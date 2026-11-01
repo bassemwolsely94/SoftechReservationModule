@@ -15,6 +15,7 @@ and can be fixed (and pushed back to SOFTECH via the existing writeback service)
 Pure/read-only — no DB writes, no SOFTECH access. Safe to unit-test.
 """
 import re
+from config.writers import writer_allowed
 from decimal import Decimal
 
 TOLERANCE = Decimal('0.01')          # discounts equal within 0.01% are "aligned"
@@ -230,7 +231,7 @@ def apply_classification_changes(plan, usercode, *, actor=None):
     from apps.catalog.models import Item
     from core.softech_audit import audit_softech_write
 
-    if not getattr(settings, 'PRICING_SOFTECH_WRITE_ENABLED', False):
+    if not writer_allowed('PRICING_SOFTECH_WRITE_ENABLED'):
         return 'كتابة الأصناف إلى SOFTECH معطّلة (PRICING_SOFTECH_WRITE_ENABLED=False)', []
     if not plan:
         return 'لا توجد تغييرات', []
@@ -355,7 +356,7 @@ def create_new_tier(kind, label, usercode, code=None, *, actor=None):
     if not label or not str(label).strip():
         return 'الاسم مطلوب', None
     from django.conf import settings
-    if not getattr(settings, 'PRICING_SOFTECH_WRITE_ENABLED', False):   # same switch as apply_classification_changes
+    if not writer_allowed('PRICING_SOFTECH_WRITE_ENABLED'):   # same switch as apply_classification_changes
         return 'إنشاء فئة جديدة في SOFTECH معطّل (PRICING_SOFTECH_WRITE_ENABLED=False)', None
     from config.sybase import get_sybase_connection
     spec = LOOKUP_TABLES[kind]

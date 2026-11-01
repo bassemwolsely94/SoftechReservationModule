@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'omni', 'group': 'callcenter', 'icon': '📥',
+    'brief': T('واتساب والمكالمات والسوشيال لكل عميل في محادثة واحدة.',
+               'WhatsApp, calls and social messages for each customer in one conversation.'),
     'title': T('التواصل الموحّد (واتساب والمكالمات والسوشيال)', 'Unified communications (WhatsApp, calls, social)'),
     'summary': T(
         'كل قنوات التواصل مع العميل في مكان واحد: رسائل واتساب (عدة أرقام)، المكالمات، ماسنجر، إنستجرام، تيليجرام — مجمّعة لكل عميل في خط زمني واحد مع أحداث SOFTECH (حجوزات، فواتير). '
@@ -47,8 +49,14 @@ MODULE = {
                       'Open the conversation, read the customer history, check the owner, reply, and set it "Resolved".'),
          'steps': [
             {'screen': 'omni.inbox', 'target': 'omni-inbox-list', 'perm': 'callcenter',
+             'label': T('قائمة المحادثات', 'Conversations list'),
+             'when': T('أول ما توصل رسالة أو مكالمة جديدة.',
+                       'As soon as a new message or call arrives.'),
              'text': T('الرسالة الجديدة بتظهر فوق في «النشطة». اضغطها.', 'The new message shows at the top of "Active". Click it.')},
             {'screen': 'omni.inbox', 'target': 'omni-inbox-timeline', 'perm': 'callcenter',
+             'label': T('الخط الزمني الموحّد', 'Unified timeline'),
+             'when': T('قبل ما ترد، عشان تعرف تاريخ العميل وماتسألوش تاني.',
+                       'Before replying, so you know the customer history and do not ask again.'),
              'text': T('اقرأ الخط الزمني: رسائل قديمة، مكالمات، حجوزات وفواتير.', 'Read the timeline: past messages, calls, reservations and invoices.'),
              'open_hint': T('اختار محادثة من القائمة.', 'Pick a conversation from the list.')},
             {'screen': 'omni.inbox', 'target': 'omni-inbox-manage', 'perm': 'callcenter', 'label': T('موكلة إلى', 'Assigned to'),
@@ -313,6 +321,7 @@ SCREENS = [
              'text': T('يعرض بس المحادثات المسندة لك.', 'Shows only the conversations assigned to you.'),
              'when': T('ابدأ بيها قبل ما تاخد محادثات جديدة.', 'Start with these before taking new ones.')},
             {'target': 'omni-inbox-list',
+             'label': T('قائمة المحادثات', 'Conversations list'),
              'text': T('كل المحادثات من واتساب والمكالمات والسوشيال. الأيقونة = القناة، والشارة = الحالة.',
                        'Every conversation from WhatsApp, calls and social. The icon is the channel, the badge is the status.'),
              'when': T('اضغط أي محادثة تفتح الخط الزمني بتاعها.', 'Click a conversation to open its timeline.'),
@@ -320,6 +329,7 @@ SCREENS = [
                  'كل سطر عميل واحد، والأيقونة بتقول القناة (💬 واتساب، ☎️ مكالمات، ماسنجر، إنستجرام، تيليجرام).\n• تحت الاسم آخر رسالة أو حدث، وجنبه الوقت وحالة المحادثة.\n• الأحدث نشاطاً فوق، والقائمة بتتحدّث لوحدها كل شوية. اضغط سطر عشان تفتحه في النص.',
                  'Each row is one customer; the icon shows the channel (💬 WhatsApp, ☎️ calls, Messenger, Instagram, Telegram).\n• Under the name is the last message or event, with the time and the conversation status beside it.\n• The most recently active is on top and the list refreshes by itself. Click a row to open it in the middle.')},
             {'target': 'omni-inbox-timeline',
+             'label': T('الخط الزمني الموحّد', 'Unified timeline'),
              'text': T('الخط الزمني الموحّد: الرسائل والمكالمات والتسجيلات وأحداث SOFTECH (حجز، فاتورة) بالترتيب.',
                        'The unified timeline: messages, calls, recordings and SOFTECH events (reservation, invoice) in order.'),
              'when': T('اقرأه كله قبل ما ترد عشان ماتسألش العميل عن حاجة معروفة.', 'Read it all before replying so you never ask what is already known.'),
@@ -364,6 +374,8 @@ SCREENS = [
                        'The customer data, segment and last 5 reservations. "Full profile" opens the customer file.'),
              'open_hint': T('بيظهر لمحادثة مربوطة بعميل معروف.', 'Shown for a conversation linked to a known customer.')},
             {'target': 'omni-inbox-reply',  # from the GitHub-side tour
+             'label': T('اكتب رداً عبر ...', 'Write a reply via ...'),
+             'when': T('بعد ما تقرأ المحادثة: اكتب ردك هنا.', 'After reading the conversation: type your reply here.'),
              'text': T('اكتب الرد — بيتبعت على نفس القناة.',
                        'Write the reply — it goes out on the same channel.'),
              'more': T(
@@ -393,6 +405,9 @@ SCREENS = [
                  'بيفتح نموذج فيه: القناة، المزوّد، اسم الحساب، الرقم/المعرف، Phone Number ID، Access Token، القسم، و«الحساب الافتراضي للإرسال».\n• الاسم والرقم إجباريين، و«حفظ» مش بيشتغل من غيرهم.\n• التوكن سري — بيتحفظ مشفّر ومش بيظهر تاني؛ لو سبته فاضي بيستخدم الإعداد الافتراضي للسيرفر.',
                  'Opens a form with: channel, provider, account name, number/handle, Phone Number ID, Access Token, department, and "Default sending account".\n• Name and number are required; "Save" does not work without them.\n• The token is secret — it is stored encrypted and never shown again; left empty, the server\'s default setting is used.')},
             {'target': 'omni-accounts-card',
+             'label': T('كارت الحساب', 'Account card'),
+             'when': T('لما تراجع الأرقام المربوطة أو تتأكد أنهي رقم هو رقم الإرسال الافتراضي.',
+                       'When reviewing linked numbers or checking which one is the default sending number.'),
              'text': T('كارت لكل حساب: الاسم والرقم، وشارة «افتراضي» لو هو رقم الإرسال الأساسي.',
                        'One card per account: name and number, with a "Default" badge if it is the main sending number.'),
              'open_hint': T('بيظهر بعد إضافة أول حساب.', 'Shown once the first account exists.')},
@@ -430,18 +445,24 @@ SCREENS = [
              'text': T('يحفظ الحساب. الاسم والرقم مطلوبين.', 'Saves the account. Name and number are required.'),
              'open_hint': T('في نموذج الحساب.', 'In the account form.')},
             {'target': 'omni-accounts-header',  # from the GitHub-side tour
+             'label': T('📡 حسابات القنوات', '📡 Channel accounts'),
+             'when': T('لمعرفة كام حساب متصل وكام لأ.', 'To see how many accounts are connected and how many are not.'),
              'text': T('حسابات القنوات مع عدد الحسابات والمتصل منها.',
                        'The channel accounts, with how many exist and how many are connected.'),
              'more': T(
                  'السطر ده بيقولك بسرعة عندك كام حساب وكام منهم «متصل» دلوقتي.\n• لو المتصل أقل من العدد الكلي، فيه رقم أو صفحة مش بيستقبل رسائل — دوّر على البطاقة الحمرا أو الصفرا تحت.\n• الصفحة بتتحدّث لوحدها كل 30 ثانية تقريباً.',
                  'This line tells you at a glance how many accounts you have and how many are "connected" right now.\n• If connected is less than the total, a number or page is not receiving messages — look for the red or yellow card below.\n• The page refreshes by itself about every 30 seconds.')},
             {'target': 'omni-accounts-grid',  # from the GitHub-side tour
+             'label': T('بطاقات الحسابات', 'Account cards'),
+             'when': T('راجع آخر نبضة لكل حساب لتتأكد إنه شغّال.', 'Check each account\'s last heartbeat to confirm it is working.'),
              'text': T('بطاقة لكل حساب: الاسم، الرقم، المزوّد، آخر نبضة والفرع.',
                        'One card per account: name, number, provider, last heartbeat and branch.'),
              'more': T(
                  'كل رقم أو صفحة للشركة ليها بطاقة. «افتراضي» جنب الاسم معناه إن الإرسال بيطلع منه لو مفيش رقم محدد.\n• «نبضة» = آخر مرة الحساب أكّد إنه شغال؛ لو بقالها كتير يبقى فيه مشكلة اتصال.\n• «🔐 اعتماد خاص» معناه إن له توكن خاص بيه، والفرع مكتوب تحت («كل الفروع» لو مش مربوط بفرع).',
                  'Every company number or page has a card. "Default" next to the name means sending goes from it when no number is specified.\n• "Heartbeat" = the last time the account confirmed it works; if it is old, there is a connection problem.\n• "🔐 Own credentials" means it has its own token; the branch is shown at the bottom ("All branches" if not tied to one).')},
             {'target': 'omni-accounts-actions',  # from the GitHub-side tour
+             'label': T('✏️ تعديل · 🩺 فحص الاتصال', '✏️ Edit · 🩺 Check connection'),
+             'when': T('لما بيانات الحساب تتغيّر أو الحساب يبان مش متصل.', 'When account details change or it looks disconnected.'),
              'text': T('«✏️ تعديل» لبيانات الحساب، و«🩺 فحص الاتصال» لحسابات واتساب فقط.',
                        '"✏️ Edit" for the account details, and "🩺 Check connection" for WhatsApp accounts only.'),
              'more': T(
@@ -463,6 +484,7 @@ SCREENS = [
         'related': ['callcenter.analytics', 'callcenter.pbx'],
         'tour': [
             {'target': 'omni-wallboard-kpis',
+             'label': T('مؤشرات اللحظة', 'Live indicators'),
              'text': T('أرقام اللحظة: مكالمات جارية، مكالمات اليوم، مُجابة، مهجورة، متوسط الانتظار، العمال المتصلين، المحادثات النشطة وغير المسندة.',
                        'Live numbers: active calls, calls today, answered, abandoned, average wait, agents online, active and unassigned conversations.'),
              'when': T('الشاشة بتتحدث كل 5 ثواني. «غير مُسندة» برتقالي = محادثات مستنية حد.', 'The screen refreshes every 5 seconds. Orange "Unassigned" = conversations waiting for someone.'),
@@ -494,6 +516,8 @@ SCREENS = [
                  'بطاقة لكل تحويلة: الاسم ورقم التحويلة والحالة.\n• 📞 «في مكالمة» بالأخضر، 🟢 «متاح» جاهز يرد، ⚪ «غير مسجل» تليفونه مش متصل بالسنترال.\n• لو موظف في الشيفت وظاهر «غير مسجل»، اطلب منه يتأكد إن التليفون أو التطبيق شغال.',
                  'A card per extension: name, extension number and state.\n• 📞 "On a call" in green, 🟢 "Available" ready to answer, ⚪ "Not registered" means the phone is not connected to the PBX.\n• If someone on shift shows "Not registered", ask them to check their phone or app is running.')},
             {'target': 'omni-wallboard-header',  # from the GitHub-side tour
+             'label': T('📊 لوحة المشرف الحية', '📊 Live supervisor wallboard'),
+             'when': T('سيبها مفتوحة أثناء الشيفت لمتابعة الضغط لحظياً.', 'Keep it open during the shift to watch the load live.'),
              'text': T('لوحة المشرف الحية، تتحدث تلقائياً كل 5 ثوانٍ.',
                        'The live supervisor board; refreshes automatically every 5 seconds.'),
              'more': T(
@@ -520,6 +544,7 @@ SCREENS = [
                  '• «عند حدوث»: رسالة واردة، مكالمة، مكالمة فائتة، حجز، أو تحليل ذكي.\n• الشروط (لازم كلها تتحقق): كلمات مفتاحية مفصولة بفاصلة، «عملاء VIP فقط»، والقناة.\n• الإجراءات بالترتيب: أولوية، حالة، وسم، إسناد لدور، إشعار دور، ملاحظة، أو «رد آلي» — الرد الآلي بيوصل للعميل فوراً، فاكتبه بعناية.',
                  '• "When": incoming message, call, missed call, reservation, or AI analysis.\n• Conditions (all must match): comma-separated keywords, "VIP customers only", and the channel.\n• Actions in order: priority, status, tag, assign to role, notify role, note, or "auto-reply" — an auto-reply reaches the customer instantly, so write it carefully.')},
             {'target': 'omni-automations-rule',
+             'label': T('كارت القاعدة', 'Rule card'),
              'text': T('كل قاعدة: اسمها، الحدث، عدد الإجراءات، ونُفّذت كام مرة.', 'Each rule: name, trigger, number of actions and how many times it ran.'),
              'when': T('«نُفّذت 0 مرة» لمدة طويلة = الشروط ضيقة أو غلط.', '"Ran 0 times" for long = the conditions are too narrow or wrong.'),
              'open_hint': T('بيظهر بعد إنشاء أول قاعدة.', 'Shown once the first rule exists.')},
@@ -551,18 +576,24 @@ SCREENS = [
              'warn': T('جرّب بشروط ضيقة الأول؛ القاعدة بتشتغل على كل المحادثات.', 'Start with narrow conditions; the rule runs on every conversation.'),
              'open_hint': T('في نموذج القاعدة.', 'In the rule form.')},
             {'target': 'omni-automations-header',  # from the GitHub-side tour
+             'label': T('⚙️ قواعد الأتمتة', '⚙️ Automation rules'),
+             'when': T('لمراجعة القواعد اللي بتشتغل تلقائياً.', 'To review the rules that run automatically.'),
              'text': T('قواعد الأتمتة وعددها.',
                        'The automation rules and how many there are.'),
              'more': T(
                  'القواعد دي بتشتغل لوحدها على كل محادثة من غير ما حد يضغط حاجة — زي «لو رسالة فيها كلمة شكوى، خلّيها عاجلة وبلّغ المشرف».\n• الصفحة دي للمدير والمشرفين بس.\n• الرقم تحت العنوان = عدد القواعد كلها (المفعّلة والمعطّلة).',
                  'These rules run by themselves on every conversation without anyone clicking — e.g. "if a message contains complaint, make it urgent and notify the supervisor".\n• This page is for admins and supervisors only.\n• The number under the title = all rules (enabled and disabled).')},
             {'target': 'omni-automations-list',  # from the GitHub-side tour
+             'label': T('قائمة القواعد', 'Rules list'),
+             'when': T('راجعها لتتأكد إن مفيش قاعدة متعطّلة بالغلط.', 'Review it to make sure no rule is disabled by mistake.'),
              'text': T('القواعد الحالية؛ المعطّلة مكتوب بجانبها «(معطّلة)».',
                        'The current rules; disabled ones are marked "(disabled)".'),
              'more': T(
                  'كل بطاقة قاعدة واحدة باسمها. القاعدة المعطّلة بتفضل محفوظة بس مبتشتغلش.\n• استخدم أسماء واضحة («شكاوى واتساب → مشرف») عشان أي حد يفهم القاعدة بتعمل إيه.\n• لو قاعدتين بيعملوا نفس الحاجة، عطّل واحدة عشان الإجراء ميتكررش.',
                  'Each card is one rule by name. A disabled rule stays saved but does not run.\n• Use clear names ("WhatsApp complaints → supervisor") so anyone understands what the rule does.\n• If two rules do the same thing, disable one so the action is not repeated.')},
             {'target': 'omni-automations-summary',  # from the GitHub-side tour
+             'label': T('عند: … · إجراء · نُفّذت … مرة', 'On: … · actions · ran … times'),
+             'when': T('لو قاعدة نُفّذت صفر مرة، راجع الحدث بتاعها.', 'If a rule ran zero times, check its trigger.'),
              'text': T('لكل قاعدة: الحدث، عدد الإجراءات، وكم مرة نُفّذت.',
                        'For each rule: the event, number of actions, and how many times it ran.'),
              'more': T(
@@ -606,6 +637,8 @@ SCREENS = [
                  'أعلى 15 موظف بعدد الرسائل اللي ردّوا بيها في الفترة.\n• بيوضح توزيع الشغل على الفريق — مش مقياس جودة لوحده، الرد الواحد ممكن يكون طويل ومهم.\n• استخدمه مع «متوسط أول رد» وأنت بتراجع الأداء.',
                  'The top 15 staff by number of replies sent in the period.\n• It shows how work is spread across the team — not a quality measure on its own; one reply may be long and important.\n• Use it together with "Average first response" when reviewing performance.')},
             {'target': 'omni-analytics-breakdown',  # from the GitHub-side tour
+             'label': T('الحجم حسب القناة · حالات المحادثات', 'Volume by channel · Chat statuses'),
+             'when': T('لمعرفة أنهي قناة عليها ضغط وكام محادثة لسه مفتوحة.', 'To see which channel is busiest and how many chats are still open.'),
              'text': T('الحجم حسب القناة وتوزيع حالات المحادثات.',
                        'Volume by channel and the split of conversation statuses.'),
              'more': T(
@@ -632,15 +665,22 @@ SCREENS = [
                  'اكتب رقم الواتساب أو اسم العميل والقائمة بتتصفّى على طول.\n• الصندوق ده لواتساب بس؛ للشغل اليومي على كل القنوات استخدم «الصندوق الموحّد».\n• هنا بتيجي لما تحتاج تبعت قالب معتمد لعميل نافذته مقفولة.',
                  'Type the WhatsApp number or the customer\'s name and the list filters at once.\n• This inbox is WhatsApp only; for daily work across all channels use the "Unified inbox".\n• Come here when you need to send an approved template to a customer whose window is closed.')},
             {'target': 'omni-whatsapp-inbox-list',
+             'label': T('قائمة محادثات واتساب', 'WhatsApp conversations list'),
              'text': T('محادثات واتساب بس، الأحدث فوق. بتتحدث كل 15 ثانية.', 'WhatsApp conversations only, newest first. Refreshes every 15 seconds.'),
              'when': T('للشغل اليومي استخدم «الصندوق الموحّد»؛ هنا لما تحتاج تبعت قالب.', 'For daily work use the "Unified inbox"; come here when you need to send a template.'),
              'more': T(
                  'كل سطر عميل: الاسم والرقم ووقت آخر رسالة.\n• النقطة الخضرا = النافذة مفتوحة وتقدر ترد بنص، والحمرا = مقفولة (قالب بس).\n• القائمة بتتحدّث لوحدها؛ اضغط سطر عشان تفتح رسائله.',
                  'Each row is a customer: name, number and time of the last message.\n• A green dot = window open, you can reply with text; red = closed (template only).\n• The list refreshes by itself; click a row to open its messages.')},
             {'target': 'omni-whatsapp-inbox-dot',
+             'label': T('نافذة مفتوحة / نافذة مغلقة', 'Window open / Window closed'),
+             'when': T('قبل ما ترد: لو النافذة مقفولة، الرسالة العادية مش هتتبعت وهتحتاج رسالة قالب.',
+                       'Before replying: if the window is closed, a normal text cannot be sent and you need a template message.'),
              'text': T('النقطة الخضرا = النافذة مفتوحة، الحمرا = مقفولة.', 'Green dot = window open, red = closed.'),
              'open_hint': T('على كل صف في القائمة.', 'On every row of the list.')},
             {'target': 'omni-whatsapp-inbox-thread',
+             'label': T('رسائل المحادثة', 'Conversation messages'),
+             'when': T('بعد ما تختار محادثة: اقرا آخر الرسائل وراجع حالة التسليم قبل ما ترد.',
+                       'After choosing a conversation: read the latest messages and check delivery status before replying.'),
              'text': T('رسائل المحادثة. ✓ اتبعتت، ✓✓ وصلت، ✗ فشلت.', 'The conversation messages. ✓ sent, ✓✓ delivered, ✗ failed.'),
              'open_hint': T('اختار محادثة من القائمة.', 'Pick a conversation from the list.'),
              'more': T(
@@ -700,6 +740,7 @@ SCREENS = [
                  'بيفتح نموذج: اسم الحملة، نص الرسالة (اضغط متغير زي اسم العميل عشان يتحط في النص)، شروط الجمهور، وموعد إرسال اختياري.\n• «معاينة الجمهور» بتقولك كام عميل مطابق وكام منهم عنده رقم، قبل ما تحفظ.\n• «حفظ الحملة» بيحفظها «مسودة» — لسه مفيش ولا رسالة اتبعتت.',
                  'Opens a form: campaign name, message text (click a variable such as the customer name to insert it), audience conditions, and an optional send time.\n• "Preview audience" tells you how many customers match and how many have a phone, before you save.\n• "Save campaign" saves it as a "Draft" — no message has been sent yet.')},
             {'target': 'omni-campaigns-row',
+             'label': T('سطر الحملة', 'Campaign row'),
              'text': T('كل حملة: الاسم، التاريخ، الحالة، المُرسَل والمُسلَّم، والوصول المقدَّر. الشريط فوق بيفلتر بالحالة.',
                        'Each campaign: name, date, status, sent and delivered, estimated reach. The bar above filters by status.'),
              'when': T('اضغط الحملة تفتح تفاصيلها وأزرار الاعتماد.', 'Click a campaign to open its details and approval buttons.'),
@@ -753,27 +794,37 @@ SCREENS = [
              'warn': T('كل ضغطة ثم إرسال = رسالة للعميل. ماتبعتش نفس الرسالة مرتين.', 'Each click then send = a message to the customer. Never send the same one twice.'),
              'open_hint': T('افتح حملة اتبعتت واختار تبويب «الرسائل».', 'Open a sent campaign and choose the "Messages" tab.')},
             {'target': 'omni-campaigns-search',  # from the GitHub-side tour
+             'label': T('بحث باسم الحملة...', 'Search by campaign name...'),
+             'when': T('لما تدور على حملة معيّنة.', 'When you look for a specific campaign.'),
              'text': T('ابحث باسم الحملة.',
                        'Search by campaign name.'),
              'more': T(
                  'اكتب جزء من اسم الحملة والقائمة تحت بتتصفّى.\n• البحث بيشتغل مع تبويب الحالة المختار، فلو مش لاقيها اختار «الكل».\n• سمّي الحملات باسم واضح فيه الشهر أو الغرض عشان تلاقيها بسهولة بعدين.',
                  'Type part of the campaign name and the list below filters.\n• Search works with the selected status tab, so if you cannot find it choose "All".\n• Give campaigns clear names with the month or purpose so they are easy to find later.')},
             {'target': 'omni-campaigns-status-tabs',  # from the GitHub-side tour
+             'label': T('الكل · مسودة · بانتظار الموافقة…', 'All · Draft · Pending approval…'),
+             'when': T('لما تحب تشوف حملات حالة واحدة بس.', 'When you want to see campaigns in one status only.'),
              'text': T('صفِّ الحملات بالحالة: مسودة، بانتظار الموافقة، معتمدة، جارية، مكتملة.',
                        'Filter campaigns by status: draft, pending approval, approved, running, completed.'),
              'more': T(
                  'الحملة بتمشي: مسودة ← بانتظار الموافقة ← معتمدة ← (مجدولة) ← جارية ← مكتملة.\n• المعتمِد يفتح «بانتظار الموافقة» عشان يراجع اللي مستني قراره.\n• المجدولة والموقوفة والملغاة والمرفوضة بتظهر في «الكل».',
                  'A campaign moves: draft → pending approval → approved → (scheduled) → running → completed.\n• The approver opens "Pending approval" to review what awaits a decision.\n• Scheduled, paused, cancelled and rejected ones show under "All".')},
             {'target': 'omni-campaigns-list',  # from the GitHub-side tour
+             'label': T('قائمة الحملات', 'Campaigns list'),
+             'when': T('اضغط حملة لتفتح تفاصيلها.', 'Click a campaign to open its details.'),
              'text': T('قائمة الحملات مع حالتها وأرقام الإرسال؛ اضغط حملة لفتح تفاصيلها.',
                        'The campaign list with status and send numbers; click one to open its details.'),
              'more': T(
                  'لكل حملة: الاسم، تاريخ الإنشاء، شارة الحالة، و«الوصول المقدَّر» بعد معاينة الجمهور.\n• بعد الإرسال بيظهر «X مُرسَلة · Y مُسلَّمة» — الفرق بينهم رسائل لسه موصلتش أو فشلت.\n• اضغط الحملة عشان تفتح تفاصيلها وشريط إجراءاتها.',
                  'For each campaign: name, creation date, status badge, and "Estimated reach" after previewing the audience.\n• After sending it shows "X sent · Y delivered" — the gap is messages not yet delivered or failed.\n• Click a campaign to open its details and action bar.')},
             {'target': 'omni-campaigns-tabs',  # from the GitHub-side tour
+             'label': T('نظرة عامة · الجمهور · الرسائل', 'Overview · Audience · Messages'),
+             'when': T('بعد اختيار حملة: للتنقل بين أجزائها.', 'After picking a campaign: to move between its parts.'),
              'text': T('بعد اختيار حملة: «نظرة عامة» و«الجمهور» و«الرسائل».',
                        'After selecting a campaign: "Overview", "Audience" and "Messages".')},
             {'target': 'omni-campaigns-workflow',  # from the GitHub-side tour
+             'label': T('شريط الإجراءات', 'Actions bar'),
+             'when': T('لنقل الحملة للمرحلة اللي بعدها حسب حالتها.', 'To move the campaign to its next stage, based on its status.'),
              'text': T('شريط الإجراءات أسفل الحملة المختارة؛ أزراره تتغير حسب حالتها وصلاحيتك.',
                        'The action bar under the selected campaign; its buttons depend on the status and your permissions.'),
              'more': T(

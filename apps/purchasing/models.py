@@ -1194,6 +1194,10 @@ class IsrPush(models.Model):
     origin_request = models.ForeignKey('supply.BranchRequest', on_delete=models.SET_NULL,
                                        null=True, blank=True, related_name='isr_pushes')
     origin_donor   = models.CharField(max_length=10, blank=True, default='')
+    # P-33 (a): the shortage list (/shortage) this two-leg transfer serves — the same legs as a
+    # WhatsApp request, for lists that did not come from one.
+    origin_shortage_list = models.ForeignKey('shortage.ShortageList', on_delete=models.SET_NULL,
+                                             null=True, blank=True, related_name='isr_pushes')
 
     class Meta:
         ordering = ['-created_at']
@@ -1213,12 +1217,19 @@ class IsrPush(models.Model):
                 condition=models.Q(origin_request__isnull=False,
                                    status__in=['proposed', 'approved', 'pushed']),
                 name='isrpush_one_live_leg_per_request_donor'),
+            # one live leg of each kind per (shortage list, donor) — P-33 (a)
+            models.UniqueConstraint(
+                fields=['origin_shortage_list', 'origin_donor', 'kind'],
+                condition=models.Q(origin_shortage_list__isnull=False,
+                                   status__in=['proposed', 'approved', 'pushed']),
+                name='isrpush_one_live_leg_per_list_donor'),
             # one live GENERAL draft per route (doc 30 phase A, 2026-10-24): #30 / #32 were
             # copies of the already-pushed #29. A new draft supersedes an older proposed one
             # (isr_guards); this stops two parallel clicks from both getting through.
             models.UniqueConstraint(
                 fields=['kind', 'branchcode', 'dest_branchcode'],
                 condition=models.Q(origin_isr__isnull=True, origin_request__isnull=True,
+                                   origin_shortage_list__isnull=True,
                                    status__in=['proposed', 'approved']),
                 name='isrpush_one_live_draft_per_route'),
         ]
@@ -1317,3 +1328,34 @@ class SeasonalityRun(models.Model):
     class Meta:
         ordering = ['-started_at']
         verbose_name = 'تشغيل حساب الموسمية'
+
+
+class PivotSheetSnapshot(models.Model):
+    """
+    P-31: one demand-pivot download (`/purchasing` export view=pivot) — the sheet buyers send to suppliers
+    (owner 2026-10-31: they order from the `Total.الفرق-مطلوب/راكد` column). `lines` holds the items whose
+    Total gap was positive in THAT file, with the item's SOFTECH supplier. procurement.receipt_check compares
+    deliveries with these sheets. Imported saved pivots carry source='import'.
+    """
+    SOURCE_CHOICES = [('download', 'تنزيل من النظام'), ('import', 'ملف مستورد')]
+
+    source      = models.CharField(max_length=10, choices=SOURCE_CHOICES, default='download')
+    exported_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='+')
+    exported_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    run         = models.ForeignKey(DemandCalculationRun, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='+')
+    calc_date   = models.DateField(null=True, blank=True)
+    params      = models.JSONField(default=dict, blank=True)
+    lines       = models.JSONField(default=list, blank=True)     # [{item_code, total_gap, supplier_code}]
+    # network months of cover on this sheet for items already well covered: {item_code: months} for ≥ 3, and -1 for
+    # stock with no sales at all (P-31 6-month rule; kept from 3 so the threshold can move without re-importing)
+    covers      = models.JSONField(default=dict, blank=True)
+    line_count  = models.PositiveIntegerField(default=0)
+    lines_hash  = models.CharField(max_length=64, blank=True, db_index=True)
+    file_name   = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ['-exported_at']
+        verbose_name = 'شيت احتياج مُرسَل (Pivot)'
+        verbose_name_plural = 'شيتات الاحتياج المُرسَلة'

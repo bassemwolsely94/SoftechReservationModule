@@ -46,6 +46,11 @@ class SyncConfig(AppConfig):
         in_runserver = cmd == "runserver"
         if in_runserver and os.environ.get("RUN_MAIN") != "true":
             return  # reloader parent — the worker handles it
+        if in_runserver:
+            # P-54 startup guard for the dev server (asgi.py / wsgi.py cover production;
+            # run_scheduler runs it itself). Raises ImproperlyConfigured → refuses to start.
+            from config.writers import run_startup_checks
+            run_startup_checks()
 
         # ── Python 3.12+ / asgiref executor patch ─────────────────────────────
         # On Python 3.12+ (especially 3.14) the interpreter registers an

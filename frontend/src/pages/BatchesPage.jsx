@@ -1,6 +1,7 @@
 /**
  * BatchesPage — FEFO Batch Management + Near-Expiry Dashboard
- * Covers: batch list, near-expiry KPIs, active alerts, quarantine action
+ * Covers: near-expiry KPIs by store role (P-26), live expiry balances, purchase-expiry audit,
+ * supplier return-window calendar (P-29), rebalancing, disposal / return ledger
  */
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -10,6 +11,7 @@ import useAuthStore from '../store/authStore'
 import { wildcardMatch } from '../utils/wildcard'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
+import ReturnWindowTab from '../components/ReturnWindowTab'
 
 // ── date helpers ──────────────────────────────────────────────────────────────
 const _iso = (d) => d.toISOString().slice(0, 10)
@@ -43,45 +45,6 @@ function KpiCard({ label, value, sub, color = 'text-gray-900' }) {
       <p className="text-xs text-gray-500 mb-1">{label}</p>
       <p className={`text-2xl font-bold ${color}`}>{value ?? '—'}</p>
       {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
-    </div>
-  )
-}
-
-function QuarantineModal({ batch, onClose }) {
-  const qc    = useQueryClient()
-  const [reason, setReason] = useState('')
-  const [err, setErr]       = useState(null)
-
-  const mutation = useMutation({
-    mutationFn: () => batchesApi.quarantine(batch.id, reason),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['batches'] }); onClose() },
-    onError:   e  => setErr(e.response?.data?.detail || 'حدث خطأ'),
-  })
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" dir="rtl">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
-        <h3 className="text-lg font-bold mb-1">عزل دفعة</h3>
-        <p className="text-sm text-gray-500 mb-4">
-          {batch.item_name} — دفعة {batch.batch_number}
-        </p>
-        <textarea
-          value={reason} onChange={e => setReason(e.target.value)}
-          placeholder="سبب العزل (مطلوب)..."
-          className="w-full border rounded-lg p-3 text-sm resize-none h-24 mb-4"
-        />
-        {err && <p className="text-red-600 text-sm mb-3">{err}</p>}
-        <div className="flex gap-3 justify-end">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>
-          <button
-            onClick={() => mutation.mutate()}
-            disabled={mutation.isPending || !reason.trim()}
-            className="px-5 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
-          >
-            {mutation.isPending ? 'جاري...' : 'تأكيد العزل'}
-          </button>
-        </div>
-      </div>
     </div>
   )
 }
@@ -1095,7 +1058,7 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
         <select value={store} onChange={e => setStore(e.target.value)} className="border rounded-lg px-2 py-1.5 min-w-[8rem]">
           <option value="">كل المخازن</option>
           {[...new Set(stores.map(s => s.store_code))].filter(Boolean).sort().map(sc => (
-            <option key={sc} value={sc}>مخزن {sc}{stores.find(s => s.store_code === sc)?.is_quarantine ? ' (عزل)' : ''}</option>
+            <option key={sc} value={sc}>مخزن {sc}{(() => { const s = stores.find(x => x.store_code === sc); return s?.role && s.role !== 'live' ? ` — ${s.role_label}` : '' })()}</option>
           ))}
         </select>
         <label className="flex items-center gap-1 text-gray-600">
@@ -1412,7 +1375,16 @@ export default function BatchesPage() {
           <KpiCard label="خلال 90 يوم"              value={fmtInt(summary.lt_90?.items)}  sub={`${fmtNum(summary.lt_90?.value)} ج`}  color="text-amber-600" />
           <KpiCard label="خلال 180 يوم"             value={fmtInt(summary.lt_180?.items)} sub={`${fmtNum(summary.lt_180?.value)} ج`} color="text-yellow-600" />
           <KpiCard label="قيمة معرّضة للخطر (≤180ي)" value={`${fmtNum(summary.total_at_risk_value)} ج`} color="text-gray-700" />
-          <KpiCard label="منتهية ولا تزال بالمخزون"  value={fmtInt(summary.expired?.items)} sub={`${fmtNum(summary.expired?.value)} ج`} color="text-red-700" />
+          <KpiCard label="منتهية على الرف"  value={fmtInt(summary.expired?.items)} sub={`${fmtNum(summary.expired?.value)} ج`} color="text-red-700" />
+        </div>
+      )}
+      {/* Book residue kept apart from shelf risk (P-26 store roles); the closed branch is never counted */}
+      {summary?.buckets && (
+        <div data-tour="batches-main-buckets" className="grid grid-cols-1 md:grid-cols-3 gap-4 -mt-2 mb-6">
+          {[['return_candidate', 'text-blue-700'], ['write_off', 'text-gray-700'], ['cosmetics_expired', 'text-pink-700']].map(([k, c]) => (
+            <KpiCard key={k} label={summary.buckets[k]?.label} value={`${fmtNum(summary.buckets[k]?.value)} ج`}
+                     sub={`${fmtInt(summary.buckets[k]?.items)} صنف`} color={c} />
+          ))}
         </div>
       )}
 
@@ -1426,6 +1398,7 @@ export default function BatchesPage() {
           { key: 'reorder', label: '♻️ مراجعة الشراء' },
           { key: 'rebalance', label: '🔁 إنقاذ قبل الانتهاء' },
           { key: 'disposal', label: '🗑️ إتلاف/مرتجع' },
+          { key: 'return_window', label: '📆 تقويم المرتجع' },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`px-4 py-2 rounded-md text-sm font-medium transition ${
@@ -1446,6 +1419,7 @@ export default function BatchesPage() {
       {tab === 'reorder' && <ProcurementReviewTab />}
       {tab === 'disposal' && <DisposalTab />}
       {tab === 'rebalance' && <RebalanceWorklistTab />}
+      {tab === 'return_window' && <ReturnWindowTab />}
     </div>
   )
 }

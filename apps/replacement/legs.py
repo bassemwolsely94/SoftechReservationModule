@@ -53,7 +53,8 @@ CENT = Decimal('0.01')
 
 def posting_enabled(case=None) -> bool:
     """Live SOFTECH posting: the master switch AND (for a case) its branch in the pilot list."""
-    if not C.get('POSTING_ENABLED'):
+    from config.writers import writer_instance
+    if not (C.get('POSTING_ENABLED') and writer_instance()):   # P-54: only the writer instance posts
         return False
     return case is None or str(case.branchcode).strip() in {str(b).strip() for b in C.get('POSTING_BRANCHES')}
 

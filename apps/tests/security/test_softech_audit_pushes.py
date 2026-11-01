@@ -25,6 +25,8 @@ class InvoicePushAuditTests(TestCase):
     def setUp(self):
         from apps.invoices.models import InvoiceLine, SupplierInvoice, VendorProfile
         self.user, self.staff, self.client = make_admin('inv_pusher')
+        self.staff.softech_user_id = '1509'      # posting refuses an account with no SofTech code
+        self.staff.save(update_fields=['softech_user_id'])
         vendor = VendorProfile.objects.create(name='V', softech_personcode='5014', is_main=True)
         self.inv = SupplierInvoice.objects.create(branch=make_branch(), vendor=vendor, supplier_name='S',
                                                   invoice_number='111', status='confirmed')

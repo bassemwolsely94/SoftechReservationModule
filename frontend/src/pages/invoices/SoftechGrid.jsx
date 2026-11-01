@@ -16,12 +16,49 @@ import ItemSearchInput from '../../components/ItemSearchInput'
 
 const n = (v, d = 3) => (v === null || v === undefined || v === '' ? '' : Number(v).toFixed(d))
 
+// Stored expiry is YYYY-MM-DD; SofTech shows and takes it day first.
+const fmtExpiry = v => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || '')
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : (v || '')
+}
+
+// SofTech-style cell movement inside the grid: ↑/↓ stay in the same column,
+// Tab / Shift+Tab walk the row's editable cells and wrap to the next / previous line.
+// Only inputs marked data-nav take part (buttons and pickers are skipped).
+function navKeyDown(e) {
+  const t = e.target
+  if (!(t instanceof HTMLInputElement) || !t.dataset.nav) return
+  const table = t.closest('table')
+  if (!table) return
+  if (e.key === 'Tab') {
+    const all = Array.from(table.querySelectorAll('input[data-nav]'))
+    const next = all[all.indexOf(t) + (e.shiftKey ? -1 : 1)]
+    if (next) { e.preventDefault(); next.focus() }
+    return
+  }
+  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
+  const tr = t.closest('tr[data-line]')
+  if (!tr) return
+  let td = t.closest('td')
+  while (td && td.parentElement !== tr) td = td.parentElement?.closest('td')
+  const col = Array.from(tr.children).indexOf(td)
+  const lines = Array.from(table.querySelectorAll('tr[data-line]'))
+  const target = lines[lines.indexOf(tr) + (e.key === 'ArrowDown' ? 1 : -1)]
+  const inp = target?.children[col]?.querySelector('input[data-nav]')
+  e.preventDefault()
+  inp?.focus()
+}
+
+const selectOnFocus = e => e.target.select?.()
+
 // Grid-cell key → the model field saved via updateLine.
 const SAVE_FIELD = {
   public_price: 'public_price', quantity: 'quantity', disc_pct: 'discount_pct',
   extra_disc_pct: 'extra_discount_pct', special_disc_pct: 'special_discount_pct',
-  vat_pct: 'vat_pct', unit_cost: 'unit_price', bonus_qty: 'bonus_qty',
+  vat_pct: 'vat_pct', net_cost: 'unit_price', bonus_qty: 'bonus_qty',
 }
+// NOTE: unit_price stores the NET (before the folded distributor margin). Saving
+// unit_cost here would store net + margin and add the margin again on the next load.
 
 // Numeric cell. MUST be a module-level component, NOT defined inside SoftechGrid:
 // when it was nested, every keystroke re-rendered the grid, React saw a brand-new
@@ -41,6 +78,8 @@ function Cell({ row, k, w = 'w-20', dec = 3, ro = false, editable, onEdit, onSav
         value={raw !== undefined ? raw : n(val, dec)}
         onChange={e => onEdit(row.line_id, k, e.target.value)}
         onBlur={() => onSave(row.line_id)}
+        onFocus={selectOnFocus}
+        data-nav="1"
         inputMode="decimal"
       />
     </td>
@@ -65,6 +104,8 @@ function NumEditCell({ row, field, value, w = 'w-16', dec = 2, editable, onSaveN
         value={v}
         onChange={e => setV(e.target.value)}
         onBlur={() => { if (String(value ?? '') !== v) onSaveNum(row.line_id, field, v) }}
+        onFocus={selectOnFocus}
+        data-nav="1"
         inputMode="decimal"
       />
     </td>
@@ -74,11 +115,13 @@ function NumEditCell({ row, field, value, w = 'w-16', dec = 2, editable, onSaveN
 // Free-text cell (batch number, expiry date — both CharFields). Saved directly via
 // updateLine on blur (these are not recomputed numeric cells). Also module-level so it
 // keeps focus while typing. Local state so the field is freely editable mid-typing.
-function TextCell({ row, field, value, placeholder, editable, onSaveText }) {
-  const [v, setV] = useState(value ?? '')
-  useEffect(() => { setV(value ?? '') }, [value])
+function TextCell({ row, field, value, placeholder, editable, onSaveText, display = x => x }) {
+  const shown = display(value ?? '')
+  const [v, setV] = useState(shown)
+  useEffect(() => { setV(shown) }, [shown])
+  const err = row._err?.[field]
   if (!editable) {
-    return <td className="px-2 py-1 text-center text-xs text-gray-500 font-mono">{value || '—'}</td>
+    return <td className="px-2 py-1 text-center text-xs text-gray-500 font-mono">{shown || '—'}</td>
   }
   return (
     <td className="px-1 py-0.5">
@@ -87,9 +130,12 @@ function TextCell({ row, field, value, placeholder, editable, onSaveText }) {
         value={v}
         placeholder={placeholder}
         onChange={e => setV(e.target.value)}
-        onBlur={() => { if ((v ?? '') !== (value ?? '')) onSaveText(row.line_id, field, v) }}
-        className="w-24 text-center text-xs font-mono rounded border border-gray-200 bg-white px-1 py-0.5
-          focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-brand-400"
+        onBlur={() => { if ((v ?? '') !== shown) onSaveText(row.line_id, field, v) }}
+        onFocus={selectOnFocus}
+        data-nav="1"
+        title={err || undefined}
+        className={`w-24 text-center text-xs font-mono rounded border ${err ? 'border-red-400 bg-red-50' : 'border-gray-200 bg-white'} px-1 py-0.5
+          focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-brand-400`}
       />
     </td>
   )
@@ -148,9 +194,16 @@ export default function SoftechGrid({ invoiceId, editable = true, onChanged }) {
     setBusy(true)
     try {
       await invoicesApi.updateLine(invoiceId, lineId, payload)
-      setRows(rs => rs.map(x => x.line_id === lineId ? { ...x, _dirty: false, _rawEdit: {} } : x))
+      setRows(rs => rs.map(x => x.line_id === lineId ? { ...x, _dirty: false, _rawEdit: {}, _saveErr: null } : x))
       refreshTotals()
       onChanged?.()
+    } catch (e) {
+      // never lose an edit silently: keep the row dirty and say why it wasn't saved
+      const d = e?.response?.data
+      const msg = d && typeof d === 'object'
+        ? Object.entries(d).map(([k, v]) => `${k}: ${[].concat(v).join(' ')}`).join(' · ')
+        : 'تعذّر الحفظ'
+      setRows(rs => rs.map(x => x.line_id === lineId ? { ...x, _saveErr: msg } : x))
     } finally { setBusy(false) }
   }
 
@@ -165,9 +218,14 @@ export default function SoftechGrid({ invoiceId, editable = true, onChanged }) {
   const saveText = async (lineId, field, value) => {
     setBusy(true)
     try {
-      await invoicesApi.updateLine(invoiceId, lineId, { [field]: value })
-      setRows(rs => rs.map(x => x.line_id === lineId ? { ...x, [field]: value } : x))
+      const r = await invoicesApi.updateLine(invoiceId, lineId, { [field]: value })
+      const saved = r?.data?.[field] ?? value
+      setRows(rs => rs.map(x => x.line_id === lineId
+        ? { ...x, [field]: saved, _err: { ...(x._err || {}), [field]: null } } : x))
       onChanged?.()
+    } catch (e) {
+      const msg = e?.response?.data?.[field]?.[0] || 'تعذّر الحفظ'
+      setRows(rs => rs.map(x => x.line_id === lineId ? { ...x, _err: { ...(x._err || {}), [field]: msg } } : x))
     } finally { setBusy(false) }
   }
 
@@ -228,7 +286,9 @@ export default function SoftechGrid({ invoiceId, editable = true, onChanged }) {
       className={`overflow-x-auto border border-gray-200 rounded-xl ${kb.containerProps.className}`} dir="rtl">
       {editable && (
         <div className="px-3 py-1 flex items-center justify-between border-b border-gray-100">
-          <span className="text-[11px] text-gray-400">{GRID_KEYS_HINT}</span>
+          <span className="text-[11px] text-gray-400">
+            داخل الخانة: ↑↓ نفس العمود · Tab التالي · Shift+Tab السابق — {GRID_KEYS_HINT}
+          </span>
           {(() => {
             const need = rows.filter(r => r.needs_review ?? (r.match_review || r.needs_pick || !r.item_id)).length
             return need > 0
@@ -237,7 +297,7 @@ export default function SoftechGrid({ invoiceId, editable = true, onChanged }) {
           })()}
         </div>
       )}
-      <table className="min-w-full text-sm border-collapse">
+      <table className="min-w-full text-sm border-collapse" onKeyDown={navKeyDown}>
         <thead className="bg-brand-700 text-white sticky top-0 z-10">
           <tr className="text-[11px] whitespace-nowrap">
             <th className="px-2 py-2 font-semibold">كود</th>
@@ -271,7 +331,7 @@ export default function SoftechGrid({ invoiceId, editable = true, onChanged }) {
             const rp = kb.rowProps(row)
             return (
               <>
-                <tr key={row.line_id} ref={rp.ref} onMouseDown={rp.onMouseDown} data-kb-active={rp['data-kb-active']}
+                <tr key={row.line_id} data-line={row.line_id} ref={rp.ref} onMouseDown={rp.onMouseDown} data-kb-active={rp['data-kb-active']}
                   className={`border-t border-gray-100 ${flagged ? 'bg-amber-50/50' : row._dirty ? 'bg-blue-50/40' : 'bg-white'} ${rp.className}`}>
                   <td className="px-2 py-1 text-center font-mono text-xs text-gray-500">{row.softech_id || '—'}</td>
                   <td className="px-2 py-1 text-right max-w-[22rem]">
@@ -296,7 +356,7 @@ export default function SoftechGrid({ invoiceId, editable = true, onChanged }) {
                   <td className="px-2 py-1 text-center text-xs text-gray-400 tabular-nums">{row.current_stock != null ? n(row.current_stock, 0) : '—'}</td>
                   <Cell row={row} k="quantity" w="w-16" dec={0} editable={editable} onEdit={onEdit} onSave={save} />
                   <Cell row={row} k="bonus_qty" w="w-12" dec={0} editable={editable} onEdit={onEdit} onSave={save} />
-                  <TextCell row={row} field="expiry_date" value={row.expiry_date} placeholder="الصلاحية" editable={editable} onSaveText={saveText} />
+                  <TextCell row={row} field="expiry_date" value={row.expiry_date} display={fmtExpiry} placeholder="يوم/شهر/سنة" editable={editable} onSaveText={saveText} />
                   <TextCell row={row} field="batch_number" value={row.batch_number} placeholder="الباتش" editable={editable} onSaveText={saveText} />
                   <td className="px-1 py-0.5">
                     <Cell row={row} k="public_price" editable={editable} onEdit={onEdit} onSave={save} />
@@ -322,13 +382,13 @@ export default function SoftechGrid({ invoiceId, editable = true, onChanged }) {
                       ? <input type="checkbox" checked={!!row.cells.tax_from_cost} onChange={() => toggleTaxFromCost(row.line_id)} className="accent-brand-600" />
                       : <span>{row.cells.tax_from_cost ? '✓' : ''}</span>}
                   </td>
-                  {/* تكلفة الوحدة (صافي) — OCR net, editable → saves unit_price */}
-                  <NumEditCell row={row} field="unit_price" value={row.net_cost} dec={3}
-                    editable={editable} onSaveNum={saveNum} title="تكلفة الوحدة الصافية كما قُرئت من الفاتورة" />
+                  {/* تكلفة الوحدة (صافي) — live: editing it back-solves خصم أساسي, editing a
+                      discount updates it (server recompute). Saves unit_price. */}
+                  <Cell row={row} k="net_cost" dec={3} editable={editable} onEdit={onEdit} onSave={save} />
                   {/* التكلفة للترحيل = net + distributor margin — the value posted to SofTech */}
                   <td className="px-2 py-1 text-center font-bold tabular-nums text-amber-700 bg-amber-50/60"
                     title="تكلفة الوحدة + هامش الموزع — هذه القيمة هي التي تُرحَّل إلى SofTech">
-                    {n(row.cost_to_post, 3)}
+                    {n(row.cells.unit_cost ?? row.cost_to_post, 3)}
                   </td>
                   <Cell row={row} k="unit_cost_incl_tax" dec={3} ro editable={editable} onEdit={onEdit} onSave={save} />
                   <td className="px-2 py-1 text-center tabular-nums text-gray-600">{n(row.cells.cost_total, 2)}</td>
@@ -338,6 +398,14 @@ export default function SoftechGrid({ invoiceId, editable = true, onChanged }) {
                   <NumEditCell row={row} field="distributor_margin_amt" value={row.distributor_margin_amt} w="w-14" dec={2}
                     editable={editable} onSaveNum={saveNum} title="هامش ثابت للموزع — يُضاف لتكلفة الترحيل لموردي الهامش" />
                 </tr>
+                {row._saveErr && (
+                  <tr className="bg-red-50 text-[11px] text-red-700 border-t border-red-200">
+                    <td></td>
+                    <td className="px-2 py-0.5 text-right" colSpan={21}>
+                      ⛔ لم يُحفظ هذا السطر — {row._saveErr}
+                    </td>
+                  </tr>
+                )}
                 {row.bonus_qty > 0 && (
                   <tr className="bg-emerald-50/40 text-[11px] text-emerald-700 border-t border-dashed border-emerald-200">
                     <td></td>

@@ -192,6 +192,7 @@ INSTALLED_APPS = [
     'apps.personal',       # Personal dashboard — per-user SOFTECH identity claims + configurable widgets
     'apps.gamification',   # Gamification — points, levels/titles, badges, streaks, rankings (recognition only)
     'apps.stock_audit',    # Stock Transactions Audit (doc 32) — read-only stktrans mirror + checks
+    'apps.trace',          # P-58 EDA track-and-trace foundation — dormant (TRACK_TRACE_ENABLED)
 ]
 
 MIDDLEWARE = [
@@ -418,6 +419,10 @@ SYBASE_PASSWORD = config('SYBASE_PASSWORD', default='')
 # connection (HQ + branches), whatever the per-feature *_ENABLED flags say.
 # Turn it on for staging / UAT / demos. See config/sybase.py.
 SOFTECH_READ_ONLY = config('SOFTECH_READ_ONLY', default=False, cast=bool)
+# P-54: the ONE instance allowed to write to SOFTECH (production VPS). Every writer gate is
+# WRITER_INSTANCE and <its flag> (config/writers.py), so the office development copy can carry
+# the same flags and still never write. Writer jobs are not even scheduled elsewhere.
+WRITER_INSTANCE = config('WRITER_INSTANCE', default=False, cast=bool)
 # Staging: send every branch-server connection to this host ('host' or 'host:port')
 # instead of the production addresses stored in Branch.db_host.
 SOFTECH_BRANCH_HOST_OVERRIDE = config('SOFTECH_BRANCH_HOST_OVERRIDE', default='')
@@ -430,6 +435,9 @@ if _RUNNING_TESTS and not config('SOFTECH_TESTS_ALLOW_LIVE', default=False, cast
     SYBASE_HOST = ''
     SOFTECH_BRANCH_HOST_OVERRIDE = 'softech-disabled-in-tests.invalid'
     SOFTECH_READ_ONLY = True
+    # Writer tests open each gate with its own flag; the read-only guard above still blocks
+    # every real write. The P-54 tests switch this off to prove the instance lock.
+    WRITER_INSTANCE = True
     for _k in ('SOFTECH_DEV_HOST', 'SOFTECH_TEST_HOST', 'SOFTECH_PROD_HOST'):
         os.environ.pop(_k, None)
 
@@ -882,7 +890,13 @@ MIDDLEWARE += [
     'apps.users.middleware.CurrentUserMiddleware',
     # Server-side RoleModuleAccess check for /api/<module>/ (see core/middleware/module_access.py)
     'core.middleware.module_access.ModuleAccessMiddleware',
+    # P-56: log API requests slower than SLOW_REQUEST_MS (route pattern only) for /sync
+    'apps.sync.middleware.SlowRequestMiddleware',
 ]
+SLOW_REQUEST_MS = config('SLOW_REQUEST_MS', default=1000, cast=int)
+# P-58: capture GS1 DataMatrix pack codes on receive / sale (apps/trace). OFF until EDA
+# guideline 804/2025 is read and branches have 2D scanners. Reports nothing to EDA.
+TRACK_TRACE_ENABLED = config('TRACK_TRACE_ENABLED', default=False, cast=bool)
 
 # off | log | enforce — roll out as: log in production, clean up the matrix until the
 # "elrezeiky.rbac" log is quiet, then enforce. The test runner defaults to off so

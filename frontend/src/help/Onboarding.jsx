@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { helpApi } from '../api/client'
 import { pick, label } from './text'
 import { ba } from '../utils/flowArrow'
+import { ProductTourButton } from './Journeys'
 
 const en = (lang) => lang === 'en'
 
@@ -85,6 +86,7 @@ export function MyPath({ lang, go, canPreview }) {
               {data.roles.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
           )}
+          <ProductTourButton lang={lang} role={role || undefined} />
           <a href={`/help/manual?role=${data.role}&lang=${lang}`} target="_blank" rel="noreferrer" data-tour="general-help-center-print-path"
              className="text-xs border border-line rounded-lg px-3 py-1.5 text-brand-600 hover:bg-brand-50">
             🖨️ {en(lang) ? 'Print my manual' : 'طباعة دليلي'}

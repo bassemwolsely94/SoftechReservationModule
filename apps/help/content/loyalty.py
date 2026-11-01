@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'loyalty', 'group': 'customers', 'icon': '🏆',
+    'brief': T('نقاط العملاء وبرنامج الولاء والإحالات، ونقاط كل فرع.',
+               'Customer points, the loyalty program and referrals, and each branch\'s points.'),
     'title': T('النقاط والولاء والإحالات', 'Points, loyalty & referrals'),
     'summary': T(
         'رصيد نقاط العميل الأساسي يُحفظ في SOFTECH ويكتسبه من مشتريات قنوات النقدي والتوصيل (التعاقد والتأمين لا يكتسبان نقاطاً). '
@@ -31,6 +33,9 @@ MODULE = {
                       'Share the code, invite the referred person, validate them, then see the referrer points on their account.'),
          'steps': [
             {'screen': 'loyalty.referral', 'target': 'loyalty-referral-mycode', 'perm': 'customers',
+             'label': T('شارك هذا الكود مع أصدقائك', 'Share this code with your friends'),
+             'when': T('لما عميل راضي يقول إنه هيرشّح الصيدلية لحد يعرفه.',
+                       'When a happy customer says they will recommend the pharmacy to someone.'),
              'text': T('شارك الكود أو الـ QR مع العميل اللي هيحيل أصحابه.', 'Share the code or QR with the customer who will refer friends.'),
              'open_hint': T('تبويب «كودي».', 'The "My code" tab.')},
             {'screen': 'loyalty.referral', 'target': 'loyalty-referral-invite', 'perm': 'customers',
@@ -184,6 +189,7 @@ SCREENS = [
         'related': ['loyalty.branch', 'customers.detail'],
         'tour': [
             {'target': 'loyalty-program-customer',
+             'label': T('ابحث عن عميل باسم أو رقم هاتف…', 'Search a customer by name or phone…'),
              'text': T('ابحث عن العميل بالاسم أو الهاتف أو كود PIC، فيظهر حسابه وسجلاته.', 'Search the customer by name, phone or PIC to show their account and logs.'),
              'when': T('لما عميل يتصل يسأل على نقاطه أو يشتكي من رصيده.', 'When a customer calls about their points or complains about their balance.'),
              'more': T(
@@ -232,6 +238,8 @@ SCREENS = [
             {'target': 'loyalty-program-tiers', 'label': T('درجات الولاء', 'Loyalty tiers'),
              'text': T('الدرجات والحد الأدنى للنقاط لكل درجة ومضاعف الاكتساب.', 'The tiers, the minimum points for each and the earn multiplier.')},
             {'target': 'loyalty-program-header',  # from the GitHub-side tour
+             'label': T('نظام النقاط والولاء', 'Points & loyalty system'),
+             'when': T('نقطة البداية: ابحث عن العميل تحتها لتشوف نقاطه.', 'Starting point: search for the customer below to see their points.'),
              'text': T('نظام النقاط والولاء.',
                        'The points and loyalty program.'),
              'more': T(
@@ -338,12 +346,16 @@ SCREENS = [
              'text': T('كودك مع QR ورابط للمشاركة، وإجمالي إحالاتك والتحويلات الناجحة والنقاط المكتسبة.', 'Your code with a QR and a share link, and your total referrals, conversions and points earned.'),
              'open_hint': T('تبويب «كودي».', 'The "My code" tab.')},
             {'target': 'loyalty-referral-header',  # from the GitHub-side tour
+             'label': T('نظام الإحالات', 'Referral system'),
+             'when': T('لمتابعة العملاء اللي جم بإحالة أو لمعرفة كود الإحالة بتاعك.', 'To follow referred customers or find your own referral code.'),
              'text': T('«نظام الإحالات»: متابعة العملاء المُحالين وكود الإحالة الخاص بك.',
                        '«Referrals»: follow up referred customers and your own referral code.'),
              'more': T(
                  'الإحالة بتمشي: دعوة ← تسجيل ← تحقق ← مكافأة المُحيل بنقاط إضافية.\n• فيه حماية من الاحتيال (أرقام وهمية أو مكررة)، فراجع قبل ما تتحقق.',
                  'A referral moves: invite → register → validate → the referrer is rewarded with extra points.\n• There is fraud protection (fake or repeated numbers), so review before validating.')},
             {'target': 'loyalty-referral-row-actions',  # from the GitHub-side tour
+             'label': T('دعوة · تحقق · الأحداث', 'Invite · Verify · Events'),
+             'when': T('على صف الإحالة: الزر الظاهر بيتغيّر حسب حالتها.', 'On a referral row: the button shown depends on its status.'),
              'text': T('«دعوة» يظهر للإحالة المنتظرة لإرسال دعوة واتساب، «تحقق» للمسجَّلة، و«الأحداث» لسجل الإحالة.',
                        '«Invite» shows for pending referrals to send a WhatsApp invite, «Validate» for registered ones, and «Events» for the referral log.'),
              'more': T(

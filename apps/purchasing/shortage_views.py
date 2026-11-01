@@ -18,6 +18,7 @@ Permissions (`shortage` module, Batch 4 Z-7b): reads → view, export → export
 POSTs (flag / unflag / dismiss / retrieve) → approve.
 """
 import io
+from config.writers import writer_allowed
 import logging
 
 from django.utils import timezone
@@ -147,7 +148,7 @@ def shortage_confirmed(request):
     from django.conf import settings
     total_lost = round(sum(r.get('lost_monthly', 0) for r in rows), 2)
     return Response({'count': len(rows), 'items': rows, 'total_lost_monthly': total_lost,
-                     'softech_write_enabled': bool(getattr(settings, 'SHORTAGE_SOFTECH_WRITE_ENABLED', False))})
+                     'softech_write_enabled': writer_allowed('SHORTAGE_SOFTECH_WRITE_ENABLED')})
 
 
 @api_view(['GET'])

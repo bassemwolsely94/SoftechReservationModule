@@ -32,6 +32,7 @@ SOFTECH's own trigger + service bus carry it to every branch.
 import logging
 from decimal import Decimal, ROUND_HALF_UP
 from django.conf import settings
+from config.writers import writer_allowed
 from django.utils import timezone
 
 from .models import ItemPriceChangeRequest, FIELD_TO_SOFTECH
@@ -79,7 +80,7 @@ def execute_price_change(
     """
     from config.sybase import get_sybase_connection
 
-    if not getattr(settings, 'PRICING_SOFTECH_WRITE_ENABLED', True):
+    if not writer_allowed('PRICING_SOFTECH_WRITE_ENABLED'):
         _fail(request, erp_usercode, erp_username,
               'كتابة الأسعار إلى SOFTECH معطّلة (PRICING_SOFTECH_WRITE_ENABLED=False)')
         return False

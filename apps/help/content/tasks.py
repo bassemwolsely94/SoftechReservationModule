@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'tasks', 'group': 'operations', 'icon': '✅',
+    'brief': T('مهام الفروع اليومية: مين يعمل إيه وامتى، ومتابعة اللي اتأخر.',
+               'The branches\' daily tasks: who does what and when, and follow-up on what is late.'),
     'title': T('المهام التشغيلية', 'Operational tasks'),
     'summary': T(
         'إسناد ومتابعة أعمال الفروع اليومية (جرد، استلام، تحويل، توصيل، نقص، مشتريات، صيانة، اجتماع، تدريب، تدقيق، عملاء…): '
@@ -89,8 +91,9 @@ MODULE = {
              'text': T('جرّب الجدول مرة واحدة: بيعمل مهمة دلوقتي وتشوف شكلها.', 'Test the schedule once: it makes a task now so you can see it.'),
              'warn': T('كل ضغطة بتعمل مهمة زيادة.', 'Every click makes another task.'),
              'open_hint': T('يظهر للجداول النشطة في الجدول.', 'Shown on active schedules in the table.')},
-            {'screen': 'tasks.dashboard', 'target': 'tasks-dashboard-kpis',
-             'text': T('تابع «متأخرة» و«معدل الإتمام» عشان تعرف الفروع ملتزمة ولا لأ.', 'Watch "Overdue" and the completion rate to see whether branches keep up.')},
+            {'screen': 'tasks.dashboard', 'target': 'tasks-dashboard-kpis', 'label': T('إجمالي المهام · نشطة · متأخرة · …', 'Total tasks · Active · Overdue · …'),
+             'text': T('تابع «متأخرة» و«معدل الإتمام» عشان تعرف الفروع ملتزمة ولا لأ.', 'Watch "Overdue" and the completion rate to see whether branches keep up.'),
+             'when': T('مرة في الأسبوع — لو «متأخرة» بتزيد، راجع الفرع المسؤول.', 'Once a week — if "Overdue" keeps rising, follow up with the branch.')},
          ]},
         {'key': 'mobile', 'shell': 'mobile',
          'title': T('تنفيذ مهمتك من الموبايل', 'Doing your task on the phone'),
@@ -100,10 +103,12 @@ MODULE = {
             {'screen': 'tasks.mobile', 'target': 'tasks-mobile-filters',
              'label': T('مفتوحة', 'Open'),
              'text': T('ابدأ من «مفتوحة» — ده المطلوب منك.', 'Start from "Open" — this is what is waiting for you.')},
-            {'screen': 'tasks.mobile', 'target': 'tasks-mobile-card',
-             'text': T('اضغط المهمة تفتح تفاصيلها.', 'Tap the task to open it.')},
-            {'screen': 'tasks.mobile', 'target': 'tasks-mobile-summary',
+            {'screen': 'tasks.mobile', 'target': 'tasks-mobile-card', 'label': T('كارت المهمة', 'Task card'),
+             'text': T('اضغط المهمة تفتح تفاصيلها.', 'Tap the task to open it.'),
+             'when': T('بعد ما تلاقي مهمتك في القائمة.', 'Once you find your task in the list.')},
+            {'screen': 'tasks.mobile', 'target': 'tasks-mobile-summary', 'label': T('ملخص المهمة', 'Task summary'),
              'text': T('اقرأ الوصف والموعد النهائي.', 'Read the description and deadline.'),
+             'when': T('قبل ما تبدأ الشغل في المهمة.', 'Before you start working on the task.'),
              'open_hint': T('افتح أي مهمة من القائمة.', 'Open any task from the list.')},
             {'screen': 'tasks.mobile', 'target': 'tasks-mobile-chatter',
              'label': T('💬 المحادثة', '💬 Chat'),
@@ -267,18 +272,19 @@ SCREENS = [
             {'target': 'tasks-list-overdue', 'label': T('متأخرة فقط', 'Overdue only'),
              'text': T('يعرض المهام اللي عدّى موعدها النهائي ولسه ما اتقفلتش.', 'Shows tasks past their deadline that are not closed yet.'),
              'when': T('أول حاجة يبص عليها المشرف كل صبح.', 'The first thing a supervisor checks every morning.')},
-            {'target': 'tasks-list-row',
+            {'target': 'tasks-list-row', 'label': T('سطر المهمة', 'Task row'),
              'text': T('صف لكل مهمة: الرقم، العنوان، الحالة، الأولوية، النوع، الفرع، المسؤول والموعد. اضغطه يفتح التفاصيل.',
                        'One row per task: number, title, status, priority, type, branch, assignee and deadline. Click it to open the details.'),
+             'when': T('لما تحب تقارن المهام جنب بعض أو تدوّر على مهمة برقمها.', 'When you want to compare tasks side by side or find one by its number.'),
              'open_hint': T('في عرض «≡ قائمة» أو «👤 مهامي»، ولازم يكون فيه مهام.', 'In the "≡ List" or "👤 My tasks" view, when there are tasks.')},
-            {'target': 'tasks-list-card',
+            {'target': 'tasks-list-card', 'label': T('كارت المهمة', 'Task card'),
              'text': T('كارت المهمة في الكانبان بأولويتها ومسؤولها وموعدها، و«⚠ متأخرة» لو عدّى الموعد. اضغطه يفتحها.',
                        'The task card on the Kanban with priority, assignee and deadline, and "⚠ Overdue" when late. Click it to open.'),
              'when': T('الكانبان للعرض بس؛ تغيير الحالة بيتم من صفحة التفاصيل.', 'The Kanban is for viewing; status changes are made on the details page.'),
              'open_hint': T('اختار عرض «⊟ كانبان».', 'Switch to the "⊟ Kanban" view.')},
             {'target': 'tasks-list-dashboard', 'label': T('📊 لوحة التحكم', '📊 Dashboard'),
              'text': T('ينقلك للوحة المهام: المتأخر، معدل الإتمام، والتوزيع حسب الفرع.', 'Goes to the tasks dashboard: overdue, completion rate and the split by branch.')},
-            {'target': 'tasks-list-content',  # from the GitHub-side tour
+            {'target': 'tasks-list-content', 'label': T('قائمة المهام', 'Tasks list'), 'when': T('لما تحب تفتح مهمة وتحدّثها.', 'When you want to open a task and update it.'),  # from the GitHub-side tour
              'text': T('المهام — افتح أي مهمة لتحديثها.',
                        'The tasks — open one to update it.'),
              'more': T(
@@ -361,13 +367,13 @@ SCREENS = [
                        'Returns a completed or cancelled task to "Open" after a confirmation, and it is logged.'),
              'when': T('لما المراجع يلاقي الشغل ناقص.', 'When the reviewer finds the work incomplete.'),
              'open_hint': T('يظهر بدل «إغلاق المهمة» في المهام المكتملة أو الملغاة.', 'Shown instead of "Close task" on completed or cancelled tasks.')},
-            {'target': 'tasks-detail-header',  # from the GitHub-side tour
+            {'target': 'tasks-detail-header', 'label': T('رقم المهمة وحالتها', 'Task number and status'), 'when': T('أول ما تفتح المهمة.', 'As soon as you open the task.'),  # from the GitHub-side tour
              'text': T('رأس المهمة: رقمها وحالتها وعلامة «⚠ متأخرة» لو عدّت موعدها.',
                        'The task header: its number, status and an "⚠ Overdue" mark if past its deadline.'),
              'more': T(
                  '«← المهام» بيرجّعك للقائمة.\n• الأزرار على الطرف: «✓ إغلاق المهمة» (أو «↩ إعادة فتح» لو مقفولة) و«✎ تعديل».\n• علامة «⚠ متأخرة» معناها إن الموعد النهائي عدّى والمهمة لسه مفتوحة.',
                  '"← Tasks" takes you back to the list.\n• The buttons at the side: "✓ Close task" (or "↩ Reopen" when closed) and "✎ Edit".\n• "⚠ Overdue" means the deadline has passed and the task is still open.')},
-            {'target': 'tasks-detail-comments',  # from the GitHub-side tour
+            {'target': 'tasks-detail-comments', 'label': T('💬 التعليقات والنشاط', '💬 Comments and activity'), 'when': T('لما تحب تكتب تحديث على المهمة.', 'When you want to post an update on the task.'),  # from the GitHub-side tour
              'text': T('«التعليقات والنشاط»: اكتب تحديثك وابعته بـ Ctrl+Enter.',
                        '"Comments & activity": write your update and send it with Ctrl+Enter.'),
              'more': T(
@@ -398,9 +404,11 @@ SCREENS = [
              'when': T('رقم «متأخرة» الأحمر هو أول حاجة تتعامل معاها.', 'A red "Overdue" number is the first thing to deal with.'),
              'more': T(
                  '• «متأخرة» أهم رقم: لو أكبر من صفر اضغطه وشوف مين محتاج متابعة.\n• «معدل الإتمام (30 يوم)» بيقيس قد إيه المهام بتتقفل فعلاً.\n• لو فيه مهام حرجة أو عاجلة بيظهر تحت الكروت زر بعددها يفتحها.',
-                 '• "Overdue" is the key number: if above zero, click it and see who needs follow-up.\n• "Completion rate (30 days)" measures how many tasks actually get closed.\n• If there are critical or urgent tasks, a button with their count appears under the cards to open them.')},
-            {'target': 'tasks-dashboard-priority',
+                 '• "Overdue" is the key number: if above zero, click it and see who needs follow-up.\n• "Completion rate (30 days)" measures how many tasks actually get closed.\n• If there are critical or urgent tasks, a button with their count appears under the cards to open them.'),
+         },
+            {'target': 'tasks-dashboard-priority', 'label': T('🔴 مهام حرجة · 🟠 مهام عاجلة', '🔴 Critical tasks · 🟠 Urgent tasks'),
              'text': T('تنبيه بعدد المهام الحرجة والعاجلة. اضغطه تتفتح القائمة بالأولوية دي.', 'An alert with the number of critical and urgent tasks. Click it to open the list at that priority.'),
+             'when': T('بيظهر بس لو فيه مهام حرجة أو عاجلة — ابدأ بيها قبل أي حاجة.', 'Shows only when critical or urgent tasks exist — handle them first.'),
              'open_hint': T('يظهر بس لو فيه مهام حرجة أو عاجلة.', 'Only shown when there are critical or urgent tasks.')},
             {'target': 'tasks-dashboard-status', 'label': T('توزيع الحالات', 'Status distribution'),
              'text': T('نسبة المهام في كل حالة.', 'The share of tasks in each status.'),
@@ -427,7 +435,7 @@ SCREENS = [
              'open_hint': T('يظهر جنب كل جدول نشط في القسم ده.', 'Shown beside each active schedule in this section.')},
             {'target': 'tasks-dashboard-manage', 'label': T('⏱ إدارة الجداول', '⏱ Manage schedules'),
              'text': T('ينقلك لصفحة الجداول التلقائية تضيف أو تعدّل أو توقف جدول.', 'Goes to the schedules page to add, edit or pause a schedule.')},
-            {'target': 'tasks-dashboard-breakdown',  # from the GitHub-side tour
+            {'target': 'tasks-dashboard-breakdown', 'label': T('توزيع الحالات · حسب النوع · حسب الفرع', 'Status split · By type · By branch'), 'when': T('لما تحب تعرف المهام متركّزة فين.', 'When you want to see where the tasks pile up.'),  # from the GitHub-side tour
              'text': T('توزيع المهام حسب الحالة والنوع والفرع.',
                        'Tasks broken down by status, type and branch.'),
              'more': T(
@@ -488,13 +496,15 @@ SCREENS = [
             {'target': 'tasks-schedules-save', 'label': T('حفظ', 'Save'),
              'text': T('يحفظ الجدول. الاسم وقالب العنوان مطلوبين.', 'Saves the schedule. The name and title template are required.'),
              'open_hint': T('اضغط «+ جدول جديد» أو «تعديل» على أي جدول.', 'Press "+ New schedule" or "Edit" on any schedule.')},
-            {'target': 'tasks-schedules-table',
+            {'target': 'tasks-schedules-table', 'label': T('الجداول التلقائية', 'Automatic schedules'),
              'text': T('كل الجداول: التكرار، الفرع، المسؤول، عدد المهام المولّدة، آخر تشغيل والحالة (نشط/موقوف).',
                        'All schedules: frequency, branch, assignee, tasks generated, last run and status (active/paused).'),
+             'when': T('لما تتأكد إن الجداول شغالة — «آخر تشغيل» قديم أو حالة موقوف = مفيش مهام بتتولّد.', 'To check schedules run — an old "Last run" or a paused status means no tasks are made.'),
              'open_hint': T('يظهر لما يكون فيه جدول واحد على الأقل.', 'Shown when there is at least one schedule.'),
              'more': T(
                  'راجع «آخر تشغيل» و«المهام المولَّدة» تتأكد إن الجدول شغال فعلاً.\n• عمود «الحالة» بيوضح النشط من الموقوف.',
-                 'Check "Last run" and "Tasks generated" to make sure the schedule is really working.\n• The "Status" column shows active versus paused.')},
+                 'Check "Last run" and "Tasks generated" to make sure the schedule is really working.\n• The "Status" column shows active versus paused.'),
+         },
             {'target': 'tasks-schedules-run', 'label': T('تشغيل', 'Run'),
              'text': T('ينشئ مهمة من الجدول دلوقتي ويعرض رقمها فوق.', 'Creates a task from the schedule now and shows its number above.'),
              'warn': T('كل ضغطة بتعمل مهمة زيادة — استخدمه للتجربة مرة واحدة بس.', 'Every click makes another task — use it once, to test.'),
@@ -504,13 +514,13 @@ SCREENS = [
             {'target': 'tasks-schedules-delete', 'label': T('حذف', 'Delete'),
              'text': T('يمسح الجدول بعد تأكيد. المهام اللي اتولدت قبل كده بتفضل موجودة.', 'Deletes the schedule after a confirmation. Tasks it already generated stay.'),
              'warn': T('الحذف نهائي. لو عايز توقفه مؤقتاً شيل علامة «نشط» بدل الحذف.', 'Deleting is final. To pause it, untick "Active" instead of deleting.')},
-            {'target': 'tasks-schedules-header',  # from the GitHub-side tour
+            {'target': 'tasks-schedules-header', 'label': T('الجداول التلقائية', 'Automatic schedules'), 'when': T('لما تحب مهمة تتكرر لوحدها.', 'When you want a task to repeat by itself.'),  # from the GitHub-side tour
              'text': T('دي «الجداول التلقائية»: النظام بينشئ المهام المتكررة في معادها من القالب.',
                        'These are "Automatic schedules": the system creates recurring tasks on time from a template.'),
              'more': T(
                  'بدل ما تكتب نفس المهمة كل يوم أو كل أسبوع، عرّفها هنا مرة واحدة.\n• المهام المولَّدة بتظهر في قائمة المهام عادي وبتتابعها زي أي مهمة.',
                  'Instead of writing the same task every day or week, define it here once.\n• Generated tasks show in the task list and are followed like any task.')},
-            {'target': 'tasks-schedules-actions',  # from the GitHub-side tour
+            {'target': 'tasks-schedules-actions', 'label': T('تشغيل · تعديل · حذف', 'Run · Edit · Delete'), 'when': T('لما تحب تجرّب جدول أو تغيّره.', 'When you want to try or change a schedule.'),  # from the GitHub-side tour
              'text': T('«تشغيل» ينشئ مهمة دلوقتي للتجربة (للجداول النشطة)، و«تعديل» و«حذف» للجدول.',
                        '"Run" creates a task now as a test (active schedules only); "Edit" and "Delete" act on the schedule.'),
              'more': T(
@@ -533,14 +543,16 @@ SCREENS = [
              'text': T('شرائح الحالة. بتفتح على «مفتوحة» عشان تشوف المطلوب منك الأول.', 'Status chips. It opens on "Open" so you see what is waiting first.'),
              'more': T(
                  'الشاشة بتفتح على «مفتوحة» — يعني اللي لسه مطلوب منك.\n• «منجزة» لو عايز ترجع لمهمة خلّصتها.',
-                 'The screen opens on "Open" — what is still expected of you.\n• "Done" if you want to look back at a finished task.')},
-            {'target': 'tasks-mobile-card',
+                 'The screen opens on "Open" — what is still expected of you.\n• "Done" if you want to look back at a finished task.'),
+         },
+            {'target': 'tasks-mobile-card', 'label': T('كارت المهمة', 'Task card'),
              'text': T('كارت لكل مهمة بعنوانها وحالتها وموعدها. اضغطه يفتح التفاصيل.', 'One card per task with title, status and deadline. Tap it to open the details.'),
              'when': T('إنشاء المهام من الكمبيوتر بس — الموبايل لتنفيذها.', 'Tasks are created on the computer only — the phone is for doing them.'),
              'open_hint': T('في قائمة المهام، ولازم يكون فيه مهام.', 'On the task list, when there are tasks.')},
-            {'target': 'tasks-mobile-summary',
+            {'target': 'tasks-mobile-summary', 'label': T('ملخص المهمة', 'Task summary'),
              'text': T('عنوان المهمة وحالتها ووصفها وموعدها النهائي. اقرأ الوصف كويس قبل ما تبدأ.',
                        'The task title, status, description and deadline. Read the description before you start.'),
+             'when': T('قبل ما تغيّر الحالة — اتأكد إنك فاهم المطلوب والموعد.', 'Before changing the status — make sure you understand the job and the deadline.'),
              'open_hint': T('افتح أي مهمة من القائمة.', 'Open any task from the list.')},
             {'target': 'tasks-mobile-checklist', 'label': T('قائمة التحقق', 'Checklist'),
              'text': T('خطوات المهمة للقراءة. التعليم على العناصر بيتم من الكمبيوتر.', 'The task steps, read-only. Ticking items is done on the computer.'),
@@ -563,7 +575,7 @@ SCREENS = [
             {'target': 'tasks-mobile-back', 'label': T('الرجوع للمهام', 'Back to tasks'),
              'text': T('يرجّعك لقائمة المهام.', 'Takes you back to the task list.'),
              'open_hint': T('افتح أي مهمة من القائمة.', 'Open any task from the list.')},
-            {'target': 'tasks-mobile-list',  # from the GitHub-side tour
+            {'target': 'tasks-mobile-list', 'label': T('قائمة مهامي', 'My tasks list'), 'when': T('لما تحب تفتح مهمة من الموبايل.', 'When you want to open a task on mobile.'),  # from the GitHub-side tour
              'text': T('دي مهامك بحالتها وموعد استحقاقها؛ اضغط على مهمة عشان تفتحها.',
                        'These are your tasks with status and due date; tap a task to open it.'),
              'more': T(

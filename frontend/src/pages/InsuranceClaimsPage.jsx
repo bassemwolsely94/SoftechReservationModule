@@ -500,7 +500,7 @@ function ImportModal({ subclients, onClose, onCreated }) {
         </div>
 
         <div data-tour="insurance-import-submit" className="flex gap-3 mt-6">
-          <Btn onClick={submit} disabled={loading || !form.subclient_id} className="flex-1">
+          <Btn onClick={submit} disabled={loading || !form.subclient_id} className="flex-1" data-tour="insurance-claims-import-submit">
             {loading ? 'جارٍ الاستيراد...' : 'استيراد وإنشاء المطالبة'}
           </Btn>
           <Btn variant="secondary" onClick={onClose}>إلغاء</Btn>
