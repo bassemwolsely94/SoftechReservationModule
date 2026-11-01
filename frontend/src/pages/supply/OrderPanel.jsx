@@ -129,11 +129,11 @@ export default function OrderPanel({ lines: initialLines, supplierId, supplierNa
       </pre>
 
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={copy} disabled={!text} className={btnGhost} title="Ctrl+Enter">
+        <button data-tour="purchasing-supply-order-copy" type="button" onClick={copy} disabled={!text} className={btnGhost} title="Ctrl+Enter">
           {copied ? 'تم النسخ ✓' : 'نسخ النص'}
         </button>
-        <WhatsAppShareButton text={text} size="md" label="إرسال عبر واتساب" />
-        <button type="button" onClick={() => excelM.mutate()} disabled={!payloadLines.length || excelM.isPending}
+        <span data-tour="purchasing-supply-order-whatsapp" className="inline-flex"><WhatsAppShareButton text={text} size="md" label="إرسال عبر واتساب" /></span>
+        <button data-tour="purchasing-supply-order-excel" type="button" onClick={() => excelM.mutate()} disabled={!payloadLines.length || excelM.isPending}
           className={btnGhost}>{excelM.isPending ? 'جارٍ التصدير…' : 'Excel'}</button>
         {!commitM.data ? (
           <button data-tour="purchasing-supply-order-record" type="button" onClick={() => commitM.mutate()}

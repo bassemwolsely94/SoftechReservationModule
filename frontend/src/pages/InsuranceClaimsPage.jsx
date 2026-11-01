@@ -432,14 +432,14 @@ function ImportModal({ subclients, onClose, onCreated }) {
             <div data-tour="insurance-import-softech" className="border border-blue-200 rounded-lg p-3 bg-blue-50">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-xs font-semibold text-blue-800">المطالبات المتاحة في سوفتك</span>
-                <Btn onClick={loadMotalbas} disabled={loadingMot} size="sm" variant="secondary">
+                <Btn data-tour="insurance-claims-import-load-motalbas" onClick={loadMotalbas} disabled={loadingMot} size="sm" variant="secondary">
                   {loadingMot ? 'جارٍ التحميل...' : 'عرض المطالبات'}
                 </Btn>
               </div>
               {motalbas.length > 0 && (
                 <div className="max-h-44 overflow-y-auto border border-gray-200 rounded bg-white mb-2">
                   {motalbas.map(m => (
-                    <button key={m.motalbano} onClick={() => pickMotalba(m)}
+                    <button data-tour="insurance-claims-import-pick-motalba" key={m.motalbano} onClick={() => pickMotalba(m)}
                       className={`w-full text-right px-3 py-2 text-xs hover:bg-blue-50 border-b border-gray-100 flex justify-between items-center ${
                         String(m.motalbano) === form.softech_motalba_no ? 'bg-blue-100' : ''
                       }`}>
@@ -500,7 +500,7 @@ function ImportModal({ subclients, onClose, onCreated }) {
         </div>
 
         <div data-tour="insurance-import-submit" className="flex gap-3 mt-6">
-          <Btn onClick={submit} disabled={loading || !form.subclient_id} className="flex-1">
+          <Btn onClick={submit} disabled={loading || !form.subclient_id} className="flex-1" data-tour="insurance-claims-import-submit">
             {loading ? 'جارٍ الاستيراد...' : 'استيراد وإنشاء المطالبة'}
           </Btn>
           <Btn variant="secondary" onClick={onClose}>إلغاء</Btn>
@@ -902,7 +902,7 @@ export default function InsuranceClaimsPage() {
                         className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-0.5">
                         طباعة
                       </button>
-                      <button
+                      <button data-tour="insurance-claims-row-delete"
                         onClick={() => deleteClaims([claim.id])} disabled={deleting}
                         title="حذف المطالبة (الاستيراد المحلى فقط)"
                         className="text-xs text-red-500 hover:text-white hover:bg-red-500 border border-red-200 rounded px-2 py-0.5 mr-1 disabled:opacity-50">

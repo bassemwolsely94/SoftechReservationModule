@@ -263,7 +263,7 @@ export default function MyIncentivesPage() {
       <div className="bg-white rounded-2xl shadow p-8 max-w-md text-center space-y-4">
         <div className="text-5xl">⚠️</div>
         <div className="text-red-600 font-semibold">{err}</div>
-        <button className="btn-primary" onClick={load}>إعادة المحاولة</button>
+        <button data-tour="incentives-mine-retry" className="btn-primary" onClick={load}>إعادة المحاولة</button>
       </div>
     </div>
   )

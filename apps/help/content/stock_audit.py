@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'stock_audit', 'group': 'inventory', 'icon': '🔎',
+    'brief': T('فحوص تلقائية على كل حركة مخزون في SOFTECH تطلّع الحركات اللي محتاجة مراجعة.',
+               'Automatic checks on every SOFTECH stock movement that bring up the ones needing review.'),
     'title': T('تدقيق حركات المخزون', 'Stock transactions audit'),
     'summary': T(
         'فحوص ثابتة تعمل تلقائياً على كل حركات المخزون في SOFTECH (بيع، مرتجع، شراء، تحويل، تسوية) لكل الفروع، '
@@ -249,6 +251,24 @@ SCREENS = [
              'text': T('يوقف وصول مدير الفرع فوراً. يبقى سجل المنح والسحب.', 'Stops the branch manager’s access at once. The grant and removal stay on record.'),
              'open_hint': T('بجوار اسم مدير الفرع.', 'Next to the branch manager’s name.')},
         ],
-        'updated': '2026-10-28',
+        'hints': [
+            {'target': 'stock-audit-main-branch-save', 'label': T('حفظ حدود الفرع', 'Save branch thresholds'),
+             'text': T('يحفظ حدود مختلفة للفحص ده في الفرع المختار بس، وتتطبق من التشغيل الجاي. التغيير بيتسجّل قبل وبعد.',
+                       'Saves different thresholds for this check in the chosen branch only; they apply from the next run. The change is logged before and after.'),
+             'when': T('لما فرع طبيعته مختلفة (حجم أو قناة) وبيطلع ملاحظات كتير مش حقيقية بالحد العام.',
+                       'When a branch is different (size or channel) and the chain threshold gives it many false findings.'),
+             'warn': T('حد الفرع الأعلى بيخفي ملاحظات الفرع ده بس — راجع نتايجه الأول.', 'A higher branch threshold hides that branch’s findings only — review its results first.'),
+             'open_hint': T('في الإعدادات: اختار فرع تحت الفحص. للمدير والجودة.', 'In Settings: pick a branch under the check. Admin and quality.')},
+            {'target': 'stock-audit-main-branch-reset', 'label': T('رجوع للحدود العامة', 'Back to chain thresholds'),
+             'text': T('يمسح حدود الفرع ده للفحص ده، فيرجع يتفحص بالحدود العامة من التشغيل الجاي. بيتسجّل في السجل.',
+                       'Deletes this branch’s thresholds for this check, so it is checked with the chain thresholds from the next run. Logged.'),
+             'open_hint': T('يظهر لما الفرع المختار ليه حدود خاصة.', 'Shows when the chosen branch has its own thresholds.')},
+            {'target': 'stock-audit-main-access-grant', 'label': T('منح الصلاحية', 'Grant access'),
+             'text': T('يدي الموظف ده صلاحية يشوف ملاحظات فرعه بس ويراجعها ويصدّرها — من غير ما يغيّر الحدود. بيتسجّل مين منح وإمتى.',
+                       'Lets this employee see, review and export his own branch’s findings only — without changing thresholds. Who granted it and when is logged.'),
+             'when': T('لمدير الفرع اللي عايزه يتابع ملاحظات فرعه بنفسه.', 'For a branch manager who should follow up his branch’s findings himself.'),
+             'open_hint': T('ابحث عن الموظف بالاسم أو الكود (حرفين على الأقل). للإدارة.', 'Search the employee by name or code (2+ letters). Admin.')},
+        ],
+        'updated': '2026-11-01',
     },
 ]

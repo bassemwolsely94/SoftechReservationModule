@@ -26,6 +26,7 @@ Points BALANCES are not touched here (separate, pending the reset method).
 import logging
 
 from django.conf import settings
+from config.writers import writer_allowed
 
 logger = logging.getLogger('elrezeiky.customers')
 
@@ -36,7 +37,7 @@ _TEXT = {'phcodestatus', 'usercode'}
 
 
 def write_enabled():
-    return bool(getattr(settings, 'CUSTOMER_BRANCH_COPY_WRITE_ENABLED', False))
+    return writer_allowed('CUSTOMER_BRANCH_COPY_WRITE_ENABLED')
 
 
 def max_per_run():

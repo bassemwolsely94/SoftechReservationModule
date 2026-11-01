@@ -83,7 +83,7 @@ function SaveBar({ dirty, saving, onSave, onReset }) {
     <div className="fixed bottom-6 inset-x-0 flex justify-center z-50 pointer-events-none">
       <div className="flex items-center gap-3 bg-white border border-gray-200 shadow-2xl rounded-2xl px-6 py-3 pointer-events-auto">
         <span className="text-sm text-amber-600 font-medium">⚠ يوجد تغييرات غير محفوظة</span>
-        <button onClick={onReset} className="text-sm text-gray-400 hover:text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-50">
+        <button data-tour="catalog-intel-discard" onClick={onReset} className="text-sm text-gray-400 hover:text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-50">
           إلغاء
         </button>
         <button
@@ -518,7 +518,7 @@ function ClinicalSection({ data, softech_id }) {
           {searchRes.length > 0 && (
             <div className="absolute z-20 top-full right-0 left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
               {searchRes.map(ai => (
-                <button
+                <button data-tour="catalog-intel-ingredient-pick"
                   key={ai.id}
                   onClick={() => addMut.mutate(ai)}
                   disabled={addMut.isPending || ingredients.some(i => i.ingredient_id === ai.id)}
@@ -718,7 +718,7 @@ function RecommendationsSection({ data }) {
     <div>
       <div className="space-y-2">
         {fbt.map((pair, i) => (
-          <button
+          <button data-tour="catalog-intel-fbt-item"
             key={i}
             onClick={() => navigate(`/products/${pair.partner_softech_id}`)}
             className="w-full flex items-center gap-4 bg-white hover:bg-brand-50 border border-gray-100 hover:border-brand-200 rounded-xl px-4 py-3 text-right transition-colors"

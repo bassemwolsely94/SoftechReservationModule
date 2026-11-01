@@ -24,6 +24,7 @@ import IsrFulfilmentTab from './supply/IsrFulfilmentTab'
 import BranchRequestsTab from './supply/BranchRequestsTab'
 import SupplierComparisonTab from './supply/SupplierComparisonTab'
 import PurchasePricesTab from './supply/PurchasePricesTab'
+import ReceiptCheckTab from './supply/ReceiptCheckTab'
 import { wildcardMatch } from '../utils/wildcard'
 import useBranchLabels from '../hooks/useBranchLabels'
 import useHelpTab from '../help/useHelpTab'
@@ -55,7 +56,7 @@ const n = (v, d = 1) => (v === null || v === undefined || v === '' ? '—' : Num
 const SUPPLY_TABS = [
   ['inbox', 'صندوق الإتاحة'], ['compare', 'مقارنة الموردين'], ['prices', 'مقارنة أسعار الشراء'], ['cases', 'متابعة النواقص'],
   ['rates', 'معدلات البيع'], ['isr', 'طلبات التوريد / ISR'], ['isrfill', 'تلبية طلبات الفروع'],
-  ['wa', 'طلبات واتساب'], ['dist', 'التوزيعة'],
+  ['wa', 'طلبات واتساب'], ['dist', 'التوزيعة'], ['receipts', 'شراء رغم تغطية عالية'],
 ]
 const TAB_KEY = 'supply_last_tab'
 
@@ -103,7 +104,8 @@ export default function SupplyPage() {
         : tab === 'rates' ? <RatesTab />
         : tab === 'isr' ? <IsrTab />
         : tab === 'isrfill' ? <IsrFulfilmentTab />
-        : tab === 'wa' ? <BranchRequestsTab /> : <DistributionTab />}
+        : tab === 'wa' ? <BranchRequestsTab />
+        : tab === 'receipts' ? <ReceiptCheckTab /> : <DistributionTab />}
     </div>
   )
 }
@@ -215,7 +217,7 @@ function RatesTab() {
           </select>
         </div>
         {method === 'advanced' && (
-          <button type="button" onClick={() => setShowAdv(v => !v)}
+          <button data-tour="purchasing-supply-rates-advanced" type="button" onClick={() => setShowAdv(v => !v)}
             className="text-xs text-primary underline underline-offset-2 pb-1.5">
             {showAdv ? 'إخفاء الإعدادات' : 'إعدادات متقدمة ⚙'}
           </button>
@@ -236,7 +238,7 @@ function RatesTab() {
         <div className="rounded-lg border border-line bg-surface p-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-content/80">إعدادات المحرك المتقدم (Croston / التنبؤ)</span>
-            <button type="button" onClick={() => setAdv({ ...ADV_DEFAULTS })}
+            <button data-tour="purchasing-supply-rates-advanced-reset" type="button" onClick={() => setAdv({ ...ADV_DEFAULTS })}
               className="text-xs text-content/50 hover:text-primary">إعادة الافتراضي</button>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -382,7 +384,7 @@ function PushDetail({ push, gated, canWrite, onApprove, onExecute, approving, ex
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => xlsM.mutate()} disabled={xlsM.isPending}
+          <button data-tour="purchasing-supply-rates-export" type="button" onClick={() => xlsM.mutate()} disabled={xlsM.isPending}
             className="px-3 py-1.5 rounded border border-line text-sm hover:bg-primary/5 disabled:opacity-50"
             title="كل أسطر الدفعة مع «بيانات الصنف» (التصنيف، المورد الرئيسي، الشركة المنتجة، الأسعار)">
             {xlsM.isPending ? '…' : '⬇ Excel'}
@@ -594,7 +596,7 @@ function IsrTab() {
           className="px-4 py-1.5 rounded bg-primary text-white text-sm font-medium disabled:opacity-50">
           {proposeM.isPending ? 'جارٍ التحضير…' : '＋ طلب توريد جديد (معاينة)'}
         </button>
-        <button onClick={() => setShowXfer(v => !v)}
+        <button data-tour="purchasing-supply-isr-xfer-toggle" onClick={() => setShowXfer(v => !v)}
           className="px-3 py-1.5 rounded border border-line text-sm text-content/80 hover:border-primary/40">
           {showXfer ? '▲ إخفاء التوزيعة' : '⇄ توزيعة بين الفروع'}
         </button>
@@ -617,7 +619,7 @@ function IsrTab() {
             توزيعة بين الفروع (فائض ← الرئيسي ← عجز)
             {previewQ.data?.run_id && <span className="text-xs text-content/50">تشغيل #{previewQ.data.run_id}</span>}
             {previewQ.data?.pairs?.length > 0 && (
-              <button onClick={() => xferXlsM.mutate(null)} disabled={xferXlsM.isPending}
+              <button data-tour="purchasing-supply-isr-xfer-export-all" onClick={() => xferXlsM.mutate(null)} disabled={xferXlsM.isPending}
                 className="ms-auto px-2 py-0.5 rounded border border-line text-xs text-content/80 hover:border-primary/40 disabled:opacity-50">
                 {xferXlsM.isPending ? '…' : '⬇ Excel (كل المسارات)'}</button>)}
           </div>
@@ -633,10 +635,10 @@ function IsrTab() {
                 </span>
                 <span className="flex items-center gap-2 text-xs text-content/60">
                   {p.items} صنف · {Number(p.value).toLocaleString('ar-EG')} ج
-                  <button onClick={() => xferXlsM.mutate({ from: p.from, to: p.to })} disabled={xferXlsM.isPending}
+                  <button data-tour="purchasing-supply-isr-xfer-export" onClick={() => xferXlsM.mutate({ from: p.from, to: p.to })} disabled={xferXlsM.isPending}
                     className="px-2 py-0.5 rounded border border-line text-content/80 hover:border-primary/40 disabled:opacity-50"
                     title="أصناف هذا المسار مع الأرصدة ومعدلات البيع — للمراجعة قبل التوليد">Excel</button>
-                  <button onClick={() => xferM.mutate({ from: p.from, to: p.to })} disabled={xferM.isPending}
+                  <button data-tour="purchasing-supply-isr-xfer-generate" onClick={() => xferM.mutate({ from: p.from, to: p.to })} disabled={xferM.isPending}
                     className="px-2 py-0.5 rounded bg-primary text-white disabled:opacity-50">توليد</button>
                 </span>
               </div>
@@ -790,7 +792,7 @@ function IsrDetail({ push, gated, canWrite, onApprove, onPush, onCancel, approvi
         <div className="px-3 py-2 border-b border-line flex flex-wrap items-center gap-2 text-sm">
           <input value={reason} onChange={e => setReason(e.target.value)} placeholder="سبب الإلغاء (مطلوب)" autoFocus
             className="border border-line rounded px-2 py-1 text-sm bg-surface text-content w-72" />
-          <button onClick={() => onCancel(reason)} disabled={cancelling || reason.trim().length < 5}
+          <button data-tour="purchasing-supply-isr-cancel-confirm" onClick={() => onCancel(reason)} disabled={cancelling || reason.trim().length < 5}
             className="px-3 py-1 rounded bg-rose-600 text-white text-sm disabled:opacity-50">{cancelling ? '…' : 'تأكيد الإلغاء'}</button>
           <button onClick={() => setCancelOpen(false)} className="text-xs text-content/60 underline">تراجع</button>
         </div>
@@ -818,7 +820,7 @@ function IsrDetail({ push, gated, canWrite, onApprove, onPush, onCancel, approvi
               <input value={forceReason} onChange={e => setForceReason(e.target.value)}
                 placeholder="سبب إعادة الإرسال عن قصد (مطلوب)"
                 className="border border-line rounded px-2 py-1 text-sm bg-surface text-content w-72" />
-              <button onClick={() => onPush(forceReason)} disabled={pushing || forceReason.trim().length < 5}
+              <button data-tour="purchasing-supply-isr-push-force" onClick={() => onPush(forceReason)} disabled={pushing || forceReason.trim().length < 5}
                 className="px-3 py-1 rounded border border-rose-300 text-rose-700 text-sm disabled:opacity-50">
                 ترحيل رغم التطابق</button>
             </div>
@@ -955,7 +957,7 @@ function DistributionTab() {
           ))}
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث بالصنف أو الكود… (* أو %)"
             className="border border-line rounded px-2 py-1 text-xs bg-surface text-content w-52" />
-          <button onClick={() => xlsM.mutate()} disabled={xlsM.isPending || !cats.length || !q.data}
+          <button data-tour="purchasing-supply-dist-export" onClick={() => xlsM.mutate()} disabled={xlsM.isPending || !cats.length || !q.data}
             className="px-3 py-1.5 rounded border border-line text-sm text-content/80 hover:border-primary/40 disabled:opacity-50 ms-auto"
             title="الصفوف الظاهرة بنفس الفلاتر، مع رصيد ومعدل بيع الفرع الحائز والمستهدف">
             {xlsM.isPending ? '…' : '⬇ Excel'}</button>

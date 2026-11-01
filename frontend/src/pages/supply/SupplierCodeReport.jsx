@@ -43,7 +43,7 @@ export default function SupplierCodeReport({ onClose }) {
         <select value={days} onChange={e => setDays(Number(e.target.value))} className={`${inputCls} text-xs w-28`}>
           {[30, 90, 180, 365, 730].map(n => <option key={n} value={n}>آخر {n} يوم</option>)}
         </select>
-        <button type="button" className={btnGhost} disabled={!d || xl.isPending} onClick={() => xl.mutate()}>
+        <button data-tour="purchasing-supply-codes-export" type="button" className={btnGhost} disabled={!d || xl.isPending} onClick={() => xl.mutate()}>
           {xl.isPending ? 'جارٍ التجهيز…' : 'تصدير Excel'}</button>
         <button type="button" className="ms-auto text-xs text-content/50 hover:text-primary" onClick={onClose}>إغلاق</button>
       </div>

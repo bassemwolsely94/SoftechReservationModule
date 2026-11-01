@@ -86,7 +86,7 @@ export default function HelpUsage({ days, go }) {
             <summary className="cursor-pointer text-muted">جولات محدش شغّلها ({neverRun.length})</summary>
             <div className="flex flex-wrap gap-1.5 mt-2">
               {neverRun.map((t) => t.flow
-                ? <button key={t.screen_key} type="button" onClick={() => openFix(t)}
+                ? <button data-tour="general-help-usage-fix" key={t.screen_key} type="button" onClick={() => openFix(t)}
                           className="text-xs border border-line rounded-full px-2.5 py-1 text-content hover:border-brand-300">🧭 {pick(t.title, 'ar')}</button>
                 : <Screen key={t.screen_key} u={{ ...t, on_paths: [] }} />)}
             </div>

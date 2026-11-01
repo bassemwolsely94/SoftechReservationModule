@@ -123,7 +123,7 @@ function ClientPanel({ selected, onSelect }) {
             <input className={inp} value={form.notes} onChange={e => setForm(p => ({...p, notes: e.target.value}))} />
           </div>
           <div className="flex gap-2">
-            <Btn onClick={save} disabled={!form.name || saving} size="md">
+            <Btn data-tour="insurance-clients-client-save" onClick={save} disabled={!form.name || saving} size="md">
               {saving ? 'جارٍ الحفظ...' : (editId ? 'حفظ التعديل' : 'حفظ')}
             </Btn>
             <Btn onClick={close} variant="secondary" size="md">إلغاء</Btn>
@@ -238,7 +238,7 @@ function SubClientPanel({ client, selected, onSelect }) {
               onChange={e => setForm(p => ({...p, notes: e.target.value}))} />
           </div>
           <div className="flex gap-2">
-            <Btn onClick={save} disabled={!form.name || saving} size="md">
+            <Btn data-tour="insurance-clients-subclient-save" onClick={save} disabled={!form.name || saving} size="md">
               {saving ? 'جارٍ الحفظ...' : (editId ? 'حفظ التعديل' : 'حفظ')}
             </Btn>
             <Btn onClick={close} variant="secondary" size="md">إلغاء</Btn>
@@ -424,7 +424,7 @@ export default function InsuranceClientsPage() {
         <p className="text-sm text-gray-500 mt-0.5">جهات التأمين — الفئات — العقود ونسب الخصم</p>
       </div>
 
-      <div className="px-6 py-6 grid grid-cols-3 gap-6 h-[calc(100vh-130px)]">
+      <div className="px-6 py-6 grid grid-cols-3 gap-6 h-[calc(100vh-130px)]" data-tour="insurance-clients-columns">
         <div data-tour="insurance-clients-payers" className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden flex flex-col">
           <ClientPanel
             selected={selectedClient}

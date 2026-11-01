@@ -127,7 +127,7 @@ export default function ContractAssist({ P, mobile = false }) {
   const label = (l) => `${l.name || 'صنف غير معروف'} (${WHY[l.status] || l.status})`
   return (
     <div className="mb-3">
-      <button type="button" disabled={!name || busy} onClick={open}
+      <button data-tour="pos-order-contract-last-rx" type="button" disabled={!name || busy} onClick={open}
               title={name ? 'آخر روشتات هذا المريض' : 'اختر المريض أولاً'}
               className="inline-flex items-center gap-1.5 text-xs font-medium rounded border border-blue-300 text-blue-800 bg-blue-50 px-2.5 py-1.5 disabled:opacity-40">
         <Icon name="rx" size={14} /> آخر روشتة {busy && '…'}
@@ -140,7 +140,7 @@ export default function ContractAssist({ P, mobile = false }) {
                 const s = c.revalidated?.summary || {}
                 const bad = (s.out_of_stock || 0) + (s.blocked || 0) + (s.missing_item || 0)
                 return (
-                  <button key={`${c.source}-${c.ref}`} type="button" disabled={busy} onClick={() => apply(c)}
+                  <button data-tour="pos-order-contract-rx-apply" key={`${c.source}-${c.ref}`} type="button" disabled={busy} onClick={() => apply(c)}
                           className="text-start border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white hover:border-blue-500 disabled:opacity-50 shrink-0 min-w-[9.5rem]">
                     <div className="text-xs font-semibold">{dateOf(c.date)}</div>
                     <div className="text-[11px] text-gray-600">{s.total_lines ?? c.revalidated?.lines?.length ?? 0} أصناف · {fmtMoney(c.total)} ج</div>

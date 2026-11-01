@@ -31,7 +31,7 @@ export function useHelpShortcuts() {
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'F1' && e.shiftKey) { e.preventDefault(); window.dispatchEvent(new Event('help:show-me')); return }
-      if (e.key === 'F1' && e.ctrlKey) { e.preventDefault(); toggleHints(); return }
+      if (e.key === 'F1' && e.altKey) { e.preventDefault(); toggleHints(); return }
       if (e.key === 'F1') { e.preventDefault(); toggle() }
     }
     const onOpen = (e) => open(e?.detail?.key || null, e?.detail?.tab || null)
@@ -167,8 +167,7 @@ function PanelBody() {
               </div>
             )}
             {data.tour?.length > 0 && data.key === screen?.key && (
-              <button type="button" onClick={() => startTour(data.key, data.tour_flow?.length ? data.tour_flow : data.tour, data.routes, data.title)}
-                      data-tour="general-help-center-panel-show-me"
+              <button type="button" data-tour="general-help-center-panel-show-me" onClick={() => startTour(data.key, data.tour_flow?.length ? data.tour_flow : data.tour, data.routes, data.title)}
                       className="w-full mb-4 flex items-center gap-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white px-4 py-3 text-start">
                 <span className="text-2xl">👆</span>
                 <span className="flex-1">
@@ -204,7 +203,7 @@ function PanelBody() {
               </button>
             ))}
             {data && !term && data.tour?.length > 0 && data.key === screen?.key && (
-              <button type="button" onClick={() => { toggleHints(); close() }} title="Ctrl+F1" data-tour="general-help-center-panel-hints"
+              <button type="button" onClick={() => { toggleHints(); close() }} title="Alt+F1" data-tour="general-help-center-panel-hints"
                       className={`text-xs rounded-lg px-3 py-1.5 border ${hints
                         ? 'bg-amber-50 border-amber-300 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100'
                         : 'border-line text-content hover:bg-surface-2'}`}>
@@ -215,7 +214,7 @@ function PanelBody() {
             <Link to="/help" onClick={close} className="text-brand-600 hover:underline">{label('openCenter', lang)}</Link>
             <Link to="/help?tab=path" onClick={close} className="text-brand-600 hover:underline">🎓 {lang === 'en' ? 'My path' : 'مساري'}</Link>
             {data?.can_edit && !term && (
-              <button type="button" onClick={() => setEditing(true)} className="ms-auto text-brand-600 hover:underline">
+              <button data-tour="help-panel-edit" type="button" onClick={() => setEditing(true)} className="ms-auto text-brand-600 hover:underline">
                 ✏️ {label('edit', lang)}
               </button>
             )}
@@ -238,7 +237,7 @@ export function FlowList({ flows, role, lang, onStart, mobile = null }) {
         🧭 {lang === 'en' ? 'Workflow tours (across screens)' : 'جولات دورة العمل (بين الشاشات)'}
       </h3>
       {mine.map((f) => (
-        <button key={f.id} type="button" onClick={() => onStart(f.id, f.steps, [], f.title)}
+        <button data-tour="help-panel-flow" key={f.id} type="button" onClick={() => onStart(f.id, f.steps, [], f.title)}
                 className="w-full text-start rounded-lg border border-line px-3 py-2 hover:border-brand-300 hover:bg-brand-50">
           <div className="text-sm font-semibold text-content">{f.mobile ? '📱' : '👆'} {pick(f.title, lang)}</div>
           {f.summary && <div className="text-xs text-muted leading-5">{pick(f.summary, lang)}</div>}

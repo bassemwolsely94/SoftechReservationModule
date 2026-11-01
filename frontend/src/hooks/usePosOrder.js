@@ -1361,20 +1361,28 @@ export default function usePosOrder() {
 
   // ── held / parked orders (localStorage) ──
   const _persistParked = (list) => { setParked(list); localStorage.setItem('pos_parked', JSON.stringify(list)) }
+  const _parkSnap = () => ({ id: Date.now(), at: new Date().toISOString(),
+    label: customer?.name || `سلة ${parked.length + 1}`, total: totals.net,
+    channel, docKind, customer, lines, tenders, claim })
   const parkOrder = () => {
     if (!lines.length) { setMsg('لا يوجد ما يُعلّق'); return }
-    const snap = { id: Date.now(), at: new Date().toISOString(),
-      label: customer?.name || `سلة ${parked.length + 1}`, total: totals.net,
-      channel, docKind, customer, lines, tenders, claim }
-    _persistParked([snap, ...parked]); reset(); setMsg('تم تعليق السلة (Park)')
+    _persistParked([_parkSnap(), ...parked]); reset(); setMsg('تم تعليق السلة (Park)')
   }
+  // recalling never loses the basket on screen: a non-empty one is parked first
   const recallOrder = (id) => {
     const s = parked.find(p => p.id === id); if (!s) return
+    const rest = parked.filter(p => p.id !== id)
+    const parkCurrent = lines.length > 0
     setChannel(s.channel); setDocKind(s.docKind); setCustomer(s.customer || null)
     setLines(s.lines || []); setTenders(s.tenders || [blankTender()]); setClaim(s.claim || blankClaim())
-    _persistParked(parked.filter(p => p.id !== id)); setMsg('تم استرجاع السلة')
+    _persistParked(parkCurrent ? [_parkSnap(), ...rest] : rest)
+    setMsg(parkCurrent ? 'تم استرجاع السلة — والسلة اللي كانت مفتوحة اتعلّقت' : 'تم استرجاع السلة')
   }
-  const deleteParked = (id) => _persistParked(parked.filter(p => p.id !== id))
+  const deleteParked = (id) => {
+    const s = parked.find(p => p.id === id)
+    if (s && !window.confirm(`حذف السلة المعلّقة «${s.label}»؟ مش هترجع.`)) return
+    _persistParked(parked.filter(p => p.id !== id))
+  }
 
   // ── favorites quick grid + barcode scan ──
   const _favShape = it => ({ item_id: it.item_id || it.id || null, softech_id: it.softech_id,

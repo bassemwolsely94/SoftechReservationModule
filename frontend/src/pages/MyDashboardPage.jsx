@@ -58,7 +58,7 @@ function BranchFilter({ options, selected, onChange }) {
     onChange([...set])
   }
   return (
-    <div className="flex gap-1 mb-2 flex-wrap items-center">
+    <div data-tour="general-me-branch-filter" className="flex gap-1 mb-2 flex-wrap items-center">
       <span className="text-[13px] text-gray-400 ml-1">الفروع:</span>
       {options.map(b => (
         <button key={b} onClick={() => toggle(b)}
@@ -153,7 +153,7 @@ export default function MyDashboardPage() {
             preset="search"
             title="لوحتك فارغة"
             sub="ابدأ بإضافة لوحة — قد تحتاج أولاً إلى المطالبة بهويتك في SOFTECH واعتمادها"
-            action={<button className="btn-primary" onClick={() => setShowAdd(true)}>➕ إضافة لوحة</button>}
+            action={<button data-tour="general-me-add-widget" className="btn-primary" onClick={() => setShowAdd(true)}>➕ إضافة لوحة</button>}
           />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4" data-tour="general-me-widgets">
@@ -286,9 +286,9 @@ function WidgetCard({ widget, index, canEdit, onDragStart, onDragEnter, onDragEn
             )}
           </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0" data-tour="general-me-widget-controls">
+        <div data-tour="general-me-widget-controls" className="flex items-center gap-1 shrink-0">
           <button data-tour="general-me-widget-size" title={`العرض: ${SIZE_HINT[widget.size] || SIZE_HINT.md} — اضغط للتوسيع`} className="text-gray-400 hover:text-brand-600 p-1" onClick={cycleSize}>⤢</button>
-          <button title="تحديث" className="text-gray-400 hover:text-brand-600 p-1" onClick={() => setRefreshTick(t => t + 1)}>↻</button>
+          <button data-tour="general-me-widget-refresh" title="تحديث" className="text-gray-400 hover:text-brand-600 p-1" onClick={() => setRefreshTick(t => t + 1)}>↻</button>
           <button data-tour="general-me-widget-remove" title="حذف" className="text-gray-400 hover:text-red-600 p-1" onClick={() => removeM.mutate()}>✕</button>
         </div>
       </div>
@@ -399,7 +399,7 @@ function RevisionControl({ item, kind, widgetId, canEdit, onSaved }) {
       {canEdit && (
         <div className="flex gap-1.5 shrink-0">
           {drift && (
-            <button disabled={saving} onClick={() => setRev(true)} className="btn-secondary text-[13px] px-2 py-0.5">إعادة الختم</button>
+            <button data-tour="general-me-revision-restamp" disabled={saving} onClick={() => setRev(true)} className="btn-secondary text-[13px] px-2 py-0.5">إعادة الختم</button>
           )}
           <button data-tour="general-me-mark-reviewed" disabled={saving} onClick={() => setRev(!revised)}
             className={`text-[13px] px-2 py-0.5 rounded ${revised ? 'btn-secondary' : 'btn-primary'} disabled:opacity-50`}>
@@ -678,7 +678,7 @@ function PaymentsBody({ payload, widgetId, canEdit, onSaved, branches }) {
                             className="w-full text-sm border border-gray-200 rounded-lg p-1.5 focus:outline-none focus:border-brand-500"
                             placeholder="اكتب ملاحظة (تُكتب في SOFTECH — المركز والفرع)" />
                           <div className="flex gap-1.5">
-                            <button disabled={saving} onClick={() => saveNote(c)}
+                            <button data-tour="general-me-cheque-note-save-softech" disabled={saving} onClick={() => saveNote(c)}
                               className="btn-primary text-sm px-3 py-1 disabled:opacity-50">
                               {saving ? '...' : 'حفظ في SOFTECH'}
                             </button>
@@ -691,7 +691,7 @@ function PaymentsBody({ payload, widgetId, canEdit, onSaved, branches }) {
                           <div className="flex items-center justify-between">
                             <span className="text-gray-400">📝 ملاحظات</span>
                             {canEdit && (
-                              <button onClick={() => { setDraft(c.note || ''); setEditing(true) }}
+                              <button data-tour="general-me-cheque-note-edit" onClick={() => { setDraft(c.note || ''); setEditing(true) }}
                                 className="text-gray-400 hover:text-brand-600" title="تعديل ملاحظة الشيك">✏️ تعديل</button>
                             )}
                           </div>
@@ -883,7 +883,7 @@ function AddWidgetModal({ onClose, approvedIdentities, onNeedIdentity, onAdded }
             options.length === 0 ? (
               <div className="text-xs bg-amber-50 text-amber-700 rounded-lg p-3">
                 لا توجد هوية {KIND_LABEL[picked.kind]} معتمدة.
-                <button className="underline mr-1" onClick={onNeedIdentity}>اطلب هوية الآن</button>
+                <button data-tour="general-me-request-identity" className="underline mr-1" onClick={onNeedIdentity}>اطلب هوية الآن</button>
               </div>
             ) : (
               <select className="input w-full" value={identityId} onChange={e => setIdentityId(e.target.value)}>
@@ -929,7 +929,7 @@ function ClaimIdentityModal({ onClose, onClaimed }) {
   return (
     <Modal open onClose={onClose} title="المطالبة بهوية SOFTECH" subtitle="ابحث عن كودك في سجلّ الأشخاص ثم اطلب اعتماده"
       maxWidth="max-w-xl">
-      <div className="flex gap-2 mb-3">
+      <div data-tour="general-me-claim-kind" className="flex gap-2 mb-3">
         {['supplier', 'customer'].map(k => (
           <button key={k} onClick={() => { setKind(k); setResults([]) }}
             className={`flex-1 py-2 rounded-lg text-sm border ${kind === k ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-200 text-gray-600'}`}>
@@ -940,7 +940,7 @@ function ClaimIdentityModal({ onClose, onClaimed }) {
       <div className="flex gap-2 mb-3">
         <input data-tour="general-me-claim-search" className="input flex-1" placeholder="ابحث بالاسم أو الكود…" value={q}
           onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} />
-        <button className="btn-primary" onClick={doSearch} disabled={searching}>{searching ? <Spinner size="sm" color="white" /> : 'بحث'}</button>
+        <button data-tour="general-me-claim-search-run" className="btn-primary" onClick={doSearch} disabled={searching}>{searching ? <Spinner size="sm" color="white" /> : 'بحث'}</button>
       </div>
       <div className="max-h-72 overflow-auto space-y-1">
         {results.length === 0 ? (
@@ -989,7 +989,7 @@ function ManageIdentitiesModal({ identities, onClose, onClaimNew, onChanged }) {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className={`text-[13px] rounded-full px-2 py-0.5 ${b.c}`}>{b.t}</span>
-                  <button className="text-gray-300 hover:text-red-600" onClick={() => delM.mutate(i.id)}>✕</button>
+                  <button data-tour="general-me-identity-delete" className="text-gray-300 hover:text-red-600" onClick={() => delM.mutate(i.id)}>✕</button>
                 </div>
               </div>
             )
@@ -1023,7 +1023,7 @@ function AdminApprovalQueue() {
 
   if (pending.length === 0) return null
   return (
-    <div className="mt-4 card border-amber-200 bg-amber-50/40" data-tour="general-me-approvals">
+    <div data-tour="general-me-identity-queue" className="mt-4 card border-amber-200 bg-amber-50/40">
       <SectionTitle icon="🪪">طلبات اعتماد الهويات ({pending.length})</SectionTitle>
       <div className="space-y-2">
         {pending.map(p => (
@@ -1034,7 +1034,7 @@ function AdminApprovalQueue() {
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <button data-tour="general-me-identity-approve" className="btn-primary text-xs" onClick={() => reviewM.mutate({ id: p.id, action: 'approve' })}>اعتماد</button>
-              <button className="btn-secondary text-xs" onClick={() => reviewM.mutate({ id: p.id, action: 'reject' })}>رفض</button>
+              <button data-tour="general-me-identity-reject" className="btn-secondary text-xs" onClick={() => reviewM.mutate({ id: p.id, action: 'reject' })}>رفض</button>
             </div>
           </div>
         ))}

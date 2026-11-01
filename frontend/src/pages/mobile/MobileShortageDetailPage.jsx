@@ -161,11 +161,13 @@ export default function MobileShortageDetailPage() {
   }
 
   async function removeItem(iid) {
+    if (!window.confirm('حذف هذا الصنف؟')) return        // as on the desktop list
     await shortageApi.deleteItem(id, iid)
     refresh()
   }
 
   async function submitList() {
+    if (!window.confirm('إرسال القائمة للمراجعة؟')) return
     await shortageApi.submit(id)
     refresh()
   }
@@ -254,7 +256,7 @@ export default function MobileShortageDetailPage() {
                 value={bulkText}
                 onChange={e => setBulkText(e.target.value)}
               />
-              <button onClick={importBulk} disabled={bulkBusy || !bulkText.trim()}
+              <button data-tour="shortage-mobile-bulk-import" onClick={importBulk} disabled={bulkBusy || !bulkText.trim()}
                 className="btn-primary w-full text-sm py-2 disabled:opacity-50">
                 {bulkBusy ? 'جارٍ الاستيراد...' : 'استيراد القائمة'}
               </button>

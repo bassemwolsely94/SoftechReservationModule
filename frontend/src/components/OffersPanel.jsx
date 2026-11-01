@@ -38,7 +38,7 @@ export default function OffersPanel({ P }) {
         <div key={i} className="flex items-center gap-2 text-[11px] bg-white/70 border border-sky-100 rounded px-2 py-1 mb-1">
           <span>🎁</span>
           <span className="flex-1 truncate text-gray-800">{s.item_name} <span className="text-gray-400">({s.softech_id})</span> ×{s.qty}</span>
-          <button className="text-sky-600 hover:text-sky-800 font-semibold" onClick={() => P.addGift(s)}>+ أضف الهدية</button>
+          <button data-tour="pos-order-offer-gift" className="text-sky-600 hover:text-sky-800 font-semibold" onClick={() => P.addGift(s)}>+ أضف الهدية</button>
         </div>
       ))}
 

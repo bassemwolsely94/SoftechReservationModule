@@ -131,7 +131,7 @@ export default function SupplierCategoriesPage() {
                     ? <span className="text-emerald-600 text-xs">نشط</span>
                     : <span className="text-gray-400 text-xs">معطّل</span>}</td>
                   <td className="px-3 py-2 text-left whitespace-nowrap">
-                    <button onClick={() => setCatModal(c)} className="text-brand-600 hover:underline text-xs ml-3">تعديل</button>
+                    <button data-tour="purchasing-categories-edit-category" onClick={() => setCatModal(c)} className="text-brand-600 hover:underline text-xs ml-3">تعديل</button>
                     <button data-tour="purchasing-categories-delete-category" onClick={() => { if (confirm(`حذف الفئة "${c.name_ar}"؟`)) delCat.mutate(c.id) }}
                       className="text-red-500 hover:underline text-xs">حذف</button>
                   </td>
@@ -172,7 +172,7 @@ export default function SupplierCategoriesPage() {
                     ? <span className="text-emerald-600 text-xs">نشط</span>
                     : <span className="text-gray-400 text-xs">معطّل</span>}</td>
                   <td className="px-3 py-2 text-left whitespace-nowrap">
-                    <button onClick={() => setRuleModal(r)} className="text-brand-600 hover:underline text-xs ml-3">تعديل</button>
+                    <button data-tour="purchasing-categories-edit-rule" onClick={() => setRuleModal(r)} className="text-brand-600 hover:underline text-xs ml-3">تعديل</button>
                     <button data-tour="purchasing-categories-delete-rule" onClick={() => { if (confirm('حذف القاعدة؟')) delRule.mutate(r.id) }}
                       className="text-red-500 hover:underline text-xs">حذف</button>
                   </td>

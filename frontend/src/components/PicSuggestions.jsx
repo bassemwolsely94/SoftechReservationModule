@@ -15,7 +15,7 @@ export default function PicSuggestions({ P }) {
         <div className="flex items-center gap-2">
           {src.date && <span className="text-[11px] text-indigo-600">آخر فاتورة: {src.date}</span>}
           {sellable.length > 1 && (
-            <button onClick={reorderAll} title="إضافة كل الأصناف المتاحة من آخر فاتورة"
+            <button data-tour="pos-order-reorder-all" onClick={reorderAll} title="إضافة كل الأصناف المتاحة من آخر فاتورة"
                     className="text-[11px] bg-indigo-600 text-white rounded px-2 py-0.5 font-semibold hover:bg-indigo-700">
               ↻ إعادة الطلب كامل ({sellable.length})
             </button>
@@ -27,7 +27,7 @@ export default function PicSuggestions({ P }) {
           const disabled = l.blocked || l.status === 'missing'
           const oos = l.status === 'out_of_stock'
           return (
-            <button key={i} disabled={disabled}
+            <button data-tour="pos-order-reorder-item" key={i} disabled={disabled}
               onClick={() => l.softech_id && P.addByBarcode(l.softech_id)}
               title={disabled ? 'محظور/غير متاح' : (oos ? 'غير متوفر بالمخزن — يُضاف كحجز' : 'إضافة للسلة')}
               className={`text-[11px] rounded px-2 py-1 border flex items-center gap-1 ${

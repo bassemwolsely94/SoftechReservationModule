@@ -21,6 +21,7 @@ urlpatterns = [
     path('journeys/<str:jid>/', views.journey_detail, name='help-journey'),
     path('onboarding/', ob.my_path, name='help-onboarding'),
     path('onboarding/learned/', ob.mark_learned, name='help-onboarding-learned'),
+    path('product-tour/', ob.product_tour, name='help-product-tour'),
     path('onboarding/team/', ob.team, name='help-onboarding-team'),
     path('onboarding/remind/', ob.remind, name='help-onboarding-remind'),
     path('first-day/', ob.first_day, name='help-first-day'),

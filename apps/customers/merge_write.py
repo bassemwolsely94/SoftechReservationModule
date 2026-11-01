@@ -28,6 +28,7 @@ the first conflict / failure; one run at a time (pg lock); every attempt = Custo
 import logging
 
 from django.conf import settings
+from config.writers import writer_allowed
 from django.utils import timezone
 
 logger = logging.getLogger('elrezeiky.customers')
@@ -37,7 +38,7 @@ LOCK_KEY = 7_301_005
 
 
 def write_enabled():
-    return bool(getattr(settings, 'CUSTOMER_MERGE_WRITE_ENABLED', False))
+    return writer_allowed('CUSTOMER_MERGE_WRITE_ENABLED')
 
 
 def batch_max():

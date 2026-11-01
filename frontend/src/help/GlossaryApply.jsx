@@ -56,8 +56,8 @@ export default function GlossaryApply({ screenKey, draft, setDraft }) {
     <div className="rounded-lg border border-brand-200 bg-brand-50/40 p-3 space-y-2" dir="rtl">
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className="font-bold text-content flex-1">📖 القاموس — {items.length ? `${items.length} كلمة` : 'الشرح ماشي على القاموس ✓'}</span>
-        {open > 1 && <button type="button" onClick={acceptAll} className="text-brand-700 font-semibold hover:underline">استبدل الباقي ({open})</button>}
-        <button type="button" disabled={busy} onClick={scan} className="text-brand-600 hover:underline">افحص تاني</button>
+        {open > 1 && <button data-tour="general-help-glossary-replace-all" type="button" onClick={acceptAll} className="text-brand-700 font-semibold hover:underline">استبدل الباقي ({open})</button>}
+        <button data-tour="general-help-glossary-rescan" type="button" disabled={busy} onClick={scan} className="text-brand-600 hover:underline">افحص تاني</button>
         <button type="button" onClick={() => setItems(null)} className="text-faint hover:text-content">إغلاق ✕</button>
       </div>
       <div className="divide-y divide-line max-h-80 overflow-y-auto">
@@ -71,8 +71,8 @@ export default function GlossaryApply({ screenKey, draft, setDraft }) {
             </span>
             {it.state === 'open' ? (
               <span className="flex gap-2 text-xs">
-                <button type="button" onClick={() => accept(i)} className="bg-brand-600 text-white rounded px-2 py-0.5">استبدل</button>
-                <button type="button" onClick={() => skip(i)} className="border border-line rounded px-2 py-0.5">تخطّى</button>
+                <button data-tour="general-help-glossary-replace" type="button" onClick={() => accept(i)} className="bg-brand-600 text-white rounded px-2 py-0.5">استبدل</button>
+                <button data-tour="general-help-glossary-skip" type="button" onClick={() => skip(i)} className="border border-line rounded px-2 py-0.5">تخطّى</button>
               </span>
             ) : (
               <span className="text-[11px] text-muted">
