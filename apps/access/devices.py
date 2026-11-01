@@ -4,6 +4,9 @@ Device registry helpers (N2). The cookie value is a random secret; only its sha2
 import hashlib
 import logging
 import secrets
+from dataclasses import dataclass
+
+from django.core.cache import cache
 
 from .network import INTERNAL
 
@@ -11,6 +14,9 @@ logger = logging.getLogger('elrezeiky.access')
 
 COOKIE = 'erp_device'
 COOKIE_MAX_AGE = 400 * 24 * 3600
+DEVICE_CACHE_SECONDS = 60
+TOUCH_SECONDS = 600
+BLOCKED_MESSAGE = 'هذا الجهاز موقوف — تواصل مع المدير'
 
 _MOBILE_MARKERS = ('mobile', 'iphone', 'android', 'ipad')
 
@@ -136,3 +142,93 @@ def notify_new_device(device, profile, net=None):
             Notification.send_to_user(sp, 'system', title, body, dedup_key=f'device_new_{device.pk}')
     except Exception as exc:
         logger.debug('notify_new_device skipped: %s', exc)
+
+
+# -- Resolving the device of a request (N2) ---------------------------------------------
+
+@dataclass(frozen=True)
+class DeviceInfo:
+    public_id: str
+    status: str
+    name: str
+    kind: str
+
+
+_NONE = 'none'      # cached "no such device", so an unknown cookie costs no query either
+
+
+def _client_ip(request):
+    try:
+        from core.client_ip import client_ip
+        return client_ip(request)
+    except Exception:
+        return None
+
+
+def _touch(request, pk):
+    """last_seen / last_ip at most once per TOUCH_SECONDS per device."""
+    if not cache.add(f'access:devtouch:{pk}', 1, TOUCH_SECONDS):
+        return
+    from django.utils import timezone
+    from .models import Device
+    fields = {'last_seen': timezone.now()}
+    ip = _client_ip(request)
+    if ip:
+        fields['last_ip'] = ip
+    Device.objects.filter(pk=pk).update(**fields)
+
+
+def resolve(request):
+    """The DeviceInfo of the request's device cookie, or None. Never raises."""
+    try:
+        secret = request.COOKIES.get(COOKIE)
+        if not secret:
+            return None
+        key = f'access:dev:{hash_secret(secret)}'
+        hit = cache.get(key)
+        if hit is None:
+            device = from_secret(secret)
+            if device is None:
+                hit = _NONE
+            else:
+                hit = (device.pk, DeviceInfo(str(device.public_id), device.status, device.name, device.kind))
+            cache.set(key, hit, DEVICE_CACHE_SECONDS)
+        if hit == _NONE:
+            return None
+        pk, info = hit
+        _touch(request, pk)
+        return info
+    except Exception as exc:
+        logger.debug('device resolve skipped: %s', exc)
+        return None
+
+
+def blocked_cookie(request):
+    """True when the request carries the cookie of a BLOCKED device (refused at sign-in)."""
+    info = resolve(request)
+    return info is not None and info.status == 'blocked'
+
+
+def is_revoked(public_id):
+    """True when the device is blocked or retired. False for None, unknown ids or any error."""
+    if not public_id:
+        return False
+    try:
+        key = f'access:devrev:{public_id}'
+        hit = cache.get(key)
+        if hit is None:
+            from .models import Device
+            hit = Device.objects.filter(public_id=public_id, status__in=('blocked', 'retired')).exists()
+            cache.set(key, hit, DEVICE_CACHE_SECONDS)
+        return bool(hit)
+    except Exception as exc:
+        logger.debug('device is_revoked skipped: %s', exc)
+        return False
+
+
+def invalidate(device):
+    cache.delete_many([f'access:dev:{device.secret_hash}', f'access:devrev:{device.public_id}'])
+
+
+def invalidate_signal(sender, instance, **kwargs):
+    invalidate(instance)

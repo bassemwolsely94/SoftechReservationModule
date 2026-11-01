@@ -201,6 +201,11 @@ def login_view(request):
     if profile and not profile.is_active:
         return Response({'error': 'الحساب موقوف. تواصل مع المدير'}, status=status.HTTP_403_FORBIDDEN)
 
+    from apps.access import devices as _devices
+    if _devices.blocked_cookie(request):         # a blocked device signs nobody in (N2)
+        _log_auth('login_failed', profile, ip, note='device_blocked', request=request)
+        return Response({'error': _devices.BLOCKED_MESSAGE}, status=status.HTTP_401_UNAUTHORIZED)
+
     # ── Two-factor gate ───────────────────────────────────────────────────────
     # Step 1 of login. If the user has 2FA on (or is in a required role once
     # enforcement is enabled), don't issue tokens yet — hand back a short-lived
@@ -270,6 +275,14 @@ def refresh_view(request):
         return Response({'detail': 'لا توجد جلسة'}, status=status.HTTP_401_UNAUTHORIZED)
     if not _refresh_owner_active(raw):           # a disabled account never renews (Batch 3, A-3)
         return clear_auth_cookies(Response({'detail': 'الحساب موقوف'}, status=status.HTTP_401_UNAUTHORIZED))
+    from apps.access import devices as _devices
+    try:
+        dev_claim = RefreshToken(raw).get('dev')
+    except Exception:
+        dev_claim = None
+    if _devices.is_revoked(dev_claim):           # a blocked/retired device never renews (N2)
+        return clear_auth_cookies(Response({'detail': _devices.BLOCKED_MESSAGE},
+                                           status=status.HTTP_401_UNAUTHORIZED))
     ser = TokenRefreshSerializer(data={'refresh': raw})
     try:
         ser.is_valid(raise_exception=True)

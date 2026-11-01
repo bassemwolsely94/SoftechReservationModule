@@ -10,7 +10,7 @@ from rest_framework.throttling import SimpleRateThrottle
 from apps.audit.models import AuditLog
 from apps.users.permissions import IsAdminRole
 
-from .models import TrustedNetwork
+from .models import Device, TrustedNetwork
 from .network import INTERNAL, request_network
 from .serializers import TrustedNetworkSerializer
 
@@ -33,7 +33,13 @@ def whoami(request):
     net = access.network if access is not None else request_network(request._request)
     site = net.site if net.zone == INTERNAL else None
     branch = site.branch if site is not None and site.branch_id else None
+    device = None
+    if access is not None and access.user_id is not None and access.device is not None:
+        d = access.device
+        device = {'status': d.status, 'status_label': dict(Device.STATUS_CHOICES).get(d.status, d.status),
+                  'name': d.name}
     return Response({
+        'device': device,
         'zone': net.zone,
         'ip': net.ip,
         'label': net.label_ar,

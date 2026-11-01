@@ -82,6 +82,9 @@ class CookieJWTAuthentication(JWTAuthentication):
         user = super().get_user(validated_token)
         if not account_active(user):
             raise AuthenticationFailed('الحساب موقوف', code='user_inactive')
+        from apps.access import devices
+        if devices.is_revoked(validated_token.get('dev')):     # a blocked/retired device ends its sessions (N2)
+            raise AuthenticationFailed(devices.BLOCKED_MESSAGE, code='device_blocked')
         return user
 
 

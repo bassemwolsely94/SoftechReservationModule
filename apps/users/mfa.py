@@ -208,6 +208,15 @@ def session_response(payload: dict, status_code=200, device_secret=None):
     return resp
 
 
+def blocked_device_response(request, profile):
+    """401 (and a login_failed log row) when the request carries a BLOCKED device's cookie, else None."""
+    from apps.access import devices
+    if request is None or not devices.blocked_cookie(request):
+        return None
+    _log('login_failed', profile, request, note='device_blocked')
+    return Response({'error': devices.BLOCKED_MESSAGE}, status=status.HTTP_401_UNAUTHORIZED)
+
+
 def enroll_login(request, user):
     """Enroll the browser's device for a completed sign-in: (device, new_secret) or (None, None)."""
     profile = getattr(user, 'staff_profile', None)
@@ -283,6 +292,10 @@ def verify_2fa_view(request):
     if not (profile and profile.mfa_enabled):
         return Response({'error': 'المصادقة الثنائية غير مفعّلة'}, status=status.HTTP_400_BAD_REQUEST)
 
+    refused = blocked_device_response(request, profile)
+    if refused is not None:
+        return refused
+
     if not (verify_login_code(profile, code) or consume_backup_code(profile, code)):
         cache.add(tries_key, 0, _PREAUTH_MAX_AGE)
         tries = cache.incr(tries_key)
@@ -338,6 +351,10 @@ def enable_2fa_view(request):
     profile = getattr(user, 'staff_profile', None)
     if not profile or not profile.mfa_secret:
         return Response({'error': 'ابدأ الإعداد أولاً'}, status=status.HTTP_400_BAD_REQUEST)
+    if via_preauth:
+        refused = blocked_device_response(request, profile)
+        if refused is not None:
+            return refused
     if profile.mfa_enabled:      # A-1: no second set of backup codes / no login through here
         return Response({'error': 'المصادقة الثنائية مفعّلة بالفعل'}, status=status.HTTP_400_BAD_REQUEST)
 

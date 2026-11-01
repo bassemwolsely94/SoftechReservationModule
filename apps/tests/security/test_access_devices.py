@@ -210,3 +210,190 @@ class EnrollmentTests(TestCase):
         self.assertEqual(claims['dev'], str(dev.public_id))
         log = UserActivityLog.objects.filter(action='mfa_verified').latest('id')
         self.assertEqual(log.device, dev)
+
+
+# ── Task 3: device in the access context; blocked device ends sessions ────────────────
+
+from django.test import RequestFactory  # noqa: E402
+
+from apps.access import context as access_context  # noqa: E402
+
+
+def _signed_in(username='t3_u1'):
+    """A client signed in through the real login (so the token carries `dev`) + its device."""
+    c = APIClient()
+    r = _login(c, username)
+    assert r.status_code == 200, r.data
+    secret = r.cookies[devices.COOKIE].value
+    c.cookies[devices.COOKIE] = secret
+    return c, r, Device.objects.get(secret_hash=devices.hash_secret(secret))
+
+
+class RevocationTests(TestCase):
+
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.user, self.profile, _ = make_user('t3_u1')
+
+    def _me(self, client):
+        return client.get('/api/auth/me/')
+
+    def test_blocked_device_access_token_refused(self):
+        c, r, dev = _signed_in()
+        self.assertEqual(self._me(c).status_code, 200)
+        dev.status = 'blocked'
+        dev.save()
+        self.assertEqual(self._me(c).status_code, 401)
+
+    def test_blocked_device_refresh_refused_and_cookies_cleared(self):
+        c, r, dev = _signed_in()
+        dev.status = 'blocked'
+        dev.save()
+        resp = c.post('/api/auth/refresh/', {}, format='json')
+        self.assertEqual(resp.status_code, 401)
+        self.assertEqual(resp.data['detail'], devices.BLOCKED_MESSAGE)
+        self.assertEqual(resp.cookies['erp_access'].value, '')
+        self.assertEqual(resp.cookies['erp_refresh'].value, '')
+
+    def test_token_without_dev_claim_unaffected(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        _device(status='blocked')
+        tok = RefreshToken.for_user(self.user)
+        c = APIClient()
+        c.credentials(HTTP_AUTHORIZATION=f'Bearer {tok.access_token}')
+        self.assertEqual(self._me(c).status_code, 200)
+
+    def test_retired_device_refused(self):
+        c, r, dev = _signed_in()
+        dev.status = 'retired'
+        dev.save()
+        self.assertEqual(self._me(c).status_code, 401)
+
+    def test_unblock_restores(self):
+        c, r, dev = _signed_in()
+        dev.status = 'blocked'
+        dev.save()
+        self.assertEqual(self._me(c).status_code, 401)
+        dev.status = 'approved'
+        dev.save()
+        self.assertEqual(self._me(c).status_code, 200)
+
+    def test_blocked_device_cookie_refused_at_sign_in(self):
+        secret, dev = _device(status='blocked')
+        c = APIClient()
+        c.cookies[devices.COOKIE] = secret
+        before = Device.objects.count()
+        r = _login(c, 't3_u1')
+        self.assertEqual(r.status_code, 401)
+        self.assertEqual(r.data['error'], devices.BLOCKED_MESSAGE)
+        self.assertNotIn('access', r.data)
+        for name in ('erp_access', 'erp_refresh', devices.COOKIE):
+            self.assertNotIn(name, r.cookies)
+        self.assertEqual(Device.objects.count(), before)
+        log = UserActivityLog.objects.filter(action='login_failed').latest('id')
+        self.assertEqual(log.note, 'device_blocked')
+
+    def test_blocked_device_cookie_refused_at_2fa_verify(self):
+        self.profile.mfa_enabled = True
+        self.profile.mfa_secret = pyotp.random_base32()
+        self.profile.save()
+        c = APIClient()
+        r = _login(c, 't3_u1')
+        self.assertTrue(r.data.get('mfa_required'))
+        secret, _dev = _device(status='blocked')
+        c.cookies[devices.COOKIE] = secret
+        r2 = c.post('/api/auth/2fa/verify/', {'mfa_token': r.data['mfa_token'],
+                                              'code': pyotp.TOTP(self.profile.mfa_secret).now()},
+                    format='json', HTTP_USER_AGENT=UA)
+        self.assertEqual(r2.status_code, 401)
+        self.assertEqual(r2.data['error'], devices.BLOCKED_MESSAGE)
+        self.assertNotIn('access', r2.data)
+        self.assertNotIn('erp_access', r2.cookies)
+
+    def test_retired_cookie_still_signs_in(self):
+        secret, _ = _device(status='retired')
+        c = APIClient()
+        c.cookies[devices.COOKIE] = secret
+        self.assertEqual(_login(c, 't3_u1').status_code, 200)
+
+
+class ResolveTests(TestCase):
+
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def _req(self, secret):
+        req = RequestFactory().get('/', REMOTE_ADDR='9.9.9.9')
+        req.COOKIES[devices.COOKIE] = secret
+        return req
+
+    def test_device_resolve_is_cached(self):
+        secret, dev = _device()
+        req = self._req(secret)
+        first = devices.resolve(req)
+        self.assertEqual(first.public_id, str(dev.public_id))
+        with self.assertNumQueries(0):
+            second = devices.resolve(req)
+        self.assertEqual(first, second)
+
+    def test_unknown_cookie_cached_as_none(self):
+        req = self._req('nope')
+        self.assertIsNone(devices.resolve(req))
+        with self.assertNumQueries(0):
+            self.assertIsNone(devices.resolve(req))
+        self.assertIsNone(devices.resolve(RequestFactory().get('/')))
+
+    def test_last_seen_touched_once_per_window(self):
+        secret, dev = _device()
+        req = self._req(secret)
+        devices.resolve(req)
+        dev.refresh_from_db()
+        self.assertIsNotNone(dev.last_seen)
+        self.assertEqual(dev.last_ip, '9.9.9.9')
+        Device.objects.filter(pk=dev.pk).update(last_seen=None)
+        devices.resolve(req)
+        dev.refresh_from_db()
+        self.assertIsNone(dev.last_seen)          # second call inside the window: no touch
+        cache.delete(f'access:devtouch:{dev.pk}')
+        devices.resolve(req)
+        dev.refresh_from_db()
+        self.assertIsNotNone(dev.last_seen)
+
+    def test_is_revoked(self):
+        _, ok = _device()
+        _, blk = _device(status='blocked')
+        self.assertFalse(devices.is_revoked(None))
+        self.assertFalse(devices.is_revoked('not-a-uuid'))
+        self.assertFalse(devices.is_revoked(str(ok.public_id)))
+        self.assertTrue(devices.is_revoked(str(blk.public_id)))
+
+    def test_context_has_device(self):
+        secret, dev = _device()
+        ctx = access_context.for_request(self._req(secret))
+        self.assertEqual(ctx.device.public_id, str(dev.public_id))
+        self.assertIsNone(access_context.fallback().device)
+
+
+class WhoamiDeviceTests(TestCase):
+
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        make_user('t3_u1')
+
+    def test_whoami_device_null_when_anonymous(self):
+        secret, _ = _device()
+        c = APIClient()
+        c.cookies[devices.COOKIE] = secret
+        r = c.get('/api/access/whoami/')
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNone(r.data['device'])
+
+    def test_whoami_device_when_signed_in(self):
+        c, _, dev = _signed_in()
+        r = c.get('/api/access/whoami/')
+        self.assertEqual(r.data['device']['status'], 'pending')
+        self.assertEqual(r.data['device']['status_label'], 'بانتظار الاعتماد')
+        self.assertEqual(r.data['device']['name'], dev.name)
