@@ -33,16 +33,19 @@ def _cookie_kwargs():
     }
 
 
-def set_auth_cookies(response, access=None, refresh=None):
+def set_auth_cookies(response, access=None, refresh=None, refresh_max_age=None):
+    """`refresh_max_age` (seconds) shortens the refresh cookie, e.g. to the zone's session cap (N3)."""
     jwt = settings.SIMPLE_JWT
     if access:
         response.set_cookie(ACCESS_COOKIE, str(access), path='/',
                             max_age=int(jwt['ACCESS_TOKEN_LIFETIME'].total_seconds()),
                             **_cookie_kwargs())
     if refresh:
+        max_age = int(jwt['REFRESH_TOKEN_LIFETIME'].total_seconds())
+        if refresh_max_age is not None:
+            max_age = max(0, min(max_age, int(refresh_max_age)))
         response.set_cookie(REFRESH_COOKIE, str(refresh), path=REFRESH_COOKIE_PATH,
-                            max_age=int(jwt['REFRESH_TOKEN_LIFETIME'].total_seconds()),
-                            **_cookie_kwargs())
+                            max_age=max_age, **_cookie_kwargs())
     return response
 
 

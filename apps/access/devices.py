@@ -181,7 +181,6 @@ def notify_new_device(device, profile, net=None):
     try:
         from django.utils import timezone
         from apps.notifications.models import Notification
-        from apps.users.models import StaffProfile
         from .models import Device
         label = net.label_ar if net is not None else ''
         title = '💻 جهاز جديد بانتظار الاعتماد'
@@ -194,14 +193,27 @@ def notify_new_device(device, profile, net=None):
         pending = Device.objects.filter(status='pending').count()
         hour = timezone.now().strftime('%Y%m%d%H')
         digest = f'أجهزة جديدة بانتظار الاعتماد: {pending} — افتح /access/devices'
-        for admin in StaffProfile.objects.filter(role='admin', is_active=True).exclude(pk=profile.pk):
-            try:
-                Notification.send_to_user(admin, 'system', '💻 أجهزة جديدة بانتظار الاعتماد', digest,
-                                          dedup_key=f'device_digest_{hour}', dedup_once=True)
-            except Exception as exc:
-                logger.warning('device digest to admin %s failed: %s', admin.pk, exc)
+        admin_digest('💻 أجهزة جديدة بانتظار الاعتماد', digest, f'device_digest_{hour}', exclude_pk=profile.pk)
     except Exception as exc:
         logger.warning('notify_new_device skipped: %s', exc)
+
+
+def admin_digest(title, body, dedup_key, exclude_pk=None):
+    """One notification per active admin per `dedup_key` (time-bucketed by the caller, e.g. per
+    hour). Each admin is tried on its own. Never raises."""
+    try:
+        from apps.notifications.models import Notification
+        from apps.users.models import StaffProfile
+        admins = StaffProfile.objects.filter(role='admin', is_active=True)
+        if exclude_pk is not None:
+            admins = admins.exclude(pk=exclude_pk)
+        for admin in admins:
+            try:
+                Notification.send_to_user(admin, 'system', title, body, dedup_key=dedup_key, dedup_once=True)
+            except Exception as exc:
+                logger.warning('admin digest %s to admin %s failed: %s', dedup_key, admin.pk, exc)
+    except Exception as exc:
+        logger.warning('admin digest %s skipped: %s', dedup_key, exc)
 
 
 # -- Resolving the device of a request (N2) ---------------------------------------------

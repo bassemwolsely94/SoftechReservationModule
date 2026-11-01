@@ -24,6 +24,8 @@ function refreshSession() {
 // Browsers that still hold tokens in localStorage (pre-cookie builds): trade the
 // refresh token for cookies once, then forget it — no forced re-login.
 export async function migrateLegacyTokens() {
+  // The old 2FA "remember" token (removed in N3: only an approved device remembers now).
+  localStorage.removeItem('mfa_device_token')
   const legacy = localStorage.getItem('refresh_token')
   localStorage.removeItem('access_token')
   localStorage.removeItem('refresh_token')
@@ -61,8 +63,7 @@ export default api
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 export const authApi = {
-  login: (username, password, deviceToken) =>
-    api.post('/auth/login/', { username, password, device_token: deviceToken || undefined }),
+  login: (username, password) => api.post('/auth/login/', { username, password }),
   me: () => api.get('/auth/me/'),
   logout: () => api.post('/auth/logout/', {}),
 

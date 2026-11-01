@@ -639,6 +639,12 @@ SCREENS = [
         'tips': [
             T('كل رمز استرجاع يُستخدم مرة واحدة فقط؛ الشاشة توضح كم رمزاً تبقّى.',
               'Each recovery code works once; the screen shows how many are left.'),
+            T('«تذكّر هذا الجهاز» بيشتغل بس على جهاز معتمد من المدير (شاشة الأجهزة)؛ على جهاز غير معتمد الرمز بيتطلب كل مرة.',
+              '"Remember this device" works only on a device the admin approved (Devices screen); on an unapproved device the code is asked every time.'),
+            T('الدخول من خارج شبكة الشركة: الأدوار المسموح لها بس، وبعد كلمة المرور لازم رمز التحقق، والجلسة بتنتهي بعد 8 ساعات من الدخول (الطيار 12 ساعة) فتسجّل دخول من جديد. بيوصلك إشعار «دخول من خارج الشبكة» ويوصل للمدير — لو مش إنت غيّر كلمة المرور فوراً.',
+              'Signing in from outside the company network: only the roles allowed to, the verification code is required after the password, and the session ends 8 hours after sign-in (riders 12 hours) so you sign in again. You and the admins get an "outside the network sign-in" notification — if it was not you, change your password at once.'),
+            T('لو دورك مش مسموح له بالدخول من خارج الشبكة هتظهر رسالة «الدخول من خارج شبكة الشركة غير متاح لدورك» — ادخل من الفرع أو من جهاز معتمد على شبكة الشركة.',
+              'If your role may not sign in from outside the network you see "Sign-in from outside the company network is not available for your role" — sign in at the branch or on an approved device on the company network.'),
         ],
         'tour': [
             {'target': 'general-security-header', 'text': T('دي شاشة أمان حسابك: منها بتفعّل أو توقف المصادقة الثنائية (TOTP).',
@@ -706,8 +712,9 @@ SCREENS = [
                        'Turning it off needs your password + a current code from the app or a recovery code, so nobody can switch it off from your device while you are away.\n• After turning it off, login is by password only — better to keep it on.'),
          },
         ],
-        'change_note': T('زر «إلغاء كل الأجهزة المحفوظة»', 'A "Forget all saved devices" button'),
-        'updated': '2026-10-31',
+        'change_note': T('«تذكّر هذا الجهاز» على الأجهزة المعتمدة فقط؛ قواعد الدخول من خارج الشبكة (رمز التحقق، مدة الجلسة، الإشعار)',
+                         '"Remember this device" on approved devices only; outside-the-network sign-in rules (code, session length, alert)'),
+        'updated': '2026-11-01',
     },
     {
         'key': 'general.notifications',

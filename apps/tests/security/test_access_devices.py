@@ -455,7 +455,7 @@ class RememberDeviceTests(TestCase):
         link = DeviceUser.objects.get(device=dev, user=self.profile)
         self.assertIsNotNone(link.mfa_remembered_at)
         self.assertEqual(link.mfa_remembered_epoch, self.profile.mfa_device_epoch)
-        self.assertIn('device_token', r2.data)
+        self.assertNotIn('device_token', r2.data)          # legacy token removed (N3)
         r = _login(c2, 'rem_u1')
         self.assertEqual(r.status_code, 200)
         self.assertNotIn('mfa_required', r.data)
@@ -505,14 +505,16 @@ class RememberDeviceTests(TestCase):
         c2.cookies[devices.COOKIE] = r2.cookies[devices.COOKIE].value
         self.assertTrue(_login(c2, 'rem_u1').data.get('mfa_required'))
 
-    def test_legacy_device_token_still_works(self):
+    def test_legacy_device_token_ignored(self):
+        """N3: the old signed device_token no longer skips 2FA; only the approved-device remember does."""
+        from django.core import signing
         from apps.users import mfa
-        token = mfa.make_device_token(self.user)
+        token = signing.dumps({'uid': self.user.id, 'fp': mfa._device_fingerprint(self.user)}, salt='mfa-device')
         r = APIClient().post('/api/auth/login/', {'username': 'rem_u1', 'password': 'TestPass123',
                                                   'device_token': token},
                              format='json', HTTP_USER_AGENT=UA, **XHR)
         self.assertEqual(r.status_code, 200)
-        self.assertNotIn('mfa_required', r.data)
+        self.assertTrue(r.data.get('mfa_required'))
 
     def test_password_change_cancels(self):
         c2, dev, _ = self._remembered_client()

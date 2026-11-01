@@ -163,7 +163,7 @@ export default function LoginPage() {
               />
               <label className="flex items-center gap-2 text-sm text-gray-600">
                 <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />
-                الوثوق بهذا الجهاز لمدة 30 يوماً
+                تذكّر هذا الجهاز 30 يوماً (الأجهزة المعتمدة فقط)
               </label>
               <button
                 type="submit"
