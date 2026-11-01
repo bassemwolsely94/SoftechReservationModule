@@ -10,6 +10,7 @@ import io
 from django.utils import timezone
 
 from apps.catalog.item_columns import ITEM_NOTE
+from core.export_safety import neutralise_formulas
 
 NAVY = '022871'
 
@@ -57,7 +58,7 @@ def _notes(wb, lines):
 
 def _bytes(wb):
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     return buf.getvalue()
 
 

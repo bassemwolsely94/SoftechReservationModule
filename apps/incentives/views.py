@@ -886,7 +886,7 @@ class IncentiveProgramViewSet(viewsets.ModelViewSet):
 
         # Return as HTTP response
         buf = io.BytesIO()
-        wb.save(buf)
+        neutralise_formulas(wb).save(buf)
         buf.seek(0)
         filename = f'incentives_{program.id}_{period_start}_{period_end}.xlsx'
         response = HttpResponse(
@@ -1740,6 +1740,7 @@ _TARGET_EDIT_ROLES = {'admin', 'supervisor', 'purchasing'}
 # need an editor role (_TARGET_EDIT_ROLES) before the body is read — _guard below stays.
 from core.permissions import matrix_permission as _matrix_permission   # noqa: E402
 from rest_framework.permissions import SAFE_METHODS as _SAFE, BasePermission as _BasePermission  # noqa: E402
+from core.export_safety import neutralise_formulas
 _TARGETS = _matrix_permission('analytics', post=('view',), edit=('view',), delete=('view',))
 
 

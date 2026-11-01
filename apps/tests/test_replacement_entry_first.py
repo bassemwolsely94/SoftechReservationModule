@@ -81,7 +81,14 @@ class EntryFirstTests(TW._Base):
         c = self.submit(self.calc(self.claim(src)))
         self.assertEqual(c.status, RC.STATUS_AWAITING_APPROVAL)
         self.assertTrue(any('بأثر رجعي' in r for r in c.approval_request.context_data['reasons']))
+        # yesterday's purchase is a supervisor claim — on the 1st of a month it crosses month-end and
+        # the route adds the manager after the supervisor (backdate bands), so walk whatever it asked
+        crossed = YESTERDAY.month != TODAY.month
+        self.assertEqual(c.approval_request.workflow.code,
+                         'replacement_manager' if crossed else 'replacement_supervisor')
         c = W.decide(c.pk, user=self.sup, version=c.version, approve=True)
+        if crossed:
+            c = W.decide(c.pk, user=self.admin, version=self.v(c), approve=True)
 
         c.refresh_from_db()
         op = Op.objects.get(case=c, idempotency_key=f'{c.pk}:purchase')

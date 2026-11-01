@@ -11,7 +11,6 @@ from __future__ import annotations
 import io
 import logging
 import os
-import urllib.request
 from typing import Optional
 
 from django.core.files.base import ContentFile
@@ -42,42 +41,32 @@ def download_image(url: str) -> Optional[tuple[bytes, str]]:
     Returns (raw_bytes, extension) or None on any failure.
     Extension derived from Content-Type header.
     """
+    # http(s) to public hosts only, redirects re-checked, size capped (security Batch 6, W-6)
+    from core import safe_fetch
     try:
-        req = urllib.request.Request(
-            url,
+        data, content_type = safe_fetch.fetch(
+            url, max_bytes=_MAX_DOWNLOAD_BYTES, timeout=_TIMEOUT,
             headers={
                 'User-Agent':  _UA,
                 'Accept':      'image/webp,image/apng,image/*,*/*;q=0.8',
                 'Referer':     'https://www.google.com/',
             },
         )
-        with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
-            content_type = resp.headers.get('Content-Type', '').split(';')[0].strip().lower()
-            ext          = VALID_CONTENT_TYPES.get(content_type, '')
-            if not ext:
-                # Fallback: guess from URL
-                url_lower = url.lower().split('?')[0]
-                for e in ['jpg', 'jpeg', 'png', 'webp', 'gif']:
-                    if url_lower.endswith('.' + e):
-                        ext = 'jpg' if e == 'jpeg' else e
-                        break
-                if not ext:
-                    logger.debug('Unsupported content-type %s for %s', content_type, url)
-                    return None
-
-            data = b''
-            while True:
-                chunk = resp.read(65536)
-                if not chunk:
-                    break
-                data += chunk
-                if len(data) > _MAX_DOWNLOAD_BYTES:
-                    logger.debug('Image too large at %s', url)
-                    return None
-
     except Exception as exc:
-        logger.debug('Download failed for %s: %s', url, exc)
+        logger.debug('Download refused or failed for %s: %s', url, exc)
         return None
+
+    ext = VALID_CONTENT_TYPES.get(content_type, '')
+    if not ext:
+        # Fallback: guess from URL
+        url_lower = url.lower().split('?')[0]
+        for e in ['jpg', 'jpeg', 'png', 'webp', 'gif']:
+            if url_lower.endswith('.' + e):
+                ext = 'jpg' if e == 'jpeg' else e
+                break
+        if not ext:
+            logger.debug('Unsupported content-type %s for %s', content_type, url)
+            return None
 
     if len(data) < 1000:   # < 1 KB — almost certainly an error page
         return None

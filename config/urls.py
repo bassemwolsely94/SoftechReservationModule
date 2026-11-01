@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.urls import path, include
 
+from core.csp import csp_report
 from core.media import serve_media
 
 urlpatterns = [
@@ -63,6 +64,7 @@ urlpatterns = [
     path('api/pbx/',        include('apps.pbx.urls')),
     path('api/qa/',         include('apps.qa.urls')),
     path('api/personal/',   include('apps.personal.urls')),
+    path('api/csp-report/', csp_report),                     # CSP report-only collector (Batch 6, W-9)
     path('api/help/',       include('apps.help.urls')),     # in-app help; edits gated by help/edit
     path('api/gamification/', include('apps.gamification.urls')),  # own data open; reports/config gated by gamification/*
     path('api/stock-audit/', include('apps.stock_audit.urls')),

@@ -443,6 +443,48 @@ class StaticScanUnitTests(SimpleTestCase):
         text = 'PASSWORD = os.environ.get("ADMIN_PASS", "")\npassword = config("X")\n'
         self.assertEqual(static_scan.secret_hits(text), set())
 
+    def test_workbook_save_without_neutralise_flagged(self):
+        t = _tree('''
+            def f(buf):
+                wb = openpyxl.Workbook()
+                wb.save(buf)
+            def g(buf):
+                wb = Workbook(write_only=True)
+                neutralise_formulas(wb).save(buf)
+        ''')
+        self.assertEqual(static_scan.unsafe_export_sites(t, 't.py'), {'t.py::f'})
+
+    def test_workbook_builders_and_loaded_books_flagged(self):
+        t = _tree('''
+            def f(p):
+                build_workbook(snap).save(p)
+            def g(p):
+                book = load_workbook(p)
+                book.save(p)
+            def h(p):
+                neutralise_formulas(print_workbook(batch)).save(p)
+        ''')
+        self.assertEqual(static_scan.unsafe_export_sites(t, 't.py'), {'t.py::f', 't.py::g'})
+
+    def test_raw_csv_writer_flagged(self):
+        t = _tree('''
+            def f(buf):
+                w = csv.writer(buf)
+            def g(buf):
+                w = csv_writer(buf)
+        ''')
+        self.assertEqual(static_scan.unsafe_export_sites(t, 't.py'), {'t.py::f'})
+
+    def test_other_saves_not_flagged(self):
+        t = _tree('''
+            def f(buf):
+                img = Image.open(buf)
+                img.save(buf, format='PNG')
+                doc.save(buf)
+                obj.save()
+        ''')
+        self.assertEqual(static_scan.unsafe_export_sites(t, 't.py'), set())
+
 
 class StaticGuardTests(SimpleTestCase):
 
@@ -501,3 +543,20 @@ class StaticGuardTests(SimpleTestCase):
         known = set(MODULE_BY_PREFIX) | set(READ_OPEN_PREFIXES) | set(EXEMPT_PREFIXES)
         prefixes = {p.split('/')[2] for p, _ in api_routes()}
         assert_matches_baseline(self, 'unclassified_api_prefixes', prefixes - known)
+
+    def test_exports_neutralise_formulas(self):
+        """Batch 6, W-4: every Excel save goes through neutralise_formulas and every CSV through
+        export_safety.csv_writer — typed text must never reach Excel as a live formula."""
+        assert_matches_baseline(self, 'unsafe_exports', static_scan.repo_sites(
+            static_scan.unsafe_export_sites))
+
+    def test_unsafe_exports_baseline_lines_are_all_explained(self):
+        from .baseline import BASELINE_DIR
+        header, unexplained = None, []
+        for ln in (BASELINE_DIR / 'unsafe_exports.txt').read_text(encoding='utf-8').splitlines():
+            s = ln.strip()
+            if s.startswith('# reason:'):
+                header = s
+            elif s and not s.startswith('#') and header is None:
+                unexplained.append(s)
+        self.assertEqual(unexplained, [], 'unexplained export sites:\n' + '\n'.join(unexplained))

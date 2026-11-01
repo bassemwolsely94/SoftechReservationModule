@@ -33,6 +33,7 @@ from .services import (
     ensure_product_attribute, ensure_product_seo, generate_thumbnail,
 )
 from .selectors import search_products, autocomplete_products, get_recommendations, get_popular_products
+from core.export_safety import neutralise_formulas
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────
@@ -732,7 +733,7 @@ def product_export(request):
         ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
 
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     buf.seek(0)
 
     response = HttpResponse(

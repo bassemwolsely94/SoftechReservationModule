@@ -303,3 +303,17 @@ class RoleFixtureTests(TestCase):
         from .fixtures import role_clients, seed_code_matrix
         seed_code_matrix()
         self.assertNotEqual(role_clients()['admin'].get('/api/sync/status/').status_code, 403)
+
+    def test_bearer_client_outlives_the_token_lifetime(self):
+        # A sweep that runs longer than ACCESS_TOKEN_LIFETIME (1 h — a busy machine took 6.5 h)
+        # used to get 401 on every later request; 401 classifies as "refused", so unproven routes,
+        # overblocks and leaks silently dropped out of the verdicts.
+        import datetime
+        from rest_framework_simplejwt.utils import aware_utcnow
+        from apps.tests.factories import make_user
+        from .fixtures import bearer_client
+        user, _, _ = make_user('sec_token_clock', role='viewer')
+        two_hours_ago = aware_utcnow() - datetime.timedelta(hours=2)
+        with mock.patch('rest_framework_simplejwt.tokens.aware_utcnow', return_value=two_hours_ago):
+            client = bearer_client(user)          # built at the start of a long sweep
+        self.assertNotEqual(client.get('/api/auth/me/').status_code, 401)

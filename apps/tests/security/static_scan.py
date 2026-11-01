@@ -553,3 +553,63 @@ def tracked_secret_sites(files) -> set:
             continue
         found |= {f'{rel}:{name}' for name in secret_hits(text)}
     return found
+
+
+# ── Excel / CSV formula injection (Batch 6, W-4) ─────────────────────────────
+#
+# A site is a function that saves a workbook without passing it through
+# core.export_safety.neutralise_formulas, or that opens a raw csv.writer /
+# csv.DictWriter instead of export_safety.csv_writer. A workbook is a name bound
+# from Workbook() / load_workbook() / any *workbook*() builder in the same function,
+# or a name commonly used for one (wb, workbook, book), or such a call saved directly.
+
+_BOOK_NAMES = {'wb', 'workbook', 'book'}
+
+
+def _is_book_call(node) -> bool:
+    if not isinstance(node, ast.Call):
+        return False
+    name = _call_name(node.func) or ''
+    return name in ('Workbook', 'load_workbook') or 'workbook' in name.lower()
+
+
+class _UnsafeExport(_Scoped):
+
+    def __init__(self, path):
+        super().__init__()
+        self.path, self.sites, self.books = path, set(), [set()]
+
+    def enter_scope(self, node):
+        bound = set()
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Assign) and _is_book_call(sub.value):
+                bound |= {t.id for t in sub.targets if isinstance(t, ast.Name)}
+        self.books.append(bound)
+
+    def leave_scope(self, node):
+        self.books.pop()
+
+    def _unsafe_save(self, node) -> bool:
+        f = node.func
+        if not (isinstance(f, ast.Attribute) and f.attr == 'save'):
+            return False
+        recv = f.value
+        if isinstance(recv, ast.Call) and _call_name(recv.func) == 'neutralise_formulas':
+            return False
+        if _is_book_call(recv):
+            return True
+        return isinstance(recv, ast.Name) and (recv.id in _BOOK_NAMES or recv.id in self.books[-1])
+
+    def visit_Call(self, node):
+        f = node.func
+        raw_csv = (isinstance(f, ast.Attribute) and f.attr in ('writer', 'DictWriter')
+                   and isinstance(f.value, ast.Name) and f.value.id == 'csv')
+        if raw_csv or self._unsafe_save(node):
+            self.sites.add(f'{self.path}::{self.qualname}')
+        self.generic_visit(node)
+
+
+def unsafe_export_sites(tree, path) -> set:
+    v = _UnsafeExport(path)
+    v.visit(tree)
+    return v.sites

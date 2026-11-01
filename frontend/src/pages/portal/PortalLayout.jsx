@@ -7,7 +7,7 @@
 import { useEffect } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import ErrorBoundary from '../../components/ErrorBoundary'
-import { portalToken } from '../../portal/portalApi'
+import { portalApi, portalToken } from '../../portal/portalApi'
 
 const TABS = [
   { to: '/portal',         label: 'طلباتي',     icon: '📦', end: true },
@@ -29,7 +29,13 @@ export default function PortalLayout() {
     }
   }, [])
 
-  const logout = () => { portalToken.clear(); navigate('/portal/login', { replace: true }) }
+  // end the session on the server too — forgetting the token in this browser is not enough
+  const logout = () => {
+    portalApi.logout().catch(() => {}).finally(() => {
+      portalToken.clear()
+      navigate('/portal/login', { replace: true })
+    })
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 font-cairo flex flex-col" dir="rtl">

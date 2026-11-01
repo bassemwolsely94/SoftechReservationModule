@@ -194,10 +194,12 @@ class TranscribeEndpointTests(TestCase):
             phone_number='01012345678', direction='inbound', status='answered',
             recording_url='http://issabel/recordings/x.wav',
         )
-        fake_resp = mock.Mock(content=b'AUDIOBYTES',
-                              headers={'Content-Type': 'audio/wav'})
-        fake_resp.raise_for_status = mock.Mock()
-        with mock.patch('requests.get', return_value=fake_resp), \
+        fake_resp = mock.Mock(status_code=200, headers={'Content-Type': 'audio/wav'})
+        fake_resp.iter_content.return_value = [b'AUDIOBYTES']
+        # the Issabel box is on the LAN: recordings are fetched only from the PBX host admins
+        # configured (security Batch 6, W-6)
+        with override_settings(PBX_RECORDINGS_URL_BASE='http://issabel/recordings/'), \
+             mock.patch('requests.get', return_value=fake_resp), \
              mock.patch('apps.omni.transcription._gemini_transcribe',
                         return_value='العميل يسأل عن دواء الضغط'), \
              mock.patch('apps.callcenter.ai.summarize_call_async'):

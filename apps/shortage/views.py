@@ -20,7 +20,6 @@ Endpoints:
   GET    /api/shortage/lists/aggregate/               Aggregate across lists (query params)
   GET    /api/shortage/lists/export-aggregated/       Aggregated Excel download
 """
-import csv
 import io
 import logging
 import re
@@ -32,6 +31,8 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import MethodNotAllowed
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+
+from core.export_safety import csv_writer
 
 from .models import ShortageList, ShortageItem
 from .matching import find_best_matches, _normalize, dedup_key
@@ -816,7 +817,7 @@ class ShortageListViewSet(viewsets.ModelViewSet):
         sl    = self.get_object()
         items = sl.items.select_related('item').order_by('raw_name')
         buf   = io.StringIO()
-        w     = csv.writer(buf)
+        w     = csv_writer(buf)
         w.writerow(['الاسم كما أُدخل', 'الصنف المطابق', 'كود ERP',
                     'الكمية', 'الوحدة', 'مصدر الإدخال', 'نسبة التطابق', 'مُأكَّد', 'ملاحظات'])
         for si in items:

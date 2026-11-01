@@ -18,6 +18,7 @@ queries to `request.user.customer` and never accept a customer id from the clien
 from rest_framework import authentication, exceptions, permissions
 
 from apps.customers.models import Customer
+from apps.portal.models import PortalLogin
 from apps.portal.tokens import read_session_token
 
 # Custom scheme keyword so it can never collide with the staff `Bearer` JWT.
@@ -37,8 +38,9 @@ class PortalPrincipal:
     is_active = True
     is_anonymous = False
 
-    def __init__(self, customer: Customer):
+    def __init__(self, customer: Customer, login: PortalLogin | None = None):
         self.customer = customer
+        self.login = login            # the PortalLogin row this session stands for
 
     @property
     def id(self):
@@ -61,15 +63,12 @@ class PortalSessionAuthentication(authentication.BaseAuthentication):
             raise exceptions.AuthenticationFailed('رأس التوثيق غير صالح')
 
         token = auth[1].decode()
-        pic = read_session_token(token)
-        if not pic:
+        claims = read_session_token(token)
+        login = PortalLogin.live_session(claims[1], claims[0]) if claims else None
+        if login is None:                     # expired, logged out, revoked by staff, or forged
             raise exceptions.AuthenticationFailed('انتهت الجلسة — سجّل الدخول مرة أخرى')
 
-        customer = Customer.objects.filter(softech_pic=pic).first()
-        if customer is None:
-            raise exceptions.AuthenticationFailed('الحساب غير موجود')
-
-        return (PortalPrincipal(customer), token)
+        return (PortalPrincipal(login.customer, login), token)
 
     def authenticate_header(self, request):
         return self.keyword

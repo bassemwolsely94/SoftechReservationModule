@@ -28,6 +28,7 @@ import datetime
 import io
 import logging
 from decimal import Decimal
+from core.export_safety import neutralise_formulas
 
 logger = logging.getLogger('elrezeiky.transits')
 
@@ -1076,7 +1077,7 @@ def generate_picking_workbook(transfers, mode='picking') -> tuple:
         _write_revision_sheet(wb, po, mode=mode)
 
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     buf.seek(0)
 
     prefix = EXPORT_MODES[mode]['filename']

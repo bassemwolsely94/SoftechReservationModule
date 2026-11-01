@@ -19,6 +19,8 @@ from openpyxl.styles import (
 )
 from openpyxl.utils import get_column_letter
 
+from core.export_safety import neutralise_formulas
+
 # ── Style constants ────────────────────────────────────────────────────────────
 _HEADER_FILL   = PatternFill('solid', fgColor='1F3864')   # dark navy
 _SUBHDR_FILL   = PatternFill('solid', fgColor='2E75B6')   # brand blue
@@ -143,7 +145,7 @@ def export_list_excel(shortage_list) -> bytes:
     ws.cell(row=summary_row, column=2, value=f'{len(items)} صنف — {confirmed_count} مُأكَّد — {unmatched_count} غير مطابق').font = _NORMAL_FONT
 
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     return buf.getvalue()
 
 
@@ -248,7 +250,7 @@ def export_aggregated_excel(shortage_lists) -> bytes:
         ws.row_dimensions[r].height = 18
 
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     return buf.getvalue()
 
 
@@ -314,7 +316,7 @@ def export_supplier_matrix(shortage_list) -> bytes:
             _style(cell, font=_NORMAL_FONT, fill=fill, align=_RTL_ALIGN)
             if c in (4, len(fixed) + len(mains) + 2, len(fixed) + len(mains) + 3):
                 cell.number_format = '#,##0.##'
-    buf = io.BytesIO(); wb.save(buf); return buf.getvalue()
+    buf = io.BytesIO(); neutralise_formulas(wb).save(buf); return buf.getvalue()
 
 
 def export_supplier_po(shortage_list, suppcode: str, supplier_name: str = '') -> bytes:
@@ -362,4 +364,4 @@ def export_supplier_po(shortage_list, suppcode: str, supplier_name: str = '') ->
             if c in (6, 7):
                 cell.number_format = '#,##0.##'
         r += 1
-    buf = io.BytesIO(); wb.save(buf); return buf.getvalue()
+    buf = io.BytesIO(); neutralise_formulas(wb).save(buf); return buf.getvalue()

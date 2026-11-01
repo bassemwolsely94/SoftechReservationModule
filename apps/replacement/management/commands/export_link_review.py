@@ -22,6 +22,7 @@ from decimal import Decimal
 
 from django.core.management.base import BaseCommand
 from django.db.models import F, Sum
+from core.export_safety import neutralise_formulas
 
 ACCOUNTS = ['4469', '4470', '4471', '4472', '3068', '4069']
 LINKED_ORIGINS = ['softech', 'written', 'approved']
@@ -159,7 +160,7 @@ class Command(BaseCommand):
         summary.column_dimensions['A'].width = 30
         summary.column_dimensions['D'].width = 90
         summary['A1'].font = Font(bold=True, size=13)
-        wb.save(o['out'])
+        neutralise_formulas(wb).save(o['out'])
         for title, n, amt, _ in totals:
             self.stdout.write(f'{title}: {n} links, {amt:,.2f}')
         self.stdout.write(self.style.SUCCESS(f'written {o["out"]}'))

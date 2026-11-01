@@ -34,6 +34,8 @@ KNOWN_PUBLIC_VIEWS = {
     'apps.delivery.views.delivery_public_track',
     'apps.pbx.views.RecordingView',
     'apps.users.mfa',
+    # browsers' CSP violation reports — log only, throttled, capped (Batch 6, W-9)
+    'core.csp.csp_report',
 }
 
 _CONVERTERS = {

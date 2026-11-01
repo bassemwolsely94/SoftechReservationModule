@@ -23,6 +23,7 @@ from rest_framework.response import Response
 from . import cash_view as CV
 from .receivables_views import _as_of, _j
 from .recon_views import FINANCE, FINANCE_EDIT, FINANCE_EXPORT
+from core.export_safety import neutralise_formulas
 
 SOURCE_LABELS = {'softech_mirror': 'SOFTECH', 'finance_input': 'إدخال المالية', 'estimate': 'تقدير'}
 _FIXED_FIELDS = ('label', 'category', 'amount', 'frequency', 'day_of_month', 'date', 'start', 'end', 'is_active')
@@ -239,7 +240,7 @@ def cash_view_export(request):
         ws.append([label, ''] + ([float(x) for x in v['closing'][case]] if v['closing'][case] else []))
     ws.freeze_panes = 'C4'
     buf = BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     resp = HttpResponse(buf.getvalue(),
                         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     resp['Content-Disposition'] = f'attachment; filename="cash_view_{as_of.isoformat()}.xlsx"'

@@ -13,6 +13,7 @@ from django.db.models import Count, Q, Sum, Avg, F
 from datetime import date, timedelta
 
 from core import branch_scope
+from core.export_safety import neutralise_formulas
 
 from .models import Reservation, ReservationStatusLog, ReservationActivity, ReservationDownpayment, ReservationImage, ReservationLine
 from .serializers import (
@@ -1349,7 +1350,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
 
         import io
         buf = io.BytesIO()
-        wb.save(buf)
+        neutralise_formulas(wb).save(buf)
         buf.seek(0)
         response = HttpResponse(
             buf.read(),

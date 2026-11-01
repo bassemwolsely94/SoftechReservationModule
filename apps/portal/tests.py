@@ -14,9 +14,8 @@ from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.customers.models import Customer
 from apps.reservations.models import Reservation
-from apps.portal.tokens import (
-    make_magic_token, make_session_token, read_session_token,
-)
+from apps.portal.services import exchange_magic_link, issue_magic_link
+from apps.portal.tokens import read_session_token
 from apps.tests.factories import make_branch, make_item, make_user
 
 
@@ -34,8 +33,11 @@ class PortalTestBase(APITestCase):
         )
 
     def session_headers(self, customer=None):
-        c = customer or self.customer
-        return {'HTTP_AUTHORIZATION': f'Portal {make_session_token(c.softech_pic)}'}
+        return {'HTTP_AUTHORIZATION': f'Portal {self.session_token(customer)}'}
+
+    def session_token(self, customer=None):
+        _, token = exchange_magic_link(issue_magic_link(customer or self.customer))
+        return token
 
 
 class RequestLinkTests(PortalTestBase):
@@ -61,16 +63,16 @@ class RequestLinkTests(PortalTestBase):
         with mock.patch('apps.whatsapp.sender.WhatsAppSender'):
             for _ in range(7):
                 codes.append(self.client.post(url, {'phone': '01055667788'}).status_code)
-        self.assertIn(429, codes)  # default rate is 5/min
+        self.assertIn(429, codes)  # default rate is 5/hour per phone
 
 
 class AuthExchangeTests(PortalTestBase):
     def test_valid_magic_token_yields_session(self):
-        token = make_magic_token(self.customer.softech_pic)
+        token = issue_magic_link(self.customer)
         r = self.client.post(reverse('portal-auth'), {'token': token})
         self.assertEqual(r.status_code, 200)
         body = r.json()
-        self.assertEqual(read_session_token(body['session_token']), self.customer.softech_pic)
+        self.assertEqual(read_session_token(body['session_token'])[0], self.customer.softech_pic)
         self.assertEqual(body['customer']['name'], 'سعيد علي')
 
     def test_garbage_token_rejected(self):
@@ -79,14 +81,14 @@ class AuthExchangeTests(PortalTestBase):
 
     def test_session_token_not_accepted_as_magic(self):
         # A session-salt token must NOT be exchangeable at the magic-link endpoint.
-        session = make_session_token(self.customer.softech_pic)
+        session = self.session_token()
         r = self.client.post(reverse('portal-auth'), {'token': session})
         self.assertEqual(r.status_code, 400)
 
 
 class CrossAuthIsolationTests(PortalTestBase):
     def test_portal_token_rejected_on_staff_api(self):
-        token = make_session_token(self.customer.softech_pic)
+        token = self.session_token()
         r = self.client.get('/api/customers/', HTTP_AUTHORIZATION=f'Portal {token}')
         self.assertEqual(r.status_code, 401)
 
