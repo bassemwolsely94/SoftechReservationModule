@@ -249,7 +249,7 @@ function Review({ id }) {
               title="ينشئ قائمة نواقص الفرع من الأسطر المؤكَّدة ويُعلِّم المطابِق">
               {confirmM.isPending ? '…' : `إنشاء قائمة النواقص (${items.length - pending.length})`}
             </button>
-            <button data-tour="purchasing-supply-wa-cancel" className="text-xs text-rose-700 underline" onClick={() => cancelM.mutate()}>إلغاء الطلب</button>
+            <button data-tour="purchasing-supply-wa-cancel" className="text-xs text-rose-700 underline" onClick={() => window.confirm('إلغاء الطلب نهائياً؟ الطلب الملغي لا يرجع للتعديل.') && cancelM.mutate()}>إلغاء الطلب</button>
           </>}
         </div>
       </div>

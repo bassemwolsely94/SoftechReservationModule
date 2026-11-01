@@ -476,8 +476,8 @@ SCREENS = [
         ],
         'hints': [
             {'target': 'customers-detail-note-delete', 'label': T('حذف', 'Delete'),
-             'text': T('يحذف الملاحظة من ملف العميل.', 'Deletes the note from the customer file.'),
-             'warn': T('بيتحذف فوراً ونهائياً من غير سؤال تأكيد. اتأكد إنك على الملاحظة الصح.', 'It is deleted at once and for good, with no confirmation. Make sure it is the right note.'),
+             'text': T('يحذف الملاحظة من ملف العميل — كاتبها أو المدير/الجودة بس.', "Deletes the note from the customer's file — only its author or a manager / quality."),
+             'warn': T('بيسأل للتأكيد، والحذف نهائي — نص الملاحظة بيتحفظ في سجل المراجعة باسمك.', 'Asks first; deleting is final — the note text is kept in the audit log under your name.'),
              'open_hint': T('تحت كل ملاحظة في «الجدول الزمني».', 'Under each note on the "Timeline".')},
             {'target': 'customers-detail-points-chip', 'label': T('🏆 نقاط SOFTECH · عرض التفاصيل ←', '🏆 SOFTECH points · Details ←'),
              'text': T('رصيد النقاط مقروء من SOFTECH. الضغط يفتح تبويب «🏆 النقاط».', 'The points balance read from SOFTECH. Clicking opens the "🏆 Points" tab.'),

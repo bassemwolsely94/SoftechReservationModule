@@ -931,6 +931,7 @@ function SupplementsTab({ claimId, claim, onRefresh }) {
   }
 
   const delSup = async (id) => {
+    if (!window.confirm('حذف هذا الملحق نهائياً؟')) return
     await insuranceApi.deleteSupplement(claimId, id)
     load()
     onRefresh()
@@ -1073,6 +1074,7 @@ function ManualRxTab({ claimId, claim, onRefresh }) {
   }
 
   const removeRx = async (id) => {
+    if (!window.confirm('حذف هذه الروشتة المضافة يدوياً نهائياً؟')) return
     await insuranceApi.removeManualRx(claimId, id)
     load(); onRefresh()
   }

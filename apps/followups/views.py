@@ -680,11 +680,14 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
         """
         POST /api/followups/tasks/multi-whatsapp/
         Build a combined WhatsApp message for a customer covering multiple tasks.
-        Body: { task_ids: [int], include_upsell?: bool }
+        Body: { task_ids: [int], include_upsell?: bool, mark_called?: bool }
         Returns { message, whatsapp_url, character_count }
+        Building the preview changes nothing; the screen sends mark_called=true when the user
+        actually opens WhatsApp, and only then are the tasks marked called.
         """
         task_ids      = request.data.get('task_ids', [])
         include_upsell = bool(request.data.get('include_upsell', False))
+        mark_called    = request.data.get('mark_called') in (True, 'true', '1', 1)
 
         if not task_ids:
             return Response({'detail': 'task_ids مطلوبة'}, status=400)
@@ -712,8 +715,8 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
             clean  = tasks[0]._normalise_phone(phone)
             wa_url = f'https://wa.me/{clean}?text={urllib.parse.quote(msg)}'
 
-        # Mark all included tasks as called (outreach attempted)
-        for task in tasks:
+        # Mark all included tasks as called (outreach attempted) — only when WhatsApp is opened
+        for task in (tasks if mark_called else []):
             if task.status in ('pending', 'called'):
                 services.mark_task_called(
                     task, note='تم التواصل عبر واتساب (رسالة متعددة الأصناف)',

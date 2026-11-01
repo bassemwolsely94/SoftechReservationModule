@@ -1206,8 +1206,8 @@ function ChronicConditionsWidget({ customerId, value, onSaved }) {
       await customersApi.updateConditions(customerId, text)
       onSaved(text)
       setEditing(false)
-    } catch {
-      /* silent */
+    } catch (e) {
+      alert(e?.response?.data?.detail || 'تعذّر حفظ الأمراض المزمنة')   // the editor stays open — nothing typed is lost
     } finally { setSaving(false) }
   }
 
@@ -1354,6 +1354,7 @@ export default function CustomerDetailPage() {
   const deleteNoteMutation = useMutation({
     mutationFn: (noteId) => customersApi.deleteNote(id, noteId),
     onSuccess: () => qc.invalidateQueries(['customer', id]),
+    onError: (e) => alert(e?.response?.data?.detail || 'تعذّر حذف الملاحظة'),
   })
 
   if (isLoading) return (
@@ -1467,7 +1468,9 @@ export default function CustomerDetailPage() {
                   notes={customer.notes || []}
                   reservations={reservations || []}
                   navigate={navigate}
-                  onDeleteNote={(noteId) => deleteNoteMutation.mutate(noteId)}
+                  onDeleteNote={(noteId) => {
+                    if (window.confirm('حذف هذه الملاحظة؟ يحذفها كاتبها أو المدير، وتُحفظ في سجل المراجعة.')) deleteNoteMutation.mutate(noteId)
+                  }}
                 />
               </>
             )}

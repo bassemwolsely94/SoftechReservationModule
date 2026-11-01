@@ -5,6 +5,7 @@ import { reservationsApi, branchesApi } from '../api/client'
 import { StatusBadge, PriorityBadge, STATUS_OPTIONS, PRIORITY_OPTIONS } from '../components/StatusBadge'
 import BranchSelect from '../components/BranchSelect'
 import DataFreshnessBar from '../components/DataFreshnessBar'
+import CancelReasonPicker, { cancelNote, EMPTY_CANCEL } from '../components/CancelReasonPicker'
 import useAuthStore from '../store/authStore'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
@@ -82,6 +83,8 @@ function FilterBar({ filters, onChange, branches }) {
 // ── Bulk action toolbar ────────────────────────────────────────────────────────
 function BulkToolbar({ selectedIds, selectedReservations, onClear, onAction }) {
   const [bulkStatus, setBulkStatus] = useState('')
+  const [bulkCancel, setBulkCancel] = useState(EMPTY_CANCEL)
+  const bulkNote = bulkStatus === 'cancelled' ? cancelNote(bulkCancel) : ''
   const [loading, setLoading] = useState(false)
 
   // Compute which target statuses are valid for at least one selected reservation.
@@ -113,8 +116,9 @@ function BulkToolbar({ selectedIds, selectedReservations, onClear, onAction }) {
     if (!bulkStatus) return
     setLoading(true)
     try {
-      await onAction('change_status', { status: bulkStatus })
+      await onAction('change_status', { status: bulkStatus, note: bulkNote })
       setBulkStatus('')
+      setBulkCancel(EMPTY_CANCEL)
     } finally {
       setLoading(false)
     }
@@ -158,8 +162,11 @@ function BulkToolbar({ selectedIds, selectedReservations, onClear, onAction }) {
                 ))
             }
           </select>
+          {bulkStatus === 'cancelled' && (
+            <div className="w-56"><CancelReasonPicker value={bulkCancel} onChange={setBulkCancel} compact /></div>
+          )}
           <button
-            disabled={!bulkStatus || loading}
+            disabled={!bulkStatus || loading || (bulkStatus === 'cancelled' && !bulkNote)}
             onClick={handleChangeStatus}
             className="btn-primary text-xs py-1 px-3 disabled:opacity-40"
           >

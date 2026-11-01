@@ -1784,6 +1784,7 @@ export const callCenterApi = {
   getItems:    (callId)         => api.get(`/callcenter/calls/${callId}/items/`),
   addItem:     (callId, data)   => api.post(`/callcenter/calls/${callId}/items/`, data),
   removeItem:  (callId, itemId) => api.delete(`/callcenter/calls/${callId}/items/${itemId}/`),
+  updateItem:  (callId, itemId, data) => api.patch(`/callcenter/calls/${callId}/items/${itemId}/`, data),
 
   // Quick-convert call items → Reservation(s)
   // data: { branch_id, notes?, priority?, channel?, item_ids? }
@@ -1917,8 +1918,9 @@ export const followupsApi = {
 
   // Feature 6: Grouped by customer + multi-item WhatsApp
   grouped:       (params) => api.get('/followups/tasks/grouped/', { params }),
-  multiWhatsapp: (taskIds, includeUpsell = false) => api.post('/followups/tasks/multi-whatsapp/', {
-    task_ids: taskIds, include_upsell: includeUpsell,
+  // markCalled: false = preview only; true when the user opens WhatsApp (marks the tasks called)
+  multiWhatsapp: (taskIds, includeUpsell = false, markCalled = false) => api.post('/followups/tasks/multi-whatsapp/', {
+    task_ids: taskIds, include_upsell: includeUpsell, mark_called: markCalled,
   }),
 
   // Feature 23: Create demand record
