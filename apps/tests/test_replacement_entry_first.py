@@ -5,8 +5,9 @@ tracked, claimable «شراء بدون حالة» record; a live case funds vouc
 only; anonymous receipts are never auto-confirmed; approvals follow the owner matrix (cash manager
 > 1,500, rate lowered manager > 5 pp, backdate bands).
 """
-from datetime import datetime, timedelta, timezone as dt_tz
+from datetime import date, datetime, timedelta, timezone as dt_tz
 from decimal import Decimal
+from unittest import mock
 
 from django.core.exceptions import ValidationError
 from django.test import override_settings
@@ -30,6 +31,29 @@ CUTOVER = {'130': (TODAY - timedelta(days=20)).isoformat()}
 
 def _at(day, h=9, mi=0):
     return datetime(day.year, day.month, day.day, h, mi, tzinfo=dt_tz.utc)
+
+
+# The backdate bands read today's date, so tests that claim a purchase pin it: a fixed mid-month
+# purchase claimed the next day (supervisor band). "Yesterday" broke on every 1st of the month,
+# when yesterday is in the previous month and the claim correctly needs the manager.
+P_DAY = date(2026, 10, 14)
+FIXED_CUTOVER = {'130': '2026-09-01'}
+
+
+class _Clock:
+    """`apps.replacement.workflow.timezone` with today pinned; everything else is the real module."""
+    def __init__(self, day):
+        self.day = day
+
+    def localdate(self, *args, **kwargs):
+        return self.day
+
+    def __getattr__(self, name):
+        return getattr(timezone, name)
+
+
+def _today(day):
+    return mock.patch.object(W, 'timezone', _Clock(day))
 
 
 @override_settings(REPLACEMENT_ENTRY_FIRST_FROM=CUTOVER)
@@ -75,10 +99,25 @@ class EntryFirstTests(TW._Base):
                              items=items if items is not None else [{'item_id': self.lokelma.pk, 'qty': 1}],
                              claim_of=src)
 
+    def _route_for_claim(self, purchase_day, today):
+        src = R.reconstruct_invoice(self.ap_invoice(docdate=purchase_day))['case']
+        self.assertEqual(src.status, RC.STATUS_UNCLAIMED)
+        c = self.calc(self.claim(src))
+        with _today(today):
+            return W.approval_route(RC.objects.get(pk=c.pk))
+
+    @override_settings(REPLACEMENT_ENTRY_FIRST_FROM=FIXED_CUTOVER)
+    def test_backdate_band_across_month_end_is_manager_even_one_day_later(self):
+        wf, reasons = self._route_for_claim(date(2026, 9, 30), date(2026, 10, 1))
+        self.assertEqual(wf, 'replacement_manager', reasons)
+        self.assertTrue(any('عبر نهاية الشهر' in r for r in reasons), reasons)
+
+    @override_settings(REPLACEMENT_ENTRY_FIRST_FROM=FIXED_CUTOVER)
     def test_claim_links_purchase_on_approval_and_retires_the_unclaimed_record(self):
-        src = R.reconstruct_invoice(self.ap_invoice())['case']
+        src = R.reconstruct_invoice(self.ap_invoice(docdate=P_DAY))['case']
         X.objects.filter(case=src).update(status=X.STATUS_ACK)          # someone reviewed it — still claimable
-        c = self.submit(self.calc(self.claim(src)))
+        with _today(P_DAY + timedelta(days=1)):                         # supervisor band (see P_DAY)
+            c = self.submit(self.calc(self.claim(src)))
         self.assertEqual(c.status, RC.STATUS_AWAITING_APPROVAL)
         self.assertTrue(any('بأثر رجعي' in r for r in c.approval_request.context_data['reasons']))
         c = W.decide(c.pk, user=self.sup, version=c.version, approve=True)
