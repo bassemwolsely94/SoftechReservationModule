@@ -154,6 +154,16 @@ class StaffProfile(models.Model):
         default=False, verbose_name='إشعار قائمة الصلاحيات عبر واتساب',
     )
 
+    # Security N3: per-user widening of the external (Z3) policy; admins only, off by default
+    external_export = models.BooleanField(
+        default=False, verbose_name='التصدير من خارج الشبكة',
+        help_text='يسمح للأدمن بتصدير الملفات من جهاز معتمد خارج شبكة الشركة',
+    )
+    external_softech_write = models.BooleanField(
+        default=False, verbose_name='الكتابة في SOFTECH من خارج الشبكة',
+        help_text='يسمح للأدمن بعمليات الكتابة في SOFTECH من جهاز معتمد خارج شبكة الشركة',
+    )
+
     # Branch access flags
     access_all_branches = models.BooleanField(
         default=False,
