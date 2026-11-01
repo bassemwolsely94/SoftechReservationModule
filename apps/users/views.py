@@ -2,7 +2,7 @@ from rest_framework import serializers as drf_serializers, status, viewsets, fil
 from rest_framework.decorators import api_view, permission_classes, action, throttle_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
-from core.auth_cookies import set_auth_cookies
+from core.auth_cookies import set_auth_cookies, set_device_cookie
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.throttling import AnonRateThrottle
@@ -126,7 +126,7 @@ def _request_network_fields(request):
         return {}
 
 
-def _log_auth(action: str, profile, ip: str, note: str = '', request=None):
+def _log_auth(action: str, profile, ip: str, note: str = '', request=None, device=None):
     try:
         UserActivityLog.objects.create(
             target_user=profile,
@@ -134,6 +134,7 @@ def _log_auth(action: str, profile, ip: str, note: str = '', request=None):
             action=action,
             ip_address=ip,
             note=note,
+            device=device,
             **_request_network_fields(request),
         )
     except Exception:
@@ -217,9 +218,12 @@ def login_view(request):
         return Response({'mfa_setup_required': True,
                          'mfa_token': _mfa.make_preauth_token(user, 'enroll')})
 
-    _log_auth('login_success', profile, ip, request=request)
+    device, device_secret = _mfa.enroll_login(request, user)
+    _log_auth('login_success', profile, ip, request=request, device=device)
 
     refresh = RefreshToken.for_user(user)
+    if device is not None:
+        refresh['dev'] = str(device.public_id)   # before .access_token: the access token copies it
     resp = Response({
         'access':  str(refresh.access_token),
         'refresh': str(refresh),
@@ -228,6 +232,8 @@ def login_view(request):
             'role': 'admin' if user.is_superuser else 'viewer',
         }
     })
+    if device_secret:
+        set_device_cookie(resp, device_secret)
     # The SPA uses the httpOnly cookies and ignores the body tokens (kept for
     # scripts / non-browser clients, which need the password anyway).
     return set_auth_cookies(resp, refresh.access_token, refresh)
