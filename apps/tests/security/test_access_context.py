@@ -78,6 +78,23 @@ class AccessContextTests(TestCase):
             self.client.get('/api/probe/', REMOTE_ADDR='203.0.113.9')
         self.assertTrue(any('203.0.113.9' in m and '/api/probe/' in m for m in cm.output))
 
+    @override_settings(NETWORK_POLICY_ENFORCEMENT='log')
+    def test_repeated_identical_request_logged_once(self):
+        cache.clear()
+        with self.assertLogs('elrezeiky.access', 'INFO') as cm:
+            for _ in range(3):
+                self.client.get('/api/probe/', REMOTE_ADDR='203.0.113.77')
+            self.client.get('/api/probe/', REMOTE_ADDR='203.0.113.78')
+        self.assertEqual(len([m for m in cm.output if '203.0.113.77' in m]), 1)
+        self.assertEqual(len([m for m in cm.output if '203.0.113.78' in m]), 1)
+
+    @override_settings(NETWORK_POLICY_ENFORCEMENT='log')
+    def test_log_dedupe_never_raises_when_cache_fails(self):
+        from unittest import mock
+        with mock.patch('apps.access.middleware.cache.add', side_effect=RuntimeError('boom')):
+            r = self.client.get('/api/probe/', REMOTE_ADDR='203.0.113.9')
+        self.assertEqual(r.status_code, 200)
+
     @override_settings(NETWORK_POLICY_ENFORCEMENT='off')
     def test_nothing_logged_when_off(self):
         with self.assertNoLogs('elrezeiky.access', 'INFO'):

@@ -646,7 +646,9 @@ SCREENS = [
         'tips': [T('النقطة «منقطعة باستمرار» بعد عدة محاولات فاشلة متتالية — تحقق من اتصال الفرع.', 'A node is "persistently down" after several consecutive failures — check the branch connection.'),
                  T('المزامنة قراءة فقط من SOFTECH إلى النظام؛ لا تكتب أي شيء في SOFTECH.', 'Sync only reads from SOFTECH into the system; it writes nothing to SOFTECH.'),
                  T('«حمل SOFTECH» يعرض كم مرة اتصلنا بالسيرفر وكم استعلاماً وصفاً سحبنا وكم استغرق — حسب المهمة أو الكود أو السيرفر. الأثقل في أول الجدول؛ الأرقام تُحفظ كل دقيقة تقريباً.',
-                   '"SOFTECH load" shows how many times we logged in to the server, how many queries and rows we pulled and how long it took — by job, code or server. The heaviest come first; figures are saved about once a minute.')],
+                   '"SOFTECH load" shows how many times we logged in to the server, how many queries and rows we pulled and how long it took — by job, code or server. The heaviest come first; figures are saved about once a minute.'),
+                 T('في «حسب المهمة»، سطور الشاشات تظهر «الشاشات · داخل الشبكة|خارج الشبكة · الدور» — تفرّق بين ضغط موظفي الشركة وضغط الطلبات الخارجية.',
+                   'In "by job", screen rows read "Screens · inside|outside the network · role" — telling company staff load apart from external requests.')],
         'tour': [
             {'target': 'admin-sync-status', 'text': T('حالة المزامنة مع SOFTECH — لو فشلت، السبب مكتوب هنا.',
                                               'The SOFTECH sync status — if it failed, the reason is shown here.'),
@@ -701,8 +703,8 @@ SCREENS = [
              'label': T('سجل المزامنة', 'Sync log'),
              'when': T('جدول عدده صفر وهو المفروض يتحدث = مشكلة في الجدول ده.', 'A table at zero that should update = a problem with that table.')},
         ],
-        'updated': '2026-10-31',
-        'change_note': T('«فحص الآن» للمدير فقط وبحد مرة كل دقيقة', '"Check now" is admin-only, at most once a minute'),
+        'updated': '2026-11-01',
+        'change_note': T('«حمل SOFTECH» يفرّق الشاشات حسب الشبكة والدور', '"SOFTECH load" splits screens by network and role'),
     },
     {
         'key': 'admin.audit',

@@ -4,12 +4,17 @@ Attaches request.access, and files the request's SOFTECH load under network + ro
 import logging
 
 from django.conf import settings
+from django.core.cache import cache
 
 from apps.sync import softech_load
 
 from . import context
 
 log = logging.getLogger('elrezeiky.access')
+
+# One line per (zone, ip, role) per window, not one per request: until split DNS is live every
+# company request is "external" and would otherwise flood platform.log and journald.
+LOG_DEDUPE_SECONDS = 600
 
 
 class AccessContextMiddleware:
@@ -37,7 +42,11 @@ class AccessContextMiddleware:
         try:
             if (getattr(settings, 'NETWORK_POLICY_ENFORCEMENT', 'log') == 'log'
                     and ctx.network.zone != 'internal' and request.path.startswith('/api/')):
-                log.info('external request user=%s role=%s ip=%s %s %s', ctx.user_id,
-                         ctx.role or 'anon', ctx.network.ip, request.method, request.path)
+                role = ctx.role or 'anon'
+                key = f'access:extlog:{ctx.network.zone}:{ctx.network.ip}:{role}'
+                if cache.add(key, 1, LOG_DEDUPE_SECONDS):
+                    log.info('external request (first in %ss) user=%s role=%s ip=%s %s %s',
+                             LOG_DEDUPE_SECONDS, ctx.user_id, role, ctx.network.ip,
+                             request.method, request.path)
         except Exception:
             log.warning('access log line failed', exc_info=True)

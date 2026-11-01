@@ -108,6 +108,20 @@ class NetworksApiTests(TestCase):
             self.assertIn('نطاق الشبكة غير صحيح', str(r.json()['cidr']), bad)
         self.assertEqual(TrustedNetwork.objects.count(), 0)
 
+    def test_duplicate_cidr_rejected_in_arabic(self):
+        self.assertEqual(self.admin_c.post(LIST, self._body(), format='json').status_code, 201)
+        r = self.admin_c.post(LIST, self._body(name='نسخة', cidr='192.168.3.9/24'), format='json')
+        self.assertEqual(r.status_code, 400, r.content)
+        msg = str(r.json()['cidr'])
+        self.assertIn('مسجّل بالفعل', msg)
+        self.assertIn('LAN المعادي', msg)
+        self.assertEqual(TrustedNetwork.objects.count(), 1)
+
+    def test_patch_same_cidr_on_self_allowed(self):
+        pk = self.admin_c.post(LIST, self._body(), format='json').json()['id']
+        r = self.admin_c.patch(f'{LIST}{pk}/', {'cidr': '192.168.3.0/24', 'notes': 'x'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+
     def test_cidr_normalised_on_post(self):
         r = self.admin_c.post(LIST, self._body(cidr='192.168.3.7/24'), format='json')
         self.assertEqual(r.status_code, 201, r.content)

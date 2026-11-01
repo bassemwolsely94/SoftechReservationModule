@@ -14,7 +14,7 @@ class TrustedNetworkSerializer(serializers.ModelSerializer):
         model = TrustedNetwork
         fields = ['id', 'name', 'cidr', 'kind', 'branch', 'branch_label', 'is_active', 'notes', 'updated_at']
         read_only_fields = ['id', 'updated_at']
-        extra_kwargs = {'cidr': {'error_messages': {'blank': CIDR_BAD, 'required': CIDR_BAD, 'null': CIDR_BAD}}}
+        extra_kwargs = {'cidr': {'validators': [], 'error_messages': {'blank': CIDR_BAD, 'required': CIDR_BAD, 'null': CIDR_BAD}}}
 
     def get_branch_label(self, obj):
         b = obj.branch
@@ -22,6 +22,13 @@ class TrustedNetworkSerializer(serializers.ModelSerializer):
 
     def validate_cidr(self, value):
         try:
-            return str(ipaddress.ip_network((value or '').strip(), strict=False))
+            cidr = str(ipaddress.ip_network((value or '').strip(), strict=False))
         except ValueError:
             raise serializers.ValidationError(CIDR_BAD)
+        dup = TrustedNetwork.objects.filter(cidr=cidr)
+        if self.instance is not None:
+            dup = dup.exclude(pk=self.instance.pk)
+        existing = dup.first()
+        if existing:
+            raise serializers.ValidationError(f'هذا النطاق ({cidr}) مسجّل بالفعل باسم «{existing.name}»')
+        return cidr

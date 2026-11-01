@@ -15,7 +15,7 @@ class TrustedNetwork(models.Model):
     ]
 
     name = models.CharField('الاسم', max_length=120)
-    cidr = models.CharField('نطاق الشبكة (CIDR)', max_length=43)
+    cidr = models.CharField('نطاق الشبكة (CIDR)', max_length=43, unique=True)
     kind = models.CharField('النوع', max_length=20, choices=KIND_CHOICES)
     branch = models.ForeignKey(
         'branches.Branch', null=True, blank=True, on_delete=models.PROTECT,
@@ -48,6 +48,8 @@ class TrustedNetwork(models.Model):
     def clean(self):
         self.normalise_cidr()
 
+    # NOTE: only save() normalises the CIDR. QuerySet.update() and bulk_create() bypass it, so
+    # never use them on this model (a non-normalised value would defeat the unique check).
     def save(self, *args, **kwargs):
         # the API, the seed command and the shell all store the same normalised form
         self.normalise_cidr()

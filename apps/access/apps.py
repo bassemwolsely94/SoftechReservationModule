@@ -7,6 +7,7 @@ class AccessConfig(AppConfig):
     verbose_name = 'الوصول والشبكات'
 
     def ready(self):
+        from . import checks  # noqa: F401  (registers the system checks)
         from django.db.models.signals import post_delete, post_save
         from .models import TrustedNetwork
         from .network import invalidate_cache

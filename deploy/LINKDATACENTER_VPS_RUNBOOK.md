@@ -845,6 +845,9 @@ ALLOWED_HOSTS=elrezeikyapp.dawalvry.com,localhost,127.0.0.1
 CSRF_TRUSTED_ORIGINS=https://elrezeikyapp.dawalvry.com
 FRONTEND_BASE_URL=https://elrezeikyapp.dawalvry.com
 BEHIND_HTTPS_PROXY=True
+NETWORK_HEADER_TRUSTED=True         # ONLY because our nginx + elrezeiky-proxy-headers.conf is the sole way in (N1)
+NETWORK_UNTRUSTED_ZONE=external     # if the header is ever untrusted, treat everyone as external
+NETWORK_POLICY_ENFORCEMENT=log      # off | log | enforce (N3)
 SCHEDULER_AUTOSTART=False
 MEDIA_ACCEL_REDIRECT=True
 RBAC_ENFORCEMENT=log                # same as office today; 'enforce' once the rbac log is quiet
@@ -1051,11 +1054,11 @@ address, not `6.6.6.6`.
 
 #### Batch N1 on the live server
 
-N1 only labels each request `internal` / `external` (log only, nothing is refused). Edit the live
-site file in place again:
+N1 only labels each request `internal` / `external` (log only, nothing is refused). Order matters:
+the `map` must exist **before** the include that uses `$elr_network` is copied, otherwise a restart
+in between fails with `unknown "elr_network" variable` and the site is down.
 
 ```bash
-sudo cp deploy/nginx-proxy-headers.conf /etc/nginx/elrezeiky-proxy-headers.conf   # adds X-ElR-Network
 sudo nano /etc/nginx/sites-available/elrezeiky
 #  - next to the `limit_req_zone` lines (http level, OUTSIDE every server block) add:
 #      map $server_addr $elr_network {
@@ -1063,11 +1066,19 @@ sudo nano /etc/nginx/sites-available/elrezeiky
 #          10.0.0.77   internal;   # SSTP backup
 #          default     external;
 #      }
+sudo cp deploy/nginx-proxy-headers.conf /etc/nginx/elrezeiky-proxy-headers.conf   # adds X-ElR-Network (map already in place)
 sudo nginx -t && sudo systemctl reload nginx
 ```
-Check (the forged header must lose):
+Also make sure `.env` has `NETWORK_HEADER_TRUSTED=True` and `NETWORK_UNTRUSTED_ZONE=external`
+(see the `.env` block above), then `sudo systemctl restart elrezeiky-web`. `NETWORK_HEADER_TRUSTED`
+may be True only because our nginx is the sole way in; never set it where a tunnel/CDN reaches
+Daphne directly. `manage.py check` warns when it is False outside DEBUG and errors on a typo in
+`NETWORK_UNTRUSTED_ZONE` / `NETWORK_POLICY_ENFORCEMENT`.
+
+Check (the forged header must lose). A browser cannot do the second one (the certificate does not
+match the IP), so use curl with `--resolve`:
 - from mobile data: `curl -H 'X-ElR-Network: internal' https://elrezeikyapp.dawalvry.com/api/access/whoami/` -> `external`
-- from a ZeroTier laptop, browse `https://10.50.50.77` with `Host: elrezeikyapp.dawalvry.com` -> `internal`
+- from a ZeroTier laptop: `curl --resolve elrezeikyapp.dawalvry.com:443:10.50.50.77 https://elrezeikyapp.dawalvry.com/api/access/whoami/` -> `internal`
 
 Nginx needs to read static/media files: `sudo chmod 755 /opt/elrezeiky /opt/elrezeiky/app`.
 
@@ -1185,6 +1196,7 @@ address a request arrived on; ufw 443 stays open on all three addresses.
 | Guest Wi-Fi device: `nslookup` and `whoami` | public address; `zone: external` |
 | Mobile data | `zone: external`; a forged `X-ElR-Network: internal` header is ignored |
 | ZeroTier laptop with Allow DNS | `nslookup` = `10.50.50.77`, `zone: internal` |
+| Branch PC: `ip` is `10.50.50.1` or `10.0.0.1` | **FAIL** - the router is NATing (T2 srcnat `accept` missing or below masquerade). Every device looks like the router and shows a healthy «داخل الشبكة — ZeroTier»; fix the rule order before registering sites |
 | Stop ZeroTier (VPS side or router link) | within about a minute the watcher moves to SSTP; the same PC is still `internal` |
 
 **Last step:** register each site so it shows a name instead of a bare range: open «الشبكات
@@ -1195,7 +1207,7 @@ cd /opt/elrezeiky/app
 sudo -u elrezeiky /opt/elrezeiky/venv/bin/python manage.py seed_trusted_networks
 sudo -u elrezeiky /opt/elrezeiky/venv/bin/python manage.py seed_trusted_networks --apply
 ```
-In N1 nothing is refused because of the network (log only); blocking starts in batch N3.
+The site labels appear within a minute (the trusted-network list is cached per process for 60 s, and the seed command runs in its own process). In N1 nothing is refused because of the network (log only); blocking starts in batch N3.
 
 ### 9.3 TLS certificate (DNS must resolve first — section 3)
 

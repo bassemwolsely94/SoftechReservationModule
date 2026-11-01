@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { syncApi } from '../api/client'
+import { ROLE_LABELS } from '../utils/roleLabels'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 
@@ -145,6 +146,11 @@ const secs = ms => (ms || 0) >= 60_000 ? `${n0(Math.round(ms / 60_000))} د` : `
 function scopeLabel(s) {
   if (!s) return '—'
   if (s === 'web') return 'الشاشات (طلبات المستخدمين)'
+  if (s.startsWith('web:')) {
+    const [, zone, role] = s.split(':')
+    const where = zone === 'internal' ? 'داخل الشبكة' : 'خارج الشبكة'
+    return `الشاشات · ${where} · ${role === 'anon' ? 'غير مسجّل الدخول' : (ROLE_LABELS[role] || role)}`
+  }
   if (s.startsWith('job:')) return `مهمة مجدولة · ${s.slice(4)}`
   if (s.startsWith('cmd:')) return `أمر يدوي · ${s.slice(4)}`
   return s
