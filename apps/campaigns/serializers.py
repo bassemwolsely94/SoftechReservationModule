@@ -61,6 +61,12 @@ class WhatsAppCampaignDetailSerializer(serializers.ModelSerializer):
     can_approve          = serializers.BooleanField(read_only=True)
     can_queue            = serializers.BooleanField(read_only=True)
     can_cancel           = serializers.BooleanField(read_only=True)
+    # Per-user, from the RBAC matrix (Batch 4 Z-8b): approve / reject / send need approve,
+    # cancelling edit or approve — the same rules the views enforce.
+    my_can_approve       = serializers.SerializerMethodField()
+    my_can_cancel        = serializers.SerializerMethodField()
+    queued_by_name       = serializers.SerializerMethodField()
+    cancelled_by_name    = serializers.SerializerMethodField()
 
     class Meta:
         model = WhatsAppCampaign
@@ -75,7 +81,8 @@ class WhatsAppCampaignDetailSerializer(serializers.ModelSerializer):
             'approved_by', 'approved_by_name',
             'rejected_by', 'rejected_by_name',
             'rejection_reason',
-            'can_request_approval', 'can_approve', 'can_queue', 'can_cancel',
+            'queued_by', 'queued_by_name', 'cancelled_by', 'cancelled_by_name', 'cancelled_at',
+            'can_request_approval', 'can_approve', 'can_queue', 'can_cancel', 'my_can_approve', 'my_can_cancel',
             'created_at', 'updated_at', 'approved_at', 'queued_at', 'completed_at',
         ]
         read_only_fields = [
@@ -85,9 +92,32 @@ class WhatsAppCampaignDetailSerializer(serializers.ModelSerializer):
             'created_by', 'created_by_name',
             'approved_by', 'approved_by_name',
             'rejected_by', 'rejected_by_name',
-            'can_request_approval', 'can_approve', 'can_queue', 'can_cancel',
+            'queued_by', 'queued_by_name', 'cancelled_by', 'cancelled_by_name', 'cancelled_at',
+            'can_request_approval', 'can_approve', 'can_queue', 'can_cancel', 'my_can_approve', 'my_can_cancel',
             'created_at', 'updated_at', 'approved_at', 'queued_at', 'completed_at',
         ]
+
+    def _my(self, *actions):
+        from core.permissions import _get_profile, matrix_allows
+        request = self.context.get('request')
+        if request is None or not request.user.is_authenticated:
+            return False
+        key = '_my_' + '_'.join(actions)
+        if key not in self.context:
+            self.context[key] = matrix_allows(_get_profile(request), 'campaigns', *actions)
+        return self.context[key]
+
+    def get_my_can_approve(self, obj):
+        return self._my('approve')
+
+    def get_my_can_cancel(self, obj):
+        return self._my('edit', 'approve')
+
+    def get_queued_by_name(self, obj):
+        return obj.queued_by.user.get_full_name() if obj.queued_by_id else ''
+
+    def get_cancelled_by_name(self, obj):
+        return obj.cancelled_by.user.get_full_name() if obj.cancelled_by_id else ''
 
     def get_created_by_name(self, obj):
         return obj.created_by.user.get_full_name() if obj.created_by_id else ''

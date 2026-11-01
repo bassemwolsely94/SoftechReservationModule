@@ -62,10 +62,15 @@ def _net(line):
 
 
 def validate_invoice(invoice, *, live=True):
-    errors, warnings = [], []
+    errors, warnings, notices = [], [], []
 
     def err(code, msg, line_id=None):
         errors.append({'code': code, 'severity': 'error', 'line_id': line_id, 'message': msg})
+
+    def notice(code, msg, line_id=None):
+        # Owner decision 2026-10-31: shown loudly, never blocks posting and needs no
+        # «راجعت التحذيرات» tick (the module's behaviour is right; SofTech's master is off).
+        notices.append({'code': code, 'severity': 'notice', 'line_id': line_id, 'message': msg})
 
     def warn(code, msg, line_id=None):
         warnings.append({'code': code, 'severity': 'warning', 'line_id': line_id, 'message': msg})
@@ -76,10 +81,28 @@ def validate_invoice(invoice, *, live=True):
     # ── PG-side checks (no SOFTECH) ──────────────────────────────────────────
     if not invoice.vendor or not invoice.vendor.softech_personcode:
         err('supplier_unlinked', 'المورد غير مربوط بكود SOFTECH (VendorProfile.softech_personcode)')
+    # Only a scanned supplier paper carries a printed number/date to read; generated documents
+    # (gift-coupon stocking, buy-back legs) get theirs assigned at posting.
+    from_paper = bool(getattr(invoice, 'source_image', None))
+    if not is_return and from_paper and not (invoice.invoice_number or '').strip():
+        err('invoice_number_missing', 'رقم فاتورة المورد غير موجود — أدخله في بيانات الرأس')
+    if not is_return and from_paper and not invoice.invoice_date:
+        warn('invoice_date_missing', 'تاريخ فاتورة المورد غير موجود — سيُحفظ «تاريخ مستند المورد» بتاريخ اليوم')
     matched = [l for l in lines if l.item_id]
     if not matched:
         err('item_unmatched', 'لا توجد أصناف مطابقة لترحيلها')
     zero_ok = zero_cost_items()
+    batch_flagged = set()          # line ids already reported batch_required
+
+    def need_batch(l):
+        # SOFTECH items.itempartno («رقم القطعة أو الباتش») = 1 → the batch must be
+        # entered (e.g. Entresto, Kisqali). It posts to stktrans.item_partno. Purchases
+        # only — the native return value is not verified.
+        if is_return or (l.batch_number or '').strip() or l.id in batch_flagged:
+            return
+        batch_flagged.add(l.id)
+        err('batch_required', f'رقم الباتش مطلوب للصنف: {l.item.name}', l.id)
+
     for l in lines:
         if not l.item_id:
             err('item_unmatched', f'صنف غير مطابق: {l.manual_name or l.raw_text or "—"}', l.id)
@@ -88,9 +111,11 @@ def validate_invoice(invoice, *, live=True):
             err('qty_invalid', f'كمية غير صحيحة (≤0): {l.item.name}', l.id)
         if _net(l) <= 0 and str(l.item.softech_id).strip() not in zero_ok:
             err('price_invalid', f'سعر شراء غير صحيح (≤0): {l.item.name}', l.id)
+        if getattr(l.item, 'batch_required', False):      # catalog mirror (works offline)
+            need_batch(l)
 
     if not live or not matched:
-        return {'ok': not errors, 'errors': errors, 'warnings': warnings}
+        return {'ok': not errors, 'errors': errors, 'warnings': warnings, 'notices': notices}
 
     # ── live SOFTECH master-data reads (one connection) ──────────────────────
     from config.sybase import get_branch_connection
@@ -98,7 +123,7 @@ def validate_invoice(invoice, *, live=True):
     host = writer.branch_host(invoice)
     if not host:
         warn('offline', 'تعذّر التحقق الحي من بيانات SOFTECH (لا يوجد اتصال بالفرع)')
-        return {'ok': not errors, 'errors': errors, 'warnings': warnings}
+        return {'ok': not errors, 'errors': errors, 'warnings': warnings, 'notices': notices}
 
     personcode = invoice.vendor.softech_personcode
     branch = invoice.softech_branchcode
@@ -110,12 +135,14 @@ def validate_invoice(invoice, *, live=True):
         ph = ','.join('?' for _ in codes)
         cur = conn.cursor()
         cur.execute(f"SELECT itemcode, itemnomoreuse, itemarchive, itemexpiry, itemcostprice, "
-                    f"itemsaleprice, itemsalestaxp, itemtrans3 FROM items WHERE itemcode IN ({ph})", codes)
+                    f"itemsaleprice, itemsalestaxp, itemtrans3, itempartno, itemsaleprice_tax "
+                    f"FROM items WHERE itemcode IN ({ph})", codes)
         for r in cur.fetchall():
             items[str(r[0]).strip()] = {
                 'nomoreuse': str(r[1] or '').strip(), 'archive': int(_f(r[2])),
                 'expiry': str(r[3] or '').strip(), 'cost': _f(r[4]),
-                'public': _f(r[5]), 'taxp': _f(r[6]), 'trans3': int(_f(r[7]))}
+                'public': _f(r[5]), 'taxp': _f(r[6]), 'trans3': int(_f(r[7])),
+                'partno': int(_f(r[8])), 'base': _f(r[9])}
         srow = writer._q1(conn, "SELECT personcredit, personmaxbal FROM personsdata WHERE personcode=?",
                           [personcode])
         if srow:
@@ -172,6 +199,8 @@ def validate_invoice(invoice, *, live=True):
             err('item_return_blocked', f'الصنف غير مسموح بإرجاعه للموردين ({reason}): {l.item.name}', l.id)
         if it['expiry'] == '1' and not writer._parse_expiry(l.expiry_date):
             err('expiry_required', f'تاريخ صلاحية مطلوب للصنف: {l.item.name}', l.id)
+        if it['partno'] == 1:                              # live SOFTECH flag (catalog may lag)
+            need_batch(l)
         if is_return and code in orig_qty and _f(l.quantity) > orig_qty[code] + 0.0001:
             err('return_exceeds_received',
                 f'كمية المرتجع ({_f(l.quantity):g}) أكبر من المستلَم ({orig_qty[code]:g}): {l.item.name}', l.id)
@@ -185,13 +214,20 @@ def validate_invoice(invoice, *, live=True):
         if it['cost'] > 0 and net < it['cost'] * (1 - dec / 100):
             warn('price_drop',
                  f'انخفاض حاد في سعر الشراء ({net:.2f} مقابل {it["cost"]:.2f}): {l.item.name}', l.id)
-        if abs(_f(l.vat_pct) - it['taxp']) > 0.01:
-            warn('tax_mismatch',
-                 f'نسبة ضريبة مختلفة عن الصنف ({_f(l.vat_pct):g}% مقابل {it["taxp"]:g}%): {l.item.name}', l.id)
+        # The item's real VAT rate is itemsaleprice / itemsaleprice_tax: SOFTECH leaves
+        # itemsalestaxp at 0 on most taxed items, so comparing to it warned on every
+        # taxed line. Compare the rate we will POST (grid.effective_tax) to that ratio.
+        from .grid import effective_tax
+        posted_rate = effective_tax(l)[2]
+        item_rate = ((it['public'] / it['base'] - 1) * 100
+                     if it['public'] > 0 and it['base'] > 0 else it['taxp'])
+        if abs(posted_rate - item_rate) > 0.5:
+            notice('tax_mismatch',
+                 f'نسبة ضريبة مختلفة عن الصنف ({posted_rate:g}% مقابل {item_rate:.0f}%): {l.item.name}', l.id)
         if _f(l.discount_pct) > hi_disc:
             warn('discount_high', f'خصم مرتفع ({_f(l.discount_pct):g}%): {l.item.name}', l.id)
         if not is_return and code not in linked:
-            warn('supplier_not_listed', f'الصنف غير مُدرج لدى هذا المورد في SOFTECH: {l.item.name}', l.id)
+            notice('supplier_not_listed', f'الصنف غير مُدرج لدى هذا المورد في SOFTECH — سيُضاف الربط عند الترحيل: {l.item.name}', l.id)
 
     # ── credit limit (purchase only) ─────────────────────────────────────────
     if (not is_return and _cfg('INVOICE_ENFORCE_CREDIT_LIMIT', True)
@@ -200,4 +236,4 @@ def validate_invoice(invoice, *, live=True):
             f'تجاوز حد ائتمان المورد: الرصيد الحالي {credit:,.0f} + قيمة الفاتورة {doc_value:,.0f} '
             f'يتجاوز الحد {maxbal:,.0f}')
 
-    return {'ok': not errors, 'errors': errors, 'warnings': warnings, 'doc_value': round(doc_value, 2)}
+    return {'ok': not errors, 'errors': errors, 'warnings': warnings, 'notices': notices, 'doc_value': round(doc_value, 2)}

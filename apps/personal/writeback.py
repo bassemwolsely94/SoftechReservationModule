@@ -24,6 +24,7 @@ owns. Everything else in apps/personal stays read-only.
 from __future__ import annotations
 
 from django.conf import settings
+from config.writers import writer_allowed
 
 from config.sybase import get_sybase_connection, get_branch_connection
 
@@ -116,7 +117,7 @@ def write_document_comment(*, branchcode, doccode, docnumber, comment=None,
     docnum = _docnum_param(docnumber)
     _key = [('branchcode', branchcode), ('doccode', doccode), ('docnumber', docnum)]
     old_comment, final = '', ''
-    if not getattr(settings, 'PERSONAL_COMMENT_WRITE_ENABLED', True):
+    if not writer_allowed('PERSONAL_COMMENT_WRITE_ENABLED'):
         raise CommentWriteError('معطّل حالياً من إعدادات النظام', 503)
     if transform is None:
         _validate_text(comment, MAX_LEN)   # reject bad input before touching SOFTECH
@@ -191,7 +192,7 @@ def write_cheque_note(*, branchcode, financialdoccode, cheqsno, note=None,
     sno = _docnum_param(cheqsno)
     key = [('branchcode', branchcode), ('financialdoccode', fdc), ('cheqsno', sno)]
     old_note, final = '', ''
-    if not getattr(settings, 'PERSONAL_COMMENT_WRITE_ENABLED', True):
+    if not writer_allowed('PERSONAL_COMMENT_WRITE_ENABLED'):
         raise CommentWriteError('معطّل حالياً من إعدادات النظام', 503)
     if transform is None:
         _validate_text(note, CHEQ_MAX_LEN)   # reject bad input before touching SOFTECH

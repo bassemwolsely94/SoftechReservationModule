@@ -8,6 +8,7 @@ spine (own data open, reports/config gated by RBAC module `gamification`).
 """
 from datetime import timedelta
 from decimal import Decimal
+from unittest import mock
 
 from django.test import TestCase
 from django.utils import timezone
@@ -130,6 +131,13 @@ class EngineTests(TestCase):
         self.assertEqual(_points(self.sales, 'streak_week'), 25)
 
     def test_branch_request_answered_fast(self):
+        # a fixed Cairo noon: the request counts on the day it was submitted, and just after
+        # midnight "30 minutes ago" is yesterday — the real clock made this test flaky
+        noon = timezone.localtime().replace(hour=12, minute=0, second=0, microsecond=0)
+        with mock.patch('django.utils.timezone.now', return_value=noon):
+            self._branch_request_answered_fast()
+
+    def _branch_request_answered_fast(self):
         now = timezone.now()
         TransferRequest.objects.create(requesting_branch=self.branch,
                                        supplying_branch=self.branch2, status='approved',

@@ -28,7 +28,7 @@ class SyncRunSerializer(serializers.ModelSerializer):
         model = SyncRun
         fields = ['id', 'status', 'started_at', 'completed_at',
                   'records_synced', 'error_message', 'duration_seconds',
-                  'progress', 'logs']
+                  'progress', 'lane', 'manual', 'logs']
 
 
 @api_view(['GET'])
@@ -61,11 +61,11 @@ def trigger_sync(request):
     lane = (request.data.get('lane') or '').strip().lower()
     full = bool(request.data.get('full', False))
     if lane == 'fast':
-        worker, label = run_fast_sync, 'fast'
+        worker, label = (lambda: run_fast_sync(manual=True)), 'fast'
     elif lane == 'slow':
-        worker, label = run_slow_sync, 'slow'
+        worker, label = (lambda: run_slow_sync(manual=True)), 'slow'
     else:
-        worker, label = (lambda: run_full_sync(full_history=full)), 'full'
+        worker, label = (lambda: run_full_sync(full_history=full, manual=True)), 'full'
 
     # Don't pile a second run on top of one already in flight. The scheduled
     # fast/slow lanes also create 'running' rows but finish in seconds/minutes; a
@@ -281,4 +281,69 @@ def softech_load(request):
         'by_caller': rows_by('caller', 40),
         'by_node': nodes,
         'hourly': hourly,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def slow_requests(request):
+    """
+    Top 10 slowest API endpoints over the last ?days= (default 14, max 30) by p95
+    duration, from SlowRequest (P-56: measure before optimising). Only requests
+    slower than SLOW_REQUEST_MS are recorded, so `count` is "slow calls", not all
+    calls. Admin only.
+    """
+    from datetime import timedelta
+    from django.utils import timezone
+    from apps.users.permissions import IsAdminRole
+    from .models import SlowRequest
+
+    if not IsAdminRole().has_permission(request, None):
+        return Response({'detail': 'admin only'}, status=status.HTTP_403_FORBIDDEN)
+    try:
+        days = max(1, min(int(request.query_params.get('days', 14)), 30))
+    except (TypeError, ValueError):
+        days = 14
+    since = timezone.now() - timedelta(days=days)
+    by_path = {}
+    for path, method, ms in (SlowRequest.objects.filter(at__gte=since)
+                             .values_list('path', 'method', 'duration_ms')):
+        by_path.setdefault((path, method), []).append(ms)
+    rows = []
+    for (path, method), vals in by_path.items():
+        vals.sort()
+        p95 = vals[min(len(vals) - 1, int(round(0.95 * (len(vals) - 1))))]
+        rows.append({'path': path, 'method': method, 'count': len(vals),
+                     'p95_ms': p95, 'max_ms': vals[-1]})
+    rows.sort(key=lambda r: (-r['p95_ms'], -r['count']))
+    from django.conf import settings
+    return Response({'days': days, 'threshold_ms': int(getattr(settings, 'SLOW_REQUEST_MS', 1000)),
+                     'endpoints': rows[:10]})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def writer_switches(request):
+    """
+    P-54 switch table: every SOFTECH writer flag with its .env value, its effective state
+    (WRITER_INSTANCE and flag), the code default (always OFF) and what it protects, plus
+    this instance's role and the kill-switch. Read-only. Admin only.
+    """
+    from django.conf import settings
+    from apps.users.permissions import IsAdminRole
+    from config.writers import WRITER_FLAGS, WRITER_JOBS, writer_allowed, writer_instance
+
+    if not IsAdminRole().has_permission(request, None):
+        return Response({'detail': 'admin only'}, status=status.HTTP_403_FORBIDDEN)
+    return Response({
+        'writer_instance': writer_instance(),
+        'softech_read_only': bool(getattr(settings, 'SOFTECH_READ_ONLY', False)),
+        'writer_jobs': list(WRITER_JOBS),
+        'flags': [{
+            'flag': flag,
+            'protects': info['protects'],
+            'value': bool(getattr(settings, flag, False)),
+            'effective': writer_allowed(flag),
+            'code_default': False,
+        } for flag, info in WRITER_FLAGS.items()],
     })

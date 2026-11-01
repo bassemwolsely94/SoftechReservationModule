@@ -303,6 +303,150 @@ class ManualReceiptSurvivesSyncTests(TestCase):
         self.assertFalse(t.has_discrepancy)
 
 
+class FlakyConn(FakeConn):
+    """Receipt (doc 25) queries raise like a dropped jConnect session.
+    `reconnect()` heals it when `heal_on_reconnect` is set."""
+    def __init__(self, heal_on_reconnect=False):
+        super().__init__()
+        self.broken = True
+        self.heal_on_reconnect = heal_on_reconnect
+        self.reconnects = 0
+
+    def cursor(self):
+        conn = self
+        base = FakeCursor(self)
+        real_execute = base.execute
+
+        def execute(sql, params=None):
+            s = ' '.join(sql.split()).lower()
+            if conn.broken and "doccode = '25'" in s and 'docnumber2' in s:
+                raise Exception('java.sql.SQLException: JZ0C0: Connection is already closed.')
+            return real_execute(sql, params)
+        base.execute = execute
+        return base
+
+    def reconnect(self):
+        self.reconnects += 1
+        if self.heal_on_reconnect:
+            self.broken = False
+
+
+class ReceiptCheckFailureTests(TestCase):
+    """2026-10-30 bug: a dropped SOFTECH connection made every remaining receipt check
+    return "not received" — received transfers flipped back to in_transit, their receipt
+    data was wiped, and a daily alert fired for each (13,320 failures in 10 days)."""
+
+    def setUp(self):
+        self.hq   = make_branch('HQ', '100')
+        self.giza = make_branch2('Giza', '140')
+        self.cmd = Command()
+
+    def _received(self, doc):
+        return InTransitTransfer.objects.create(
+            erp_doc_number=str(doc), erp_supplying_branch_code='100', supplying_branch=self.hq,
+            erp_receiving_branch_code='140', receiving_branch=self.giza,
+            issue_date=TODAY - datetime.timedelta(days=5), transit_status='received',
+            erp_receipt_doc_number='555', erp_received_date=TODAY - datetime.timedelta(days=4),
+            item_count=1,
+            items_snapshot=[{'itemcode': 'IT001', 'itemname': 'X', 'qty': 5,
+                             'unit_cost': 70, 'extended_cost': 350,
+                             'batch': None, 'expiry': None, 'near_expiry': False}],
+        )
+
+    def test_failed_check_never_unreceives(self):
+        self._received(903000)
+        conn = FlakyConn()
+        conn.headers = [_hdr(903000, '100', '140', date=TODAY - datetime.timedelta(days=5))]
+        conn.lines[(903000, '100', '125')] = [_line('IT001', 5, 350)]
+
+        stats = self.cmd._sync(conn, 30, '')
+
+        t = InTransitTransfer.objects.get(erp_doc_number='903000')
+        self.assertEqual(t.transit_status, 'received')
+        self.assertEqual(t.erp_receipt_doc_number, '555')
+        self.assertIsNotNone(t.erp_received_date)
+        self.assertEqual(stats['receipt_check_failed'], 1)
+
+    def test_reconnects_and_retries_the_check(self):
+        conn = FlakyConn(heal_on_reconnect=True)
+        conn.headers = [_hdr(903100, '100', '140', date=TODAY - datetime.timedelta(days=3))]
+        conn.lines[(903100, '100', '125')] = [_line('IT001', 5, 350)]
+        conn.receipts[('140', '100', 903100)] = [(556, TODAY)]
+        conn.lines[(556, '140', '25')] = [_line('IT001', 5, 350)]
+
+        stats = self.cmd._sync(conn, 30, '')
+
+        t = InTransitTransfer.objects.get(erp_doc_number='903100')
+        self.assertEqual(t.transit_status, 'received')
+        self.assertEqual(t.erp_receipt_doc_number, '556')
+        self.assertEqual(conn.reconnects, 1)
+        self.assertEqual(stats['receipt_check_failed'], 0)
+
+    def _overdue(self, doc):
+        return InTransitTransfer.objects.create(
+            erp_doc_number=str(doc), erp_supplying_branch_code='100', supplying_branch=self.hq,
+            erp_receiving_branch_code='140', receiving_branch=self.giza,
+            issue_date=TODAY - datetime.timedelta(days=20), transit_status='in_transit',
+            days_in_transit=20, item_count=1,
+        )
+
+    def test_no_alert_when_receipt_check_failed(self):
+        from apps.notifications.models import Notification
+        from .factories import make_admin
+        make_admin('tr_alert_admin')
+        self._overdue(903200)
+        conn = FlakyConn()
+        conn.headers = [_hdr(903200, '100', '140', date=TODAY - datetime.timedelta(days=20))]
+        conn.lines[(903200, '100', '125')] = [_line('IT001', 5, 350)]
+
+        self.cmd._sync(conn, 30, '')
+
+        self.assertEqual(
+            Notification.objects.filter(notification_type='transit_critical').count(), 0)
+
+    def test_alert_still_fires_when_verified_unreceived(self):
+        """Control: a successful check with no receipt is a real stuck transfer."""
+        from apps.notifications.models import Notification
+        from .factories import make_admin
+        make_admin('tr_alert_admin2')
+        self._overdue(903300)
+        conn = FakeConn()
+        conn.headers = [_hdr(903300, '100', '140', date=TODAY - datetime.timedelta(days=20))]
+        conn.lines[(903300, '100', '125')] = [_line('IT001', 5, 350)]
+
+        self.cmd._sync(conn, 30, '')
+
+        self.assertGreater(
+            Notification.objects.filter(notification_type='transit_critical').count(), 0)
+
+    def test_stops_reconnecting_once_softech_stays_down(self):
+        """A dead network must not cost a reconnect attempt per open transfer."""
+        conn = FlakyConn()                       # never heals
+        conn.headers = [_hdr(904000 + i, '100', '140') for i in range(6)]
+        for i in range(6):
+            conn.lines[(904000 + i, '100', '125')] = [_line('IT001', 1, 70)]
+
+        stats = self.cmd._sync(conn, 30, '')
+
+        self.assertEqual(stats['receipt_check_failed'], 6)
+        self.assertLessEqual(conn.reconnects, 3)
+
+    def test_old_open_transfer_check_failure_keeps_it_unalerted(self):
+        """Wide re-check (outside the header window) obeys the same rule."""
+        from apps.notifications.models import Notification
+        from .factories import make_admin
+        make_admin('tr_alert_admin3')
+        self._overdue(903400)
+        conn = FlakyConn()
+        conn.headers = []                       # outside the 30-day header window
+
+        stats = self.cmd._sync(conn, 30, '')
+
+        self.assertEqual(stats['receipt_check_failed'], 1)
+        self.assertEqual(
+            Notification.objects.filter(notification_type='transit_critical').count(), 0)
+
+
 class LocalReceiptAlertTests(TestCase):
     """A local receipt not confirmed in SOFTECH (no doc 25) after N days alerts the
     receiving branch once a day; confirmed / recent / in-transit ones don't."""
@@ -353,3 +497,80 @@ class LocalReceiptAlertTests(TestCase):
         self.assertEqual(r.status_code, 200)
         rows = r.json()['results'] if isinstance(r.json(), dict) else r.json()
         self.assertEqual([x['erp_doc_number'] for x in rows], ['902200'])
+
+
+class TransitLinkTests(TestCase):
+    """P-33 (c): a 125 links to a transfer only when the docnumber AND both branches match (and the
+    ERP-matched date is within 3 days when known). Docnumbers repeat per (branch, doctype), so the
+    docnumber alone linked transits to other branches' transfers."""
+
+    def setUp(self):
+        from .factories import make_user
+        self.hq = make_branch('HQ', '100')
+        self.giza = make_branch2('Giza', '140')
+        self.b150 = make_branch('B150', '150')
+        _, self.staff, _ = make_user('tr_link', role='admin')
+        self.cmd = Command()
+
+    def _tr(self, ref, supply, recv, **kw):
+        from apps.transfers.models import TransferRequest
+        return TransferRequest.objects.create(requesting_branch=recv, supplying_branch=supply, created_by=self.staff,
+                                              status='sent_to_erp', erp_reference=ref, **kw)
+
+    def _sync(self, *headers):
+        conn = FakeConn()
+        conn.headers = list(headers)
+        for h in headers:
+            conn.lines[(h[0], h[2], '125')] = [_line('IT001', 1, 10)]
+        self.cmd._sync(conn, 30, '')
+
+    def test_same_reference_from_two_branches_links_each_to_its_own(self):
+        a = self._tr('777', self.hq, self.giza)
+        b = self._tr('777', self.b150, self.giza)
+        self._sync(_hdr(777, '100', '140'), _hdr(777, '150', '140'))
+        got = dict(InTransitTransfer.objects.values_list('erp_supplying_branch_code', 'linked_request_id'))
+        self.assertEqual(got, {'100': a.pk, '150': b.pk})
+
+    def test_receiving_branch_mismatch_does_not_link(self):
+        self._tr('778', self.hq, self.b150)                            # the request was for 150
+        self._sync(_hdr(778, '100', '140'))                             # the 125 goes to 140
+        self.assertIsNone(InTransitTransfer.objects.get().linked_request_id)
+
+    def test_erp_match_date_far_away_does_not_link(self):
+        self._tr('779', self.hq, self.giza, erp_match_doc_date=TODAY - datetime.timedelta(days=20),
+                 erp_match_doc_code='125')
+        self._sync(_hdr(779, '100', '140'))
+        self.assertIsNone(InTransitTransfer.objects.get().linked_request_id)
+
+    def test_two_candidates_link_nothing_and_are_logged(self):
+        from apps.transits.models import InTransitAuditEvent
+        self._tr('780', self.hq, self.giza)
+        self._tr('780', self.hq, self.giza)
+        self._sync(_hdr(780, '100', '140'))
+        t = InTransitTransfer.objects.get()
+        self.assertIsNone(t.linked_request_id)
+        self.assertTrue(InTransitAuditEvent.objects.filter(transfer=t, action='ambiguous_link').exists())
+
+    def test_repair_command_reports_then_unlinks(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from apps.transits.models import InTransitAuditEvent
+        wrong = self._tr('781', self.b150, self.giza)
+        good = self._tr('782', self.hq, self.giza)
+        bad_t = InTransitTransfer.objects.create(erp_doc_number='781', erp_supplying_branch_code='100',
+                                                 erp_receiving_branch_code='140', issue_date=TODAY,
+                                                 linked_request=wrong)
+        ok_t = InTransitTransfer.objects.create(erp_doc_number='782', erp_supplying_branch_code='100',
+                                                erp_receiving_branch_code='140', issue_date=TODAY,
+                                                linked_request=good)
+        out = StringIO()
+        call_command('audit_transit_links', stdout=out)
+        self.assertIn('781', out.getvalue())
+        bad_t.refresh_from_db()
+        self.assertEqual(bad_t.linked_request_id, wrong.pk)             # report only
+        call_command('audit_transit_links', '--commit', stdout=StringIO())
+        bad_t.refresh_from_db(); ok_t.refresh_from_db()
+        self.assertIsNone(bad_t.linked_request_id)
+        self.assertEqual(ok_t.linked_request_id, good.pk)
+        self.assertTrue(InTransitAuditEvent.objects.filter(transfer=bad_t, action='unlinked').exists())
+        self.assertTrue(wrong.messages.filter(message_type='system').exists())

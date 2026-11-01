@@ -154,7 +154,8 @@ must not get wrong → add a quiz question.
 
 ### Rich steps + journeys (built 2026-10-26, batch 1 of 6 — design: `docs/superpowers/specs/2026-10-26-rich-tours-design.md`)
 
-- **Step format:** `{'target', 'text', 'label'?, 'when'?, 'warn'?, 'open_hint'?}` — the card shows the
+- **Step format:** `{'target', 'label', 'text', 'when'?, 'warn'?, 'open_hint'?}` (`label` required on every
+  tour and journey step since batch 7, 2026-10-30 — the element's name exactly as on screen; tested) — the card shows the
   button name («label», bold), what it does, «متى؟» (when / what happens next), an amber ⚠ box, and
   `open_hint` when the element is not on screen (another tab, a record to open, a status). Limits per
   language: label ≤ 40, others ≤ 160 (`registry.TOUR_LIMITS`).
@@ -193,17 +194,40 @@ must not get wrong → add a quiz question.
 
 ### Button hints + first-visit offer (built 2026-10-30, batch 8 — `frontend/src/help/Hints.jsx`)
 
-- **«💡 تلميحات الأزرار»** (help-panel footer, or **Ctrl+F1** anywhere): every element of the current
+- **«💡 تلميحات الأزرار»** (help-panel footer, or **Alt+F1** anywhere — Shift+F1 is «اعرض لي»): every element of the current
   screen that has a tour step (the screen's `tour`, plus its module's journey steps on this screen;
   the screen's own step wins) gets a dashed outline — amber when the step has a `warn`. Hover or focus
   shows a small card (label, text, «متى؟», ⚠); it never takes clicks. A bar «💡 … — N عنصر مشروح هنا»
   with «إيقاف ✕» stays while it is on. Off during a tour. Same text as the tours — nothing new to write.
 - **«جديد هنا؟ 👆 اعرض لي»**: a small chip (no modal), 1.5 s after arriving on a screen that has a tour
   whose current help version the user has neither read (`seen`) nor been offered (`offered`). Shown
-  once per screen version; ✕ or leaving the screen hides it.
+  once per screen version; ✕ or leaving the screen hides it. Not on `/dashboard`, where «👋 ابدأ من هنا»
+  covers first visits. Starts the tour with `startScreenTour` (list → detail flows included).
 - State in `helpStore` (persisted per browser): `hints`, `offered`. The hints fetch uses
   `screens/<key>/?log=0`, so it does not count as "help opened" in the trainers' report.
 - Mounted by `HelpPanel` next to `TourRunner`, so both shells (desktop + `/m/`) get it.
+
+### «🗺️ جولة في موديولات دورك» — role module tour (built 2026-10-30, batch 9)
+
+Not the same as the hand-written «🧭 جولة تعريفية بالنظام» (`flow:general.system`: menu, search, help,
+notifications) — both exist; this one visits the modules of the person's work.
+
+- **Generated, not written:** `training.product_tour(role, shell)` builds a journey from the role's
+  training path (trainer path edits included): a welcome on the dashboard, then **one stop per module**
+  in path order — that module's first path screen on the shell with a tour and a param-free route; the
+  step highlights that screen's first tour anchor, labelled with the module icon + short title, text =
+  the module's one-line **`MODULE['brief']`** (≤160 chars, every module has one — tested), «متى؟» = how many
+  path screens it has — then a finish step on «؟ مساعدة» (F1, Shift+F1 «اعرض لي», Alt+F1 hints, «مساري التدريبي»).
+  Welcome / finish text: `content/onboarding.py` `PRODUCT_TOUR`. Module `general` gets no stop of its own.
+- **API:** `GET /api/help/product-tour/?shell=desktop|mobile` (own role; trainers `&role=`) → a journey
+  (`id = product.<role>.<shell>`, steps with routes like module journeys) or 404. Tour events use
+  `journey:product.<role>.<shell>`; the usage report lists every role × shell (`kind: 'product'`).
+- **Entry points:** «🗺️ جولة في موديولات دورك» on `/help` (header, next to «🧭 جولة تعريفية بالنظام»), in
+  «مساري التدريبي» (follows the role a trainer previews), and a card in «👋 ابدأ من هنا» on the home page
+  (`module_tour` in `GET /api/help/first-day/`, ticked ✓ once finished). Started with the same runner as
+  journeys (`useStartProductTour` in `Journeys.jsx`).
+- **Not wired yet:** a mobile entry point (the API supports `shell=mobile`); the tours for roles whose
+  path is mostly mobile are thin on desktop.
 
 ## «اسأل النظام» (built 2026-10-10)
 
@@ -383,7 +407,9 @@ The two help lines were merged (branch `claude/help-reconcile`). Nothing was dro
 ## Next steps (proposed, not built)
 
 - ~~Rich tours + journeys for every module~~ ✅ done (batches 1–6, last 2026-10-30).
-- Batch 7: enrich the remaining thin steps (no «label» / «متى؟») in finished modules — most in purchasing.
+- ~~Batch 7: every step names its element~~ ✅ done 2026-10-30 — 189 steps got a «label» (every one that had neither label nor «متى؟» also got a «متى؟» — 155);
+  `test_every_step_names_its_element` keeps it so.
 - ~~Batch 8: hints mode + once-per-screen «جديد هنا؟ اعرض لي» chip~~ ✅ built 2026-10-30. Still open:
   anchor (and write steps for) the main buttons that have no `data-tour` yet (~half of all buttons).
-- Batch 9: role product tour «جولة في النظام» across modules, from `/help` and onboarding.
+- ~~Batch 9: role module tour «🗺️ جولة في موديولات دورك»~~ ✅ built 2026-10-30 (desktop entry points; mobile
+  entry still open).

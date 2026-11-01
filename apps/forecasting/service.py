@@ -230,35 +230,16 @@ class ForecastService:
     @classmethod
     def _expiry_risk(cls, metrics) -> Decimal | None:
         """
-        Value of stock that will expire before it can be sold.
-        Requires BatchService — graceful fallback if unavailable.
+        Value of live stock that will expire before it sells (P-26: the one at-risk definition,
+        apps/batches/stock_expiry.at_risk_by_branch — the StockExpiryBalance mirror, FEFO, 180 days).
         """
         try:
-            from apps.batches.service import BatchService
-            from apps.batches.models import StockBatch
-            from django.db.models import F
-
-            today    = date.today()
-            r30      = getattr(metrics, 'rate_30d',  None) or Decimal('0')
-            r365     = getattr(metrics, 'rate_365d', None) or Decimal('0')
-            daily    = r30 if r30 > 0 else r365
-
-            at_risk_value = Decimal('0')
-            batches = StockBatch.objects.filter(
-                item_id   = metrics.item_id,
-                branch_id = metrics.branch_id,
-                is_active = True,
-                expiry_date__isnull = False,
-                expiry_date__lte    = today + timedelta(days=90),
-            )
-            for batch in batches:
-                days_left = (batch.expiry_date - today).days
-                sellable  = float(daily) * days_left if daily else 0
-                will_expire = max(0, float(batch.current_qty) - sellable)
-                unit_cost   = float(getattr(metrics.item, 'cost_price', 0) or 0)
-                at_risk_value += Decimal(str(will_expire * unit_cost))
-
-            return at_risk_value.quantize(Decimal('0.01'), ROUND_HALF_UP)
+            from apps.batches.stock_expiry import at_risk_by_branch
+            item_code = metrics.item.softech_id
+            branch_code = metrics.branch.softech_branch_id
+            risk = at_risk_by_branch(branch_codes=[branch_code], item_codes=[item_code]).get(branch_code)
+            value = dict(risk['items']).get(item_code, 0) if risk else 0
+            return Decimal(str(value)).quantize(Decimal('0.01'), ROUND_HALF_UP)
         except Exception:
             return None
 

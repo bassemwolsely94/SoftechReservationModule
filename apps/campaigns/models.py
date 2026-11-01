@@ -105,6 +105,20 @@ class WhatsAppCampaign(models.Model):
         verbose_name='رفض بواسطة',
     )
     rejection_reason = models.TextField(blank=True, verbose_name='سبب الرفض')
+    queued_by = models.ForeignKey(
+        'users.StaffProfile',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='campaigns_queued',
+        verbose_name='أرسل بواسطة',
+    )
+    cancelled_by = models.ForeignKey(
+        'users.StaffProfile',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='campaigns_cancelled',
+        verbose_name='ألغى بواسطة',
+    )
 
     # ── Timestamps ────────────────────────────────────────────────────────────
     created_at   = models.DateTimeField(auto_now_add=True)
@@ -112,6 +126,7 @@ class WhatsAppCampaign(models.Model):
     approved_at  = models.DateTimeField(null=True, blank=True)
     queued_at    = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-created_at']

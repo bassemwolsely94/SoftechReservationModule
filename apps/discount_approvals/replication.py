@@ -20,6 +20,7 @@ All branch reads/writes use the same credentials and code paths the ERP uses;
 no SOFTECH schema is modified.
 """
 import logging
+from config.writers import writer_allowed
 from decimal import Decimal
 from datetime import timedelta
 
@@ -389,7 +390,7 @@ def force_replication(softech_id, erp_usercode=None, mode='restamp', target_bran
     from config.sybase import get_sybase_connection, get_branch_connection
 
     result = {'restamped': False, 'pushed': {}}
-    if not getattr(settings, 'REPLICATION_REPAIR_ENABLED', True):
+    if not writer_allowed('REPLICATION_REPAIR_ENABLED'):
         result['error'] = 'replication_repair_disabled'
         return result
 

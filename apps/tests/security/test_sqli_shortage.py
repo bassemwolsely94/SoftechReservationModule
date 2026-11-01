@@ -16,6 +16,13 @@ PAYLOAD = "1' OR '1'='1"
 
 
 class BuildSourcingTests(SimpleTestCase):
+    """The live SOFTECH read — since P-33 (d) the fallback when our mirrors are stale."""
+
+    def setUp(self):
+        from apps.shortage import supplier_sourcing
+        p = mock.patch.object(supplier_sourcing, '_mirrors_fresh', return_value=False)
+        p.start()
+        self.addCleanup(p.stop)
 
     def test_restrict_supplier_is_bound_in_every_query(self):
         with RecordingSybase() as rec:

@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'vouchers', 'group': 'customers', 'icon': '🎫',
+    'brief': T('قسائم الخصم وكوبونات الهدايا: التحقق بالكود (OTP) والاستخدام عند البيع.',
+               'Discount vouchers and gift coupons: the code (OTP) check and redemption at the sale.'),
     'title': T('القسائم وكوبونات الهدايا', 'Vouchers & gift coupons'),
     'summary': T(
         'قسائم الخصم الإلكترونية: تُنشئها الإدارة (عامة، خاصة بعميل، أول مرة، أو مخصصة بأرقام هواتف) بأنواع خصم نسبة أو مبلغ أو رصيد نقدي أو صنف مجاني، '
@@ -105,8 +107,9 @@ MODULE = {
          'summary': T('اختيار القسيمة، هاتف العميل، رمز التحقق، ثم مستند الصرف للـ POS.',
                       'Pick the voucher, the customer phone, the verification code, then the redemption document for the POS.'),
          'steps': [
-            {'screen': 'vouchers.mobile', 'target': 'vouchers-mobile-voucher', 'perm': 'vouchers',
-             'text': T('اضغط القسيمة اللي العميل جاي بيها.', 'Tap the voucher the customer came with.')},
+            {'screen': 'vouchers.mobile', 'target': 'vouchers-mobile-voucher', 'label': T('كارت القسيمة', 'Voucher card'), 'perm': 'vouchers',
+             'text': T('اضغط القسيمة اللي العميل جاي بيها.', 'Tap the voucher the customer came with.'),
+             'when': T('أول ما العميل يقولك إن معاه قسيمة.', 'As soon as the customer says they have a voucher.')},
             {'screen': 'vouchers.mobile', 'target': 'vouchers-mobile-phone', 'perm': 'vouchers',
              'label': T('هاتف العميل *', 'Customer phone *'),
              'text': T('اكتب هاتف العميل وقيمة الطلب لو عايز الخصم يتحسب.', 'Type the customer phone, and the order value to calculate the discount.'),
@@ -116,16 +119,18 @@ MODULE = {
              'text': T('يتأكد من الأهلية ويبعت الرمز للعميل.', 'Checks eligibility and sends the customer the code.'),
              'warn': T('اتأكد من الرقم قبل الإرسال.', 'Check the number before sending.'),
              'open_hint': T('اختار قسيمة من القائمة.', 'Pick a voucher from the list.')},
-            {'screen': 'vouchers.mobile', 'target': 'vouchers-mobile-code', 'perm': 'vouchers',
+            {'screen': 'vouchers.mobile', 'target': 'vouchers-mobile-code', 'label': T('رمز التحقق ------', 'Verification code ------'), 'perm': 'vouchers',
              'text': T('العميل يقرا الرمز وانت تكتبه. 3 دقائق و3 محاولات.', 'The customer reads the code and you type it. 3 minutes and 3 tries.'),
+             'when': T('بعد ما الرمز يوصل للعميل على موبايله.', "Once the code reaches the customer's phone."),
              'open_hint': T('بعد «إرسال رمز التحقق».', 'After "Send verification code".')},
             {'screen': 'vouchers.mobile', 'target': 'vouchers-mobile-verify', 'perm': 'vouchers',
              'label': T('تحقق وصرف', 'Verify and redeem'),
              'text': T('ينشئ مستند الصرف.', 'Creates the redemption document.'),
              'warn': T('بيحسب استخدام من القسيمة فوراً.', 'It counts one use of the voucher at once.'),
              'open_hint': T('بعد «إرسال رمز التحقق».', 'After "Send verification code".')},
-            {'screen': 'vouchers.mobile', 'target': 'vouchers-mobile-done', 'perm': 'vouchers',
+            {'screen': 'vouchers.mobile', 'target': 'vouchers-mobile-done', 'label': T('تم التحقق وإنشاء مستند الصرف', 'Verified — redemption doc created'), 'perm': 'vouchers',
              'text': T('ادّي رقم المستند للكاشير خلال 15 دقيقة.', 'Give the document number to the cashier within 15 minutes.'),
+             'when': T('بعد ما يظهر ✅ — والعميل لسه في الفرع.', 'Once ✅ shows — while the customer is still in the branch.'),
              'open_hint': T('بعد «تحقق وصرف» بنجاح.', 'After a successful "Verify and redeem".')},
          ]},
     ],
@@ -300,13 +305,13 @@ SCREENS = [
                        'Writes to SOFTECH. Run "Rehearse without saving" first. The button is locked while writing is off in settings.'),
              'open_hint': T('تبويب «🎟️ كوبونات الهدايا» ← «الدفعات»، دفعة بانتظار الإدخال. للمسؤول والمشتريات والمشرف.',
                             '"🎟️ Gift coupons" tab → "Batches", a batch waiting to be entered. For admin, purchasing and supervisor.')},
-            {'target': 'vouchers-main-status',  # from the GitHub-side tour
+            {'target': 'vouchers-main-status', 'label': T('كل الحالات', 'All statuses'), 'when': T('لما تحب تشوف قسائم حالة معيّنة بس.', 'When you want to see vouchers of one status only.'),  # from the GitHub-side tour
              'text': T('فلتر الحالة.',
                        'Status filter.'),
              'more': T(
                  'القسيمة «النشطة» بس هي اللي ينفع تتصرف أو تتخصص أو تتلغى. المنتهية أو المُستخدمة بالكامل بتفضل في القائمة للمتابعة.',
                  'Only an "active" voucher can be redeemed, assigned or cancelled. Expired or fully used ones stay in the list for follow-up.')},
-            {'target': 'vouchers-main-table',  # from the GitHub-side tour
+            {'target': 'vouchers-main-table', 'label': T('جدول القسائم', 'Vouchers table'), 'when': T('لما تحب تراجع قسيمة أو تفتح تفاصيلها.', 'When you want to review a voucher or open its details.'),  # from the GitHub-side tour
              'text': T('القسائم — افتح أي قسيمة لتفاصيلها.',
                        'The vouchers — open one for its details.'),
              'more': T(
@@ -326,8 +331,9 @@ SCREENS = [
         'steps': [T('بعد «تم التحقق» استخدم رقم المستند في نقطة البيع خلال 15 دقيقة.', 'After "verified", use the document number at the POS within 15 minutes.')],
         'related': ['vouchers.main'],
         'tour': [
-            {'target': 'vouchers-mobile-voucher',
-             'text': T('القسائم النشطة بس. اضغط القسيمة اللي العميل جاي بيها.', 'Active vouchers only. Tap the voucher the customer came with.')},
+            {'target': 'vouchers-mobile-voucher', 'label': T('كارت القسيمة', 'Voucher card'),
+             'text': T('القسائم النشطة بس. اضغط القسيمة اللي العميل جاي بيها.', 'Active vouchers only. Tap the voucher the customer came with.'),
+             'when': T('لما عميل يجي يصرف قسيمة — دي أول خطوة.', 'When a customer comes to redeem a voucher — this is the first step.')},
             {'target': 'vouchers-mobile-phone', 'label': T('هاتف العميل *', 'Customer phone *'),
              'text': T('هاتف العميل، وقيمة الطلب لو عايز الخصم يتحسب. لو القسيمة مقصورة على أصناف، علّم الصنف اللي في الطلب.',
                        'The customer phone, and the order value if you want the discount calculated. If limited to items, tick the one in the order.'),
@@ -343,29 +349,33 @@ SCREENS = [
             {'target': 'vouchers-mobile-whatsapp', 'label': T('💬 إرسال عبر واتساب', '💬 Send via WhatsApp'),
              'text': T('يفتح واتساب برسالة الرمز لو العميل ماوصلهوش.', 'Opens WhatsApp with the code message if the customer did not get it.'),
              'open_hint': T('بعد «إرسال رمز التحقق».', 'After "Send verification code".')},
-            {'target': 'vouchers-mobile-code',
+            {'target': 'vouchers-mobile-code', 'label': T('رمز التحقق ------', 'Verification code ------'),
              'text': T('اكتب الرمز اللي العميل بيقراه لك. صالح 3 دقائق و3 محاولات.', 'Type the code the customer reads to you. Valid 3 minutes and 3 tries.'),
+             'when': T('بعد ما الرمز يوصل للعميل. بعدها اضغط «تحقق وصرف».', 'Once the code reaches the customer. Then press "Verify and redeem".'),
              'open_hint': T('بعد «إرسال رمز التحقق».', 'After "Send verification code".'),
              'more': T(
                  'اكتب الرمز اللي العميل يقراه لك. لو الرسالة ما وصلتش، زر «💬 إرسال عبر واتساب» يفتح الرسالة جاهزة.\n• ما تطلبش من العميل يبعتلك الرمز في رسالة — يقراه لك بس.\n• «← تغيير الرقم» يرجعك لو الهاتف غلط.',
-                 'Type the code the customer reads out to you. If the message did not arrive, "💬 Send via WhatsApp" opens it ready to send.\n• Do not ask the customer to forward the code in a message — they only read it to you.\n• "← Change number" takes you back if the phone was wrong.')},
+                 'Type the code the customer reads out to you. If the message did not arrive, "💬 Send via WhatsApp" opens it ready to send.\n• Do not ask the customer to forward the code in a message — they only read it to you.\n• "← Change number" takes you back if the phone was wrong.'),
+         },
             {'target': 'vouchers-mobile-verify', 'label': T('تحقق وصرف', 'Verify and redeem'),
              'text': T('يتأكد من الرمز وينشئ مستند الصرف.', 'Checks the code and creates the redemption document.'),
              'warn': T('بيحسب استخدام من القسيمة فوراً. اضغطه والعميل قدامك بيشتري.', 'It counts one use of the voucher at once. Press it while the customer is buying.'),
              'open_hint': T('بعد «إرسال رمز التحقق».', 'After "Send verification code".'),
              'more': T(
                  'لو الرمز صح، بيظهر «تم التحقق وإنشاء مستند الصرف» برقم المستند ووقت انتهائه.\n• استخدم رقم المستند في نقطة البيع خلال 15 دقيقة، وبعد كده بيتعلّم «مُستخدَم».\n• «صرف قسيمة أخرى» يرجعك للقائمة.',
-                 'If the code is right, "Verified and redemption document created" shows with the document number and when it expires.\n• Use the document number at the point of sale within 15 minutes; it is then marked "used".\n• "Redeem another voucher" takes you back to the list.')},
-            {'target': 'vouchers-mobile-done',
+                 'If the code is right, "Verified and redemption document created" shows with the document number and when it expires.\n• Use the document number at the point of sale within 15 minutes; it is then marked "used".\n• "Redeem another voucher" takes you back to the list.'),
+         },
+            {'target': 'vouchers-mobile-done', 'label': T('تم التحقق وإنشاء مستند الصرف', 'Verified — redemption doc created'),
              'text': T('رقم المستند وصلاحيته. استخدمه في نقطة البيع خلال 15 دقيقة.', 'The document number and its validity. Use it at the POS within 15 minutes.'),
+             'when': T('بعد التحقق على طول — ادّي رقم المستند للكاشير قبل ما صلاحيته تخلص.', 'Right after verifying — give the document number to the cashier before it expires.'),
              'open_hint': T('بعد «تحقق وصرف» بنجاح.', 'After a successful "Verify and redeem".')},
-            {'target': 'vouchers-mobile-header',  # from the GitHub-side tour
+            {'target': 'vouchers-mobile-header', 'label': T('صرف قسيمة', 'Redeem voucher'), 'when': T('لما عميل يطلب يصرف قسيمة.', 'When a customer asks to redeem a voucher.'),  # from the GitHub-side tour
              'text': T('«صرف قسيمة» من الموبايل: اختر القسيمة، أدخل بيانات العميل، ثم أكّد برمز التحقق.',
                        '«Redeem voucher» on mobile: pick the voucher, enter the customer\'s details, then confirm with the verification code.'),
              'more': T(
                  'الشاشة دي لصرف قسيمة لعميل واقف قدامك أو على التليفون، من غير ما تفتح الكمبيوتر.\n• الخطوات بالترتيب: القسيمة ← هاتف العميل ← رمز التحقق ← مستند الصرف.\n• المستند اللي بيطلع في الآخر هو اللي بيتستخدم في نقطة البيع.',
                  "This screen redeems a voucher for a customer in front of you or on the phone, without opening the computer.\n• The steps in order: the voucher → the customer's phone → the verification code → the redemption document.\n• The document produced at the end is what gets used at the point of sale.")},
-            {'target': 'vouchers-mobile-list',  # from the GitHub-side tour
+            {'target': 'vouchers-mobile-list', 'label': T('القسائم الفعّالة', 'Active vouchers'), 'when': T('لما تختار القسيمة اللي العميل عايزها.', 'When you pick the voucher the customer wants.'),  # from the GitHub-side tour
              'text': T('القسائم الفعّالة بكودها وقيمتها — اضغط على القسيمة التي يريد العميل صرفها.',
                        'Active vouchers with their code and value — tap the one the customer wants to redeem.'),
              'more': T(

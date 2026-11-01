@@ -29,7 +29,9 @@ function fmtAge(seconds) {
   return `منذ ${Math.floor(h / 24)} يوم`
 }
 
-function DomainFreshness({ domains, canEdit, compact }) {
+// onRefresh (optional): a module's own refresher for custom-source domains that the
+// SOFTECH lane trigger cannot refresh (e.g. finance → /finance/trigger-sync/).
+function DomainFreshness({ domains, canEdit, compact, onRefresh }) {
   const qc = useQueryClient()
   const [refreshing, setRefreshing] = useState(false)
   const { data } = useQuery({
@@ -43,7 +45,7 @@ function DomainFreshness({ domains, canEdit, compact }) {
   const anyStale = list.some(d => d.stale)
   const lane = domains.every(d => FAST_DOMAINS.has(d)) ? 'fast' : 'full'
   // Only offer the sync-trigger button when EVERY domain is refreshable by it.
-  const canRefresh = canEdit && domains.every(d => SYNC_REFRESHABLE.has(d))
+  const canRefresh = canEdit && (onRefresh || domains.every(d => SYNC_REFRESHABLE.has(d)))
 
   // Compact inline chip for dense screens (POS header): one dot + hover detail,
   // no block, no button — keeps the cashier surface calm.
@@ -62,7 +64,7 @@ function DomainFreshness({ domains, canEdit, compact }) {
 
   async function refresh() {
     setRefreshing(true)
-    try { await syncApi.triggerLane(lane) } catch { /* surfaced by staleness */ }
+    try { await (onRefresh ? onRefresh() : syncApi.triggerLane(lane)) } catch { /* surfaced by staleness */ }
     let n = 0
     const t = setInterval(() => {
       qc.invalidateQueries({ queryKey: ['data-freshness', domains.join(',')] })
@@ -111,11 +113,11 @@ function daysBehind(dateStr) {
   return Math.max(0, Math.round((today - d) / 86400000) - 1)
 }
 
-export default function DataFreshnessBar({ domains, compact, dataThrough, daysElapsed, daysTotal, canEdit, invalidateKeys = [] }) {
+export default function DataFreshnessBar({ domains, compact, dataThrough, daysElapsed, daysTotal, canEdit, invalidateKeys = [], onRefresh }) {
   // NEW per-domain freshness mode (modules pass `domains`); falls through to the
   // legacy KPI/MTD mode when `domains` is absent. `compact` renders a tiny inline
   // chip for dense screens (e.g. POS header).
-  if (domains && domains.length) return <DomainFreshness domains={domains} canEdit={canEdit} compact={compact} />
+  if (domains && domains.length) return <DomainFreshness domains={domains} canEdit={canEdit} compact={compact} onRefresh={onRefresh} />
 
   const qc = useQueryClient()
   const [refreshing, setRefreshing] = useState(false)

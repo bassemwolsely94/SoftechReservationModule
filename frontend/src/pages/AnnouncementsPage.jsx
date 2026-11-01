@@ -71,8 +71,8 @@ export default function AnnouncementsPage() {
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     {a.is_read
                       ? <span className="text-[11px] text-emerald-600 font-medium">✓ مقروء</span>
-                      : <button onClick={() => ack.mutate(a.id)} data-tour="general-announcements-ack" className="text-xs bg-brand-600 text-white rounded-lg px-3 py-1.5 font-medium">تأكيد القراءة</button>}
-                    {mine && <button onClick={() => setStatsFor(a.id)} data-tour="general-announcements-stats" className="text-[11px] text-gray-500 hover:text-gray-800">📊 من قرأ</button>}
+                      : <button data-tour="general-announcements-ack" onClick={() => ack.mutate(a.id)} className="text-xs bg-brand-600 text-white rounded-lg px-3 py-1.5 font-medium">تأكيد القراءة</button>}
+                    {mine && <button data-tour="general-announcements-who-read" onClick={() => setStatsFor(a.id)} className="text-[11px] text-gray-500 hover:text-gray-800">📊 من قرأ</button>}
                     {mine && <button data-tour="general-announcements-delete" onClick={() => del.mutate(a.id)} className="text-[11px] text-gray-300 hover:text-red-500">حذف</button>}
                   </div>
                 </div>

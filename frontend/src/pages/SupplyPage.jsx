@@ -24,6 +24,7 @@ import IsrFulfilmentTab from './supply/IsrFulfilmentTab'
 import BranchRequestsTab from './supply/BranchRequestsTab'
 import SupplierComparisonTab from './supply/SupplierComparisonTab'
 import PurchasePricesTab from './supply/PurchasePricesTab'
+import ReceiptCheckTab from './supply/ReceiptCheckTab'
 import { wildcardMatch } from '../utils/wildcard'
 import useBranchLabels from '../hooks/useBranchLabels'
 import useHelpTab from '../help/useHelpTab'
@@ -55,7 +56,7 @@ const n = (v, d = 1) => (v === null || v === undefined || v === '' ? '—' : Num
 const SUPPLY_TABS = [
   ['inbox', 'صندوق الإتاحة'], ['compare', 'مقارنة الموردين'], ['prices', 'مقارنة أسعار الشراء'], ['cases', 'متابعة النواقص'],
   ['rates', 'معدلات البيع'], ['isr', 'طلبات التوريد / ISR'], ['isrfill', 'تلبية طلبات الفروع'],
-  ['wa', 'طلبات واتساب'], ['dist', 'التوزيعة'],
+  ['wa', 'طلبات واتساب'], ['dist', 'التوزيعة'], ['receipts', 'شراء رغم تغطية عالية'],
 ]
 const TAB_KEY = 'supply_last_tab'
 
@@ -103,7 +104,8 @@ export default function SupplyPage() {
         : tab === 'rates' ? <RatesTab />
         : tab === 'isr' ? <IsrTab />
         : tab === 'isrfill' ? <IsrFulfilmentTab />
-        : tab === 'wa' ? <BranchRequestsTab /> : <DistributionTab />}
+        : tab === 'wa' ? <BranchRequestsTab />
+        : tab === 'receipts' ? <ReceiptCheckTab /> : <DistributionTab />}
     </div>
   )
 }

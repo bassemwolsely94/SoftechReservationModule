@@ -27,6 +27,7 @@ picked up again (discount 0) and only get the discount. Branch copies: push_cust
 import logging
 
 from django.conf import settings
+from config.writers import writer_allowed
 
 logger = logging.getLogger('elrezeiky.customers')
 
@@ -36,7 +37,7 @@ LOCK_KEY = 7_301_009       # pg advisory lock: one live removal run at a time (B
 
 
 def write_enabled():
-    return bool(getattr(settings, 'POINTS_REMOVAL_WRITE_ENABLED', False))
+    return writer_allowed('POINTS_REMOVAL_WRITE_ENABLED')
 
 
 def batch_max():

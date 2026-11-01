@@ -379,8 +379,19 @@ class StockExpiryBalance(models.Model):
     qty         = models.DecimalField(max_digits=14, decimal_places=5, default=0,
                                       verbose_name='الكمية')
     is_quarantine = models.BooleanField(default=False, verbose_name='مخزن عزل/تالف')
+    # P-26: what the store holds (apps/batches/store_roles.py) — every expiry number filters on it.
+    # is_quarantine stays for compatibility: role in (return_candidate, write_off, cosmetics_expired).
+    store_role  = models.CharField(max_length=20, blank=True, default='', db_index=True,
+                                   verbose_name='دور المخزن')
 
     synced_at   = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    def save(self, *args, **kwargs):
+        if not self.store_role:
+            from .store_roles import store_role, QUARANTINE_ROLES
+            self.store_role = store_role(self.branch_code, self.store_code)
+            self.is_quarantine = self.store_role in QUARANTINE_ROLES
+        super().save(*args, **kwargs)
 
     class Meta:
         verbose_name        = 'رصيد صلاحية مخزون'
@@ -489,6 +500,27 @@ class ExpiryDisposalRecord(models.Model):
                                     related_name='disposal_records_decided', verbose_name='اعتمد/نفّذ بواسطة')
     decided_at  = models.DateTimeField(null=True, blank=True)
 
+    # ── P-29 return-window calendar (apps/batches/return_calendar.py) ─────────
+    SOURCE_CHOICES = [('manual', 'يدوي'), ('return_window', 'تقويم المرتجع')]
+    ANSWER_CHOICES = [('', '—'), ('accepted', 'مقبول'), ('partial', 'مقبول جزئياً'), ('rejected', 'مرفوض')]
+    source           = models.CharField(max_length=15, choices=SOURCE_CHOICES, default='manual', db_index=True,
+                                        verbose_name='المصدر')
+    window_opens     = models.DateField(null=True, blank=True, verbose_name='تفتح نافذة المرتجع')
+    window_closes    = models.DateField(null=True, blank=True, verbose_name='تُغلق نافذة المرتجع')
+    match_confidence = models.CharField(max_length=10, blank=True, verbose_name='ثقة نسب المورد')
+    supplier_answer  = models.CharField(max_length=10, choices=ANSWER_CHOICES, blank=True, default='',
+                                        verbose_name='رد المورد')
+    allowed_expiry   = models.DateField(null=True, blank=True, verbose_name='الصلاحية المسموحة')
+    accepted_qty     = models.DecimalField(max_digits=14, decimal_places=3, null=True, blank=True,
+                                           verbose_name='الكمية المقبولة')
+    answered_by      = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
+                                         related_name='+', verbose_name='سجّل الرد')
+    answered_at      = models.DateTimeField(null=True, blank=True)
+    returned_qty     = models.DecimalField(max_digits=14, decimal_places=3, default=0,
+                                           verbose_name='الكمية المرتجعة فعلياً')
+    softech_doc_refs = models.JSONField(default=list, blank=True, verbose_name='مستندات المرتجع (120)')
+    closed_by_ledger_at = models.DateTimeField(null=True, blank=True, verbose_name='أُغلق من دفتر SOFTECH')
+
     class Meta:
         verbose_name        = 'قرار إتلاف/مرتجع صلاحية'
         verbose_name_plural = 'قرارات الإتلاف/المرتجع'
@@ -500,6 +532,27 @@ class ExpiryDisposalRecord(models.Model):
 
     def __str__(self):
         return f'{self.get_decision_display()} — {self.item_code} × {self.qty} @ {self.branch_code} [{self.status}]'
+
+
+class ReturnWindowMonthly(models.Model):
+    """
+    P-29 KPI snapshot: per supplier, on the 1st of each month, the value of stock in each window
+    state. Needed because StockExpiryBalance is a replace-snapshot with no history. Written once per
+    supplier × month by return_calendar.monthly_digest.
+    """
+    supplier_code = models.CharField(max_length=10, verbose_name='كود المورد')
+    month         = models.DateField(verbose_name='الشهر')
+    opens_next_month_value  = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    open_value              = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    closes_this_month_value = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    missed_value            = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    created_at    = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name        = 'لقطة شهرية لنافذة المرتجع'
+        verbose_name_plural = 'لقطات نافذة المرتجع الشهرية'
+        unique_together     = ('supplier_code', 'month')
+        ordering            = ['-month', 'supplier_code']
 
 
 class NearExpiryAlert(models.Model):

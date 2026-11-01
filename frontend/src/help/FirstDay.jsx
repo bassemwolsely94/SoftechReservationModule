@@ -9,12 +9,14 @@ import { useNavigate } from 'react-router-dom'
 import { helpApi } from '../api/client'
 import useHelpStore from './helpStore'
 import { startScreenTour } from './Tour'
+import { useStartProductTour } from './Journeys'
 import { pick } from './text'
 
 export default function FirstDay({ mobile = false }) {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const startTour = useHelpStore((s) => s.startTour)
+  const startModules = useStartProductTour()
   const { data } = useQuery({
     queryKey: ['help', 'first-day', mobile],
     queryFn: () => helpApi.firstDay(mobile).then((r) => r.data),
@@ -73,6 +75,11 @@ export default function FirstDay({ mobile = false }) {
                 title="جولة تعريفية بالنظام" sub="القائمة، البحث، المساعدة، الإشعارات — في دقيقتين."
                 cta={data.system_tour.done ? 'شوفها تاني' : 'ابدأ الجولة'}
                 onClick={() => startTour(data.system_tour.id, data.system_tour.steps, [], data.system_tour.title)} />
+        )}
+        {data.module_tour && (
+          <Card icon="🗺️" done={data.module_tour.done}
+                title="جولة في موديولات دورك" sub={`${data.module_tour.stops} محطة — كل موديول في شغلك: بيعمل إيه ومنين تبدأ.`}
+                cta={data.module_tour.done ? 'شوفها تاني' : 'ابدأ الجولة'} onClick={() => startModules()} />
         )}
         {next && (
           <Card icon="🎓" primary={!!data.system_tour?.done || !data.system_tour}

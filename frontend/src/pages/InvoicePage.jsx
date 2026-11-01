@@ -597,6 +597,21 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
     }
   }
 
+  const [reopening, setReopening] = useState(false)
+  const handleReopen = async () => {
+    setReopening(true)
+    try {
+      const { data } = await invoicesApi.reopen(invoiceId)
+      showToast(data.detail || 'رجعت الفاتورة للمراجعة', data.status === 'finalized' ? 'error' : 'success')
+      setPreview(null); setPreviewVal(null)
+      await load()
+    } catch (e) {
+      showToast(e?.response?.data?.detail || 'تعذّر الرجوع للتعديل', 'error')
+    } finally {
+      setReopening(false)
+    }
+  }
+
   const handlePush = async (force = false) => {
     setPushing(true)
     try {
@@ -635,12 +650,13 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
     setValidating(true)
     try {
       const { data } = await invoicesApi.validateErp(invoiceId)
-      const ne = data.errors?.length || 0, nw = data.warnings?.length || 0
-      if (ne === 0 && nw === 0) showToast('✓ لا توجد مخالفات — جاهزة للترحيل')
+      const ne = data.errors?.length || 0, nw = data.warnings?.length || 0, nn = data.notices?.length || 0
+      if (ne === 0 && nw === 0 && nn === 0) showToast('✓ لا توجد مخالفات — جاهزة للترحيل')
       else {
         const parts = []
         if (ne) parts.push('أخطاء (تمنع الترحيل):\n' + data.errors.map(e => '• ' + e.message).join('\n'))
         if (nw) parts.push('تحذيرات:\n' + data.warnings.map(w => '• ' + w.message).join('\n'))
+        if (nn) parts.push('تنبيهات (لا تمنع الترحيل):\n' + data.notices.map(w => '• ' + w.message).join('\n'))
         window.alert(parts.join('\n\n'))
         showToast(`${ne} خطأ / ${nw} تحذير`, ne ? 'error' : 'success')
       }
@@ -797,7 +813,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
               </ul>
 
               {/* SofTech-rule validation (credit limit, item allowed, price caps, expiry…) */}
-              {previewVal && ((previewVal.errors?.length || previewVal.warnings?.length) ? (
+              {previewVal && ((previewVal.errors?.length || previewVal.warnings?.length || previewVal.notices?.length) ? (
                 <div className="space-y-2">
                   {previewVal.errors?.length > 0 && (
                     <div className="rounded-lg border border-red-200 bg-red-50 p-3">
@@ -817,6 +833,15 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                         <input type="checkbox" checked={ackWarnings} onChange={e => setAckWarnings(e.target.checked)} />
                         راجعت التحذيرات وأريد المتابعة
                       </label>
+                    </div>
+                  )}
+                  {/* notices: shown loudly, never block posting (owner decision 2026-10-31) */}
+                  {previewVal.notices?.length > 0 && (
+                    <div className="rounded-lg border border-rose-300 bg-rose-50 p-3">
+                      <div className="text-xs font-bold text-rose-700 mb-1">🔔 تنبيهات — لا تمنع الترحيل ({previewVal.notices.length})</div>
+                      <ul className="text-[11px] text-rose-700 list-disc pr-4 space-y-0.5">
+                        {previewVal.notices.map((w, i) => <li key={i}>{w.message}</li>)}
+                      </ul>
                     </div>
                   )}
                 </div>
@@ -940,6 +965,13 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                 {dupChecking ? '...' : '🔎 فحص التكرار'}
               </button>
             )}
+            {['confirmed', 'push_failed', 'queued', 'pushing'].includes(inv.status) && !inv.softech_docnumber && (
+              <button data-tour="invoices-main-reopen" onClick={handleReopen} disabled={reopening || pushing}
+                title="إرجاع الفاتورة للمراجعة لتعديل الجدول أو بيانات الرأس قبل الترحيل — لا يُرحَّل شيء"
+                className="px-3 py-1.5 border border-amber-300 text-amber-700 bg-amber-50 rounded-lg text-sm font-medium hover:bg-amber-100 disabled:opacity-50">
+                {reopening ? '...' : '↩ رجوع للتعديل'}
+              </button>
+            )}
             {['confirmed', 'push_failed', 'queued'].includes(inv.status) && (
               <button data-tour="invoices-main-push" onClick={openPreview} disabled={previewLoading || pushing}
                 title="معاينة ثم ترحيل الفاتورة إلى SOFTECH كمستند شراء نهائي"
@@ -1012,8 +1044,16 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                 <span><span className="text-gray-400 text-xs">المورد: </span><span className="font-medium">{inv.supplier_name || '—'}</span></span>
                 <VendorLink inv={inv} editable={editable} onLinked={load} onNotify={showToast} />
               </div>
-              <div><span className="text-gray-400 text-xs">الفاتورة: </span><span className="font-mono">{inv.invoice_number || '—'}</span></div>
-              <div><span className="text-gray-400 text-xs">التاريخ: </span><span>{inv.invoice_date || '—'}</span></div>
+              <div><span className="text-gray-400 text-xs">الفاتورة: </span>
+                {inv.invoice_number
+                  ? <span className="font-mono">{inv.invoice_number}</span>
+                  : <span className="text-red-600 font-medium" title="لم يُقرأ رقم فاتورة المورد — أدخله من «تعديل»">⚠ غير مقروء</span>}
+              </div>
+              <div><span className="text-gray-400 text-xs">التاريخ: </span>
+                {inv.invoice_date
+                  ? <span>{inv.invoice_date}</span>
+                  : <span className="text-red-600 font-medium" title="لم يُقرأ تاريخ فاتورة المورد — يُحفظ في SofTech كـ «تاريخ مستند المورد»">⚠ غير مقروء</span>}
+              </div>
               <div><span className="text-gray-400 text-xs">الخصم: </span><span>{inv.global_discount_pct}%</span></div>
               <div className="font-bold text-gray-900">
                 <span className="text-gray-400 text-xs font-normal">الإجمالي: </span>

@@ -8,6 +8,7 @@ import { auditApi } from '../api/client'
 import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import useHelpTab from '../help/useHelpTab'
+import ScreenUsageTab from '../components/ScreenUsageTab'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -509,6 +510,15 @@ export default function AuditPage() {
               }`}>
               📋 سجل الإجراءات
             </button>
+            <button
+              onClick={() => setTab('usage')}
+              className={`px-5 py-3 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${
+                tab === 'usage'
+                  ? 'border-brand-600 text-brand-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}>
+              📈 استخدام الشاشات
+            </button>
           </div>
         </div>
       </div>
@@ -517,6 +527,7 @@ export default function AuditPage() {
       <div className="max-w-6xl mx-auto px-6 py-5">
         {tab === 'flags' && <AbuseFlagsTab />}
         {tab === 'logs'  && <AuditLogsTab />}
+        {tab === 'usage' && <ScreenUsageTab />}
       </div>
     </div>
   )

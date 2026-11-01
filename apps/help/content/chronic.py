@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'chronic', 'group': 'inventory', 'icon': '🧬',
+    'brief': T('الأدوية المزمنة والمواد الفعّالة: ابحث بالمادة الفعالة وصنّف الأصناف المزمنة.',
+               'Chronic medicines and active ingredients: search by ingredient and classify chronic items.'),
     'title': T('الأدوية المزمنة والمواد الفعّالة', 'Chronic medicines & active ingredients'),
     'summary': T(
         'تصنيف الأصناف كأدوية مزمنة بربطها بمادة فعّالة وتصنيف مرض (سكري، ضغط، قلب، غدة…)، وتعريف «بروتوكولات المتابعة» التي تولّد مهام متابعة المرضى. '
@@ -45,6 +47,9 @@ MODULE = {
              'label': T('معتمد فقط', 'Approved only'),
              'text': T('اكتب المادة واختار «معتمد فقط».', 'Type the molecule and choose "approved only".')},
             {'screen': 'chronic.ingredient_search', 'target': 'chronic-ingredient-search-results', 'perm': 'chronic',
+             'label': T('جدول النتائج', 'Results table'),
+             'when': T('بعد البحث، وقبل أي ترشيح: اتأكد من التركيز والشكل بنفسك.',
+                       'After searching and before any suggestion: verify strength and form yourself.'),
              'text': T('راجع الأصناف اللي فيها نفس المادة.', 'Review the items containing the same molecule.'),
              'warn': T('مفيش استبدال تلقائي. لازم صيدلي يتحقق قبل عرض أي بديل على العميل.', 'No automatic substitution. A pharmacist must verify before offering any alternative.'),
              'open_hint': T('يظهر بعد البحث.', 'Shows after searching.')},
@@ -207,24 +212,32 @@ SCREENS = [
                        'Confidence is no guarantee. Review any medical field (dose, warnings, interactions) one by one before accepting.'),
              'open_hint': T('تبويب «🤖 الإثراء الذكي»، اختار صنف عنده اقتراحات معلّقة.', '"🤖 AI enrichment" tab, pick an item with pending suggestions.')},
             {'target': 'chronic-classifier-header',  # from the GitHub-side tour
+             'label': T('مصنّف الأدوية المزمنة', 'Chronic medication classifier'),
+             'when': T('لتجهيز الأصناف المزمنة اللي بتتبني عليها متابعة العملاء.', 'To prepare the chronic items that customer follow-up is built on.'),
              'text': T('«مصنّف الأدوية المزمنة»: ربط الأصناف بمادتها الفعّالة وتحديد المزمن منها للمتابعة.',
                        '«Chronic medicine classifier»: link items to their active ingredient and mark chronic ones for follow-up.'),
              'more': T(
                  'الأصناف اللي بتتعلّم «مزمن» هنا هي اللي بيتولّد لعملائها مهام متابعة (تذكير بميعاد الصرف).\n• مفيش حاجة بتتكتب في SOFTECH من هنا.',
                  'Items marked "chronic" here are the ones whose customers get follow-up tasks (refill reminders).\n• Nothing is written to SOFTECH from here.')},
             {'target': 'chronic-classifier-summary',  # from the GitHub-side tour
+             'label': T('ملخص التصنيف', 'Classification summary'),
+             'when': T('لمتابعة كام صنف فاضل من غير تصنيف.', 'To track how many items are still unclassified.'),
              'text': T('إجمالي الأصناف، المصنَّف، غير المصنَّف، والمزمن مع نسبة التصنيف.',
                        'Total items, classified, unclassified, and chronic with the classification rate.'),
              'more': T(
                  'مقياس التقدّم: كل ما «غير مصنَّف» قلّ، كل ما متابعة المرضى بقت أدق.\n• «مزمن» = عدد الأصناف اللي هتولّد مهام متابعة.',
                  'Your progress gauge: the smaller "Unclassified" gets, the more accurate patient follow-up becomes.\n• "Chronic" = the number of items that will generate follow-up tasks.')},
             {'target': 'chronic-classifier-table',  # from the GitHub-side tour
+             'label': T('جدول الأصناف', 'Items table'),
+             'when': T('اختار صنف واضغط «تصنيف» أو «تعديل».', 'Pick an item and press "Classify" or "Edit".'),
              'text': T('الأصناف بمادتها الفعّالة وتصنيفها؛ «تصنيف» أو «تعديل» يفتح لوحة التصنيف.',
                        'Items with their active ingredient and class; «Classify» or «Edit» opens the classify panel.'),
              'more': T(
                  'الأعمدة: اسم الصنف، الكود، المادة الفعّالة، والتصنيف.\n• الصنف المصنَّف بيظهر له «تعديل» بدل «تصنيف» لو محتاج تصحيح.',
                  'Columns: item name, code, active ingredient and class.\n• A classified item shows "Edit" instead of "Classify" when it needs a correction.')},
             {'target': 'chronic-classifier-panel',  # from the GitHub-side tour
+             'label': T('لوحة التصنيف', 'Classification panel'),
+             'when': T('بتفتح بعد الضغط على «تصنيف» أو «تعديل» لصنف.', 'Opens after you press "Classify" or "Edit" on an item.'),
              'text': T('بعد اختيار صنف: اربطه بمادة موجودة أو جديدة وحدد هل هو مزمن — تصنيف فقط وليس بديلاً.',
                        'After selecting an item: link it to an existing or new ingredient and set if it is chronic — classification only, not substitution.'),
              'more': T(
@@ -250,6 +263,9 @@ SCREENS = [
         'related': ['chronic.ingredient_search', 'catalog.intel'],
         'tour': [
             {'target': 'chronic-composition-stats',
+             'label': T('ملخص التنقية', 'Cleanup summary'),
+             'when': T('أول ما تفتح الشاشة: تعرف قد إيه اتراجع وقد إيه فاضل قبل ما تبدأ.',
+                       'On opening the screen: see how much is reviewed and how much is left before you start.'),
              'text': T('ملخص التنقية: سطور SOFTECH، التركيبات، القيم الفاضية، الجزيئات المقترحة، الأصناف المغطاة، ونسبة الاعتماد.',
                        'Cleanup summary: SOFTECH rows, combinations, empty values, proposed molecules, covered items, and the approval rate.'),
              'more': T(
@@ -302,18 +318,24 @@ SCREENS = [
                  'بعد ما يخلص بتظهر رسالة خضرا بعدد السطور والأصناف والمواد والمعتمد منها.\n• فوقه «＋ إضافة تصنيف جديد» لو التصنيف اللي محتاجه مش موجود.',
                  'When it finishes a green message shows the rows, items, molecules and how many are approved.\n• Above it, "＋ Add new class" if the class you need does not exist.')},
             {'target': 'chronic-composition-header',  # from the GitHub-side tour
+             'label': T('تنقية المواد الفعّالة', 'Active ingredient cleanup'),
+             'when': T('لمراجعة تحليل المواد الفعّالة من SOFTECH واعتماده.', 'To review and approve the active-ingredient parse of SOFTECH data.'),
              'text': T('«تنقية المواد الفعّالة»: مراجعة تحليل بيانات SOFTECH واعتماده — لا يُعدَّل شيء في SOFTECH.',
                        '«Active-ingredient cleanup»: review and approve the parsing of SOFTECH data — nothing in SOFTECH is changed.'),
              'more': T(
                  'النظام بيحلّل نص المادة الفعّالة في SOFTECH ويقترح المكوّنات والتركيز؛ انت كصيدلي بتأكد أو تصحّح.\n• الاعتماد هنا هو اللي بيخلّي بحث المواد الفعّالة موثوق.',
                  'The system parses the SOFTECH ingredient text and proposes components and strength; you as a pharmacist confirm or correct.\n• Approval here is what makes active-ingredient search trustworthy.')},
             {'target': 'chronic-composition-list',  # from the GitHub-side tour
+             'label': T('قائمة المواد الفعّالة', 'Active ingredients list'),
+             'when': T('راجع كل سطر قبل اعتماده، وصحّح الغلط بـ«✎ تعديل».', 'Check each row before approving; fix mistakes with "✎ Edit".'),
              'text': T('كل سطر مادة فعّالة بمكوّناتها وثقتها؛ «✎ تعديل» للتصحيح وعدد الأصناف لعرضها.',
                        'Each ingredient row with components and confidence; «✎ Edit» to correct and the item count to show items.'),
              'more': T(
                  '• النسبة الملوّنة = ثقة التحليل؛ «مركّب» و«غير دوائي» علامات.\n• «✎ تعديل» يفتح محرر المكوّنات: صحّح الاسم والتركيز أو استبعد مكوّن.\n• «x صنف ▼» يعرض الأصناف المرتبطة عشان تتأكد قبل الاعتماد.',
                  '• The coloured percentage = parsing confidence; "Combination" and "Non-drug" are badges.\n• "✎ Edit" opens the component editor: fix the name and strength or drop a component.\n• "x items ▼" lists the linked items so you can check before approving.')},
             {'target': 'chronic-composition-row-actions',  # from the GitHub-side tour
+             'label': T('اعتماد · غير دوائي… · رفض', 'Approve · Non-drug… · Reject'),
+             'when': T('بعد مراجعة السطر: اختار التصنيف وبعدها قرارك.', 'After reviewing the row: pick the class, then your decision.'),
              'text': T('لكل سطر: اختر التصنيف ثم «اعتماد» أو «غير دوائي…» أو «رفض».',
                        'Per row: pick the class, then «Approve», «Non-drug…» or «Reject».'),
              'more': T(
@@ -354,6 +376,9 @@ SCREENS = [
             {'target': 'chronic-ingredient-search-clear', 'label': T('مسح', 'Clear'),
              'text': T('يمسح التركيز والوحدة والشكل والتصنيف والمصدر. المادة المكتوبة بتفضل.', 'Clears strength, unit, form, class and source. The typed molecule stays.')},
             {'target': 'chronic-ingredient-search-results',
+             'label': T('جدول النتائج', 'Results table'),
+             'when': T('لما تدوّر على أصناف فيها نفس المادة. التركيز والشكل لازم يتطابقوا، وبيانات المادة محتاجة مراجعة صيدلي.',
+                       'When looking for items with the same ingredient. Strength and form must match, and ingredient data needs a pharmacist check.'),
              'text': T('كل صنف فيه المادة: الاسم والكود، المادة، التركيز، الشكل، التصنيف، والمصدر.',
                        'Every item containing the molecule: name and code, molecule, strength, form, class and source.'),
              'warn': T('نفس المادة مش معناها بديل آمن. لازم صيدلي يتحقق قبل ما يعرض أي بديل على العميل.',
@@ -367,9 +392,14 @@ SCREENS = [
              'warn': T('بيانات المواد من SOFTECH مش نظيفة. «مقترح» ممكن يكون غلط — راجع العبوة.', 'SOFTECH ingredient data is not clean. "Suggested" may be wrong — check the pack.'),
              'open_hint': T('عمود «المصدر» في النتائج.', 'The "Source" column of the results.')},
             {'target': 'chronic-ingredient-search-item',
+             'label': T('اسم الصنف', 'Item name'),
+             'when': T('لما عايز تشوف سعر الصنف وتوافره في الفروع.',
+                       'When you want to see the item price and branch availability.'),
              'text': T('اسم الصنف يفتح صفحته في الكتالوج.', 'The item name opens its catalog page.'),
              'open_hint': T('في النتائج، للأصناف الموجودة في الكتالوج.', 'In the results, for items that exist in the catalog.')},
             {'target': 'chronic-ingredient-search-header',  # from the GitHub-side tour
+             'label': T('بحث المواد الفعّالة', 'Active ingredient search'),
+             'when': T('لما تحب تعرف كل الأصناف اللي فيها مادة معيّنة.', 'When you want every item that contains a given ingredient.'),
              'text': T('«بحث المواد الفعّالة»: بحث للاطلاع فقط عن الأصناف التي تحتوي مادة معيّنة.',
                        '«Active-ingredient search»: a lookup of items that contain a given molecule.'),
              'more': T(
