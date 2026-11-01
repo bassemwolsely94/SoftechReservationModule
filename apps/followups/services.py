@@ -23,6 +23,7 @@ HARD RULES: ❌ No ERP writes  ✅ ERP READ ONLY
 """
 import logging
 from datetime import date, timedelta
+from decimal import ROUND_DOWN, Decimal
 from django.utils import timezone
 from django.db.models import Q, Subquery, OuterRef, Value
 from django.db.models.functions import Coalesce
@@ -38,10 +39,11 @@ def generate_followup_tasks_bulk(branch=None, days_limit=90, dry_run=False, grac
     """
     Main entry point — called by scheduler and management command.
 
-    Strategy (ERP-first, O(N) not O(N×M)):
+    Strategy (O(N) not O(N×M)):
       1. Load all chronic profiles into a dict keyed by item_id
-      2. Load all ERP sales for chronic items in one query
-      3. Group by phcode → find last sale per (phcode, item)
+      2. Load the synced SOFTECH sales (PurchaseHistory) of chronic items in one query —
+         the ERPTransaction mirror stopped 2026-04-30, so no task was generated after it
+      3. Group by PIC (phcode) → find last sale per (phcode, item)
       4. For each group: calculate refill date, check window, create task
 
     grace_days: how many days PAST refill date we still create tasks.
@@ -49,10 +51,8 @@ def generate_followup_tasks_bulk(branch=None, days_limit=90, dry_run=False, grac
 
     Returns total tasks created (or would-create in dry_run).
     """
-    from collections import defaultdict
-    from apps.erp.models import ERPTransaction, ERPTransactionLine
     from apps.erp.models import LocalCustomer
-    from apps.customers.models import Customer
+    from apps.customers.models import Customer, PurchaseHistoryLine
 
     total = 0
     today = date.today()
@@ -71,50 +71,48 @@ def generate_followup_tasks_bulk(branch=None, days_limit=90, dry_run=False, grac
     chronic_item_ids = list(profiles.keys())
     logger.info(f'Processing {len(chronic_item_ids)} chronic items')
 
-    # ── Step 2: Load ERP sales for chronic items (ONE query) ─────────────────
-    # We need: phcode, item_id, transaction_date, branch
-    # Join through ERPTransactionLine → ERPTransaction
+    # ── Step 2: Load synced sales of chronic items (ONE query) ───────────────
+    # Only sales recent enough to still fall inside some item's window.
+    longest = max(p.expected_duration_days for p in profiles.values())
+    since   = today - timedelta(days=min(longest + grace_days + 1, 3650))
     lines = (
-        ERPTransactionLine.objects
+        PurchaseHistoryLine.objects
         .filter(
-            transaction__doccode='115',
+            purchase__doc_code='115',
+            purchase__invoice_date__date__gte=since,
             item_id__in=chronic_item_ids,
         )
-        .select_related('transaction')
+        .exclude(purchase__softech_phcode='')
         .values(
             'item_id',
             'quantity',
             'unit_price',
-            'line_total',
-            'transaction__id',
-            'transaction__phcode',
-            'transaction__transaction_date',
-            'transaction__softech_branch_code',
-            'transaction__reference_number',   # ← docnumber for SOFTECH lookup
-            'transaction__total_amount',        # ← full invoice total
+            'purchase__softech_phcode',
+            'purchase__invoice_date',
+            'purchase__branch__softech_branch_id',
+            'purchase__docnumber',              # ← docnumber for SOFTECH lookup
+            'purchase__total_amount',           # ← full invoice total
         )
-        .order_by('transaction__phcode', 'item_id', '-transaction__transaction_date')
+        .order_by('purchase__softech_phcode', 'item_id', '-purchase__invoice_date')
     )
 
     # ── Step 3: Group by (phcode, item_id) → keep last sale per pair ─────────
-    # {(phcode, item_id): {date, branch_code, tx_id}}
     last_sale = {}
     for row in lines:
-        phcode     = row['transaction__phcode']
+        phcode     = row['purchase__softech_phcode']
         item_id    = row['item_id']
-        sale_date  = row['transaction__transaction_date']
+        when       = row['purchase__invoice_date']
 
-        if not phcode or not item_id:
+        if not phcode or not item_id or when is None:
             continue
 
         key = (phcode, item_id)
         if key not in last_sale:
             last_sale[key] = {
-                'sale_date':    sale_date.date() if hasattr(sale_date, 'date') else sale_date,
-                'branch_code':  row['transaction__softech_branch_code'],
-                'tx_id':        row['transaction__id'],
-                'docnumber':    row['transaction__reference_number'] or '',
-                'total_amount': row['transaction__total_amount'],
+                'sale_date':    timezone.localtime(when).date(),   # Cairo date, not UTC
+                'branch_code':  row['purchase__branch__softech_branch_id'],
+                'docnumber':    row['purchase__docnumber'] or '',
+                'total_amount': row['purchase__total_amount'],
                 'item_qty':     row['quantity'],
                 'item_price':   row['unit_price'],
             }
@@ -132,6 +130,11 @@ def generate_followup_tasks_bulk(branch=None, days_limit=90, dry_run=False, grac
         for lc in LocalCustomer.objects.filter(
             phcode__in=all_phcodes
         ).select_related('linked_customer', 'branch')
+    }
+    # PIC → Customer (softech_pic IS the phcode; account placeholders are not people)
+    pic_customer = {
+        c.softech_pic: c
+        for c in Customer.objects.filter(softech_pic__in=all_phcodes, is_account_placeholder=False)
     }
 
     # Pre-load phcode → sales_channel from PurchaseHistory (AUTHORITATIVE source).
@@ -151,6 +154,13 @@ def generate_followup_tasks_bulk(branch=None, days_limit=90, dry_run=False, grac
             status__in=('pending', 'called'),
             item_id__in=chronic_item_ids,
         ).exclude(phcode='').values_list('phcode', 'item_id')
+    )
+    # A sale that already produced a task (any status — done, missed, auto-closed) never
+    # produces a second one.
+    done_sale_keys = set(
+        FollowUpTask.objects.filter(item_id__in=chronic_item_ids)
+        .exclude(phcode='').exclude(source_erp_transaction='')
+        .values_list('phcode', 'item_id', 'source_erp_transaction')
     )
 
     # ── Step 5: For each (phcode, item_id), check window and create task ──────
@@ -180,10 +190,12 @@ def generate_followup_tasks_bulk(branch=None, days_limit=90, dry_run=False, grac
         # Duplicate check
         if (phcode, item_id) in open_task_keys:
             continue
+        if (phcode, item_id, str(sale_info['docnumber'])) in done_sale_keys:
+            continue
 
         # Resolve LocalCustomer and Customer
         lc       = lc_map.get(phcode)
-        customer = lc.linked_customer if lc else None
+        customer = pic_customer.get(phcode) or (lc.linked_customer if lc else None)
 
         # Resolve branch
         branch_code = sale_info['branch_code']
@@ -430,66 +442,122 @@ def auto_close_followup_tasks_from_erp(since_minutes=12, dry_run=False):
     return closed
 
 
-# ── Infer chronic profiles from ERP history ───────────────────────────────────
+# ── Infer chronic profiles from repeat purchases ─────────────────────────────
+
+def _episodes(dates, merge_days=7):
+    """Sorted purchase dates → one date per buying episode (buys within `merge_days` merge)."""
+    out = []
+    for d in sorted(set(dates)):
+        if not out or (d - out[-1]).days > merge_days:
+            out.append(d)
+    return out
+
+
+def infer_chronic_profiles_from_sales(months=24, min_episodes=3, min_patients=5,
+                                      min_interval=20, max_interval=100, max_spread=0.5,
+                                      min_share=0.05, dry_run=False):
+    """
+    A medicine is chronic when enough patients REBUY it on a steady cycle.
+
+    From the synced SOFTECH sales (PurchaseHistory) of the last `months`, medicines only
+    (Item.medicine_type '10'): for each (PIC, item) take the buying episodes; a patient counts
+    when they have >= `min_episodes` episodes, their median gap is `min_interval`..`max_interval`
+    days and the gaps are steady (median |gap - median| / median <= `max_spread`). An item with
+    >= `min_patients` such patients, who are >= `min_share` of all its buyers, is chronic; its
+    cycle = the median of their median gaps. The share is what separates chronic medicines
+    (CONCOR 15%, PLAVIX 20%, DIAMICRON 14%) from short courses that a clinic or household PIC
+    happens to rebuy (AUGMENTIN 2.3%, PANADOL 2.8%, FLAGYL 1.2%) — measured 2026-11-01.
+
+    Replaces the old ERPTransaction inference, which read a mirror frozen on 2026-04-30 and
+    called «span ÷ number of buyers» a refill cycle (every profile came out 30 days, coupons
+    and syringes included). Never touches source='manual' profiles; inferred profiles that no
+    longer qualify are switched off (is_chronic=False), not deleted — tasks link to them.
+
+    Returns a report dict; dry_run computes it without saving.
+    """
+    from collections import defaultdict
+    from statistics import median
+    from apps.catalog.models import Item
+    from apps.customers.models import PurchaseHistoryLine
+
+    since = date.today() - timedelta(days=30 * months)
+    dates = defaultdict(list)                      # (item_id, pic) → purchase dates
+    rows = (PurchaseHistoryLine.objects
+            .filter(purchase__doc_code='115', purchase__invoice_date__date__gte=since,
+                    item__medicine_type='10')
+            .exclude(purchase__softech_phcode='')
+            .values_list('item_id', 'purchase__softech_phcode', 'purchase__invoice_date'))
+    for item_id, pic, when in rows.iterator(chunk_size=20000):
+        dates[(item_id, pic)].append(timezone.localtime(when).date())
+
+    cycles = defaultdict(list)                     # item_id → each steady patient's median gap
+    buyers = defaultdict(int)                      # item_id → patients who bought it at all
+    for (item_id, _pic), ds in dates.items():
+        buyers[item_id] += 1
+        ep = _episodes(ds)
+        if len(ep) < min_episodes:
+            continue
+        gaps = [(b - a).days for a, b in zip(ep, ep[1:])]
+        m = median(gaps)
+        if not (min_interval <= m <= max_interval):
+            continue
+        if median(abs(g - m) for g in gaps) / m > max_spread:
+            continue
+        cycles[item_id].append(m)
+
+    chronic = {iid: (int(round(median(ms))), len(ms)) for iid, ms in cycles.items()
+               if len(ms) >= min_patients and len(ms) / buyers[iid] >= min_share}
+    existing = {p.item_id: p for p in ChronicMedicationProfile.objects.all()}
+    names = dict(Item.objects.filter(id__in=set(chronic) | set(existing)).values_list('id', 'name'))
+    effects = dict(Item.objects.filter(id__in=chronic).values_list('id', 'effect_name'))
+
+    report = {'chronic': len(chronic), 'created': 0, 'updated': 0, 'protected_manual': 0, 'switched_off': 0,
+              'items': sorted(((names.get(i, i), d, n, effects.get(i, ''), round(100 * n / buyers[i], 1))
+                               for i, (d, n) in chronic.items()), key=lambda x: -x[2]),
+              'switched_off_items': []}
+    for iid, (cycle, patients) in chronic.items():
+        p = existing.get(iid)
+        if p is not None and p.source == 'manual':
+            report['protected_manual'] += 1
+            continue
+        report['updated' if p else 'created'] += 1
+        if dry_run:
+            continue
+        # save() re-derives the duration as pack_size ÷ avg_daily_usage (defaults 30 ÷ 1 = 30 —
+        # why every old profile read 30 days), so express the cycle as the usage; rounding the
+        # usage DOWN keeps int(pack ÷ usage) == cycle.
+        pack = (p.pack_size if p is not None else None) or Decimal('30')
+        usage = (Decimal(pack) / Decimal(cycle)).quantize(Decimal('0.001'), rounding=ROUND_DOWN)
+        while usage > Decimal('0.001') and int(float(pack) / float(usage)) < cycle:   # 30 ÷ 1.2 = 24.999…
+            usage -= Decimal('0.001')
+        ChronicMedicationProfile.objects.update_or_create(item_id=iid, defaults={
+            'is_chronic': True,
+            'pack_size': pack,
+            'avg_daily_usage': usage,
+            'expected_duration_days': cycle,
+            'followup_before_days': max(3, min(7, round(cycle * 0.15))),
+            'source': 'sales_infer',
+            'notes': f'مستنتج من {patients} مريض يكرّرون الشراء بانتظام — متوسط الدورة {cycle} يوم',
+        })
+    for iid, p in existing.items():
+        if iid in chronic or p.source == 'manual' or not p.is_chronic:
+            continue
+        report['switched_off'] += 1
+        report['switched_off_items'].append(names.get(iid, iid))
+        if not dry_run:
+            p.is_chronic = False
+            p.notes = (p.notes + ' | ' if p.notes else '') + 'أُوقف — لا يوجد تكرار شراء منتظم في المبيعات'
+            p.save(update_fields=['is_chronic', 'notes', 'updated_at'])
+    logger.info('Chronic inference (dry_run=%s): %d chronic, %d created, %d updated, %d switched off',
+                dry_run, report['chronic'], report['created'], report['updated'], report['switched_off'])
+    return report
+
 
 def infer_chronic_profiles_from_erp(min_purchase_count=3, min_months=2):
-    """
-    Analyse ERP sales to detect chronic medications.
-    Creates/updates ChronicMedicationProfile for qualifying items.
-    """
-    count = 0
-    try:
-        from apps.erp.models import ERPTransactionLine
-        from django.db.models import Count, Min, Max
-
-        stats = (
-            ERPTransactionLine.objects
-            .filter(transaction__doccode='115')
-            .values('item', 'item_code')
-            .annotate(
-                purchase_count=Count('transaction__phcode', distinct=True),
-                first_sale=Min('transaction__transaction_date'),
-                last_sale=Max('transaction__transaction_date'),
-            )
-            .filter(purchase_count__gte=min_purchase_count)
-        )
-
-        for stat in stats:
-            if not stat['item']:
-                continue
-            if not stat['first_sale'] or not stat['last_sale']:
-                continue
-
-            months_span = (stat['last_sale'] - stat['first_sale']).days / 30
-            if months_span < min_months:
-                continue
-
-            avg_days = max(1, int(
-                (stat['last_sale'] - stat['first_sale']).days
-                / max(stat['purchase_count'] - 1, 1)
-            ))
-
-            ChronicMedicationProfile.objects.update_or_create(
-                item_id=stat['item'],
-                defaults={
-                    'is_chronic':             True,
-                    'expected_duration_days': min(avg_days, 90),
-                    'followup_before_days':   max(3, min(7, avg_days // 5)),
-                    'source':                 'erp_infer',
-                    'notes': (
-                        f'مستنتج من {stat["purchase_count"]} عميل '
-                        f'خلال {months_span:.1f} شهر — '
-                        f'متوسط دورة {avg_days} يوم'
-                    ),
-                }
-            )
-            count += 1
-
-    except Exception as e:
-        logger.warning(f'infer_chronic_profiles_from_erp failed: {e}')
-
-    logger.info(f'Chronic profile inference: {count} profiles created/updated')
-    return count
+    """Kept for the API / command: runs the sales-based inference. `min_purchase_count` = the
+    minimum buying episodes per patient; `min_months` is no longer used. Returns profiles saved."""
+    r = infer_chronic_profiles_from_sales(min_episodes=min_purchase_count)
+    return r['created'] + r['updated']
 
 
 # ── Manual task actions (pin / assign) ────────────────────────────────────────
