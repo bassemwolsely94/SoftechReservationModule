@@ -1119,6 +1119,8 @@ written. Every Python command uses the app venv `/opt/elrezeiky/venv/bin/python`
   browser-stored "remember" token is gone.
 - Riders (the delivery role) always land on the rider screen `/rider`; other staff screens send
   them back there. Their «🔒 أمان الحساب» button is in the rider screen's blue bar.
+- On the day of Step 9 (enforce), everyone working from outside signs in once more: sessions started
+  before the switch have not passed the two-factor code that outside work now needs.
 
 **Step 1 - release the code (migrations, frontend, every service) with `release.sh`.**
 ```bash
@@ -1200,12 +1202,13 @@ branch PC is unapproved or a branch is not yet labelled internal — go back to 
 ```bash
 APP=/opt/elrezeiky/app; PY=/opt/elrezeiky/venv/bin/python
 sudo -u elrezeiky $PY $APP/manage.py access_preflight \
+  && sudo -u elrezeiky env NETWORK_POLICY_ENFORCEMENT=enforce $PY $APP/manage.py check \
   && sudo sed -i '/^NETWORK_POLICY_ENFORCEMENT=/d' $APP/.env \
   && echo 'NETWORK_POLICY_ENFORCEMENT=enforce' | sudo tee -a $APP/.env >/dev/null \
-  && sudo -u elrezeiky $PY $APP/manage.py check \
   && sudo systemctl restart elrezeiky-web elrezeiky-scheduler
 ```
-Each step runs only when the previous one passed. `manage.py check` refuses `enforce` when the
+Each step runs only when the previous one passed, and `.env` changes only after `manage.py check`
+has passed against `enforce` (the value given on the command line wins over `.env`). The check refuses `enforce` when the
 header is not trusted (`access.E004`) or the key is empty (`access.E003`). If the service is
 started anyway with such a setup, it does **not** enforce: it runs as `log` and writes
 `NETWORK_POLICY_ENFORCEMENT=enforce refused (access.E00x …)` as an ERROR line at start-up and every
