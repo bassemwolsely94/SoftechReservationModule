@@ -36,6 +36,7 @@ from .serializers import (
 from .anomalies import check_invoice_anomalies
 from apps.catalog.wildcard import wq
 from core.errors import public_error
+from core.threads import start_thread
 
 logger = logging.getLogger('elrezeiky.invoices')
 
@@ -209,14 +210,12 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         immediately with status='processing'.  The thread updates the invoice
         to status='review' once done (or appends an error note on failure).
         """
-        t = threading.Thread(
-            target=self._run_ocr,
+        start_thread(
+            self._run_ocr,
             args=(invoice,),
             kwargs={'engine': engine},
-            daemon=True,
             name=f'ocr-invoice-{invoice.pk}',
         )
-        t.start()
 
     def _run_ocr(self, invoice: SupplierInvoice, engine=None):
         import json

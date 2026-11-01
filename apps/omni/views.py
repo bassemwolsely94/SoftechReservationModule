@@ -16,6 +16,7 @@ from apps.catalog.wildcard import wq
 from core.errors import public_error
 from core import branch_scope
 from django.db.models import Q as _Q
+from core.threads import start_thread
 
 
 def _scope_conversations(qs, user):
@@ -260,15 +261,12 @@ class TranscribeEventView(APIView):
 
         model = (f'{event.content_type.app_label}.{event.content_type.model}'
                  if event.content_type_id else '')
-        from threading import Thread
         from apps.omni import transcription
 
         if model == 'callcenter.calllog':
-            Thread(target=transcription.transcribe_call_log,
-                   args=(event.object_id,), daemon=True).start()
+            start_thread(transcription.transcribe_call_log, args=(event.object_id,))
         elif model == 'whatsapp.wamessage':
-            Thread(target=transcription.transcribe_wa_voice,
-                   args=(event.object_id,), daemon=True).start()
+            start_thread(transcription.transcribe_wa_voice, args=(event.object_id,))
         else:
             return Response(
                 {'detail': 'هذا الحدث لا يحتوي على صوت قابل للتفريغ'}, status=400)

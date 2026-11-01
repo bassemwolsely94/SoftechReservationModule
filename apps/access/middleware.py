@@ -1,6 +1,7 @@
 """
 Attaches request.access, and files the request's SOFTECH load under network + role (N1, log only).
 """
+import contextvars
 import logging
 
 from django.core.cache import cache
@@ -33,9 +34,26 @@ class AccessContextMiddleware:
         try:
             self._log_external(request, ctx)
             with softech_load.scope(f'web:{ctx.network.zone}:{ctx.role or "anon"}'):
-                return self.get_response(request)
+                response = self.get_response(request)
+                if getattr(response, 'streaming', False) and not getattr(response, 'is_async', False):
+                    # The body is produced after this frame returns and the reset below runs;
+                    # pull every chunk inside the request's own context so the generator
+                    # (a SOFTECH read, say) is still gated as this user.
+                    response.streaming_content = self._in_context(
+                        contextvars.copy_context(), response.streaming_content)
+                return response
         finally:
             context.access_context.reset(token)
+
+    @staticmethod
+    def _in_context(ctx, chunks):
+        it = iter(chunks)
+        while True:
+            try:
+                chunk = ctx.run(next, it)
+            except StopIteration:
+                return
+            yield chunk
 
     @staticmethod
     def _log_external(request, ctx):

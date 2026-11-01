@@ -11,6 +11,7 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 
 from core.permissions import MatrixPermission, deny_unless, matrix_permission
+from core.threads import start_thread
 
 # Enrichment suggestions are catalog edits (Batch 4, Z-9b — any logged-in user could bulk-approve).
 CATALOG_EDIT = matrix_permission('catalog', post=('edit', 'approve'), edit=('edit', 'approve'),
@@ -341,8 +342,7 @@ def _start_batch_thread(batch_pk: int) -> None:
                 status='failed', error_log=str(exc)[:2000],
             )
 
-    t = threading.Thread(target=_run, daemon=True)
-    t.start()
+    start_thread(_run)
 
 
 # ── Standalone API views ──────────────────────────────────────────────────────
@@ -474,5 +474,5 @@ def recompute_scores(request):
         from apps.enrichment.gap_detector import recompute_all_scores
         recompute_all_scores()
 
-    threading.Thread(target=_run, daemon=True).start()
+    start_thread(_run)
     return Response({'detail': 'جارٍ إعادة الحساب في الخلفية'})

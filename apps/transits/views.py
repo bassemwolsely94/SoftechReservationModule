@@ -44,6 +44,7 @@ from .serializers import (
     MarkReceivedSerializer,
     TransitDashboardSerializer,
 )
+from core.threads import start_thread
 
 logger = logging.getLogger('elrezeiky.transits')
 
@@ -491,14 +492,7 @@ class InTransitTransferViewSet(viewsets.ReadOnlyModelViewSet):
 
         try:
             from django.core.management import call_command
-            import threading
-            t = threading.Thread(
-                target=call_command,
-                args=('sync_in_transit',),
-                kwargs={'verbosity': 0},
-                daemon=True,
-            )
-            t.start()
+            start_thread(call_command, args=('sync_in_transit',), kwargs={'verbosity': 0})
         except Exception as exc:
             logger.error('Manual transit sync trigger failed: %s', exc)
             return Response(

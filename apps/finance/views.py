@@ -16,6 +16,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from core import branch_scope
 from core.permissions import deny_unless, matrix_permission
+from core.threads import start_thread
 
 FINANCE = matrix_permission('finance')        # every finance view checks the matrix (Batch 4, Z-3)
 from rest_framework.response import Response
@@ -672,8 +673,7 @@ def trigger_discover(request):
         except Exception:
             pass
 
-    thread = threading.Thread(target=_run, daemon=True)
-    thread.start()
+    start_thread(_run)
 
     return Response({'detail': 'Schema discovery started in background.'}, status=202)
 
@@ -727,7 +727,7 @@ def trigger_sync(request):
             except Exception:
                 pass
 
-    threading.Thread(target=_run, daemon=True).start()
+    start_thread(_run)
 
     return Response({
         'detail':    f'Sync started for {len(pairs)} period(s).',

@@ -21,6 +21,7 @@ from datetime import timedelta
 
 from django.db import connections
 from django.utils import timezone
+from core.threads import start_thread
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +97,7 @@ def start_background(triggered_by: str) -> bool:
         finally:
             connections.close_all()
 
-    threading.Thread(target=_worker, name='procurement-refresh', daemon=True).start()
+    start_thread(_worker, name='procurement-refresh')
     return True
 
 

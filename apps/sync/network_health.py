@@ -21,7 +21,9 @@ Closed / cancelled / call-center branches (is_operational=False, no db_host) are
 intentionally excluded — they have no server to reach.
 """
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import as_completed
+
+from core.threads import ContextThreadPoolExecutor
 
 from django.conf import settings
 
@@ -89,7 +91,7 @@ def probe_all_nodes(record=True) -> dict:
         return host, r
 
     # Parallel so one slow/down node doesn't serialise the whole sweep.
-    with ThreadPoolExecutor(max_workers=min(8, len(nodes) or 1)) as pool:
+    with ContextThreadPoolExecutor(max_workers=min(8, len(nodes) or 1)) as pool:
         futures = [pool.submit(_probe, n) for n in nodes]
         for fut in as_completed(futures):
             try:

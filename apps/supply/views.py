@@ -40,6 +40,7 @@ from .permissions import CanOperateSupply
 from core.errors import public_error
 from core import branch_scope
 from django.db.models import Q as _Q
+from core.threads import start_thread
 
 
 def _scope_cases(qs, user, field='branch'):
@@ -902,7 +903,7 @@ def freshness_sync_stock(request):
         finally:
             connections.close_all()
 
-    threading.Thread(target=_worker, name='supply-stock-sync', daemon=True).start()
+    start_thread(_worker, name='supply-stock-sync')
     logger.info('[supply] stock+sales sync requested by %s', request.user.username)
     return Response({'detail': 'بدأ تحديث الأرصدة والمبيعات من SOFTECH.', 'running': True},
                     status=status.HTTP_202_ACCEPTED)

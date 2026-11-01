@@ -16,6 +16,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import RecommendationEngineRun, FrequentlyBoughtTogether, CustomerRecommendation
 from .serializers import EngineRunSerializer, FBTPairSerializer, CustomerRecSerializer
+from core.threads import start_thread
 
 
 def _profile(request):
@@ -89,7 +90,7 @@ def trigger_engine(request):
         except Exception:
             pass
 
-    Thread(target=_run, daemon=True).start()
+    start_thread(_run)
 
     return Response({'queued': True, 'message': 'محرك التوصيات يعمل في الخلفية'})
 

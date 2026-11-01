@@ -9,6 +9,7 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 
 from core import branch_scope
 from core.permissions import matrix_allows, matrix_permission
+from core.threads import start_thread
 
 # Expiry batches = the catalog module (Batch 4, Z-9b — was any logged-in user): reads and the
 # worklist / export POSTs (they only compute) need catalog view; disposal decisions need catalog
@@ -514,7 +515,7 @@ def trigger_purchase_expiry_sync(request):
             logger.exception('purchase-expiry backfill failed (run #%s)', run.pk)
             run.finish('failed', error=str(e))
 
-    threading.Thread(target=_run, daemon=True).start()
+    start_thread(_run)
 
     return Response({
         'detail': 'بدأت مزامنة صلاحيات الشراء في الخلفية.',
@@ -720,7 +721,7 @@ def stock_expiry_sync_trigger(request):
             logger.exception('stock-expiry sync failed (run #%s)', run.pk)
             run.status = 'failed'; run.detail = {'fatal': str(e)[:300]}; run.finish('failed')
 
-    threading.Thread(target=_run, daemon=True).start()
+    start_thread(_run)
     return Response({'detail': 'بدأت مزامنة صلاحية المخزون في الخلفية.', 'run_id': run.pk},
                     status=status.HTTP_202_ACCEPTED)
 

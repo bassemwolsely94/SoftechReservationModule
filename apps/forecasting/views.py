@@ -26,6 +26,7 @@ from .serializers import (
 from .service import ForecastService
 from .engine import ForecastEngine
 from .backtest import BacktestService
+from core.threads import start_thread
 
 logger = logging.getLogger('elrezeiky')
 
@@ -352,7 +353,7 @@ class KpiRefreshView(APIView):
             finally:
                 connections.close_all()
 
-        threading.Thread(target=_job, daemon=True).start()
+        start_thread(_job)
         return Response({'started': True})
 
 

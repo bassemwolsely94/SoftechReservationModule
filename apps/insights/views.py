@@ -10,6 +10,7 @@ from .models import InsightRun, InsightRule, InsightFinding
 from .serializers import (InsightRunSerializer, InsightRunListSerializer, InsightRuleSerializer,
                           InsightFindingSerializer)
 from .engine import InsightEngine
+from core.threads import start_thread
 
 logger = logging.getLogger('elrezeiky')
 ANALYST_ROLES = {'admin', 'supervisor', 'purchasing', 'quality_manager'}
@@ -115,7 +116,7 @@ class InsightRunViewSet(viewsets.ReadOnlyModelViewSet):
             finally:
                 connections.close_all()
 
-        threading.Thread(target=_worker, name='insights-backfill', daemon=True).start()
+        start_thread(_worker, name='insights-backfill')
         return Response({'status': 'running', 'domain': domain, 'months': sorted({ym_start, ym_end}),
                          'detail': 'بدأت إعادة المزامنة/التعبئة'}, status=status.HTTP_202_ACCEPTED)
 

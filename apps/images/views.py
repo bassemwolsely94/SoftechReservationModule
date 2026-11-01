@@ -31,7 +31,7 @@ Stats
   GET  /api/images/filter-meta/   category/producer lists for UI dropdowns
 """
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from core.threads import ContextThreadPoolExecutor, start_thread
 
 from django.db.models import Count, Exists, OuterRef, Q, Subquery
 from django.utils import timezone
@@ -334,7 +334,7 @@ def redownload_candidate(request, pk):
         candidate.status           = 'scored'
         candidate.save()
 
-    threading.Thread(target=_run, daemon=True).start()
+    start_thread(_run)
     return Response({'detail': 'إعادة التنزيل جارية'})
 
 
@@ -779,7 +779,7 @@ def filter_meta(request):
 # Max 6 concurrent pipeline workers.  Each holds exactly one DB connection
 # during the DB phase; the connection is closed before HTTP I/O.
 # This caps peak DB connections at: 6 (workers) + Django request threads.
-_PIPELINE_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix='img-pipeline')
+_PIPELINE_POOL = ContextThreadPoolExecutor(max_workers=4, thread_name_prefix='img-pipeline')
 
 
 def _start_job_thread(job_pk: int) -> None:

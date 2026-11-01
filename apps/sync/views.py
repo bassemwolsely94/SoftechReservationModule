@@ -5,6 +5,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 
 from core.permissions import matrix_permission
+from core.threads import start_thread
 
 SYNC = matrix_permission('sync')      # sync logs / scheduler state = sync view (Batch 4, Z-4)
 from rest_framework.response import Response
@@ -88,7 +89,7 @@ def trigger_sync(request):
             # don't leak past the thread's lifetime.
             connections.close_all()
 
-    threading.Thread(target=_worker, name=f'manual-sync-{label}', daemon=True).start()
+    start_thread(_worker, name=f'manual-sync-{label}')
     return Response(
         {'status': 'running', 'lane': label, 'full': full, 'detail': 'sync started'},
         status=status.HTTP_202_ACCEPTED,

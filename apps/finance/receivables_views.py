@@ -25,6 +25,7 @@ from rest_framework.response import Response
 
 from . import receivables as R
 from .recon_views import FINANCE, FINANCE_EDIT, FINANCE_EXPORT
+from core.threads import start_thread
 
 logger = logging.getLogger('elrezeiky.finance')
 
@@ -204,6 +205,6 @@ def receivables_refresh(request):
                 logger.exception('contract receivables refresh failed')
             finally:
                 connections.close_all()
-    threading.Thread(target=_work, name='contract-receivables-refresh', daemon=True).start()
+    start_thread(_work, name='contract-receivables-refresh')
     return Response({'detail': 'بدأ تحديث مستحقات التعاقدات من SOFTECH.', 'running': True},
                     status=status.HTTP_202_ACCEPTED)
