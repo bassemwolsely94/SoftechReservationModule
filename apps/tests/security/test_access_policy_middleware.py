@@ -7,6 +7,8 @@ from django.core.cache import cache
 from django.http import HttpResponse
 from django.test import RequestFactory, TestCase, override_settings
 
+from apps.access import devices
+from apps.access.models import Device, TrustedNetwork
 from apps.access.policy import REASON_MESSAGES
 from apps.access.policy_middleware import ERROR_MESSAGE, ZonePolicyMiddleware
 from apps.tests.factories import make_user
@@ -124,3 +126,74 @@ class ZonePolicyMiddlewareTests(TestCase):
                 self._call(user, 'Z4', '/api/customers/')
             self._call(user, 'Z4', '/api/hr/')
         self.assertEqual(len(cm.output), 2)
+
+
+    @override_settings(NETWORK_POLICY_ENFORCEMENT='enforce')
+    def test_bulk_body_fails_closed(self):
+        cc, _, _ = make_user('zp_cc3', role='call_center')
+        path = '/api/reservations/bulk/'
+
+        def reason(**kw):
+            r = self._call(cc, 'Z3', path, 'post', **kw)
+            return r.status_code, (json.loads(r.content)['reason'] if r.status_code == 403 else None)
+
+        big = json.dumps({'action': 'assign', 'pad': 'x' * (1024 * 1024 + 10)})
+        self.assertEqual(reason(data=big, content_type='application/json'), (403, 'export'))
+        self.assertEqual(reason(data=json.dumps({'action': 'export'}), content_type='*/*'),
+                         (403, 'export'))
+        self.assertEqual(reason(data='not json {', content_type='application/json'), (403, 'export'))
+        self.assertEqual(reason(data='[1]', content_type='application/json'), (403, 'export'))
+        self.assertEqual(reason(data=json.dumps({'action': 'assign'}),
+                                content_type='application/json'), (200, None))
+
+    @override_settings(NETWORK_POLICY_ENFORCEMENT='enforce')
+    def test_deny_line_deduplicated_per_module(self):
+        user, _, _ = make_user('zp_dd2', role='pharmacist')
+        with self.assertLogs('elrezeiky.access', 'WARNING') as cm:
+            for _i in range(3):
+                self._call(user, 'Z4', '/api/customers/')
+                self._call(user, 'Z4', '/api/customers/123/')
+        self.assertEqual(len(cm.output), 1)
+        self.assertIn('zone DENY', cm.output[0])
+
+
+@override_settings(NETWORK_POLICY_ENFORCEMENT='enforce', NETWORK_HEADER_TRUSTED=True,
+                   NETWORK_PROXY_KEY='', ACCESS_NETWORKS_TTL=0, ACCESS_POLICY_TTL=0)
+class ZonePolicyFullStackTests(TestCase):
+    """Through the real middleware chain: Bearer token, network header, device cookie."""
+
+    def setUp(self):
+        from rest_framework_simplejwt.tokens import AccessToken
+        cache.clear()
+        TrustedNetwork.objects.create(name='فرع', cidr='10.60.60.0/24', kind='branch_lan')
+        self.user, _, _ = make_user('zp_full', role='pharmacist')
+        self.auth = {'HTTP_AUTHORIZATION': f'Bearer {AccessToken.for_user(self.user)}'}
+
+    def _approved_device_cookie(self):
+        secret = devices.new_secret()
+        Device.objects.create(secret_hash=devices.hash_secret(secret), name='pc', status='approved')
+        self.client.cookies[devices.COOKIE] = secret
+
+    def _kw(self, network):
+        return dict(HTTP_X_ELR_NETWORK=network, REMOTE_ADDR='10.60.60.9', **self.auth)
+
+    def test_z4_blocked(self):
+        r = self.client.get('/api/customers/', **self._kw('external'))
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.json()['reason'], 'blocked')
+        self.assertEqual(r.json()['zone'], 'Z4')
+
+    def test_z1_allowed(self):
+        self._approved_device_cookie()
+        r = self.client.get('/api/customers/', **self._kw('internal'))
+        self.assertNotEqual(r.status_code, 403, r.content)
+        self.assertEqual(r.status_code, 200)
+
+    def test_z2_read_only_but_logout_open(self):
+        r = self.client.post('/api/auth/logout/', **self._kw('internal'))
+        self.assertNotEqual(r.status_code, 403)
+        r = self.client.post('/api/customers/', data={}, content_type='application/json',
+                             **self._kw('internal'))
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.json()['reason'], 'read_only')
+        self.assertEqual(r.json()['zone'], 'Z2')

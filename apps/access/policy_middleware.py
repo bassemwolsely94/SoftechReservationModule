@@ -19,6 +19,7 @@ from . import policy
 log = logging.getLogger('elrezeiky.access')
 
 LOG_DEDUPE_SECONDS = 600
+DENY_DEDUPE_SECONDS = 60
 MAX_BODY_BYTES = 1024 * 1024
 ERROR_MESSAGE = 'تعذر التحقق من صلاحية الدخول — حاول مرة أخرى'
 
@@ -29,18 +30,27 @@ def _mode():
 
 
 def _json_body(request):
-    """The parsed JSON body for body-selected export routes only; None when not JSON / too big."""
-    if request.path_info not in policy.BODY_EXPORTS:
+    """Body-selected export routes only (BODY_EXPORTS), unsafe methods only. Fails closed: a body
+    that is too big, unparseable or not a dict counts as the export, whatever the Content-Type
+    (DRF parses `*/*` as JSON). Returns None for every other request, the body is never read."""
+    rule = policy.BODY_EXPORTS.get(request.path_info)
+    if not rule or request.method in ('GET', 'HEAD', 'OPTIONS'):
         return None
-    ctype = (request.META.get('CONTENT_TYPE') or '').lower()
-    if not ctype.startswith('application/json'):
-        return None
+    forced = {rule[0]: rule[1]}
     try:
         if int(request.META.get('CONTENT_LENGTH') or 0) > MAX_BODY_BYTES:
-            return None
-        return json.loads(request.body or b'null')
+            return forced
+        body = json.loads(request.body or b'null')
     except Exception:
-        return None
+        return forced
+    return body if isinstance(body, dict) else forced
+
+
+def _scope(request, module):
+    """Dedupe scope: the module, else the first two path segments after /api/."""
+    if module:
+        return module
+    return '/'.join(request.path_info.split('/')[2:4])
 
 
 class ZonePolicyMiddleware:
@@ -72,7 +82,7 @@ class ZonePolicyMiddleware:
                                      export_request=export)
             if decision.allowed:
                 return None
-            self._log(mode, profile, decision.zone, decision.reason, request)
+            self._log(mode, profile, decision.zone, decision.reason, request, _scope(request, module))
             if mode != 'enforce':
                 return None
             return JsonResponse({'detail': policy.REASON_MESSAGES[decision.reason],
@@ -85,18 +95,15 @@ class ZonePolicyMiddleware:
             return None
 
     @staticmethod
-    def _log(mode, profile, zone, reason, request):
+    def _log(mode, profile, zone, reason, request, scope):
         try:
             user = getattr(profile.user, 'username', '?')
-            path = request.path_info
-            if mode == 'enforce':
-                label = 'zone DENY'
-            else:
-                label = 'zone would-deny'
-                if not cache.add(f'access:zonelog:{user}:{zone}:{reason}:{path}', 1,
-                                 LOG_DEDUPE_SECONDS):
-                    return
+            enforce = mode == 'enforce'
+            ttl = DENY_DEDUPE_SECONDS if enforce else LOG_DEDUPE_SECONDS
+            if not cache.add(f'access:zonelog:{mode}:{user}:{zone}:{reason}:{scope}', 1, ttl):
+                return
             log.warning('%s user=%s role=%s zone=%s reason=%s %s %s',
-                        label, user, profile.role, zone, reason, request.method, path)
+                        'zone DENY' if enforce else 'zone would-deny', user, profile.role, zone,
+                        reason, request.method, request.path_info)
         except Exception:
             log.warning('zone policy log failed', exc_info=True)
