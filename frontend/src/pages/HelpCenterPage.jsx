@@ -19,7 +19,7 @@ import { FlowList } from '../help/HelpPanel'
 import { pick, label } from '../help/text'
 import AskBox from '../help/AskBox'
 import TrainingEditor from '../help/TrainingEditor'
-import Journeys from '../help/Journeys'
+import Journeys, { ProductTourButton } from '../help/Journeys'
 import HelpUsage from '../help/HelpUsage'
 import NotesLog from '../help/NotesLog'
 import Glossary from '../help/Glossary'
@@ -63,6 +63,7 @@ export default function HelpCenterPage() {
           </p>
         </div>
         <SystemTourButton lang={lang} />
+        <ProductTourButton lang={lang} className="text-sm px-4 py-2" />
         <div className="flex items-center border border-line rounded-lg overflow-hidden text-sm" data-tour="general-help-center-lang">
           {['ar', 'en'].map((l) => (
             <button key={l} type="button" onClick={() => setHelpLang(l)}
@@ -223,7 +224,7 @@ function ScreenView({ screenKey, lang, go, index }) {
             </button>
           )}
           {data.can_edit && !editing && (
-            <button type="button" onClick={() => setEditing(true)} className="text-xs border border-line rounded-lg px-3 py-1.5 text-brand-600 hover:bg-brand-50">
+            <button data-tour="general-help-center-edit" type="button" onClick={() => setEditing(true)} className="text-xs border border-line rounded-lg px-3 py-1.5 text-brand-600 hover:bg-brand-50">
               ✏️ {label('edit', lang)}
             </button>
           )}
@@ -314,7 +315,7 @@ function Trainers({ index, lang, go }) {
   )
   return (
     <div className="space-y-4" dir="rtl">
-      <div className="flex items-center gap-2 text-sm">
+      <div data-tour="general-help-center-trainers-period" className="flex items-center gap-2 text-sm">
         <span className="text-muted">الفترة:</span>
         {[7, 30, 90].map((d) => (
           <button key={d} type="button" onClick={() => setDays(d)}
@@ -366,7 +367,7 @@ function Trainers({ index, lang, go }) {
                 <div className="text-content whitespace-pre-line">{f.comment}</div>
                 <div className="text-[11px] text-faint">{f.staff} · {f.role} · {new Date(f.created_at).toLocaleString('ar-EG-u-nu-latn')}</div>
               </div>
-              <button type="button" onClick={() => resolve(f.id)} className="text-xs border border-line rounded-lg px-2 py-1 hover:bg-emerald-50">تم ✓</button>
+              <button data-tour="general-help-center-feedback-resolve" type="button" onClick={() => resolve(f.id)} className="text-xs border border-line rounded-lg px-2 py-1 hover:bg-emerald-50">تم ✓</button>
             </div>
           ))}
         </div>

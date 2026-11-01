@@ -249,9 +249,8 @@ def treasury_dashboard(request):
     denied = deny_unless(request, 'cheques', 'view')
     if denied:
         return denied
-    today = date.today()
-    # (a "same day next month" replace() used to run first and crashed on the 29th–31st)
     from datetime import timedelta
+    today = date.today()
     in_30 = today + timedelta(days=30)
 
     active_plans = branch_scope.scope(ChequePlan.objects.filter(status='active'), request.user)

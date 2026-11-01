@@ -751,6 +751,8 @@ class InTransitAuditEvent(models.Model):
         ('printed',         '🖨️ طُبع'),
         ('exported',        '📤 صُدِّر'),
         ('linked',          '🔗 رُبط بطلب'),
+        ('ambiguous_link',  '❔ أكثر من طلب بنفس الرقم — لم يُربط'),
+        ('unlinked',        '⛓️‍💥 أُلغي ربط خاطئ بطلب'),
     ]
 
     transfer = models.ForeignKey(

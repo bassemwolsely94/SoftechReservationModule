@@ -81,7 +81,7 @@ export function ProcurementFilterBar() {
         {/* Period presets */}
         <div className="flex bg-gray-100 rounded-lg p-0.5">
           {PERIODS.map(p => (
-            <button key={p.key} onClick={() => set('period', p.key)}
+            <button data-tour="purchasing-procurement-filters-period" key={p.key} onClick={() => set('period', p.key)}
               className={`px-3 py-1 text-xs rounded-md transition-colors ${
                 filters.period === p.key ? 'bg-white shadow font-bold text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
               {p.label}
@@ -104,7 +104,7 @@ export function ProcurementFilterBar() {
         <div className="w-44"><MultiSelectFilter options={options.supplier_categories ?? []} selected={filters.supplier_category}
           onChange={v => set('supplier_category', v)} placeholder="كل فئات الموردين" /></div>
 
-        <button onClick={() => setShowAdv(s => !s)}
+        <button data-tour="purchasing-procurement-filters-items" onClick={() => setShowAdv(s => !s)}
           className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${
             advCount ? 'border-brand-500 text-brand-700 bg-brand-50' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
           فلاتر الأصناف {advCount ? `(${advCount})` : ''} {showAdv ? '▲' : '▾'}
@@ -114,7 +114,7 @@ export function ProcurementFilterBar() {
         {activeCount > 0 && (
           <>
             <span className="text-xs text-gray-400">{activeCount} بُعد نشط</span>
-            <button onClick={() => setFilters(f => ({ ...EMPTY, period: f.period }))}
+            <button data-tour="purchasing-procurement-filters-clear" onClick={() => setFilters(f => ({ ...EMPTY, period: f.period }))}
               className="px-3 py-1 rounded-lg text-xs text-gray-500 border border-gray-300 hover:bg-gray-50">مسح الفلاتر</button>
           </>
         )}

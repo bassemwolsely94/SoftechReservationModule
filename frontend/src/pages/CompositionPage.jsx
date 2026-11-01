@@ -83,15 +83,15 @@ function ComponentEditor({ initial, onSave, onCancel, saving }) {
             placeholder="تركيز" type="number" step="any" className="w-16 rounded border border-line bg-surface px-2 py-1 text-xs text-content" />
           <input value={r.strength_unit} onChange={e => upd(i, 'strength_unit', e.target.value)}
             placeholder="وحدة" className="w-16 rounded border border-line bg-surface px-2 py-1 text-xs text-content" />
-          <button onClick={() => setRows(rs => rs.filter((_, j) => j !== i))} className="text-red-500 text-xs px-1">✕</button>
+          <button onClick={() => setRows(rs => rs.filter((_, j) => j !== i))} data-tour="chronic-composition-edit-remove" className="text-red-500 text-xs px-1">✕</button>
         </div>
       ))}
       <div className="flex items-center gap-2 pt-1">
-        <button onClick={() => setRows(rs => [...rs, { molecule: '', strength_value: '', strength_unit: '', include: true }])}
+        <button data-tour="chronic-composition-edit-add" onClick={() => setRows(rs => [...rs, { molecule: '', strength_value: '', strength_unit: '', include: true }])}
           className="text-xs text-primary">+ إضافة مادة</button>
         <div className="flex-1" />
         <button onClick={onCancel} className="rounded border border-line px-2 py-1 text-xs text-muted">إلغاء</button>
-        <button onClick={() => onSave(rows)} disabled={saving}
+        <button onClick={() => onSave(rows)} disabled={saving} data-tour="chronic-composition-edit-save"
           className="rounded bg-primary px-3 py-1 text-xs font-medium text-white disabled:opacity-50">حفظ</button>
       </div>
     </div>
@@ -273,7 +273,7 @@ export default function CompositionPage() {
             placeholder="الاسم بالعربية (اختياري)"
             className="block w-full rounded border border-line bg-surface px-3 py-2 text-sm text-content" dir="rtl" />
           <div className="flex items-center gap-2">
-            <button onClick={addClass} disabled={!nc.name.trim() || createClassM.isPending}
+            <button onClick={addClass} disabled={!nc.name.trim() || createClassM.isPending} data-tour="chronic-composition-class-save"
               style={{ backgroundColor: '#16a34a' }}
               className="rounded-lg px-6 py-2 text-sm font-bold text-white disabled:opacity-50">
               {createClassM.isPending ? '… جارٍ الحفظ' : '✓ حفظ التصنيف'}

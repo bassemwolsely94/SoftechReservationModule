@@ -11,7 +11,9 @@ from .factories import make_branch, make_item, make_admin, make_pharmacist
 
 class BatchPushTests(TestCase):
     def setUp(self):
-        self.user, _, self.client = make_admin('pusher')
+        self.user, profile, self.client = make_admin('pusher')
+        profile.softech_user_id = '1509'          # posts under the poster's SofTech code
+        profile.save(update_fields=['softech_user_id'])
         self.br = make_branch()
         self.item = make_item(softech_id='90792')
         self.vendor = VendorProfile.objects.create(name='V', softech_personcode='5014', is_main=True)
@@ -44,6 +46,12 @@ class BatchPushTests(TestCase):
         self.assertIn('error', byid[999999])
         self.assertEqual(d['succeeded'], 1)
         self.assertEqual(d['failed'], 2)
+
+    def test_refused_without_softech_user_code(self):
+        _, _, c = make_admin('nocode')
+        r = c.post('/api/invoices/invoices/push-batch/', {'invoice_ids': [self._inv().id]}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('SofTech', r.json()['detail'])
 
     def test_requires_push_role(self):
         _, _, c = make_pharmacist('ph2')

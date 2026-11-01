@@ -17,6 +17,10 @@ Usage (called from the campaign view after approval):
 Usage (called from APScheduler every minute):
     from apps.campaigns.dispatcher import drain_queue
     drain_queue()
+
+drain_queue() first releases scheduled campaigns whose scheduled_at has passed
+(release_due_scheduled_campaigns) — that is the only point a scheduled campaign's
+messages enter WAMessageQueue.
 """
 import logging
 from datetime import timedelta
@@ -170,6 +174,35 @@ class CampaignDispatcher:
 # drain_queue — called by APScheduler every minute
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+def release_due_scheduled_campaigns(now=None) -> int:
+    """
+    scheduled → running for every campaign whose scheduled_at has passed, and
+    only then move its pending messages into WAMessageQueue. queue_campaign does
+    not enqueue scheduled campaigns, so nothing of theirs can be sent early.
+    The status flip is a conditional UPDATE, so a campaign is released once even
+    if two scheduler runs overlap. Returns the number of campaigns released.
+    """
+    from apps.campaigns.models import WhatsAppCampaign
+    from apps.campaigns.views import _enqueue_to_wa_queue
+
+    now = now or timezone.now()
+    released = 0
+    due = WhatsAppCampaign.objects.filter(status='scheduled', scheduled_at__lte=now)
+    for campaign in due:
+        if not WhatsAppCampaign.objects.filter(pk=campaign.pk, status='scheduled').update(
+            status='running', updated_at=now,
+        ):
+            continue  # cancelled or released meanwhile
+        campaign.status = 'running'
+        released += 1
+        try:
+            _enqueue_to_wa_queue(campaign)
+        except Exception as exc:
+            logger.warning('Campaign %d: scheduled release enqueue failed: %s', campaign.pk, exc)
+        logger.info('Campaign %d: released at scheduled time %s', campaign.pk, campaign.scheduled_at)
+    return released
+
+
 def drain_queue():
     """
     Send up to DRAIN_BATCH pending WAMessageQueue items via WhatsApp Cloud API.
@@ -178,6 +211,11 @@ def drain_queue():
     """
     from apps.whatsapp.models import WAMessageQueue, WAMessage, WAConversation
     from apps.whatsapp.sender import WhatsAppSender
+
+    try:
+        release_due_scheduled_campaigns()
+    except Exception as exc:
+        logger.error('release_due_scheduled_campaigns error: %s', exc, exc_info=True)
 
     try:
         sender = WhatsAppSender()

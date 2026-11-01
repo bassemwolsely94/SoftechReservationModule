@@ -108,7 +108,7 @@ export default function POSCustomerModal({ onSelect, onClose, initialPhone = '' 
             <div className="flex gap-2 mb-3">
               <input autoFocus value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && runQuery()}
                      placeholder="بحث بالإسم أو رقم التليفون أو PIC…" className="flex-1 border rounded px-3 py-2" />
-              <button onClick={runQuery} disabled={searching} className="px-4 rounded bg-blue-600 text-white">{searching ? '...' : 'تنفيذ إستعلام (F8)'}</button>
+              <button data-tour="pos-order-cust-query" onClick={runQuery} disabled={searching} className="px-4 rounded bg-blue-600 text-white">{searching ? '...' : 'تنفيذ إستعلام (F8)'}</button>
             </div>
             <table className="w-full text-xs border">
               <thead className="bg-sky-700 text-white">
@@ -122,7 +122,7 @@ export default function POSCustomerModal({ onSelect, onClose, initialPhone = '' 
                     <td className="text-center">{c.person_type_label || ''}</td>
                     <td className="text-center">{c.phone || '—'}</td>
                     <td className="text-center">{c.person_classif_label || ''}</td>
-                    <td className="text-center"><button onClick={() => { onSelect({ id: c.id, name: c.name, phone: c.phone, softech_pic: c.softech_pic }); onClose() }} className="text-blue-600">اختيار</button></td>
+                    <td className="text-center"><button data-tour="pos-order-cust-select" onClick={() => { onSelect({ id: c.id, name: c.name, phone: c.phone, softech_pic: c.softech_pic }); onClose() }} className="text-blue-600">اختيار</button></td>
                   </tr>
                 ))}
                 {!rows.length && <tr><td colSpan="6" className="text-center text-gray-400 py-6">نفّذ استعلاماً لعرض العملاء</td></tr>}
@@ -168,7 +168,7 @@ export default function POSCustomerModal({ onSelect, onClose, initialPhone = '' 
 
         <div className="flex justify-end gap-2 px-4 py-3 border-t bg-gray-50">
           <button onClick={onClose} className="px-4 py-1.5 rounded border">خروج (Ctrl+E)</button>
-          {tab === 'add' && <button onClick={save} disabled={saving} className="px-4 py-1.5 rounded bg-green-600 text-white">{saving ? '...' : 'تخزين (Ctrl+S)'}</button>}
+          {tab === 'add' && <button data-tour="pos-order-cust-save" onClick={save} disabled={saving} className="px-4 py-1.5 rounded bg-green-600 text-white">{saving ? '...' : 'تخزين (Ctrl+S)'}</button>}
         </div>
         <style>{`.cin{width:100%;border:1px solid #d1d5db;border-radius:.3rem;padding:.25rem .5rem;font-size:12px}`}</style>
       </div>
@@ -193,7 +193,7 @@ function Hits({ rows, title, onUse }) {
           <span className="flex-1">{c.name}</span>
           <span className="font-mono text-gray-600">{c.softech_pic || '—'}</span>
           <span className="text-gray-500">{c.phone || ''}</span>
-          <button type="button" onClick={() => onUse(c)} className="px-2 py-0.5 rounded bg-blue-600 text-white">استخدم هذا العميل</button>
+          <button data-tour="pos-order-cust-use-existing" type="button" onClick={() => onUse(c)} className="px-2 py-0.5 rounded bg-blue-600 text-white">استخدم هذا العميل</button>
         </div>
       ))}
     </div>

@@ -124,7 +124,7 @@ export default function MobileNewDemandPage() {
                 </div>
                 <input type="number" min="1" inputMode="numeric" className="input-field w-16 text-sm"
                   value={l.quantity} onChange={e => setQty(l.key, e.target.value)} />
-                <button onClick={() => removeLine(l.key)} className="text-gray-400 hover:text-red-500 text-sm shrink-0">🗑</button>
+                <button onClick={() => removeLine(l.key)} data-tour="demand-mobile-new-line-delete" className="text-gray-400 hover:text-red-500 text-sm shrink-0">🗑</button>
               </div>
             ))}
           </div>

@@ -392,7 +392,7 @@ function CaseDetailPanel({ caseId, onClose, onStateChange }) {
                 </label>
 
                 {/* Voice recorder */}
-                <button
+                <button data-tour="callcenter-cases-note-voice"
                   onClick={recording ? stopRecording : startRecording}
                   title={recording ? 'إيقاف التسجيل' : 'تسجيل صوتي'}
                   className={`btn-secondary text-xs px-2 py-1.5 ${recording ? 'text-red-600 animate-pulse' : ''}`}>
@@ -400,7 +400,7 @@ function CaseDetailPanel({ caseId, onClose, onStateChange }) {
                 </button>
 
                 {/* Send */}
-                <button onClick={addNote}
+                <button data-tour="callcenter-cases-note-send" onClick={addNote}
                   disabled={(!noteText.trim() && !attachFile) || posting}
                   className="btn-primary text-xs px-2 py-1.5 disabled:opacity-40">
                   {posting ? '⏳' : '➤'}
@@ -450,7 +450,7 @@ function CaseDetailPanel({ caseId, onClose, onStateChange }) {
                 onChange={e => setResolveText(e.target.value)} />
               <div className="flex gap-2">
                 <button onClick={() => setShowResolve(false)} className="btn-secondary text-xs">إلغاء</button>
-                <button onClick={resolve} disabled={!resolveText.trim()}
+                <button data-tour="callcenter-cases-resolve-confirm" onClick={resolve} disabled={!resolveText.trim()}
                   className="btn-primary text-xs disabled:opacity-40">✅ تأكيد الحل</button>
               </div>
             </div>
@@ -518,7 +518,7 @@ function StandaloneCaseModal({ onClose, onCreated }) {
                 value={phone}
                 onChange={e => setPhone(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && searchCustomer()} />
-              <button onClick={searchCustomer} disabled={searching || !phone.trim()}
+              <button data-tour="callcenter-cases-new-search" onClick={searchCustomer} disabled={searching || !phone.trim()}
                 className="btn-secondary text-sm disabled:opacity-40">
                 {searching ? '⏳' : '🔍'}
               </button>
@@ -526,7 +526,7 @@ function StandaloneCaseModal({ onClose, onCreated }) {
             {customers.length > 1 && (
               <div className="mt-2 space-y-1 max-h-36 overflow-y-auto">
                 {customers.map(c => (
-                  <button key={c.id}
+                  <button data-tour="callcenter-cases-new-pick" key={c.id}
                     onClick={() => setSelectedCustomer(c)}
                     className={`w-full text-right px-3 py-2 rounded-lg text-sm transition-all
                       ${selectedCustomer?.id === c.id
@@ -542,7 +542,7 @@ function StandaloneCaseModal({ onClose, onCreated }) {
               <div className="mt-2 flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm">
                 <span className="text-green-700 font-bold">✓ {selectedCustomer.name}</span>
                 <span className="text-gray-400 text-xs font-mono">{selectedCustomer.phone}</span>
-                <button onClick={() => { setSelectedCustomer(null); setCustomers([]) }}
+                <button data-tour="callcenter-cases-new-change" onClick={() => { setSelectedCustomer(null); setCustomers([]) }}
                   className="text-gray-400 hover:text-red-500 mr-auto text-xs">تغيير</button>
               </div>
             )}
@@ -589,7 +589,7 @@ function StandaloneCaseModal({ onClose, onCreated }) {
         </div>
         <div className="p-5 border-t border-gray-100 flex gap-2 justify-end">
           <button onClick={onClose} className="btn-secondary text-sm">إلغاء</button>
-          <button onClick={submit} disabled={loading || !selectedCustomer}
+          <button data-tour="callcenter-cases-new-submit" onClick={submit} disabled={loading || !selectedCustomer}
             className="btn-primary text-sm disabled:opacity-50">
             {loading ? '...' : '🗂️ فتح الحالة'}
           </button>
@@ -705,7 +705,7 @@ export default function CasesPage() {
                     : 'لا توجد حالات بعد'}
                 </div>
                 {canCreate && !filters.search && !filters.status && !filters.category && (
-                  <button onClick={() => setShowCreate(true)}
+                  <button data-tour="callcenter-cases-first" onClick={() => setShowCreate(true)}
                     className="btn-primary text-sm mt-4">
                     🗂️ افتح أول حالة
                   </button>

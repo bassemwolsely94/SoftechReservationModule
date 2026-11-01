@@ -86,6 +86,10 @@ VALID_TRANSITIONS = {
 }
 
 
+# stages before «ready» — preparation itself is tracked in SOFTECH; assigning a driver passes them
+PRE_READY = {DeliveryOrder.STATUS_CREATED, DeliveryOrder.STATUS_PENDING_REVIEW, DeliveryOrder.STATUS_PREPARING}
+
+
 def _log_transition(order, from_status, to_status, user, notes='', source='manual'):
     DeliveryStatusLog.objects.create(
         order=order,
@@ -273,7 +277,7 @@ class DeliveryOrderListView(generics.ListCreateAPIView):
             # Live board: everything still in flight (excludes terminal statuses).
             qs = qs.exclude(status__in=DeliveryOrder.TERMINAL_STATUSES)
         if status_param:
-            qs = qs.filter(status=status_param)
+            qs = qs.filter(status__in=[s.strip() for s in status_param.split(',') if s.strip()])
         if branch_param:
             qs = qs.filter(branch_id=branch_param)
         if driver_param:
@@ -359,15 +363,20 @@ def delivery_assign(request, pk):
     Body: { driver_id (required or driver_name), vehicle (opt), notes (opt) }
     Assigns a driver and moves order to STATUS_ASSIGNED.
     Supersedes previous assignment (is_current=False on old one).
+    An order not yet marked ready (created / pending_review / preparing) is assigned in the
+    same click: preparation is tracked in SOFTECH (owner 2026-11-01), so the stage log gets a
+    «system» step to ready first and the tracking timeline stays complete.
     """
     denied = guard(request, 'assign')
     if denied:
         return denied
     order = get_object_or_404(_orders(request), pk=pk)
-    try:
-        _assert_transition(order, DeliveryOrder.STATUS_ASSIGNED)
-    except ValueError as e:
-        return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    skip_to_ready = order.status in PRE_READY
+    if not skip_to_ready:
+        try:
+            _assert_transition(order, DeliveryOrder.STATUS_ASSIGNED)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     driver_id   = request.data.get('driver_id')
     driver_name = request.data.get('driver_name', '').strip()
@@ -386,6 +395,11 @@ def delivery_assign(request, pk):
         return Response({'detail': 'يجب تحديد السائق.'}, status=status.HTTP_400_BAD_REQUEST)
 
     prev_status = order.status
+    if skip_to_ready:
+        _log_transition(order, prev_status, DeliveryOrder.STATUS_READY, request.user,
+                        notes='جاهز — تلقائياً عند تكليف السائق (التحضير متابَع في SOFTECH)',
+                        source='system')
+        prev_status = DeliveryOrder.STATUS_READY
 
     # Deactivate previous assignment
     order.assignments.filter(is_current=True).update(is_current=False)
@@ -1963,7 +1977,13 @@ def delivery_routes(request):
             continue
         o.route = route
         o.route_sequence = seq
-        # Assign the driver if the order can still be assigned (READY → ASSIGNED).
+        # Assign the driver if the order can still be assigned (READY → ASSIGNED; an order not
+        # yet marked ready passes through it, as in delivery_assign).
+        if o.status in PRE_READY:
+            _log_transition(o, o.status, DeliveryOrder.STATUS_READY, request.user,
+                            notes='جاهز — تلقائياً عند تكليف السائق (التحضير متابَع في SOFTECH)',
+                            source='system')
+            o.status = DeliveryOrder.STATUS_READY
         if o.status == DeliveryOrder.STATUS_READY:
             o.assignments.filter(is_current=True).update(is_current=False)
             DeliveryAssignment.objects.create(

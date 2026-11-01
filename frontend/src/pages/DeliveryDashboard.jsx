@@ -99,7 +99,7 @@ function WhatsAppButton({ orderId, phone, size = 'sm' }) {
 
   if (!phone) return null
   return (
-    <button onClick={open} disabled={isLoading} className={cls}>
+    <button onClick={open} disabled={isLoading} className={cls} data-tour="delivery-dashboard-wa-button">
       {isLoading ? '⏳' : '💬'} واتساب {sent && '✓'}
     </button>
   )
@@ -517,7 +517,7 @@ function ReasonModal({ order, title, color, action, label, onClose, onDone }) {
         {mut.isError && <p className="text-xs text-red-500 mt-2">{mut.error?.response?.data?.detail || 'حدث خطأ'}</p>}
         <div className="flex gap-3 mt-4">
           <button onClick={onClose} className="flex-1 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">رجوع</button>
-          <button disabled={!reason.trim() || mut.isPending} onClick={() => mut.mutate()}
+          <button disabled={!reason.trim() || mut.isPending} onClick={() => mut.mutate()} data-tour="delivery-dashboard-reason-confirm"
             className={`flex-1 py-2 bg-${color}-600 text-white rounded-lg text-sm font-medium hover:bg-${color}-700 disabled:opacity-50`}>
             {mut.isPending ? 'جارٍ…' : label}
           </button>
@@ -669,15 +669,18 @@ function NewOrderModal({ branches, onClose, onDone }) {
 // ORDER ROW ACTIONS
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+// a refused step says why (e.g. the pickup geofence: «خرج للتوصيل» needs the driver's GPS at the branch)
+const showError = (e) => alert(e?.response?.data?.detail || 'تعذّر تنفيذ الإجراء')
+
 function OrderActions({ order, onAssign, onFail, onCancel, onCash, refetch }) {
   const mut = fn => useMutation({ mutationFn: fn, onSuccess: refetch }) // eslint-disable-line
-  const acceptMut      = useMutation({ mutationFn: () => deliveryApi.accept(order.id, {}),      onSuccess: refetch }) // eslint-disable-line
-  const dispatchMut    = useMutation({ mutationFn: () => deliveryApi.dispatch(order.id, {}),    onSuccess: refetch }) // eslint-disable-line
-  const completeMut    = useMutation({ mutationFn: () => deliveryApi.complete(order.id, {}),    onSuccess: refetch }) // eslint-disable-line
-  const partialMut     = useMutation({ mutationFn: () => deliveryApi.partial(order.id, {}),     onSuccess: refetch }) // eslint-disable-line
-  const unavailableMut = useMutation({ mutationFn: () => deliveryApi.unavailable(order.id, {}), onSuccess: refetch }) // eslint-disable-line
-  const closeMut       = useMutation({ mutationFn: () => deliveryApi.close(order.id, {}),       onSuccess: refetch }) // eslint-disable-line
-  const returnMut      = useMutation({ mutationFn: () => deliveryApi.return(order.id, {}),      onSuccess: refetch }) // eslint-disable-line
+  const acceptMut      = useMutation({ mutationFn: () => deliveryApi.accept(order.id, {}),      onSuccess: refetch, onError: showError }) // eslint-disable-line
+  const dispatchMut    = useMutation({ mutationFn: () => deliveryApi.dispatch(order.id, {}),    onSuccess: refetch, onError: showError }) // eslint-disable-line
+  const completeMut    = useMutation({ mutationFn: () => deliveryApi.complete(order.id, {}),    onSuccess: refetch, onError: showError }) // eslint-disable-line
+  const partialMut     = useMutation({ mutationFn: () => deliveryApi.partial(order.id, {}),     onSuccess: refetch, onError: showError }) // eslint-disable-line
+  const unavailableMut = useMutation({ mutationFn: () => deliveryApi.unavailable(order.id, {}), onSuccess: refetch, onError: showError }) // eslint-disable-line
+  const closeMut       = useMutation({ mutationFn: () => deliveryApi.close(order.id, {}),       onSuccess: refetch, onError: showError }) // eslint-disable-line
+  const returnMut      = useMutation({ mutationFn: () => deliveryApi.return(order.id, {}),      onSuccess: refetch, onError: showError }) // eslint-disable-line
 
   const btn = (label, cls, onClick, disabled = false) => (
     <button onClick={onClick} disabled={disabled}

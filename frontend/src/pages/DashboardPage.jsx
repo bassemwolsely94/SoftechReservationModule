@@ -25,6 +25,7 @@ import { tint } from '../theme/theme'
 import useAuthStore from '../store/authStore'
 import GamificationCard from '../components/GamificationCard'
 import DataFreshnessBar from '../components/DataFreshnessBar'
+import ExpiryBucketsTile from '../components/ExpiryBucketsTile'
 import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 
@@ -602,7 +603,7 @@ function SupplyKpiSection({ navigate }) {
   const go = (bucket) => () => navigate(`/supply?tab=cases${bucket ? `&bucket=${bucket}` : ''}`)
 
   return (
-    <div>
+    <div data-tour="general-dashboard-supply">
       <SectionTitle icon="🔄" action={
         <div className="flex items-center gap-2">
           <select value={days} onChange={e => setDays(Number(e.target.value))}
@@ -708,7 +709,7 @@ export default function DashboardPage() {
               {user?.branch_name && <span className="mr-2">· {user.branch_name}</span>}
             </p>
           </div>
-          <div className="flex gap-2 flex-wrap" data-tour="general-dashboard-actions">
+          <div data-tour="general-dashboard-quick-actions" className="flex gap-2 flex-wrap">
             <button
               onClick={() => navigate('/reservations')}
               className="btn-secondary text-sm flex items-center gap-1.5"
@@ -741,6 +742,9 @@ export default function DashboardPage() {
 
         {/* Data freshness — dashboard mixes live sales + stock */}
         <DataFreshnessBar domains={['sales', 'stock']} canEdit={user?.is_staff || user?.role === 'admin'} />
+
+        {/* Expiry picture (P-26): shelf risk apart from book residue */}
+        <ExpiryBucketsTile />
 
         {/* ── 1b. Gamification — my level, points, streak, what is waiting ── */}
         <GamificationCard />
@@ -965,7 +969,7 @@ export default function DashboardPage() {
 
             {/* Purchasing shortcut (admin/purchasing only) */}
             {isAdminOrCC && user?.role !== 'call_center' && (
-              <button
+              <button data-tour="general-dashboard-purchasing"
                 onClick={() => navigate('/purchasing')}
                 className="w-full rounded-2xl p-4 border-2 text-right transition-all hover:shadow-md"
                 style={{ borderColor: tint(BRAND, 0.267), background: 'rgb(var(--c-brand-50))' }}

@@ -89,7 +89,11 @@ OPEN_READ_PATHS = ('/api/users/my-permissions/', '/api/sync/freshness/', '/api/s
 # Exact paths, not prefixes: the staff picker list every screen loads (tasks, demand, HR forms,
 # follow-ups, incentives) — slim fields for roles without users view; a record needs users (Z-4).
 OPEN_READ_EXACT = ('/api/users/staff/',
-                   '/api/incentives/my-progress/')     # the caller's own incentive progress (Z-9a)
+                   '/api/incentives/my-progress/',     # the caller's own incentive progress (Z-9a)
+                   '/api/audit/usage/')                # P-57: own gate (admin / HR / own branch)
+# Exact paths any signed-in staff member may POST: the screen-usage beacon every page
+# sends (P-57) — it records the caller's own visit and nothing else.
+OPEN_WRITE_EXACT = ('/api/audit/screen-view/',)
 
 # Never checked: own session/profile, notifications, personal dashboard, global
 # search, in-app help (reading is for everyone; its views check help/edit for
@@ -97,7 +101,9 @@ OPEN_READ_EXACT = ('/api/users/staff/',
 EXEMPT_PREFIXES = {'auth', 'notifications', 'personal', 'search', 'help', 'portal', 'social',
                    'gamification',   # own points open to all; its views check gamification/*
                    'tasks',          # every staff member's own task board (scoping: Batch 5)
-                   'stock-audit'}    # own gate apps/stock_audit/access.py: RBAC stock_audit
+                   'stock-audit',    # own gate apps/stock_audit/access.py: RBAC stock_audit
+                   'trace'}          # P-58 own gates apps/trace/views.py: parse = admin,
+                                     # scan = pos create (sale) / invoices create (receive)
                                      # + named branch managers the matrix doesn't know (Z-1)
 
 # A POST needs a write grant. `export` is not one (Batch 4, Z-11a — overblock review decision 1):
@@ -171,7 +177,7 @@ def required(path, method):
     if len(parts) < 3 or parts[1] != 'api':
         return None
     prefix = parts[2]
-    if prefix in EXEMPT_PREFIXES:
+    if prefix in EXEMPT_PREFIXES or path in OPEN_WRITE_EXACT:
         return None
     method = method.upper()
     # POS alternatives live under /api/composition/ (chronic) but belong to the POS module
@@ -197,6 +203,11 @@ def required(path, method):
         if parts[3] == 'spike':
             return 'purchasing', _POST_ACTIONS
         return 'shortage', ('approve',)       # flag / dismiss / phantom review: approve, as the views
+    # P-33 (a): creating transfer proposals from a shortage list is the WhatsApp path's purchasing
+    # write (its view checks can_supply_write), not a shortage-list edit
+    if (not safe and prefix == 'shortage' and parts[3:4] == ['lists'] and len(parts) > 6
+            and parts[5] == 'transfers'):
+        return 'purchasing', _POST_ACTIONS
     # Vouchers (Z-9d): each write needs exactly the grant its view asks — issue create, assign
     # assign, cancel / edit edit, redeem (OTP send / verify) and finishing a redemption document
     # approve or finalize, the eligibility check view
@@ -214,8 +225,11 @@ def required(path, method):
     if not safe and prefix == 'batches':
         tail = '/'.join(parts[3:-1])
         if tail in ('purchase-expiry/candidates', 'purchase-expiry/rebalance-suggest', 'purchase-expiry/export',
-                    'stock-expiry/export', 'stock-expiry/disposal/export'):
+                    'stock-expiry/export', 'stock-expiry/disposal/export', 'return-window/export'):
             return 'catalog', ('view',)
+        # P-29: supplier return policies belong to purchasing (owner 2026-10-31), not catalog editors
+        if tail == 'return-window/policies':
+            return 'purchasing', ('edit',)
         if parts[4:5] == ['quarantine']:
             return 'approvals', ('approve',)
         if tail == 'purchase-expiry/request-markdown':

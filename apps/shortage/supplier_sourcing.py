@@ -12,6 +12,11 @@ shortage Excel exports.
 
 Both lookups are indexed (itemssuppliers key (itemcode,suppcode); stktrans_ndx2
 (itemcode,branchcode,doccode,docdate)) so this stays fast for a whole list.
+
+P-33 (d): the same answers come from our mirrors first — catalog.ItemSupplierLink (nightly
+itemssuppliers) and procurement.PurchaseLine (doc 10) — so an export never waits on the SOFTECH
+link. SOFTECH is read live only when a mirror is stale (ItemSupplierLink older than 48 h, or the
+`purchases` freshness domain stale). meta['source'] says which ('mirror' | 'live').
 """
 from __future__ import annotations
 
@@ -43,7 +48,7 @@ def _marks(values) -> str:
 
 
 def build_sourcing(itemcodes, *, restrict_supplier: str = '', with_history: bool = True,
-                   branch: str = '100', main_only: bool = True) -> dict:
+                   branch: str = '100', main_only: bool = True, meta: dict | None = None) -> dict:
     """Return {itemcode: {'suppliers': {suppcode: {'code','name'}},
                           'history': {suppcode: {'name','cost','date'}},
                           'last_bought': {suppcode,'name','cost','date'} | None}}.
@@ -67,6 +72,84 @@ def build_sourcing(itemcodes, *, restrict_supplier: str = '', with_history: bool
         if not mains:
             return out   # nothing flagged main → nothing to process
         supp_params = sorted(str(c) for c in mains)
+    if _mirrors_fresh():
+        source, out = 'mirror', _from_mirror(codes, supp_params, with_history, branch)
+    else:
+        source, out = 'live', _from_softech(codes, supp_params, with_history, branch)
+    if meta is not None:
+        meta['source'] = source
+    return out
+
+
+_LINK_MAX_AGE_HOURS = 48
+
+
+def _mirrors_fresh() -> bool:
+    """ItemSupplierLink synced within 48 h and the `purchases` domain (PurchaseLine) not stale."""
+    import datetime
+    from django.db.models import Max
+    from django.utils import timezone
+    from apps.catalog.models import ItemSupplierLink
+    last = ItemSupplierLink.objects.aggregate(m=Max('synced_at'))['m']
+    if last is None or timezone.now() - last > datetime.timedelta(hours=_LINK_MAX_AGE_HOURS):
+        return False
+    try:
+        from apps.sync.freshness import get_freshness
+        return not get_freshness(['purchases'])['domains']['purchases']['stale']
+    except Exception:
+        logger.exception('supplier sourcing: purchases freshness unavailable — using SOFTECH')
+        return False
+
+
+def _supplier_names(codes):
+    """Supplier names from our tables: VendorProfile, then SupplierSegmentation."""
+    from apps.invoices.models import VendorProfile
+    from apps.procurement.models import SupplierSegmentation
+    names = dict(SupplierSegmentation.objects.filter(supplier_code__in=codes).exclude(supplier_name='')
+                 .values_list('supplier_code', 'supplier_name'))
+    names.update({c: n for c, n in VendorProfile.objects.filter(softech_personcode__in=codes)
+                  .values_list('softech_personcode', 'name') if n})
+    return names
+
+
+def _from_mirror(codes, supp_params, with_history, branch) -> dict:
+    """build_sourcing's answer from catalog.ItemSupplierLink + procurement.PurchaseLine."""
+    import datetime
+    from apps.catalog.models import ItemSupplierLink
+    from apps.procurement.models import PurchaseLine
+    out = {c: {'suppliers': {}, 'history': {}, 'last_bought': None} for c in codes}
+    links = ItemSupplierLink.objects.filter(item_code__in=codes)
+    if supp_params:
+        links = links.filter(supp_code__in=supp_params)
+    for ic, sc, code in links.values_list('item_code', 'supp_code', 'supp_item_code'):
+        out[ic.strip()]['suppliers'][sc.strip()] = {'code': (code or '').strip(), 'name': ''}
+    if with_history:
+        lines = PurchaseLine.objects.filter(doccode='10', branch_code=str(branch), item_code__in=codes,
+                                            doc_date__gt=datetime.date.fromisoformat(_HISTORY_SINCE))
+        if supp_params:
+            lines = lines.filter(supplier_code__in=supp_params)
+        for ic, sc, cost, ddate in lines.order_by('doc_date', 'pk').values_list(
+                'item_code', 'supplier_code', 'unit_price', 'doc_date'):
+            out[ic.strip()]['history'][sc.strip()] = {'name': '', 'cost': float(cost) if cost is not None else None,
+                                                      'date': ddate}            # newest wins (ordered)
+        for rec in out.values():
+            if rec['history']:
+                sc, h = max(rec['history'].items(), key=lambda kv: (kv[1]['date'], kv[0]))
+                rec['last_bought'] = {'suppcode': sc, **h}
+    names = _supplier_names({sc for r in out.values() for sc in (*r['suppliers'], *r['history'])})
+    for rec in out.values():
+        for sc, s in rec['suppliers'].items():
+            s['name'] = names.get(sc, '')
+        for sc, h in rec['history'].items():
+            h['name'] = names.get(sc, '')
+        if rec['last_bought']:
+            rec['last_bought']['name'] = names.get(rec['last_bought']['suppcode'], '')
+    return out
+
+
+def _from_softech(codes, supp_params, with_history, branch) -> dict:
+    """build_sourcing's answer read live from SOFTECH (the fallback when a mirror is stale)."""
+    out = {c: {'suppliers': {}, 'history': {}, 'last_bought': None} for c in codes}
     supp_filter = f' AND {{col}} IN ({_marks(supp_params)})' if supp_params else ''
     item_chunk = max(1, _MAX_PARAMS - len(supp_params) - 1)   # room for branch + suppliers
 

@@ -94,16 +94,16 @@ export default function MobilePOSOrderPage() {
         {/* three-level customer cascade: نوع العميل → إسم العميل → العميل الفعلي (PIC) */}
         <div data-tour="pos-mobile-customer" className="flex gap-1 items-start">
           <div className="flex-1"><CustomerTypePicker P={P} compact onOpenPic={() => setShowPic(true)} /></div>
-          <button onClick={() => setShowCust(true)} title="دليل العملاء الأفراد"
+          <button data-tour="pos-mobile-cust-directory" onClick={() => setShowCust(true)} title="دليل العملاء الأفراد"
                   className="px-3 py-2 border rounded bg-gray-50 shrink-0 self-start mt-4">…</button>
         </div>
         {P.loyalty?.points_balance != null &&
           <div className="text-xs text-emerald-700 bg-emerald-50 rounded px-2 py-1">نقاط الولاء: {P.loyalty.points_balance}</div>}
-        <button onClick={() => setSheet('extra')} className="w-full text-xs border rounded py-1.5 text-gray-600">
+        <button data-tour="pos-mobile-header-sheet" onClick={() => setSheet('extra')} className="w-full text-xs border rounded py-1.5 text-gray-600">
           بيانات الرأس (مخزن · تاريخ · خصم فكة · خيارات) ▾
         </button>
         {P.isClaim && (
-          <button onClick={() => setSheet('contract')} className={`w-full text-xs rounded py-1.5 ${P.claim.patientname ? 'bg-green-50 text-green-700' : 'bg-amber-100 text-amber-800'}`}>
+          <button data-tour="pos-mobile-contract" onClick={() => setSheet('contract')} className={`w-full text-xs rounded py-1.5 ${P.claim.patientname ? 'bg-green-50 text-green-700' : 'bg-amber-100 text-amber-800'}`}>
             بيانات التعاقد / المريض {P.claim.patientname ? '✓' : '— مطلوبة'}
           </button>
         )}
@@ -113,22 +113,22 @@ export default function MobilePOSOrderPage() {
       <div data-tour="pos-mobile-search" className="p-3 bg-white border-b space-y-2">
         <div className="flex gap-2 items-start">
           <div className="flex-1 min-w-0"><ItemSearchWidget variant="pos" sheet branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id} onSelect={P.addItem} onAction={P.searchAction} onAlternatives={setAltItem} placeholder="ابحث بالاسم / الكود / الباركود…" /></div>
-          <button onClick={openImages} title="بحث بالصور" aria-label="بحث بالصور"
+          <button data-tour="pos-mobile-image-search" onClick={openImages} title="بحث بالصور" aria-label="بحث بالصور"
                   className="px-3 py-2 rounded border border-gray-300 bg-white text-gray-600 shrink-0"><Icon name="image" size={18} /></button>
         </div>
         <div className="flex gap-2">
           <input placeholder="مسح باركود ⏎" className="flex-1 border rounded px-2 py-2 text-sm"
                  onKeyDown={e => { if (e.key === 'Enter') { P.addByBarcode(e.target.value.trim()); e.target.value = '' } }} />
-          <button onClick={() => setShowOcr(true)} title="روشتة / صوت"
+          <button data-tour="pos-mobile-ocr" onClick={() => setShowOcr(true)} title="روشتة / صوت"
                   className="px-3 rounded text-white text-sm shrink-0" style={{ background: '#022871' }}>📷🎤</button>
           {histCustomerId && (
-            <button onClick={() => setShowHistory(true)} title="سجل المعاملات"
+            <button data-tour="pos-mobile-history" onClick={() => setShowHistory(true)} title="سجل المعاملات"
                     className="px-3 rounded border border-indigo-200 text-indigo-700 text-sm shrink-0 bg-white">📜</button>
           )}
         </div>
         {P.favorites.length > 0 && (
           <div className="flex flex-wrap gap-1">
-            {P.favorites.map(f => <button key={f.softech_id} onClick={() => P.addItem(f)}
+            {P.favorites.map(f => <button data-tour="pos-mobile-favorite-add" key={f.softech_id} onClick={() => P.addItem(f)}
               className="px-2 py-1 rounded bg-amber-50 border border-amber-200 text-[11px]">⭐ {f.name?.slice(0, 16)}</button>)}
           </div>
         )}
@@ -139,7 +139,7 @@ export default function MobilePOSOrderPage() {
         <BasketIntelPanel itemCodes={P.lines.map(l => l.softech_itemcode).filter(Boolean)}
                           customerId={P.customer?.id} branchId={P.branch} onAdd={P.addItem} />
         {Object.values(P.suggest.map || {}).some(v => v != null) &&
-          <button onClick={P.applyAllSuggested} className="w-full py-1.5 rounded bg-emerald-600 text-white text-xs">تطبيق الخصم المقترح</button>}
+          <button data-tour="pos-mobile-apply-suggested" onClick={P.applyAllSuggested} className="w-full py-1.5 rounded bg-emerald-600 text-white text-xs">تطبيق الخصم المقترح</button>}
       </div>
 
       {/* cart */}
@@ -156,17 +156,17 @@ export default function MobilePOSOrderPage() {
               <div className="px-3 py-2 flex justify-between items-center" onClick={() => setOpen(open === i ? -1 : i)}>
                 <div>
                   <div className="font-medium">
-                    <button onClick={e => { e.stopPropagation(); P.toggleFavorite(l) }} className="ml-1">{P.isFavorite(l.softech_itemcode) ? '⭐' : '☆'}</button>
+                    <button data-tour="pos-mobile-favorite" onClick={e => { e.stopPropagation(); P.toggleFavorite(l) }} className="ml-1">{P.isFavorite(l.softech_itemcode) ? '⭐' : '☆'}</button>
                     {l.item_name}
                   </div>
                   <div className="text-xs text-gray-500">
                     {l.softech_itemcode} · {Number(l.qty)}×{money(l.item_sale_price)}
                     {' · '}{l.is_reservation ? <span className="bg-amber-100 text-amber-800 px-1 rounded">حجز</span> : g ? null : (l.item_expiry || 'بدون تشغيلة')}
                     {P.suggest.map[l.softech_itemcode] != null &&
-                      <button onClick={e => { e.stopPropagation(); P.applySuggested(i) }} className="text-emerald-700 mr-1">· مقترح {P.suggest.map[l.softech_itemcode]}%</button>}
+                      <button data-tour="pos-mobile-line-suggested" onClick={e => { e.stopPropagation(); P.applySuggested(i) }} className="text-emerald-700 mr-1">· مقترح {P.suggest.map[l.softech_itemcode]}%</button>}
                   </div>
                 </div>
-                <div className="text-left"><div className="font-mono">{money(net)}</div><button onClick={e => { e.stopPropagation(); P.removeLine(i) }} className="text-red-500 text-xs">حذف</button></div>
+                <div className="text-left"><div className="font-mono">{money(net)}</div><button data-tour="pos-mobile-line-remove" onClick={e => { e.stopPropagation(); P.removeLine(i) }} className="text-red-500 text-xs">حذف</button></div>
               </div>
               {g && <div className="px-3 pb-2 -mt-1"><FefoGroupChip g={g} P={P} /></div>}
               {open === i && (
@@ -207,7 +207,7 @@ export default function MobilePOSOrderPage() {
           <div className="text-xs font-semibold text-gray-600 mb-2">🛒 يُشترى معه عادةً</div>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {P.fbt.map(r => (
-              <button key={r.softech_id} onClick={() => P.addFbt(r)}
+              <button data-tour="pos-mobile-fbt-add" key={r.softech_id} onClick={() => P.addFbt(r)}
                       className="shrink-0 px-2 py-1.5 rounded border bg-emerald-50 border-emerald-200 text-[11px]">
                 + {r.item_name?.slice(0, 18)} <span className="text-emerald-600">({Math.round(r.confidence * 100)}%)</span>
               </button>
@@ -231,11 +231,11 @@ export default function MobilePOSOrderPage() {
         <div className="grid grid-cols-4 gap-2 text-xs">
           <button onClick={() => setSheet('pay')} data-tour="pos-mobile-pay" className="py-2 rounded border">السداد ({P.tenders.length})</button>
           <button onClick={P.parkOrder} data-tour="pos-mobile-park" className="py-2 rounded border">⏸ تعليق</button>
-          <button onClick={() => setSheet('parked')} className="py-2 rounded border">المعلّقة ({P.parked.length})</button>
-          <button onClick={() => setSheet('receipt')} disabled={!P.lines.length} className="py-2 rounded border disabled:opacity-40">🧾 إيصال</button>
+          <button data-tour="pos-mobile-parked" onClick={() => setSheet('parked')} className="py-2 rounded border">المعلّقة ({P.parked.length})</button>
+          <button data-tour="pos-mobile-receipt" onClick={() => setSheet('receipt')} disabled={!P.lines.length} className="py-2 rounded border disabled:opacity-40">🧾 إيصال</button>
         </div>
         <div className="grid grid-cols-3 gap-2">
-          <button onClick={() => P.reset()} className="py-2.5 rounded border text-red-600 text-xs">أمر جديد</button>
+          <button data-tour="pos-mobile-reset" onClick={() => P.reset()} className="py-2.5 rounded border text-red-600 text-xs">أمر جديد</button>
           <button data-tour="pos-mobile-preview" onClick={() => P.submit(false)} disabled={P.busy} className="py-2.5 rounded bg-blue-600 text-white disabled:opacity-50">{P.busy ? '...' : 'معاينة'}</button>
           {P.ref?.writer_enabled
             ? <button onClick={() => P.submit(true)} disabled={P.busy} data-tour="pos-mobile-send" className="py-2.5 rounded bg-red-600 text-white disabled:opacity-50">⚠ فعلي</button>
@@ -251,8 +251,8 @@ export default function MobilePOSOrderPage() {
             <div key={s.id} className="flex items-center justify-between border-b py-2 text-sm">
               <div><div className="font-medium">{s.label}</div><div className="text-xs text-gray-500">{s.lines?.length} صنف · {money(s.total)}</div></div>
               <div className="flex gap-2">
-                <button onClick={() => { P.recallOrder(s.id); setSheet(null) }} className="px-3 py-1 rounded bg-blue-600 text-white text-xs">استرجاع</button>
-                <button onClick={() => P.deleteParked(s.id)} className="px-2 text-red-500">✕</button>
+                <button data-tour="pos-mobile-parked-recall" onClick={() => { P.recallOrder(s.id); setSheet(null) }} className="px-3 py-1 rounded bg-blue-600 text-white text-xs">استرجاع</button>
+                <button data-tour="pos-mobile-parked-delete" onClick={() => P.deleteParked(s.id)} className="px-2 text-red-500">✕</button>
               </div>
             </div>
           ))}
@@ -288,7 +288,7 @@ export default function MobilePOSOrderPage() {
               <div key={i} className="text-center text-[10px] text-gray-500 leading-tight">{f}</div>
             ))}
           </div>
-          <button onClick={() => window.print()} className="w-full mt-3 py-2.5 rounded bg-blue-600 text-white">🖨 طباعة</button>
+          <button data-tour="pos-mobile-receipt-print" onClick={() => window.print()} className="w-full mt-3 py-2.5 rounded bg-blue-600 text-white">🖨 طباعة</button>
         </Sheet>
       )}
 
@@ -302,7 +302,7 @@ export default function MobilePOSOrderPage() {
           {P.couponModal.errors?.length > 0 && (
             <div className="mt-2 text-sm text-red-700">{P.couponModal.errors.map((er, i) => <div key={i}>• {er}</div>)}</div>
           )}
-          <button onClick={P.checkCoupon} disabled={P.couponModal.checking}
+          <button data-tour="pos-mobile-coupon-check" onClick={P.checkCoupon} disabled={P.couponModal.checking}
                   className="w-full mt-3 py-2 rounded bg-blue-600 text-white disabled:bg-gray-300">
             {P.couponModal.checking ? 'جارٍ التحقق…' : 'تحقق وأضف'}
           </button>
@@ -315,7 +315,7 @@ export default function MobilePOSOrderPage() {
               <input type="number" min="0" step="0.001" value={P.batchModal.need}
                      onChange={e => P.setBatchNeed(e.target.value)}
                      className="w-full border rounded px-2 py-1 mt-0.5 text-center" /></label>
-            <button onClick={P.fefoFill} className="px-3 py-2 rounded bg-emerald-600 text-white text-xs shrink-0">FEFO تلقائى</button>
+            <button data-tour="pos-mobile-batch-fefo" onClick={P.fefoFill} className="px-3 py-2 rounded bg-emerald-600 text-white text-xs shrink-0">FEFO تلقائى</button>
           </div>
           {P.batchModal.batches.map((b, i) => (
             <div key={i} className="flex items-center justify-between border-b py-2">
@@ -328,7 +328,7 @@ export default function MobilePOSOrderPage() {
           ))}
           {P.batchModal.shortfall > 0 && <div className="text-xs text-amber-700 mt-1">نقص {P.batchModal.shortfall} — سيُضاف كحجز.</div>}
           <div className="text-sm font-bold mt-2">إجمالي الرصيد {P.batchModal.total}</div>
-          <button onClick={P.confirmBatchPick} className="w-full mt-3 py-2.5 rounded bg-blue-600 text-white">إضافة</button>
+          <button data-tour="pos-mobile-batch-add" onClick={P.confirmBatchPick} className="w-full mt-3 py-2.5 rounded bg-blue-600 text-white">إضافة</button>
         </Sheet>
       )}
 
@@ -392,7 +392,7 @@ export default function MobilePOSOrderPage() {
               </div>
             </div>
           ))}
-          <button onClick={P.addTender} className="text-blue-600 text-sm">+ طريقة سداد</button>
+          <button data-tour="pos-mobile-tender-add" onClick={P.addTender} className="text-blue-600 text-sm">+ طريقة سداد</button>
           <button onClick={() => setSheet(null)} className="w-full mt-3 py-2.5 rounded bg-blue-600 text-white">تم</button>
         </Sheet>
       )}
@@ -479,7 +479,7 @@ function MobileGuidedMode({ P, onClose, onOpenPic }) {
         <button onClick={goPrev} disabled={safeIdx === 0} className="px-3 py-2 rounded-lg border text-sm disabled:opacity-40">‹ السابق</button>
         {!isLast
           ? <button onClick={goNext} className="px-4 py-2 rounded-lg text-white text-sm" style={{ background: '#022871' }}>التالى ›</button>
-          : <button onClick={() => P.submit(true)} disabled={P.busy || !wf.ready} className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm disabled:opacity-40">{P.busy ? '…' : 'إرسال ✓'}</button>}
+          : <button data-tour="pos-mobile-guided-send" onClick={() => P.submit(true)} disabled={P.busy || !wf.ready} className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm disabled:opacity-40">{P.busy ? '…' : 'إرسال ✓'}</button>}
       </div>
       <style>{`.minp{margin-top:.15rem;width:100%;border:1px solid #d1d5db;border-radius:.375rem;padding:.4rem .5rem;text-align:center}
         .pos-num::-webkit-inner-spin-button,.pos-num::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
@@ -605,7 +605,7 @@ function MobileWorkflowBar({ P, onGo, onToggleGuided }) {
   return (
     <div className="bg-white border-b px-3 pt-2 pb-1.5 sticky top-0 z-20">
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-        <button onClick={onToggleGuided} title="الوضع الموجّه"
+        <button data-tour="pos-mobile-guided" onClick={onToggleGuided} title="الوضع الموجّه"
           className="shrink-0 flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium text-white" style={{ background: '#022871' }}>
           🧭 <span className="whitespace-nowrap">موجّه</span>
         </button>

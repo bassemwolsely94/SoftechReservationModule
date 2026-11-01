@@ -141,11 +141,11 @@ export default function AvailabilityInboxTab() {
             </button>
           ))}
         </div>
-        <button type="button" className={`${btnGhost} shrink-0`} onClick={() => setShowCodes(s => !s)}
+        <button data-tour="purchasing-supply-codes-report" type="button" className={`${btnGhost} shrink-0`} onClick={() => setShowCodes(s => !s)}
           title="كم سطراً من أسطر الموردين يُطابَق بكود المورد (المطابقات المؤكدة + نسخة SOFTECH)">
           📊 مطابقة الأكواد</button>
         {selected && (
-          <button type="button" className={`${btnPrimary} shrink-0`} onClick={() => setShowImport(s => !s)}>
+          <button data-tour="purchasing-supply-new-list" type="button" className={`${btnPrimary} shrink-0`} onClick={() => setShowImport(s => !s)}>
             {showImport ? 'إخفاء الإدخال' : '+ قائمة جديدة'}
           </button>
         )}
@@ -168,9 +168,9 @@ export default function AvailabilityInboxTab() {
             </select>
           </div>
           <div className="flex gap-2 mr-auto">
-            <button type="button" className={btnGhost} onClick={() => imgRef.current?.click()}
+            <button data-tour="purchasing-supply-upload-image" type="button" className={btnGhost} onClick={() => imgRef.current?.click()}
               disabled={uploadM.isPending}>📷 صورة / لقطة شاشة</button>
-            <button type="button" className={btnGhost} onClick={() => fileRef.current?.click()}
+            <button data-tour="purchasing-supply-upload-file" type="button" className={btnGhost} onClick={() => fileRef.current?.click()}
               disabled={uploadM.isPending}>📄 Excel / CSV</button>
             <input ref={imgRef} type="file" accept="image/*" hidden
               onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) uploadM.mutate({ kind: 'image', file: f }) }} />
@@ -200,7 +200,7 @@ export default function AvailabilityInboxTab() {
             ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-line bg-primary/5 text-content/70'}`}>
             {notice.text}
             {notice.layoutId && (
-              <button type="button" className="underline ms-2 hover:text-primary" disabled={forgetM.isPending}
+              <button data-tour="purchasing-supply-forget-layout" type="button" className="underline ms-2 hover:text-primary" disabled={forgetM.isPending}
                 onClick={() => forgetM.mutate(notice.layoutId)}
                 title="إذا تغيّر شكل ملف هذا المورد: انسَ الترتيب المحفوظ وراجع الأعمدة في الملف القادم">نسيان ترتيب الأعمدة</button>)}
           </div>
@@ -430,7 +430,7 @@ function BatchReview({ batchId }) {
         {FILTERS.map(([k, l]) => {
           const count = k === 'all' ? summary.total : summary[k]
           return (
-            <button key={k} type="button" onClick={() => setFilter(k)}
+            <button data-tour="purchasing-supply-inbox-filter" key={k} type="button" onClick={() => setFilter(k)}
               className={`text-xs px-2.5 py-1 rounded-full border transition ${filter === k
                 ? 'border-primary bg-primary text-white' : 'border-line bg-surface text-content/70 hover:border-primary/50'}`}>
               {l} <span className="opacity-70">{count ?? 0}</span>
@@ -438,7 +438,7 @@ function BatchReview({ batchId }) {
           )
         })}
         {orderStale && (
-          <button type="button" onClick={resort}
+          <button data-tour="purchasing-supply-resort" type="button" onClick={resort}
             className="text-xs px-2.5 py-1 rounded-full border border-primary/50 text-primary hover:bg-primary/5"
             title="الترتيب ثابت أثناء المطابقة حتى لا تقفز الأسطر — اضغط لإعادة الترتيب الآن (يتم تلقائياً عند التأكيد)">
             ↻ إعادة الترتيب</button>)}
@@ -452,8 +452,8 @@ function BatchReview({ batchId }) {
           title="تأكيد كل المطابقات عالية الثقة دفعة واحدة — يتعلّمها النظام لهذا المورد">
           ✓ تأكيد المطابقات الواضحة
         </button>
-        <button type="button" className={btnGhost} onClick={pickNeeded}>تحديد المطلوب فقط</button>
-        <button type="button" className={btnGhost} onClick={() => xlsM.mutate()} disabled={xlsM.isPending}
+        <button data-tour="purchasing-supply-pick-needed" type="button" className={btnGhost} onClick={pickNeeded}>تحديد المطلوب فقط</button>
+        <button data-tour="purchasing-supply-inbox-export" type="button" className={btnGhost} onClick={() => xlsM.mutate()} disabled={xlsM.isPending}
           title="كل أسطر القائمة مع التحليل و«بيانات الصنف» (التصنيف، المورد الرئيسي، الشركة المنتجة، الأسعار)">
           {xlsM.isPending ? '…' : '⬇ Excel'}</button>
         {Object.keys(picked).length > 0 && (
@@ -522,7 +522,7 @@ function BatchReview({ batchId }) {
             إجمالي مقترح {q(pickedRows.reduce((s, r) => s + (r.suggested_buy || 0), 0))} وحدة
           </span>
           {pickedUnconfirmed.length > 0 && !locked && (
-            <button type="button" className={btnGhost} disabled={confirmPickedM.isPending}
+            <button data-tour="purchasing-supply-confirm-picked" type="button" className={btnGhost} disabled={confirmPickedM.isPending}
               onClick={() => confirmPickedM.mutate(pickedUnconfirmed)}
               title="تأكيد مطابقة الأسطر المحددة غير المؤكدة — يتعلّمها النظام لهذا المورد">
               ✓ تأكيد المحدد ({pickedUnconfirmed.length})</button>)}
@@ -571,7 +571,7 @@ function ItemPicks({ r, batchId, group, saving, onSetItems, locked }) {
         {picks.map(p => (
           <span key={p.id} className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/5 px-2 py-0.5">
             <span className="font-mono text-content/50">{p.code}</span>{p.name}
-            <button type="button" disabled={saving} onClick={() => toggle(p.id)} title="إزالة"
+            <button data-tour="purchasing-supply-line-remove-item" type="button" disabled={saving} onClick={() => toggle(p.id)} title="إزالة"
               className="text-content/50 hover:text-rose-700 disabled:opacity-40">✕</button>
           </span>
         ))}
@@ -595,7 +595,7 @@ function ItemPicks({ r, batchId, group, saving, onSetItems, locked }) {
                 <td className="px-2 py-1 w-14 text-center text-content/50">{c.score == null ? '' : pct(c.score)}</td>
                 <td className="px-2 py-1 w-16 text-center">
                   {!(on && ids.length === 1) && (
-                    <button type="button" disabled={saving} title="هذا الصنف وحده بدل المختار"
+                    <button data-tour="purchasing-supply-line-only-this" type="button" disabled={saving} title="هذا الصنف وحده بدل المختار"
                       onClick={e => { e.stopPropagation(); onSetItems([c.item_id]) }}
                       className="underline text-content/60 hover:text-primary disabled:opacity-40">فقط هذا</button>
                   )}
@@ -632,7 +632,7 @@ function Row({ r, picked, onPick, expanded, onToggle, onConfirm, onSetItems, bat
           <input type="checkbox" checked={picked} disabled={!r.item_id} onChange={e => onPick(e.target.checked)} />
         </td>
         <td className="py-1.5 px-2 align-top">
-          <button type="button" onClick={onToggle} dir="auto"
+          <button data-tour="purchasing-supply-line-open" type="button" onClick={onToggle} dir="auto"
             className="text-right text-content/80 hover:text-primary whitespace-normal break-words block w-full">{r.raw_text}</button>
         </td>
         <td className="py-1.5 px-2 align-top">
@@ -645,12 +645,12 @@ function Row({ r, picked, onPick, expanded, onToggle, onConfirm, onSetItems, bat
                 : <>
                     <span className="text-[11px] text-content/50">{pct(r.match_score)}</span>
                     {!locked && (
-                      <button type="button" onClick={onConfirm} title="تأكيد المطابقة (يتعلّمها النظام لهذا المورد)"
+                      <button data-tour="purchasing-supply-line-confirm" type="button" onClick={onConfirm} title="تأكيد المطابقة (يتعلّمها النظام لهذا المورد)"
                         className="text-[11px] px-1.5 rounded border border-line hover:border-primary whitespace-nowrap">تأكيد</button>)}
                   </>}
             </div>
           ) : (
-            <button type="button" onClick={onToggle} className="text-xs text-amber-700 underline">اختر الصنف…</button>
+            <button data-tour="purchasing-supply-line-choose" type="button" onClick={onToggle} className="text-xs text-amber-700 underline">اختر الصنف…</button>
           )}
         </td>
         <td className="py-1.5 px-2 text-center">

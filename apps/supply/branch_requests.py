@@ -667,3 +667,23 @@ def pseudo_isr(req, *, confirmed_only=False) -> dict:
             'date': req.created_at.strftime('%Y-%m-%d') if req.created_at else '',
             'approved': 0, 'value': round(sum(l['qty'] * l['cost'] for l in lines), 3),
             'user': user, 'lines': lines}
+
+
+def pseudo_isr_from_list(shortage_list) -> dict:
+    """P-33 (a): a shortage list in the ISR-fulfilment engine's shape, like pseudo_isr — only
+    CONFIRMED, matched items move; quantity_needed is in packs; the same item twice is summed."""
+    agg = {}
+    for si in shortage_list.items.filter(is_confirmed=True, item__isnull=False).select_related('item'):
+        it = si.item
+        a = agg.setdefault(it.softech_id, {'code': str(it.softech_id).strip(), 'qty': 0.0,
+                                           'cost': float(it.cost_price or 0), 'price': float(it.pack_price or 0),
+                                           'nowqty_at_request': 0.0})
+        a['qty'] += float(si.quantity_needed or 0)
+    lines = [l for l in agg.values() if l['qty'] > 0]
+    sl = shortage_list
+    user = getattr(getattr(sl.created_by, 'user', None), 'username', '') or ''
+    return {'isr': f'SL-{sl.pk}', 'kind': 'shortage', 'branch': sl.branch.softech_branch_id,
+            'for_branch': sl.branch.softech_branch_id,
+            'date': sl.created_at.strftime('%Y-%m-%d') if sl.created_at else '',
+            'approved': 0, 'value': round(sum(l['qty'] * l['cost'] for l in lines), 3),
+            'user': user, 'lines': lines}

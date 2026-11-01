@@ -78,19 +78,19 @@ export function FreshnessBar({ onRefreshed, domains = DEFAULT_DOMAINS }) {
         </span>
       ))}
       {d.can?.sync_stock && (show('stock') || show('sales')) && (
-        <button type="button" className="underline text-content/70 hover:text-primary disabled:opacity-40"
+        <button data-tour="purchasing-supply-fresh-stock" type="button" className="underline text-content/70 hover:text-primary disabled:opacity-40"
           disabled={busy || stockM.isPending} onClick={() => stockM.mutate()}
           title="سحب الأرصدة والمبيعات من SOFTECH الآن (قراءة فقط)">⟳ الأرصدة والمبيعات</button>)}
       {d.can?.run_engine && show('rates') && (
-        <button type="button" className="underline text-content/70 hover:text-primary disabled:opacity-40"
+        <button data-tour="purchasing-supply-fresh-rates" type="button" className="underline text-content/70 hover:text-primary disabled:opacity-40"
           disabled={busy || engineM.isPending} onClick={() => engineM.mutate()}
           title="تشغيل سريع لمحرك الاحتياج — يحدّث معدلات البيع والفجوة لكل فرع">▶ تحديث معدلات البيع</button>)}
       {d.can?.refresh_purchases && show('purchases') && (
-        <button type="button" className="underline text-content/70 hover:text-primary disabled:opacity-40"
+        <button data-tour="purchasing-supply-fresh-purchases" type="button" className="underline text-content/70 hover:text-primary disabled:opacity-40"
           disabled={busy || purchasesM.isPending} onClick={() => purchasesM.mutate()}
           title="سحب فواتير الشراء الجديدة من SOFTECH الآن (قراءة فقط) — كل الأيام منذ آخر تحديث">⟳ المشتريات</button>)}
       {d.can?.sync_items && show('items') && (
-        <button type="button" className="underline text-content/70 hover:text-primary disabled:opacity-40"
+        <button data-tour="purchasing-supply-fresh-items" type="button" className="underline text-content/70 hover:text-primary disabled:opacity-40"
           disabled={busy || itemsM.isPending} onClick={() => itemsM.mutate()}
           title="مزامنة الأصناف الجديدة والأسعار والباركود">⟳ الأصناف</button>)}
       {d.rates?.sales_pulled === false && !busy && (
@@ -125,10 +125,10 @@ export function ScopeBar({ batchId, scope, locked, onChanged }) {
       <span className="text-[11px] text-content/60"
         title="فروع يخدمها هذا المورد (مخزن قريب من بعض الفروع فقط). الاحتياج والشراء المقترح يُحسبان لها وحدها.">
         الاحتياج لـ:</span>
-      <button type="button" disabled={locked || m.isPending} className={chip(!ids.length)}
+      <button data-tour="purchasing-supply-scope-all" type="button" disabled={locked || m.isPending} className={chip(!ids.length)}
         onClick={() => ids.length && m.mutate([])}>كل الفروع (إجمالي)</button>
       {branches.map(b => (
-        <button key={b.id} type="button" disabled={locked || m.isPending} className={chip(ids.includes(b.id))}
+        <button data-tour="purchasing-supply-scope-branch" key={b.id} type="button" disabled={locked || m.isPending} className={chip(ids.includes(b.id))}
           onClick={() => toggle(b.id)} title={b.name}>{b.code} · {b.name.split(',')[0]}</button>
       ))}
       {m.isPending && <span className="text-[11px] text-content/50">جارٍ إعادة الحساب…</span>}
@@ -220,7 +220,7 @@ export function LockBar({ batch, onChanged }) {
             </Chip>
           : <Chip>مسودة — قابلة للتعديل</Chip>}
         {!mode && (batch.is_locked
-          ? <button type="button" className={btnGhost} onClick={() => setMode('unlock')}>🔓 فتح للتعديل</button>
+          ? <button data-tour="purchasing-supply-unlock-list" type="button" className={btnGhost} onClick={() => setMode('unlock')}>🔓 فتح للتعديل</button>
           : <button data-tour="purchasing-supply-lock-list" type="button" className={btnGhost} onClick={() => setMode('lock')}
               title="تثبيت المطابقات والفروع — لا تعديل حتى تُفتح بسبب مكتوب">🔒 إقفال القائمة</button>)}
         {mode && (
@@ -230,13 +230,13 @@ export function LockBar({ batch, onChanged }) {
                                 if (e.key === 'Escape') setMode(null) }}
               placeholder={mode === 'unlock' ? 'سبب الفتح (مطلوب — يُحفظ في السجل)' : 'ملاحظة (اختياري)'}
               className={`${inputCls} text-xs w-72`} />
-            <button type="button" className={btnPrimary}
+            <button data-tour="purchasing-supply-lock-confirm" type="button" className={btnPrimary}
               disabled={m.isPending || (mode === 'unlock' && text.trim().length < 3)} onClick={() => m.mutate()}>
               {mode === 'unlock' ? 'فتح' : 'تأكيد الإقفال'}</button>
             <button type="button" className="text-content/50 hover:text-primary" onClick={() => setMode(null)}>إلغاء</button>
           </>
         )}
-        <button type="button" className="underline text-content/60 hover:text-primary"
+        <button data-tour="purchasing-supply-lock-history" type="button" className="underline text-content/60 hover:text-primary"
           onClick={() => setShowHistory(s => !s)}>{showHistory ? 'إخفاء السجل' : 'السجل'}</button>
         {m.isError && <span className="text-rose-600">{errText(m.error)}</span>}
         {batch.is_locked && lockM.data?.data?.duplicates_merged > 0 && (

@@ -23,6 +23,7 @@ import useGridKeyboard from '../hooks/useGridKeyboard'
 import { createWorker } from 'tesseract.js'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
+import ShortageTransfersSection from '../components/ShortageTransfersSection'
 
 // ─── OCR helpers ──────────────────────────────────────────────────────────────
 
@@ -263,7 +264,7 @@ function MatchModal({ item, listId, onConfirm, onClose }) {
 
         {/* Actions */}
         <div className="px-4 pb-4 pt-2 border-t border-gray-100 flex items-center gap-2">
-          <button
+          <button data-tour="shortage-list-match-confirm"
             onClick={confirm}
             disabled={!selected}
             className="flex-1 py-2.5 bg-brand-600 text-white rounded-xl font-medium text-sm
@@ -271,7 +272,7 @@ function MatchModal({ item, listId, onConfirm, onClose }) {
           >
             ✓ تأكيد الاختيار
           </button>
-          <button
+          <button data-tour="shortage-list-match-unmatched"
             onClick={markUnmatched}
             className="px-4 py-2.5 border border-gray-300 text-gray-600 rounded-xl text-sm hover:bg-gray-50"
           >
@@ -302,7 +303,7 @@ function StockCheckPanel({ listId, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col" dir="rtl">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col" dir="rtl">
         {/* Header */}
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
           <div>
@@ -328,7 +329,11 @@ function StockCheckPanel({ listId, onClose }) {
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto p-4">
-            {/* Summary */}
+            {/* P-33 (a): real transfer proposals from the donors' excess (same as «طلبات واتساب») */}
+            <ShortageTransfersSection listId={listId} />
+
+            {/* Summary — raw on-hand stock at other branches, before each donor keeps its own cover */}
+            <div className="text-xs text-gray-500 mb-2">الأرقام التالية رصيد متاح (قبل حساب التغطية) — للاطلاع السريع فقط؛ الكميات الفعلية من «تحليل التحويل».</div>
             <div className="grid grid-cols-3 gap-3 mb-4">
               {[
                 { label: 'يمكن تحويله', count: transferable.length, color: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
@@ -347,7 +352,7 @@ function StockCheckPanel({ listId, onClose }) {
               <div className="mb-4">
                 <div className="text-xs font-bold text-emerald-700 mb-2 flex items-center gap-1">
                   <span className="w-2 h-2 bg-emerald-500 rounded-full inline-block" />
-                  متاح للتحويل ({transferable.length})
+                  رصيد متاح (قبل حساب التغطية) ({transferable.length})
                 </div>
                 <div className="space-y-2">
                   {transferable.map(item => (
@@ -565,7 +570,7 @@ function OcrReviewModal({ lines, onImport, onClose, title = 'OCR', candidates = 
                       )}
                       {/* Inline correct / pick control (OCR mode only) */}
                       {isOcr && (
-                        <button
+                        <button data-tour="shortage-list-review-correct"
                           onClick={e => { e.stopPropagation(); setPickingFor(picking ? null : i) }}
                           className="text-brand-600 hover:text-brand-700 font-medium"
                         >
@@ -607,7 +612,7 @@ function OcrReviewModal({ lines, onImport, onClose, title = 'OCR', candidates = 
         </div>
 
         <div className="px-4 py-3 border-t border-gray-100 flex gap-2 shrink-0">
-          <button
+          <button data-tour="shortage-list-review-import"
             onClick={handleImport}
             disabled={selected.size === 0}
             className="flex-1 py-2.5 bg-brand-600 text-white rounded-xl text-sm font-medium
@@ -706,7 +711,7 @@ function VoiceInput({ onReview }) {
     <div className="space-y-4">
       {/* Record button */}
       <div className="flex flex-col items-center gap-3">
-        <button
+        <button data-tour="shortage-list-voice-record"
           onClick={toggle}
           className={`w-20 h-20 rounded-full flex items-center justify-center text-3xl shadow-lg
             transition-all duration-200
@@ -745,7 +750,7 @@ function VoiceInput({ onReview }) {
       )}
 
       {/* Review + import button */}
-      <button
+      <button data-tour="shortage-list-voice-review"
         onClick={handleReview}
         disabled={previewLines.length === 0}
         className="w-full py-2.5 bg-brand-600 text-white rounded-xl text-sm font-medium
@@ -827,7 +832,7 @@ function ShortageItemRow({ item: si, listId, onUpdated, onDelete, isOpen, kb, op
                   onChange={e => setQty(e.target.value)}
                   className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-20 focus:outline-none focus:ring-2 focus:ring-brand-400"
                 />
-                <button onClick={save} disabled={saving}
+                <button data-tour="shortage-list-item-save" onClick={save} disabled={saving}
                   className="px-2.5 py-1 bg-brand-600 text-white rounded-lg text-xs font-medium">
                   {saving ? '...' : 'حفظ'}
                 </button>
@@ -871,7 +876,7 @@ function ShortageItemRow({ item: si, listId, onUpdated, onDelete, isOpen, kb, op
                   🔍 تطابق
                 </button>
               )}
-              <button onClick={() => setEditing(true)}
+              <button data-tour="shortage-list-item-edit" onClick={() => setEditing(true)}
                 className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded hover:bg-gray-100">
                 ✏️
               </button>
@@ -1314,7 +1319,7 @@ function ShortageDetail({ listId, onBack }) {
                           focus:outline-none focus:ring-2 focus:ring-brand-400"
                       />
                     </div>
-                    <button onClick={handleAddSingle} disabled={submitting}
+                    <button data-tour="shortage-list-add-text" onClick={handleAddSingle} disabled={submitting}
                       className="px-4 py-1.5 bg-brand-600 text-white rounded-xl text-sm font-medium
                         hover:bg-brand-700 disabled:opacity-50">
                       {submitting ? '...' : '+ إضافة'}
@@ -1340,7 +1345,7 @@ function ShortageDetail({ listId, onBack }) {
                               focus:outline-none focus:ring-2 focus:ring-brand-400"
                           />
                         </div>
-                        <button
+                        <button data-tour="shortage-list-add-catalog"
                           onClick={handleAddFromCatalog}
                           disabled={submitting}
                           className="px-4 py-2 bg-brand-600 text-white rounded-xl text-sm font-medium
@@ -1369,7 +1374,7 @@ function ShortageDetail({ listId, onBack }) {
             {activeTab === 'ocr' && (
               <div className="space-y-3">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <button
+                  <button data-tour="shortage-list-ocr-pick"
                     onClick={() => fileInputRef.current?.click()}
                     className="px-4 py-2 border-2 border-dashed border-gray-300 rounded-xl text-sm text-gray-600
                       hover:border-brand-400 hover:text-brand-600 transition-colors"
@@ -1392,7 +1397,7 @@ function ShortageDetail({ listId, onBack }) {
                     <img src={ocrPreview} alt="OCR preview"
                       className="w-32 h-24 object-cover rounded-xl border border-gray-200 shrink-0" />
                     <div className="space-y-2 flex-1">
-                      <button
+                      <button data-tour="shortage-list-ocr-read"
                         onClick={handleOcrExtract}
                         disabled={ocrLoading}
                         className="px-4 py-2 bg-brand-600 text-white rounded-xl text-sm font-medium
@@ -1437,7 +1442,7 @@ function ShortageDetail({ listId, onBack }) {
                     focus:outline-none focus:ring-2 focus:ring-brand-400 font-mono"
                   placeholder={'أموكسيسيلين 500 ملج 10\nباراسيتامول 5\nميترونيدازول 3'}
                 />
-                <button
+                <button data-tour="shortage-list-bulk-import"
                   onClick={() => handleBulkImport()}
                   disabled={submitting || !bulkText.trim()}
                   className="mt-2 px-4 py-1.5 bg-brand-600 text-white rounded-xl text-sm font-medium
@@ -1587,12 +1592,12 @@ function AggregateView({ branches, onClose }) {
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
               className="border border-gray-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
           </div>
-          <button onClick={load} disabled={loading}
+          <button data-tour="shortage-list-aggregate-run" onClick={load} disabled={loading}
             className="px-4 py-1.5 bg-brand-600 text-white rounded-xl text-sm font-medium hover:bg-brand-700 disabled:opacity-50">
             {loading ? 'جاري...' : '🔍 تجميع'}
           </button>
           {data.length > 0 && (
-            <button onClick={handleExcel} disabled={exporting}
+            <button data-tour="shortage-list-aggregate-export" onClick={handleExcel} disabled={exporting}
               className="px-4 py-1.5 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
               {exporting ? '...' : '📊 تصدير Excel'}
             </button>
@@ -1724,7 +1729,7 @@ function CreateModal({ branches, onClose, onCreated }) {
         </div>
         {error && <div className="mt-3 text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
         <div className="flex gap-2 mt-5">
-          <button onClick={submit} disabled={saving}
+          <button data-tour="shortage-list-create-save" onClick={submit} disabled={saving}
             className="flex-1 py-2 bg-brand-600 text-white rounded-xl font-medium hover:bg-brand-700 disabled:opacity-50 text-sm">
             {saving ? '...' : 'إنشاء'}
           </button>

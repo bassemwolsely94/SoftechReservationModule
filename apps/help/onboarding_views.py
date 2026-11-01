@@ -25,7 +25,7 @@ from apps.users.models import ROLE_CHOICES, StaffProfile
 
 from . import registry, training
 from .models import HelpLearned, HelpOverride, HelpQuizAttempt, HelpRevision, HelpTrainingOverride
-from .views import _can_edit, _profile, _staff_name, _updated
+from .views import _can_edit, _profile, _routed_steps, _staff_name, _updated
 
 ROLES = [r for r, _ in ROLE_CHOICES]
 
@@ -118,6 +118,28 @@ def my_path(request):
         # every screen I ticked (also outside my path), so the «فهمت» button knows its state
         'learned': {k: _state(v, versions.get(k)) for k, v in learned.items()},
     })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def product_tour(request):
+    """«🗺️ جولة في موديولات دورك» for the caller's role (?shell=desktop|mobile); trainers may
+    preview another role (?role=). 404 when the role's path has nothing on that shell."""
+    profile = _profile(request)
+    if profile is None:
+        return Response({'detail': 'no staff profile'}, status=400)
+    shell = request.query_params.get('shell', 'desktop')
+    if shell not in training.PRODUCT_SHELLS:
+        return Response({'detail': 'unknown shell'}, status=400)
+    role = profile.role
+    asked = request.query_params.get('role')
+    if asked and asked != role and _can_edit(profile) and asked in ROLES:
+        role = asked
+    j = training.product_tour(role, shell)
+    if j is None:
+        return Response({'detail': 'no tour for this role'}, status=404)
+    _, screens = registry.load()
+    return Response({**j, 'steps': _routed_steps(j, j['steps'], screens)})
 
 
 @api_view(['POST'])
@@ -394,7 +416,7 @@ def _done_tours(profile):
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def first_day(request):
-    """GET  → the cards: system tour, my training path (+ the next screen), my role's
+    """GET  → the cards: system tour, my role's module tour, my training path (+ the next screen), my role's
               workflow tours, the next quiz; `show` = path not finished and not hidden.
        POST {hidden: bool} → hide / show the cards (stored per person)."""
     from .models import HelpPreference
@@ -425,6 +447,8 @@ def first_day(request):
             if fid != 'flow:general.system' and bool(f.get('mobile')) == mobile
             and (not f.get('roles') or role in f['roles'])]
     quiz = next((m for m in mods if not best.get(m, {}).get('passed')), None)
+    # «🗺️ جولة في موديولات دورك» — one stop per module of this role's path (training.product_tour)
+    pt = training.product_tour(role, 'mobile' if mobile else 'desktop', keys)
 
     def screen_card(k):
         s = screens[k]
@@ -440,6 +464,9 @@ def first_day(request):
         'system_tour': (None if mobile or not system else
                         {**training.flow_brief('flow:general.system', system),
                          'done': 'flow:general.system' in done}),
+        'module_tour': None if not pt else {'id': pt['id'], 'title': pt['title'], 'summary': pt['summary'],
+                                            'stops': len(pt['steps']) - 2,
+                                            'done': f"journey:{pt['id']}" in done},
         'next_screen': screen_card(nxt) if nxt else None,
         'flows': [{**f, 'done': f['id'] in done} for f in mine[:4]],
         'quiz': None if not quiz else {'module': quiz, 'title': modules[quiz]['title'],

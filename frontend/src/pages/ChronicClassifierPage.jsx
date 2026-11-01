@@ -397,7 +397,7 @@ function ItemClassifier() {
                           />
                         )}
                       </div>
-                      <button
+                      <button data-tour="chronic-classifier-panel-unlink"
                         onClick={() => unclassifyMut.mutate({ itemId: selected.id, ingredientId: m.ingredient_id })}
                         className="text-red-400 hover:text-red-600 text-xs flex-shrink-0"
                       >حذف</button>
@@ -745,7 +745,7 @@ function IngredientsManager() {
                 {(ingDetail.ingredient_tags || []).map(it => (
                   <div key={it.id} className="flex items-center gap-1">
                     <TagBadge tag={it.tag_detail} />
-                    <button
+                    <button data-tour="chronic-classifier-tag-remove"
                       onClick={() => removeTagMut.mutate({ id: ingDetail.id, tagId: it.tag })}
                       className="text-gray-300 hover:text-red-400 text-xs leading-none"
                       title="حذف الوسم"
@@ -753,7 +753,7 @@ function IngredientsManager() {
                   </div>
                 ))}
                 {(tags || []).filter(t => !linkedTagIds.has(t.id)).map(tag => (
-                  <button
+                  <button data-tour="chronic-classifier-tag-add"
                     key={tag.id}
                     onClick={() => addTagMut.mutate({ id: ingDetail.id, tagId: tag.id })}
                     className="text-xs px-2 py-0.5 rounded border border-dashed border-gray-300 text-gray-400 hover:border-brand-400 hover:text-brand-600 transition-colors"
@@ -895,7 +895,7 @@ function IngredientsManager() {
                       {JSON.stringify(addProtMut.error?.response?.data)}
                     </div>
                   )}
-                  <button
+                  <button data-tour="chronic-classifier-protocol-save"
                     onClick={() => addProtMut.mutate(prot)}
                     disabled={!prot.name.trim() || addProtMut.isPending}
                     className="w-full bg-brand-600 text-white rounded py-1.5 text-sm hover:bg-brand-700 disabled:opacity-40"
@@ -978,7 +978,7 @@ function IngredientsManager() {
               </div>
             )}
             <div className="flex gap-3 pt-2">
-              <button
+              <button data-tour="chronic-classifier-ingredient-save"
                 onClick={() => createIngMut.mutate(form)}
                 disabled={!form.name.trim() || createIngMut.isPending}
                 className="flex-1 bg-brand-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-brand-700 disabled:opacity-40"
@@ -1311,7 +1311,7 @@ function SuggestionCard({ sug, onApprove, onReject, isLoading }) {
 
       {/* Actions */}
       <div className="flex gap-1.5">
-        <button
+        <button data-tour="chronic-classifier-suggestion-approve"
           onClick={() => { onApprove(sug.id, editMode ? editVal : sug.suggested_value); setEditMode(false) }}
           disabled={isLoading}
           className="flex-1 bg-green-600 text-white rounded-lg py-1.5 text-xs font-medium hover:bg-green-700 disabled:opacity-40 transition-colors"
@@ -1326,7 +1326,7 @@ function SuggestionCard({ sug, onApprove, onReject, isLoading }) {
             إلغاء
           </button>
         ) : (
-          <button
+          <button data-tour="chronic-classifier-suggestion-edit"
             onClick={() => setEditMode(true)}
             className="px-3 bg-gray-100 text-gray-600 rounded-lg py-1.5 text-xs hover:bg-gray-200 transition-colors"
             title="تعديل قبل القبول"
@@ -1334,7 +1334,7 @@ function SuggestionCard({ sug, onApprove, onReject, isLoading }) {
             ✏️
           </button>
         )}
-        <button
+        <button data-tour="chronic-classifier-suggestion-reject"
           onClick={() => onReject(sug.id)}
           disabled={isLoading}
           className="px-3 bg-red-50 text-red-600 rounded-lg py-1.5 text-xs hover:bg-red-100 disabled:opacity-40 transition-colors border border-red-200"
@@ -1487,7 +1487,7 @@ function AIEnrichmentTab() {
           {/* Filters row */}
           <div className="flex gap-1.5 flex-wrap">
             {[['', 'الكل'], ['empty', 'فارغة'], ['partial', 'ناقصة'], ['complete', 'مكتملة']].map(([val, lbl]) => (
-              <button
+              <button data-tour="chronic-classifier-score-filter"
                 key={val}
                 onClick={() => setScoreFilter(val)}
                 className={`px-2 py-0.5 rounded-full text-xs font-medium border transition-colors ${
@@ -1585,7 +1585,7 @@ function AIEnrichmentTab() {
                   >
                     {generateMut.isPending ? 'جارٍ...' : '🔍 استخراج اقتراحات'}
                   </button>
-                  <button
+                  <button data-tour="chronic-classifier-extract-redo"
                     onClick={() => generateMut.mutate({ itemPk: selected.item_id, overwrite: true })}
                     disabled={generateMut.isPending}
                     className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200 disabled:opacity-40 transition-colors"

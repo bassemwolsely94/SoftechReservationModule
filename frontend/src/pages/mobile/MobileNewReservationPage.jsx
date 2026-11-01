@@ -148,7 +148,7 @@ export default function MobileNewReservationPage() {
             </div>
             <div className="flex gap-2">
               <button onClick={() => setDuplicateData(null)} className="btn-secondary flex-1 text-sm">إلغاء</button>
-              <button onClick={() => { setDuplicateData(null); submit(true) }} className="btn-primary flex-1 text-sm">
+              <button data-tour="reservations-new-dup-force" onClick={() => { setDuplicateData(null); submit(true) }} className="btn-primary flex-1 text-sm">
                 إنشاء على أي حال
               </button>
             </div>
@@ -190,7 +190,7 @@ export default function MobileNewReservationPage() {
               onClear={handleItemClear}
             />
             {!selectedItem && (
-              <button
+              <button data-tour="reservations-mnew-manual"
                 type="button"
                 onClick={() => setManualMode(true)}
                 className="text-[11px] text-gray-400 mt-1.5"
@@ -268,7 +268,7 @@ export default function MobileNewReservationPage() {
         </div>
 
         {/* Priority */}
-        <div>
+        <div data-tour="reservations-new-priority">
           <label className="label">الأولوية</label>
           <div className="grid grid-cols-3 gap-2">
             {PRIORITIES.map(p => (
@@ -300,21 +300,22 @@ export default function MobileNewReservationPage() {
 
       {/* Actions */}
       <div className="flex gap-2.5">
-        <button onClick={() => navigate('/m/reservations')} className="btn-secondary px-5">إلغاء</button>
-        <button
-          data-tour="reservations-mnew-submit"
-          onClick={() => submit(false)}
-          data-tour="reservations-new-submit"
-          disabled={submitting}
-          className="btn-primary flex-1 py-3 text-base disabled:opacity-50"
-        >
-          {submitting ? (
-            <span className="flex items-center justify-center gap-2">
-              <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-              جارٍ الحفظ...
-            </span>
-          ) : '✅ إنشاء الحجز'}
-        </button>
+        <button data-tour="reservations-new-cancel" onClick={() => navigate('/m/reservations')} className="btn-secondary px-5">إلغاء</button>
+        <div data-tour="reservations-mnew-submit" className="flex-1 flex">
+          <button
+            onClick={() => submit(false)}
+            data-tour="reservations-new-submit"
+            disabled={submitting}
+            className="btn-primary flex-1 py-3 text-base disabled:opacity-50"
+          >
+            {submitting ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                جارٍ الحفظ...
+              </span>
+            ) : '✅ إنشاء الحجز'}
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -465,7 +465,7 @@ export default function TasksPage() {
           <div className="flex flex-col items-center justify-center h-48 text-gray-400">
             <div className="text-4xl mb-3">📋</div>
             <p className="text-sm">لا توجد مهام</p>
-            <button
+            <button data-tour="tasks-list-new"
               onClick={() => setShowNewModal(true)}
               className="mt-3 text-sm text-brand-600 underline"
             >

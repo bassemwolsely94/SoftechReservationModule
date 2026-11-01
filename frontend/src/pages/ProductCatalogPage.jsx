@@ -441,7 +441,7 @@ function BarcodeScannerModal({ onClose, onFound }) {
             placeholder="أدخل الباركود يدوياً"
             className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-300"
           />
-          <button
+          <button data-tour="catalog-products-scan-manual"
             onClick={handleManual}
             className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-brand-700"
           >بحث</button>
@@ -490,7 +490,7 @@ function ComparePanel({ items, onRemove, onClear, onNavigate }) {
           <button onClick={() => setExpanded(v => !v)} className="text-xs underline hover:no-underline">
             {expanded ? 'إخفاء التفاصيل' : 'عرض التفاصيل'}
           </button>
-          <button onClick={onClear} className="text-xs text-red-200 hover:text-white">مسح الكل</button>
+          <button data-tour="catalog-products-compare-clear" onClick={onClear} className="text-xs text-red-200 hover:text-white">مسح الكل</button>
         </div>
       </div>
 
@@ -571,7 +571,7 @@ function BundleTab({ onNavigate }) {
 
           <div className="space-y-1.5">
             {(bundle.items || []).map(bi => (
-              <button
+              <button data-tour="catalog-products-bundle-item"
                 key={bi.id}
                 onClick={() => onNavigate(bi.item_code)}
                 className="w-full flex items-center justify-between text-right text-xs bg-gray-50 hover:bg-brand-50
@@ -909,7 +909,7 @@ export default function ProductCatalogPage() {
                     <p className="text-sm mt-1 text-gray-400">
                       اكتب اسم المنتج أو الكود أو الباركود أو المادة الفعالة للبحث في جميع الأصناف
                     </p>
-                    <button
+                    <button data-tour="catalog-products-empty-scan"
                       onClick={() => setShowScanner(true)}
                       className="mt-4 text-brand-600 text-sm border border-brand-200 rounded-xl px-4 py-2 hover:bg-brand-50"
                     >
@@ -921,7 +921,7 @@ export default function ProductCatalogPage() {
                     <div className="text-5xl mb-3">📭</div>
                     <p className="text-sm">لا توجد نتائج مطابقة</p>
                     {(query || activeFilterCount > 0) && (
-                      <button
+                      <button data-tour="catalog-products-empty-reset"
                         onClick={() => { setQuery(''); setFilters({ availability: '' }); setPage(1) }}
                         className="mt-3 text-brand-500 text-xs hover:underline"
                       >

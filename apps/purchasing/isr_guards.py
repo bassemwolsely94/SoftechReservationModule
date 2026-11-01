@@ -58,7 +58,7 @@ def validate_route(kind, source, dest):
 
 
 def _general(qs):
-    return qs.filter(origin_isr__isnull=True, origin_request__isnull=True)
+    return qs.filter(origin_isr__isnull=True, origin_request__isnull=True, origin_shortage_list__isnull=True)
 
 
 def live_on_route(kind, source, dest, *, exclude=None):

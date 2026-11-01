@@ -396,7 +396,7 @@ function RelatedTab({ product }) {
             {items.map(rel => {
               const p = rel.to_item
               return (
-                <button
+                <button data-tour="catalog-product-related-item"
                   key={rel.id}
                   onClick={() => navigate(`/products/${p.softech_id}`)}
                   className="flex items-center gap-3 bg-gray-50 hover:bg-brand-50 border border-gray-100
@@ -529,7 +529,7 @@ function DemandTab({ productId }) {
           </h4>
           <div className="space-y-2">
             {demands.map((d, i) => (
-              <button
+              <button data-tour="catalog-product-demand-open"
                 key={i}
                 onClick={() => navigate(`/demand?q=${d.demand_number}`)}
                 className="w-full flex items-center justify-between text-right bg-amber-50 hover:bg-amber-100

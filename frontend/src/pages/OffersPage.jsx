@@ -171,7 +171,7 @@ function OfferEditor({ draft, fields, toast, onDone, onCancel }) {
         <button onClick={onCancel} className="text-sm text-muted hover:text-content">{ba()} رجوع للقائمة</button>
         <div className="flex gap-2">
           {o.id && <button onClick={remove} data-tour="pos-offers-delete" className="btn-danger text-xs">حذف</button>}
-          <button onClick={onDone} className="btn-secondary text-xs">تم</button>
+          <button data-tour="pos-offers-done" onClick={onDone} className="btn-secondary text-xs">تم</button>
           <button onClick={save} disabled={saving} data-tour="pos-offers-save" className="btn-primary">{saving ? '…' : 'حفظ العرض'}</button>
         </div>
       </div>
@@ -339,7 +339,7 @@ function WarningsPanel({ offerId, refreshKey }) {
     <div className="card mb-3 border-amber-300 bg-amber-50/60" data-tour="pos-offers-warnings">
       <div className="section-title flex items-center justify-between text-amber-800">
         <span>⚠ تنبيهات الإعداد</span>
-        <button className="text-[11px] text-amber-700 underline" onClick={run} disabled={loading}>{loading ? '…' : 'إعادة الفحص'}</button>
+        <button data-tour="pos-offers-recheck" className="text-[11px] text-amber-700 underline" onClick={run} disabled={loading}>{loading ? '…' : 'إعادة الفحص'}</button>
       </div>
       <ul className="space-y-1 mt-1">
         {(warnings || []).map((w, i) => (
@@ -391,7 +391,7 @@ function MatchReview({ o, set }) {
           {count === 0 && <span className="text-red-600">🚫 لا أصناف مطابقة</span>}
           {lossN > 0 && <span className="text-amber-600">💸 {lossN}+ قد يُباع بالخسارة</span>}
         </div>
-        {count > 0 && <button className="text-[11px] text-brand-600 underline" onClick={() => setExpanded(e => !e)}>
+        {count > 0 && <button data-tour="pos-offers-review-matches" className="text-[11px] text-brand-600 underline" onClick={() => setExpanded(e => !e)}>
           {expanded ? 'إخفاء القائمة' : 'مراجعة القائمة'}</button>}
       </div>
 
@@ -416,7 +416,7 @@ function MatchReview({ o, set }) {
                     <td className="px-2 py-1 tabnum text-center text-muted">{row.pack_price.toFixed(2)}</td>
                     <td className={`px-2 py-1 tabnum text-center ${loss ? 'text-red-600 font-bold' : 'text-muted'}`}>{netOf(row).toFixed(2)}{loss && ' 💸'}</td>
                     <td className="px-2 py-1 text-center">
-                      <button className="text-red-500 hover:text-red-700" title="استبعاد هذا الصنف" onClick={() => exclude(row.id)}>استبعاد ×</button>
+                      <button data-tour="pos-offers-exclude-item" className="text-red-500 hover:text-red-700" title="استبعاد هذا الصنف" onClick={() => exclude(row.id)}>استبعاد ×</button>
                     </td>
                   </tr>
                 )
@@ -459,7 +459,7 @@ function TierEditor({ tiers, on }) {
           <button className="btn-ghost" onClick={() => on(tiers.filter((_, j) => j !== i))}>×</button>
         </div>
       ))}
-      <button className="btn-secondary text-xs" onClick={add}>+ شريحة</button>
+      <button data-tour="pos-offers-add-tier" className="btn-secondary text-xs" onClick={add}>+ شريحة</button>
     </div>
   )
 }
@@ -529,7 +529,7 @@ function RuleBuilder({ fields, spec, on }) {
         )
       })}
       <div className="flex items-center gap-2">
-        <button className="btn-secondary text-xs" onClick={add}>+ شرط</button>
+        <button data-tour="pos-offers-add-rule" className="btn-secondary text-xs" onClick={add}>+ شرط</button>
         {fm_hint(rules)}
       </div>
     </div>
@@ -639,11 +639,11 @@ function ApplyLive({ label, onApply }) {
   return (
     <div className="mt-2">
       {!confirming
-        ? <button className="btn-danger text-xs" onClick={() => setConfirming(true)}>{label}</button>
+        ? <button data-tour="pos-offers-apply-live" className="btn-danger text-xs" onClick={() => setConfirming(true)}>{label}</button>
         : (
           <div className="flex items-center gap-2 flex-wrap bg-red-50 border border-red-200 rounded-lg p-2">
             <span className="text-[11px] text-red-700">كتابة فعلية إلى سوفتك — تؤثر على كل مبيعات الكاشير. متأكد؟</span>
-            <button className="btn-danger text-xs" onClick={go} disabled={busy}>{busy ? '…' : 'تأكيد الكتابة'}</button>
+            <button data-tour="pos-offers-apply-live-confirm" className="btn-danger text-xs" onClick={go} disabled={busy}>{busy ? '…' : 'تأكيد الكتابة'}</button>
             <button className="btn-secondary text-xs" onClick={() => setConfirming(false)}>إلغاء</button>
           </div>
         )}
@@ -662,7 +662,7 @@ function PosdiscpPanel({ offerId }) {
         يضبط نسبة العرض في posdiscp لأصناف المطابقة، فتُطبَّق على كل مبيعات الكاشير (وليس نقطة البيع فقط).
         هذه معاينة فقط — الكتابة إلى سوفتك مُقيَّدة بمفتاح واعتماد.
       </p>
-      <button className="btn-secondary text-xs" onClick={run} disabled={loading}>{loading ? '…' : 'احسب التغييرات'}</button>
+      <button data-tour="pos-offers-posdiscp-plan" className="btn-secondary text-xs" onClick={run} disabled={loading}>{loading ? '…' : 'احسب التغييرات'}</button>
       {plan && !plan.eligible && <div className="text-xs text-amber-600 mt-2">{plan.reason}</div>}
       {plan && plan.eligible && (
         <div className="mt-2 text-xs">
@@ -693,7 +693,7 @@ function PromoPanel({ offerId }) {
         يُكتب العرض في جدول عروض سوفتك الأصلي (برقم متسلسل)، فيُطبَّق تلقائيًا على الكاشير.
         معاينة فقط — الكتابة مُقيَّدة بمفتاح واعتماد.
       </p>
-      <button className="btn-secondary text-xs" onClick={run} disabled={loading}>{loading ? '…' : 'احسب صف العرض'}</button>
+      <button data-tour="pos-offers-promo-plan" className="btn-secondary text-xs" onClick={run} disabled={loading}>{loading ? '…' : 'احسب صف العرض'}</button>
       {plan && !plan.eligible && <div className="text-xs text-amber-600 mt-2">{plan.reason}</div>}
       {plan && plan.eligible && (
         <div className="mt-2 text-xs space-y-1">

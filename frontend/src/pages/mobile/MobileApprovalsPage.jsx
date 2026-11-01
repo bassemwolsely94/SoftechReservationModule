@@ -175,7 +175,7 @@ export default function MobileApprovalsPage() {
       ) : (
         <div data-tour="hr-mobile-approvals-list" className="space-y-2.5">
           {items.map(it => (
-            <div key={`${it.kind}-${it.id}`} className="bg-white rounded-2xl border border-gray-200 p-4">
+            <div key={`${it.kind}-${it.id}`} data-tour="hr-mobile-approvals-card" className="bg-white rounded-2xl border border-gray-200 p-4">
               <div data-tour="hr-mobile-approvals-tag" className="flex items-start justify-between gap-2 mb-1.5">
                 <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
                   it.kind === 'pricing' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
@@ -196,7 +196,7 @@ export default function MobileApprovalsPage() {
               </div>
 
               <div data-tour="hr-mobile-approvals-decide" className="grid grid-cols-2 gap-2 mt-3">
-                <button
+                <button data-tour="hr-mobile-approvals-approve"
                   onClick={() => { setTarget({ kind: it.kind, id: it.id, decision: 'approved' }); setNotes(''); setError('') }}
                   className="py-2.5 rounded-xl bg-green-600 text-white text-sm font-semibold active:opacity-90"
                 >اعتماد</button>

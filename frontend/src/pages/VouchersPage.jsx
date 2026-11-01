@@ -431,7 +431,7 @@ function AssignModal({ voucher, onClose, onDone }) {
 
             <ErrorBox msg={error} />
             <div className="flex gap-2 mt-4">
-              <Btn variant="primary" onClick={submit} disabled={saving || !phone} className="flex-1">
+              <Btn data-tour="vouchers-main-assign-submit" variant="primary" onClick={submit} disabled={saving || !phone} className="flex-1">
                 {saving ? '...' : '✓ تخصيص'}
               </Btn>
               <Btn variant="ghost" onClick={onClose} className="flex-1">إلغاء</Btn>
@@ -833,7 +833,7 @@ function RedemptionFlow({ voucher, onClose }) {
                 </Field>
               )}
               <ErrorBox msg={error} />
-              <Btn variant="primary" size="lg" onClick={handleValidate}
+              <Btn data-tour="vouchers-main-eligibility" variant="primary" size="lg" onClick={handleValidate}
                 disabled={loading || !phone} className="w-full">
                 {loading ? '...' : '🔍 تحقق من الأهلية'}
               </Btn>
@@ -888,7 +888,7 @@ function RedemptionFlow({ voucher, onClose }) {
             <div className="space-y-3">
 
               {/* Mode switcher */}
-              <div className="flex rounded-xl overflow-hidden border border-gray-200 text-xs font-medium">
+              <div className="flex rounded-xl overflow-hidden border border-gray-200 text-xs font-medium" data-tour="vouchers-main-otp-mode">
                 <button
                   onClick={() => setOtpMode('qr')}
                   className={`flex-1 py-2 transition-colors ${otpMode === 'qr'
@@ -979,7 +979,7 @@ function RedemptionFlow({ voucher, onClose }) {
               <ErrorBox msg={error} />
 
               <div className="flex gap-2">
-                <Btn variant="ghost" size="sm" onClick={handleResend} disabled={loading} className="flex-1">
+                <Btn data-tour="vouchers-main-otp-resend" variant="ghost" size="sm" onClick={handleResend} disabled={loading} className="flex-1">
                   🔄 رمز جديد
                 </Btn>
                 <Btn data-tour="vouchers-main-otp-verify" variant="success" size="lg" onClick={handleVerify}
@@ -1030,7 +1030,7 @@ function RedemptionFlow({ voucher, onClose }) {
 
               {/* Actions */}
               <div className="flex gap-2">
-                <Btn variant="outline" size="sm" className="flex-1"
+                <Btn data-tour="vouchers-main-doc-print" variant="outline" size="sm" className="flex-1"
                   onClick={async () => {
                     try {
                       const r = await vouchersApi.documentPrint(document.reference_code)
@@ -1078,7 +1078,7 @@ function RedemptionFlow({ voucher, onClose }) {
                   }}>
                   🖨️ طباعة
                 </Btn>
-                <Btn variant="whatsapp" size="sm" className="flex-1"
+                <Btn data-tour="vouchers-main-doc-whatsapp" variant="whatsapp" size="sm" className="flex-1"
                   onClick={async () => {
                     try {
                       const r = await vouchersApi.documentWhatsapp(document.reference_code)
@@ -1229,7 +1229,7 @@ function DocumentsTab() {
                   {markLoading ? '...' : '✅ تفعيل الوثيقة (POS)'}
                 </Btn>
               )}
-              <Btn variant="outline" size="md"
+              <Btn data-tour="vouchers-main-doc-whatsapp" variant="outline" size="md"
                 onClick={async () => {
                   try {
                     const r = await vouchersApi.documentWhatsapp(doc.reference_code)
