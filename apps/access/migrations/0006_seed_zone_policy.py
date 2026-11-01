@@ -14,7 +14,8 @@ def _row(role, zone):
         row.update(access='full', export=True, softech_read=True, softech_write=True)
         return row
     if zone == 'Z2':
-        row.update(access='read_only', softech_read=True)
+        # a rider's phone on branch Wi-Fi keeps the rider surface (I3): never less than on mobile data
+        row.update(access='rider' if role == 'delivery' else 'read_only', softech_read=True)
         return row
     # Z3 / Z4: 2FA always, 8 h session cap (delivery 12 h)
     row.update(require_mfa=True, max_session_hours=12 if role == 'delivery' else 8)

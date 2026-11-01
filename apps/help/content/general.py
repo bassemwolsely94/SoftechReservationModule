@@ -616,7 +616,7 @@ SCREENS = [
     },
     {
         'key': 'general.security',
-        'routes': ['/security'],
+        'routes': ['/security', '/rider/security'],
         'title': T('أمان الحساب (المصادقة الثنائية)', 'Account security (two-factor)'),
         'summary': T(
             'تفعيل المصادقة الثنائية (TOTP) لحسابك: بعد كلمة المرور يطلب النظام رمزاً من تطبيق على موبايلك '
@@ -645,6 +645,8 @@ SCREENS = [
               'Signing in from outside the company network: only the roles allowed to, the verification code is required after the password, and the session ends 8 hours after sign-in (riders 12 hours) so you sign in again. You and the admins get an "outside the network sign-in" notification — if it was not you, change your password at once.'),
             T('أول تفعيل للمصادقة الثنائية وقت الدخول بيتم من داخل شبكة الشركة بس؛ من برّه هتظهر «فعّل المصادقة الثنائية من داخل شبكة الشركة أولاً». فعّلها مرة من الفرع (أو من الشاشة دي وإنت داخل بالفعل).',
               'The first two-factor enrolment at sign-in is done only inside the company network; from outside you see "Enable two-factor authentication from inside the company network first". Enrol once at the branch (or from this screen while already signed in).'),
+            T('الطيار: افتح «🔒 أمان الحساب» من الشريط الأزرق في شاشة الطيار وفعّل المصادقة الثنائية وإنت في الفرع — من غيرها مش هتقدر تدخل من بيانات الموبايل.',
+              'Riders: open "🔒 Account security" from the blue bar on the rider screen and turn on two-factor while at a branch — without it you cannot sign in over mobile data.'),
             T('لو دورك مش مسموح له بالدخول من خارج الشبكة هتظهر رسالة «الدخول من خارج شبكة الشركة غير متاح لدورك» — ادخل من الفرع أو من جهاز معتمد على شبكة الشركة.',
               'If your role may not sign in from outside the network you see "Sign-in from outside the company network is not available for your role" — sign in at the branch or on an approved device on the company network.'),
         ],
@@ -714,8 +716,8 @@ SCREENS = [
                        'Turning it off needs your password + a current code from the app or a recovery code, so nobody can switch it off from your device while you are away.\n• After turning it off, login is by password only — better to keep it on.'),
          },
         ],
-        'change_note': T('«تذكّر هذا الجهاز» على الأجهزة المعتمدة فقط؛ قواعد الدخول من خارج الشبكة (رمز التحقق، أول تفعيل من الداخل، مدة الجلسة، الإشعار)',
-                         '"Remember this device" on approved devices only; outside-the-network sign-in rules (code, first enrolment inside, session length, alert)'),
+        'change_note': T('الطيار يفتح «أمان الحساب» من شاشة الطيار ويفعّل المصادقة الثنائية؛ «تذكّر هذا الجهاز» على الأجهزة المعتمدة فقط؛ قواعد الدخول من خارج الشبكة',
+                         'Riders open "Account security" from the rider screen to turn on two-factor; "Remember this device" on approved devices only; outside-the-network sign-in rules'),
         'updated': '2026-11-01',
     },
     {

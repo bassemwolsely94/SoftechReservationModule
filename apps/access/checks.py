@@ -34,4 +34,9 @@ def network_settings_check(app_configs, **kwargs):
             'NETWORK_PROXY_KEY is empty while NETWORK_HEADER_TRUSTED is True: X-ElR-Network is believed '
             'without proof it came from our nginx. Set the key (runbook, Batch N3) before enforcing.',
             id='access.W002'))
+    if mode == 'enforce' and not trusted:
+        out.append(Error(
+            'NETWORK_POLICY_ENFORCEMENT=enforce needs NETWORK_HEADER_TRUSTED=True: without the nginx label every '
+            f'request is {zone!r} (NETWORK_UNTRUSTED_ZONE), so the policy is either void or refuses everyone.',
+            id='access.E004'))
     return out

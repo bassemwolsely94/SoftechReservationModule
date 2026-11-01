@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from django.conf import settings
 from django.core.cache import cache
 
-from .zones import Z3, Z4
+from .zones import Z2, Z3, Z4
 
 # Reachable in every zone for a signed-in user.
 ALWAYS_OPEN = (
@@ -28,6 +28,10 @@ RIDER_PATHS = (
     (re.compile(r'^/api/delivery/\d+/$'), ('GET', 'HEAD', 'OPTIONS')),
     (re.compile(r'^/api/delivery/\d+/(accept|dispatch|complete|partial|unavailable|fail|collect-cash|items)/$'), None),
 )
+
+# I2 recovery: an admin on an unapproved browser inside the network (Z2) may still approve devices
+# and fix the trusted networks, so one lost device cookie never locks the company out.
+ADMIN_Z2_RECOVERY = ('/api/access/devices/', '/api/access/networks/')
 
 REASON_MESSAGES = {
     'blocked': 'الدخول من خارج شبكة الشركة غير متاح لدورك',
@@ -134,6 +138,8 @@ def decide(profile, zone, path, method, module=None, export_request=False):
     if zone is None:
         zone = Z4                                   # context failure: never "no policy"
     if _is_always_open(path):
+        return Decision(True, None, zone)
+    if zone == Z2 and profile.role == 'admin' and path.startswith(ADMIN_Z2_RECOVERY):
         return Decision(True, None, zone)
     pol = policy_for(profile.role, zone)
     if pol is None:

@@ -17,8 +17,9 @@ def _expected(role, zone):
     """The owner table 7.3, written out independently of the seed."""
     if zone == 'Z1':
         return dict(access='full', export=True, softech_read=True, softech_write=True)
-    if zone == 'Z2':
-        return dict(access='read_only', export=False, softech_read=True, softech_write=False)
+    if zone == 'Z2':   # a rider keeps the rider surface on branch Wi-Fi (final wave I3)
+        return dict(access='rider' if role == 'delivery' else 'read_only', export=False, softech_read=True,
+                    softech_write=False)
     if role == 'delivery':
         return dict(access='rider', export=False, softech_read=False, softech_write=False)
     if zone == 'Z4':
@@ -102,7 +103,8 @@ class DecideTests(TestCase):
         r = self.d('delivery', 'Z4', '/api/delivery/summary/', module='delivery')
         self.assertEqual((r.allowed, r.reason), (False, 'module'))
         self.assertEqual(self.d('delivery', 'Z3', '/api/pos-orders/').reason, 'module')
-        for role in ROLES:
+        self.assertEqual(self.d('delivery', 'Z2', method='POST').reason, 'module')   # rider surface (I3)
+        for role in [r for r in ROLES if r != 'delivery']:
             r = self.d(role, 'Z2', method='POST')
             self.assertEqual((r.allowed, r.reason), (False, 'read_only'), role)
             self.assertTrue(self.d(role, 'Z2').allowed, role)

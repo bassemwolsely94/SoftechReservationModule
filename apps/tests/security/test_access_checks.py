@@ -55,3 +55,15 @@ class NetworkSettingsCheckTests(SimpleTestCase):
                        NETWORK_POLICY_ENFORCEMENT='log', NETWORK_PROXY_KEY='k')
     def test_valid_settings_clean(self):
         self.assertEqual(ids(), set())
+
+    @override_settings(NETWORK_POLICY_ENFORCEMENT='enforce', NETWORK_HEADER_TRUSTED=False, NETWORK_PROXY_KEY='k')
+    def test_e004_enforce_without_trusted_header(self):
+        self.assertIn('access.E004', ids())
+
+    @override_settings(NETWORK_POLICY_ENFORCEMENT='enforce', NETWORK_HEADER_TRUSTED=True, NETWORK_PROXY_KEY='k')
+    def test_no_e004_when_trusted(self):
+        self.assertNotIn('access.E004', ids())
+
+    @override_settings(NETWORK_POLICY_ENFORCEMENT='log', NETWORK_HEADER_TRUSTED=False)
+    def test_no_e004_in_log_mode(self):
+        self.assertNotIn('access.E004', ids())

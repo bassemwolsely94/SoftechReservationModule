@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import useAuthStore from './store/authStore'
 import useLangStore from './store/langStore'
@@ -238,11 +238,15 @@ function RequireRole({ roles, children }) {
   return children
 }
 
-// A rider lives on /rider only (N3 H4): any other staff route sends the delivery role back there.
-// The server (zone policy, access='rider') is the real guard; this keeps the UI honest.
+// A rider lives on /rider only (N3 H4): any other staff route sends the delivery role back there,
+// except «أمان الحساب» (/security), which opens inside the rider shell at /rider/security so a rider
+// can enrol two-factor (C1). The server (zone policy, access='rider') is the real guard.
 function RiderHome({ children }) {
   const { user } = useAuthStore()
-  if (user?.role === 'delivery') return <Navigate to="/rider" replace />
+  const { pathname } = useLocation()
+  if (user?.role === 'delivery') {
+    return <Navigate to={pathname.replace(/\/+$/, '') === '/security' ? '/rider/security' : '/rider'} replace />
+  }
   return children
 }
 
@@ -290,6 +294,7 @@ export default function App() {
           </Route>
           {/* Standalone mobile rider screen (no desktop sidebar) */}
           <Route path="/rider" element={<RequireAuth><RequireRole roles={['delivery','admin','supervisor']}><RiderLayout><DriverDeliveryApp /></RiderLayout></RequireRole></RequireAuth>} />
+          <Route path="/rider/security" element={<RequireAuth><RiderLayout><SecurityPage /></RiderLayout></RequireAuth>} />
 
           {/* ── Standalone mobile web surfaces (no desktop sidebar) ─────────
               Phone-friendly, thin views over the existing APIs. Pilot: reservations.
