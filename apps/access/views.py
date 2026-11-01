@@ -15,10 +15,10 @@ from apps.audit.models import AuditLog
 from apps.users.permissions import IsAdminRole
 
 from . import devices as dev_api
-from .models import Device, DeviceUser, TrustedNetwork
+from .models import Device, DeviceUser, TrustedNetwork, ZonePolicy
 from .network import INTERNAL, request_network
 from .zones import ZONE_LABELS
-from .serializers import DeviceSerializer, TrustedNetworkSerializer
+from .serializers import DeviceSerializer, TrustedNetworkSerializer, ZonePolicySerializer
 
 _AUDITED = ('name', 'cidr', 'kind', 'branch_id', 'is_active', 'notes')
 
@@ -176,3 +176,38 @@ class DeviceViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upd
                 dev_api.set_status(device, 'approved', request.user.staff_profile, note, request=request)
                 approved += 1
         return Response({'approved': approved, 'skipped': len(ids) - approved})
+
+
+_POLICY_AUDITED = ('access', 'modules', 'view_only', 'export', 'softech_read', 'softech_write',
+                   'require_mfa', 'max_session_hours')
+
+
+class ZonePolicyViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin,
+                        viewsets.GenericViewSet):
+    """«سياسة الشبكات» (N3): the role x zone grid. Edit only: rows are seeded, never created or
+    deleted here, and PUT is not offered."""
+    serializer_class = ZonePolicySerializer
+    permission_classes = [IsAuthenticated, IsAdminRole]
+    pagination_class = None
+    http_method_names = ['get', 'patch', 'head', 'options']
+    queryset = ZonePolicy.objects.select_related('updated_by__user').order_by('role', 'zone')
+
+    def perform_update(self, serializer):
+        before = {f: getattr(serializer.instance, f) for f in _POLICY_AUDITED}
+        row = serializer.save(updated_by=self.request.user.staff_profile)
+        after = {f: getattr(row, f) for f in _POLICY_AUDITED}
+        if after != before:                      # a no-op save leaves no audit row
+            AuditLog.log('zone_policy_changed', user=self.request.user.staff_profile, obj=row,
+                         changes={'before': before, 'after': after, 'role': row.role, 'zone': row.zone},
+                         request=self.request._request)
+
+    @action(detail=False, methods=['get'])
+    def choices(self, request):
+        """The module keys a policy may list (with Arabic labels) and the access levels."""
+        from apps.users.models import MODULE_CHOICES
+        from core.middleware.module_access import MODULE_BY_PREFIX
+        known = set(MODULE_BY_PREFIX.values())
+        return Response({
+            'modules': [{'value': v, 'label': l} for v, l in MODULE_CHOICES if v in known],
+            'access': [{'value': v, 'label': l} for v, l in ZonePolicy.ACCESS_CHOICES],
+        })

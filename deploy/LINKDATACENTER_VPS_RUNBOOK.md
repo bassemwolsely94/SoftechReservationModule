@@ -1132,6 +1132,46 @@ Reload nginx **before** restarting the web service: with a key in `.env` that ng
 every request counts as external. `manage.py check` warns (`access.W002`) while the header is trusted
 without a key, and refuses to start in `enforce` mode without one (`access.E003`).
 
+**Step 2 - migrate.**
+```bash
+cd /opt/elrezeiky/app && git pull
+venv/bin/python manage.py migrate
+sudo systemctl restart elrezeiky-web
+```
+The migrations create and seed the zone policy table (owner table, design doc 7.3) and add the two
+per-user flags. `NETWORK_POLICY_ENFORCEMENT` stays `log` (the default): nothing is refused yet.
+
+**Step 3 - stay in `log` for at least a week and read what would have been refused.**
+```bash
+sudo journalctl -u elrezeiky-web | grep 'zone would-deny'
+```
+Every line is a request the policy would refuse in `enforce` mode (user, zone, reason, module).
+Fix the cause before switching: wrong policy cell on «سياسة الشبكات» (`/access/zone-policy`), a
+device that is not approved yet, or a screen the role really needs from outside.
+
+**Step 4 - approve devices.** Open «الأجهزة» and approve the branch PCs and the known personal
+devices (see Batch N2). An unapproved device is Z2 (inside) or Z4 (outside); only an approved one
+gets Z1 / Z3.
+
+**Step 5 - two-factor enrolment inside the network.** Riders and everyone who must use 2FA from
+outside enrol it **once, inside the network** (at the branch, or from «أمان الحساب» while signed in).
+In `enforce`, the first enrolment from outside is refused. The old "remember this device" token
+(browser local storage) is gone: expect 2FA prompts until each device is approved and "remember
+this device" is ticked again after the next code.
+
+**Step 6 - switch to enforce (the owner's action).**
+```bash
+sudo sed -i '/^NETWORK_POLICY_ENFORCEMENT=/d' /opt/elrezeiky/app/.env
+echo 'NETWORK_POLICY_ENFORCEMENT=enforce' | sudo tee -a /opt/elrezeiky/app/.env >/dev/null
+cd /opt/elrezeiky/app && venv/bin/python manage.py check
+sudo systemctl restart elrezeiky-web
+```
+`manage.py check` refuses (`access.E003`) when the header is trusted and `NETWORK_PROXY_KEY` is empty.
+
+**The way back if you are locked out.** Connect through ZeroTier (it counts as inside, so Z1 / Z2
+rules apply), or on the server set `NETWORK_POLICY_ENFORCEMENT=log` again and restart
+`elrezeiky-web`. Policy edits take effect within a minute without a restart.
+
 #### Company network through the tunnel (split DNS)
 
 Goal: a company device resolves `elrezeikyapp.dawalvry.com` to `10.50.50.77` and reaches the VPS

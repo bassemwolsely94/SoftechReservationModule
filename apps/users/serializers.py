@@ -77,6 +77,7 @@ class StaffProfileListSerializer(serializers.ModelSerializer):
             'access_all_branches', 'softech_username', 'hr_code', 'phone',
             'allowed_pos_channels',
             'can_see_all_customers', 'can_see_customer_phone',
+            'external_export', 'external_softech_write',
             'login_locked_until',
         ]
 
@@ -111,6 +112,7 @@ class StaffProfileUpdateSerializer(serializers.ModelSerializer):
             'phone', 'is_active', 'hr_code',
             'first_name', 'last_name', 'email',
             'can_see_all_customers', 'can_see_customer_phone',
+            'external_export', 'external_softech_write',
         ]
 
     def update(self, instance, validated_data):
@@ -123,6 +125,7 @@ class StaffProfileUpdateSerializer(serializers.ModelSerializer):
 
         old_role   = instance.role
         old_branch = instance.branch_id
+        old_ext    = {f: getattr(instance, f) for f in EXTERNAL_FLAGS}
 
         # Update M2M
         allowed    = validated_data.pop('allowed_branches',    None)
@@ -139,6 +142,8 @@ class StaffProfileUpdateSerializer(serializers.ModelSerializer):
 
         # Audit log
         _log_user_change(instance, old_role, old_branch, validated_data)
+        req = self.context.get('request')
+        _log_external_flags(instance, old_ext, getattr(getattr(req, 'user', None), 'staff_profile', None))
         return instance
 
 
@@ -225,6 +230,23 @@ class UserActivityLogSerializer(serializers.ModelSerializer):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+EXTERNAL_FLAGS = ('external_export', 'external_softech_write')
+
+
+def _log_external_flags(profile, old, actor=None):
+    new = {f: getattr(profile, f) for f in EXTERNAL_FLAGS}
+    if new == old:
+        return
+    try:
+        from apps.users.middleware import get_current_user_profile
+        UserActivityLog.objects.create(
+            target_user=profile, changed_by=actor or get_current_user_profile(), action='permissions_changed',
+            old_value=old, new_value=new,
+        )
+    except Exception:
+        pass
+
 
 def _log_user_change(profile, old_role, old_branch_id, changes):
     try:

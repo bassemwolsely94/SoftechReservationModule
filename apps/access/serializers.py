@@ -6,7 +6,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-from .models import Device, TrustedNetwork
+from .models import Device, TrustedNetwork, ZonePolicy
 
 CIDR_BAD = 'نطاق الشبكة غير صحيح (مثال: 192.168.3.0/24)'
 
@@ -94,3 +94,42 @@ class DeviceSerializer(serializers.ModelSerializer):
                  'last_seen': link.last_seen,
                  'mfa_remembered': bool(link.mfa_remembered_at and link.mfa_remembered_at >= limit)}
                 for link in links]
+
+
+class ZonePolicySerializer(serializers.ModelSerializer):
+    """One (role, zone) cell. role and zone never change; the rest is editable (N3)."""
+    role_label = serializers.SerializerMethodField()
+    zone_label = serializers.SerializerMethodField()
+    updated_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ZonePolicy
+        fields = ['id', 'role', 'role_label', 'zone', 'zone_label', 'access', 'modules', 'view_only', 'export',
+                  'softech_read', 'softech_write', 'require_mfa', 'max_session_hours',
+                  'updated_by_name', 'updated_at']
+        read_only_fields = ['id', 'role', 'zone', 'updated_at']
+
+    def get_role_label(self, obj):
+        return obj.get_role_display()
+
+    def get_zone_label(self, obj):
+        from .zones import ZONE_LABELS
+        return ZONE_LABELS.get(obj.zone, obj.zone)
+
+    def get_updated_by_name(self, obj):
+        return obj.updated_by.full_name if obj.updated_by_id else None
+
+    def validate_modules(self, value):
+        from core.middleware.module_access import MODULE_BY_PREFIX
+        known = set(MODULE_BY_PREFIX.values())
+        if not isinstance(value, list) or not all(isinstance(m, str) for m in value):
+            raise serializers.ValidationError('الشاشات يجب أن تكون قائمة')
+        bad = [m for m in value if m not in known]
+        if bad:
+            raise serializers.ValidationError(f'شاشات غير معروفة: {", ".join(bad)}')
+        return list(dict.fromkeys(value))
+
+    def validate_max_session_hours(self, value):
+        if value is not None and not 1 <= value <= 72:
+            raise serializers.ValidationError('مدة الجلسة من 1 إلى 72 ساعة')
+        return value

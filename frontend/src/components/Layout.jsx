@@ -9,6 +9,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import NotificationBell from './NotificationBell'
 import NetworkBadge from './NetworkBadge'
+import ZoneBanner from './ZoneBanner'
 import ModuleNotificationBell from './ModuleNotificationBell'
 import ThemeToggle from './ThemeToggle'
 import CommandPalette from './CommandPalette'
@@ -231,6 +232,7 @@ export const NAV_GROUPS = [
       { to: '/sync',             icon: '⟳', label: 'المزامنة',            roles: ['admin'] },
       { to: '/access/networks',  icon: '🌐', label: 'الشبكات الموثوقة',   roles: ['admin'] },
       { to: '/access/devices',   icon: '💻', label: 'الأجهزة',            roles: ['admin'] },
+      { to: '/access/zone-policy', icon: '🛰️', label: 'سياسة الشبكات',      roles: ['admin'] },
     ],
   },
 ]
@@ -546,6 +548,7 @@ export default function Layout() {
             </button>
           </div>
         </header>
+        <ZoneBanner />
 
         {/* Page content */}
         <div className="flex-1 overflow-auto">

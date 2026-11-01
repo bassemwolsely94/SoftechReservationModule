@@ -313,6 +313,7 @@ Full schema: [03_DATABASE_DICTIONARY.md](03_DATABASE_DICTIONARY.md)
 | Audit | `/audit` | Audit | PARTIAL |
 | Trusted Networks (الشبكات الموثوقة) | `/access/networks` | Access (admin only) | COMPLETE (N1) |
 | Devices (الأجهزة) | `/access/devices` | Access (admin only) | COMPLETE (N2) |
+| Network policy (سياسة الشبكات) | `/access/zone-policy` | Access (admin only) | COMPLETE (N3) |
 | Account Security (2FA) | `/security` | Users (all roles) | COMPLETE |
 | Help guide (دليل الاستخدام) | `/help` (+ «؟ مساعدة»/F1 panel on every screen) | Help (all roles) | COMPLETE |
 | Gamification (التحفيز) | `/gamification` (`?tab=me\|leaderboard\|branches\|badges\|rules\|champions\|rewards\|redemptions\|reports\|settings`) + card on `/dashboard` and `/me` | Gamification (all roles; reports/settings by RBAC) | COMPLETE |

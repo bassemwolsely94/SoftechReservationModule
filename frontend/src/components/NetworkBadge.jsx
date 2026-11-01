@@ -48,7 +48,11 @@ export default function NetworkBadge({ variant = 'desktop' }) {
   const p = networkBadgeParts(data)
   if (!p) return null
   const dev = deviceWord(data)
-  const title = `${p.text}${dev ? ` · ${dev}` : ''}${data?.ip ? ` · ${data.ip}` : ''}`
+  // signed in: the zone label (internal/external × approved/not) replaces the device word
+  const zl = data?.access_zone_label || ''
+  const site = data?.zone === 'internal' && data?.site ? (data.site.branch_label || data.site.name) : ''
+  const shown = zl ? `${zl}${site ? ` · ${site}` : ''}` : p.text
+  const title = `${shown}${zl ? '' : (dev ? ` · ${dev}` : '')}${data?.ip ? ` · ${data.ip}` : ''}`
   if (variant === 'mobile') {
     return (
       <span data-tour="shell-network-badge" title={title} aria-label={title}
@@ -61,8 +65,8 @@ export default function NetworkBadge({ variant = 'desktop' }) {
     <span data-tour="shell-network-badge" title={title}
           className={`hidden md:inline-flex items-center gap-1 text-xs border rounded-full px-2.5 py-1 whitespace-nowrap ${TONE[p.tone]}`}>
       <span>{p.icon}</span>
-      <span>{p.text}</span>
-      {dev && <span className="opacity-80">· {dev}</span>}
+      <span>{shown}</span>
+      {!zl && dev && <span className="opacity-80">· {dev}</span>}
     </span>
   )
 }

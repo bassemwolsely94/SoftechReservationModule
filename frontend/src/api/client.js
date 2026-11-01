@@ -358,6 +358,9 @@ export const accessApi = {
   blockDevice:   (id, note) => api.post(`/access/devices/${id}/block/`, { note }),
   retireDevice:  (id) => api.post(`/access/devices/${id}/retire/`),
   bulkApproveDevices: (ids) => api.post('/access/devices/bulk-approve/', { ids }),
+  zonePolicies:  () => api.get('/access/zone-policies/'),
+  zonePolicyChoices: () => api.get('/access/zone-policies/choices/'),
+  updateZonePolicy: (id, data) => api.patch(`/access/zone-policies/${id}/`, data),
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
