@@ -80,11 +80,25 @@ def policy_for(role, zone):
 
 # ── request classification ───────────────────────────────────────────────────
 
-def is_export(path, method=None):
-    """A download route: a path segment `export`, `export-*` or `*-export`."""
-    for seg in (path or '').split('/'):
+EXPORT_FORMATS = ('xlsx', 'xls', 'csv', 'excel')
+# POST routes where the body picks the export: path -> (key, value)
+BODY_EXPORTS = {'/api/reservations/bulk/': ('action', 'export')}
+
+
+def is_export(path, method=None, query=None, body=None):
+    """A download request: a path segment `export`, `export-*` or `*-export`; a `?format=` of
+    xlsx / xls / csv / excel; or a body-selected export (BODY_EXPORTS)."""
+    path = path or ''
+    for seg in path.split('/'):
         if seg == 'export' or seg.startswith('export-') or seg.endswith('-export'):
             return True
+    if query is not None:
+        fmt = query.get('format')
+        if isinstance(fmt, str) and fmt.strip().lower() in EXPORT_FORMATS:
+            return True
+    rule = BODY_EXPORTS.get(path)
+    if rule and isinstance(body, dict) and body.get(rule[0]) == rule[1]:
+        return True
     return False
 
 
@@ -102,6 +116,7 @@ def _is_rider_path(path, method):
 def softech_write_allowed(profile, zone):
     """N4 hook: SOFTECH writes from a zone - the policy row, widened for admins in Z3 by the
     per-user flag."""
+    zone = zone or Z4   # signed-in context failure is Z4, as decide()
     pol = policy_for(profile.role, zone)
     if pol is None:
         return True
@@ -112,7 +127,7 @@ def softech_write_allowed(profile, zone):
 
 # ── the decision ─────────────────────────────────────────────────────────────
 
-def decide(profile, zone, path, method, module=None, is_export=False):
+def decide(profile, zone, path, method, module=None, export_request=False):
     """Allow or refuse one request. `module` is what module_access.required() maps the path to."""
     if profile is None:
         return Decision(True, None, zone)          # anonymous: the view answers 401
@@ -133,11 +148,15 @@ def decide(profile, zone, path, method, module=None, is_export=False):
         return refuse('blocked')
     if pol.access == 'rider':
         return Decision(True, None, zone) if _is_rider_path(path, method) else refuse('module')
-    if pol.access == 'listed' and module is not None and module not in (pol.modules or []):
-        return refuse('module')
+    if pol.access == 'listed':
+        if module is None:
+            if not safe:
+                return refuse('module')      # exempt / unmapped prefixes: reads only
+        elif module not in (pol.modules or []):
+            return refuse('module')
     if (pol.access == 'read_only' or (pol.access == 'listed' and pol.view_only)) and not safe:
         return refuse('read_only')
-    if is_export and not pol.export:
+    if export_request and not pol.export:
         widened = (zone == Z3 and profile.role == 'admin'
                    and bool(getattr(profile, 'external_export', False)))
         if not widened:

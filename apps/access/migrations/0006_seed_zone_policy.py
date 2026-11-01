@@ -27,9 +27,9 @@ def _row(role, zone):
         row.update(access='full', softech_read=True)
     elif role in ('supervisor', 'purchasing', 'quality_manager'):
         # "their modules, view-only" = every module the role matrix already grants, read only
-        row['access'] = 'read_only'
+        row.update(access='read_only', softech_read=True)
     elif role == 'call_center':
-        row.update(access='listed', modules=list(CALL_CENTER_MODULES))
+        row.update(access='listed', modules=list(CALL_CENTER_MODULES), softech_read=True)
     else:
         row['access'] = 'none'
     return row

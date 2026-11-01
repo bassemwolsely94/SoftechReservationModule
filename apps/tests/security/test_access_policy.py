@@ -5,7 +5,7 @@ from django.core.cache import cache
 from django.test import SimpleTestCase, TestCase
 
 from apps.access.models import ZonePolicy
-from apps.access.policy import Decision, decide, is_export, policy_for
+from apps.access.policy import Decision, decide, is_export, policy_for, softech_write_allowed
 from apps.users.models import StaffProfile
 
 ROLES = ['admin', 'supervisor', 'purchasing', 'quality_manager', 'call_center', 'delivery',
@@ -16,20 +16,20 @@ CC_MODULES = ['callcenter', 'demand', 'reservations', 'customers']
 def _expected(role, zone):
     """The owner table 7.3, written out independently of the seed."""
     if zone == 'Z1':
-        return dict(access='full', export=True)
+        return dict(access='full', export=True, softech_read=True, softech_write=True)
     if zone == 'Z2':
-        return dict(access='read_only', export=False)
+        return dict(access='read_only', export=False, softech_read=True, softech_write=False)
     if role == 'delivery':
-        return dict(access='rider', export=False)
+        return dict(access='rider', export=False, softech_read=False, softech_write=False)
     if zone == 'Z4':
-        return dict(access='none', export=False)
+        return dict(access='none', export=False, softech_read=False, softech_write=False)
     if role == 'admin':
-        return dict(access='full', export=False)
+        return dict(access='full', export=False, softech_read=True, softech_write=False)
     if role in ('supervisor', 'purchasing', 'quality_manager'):
-        return dict(access='read_only', export=False)
+        return dict(access='read_only', export=False, softech_read=True, softech_write=False)
     if role == 'call_center':
-        return dict(access='listed', export=False)
-    return dict(access='none', export=False)
+        return dict(access='listed', export=False, softech_read=True, softech_write=False)
+    return dict(access='none', export=False, softech_read=False, softech_write=False)
 
 
 def _profile(role, export=False, softech=False):
@@ -75,6 +75,16 @@ class DecideTests(TestCase):
 
     def d(self, role, zone, path='/api/pos-orders/', method='GET', module='pos', export=False):
         return decide(_profile(role), zone, path, method, module, export)
+
+    def test_listed_module_none_writes_refused(self):
+        r = self.d('call_center', 'Z3', '/api/tasks/5/', 'POST', None)
+        self.assertEqual((r.allowed, r.reason), (False, 'module'))
+        self.assertTrue(self.d('call_center', 'Z3', '/api/items/', 'GET', None).allowed)
+
+    def test_softech_write_zone_none_is_z4(self):
+        self.assertFalse(softech_write_allowed(_profile('admin', softech=True), None))
+        self.assertTrue(softech_write_allowed(_profile('admin', softech=True), 'Z3'))
+        self.assertFalse(softech_write_allowed(_profile('admin'), 'Z3'))
 
     def test_decide_matrix(self):
         self.assertEqual(self.d('pharmacist', 'Z3'), Decision(False, 'blocked', 'Z3'))
@@ -178,6 +188,9 @@ EXPORT_ROUTES = [
     '/api/invoices/10/export-excel/', '/api/invoices/10/export-csv/',
     '/api/transits/11/export-picking/', '/api/transits/export-picking/',
     '/api/transits/export-stocking/',
+    '/api/supply/availability/12/export/', '/api/supply/cases/export/',
+    '/api/shortage/lists/13/export-excel/', '/api/shortage/lists/13/export-supplier-matrix/',
+    '/api/shortage/lists/13/export-supplier-po/S1/', '/api/shortage/lists/export-aggregated/',
 ]
 NON_EXPORT = ['/api/pos-orders/', '/api/customers/12/', '/api/purchasing/runs/latest/',
               '/api/products/exporter-list/', '/api/delivery/app/my-orders/',
@@ -189,6 +202,21 @@ class ExportDetectionTests(SimpleTestCase):
         for p in EXPORT_ROUTES:
             self.assertTrue(is_export(p, 'GET'), p)
             self.assertTrue(is_export(p, 'POST'), p)
+
+    def test_format_query_detected(self):
+        for p in ['/api/purchasing/isr/distribution-preview/', '/api/supply/supplier-code-report/',
+                  '/api/supply/purchase-prices/', '/api/supply/supplier-comparison/']:
+            for fmt in ('xlsx', 'XLSX', 'csv', 'xls', 'excel'):
+                self.assertTrue(is_export(p, 'GET', query={'format': fmt}), (p, fmt))
+            self.assertFalse(is_export(p, 'GET', query={'format': 'json'}), p)
+            self.assertFalse(is_export(p, 'GET', query={}), p)
+
+    def test_reservations_bulk_body_export(self):
+        p = '/api/reservations/bulk/'
+        self.assertTrue(is_export(p, 'POST', body={'action': 'export', 'ids': [1]}))
+        self.assertFalse(is_export(p, 'POST', body={'action': 'assign'}))
+        self.assertFalse(is_export(p, 'POST', body=None))
+        self.assertFalse(is_export('/api/customers/', 'POST', body={'action': 'export'}))
 
     def test_non_export_paths(self):
         for p in NON_EXPORT:
