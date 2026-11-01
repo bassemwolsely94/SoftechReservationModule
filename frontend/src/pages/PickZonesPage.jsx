@@ -152,7 +152,7 @@ function SettingsCard({ zones, canEdit, showToast }) {
               onChange={e => setThreshold(e.target.value)}
             />
             {threshold != null && Number(threshold) > 0 && (
-              <button
+              <button data-tour="transfers-pick-zones-threshold-save"
                 onClick={() => saveThreshold.mutate(Number(threshold))}
                 disabled={saveThreshold.isPending}
                 className="btn-secondary text-xs px-3"
@@ -261,7 +261,7 @@ function ZoneRow({ zone, canEdit, showToast }) {
       {canEdit && (
         <td className="px-3 py-2 text-left whitespace-nowrap">
           {dirty && (
-            <button onClick={() => update.mutate({
+            <button data-tour="transfers-pick-zones-zone-save" onClick={() => update.mutate({
               name: form.name.trim(),
               sort_key: Number(form.sort_key) || 0,
               location: form.location.trim(),
@@ -342,7 +342,7 @@ function ZonesTab({ zones, branchParam, purpose, canEdit, showToast }) {
                 </td>
                 <td colSpan={3} />
                 <td className="px-3 py-2 text-left">
-                  <button
+                  <button data-tour="transfers-pick-zones-add-zone"
                     onClick={() => create.mutate()}
                     disabled={!add.name.trim() || create.isPending}
                     className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg disabled:opacity-40">
@@ -440,7 +440,7 @@ function RuleRow({ rule, idx, total, zones, canEdit, onMove, showToast }) {
         <span className="font-black text-gray-400 tabular-nums text-xs ml-1">{toLatin(idx + 1)}</span>
         {canEdit && (
           <span className="inline-flex flex-col align-middle">
-            <button onClick={() => onMove(idx, -1)} disabled={idx === 0}
+            <button data-tour="transfers-pick-zones-rule-move" onClick={() => onMove(idx, -1)} disabled={idx === 0}
               className="text-gray-400 hover:text-brand-600 disabled:opacity-20 leading-none text-xs">▲</button>
             <button onClick={() => onMove(idx, +1)} disabled={idx === total - 1}
               className="text-gray-400 hover:text-brand-600 disabled:opacity-20 leading-none text-xs">▼</button>
@@ -486,13 +486,13 @@ function RuleRow({ rule, idx, total, zones, canEdit, onMove, showToast }) {
       {canEdit && (
         <td className="px-3 py-2 text-left whitespace-nowrap w-28">
           {dirty && (
-            <button onClick={() => update.mutate({ keywords: currentValues, note: note.trim() })}
+            <button data-tour="transfers-pick-zones-rule-save" onClick={() => update.mutate({ keywords: currentValues, note: note.trim() })}
               disabled={update.isPending || currentValues.length === 0}
               className="text-xs bg-brand-600 hover:bg-brand-700 text-white font-bold px-3 py-1 rounded-lg ml-1 disabled:opacity-40">
               حفظ
             </button>
           )}
-          <button onClick={() => window.confirm('حذف القاعدة؟') && remove.mutate()}
+          <button data-tour="transfers-pick-zones-delete-rule" onClick={() => window.confirm('حذف القاعدة؟') && remove.mutate()}
             className="text-xs text-red-500 hover:text-red-700 px-2 py-1">🗑️</button>
         </td>
       )}
@@ -656,7 +656,7 @@ function UncategorizedRow({ item, zones, branchParam, purpose, canEdit, showToas
               value={tag} onChange={e => setTag(e.target.value)} />
           </td>
           <td className="px-3 py-2 text-left w-24">
-            <button onClick={() => assign.mutate()}
+            <button data-tour="transfers-pick-zones-uncat-assign" onClick={() => assign.mutate()}
               disabled={!zoneId || assign.isPending}
               className="text-xs bg-brand-600 hover:bg-brand-700 text-white font-bold px-3 py-1.5 rounded-lg disabled:opacity-40">
               تخصيص
@@ -688,7 +688,7 @@ function UncategorizedTab({ zones, branchParam, purpose, canEdit, showToast }) {
           onChange={e => setQ(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && setSearch(q.trim())} />
         <button onClick={() => setSearch(q.trim())} className="btn-secondary text-xs px-3 py-1.5">بحث</button>
-        <button onClick={() => refetch()} className="btn-secondary text-xs px-3 py-1.5"
+        <button data-tour="transfers-pick-zones-uncat-rescan" onClick={() => refetch()} className="btn-secondary text-xs px-3 py-1.5"
           disabled={isFetching}>
           {isFetching ? 'جارٍ الفحص...' : '🔄 إعادة الفحص'}
         </button>
@@ -777,7 +777,7 @@ function OverrideRow({ ov, zones, canEdit, showToast }) {
             placeholder="وسم/رف" value={tag}
             onChange={e => setTag(e.target.value)} />
           {canEdit && tag !== (ov.tag || '') && (
-            <button onClick={() => update.mutate({ tag: tag.trim() })}
+            <button data-tour="transfers-pick-zones-override-tag-save" onClick={() => update.mutate({ tag: tag.trim() })}
               className="text-xs bg-brand-600 text-white font-bold px-2 rounded-lg">✓</button>
           )}
         </div>
@@ -785,7 +785,7 @@ function OverrideRow({ ov, zones, canEdit, showToast }) {
       <td className="px-3 py-2 text-xs text-gray-400">{ov.created_by_name}</td>
       {canEdit && (
         <td className="px-3 py-2 text-left w-16">
-          <button onClick={() => window.confirm(`إلغاء تخصيص "${ov.item_name}"؟`) && remove.mutate()}
+          <button data-tour="transfers-pick-zones-delete-override" onClick={() => window.confirm(`إلغاء تخصيص "${ov.item_name}"؟`) && remove.mutate()}
             className="text-xs text-red-500 hover:text-red-700 px-2 py-1">🗑️</button>
         </td>
       )}

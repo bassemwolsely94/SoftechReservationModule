@@ -242,7 +242,7 @@ function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNoti
           <div className="flex items-center gap-1 shrink-0">
             {editing ? (
               <>
-                <button onClick={save} disabled={saving}
+                <button data-tour="invoices-main-line-save" onClick={save} disabled={saving}
                   className="px-2.5 py-1 bg-brand-600 text-white rounded-lg text-xs font-medium">
                   {saving ? '...' : 'حفظ'}
                 </button>
@@ -251,13 +251,13 @@ function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNoti
               </>
             ) : (
               <>
-                <button onClick={() => setEditing(true)}
+                <button data-tour="invoices-main-line-edit" onClick={() => setEditing(true)}
                   className="text-xs text-gray-400 hover:text-gray-600 px-1.5 py-1 rounded hover:bg-gray-100">✏️</button>
-                <button onClick={fetchMatches} disabled={loadingM}
+                <button data-tour="invoices-main-line-match" onClick={fetchMatches} disabled={loadingM}
                   className="text-xs text-blue-500 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50">
                   {loadingM ? '...' : '🔍'}
                 </button>
-                <button onClick={() => onDelete(line.id)}
+                <button data-tour="invoices-main-line-delete" onClick={() => onDelete(line.id)}
                   className="text-xs text-red-400 hover:text-red-600 px-1.5 py-1 rounded hover:bg-red-50">🗑</button>
               </>
             )}
@@ -279,7 +279,7 @@ function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNoti
           ) : (
             <div className="space-y-1">
               {matches.map(m => (
-                <button key={m.item_id} onClick={() => selectMatch(m)}
+                <button data-tour="invoices-main-line-pick-match" key={m.item_id} onClick={() => selectMatch(m)}
                   className="w-full text-right flex items-center justify-between px-3 py-2 rounded-lg hover:bg-brand-50 border border-transparent hover:border-brand-200 transition-colors">
                   <div>
                     <span className="text-sm font-medium text-gray-800">{m.item_name}</span>
@@ -368,7 +368,7 @@ function VendorLink({ inv, editable, onLinked, onNotify }) {
             </option>
           ))}
         </select>
-        <button onClick={save} disabled={!choice || saving}
+        <button data-tour="invoices-main-supplier-link-save" onClick={save} disabled={!choice || saving}
           className="px-2 py-1 bg-brand-600 text-white rounded-lg text-xs disabled:opacity-50">ربط</button>
         <button onClick={() => setOpen(false)}
           className="px-2 py-1 bg-gray-100 text-gray-600 rounded-lg text-xs">إلغاء</button>
@@ -387,7 +387,7 @@ function VendorLink({ inv, editable, onLinked, onNotify }) {
     <span className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 flex items-center gap-1">
       غير مربوط بمورد SOFTECH
       {!locked && (
-        <button onClick={start} className="font-medium hover:underline mr-1">ربط المورد</button>
+        <button data-tour="invoices-main-supplier-link" onClick={start} className="font-medium hover:underline mr-1">ربط المورد</button>
       )}
     </span>
   )
@@ -894,7 +894,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
 
             {/* Anomaly check */}
             {lines.length > 0 && (
-              <button onClick={fetchAnomalies}
+              <button data-tour="invoices-main-anomalies" onClick={fetchAnomalies}
                 className="px-3 py-1.5 border border-amber-300 text-amber-700 bg-amber-50 rounded-lg text-xs font-medium hover:bg-amber-100">
                 ⚠ فحص الانحرافات
               </button>
@@ -902,7 +902,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
 
             {/* 3-way financial reconciliation */}
             {lines.length > 0 && (
-              <button onClick={async () => { try { const r = await invoicesApi.reconcile3way(invoiceId); setRecon(r.data) } catch { showToast('تعذّرت المطابقة المالية', 'error') } }}
+              <button data-tour="invoices-main-three-way" onClick={async () => { try { const r = await invoicesApi.reconcile3way(invoiceId); setRecon(r.data) } catch { showToast('تعذّرت المطابقة المالية', 'error') } }}
                 className="px-3 py-1.5 border border-indigo-300 text-indigo-700 bg-indigo-50 rounded-lg text-xs font-medium hover:bg-indigo-100">
                 ⚖ المطابقة المالية
               </button>
@@ -910,7 +910,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
 
             {/* PO / goods-received (separate advisory check) */}
             {lines.length > 0 && (
-              <button onClick={async () => { try { const r = await invoicesApi.poMatch(invoiceId); setPoResult(r.data) } catch { showToast('تعذّرت مطابقة أمر الشراء', 'error') } }}
+              <button data-tour="invoices-main-po-match" onClick={async () => { try { const r = await invoicesApi.poMatch(invoiceId); setPoResult(r.data) } catch { showToast('تعذّرت مطابقة أمر الشراء', 'error') } }}
                 className="px-3 py-1.5 border border-gray-300 text-gray-600 bg-gray-50 rounded-lg text-xs font-medium hover:bg-gray-100">
                 🔗 أمر الشراء
               </button>
@@ -919,11 +919,11 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
             {/* Export buttons */}
             {lines.length > 0 && (
               <>
-                <button onClick={handleExportExcel} disabled={exporting === 'excel'}
+                <button data-tour="invoices-main-export-excel" onClick={handleExportExcel} disabled={exporting === 'excel'}
                   className="px-3 py-1.5 border border-green-300 text-green-700 bg-green-50 rounded-lg text-xs font-medium hover:bg-green-100">
                   {exporting === 'excel' ? '...' : '⬇ Excel'}
                 </button>
-                <button onClick={handleExportCsv} disabled={exporting === 'csv'}
+                <button data-tour="invoices-main-export-csv" onClick={handleExportCsv} disabled={exporting === 'csv'}
                   className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-50">
                   {exporting === 'csv' ? '...' : '⬇ CSV'}
                 </button>
@@ -1032,7 +1032,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                 </div>
               ))}
               <div className="flex items-end gap-2">
-                <button onClick={saveHeader}
+                <button data-tour="invoices-main-header-save" onClick={saveHeader}
                   className="px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs font-medium">حفظ</button>
                 <button onClick={() => setHeaderEdit(false)}
                   className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs">إلغاء</button>
@@ -1060,7 +1060,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                 {Number(inv.total_after_discount || 0).toFixed(3)} {inv.currency}
               </div>
               {editable && (
-                <button onClick={() => setHeaderEdit(true)}
+                <button data-tour="invoices-main-header-edit" onClick={() => setHeaderEdit(true)}
                   className="text-xs text-brand-600 hover:underline mr-auto">تعديل</button>
               )}
             </div>
@@ -1073,7 +1073,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
           <span className="text-green-600">{confirmed} مُأكَّد</span>
           <span className="text-amber-600">{unmatched} بدون مطابقة</span>
           {editable && (
-            <button onClick={() => setAddLine(s => !s)}
+            <button data-tour="invoices-main-add-line" onClick={() => setAddLine(s => !s)}
               className="mr-auto px-3 py-1.5 border border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-brand-400 hover:text-brand-600 transition-colors">
               + إضافة سطر يدوي
             </button>
@@ -1108,7 +1108,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                   onChange={e => setNewLine(n => ({ ...n, discount_pct: e.target.value }))}
                   className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-20 focus:outline-none focus:ring-2 focus:ring-brand-400" />
               </div>
-              <button onClick={handleAddLine}
+              <button data-tour="invoices-main-add-line-save" onClick={handleAddLine}
                 className="px-3 py-1.5 bg-brand-600 text-white rounded-lg text-sm font-medium">إضافة</button>
               <button onClick={() => setAddLine(false)}
                 className="px-3 py-1.5 bg-white text-gray-500 rounded-lg text-sm border">إلغاء</button>

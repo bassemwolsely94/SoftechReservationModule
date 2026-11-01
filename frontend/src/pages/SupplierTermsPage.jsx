@@ -105,7 +105,7 @@ function TermForm({ term, onSaved }) {
       <label className="flex flex-col">مرجع الاتفاق
         <input value={f.source_note} onChange={set('source_note')} className="w-40 border rounded px-1 py-0.5" />
       </label>
-      <button onClick={() => save.mutate()} className="px-2 py-1 border rounded bg-white hover:bg-gray-50">حفظ</button>
+      <button data-tour="finance-supplier-terms-save" onClick={() => save.mutate()} className="px-2 py-1 border rounded bg-white hover:bg-gray-50">حفظ</button>
       {msg && <span className="text-gray-500">{msg}</span>}
       <span className="text-gray-400">ساري من {term.effective_from}{term.entered_by ? ` · ${term.entered_by}` : ''}</span>
     </div>

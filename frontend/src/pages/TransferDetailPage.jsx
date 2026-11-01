@@ -140,7 +140,7 @@ function ActionButtons({ tr, onAction, loading }) {
             ))}
           </div>
           <div className="flex gap-2">
-            <button onClick={submitApprove} disabled={loading}
+            <button data-tour="transfers-detail-approve-confirm" onClick={submitApprove} disabled={loading}
               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2.5 rounded-xl disabled:opacity-50">
               تأكيد الاعتماد
             </button>
@@ -184,7 +184,7 @@ function ActionButtons({ tr, onAction, loading }) {
             })}
           </div>
           <div className="flex gap-2">
-            <button onClick={submitComplete} disabled={loading}
+            <button data-tour="transfers-detail-receive-confirm" onClick={submitComplete} disabled={loading}
               className="flex-1 bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-2.5 rounded-xl disabled:opacity-50">
               تأكيد الاستلام وإغلاق الطلب
             </button>
@@ -250,7 +250,7 @@ function ActionButtons({ tr, onAction, loading }) {
             onChange={e => setRejectionReason(e.target.value)}
             autoFocus
           />
-          <button
+          <button data-tour="transfers-detail-reject-confirm"
             onClick={() => { if (rejectionReason.trim()) { onAction('reject', { rejection_reason: rejectionReason }); setShowRejectForm(false) } }}
             disabled={!rejectionReason.trim()}
             className="text-xs bg-red-600 text-white px-2 py-1 rounded-lg disabled:opacity-50"
@@ -278,7 +278,7 @@ function ActionButtons({ tr, onAction, loading }) {
             onChange={e => setRevisionNotes(e.target.value)}
             autoFocus
           />
-          <button
+          <button data-tour="transfers-detail-revision-submit"
             onClick={() => { if (revisionNotes.trim()) { onAction('revision', { revision_notes: revisionNotes }); setShowRevisionForm(false) } }}
             disabled={!revisionNotes.trim()}
             className="text-xs bg-yellow-600 text-white px-2 py-1 rounded-lg disabled:opacity-50"
@@ -305,7 +305,7 @@ function ActionButtons({ tr, onAction, loading }) {
             value={erpRef}
             onChange={e => setErpRef(e.target.value)}
           />
-          <button
+          <button data-tour="transfers-detail-send-erp-confirm"
             onClick={() => { onAction('send-to-erp', { erp_reference: erpRef }); setShowErpForm(false) }}
             className="text-xs bg-purple-600 text-white px-2 py-1 rounded-lg"
           >
@@ -333,7 +333,7 @@ function ActionButtons({ tr, onAction, loading }) {
             onChange={e => setDeliveryPerson(e.target.value)}
             autoFocus
           />
-          <button
+          <button data-tour="transfers-detail-dispatch-confirm"
             onClick={() => {
               if (deliveryPerson.trim()) {
                 onAction('dispatch', { delivery_person_name: deliveryPerson.trim() })
@@ -606,7 +606,7 @@ function ERPMatchPanel({ tr, onRefresh }) {
         </div>
         {tr.can_check_erp_match && (
           <div className="flex flex-col items-end gap-1">
-            <button
+            <button data-tour="transfers-detail-erp-check"
               onClick={runCheck}
               disabled={checking || cooldown > 0}
               title={cooldown > 0 ? `يمكن إعادة الفحص بعد ${cooldown} ثانية` : ''}
@@ -882,7 +882,7 @@ function ItemsTab({ tr, onRefresh }) {
                   <td className="py-3 px-2 text-xs text-gray-500">{line.notes || '—'}</td>
                   {tr.is_editable && (
                     <td className="py-3 px-2">
-                      <button onClick={() => removeItem(line.id)}
+                      <button data-tour="transfers-detail-remove-item" onClick={() => removeItem(line.id)}
                         className="text-gray-300 hover:text-red-400 text-lg leading-none transition-colors">
                         ✕
                       </button>
@@ -899,7 +899,7 @@ function ItemsTab({ tr, onRefresh }) {
       {tr.is_editable && (
         <div className="border-t border-gray-100 pt-4">
           {!adding ? (
-            <button onClick={() => setAdding(true)}
+            <button data-tour="transfers-detail-add-item" onClick={() => setAdding(true)}
               className="btn-secondary text-sm">
               + إضافة صنف
             </button>
@@ -1076,7 +1076,7 @@ function CommunicationTab({ tr, onRefresh, onDeleteMessage }) {
                   <span className="text-xs text-gray-300 mr-auto">{timeAgo(msg.created_at)}</span>
                   {/* Delete button */}
                   {msg.can_delete && onDeleteMessage && (
-                    <button
+                    <button data-tour="transfers-detail-delete-message"
                       onClick={() => onDeleteMessage(msg.id)}
                       className="text-gray-300 hover:text-red-400 transition-colors p-0.5 rounded"
                       title="حذف الرسالة"
@@ -1190,7 +1190,7 @@ function CommunicationTab({ tr, onRefresh, onDeleteMessage }) {
             </span>
           )}
           <div className="flex-1" />
-          <button onClick={sendMessage} disabled={(!message.trim() && !attachFile && !voiceFile) || sending}
+          <button data-tour="transfers-detail-chatter-send" onClick={sendMessage} disabled={(!message.trim() && !attachFile && !voiceFile) || sending}
             className="text-xs bg-brand-600 text-white px-3 py-1 rounded-lg disabled:opacity-40 hover:bg-brand-700 transition-colors font-medium">
             {sending ? 'جارٍ...' : 'إرسال'}
           </button>
@@ -1325,7 +1325,7 @@ export default function TransferDetailPage() {
               </span>
               {/* Deep-link to the fulfillment side once issued as a 125 */}
               {(tr.in_transit_docs || []).map(d => (
-                <button
+                <button data-tour="transfers-detail-transit-link"
                   key={d.id}
                   onClick={() => navigate(`/transits?id=${d.id}`)}
                   title={`تتبع الشحنة قيد النقل — ${d.transit_status_display}`}
