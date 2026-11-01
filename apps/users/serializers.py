@@ -1,6 +1,10 @@
+import logging
+
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import StaffProfile, ERPUser, UserActivityLog
+
+logger = logging.getLogger('elrezeiky.users')
 
 
 # ── ERP User (read-only) ──────────────────────────────────────────────────────
@@ -114,6 +118,20 @@ class StaffProfileUpdateSerializer(serializers.ModelSerializer):
             'can_see_all_customers', 'can_see_customer_phone',
             'external_export', 'external_softech_write',
         ]
+
+    def validate(self, attrs):
+        # the per-user "outside the network" flags exist for the admin role only (N3)
+        role = attrs.get('role', getattr(self.instance, 'role', None))
+        if role != 'admin':
+            on = [f for f in EXTERNAL_FLAGS if attrs.get(f)]
+            if on:
+                raise serializers.ValidationError(
+                    {on[0]: 'صلاحيات «من خارج الشبكة» للمدير فقط'})
+            if self.instance is not None:      # a role change away from admin clears them
+                for f in EXTERNAL_FLAGS:
+                    if getattr(self.instance, f, False):
+                        attrs[f] = False
+        return attrs
 
     def update(self, instance, validated_data):
         # Pop nested user fields
@@ -245,7 +263,8 @@ def _log_external_flags(profile, old, actor=None):
             old_value=old, new_value=new,
         )
     except Exception:
-        pass
+        logger.error('external access flags audit row failed for %s', getattr(profile, 'pk', None),
+                     exc_info=True)
 
 
 def _log_user_change(profile, old_role, old_branch_id, changes):

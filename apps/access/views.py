@@ -17,8 +17,8 @@ from apps.users.permissions import IsAdminRole
 from . import devices as dev_api
 from .models import Device, DeviceUser, TrustedNetwork, ZonePolicy
 from .network import INTERNAL, request_network
-from .zones import ZONE_LABELS
 from .serializers import DeviceSerializer, TrustedNetworkSerializer, ZonePolicySerializer
+from .zones import ZONE_LABELS
 
 _AUDITED = ('name', 'cidr', 'kind', 'branch_id', 'is_active', 'notes')
 
@@ -49,6 +49,9 @@ def whoami(request):
         'device': device,
         'access_zone': access_zone,
         'access_zone_label': ZONE_LABELS.get(access_zone),
+        # what the banner may honestly say: the mode and this role's row in this zone
+        'policy_mode': _policy_mode(),
+        'zone_access': _zone_access(request, access_zone),
         'zone': net.zone,
         'ip': net.ip,
         'label': net.label_ar,
@@ -58,6 +61,26 @@ def whoami(request):
             'branch_label': (branch.name_ar or branch.name) if branch else None,
         },
     })
+
+
+def _policy_mode():
+    from .policy_middleware import _mode
+    return _mode()
+
+
+def _zone_access(request, zone):
+    """The signed-in user's policy row access in `zone` ('full', 'read_only', ...), or None."""
+    if zone is None:
+        return None
+    try:
+        from .policy import policy_for
+        from .session_policy import subject
+        user = request.user if getattr(request.user, 'is_authenticated', False) else None
+        subj = subject(user)
+        row = policy_for(subj.role, zone) if subj is not None else None
+        return row.access if row is not None else None
+    except Exception:
+        return None
 
 
 def _snapshot(tn):

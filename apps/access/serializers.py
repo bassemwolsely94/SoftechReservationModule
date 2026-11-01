@@ -129,6 +129,17 @@ class ZonePolicySerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(f'شاشات غير معروفة: {", ".join(bad)}')
         return list(dict.fromkeys(value))
 
+    def validate(self, attrs):
+        # the admin's own inside-approved cell can never shrink: no self-lockout from this screen
+        row = self.instance
+        if row is not None and row.role == 'admin' and row.zone == 'Z1':
+            access = attrs.get('access', row.access)
+            view_only = attrs.get('view_only', row.view_only)
+            if access != 'full' or view_only:
+                raise serializers.ValidationError(
+                    {'access': 'خانة المدير «داخل الشبكة — جهاز معتمد» لازم تفضل «كامل» — حتى لا يُقفل الدخول على المديرين'})
+        return attrs
+
     def validate_max_session_hours(self, value):
         if value is not None and not 1 <= value <= 72:
             raise serializers.ValidationError('مدة الجلسة من 1 إلى 72 ساعة')

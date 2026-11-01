@@ -1,8 +1,10 @@
 /**
  * ZoneBanner — a calm strip under the header that says what the network policy means right now
- * (security N3). Reads whoami.access_zone (not the network `zone`):
- *   Z2  «جهاز غير معتمد — للعرض فقط»   amber (inside the company, device not approved)
- *   Z3 / Z4  «خارج شبكة الشركة»        neutral info
+ * (security N3). Reads whoami.access_zone (not the network `zone`), whoami.policy_mode and
+ * whoami.zone_access (this role's row in that zone), so it never claims more than is enforced:
+ *   Z2 + enforce + read_only  «جهاز غير معتمد — للعرض فقط»          amber
+ *   Z2 otherwise              «جهاز غير معتمد — اطلب اعتماده من المدير»  neutral
+ *   Z3 / Z4                   «خارج شبكة الشركة»                     neutral info
  * Nothing for Z1 or when signed out. No popup, no button: it only informs.
  */
 import { useQuery } from '@tanstack/react-query'
@@ -10,7 +12,12 @@ import { accessApi } from '../api/client'
 
 export function zoneBannerParts(info) {
   const z = info?.access_zone
-  if (z === 'Z2') return { tone: 'warn', text: 'جهاز غير معتمد — للعرض فقط' }
+  if (z === 'Z2') {
+    if (info?.policy_mode === 'enforce' && info?.zone_access === 'read_only') {
+      return { tone: 'warn', text: 'جهاز غير معتمد — للعرض فقط' }
+    }
+    return { tone: 'info', text: 'جهاز غير معتمد — اطلب اعتماده من المدير' }
+  }
   if (z === 'Z3' || z === 'Z4') return { tone: 'info', text: 'خارج شبكة الشركة' }
   return null
 }

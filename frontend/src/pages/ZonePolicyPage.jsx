@@ -59,7 +59,7 @@ function Details({ row, choices, onPatch, saving, error }) {
         </span>
       </div>
       <div className="flex flex-wrap gap-x-6 gap-y-2">
-        <Check label="عرض فقط للشاشات المحددة" checked={!!row.view_only} onChange={v => onPatch({ view_only: v })} />
+        <Check label="عرض فقط (مع «شاشات محددة»)" checked={!!row.view_only} onChange={v => onPatch({ view_only: v })} />
         <Check label="التصدير" checked={!!row.export} onChange={v => onPatch({ export: v })} />
         <Check label="إلزام التحقق بخطوتين" checked={!!row.require_mfa} onChange={v => onPatch({ require_mfa: v })} />
         <Check label="قراءة SOFTECH" checked={!!row.softech_read} onChange={v => onPatch({ softech_read: v })} />
