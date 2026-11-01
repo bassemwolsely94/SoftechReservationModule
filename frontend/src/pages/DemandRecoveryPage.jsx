@@ -71,7 +71,7 @@ function ReasonModal({ title, hint, reasons, confirmLabel, confirmColor, onConfi
         </select>
         <div className="flex gap-2 justify-end mt-5">
           <button onClick={onClose} className="btn-secondary text-sm px-4">إلغاء</button>
-          <button onClick={() => onConfirm(reason)} disabled={busy}
+          <button onClick={() => onConfirm(reason)} disabled={busy} data-tour="demand-recovery-reason-confirm"
             className="text-sm px-4 py-2 rounded-lg text-white font-semibold disabled:opacity-50"
             style={{ background: confirmColor }}>
             {busy ? 'جارٍ...' : confirmLabel}

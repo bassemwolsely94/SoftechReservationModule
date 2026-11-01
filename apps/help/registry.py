@@ -40,6 +40,9 @@ Content format (one file per module, see content/reservations.py for a full exam
                     'warn': T(..),            # optional ⚠: the costly mistake (required for
                                               # push / approve / discount … anchors, see TOUR_WARN_WORDS)
                     'open_hint': T(..)}],     # optional: how to make the element appear
+        'hints':  [{'target': …, 'label': T(..), 'text': T(..), 'when': T(..), 'warn': T(..)}],
+                                              # «💡 تلميحات الأزرار» only, never in the tour: the
+                                              # screen's other buttons (same rules as tour steps)
         'updated': '2026-10-10',              # bump when the text changes → "new" badge
     }]
 
@@ -69,6 +72,8 @@ TOUR_TEXT_KEYS = ('label', 'text', 'when', 'warn', 'open_hint', 'more')
 # see tour_flow() below
 TOUR_STEP_KEYS = {'target', *TOUR_TEXT_KEYS, 'route', 'wait', 'nav'}
 JOURNEY_STEP_KEYS = TOUR_STEP_KEYS | {'screen', 'perm'}
+# a screen's `hints`: buttons explained by «💡 تلميحات الأزرار» but kept out of «اعرض لي»
+HINT_STEP_KEYS = {'target', 'label', 'text', 'when', 'warn', 'open_hint'}
 # more = the longer explanation shown under the step (help tours)
 TOUR_LIMITS = {'label': 40, 'text': 160, 'when': 160, 'warn': 160, 'open_hint': 160, 'more': 600}
 # a step on a button whose anchor has one of these words must carry a ⚠ warning

@@ -539,7 +539,7 @@ export default function ReservationsKanban() {
               onChange={e => setDateTo(e.target.value)}
             />
             {(dateFrom || dateTo) && (
-              <button
+              <button data-tour="reservations-board-dates-clear"
                 onClick={() => { setDateFrom(''); setDateTo('') }}
                 className="text-gray-400 hover:text-gray-600 transition-colors text-base leading-none"
                 title="مسح التواريخ"
@@ -557,7 +557,7 @@ export default function ReservationsKanban() {
       ) : reservationsError ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-sm">
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3">حدث خطأ أثناء تحميل الحجوزات.</div>
-          <button className="px-3 py-1.5 rounded-lg border border-red-300 text-red-700 hover:bg-red-50" onClick={() => reservationsQuery.refetch()}>
+          <button data-tour="reservations-board-retry" className="px-3 py-1.5 rounded-lg border border-red-300 text-red-700 hover:bg-red-50" onClick={() => reservationsQuery.refetch()}>
             إعادة المحاولة
           </button>
         </div>

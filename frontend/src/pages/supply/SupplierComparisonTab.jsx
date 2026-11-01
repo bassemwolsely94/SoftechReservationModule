@@ -35,7 +35,7 @@ const day = (iso) => (iso ? String(iso).slice(0, 10) : '—')
 
 function Tile({ label, value, tone = '', active, onClick }) {
   return (
-    <button type="button" onClick={onClick}
+    <button data-tour="purchasing-supply-compare-tile" type="button" onClick={onClick}
       className={`rounded-lg border px-3 py-2 min-w-[8rem] text-right transition ${active ? 'border-primary bg-primary/5' : 'border-line bg-surface hover:border-primary/40'} ${tone}`}>
       <div className="text-[11px] text-content/60">{label}</div>
       <div className="text-lg font-semibold tabular-nums text-content">{value ?? 0}</div>
@@ -170,7 +170,7 @@ export default function SupplierComparisonTab() {
         </select>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث بالصنف أو الكود… (* أو %)"
           className={`${inputCls} text-xs w-56`} />
-        <button type="button" className={btnGhost} disabled={!d || xl.isPending} onClick={() => xl.mutate()}>
+        <button data-tour="purchasing-supply-compare-export" type="button" className={btnGhost} disabled={!d || xl.isPending} onClick={() => xl.mutate()}>
           {xl.isPending ? 'جارٍ التجهيز…' : 'تصدير Excel'}</button>
         <span className="text-[11px] text-content/50 ms-auto">
           التكلفة من مشترياتنا الفعلية (خصم من سعر الجمهور الحالي) + بونص القائمة · الأفضل أرخص بأكثر من {d?.better_pct ?? 1}% أو ببونص

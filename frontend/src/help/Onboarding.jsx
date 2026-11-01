@@ -222,7 +222,7 @@ export function Quiz({ moduleKey, lang, onBack }) {
       })}
       {result
         ? <button type="button" onClick={retry} className="text-sm border border-line rounded-lg px-4 py-2 hover:bg-surface-2">{en(lang) ? 'Try again' : 'حاول تاني'}</button>
-        : <button type="button" disabled={busy || answered < data.questions.length} onClick={submit}
+        : <button data-tour="general-help-center-quiz-submit" type="button" disabled={busy || answered < data.questions.length} onClick={submit}
                   className="text-sm bg-brand-600 text-white rounded-lg px-4 py-2 disabled:opacity-50">
             {en(lang) ? `Submit (${answered}/${data.questions.length})` : `تسليم (${answered}/${data.questions.length})`}
           </button>}
@@ -265,7 +265,7 @@ export function TeamProgress() {
           الواقفين بس ({(data || []).filter((r) => r.stuck).length})
         </label>
         {remindable.length > 0 && (
-          <button type="button" disabled={busy} onClick={() => remind(remindable.map((r) => r.id))}
+          <button data-tour="general-help-center-team-remind-all" type="button" disabled={busy} onClick={() => remind(remindable.map((r) => r.id))}
                   className="text-xs border border-amber-300 bg-amber-50 text-amber-800 rounded-lg px-2.5 py-1 hover:bg-amber-100 disabled:opacity-50">
             🔔 تذكير كل الواقفين ({remindable.length})
           </button>
@@ -296,7 +296,7 @@ export function TeamProgress() {
               {r.stuck && <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded px-1.5">⏳ واقف</span>}
               {r.stuck && (cooled(r)
                 ? <span className="text-[10px] text-faint" title={new Date(r.last_reminded_at).toLocaleString('ar-EG-u-nu-latn')}>اتذكّر ✓</span>
-                : <button type="button" disabled={busy} onClick={() => remind([r.id])}
+                : <button data-tour="general-help-center-team-remind" type="button" disabled={busy} onClick={() => remind([r.id])}
                           className="text-xs border border-line rounded-lg px-2 py-0.5 text-brand-700 hover:bg-brand-50 disabled:opacity-50">🔔 تذكير</button>)}
             </span>
           </div>
@@ -317,7 +317,7 @@ function ShowFirstDayAgain({ lang }) {
   if (!data?.hidden || data.progress.percent >= 100) return null
   const show = async () => { await helpApi.hideFirstDay(false); qc.invalidateQueries({ queryKey: ['help', 'first-day'] }) }
   return (
-    <button type="button" onClick={show}
+    <button data-tour="general-help-center-show-start-cards" type="button" onClick={show}
             className="text-xs border border-line rounded-lg px-3 py-1.5 text-brand-600 hover:bg-brand-50">
       👋 {en(lang) ? 'Show the start cards on Home' : 'إظهار كروت «ابدأ من هنا» في الرئيسية'}
     </button>

@@ -127,7 +127,7 @@ function RebalanceModal({ row, fromBranch, onClose }) {
                         {done[p.to_branch] ? (
                           <span className="text-green-600 text-xs">✓ تم إنشاء الطلب</span>
                         ) : (
-                          <button
+                          <button data-tour="batches-main-rebalance-create"
                             onClick={() => createTransfer.mutate(p)}
                             disabled={createTransfer.isPending}
                             className="px-3 py-1 text-xs bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50">
@@ -442,7 +442,7 @@ function PurchaseExpiryAuditTab() {
           ) : <span className="text-gray-400">لم تُنفّذ مزامنة بعد — شغّل المزامنة لجلب بيانات الشراء (٣ سنوات).</span>}
         </div>
         {canSync && (
-          <button
+          <button data-tour="batches-main-audit-sync"
             onClick={() => sync.mutate()}
             disabled={sync.isPending || isRunning}
             className="px-4 py-2 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50"
@@ -561,14 +561,14 @@ function PurchaseExpiryAuditTab() {
               </>}
             </p>
             <div className="flex items-center gap-2">
-              <button
+              <button data-tour="batches-main-audit-export"
                 onClick={() => exportXlsx.mutate()}
                 disabled={exportXlsx.isPending || displayRows.length === 0}
                 className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
               >
                 {exportXlsx.isPending ? 'جاري التصدير…' : '⬇️ تصدير Excel'}
               </button>
-              <button
+              <button data-tour="batches-main-audit-count"
                 onClick={() => spawn.mutate()}
                 disabled={spawn.isPending || !branch || displayRows.length === 0}
                 title={!branch ? 'اختر فرعًا لبدء جرد مادي' : ''}
@@ -673,7 +673,7 @@ function PurchaseExpiryAuditTab() {
                     <td className="px-3 py-3">{r.entry_count}</td>
                     <td className="px-3 py-3">
                       <div className="flex items-center gap-1">
-                        <button onClick={() => setRebal(r)}
+                        <button data-tour="batches-main-audit-rebalance" onClick={() => setRebal(r)}
                                 className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50"
                                 title="اقتراح إعادة توزيع بين الفروع">↔ تحويل</button>
                         {mdEnabled && r.markdown_discount_pct != null && (
@@ -751,7 +751,7 @@ function SupplierScorecardTab() {
                  onChange={e => setMonthsBack(e.target.value)}
                  placeholder="الكل" className="border rounded-lg px-3 py-2 w-28" />
         </label>
-        <button onClick={() => refetch()} disabled={isFetching}
+        <button data-tour="batches-main-scorecard-refresh" onClick={() => refetch()} disabled={isFetching}
                 className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50">
           {isFetching ? 'جاري…' : 'تحديث'}
         </button>
@@ -843,7 +843,7 @@ function ProcurementReviewTab() {
           <input type="checkbox" checked={reviewOnly} onChange={e => setReviewOnly(e.target.checked)} />
           للمراجعة فقط
         </label>
-        <button onClick={() => refetch()} disabled={isFetching}
+        <button data-tour="batches-main-prone-refresh" onClick={() => refetch()} disabled={isFetching}
                 className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50">
           {isFetching ? 'جاري…' : 'تحديث'}
         </button>
@@ -1239,7 +1239,7 @@ function DisposalModal({ row, branch, onClose }) {
             {err && <p className="text-red-600 text-sm mb-2">{err}</p>}
             <div className="flex justify-end gap-2">
               <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>
-              <button onClick={() => create.mutate()} disabled={create.isPending || !bc || !(Number(qty) > 0)}
+              <button data-tour="batches-main-disposal-save" onClick={() => create.mutate()} disabled={create.isPending || !bc || !(Number(qty) > 0)}
                       className="px-5 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50">
                 {create.isPending ? 'جاري…' : 'تسجيل القرار'}
               </button>
@@ -1297,7 +1297,7 @@ function DisposalTab() {
           </select>
           <span className="text-gray-600">العدد: <b>{fmtInt(rows.length)}</b> · القيمة: <b className="text-red-600">{fmtNum(totalVal)} ج</b></span>
         </div>
-        <button onClick={() => exp.mutate()} disabled={exp.isPending || rows.length === 0}
+        <button data-tour="batches-main-disposal-export" onClick={() => exp.mutate()} disabled={exp.isPending || rows.length === 0}
                 className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
           ⬇️ تصدير / طباعة
         </button>
@@ -1337,7 +1337,7 @@ function DisposalTab() {
                       {r.status === 'approved' && canApprove &&
                         <button data-tour="batches-main-disposal-done" onClick={() => setStatus.mutate({ id: r.id, status: 'done' })} className="px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700">تم التنفيذ</button>}
                       {r.status !== 'cancelled' && r.status !== 'done' &&
-                        <button onClick={() => setStatus.mutate({ id: r.id, status: 'cancelled' })} className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50">إلغاء</button>}
+                        <button data-tour="batches-main-disposal-cancel" onClick={() => setStatus.mutate({ id: r.id, status: 'cancelled' })} className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50">إلغاء</button>}
                     </div>
                   </td>
                 </tr>

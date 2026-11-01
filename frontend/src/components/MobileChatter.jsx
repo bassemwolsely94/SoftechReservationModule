@@ -61,7 +61,7 @@ export default function MobileChatter({ messages = [], onSend, title = '💬 ا�
             onChange={e => setText(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') send() }}
           />
-          <button onClick={send} disabled={busy || !text.trim()}
+          <button data-tour="mchatter-send" onClick={send} disabled={busy || !text.trim()}
             className="btn-primary text-sm py-2 px-4 disabled:opacity-50">
             {busy ? '...' : 'إرسال'}
           </button>

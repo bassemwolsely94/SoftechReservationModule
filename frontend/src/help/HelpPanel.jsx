@@ -214,7 +214,7 @@ function PanelBody() {
             <Link to="/help" onClick={close} className="text-brand-600 hover:underline">{label('openCenter', lang)}</Link>
             <Link to="/help?tab=path" onClick={close} className="text-brand-600 hover:underline">🎓 {lang === 'en' ? 'My path' : 'مساري'}</Link>
             {data?.can_edit && !term && (
-              <button type="button" onClick={() => setEditing(true)} className="ms-auto text-brand-600 hover:underline">
+              <button data-tour="help-panel-edit" type="button" onClick={() => setEditing(true)} className="ms-auto text-brand-600 hover:underline">
                 ✏️ {label('edit', lang)}
               </button>
             )}
@@ -237,7 +237,7 @@ export function FlowList({ flows, role, lang, onStart, mobile = null }) {
         🧭 {lang === 'en' ? 'Workflow tours (across screens)' : 'جولات دورة العمل (بين الشاشات)'}
       </h3>
       {mine.map((f) => (
-        <button key={f.id} type="button" onClick={() => onStart(f.id, f.steps, [], f.title)}
+        <button data-tour="help-panel-flow" key={f.id} type="button" onClick={() => onStart(f.id, f.steps, [], f.title)}
                 className="w-full text-start rounded-lg border border-line px-3 py-2 hover:border-brand-300 hover:bg-brand-50">
           <div className="text-sm font-semibold text-content">{f.mobile ? '📱' : '👆'} {pick(f.title, lang)}</div>
           {f.summary && <div className="text-xs text-muted leading-5">{pick(f.summary, lang)}</div>}

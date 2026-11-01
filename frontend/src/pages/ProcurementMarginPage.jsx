@@ -205,7 +205,7 @@ function PriceControlTab() {
             className="w-16 border border-gray-300 rounded px-2 py-1 text-sm text-center"
           />
         </label>
-        <button onClick={load} className="px-3 py-1.5 text-sm bg-brand-600 text-white rounded-lg">
+        <button data-tour="purchasing-margins-price-apply" onClick={load} className="px-3 py-1.5 text-sm bg-brand-600 text-white rounded-lg">
           تطبيق
         </button>
       </div>

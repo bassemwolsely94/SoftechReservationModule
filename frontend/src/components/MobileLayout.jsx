@@ -127,7 +127,7 @@ export default function MobileLayout({ title = 'صيدليات الرزيقي', 
               </span>
             )}
           </button>
-          <button
+          <button data-tour="mshell-logout"
             onClick={() => { logout(); navigate('/login') }}
             className="text-xs bg-white/15 hover:bg-white/25 active:bg-white/30 rounded-lg px-3 py-1.5 font-medium"
           >

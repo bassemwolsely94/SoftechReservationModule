@@ -213,7 +213,7 @@ function InputsTab() {
           <label className="flex flex-col text-xs">التاريخ<input type="date" value={ob.as_of} onChange={set(setOb, 'as_of')} className="border rounded px-1 py-1" /></label>
           <label className="flex flex-col text-xs">الرصيد<input type="number" step="1000" value={ob.amount} onChange={set(setOb, 'amount')} className="w-32 border rounded px-1 py-1" /></label>
           <label className="flex flex-col text-xs flex-1">الخزائن والبنوك<input value={ob.note} onChange={set(setOb, 'note')} className="border rounded px-1 py-1" /></label>
-          <button disabled={!ob.amount} onClick={() => addOb.mutate()} className="px-3 py-1.5 rounded-lg bg-brand-600 text-white disabled:opacity-40">حفظ</button>
+          <button data-tour="finance-cash-opening-save" disabled={!ob.amount} onClick={() => addOb.mutate()} className="px-3 py-1.5 rounded-lg bg-brand-600 text-white disabled:opacity-40">حفظ</button>
         </div>
         <table className="w-full text-xs">
           <thead className="text-gray-500"><tr><th className="text-right p-1">التاريخ</th><th className="text-right p-1">الرصيد</th><th className="text-right p-1">بيان</th><th className="text-right p-1">أدخله</th></tr></thead>
@@ -231,7 +231,7 @@ function InputsTab() {
           <label className="flex flex-col text-xs">التكرار<select value={nf.frequency} onChange={set(setNf, 'frequency')} className="border rounded px-1 py-1">{freqs.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
           {nf.frequency === 'monthly' && <label className="flex flex-col text-xs">يوم الشهر<input type="number" min="1" max="31" step="1" value={nf.day_of_month} onChange={set(setNf, 'day_of_month')} className="w-16 border rounded px-1 py-1" /></label>}
           {nf.frequency === 'one_off' && <label className="flex flex-col text-xs">التاريخ<input type="date" value={nf.date} onChange={set(setNf, 'date')} className="border rounded px-1 py-1" /></label>}
-          <button disabled={!nf.label || !nf.amount} onClick={() => addF.mutate()} className="px-3 py-1.5 rounded-lg bg-brand-600 text-white disabled:opacity-40">إضافة</button>
+          <button data-tour="finance-cash-fixed-add" disabled={!nf.label || !nf.amount} onClick={() => addF.mutate()} className="px-3 py-1.5 rounded-lg bg-brand-600 text-white disabled:opacity-40">إضافة</button>
         </div>
         <table className="w-full text-xs">
           <thead className="text-gray-500"><tr><th className="text-right p-1">البيان</th><th className="text-right p-1">الفئة</th><th className="text-right p-1">المبلغ</th><th className="text-right p-1">التكرار</th><th className="text-right p-1">فعّال</th></tr></thead>

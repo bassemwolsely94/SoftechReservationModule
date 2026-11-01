@@ -304,6 +304,24 @@ class HelpContentCoverageTests(SimpleTestCase):
                     for i, st in enumerate(j['steps']) if 'label' not in st]
         self.assertEqual(missing, [], 'Steps without a «label» (the element\'s name as on screen)')
 
+    def test_hints_valid(self):
+        """A screen's `hints` (buttons «💡 تلميحات الأزرار» explains outside the tour): rich
+        steps with a «label», a real anchor, no anchor twice and none already in the tour."""
+        anchors = self._anchors()
+        bad = []
+        for key, s in self.screens.items():
+            seen = {st['target'] for st in s.get('tour') or []}
+            for i, st in enumerate(s.get('hints') or []):
+                where = f'{key}.hints[{i}]'
+                self._check_rich_step(where, st, registry.HINT_STEP_KEYS)
+                self.assertIn('label', st, f'{where}: no «label»')
+                if st['target'] not in anchors:
+                    bad.append(f'{where}: no data-tour="{st["target"]}" in frontend/src')
+                if st['target'] in seen:
+                    bad.append(f'{where}: {st["target"]} is already a tour step or a hint')
+                seen.add(st['target'])
+        self.assertEqual(bad, [], 'Broken hints')
+
     def test_every_module_has_a_brief(self):
         """«🚀 جولة في النظام» shows each module's one-line brief — short and bilingual."""
         for key, m in self.modules.items():

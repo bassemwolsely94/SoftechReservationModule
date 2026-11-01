@@ -152,7 +152,7 @@ export default function ReplacementNewCasePage() {
           <input value={pic} onChange={(e) => setPic(e.target.value)} placeholder="كود المريض PIC أو الموبايل"
                  onKeyDown={(e) => { if (e.key === 'Enter') { setLookupPic(pic.trim()); setSale(null); setPicked({}) } }}
                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono w-56" />
-          <button type="button" onClick={() => { setLookupPic(pic.trim()); setSale(null); setPicked({}) }}
+          <button data-tour="replacement-new-lookup-sales" type="button" onClick={() => { setLookupPic(pic.trim()); setSale(null); setPicked({}) }}
                   className="text-sm px-3 py-1.5 rounded-lg border border-gray-300">عرض روشتات التعاقد للمريض</button>
           {sales.isFetching && <span className="text-xs text-gray-400">جارٍ البحث…</span>}
         </div>

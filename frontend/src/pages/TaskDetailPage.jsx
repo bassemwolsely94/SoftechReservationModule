@@ -129,7 +129,7 @@ function Chatter({ taskId, messages, onRefresh }) {
           onChange={e => setBody(e.target.value)}
           onKeyDown={handleKey}
         />
-        <button
+        <button data-tour="tasks-detail-comment-send"
           onClick={send}
           disabled={sending || !body.trim()}
           className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-40 self-end"
@@ -209,7 +209,7 @@ function Checklist({ taskId, items, onRefresh }) {
                 </p>
               )}
             </div>
-            <button
+            <button data-tour="tasks-detail-checklist-delete"
               onClick={() => deleteItem(item)}
               className="opacity-0 group-hover:opacity-100 text-xs text-red-400 hover:text-red-600"
             >✕</button>
@@ -227,7 +227,7 @@ function Checklist({ taskId, items, onRefresh }) {
           onChange={e => setNewName(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && addItem()}
         />
-        <button
+        <button data-tour="tasks-detail-checklist-add"
           onClick={addItem}
           disabled={adding || !newName.trim()}
           className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-40"
@@ -288,7 +288,7 @@ function Attachments({ taskId, attachments, onRefresh }) {
                 {att.file_size && ` · ${(att.file_size / 1024).toFixed(0)} KB`}
               </p>
             </div>
-            <button
+            <button data-tour="tasks-detail-attachment-delete"
               onClick={() => remove(att)}
               className="opacity-0 group-hover:opacity-100 text-xs text-red-400 hover:text-red-600"
             >✕</button>
@@ -296,7 +296,7 @@ function Attachments({ taskId, attachments, onRefresh }) {
         ))}
       </div>
       <input ref={fileRef} type="file" className="hidden" onChange={upload} />
-      <button
+      <button data-tour="tasks-detail-attachment-upload"
         onClick={() => fileRef.current?.click()}
         disabled={uploading}
         className="w-full py-2 text-sm border-2 border-dashed border-gray-200 text-gray-500 rounded-lg hover:border-brand-300 hover:text-brand-600 transition-colors disabled:opacity-40"
@@ -352,7 +352,7 @@ function AssignmentsPanel({ taskId, assignments, staff, onRefresh }) {
               <p className="text-xs text-gray-400">{ROLES[a.role] || a.role}</p>
             </div>
             {a.is_completed && <span className="text-xs text-green-600">✓</span>}
-            <button onClick={() => remove(a.id)} className="opacity-0 group-hover:opacity-100 text-xs text-red-400 hover:text-red-600">✕</button>
+            <button data-tour="tasks-detail-team-remove" onClick={() => remove(a.id)} className="opacity-0 group-hover:opacity-100 text-xs text-red-400 hover:text-red-600">✕</button>
           </div>
         ))}
       </div>
@@ -368,7 +368,7 @@ function AssignmentsPanel({ taskId, assignments, staff, onRefresh }) {
         <select className="w-24 border rounded-lg px-2 py-1.5 text-sm text-right" value={role} onChange={e => setRole(e.target.value)}>
           {Object.entries(ROLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
-        <button
+        <button data-tour="tasks-detail-team-add"
           onClick={add}
           disabled={adding || !staffId}
           className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-40"
@@ -731,7 +731,7 @@ export default function TaskDetailPage() {
           {task.related_model && task.related_id && (
             <div className="bg-white rounded-xl border border-gray-200 p-4 text-right">
               <p className="text-xs text-gray-500 mb-1">مرتبط بـ</p>
-              <button
+              <button data-tour="tasks-detail-related"
                 onClick={() => navigate(`/${task.related_model}s/${task.related_id}`)}
                 className="text-sm text-brand-600 hover:underline"
               >

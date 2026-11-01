@@ -60,7 +60,7 @@ export default function PicHistoryModal({ customerId, name, onAdd, onClose }) {
                         <span className="text-gray-400">×{Number(l.quantity)}</span>
                         <span className="tabnum text-gray-500">{money(l.line_total)}</span>
                         {onAdd && l.item_softech_id && !ret && (
-                          <button onClick={() => onAdd(l.item_softech_id)}
+                          <button data-tour="pos-order-history-add" onClick={() => onAdd(l.item_softech_id)}
                                   title="إضافة للسلة" className="text-brand-600 hover:text-brand-800 font-bold">+ إضافة</button>
                         )}
                       </div>

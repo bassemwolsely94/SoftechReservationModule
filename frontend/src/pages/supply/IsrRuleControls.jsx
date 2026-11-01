@@ -111,7 +111,7 @@ export function IsrRulePanel({ opts, st, setSt, reset }) {
             لا تتجاوز رصيد الرئيسي
           </label>
         </fieldset>
-        {changed && <button type="button" onClick={reset} className="text-xs text-primary underline mb-1">إعدادات SOFTECH الافتراضية</button>}
+        {changed && <button data-tour="purchasing-supply-isr-rule-reset" type="button" onClick={reset} className="text-xs text-primary underline mb-1">إعدادات SOFTECH الافتراضية</button>}
       </div>
 
       <details open={active > 0}>

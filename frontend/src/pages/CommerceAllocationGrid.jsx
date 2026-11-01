@@ -97,7 +97,7 @@ export default function CommerceAllocationGrid({ doc, onTotals }) {
                 ))}
                 <td className="px-3 py-2 text-left font-mono font-semibold">{fmt(row.total_qty)}</td>
                 <td className="px-3 py-2 text-left font-mono font-semibold text-gray-900">{fmt(row.line_total)}</td>
-                <td className="px-2 py-2 text-left"><button onClick={() => delItem(row.line_id)} className="text-red-500 hover:text-red-700 text-xs">حذف</button></td>
+                <td className="px-2 py-2 text-left"><button data-tour="commerce-editor-grid-delete-item" onClick={() => delItem(row.line_id)} className="text-red-500 hover:text-red-700 text-xs">حذف</button></td>
               </tr>
             ))}
             {/* Add-item row */}
@@ -112,7 +112,7 @@ export default function CommerceAllocationGrid({ doc, onTotals }) {
               </td>
               <td colSpan={locs.length + 2} className="px-3 py-2 text-gray-400 text-xs">أضف الصنف ثم وزّع الكميات على الفروع</td>
               <td className="px-2 py-2 text-left">
-                <button onClick={addItem} disabled={busy || !draft.item_name.trim()}
+                <button data-tour="commerce-editor-grid-add-item" onClick={addItem} disabled={busy || !draft.item_name.trim()}
                   className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50">إضافة</button>
               </td>
             </tr>

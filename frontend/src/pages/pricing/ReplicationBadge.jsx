@@ -61,11 +61,11 @@ export default function ReplicationBadge({ requestId, isAdmin }) {
           ))}
           {isAdmin && data && !data.fully_replicated && (
             <div className="pt-1.5 mt-1 border-t flex gap-1.5">
-              <button onClick={() => force.mutate('restamp')} disabled={force.isPending}
+              <button data-tour="pricing-approvals-badge-resync" onClick={() => force.mutate('restamp')} disabled={force.isPending}
                 className="flex-1 bg-amber-600 text-white rounded px-2 py-1 hover:bg-amber-700 disabled:opacity-60">
                 إعادة مزامنة (الدورة)
               </button>
-              <button onClick={() => force.mutate('both')} disabled={force.isPending}
+              <button data-tour="pricing-approvals-badge-fix-now" onClick={() => force.mutate('both')} disabled={force.isPending}
                 className="flex-1 bg-blue-600 text-white rounded px-2 py-1 hover:bg-blue-700 disabled:opacity-60">
                 فوري
               </button>

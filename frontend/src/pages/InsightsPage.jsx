@@ -210,7 +210,7 @@ export default function InsightsPage() {
             const curYm = range.start.slice(0, 7)
             const thisYm = isoToday().slice(0, 7)
             return (
-              <div className="flex items-center gap-1 text-sm text-gray-500">
+              <div data-tour="analytics-insights-month" className="flex items-center gap-1 text-sm text-gray-500">
                 <button type="button" onClick={() => setRange(mtdBounds(shiftYm(curYm, -1)))}
                   className="px-2 py-1 rounded-md hover:bg-gray-100 text-gray-600" title="الشهر السابق">‹</button>
                 <input type="month" value={curYm} max={thisYm}
@@ -399,7 +399,7 @@ function RulesEditor() {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-1">
+                  <div data-tour="analytics-insights-rule-periods" className="flex items-center gap-1">
                     {PERIOD_KEYS.map(p => {
                       const on = d.periods.split(',').includes(p)
                       return (
@@ -508,7 +508,7 @@ function ReportView({ id }) {
       ) : (<>
       <div data-tour="analytics-insights-report" className="bg-white rounded-2xl border border-gray-100 p-4">
         <div className="flex items-center justify-between mb-3">
-          <div className="flex rounded-lg bg-gray-100 p-0.5 text-sm">
+          <div data-tour="analytics-insights-lang" className="flex rounded-lg bg-gray-100 p-0.5 text-sm">
             <button onClick={() => setLang('ar')} className={`px-3 py-1 rounded-md ${lang === 'ar' ? 'bg-white shadow font-bold' : 'text-gray-500'}`}>عربي</button>
             <button onClick={() => setLang('en')} className={`px-3 py-1 rounded-md ${lang === 'en' ? 'bg-white shadow font-bold' : 'text-gray-500'}`}>English</button>
           </div>
@@ -526,7 +526,7 @@ function ReportView({ id }) {
         <div className="bg-white rounded-2xl border border-gray-100 p-4" data-tour="analytics-insights-findings">
           <div className="flex items-center justify-between mb-2">
             <div className="font-bold text-gray-800 text-sm">الملاحظات ({rep.findings.length})</div>
-            <button onClick={copyFindings} className="text-xs px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">
+            <button data-tour="analytics-insights-copy-findings" onClick={copyFindings} className="text-xs px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">
               {copiedF ? '✓ نُسخ' : '📋 نسخ الملاحظات'}
             </button>
           </div>

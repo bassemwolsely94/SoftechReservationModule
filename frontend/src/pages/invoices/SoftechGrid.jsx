@@ -345,7 +345,7 @@ export default function SoftechGrid({ invoiceId, editable = true, onChanged }) {
                         </span>
                       )}
                       {editable && (
-                        <button onClick={() => setPickFor(pickFor === row.line_id ? null : row.line_id)}
+                        <button data-tour="invoices-main-grid-pick-item" onClick={() => setPickFor(pickFor === row.line_id ? null : row.line_id)}
                           className="text-[11px] text-brand-600 hover:text-brand-700 font-medium">
                           {row.item_id ? 'تغيير' : '🔍 اختر'}
                         </button>
@@ -363,7 +363,7 @@ export default function SoftechGrid({ invoiceId, editable = true, onChanged }) {
                     {priceChanged && (
                       <div className="mt-0.5 flex items-center gap-1 justify-center">
                         <span className="text-[9px] text-gray-400 line-through">{n(row.price.catalog_price, 2)}</span>
-                        <button onClick={() => setPriceAction(row.line_id, row.price_action === 'use_new' ? 'keep_old' : 'use_new')}
+                        <button data-tour="invoices-main-grid-new-price" onClick={() => setPriceAction(row.line_id, row.price_action === 'use_new' ? 'keep_old' : 'use_new')}
                           className={`text-[9px] px-1 rounded ${row.price_action === 'use_new' ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-500'}`}
                           title="تحديث سعر البيع للجمهور في الكتالوج (قرار فقط — يُنفَّذ لاحقاً باعتماد)">
                           {row.price_action === 'use_new' ? '✓ سعر جديد' : 'سعر جديد؟'}

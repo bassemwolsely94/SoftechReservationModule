@@ -66,7 +66,7 @@ export default function CustomerTypePicker({ P, compact = false, dense = false, 
             {explicitPic && <button onClick={() => P.setPicCustomer(null)} className="text-gray-400 hover:text-red-500">✕</button>}
           </span>
         ) : (
-          <button onClick={onOpenPic} title={picRequired ? '③ العميل الفعلي (PIC) — مطلوب قبل الإرسال' : '③ العميل الفعلي (PIC) — اختياري (لسحب التاريخ والاقتراحات)'}
+          <button data-tour="pos-order-pic" onClick={onOpenPic} title={picRequired ? '③ العميل الفعلي (PIC) — مطلوب قبل الإرسال' : '③ العميل الفعلي (PIC) — اختياري (لسحب التاريخ والاقتراحات)'}
                   data-pos-flow="pic" {...(flow?.pic || {})}
                   className={`h-8 px-2 rounded text-xs border shrink-0 ${picRequired ? 'text-red-700 border-red-300 bg-red-50 font-semibold' : 'text-gray-600 bg-white hover:bg-gray-50'}`}>
             🪪 PIC{picRequired ? ' *' : ''}
@@ -133,7 +133,7 @@ export default function CustomerTypePicker({ P, compact = false, dense = false, 
                 {picRequired ? 'لم يُحدد عميل PIC بعد' : 'اختر الشخص لسحب مشترياته السابقة واقتراحاته'}
               </div>
             )}
-            <button onClick={onOpenPic} className="px-3 py-1.5 rounded text-white text-sm shrink-0" style={{ background: '#022871' }}>
+            <button data-tour="pos-order-pic-search" onClick={onOpenPic} className="px-3 py-1.5 rounded text-white text-sm shrink-0" style={{ background: '#022871' }}>
               {accountPic ? '🔍 شخص مختلف' : '🔍 بحث / اختيار / إضافة'}
             </button>
           </div>

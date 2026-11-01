@@ -24,10 +24,10 @@ function Box({ title, children, tone = 'border-gray-200' }) {
   )
 }
 
-function Btn({ children, onClick, disabled, kind = 'primary' }) {
+function Btn({ children, onClick, disabled, kind = 'primary', 'data-tour': dataTour }) {
   const cls = kind === 'primary' ? 'bg-blue-600 text-white' : kind === 'danger' ? 'border border-rose-300 text-rose-700'
     : kind === 'ok' ? 'bg-emerald-600 text-white' : 'border border-gray-300 text-gray-700'
-  return <button type="button" disabled={disabled} onClick={onClick}
+  return <button type="button" data-tour={dataTour} disabled={disabled} onClick={onClick}
                  className={`text-sm px-3 py-1.5 rounded-lg disabled:opacity-40 ${cls}`}>{children}</button>
 }
 
@@ -40,7 +40,7 @@ function NativeDocLink({ label, branchcode, busy, onLink }) {
       <input value={d.branchcode} onChange={(e) => setD({ ...d, branchcode: e.target.value })} className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-16" />
       <input value={d.docnumber} onChange={(e) => setD({ ...d, docnumber: e.target.value })} placeholder="رقم المستند" className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-32 font-mono" />
       <input type="date" value={d.docdate} onChange={(e) => setD({ ...d, docdate: e.target.value })} className="border border-gray-300 rounded-lg px-2 py-1 text-sm" />
-      <Btn kind="ghost" disabled={busy || !d.docnumber || !d.docdate} onClick={() => onLink(d)}>ربط</Btn>
+      <Btn data-tour="replacement-detail-native-link" kind="ghost" disabled={busy || !d.docnumber || !d.docdate} onClick={() => onLink(d)}>ربط</Btn>
     </div>
   )
 }
@@ -74,9 +74,9 @@ function PosOrderFunding({ c, busy, onDone }) {
                 <Chip tone="emerald">مموّل: {o.funded_by.map((f) => `${f.case} ${money(f.amount)}`).join('، ')}</Chip>
                 <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="سبب إلغاء التمويل"
                        className="border border-gray-300 rounded-lg px-2 py-1 text-xs w-40" />
-                <Btn kind="danger" disabled={busy || unfund.isPending || !reason.trim()} onClick={() => unfund.mutate(o.id)}>إلغاء التمويل</Btn>
+                <Btn data-tour="replacement-detail-unfund-order" kind="danger" disabled={busy || unfund.isPending || !reason.trim()} onClick={() => unfund.mutate(o.id)}>إلغاء التمويل</Btn>
               </>
-            : <Btn kind="ghost" disabled={busy || fund.isPending} onClick={() => fund.mutate(o.id)}>تمويل من الرصيد</Btn>}
+            : <Btn data-tour="replacement-detail-fund-order" kind="ghost" disabled={busy || fund.isPending} onClick={() => fund.mutate(o.id)}>تمويل من الرصيد</Btn>}
         </div>
       ))}
       {msg && <div className="text-xs text-rose-700">{msg}</div>}
@@ -110,7 +110,7 @@ function Reversals({ c, wf, can, busy, run, v }) {
                  className="border border-gray-300 rounded-lg px-2 py-1 text-sm flex-1 min-w-[180px]" />
           <input type="number" min="0" step="any" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })}
                  placeholder="القيمة (الرصيد كاملاً)" className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-36" />
-          <Btn kind="danger" disabled={busy || !f.reason.trim()} onClick={() => run(replacementApi.requestReversal, c.id, { ...v, ...f })}>طلب عكس</Btn>
+          <Btn data-tour="replacement-detail-reversal-request" kind="danger" disabled={busy || !f.reason.trim()} onClick={() => run(replacementApi.requestReversal, c.id, { ...v, ...f })}>طلب عكس</Btn>
         </div>
       )}
       {rows.map((r) => (
@@ -127,8 +127,8 @@ function Reversals({ c, wf, can, busy, run, v }) {
             <div className="flex gap-2 items-center">
               <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="ملاحظة (إلزامية عند الرفض)"
                      className="border border-gray-300 rounded px-2 py-0.5 text-xs flex-1" />
-              <Btn kind="ok" disabled={busy} onClick={() => run(replacementApi.actReversal, c.id, r.id, 'approve', { ...v, note })}>اعتماد</Btn>
-              <Btn kind="danger" disabled={busy || !note.trim()} onClick={() => run(replacementApi.actReversal, c.id, r.id, 'reject', { ...v, note })}>رفض</Btn>
+              <Btn data-tour="replacement-detail-reversal-approve" kind="ok" disabled={busy} onClick={() => run(replacementApi.actReversal, c.id, r.id, 'approve', { ...v, note })}>اعتماد</Btn>
+              <Btn data-tour="replacement-detail-reversal-reject" kind="danger" disabled={busy || !note.trim()} onClick={() => run(replacementApi.actReversal, c.id, r.id, 'reject', { ...v, note })}>رفض</Btn>
             </div>
           )}
           {r.instruction && (
@@ -141,7 +141,7 @@ function Reversals({ c, wf, can, busy, run, v }) {
             <div className="flex gap-2 items-center">
               <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="سبب الإلغاء"
                      className="border border-gray-300 rounded px-2 py-0.5 text-xs w-40" />
-              <Btn kind="ghost" disabled={busy || !note.trim()} onClick={() => run(replacementApi.actReversal, c.id, r.id, 'cancel', { ...v, note })}>إلغاء الطلب</Btn>
+              <Btn data-tour="replacement-detail-reversal-cancel" kind="ghost" disabled={busy || !note.trim()} onClick={() => run(replacementApi.actReversal, c.id, r.id, 'cancel', { ...v, note })}>إلغاء الطلب</Btn>
             </div>
           )}
         </div>
@@ -150,7 +150,7 @@ function Reversals({ c, wf, can, busy, run, v }) {
         <div className="flex gap-2 items-center flex-wrap">
           <input value={rej} onChange={(e) => setRej(e.target.value)} placeholder="تسجيل رفض شركة التأمين (للتقارير فقط)"
                  className="border border-gray-300 rounded-lg px-2 py-1 text-xs flex-1 min-w-[220px]" />
-          <Btn kind="ghost" disabled={busy || !rej.trim()} onClick={() => { run(replacementApi.insurerRejection, c.id, { ...v, note: rej }); setRej('') }}>تسجيل</Btn>
+          <Btn data-tour="replacement-detail-insurer-rejection" kind="ghost" disabled={busy || !rej.trim()} onClick={() => { run(replacementApi.insurerRejection, c.id, { ...v, note: rej }); setRej('') }}>تسجيل</Btn>
         </div>
       )}
     </div>
@@ -172,7 +172,7 @@ function CashPayouts({ c, wf, can, busy, run, v }) {
         <div className="flex gap-2 items-center flex-wrap">
           <input type="number" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)}
                  placeholder="المبلغ" className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-32" />
-          <Btn disabled={busy || !(Number(amount) > 0)} onClick={() => { run(replacementApi.requestPayout, c.id, { ...v, amount }); setAmount('') }}>
+          <Btn data-tour="replacement-detail-cash-request" disabled={busy || !(Number(amount) > 0)} onClick={() => { run(replacementApi.requestPayout, c.id, { ...v, amount }); setAmount('') }}>
             تعليمات صرف للكاشير</Btn>
         </div>
       )}
@@ -193,7 +193,7 @@ function CashPayouts({ c, wf, can, busy, run, v }) {
                 <div className="flex gap-2 items-center pt-1">
                   <input value={why} onChange={(e) => setWhy(e.target.value)} placeholder="سبب الإلغاء"
                          className="border border-gray-300 rounded px-2 py-0.5 text-xs w-40" />
-                  <Btn kind="danger" disabled={busy || !why.trim()} onClick={() => run(replacementApi.cancelPayout, c.id, p.id, { ...v, reason: why })}>إلغاء التعليمات</Btn>
+                  <Btn data-tour="replacement-detail-cash-cancel" kind="danger" disabled={busy || !why.trim()} onClick={() => run(replacementApi.cancelPayout, c.id, p.id, { ...v, reason: why })}>إلغاء التعليمات</Btn>
                 </div>
               )}
             </div>
@@ -202,7 +202,7 @@ function CashPayouts({ c, wf, can, busy, run, v }) {
             <div className="flex gap-2 items-center">
               <input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="مرجع / إيصال (اختياري)"
                      className="border border-gray-300 rounded px-2 py-0.5 text-xs w-48" />
-              <Btn kind="ok" disabled={busy} onClick={() => run(replacementApi.confirmPayout, c.id, p.id, { ...v, reference: ref })}>
+              <Btn data-tour="replacement-detail-cash-confirm" kind="ok" disabled={busy} onClick={() => run(replacementApi.confirmPayout, c.id, p.id, { ...v, reference: ref })}>
                 أؤكد تسليم المبلغ للمريض</Btn>
             </div>
           )}
@@ -351,9 +351,9 @@ export default function WorkflowPanel({ c }) {
                 <input value={link.branchcode} onChange={(e) => setLink({ ...link, branchcode: e.target.value })} className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-16" />
                 <input value={link.docnumber} onChange={(e) => setLink({ ...link, docnumber: e.target.value })} placeholder="رقم الفاتورة" className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-32 font-mono" />
                 <input type="date" value={link.docdate} onChange={(e) => setLink({ ...link, docdate: e.target.value })} className="border border-gray-300 rounded-lg px-2 py-1 text-sm" />
-                <Btn kind="ghost" disabled={busy || !link.docnumber || !link.docdate} onClick={() => run(replacementApi.linkContract, c.id, { ...v, ...link })}>ربط</Btn>
+                <Btn data-tour="replacement-detail-contract-link" kind="ghost" disabled={busy || !link.docnumber || !link.docdate} onClick={() => run(replacementApi.linkContract, c.id, { ...v, ...link })}>ربط</Btn>
                 {can.post && !opOf('contract_sale').length &&
-                  <Btn kind="ghost" disabled={busy} onClick={() => run(replacementApi.prepareContract, c.id, v)}>تجهيز بيع تعاقد</Btn>}
+                  <Btn data-tour="replacement-detail-contract-prepare" kind="ghost" disabled={busy} onClick={() => run(replacementApi.prepareContract, c.id, v)}>تجهيز بيع تعاقد</Btn>}
               </div>
             </div>
           )}

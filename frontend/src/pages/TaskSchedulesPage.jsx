@@ -259,7 +259,7 @@ export default function TaskSchedulesPage() {
           <div className="text-center py-16 text-gray-400">
             <div className="text-4xl mb-3">⏱</div>
             <p className="text-sm mb-3">لا توجد جداول بعد</p>
-            <button onClick={() => setShowForm(true)} className="text-sm text-brand-600 underline">إنشاء أول جدول</button>
+            <button data-tour="tasks-schedules-new" onClick={() => setShowForm(true)} className="text-sm text-brand-600 underline">إنشاء أول جدول</button>
           </div>
         ) : (
           <div data-tour="tasks-schedules-table" className="bg-white rounded-xl border border-gray-200 overflow-hidden">

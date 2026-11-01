@@ -52,10 +52,10 @@ export default function ColumnMapper({ preview, busy, error, onImport, onCancel 
         </table>
       </div>
       <div className="flex items-center gap-2">
-        <button type="button" className={btnPrimary} disabled={!hasName || busy}
+        <button data-tour="purchasing-supply-column-import" type="button" className={btnPrimary} disabled={!hasName || busy}
           onClick={() => onImport({ mapping, header_row: preview.header_row })}>
           {busy ? 'جارٍ الاستيراد…' : 'استيراد وحفظ ترتيب الأعمدة'}</button>
-        <button type="button" className={btnGhost} onClick={onCancel} disabled={busy}>إلغاء</button>
+        <button data-tour="purchasing-supply-column-cancel" type="button" className={btnGhost} onClick={onCancel} disabled={busy}>إلغاء</button>
         {!hasName && <span className="text-xs text-amber-700">حدد عمود «اسم الصنف».</span>}
         {error && <span className="text-xs text-rose-600">{error}</span>}
       </div>

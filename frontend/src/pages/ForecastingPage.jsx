@@ -135,7 +135,7 @@ export default function ForecastingPage() {
           <div className="text-center py-16 text-gray-400">
             <div className="text-4xl mb-3">📊</div>
             <p>لم يتم تشغيل أي تنبؤ بعد</p>
-            <button onClick={() => triggerRun.mutate()} disabled={triggerRun.isPending}
+            <button data-tour="analytics-forecasting-run" onClick={() => triggerRun.mutate()} disabled={triggerRun.isPending}
               className="mt-4 px-5 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700 disabled:opacity-50">
               تشغيل أول تنبؤ
             </button>
@@ -237,7 +237,7 @@ export default function ForecastingPage() {
           ) : seasonality.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
               <p>لا توجد مؤشرات موسمية بعد</p>
-              <button onClick={() => computeSeasonality.mutate()} disabled={computeSeasonality.isPending}
+              <button data-tour="analytics-forecasting-recompute" onClick={() => computeSeasonality.mutate()} disabled={computeSeasonality.isPending}
                 className="mt-4 px-5 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700 disabled:opacity-50">
                 حساب الموسمية
               </button>
