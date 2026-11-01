@@ -580,6 +580,25 @@ class ApiGuardTests(TestCase):
         # bypass fetch; here we assert the detector directly).
         self.assertEqual(len(find_duplicate_receipt(b, '900900')), 1)
 
+    def test_failed_runs_export_finds_the_claim(self):
+        # ?status=failed filters the RUNS, not the claim list — a draft claim must still be found
+        claim = _mk_claim(number='E1', sub=self.sub)
+        m.SoftechRepriceRun.objects.create(
+            claim=claim, docnumber='549566', branchcode='140', cust_branch_code='4227',
+            net_delta=Decimal('1.0'), status=m.SoftechRepriceRun.STATUS_FAILED)
+        r = self.api.get(f'/api/insurance/claims/{claim.id}/softech-reprice/runs/export/',
+                         {'status': 'failed'})
+        self.assertEqual(r.status_code, 200, r.content[:200])
+        self.assertTrue(r['Content-Type'].startswith('application/vnd.openxmlformats'))
+
+    def test_list_still_filters_by_status(self):
+        _mk_claim(number='S1', sub=self.sub)
+        _mk_claim(number='S2', sub=self.sub, status=m.InsuranceClaim.STATUS_SUBMITTED)
+        r = self.api.get('/api/insurance/claims/', {'status': m.InsuranceClaim.STATUS_SUBMITTED})
+        rows = r.json()
+        rows = rows.get('results', rows) if isinstance(rows, dict) else rows
+        self.assertEqual([c['claim_number'] for c in rows], ['S2'])
+
 
 # ── 7. RBAC — server-side module access ──────────────────────────────────────
 class RbacTests(TestCase):

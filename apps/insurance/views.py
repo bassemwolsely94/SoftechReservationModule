@@ -158,6 +158,9 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        # list filters only — on one claim ?status= belongs to the action (e.g. failed re-price runs)
+        if self.kwargs.get(self.lookup_url_kwarg or self.lookup_field):
+            return qs
         params = self.request.query_params
 
         client_id    = params.get('client_id')
