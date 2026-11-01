@@ -78,6 +78,9 @@ class JWTAuthMiddleware(BaseMiddleware):
                 **{api_settings.USER_ID_FIELD: user_id})
             if not account_active(user):        # a disabled account is refused at once (A-3/A-4)
                 return AnonymousUser()
+            from apps.access.devices import is_revoked
+            if is_revoked(AccessToken(token).get('dev')):   # a blocked/retired device keeps no socket (N2)
+                return AnonymousUser()
             return user
 
         except Exception as exc:

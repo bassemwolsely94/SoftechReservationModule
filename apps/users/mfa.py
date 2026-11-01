@@ -213,7 +213,7 @@ def blocked_device_response(request, profile):
     from apps.access import devices
     if request is None or not devices.blocked_cookie(request):
         return None
-    _log('login_failed', profile, request, note='device_blocked')
+    _log('login_refused_device', profile, request)   # not login_failed: never counts toward lockout
     return Response({'error': devices.BLOCKED_MESSAGE}, status=status.HTTP_401_UNAUTHORIZED)
 
 

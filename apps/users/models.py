@@ -92,6 +92,7 @@ USER_ACTIVITY_ACTION_CHOICES = [
     ('mfa_challenge',       'طلب رمز التحقق'),
     ('mfa_devices_forgotten', 'إلغاء الأجهزة المحفوظة'),
     ('device_status',       'تغيير حالة جهاز'),
+    ('login_refused_device', 'دخول مرفوض: جهاز موقوف'),
 ]
 
 # Roles that must pass 2FA at login once enforcement is switched on

@@ -10,6 +10,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.utils import timezone
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # ── Gap-1: Brute-force throttle on login ──────────────────────────────────────
@@ -203,7 +206,7 @@ def login_view(request):
 
     from apps.access import devices as _devices
     if _devices.blocked_cookie(request):         # a blocked device signs nobody in (N2)
-        _log_auth('login_failed', profile, ip, note='device_blocked', request=request)
+        _log_auth('login_refused_device', profile, ip, request=request)   # not login_failed: never counts toward lockout
         return Response({'error': _devices.BLOCKED_MESSAGE}, status=status.HTTP_401_UNAUTHORIZED)
 
     # ── Two-factor gate ───────────────────────────────────────────────────────
@@ -295,8 +298,43 @@ def refresh_view(request):
     except Exception:
         return clear_auth_cookies(Response({'detail': 'انتهت الجلسة'}, status=status.HTTP_401_UNAUTHORIZED))
     data = ser.validated_data
-    resp = Response(data if body_token else {'ok': True})
-    return set_auth_cookies(resp, data.get('access'), data.get('refresh'))
+    access, new_refresh, device_secret = data.get('access'), data.get('refresh'), None
+    if dev_claim is None and new_refresh:
+        # A session from before N2 has no device: enrol this browser now and stamp the rotated
+        # tokens, so existing users reach the registry without a forced sign-in (I-2).
+        access, new_refresh, device_secret = _stamp_device(request, raw, access, new_refresh)
+    resp = Response({'access': access, 'refresh': new_refresh} if body_token and new_refresh
+                    else (data if body_token else {'ok': True}))
+    if device_secret:
+        set_device_cookie(resp, device_secret)
+    return set_auth_cookies(resp, access, new_refresh)
+
+
+def _stamp_device(request, old_raw, access, refresh):
+    """(access, refresh, new_device_secret) with a `dev` claim added to the rotated tokens.
+    Any problem (no SPA header, blocked cookie, bad token) returns the tokens unchanged. Never raises."""
+    try:
+        from rest_framework_simplejwt.settings import api_settings
+        from rest_framework_simplejwt.tokens import AccessToken
+        from apps.access import devices as _devices
+        if _devices.blocked_cookie(request):
+            return access, refresh, None
+        uid = RefreshToken(refresh).get(api_settings.USER_ID_CLAIM)
+        user = User.objects.select_related('staff_profile').filter(**{api_settings.USER_ID_FIELD: uid}).first()
+        profile = getattr(user, 'staff_profile', None)
+        if not profile:
+            return access, refresh, None
+        device, secret, _created = _devices.enroll(request, profile)
+        if device is None:
+            return access, refresh, None
+        new_r = RefreshToken(refresh)
+        new_r['dev'] = str(device.public_id)
+        new_a = AccessToken(access)
+        new_a['dev'] = str(device.public_id)
+        return str(new_a), str(new_r), secret
+    except Exception as exc:
+        logger.warning('refresh device stamp skipped: %s', exc)
+        return access, refresh, None
 
 
 def _refresh_owner_active(raw) -> bool:

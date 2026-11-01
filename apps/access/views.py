@@ -119,15 +119,24 @@ class DeviceViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upd
         return qs.order_by(first, '-first_seen', '-id')
 
     def perform_update(self, serializer):
+        if serializer.instance.status == 'retired':
+            raise ValidationError({'error': dev_api.RETIRED_MESSAGE})
         before = dev_api.snapshot(serializer.instance)
         device = serializer.save(updated_by=self.request.user.staff_profile)
-        AuditLog.log('device_changed', user=self.request.user.staff_profile, obj=device,
-                     changes={'before': before, 'after': dev_api.snapshot(device)},
-                     request=self.request._request)
+        after = dev_api.snapshot(device)
+        if after != before:                      # a no-op save leaves no audit row
+            AuditLog.log('device_changed', user=self.request.user.staff_profile, obj=device,
+                         changes={'before': before, 'after': after},
+                         request=self.request._request)
         dev_api.invalidate(device)
 
     def _change(self, request, status, need_note=False):
         device = self.get_object()
+        if status in ('blocked', 'retired'):
+            mine = getattr(getattr(getattr(request, 'access', None), 'device', None), 'public_id', None)
+            if mine and mine == str(device.public_id):
+                return Response({'error': 'لا يمكن حظر الجهاز الذي تستخدمه الآن'},
+                                status=http.HTTP_400_BAD_REQUEST)
         note = str(request.data.get('note') or '').strip()
         if need_note and not note:
             return Response({'error': 'اكتب سبب الحظر'}, status=http.HTTP_400_BAD_REQUEST)

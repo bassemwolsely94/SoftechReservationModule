@@ -125,8 +125,11 @@ export default function DevicesPage() {
     setRetireArm(id)
     setTimeout(() => setRetireArm(a => (a === id ? null : a)), 4000)
   }, [])
+  // Enter approves PENDING rows only (a blocked device is re-approved with its visible button) and is
+  // ignored when focus sits on a button, so Enter there presses that button instead.
   const approveRow = useCallback(r => {
-    if (r.status === 'pending' || r.status === 'blocked') act.mutate({ id: r.id, kind: 'approve' })
+    if (document.activeElement?.tagName === 'BUTTON') return
+    if (r.status === 'pending') act.mutate({ id: r.id, kind: 'approve' })
   }, [act])
   const selectAll = useCallback(() => setSelected(s => {
     const ids = rows.filter(r => r.status === 'pending').map(r => r.id)

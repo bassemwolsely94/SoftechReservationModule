@@ -153,7 +153,7 @@ class ActionTests(DeviceApiBase):
         make_user('dv_victim')
         victim = APIClient()
         r = victim.post('/api/auth/login/', {'username': 'dv_victim', 'password': 'TestPass123'},
-                        format='json', HTTP_USER_AGENT=UA)
+                        format='json', HTTP_USER_AGENT=UA, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(r.status_code, 200)
         dev = Device.objects.get()
         self.assertEqual(victim.get('/api/auth/me/').status_code, 200)

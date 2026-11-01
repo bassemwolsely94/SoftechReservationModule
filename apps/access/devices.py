@@ -85,8 +85,12 @@ def enroll(request, profile):
     """Resolve or create the device of this browser and record the sign-in on it.
 
     Returns (device, new_secret_or_None, created). Never raises: on error it logs a warning and
-    returns (None, None, False), and the sign-in goes on without a device."""
+    returns (None, None, False), and the sign-in goes on without a device.
+    Only the SPA enrols (its requests carry X-Requested-With: XMLHttpRequest): scripts and
+    body-token clients get no device and no `dev` claim (N2 final wave, I-3)."""
     try:
+        if (request.META.get('HTTP_X_REQUESTED_WITH') or '') != 'XMLHttpRequest':
+            return None, None, False
         from django.db import transaction
         from django.utils import timezone
         from .models import Device, DeviceUser
@@ -119,7 +123,8 @@ def enroll(request, profile):
             link.last_seen = now
             link.save(update_fields=['last_seen'])
         if created:
-            notify_new_device(device, profile, net)
+            # after commit, so a rolled-back sign-in sends nothing and a slow push never holds the txn
+            transaction.on_commit(lambda: notify_new_device(device, profile, net))
         return device, secret, created
     except Exception as exc:
         logger.warning('device enroll skipped: %s', exc)
@@ -130,8 +135,9 @@ MFA_REMEMBER_DAYS = 30
 
 
 def remember_mfa(device, profile):
-    """Remember a completed 2FA on this device for the profile. Never raises."""
-    if device is None:
+    """Remember a completed 2FA on this device for the profile. Only an APPROVED device earns a
+    remember (a pending one never skips 2FA, nor inherits it when approved later). Never raises."""
+    if device is None or device.status != 'approved':
         return
     try:
         from django.utils import timezone
@@ -139,7 +145,7 @@ def remember_mfa(device, profile):
         link, _ = DeviceUser.objects.get_or_create(device=device, user=profile)
         link.mfa_remembered_at = timezone.now()
         from apps.users.mfa import _device_fingerprint
-        link.mfa_remembered_epoch = profile.mfa_device_epoch or 0
+        link.mfa_remembered_epoch = profile.mfa_device_epoch or 0    # informational: the fingerprint carries the epoch, this column is not read back
         link.mfa_remembered_fp = _device_fingerprint(profile.user)
         link.save(update_fields=['mfa_remembered_at', 'mfa_remembered_epoch', 'mfa_remembered_fp'])
     except Exception as exc:
@@ -170,21 +176,32 @@ def mfa_remembered(request, profile):
 
 
 def notify_new_device(device, profile, net=None):
-    """Tell the user and every active admin that a new device awaits approval. Never raises."""
+    """Alert the user (every new device) and the active admins (one digest per hour, not one per
+    device). Each recipient is tried on its own. Never raises."""
     try:
+        from django.utils import timezone
         from apps.notifications.models import Notification
         from apps.users.models import StaffProfile
+        from .models import Device
         label = net.label_ar if net is not None else ''
         title = '💻 جهاز جديد بانتظار الاعتماد'
         body = (f'{profile.full_name or profile.user.username} — {device.name}'
                 + (f' — {label}' if label else ''))
-        recipients = {profile.pk: profile}
-        for admin in StaffProfile.objects.filter(role='admin', is_active=True):
-            recipients[admin.pk] = admin
-        for sp in recipients.values():
-            Notification.send_to_user(sp, 'system', title, body, dedup_key=f'device_new_{device.pk}')
+        try:
+            Notification.send_to_user(profile, 'system', title, body, dedup_key=f'device_new_{device.pk}')
+        except Exception as exc:
+            logger.warning('device alert to user %s failed: %s', profile.pk, exc)
+        pending = Device.objects.filter(status='pending').count()
+        hour = timezone.now().strftime('%Y%m%d%H')
+        digest = f'أجهزة جديدة بانتظار الاعتماد: {pending} — افتح /access/devices'
+        for admin in StaffProfile.objects.filter(role='admin', is_active=True).exclude(pk=profile.pk):
+            try:
+                Notification.send_to_user(admin, 'system', '💻 أجهزة جديدة بانتظار الاعتماد', digest,
+                                          dedup_key=f'device_digest_{hour}', dedup_once=True)
+            except Exception as exc:
+                logger.warning('device digest to admin %s failed: %s', admin.pk, exc)
     except Exception as exc:
-        logger.debug('notify_new_device skipped: %s', exc)
+        logger.warning('notify_new_device skipped: %s', exc)
 
 
 # -- Resolving the device of a request (N2) ---------------------------------------------
@@ -215,9 +232,15 @@ def _touch(request, pk):
     from django.utils import timezone
     from .models import Device
     fields = {'last_seen': timezone.now()}
-    ip = _client_ip(request)
-    if ip:
-        fields['last_ip'] = ip
+    net = _network(request)
+    if net is not None and net.ip:
+        fields['last_ip'] = net.ip
+        fields['last_network'] = net.zone
+        fields['last_site'] = (net.site.name if net.site else '')[:120]
+    else:
+        ip = _client_ip(request)
+        if ip:
+            fields['last_ip'] = ip
     Device.objects.filter(pk=pk).update(**fields)
 
 
@@ -270,7 +293,12 @@ def is_revoked(public_id):
 
 
 def invalidate(device):
-    cache.delete_many([f'access:dev:{device.secret_hash}', f'access:devrev:{device.public_id}'])
+    """Drop the cached status now and again after commit (a request between the two would
+    otherwise re-cache the pre-commit status for a minute)."""
+    from django.db import transaction
+    keys = [f'access:dev:{device.secret_hash}', f'access:devrev:{device.public_id}']
+    cache.delete_many(keys)
+    transaction.on_commit(lambda: cache.delete_many(keys))
 
 
 def invalidate_signal(sender, instance, **kwargs):

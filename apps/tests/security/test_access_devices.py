@@ -61,8 +61,8 @@ class KindTests(TestCase):
     def test_snapshot(self):
         _, dev = _device(name='x')
         snap = devices.snapshot(dev)
-        self.assertEqual(snap['name'], 'x')
-        self.assertEqual(snap['status'], 'pending')
+        self.assertEqual(snap, {'name': 'x', 'kind': 'personal_laptop', 'status': 'pending', 'branch': None,
+                                'owner': None, 'allowed_roles': [], 'status_note': ''})
         self.assertNotIn('secret_hash', snap)
 
 
@@ -88,12 +88,13 @@ from rest_framework.test import APIClient
 from apps.notifications.models import Notification
 from apps.users.models import UserActivityLog
 
+XHR = {'HTTP_X_REQUESTED_WITH': 'XMLHttpRequest'}   # only the SPA enrols a device
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36'
 
 
 def _login(client, username, password='TestPass123', **extra):
     return client.post('/api/auth/login/', {'username': username, 'password': password},
-                       format='json', HTTP_USER_AGENT=UA, **extra)
+                       format='json', HTTP_USER_AGENT=UA, **XHR, **extra)
 
 
 class EnrollmentTests(TestCase):
@@ -168,15 +169,19 @@ class EnrollmentTests(TestCase):
     def test_new_device_notifies_user_and_admins(self):
         _, admin, _ = make_user('enr_admin', role='admin')
         c = APIClient()
-        r = _login(c, 'enr_u1')
+        with self.captureOnCommitCallbacks(execute=True):
+            r = _login(c, 'enr_u1')
         dev = Device.objects.get()
         key = f'device_new_{dev.pk}'
         self.assertEqual(Notification.objects.filter(dedup_key=key, recipient=self.profile).count(), 1)
-        self.assertEqual(Notification.objects.filter(dedup_key=key, recipient=admin).count(), 1)
+        self.assertEqual(Notification.objects.filter(dedup_key=key, recipient=admin).count(), 0)   # admins get the digest
+        digest = Notification.objects.filter(dedup_key__startswith='device_digest_', recipient=admin)
+        self.assertEqual(digest.count(), 1)
         c.cookies[devices.COOKIE] = r.cookies[devices.COOKIE].value
-        before = Notification.objects.filter(dedup_key=key).count()
-        _login(c, 'enr_u1')
-        self.assertEqual(Notification.objects.filter(dedup_key=key).count(), before)
+        before = Notification.objects.count()
+        with self.captureOnCommitCallbacks(execute=True):
+            _login(c, 'enr_u1')
+        self.assertEqual(Notification.objects.count(), before)
 
     def test_enroll_failure_does_not_break_login(self):
         with mock.patch('apps.access.devices.from_secret', side_effect=RuntimeError('boom')):
@@ -202,7 +207,7 @@ class EnrollmentTests(TestCase):
         self.assertEqual(Device.objects.count(), 0)
         r2 = c.post('/api/auth/2fa/verify/', {'mfa_token': r.data['mfa_token'],
                                               'code': pyotp.TOTP(self.profile.mfa_secret).now()},
-                    format='json', HTTP_USER_AGENT=UA)
+                    format='json', HTTP_USER_AGENT=UA, **XHR)
         self.assertEqual(r2.status_code, 200, r2.data)
         dev = Device.objects.get()
         self.assertIn(devices.COOKIE, r2.cookies)
@@ -291,8 +296,8 @@ class RevocationTests(TestCase):
         for name in ('erp_access', 'erp_refresh', devices.COOKIE):
             self.assertNotIn(name, r.cookies)
         self.assertEqual(Device.objects.count(), before)
-        log = UserActivityLog.objects.filter(action='login_failed').latest('id')
-        self.assertEqual(log.note, 'device_blocked')
+        self.assertFalse(UserActivityLog.objects.filter(action='login_failed').exists())
+        self.assertTrue(UserActivityLog.objects.filter(action='login_refused_device').exists())
 
     def test_blocked_device_cookie_refused_at_2fa_verify(self):
         self.profile.mfa_enabled = True
@@ -305,7 +310,7 @@ class RevocationTests(TestCase):
         c.cookies[devices.COOKIE] = secret
         r2 = c.post('/api/auth/2fa/verify/', {'mfa_token': r.data['mfa_token'],
                                               'code': pyotp.TOTP(self.profile.mfa_secret).now()},
-                    format='json', HTTP_USER_AGENT=UA)
+                    format='json', HTTP_USER_AGENT=UA, **XHR)
         self.assertEqual(r2.status_code, 401)
         self.assertEqual(r2.data['error'], devices.BLOCKED_MESSAGE)
         self.assertNotIn('access', r2.data)
@@ -424,19 +429,25 @@ class RememberDeviceTests(TestCase):
         self.assertTrue(r.data.get('mfa_required'))
         r2 = c.post('/api/auth/2fa/verify/', {'mfa_token': r.data['mfa_token'], 'code': self._code(),
                                               'remember_device': remember},
-                    format='json', HTTP_USER_AGENT=UA)
+                    format='json', HTTP_USER_AGENT=UA, **XHR)
         self.assertEqual(r2.status_code, 200, r2.data)
         return r2
 
     def _remembered_client(self, approve=True):
+        """First 2FA creates the pending device; (when approved) a second 2FA with its cookie earns the remember."""
         c = APIClient()
-        r2 = self._verify(c)
+        r1 = self._verify(c)
         dev = Device.objects.get()
+        secret = r1.cookies[devices.COOKIE].value
+        r2 = r1
         if approve:
             dev.status = 'approved'
             dev.save(update_fields=['status'])
+            cache.clear()
+            c.cookies[devices.COOKIE] = secret
+            r2 = self._verify(c)
         c2 = APIClient()
-        c2.cookies[devices.COOKIE] = r2.cookies[devices.COOKIE].value
+        c2.cookies[devices.COOKIE] = secret
         return c2, dev, r2
 
     def test_remembered_on_approved_device_skips_2fa(self):
@@ -499,7 +510,7 @@ class RememberDeviceTests(TestCase):
         token = mfa.make_device_token(self.user)
         r = APIClient().post('/api/auth/login/', {'username': 'rem_u1', 'password': 'TestPass123',
                                                   'device_token': token},
-                             format='json', HTTP_USER_AGENT=UA)
+                             format='json', HTTP_USER_AGENT=UA, **XHR)
         self.assertEqual(r.status_code, 200)
         self.assertNotIn('mfa_required', r.data)
 
