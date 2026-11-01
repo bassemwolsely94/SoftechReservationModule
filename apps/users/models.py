@@ -329,6 +329,10 @@ class UserActivityLog(models.Model):
     network      = models.CharField(max_length=10, blank=True, verbose_name='الشبكة')
     network_site = models.CharField(max_length=120, blank=True, verbose_name='موقع الشبكة')
     user_agent   = models.CharField(max_length=300, blank=True, verbose_name='المتصفح')
+    device       = models.ForeignKey(
+        'access.Device', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='activity', verbose_name='الجهاز',
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='وقت الحدث', db_index=True)
 
     class Meta:

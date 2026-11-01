@@ -120,6 +120,9 @@ class AuditLog(models.Model):
         # Security N1
         ('trusted_network_changed',      'شبكة موثوقة — إضافة / تعديل / حذف'),
 
+        # Security N2
+        ('device_changed',               'جهاز — اعتماد / حظر / تعديل'),
+
     ]
 
     # ── Who ───────────────────────────────────────────────────────────────────
