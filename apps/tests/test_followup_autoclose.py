@@ -211,3 +211,26 @@ class ChronicInferenceTests(TestCase):
                 self._buy(f'130HD{p}', self.concor, 37 * k + p)
         infer_chronic_profiles_from_sales()
         self.assertEqual(ChronicMedicationProfile.objects.get(item=self.concor).expected_duration_days, 37)
+
+
+class EscalationTests(TestCase):
+    """Overdue tasks become 'missed' only once they have existed for the grace period too."""
+
+    def setUp(self):
+        self.branch = make_branch('فرع ١٣٠', '130')
+        self.item = make_item('CONCOR 5MG', 'IT501')
+        self.today = timezone.localdate()
+
+    def _task(self, due_days_ago, created_days_ago):
+        t = FollowUpTask.objects.create(phcode=PIC, item=self.item, branch=self.branch, task_type='refill',
+                                        status='pending', due_date=self.today - dt.timedelta(days=due_days_ago))
+        FollowUpTask.objects.filter(pk=t.pk).update(created_at=timezone.now() - dt.timedelta(days=created_days_ago))
+        return t
+
+    def test_a_catch_up_task_gets_its_grace_before_missed(self):
+        from apps.followups.services import escalate_overdue_tasks
+        fresh = self._task(due_days_ago=10, created_days_ago=0)      # created already overdue
+        old = self._task(due_days_ago=10, created_days_ago=10)
+        self.assertEqual(escalate_overdue_tasks(overdue_days=3)['escalated'], 1)
+        fresh.refresh_from_db(); old.refresh_from_db()
+        self.assertEqual((fresh.status, old.status), ('pending', 'missed'))

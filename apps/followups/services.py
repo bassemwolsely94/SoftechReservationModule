@@ -1380,7 +1380,10 @@ def bulk_task_action(
 def escalate_overdue_tasks(overdue_days: int = 3, dry_run: bool = False) -> dict:
     """
     Scans ALL pending FollowUpTasks whose due_date is more than `overdue_days`
-    days in the past and marks them 'missed'.
+    days in the past and marks them 'missed' — but only tasks that have EXISTED for
+    `overdue_days` too: a task created already overdue (a catch-up batch — 2026-11-01 the
+    generator restarted after 5 months with 2,876 of 4,788 tasks past due) gets the same
+    chance to be called before it counts as a missed refill in the churn score.
 
     This is the critical link between the follow-up engine and the churn
     scoring engine: once a task is 'missed', segment_customers picks it up
@@ -1396,10 +1399,12 @@ def escalate_overdue_tasks(overdue_days: int = 3, dry_run: bool = False) -> dict
 
     cutoff = date.today() - timedelta(days=overdue_days)
 
-    # Tasks that are still 'pending' or 'called' but passed due date + grace
+    # Tasks that are still 'pending' or 'called' but passed due date + grace, and have
+    # been open at least as long as the grace
     overdue_qs = FollowUpTask.objects.filter(
         status__in=('pending', 'called'),
         due_date__lt=cutoff,
+        created_at__lt=timezone.now() - timedelta(days=overdue_days),
     )
 
     already_missed = FollowUpTask.objects.filter(status='missed').count()
