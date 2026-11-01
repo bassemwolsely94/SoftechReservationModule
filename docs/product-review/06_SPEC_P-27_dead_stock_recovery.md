@@ -211,6 +211,20 @@ The engine's metrics are replaced each run, so the list and its history are stor
 5. **Actions** on ticked rows, inline (no modal): «استبعاد» (+ reason select), «احتفاظ استراتيجي», «⬇️ تصدير Excel».
 6. Part A has **no "create transfer" button.** Moves happen only through Part B.
 
+### Part A — built 2026-11-01
+- `apps/purchasing/dead_stock.py` (pure `classify` + PG loader + `compute_snapshot`), `dead_stock_views.py`, models
+  `DeadStockSnapshot` / `DeadStockLine` / `DeadStockDecision` (migration `purchasing` — new tables only), tab
+  `frontend/src/pages/cash/DeadStockTab.jsx`, job `dead_stock_snapshot` (every 30 min, builds the list once per
+  successful engine run), help `purchasing.cash` tab `dead`. Routes classified in `core/middleware/module_access.py`
+  with the spike tab (reads analytics, writes purchasing).
+- **Build decision:** HQ (100) is a warehouse, so "no local sale" does not apply there: an HQ line is dead only when no
+  branch sells the item (otherwise all HQ stock would read dead).
+- **First run, read-only in memory, engine run 107 (2026-11-01):** 6,239 lines, 1.17M EGP — move 4,457 / 729,244 ·
+  return 632 / 143,344 · stop 1,150 / 302,313. Moves worth proposing (≥ 100 EGP, not fridge): 1,298 / 316,141.
+  3,148 move lines are under 100 EGP; 3,293 lines hold stock older than the ledger's year. Location: branches only
+  6,180, both 51, HQ only 8. Lower than the backlog baseline (1.87M) because of the stock-age rule, the HQ rule and
+  `strategic_hold`.
+
 ### 2.6 Part B — the «يُباع بفرع آخر» lane in «التوزيعة» (after doc 30 phase B)
 
 Built only when doc 30 phase B (`DistributionPlan`, `PlannedMove`, wave 0) exists and the owner has reviewed the first

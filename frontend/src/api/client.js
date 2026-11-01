@@ -714,6 +714,14 @@ export const purchasingApi = {
   spikeMedTypes:      ()            => api.get('/purchasing/spike/med-types/'),
   spikeConfirm:       (itemId)      => api.post('/purchasing/spike/confirm/', { item_id: itemId }),
   spikeUnconfirm:     (itemId)      => api.post('/purchasing/spike/unconfirm/', { item_id: itemId }),
+  // P-27 dead stock («🧊 مخزون راكد», read-only)
+  deadStockSummary:   ()            => api.get('/purchasing/dead-stock/summary/'),
+  deadStockLines:     (params)      => api.get('/purchasing/dead-stock/lines/', { params }),
+  deadStockExport:    (params)      => api.get('/purchasing/dead-stock/lines/', { params: { ...params, format: 'xlsx' }, responseType: 'blob' }),
+  deadStockRecompute: ()            => api.post('/purchasing/dead-stock/recompute/'),
+  deadStockRecomputeStatus: ()      => api.get('/purchasing/dead-stock/recompute/'),
+  deadStockDecide:    (body)        => api.post('/purchasing/dead-stock/decisions/', body),
+  deadStockHold:      (body)        => api.post('/purchasing/dead-stock/strategic-hold/', body),
 
   // EngineConfig singleton — GET returns current weights/thresholds; PATCH updates them (admin only)
   config:       ()       => api.get('/purchasing/config/'),

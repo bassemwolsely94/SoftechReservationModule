@@ -3,6 +3,7 @@ from . import views
 from . import shortage_views
 from . import phantom_views
 from . import spike_views
+from . import dead_stock_views   # P-27
 from . import rate_writer_views
 from . import isr_views
 from . import branch_request_views
@@ -116,6 +117,12 @@ urlpatterns = [
     path('isr/branch-requests/<int:pk>/analysis/export/', branch_request_views.branch_request_analysis_export),
     path('isr/branch-requests/<int:pk>/transfers/', branch_request_views.branch_request_transfers),
 
+    # ── Dead stock (🧊 مخزون راكد, P-27 part A — read-only) ──────────────────
+    path('dead-stock/summary/', dead_stock_views.dead_stock_summary, name='dead-stock-summary'),
+    path('dead-stock/lines/', dead_stock_views.dead_stock_lines, name='dead-stock-lines'),
+    path('dead-stock/recompute/', dead_stock_views.dead_stock_recompute, name='dead-stock-recompute'),
+    path('dead-stock/decisions/', dead_stock_views.dead_stock_decisions, name='dead-stock-decisions'),
+    path('dead-stock/strategic-hold/', dead_stock_views.dead_stock_strategic_hold, name='dead-stock-hold'),
     # ── Demand-spike over-purchase detector (📈 ذروة الطلب) ───────────────────
     path('spike/candidates/', spike_views.spike_candidates, name='spike-candidates'),
     path('spike/summary/',    spike_views.spike_summary,    name='spike-summary'),
