@@ -31,7 +31,7 @@ from .serializers import (
 from .importer import (
     import_claim_from_softech, import_claim_by_motalbano,
     fetch_single_rx_from_softech,
-    recalculate_claim_final_totals, InsuranceImportError,
+    recalculate_claim_final_totals, InsuranceImportError, InsuranceMixedMotalbaError,
 )
 from .audit import record_audit
 from apps.catalog.wildcard import wq
@@ -342,6 +342,8 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
                 branchcodes = data.get('branchcodes') or None,
                 user        = staff,
             )
+        except InsuranceMixedMotalbaError as e:
+            return Response({'error': str(e), 'motalbas': e.motalbas}, status=status.HTTP_409_CONFLICT)
         except InsuranceImportError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
@@ -420,6 +422,9 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
                     period_from=data['period_from'], period_to=data['period_to'],
                     branchcodes=data.get('branchcodes') or None, user=staff,
                 )
+        except InsuranceMixedMotalbaError as e:
+            claim.delete()
+            return Response({'error': str(e), 'motalbas': e.motalbas}, status=status.HTTP_409_CONFLICT)
         except InsuranceImportError as e:
             claim.delete()
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)

@@ -206,8 +206,8 @@ MODULE = {
                 {'target': 'insurance-import-period', 'route': '/insurance',
                  'text': T('الفترة والعقد — نسب الخصم بتيجي من العقد.',
                            'The period and the contract — discount rates come from the contract.'),
-                 'more': T('الفترة مطلوبة لو ما اخترتش رقم مطالبة.\n• «العقد (لنسب الخصم)» بيحدد نسب خصم المحلي والمستورد والترسية اللي هتتطبق؛ لو اخترت «بدون عقد محدد» راجع النسب قبل الإصدار.',
-                           'The period is required if you did not pick a claim number.\n• "Contract (for discount rates)" sets the local, imported and tender rates to apply; if you choose "No specific contract", check the rates before issuing.')},
+                 'more': T('الفترة مطلوبة لو ما اخترتش رقم مطالبة.\n• الأفضل دايماً الاستيراد برقم المطالبة: لو الفترة فيها أكثر من مطالبة في سوفتك (مثلاً مطالبة قديمة وجديدة لنفس الشهر) الاستيراد بيتوقف ويعرض المطالبات اللي لقاها — اختار الصحيحة.\n• «العقد (لنسب الخصم)» بيحدد نسب خصم المحلي والمستورد والترسية اللي هتتطبق؛ لو اخترت «بدون عقد محدد» راجع النسب قبل الإصدار.',
+                           'The period is required if you did not pick a claim number.\n• Prefer importing by claim number: if the dates span more than one SOFTECH claim (e.g. an old and a new one for the same month) the import stops and lists the claims it found — pick the right one.\n• "Contract (for discount rates)" sets the local, imported and tender rates to apply; if you choose "No specific contract", check the rates before issuing.')},
                 {'target': 'insurance-import-submit', 'route': '/insurance',
                  'text': T('«استيراد وإنشاء المطالبة». (في الجولة مش هنستورد — اقفل النافذة.)',
                            '"Import and create the claim". (In this tour we will not import — close the window.)'),
@@ -357,9 +357,9 @@ SCREENS = [
              'text': T('الجهات والفئات والعقود ونسب الخصم. بجانبه: «🖨 تخصيص الطباعة» و«🏷 تصويب تصنيف الأصناف».',
                        'Payers, categories, contracts and discount rates. Next to it: "🖨 Print setup" and "🏷 Item class corrections".')},
         ],
-        'updated': '2026-10-30',
-    
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-01',
+
+        'change_note': T('الاستيراد بالتاريخ يُرفض لو الفترة فيها أكثر من مطالبة في سوفتك — اختر رقم المطالبة', 'A date-range import is refused when the dates span more than one SOFTECH claim — pick the claim number'),
     },
     {
         'key': 'insurance.claim',
@@ -538,7 +538,7 @@ SCREENS = [
         ],
         'updated': '2026-11-01',
     
-        'change_note': T('فحص التخصيص الخاطئ بسجل مرضى تراكمي؛ «مراجعة الأسماء» جدول قابل للترتيب مع تحديد الكل', 'Wrong-allocation roster check; "Name review" is now a sortable grid with select / unselect all'),
+        'change_note': T('فحص التخصيص الخاطئ بسجل مرضى تراكمي؛ «مراجعة الأسماء» جدول قابل للترتيب مع تحديد الكل؛ ملف «فحص الفروقات» فيه كود الصنف', 'Wrong-allocation roster check; "Name review" is a sortable grid with select / unselect all; the "Discrepancy check" Excel now has the item code'),
     },
     {
         'key': 'insurance.print',

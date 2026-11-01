@@ -401,6 +401,10 @@ function ImportModal({ subclients, onClose, onCreated }) {
       onCreated(data.claim)
     } catch (e) {
       setError(e.response?.data?.error || 'حدث خطأ')
+      // The dates span several SOFTECH motalbas — show them so one is picked by number.
+      if (e.response?.status === 409 && Array.isArray(e.response.data?.motalbas)) {
+        setMotalbas(e.response.data.motalbas)
+      }
     } finally { setLoading(false) }
   }
 
@@ -439,16 +443,19 @@ function ImportModal({ subclients, onClose, onCreated }) {
               {motalbas.length > 0 && (
                 <div className="max-h-44 overflow-y-auto border border-gray-200 rounded bg-white mb-2">
                   {motalbas.map(m => (
-                    <button key={m.motalbano} onClick={() => pickMotalba(m)}
+                    <button key={m.motalbano ?? 'none'} onClick={() => m.motalbano && pickMotalba(m)}
+                      disabled={!m.motalbano}
                       className={`w-full text-right px-3 py-2 text-xs hover:bg-blue-50 border-b border-gray-100 flex justify-between items-center ${
                         String(m.motalbano) === form.softech_motalba_no ? 'bg-blue-100' : ''
                       }`}>
                       <div>
-                        <span className="font-mono font-bold text-blue-700 ml-2">#{m.motalbano}</span>
+                        <span className="font-mono font-bold text-blue-700 ml-2">{m.motalbano ? `#${m.motalbano}` : 'بدون رقم'}</span>
                         <span className="text-gray-500">{m.motfromdate} {fa()} {m.mottodate}</span>
                       </div>
                       <div>
-                        <span className="text-gray-500 ml-2">{m.rxcount} روشتة</span>
+                        <span className="text-gray-500 ml-2">
+                          {m.rxcount} روشتة{m.in_range != null && m.in_range !== m.rxcount ? ` (الاستيراد بالتاريخ كان سيأخذ ${m.in_range} منها)` : ''}
+                        </span>
                         <span className="font-mono text-gray-800">{fmtPlain(m.docvaluetotal)}</span>
                       </div>
                     </button>
