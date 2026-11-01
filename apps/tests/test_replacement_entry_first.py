@@ -7,6 +7,7 @@ only; anonymous receipts are never auto-confirmed; approvals follow the owner ma
 """
 from datetime import datetime, timedelta, timezone as dt_tz
 from decimal import Decimal
+from unittest import mock
 
 from django.core.exceptions import ValidationError
 from django.test import override_settings
@@ -23,7 +24,12 @@ from . import test_replacement_workflow as TW
 from .test_replacement_workflow import PIC
 
 D = Decimal
-TODAY = timezone.localdate()
+_REAL_TODAY = timezone.localdate()
+# The clock is pinned to the 15th of the month (_MidMonthClock): «yesterday» must be in the same
+# month. On the 1st a 1-day backdate crosses a month end, which the owner matrix rightly sends to a
+# manager (level 2, HIGH) — the supervisor-band test then failed every 1st (first seen 2026-11-01).
+TODAY = _REAL_TODAY.replace(day=15)
+_SHIFT = TODAY - _REAL_TODAY
 YESTERDAY = TODAY - timedelta(days=1)
 CUTOVER = {'130': (TODAY - timedelta(days=20)).isoformat()}
 
@@ -32,8 +38,27 @@ def _at(day, h=9, mi=0):
     return datetime(day.year, day.month, day.day, h, mi, tzinfo=dt_tz.utc)
 
 
+class _MidMonthClock:
+    """Shifts django.utils.timezone.now (and so localdate) by _SHIFT for the whole class, test data
+    included — time keeps moving, so created_at ordering still works."""
+
+    @classmethod
+    def setUpClass(cls):
+        real_now = timezone.now
+        cls._clock = mock.patch('django.utils.timezone.now', lambda: real_now() + _SHIFT)
+        cls._clock.start()
+        super().setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            super().tearDownClass()
+        finally:
+            cls._clock.stop()
+
+
 @override_settings(REPLACEMENT_ENTRY_FIRST_FROM=CUTOVER)
-class EntryFirstTests(TW._Base):
+class EntryFirstTests(_MidMonthClock, TW._Base):
     approved = TW.LegTests.approved
 
     def setUp(self):
@@ -82,8 +107,6 @@ class EntryFirstTests(TW._Base):
         self.assertEqual(c.status, RC.STATUS_AWAITING_APPROVAL)
         self.assertTrue(any('بأثر رجعي' in r for r in c.approval_request.context_data['reasons']))
         c = W.decide(c.pk, user=self.sup, version=c.version, approve=True)
-        if c.status == RC.STATUS_AWAITING_APPROVAL:     # on the 1st, yesterday is last month → manager step too
-            c = W.decide(c.pk, user=self.admin, version=c.version, approve=True)
 
         c.refresh_from_db()
         op = Op.objects.get(case=c, idempotency_key=f'{c.pk}:purchase')
@@ -206,7 +229,7 @@ class EntryFirstTests(TW._Base):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-class OwnerApprovalMatrixTests(TW._Base):
+class OwnerApprovalMatrixTests(_MidMonthClock, TW._Base):
     """Owner 2026-10-26. _Base keeps the value band at 2,000 / 6,000 so these isolate each control."""
 
     def route(self, case):
@@ -252,7 +275,7 @@ class OwnerApprovalMatrixTests(TW._Base):
 
 # ═══════════════════════════════════════════════════════════════════════════════
 @override_settings(REPLACEMENT_ENTRY_FIRST_FROM=CUTOVER)
-class EntryFirstApiTests(TW._Base):
+class EntryFirstApiTests(_MidMonthClock, TW._Base):
     def test_patient_lookup_by_mobile(self):
         from apps.customers.models import Customer
         Customer.objects.filter(softech_pic=PIC).update(phone='01001234567')

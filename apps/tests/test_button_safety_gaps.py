@@ -49,19 +49,18 @@ class DisposalStatusTests(TestCase):
         from apps.users.models import RoleModuleAccess
         from core.middleware import module_access
         module_access.clear_cache()
-        # the status endpoint needs catalog edit|approve (BATCH_DISPOSAL, Batch 4): the creator
-        # holds edit (as the seeded pharmacist matrix does), the manager holds approve
-        for role, action in (('pharmacist', 'view'), ('pharmacist', 'edit'),
-                             ('supervisor', 'view'), ('supervisor', 'approve')):
-            RoleModuleAccess.objects.create(role=role, module='catalog', action=action)
+        for role in ('pharmacist', 'supervisor'):
+            # status changes need catalog edit / approve (BATCH_DISPOSAL — a view-only user can't cancel)
+            for action in ('view', 'edit'):
+                RoleModuleAccess.objects.create(role=role, module='catalog', action=action)
         self.addCleanup(module_access.clear_cache)
         branch = make_branch()
         _, self.owner, self.owner_c = make_user('disp_owner', role='pharmacist', branch=branch)
         _, _, self.other_c = make_user('disp_other', role='pharmacist', branch=branch)
         _, _, self.mgr_c = make_user('disp_mgr', role='supervisor', access_all=True)
         self.Rec = ExpiryDisposalRecord
-        self.rec = ExpiryDisposalRecord.objects.create(item_code='A', branch_code=branch.softech_branch_id,
-                                                       qty=Decimal('2'),
+        # on the staff's own branch (records are branch-scoped since Batch 5 part 2)
+        self.rec = ExpiryDisposalRecord.objects.create(item_code='A', branch_code=branch.softech_branch_id, qty=Decimal('2'),
                                                        decision='dispose', created_by=self.owner)
 
     def _set(self, client, status, rec=None):
