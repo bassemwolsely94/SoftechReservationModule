@@ -9,6 +9,7 @@ from core.auth_cookies import user_from_request
 from .devices import DeviceInfo
 from .devices import resolve as resolve_device
 from .network import EXTERNAL, NetworkInfo, request_network
+from .zones import zone_for
 
 access_context = contextvars.ContextVar('access_context', default=None)
 
@@ -19,6 +20,7 @@ class AccessContext:
     user_id: int | None
     role: str | None
     device: DeviceInfo | None = None     # the device named by the erp_device cookie (N2)
+    zone: str | None = None              # Z1-Z4 (N3); None for an anonymous request
 
 
 def current():
@@ -35,9 +37,12 @@ def _role(user):
 def for_request(request):
     network = request_network(request)
     user = user_from_request(request)
+    device = resolve_device(request)
+    zone = None
+    if user is not None:
+        zone = zone_for(network.zone, device.status if device is not None else None)
     return AccessContext(network=network, user_id=user.pk if user else None,
-                         role=_role(user) if user else None,
-                         device=resolve_device(request))
+                         role=_role(user) if user else None, device=device, zone=zone)
 
 
 def fallback():

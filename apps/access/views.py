@@ -17,6 +17,7 @@ from apps.users.permissions import IsAdminRole
 from . import devices as dev_api
 from .models import Device, DeviceUser, TrustedNetwork
 from .network import INTERNAL, request_network
+from .zones import ZONE_LABELS
 from .serializers import DeviceSerializer, TrustedNetworkSerializer
 
 _AUDITED = ('name', 'cidr', 'kind', 'branch_id', 'is_active', 'notes')
@@ -43,8 +44,11 @@ def whoami(request):
         d = access.device
         device = {'status': d.status, 'status_label': dict(Device.STATUS_CHOICES).get(d.status, d.status),
                   'name': d.name}
+    access_zone = access.zone if access is not None else None
     return Response({
         'device': device,
+        'access_zone': access_zone,
+        'access_zone_label': ZONE_LABELS.get(access_zone),
         'zone': net.zone,
         'ip': net.ip,
         'label': net.label_ar,
