@@ -2392,8 +2392,213 @@ const SEV_CFG = {
   ok:      { cls: 'bg-green-50 border-green-200 text-green-700', icon: '✓', badge: 'bg-green-100 text-green-700' },
 }
 
-// ── Name separation tab — flag prescriptions matching a separation list ────────
+// ── Name separation tab — wrong-insurer roster check + manual separation lists ──
 function SeparationTab({ claimId, onRefresh }) {
+  const [mode, setMode] = useState('roster')
+  const btn = (k, label) => (
+    <button onClick={() => setMode(k)}
+      className={`px-3 py-1.5 text-sm rounded ${mode === k ? 'bg-blue-600 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
+      {label}
+    </button>
+  )
+  return (
+    <div>
+      <div className="px-6 pt-4 flex gap-2" data-tour="insurance-claim-separation-mode">
+        {btn('roster', 'تخصيص خاطئ (سجل الجهات)')}
+        {btn('lists', 'قوائم الفصل')}
+      </div>
+      {mode === 'roster'
+        ? <RosterCheckView claimId={claimId} onRefresh={onRefresh} />
+        : <SeparationListsView claimId={claimId} onRefresh={onRefresh} />}
+    </div>
+  )
+}
+
+const _ROSTER_CAT = {
+  wrong:  { label: 'جهة/فئة خاطئة',  cls: 'bg-red-100 text-red-700' },
+  shared: { label: 'مُفوتر لجهة أخرى أيضاً', cls: 'bg-amber-100 text-amber-700' },
+  sister: { label: 'نفس الشركة',      cls: 'bg-yellow-50 text-yellow-700' },
+  new:    { label: 'اسم جديد',        cls: 'bg-blue-50 text-blue-700' },
+}
+const _ROSTER_SCOPE = {
+  company:  { label: 'جهة أخرى',      cls: 'text-red-600' },
+  division: { label: 'فئة أخرى',      cls: 'text-orange-600' },
+  sister:   { label: 'نفس الشركة',    cls: 'text-yellow-700' },
+}
+
+// Wrong-allocation check: each receipt's patient vs the cumulative rosters built from
+// earlier motalbas (جهة → فئة → فئة فوترة). The backend classifies; we only display/act.
+function RosterCheckView({ claimId, onRefresh }) {
+  const [data, setData]   = useState(null)
+  const [loading, setLoad] = useState(true)
+  const [cats, setCats]   = useState(new Set(['wrong', 'shared']))
+  const [sel, setSel]     = useState(new Set())
+  const [busy, setBusy]   = useState(false)
+  const [msg, setMsg]     = useState(null)
+
+  const load = () => {
+    setLoad(true)
+    insuranceApi.rosterCheck(claimId)
+      .then(r => {
+        setData(r.data)
+        setSel(new Set(r.data.rows.filter(x => x.category === 'wrong' && x.confidence === 'full')
+          .map(x => x.prescription_id)))
+      })
+      .catch(e => setMsg(e.response?.data?.error || 'تعذّر فحص سجل المرضى'))
+      .finally(() => setLoad(false))
+  }
+  useEffect(() => { load() }, [claimId])   // eslint-disable-line
+
+  const rows = (data?.rows || []).filter(r => cats.has(r.category))
+  const toggle = (id) => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const kb = useGridKeyboard({
+    rows, getKey: r => r.prescription_id,
+    onToggle: r => toggle(r.prescription_id),
+    onSelectAll: () => setSel(new Set(rows.map(r => r.prescription_id))),
+  })
+  const toggleCat = (c) => setCats(s => { const n = new Set(s); n.has(c) ? n.delete(c) : n.add(c); return n })
+  const errText = (e, fb) => !e.response ? 'تعذّر الاتصال بالسيرفر'
+    : (e.response.data?.error || e.response.data?.detail || `${fb} (خطأ ${e.response.status})`)
+
+  const decide = async (ids, verdict, target = null) => {
+    if (!ids.length) return
+    setBusy(true); setMsg(null)
+    try {
+      await insuranceApi.rosterDecision(claimId, { prescription_ids: ids, verdict, target })
+      setMsg(verdict === 'member' ? `سُجّل ${ids.length} اسم كتابع لهذه الجهة — لن يُعلَّم مجدداً`
+        : verdict === 'clear' ? 'أُلغي القرار' : `سُجّل ${ids.length} اسم كغير تابع لهذه الجهة`)
+      load()
+    } catch (e) { setMsg(errText(e, 'تعذّر حفظ القرار')) } finally { setBusy(false) }
+  }
+
+  const doExclude = async () => {
+    const ids = [...sel]
+    if (!ids.length) return
+    const picked = data.rows.filter(r => sel.has(r.prescription_id))
+    const tops = [...new Set(picked.map(r => r.where[0]?.label).filter(Boolean))]
+    const reason = tops.length === 1 ? `تخصيص خاطئ ← ${tops[0]}` : 'تخصيص خاطئ — يتبع جهة أخرى'
+    if (!window.confirm(`استبعاد ${ids.length} روشتة من هذه المطالبة لإعادة فوترتها على جهتها الصحيحة؟ يمكن التراجع بإعادة إدراجها.`)) return
+    setBusy(true); setMsg(null)
+    try {
+      const { data: res } = await insuranceApi.bulkExclude(claimId, ids, reason)
+      await insuranceApi.rosterDecision(claimId, { prescription_ids: ids, verdict: 'not_member', note: reason })
+      setMsg(`تم استبعاد ${res.excluded} روشتة · الصافى الآن ${fmt(res.claim_net_after)}`)
+      setSel(new Set()); load(); onRefresh && onRefresh()
+    } catch (e) { setMsg(errText(e, 'تعذّر الاستبعاد')) } finally { setBusy(false) }
+  }
+
+  if (loading && !data) return <div className="px-6 py-6 text-sm text-gray-400">جارٍ مطابقة الأسماء مع سجل الجهات…</div>
+  if (!data) return msg ? <div className="px-6 py-6 text-sm text-red-600">{msg}</div> : null
+  const c = data.counts
+
+  return (
+    <div className="px-6 py-4">
+      <div className="flex items-center gap-2 flex-wrap mb-2" data-tour="insurance-claim-roster-filters">
+        <span className="text-sm font-semibold text-gray-700">{data.unit.client}{data.unit.subclient ? ` — ${data.unit.subclient}` : ''}</span>
+        {Object.entries(_ROSTER_CAT).map(([k, v]) => (
+          <button key={k} onClick={() => toggleCat(k)}
+            className={`text-xs rounded px-2 py-1 border ${cats.has(k) ? `${v.cls} border-current` : 'bg-white text-gray-400 border-gray-200'}`}>
+            {v.label} {c[k]}{k === 'wrong' && data.wrong_net ? ` · ${fmt(data.wrong_net)}` : ''}
+          </button>
+        ))}
+        <span className="text-xs text-gray-400">مطابق للسجل {c.known} · السجل {data.roster_names} اسم</span>
+      </div>
+      <p className="text-xs text-gray-500 mb-3">
+        كل اسم يُقارن بأسماء المطالبات السابقة لكل جهة وفئة وفئة فوترة (سجل يكبر تلقائياً كل شهر).
+        <span className="text-red-700"> «جهة/فئة خاطئة»</span> = الاسم لم يُفوتر هنا من قبل لكنه مُفوتر على جهة أو فئة أخرى — هذه هي الروشتات التي تُخصم ثم تُعاد.
+        المطابقة الكاملة مُحدَّدة تلقائياً.
+      </p>
+      {msg && <div className="mb-3 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">{msg}</div>}
+
+      <div className="mb-3 flex gap-2 flex-wrap">
+        <button onClick={doExclude} disabled={busy || sel.size === 0} data-tour="insurance-claim-roster-exclude"
+          className="px-3 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-50">
+          {busy ? 'جارٍ…' : `استبعاد المحدد (${sel.size})`}
+        </button>
+        <button onClick={() => decide([...sel], 'member')} disabled={busy || sel.size === 0} data-tour="insurance-claim-roster-member"
+          className="px-3 py-2 bg-white border border-green-600 text-green-700 text-sm rounded hover:bg-green-50 disabled:opacity-50">
+          يتبع هذه الجهة ({sel.size})
+        </button>
+      </div>
+
+      <div {...kb.containerProps} className="bg-white rounded-xl border border-gray-200 overflow-x-auto outline-none">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 border-b border-gray-200 text-gray-500 text-xs">
+            <tr>
+              <th className="px-2 py-2 w-8"></th>
+              <th className="text-right px-2 py-2">اسم المريض</th>
+              <th className="text-center px-2 py-2">الحالة</th>
+              <th className="text-right px-2 py-2">مُفوتر سابقاً على</th>
+              <th className="text-center px-2 py-2">مرات هنا</th>
+              <th className="text-right px-2 py-2">رقم الفاتورة</th>
+              <th className="text-right px-2 py-2">التاريخ</th>
+              <th className="text-center px-2 py-2">الفرع</th>
+              <th className="text-right px-2 py-2">فئة الفوترة</th>
+              <th className="text-left px-2 py-2">الصافى</th>
+              <th className="px-2 py-2"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {rows.map(r => {
+              const cat = _ROSTER_CAT[r.category]
+              const rp = kb.rowProps(r)
+              return (
+                <tr key={r.prescription_id} {...rp} className={`hover:bg-gray-50 align-top ${rp.className}`}>
+                  <td className="px-2 py-1.5 text-center">
+                    <input type="checkbox" checked={sel.has(r.prescription_id)} onChange={() => toggle(r.prescription_id)} />
+                  </td>
+                  <td className="px-2 py-1.5 font-medium text-gray-800">{r.patient_name}</td>
+                  <td className="px-2 py-1.5 text-center whitespace-nowrap">
+                    <span className={`text-[10px] rounded px-1.5 py-0.5 ${cat.cls}`}>{cat.label}</span>
+                    {r.confidence === 'partial' && <span className="block text-[10px] text-gray-400">مطابقة جزئية</span>}
+                    {r.decided && <span className="block text-[10px] text-gray-500">قرار مُسجَّل</span>}
+                  </td>
+                  <td className="px-2 py-1.5 text-xs">
+                    {r.where.slice(0, 3).map((w, i) => (
+                      <div key={i} className="flex items-center gap-1">
+                        <span className={`${_ROSTER_SCOPE[w.scope].cls} whitespace-nowrap`}>{_ROSTER_SCOPE[w.scope].label}:</span>
+                        <span className="text-gray-700">{w.label}</span>
+                        <span className="text-gray-400 whitespace-nowrap">
+                          · {w.from_list ? 'قائمة' : `${w.count}×`}{w.last ? ` · ${w.last}` : ''}
+                          {w.matched_name !== r.patient_name ? ` · «${w.matched_name}»` : ''}
+                        </span>
+                        {r.category === 'wrong' && w.scope !== 'sister' && (
+                          <button disabled={busy} title="تسجيل أن الاسم يتبع هذه الجهة (لا يغيّر المطالبة)"
+                            onClick={() => decide([r.prescription_id], 'not_member',
+                              { client_id: w.client_id, subclient_id: w.subclient_id, group_label: w.group_label })}
+                            className="text-[10px] text-blue-600 hover:underline whitespace-nowrap">يتبعها</button>
+                        )}
+                      </div>
+                    ))}
+                    {r.where.length === 0 && <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-2 py-1.5 text-center text-xs">{r.here_count || '—'}</td>
+                  <td className="px-2 py-1.5 font-mono text-xs">{r.docnumber || '—'}</td>
+                  <td className="px-2 py-1.5 text-xs text-gray-600">{r.docdate || '—'}</td>
+                  <td className="px-2 py-1.5 text-center text-xs">{r.branch || '—'}</td>
+                  <td className="px-2 py-1.5 text-xs text-gray-500">{r.group_label || '—'}</td>
+                  <td className="px-2 py-1.5 text-left font-mono">{fmt(r.net_after)}</td>
+                  <td className="px-2 py-1.5 text-xs whitespace-nowrap">
+                    {r.decided && (
+                      <button disabled={busy} onClick={() => decide([r.prescription_id], 'clear')}
+                        className="text-gray-400 hover:text-gray-700">↩ إلغاء القرار</button>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+            {rows.length === 0 && (
+              <tr><td colSpan={11} className="px-3 py-8 text-center text-gray-400">لا أسماء في الفئات المختارة.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ── Manual separation lists (قوائم الفصل) ─────────────────────────────────────
+function SeparationListsView({ claimId, onRefresh }) {
   const [data, setData]   = useState(null)
   const [listId, setListId] = useState('')
   const [loading, setLoad]  = useState(true)

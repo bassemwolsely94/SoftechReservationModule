@@ -2396,6 +2396,8 @@ export const insuranceApi = {
   separationMatches:   (claimId, listId)    => api.get(`/insurance/claims/${claimId}/separation-matches/`, { params: listId ? { list_id: listId } : {} }),
   bulkExclude:         (claimId, ids, reason) => api.post(`/insurance/claims/${claimId}/bulk-exclude/`, { prescription_ids: ids, reason }),
   markReviewed:        (claimId, ids, reviewed) => api.post(`/insurance/claims/${claimId}/mark-reviewed/`, { prescription_ids: ids, reviewed }),
+  rosterCheck:         (claimId)            => api.get(`/insurance/claims/${claimId}/roster-check/`),
+  rosterDecision:      (claimId, data)      => api.post(`/insurance/claims/${claimId}/roster-decision/`, data),
   reviewItems:         (claimId)            => api.get(`/insurance/claims/${claimId}/review-items/`),
   applyReviewDecision: (claimId, item_code, category) => api.post(`/insurance/claims/${claimId}/apply-review-decision/`, { item_code, category }),
 

@@ -96,6 +96,10 @@ def find_separation_matches(claim, sep_list_id=None) -> dict:
     names_qs = InsuranceSeparationName.objects.filter(is_active=True, sep_list__is_active=True)
     if sep_list_id:
         names_qs = names_qs.filter(sep_list_id=sep_list_id)
+    # A list whose names BELONG to this claim's insurer must not flag its own claims
+    client_id = getattr(claim.subclient, 'client_id', None) if claim.subclient_id else None
+    if client_id:
+        names_qs = names_qs.exclude(sep_list__target_client_id=client_id)
     names = list(names_qs.select_related('sep_list'))
 
     # Pre-tokenize the list names once

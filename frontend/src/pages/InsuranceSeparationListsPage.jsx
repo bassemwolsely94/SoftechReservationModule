@@ -22,9 +22,19 @@ export default function InsuranceSeparationListsPage() {
   const [editNameId, setEditNameId] = useState(null)
   const [editNameVal, setEditNameVal] = useState('')
   const [nameFilter, setNameFilter] = useState('')
+  const [clientOpts, setClientOpts] = useState([])   // [{id, label}] — جهة + its فئات (names repeat across جهات)
 
   const loadLists = () => insuranceApi.separationLists().then(r => setLists(r.data.results || r.data))
   useEffect(() => { loadLists() }, [])
+  useEffect(() => {
+    Promise.all([insuranceApi.clients(), insuranceApi.subclients()]).then(([c, sc]) => {
+      const subs = sc.data.results || sc.data
+      setClientOpts((c.data.results || c.data).map(cl => {
+        const names = subs.filter(x => x.client === cl.id).map(x => x.name).join('، ')
+        return { id: cl.id, label: names ? `${cl.name} — ${names}` : cl.name }
+      }))
+    }).catch(() => {})
+  }, [])
   const loadNames = (l) => { setSel(l); insuranceApi.separationNames(l.id).then(r => setNames(r.data)) }
 
   const flash = (t) => { setMsg(t); setTimeout(() => setMsg(null), 4000) }
@@ -60,6 +70,12 @@ export default function InsuranceSeparationListsPage() {
   const toggleListActive = async (l) => {
     await insuranceApi.updateSeparationList(l.id, { is_active: !l.is_active })
     loadLists()
+  }
+  const setTargetClient = async (l, clientId) => {
+    const target_client = clientId ? Number(clientId) : null
+    await insuranceApi.updateSeparationList(l.id, { target_client })
+    loadLists(); setSel({ ...l, target_client })
+    flash(target_client ? 'أسماء القائمة أصبحت ضمن سجل مرضى هذه الجهة' : 'أُلغي ربط القائمة بجهة')
   }
   const saveNameEdit = async (n) => {
     if (!editNameVal.trim()) return
@@ -101,7 +117,8 @@ export default function InsuranceSeparationListsPage() {
                   <div className="flex items-center justify-between">
                     <div className="cursor-pointer flex-1" onClick={() => loadNames(l)} data-tour="insurance-separation-lists-open">
                       <div className="text-sm font-medium text-gray-800">{l.label}</div>
-                      <div className="text-xs text-gray-400">{l.name_count} اسم {l.is_active ? '' : '· موقوفة'}</div>
+                      <div className="text-xs text-gray-400">{l.name_count} اسم {l.is_active ? '' : '· موقوفة'}
+                        {l.target_client_name && <span className="text-emerald-600"> · تتبع: {l.target_client_name}</span>}</div>
                     </div>
                     <div data-tour="insurance-separation-lists-list-actions" className="flex items-center gap-2 text-xs">
                       <button onClick={() => { setEditListId(l.id); setEditLabel(l.label) }} title="تعديل الاسم" className="text-gray-400 hover:text-blue-600">✏️</button>
@@ -127,6 +144,14 @@ export default function InsuranceSeparationListsPage() {
                 <h3 className="font-semibold text-gray-700">{sel.label} — {names.length} اسم</h3>
                 <input className="border border-gray-300 rounded px-3 py-1.5 text-sm w-56" placeholder="بحث في الأسماء…" data-tour="insurance-separation-lists-search"
                   value={nameFilter} onChange={e => setNameFilter(e.target.value)} />
+              </div>
+              <div data-tour="insurance-separation-lists-target" className="mb-3 flex items-center gap-2 text-sm">
+                <label className="text-xs text-gray-600 whitespace-nowrap">الأسماء تتبع جهة:</label>
+                <select className="border border-gray-300 rounded px-2 py-1.5 text-sm flex-1"
+                  value={sel.target_client || ''} onChange={e => setTargetClient(sel, e.target.value)}>
+                  <option value="">— غير محددة (فصل فقط) —</option>
+                  {clientOpts.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </select>
               </div>
               <div data-tour="insurance-separation-lists-add-names" className="mb-3">
                 <label className="block text-xs text-gray-600 mb-1">إضافة أسماء (اسم في كل سطر)</label>

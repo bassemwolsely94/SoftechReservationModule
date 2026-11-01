@@ -2285,6 +2285,45 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
         list_id = request.query_params.get('list_id') or None
         return Response(find_separation_matches(claim, sep_list_id=list_id))
 
+    @action(detail=True, methods=['get'], url_path='roster-check')
+    def roster_check(self, request, pk=None):
+        """READ-ONLY: classify each receipt against the cumulative patient rosters
+        (جهة → فئة → فئة فوترة) to catch wrong-insurer allocation."""
+        claim = self.get_object()
+        from .roster import check_claim_roster
+        return Response(check_claim_roster(claim))
+
+    @action(detail=True, methods=['post'], url_path='roster-decision')
+    def roster_decision(self, request, pk=None):
+        """Record a reviewer verdict on patients of this claim (does NOT change totals).
+
+        Body: { prescription_ids: [...], verdict: 'member'|'not_member'|'clear',
+                target: {client_id, subclient_id?, group_label?}?, note? }
+        """
+        claim = self.get_object()
+        from .roster import record_decision
+        ids = request.data.get('prescription_ids') or []
+        verdict = request.data.get('verdict')
+        target = request.data.get('target') or None
+        note = (request.data.get('note') or '').strip()
+        if not ids or verdict not in ('member', 'not_member', 'clear'):
+            return Response({'error': 'prescription_ids و verdict مطلوبان'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if target is not None and not InsuranceClient.objects.filter(pk=target.get('client_id')).exists():
+            return Response({'error': 'الجهة الهدف غير موجودة'}, status=status.HTTP_400_BAD_REQUEST)
+        staff = getattr(request.user, 'staff_profile', None)
+        rxs = list(claim.prescriptions.filter(id__in=ids).select_related('billing_group'))
+        for rx in rxs:
+            record_decision(claim, rx, verdict, target=target, note=note, actor=staff)
+        labels = {'member': 'يتبع هذه الجهة', 'not_member': 'لا يتبع هذه الجهة', 'clear': 'إلغاء القرار'}
+        record_audit(claim, 'roster_decision', actor=staff,
+                     summary=f'سجل المرضى: {labels[verdict]} — {len(rxs)} اسم',
+                     reason=note,
+                     meta={'verdict': verdict, 'target': target,
+                           'names': [rx.patient_name for rx in rxs][:200],
+                           'prescription_ids': [rx.id for rx in rxs][:200]})
+        return Response({'updated': len(rxs), 'verdict': verdict})
+
     @action(detail=True, methods=['get'], url_path='audit-log')
     def audit_log(self, request, pk=None):
         """Activity trail for this claim — every material change (who/what/when/

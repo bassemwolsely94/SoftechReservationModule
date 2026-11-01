@@ -1156,6 +1156,7 @@ class InsuranceAuditEvent(models.Model):
         ('deduction',       'خصم/استقطاع'),
         ('billing_group',   'فئة فوترة'),
         ('bulk_exclude',    'استبعاد جماعي (فصل)'),
+        ('roster_decision', 'قرار سجل المرضى'),
         ('other',           'أخرى'),
     ]
 
@@ -1530,6 +1531,12 @@ class InsuranceSeparationList(models.Model):
                                     help_text='مثال: شركة الخدمات الطبية')
     description = models.TextField(blank=True, verbose_name='وصف')
     is_active   = models.BooleanField(default=True, verbose_name='مُفعَّلة')
+    # Optional: the insurer these names actually BELONG to.  When set, the names
+    # count as confirmed members of that insurer's patient roster (roster.py) and
+    # are not flagged on that insurer's own claims.
+    target_client = models.ForeignKey('InsuranceClient', on_delete=models.SET_NULL,
+                                      null=True, blank=True, related_name='separation_lists',
+                                      verbose_name='الجهة التي تتبعها الأسماء')
     created_by  = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL,
                                     null=True, blank=True, related_name='+',
                                     verbose_name='أُنشئت بواسطة')
@@ -1567,3 +1574,55 @@ class InsuranceSeparationName(models.Model):
 
     def __str__(self):
         return self.name
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PATIENT ROSTER DECISIONS — wrong-insurer allocation review (roster.py)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class InsuranceRosterDecision(models.Model):
+    """
+    A reviewer's verdict on whether a patient name belongs to an insurer's roster.
+    Rosters themselves are DERIVED from claim history (roster.py); these rows only
+    override that history, so a decided name stops being re-flagged every month.
+
+      member      — the name belongs to `client` (confirmed / shared name, not a mistake)
+      not_member  — the name does NOT belong to `client` (it was a wrong allocation)
+    """
+    VERDICT_MEMBER     = 'member'
+    VERDICT_NOT_MEMBER = 'not_member'
+    VERDICT_CHOICES = [
+        (VERDICT_MEMBER,     'يتبع الجهة'),
+        (VERDICT_NOT_MEMBER, 'لا يتبع الجهة'),
+    ]
+
+    # The roster UNIT: جهة → فئة (optional) → فئة فوترة (optional, stored as
+    # roster.group_key so the same division matches across months).
+    client     = models.ForeignKey(InsuranceClient, on_delete=models.CASCADE,
+                                   related_name='roster_decisions', verbose_name='الجهة')
+    subclient  = models.ForeignKey(InsuranceSubClient, on_delete=models.CASCADE, null=True, blank=True,
+                                   related_name='roster_decisions', verbose_name='الفئة')
+    group_key  = models.CharField(max_length=200, blank=True, default='', verbose_name='فئة الفوترة (مُعيَّرة)')
+    group_label = models.CharField(max_length=200, blank=True, default='', verbose_name='فئة الفوترة')
+    name      = models.CharField(max_length=200, verbose_name='الاسم')
+    normalized = models.CharField(max_length=200, db_index=True, verbose_name='الاسم المُعيَّر')
+    verdict    = models.CharField(max_length=20, choices=VERDICT_CHOICES, verbose_name='القرار')
+    note       = models.CharField(max_length=300, blank=True, verbose_name='ملاحظة')
+    claim      = models.ForeignKey(InsuranceClaim, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+', verbose_name='المطالبة التي اتُّخذ فيها القرار')
+    decided_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL,
+                                   null=True, blank=True, related_name='+', verbose_name='بواسطة')
+    decided_at = models.DateTimeField(auto_now=True, verbose_name='وقت القرار')
+
+    class Meta:
+        verbose_name        = 'قرار سجل مرضى'
+        verbose_name_plural = 'قرارات سجل المرضى'
+        unique_together     = [['client', 'subclient', 'group_key', 'normalized']]
+
+    def save(self, *args, **kwargs):
+        from .separation import normalize_name
+        self.normalized = normalize_name(self.name)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.name} → {self.client_id}/{self.subclient_id}/{self.group_key}: {self.verdict}'
