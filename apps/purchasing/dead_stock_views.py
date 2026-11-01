@@ -6,7 +6,8 @@ Read = the analytics grant (as the spike tab); a branch-bound user sees only own
 Decisions and strategic hold = purchasing edit/approve, audited (AuditLog).
 
   GET  /api/purchasing/dead-stock/summary/
-  GET  /api/purchasing/dead-stock/lines/?lane=&location=&branch=&cause=&flag=&q=&show_decided=1&format=xlsx
+  GET  /api/purchasing/dead-stock/lines/?lane=&location=&branch=&cause=&flag=&q=&show_decided=1&page=&page_size=
+                                                      (200 a page, rank order; format=xlsx = every line)
   GET  /api/purchasing/dead-stock/recompute/          {running}
   POST /api/purchasing/dead-stock/recompute/          rebuild the list for the latest engine run (background)
   POST /api/purchasing/dead-stock/decisions/          {item_id, branch_code, decision, reason, until?} · {id, close: true}
@@ -39,6 +40,8 @@ CAUSE_AR = {'': '', 'supplier_push': 'دفع مورد / شراء مركزي', 'd
 WINDOW_AR = {'open': 'نافذة المرتجع مفتوحة', 'closes_this_month': 'تُغلق هذا الشهر', 'opens_next_month': 'تُفتح الشهر القادم',
              'later': 'لاحقًا', 'missed': 'فاتت'}
 REASONS = ('مريض معروف', 'عرض قادم', 'خطأ رصيد', 'أخرى')
+PAGE_SIZE = 200
+MAX_PAGE_SIZE = 1000
 
 
 def _allowed_codes(request):
@@ -130,6 +133,8 @@ def dead_stock_summary(request):
     return Response({'snapshot': {'run_id': snap.run_id, 'run_finished_at': snap.run.finished_at,
                                   'computed_at': snap.computed_at, 'as_of': snap.as_of,
                                   'settings': snap.settings_used},
+                     'branches': [{'code': c, 'name': n} for c, n in
+                                  sorted({(l['branch_code'], l['branch_name']) for l in lines})],
                      'lanes': lanes, 'locations': locations, 'total': {
                          'count': len(lines), 'value': sum(l['value'] for l in lines)},
                      'reasons': REASONS})
@@ -141,8 +146,16 @@ def dead_stock_lines(request):
     snap = DS.latest_snapshot()
     lines = _lines(request, snap) if snap else []
     if request.query_params.get('format') == 'xlsx':
-        return _excel(lines, snap)
-    return Response({'lines': lines, 'run_id': snap.run_id if snap else None})
+        return _excel(lines, snap)                                    # the export is never paged
+    try:
+        size = max(1, min(int(request.query_params.get('page_size', PAGE_SIZE)), MAX_PAGE_SIZE))
+        page = max(1, int(request.query_params.get('page', 1)))
+    except ValueError:
+        size, page = PAGE_SIZE, 1
+    pages = max(1, -(-len(lines) // size))
+    page = min(page, pages)
+    return Response({'lines': lines[(page - 1) * size: page * size], 'count': len(lines), 'page': page,
+                     'pages': pages, 'page_size': size, 'run_id': snap.run_id if snap else None})
 
 
 def _excel(lines, snap):

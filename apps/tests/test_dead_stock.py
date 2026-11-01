@@ -202,3 +202,25 @@ class ApiTests(SnapshotTests):
                                     format='json').status_code, 403)
         self.assertEqual(ph130.post(self.URL + 'strategic-hold/', {'item_id': 1, 'hold': True},
                                     format='json').status_code, 403)
+
+
+class PagingTests(ApiTests):
+
+    def test_pages_in_rank_order_with_count_and_branch_list(self):
+        from apps.catalog.models import Item
+        from apps.purchasing import dead_stock
+        from apps.purchasing.models import ItemDemandMetrics
+        from apps.branches.models import Branch
+        b130 = Branch.objects.get(softech_branch_id='130')
+        for n in range(4):
+            it = Item.objects.create(softech_id=f'P{n}', name=f'صفحة {n}', cost_price=D(10 + n))
+            ItemDemandMetrics.objects.create(run=self.run, item=it, branch=b130, calc_date=TODAY, current_stock=5)
+        dead_stock.compute_snapshot(self.run, today=TODAY)
+        r = self.admin.get(self.URL + 'lines/?page_size=2&page=1').data
+        self.assertEqual((r['count'], r['pages'], len(r['lines'])), (5, 3, 2))
+        last = self.admin.get(self.URL + 'lines/?page_size=2&page=3').data['lines']
+        self.assertEqual(len(last), 1)
+        first_ids = [x['id'] for x in r['lines']]
+        self.assertNotIn(last[0]['id'], first_ids)
+        s = self.admin.get(self.URL + 'summary/').data
+        self.assertEqual(s['branches'], [{'code': '130', 'name': 'فرع 130'}])

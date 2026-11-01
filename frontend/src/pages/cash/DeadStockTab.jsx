@@ -6,7 +6,7 @@
  * return to the supplier (advisory), stop (موقوف). Buyers tick lines and exclude them (with a reason) or set a
  * strategic hold; both are audited server-side. Nothing here creates a transfer or writes to SOFTECH.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { purchasingApi } from '../../api/client'
 import DataFreshnessBar from '../../components/DataFreshnessBar'
@@ -31,11 +31,15 @@ export default function DeadStockTab() {
   const [reason, setReason] = useState('')
   const [msg, setMsg] = useState('')
   const [since, setSince] = useState(null)
-  const params = { lane: lane || undefined, location: location || undefined, branch: branch || undefined,
-                   q: q || undefined, show_decided: showDecided ? 1 : undefined }
+  const [page, setPage] = useState(1)
+  const filters = { lane: lane || undefined, location: location || undefined, branch: branch || undefined,
+                    q: q || undefined, show_decided: showDecided ? 1 : undefined }
+  const params = { ...filters, page }
+  useEffect(() => { setPage(1); setTicked(new Set()) }, [lane, location, branch, q, showDecided])
   const reload = () => qc.invalidateQueries({ queryKey: ['dead-stock'] })
   const summary = useQuery({ queryKey: ['dead-stock', 'summary'], queryFn: () => purchasingApi.deadStockSummary().then(r => r.data) })
-  const lines = useQuery({ queryKey: ['dead-stock', 'lines', params], queryFn: () => purchasingApi.deadStockLines(params).then(r => r.data) })
+  const lines = useQuery({ queryKey: ['dead-stock', 'lines', params], placeholderData: prev => prev,
+                           queryFn: () => purchasingApi.deadStockLines(params).then(r => r.data) })
   const status = useQuery({
     queryKey: ['dead-stock-recompute'], enabled: since != null, refetchInterval: 3000,
     queryFn: () => purchasingApi.deadStockRecomputeStatus().then(r => r.data),
@@ -45,7 +49,6 @@ export default function DeadStockTab() {
   }, [status.data]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const rows = lines.data?.lines || []
-  const branches = useMemo(() => [...new Map(rows.map(r => [r.branch_code, r.branch_name])).entries()], [rows])
   const toggle = (id) => setTicked(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   const kb = useGridKeyboard({
     rows, getKey: r => r.id, onToggle: r => toggle(r.id), onOpen: r => setOpen(o => (o === r.id ? null : r.id)),
@@ -73,7 +76,7 @@ export default function DeadStockTab() {
   const recompute = () => purchasingApi.deadStockRecompute()
     .then(r => { setMsg(r.data.detail); setSince(Date.now()) })
     .catch(e => setMsg(errOf(e, 'تعذّر بدء إعادة الحساب')))
-  const exportX = () => purchasingApi.deadStockExport(params).then(res => {
+  const exportX = () => purchasingApi.deadStockExport(filters).then(res => {
     const url = window.URL.createObjectURL(new Blob([res.data]))
     const a = document.createElement('a'); a.href = url; a.download = 'dead_stock.xlsx'
     document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url)
@@ -114,7 +117,7 @@ export default function DeadStockTab() {
         </select>
         <select value={branch} onChange={e => setBranch(e.target.value)} className="border rounded px-2 py-1">
           <option value="">كل الفروع</option>
-          {branches.map(([c, n]) => <option key={c} value={c}>{n}</option>)}
+          {(summary.data?.branches || []).map(b => <option key={b.code} value={b.code}>{b.name}</option>)}
         </select>
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="بحث بالصنف أو الكود" className="border rounded px-2 py-1" />
         <label className="flex items-center gap-1 text-xs text-gray-600"><input type="checkbox" checked={showDecided} onChange={e => setShowDecided(e.target.checked)} /> إظهار المستبعد</label>
@@ -180,6 +183,13 @@ export default function DeadStockTab() {
         )}
         {!lines.isLoading && !rows.length && <div className="text-center py-10 text-gray-400 text-sm">لا سطور.</div>}
       </div>
+      {(lines.data?.pages || 1) > 1 && (
+        <div className="flex items-center justify-center gap-2 text-sm">
+          <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1 border rounded disabled:opacity-40">السابق</button>
+          <span className="text-gray-600">صفحة {lines.data.page} من {lines.data.pages} · {lines.data.count} سطر</span>
+          <button disabled={page >= lines.data.pages} onClick={() => setPage(p => p + 1)} className="px-3 py-1 border rounded disabled:opacity-40">التالي</button>
+        </div>
+      )}
       <p className="text-xs text-gray-400">للاسترشاد فقط — لا يُنشأ تحويل أو مرتجع من هنا. النقل يدخل «التوزيعة» لاحقًا بعد مراجعة أول قائمة.</p>
     </div>
   )
