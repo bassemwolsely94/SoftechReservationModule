@@ -502,3 +502,33 @@ class RememberDeviceTests(TestCase):
                              format='json', HTTP_USER_AGENT=UA)
         self.assertEqual(r.status_code, 200)
         self.assertNotIn('mfa_required', r.data)
+
+    def test_password_change_cancels(self):
+        c2, dev, _ = self._remembered_client()
+        self.user.set_password('NewPass123!x')       # self-service change and admin reset both do this
+        self.user.save(update_fields=['password'])
+        r = _login(c2, 'rem_u1', password='NewPass123!x')
+        self.assertTrue(r.data.get('mfa_required'))
+
+    def test_2fa_disable_then_reenable_cancels(self):
+        c2, dev, _ = self._remembered_client()
+        self.profile.mfa_enabled = False
+        self.profile.mfa_secret = ''
+        self.profile.save()
+        self.profile.mfa_secret = pyotp.random_base32()
+        self.profile.mfa_enabled = True
+        self.profile.save()
+        self.assertTrue(_login(c2, 'rem_u1').data.get('mfa_required'))
+
+    def test_other_users_remember_does_not_skip_for_another_user(self):
+        c2, dev, _ = self._remembered_client()
+        u2, p2, _ = make_user('rem_u2')
+        p2.mfa_enabled = True
+        p2.mfa_secret = pyotp.random_base32()
+        p2.save()
+        self.assertTrue(_login(c2, 'rem_u2').data.get('mfa_required'))
+
+    def test_future_dated_remember_ignored(self):
+        c2, dev, _ = self._remembered_client()
+        DeviceUser.objects.filter(device=dev).update(mfa_remembered_at=timezone.now() + timedelta(days=5))
+        self.assertTrue(_login(c2, 'rem_u1').data.get('mfa_required'))

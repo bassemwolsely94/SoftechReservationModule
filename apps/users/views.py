@@ -214,14 +214,13 @@ def login_view(request):
     login_note = ''
     if profile and profile.mfa_enabled:
         device_token = request.data.get('device_token', '')
-        if _mfa.valid_device_token(device_token, user):
-            pass
-        elif _devices.mfa_remembered(request, profile):
-            login_note = 'mfa_skipped_device'
-        else:
-            _log_auth('mfa_challenge', profile, ip, request=request)
-            return Response({'mfa_required': True,
-                             'mfa_token': _mfa.make_preauth_token(user, 'login')})
+        if not _mfa.valid_device_token(device_token, user):
+            if _devices.mfa_remembered(request, profile):
+                login_note = 'mfa_skipped_device'
+            else:
+                _log_auth('mfa_challenge', profile, ip, request=request)
+                return Response({'mfa_required': True,
+                                 'mfa_token': _mfa.make_preauth_token(user, 'login')})
     elif _mfa.mfa_required_for(profile):
         # Enforcement on + required role + not yet enrolled → force enrollment now.
         _log_auth('mfa_challenge', profile, ip, note='mfa_setup_required', request=request)

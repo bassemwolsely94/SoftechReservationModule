@@ -127,6 +127,7 @@ class DeviceUser(models.Model):
     last_seen = models.DateTimeField(null=True, blank=True)
     mfa_remembered_at = models.DateTimeField(null=True, blank=True)
     mfa_remembered_epoch = models.PositiveIntegerField(null=True, blank=True)
+    mfa_remembered_fp = models.CharField(max_length=24, blank=True, default='')
 
     class Meta:
         unique_together = [('device', 'user')]

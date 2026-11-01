@@ -138,8 +138,10 @@ def remember_mfa(device, profile):
         from .models import DeviceUser
         link, _ = DeviceUser.objects.get_or_create(device=device, user=profile)
         link.mfa_remembered_at = timezone.now()
+        from apps.users.mfa import _device_fingerprint
         link.mfa_remembered_epoch = profile.mfa_device_epoch or 0
-        link.save(update_fields=['mfa_remembered_at', 'mfa_remembered_epoch'])
+        link.mfa_remembered_fp = _device_fingerprint(profile.user)
+        link.save(update_fields=['mfa_remembered_at', 'mfa_remembered_epoch', 'mfa_remembered_fp'])
     except Exception as exc:
         logger.warning('remember_mfa skipped: %s', exc)
 
@@ -157,9 +159,11 @@ def mfa_remembered(request, profile):
         link = DeviceUser.objects.filter(device=device, user=profile).first()
         if link is None or link.mfa_remembered_at is None:
             return False
-        if timezone.now() - link.mfa_remembered_at > timedelta(days=MFA_REMEMBER_DAYS):
+        age = timezone.now() - link.mfa_remembered_at
+        if age < timedelta(0) or age > timedelta(days=MFA_REMEMBER_DAYS):
             return False
-        return (link.mfa_remembered_epoch or 0) == (profile.mfa_device_epoch or 0)
+        from apps.users.mfa import _device_fingerprint     # password + 2FA secret + epoch
+        return bool(link.mfa_remembered_fp) and link.mfa_remembered_fp == _device_fingerprint(profile.user)
     except Exception as exc:
         logger.debug('mfa_remembered skipped: %s', exc)
         return False
