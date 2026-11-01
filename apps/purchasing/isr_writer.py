@@ -438,7 +438,7 @@ def build_items_plan(node_branch, items):
 # ── create a proposal (PG only) + optional auto-approve+push ────────────────────
 def _persist_proposal(*, source, dest, kind, lines, run_id=None, created_by=None, linked=None,
                       coverage_months=None, params=None, origin_isr=None, origin_request=None,
-                      origin_shortage_list=None, origin_donor='', notes=''):
+                      origin_shortage_list=None, origin_donor='', notes='', planner=None):
     """Save one PROPOSED draft. Guards (isr_guards, doc 30 phase A): the route must be valid
     (never HQ → HQ); a GENERAL draft (no origin request) supersedes an older proposed draft
     on the same route and is refused while an approved one waits there. Drafts tied to a
@@ -454,7 +454,9 @@ def _persist_proposal(*, source, dest, kind, lines, run_id=None, created_by=None
     branch = Branch.objects.filter(softech_branch_id=str(source)).first()
     general = origin_isr is None and origin_request is None and origin_shortage_list is None
     with transaction.atomic():
-        older = isr_guards.check_route_free(kind, source, dest) if general else []
+        if general and planner:
+            params = {**(params or {}), 'planner': planner}       # P-32 §2.3: who made this draft
+        older = isr_guards.check_route_free(kind, source, dest, planner=planner) if general else []
         isr_guards.retire(older, user=created_by)        # one live draft per route, always
         p = IsrPush.objects.create(
             branch=branch, branchcode=str(source), dest_branchcode=str(dest), kind=kind,
@@ -492,7 +494,7 @@ def create_proposal(branchcode, *, created_by=None, max_lines=None, run=None, fr
     kind = IsrPush.KIND_HQ_TO_BRANCH if from_hq else IsrPush.KIND_SELF
     p = _persist_proposal(source=source, dest=str(branchcode), kind=kind,
                           lines=plan['lines'], run_id=plan.get('run_id'), created_by=created_by,
-                          coverage_months=plan.get('coverage_months'), params=params)
+                          coverage_months=plan.get('coverage_months'), params=params, planner='replenishment')
     return (p, plan) if return_plan else p
 
 
@@ -531,7 +533,7 @@ def generate_transfers_from_run(*, run=None, from_branch=None, to_branch=None,
         if max_pairs and len(out) >= max_pairs:
             break
         try:
-            leg1, leg2 = create_transfer_proposals(a, b, items, created_by=created_by)
+            leg1, leg2 = create_transfer_proposals(a, b, items, created_by=created_by, planner='transfer')
         except ValueError as exc:                # a guard refused this route (isr_guards)
             if skipped is not None:
                 skipped.append({'route': f'{a} ← {b}', 'path': [a, b], 'reason': str(exc)})
@@ -543,7 +545,7 @@ def generate_transfers_from_run(*, run=None, from_branch=None, to_branch=None,
     return out
 
 
-def create_transfer_proposals(from_branch, to_branch, items, *, created_by=None):
+def create_transfer_proposals(from_branch, to_branch, items, *, created_by=None, planner=None):
     """L2: two linked ISR proposals for a surplus→HQ→deficit allocation.
       Leg 1: source=from_branch (surplus, prepares), dest=100 (HQ receives)  [branch_to_hq]
       Leg 2: source=100 (HQ prepares),      dest=to_branch (deficit receives) [hq_to_branch]
@@ -557,19 +559,20 @@ def create_transfer_proposals(from_branch, to_branch, items, *, created_by=None)
         return None, None
     if dst == HQ_CODE:                                       # surplus branch → HQ only
         return _persist_proposal(source=src, dest=HQ_CODE, kind=IsrPush.KIND_BRANCH_TO_HQ,
-                                 lines=build_items_plan(src, items), created_by=created_by), None
+                                 lines=build_items_plan(src, items), created_by=created_by, planner=planner), None
     if src == HQ_CODE:                                       # HQ → deficit branch only
         return None, _persist_proposal(source=HQ_CODE, dest=dst, kind=IsrPush.KIND_HQ_TO_BRANCH,
-                                       lines=build_items_plan(HQ_CODE, items), created_by=created_by)
+                                       lines=build_items_plan(HQ_CODE, items), created_by=created_by, planner=planner)
     leg1_lines = build_items_plan(src, items)                # nowqty from surplus branch
     leg2_lines = build_items_plan(HQ_CODE, items)            # nowqty from HQ
     if not leg1_lines and not leg2_lines:
         return None, None
     with transaction.atomic():                               # both legs or neither
         leg1 = _persist_proposal(source=src, dest=HQ_CODE, kind=IsrPush.KIND_BRANCH_TO_HQ,
-                                 lines=leg1_lines, created_by=created_by)
+                                 lines=leg1_lines, created_by=created_by, planner=planner)
         leg2 = _persist_proposal(source=HQ_CODE, dest=dst, kind=IsrPush.KIND_HQ_TO_BRANCH,
-                                 lines=leg2_lines, created_by=created_by, linked=leg1)
+                                 lines=leg2_lines, created_by=created_by, linked=leg1,
+                                 planner=planner)
         if leg1 and leg2:
             leg1.linked_push = leg2
             leg1.save(update_fields=['linked_push'])
@@ -600,12 +603,12 @@ def create_distribution_proposals(*, categories=None, limit=None, created_by=Non
             if src == HQ_CODE:
                 lines = build_items_plan(HQ_CODE, items)
                 p = _persist_proposal(source=HQ_CODE, dest=dest, kind=IsrPush.KIND_HQ_TO_BRANCH,
-                                      lines=lines, created_by=created_by)
+                                      lines=lines, created_by=created_by, planner='distribution')
                 if p:
                     created.append({'route': f'{HQ_CODE} ← {dest}', 'path': [HQ_CODE, dest], 'kind': 'hq_to_branch',
                                     'ids': [p.id], 'items': len(items)})
                 continue
-            leg1, leg2 = create_transfer_proposals(src, dest, items, created_by=created_by)
+            leg1, leg2 = create_transfer_proposals(src, dest, items, created_by=created_by, planner='distribution')
         except ValueError as exc:                # a guard refused this route (isr_guards)
             if skipped is not None:
                 skipped.append({'route': f'{src} ← {dest}', 'path': [src, dest], 'reason': str(exc)})

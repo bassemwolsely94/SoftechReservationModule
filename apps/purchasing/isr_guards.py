@@ -74,15 +74,26 @@ def live_on_route(kind, source, dest, *, exclude=None):
     return qs.exclude(pk=exclude) if exclude else qs
 
 
-def check_route_free(kind, source, dest):
-    """Before a new general draft: refuse when an APPROVED one waits on the route; return
-    the PROPOSED ones the new draft will supersede."""
+PLANNER_AR = {'replenishment': 'طلبات التوريد', 'distribution': 'التوزيعة', 'transfer': 'تحويلات المحرك'}
+
+
+def check_route_free(kind, source, dest, *, planner=None):
+    """Before a new general draft: refuse when an APPROVED one waits on the route, or (P-32 §2.3) when a PROPOSED
+    one from ANOTHER planner waits there — it is no longer silently cancelled. Return the PROPOSED drafts the new
+    draft will supersede (same planner, or drafts made before planners were recorded)."""
     live = list(live_on_route(kind, source, dest).select_for_update())
     approved = [p for p in live if p.status == 'approved']
     if approved:
         raise GuardError(f'يوجد طلب توريد معتمد #{approved[0].pk} لنفس المسار ({source} ← {dest or source}) '
                          f'لم يُرحَّل بعد — رحّله أو ألغه أولاً.', code='approved_exists', other=approved[0].pk)
-    return [p for p in live if p.status == 'proposed']
+    proposed = [p for p in live if p.status == 'proposed']
+    if planner:
+        other = next((p for p in proposed if (p.params or {}).get('planner') not in (None, '', planner)), None)
+        if other is not None:
+            who = PLANNER_AR.get(other.params['planner'], other.params['planner'])
+            raise GuardError(f'يوجد طلب مقترح #{other.pk} من «{who}» لنفس المسار ({source} ← {dest or source}) — '
+                             f'لن يُلغى تلقائياً. راجعه أو ألغه أولاً.', code='other_planner', other=other.pk)
+    return proposed
 
 
 def _audit(action, obj, *, user=None, note='', changes=None, extra=None):
@@ -260,3 +271,28 @@ def check_push(p, *, user=None, force_reason=''):
             p.save(update_fields=['params'])
             _audit('isr_overlap_push_forced', p, user=user, note=reason,
                    extra={'earlier': earlier, 'items': len(rows)})
+
+
+def expiry_days():
+    """SystemSetting `isr_draft_expiry_days` (0 / missing = off)."""
+    from apps.config.models import SystemSetting
+    try:
+        return max(0, int(SystemSetting.get('isr_draft_expiry_days', 0) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def expire_drafts(*, now=None):
+    """P-32 §2.4 / doc 30 §2.6: cancel, with audit, every PROPOSED general draft older than `expiry_days()` (PG only,
+    never SOFTECH). Approved drafts (a person signed them off) and drafts tied to a branch / WhatsApp / shortage-list
+    request keep their own rules. Returns the cancelled ids. Idempotent."""
+    from apps.purchasing.models import IsrPush as P
+    days = expiry_days()
+    if not days:
+        return []
+    cutoff = (now or timezone.now()) - timedelta(days=days)
+    done = []
+    for p in _general(P.objects.filter(status=P.STATUS_PROPOSED, created_at__lt=cutoff)).order_by('pk'):
+        _cancel(p, reason=f'انتهت صلاحية المقترح: أقدم من {days} أيام دون اعتماد')
+        done.append(p.pk)
+    return done

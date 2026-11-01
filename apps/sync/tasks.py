@@ -2354,6 +2354,17 @@ def _run_cash_view_snapshot():
         logger.error('[APScheduler] cash view snapshot failed: %s', exc)
 
 
+def _run_isr_draft_expiry():
+    """P-32: cancel unapproved general ISR drafts older than isr_draft_expiry_days (off at 0). PG only."""
+    try:
+        from apps.purchasing.isr_guards import expire_drafts
+        done = expire_drafts()
+        if done:
+            logger.info('[APScheduler] ISR draft expiry cancelled %s', done)
+    except Exception as exc:
+        logger.error('[APScheduler] ISR draft expiry failed: %s', exc)
+
+
 def _run_return_window_digest():
     """P-29: 1st of the month — supplier window snapshot + one digest to the returns owners."""
     try:
@@ -3547,6 +3558,11 @@ def start_scheduler():
     )
     _scheduler.add_job(
         _run_return_window_digest, 'cron', day=1, hour=8, minute=15, id='return_window_digest',
+        replace_existing=True, max_instances=1, misfire_grace_time=6 * 3600,
+    )
+    # ISR draft expiry (P-32): daily 06:30, PG only; does nothing until isr_draft_expiry_days > 0.
+    _scheduler.add_job(
+        _run_isr_draft_expiry, 'cron', hour=6, minute=30, id='isr_draft_expiry',
         replace_existing=True, max_instances=1, misfire_grace_time=6 * 3600,
     )
     # 13-week cash view (P-40): Saturday 06:00 snapshot, the week's first morning (weeks start Saturday).

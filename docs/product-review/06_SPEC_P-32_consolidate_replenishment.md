@@ -139,6 +139,13 @@ gate and guards. No new SOFTECH writer.
   does not put the ISR number on the issue line (`s_doccode` empty, `r_doccode` points to purchases), so the rule is
   item × route × time. The ledger refreshes every 2 h: a very recent issue still asks for a reason (safe side).
 - **Switched ON 2026-11-01** by the owner (SystemSetting `isr_overlap_guard` = on, office database).
+- **Built 2026-11-01 — planner rule (§2.3), live:** `_persist_proposal(planner=…)` records `params['planner']`
+  (`replenishment` from `create_proposal`, `distribution` from «التوزيعة», `transfer` from the engine pairs);
+  `check_route_free` refuses a proposed draft of another planner with `other_planner` instead of cancelling it.
+  Drafts made before planners were recorded still supersede as before.
+- **Built 2026-11-01 — draft expiry, OFF:** `isr_guards.expire_drafts` + daily 06:30 job `isr_draft_expiry` cancel
+  (with audit) PROPOSED general drafts older than SystemSetting `isr_draft_expiry_days`; 0 / missing = off. Approved
+  and request-tied drafts are never expired.
 - **Draft expiry** (doc 30 §2.6): an unpushed general draft older than N days (default 7) is cancelled with audit by a
   daily PG-only job `isr_draft_expiry`. It never touches SOFTECH.
 - Regenerating a plan supersedes the old plan's drafts (same planner). It never duplicates them.
