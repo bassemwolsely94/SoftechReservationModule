@@ -516,3 +516,10 @@ pharmacist GET /api/analytics/branch-contribution/
 pharmacist GET /api/analytics/inventory-investment/
 viewer GET /api/analytics/branch-contribution/
 viewer GET /api/analytics/inventory-investment/
+
+# reason: security N1 — the trusted-network list decides who counts as "inside the company"; it is
+#   admin only (IsAdminRole) like the rest of the access settings, even for roles that can open settings.
+pharmacist GET /api/access/networks/
+pharmacist GET /api/access/networks/987654321/
+purchasing GET /api/access/networks/
+purchasing GET /api/access/networks/987654321/

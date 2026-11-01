@@ -1,9 +1,9 @@
 from django.urls import include, path
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import SimpleRouter
 
 from . import views
 
-router = DefaultRouter()
+router = SimpleRouter()   # no browsable API root / format routes
 router.register('networks', views.TrustedNetworkViewSet, basename='trusted-network')
 
 urlpatterns = [

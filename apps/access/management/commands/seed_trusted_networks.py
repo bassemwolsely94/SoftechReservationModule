@@ -1,6 +1,6 @@
 """
 Seed the trusted-network list (security N1): one /24 per branch whose SOFTECH db_host is a
-192.168.x.y address, plus the ZeroTier staff VPN. Dry run unless --apply; idempotent; never
+192.168.x.y address (closed branches excluded), plus the ZeroTier staff VPN. Dry run unless --apply; idempotent; never
 touches a row whose cidr already exists.
 """
 import ipaddress
@@ -22,7 +22,7 @@ class Command(BaseCommand):
 
     def _wanted(self):
         seen = set()
-        for b in Branch.objects.with_local_db().order_by('softech_branch_id'):
+        for b in Branch.objects.with_local_db().exclude(kind=Branch.KIND_CLOSED).order_by('softech_branch_id'):
             try:
                 addr = ipaddress.ip_address((b.db_host or '').strip())
             except ValueError:

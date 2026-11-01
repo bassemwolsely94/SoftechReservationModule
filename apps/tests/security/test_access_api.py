@@ -142,6 +142,7 @@ class SeedCommandTests(TestCase):
         self.b2 = Branch.objects.create(softech_branch_id='102', name='B', name_ar='فرع ب', db_host='192.168.30.12')
         Branch.objects.create(softech_branch_id='103', name='C', db_host='10.0.0.5')   # not 192.168.x
         Branch.objects.create(softech_branch_id='104', name='D', db_host='')
+        Branch.objects.create(softech_branch_id='110', name='X', db_host='192.168.110.5', kind='closed')
 
     def test_dry_run_writes_nothing(self):
         out = self._run()
