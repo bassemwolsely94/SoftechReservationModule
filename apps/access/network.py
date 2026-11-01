@@ -42,7 +42,8 @@ def proxy_key_ok(request):
     if not key:
         return True
     sent = request.META.get('HTTP_X_ELR_PROXY_KEY') or ''
-    return hmac.compare_digest(str(sent), str(key))
+    # bytes, so a non-ASCII header can never make compare_digest raise
+    return hmac.compare_digest(str(sent).encode('utf-8', 'surrogateescape'), str(key).encode('utf-8'))
 
 
 def zone_from_request(request):

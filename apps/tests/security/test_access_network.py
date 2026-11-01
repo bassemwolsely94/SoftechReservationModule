@@ -61,6 +61,11 @@ class ProxyKeyTests(TestCase):
         self.assertEqual(zone_from_request(_req('internal', key='s3cret-key')), INTERNAL)
         self.assertEqual(zone_from_request(_req('external', key='s3cret-key')), EXTERNAL)
 
+    def test_non_ascii_key_header_is_external_not_error(self):
+        for junk in ('éال', 'caf\udce9'):
+            self.assertEqual(zone_from_request(_req('internal', key=junk)), EXTERNAL)
+            self.assertFalse(proxy_key_ok(_req('internal', key=junk)))
+
     @override_settings(NETWORK_PROXY_KEY='')
     def test_no_key_configured_keeps_n1_behaviour(self):
         self.assertTrue(proxy_key_ok(_req()))

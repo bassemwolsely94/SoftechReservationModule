@@ -37,6 +37,10 @@ class NetworkSettingsCheckTests(SimpleTestCase):
     def test_no_e003_with_key(self):
         self.assertNotIn('access.E003', ids())
 
+    @override_settings(NETWORK_POLICY_ENFORCEMENT='enforce', NETWORK_HEADER_TRUSTED=False, NETWORK_PROXY_KEY='')
+    def test_no_e003_when_header_untrusted(self):
+        self.assertNotIn('access.E003', ids())
+
     @override_settings(DEBUG=False, NETWORK_POLICY_ENFORCEMENT='log', NETWORK_HEADER_TRUSTED=True,
                        NETWORK_PROXY_KEY='')
     def test_w002_trusted_without_key_outside_debug(self):

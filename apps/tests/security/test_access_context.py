@@ -92,7 +92,8 @@ class AccessContextTests(TestCase):
     def test_log_dedupe_never_raises_when_cache_fails(self):
         from unittest import mock
         with mock.patch('apps.access.middleware.cache.add', side_effect=RuntimeError('boom')):
-            r = self.client.get('/api/probe/', REMOTE_ADDR='203.0.113.9')
+            with self.assertLogs('elrezeiky.access', 'WARNING'):
+                r = self.client.get('/api/probe/', REMOTE_ADDR='203.0.113.9')
         self.assertEqual(r.status_code, 200)
 
     @override_settings(NETWORK_POLICY_ENFORCEMENT='off')

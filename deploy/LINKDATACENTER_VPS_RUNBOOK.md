@@ -1112,10 +1112,18 @@ N3 turns the network label into a policy. Do the steps in order; each later task
 
 **Step 1 - proxy key (only nginx can say "internal").**
 ```bash
-KEY=$(openssl rand -hex 32)
-echo "proxy_set_header X-ElR-Proxy-Key \"$KEY\";" | sudo tee /etc/nginx/elrezeiky-proxy-key.conf >/dev/null
+# the key never appears in a command line: it lives only in root-only files (re-running replaces it)
+sudo bash -c '
+umask 077
+K=/root/.elr-proxy-key
+openssl rand -hex 32 > $K
+{ printf "proxy_set_header X-ElR-Proxy-Key \""; tr -d "\n" < $K; echo "\";"; } > /etc/nginx/elrezeiky-proxy-key.conf
+ENV=/opt/elrezeiky/app/.env
+sed -i "/^NETWORK_PROXY_KEY=/d" $ENV
+[ -z "$(tail -c1 $ENV)" ] || echo >> $ENV
+{ printf "NETWORK_PROXY_KEY="; cat $K; } >> $ENV
+shred -u $K'
 sudo chmod 600 /etc/nginx/elrezeiky-proxy-key.conf
-echo "NETWORK_PROXY_KEY=$KEY" | sudo tee -a /opt/elrezeiky/app/.env >/dev/null   # never paste the key in chat or logs
 sudo cp /opt/elrezeiky/app/deploy/nginx-proxy-headers.conf /etc/nginx/elrezeiky-proxy-headers.conf
 sudo nginx -t && sudo systemctl reload nginx
 sudo systemctl restart elrezeiky-web
