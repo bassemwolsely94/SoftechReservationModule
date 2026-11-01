@@ -2840,12 +2840,23 @@ const _AUDIT_TONE = {
 }
 
 // ── Name review: bulk-fix incomplete / misspelled patient names ────────────────
+const _NAME_TYPE_RANK = { complete: 0, spelling: 1, ambiguous: 2 }
+const _nameSortVal = (r, k, sel) => {
+  if (k === 'count')      return Number(r.count || 0)
+  if (k === 'type')       return _NAME_TYPE_RANK[r.type] ?? 3
+  if (k === 'selected')   return sel[r.rx_id] != null ? 0 : 1
+  if (k === 'suggestion') return sel[r.rx_id] || r.suggestion || ''
+  return r[k] || ''
+}
+
 function NameReviewTab({ claimId, onRefresh }) {
   const [rows, setRows]     = useState(null)
   const [loading, setLoading] = useState(true)
   const [sel, setSel]       = useState({})     // rx_id → chosen name
   const [busy, setBusy]     = useState(false)
   const [msg, setMsg]       = useState(null)
+  const [sortKey, setSortKey] = useState('date')
+  const [sortDir, setSortDir] = useState('asc')
 
   const load = () => {
     setLoading(true)
@@ -2870,6 +2881,30 @@ function NameReviewTab({ claimId, onRefresh }) {
     return n
   })
   const setChoice = (rxId, name) => setSel(s => ({ ...s, [rxId]: name }))
+
+  const sortBy = (k) => {
+    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(k); setSortDir(k === 'count' ? 'desc' : 'asc') }
+  }
+  const sorted = [...(rows || [])].sort((a, b) => {
+    const va = _nameSortVal(a, sortKey, sel), vb = _nameSortVal(b, sortKey, sel)
+    const c = typeof va === 'number' ? va - vb : String(va).localeCompare(String(vb), 'ar')
+    return sortDir === 'asc' ? c : -c
+  })
+  // «تحديد الكل» never guesses for a multi-option name: those need a manual pick first.
+  const pickable = (row) => sel[row.rx_id] != null || (row.suggestion && row.type !== 'ambiguous')
+  const selectAll = () => setSel(s => {
+    const n = { ...s }
+    for (const row of sorted) if (n[row.rx_id] == null && pickable(row)) n[row.rx_id] = row.suggestion
+    return n
+  })
+  const pickableRows = sorted.filter(pickable)
+  const allSelected = pickableRows.length > 0 && pickableRows.every(r => sel[r.rx_id] != null)
+  const kb = useGridKeyboard({
+    rows: sorted, getKey: r => r.rx_id,
+    onToggle: r => toggle(r),
+    onSelectAll: selectAll,
+  })
 
   const applySel = async () => {
     const choices = {}
@@ -2923,32 +2958,55 @@ function NameReviewTab({ claimId, onRefresh }) {
           ✓ لا توجد أسماء تحتاج إلى تصحيح أو إكمال حسب السجل التاريخى.
         </div>
       ) : (
+        <>
+        <div className="mb-2 flex gap-2 flex-wrap items-center">
+          <button onClick={selectAll} disabled={busy || allSelected} data-tour="insurance-claim-name-review-select-all"
+            className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-xs rounded hover:bg-gray-50 disabled:opacity-40">
+            تحديد الكل
+          </button>
+          <button onClick={() => setSel({})} disabled={busy || selCount === 0}
+            className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-xs rounded hover:bg-gray-50 disabled:opacity-40">
+            إلغاء تحديد الكل
+          </button>
+          <span className="text-[11px] text-gray-400">
+            {rows.length} اسم · الأسماء متعددة الاحتمالات لا تُحدَّد إلا بعد اختيار الاسم يدوياً
+          </span>
+        </div>
+        <div {...kb.containerProps} data-tour="insurance-claim-name-review-grid"
+          className="bg-white rounded-xl border border-gray-200 overflow-auto max-h-[calc(100vh-320px)] outline-none">
         <table className="w-full text-sm">
-          <thead className="text-gray-500 text-xs border-b border-gray-200">
+          <thead className="bg-gray-50 border-b border-gray-200 text-gray-500 text-xs sticky top-0 z-10">
             <tr>
-              <th className="py-2 w-8"></th>
-              <th className="text-right">التاريخ</th>
-              <th className="text-right">الإيصال</th>
-              <th className="text-right">الاسم الحالى</th>
-              <th className="text-right">الاقتراح</th>
-              <th></th>
+              <th className="px-2 py-2 w-8">
+                <input type="checkbox" title="تحديد الكل / إلغاء تحديد الكل"
+                  checked={allSelected}
+                  onChange={e => e.target.checked ? selectAll() : setSel({})} />
+              </th>
+              <RosterTh k="date" {...{ sortKey, sortDir, sortBy }}>التاريخ</RosterTh>
+              <RosterTh k="docnumber" {...{ sortKey, sortDir, sortBy }}>الإيصال</RosterTh>
+              <RosterTh k="current_name" {...{ sortKey, sortDir, sortBy }}>الاسم الحالى</RosterTh>
+              <RosterTh k="type" align="center" {...{ sortKey, sortDir, sortBy }}>النوع</RosterTh>
+              <RosterTh k="suggestion" {...{ sortKey, sortDir, sortBy }}>الاقتراح</RosterTh>
+              <RosterTh k="count" align="center" {...{ sortKey, sortDir, sortBy }}>مرات فى السجل</RosterTh>
+              <th className="px-2 py-2"></th>
             </tr>
           </thead>
-          <tbody>
-            {rows.map(row => {
+          <tbody className="divide-y divide-gray-100">
+            {sorted.map(row => {
               const chosen = sel[row.rx_id]
               const checked = chosen != null
+              const rp = kb.rowProps(row)
               return (
-                <tr key={row.rx_id} className="border-b border-gray-100">
-                  <td className="py-2 text-center">
+                <tr key={row.rx_id} {...rp} className={`hover:bg-gray-50 ${rp.className}`}>
+                  <td className="px-2 py-1.5 text-center">
                     <input type="checkbox" checked={checked} onChange={() => toggle(row)} />
                   </td>
-                  <td className="text-xs text-gray-500 whitespace-nowrap">{row.date}</td>
-                  <td className="text-xs font-mono text-gray-500">#{row.docnumber}</td>
-                  <td className="text-gray-800">{row.current_name}</td>
-                  <td>
+                  <td className="px-2 text-xs text-gray-500 whitespace-nowrap">{row.date}</td>
+                  <td className="px-2 text-xs font-mono text-gray-500">#{row.docnumber}</td>
+                  <td className="px-2 text-gray-800">{row.current_name}</td>
+                  <td className="px-2 text-center">{typeBadge(row.type)}</td>
+                  <td className="px-2">
                     <div className="flex items-center gap-2 flex-wrap">
-                      {typeBadge(row.type)}
                       {row.type === 'ambiguous' ? (
                         <select value={chosen ?? ''} onChange={e => setChoice(row.rx_id, e.target.value)}
                           className="border border-gray-300 rounded px-2 py-1 text-xs">
@@ -2958,10 +3016,10 @@ function NameReviewTab({ claimId, onRefresh }) {
                       ) : (
                         <span className="font-medium text-gray-900">{row.suggestion}</span>
                       )}
-                      {row.count ? <span className="text-[10px] text-gray-400" dir="ltr">{row.count}×</span> : null}
                     </div>
                   </td>
-                  <td className="text-left">
+                  <td className="px-2 text-center text-xs text-gray-500" dir="ltr">{row.count ? `${row.count}×` : '—'}</td>
+                  <td className="px-2 text-left">
                     {row.softech_name && row.current_name !== row.softech_name && (
                       <button onClick={() => revertOne(row.rx_id)} disabled={busy}
                         title={`استرجاع اسم سوفتك: ${row.softech_name}`}
@@ -2975,6 +3033,8 @@ function NameReviewTab({ claimId, onRefresh }) {
             })}
           </tbody>
         </table>
+        </div>
+        </>
       )}
     </div>
   )
