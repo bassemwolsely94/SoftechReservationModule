@@ -1,9 +1,11 @@
 """
 «من أين أتصل؟» (whoami) and the admin-only trusted-networks API (security N1, log only).
 """
+from django.db import transaction
 from django.db.models import Case, IntegerField, Prefetch, Value, When
 from rest_framework import mixins, status as http, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -105,11 +107,13 @@ class DeviceViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upd
         if p.get('kind'):
             qs = qs.filter(kind=p['kind'])
         if p.get('branch'):
-            qs = qs.filter(branch_id=p['branch'])
+            if not str(p['branch']).isdigit():
+                raise ValidationError({'error': 'الفرع غير صحيح'})
+            qs = qs.filter(branch_id=int(p['branch']))
         q = (p.get('q') or '').strip()
         if q:
             qs = qs.filter(wq(q, 'name', 'last_ip', 'first_ip', 'last_site',
-                              'device_users__user__user__username', 'device_users__user__user__first_name',
+                              'device_users__user__user__username', 'device_users__user__user__first_name', 'device_users__user__user__last_name',
                               'device_users__user__softech_username')).distinct()
         first = Case(When(status='pending', then=Value(0)), default=Value(1), output_field=IntegerField())
         return qs.order_by(first, '-first_seen', '-id')
@@ -123,11 +127,14 @@ class DeviceViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upd
         dev_api.invalidate(device)
 
     def _change(self, request, status, need_note=False):
+        device = self.get_object()
         note = str(request.data.get('note') or '').strip()
         if need_note and not note:
             return Response({'error': 'اكتب سبب الحظر'}, status=http.HTTP_400_BAD_REQUEST)
-        device = self.get_object()
-        dev_api.set_status(device, status, request.user.staff_profile, note)
+        try:
+            dev_api.set_status(device, status, request.user.staff_profile, note, request=request)
+        except dev_api.RetiredDevice:
+            return Response({'error': dev_api.RETIRED_MESSAGE}, status=http.HTTP_400_BAD_REQUEST)
         device = self.get_queryset().get(pk=device.pk)
         return Response(self.get_serializer(device).data)
 
@@ -151,7 +158,8 @@ class DeviceViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upd
         ids = set(ids)
         note = str(request.data.get('note') or '').strip()
         approved = 0
-        for device in Device.objects.filter(pk__in=ids, status='pending').select_related('owner'):
-            dev_api.set_status(device, 'approved', request.user.staff_profile, note)
-            approved += 1
+        with transaction.atomic():
+            for device in Device.objects.filter(pk__in=ids, status='pending').select_related('owner'):
+                dev_api.set_status(device, 'approved', request.user.staff_profile, note, request=request)
+                approved += 1
         return Response({'approved': approved, 'skipped': len(ids) - approved})

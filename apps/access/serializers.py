@@ -61,6 +61,13 @@ class DeviceSerializer(serializers.ModelSerializer):
         b = obj.branch
         return (b.name_ar or b.name) if b else None
 
+    def validate_allowed_roles(self, value):
+        from apps.users.models import ROLE_CHOICES
+        valid = {k for k, _ in ROLE_CHOICES}
+        if not isinstance(value, list) or not all(isinstance(r, str) and r in valid for r in value):
+            raise serializers.ValidationError('الأدوار المسموحة يجب أن تكون قائمة بأدوار صحيحة')
+        return list(dict.fromkeys(value))
+
     def get_owner_name(self, obj):
         return obj.owner.full_name if obj.owner_id else None
 

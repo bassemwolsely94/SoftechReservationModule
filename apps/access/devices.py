@@ -279,12 +279,35 @@ def invalidate_signal(sender, instance, **kwargs):
 
 # -- Admin status changes (N2) -----------------------------------------------------------
 
-def set_status(device, status, by, note=''):
+def _request_fields(request):
+    if request is None:
+        return {}
+    from apps.users.views import _request_network_fields
+    fields = _request_network_fields(request)
+    ip = _client_ip(request)
+    if ip:
+        fields['ip_address'] = ip
+    return fields
+
+
+RETIRED_MESSAGE = 'الجهاز متقاعد — لا يمكن إعادة تفعيله'
+
+
+class RetiredDevice(Exception):
+    pass
+
+
+def set_status(device, status, by, note='', request=None):
     """Change a device's status: save (so the cache drops via post_save), audit, activity log.
     Never use QuerySet.update here - it would skip the invalidation."""
     from django.utils import timezone
     from apps.audit.models import AuditLog
     from apps.users.models import UserActivityLog
+    if device.status == status:
+        return device                       # no change, no audit row
+    if device.status == 'retired':
+        raise RetiredDevice(RETIRED_MESSAGE)   # retired is final
+    request = getattr(request, '_request', request)
     before = snapshot(device)
     old_status = device.status
     device.status = status
@@ -298,8 +321,9 @@ def set_status(device, status, by, note=''):
     device.save(update_fields=fields)
     invalidate(device)
     AuditLog.log('device_changed', user=by, obj=device,
-                 changes={'before': before, 'after': snapshot(device)}, note=device.status_note)
+                 changes={'before': before, 'after': snapshot(device)}, note=device.status_note,
+                 request=request)
     UserActivityLog.objects.create(target_user=device.owner, changed_by=by, action='device_status',
                                    old_value=old_status, new_value=status, note=device.status_note,
-                                   device=device)
+                                   device=device, **_request_fields(request))
     return device

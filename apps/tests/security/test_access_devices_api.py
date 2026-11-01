@@ -190,3 +190,78 @@ class ActionTests(DeviceApiBase):
         self.api.patch(f'{LIST}{d.pk}/', {'status': 'approved'}, format='json')   # status is read-only
         d.refresh_from_db()
         self.assertEqual(d.status, 'pending')
+
+
+class FixRoundTests(DeviceApiBase):
+
+    def _patch(self, d, body):
+        return self.api.patch(f'{LIST}{d.pk}/', body, format='json')
+
+    def test_allowed_roles_validated(self):
+        d = _dev()
+        for bad in ({'a': 1}, [1, 2], 'admin', ['nope'], ['pharmacist', 'nope']):
+            self.assertEqual(self._patch(d, {'allowed_roles': bad}).status_code, 400, bad)
+        r = self._patch(d, {'allowed_roles': ['pharmacist', 'admin', 'pharmacist']})
+        self.assertEqual(r.status_code, 200, r.content)
+        d.refresh_from_db()
+        self.assertEqual(d.allowed_roles, ['pharmacist', 'admin'])
+
+    def test_patch_ignores_protected_fields(self):
+        d = _dev()
+        old_pid, old_hash = d.public_id, d.secret_hash
+        self._patch(d, {'public_id': '11111111-1111-1111-1111-111111111111', 'secret_hash': 'x' * 64,
+                        'approved_by': self.admin.pk, 'status': 'approved', 'name': 'ok'})
+        d.refresh_from_db()
+        self.assertEqual((d.public_id, d.secret_hash, d.approved_by, d.status, d.name),
+                         (old_pid, old_hash, None, 'pending', 'ok'))
+
+    def test_audit_rows_carry_request_context(self):
+        _, owner, _ = make_user('dv_ctx_owner')
+        d = _dev(owner=owner)
+        self.api.post(f'{LIST}{d.pk}/approve/', {}, format='json', HTTP_USER_AGENT=UA, REMOTE_ADDR='10.9.8.7')
+        log = AuditLog.objects.filter(action='device_changed').latest('id')
+        self.assertTrue(log.ip_address)
+        act = UserActivityLog.objects.get(action='device_status')
+        self.assertTrue(act.ip_address)
+        self.assertEqual(act.user_agent, UA)
+        self.assertTrue(act.network)
+
+    def test_activity_rows_for_block_and_bulk(self):
+        _, owner, _ = make_user('dv_blk_owner')
+        a = _dev('a', status='approved', owner=owner)
+        self.api.post(f'{LIST}{a.pk}/block/', {'note': 'سبب'}, format='json')
+        row = UserActivityLog.objects.get(action='device_status', device=a)
+        self.assertEqual((row.old_value, row.new_value, row.note), ('approved', 'blocked', 'سبب'))
+        p1, p2 = _dev('p1'), _dev('p2')
+        self.api.post(f'{LIST}bulk-approve/', {'ids': [p1.pk, p2.pk]}, format='json')
+        self.assertEqual(UserActivityLog.objects.filter(action='device_status', new_value='approved').count(), 2)
+
+    def test_same_status_is_noop(self):
+        d = _dev(status='approved')
+        r = self.api.post(f'{LIST}{d.pk}/approve/', {}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['status'], 'approved')
+        self.assertEqual(AuditLog.objects.filter(action='device_changed').count(), 0)
+        self.assertEqual(UserActivityLog.objects.filter(action='device_status').count(), 0)
+
+    def test_retired_is_final(self):
+        d = _dev(status='retired')
+        for act, body in (('approve', {}), ('block', {'note': 'x'})):
+            r = self.api.post(f'{LIST}{d.pk}/{act}/', body, format='json')
+            self.assertEqual(r.status_code, 400)
+            self.assertEqual(r.json(), {'error': 'الجهاز متقاعد — لا يمكن إعادة تفعيله'})
+        d.refresh_from_db()
+        self.assertEqual(d.status, 'retired')
+        self.assertEqual(self.api.post(f'{LIST}{d.pk}/retire/', {}, format='json').status_code, 200)
+
+    def test_missing_id_is_404_before_note_check(self):
+        self.assertEqual(self.api.post(f'{LIST}999999/block/', {}, format='json').status_code, 404)
+
+    def test_search_last_name_and_bad_branch(self):
+        user, prof, _ = make_user('dv_ln', role='pharmacist')
+        user.last_name = 'Zakariyya'
+        user.save()
+        d = _dev('x')
+        DeviceUser.objects.create(device=d, user=prof)
+        self.assertEqual({x['id'] for x in _rows(self.api.get(LIST + '?q=zakariy'))}, {d.pk})
+        self.assertEqual(self.api.get(LIST + '?branch=abc').status_code, 400)
