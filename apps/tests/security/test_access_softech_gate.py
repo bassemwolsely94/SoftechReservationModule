@@ -1,5 +1,6 @@
 """N4 / Task 2 - the SOFTECH gate decision: role x zone x scope, log first."""
 from types import SimpleNamespace
+from unittest import mock
 
 from django.core.cache import cache
 from django.test import TestCase, override_settings
@@ -91,7 +92,8 @@ class CheckTests(TestCase):
     def test_check_log_mode_read_keeps_read_grant(self):
         self.profile.role = 'supervisor'
         self.profile.save()
-        object.__setattr__(self.ctx, 'zone', 'Z3')
+        access_context.access_context.set(access_context.AccessContext(
+            network=self.ctx.network, user_id=self.user.pk, role='supervisor', device=None, zone='Z3'))
         with softech_scope('web:external:supervisor'):
             d = gate.check('probe')
         self.assertEqual((d.grant, d.reason), (READ, 'zone_no_write'))
@@ -125,3 +127,69 @@ class CheckTests(TestCase):
         with softech_scope('job:sync_stock'):
             self.assertEqual(gate.check('probe').grant, FULL)
         self.assertEqual(self._count(), 0)
+
+
+class FailureTests(TestCase):
+    """Nothing ever raises out of check(); the failure is the only injected thing."""
+
+    def setUp(self):
+        cache.clear()
+        self.user, self.profile, _ = make_user('gate_fail', role='salesperson')
+        self.token = None
+
+    def tearDown(self):
+        if self.token is not None:
+            access_context.access_context.reset(self.token)
+        cache.clear()
+
+    def _ctx(self, net):
+        c = access_context.AccessContext(
+            network=SimpleNamespace(zone=net, ip='1.2.3.4', site=None),
+            user_id=self.user.pk, role='salesperson', device=None, zone='Z1' if net == 'internal' else 'Z4')
+        self.token = access_context.access_context.set(c)
+
+    def _boom(self, *a, **k):
+        raise RuntimeError('boom')
+
+    @override_settings(SOFTECH_GATE_ENFORCEMENT='log')
+    def test_policy_failure_in_log_mode_is_full_gate_error(self):
+        self._ctx('external')
+        with softech_scope('web:x'), mock.patch('apps.access.policy.policy_for', self._boom):
+            d = gate.check('probe')
+        self.assertEqual((d.grant, d.reason), (FULL, 'gate_error'))
+
+    @override_settings(SOFTECH_GATE_ENFORCEMENT='enforce', NETWORK_ENFORCE_GUARD=False)
+    def test_policy_failure_enforce_internal_is_full(self):
+        self._ctx('internal')
+        with softech_scope('web:x'), mock.patch('apps.access.policy.policy_for', self._boom):
+            d = gate.check('probe')
+        self.assertEqual((d.grant, d.reason), (FULL, 'gate_error'))
+
+    @override_settings(SOFTECH_GATE_ENFORCEMENT='enforce', NETWORK_ENFORCE_GUARD=False)
+    def test_policy_failure_enforce_external_is_none(self):
+        self._ctx('external')
+        with softech_scope('web:x'), mock.patch('apps.access.policy.policy_for', self._boom):
+            d = gate.check('probe')
+        self.assertEqual((d.grant, d.reason), (NONE, 'gate_error'))
+        self.assertTrue(AuditLog.objects.get(action='softech_gate_denied').extra['enforced'])
+
+    @override_settings(SOFTECH_GATE_ENFORCEMENT='log')
+    def test_subject_failure_is_subject_failed_not_anonymous(self):
+        self._ctx('external')
+        with softech_scope('web:x'), mock.patch('apps.access.session_policy.subject', self._boom):
+            d = gate.check('probe')
+        self.assertEqual((d.grant, d.reason), (FULL, 'subject_failed'))
+        self.assertEqual(AuditLog.objects.get(action='softech_gate_denied').extra['reason'], 'subject_failed')
+
+    @override_settings(SOFTECH_GATE_ENFORCEMENT='enforce', NETWORK_ENFORCE_GUARD=False)
+    def test_mode_failure_treated_as_log(self):
+        self._ctx('external')
+        with softech_scope('web:x'), mock.patch.object(gate, 'mode', self._boom):
+            d = gate.check('probe')
+        self.assertEqual(d.grant, FULL)
+
+    @override_settings(SOFTECH_GATE_ENFORCEMENT='enforce', NETWORK_ENFORCE_GUARD=False)
+    def test_no_context_in_enforce_is_none(self):
+        with softech_scope('web'):
+            d = gate.check('probe')
+        self.assertEqual((d.grant, d.reason), (NONE, 'no_context'))

@@ -87,6 +87,10 @@ def decide(scope, ctx, profile):
     return GateDecision(FULL, None, scope, zone)
 
 
+class _SubjectFailed(Exception):
+    pass
+
+
 def _subject(ctx):
     """The policy subject of the context's user, memoised for the request's context."""
     cached = _subject_var.get()
@@ -94,46 +98,92 @@ def _subject(ctx):
         return cached[1]
     profile = None
     if ctx.user_id is not None:
-        from django.contrib.auth import get_user_model
-        user = (get_user_model().objects.select_related('staff_profile')
-                .filter(pk=ctx.user_id).first())
-        profile = session_policy.subject(user) if user is not None else None
+        try:
+            from django.contrib.auth import get_user_model
+            user = (get_user_model().objects.select_related('staff_profile')
+                    .filter(pk=ctx.user_id).first())
+            profile = session_policy.subject(user) if user is not None else None
+        except Exception as exc:
+            raise _SubjectFailed() from exc
     _subject_var.set((ctx, profile))
     return profile
 
 
-def check(label=''):
-    """The effective decision for the current scope and context, after the mode."""
-    from apps.sync.softech_load import current_scope
-    scope = current_scope()
-    current_mode = mode()
-    if current_mode == 'off':
-        return GateDecision(FULL, None, scope, None)
-    ctx = access_context.current()
-    profile = None
-    if str(scope).startswith('web') and ctx is not None and not ctx.failed:
+def _dedupe(key):
+    try:
+        return cache.add(key, 1, LOG_DEDUPE_SECONDS)
+    except Exception:
+        return True
+
+
+def _failed(reason, label, scope, current_mode):
+    """Called from an except block: nothing raises out of check(). off / log -> FULL; enforce ->
+    FULL inside the network (F3 parity), else NONE."""
+    log.error('softech gate: %s (%s)', reason, label, exc_info=True)
+    ctx = None
+    try:
+        ctx = access_context.current()
+    except Exception:
+        pass
+    zone = getattr(ctx, 'zone', None)
+    grant = FULL
+    if current_mode == 'enforce':
+        inside = False
         try:
-            profile = _subject(ctx)
+            inside = ctx is not None and ctx.network.zone == INTERNAL
         except Exception:
-            log.error('softech gate: subject lookup failed', exc_info=True)
-            profile = None
-    decision = decide(scope, ctx, profile)
-    if decision.reason == 'context_failed' and decision.grant == FULL:
-        log.error('softech gate: access context failed inside the network - allowed (%s)', label)
-    if decision.grant == NONE:
-        enforced = current_mode == 'enforce'
-        note(decision, label, enforced=enforced)
-        if not enforced:
-            return GateDecision(FULL, decision.reason, scope, decision.zone)
+            pass
+        grant = FULL if inside else NONE
+    decision = GateDecision(grant, reason, scope, zone)
+    note(GateDecision(NONE, reason, scope, zone), label, enforced=grant == NONE, mode=current_mode)
     return decision
 
 
-def note(decision, label, *, enforced):
+def check(label=''):
+    """The effective decision for the current scope and context, after the mode. Never raises.
+
+    In log mode a refused request comes back with grant FULL and the refusal reason kept in
+    `reason`: consumers must test `grant`, never `reason`. READ keeps its grant in log mode.
+    Any internal error is reason 'gate_error' ('subject_failed' for the user lookup): off / log
+    -> FULL; enforce -> FULL inside the network, NONE otherwise."""
+    scope = '?'
+    try:
+        current_mode = mode()
+    except Exception:
+        log.error('softech gate: mode lookup failed - treated as log', exc_info=True)
+        current_mode = 'log'
+    try:
+        from apps.sync.softech_load import current_scope
+        scope = current_scope()
+        if current_mode == 'off':
+            return GateDecision(FULL, None, scope, None)
+        ctx = access_context.current()
+        profile = None
+        if str(scope).startswith('web') and ctx is not None and not ctx.failed:
+            profile = _subject(ctx)
+        decision = decide(scope, ctx, profile)
+        if decision.reason == 'context_failed' and decision.grant == FULL:
+            if _dedupe(f'access:softech-gate:ctxfail:{decision.zone}'):
+                log.error('softech gate: access context failed inside the network - allowed (%s)',
+                          label)
+        if decision.grant == NONE:
+            enforced = current_mode == 'enforce'
+            note(decision, label, enforced=enforced, mode=current_mode)
+            if not enforced:
+                return GateDecision(FULL, decision.reason, scope, decision.zone)
+        return decision
+    except _SubjectFailed:
+        return _failed('subject_failed', label, scope, current_mode)
+    except Exception:
+        return _failed('gate_error', label, scope, current_mode)
+
+
+def note(decision, label, *, enforced, mode=None):
     """One deduplicated log line and AuditLog row for a refusal (or would-refuse). Never raises."""
     try:
         ctx = access_context.current()
         user_id = ctx.user_id if ctx is not None else None
-        current_mode = mode()
+        current_mode = mode or ('enforce' if enforced else 'log')
         key = f'access:softech-gate:{user_id}:{decision.zone}:{decision.reason}:{current_mode}'
         try:
             if not cache.add(key, 1, LOG_DEDUPE_SECONDS):
