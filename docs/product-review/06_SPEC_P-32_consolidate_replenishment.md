@@ -138,6 +138,7 @@ gate and guards. No new SOFTECH writer.
   store = destination — verified on HQ issue lines: `storecode2` and `personcode` = the receiving branch). SOFTECH
   does not put the ISR number on the issue line (`s_doccode` empty, `r_doccode` points to purchases), so the rule is
   item × route × time. The ledger refreshes every 2 h: a very recent issue still asks for a reason (safe side).
+- **Switched ON 2026-11-01** by the owner (SystemSetting `isr_overlap_guard` = on, office database).
 - **Draft expiry** (doc 30 §2.6): an unpushed general draft older than N days (default 7) is cancelled with audit by a
   daily PG-only job `isr_draft_expiry`. It never touches SOFTECH.
 - Regenerating a plan supersedes the old plan's drafts (same planner). It never duplicates them.
