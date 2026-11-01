@@ -6,7 +6,7 @@
  * no modal) or retires them. Blocked / retired devices lose their sessions server-side.
  * Name, kind and branch are edited in the row itself.
  *
- * Keys (useGridKeyboard): ↑↓ move · Space select · Enter approve the focused row · M mark · Ctrl+A select all.
+ * Keys (useGridKeyboard): ↑↓ move · Space select · Enter approve the focused row · M edit the device · Ctrl+A select all (pending).
  * The grid stays mounted while the list refetches (the refetch state shows in the header).
  */
 import { useCallback, useMemo, useState } from 'react'
@@ -33,7 +33,7 @@ const STATUS_TONE = {
   blocked: 'bg-red-500/10 text-red-700 dark:text-red-300',
   retired: 'bg-surface-2 text-muted',
 }
-const HINT = '⌨ ↑↓ تنقل · مسافة تحديد · Enter اعتماد الصف · M علامة · Ctrl+A تحديد الكل'
+const HINT = '⌨ ↑↓ تنقل · مسافة تحديد · Enter اعتماد الصف · M تعديل الجهاز · Ctrl+A تحديد الكل'
 
 function errText(e) {
   const d = e?.response?.data
@@ -52,7 +52,7 @@ export default function DevicesPage() {
   const [kind, setKind] = useState('')
   const [q, setQ] = useState('')
   const [selected, setSelected] = useState(() => new Set())
-  const [marked, setMarked] = useState(() => new Set())
+  const [retireArm, setRetireArm] = useState(null)   // device id waiting for the second click on تقاعد
   const [notes, setNotes] = useState({})            // device id -> block reason being typed
   const [errors, setErrors] = useState({})          // device id -> message
   const [banner, setBanner] = useState('')
@@ -114,21 +114,27 @@ export default function DevicesPage() {
   })
 
   const toggle = useCallback(r => setSelected(s => {
+    if (r.status !== 'pending') return s
     const n = new Set(s); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n
   }), [])
-  const mark = useCallback(r => setMarked(s => {
-    const n = new Set(s); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n
-  }), [])
+  // M: jump into the focused row's inline editor (its name field)
+  const editRow = useCallback(r => {
+    document.querySelector(`[data-device-name="${r.id}"]`)?.focus()
+  }, [])
+  const armRetire = useCallback(id => {
+    setRetireArm(id)
+    setTimeout(() => setRetireArm(a => (a === id ? null : a)), 4000)
+  }, [])
   const approveRow = useCallback(r => {
     if (r.status === 'pending' || r.status === 'blocked') act.mutate({ id: r.id, kind: 'approve' })
   }, [act])
   const selectAll = useCallback(() => setSelected(s => {
-    const ids = rows.filter(r => r.status !== 'retired').map(r => r.id)
+    const ids = rows.filter(r => r.status === 'pending').map(r => r.id)
     return ids.every(i => s.has(i)) ? new Set() : new Set(ids)
   }), [rows])
 
   const kb = useGridKeyboard({
-    rows, getKey: r => r.id, onToggle: toggle, onConfirm: approveRow, onOpen: mark, onSelectAll: selectAll,
+    rows, getKey: r => r.id, onToggle: toggle, onConfirm: approveRow, onOpen: editRow, onSelectAll: selectAll,
   })
 
   const pickedPending = rows.filter(r => selected.has(r.id) && r.status === 'pending').map(r => r.id)
@@ -199,15 +205,16 @@ export default function DevicesPage() {
               const canBlock = r.status === 'pending' || r.status === 'approved'
               return (
                 <RowFragment key={r.id}>
-                  <tr {...rp} className={`border-b border-line align-top ${rp.className} ${marked.has(r.id) ? 'bg-amber-500/5' : ''} ${r.status === 'retired' ? 'opacity-60' : ''}`}>
+                  <tr {...rp} className={`border-b border-line align-top ${rp.className} ${r.status === 'retired' ? 'opacity-60' : ''}`}>
                     <td className="p-2">
-                      <input type="checkbox" className="accent-brand-600" disabled={!editable}
-                             checked={selected.has(r.id)} onChange={() => toggle(r)} aria-label="تحديد" />
+                      {r.status === 'pending' && (
+                        <input type="checkbox" className="accent-brand-600"
+                               checked={selected.has(r.id)} onChange={() => toggle(r)} aria-label="تحديد" />
+                      )}
                     </td>
                     <td className="p-2">
                       <div className="flex items-center gap-1">
-                        {marked.has(r.id) && <span title="علامة">⭐</span>}
-                        <input className="input w-44" key={`n${r.id}-${r.name}`} defaultValue={r.name} disabled={!editable}
+                        <input className="input w-44" key={`n${r.id}-${r.name}`} data-device-name={r.id} defaultValue={r.name} disabled={!editable}
                                aria-label="اسم الجهاز"
                                onBlur={e => { const v = e.target.value.trim(); if (v && v !== r.name) edit.mutate({ id: r.id, data: { name: v } }) }} />
                       </div>
@@ -248,7 +255,7 @@ export default function DevicesPage() {
                         )}
                         {canBlock && (
                           <>
-                            <input className="input w-36 text-xs" placeholder="سبب الحظر" value={notes[r.id] || ''}
+                            <input className="input w-36 text-xs" placeholder="سبب الحظر" aria-label="سبب الحظر" value={notes[r.id] || ''}
                                    onChange={e => setNotes(n => ({ ...n, [r.id]: e.target.value }))}
                                    onKeyDown={e => { if (e.key === 'Enter') act.mutate({ id: r.id, kind: 'block', note: notes[r.id] || '' }) }} />
                             <button data-tour="admin-devices-block" className="text-xs text-red-600 font-semibold px-2" disabled={act.isPending}
@@ -256,8 +263,13 @@ export default function DevicesPage() {
                           </>
                         )}
                         {editable && (
-                          <button className="text-xs text-muted px-2" disabled={act.isPending}
-                                  onClick={() => act.mutate({ id: r.id, kind: 'retire' })}>تقاعد</button>
+                          retireArm === r.id ? (
+                            <button className="text-xs text-red-600 font-semibold px-2" disabled={act.isPending}
+                                    onClick={() => { setRetireArm(null); act.mutate({ id: r.id, kind: 'retire' }) }}>تأكيد التقاعد؟</button>
+                          ) : (
+                            <button className="text-xs text-muted px-2" disabled={act.isPending}
+                                    onClick={() => armRetire(r.id)}>تقاعد</button>
+                          )
                         )}
                       </div>
                     </td>

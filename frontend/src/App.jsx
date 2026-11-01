@@ -517,8 +517,8 @@ export default function App() {
             {/* trusted networks (security N1): admin only */}
             <Route path="access/networks"
               element={<RequireRole roles={['admin']}><TrustedNetworksPage /></RequireRole>} />
-              <Route path="access/devices"
-                element={<RequireRole roles={['admin']}><DevicesPage /></RequireRole>} />
+            <Route path="access/devices"
+              element={<RequireRole roles={['admin']}><DevicesPage /></RequireRole>} />
             {/* procurement: purchasing + admin */}
             <Route path="invoices"
               element={<RequireRole roles={['admin','purchasing']}><InvoicePage /></RequireRole>} />
