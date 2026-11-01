@@ -263,14 +263,12 @@ Batch 7 sets it), `bandit -b bandit-baseline.json`, `pip_audit_check.py`, and in
   cryptography (7), sqlparse (9), daphne (4). The CI check audits the installed environment
   (exactly what requirements-ci.txt installs); run it inside the production venv to cover
   production-only packages.
-- **npm (production deps) — 2 left** (`npm-audit-allow.txt`, 2026-11-01): lockfile-only upgrades
-  (axios 1.21, react-router-dom 6.30.6, form-data 4.0.6, follow-redirects 1.16.2, postcss 8.5)
-  took it from 35 to 2. Both left are react-router moderates fixed only in v7 (a major upgrade) and
-  not reachable here: an open redirect through a backslash path (our `navigate()`/`<Link>` targets
-  are app routes from our own server data, never a URL parameter) and SSR hydration (this is a
-  client-rendered SPA). Dev tooling: vite 5 → 6.4.5 (+ plugin-react 4.7, esbuild 0.25) cleared the
-  9 dev-server advisories (8 vite, 1 esbuild), so the full `npm audit` (dev deps included) now shows only
-  the react-router pair. Still never expose `npm run dev` beyond localhost.
+- **npm — 0 left** (`npm-audit-allow.txt` empty, 2026-11-01): lockfile-only upgrades (axios 1.21,
+  react-router-dom 6.30.6, form-data 4.0.6, follow-redirects 1.16.2, postcss 8.5) took production
+  deps from 35 to 2; react-router-dom 6 → 7.18.5 cleared the last two (an open redirect through a
+  backslash path, and SSR hydration). Dev tooling: vite 5 → 6.4.5 (+ plugin-react 4.7, esbuild 0.25)
+  cleared the 9 dev-server advisories (8 vite, 1 esbuild). The full `npm audit`, dev deps included,
+  reports 0. Still never expose `npm run dev` beyond localhost.
 - **OCR sidecar** (`ocr_sidecar/requirements.txt`, its own Python 3.10–3.12 venv, not in CI —
   audit by hand with `pip-audit -r ocr_sidecar/requirements.txt` under Python 3.12). Pillow floor
   raised to 13.0.0 (the only release with no open advisories; it decodes the uploaded image) and
