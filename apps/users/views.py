@@ -56,6 +56,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
     can_supply_write = drf_serializers.SerializerMethodField()
     can_run_engine   = drf_serializers.SerializerMethodField()
     can_stock_audit  = drf_serializers.SerializerMethodField()   # doc 32: management or a named branch manager
+    can_pic_analytics = drf_serializers.SerializerMethodField()  # doc 33: management or a named branch manager
 
     def get_branch_id(self, obj):
         return obj.branch_id  # Django auto-attribute (FK integer)
@@ -72,6 +73,10 @@ class _MeSerializer(drf_serializers.ModelSerializer):
         from apps.stock_audit.access import can_open
         return can_open(obj.user)
 
+    def get_can_pic_analytics(self, obj):
+        from apps.pic_analytics.access import can_open
+        return can_open(obj.user)
+
     class Meta:
         model  = StaffProfile
         fields = [
@@ -81,7 +86,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
             'access_all_branches', 'softech_username',
             'phone', 'is_active',
             'can_see_all_customers', 'can_see_customer_phone',
-            'mfa_enabled', 'can_supply_write', 'can_run_engine', 'can_stock_audit',
+            'mfa_enabled', 'can_supply_write', 'can_run_engine', 'can_stock_audit', 'can_pic_analytics',
         ]
 
 
