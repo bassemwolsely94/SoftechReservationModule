@@ -9,7 +9,6 @@ const useAuthStore = create((set, get) => ({
   // The server has already set the httpOnly session cookies; keep only the user.
   // (data.access / data.refresh are deliberately NOT stored anywhere.)
   setSession: (data) => {
-    if (data.device_token) localStorage.setItem('mfa_device_token', data.device_token)
     set({ user: data.user, isAuthenticated: true })
     return data.user
   },
@@ -18,24 +17,18 @@ const useAuthStore = create((set, get) => ({
   //   { mfa: 'verify' | 'setup', mfaToken }  → caller must complete 2FA, OR
   //   { user }                               → session already established.
   login: async (username, password) => {
-    const deviceToken = localStorage.getItem('mfa_device_token')
-    const { data } = await authApi.login(username, password, deviceToken)
+    const { data } = await authApi.login(username, password)
     if (data.mfa_required)       return { mfa: 'verify', mfaToken: data.mfa_token }
     if (data.mfa_setup_required) return { mfa: 'setup',  mfaToken: data.mfa_token }
     return { user: useAuthStore.getState().setSession(data) }
   },
 
-  // After "forget saved devices" succeeds the local token is dead; drop it too.
-  clearDeviceToken: () => localStorage.removeItem('mfa_device_token'),
-
   logout: () => {
     // Server side: blacklist the refresh token and clear the cookies.
     authApi.logout().catch(() => {})
-    // Preserve the trusted-device token across logout so 2FA can be skipped on
-    // this device until it expires (30 days). Everything else is cleared.
-    const device = localStorage.getItem('mfa_device_token')
+    // "Remember this device" lives server-side on the approved device (N2/N3);
+    // nothing on this browser has to survive logout.
     localStorage.clear()
-    if (device) localStorage.setItem('mfa_device_token', device)
     set({ user: null, isAuthenticated: false })
   },
 
@@ -46,7 +39,7 @@ const useAuthStore = create((set, get) => ({
       set({ user: data, isAuthenticated: true, isLoading: false })
     } catch {
       // Not logged in (or session expired): no tokens are kept client-side, so
-      // there is nothing to wipe — keep the trusted-device token and UI prefs.
+      // there is nothing to wipe — keep the UI prefs.
       set({ user: null, isAuthenticated: false, isLoading: false })
     }
   },

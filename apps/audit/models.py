@@ -127,6 +127,9 @@ class AuditLog(models.Model):
         # Security N2
         ('device_changed',               'جهاز — اعتماد / حظر / تعديل'),
 
+        # Security N3
+        ('zone_policy_changed',          'سياسة منطقة — تعديل'),
+
         # Return-window calendar (P-29)
         ('return_policy_changed',        'مرتجع — تعديل سياسة مورد'),
         ('return_requested',             'مرتجع — طلب مرتجع لمورد'),

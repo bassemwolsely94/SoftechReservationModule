@@ -104,8 +104,14 @@ if BEHIND_HTTPS_PROXY:
 # there means external. Without nginx (dev, tests) NETWORK_UNTRUSTED_ZONE stands in.
 NETWORK_HEADER_TRUSTED = config('NETWORK_HEADER_TRUSTED', default=BEHIND_HTTPS_PROXY, cast=bool)
 NETWORK_UNTRUSTED_ZONE = config('NETWORK_UNTRUSTED_ZONE', default='internal')
+# Shared secret nginx adds as X-ElR-Proxy-Key (N3). When set, X-ElR-Network is believed only with a
+# matching key, so only our nginx can label a request internal. Empty = N1 behaviour. Never logged.
+NETWORK_PROXY_KEY = config('NETWORK_PROXY_KEY', default='')
 # off | log only in N1 — no request is refused because of its network.
 NETWORK_POLICY_ENFORCEMENT = config('NETWORK_POLICY_ENFORCEMENT', default='off' if _RUNNING_TESTS else 'log')
+# enforce on an unsafe setup (access.E003 / E004) runs as log with an ERROR line instead (N3, I5).
+# Not an .env setting: only the test suite turns it off, to exercise enforce without nginx.
+NETWORK_ENFORCE_GUARD = not _RUNNING_TESTS
 # Seconds the trusted-network list is cached per process; 0 under tests.
 ACCESS_NETWORKS_TTL = config('ACCESS_NETWORKS_TTL', default=0 if _RUNNING_TESTS else 60, cast=float)
 # Proxies in front of Django that APPEND the peer to X-Forwarded-For (nginx proxy_params: 1).
@@ -907,6 +913,8 @@ MIDDLEWARE += [
     'apps.access.middleware.AccessContextMiddleware',
     # Server-side RoleModuleAccess check for /api/<module>/ (see core/middleware/module_access.py)
     'core.middleware.module_access.ModuleAccessMiddleware',
+    # Zone policy (N3): narrows by access zone; mode NETWORK_POLICY_ENFORCEMENT off/log/enforce
+    'apps.access.policy_middleware.ZonePolicyMiddleware',
     # P-56: log API requests slower than SLOW_REQUEST_MS (route pattern only) for /sync
     'apps.sync.middleware.SlowRequestMiddleware',
 ]

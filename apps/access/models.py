@@ -4,6 +4,8 @@ import uuid
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from apps.users.models import ROLE_CHOICES
+
 
 class TrustedNetwork(models.Model):
     """A network we recognise (branch LAN, staff VPN, server). Log-only in N1: it names the
@@ -131,3 +133,42 @@ class DeviceUser(models.Model):
 
     class Meta:
         unique_together = [('device', 'user')]
+
+
+class ZonePolicy(models.Model):
+    """What a role may do from each access zone (N3). The policy only narrows the role's own
+    module matrix, it never widens it. One row per (role, zone); no row = no extra restriction."""
+
+    ZONE_CHOICES = [('Z1', 'Z1'), ('Z2', 'Z2'), ('Z3', 'Z3'), ('Z4', 'Z4')]
+    ACCESS_CHOICES = [
+        ('full', 'كامل'),
+        ('read_only', 'عرض فقط'),
+        ('listed', 'شاشات محددة'),
+        ('rider', 'واجهة الطيار'),
+        ('none', 'محظور'),
+    ]
+
+    role = models.CharField('الدور', max_length=20, choices=ROLE_CHOICES)
+    zone = models.CharField('المنطقة', max_length=2, choices=ZONE_CHOICES)
+    access = models.CharField('الوصول', max_length=10, choices=ACCESS_CHOICES, default='none')
+    modules = models.JSONField('الشاشات', default=list, blank=True)   # module keys, used when listed
+    view_only = models.BooleanField('عرض فقط للشاشات المحددة', default=False)
+    export = models.BooleanField('التصدير', default=False)
+    softech_read = models.BooleanField('قراءة SOFTECH', default=False)    # stored; enforced in N4
+    softech_write = models.BooleanField('كتابة SOFTECH', default=False)   # stored; enforced in N4
+    require_mfa = models.BooleanField('إلزام التحقق بخطوتين', default=False)
+    max_session_hours = models.PositiveSmallIntegerField('أقصى مدة جلسة (ساعات)', null=True, blank=True)
+    updated_by = models.ForeignKey(
+        'users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='+', verbose_name='آخر تعديل بواسطة',
+    )
+    updated_at = models.DateTimeField('آخر تعديل', auto_now=True)
+
+    class Meta:
+        verbose_name = 'سياسة منطقة'
+        verbose_name_plural = 'سياسات المناطق'
+        unique_together = [('role', 'zone')]
+        ordering = ['role', 'zone']
+
+    def __str__(self):
+        return f'{self.role} @ {self.zone}: {self.access}'

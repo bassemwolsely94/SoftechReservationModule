@@ -209,46 +209,50 @@ def login_view(request):
         _log_auth('login_refused_device', profile, ip, request=request)   # not login_failed: never counts toward lockout
         return Response({'error': _devices.BLOCKED_MESSAGE}, status=status.HTTP_401_UNAUTHORIZED)
 
+    # ── Access zone (N3) ──────────────────────────────────────────────────────
+    # Only after the password succeeded, before 2FA and tokens. A 403 here does tell the caller
+    # the password was right (a wrong one answers 401); the lockout bounds how many passwords
+    # can be tried. A refusal happens in enforce mode only; log mode writes a line and goes on.
+    from . import mfa as _mfa
+    from apps.access import session_policy as _session
+    zone = _session.request_zone(request)
+    subj = _session.subject(user)
+    refused = _mfa.zone_refusal_response(request, user, zone)
+    if refused is not None:
+        return refused
+
     # ── Two-factor gate ───────────────────────────────────────────────────────
     # Step 1 of login. If the user has 2FA on (or is in a required role once
-    # enforcement is enabled), don't issue tokens yet — hand back a short-lived
-    # pre-auth token the client exchanges at /auth/2fa/verify/ (or /enable/).
-    from . import mfa as _mfa
+    # enforcement is enabled, or signs in from a zone that requires it), don't issue
+    # tokens yet — hand back a short-lived pre-auth token the client exchanges at
+    # /auth/2fa/verify/ (or /enable/). Only the approved-device remember skips it (N2).
     login_note = ''
     if profile and profile.mfa_enabled:
-        device_token = request.data.get('device_token', '')
-        if not _mfa.valid_device_token(device_token, user):
-            if _devices.mfa_remembered(request, profile):
-                login_note = 'mfa_skipped_device'
-            else:
-                _log_auth('mfa_challenge', profile, ip, request=request)
-                return Response({'mfa_required': True,
-                                 'mfa_token': _mfa.make_preauth_token(user, 'login')})
-    elif _mfa.mfa_required_for(profile):
-        # Enforcement on + required role + not yet enrolled → force enrollment now.
+        if _devices.mfa_remembered(request, profile):
+            login_note = 'mfa_skipped_device'
+        else:
+            _log_auth('mfa_challenge', profile, ip, request=request)
+            return Response({'mfa_required': True,
+                             'mfa_token': _mfa.make_preauth_token(user, 'login')})
+    elif _mfa.mfa_required_for(profile) or _session.login_needs_mfa(request, subj, zone):
+        # Not yet enrolled and 2FA required (role enforcement, or the zone) → enrol now,
+        # but only from inside the network (F1).
+        refused = _mfa.enrol_refusal_response(request, user, zone)
+        if refused is not None:
+            return refused
         _log_auth('mfa_challenge', profile, ip, note='mfa_setup_required', request=request)
         return Response({'mfa_setup_required': True,
                          'mfa_token': _mfa.make_preauth_token(user, 'enroll')})
 
     device, device_secret = _mfa.enroll_login(request, user)
     _log_auth('login_success', profile, ip, note=login_note, request=request, device=device)
-
-    refresh = RefreshToken.for_user(user)
-    if device is not None:
-        refresh['dev'] = str(device.public_id)   # before .access_token: the access token copies it
-    resp = Response({
-        'access':  str(refresh.access_token),
-        'refresh': str(refresh),
-        'user': _MeSerializer(profile).data if profile else {
-            'username': user.username,
-            'role': 'admin' if user.is_superuser else 'viewer',
-        }
-    })
-    if device_secret:
-        set_device_cookie(resp, device_secret)
+    payload = _mfa.build_login_response(user, request, device=device, zone=zone,
+                                        mfa=login_note == 'mfa_skipped_device')
+    _session.alert_external_login(profile, zone, request)
     # The SPA uses the httpOnly cookies and ignores the body tokens (kept for
     # scripts / non-browser clients, which need the password anyway).
-    return set_auth_cookies(resp, refresh.access_token, refresh)
+    return _mfa.session_response(payload, device_secret=device_secret,
+                                 refresh_max_age=_mfa.cookie_age(subj, zone, payload))
 
 
 @api_view(['POST'])
@@ -290,6 +294,15 @@ def refresh_view(request):
     if _devices.is_revoked(dev_claim):           # a blocked/retired device never renews (N2)
         return clear_auth_cookies(Response({'detail': _devices.BLOCKED_MESSAGE},
                                            status=status.HTTP_401_UNAUTHORIZED))
+    # The zone is worked out again on every refresh (N3): a session started inside and carried
+    # outside meets the outside rules; the zone's cap counts from the sign-in (auth_at).
+    from apps.access import session_policy as _session
+    zone, owner, auth_at = _refresh_zone(request, raw)
+    old_token = _old_token(raw)
+    reason = _session.refresh_refusal(request, owner, old_token, zone) if owner is not None else None
+    if reason is not None:
+        return clear_auth_cookies(Response({'detail': _session.message(reason), 'zone': zone, 'reason': reason},
+                                           status=status.HTTP_401_UNAUTHORIZED))
     ser = TokenRefreshSerializer(data={'refresh': raw})
     try:
         ser.is_valid(raise_exception=True)
@@ -303,11 +316,70 @@ def refresh_view(request):
         # A session from before N2 has no device: enrol this browser now and stamp the rotated
         # tokens, so existing users reach the registry without a forced sign-in (I-2).
         access, new_refresh, device_secret = _stamp_device(request, raw, access, new_refresh)
+    access, new_refresh = _stamp_zone(access, new_refresh, zone, auth_at,
+                                      mfa=_session.mfa_of(old_token))
     resp = Response({'access': access, 'refresh': new_refresh} if body_token and new_refresh
-                    else (data if body_token else {'ok': True}))
+                    else ({'access': access} if body_token else {'ok': True}))
     if device_secret:
         set_device_cookie(resp, device_secret)
-    return set_auth_cookies(resp, access, new_refresh)
+    max_age = _session.refresh_max_age(owner, zone, auth_at) if owner is not None else None
+    return set_auth_cookies(resp, access, new_refresh, refresh_max_age=max_age)
+
+
+def _old_token(raw):
+    try:
+        return RefreshToken(raw)
+    except Exception:
+        return None
+
+
+def _refresh_zone(request, raw):
+    """(zone, owner policy subject or None, auth_at) for a refresh. auth_at falls back to the old
+    token's iat; an unreadable token gives (zone, None, None) — the serializer refuses it. Never raises."""
+    from apps.access import session_policy as _session
+    zone = _session.request_zone(request)
+    try:
+        from rest_framework_simplejwt.settings import api_settings
+        token = RefreshToken(raw)
+        uid = token.get(api_settings.USER_ID_CLAIM)
+        user = User.objects.select_related('staff_profile').filter(
+            **{api_settings.USER_ID_FIELD: uid}).first()
+        return zone, _session.subject(user), _session.auth_at_of(token)
+    except Exception:
+        return zone, None, None
+
+
+def _stamp_zone(access, refresh, zone, auth_at, mfa=False):
+    """The rotated tokens with the current `zone` and the kept `auth_at` / `mfa`. Never raises."""
+    try:
+        from rest_framework_simplejwt.tokens import AccessToken
+        from apps.access import session_policy as _session
+        if not refresh:
+            return access, refresh
+        new_r = RefreshToken(refresh)
+        _session.stamp(new_r, zone, auth_at=auth_at, mfa=mfa)
+        new_a = AccessToken(access)
+        new_a['zone'] = new_r['zone']
+        new_a['auth_at'] = new_r['auth_at']
+        new_a['mfa'] = new_r['mfa']
+        return str(new_a), str(new_r)
+    except Exception:
+        logger.error('refresh zone stamp failed; carrying auth_at only', exc_info=True)
+    # F5: never let a rotated token start a fresh cap — carry the sign-in time (old iat) at least.
+    try:
+        from rest_framework_simplejwt.tokens import AccessToken
+        if auth_at is None:
+            return access, refresh
+        new_r = RefreshToken(refresh)
+        new_r['auth_at'] = int(auth_at)
+        new_r['mfa'] = bool(mfa)
+        new_a = AccessToken(access)
+        new_a['auth_at'] = int(auth_at)
+        new_a['mfa'] = bool(mfa)
+        return str(new_a), str(new_r)
+    except Exception:
+        logger.error('refresh auth_at carry failed', exc_info=True)
+        return access, refresh
 
 
 def _stamp_device(request, old_raw, access, refresh):

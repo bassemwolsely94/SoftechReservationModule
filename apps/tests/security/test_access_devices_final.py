@@ -254,6 +254,8 @@ class RevokedAccessTests(Base):
         self.assertIsNotNone(user_from_request(req))
         dev.status = 'blocked'
         dev.save()
+        # the user is worked out once per request (final wave F6): the next request is refused
+        req = RequestFactory().get('/', HTTP_AUTHORIZATION=f'Bearer {r.data["access"]}')
         self.assertIsNone(user_from_request(req))
         req2 = RequestFactory().get('/')
         req2.COOKIES['erp_access'] = r.data['access']

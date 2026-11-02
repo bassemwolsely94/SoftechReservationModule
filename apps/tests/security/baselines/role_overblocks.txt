@@ -551,6 +551,14 @@ pharmacist GET /api/access/devices/
 pharmacist GET /api/access/devices/987654321/
 purchasing GET /api/access/devices/
 purchasing GET /api/access/devices/987654321/
+# reason: security N3 — the zone policy grid (role x zone) is admin only (IsAdminRole, same as the device
+#   registry), even for roles that can open settings.
+pharmacist GET /api/access/zone-policies/
+pharmacist GET /api/access/zone-policies/987654321/
+pharmacist GET /api/access/zone-policies/choices/
+purchasing GET /api/access/zone-policies/
+purchasing GET /api/access/zone-policies/987654321/
+purchasing GET /api/access/zone-policies/choices/
 
 # reason: owner 2026-11-01 — disposal status changes are mapped to the expiry screen (catalog view) so
 #   supervisor / quality manager reach them; the view's gate then admits only admin / quality manager /

@@ -93,6 +93,7 @@ USER_ACTIVITY_ACTION_CHOICES = [
     ('mfa_devices_forgotten', 'إلغاء الأجهزة المحفوظة'),
     ('device_status',       'تغيير حالة جهاز'),
     ('login_refused_device', 'دخول مرفوض: جهاز موقوف'),
+    ('login_refused_zone', 'دخول مرفوض: من خارج الشبكة'),
 ]
 
 # Roles that must pass 2FA at login once enforcement is switched on
@@ -152,6 +153,16 @@ class StaffProfile(models.Model):
     # flag `expiry_worklist_whatsapp_enabled`. Off by default (outward messaging).
     notify_expiry_worklist_wa = models.BooleanField(
         default=False, verbose_name='إشعار قائمة الصلاحيات عبر واتساب',
+    )
+
+    # Security N3: per-user widening of the external (Z3) policy; admins only, off by default
+    external_export = models.BooleanField(
+        default=False, verbose_name='التصدير من خارج الشبكة',
+        help_text='يسمح للأدمن بتصدير الملفات من جهاز معتمد خارج شبكة الشركة',
+    )
+    external_softech_write = models.BooleanField(
+        default=False, verbose_name='الكتابة في SOFTECH من خارج الشبكة',
+        help_text='يسمح للأدمن بعمليات الكتابة في SOFTECH من جهاز معتمد خارج شبكة الشركة',
     )
 
     # Branch access flags

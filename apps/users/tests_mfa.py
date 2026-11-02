@@ -6,7 +6,7 @@ Covers the full login state machine:
   • enforcement on + required role + unenrolled → forced setup
   • setup → enable (returns tokens + one-time backup codes)
   • enrolled login → challenge → verify (correct / wrong / backup / reuse)
-  • trusted-device token skips the challenge
+  • only the approved-device remember skips the challenge (legacy device_token removed, N3)
 """
 import pyotp
 from django.contrib.auth.models import User
@@ -118,13 +118,24 @@ class TwoFactorAuthTests(TestCase):
         secret, _ = self._enroll()
         self.client.force_authenticate(None)
 
+        from apps.access import devices
+        from apps.access.models import Device
+        xhr = {'HTTP_X_REQUESTED_WITH': 'XMLHttpRequest'}   # only the SPA enrols a device
         mfa_token = self._login().data['mfa_token']
         v = self.client.post('/api/auth/2fa/verify/',
                              {'mfa_token': mfa_token, 'code': pyotp.TOTP(secret).now(),
-                              'remember_device': True}, format='json')
-        device_token = v.data['device_token']
-        self.assertTrue(device_token)
+                              'remember_device': True}, format='json', **xhr)
+        self.assertNotIn('device_token', v.data)    # the legacy token is gone (N3)
+        Device.objects.update(status='approved')    # only an approved device earns a remember
+        cache.clear()                               # device cache + the single-use code guard
+        mfa_token = self._login().data['mfa_token']
+        v = self.client.post('/api/auth/2fa/verify/',
+                             {'mfa_token': mfa_token, 'code': pyotp.TOTP(secret).now(),
+                              'remember_device': True},
+                             format='json', **xhr)
+        self.assertEqual(v.status_code, 200, v.data)
+        self.assertTrue(self.client.cookies.get(devices.COOKIE))
 
-        r = self._login(device_token=device_token)
+        r = self._login()
         self.assertIn('access', r.data)             # no challenge this time
         self.assertNotIn('mfa_required', r.data)

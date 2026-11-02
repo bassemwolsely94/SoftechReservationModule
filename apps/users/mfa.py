@@ -46,9 +46,8 @@ _PREAUTH_MAX_AGE = 300          # 5 minutes
 # Wrong codes allowed per login token; then the token is dead → log in again
 # (Batch 3, A-2; owner 2026-10-27).
 MAX_CODE_TRIES = 5
-# Trusted-device token — lets a user skip 2FA on the same device for 30 days.
-_DEVICE_SALT = 'mfa-device'
-_DEVICE_MAX_AGE = 30 * 24 * 3600
+# "Remember this device" is the approved-device remember (apps/access/devices.py, N2); the old
+# signed device_token kept in localStorage was removed in N3.
 
 
 # ── Enforcement flag ───────────────────────────────────────────────────────────
@@ -103,22 +102,9 @@ def _device_fingerprint(user) -> str:
     return salted_hmac('mfa-device-fingerprint', material).hexdigest()[:24]
 
 
-def make_device_token(user) -> str:
-    return signing.dumps({'uid': user.id, 'fp': _device_fingerprint(user)}, salt=_DEVICE_SALT)
-
-
-def valid_device_token(token: str, user) -> bool:
-    if not token:
-        return False
-    try:
-        data = signing.loads(token, salt=_DEVICE_SALT, max_age=_DEVICE_MAX_AGE)
-    except signing.BadSignature:
-        return False
-    return data.get('uid') == user.id and data.get('fp') == _device_fingerprint(user)
-
-
 def forget_devices(profile, by_profile, ip) -> int:
-    """Cancel every "remember this device" token of `profile`; returns the new epoch (N0/H7)."""
+    """Cancel every "remember this device" of `profile` (the epoch is part of the fingerprint the
+    approved-device remember stores); returns the new epoch (N0/H7)."""
     from django.db.models import F
     from .models import UserActivityLog
     StaffProfile.objects.filter(pk=profile.pk).update(mfa_device_epoch=F('mfa_device_epoch') + 1)
@@ -197,12 +183,12 @@ def _qr_png_data_url(uri: str) -> str:
 
 # ── Shared login-response builder (lazy import to avoid an import cycle) ──────────
 
-def session_response(payload: dict, status_code=200, device_secret=None):
+def session_response(payload: dict, status_code=200, device_secret=None, refresh_max_age=None):
     """Response for a completed login: body as before + httpOnly JWT cookies (+ the device cookie
-    when a new device was enrolled)."""
+    when a new device was enrolled). `refresh_max_age` caps the refresh cookie (zone cap, N3)."""
     from core.auth_cookies import set_auth_cookies, set_device_cookie
     resp = Response(payload, status=status_code)
-    set_auth_cookies(resp, payload.get('access'), payload.get('refresh'))
+    set_auth_cookies(resp, payload.get('access'), payload.get('refresh'), refresh_max_age=refresh_max_age)
     if device_secret:
         set_device_cookie(resp, device_secret)
     return resp
@@ -227,15 +213,56 @@ def enroll_login(request, user):
     return device, secret
 
 
-def build_login_response(user, request=None, device=None) -> dict:
+def _zone_refused(request, user, zone, reason):
+    from apps.access import session_policy
+    _log('login_refused_zone', getattr(user, 'staff_profile', None), request, note=f'zone={zone} reason={reason}')
+    # 'error' (not 'detail'): the login page reads .error (ruling F6)
+    return Response({'error': session_policy.message(reason), 'zone': zone, 'reason': reason},
+                    status=status.HTTP_403_FORBIDDEN)
+
+
+def zone_refusal_response(request, user, zone):
+    """403 (and a login_refused_zone log row) when the role is blocked in this zone and the policy
+    is enforced, else None. Never counts toward the lockout (N3)."""
+    from apps.access import session_policy
+    reason = session_policy.login_refusal(request, session_policy.subject(user), zone)
+    return None if reason is None else _zone_refused(request, user, zone, reason)
+
+
+def enrol_refusal_response(request, user, zone):
+    """403 when a first 2FA enrolment at sign-in comes from outside the network and the policy is
+    enforced (F1: riders and everyone else enrol once inside), else None."""
+    from apps.access import session_policy
+    reason = session_policy.enrol_refusal(request, session_policy.subject(user), zone)
+    return None if reason is None else _zone_refused(request, user, zone, reason)
+
+
+def cookie_age(profile, zone, payload):
+    """Refresh-cookie max_age for a completed sign-in (zone cap, enforce only), or None."""
+    try:
+        from rest_framework_simplejwt.tokens import RefreshToken
+        from apps.access import session_policy
+        auth_at = RefreshToken(payload['refresh']).get('auth_at')
+        return session_policy.refresh_max_age(profile, zone, auth_at)
+    except Exception:
+        return None
+
+
+def build_login_response(user, request=None, device=None, zone=None, mfa=False) -> dict:
     """Tokens + user for a completed sign-in. `device` (from enroll_login) adds the `dev` claim;
-    without a request or device there is no enrollment and no claim."""
+    without a request or device there is no enrollment and no claim. Every token gets the `zone`
+    (worked out from the request when not given), `auth_at` and `mfa` (this sign-in passed 2FA)
+    claims (N3)."""
     from rest_framework_simplejwt.tokens import RefreshToken
+    from apps.access import session_policy
     from .views import _MeSerializer
     profile = getattr(user, 'staff_profile', None)
     refresh = RefreshToken.for_user(user)
     if device is not None:
         refresh['dev'] = str(device.public_id)   # before .access_token: the access token copies it
+    if zone is None and request is not None:
+        zone = session_policy.request_zone(request)
+    session_policy.stamp(refresh, zone, mfa=mfa)
     return {
         'access':  str(refresh.access_token),
         'refresh': str(refresh),
@@ -295,6 +322,11 @@ def verify_2fa_view(request):
     refused = blocked_device_response(request, profile)
     if refused is not None:
         return refused
+    from apps.access import session_policy
+    zone = session_policy.request_zone(request)
+    refused = zone_refusal_response(request, user, zone)
+    if refused is not None:
+        return refused
 
     if not (verify_login_code(profile, code) or consume_backup_code(profile, code)):
         cache.add(tries_key, 0, _PREAUTH_MAX_AGE)
@@ -311,24 +343,30 @@ def verify_2fa_view(request):
     cache.set(done_key, 1, _PREAUTH_MAX_AGE)
     device, device_secret = enroll_login(request, user)
     _log('mfa_verified', profile, request, device=device)
-    resp = build_login_response(user, request, device=device)
+    resp = build_login_response(user, request, device=device, zone=zone, mfa=True)
     if request.data.get('remember_device'):
-        resp['device_token'] = make_device_token(user)
         from apps.access import devices
-        devices.remember_mfa(device, profile)
-    return session_response(resp, device_secret=device_secret)
+        devices.remember_mfa(device, profile)     # approved devices only (N2)
+    session_policy.alert_external_login(profile, zone, request)
+    return session_response(resp, device_secret=device_secret,
+                            refresh_max_age=cookie_age(session_policy.subject(user), zone, resp))
 
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def setup_2fa_view(request):
     """Generate a fresh (pending) TOTP secret + QR. Callable via JWT or enroll token."""
-    user, _ = _actor_from_request(request)
+    user, via_preauth = _actor_from_request(request)
     if not user:
         return Response({'error': 'غير مصرح'}, status=status.HTTP_401_UNAUTHORIZED)
     profile = getattr(user, 'staff_profile', None)
     if not profile:
         return Response({'error': 'لا يوجد ملف موظف لهذا الحساب'}, status=status.HTTP_400_BAD_REQUEST)
+    if via_preauth:              # enrolment at sign-in: only from inside the network (F1)
+        from apps.access import session_policy
+        refused = enrol_refusal_response(request, user, session_policy.request_zone(request))
+        if refused is not None:
+            return refused
     if profile.mfa_enabled:      # never replace a working authenticator (A-1) — disable it first
         return Response({'error': 'المصادقة الثنائية مفعّلة بالفعل — أوقفها أولاً لربط هاتف جديد'},
                         status=status.HTTP_400_BAD_REQUEST)
@@ -353,8 +391,15 @@ def enable_2fa_view(request):
     profile = getattr(user, 'staff_profile', None)
     if not profile or not profile.mfa_secret:
         return Response({'error': 'ابدأ الإعداد أولاً'}, status=status.HTTP_400_BAD_REQUEST)
+    zone = None
     if via_preauth:
         refused = blocked_device_response(request, profile)
+        if refused is not None:
+            return refused
+        from apps.access import session_policy
+        zone = session_policy.request_zone(request)
+        refused = (zone_refusal_response(request, user, zone)
+                   or enrol_refusal_response(request, user, zone))
         if refused is not None:
             return refused
     if profile.mfa_enabled:      # A-1: no second set of backup codes / no login through here
@@ -372,13 +417,15 @@ def enable_2fa_view(request):
     _log('mfa_enabled', profile, request)
 
     resp = {'enabled': True, 'backup_codes': plain}
-    device_secret = None
+    device_secret, max_age = None, None
     if via_preauth:
         # Enrolled as part of a forced login → log them in now.
         device, device_secret = enroll_login(request, user)
-        resp.update(build_login_response(user, request, device=device))
+        resp.update(build_login_response(user, request, device=device, zone=zone, mfa=True))
         _log('login_success', profile, request, note='دخول بعد تفعيل المصادقة الثنائية', device=device)
-    return session_response(resp, device_secret=device_secret)
+        session_policy.alert_external_login(profile, zone, request)
+        max_age = cookie_age(session_policy.subject(user), zone, resp)
+    return session_response(resp, device_secret=device_secret, refresh_max_age=max_age)
 
 
 @api_view(['POST'])

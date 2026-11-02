@@ -15,9 +15,10 @@ from apps.audit.models import AuditLog
 from apps.users.permissions import IsAdminRole
 
 from . import devices as dev_api
-from .models import Device, DeviceUser, TrustedNetwork
+from .models import Device, DeviceUser, TrustedNetwork, ZonePolicy
 from .network import INTERNAL, request_network
-from .serializers import DeviceSerializer, TrustedNetworkSerializer
+from .serializers import DeviceSerializer, TrustedNetworkSerializer, ZonePolicySerializer
+from .zones import ZONE_LABELS
 
 _AUDITED = ('name', 'cidr', 'kind', 'branch_id', 'is_active', 'notes')
 
@@ -43,8 +44,14 @@ def whoami(request):
         d = access.device
         device = {'status': d.status, 'status_label': dict(Device.STATUS_CHOICES).get(d.status, d.status),
                   'name': d.name}
+    access_zone = access.zone if access is not None else None
     return Response({
         'device': device,
+        'access_zone': access_zone,
+        'access_zone_label': ZONE_LABELS.get(access_zone),
+        # what the banner may honestly say: the mode and this role's row in this zone
+        'policy_mode': _policy_mode(),
+        'zone_access': _zone_access(request, access_zone),
         'zone': net.zone,
         'ip': net.ip,
         'label': net.label_ar,
@@ -54,6 +61,26 @@ def whoami(request):
             'branch_label': (branch.name_ar or branch.name) if branch else None,
         },
     })
+
+
+def _policy_mode():
+    from .policy_middleware import _mode
+    return _mode()
+
+
+def _zone_access(request, zone):
+    """The signed-in user's policy row access in `zone` ('full', 'read_only', ...), or None."""
+    if zone is None:
+        return None
+    try:
+        from .policy import policy_for
+        from .session_policy import subject
+        user = request.user if getattr(request.user, 'is_authenticated', False) else None
+        subj = subject(user)
+        row = policy_for(subj.role, zone) if subj is not None else None
+        return row.access if row is not None else None
+    except Exception:
+        return None
 
 
 def _snapshot(tn):
@@ -172,3 +199,38 @@ class DeviceViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upd
                 dev_api.set_status(device, 'approved', request.user.staff_profile, note, request=request)
                 approved += 1
         return Response({'approved': approved, 'skipped': len(ids) - approved})
+
+
+_POLICY_AUDITED = ('access', 'modules', 'view_only', 'export', 'softech_read', 'softech_write',
+                   'require_mfa', 'max_session_hours')
+
+
+class ZonePolicyViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin,
+                        viewsets.GenericViewSet):
+    """«سياسة الشبكات» (N3): the role x zone grid. Edit only: rows are seeded, never created or
+    deleted here, and PUT is not offered."""
+    serializer_class = ZonePolicySerializer
+    permission_classes = [IsAuthenticated, IsAdminRole]
+    pagination_class = None
+    http_method_names = ['get', 'patch', 'head', 'options']
+    queryset = ZonePolicy.objects.select_related('updated_by__user').order_by('role', 'zone')
+
+    def perform_update(self, serializer):
+        before = {f: getattr(serializer.instance, f) for f in _POLICY_AUDITED}
+        row = serializer.save(updated_by=self.request.user.staff_profile)
+        after = {f: getattr(row, f) for f in _POLICY_AUDITED}
+        if after != before:                      # a no-op save leaves no audit row
+            AuditLog.log('zone_policy_changed', user=self.request.user.staff_profile, obj=row,
+                         changes={'before': before, 'after': after, 'role': row.role, 'zone': row.zone},
+                         request=self.request._request)
+
+    @action(detail=False, methods=['get'])
+    def choices(self, request):
+        """The module keys a policy may list (with Arabic labels) and the access levels."""
+        from apps.users.models import MODULE_CHOICES
+        from core.middleware.module_access import MODULE_BY_PREFIX
+        known = set(MODULE_BY_PREFIX.values())
+        return Response({
+            'modules': [{'value': v, 'label': l} for v, l in MODULE_CHOICES if v in known],
+            'access': [{'value': v, 'label': l} for v, l in ZonePolicy.ACCESS_CHOICES],
+        })

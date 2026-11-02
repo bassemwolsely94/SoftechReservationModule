@@ -70,6 +70,25 @@ class SecondFactorBypassTests(TestCase):
         self.assertIn('access', r.data)
 
 
+def _remember(profile):
+    """An approved device on which 2FA is remembered for `profile` (N2); returns its cookie secret.
+    (The legacy signed device_token was removed in N3.)"""
+    from apps.access import devices
+    from apps.access.models import Device
+    secret = devices.new_secret()
+    dev = Device.objects.create(secret_hash=devices.hash_secret(secret), name='جهاز', status='approved')
+    devices.remember_mfa(dev, profile)
+    return secret
+
+
+def _remembered(secret, profile):
+    from django.test import RequestFactory
+    from apps.access import devices
+    req = RequestFactory().get('/')
+    req.COOKIES[devices.COOKIE] = secret
+    return devices.mfa_remembered(req, StaffProfile.objects.select_related('user').get(pk=profile.pk))
+
+
 class ForgetDevicesTests(TestCase):
     """Revocable "remember this device" (security batch N0, H7)."""
 
@@ -80,24 +99,22 @@ class ForgetDevicesTests(TestCase):
         self.admin_user, self.admin_profile, self.admin = make_user('h7_admin', role='admin', password=PASSWORD)
 
     def test_forget_devices_invalidates_token(self):
-        from apps.users import mfa
-        token = mfa.make_device_token(self.user)
-        self.assertTrue(mfa.valid_device_token(token, self.user))
+        secret = _remember(self.profile)
+        self.assertTrue(_remembered(secret, self.profile))
         r = self.me.post('/api/auth/2fa/forget-devices/', {}, format='json')
         self.assertEqual(r.status_code, 200)
         self.user.refresh_from_db()
         self.profile.refresh_from_db()
         self.assertEqual(self.profile.mfa_device_epoch, 1)
-        self.assertFalse(mfa.valid_device_token(token, User.objects.get(pk=self.user.pk)))
+        self.assertFalse(_remembered(secret, self.profile))
         from apps.users.models import UserActivityLog
         row = UserActivityLog.objects.get(action='mfa_devices_forgotten')
         self.assertEqual(row.target_user, self.profile)
         self.assertEqual(row.changed_by, self.profile)
 
     def test_admin_forget_devices_other_user(self):
-        from apps.users import mfa
         from apps.users.models import UserActivityLog
-        token = mfa.make_device_token(self.user)
+        secret = _remember(self.profile)
         denied = self.me.post(f'/api/users/{self.other_profile.id}/forget-devices/', {}, format='json')
         self.assertEqual(denied.status_code, 403)
         self.assertFalse(UserActivityLog.objects.filter(action='mfa_devices_forgotten').exists())
@@ -106,10 +123,9 @@ class ForgetDevicesTests(TestCase):
         row = UserActivityLog.objects.get(action='mfa_devices_forgotten')
         self.assertEqual(row.target_user, self.profile)
         self.assertEqual(row.changed_by, self.admin_profile)
-        self.assertFalse(mfa.valid_device_token(token, User.objects.get(pk=self.user.pk)))
+        self.assertFalse(_remembered(secret, self.profile))
 
     def test_other_users_tokens_unaffected(self):
-        from apps.users import mfa
-        other_token = mfa.make_device_token(self.other)
+        other_secret = _remember(self.other_profile)
         self.me.post('/api/auth/2fa/forget-devices/', {}, format='json')
-        self.assertTrue(mfa.valid_device_token(other_token, User.objects.get(pk=self.other.pk)))
+        self.assertTrue(_remembered(other_secret, self.other_profile))

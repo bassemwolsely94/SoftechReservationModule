@@ -626,3 +626,6 @@ Default pagination: CursorPagination (50 items)
 | `/api/access/devices/{id}/block/` | POST | Block; `note` required (400 «اكتب سبب الحظر»). Ends the device's sessions: next call with its token answers 401 |
 | `/api/access/devices/{id}/retire/` | POST | Retire; final (400 «الجهاز متقاعد — لا يمكن إعادة تفعيله») |
 | `/api/access/devices/bulk-approve/` | POST | `{ids: [...]}` -> `{approved, skipped}`; only pending devices are approved |
+| `/api/access/zone-policies/` (`{id}/`) | GET, PATCH | Zone policy grid (N3): one row per role x zone (Z1-Z4). Admin only, unpaginated; no create / delete / PUT. PATCH edits access / modules / view_only / export / softech_read / softech_write / require_mfa / max_session_hours (1..72 or null; modules must be known module keys; role and zone are read-only). A real change is audited `zone_policy_changed` (before/after) |
+| `/api/access/zone-policies/choices/` | GET | Module keys (with labels) and access levels a policy may use. Admin only |
+| `/api/users/staff/{id}/` | PATCH | (N3) also accepts the admin-only flags `external_export` and `external_softech_write`; a change is logged in the user activity log (`permissions_changed`, old/new) |
