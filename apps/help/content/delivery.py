@@ -455,6 +455,7 @@ SCREENS = [
         'summary': T('جمّع الطلبات الجاهزة في «مسار» لسائق واحد ثم أطلق المسار دفعة واحدة، وتابع حالة مسارات اليوم والنقد المتوقع لكل مسار.',
                      'Group ready orders into one driver\'s "route", launch the whole route at once, and watch today\'s routes and the cash expected per route.'),
         'audience': T('مسؤول التوزيع، الكول سنتر، المشرفون.', 'The dispatcher, call center, supervisors.'),
+        'tips': [T('المندوب بيشوف رقم المستلم في الطلبات المسندة له حتى لو من فرع تاني. البحث برقم العميل لازم يكون بالرقم كامل.', "A rider sees the recipient's number on orders assigned to them, even from another branch. Looking a customer up by phone needs the full number.")],
         'steps': [
             T('من «جاهزة للتكليف» حدد الطلبات المتقاربة جغرافياً.', 'From "Ready to assign" select orders that are close to each other.'),
             T('اختر السائق ثم «إنشاء مسار».', 'Choose the driver, then "Create route".'),

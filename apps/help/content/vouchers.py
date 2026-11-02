@@ -235,7 +235,8 @@ SCREENS = [
             T('لصرف قسيمة: تبويب «استرداد» أو زر «استرداد» بجانب القسيمة.', 'To redeem: the "Redeem" tab or the "Redeem" button next to the voucher.'),
             {'text': T('لإنشاء قسيمة: تبويب «القسائم» ← «قسيمة جديدة».', 'To create one: the "Vouchers" tab → "New voucher".'), 'roles': ['admin', 'supervisor', 'purchasing']},
         ],
-        'tips': [
+        'tips': [T('أرقام العملاء في التوزيع والاستخدام بتظهر مخفية لموظفي الفروع؛ رمز التحقق بيتبعت على الرقم اللي اتكتب وقت الاستخدام.', 'Customer numbers in assignments and redemptions show hidden to branch staff; the one-time code goes to the number typed at redemption.'),
+                 
             T('لا تطلب من العميل إرسال الرمز في رسالة؛ يقرأه لك فقط.', 'Do not ask the customer to forward the code in a message; they only read it to you.'),
             T('القسيمة الخاصة تُستخدم فقط من العميل المحدد عليها.', 'A private voucher can only be used by the customer it is set for.'),
             T('بعد استخدام القسيمة أو تخصيصها لا تتغير قيمتها ولا حدودها، والعميل يُحدَّد من «تخصيص» فقط.',

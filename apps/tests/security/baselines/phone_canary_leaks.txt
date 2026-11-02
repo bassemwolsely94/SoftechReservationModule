@@ -1,0 +1,10 @@
+# Batch 5b phone canary sweep: a customer's full number reached staff who may not see it
+# (another branch's pharmacist, or own-branch staff with can_see_customer_phone = False).
+# Each block needs a '# reason:' tied to an owner decision (docs/security/PHONE_MASKING_PLAN.md D1–D8).
+
+# reason: not customer numbers — the sweep fills every phone-like field of every model, so it also
+#   hits the delivery riders' own mobiles and the channel accounts' business numbers.
+no_phone_flag GET /api/delivery/drivers/
+no_phone_flag GET /api/omni/accounts/
+other_branch GET /api/delivery/drivers/
+other_branch GET /api/omni/accounts/
