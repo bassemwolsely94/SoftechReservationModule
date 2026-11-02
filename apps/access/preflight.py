@@ -191,7 +191,8 @@ def check_softech(now):
     rows = (AuditLog.objects.filter(action=softech_gate.AUDIT_ACTION,
                                     created_at__gte=now - timedelta(days=RECENT_DAYS))
             .order_by()
-            .values('user_role', 'extra__reason', 'extra__zone', 'extra__scope', 'extra__label')
+            .values('user_role', 'extra__reason', 'extra__zone', 'extra__scope', 'extra__label',
+                    'extra__sql_first', 'extra__write_word')
             .annotate(n=Count('id')))
     out = []
     no_ctx = Counter()
@@ -201,7 +202,11 @@ def check_softech(now):
         if reason == 'no_context':
             no_ctx[f"{r['extra__scope']} / {r['extra__label'] or '-'}"] += r['n']
         else:
-            would[f"{r['user_role'] or '?'} × {r['extra__zone'] or '-'} × {reason}"] += r['n']
+            # M10: a write observation carries its first keyword and the write word it matched
+            # (SELECT / LOAD is a read with an odd identifier, UPDATE / UPDATE a real write)
+            sig = (f" [{r['extra__sql_first']} / {r['extra__write_word']}]"
+                   if r.get('extra__sql_first') else '')
+            would[f"{r['user_role'] or '?'} × {r['extra__zone'] or '-'} × {reason}{sig}"] += r['n']
     if no_ctx:
         out.append(Item(BLOCK, 'softech_no_context',
                         'شاشة تفتح SOFTECH من خيط أو مسار بلا سياق طلب — ستنكسر عند التطبيق الفعلي لبوابة SOFTECH',

@@ -30,7 +30,6 @@ Stats
   GET  /api/images/review-queue/  items awaiting human review
   GET  /api/images/filter-meta/   category/producer lists for UI dropdowns
 """
-import threading
 from core.threads import ContextThreadPoolExecutor, start_thread
 
 from django.db.models import Count, Exists, OuterRef, Q, Subquery

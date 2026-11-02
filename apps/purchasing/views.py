@@ -15,7 +15,6 @@ Endpoints:
 import io
 import csv
 import logging
-import threading
 from decimal import Decimal
 
 from django.http import HttpResponse, StreamingHttpResponse

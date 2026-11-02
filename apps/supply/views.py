@@ -882,7 +882,6 @@ def freshness(request):
 def freshness_sync_stock(request):
     """Run the fast sync lane (branches + stock + sales, read-only SELECTs on SOFTECH) now,
     in the background. Never stacks on a sync already running."""
-    import threading
     from datetime import timedelta
     from django.db import connections
     from django.utils import timezone

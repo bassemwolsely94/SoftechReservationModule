@@ -77,7 +77,6 @@ class InsightRunViewSet(viewsets.ReadOnlyModelViewSet):
         sp = getattr(request.user, 'staff_profile', None)
         if not (sp and sp.role in {'admin', 'supervisor'}):
             return Response({'detail': 'غير مصرح'}, status=status.HTTP_403_FORBIDDEN)
-        import threading
         from datetime import datetime, date, timedelta
         from django.core.management import call_command
         from django.db import connections

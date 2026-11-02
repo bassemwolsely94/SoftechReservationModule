@@ -7,7 +7,6 @@ All endpoints are read-only analytics except:
   - POST /trigger/          → trigger engine run (admin only)
   - PATCH /alerts/{id}/resolve/  → resolve alert
 """
-import threading
 import datetime as _dt
 from decimal import Decimal
 

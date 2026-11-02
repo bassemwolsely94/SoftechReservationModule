@@ -3,7 +3,6 @@ apps/enrichment/views.py
 
 AI Catalog Enrichment Platform — API views.
 """
-import threading
 from django.utils import timezone
 from django.db.models import Count, Prefetch, Q
 from rest_framework import viewsets, status

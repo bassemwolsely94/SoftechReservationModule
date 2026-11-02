@@ -1,7 +1,6 @@
 import datetime as _dt
 import logging
 import re
-import threading
 
 from rest_framework import viewsets, mixins, status, generics
 from rest_framework.decorators import action, api_view, permission_classes

@@ -334,7 +334,6 @@ class KpiRefreshView(APIView):
         denied = deny_unless(request, 'purchasing', 'edit', 'create')   # /api/forecasting/ = purchasing (Z-2)
         if denied:
             return denied
-        import threading
         from datetime import date
 
         def _job():

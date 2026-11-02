@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import logging
 import os
-import threading
 
 from django.conf import settings
 from core.threads import start_thread

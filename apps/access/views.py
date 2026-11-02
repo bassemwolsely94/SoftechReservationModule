@@ -82,15 +82,18 @@ def _subject(request):
 
 def _softech_access(subj, access):
     """The SOFTECH gate's grant for a web request, for the banner. Computed with decide() and
-    mode() only: whoami is not a SOFTECH use, so it never calls check()/note() and never audits."""
+    mode() only: whoami is not a SOFTECH use, so it never calls check()/note() and never audits.
+    whoami is public: an anonymous caller gets null for both (the gate mode is not for the internet)."""
     from . import softech_gate
+    if access is None or access.user_id is None:
+        return {'softech_access': None, 'softech_gate_mode': None}
     try:
         gate_mode = softech_gate.mode()
     except Exception:
         gate_mode = 'log'
     grant = softech_gate.FULL
     try:
-        if gate_mode != 'off' and access is not None and access.user_id is not None:
+        if gate_mode != 'off':
             grant = softech_gate.decide('web', access, subj).grant
     except Exception:
         grant = softech_gate.FULL

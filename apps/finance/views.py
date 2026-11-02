@@ -5,7 +5,6 @@ All views require IsAuthenticated.
 Trigger endpoints (sync, discover) additionally require admin/pharmacist role.
 """
 
-import threading
 from decimal import Decimal
 
 from django.db.models import Count, Sum

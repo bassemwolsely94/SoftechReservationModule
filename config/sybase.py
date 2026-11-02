@@ -277,6 +277,18 @@ def is_read_only_sql(sql) -> bool:
     return not _SQL_WRITE_WORDS_RE.search(text)
 
 
+def write_signature(sql):
+    """(first keyword, matched write word) of a statement is_read_only_sql() calls a write - never
+    the SQL itself. Lets the log week tell a real write (UPDATE / UPDATE) from a read that only
+    contains a write word as an identifier (SELECT / LOAD)."""
+    text = _SQL_LITERAL_OR_COMMENT_RE.sub(
+        lambda m: "''" if m.group(0)[0] in '\'"' else ' ', str(sql or ''))
+    text = text.strip().lstrip('(').strip()
+    first = re.split(r'[\s(;]+', text, maxsplit=1)[0].upper()[:20] if text else ''
+    m = _SQL_WRITE_WORDS_RE.search(text)
+    return first, (m.group(1).upper() if m else '')
+
+
 def _refuse_if_write(sql):
     if not is_read_only_sql(sql):
         snippet = ' '.join(str(sql or '').split())[:120]
@@ -380,8 +392,10 @@ def _zone_write_check(decision, label, observe_only):
         if is_read_only_sql(sql):
             return
         gate = _gate()
+        first, word = write_signature(sql)
         gate.note(decision, label, enforced=not observe_only,
-                  mode='log' if observe_only else 'enforce')
+                  mode='log' if observe_only else 'enforce',
+                  extra={'sql_first': first, 'write_word': word})
         if observe_only:
             return
         snippet = ' '.join(str(sql or '').split())[:120]

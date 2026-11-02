@@ -79,7 +79,6 @@ def trigger_engine(request):
     min_support    = float(request.data.get('min_support',   0.001))
     min_confidence = float(request.data.get('min_confidence', 0.05))
 
-    from threading import Thread
     from apps.recommendations.engine import run_fbt_engine
 
     def _run():

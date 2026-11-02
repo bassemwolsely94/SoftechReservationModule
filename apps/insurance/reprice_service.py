@@ -660,6 +660,10 @@ def apply_batch(claim, itemcode, new_price, receipts, user=None, confirm=False, 
     _TRANSIENT = ('JZ0C0', 'ConnectionDead', 'Connection is already closed',
                   'JZ006', 'IOException', 'socket', 'timed out', 'timeout')
     def _is_transient(msg):
+        # N4: a refusal (gate or global read-only) is never a flaky link - never retried
+        from config.sybase import SoftechAccessDenied, SoftechReadOnlyError
+        if isinstance(msg, (SoftechAccessDenied, SoftechReadOnlyError)):
+            return False
         return any(t.lower() in str(msg).lower() for t in _TRANSIENT)
 
     for rc in receipts:

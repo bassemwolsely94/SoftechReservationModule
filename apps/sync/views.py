@@ -51,7 +51,6 @@ def trigger_sync(request):
     polls /sync/status/ and /sync/logs/, so the run surfaces there as it does for
     the scheduled lanes.
     """
-    import threading
     from datetime import timedelta
     from django.db import connections
     from django.utils import timezone
