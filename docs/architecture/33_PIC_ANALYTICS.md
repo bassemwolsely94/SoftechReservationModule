@@ -1,6 +1,6 @@
 # 33 — PIC Analytics (تحليلات العملاء — PIC)
 
-**Status:** DESIGN — awaiting owner approval · **Date:** 2026-11-02
+**Status:** BUILT (2026-11-03, branch `claude/pic-analytics`, based on PR 41) · **Design date:** 2026-11-02
 **Depends on:** PR 41 (PBX call history `pbx.CdrCall`, linked to PICs).
 **Related:** `apps/customers` (PurchaseHistory, segmentation), `apps/analytics` (sales/performance),
 `apps/forecasting/kpi.py` (metric resolver, ChannelBucketMap), `apps/stock_audit/access.py`
@@ -278,3 +278,23 @@ Branch-manager scope and call visibility: decided 2026-11-02 (§5).
 2. The **[call]** defaults above: 24 h return window, 7-day call→purchase, loyal = bought in ≥ 10 of 12
    months, overdue = 1.5 × own cycle, new-PIC attribution to the first invoice's salesperson, returns on
    their own date, a "بدون PIC" sales line, KPI-board channel rule.
+
+---
+
+## 15. As built (deviations decided during the build)
+
+- **Gross profit follows the KPI board rules.** `PicDayFact.gp_net` / `gp` use profit channels, excluded items and line revenue (Σ line total − qty × cost at sale); `gp_pct = gp / gp_net`. The header-total-minus-cost version was wrong.
+- **Grantee scope** = home branch + allowed branches − restricted branches; a granted branch manager never gets the all-branch shortcut, cost, GP or margin.
+- **Options endpoint.** `GET options/` returns the scoped lists for the filter selects (salespeople, categories, customer types, segments, channels, frequency buckets, agents for management only).
+- **New-PIC date fallback.** A PIC without `softech_created_at` falls back to its first purchase; `new_reliable_from` (2025-08-01) is returned only when no customer has `softech_created_at` yet.
+- **Channel bucket** is mapped by sales channel only (as the KPI board does); unmapped = `other`; the `exclude` bucket stays in PIC totals and shows as its own line «مستبعدة من مؤشرات KPI».
+- **Frequency is computed at the report to-date**, not only from the rollup (rollup reused only when the to-date is yesterday); labels (new/returning/reactivated, frequency) are chain-wide, amounts are scoped.
+- **New-PIC category** = the category with the largest positive net on its first visit day.
+- **Number handles are call ids.** Unknown numbers never reach the browser: rows carry `number_id` / `call_id` (latest `CdrCall` pk), and dial / label / call-back resolve on the server.
+- **Server-side dial** (`calls/missed/<call_id>/dial/`, `numbers/<id>/dial/`, management, audited) reuses the PBX dial logic; «نسخ الرقم» was dropped from New numbers.
+- **Call-back** = `POST calls/missed/<call_id>/callback/` creating a `callcenter.CallLog` (`status='callback'`), reusing the existing call-back queue.
+- **Masking.** Unlinked numbers stay masked even for management (existing phone rules, incl. the external-zone block).
+- **Call cards stay chain-wide** under branch / salesperson / category / segment filters (calls have no branch) and are labelled «كل مكالمات العملاء»; `missed_not_returned` ignores the agent filter.
+- **Fact grain.** The unique grain includes the nullable branch, so builds delete + rebuild per day range; rules take only visit days ≤ the end date.
+- **Export** column letters use `get_column_letter` (more than 26 columns).
+- **Scheduled jobs:** `pic_facts` 04:15, `pbx_cdr_sync` every 10 min, `pbx_cdr_relink` 03:55. Deploy: migrate, `seed_permissions`, `build_pic_facts --since 2024-08-01`, restart the scheduler.
