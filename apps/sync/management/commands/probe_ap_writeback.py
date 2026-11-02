@@ -87,15 +87,22 @@ class Command(BaseCommand):
             self._save(lines)
             return
 
+        def setrc(n):
+            cur = conn._cursor()
+            try:
+                cur.execute(f'SET ROWCOUNT {n}')
+            except Exception:
+                pass
+            finally:
+                cur.close()
+
+        # each statement's cursor is closed before the next one (see _rehearse.q1)
         def run(label, sql, cap=None):
             log(f'\n--- {label} ---')
             if cap:
-                try:
-                    conn._cursor().execute(f'SET ROWCOUNT {cap}')
-                except Exception:
-                    pass
+                setrc(cap)
+            cur = conn._cursor()
             try:
-                cur = conn._cursor()
                 cur.execute(sql)
                 cols = [d[0] for d in cur.description] if cur.description else []
                 rows = cur.fetchall()
@@ -110,16 +117,14 @@ class Command(BaseCommand):
                 log(f'  [ERROR] {e}')
                 return []
             finally:
+                cur.close()
                 if cap:
-                    try:
-                        conn._cursor().execute('SET ROWCOUNT 0')
-                    except Exception:
-                        pass
+                    setrc(0)
 
         def schema(tbl):
             log(f'\n  SCHEMA: {tbl}  (colid | name | type | len | NULL?)')
+            cur = conn._cursor()
             try:
-                cur = conn._cursor()
                 cur.execute(f"""
                     SELECT c.colid, c.name, t.name, c.length, c.status
                     FROM {DB}.syscolumns c
@@ -132,6 +137,8 @@ class Command(BaseCommand):
                     log(f'    [{str(r[0]):>3}] {str(r[1]):<26} {str(r[2]):<12} len={str(r[3]):<5} {nul}')
             except Exception as e:
                 log(f'    [ERROR] {e}')
+            finally:
+                cur.close()
 
         br, pc = o['branch'], o['personcode']
 
@@ -232,16 +239,41 @@ class Command(BaseCommand):
         marker = f'APPROBE{int(time.time())}'
         log(f'  marker note = {marker}  (unique tag to find the row & detect serial reassignment)')
 
+        # every read closes its cursor: an open one can leave a pending result set on the
+        # shared jConnect connection, and the 2026-10-31 run printed the first query's
+        # value (51710) as the residue count
         def q1(sql):
-            cur = conn._cursor(); cur.execute(sql)
-            row = cur.fetchone()
-            return row
+            cur = conn._cursor()
+            try:
+                cur.execute(sql)
+                return cur.fetchone()
+            finally:
+                cur.close()
+
+        def qall(sql):
+            cur = conn._cursor()
+            try:
+                cur.execute(sql)
+                return cur.fetchall()
+            finally:
+                cur.close()
+
+        inv = None
 
         try:
             # allocate next per-branch serials (dense sequence, MAX+1)
             row = q1(f"SELECT ISNULL(MAX(cheqsno),0)+1, ISNULL(MAX(ourcheqsno),0)+1 FROM {DB}.cheques WHERE branchcode='{br}'")
             next_cheqsno, next_our = int(row[0]), int(row[1])
             log(f'  allocated cheqsno={next_cheqsno} ourcheqsno={next_our} (branch {br})')
+            # sanity check on the reads: MAX+1 can never already exist. The 2026-10-31 run
+            # "allocated" 51710 — an existing cheque — because the connector misread results
+            # (fixed in PR #36); a rehearsal on numbers like that is refused.
+            taken = qall(f"SELECT cheqsno, ourcheqsno FROM {DB}.cheques WHERE branchcode='{br}' "
+                         f"AND (cheqsno={next_cheqsno} OR ourcheqsno={next_our})")
+            if taken:
+                log(f'  [REFUSED] allocated serials already in use at branch {br} ({[tuple(r) for r in taken]}) '
+                    '— the reads are wrong; re-run discovery (no --rehearse) and check section D')
+                return
 
             # a real, recent purchase invoice for this supplier (for the chequestrans/stktransm test)
             inv = q1(f"""SELECT docnumber, docdate, docvalue, docvaluepay FROM {DB}.stktransm
@@ -317,9 +349,25 @@ class Command(BaseCommand):
             log(f'  [REHEARSAL ERROR] {e}')
 
         # ── verify zero residue (autocommit restored after rollback)
+        self._residue_check(qall, log, marker, br, inv)
+
+    @staticmethod
+    def _residue_check(qall, log, marker, br, inv):
+        """After the ROLLBACK: list (not COUNT) what the rehearsal could have left — the
+        cheques row by its marker, and a probe-shaped chequestrans row (user 1309, 1.00) on
+        the target invoice — so the line shows the rows themselves."""
         try:
-            chk = q1(f"SELECT COUNT(*) FROM {DB}.cheques WHERE chequenote='{marker}'")
-            log(f'  RESIDUE CHECK: rows with marker after rollback = {chk[0]} (must be 0)')
+            left = qall(f"SELECT cheqsno, ourcheqsno FROM {DB}.cheques WHERE chequenote='{marker}'")
+            trans = []
+            if inv:
+                trans = qall(f"""SELECT cheqsno, docnumber FROM {DB}.chequestrans
+                                 WHERE branchcode='{br}' AND doccode='10' AND docnumber={inv[0]}
+                                   AND docdate='{inv[1]}' AND usercode='1309' AND docvaluepaid=1.00""")
+            if not left and not trans:
+                log('  RESIDUE CHECK: OK — no cheques row with the marker, no probe chequestrans row')
+            else:
+                log(f'  RESIDUE CHECK: ⚠ LEFT IN SOFTECH — cheques {[tuple(r) for r in left]} '
+                    f'chequestrans {[tuple(r) for r in trans]} — remove them before any further run')
         except Exception as e:
             log(f'  [residue check error] {e}')
 
