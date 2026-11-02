@@ -6,7 +6,7 @@ from .views import (
     InsuranceParentClientViewSet, InsuranceClaimBillingGroupViewSet,
     InsuranceCacheSyncView, InsuranceExportProfileViewSet,
     InsurancePivotTemplateViewSet, InsuranceItemClassificationOverrideViewSet,
-    InsuranceSeparationListViewSet,
+    InsuranceSeparationListViewSet, InsuranceRosterView,
 )
 
 router = SimpleRouter()     # no API-root index page (Z-9c)
@@ -23,4 +23,5 @@ router.register('separation-lists', InsuranceSeparationListViewSet, basename='in
 
 urlpatterns = [
     path('sync-cache/', InsuranceCacheSyncView.as_view(), name='insurance-sync-cache'),
+    path('rosters/', InsuranceRosterView.as_view(), name='insurance-rosters'),
 ] + router.urls

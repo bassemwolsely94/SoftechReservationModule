@@ -1228,8 +1228,15 @@ def push_final(invoice: SupplierInvoice, *, dry_run=True, force=False, usercode=
     store  = invoice.store_code or branch
     if not invoice.client_token:
         invoice.client_token = uuid.uuid4()
+    # One conditional UPDATE: only the request that moves it into 'pushing' may write.
+    # A second click / user / retry that read the same status gets 0 rows and stops.
+    from django.utils import timezone as _tz
+    flipped = (type(invoice).objects.filter(pk=invoice.pk)
+               .exclude(status__in=('pushing', 'finalized'))
+               .update(status='pushing', client_token=invoice.client_token, updated_at=_tz.now()))
+    if not flipped:
+        raise ValueError('الفاتورة قيد الترحيل أو رُحّلت بالفعل من طلب آخر — حدّث الصفحة.')
     invoice.status = 'pushing'
-    invoice.save(update_fields=['status', 'client_token', 'updated_at'])
 
     conn = None
     try:

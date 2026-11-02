@@ -1507,11 +1507,11 @@ def generate_discrepancy_excel(report: dict, claim_number: str = '') -> HttpResp
     r += 1  # spacer
 
     # ── Line table header ─────────────────────────────────────────────────────
-    headers = ['الفاتورة', 'الصنف', 'الكمية',
+    headers = ['م', 'الفاتورة', 'كود الصنف', 'الصنف', 'الكمية',
                'سعر مجمّد', 'سعر حالي', 'فرق السعر',
                'تصنيف مجمّد', 'تصنيف حالي',
                'صافى مجمّد', 'صافى حالي', 'فرق الصافى', 'السبب']
-    widths  = [12, 30, 8, 12, 12, 12, 12, 12, 12, 12, 12, 14]
+    widths  = [6, 12, 11, 30, 8, 12, 12, 12, 12, 12, 12, 12, 12, 14]
     for col_idx, (h, w) in enumerate(zip(headers, widths), start=1):
         _w(ws, r, col_idx, h, font=FONT_HEADER, fill=FILL_HEADER, align=ALIGN_CENTER)
         ws.column_dimensions[get_column_letter(col_idx)].width = w
@@ -1526,19 +1526,21 @@ def generate_discrepancy_excel(report: dict, claim_number: str = '') -> HttpResp
     money = '#,##0.00'
     for row in rows:
         ws.row_dimensions[r].height = 15
-        _w(ws, r, 1,  f"#{row.get('docnumber','')}", align=ALIGN_CENTER)
-        _w(ws, r, 2,  row.get('item_name', ''), align=ALIGN_RIGHT)
-        _w(ws, r, 3,  float(row.get('quantity', 0) or 0), align=ALIGN_CENTER, fmt='#,##0')
-        _w(ws, r, 4,  float(row.get('frozen_unit_price', 0) or 0),  align=_a('left','center'), fmt=money)
-        _w(ws, r, 5,  float(row.get('current_unit_price', 0) or 0), align=_a('left','center'), fmt=money)
-        _w(ws, r, 6,  float(row.get('price_delta', 0) or 0),        align=_a('left','center'), fmt=money)
-        _w(ws, r, 7,  row.get('frozen_category_label', ''),  align=ALIGN_CENTER)
-        _w(ws, r, 8,  row.get('current_category_label', ''), align=ALIGN_CENTER)
-        _w(ws, r, 9,  float(row.get('frozen_net', 0) or 0),  align=_a('left','center'), fmt=money)
-        _w(ws, r, 10, float(row.get('current_net', 0) or 0), align=_a('left','center'), fmt=money)
-        _w(ws, r, 11, float(row.get('net_delta', 0) or 0),
+        _w(ws, r, 1, row.get('sequence') or '', align=ALIGN_CENTER)
+        _w(ws, r, 2,  f"#{row.get('docnumber','')}", align=ALIGN_CENTER)
+        _w(ws, r, 3, row.get('itemcode') or '', align=ALIGN_CENTER)
+        _w(ws, r, 4, row.get('item_name', ''), align=ALIGN_RIGHT)
+        _w(ws, r, 5, float(row.get('quantity', 0) or 0), align=ALIGN_CENTER, fmt='#,##0')
+        _w(ws, r, 6, float(row.get('frozen_unit_price', 0) or 0),  align=_a('left','center'), fmt=money)
+        _w(ws, r, 7, float(row.get('current_unit_price', 0) or 0), align=_a('left','center'), fmt=money)
+        _w(ws, r, 8, float(row.get('price_delta', 0) or 0),        align=_a('left','center'), fmt=money)
+        _w(ws, r, 9, row.get('frozen_category_label', ''),  align=ALIGN_CENTER)
+        _w(ws, r, 10, row.get('current_category_label', ''), align=ALIGN_CENTER)
+        _w(ws, r, 11, float(row.get('frozen_net', 0) or 0),  align=_a('left','center'), fmt=money)
+        _w(ws, r, 12, float(row.get('current_net', 0) or 0), align=_a('left','center'), fmt=money)
+        _w(ws, r, 13, float(row.get('net_delta', 0) or 0),
            font=FONT_SUBTOTAL, fill=FILL_SUBTOTAL, align=_a('left','center'), fmt=money)
-        _w(ws, r, 12, reason_label.get(row.get('reason'), row.get('reason', '')), align=ALIGN_CENTER)
+        _w(ws, r, 14, reason_label.get(row.get('reason'), row.get('reason', '')), align=ALIGN_CENTER)
         r += 1
 
     ws.print_title_rows = f'{header_row}:{header_row}'
@@ -1555,7 +1557,7 @@ def generate_discrepancy_excel(report: dict, claim_number: str = '') -> HttpResp
     return response
 
 
-def generate_reprice_runs_excel(runs, claim_number: str = '') -> HttpResponse:
+def generate_reprice_runs_excel(runs, claim_number: str = '', seq_map=None) -> HttpResponse:
     """
     Export the SOFTECH re-price runs log (سجل تعديلات سوفتك) as a styled Excel sheet.
     `runs` is an iterable of SoftechRepriceRun.  Includes applied, reverted AND FAILED
@@ -1573,9 +1575,9 @@ def generate_reprice_runs_excel(runs, claim_number: str = '') -> HttpResponse:
     ws.row_dimensions[1].height = 22
     _w(ws, 1, 1, 'سجل تعديلات أسعار سوفتك', font=FONT_GRAND, fill=FILL_GRAND, align=ALIGN_RIGHT)
 
-    headers = ['#', 'التاريخ', 'الإيصال', 'الفرع', 'الأسعار الجديدة',
+    headers = ['#', 'التاريخ', 'م', 'الإيصال', 'الفرع', 'الأسعار الجديدة',
                'الحالة', 'فرق الصافى', 'العُقد', 'أُعيد الرصيد', 'المستخدم', 'الخطأ']
-    widths  = [7, 18, 12, 8, 26, 12, 12, 14, 10, 16, 40]
+    widths  = [7, 18, 6, 12, 8, 26, 12, 12, 14, 10, 16, 40]
     r = 3
     for col_idx, (h, w) in enumerate(zip(headers, widths), start=1):
         _w(ws, r, col_idx, h, font=FONT_HEADER, fill=FILL_HEADER, align=ALIGN_CENTER)
@@ -1598,15 +1600,17 @@ def generate_reprice_runs_excel(runs, claim_number: str = '') -> HttpResponse:
         _w(ws, r, 1,  run.pk, align=ALIGN_CENTER, fill=fill)
         _w(ws, r, 2,  timezone.localtime(run.applied_at).strftime('%Y-%m-%d %H:%M') if run.applied_at else '',
            align=ALIGN_CENTER, fill=fill)
-        _w(ws, r, 3,  f'#{run.docnumber}', align=ALIGN_CENTER, fill=fill)
-        _w(ws, r, 4,  BL(run.branchcode), align=ALIGN_CENTER, fill=fill)
-        _w(ws, r, 5,  prices, align=ALIGN_RIGHT, fill=fill)
-        _w(ws, r, 6,  status_label.get(run.status, run.status), align=ALIGN_CENTER, fill=fill)
-        _w(ws, r, 7,  float(run.net_delta or 0), align=_a('left', 'center'), fmt=money, fill=fill)
-        _w(ws, r, 8,  ' / '.join(run.nodes or []), align=ALIGN_CENTER, fill=fill)
-        _w(ws, r, 9,  'نعم' if run.rebalanced else '—', align=ALIGN_CENTER, fill=fill)
-        _w(ws, r, 10, who, align=ALIGN_RIGHT, fill=fill)
-        _w(ws, r, 11, (run.error or '')[:300], align=ALIGN_RIGHT, fill=fill)
+        _w(ws, r, 3,  (seq_map or {}).get((str(run.docnumber), str(run.branchcode)), ''),
+           align=ALIGN_CENTER, fill=fill)
+        _w(ws, r, 4,  f'#{run.docnumber}', align=ALIGN_CENTER, fill=fill)
+        _w(ws, r, 5,  BL(run.branchcode), align=ALIGN_CENTER, fill=fill)
+        _w(ws, r, 6,  prices, align=ALIGN_RIGHT, fill=fill)
+        _w(ws, r, 7,  status_label.get(run.status, run.status), align=ALIGN_CENTER, fill=fill)
+        _w(ws, r, 8,  float(run.net_delta or 0), align=_a('left', 'center'), fmt=money, fill=fill)
+        _w(ws, r, 9,  ' / '.join(run.nodes or []), align=ALIGN_CENTER, fill=fill)
+        _w(ws, r, 10,  'نعم' if run.rebalanced else '—', align=ALIGN_CENTER, fill=fill)
+        _w(ws, r, 11, who, align=ALIGN_RIGHT, fill=fill)
+        _w(ws, r, 12, (run.error or '')[:300], align=ALIGN_RIGHT, fill=fill)
         r += 1
 
     ws.print_title_rows = f'{header_row}:{header_row}'
