@@ -11,6 +11,7 @@ Usage:
 import json
 
 from django.core.management.base import BaseCommand, CommandError
+from core.export_safety import neutralise_formulas
 
 
 class Command(BaseCommand):
@@ -87,7 +88,7 @@ class Command(BaseCommand):
                 width = max((len(str(cell.value)) for cell in col if cell.value is not None), default=10)
                 sheet.column_dimensions[col[0].column_letter].width = min(width + 2, 40)
 
-        wb.save(o['outfile'])
+        neutralise_formulas(wb).save(o['outfile'])
         n = sum(len(r.get('lines', [])) for r in data.get('receipts', []))
         self.stdout.write(self.style.SUCCESS(
             f'Wrote {o["outfile"]} — {len(data.get("receipts", []))} receipts / {n} flagged lines.'))

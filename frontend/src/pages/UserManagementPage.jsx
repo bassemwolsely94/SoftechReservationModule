@@ -63,6 +63,8 @@ function UserDrawer({ user, branches, onClose, onSaved }) {
     access_all_branches: user?.access_all_branches || false,
     can_see_all_customers:  user?.can_see_all_customers  || false,
     can_see_customer_phone: user?.can_see_customer_phone ?? true,
+    external_export:        user?.external_export        || false,
+    external_softech_write: user?.external_softech_write || false,
     phone:               user?.phone          || '',
     hr_code:             user?.hr_code        || '',
     is_active:           user?.is_active      ?? true,
@@ -351,6 +353,24 @@ function UserDrawer({ user, branches, onClose, onSaved }) {
               <span className="text-sm text-gray-700">يرى رقم هاتف العميل</span>
             </label>
 
+            {isEdit && form.role === 'admin' && (
+              <div data-tour="admin-users-external" className="pt-1 space-y-2">
+                <p className="text-xs text-gray-500">من جهاز معتمد خارج شبكة الشركة (للمدير فقط):</p>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={form.external_export}
+                         onChange={e => set('external_export', e.target.checked)}
+                         className="w-4 h-4 text-brand-600 rounded" />
+                  <span className="text-sm text-gray-700">التصدير من خارج الشبكة</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={form.external_softech_write}
+                         onChange={e => set('external_softech_write', e.target.checked)}
+                         className="w-4 h-4 text-brand-600 rounded" />
+                  <span className="text-sm text-gray-700">الكتابة في SOFTECH من خارج الشبكة</span>
+                </label>
+              </div>
+            )}
+
             {isEdit && (
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
@@ -513,6 +533,9 @@ function ActivityLogModal({ user, onClose }) {
                       <p className="text-xs text-gray-400 mt-0.5">
                         {JSON.stringify(log.old_value)} {fa()} {JSON.stringify(log.new_value)}
                       </p>
+                    )}
+                    {log.device_name && (
+                      <p className="text-xs text-gray-400">💻 {log.device_name}</p>
                     )}
                     {(log.ip_address || log.network) && (
                       <p className="text-xs text-gray-400" title={log.user_agent || undefined}>

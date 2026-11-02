@@ -23,6 +23,7 @@ from django.db.models import Sum
 
 from . import recon_labels as L
 from . import recon_filters as RF
+from core.export_safety import neutralise_formulas
 
 ZERO = Decimal('0')
 TOL = Decimal('0.01')
@@ -201,7 +202,7 @@ def build_unpaid_xlsx(party_type='supplier', personcode=None, f=None) -> bytes:
             for r in rows if r['unpaid_uncovered'] > TOL or r['under_review'] > TOL],
            money_cols=(11, 12, 13, 14, 15, 16, 17, 18, 19, 20))
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     return buf.getvalue()
 
 
@@ -237,7 +238,7 @@ def build_review_xlsx(party_type='supplier', personcode=None, classes=('medium',
              c.invoice.doc_value, c.invoice.comments, c.proposed_amount]
             for c in qs.iterator()], money_cols=(15, 22, 24))
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     return buf.getvalue()
 
 
@@ -358,7 +359,7 @@ def build_partial_xlsx(party_type='supplier', personcode=None, f=None) -> bytes:
            money_cols=(12, 13, 14))
     ws2.column_dimensions['P'].width = 60
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     return buf.getvalue()
 
 
@@ -463,5 +464,5 @@ def build_returns_chains_xlsx(party_type='supplier', personcode=None, f=None) ->
                  'ملاحظات', 'نوع الربط', 'المستند المرتبط', 'تاريخه', 'قيمته',
                  'صافي السند / المسدد من الفاتورة', 'يحتاج قرار؟'], rows, money_cols=(7, 12, 13))
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     return buf.getvalue()

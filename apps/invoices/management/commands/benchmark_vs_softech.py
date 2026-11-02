@@ -21,6 +21,7 @@ import os
 import tempfile
 
 from django.core.management.base import BaseCommand, CommandError
+from core.export_safety import csv_dict_writer
 
 
 class Command(BaseCommand):
@@ -451,13 +452,12 @@ class Command(BaseCommand):
         }
 
     def _write_csv(self, path, rows):
-        import csv
         cols = ['invoice_no', 'status', 'item_ours', 'item_posted', 'softech_id',
                 'qty_ours', 'qty_posted', 'qty_ok',
                 'cost_ours', 'cost_posted', 'cost_posted_calc', 'cost_residual', 'cost_ok',
                 'd1_ours', 'd1_posted', 'd2_ours', 'd2_posted', 'd3_ours', 'd3_posted']
         with open(path, 'w', newline='', encoding='utf-8-sig') as f:
-            w = csv.DictWriter(f, fieldnames=cols)
+            w = csv_dict_writer(f, fieldnames=cols)
             w.writeheader()
             for r in rows:
                 w.writerow(r)

@@ -41,10 +41,22 @@ def granted(role: str, module: str, actions) -> bool:
     return any(a in allowed for a in actions)
 
 
+class _BearerClient(APIClient):
+    """Mints a fresh access token for every request. A role sweep can outrun
+    ACCESS_TOKEN_LIFETIME on a busy machine; an expired token answers 401, which the sweep
+    reads as "refused" — unproven routes, overblocks and leaks would drop out unseen."""
+
+    def __init__(self, user):
+        super().__init__()
+        self._bearer_user = user
+
+    def request(self, **kwargs):
+        self.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(self._bearer_user)}')
+        return super().request(**kwargs)
+
+
 def bearer_client(user) -> APIClient:
-    client = APIClient()
-    client.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}')
-    return client
+    return _BearerClient(user)
 
 
 def role_clients(branch=None) -> dict:

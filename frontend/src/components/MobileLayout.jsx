@@ -20,6 +20,7 @@ import ErrorBoundary from './ErrorBoundary'
 import { approvalsApi, pricingApprovalsApi, notificationsApi } from '../api/client'
 import { useOnline, useOfflineQueue } from './mobileUi'
 import NetworkBadge from './NetworkBadge'
+import ZoneBanner from './ZoneBanner'
 import HelpButton from '../help/HelpButton'
 import HelpPanel from '../help/HelpPanel'
 import { useThemeMode } from '../theme/useThemeMode'
@@ -172,6 +173,7 @@ export default function MobileLayout({ title = 'صيدليات الرزيقي', 
 
       {/* ── Content ──────────────────────────────────────────────────────── */}
       <main className="flex-1 overflow-auto pb-20">
+        <ZoneBanner />
         <ErrorBoundary scope="page" resetKey={location.pathname}>{children ?? <Outlet />}</ErrorBoundary>
       </main>
 

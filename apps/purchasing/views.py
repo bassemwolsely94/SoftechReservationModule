@@ -13,7 +13,6 @@ Endpoints:
   POST /api/purchasing/trigger/       — admin-only: trigger a manual engine run
 """
 import io
-import csv
 import logging
 import threading
 from decimal import Decimal
@@ -665,7 +664,7 @@ def _export_xlsx(qs, columns, sheet_name, filename, run):
     }
 
     wb = Workbook(write_only=True)
-    ws = wb.create_sheet(title=sheet_name)
+    ws = safe_sheet(wb.create_sheet(title=sheet_name))
     ws.sheet_view.rightToLeft = True
     ws.freeze_panes = 'A5'   # rows 1-4: title / info / blank / header
 
@@ -750,7 +749,7 @@ def _export_xlsx(qs, columns, sheet_name, filename, run):
 
     # ── Serialise & return ────────────────────────────────────────────────────
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     buf.seek(0)
     response = HttpResponse(
         buf.read(),
@@ -767,13 +766,13 @@ def _export_csv(qs, columns, filename):
         # BOM for Excel Arabic compatibility
         yield '﻿'
         writer_buf = io.StringIO()
-        writer = csv.writer(writer_buf)
+        writer = csv_writer(writer_buf)
         writer.writerow([col[0] for col in columns])
         yield writer_buf.getvalue()
 
         for obj in qs.iterator(chunk_size=500):
             writer_buf = io.StringIO()
-            writer = csv.writer(writer_buf)
+            writer = csv_writer(writer_buf)
             row = []
             for _, getter, _ in columns:
                 try:
@@ -936,7 +935,7 @@ def _export_xlsx_pivot(run, request, filename):
     }
 
     wb = Workbook(write_only=True)
-    ws = wb.create_sheet(title='المعدلات-الشهرية')
+    ws = safe_sheet(wb.create_sheet(title='المعدلات-الشهرية'))
     ws.sheet_view.rightToLeft = True
     ws.freeze_panes = 'A3'
 
@@ -1042,7 +1041,7 @@ def _export_xlsx_pivot(run, request, filename):
         ws.append(row)
 
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     buf.seek(0)
     resp = HttpResponse(
         buf.read(),
@@ -1212,7 +1211,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
 
     # ── 4. Workbook setup ─────────────────────────────────────────────────────
     wb = Workbook(write_only=True)
-    ws = wb.create_sheet(title='المعدلات-الشهرية')
+    ws = safe_sheet(wb.create_sheet(title='المعدلات-الشهرية'))
     ws.sheet_view.rightToLeft = True
     ws.freeze_panes = 'Q3'   # freeze rows 1-2 + first 16 item-info cols
 
@@ -1688,7 +1687,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
 
     # ── Serialise & return ────────────────────────────────────────────────────
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     buf.seek(0)
     resp = HttpResponse(
         buf.read(),
@@ -2402,6 +2401,7 @@ def transfer_rec_update_status(request, pk):
 
 from .models import LostSalesRun                                   # noqa: E402
 from .serializers import LostSalesRunSerializer                    # noqa: E402
+from core.export_safety import csv_writer, neutralise_formulas, safe_sheet
 
 
 @api_view(['GET'])
@@ -2587,7 +2587,7 @@ def advanced_export(request):
     ]
 
     wb = Workbook(write_only=True)
-    ws = wb.create_sheet(title='تحليل متقدم')
+    ws = safe_sheet(wb.create_sheet(title='تحليل متقدم'))
     ws.sheet_view.rightToLeft = True
 
     # ── Summary line — budget effect at a glance ─────────────────────────────
@@ -2637,7 +2637,7 @@ def advanced_export(request):
         n += 1
 
     buf = _io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     buf.seek(0)
     logger.info('[ADVANCED] exported %d rows (branch=%s abc=%s) | Phase E: %d buys, need %.0f, '
                 'budget %.0f, funded %d (%.0f), deferred %d (%.0f)',
@@ -2713,7 +2713,7 @@ def advanced_pivot_export(request):
     rows.sort(key=lambda r: r[3], reverse=True)
 
     wb = Workbook(write_only=True)
-    ws = wb.create_sheet(title='طلب الموردين')
+    ws = safe_sheet(wb.create_sheet(title='طلب الموردين'))
     ws.sheet_view.rightToLeft = True
     headers = ['كود', 'الصنف', 'التصنيف العام', 'لا يُطلب (No More Use)', 'مؤرشف (Archive)',
                'المورد', 'الشركة المنتجة', 'وحدات العبوة (للعلم)', 'سعر جمهور', 'سعر تكلفة']
@@ -2736,7 +2736,7 @@ def advanced_pivot_export(request):
         n += 1
 
     # ── Method / legend sheet (embeds the explanation) ───────────────────────
-    ws2 = wb.create_sheet(title='الشرح والطريقة')
+    ws2 = safe_sheet(wb.create_sheet(title='الشرح والطريقة'))
     ws2.sheet_view.rightToLeft = True
     for line in [
         ['ورقة طلب الموردين — المحرك المتقدم (تجريبى، منفصل عن الحساب الحالى)'],
@@ -2768,7 +2768,7 @@ def advanced_pivot_export(request):
         ws2.append(line)
 
     buf = _io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     buf.seek(0)
     logger.info('[ADV-PIVOT] %d items, %d branches, supplier=%s', n, len(branches), supplier)
     resp = HttpResponse(

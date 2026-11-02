@@ -30,6 +30,7 @@ import os
 from collections import Counter, defaultdict
 
 from django.core.management.base import BaseCommand
+from core.export_safety import csv_writer
 
 DB = 'SOFTECHDB9.dbo'
 SIDE_TABLES = ('localcustomers_main', 'localcustomers2', 'localcustomers_n', 'lcpointstrans', 'picstrans', 'temppic')
@@ -356,7 +357,6 @@ class Command(BaseCommand):
             finally:
                 conn.close()
         if self.reset_csv:
-            import csv
             home = {}
             for n in self.nodes:
                 for p in last:
@@ -366,7 +366,7 @@ class Command(BaseCommand):
                             f"/{'on' if n['cust'][p].get('enrolled') else 'off'}")
             os.makedirs(os.path.dirname(self.reset_csv) or '.', exist_ok=True)
             with open(self.reset_csv, 'w', newline='', encoding='utf-8-sig') as f:
-                w = csv.writer(f)
+                w = csv_writer(f)
                 w.writerow(['pic', 'reset_at', 'reset_by', 'points_wiped', 'hq_status', 'hq_points_flag',
                             'hq_balance_now', 'coupon_conversions_after_reset', 'coupon_points_after_reset',
                             'last_conversion', 'branch_copies (branch:balance/flag)'])

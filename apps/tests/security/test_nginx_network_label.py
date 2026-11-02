@@ -39,6 +39,12 @@ class NginxNetworkLabelTests(SimpleTestCase):
         text = (_ROOT / 'deploy' / 'nginx-proxy-headers.conf').read_text(encoding='utf-8')
         self.assertIn('proxy_set_header X-ElR-Network $elr_network;', text)
 
+    def test_nginx_include_has_proxy_key(self):
+        text = (_ROOT / 'deploy' / 'nginx-proxy-headers.conf').read_text(encoding='utf-8')
+        self.assertIn('include /etc/nginx/elrezeiky-proxy-key.conf;', text)
+        example = (_ROOT / 'deploy' / 'nginx-proxy-key.conf.example').read_text(encoding='utf-8')
+        self.assertIn('proxy_set_header X-ElR-Proxy-Key "CHANGE-ME";', example)
+
     def test_every_proxied_location_gets_label(self):
         text = (_ROOT / 'deploy' / 'nginx.conf').read_text(encoding='utf-8')
         proxied = [(h, b) for h, b in _location_blocks(text) if 'proxy_pass' in b]

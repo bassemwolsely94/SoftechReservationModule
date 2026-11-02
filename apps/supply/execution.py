@@ -30,6 +30,7 @@ from .engine import recommend
 from .engine.allocation import transferable_surplus
 from .engine.sourcing import effective_unit_cost
 from .models import AvailabilityBatch, AvailabilityLine, SupplyCase, SupplyDecision
+from core.export_safety import neutralise_formulas
 
 logger = logging.getLogger('elrezeiky.supply')
 
@@ -427,5 +428,5 @@ def export_order_excel(lines, *, supplier_name='') -> bytes:
                    align=_RTL_ALIGN if col == 3 else _CENTER_ALIGN)
     _set_col_widths(ws, [5, 12, 45, 14, 16, 10, 12])
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     return buf.getvalue()

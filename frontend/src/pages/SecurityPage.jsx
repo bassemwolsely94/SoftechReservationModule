@@ -18,7 +18,6 @@ function ForgetDevices() {
     setBusy(true)
     try {
       await authApi.forgetDevices()
-      useAuthStore.getState().clearDeviceToken()
       setDone(true)
     } finally { setBusy(false) }
   }

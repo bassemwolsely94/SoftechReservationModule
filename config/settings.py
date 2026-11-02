@@ -104,8 +104,14 @@ if BEHIND_HTTPS_PROXY:
 # there means external. Without nginx (dev, tests) NETWORK_UNTRUSTED_ZONE stands in.
 NETWORK_HEADER_TRUSTED = config('NETWORK_HEADER_TRUSTED', default=BEHIND_HTTPS_PROXY, cast=bool)
 NETWORK_UNTRUSTED_ZONE = config('NETWORK_UNTRUSTED_ZONE', default='internal')
+# Shared secret nginx adds as X-ElR-Proxy-Key (N3). When set, X-ElR-Network is believed only with a
+# matching key, so only our nginx can label a request internal. Empty = N1 behaviour. Never logged.
+NETWORK_PROXY_KEY = config('NETWORK_PROXY_KEY', default='')
 # off | log only in N1 — no request is refused because of its network.
 NETWORK_POLICY_ENFORCEMENT = config('NETWORK_POLICY_ENFORCEMENT', default='off' if _RUNNING_TESTS else 'log')
+# enforce on an unsafe setup (access.E003 / E004) runs as log with an ERROR line instead (N3, I5).
+# Not an .env setting: only the test suite turns it off, to exercise enforce without nginx.
+NETWORK_ENFORCE_GUARD = not _RUNNING_TESTS
 # Seconds the trusted-network list is cached per process; 0 under tests.
 ACCESS_NETWORKS_TTL = config('ACCESS_NETWORKS_TTL', default=0 if _RUNNING_TESTS else 60, cast=float)
 # Proxies in front of Django that APPEND the peer to X-Forwarded-For (nginx proxy_params: 1).
@@ -118,7 +124,11 @@ SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=False, cast=bool)
 # Secure flag on the JWT cookies (core/auth_cookies.py). On by default whenever the
 # site is served over HTTPS; off only for plain-HTTP LAN deployments.
 AUTH_COOKIE_SECURE = config('AUTH_COOKIE_SECURE', default=BEHIND_HTTPS_PROXY or SECURE_SSL_REDIRECT, cast=bool)
-SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=0, cast=int)
+# Owner 2026-11-01 (Batch 6, W-9): HSTS starts at one day, no sub-domains, no preload — raise later.
+# Sent only on HTTPS responses, so plain-HTTP LAN installs are unaffected.
+SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=86400, cast=int)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+SECURE_HSTS_PRELOAD = False
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 X_FRAME_OPTIONS = 'DENY'
@@ -317,9 +327,12 @@ REST_FRAMEWORK = {
         'login': '10/min',   # max 10 login attempts per IP per minute
         'personal_person_search': '30/hour',   # live SOFTECH personsdata search (N0/H1)
         'access_whoami': '60/min',             # network badge lookup, per client IP (N1)
-        # Customer portal (external) magic-link request + token exchange
-        'portal_request_link': config('PORTAL_REQUEST_LINK_RATE', default='5/min'),
-        'portal_auth':         config('PORTAL_AUTH_RATE',         default='10/min'),
+        'csp_report': config('CSP_REPORT_RATE', default='60/min'),   # browsers' CSP reports (W-9)
+        # Customer portal (external) magic-link request + token exchange. A link request is
+        # limited per phone (whatever the IP) and per IP (Batch 6, W-5).
+        'portal_request_link':    config('PORTAL_REQUEST_LINK_RATE',    default='5/hour'),
+        'portal_request_link_ip': config('PORTAL_REQUEST_LINK_IP_RATE', default='30/hour'),
+        'portal_auth':            config('PORTAL_AUTH_RATE',            default='10/min'),
     },
 }
 
@@ -361,6 +374,15 @@ STORAGES = {
     'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
 }
 MEDIA_URL_TTL = config('MEDIA_URL_TTL', default=6 * 3600, cast=int)   # seconds, minimum link lifetime
+# Every uploaded file is capped as it streams in; Excel / CSV imports stop at a row cap
+# (security Batch 6, W-8 — core/upload_safety.py). nginx still caps the whole request (50 MB).
+MAX_UPLOAD_FILE_SIZE = config('MAX_UPLOAD_FILE_SIZE', default=25 * 1024 * 1024, cast=int)
+MAX_IMPORT_ROWS      = config('MAX_IMPORT_ROWS',      default=50_000, cast=int)
+FILE_UPLOAD_HANDLERS = [
+    'core.upload_safety.UploadSizeLimitHandler',
+    'django.core.files.uploadhandler.MemoryFileUploadHandler',
+    'django.core.files.uploadhandler.TemporaryFileUploadHandler',
+]
 # True behind Nginx: Django checks the signature, Nginx sends the bytes via the
 # internal /protected-media/ location (deploy/nginx.conf).
 MEDIA_ACCEL_REDIRECT = config('MEDIA_ACCEL_REDIRECT', default=False, cast=bool)
@@ -796,6 +818,16 @@ WHATSAPP_APP_SECRET      = config('WHATSAPP_APP_SECRET', default='')
 WHATSAPP_VERIFY_TOKEN    = config('WHATSAPP_VERIFY_TOKEN', default='')
 WHATSAPP_API_VERSION     = config('WHATSAPP_API_VERSION', default='v19.0')
 
+# ── SMS (core/sms.py) — off until an SMS company is chosen; 'http' = any HTTP gateway ─────────
+SMS_PROVIDER          = config('SMS_PROVIDER', default='')
+SMS_SENDER            = config('SMS_SENDER', default='')
+SMS_HTTP_URL          = config('SMS_HTTP_URL', default='')
+SMS_HTTP_METHOD       = config('SMS_HTTP_METHOD', default='POST')
+SMS_HTTP_FORMAT       = config('SMS_HTTP_FORMAT', default='json')
+SMS_HTTP_PARAMS       = config('SMS_HTTP_PARAMS', default='{"to": "{to}", "message": "{message}", "sender": "{sender}"}')
+SMS_HTTP_HEADERS      = config('SMS_HTTP_HEADERS', default='{}')
+SMS_HTTP_SUCCESS_TEXT = config('SMS_HTTP_SUCCESS_TEXT', default='')
+
 # ── Omni (CEP) ────────────────────────────────────────────────────────────────
 # Fernet key for ChannelAccount credential encryption (doc 15 §2.6).
 # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -907,6 +939,8 @@ MIDDLEWARE += [
     'apps.access.middleware.AccessContextMiddleware',
     # Server-side RoleModuleAccess check for /api/<module>/ (see core/middleware/module_access.py)
     'core.middleware.module_access.ModuleAccessMiddleware',
+    # Zone policy (N3): narrows by access zone; mode NETWORK_POLICY_ENFORCEMENT off/log/enforce
+    'apps.access.policy_middleware.ZonePolicyMiddleware',
     # P-56: log API requests slower than SLOW_REQUEST_MS (route pattern only) for /sync
     'apps.sync.middleware.SlowRequestMiddleware',
 ]

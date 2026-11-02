@@ -7,6 +7,7 @@ unknown value then means external (fail closed). Without nginx (dev, tests) NETW
 stands in. The site is the most specific active TrustedNetwork holding the client IP, and only an
 internal request gets one.
 """
+import hmac
 import ipaddress
 from dataclasses import dataclass
 
@@ -35,9 +36,21 @@ class NetworkInfo:
         return 'شبكة داخلية غير مسجلة'
 
 
+def proxy_key_ok(request):
+    """True when no NETWORK_PROXY_KEY is configured, else a constant-time match of X-ElR-Proxy-Key."""
+    key = getattr(settings, 'NETWORK_PROXY_KEY', '') or ''
+    if not key:
+        return True
+    sent = request.META.get('HTTP_X_ELR_PROXY_KEY') or ''
+    # bytes, so a non-ASCII header can never make compare_digest raise
+    return hmac.compare_digest(str(sent).encode('utf-8', 'surrogateescape'), str(key).encode('utf-8'))
+
+
 def zone_from_request(request):
     if not getattr(settings, 'NETWORK_HEADER_TRUSTED', False):
         return INTERNAL if getattr(settings, 'NETWORK_UNTRUSTED_ZONE', INTERNAL) == INTERNAL else EXTERNAL
+    if not proxy_key_ok(request):
+        return EXTERNAL   # only our nginx knows the key
     return INTERNAL if request.META.get('HTTP_X_ELR_NETWORK') == INTERNAL else EXTERNAL
 
 

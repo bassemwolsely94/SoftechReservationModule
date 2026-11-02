@@ -24,6 +24,8 @@ function refreshSession() {
 // Browsers that still hold tokens in localStorage (pre-cookie builds): trade the
 // refresh token for cookies once, then forget it — no forced re-login.
 export async function migrateLegacyTokens() {
+  // The old 2FA "remember" token (removed in N3: only an approved device remembers now).
+  localStorage.removeItem('mfa_device_token')
   const legacy = localStorage.getItem('refresh_token')
   localStorage.removeItem('access_token')
   localStorage.removeItem('refresh_token')
@@ -61,8 +63,7 @@ export default api
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 export const authApi = {
-  login: (username, password, deviceToken) =>
-    api.post('/auth/login/', { username, password, device_token: deviceToken || undefined }),
+  login: (username, password) => api.post('/auth/login/', { username, password }),
   me: () => api.get('/auth/me/'),
   logout: () => api.post('/auth/logout/', {}),
 
@@ -351,6 +352,15 @@ export const accessApi = {
   createNetwork: (data) => api.post('/access/networks/', data),
   updateNetwork: (id, data) => api.patch(`/access/networks/${id}/`, data),
   deleteNetwork: (id) => api.delete(`/access/networks/${id}/`),
+  devices:       (params) => api.get('/access/devices/', { params }),
+  updateDevice:  (id, data) => api.patch(`/access/devices/${id}/`, data),
+  approveDevice: (id) => api.post(`/access/devices/${id}/approve/`),
+  blockDevice:   (id, note) => api.post(`/access/devices/${id}/block/`, { note }),
+  retireDevice:  (id) => api.post(`/access/devices/${id}/retire/`),
+  bulkApproveDevices: (ids) => api.post('/access/devices/bulk-approve/', { ids }),
+  zonePolicies:  () => api.get('/access/zone-policies/'),
+  zonePolicyChoices: () => api.get('/access/zone-policies/choices/'),
+  updateZonePolicy: (id, data) => api.patch(`/access/zone-policies/${id}/`, data),
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────

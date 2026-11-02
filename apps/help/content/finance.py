@@ -371,7 +371,6 @@ SCREENS = [
              'open_hint': T('للمدير ومسؤول النظام بس.', 'Admins and system staff only.')},
         ],
         'updated': '2026-11-01',
-    
         'change_note': T('شريط عمر البيانات + مزامنة مالية ليلية', 'Data-age bar + nightly finance sync'),
     },
     {
@@ -441,7 +440,6 @@ SCREENS = [
              'open_hint': T('للمدير ومسؤول النظام بس.', 'Admins and system staff only.')},
         ],
         'updated': '2026-11-01',
-    
         'change_note': T('شريط عمر البيانات + مزامنة مالية ليلية', 'Data-age bar + nightly finance sync'),
     },
     {
@@ -532,7 +530,6 @@ SCREENS = [
              'open_hint': T('للمدير ومسؤول النظام بس.', 'Admins and system staff only.')},
         ],
         'updated': '2026-11-01',
-    
         'change_note': T('شريط عمر البيانات + مزامنة مالية ليلية', 'Data-age bar + nightly finance sync'),
     },
     {
@@ -743,7 +740,6 @@ SCREENS = [
              'open_hint': T('للمدير ومسؤول النظام بس.', 'Admins and system staff only.')},
         ],
         'updated': '2026-11-01',
-    
         'change_note': _NOTE,
     },
     {
@@ -828,7 +824,6 @@ SCREENS = [
              'open_hint': T('للمدير ومسؤول النظام بس.', 'Admins and system staff only.')},
         ],
         'updated': '2026-11-01',
-    
         'change_note': _NOTE,
     },
     {
@@ -851,7 +846,9 @@ SCREENS = [
                        '• «شيكات متأخرة» بتحمرّ لو فيه شيك عدّى ميعاده ولسه ما اتصرفش — تابعه فوراً.',
                        'The cards are computed on the server from the plans and cheques.\n'
                        '• "Cheques within 30 days" gives their count and amount so you can prepare the bank balance.\n'
-                       '• "Overdue cheques" turns red when a cheque is past due and not cleared — follow it up straight away.')},
+                       '• "Overdue cheques" turns red when a cheque is past due and not cleared — follow it up straight away.'),
+             'label': T('مؤشرات الخزينة', 'Treasury KPIs'),
+             'when': T('النقطة الحمراء النابضة = شيكات متأخرة تحتاج متابعة.', 'A pulsing red dot = overdue cheques to follow up.')},
             {'target': 'finance-cheques-new', 'text': T('«+ خطة جديدة» يفتح نموذج جدول سداد بالشيكات.',
                                               '«+ خطة جديدة» (New plan) opens the cheque payment schedule form.'),
              'more': T('بتكتب العنوان والمستفيد والمستند المرجعي والبنك والإجمالي وعدد الشيكات وتاريخ أول شيك والفترة بينهم.\n'
@@ -859,13 +856,15 @@ SCREENS = [
                        '• «إنشاء الخطة» بيحفظها «مسودة».',
                        'You enter the title, beneficiary, reference document, bank, total, number of cheques, first cheque date and the interval.\n'
                        '• "📅 Preview cheque schedule": the system splits the total evenly (the last cheque takes the rounding difference) and moves dates that fall on holidays.\n'
-                       '• "Create plan" saves it as a "Draft".')},
+                       '• "Create plan" saves it as a "Draft".'),
+             'label': T('+ خطة جديدة', '+ New plan')},
             {'target': 'finance-cheques-search', 'text': T('بحث في الخطط بالاسم أو المستفيد.',
                                               'Search plans by name or beneficiary.'),
              'more': T('اكتب اسم المورد أو جزء من عنوان الخطة والقائمة بتتفلتر.\n'
                        '• مفيد لما مورد يسأل عن شيكاته الجاية.',
                        'Type the supplier name or part of the plan title and the list filters.\n'
-                       '• Handy when a supplier asks about their upcoming cheques.')},
+                       '• Handy when a supplier asks about their upcoming cheques.'),
+             'label': T('بحث بالاسم أو المستفيد', 'Search by name or payee')},
             {'target': 'finance-cheques-status-tabs', 'text': T('فلتر الحالة: الكل، مسودة، نشطة، مكتملة.',
                                               'Status filter: all, draft, active, completed.'),
              'more': T('• «مسودة»: اتعملت ولسه ما اتفعلتش.\n'
@@ -873,8 +872,10 @@ SCREENS = [
                        '• «مكتملة»: كل شيكاتها خلصت.',
                        '• "Draft": created but not activated yet.\n'
                        '• "Active": its cheques are running and tracked.\n'
-                       '• "Completed": all its cheques are done.')},
-            {'target': 'finance-cheques-detail', 'text': T('تفاصيل الخطة المختارة أو نموذج الخطة الجديدة يظهر هنا.',
+                       '• "Completed": all its cheques are done.'),
+             'label': T('الكل · مسودة · نشطة · مكتملة', 'All · Draft · Active · Completed')},
+            {'target': 'finance-cheques-detail', 'label': T('تفاصيل الخطة', 'Plan details'),
+             'text': T('تفاصيل الخطة المختارة أو نموذج الخطة الجديدة يظهر هنا.',
                                               'The selected plan\'s details, or the new plan form, appear here.'),
              'more': T('اضغط أي خطة في القائمة عشان تفتح هنا.\n'
                        '• الخطة المسودة فيها «✅ تفعيل الخطة».\n'
@@ -889,30 +890,9 @@ SCREENS = [
                        '• المبلغ نفسه محسوب من الخطة ومبيتعدلش هنا.',
                        '⚠️ next to the date means it moved from the original date because of a holiday, and a red date means overdue.\n'
                        '• "Edit" opens the cheque number, status and notes: not issued → issued → presented → cleared or bounced.\n'
-                       '• The amount itself is computed from the plan and is not edited here.')},
-        ],
-        'tips': [
-            T('الشيكات اللي لسه «لم يُصدَر» في خطة نشطة بتظهر في «النقدية ١٣ أسبوع» في أسبوع استحقاقها؛ الصادر منها بيظهر من SOFTECH.',
-              'Cheques still «not issued» in an active plan show in the «13-week cash view» in their due week; issued ones come from SOFTECH.'),
-            T('كل إجراء بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الشيكات): التفعيل والإلغاء يحتاجوا «اعتماد»، وتسجيل شيك «تمّ الصرف» أو «ارتدّ» يحتاج «إنهاء».',
-              'Every action is checked on the server (Permissions Matrix, cheques module): activating and cancelling need "approve", and marking a cheque "cleared" or "bounced" needs "finalize".'),
-            T('الشيك «تمّ الصرف» أو «ملغي» نهائي، وشيكات الخطة لا تتعدل إلا والخطة «نشطة».',
-              'A "cleared" or "cancelled" cheque is final, and the cheques of a plan change only while it is "active".'),
-        ],
-        'tour': [
-            {'target': 'finance-cheques-treasury',
-             'label': T('مؤشرات الخزينة', 'Treasury KPIs'),
-             'text': T('الخطط النشطة، إجمالي المتبقي، شيكات الـ 30 يوماً القادمة، والمتأخرة.', 'Active plans, total outstanding, cheques due in 30 days, and overdue ones.'),
-             'when': T('النقطة الحمراء النابضة = شيكات متأخرة تحتاج متابعة.', 'A pulsing red dot = overdue cheques to follow up.')},
-            {'target': 'finance-cheques-new',
-             'label': T('+ خطة جديدة', '+ New plan'),
-             'text': T('يفتح نموذج خطة شيكات جديدة.', 'Opens a new cheque-plan form.')},
-            {'target': 'finance-cheques-search',
-             'label': T('بحث بالاسم أو المستفيد', 'Search by name or payee'),
-             'text': T('اكتب جزءاً من عنوان الخطة أو اسم المستفيد.', 'Type part of the plan title or payee name.')},
-            {'target': 'finance-cheques-status-tabs',
-             'label': T('الكل · مسودة · نشطة · مكتملة', 'All · Draft · Active · Completed'),
-             'text': T('صفِّ الخطط بحالتها.', 'Filter plans by status.')},
+                       '• The amount itself is computed from the plan and is not edited here.'),
+             'label': T('جدول الشيكات', 'Cheque schedule'),
+             'open_hint': T('افتح أي خطة.', 'Open any plan.')},
             {'target': 'finance-cheques-plan',
              'label': T('بطاقة الخطة', 'Plan card'),
              'text': T('العنوان والمستفيد والإجمالي وعدد الشيكات وتاريخ الشيك التالي. اضغط لفتح التفاصيل.',
@@ -941,10 +921,6 @@ SCREENS = [
              'label': T('ملخص الخطة', 'Plan summary'),
              'text': T('الإجمالي، ما تمّ صرفه، الشيكات المتبقية، ونسبة الإنجاز.', 'Total, cleared so far, cheques remaining and progress.'),
              'open_hint': T('افتح أي خطة.', 'Open any plan.')},
-            {'target': 'finance-cheques-schedule',
-             'label': T('جدول الشيكات', 'Cheque schedule'),
-             'text': T('كل شيك بتاريخه ومبلغه ورقمه وحالته. الأحمر = متأخر، الأصفر = مستحق اليوم.', 'Each cheque with date, amount, number and status. Red = overdue, yellow = due today.'),
-             'open_hint': T('افتح أي خطة.', 'Open any plan.')},
             {'target': 'finance-cheques-edit-cheque',
              'label': T('تعديل', 'Edit'),
              'text': T('يفتح رقم الشيك وحالته وملاحظاته للتعديل.', 'Opens the cheque number, status and notes for editing.'),
@@ -955,8 +931,17 @@ SCREENS = [
              'warn': T('«تمّ الصرف» نهائي، ويحتاج هو و«ارتدّ» صلاحية «إنهاء».', '"Cleared" is final; it and "bounced" need "finalize" permission.'),
              'open_hint': T('اضغط «تعديل» على شيك.', 'Press "Edit" on a cheque.')},
         ],
-        'updated': '2026-10-31',
-        'change_note': T('الشيكات المخططة بتظهر في النقدية ١٣ أسبوع', 'Planned cheques now show in the 13-week cash view'),
+        'tips': [
+            T('الشيكات اللي لسه «لم يُصدَر» في خطة نشطة بتظهر في «النقدية ١٣ أسبوع» في أسبوع استحقاقها؛ الصادر منها بيظهر من SOFTECH.',
+              'Cheques still «not issued» in an active plan show in the «13-week cash view» in their due week; issued ones come from SOFTECH.'),
+            T('كل إجراء بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الشيكات): التفعيل والإلغاء يحتاجوا «اعتماد»، وتسجيل شيك «تمّ الصرف» أو «ارتدّ» يحتاج «إنهاء».',
+              'Every action is checked on the server (Permissions Matrix, cheques module): activating and cancelling need "approve", and marking a cheque "cleared" or "bounced" needs "finalize".'),
+            T('الشيك «تمّ الصرف» أو «ملغي» نهائي، وشيكات الخطة لا تتعدل إلا والخطة «نشطة».',
+              'A "cleared" or "cancelled" cheque is final, and the cheques of a plan change only while it is "active".'),
+        ],
+
+        'updated': '2026-11-01',
+        'change_note': T('جولة «اعرض لي» رجعت كاملة: شرح كل خطوة مع تلميح الزر', 'The full "Show me" tour is back: every step\'s explanation with its button hint'),
     },
     {
         'key': 'finance.payments',
@@ -1076,7 +1061,6 @@ SCREENS = [
              'open_hint': T('اضغط «اعتراض» على دفعة.', 'Press "Dispute" on a payment.')},
         ],
         'updated': '2026-10-30',
-    
         'change_note': T('مخفية من القائمة', 'Hidden from the menu'),
     },
     {
@@ -1098,7 +1082,8 @@ SCREENS = [
                        '• المطابقة مش بتشتغل لوحدها — شغّلها من زر «تشغيل المطابقة».',
                        'You choose the file from the bank, add the bank reference if you like, and upload.\n'
                        '• The statement appears in "🏦 Bank statements" as pending.\n'
-                       '• Matching does not start by itself — run it with "Run matching".')},
+                       '• Matching does not start by itself — run it with "Run matching".'),
+             'label': T('+ رفع كشف حساب', '+ Upload statement')},
             {'target': 'finance-payment-audit-tabs', 'text': T('«⚠️ الاستثناءات» المفتوحة بعددها، و«🏦 الكشوف البنكية».',
                                               '«⚠️ الاستثناءات» (Exceptions) with their open count, and «🏦 الكشوف البنكية» (Bank statements).'),
              'more': T('• «⚠️ الاستثناءات»: الحاجات اللي محتاجة قرار منك.\n'
@@ -1106,40 +1091,42 @@ SCREENS = [
                        'ابدأ يومك بالاستثناءات.',
                        '• "⚠️ Exceptions": things that need your decision.\n'
                        '• "🏦 Bank statements": every uploaded statement and its match rate.\n'
-                       'Start your day with the exceptions.')},
+                       'Start your day with the exceptions.'),
+             'label': T('⚠️ الاستثناءات · 🏦 الكشوف البنكية', '⚠️ Exceptions · 🏦 Bank statements')},
             {'target': 'finance-payment-audit-exceptions', 'text': T('الاستثناءات المفتوحة: النوع والمبلغ والمرجع والحالة والتاريخ — تظهر عند وجودها.',
                                               'Open exceptions: type, amount, reference, status and date — shown when there are any.'),
              'more': T('الأنواع: غير مسجّلة (في البنك ومش متسجلة عندنا)، مكررة، تسوية متأخرة، فرع خاطئ، تباين في المبلغ، ومؤشر إساءة.\n'
                        '• مؤشر الإساءة بيطلع لما دفعة تبعد كتير عن المعتاد للكاشير أو طريقة الدفع — راجعه بعناية.',
                        'Types: unrecorded (in the bank but not recorded here), duplicate, late settlement, wrong branch, amount mismatch and abuse signal.\n'
-                       '• An abuse signal appears when a payment is far from the usual for that cashier or payment method — review it carefully.')},
+                       '• An abuse signal appears when a payment is far from the usual for that cashier or payment method — review it carefully.'),
+             'label': T('الاستثناءات المفتوحة', 'Open exceptions'),
+             'when': T('ابدأ بـ «🚨 مؤشر إساءة» و«مكرر».', 'Start with "🚨 Abuse signal" and "Duplicate".'),
+             'open_hint': T('تبويب «⚠️ الاستثناءات» — يظهر لو فيه مفتوح.', 'The "⚠️ Exceptions" tab — shown when any are open.')},
             {'target': 'finance-payment-audit-handle', 'text': T('«معالجة» تفتح نافذة لكتابة ملاحظة ثم «حل الاستثناء» أو «تجاهل».',
                                               '«معالجة» (Handle) opens a window to add a note, then «حل الاستثناء» (Resolve) or «تجاهل» (Ignore).'),
              'more': T('اكتب في الملاحظة عملت إيه (اتسجلت الدفعة، اتصلحت، اتكلمنا مع الفرع…).\n'
                        '• «حل الاستثناء» و«تجاهل» الاتنين بيقفلوا الاستثناء وبيسجلوا اسمك والوقت.',
                        'Write in the note what you did (payment recorded, fixed, talked to the branch…).\n'
-                       '• "Resolve" and "Ignore" both close the exception and record your name and the time.')},
+                       '• "Resolve" and "Ignore" both close the exception and record your name and the time.'),
+             'label': T('معالجة', 'Handle'),
+             'open_hint': T('على استثناء مفتوح.', 'On an open exception.')},
             {'target': 'finance-payment-audit-statements', 'text': T('في تبويب الكشوف: المرجع والسطور والمطابق ونسبة المطابقة والحالة.',
                                               'On the statements tab: reference, lines, matched, match rate and status.'),
              'more': T('نسبة مطابقة واطية معناها إن فيه حركات كتير في البنك مش لاقية دفعة مسجلة — هتلاقيها استثناءات.\n'
                        '• الحالات: في الانتظار، قيد المعالجة، مكتمل، فشل.',
                        'A low match rate means many bank lines have no recorded payment — you will find them as exceptions.\n'
-                       '• Statuses: pending, processing, completed, failed.')},
+                       '• Statuses: pending, processing, completed, failed.'),
+             'label': T('الكشوف البنكية', 'Bank statements'),
+             'open_hint': T('تبويب «🏦 الكشوف البنكية».', 'The "🏦 Bank statements" tab.')},
             {'target': 'finance-payment-audit-run-matching', 'text': T('«تشغيل المطابقة» يظهر للكشوف المعلقة ليطابق سطورها بالمدفوعات المسجلة.',
                                               '«تشغيل المطابقة» (Run matching) appears for pending statements to match their lines to recorded payments.'),
              'more': T('القواعد ثابتة: نفس المرجع ونفس المبلغ = مطابقة أكيدة، أو فرق مبلغ لحد 1% وفرق تاريخ لحد يومين = مطابقة تقريبية، وغير كده استثناء «غير مسجّلة».\n'
                        '• السيرفر بيسمح بيها للمدير والمشرف والمشتريات.',
                        'The rules are fixed: same reference and same amount = certain match, or an amount difference up to 1% and a date difference up to 2 days = approximate match; anything else becomes an "Unrecorded" exception.\n'
-                       '• The server allows it for admin, supervisor and purchasing.')},
-        ],
-        'tips': [
-            T('كل إجراء بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول المالية): العرض يحتاج «عرض»، «حل الاستثناء» و«تجاهل» يحتاجوا «اعتماد»، الإسناد يحتاج «إسناد» أو «اعتماد»، ورفع كشف يحتاج «إضافة».',
-              'Every action is checked on the server (Permissions Matrix, finance module): viewing needs "view", "Resolve" and "Ignore" need "approve", assigning needs "assign" or "approve", and uploading a statement needs "create".'),
-        ],
-        'tour': [
-            {'target': 'finance-payment-audit-upload',
-             'label': T('+ رفع كشف حساب', '+ Upload statement'),
-             'text': T('يفتح نافذة رفع كشف الحساب البنكي.', 'Opens the bank statement upload box.')},
+                       '• The server allows it for admin, supervisor and purchasing.'),
+             'label': T('تشغيل المطابقة', 'Run matching'),
+             'when': T('بعد الرفع مباشرة. لا يكتب في SOFTECH.', 'Right after uploading. It does not write to SOFTECH.'),
+             'open_hint': T('على كشف بحالة pending في تبويب الكشوف.', 'On a pending statement in the statements tab.')},
             {'target': 'finance-payment-audit-upload-file',
              'label': T('الملف (CSV / Excel)', 'File (CSV / Excel)'),
              'text': T('اختر ملف الكشف، واكتب المرجع البنكي لو موجود.', 'Pick the statement file, and type the bank reference if you have one.'),
@@ -1149,27 +1136,6 @@ SCREENS = [
              'text': T('يحفظ الكشف بحالة pending في تبويب «🏦 الكشوف البنكية».', 'Saves the statement as pending in the "🏦 Bank statements" tab.'),
              'when': T('المطابقة لا تبدأ وحدها — شغّلها من التبويب.', 'Matching does not start by itself — run it from the tab.'),
              'open_hint': T('داخل نافذة الرفع، بعد اختيار الملف.', 'Inside the upload box, after picking the file.')},
-            {'target': 'finance-payment-audit-tabs',
-             'label': T('⚠️ الاستثناءات · 🏦 الكشوف البنكية', '⚠️ Exceptions · 🏦 Bank statements'),
-             'text': T('الرقم الأحمر = عدد الاستثناءات المفتوحة.', 'The red number = open exceptions.')},
-            {'target': 'finance-payment-audit-statements',
-             'label': T('الكشوف البنكية', 'Bank statements'),
-             'text': T('كل كشف بعدد السطور والمطابق ونسبة المطابقة وحالته.', 'Each statement with line count, matched lines, match rate and status.'),
-             'open_hint': T('تبويب «🏦 الكشوف البنكية».', 'The "🏦 Bank statements" tab.')},
-            {'target': 'finance-payment-audit-run-matching',
-             'label': T('تشغيل المطابقة', 'Run matching'),
-             'text': T('يطابق سطور الكشف بالدفعات المسجّلة ويحسب النسبة.', 'Matches statement lines to recorded payments and computes the rate.'),
-             'when': T('بعد الرفع مباشرة. لا يكتب في SOFTECH.', 'Right after uploading. It does not write to SOFTECH.'),
-             'open_hint': T('على كشف بحالة pending في تبويب الكشوف.', 'On a pending statement in the statements tab.')},
-            {'target': 'finance-payment-audit-exceptions',
-             'label': T('الاستثناءات المفتوحة', 'Open exceptions'),
-             'text': T('النوع والمبلغ والمرجع والتاريخ لكل حركة تحتاج قراراً.', 'Type, amount, reference and date of each line needing a decision.'),
-             'when': T('ابدأ بـ «🚨 مؤشر إساءة» و«مكرر».', 'Start with "🚨 Abuse signal" and "Duplicate".'),
-             'open_hint': T('تبويب «⚠️ الاستثناءات» — يظهر لو فيه مفتوح.', 'The "⚠️ Exceptions" tab — shown when any are open.')},
-            {'target': 'finance-payment-audit-handle',
-             'label': T('معالجة', 'Handle'),
-             'text': T('يفتح نافذة القرار للاستثناء.', 'Opens the decision box for the exception.'),
-             'open_hint': T('على استثناء مفتوح.', 'On an open exception.')},
             {'target': 'finance-payment-audit-note',
              'label': T('ملاحظة التسوية', 'Settlement note'),
              'text': T('اكتب ما وجدته وما فعلته.', 'Write what you found and what you did.'),
@@ -1185,9 +1151,13 @@ SCREENS = [
              'warn': T('لا تتجاهل مؤشر إساءة أو تبايناً في المبلغ بلا تحقق.', 'Never ignore an abuse signal or amount mismatch unchecked.'),
              'open_hint': T('داخل نافذة «معالجة». يحتاج صلاحية «اعتماد».', 'Inside the "Handle" box. Needs "approve" permission.')},
         ],
-        'updated': '2026-10-30',
-    
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'tips': [
+            T('كل إجراء بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول المالية): العرض يحتاج «عرض»، «حل الاستثناء» و«تجاهل» يحتاجوا «اعتماد»، الإسناد يحتاج «إسناد» أو «اعتماد»، ورفع كشف يحتاج «إضافة».',
+              'Every action is checked on the server (Permissions Matrix, finance module): viewing needs "view", "Resolve" and "Ignore" need "approve", assigning needs "assign" or "approve", and uploading a statement needs "create".'),
+        ],
+
+        'updated': '2026-11-01',
+        'change_note': T('جولة «اعرض لي» رجعت كاملة: شرح كل خطوة مع تلميح الزر', 'The full "Show me" tour is back: every step\'s explanation with its button hint'),
     },
     {
         'key': 'finance.reconciliation',

@@ -36,6 +36,8 @@ KNOWN_PUBLIC_VIEWS = {
     'apps.users.mfa',
     # network badge: the caller's own zone + IP (+ site name when internal), throttled
     'apps.access.views.whoami',
+    # browsers' CSP violation reports — log only, throttled, capped (Batch 6, W-9)
+    'core.csp.csp_report',
 }
 
 _CONVERTERS = {

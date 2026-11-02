@@ -142,6 +142,7 @@ Policy data (admin-editable, audited):
    - background threads started by views must use `contextvars.copy_context().run`;
    - `SoftechAccessDenied` must never be classified as "branch offline" (POS retry queue `_is_unreachable`).
 6. **WebSocket:** same context at connect, plus periodic re-check (e.g. every 5 min) and server push to close the socket on device block, disable or zone change.
+   - **N3 note:** the WebSocket (chatter) zone check is not part of N3; it moves to N5.
 7. **Audit:** every login, device event and zone denial goes to `UserActivityLog` with UA + device. `audit_softech_write` gains IP, device and zone.
 
 **Rollout like RBAC:** a `NETWORK_POLICY_ENFORCEMENT=off|log|enforce` switch. Run in **log** first to see who reads SOFTECH from where (add user/zone to `softech_load` telemetry), then enforce.
@@ -217,8 +218,8 @@ Behaviour notes:
 |---|---|---|
 | N0 | Fix H1–H9 (personal exempt, rider bugs, open probe, proxy-headers, lockout, MFA token, admin) | No |
 | N1 | **Built 2026-10-31** (`968e668c` nginx label, `37b1b0b1` `apps/access`, `1f42a0cc` access context + login log + SOFTECH load by network, `28219d77` badge + `/access/networks`; IT steps in the VPS runbook «Company network through the tunnel»). nginx internal block + `X-ElR-Network`; `AccessContextMiddleware` + contextvar; network/zone logging only; telemetry by user/zone. Log only: nothing is refused until N3 | No |
-| N2 | Device registry + enrollment + «الأجهزة» screen + login alerts; replaces remember-device | No |
-| N3 | Zone policy model + matrix column + login/refresh/middleware enforcement (`log` → `enforce`). **Before enforce:** nginx must inject a secret header (e.g. `X-ElR-Proxy-Key`, checked in `zone_from_request`) or Daphne must listen on a unix socket only nginx can read, so local processes on the VPS cannot claim `internal` | No |
+| N2 | **Built 2026-11-01** (`e2533f74` model + secret helpers, `61ca4d4e` enrollment at sign-in + `dev` claim + new-device alert, `e3dad003` device in access context + blocked device ends its sessions, `027f18da` + `a1a65a6a` remember 2FA on approved devices, `99d40fb0` + `fafd6bb4` admin device API, and the «الأجهزة» screen + badge device status + help + docs commit). Device registry + enrollment + «الأجهزة» screen + login alerts; remember-device on approved devices. Nothing refuses a pending/unknown device; only blocked / retired are refused | No |
+| N3 | **Built 2026-11-01** (commits: `e0251a15`, `87460c8c`, `896c7c65`, `1ff97bd1`, `654f04df`, `3fca8d81`, `627be0a1`, `9bb69766`, `8efa9cd2`, `8bfb973b`, `ee76881b`). Zone policy table (owner table 7.3, seeded), access zone Z1-Z4, `PolicyMiddleware` (`log` -> `enforce`), sign-in / refresh follow the zone (2FA, session caps, no legacy remember token), rider confined to the rider screen, phones masked outside, nginx proxy key (`X-ElR-Proxy-Key`), screen «سياسة الشبكات» + Z2 banner + per-user flags. `NETWORK_POLICY_ENFORCEMENT` stays `log`; switching to `enforce` is the owner's action after the log period (runbook «Batch N3 on the live server») | No |
 | N4 | SOFTECH gate in `config/sybase.py` (log → enforce), thread context propagation, audit IP/device | **Yes — gate only (stop-and-ask: POS push path)** |
 | N5 | WebSocket re-check, export watermark + anomaly alerts | No |
 | N6 | Public-surface hardening (notify / portal / form) | No |

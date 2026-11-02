@@ -210,6 +210,9 @@ class Voucher(models.Model):
         if self.voucher_category == 'private':
             if not self.customer_id:
                 return False, 'قسيمة خاصة بدون عميل محدد'
+            # the code goes only to the customer's own phone on file (Batch 6, W-2 — owner 2026-11-01)
+            if not _same_phone(phone, self.customer.phone, self.customer.phone_alt):
+                return False, 'هذه القسيمة خاصة بعميلها — أدخل رقم هاتفه المسجّل'
 
         if self.voucher_category == 'assigned':
             if not VoucherAssignment.objects.filter(
@@ -746,3 +749,13 @@ class CouponEvent(models.Model):
 
     def __str__(self):
         return f'{self.raw_serial or "—"} {self.kind} {self.branchcode}/{self.doccode}/{self.docnumber}'
+
+
+def _digits(phone) -> str:
+    return ''.join(ch for ch in str(phone or '') if ch.isdigit())
+
+
+def _same_phone(phone, *candidates) -> bool:
+    """Same Egyptian number whatever the format (+20 / 0 prefix, spaces) — last 10 digits."""
+    want = _digits(phone)[-10:]
+    return len(want) == 10 and any(_digits(c)[-10:] == want for c in candidates if c)

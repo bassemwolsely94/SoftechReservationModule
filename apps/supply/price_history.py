@@ -27,6 +27,7 @@ from collections import defaultdict
 from datetime import timedelta
 
 from .comparison import (BETTER_PCT, SUPPLIER_GROUPS, TIER_LABELS, _f, _line_discount, _profiles, _tier)
+from core.export_safety import neutralise_formulas
 
 DEFAULT_DAYS = 180
 STALE_DAYS = 90                       # a last purchase older than this is an old price
@@ -326,5 +327,5 @@ def to_excel(board) -> bytes:
     ], start=1):
         notes.cell(i, 1, t).font = Font(name='Arial', size=11 if i > 1 else 13, bold=(i == 1))
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     return buf.getvalue()

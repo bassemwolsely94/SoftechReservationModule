@@ -24,6 +24,8 @@ import io
 import logging
 from decimal import Decimal, InvalidOperation
 from apps.finance.recon_labels import branch_label as BL      # '170' → '170 · name'
+from core.export_safety import csv_writer, neutralise_formulas
+from core.upload_safety import capped_rows
 
 logger = logging.getLogger('elrezeiky.stockcount')
 
@@ -319,7 +321,7 @@ def _export_xlsx(session, snapshots, include_variance: bool,
 
     # ── Output ────────────────────────────────────────────────────────────────
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     buf.seek(0)
     suffix = '_variance' if include_variance else '_count_sheet'
     fname  = f'stockcount_{session.pk}_{session.branch_code}{suffix}.xlsx'
@@ -329,7 +331,7 @@ def _export_xlsx(session, snapshots, include_variance: bool,
 def _export_csv(session, snapshots, include_variance: bool):
     """Fallback CSV export (when openpyxl is not installed)."""
     buf = io.StringIO()
-    w   = csv.writer(buf)
+    w   = csv_writer(buf)
 
     if include_variance:
         w.writerow(['item_code', 'item_name', 'item_medicine',
@@ -393,7 +395,7 @@ def _parse_xlsx(file_bytes: bytes) -> list:
     wb  = openpyxl.load_workbook(buf, read_only=True, data_only=True)
     ws  = wb.active
 
-    rows_iter = ws.iter_rows(values_only=True)
+    rows_iter = capped_rows(ws.iter_rows(values_only=True))      # MAX_IMPORT_ROWS (Batch 6, W-8)
 
     # Skip title row if it looks like a title (non-header content)
     header_row = None
@@ -448,7 +450,7 @@ def _parse_csv(file_bytes: bytes) -> list:
     else:
         raise ValueError('تعذّر قراءة الملف — تأكد من أن الترميز UTF-8 أو cp1256')
 
-    reader = csv.DictReader(io.StringIO(text))
+    reader = capped_rows(csv.DictReader(io.StringIO(text)))      # MAX_IMPORT_ROWS (Batch 6, W-8)
 
     # Normalise header names
     fieldnames = [f.strip().lower() for f in (reader.fieldnames or [])]

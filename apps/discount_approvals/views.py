@@ -467,17 +467,18 @@ def import_requests(request):
 def _parse_import_file(f):
     """Return (rows[list[dict]], error_str). Supports .csv and .xlsx."""
     name = (f.name or '').lower()
+    from core.upload_safety import capped_rows          # MAX_IMPORT_ROWS (security Batch 6, W-8)
     try:
         if name.endswith('.csv'):
             import csv, io
             text = f.read().decode('utf-8-sig', errors='replace')
-            reader = csv.DictReader(io.StringIO(text))
+            reader = capped_rows(csv.DictReader(io.StringIO(text)))
             return [{(k or '').strip().lower(): v for k, v in r.items()} for r in reader], None
         elif name.endswith('.xlsx') or name.endswith('.xlsm'):
             from openpyxl import load_workbook
             wb = load_workbook(f, read_only=True, data_only=True)
             ws = wb.active
-            it = ws.iter_rows(values_only=True)
+            it = capped_rows(ws.iter_rows(values_only=True))
             header = [str(c).strip().lower() if c is not None else '' for c in next(it)]
             rows = []
             for r in it:
