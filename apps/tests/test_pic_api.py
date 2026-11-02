@@ -241,7 +241,11 @@ class CallbackTests(ApiBase):
         self.assertNotIn('1000000010', r.content.decode())
         pend = self.admin_c.get('/api/callcenter/calls/pending-callbacks/?mode=all').json()
         self.assertIn(log.pk, [x['id'] for x in (pend.get('results') if isinstance(pend, dict) else pend)])
-        self.assertTrue(AuditLog.objects.filter(extra__calllog_id=log.pk).exists())
+        e = AuditLog.objects.get(action='pic_analytics_callback_scheduled')
+        self.assertEqual((e.extra['call_id'], e.extra['calllog_id'], e.extra['note']),
+                         (self.miss.pk, log.pk, 'اتصل بعد الظهر'))
+        self.assertEqual(e.extra['callback_due'], log.callback_due.isoformat())
+        self.assertFalse(AuditLog.objects.filter(action='pic_analytics_dialled').exists())
 
     def test_past_due_and_missing_due_are_400(self):
         for body in ({'due': self.due(-1)}, {}, {'due': 'nope'}, {'due': self.due(), 'note': 'x' * 501}):

@@ -352,8 +352,9 @@ def missed_callback(request, call_id):
         phone_number=call.customer_number, customer=call.customer, direction='inbound',
         status='callback', callback_due=due, handled_by=acc.profile, notes=note, source='manual')
     from apps.audit.models import AuditLog
-    AuditLog.log('pic_analytics_dialled', user=acc.profile, obj=log, request=request,
-                 note='callback scheduled (not a dial)', extra={'call_id': call.pk, 'calllog_id': log.pk})
+    AuditLog.log('pic_analytics_callback_scheduled', user=acc.profile, obj=log, request=request,
+                 note='missed call back', extra={'call_id': call.pk, 'calllog_id': log.pk,
+                                                 'callback_due': due.isoformat(), 'note': note})
     return Response({'id': log.pk, 'callback_due': log.callback_due.isoformat(),
                      'number': mask(call.customer_number)})
 

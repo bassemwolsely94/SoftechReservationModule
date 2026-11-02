@@ -97,7 +97,8 @@ export default function MissedTab({ params, ready }) {
     mutationFn: ({ id }) => picAnalyticsApi.missedCallback(id, { due: new Date(due).toISOString(), note }).then(r => r.data),
     onSuccess: (d, { id }) => {
       mark(id, true, 'تمت جدولة المعاودة ✓'); setCb(null); setDue(''); setNote('')
-      qc.invalidateQueries({ queryKey: ['callcenter'] })
+      qc.invalidateQueries({ queryKey: ['callbacks'] })
+      qc.invalidateQueries({ queryKey: ['callcenter-dashboard'] })
     },
     onError: (e, { id }) => mark(id, false, errText(e, 'تعذّرت الجدولة')),
   })
