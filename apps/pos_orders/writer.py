@@ -121,6 +121,12 @@ def _is_unreachable(exc):
     return any(h in msg for h in _UNREACHABLE_HINTS)
 
 
+def _is_gate_refusal(exc):
+    """N4: the zone gate refused this user (no connection / read-only connection)."""
+    from config.sybase import SoftechAccessDenied, SoftechZoneWriteDenied
+    return isinstance(exc, (SoftechAccessDenied, SoftechZoneWriteDenied))
+
+
 def softech_token(order):
     """
     Short idempotency marker stashed in stktransm5.vf2 (varchar(15)) linking the
@@ -842,6 +848,7 @@ def push_order(order: SoftechSalesOrder, *, dry_run=True, live=False):
     # (push button, flush job, flush command) can move this order to PUSHING; any other caller
     # holding the same order gets 0 rows and stops BEFORE touching SOFTECH. A plain save here let
     # two callers both pass the in-memory status check and both write the pending order.
+    was_queued = order.status == SoftechSalesOrder.STATUS_QUEUED   # N4: see the refusal branch below
     claimed = SoftechSalesOrder.objects.filter(
         pk=order.pk,
         status__in=(SoftechSalesOrder.STATUS_DRAFT, SoftechSalesOrder.STATUS_READY,
@@ -897,6 +904,16 @@ def push_order(order: SoftechSalesOrder, *, dry_run=True, live=False):
             logger.warning('[pos_orders] order=%s QUEUED (branch unreachable): %s', order.pk, exc)
             return {'mode': 'queued', 'wrote_to_softech': False, 'ok': False,
                     'queued': True, 'order_id': order.pk}
+        # N4 (I1): a gate refusal of the CLICKER on an order an authorised push had already queued
+        # puts it back to queued (the system flush job finishes it), not push_failed. Safe: the
+        # refusal comes at connect or at the first statement, before any serial is allocated.
+        if was_queued and _is_gate_refusal(exc):
+            order.status = SoftechSalesOrder.STATUS_QUEUED
+            order.erp_error = f'refused for this user, kept queued: {exc}'
+            order.save(update_fields=['status', 'erp_error', 'updated_at'])
+            logger.warning('[pos_orders] order=%s refused by the SOFTECH gate - kept QUEUED: %s',
+                           order.pk, exc)
+            raise
         order.status = SoftechSalesOrder.STATUS_PUSH_FAILED
         order.erp_error = str(exc)
         order.save(update_fields=['status', 'erp_error', 'updated_at'])

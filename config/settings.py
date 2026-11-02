@@ -294,6 +294,10 @@ DATABASES = {
         'TEST': {'NAME': config('TEST_DB_NAME', default=None)},
     }
 }
+# A second connection to the same database, used only for audit rows that must survive a rollback
+# of the caller's transaction (the SOFTECH gate's `softech_gate_denied`, N4 I2). Tests: a mirror
+# of default (no second test database).
+DATABASES['audit_log'] = {**DATABASES['default'], 'TEST': {'MIRROR': 'default'}}
 
 # ── REST FRAMEWORK ─────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {

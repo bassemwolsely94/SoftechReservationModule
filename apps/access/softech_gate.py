@@ -54,7 +54,7 @@ def mode():
     if value == 'enforce':
         problem = enforce_problem()
         if problem:
-            _log_unsafe(problem)
+            _log_unsafe(problem, switch='SOFTECH_GATE_ENFORCEMENT')
             return 'log'
     return value
 
@@ -179,15 +179,61 @@ def check(label=''):
         return _failed('gate_error', label, scope, current_mode)
 
 
-def note(decision, label, *, enforced, mode=None):
-    """One deduplicated log line and AuditLog row for a refusal (or would-refuse). Never raises."""
+AUDIT_DB_ALIAS = 'audit_log'
+
+
+def _audit_aliases():
+    """Where a gate row is written, in order: the `audit_log` alias first (its own connection, so
+    a rollback of the caller's transaction cannot erase the row), then `default` in a savepoint
+    (only if the alias is missing or its write failed)."""
+    from django.db import connections
+    if AUDIT_DB_ALIAS in connections.databases:
+        return (AUDIT_DB_ALIAS, 'default')
+    return ('default',)
+
+
+def _insert_row(alias, user_id, note_text, extra):
+    """One AuditLog row on `alias`. True only when the row was saved."""
+    from apps.audit.models import AuditLog
+    from apps.users.models import StaffProfile
+    # Own savepoint on `default` whatever the alias: connects happen inside writers' atomic blocks
+    # (the POS push), and nothing here may poison the caller's transaction.
+    with transaction.atomic(using='default'):
+        staff = None
+        if user_id is not None:
+            staff = StaffProfile.objects.using(alias).filter(user_id=user_id).first()
+        entry = AuditLog.log(AUDIT_ACTION, user=staff, note=note_text, extra=extra, using=alias)
+    return entry is not None
+
+
+def _write_row(user_id, note_text, extra):
+    for alias in _audit_aliases():
+        try:
+            if _insert_row(alias, user_id, note_text, extra):
+                return True
+        except Exception as exc:
+            # a test that does not list `audit_log` refuses it (DatabaseOperationForbidden):
+            # quiet; anything else is worth a line
+            if type(exc).__name__ != 'DatabaseOperationForbidden':
+                log.warning('softech gate: audit write on %s failed - trying the next', alias,
+                            exc_info=True)
+    return False
+
+
+def note(decision, label, *, enforced, mode=None, extra=None):
+    """One deduplicated log line and AuditLog row for a refusal (or would-refuse). Never raises.
+
+    The row goes through the `audit_log` alias (I2): a refusal inside the caller's
+    transaction.atomic() that then rolls back keeps its row. The dedupe key is set only after
+    the row was saved, so a lost row is retried by the next refusal instead of silenced for
+    LOG_DEDUPE_SECONDS."""
     try:
         ctx = access_context.current()
         user_id = ctx.user_id if ctx is not None else None
         current_mode = mode or ('enforce' if enforced else 'log')
         key = f'access:softech-gate:{user_id}:{decision.zone}:{decision.reason}:{current_mode}'
         try:
-            if not cache.add(key, 1, LOG_DEDUPE_SECONDS):
+            if cache.get(key):
                 return
         except Exception:
             pass
@@ -196,18 +242,40 @@ def note(decision, label, *, enforced, mode=None):
         log.warning('softech gate %s: grant=%s reason=%s scope=%s zone=%s user=%s label=%s',
                     'denied' if enforced else 'would-deny', decision.grant, decision.reason,
                     decision.scope, decision.zone, user_id, label)
-        from apps.audit.models import AuditLog
-        staff = None
-        if ctx is not None and ctx.user_id is not None:
-            from apps.users.models import StaffProfile
-            staff = StaffProfile.objects.filter(user_id=ctx.user_id).first()
-        # Own savepoint: connects happen inside writers' atomic blocks (the POS push), and a
-        # failed audit INSERT must not poison the caller's transaction.
-        with transaction.atomic():
-            AuditLog.log(AUDIT_ACTION, user=staff,
-                         note=f'{decision.reason} / {decision.zone}'[:255],
-                         extra={'scope': decision.scope, 'zone': decision.zone,
-                                'reason': decision.reason, 'label': label, 'mode': current_mode,
-                                'ip': ip, 'device_id': device_id, 'enforced': enforced})
+        row_extra = {'scope': decision.scope, 'zone': decision.zone, 'reason': decision.reason,
+                     'label': label, 'mode': current_mode, 'ip': ip, 'device_id': device_id,
+                     'enforced': enforced}
+        for k, v in (extra or {}).items():
+            row_extra.setdefault(k, v)
+        if not _write_row(user_id, f'{decision.reason} / {decision.zone}'[:255], row_extra):
+            log.error('softech gate: audit row lost (%s %s)', decision, label)
+            return
+        try:
+            cache.add(key, 1, LOG_DEDUPE_SECONDS)
+        except Exception:
+            pass
     except Exception:
         log.error('softech gate: audit row lost (%s %s)', decision, label, exc_info=True)
+
+
+def require_write(label=''):
+    """Pre-check for a view that is about to write to SOFTECH, or to queue work that a job later
+    writes with system rights (POS flush, invoice push-batch, the shortage outbox).
+
+    Returns None when the write may go ahead, else the refusing GateDecision. Only `enforce`
+    refuses: off / log answer None (a log-mode refusal is already noted by check(), and a READ
+    write is observed at the statement). One check() call, so at most one audit row: NONE is
+    noted by check(); a READ grant refused here is noted here."""
+    decision = check(label)
+    if decision.grant == FULL:
+        return None
+    if decision.grant == NONE:
+        return decision            # check() returns NONE only in enforce, already noted
+    try:
+        enforcing = mode() == 'enforce'
+    except Exception:
+        enforcing = False
+    if not enforcing:
+        return None
+    note(decision, label, enforced=True, mode='enforce')
+    return decision

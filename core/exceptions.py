@@ -8,7 +8,7 @@ else goes to DRF's default handler, unchanged.
 import sys
 
 from rest_framework.response import Response
-from rest_framework.views import exception_handler
+from rest_framework.views import exception_handler, set_rollback
 
 
 def is_softech_refusal(exc) -> bool:
@@ -19,7 +19,17 @@ def is_softech_refusal(exc) -> bool:
         exc, (sybase.SoftechAccessDenied, sybase.SoftechZoneWriteDenied))
 
 
+def softech_zone_response(decision):
+    """The 403 for a refusing gate decision from softech_gate.require_write(): the same body as
+    an uncaught refusal (NONE: no SOFTECH at all; READ: no writing)."""
+    from apps.access import softech_gate
+    text = (softech_gate.DENY_MESSAGE if decision.grant == softech_gate.NONE
+            else softech_gate.WRITE_DENY_MESSAGE)
+    return Response({'detail': text, 'code': 'softech_zone'}, status=403)
+
+
 def api_exception_handler(exc, context):
     if is_softech_refusal(exc):
+        set_rollback()     # as DRF does for its own errors (a view inside atomic rolls back)
         return Response({'detail': str(exc), 'code': 'softech_zone'}, status=403)
     return exception_handler(exc, context)

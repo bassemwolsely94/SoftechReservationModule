@@ -1284,8 +1284,25 @@ sudo -u elrezeiky $PY $APP/manage.py access_preflight \
   && sudo systemctl restart elrezeiky-web elrezeiky-scheduler
 ```
 As in N3, `.env` changes only after `manage.py check` passed against `enforce` (the value on the command
-line wins over `.env`). Afterwards `journalctl -u elrezeiky-web | grep 'softech gate denied'` shows each
-refusal, and «الأمان» → سجل المراجعة shows `softech_gate_denied` with the user, zone and scope.
+line wins over `.env`). The check refuses `enforce` while the N3 label cannot be trusted
+(`access.E005`: header not trusted or proxy key empty) and warns about a misspelt value (`access.W003`,
+e.g. `enforced`, which would silently run as `log`): any `access.E005` stops the chain; read any
+`access.W003` before going on.
+
+**Step 6 - confirm it really enforces.** After the restart:
+```bash
+APP=/opt/elrezeiky/app; PY=/opt/elrezeiky/venv/bin/python
+sudo -u elrezeiky $PY $APP/manage.py access_preflight
+sudo journalctl -u elrezeiky-web --since -10min | grep 'SOFTECH_GATE_ENFORCEMENT=enforce refused'   || echo 'no unsafe-enforce line (good)'
+```
+`softech_mode` must be **OK** («بوابة SOFTECH: التطبيق الفعلي (enforce)»). A WARN «مضبوطة enforce لكنها تعمل
+كتسجيل فقط» or a `SOFTECH_GATE_ENFORCEMENT=enforce refused (…)` ERROR line means the setup is unsafe and
+the gate still runs as `log`: go back to N3 before trying again. (N3's own line starts with
+`NETWORK_POLICY_ENFORCEMENT=`, so the two are told apart.) Afterwards
+`journalctl -u elrezeiky-web | grep 'softech gate denied'` shows each refusal, and «الأمان» → سجل المراجعة
+shows `softech_gate_denied` with the user, zone and scope. A refused «تفريغ الطابور» / «ترحيل المحدد» /
+نواقص السوق action answers with the refusal (403, `code: softech_zone`) and changes nothing: queued
+orders stay queued for the scheduler.
 
 **The way back.** Set it to `log` and restart; refusals stop at once.
 ```bash

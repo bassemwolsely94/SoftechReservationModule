@@ -1215,6 +1215,13 @@ def flush_now(request):
     if not writer.writer_enabled():
         return Response({'detail': 'الكتابة الفعلية مُعطّلة (POS_WRITER_ENABLED=False).'},
                         status=status.HTTP_409_CONFLICT)
+    # N4 (I1): the gate judges the clicker. Refused here (enforce) -> 403 and nothing is claimed,
+    # so queued sales stay queued for the system job instead of landing in push_failed.
+    from apps.access import softech_gate
+    from core.exceptions import softech_zone_response
+    refused = softech_gate.require_write('pos_flush_now')
+    if refused is not None:
+        return softech_zone_response(refused)
     statuses = [SoftechSalesOrder.STATUS_QUEUED]
     if request.data.get('include_failed'):
         statuses.append(SoftechSalesOrder.STATUS_PUSH_FAILED)

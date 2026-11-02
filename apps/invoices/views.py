@@ -10,7 +10,6 @@ The client polls GET /invoices/{id}/ until status changes to 'review'.
 import csv
 import io
 import logging
-import threading
 
 from django.db.models import Count, Q
 from django.http import HttpResponse
@@ -830,6 +829,13 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         usercode = _poster_usercode(request)
         if not usercode:
             return Response({'detail': _NO_SOFTECH_USER}, status=status.HTTP_400_BAD_REQUEST)
+        # N4 (I1): refused by the gate (enforce) -> 403 before any invoice is claimed, so a
+        # queued invoice stays queued for the system job instead of landing in push_failed.
+        from apps.access import softech_gate
+        from core.exceptions import softech_zone_response
+        refused = softech_gate.require_write('invoice_push_batch')
+        if refused is not None:
+            return softech_zone_response(refused)
         found = {inv.pk: inv for inv in SupplierInvoice.objects.filter(pk__in=ids)}
 
         def _slim(r):

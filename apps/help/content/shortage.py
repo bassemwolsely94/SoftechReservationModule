@@ -460,6 +460,8 @@ SCREENS = [
         ],
         'steps': [{'text': T('«تشغيل المحرك ومزامنة البيانات» لتحديث القائمة (تأكد أن المبيعات غير متأخرة).', '"Run engine and sync data" to refresh the list (make sure sales data is not behind).'), 'roles': ['admin', 'purchasing']}],
         'workflows': [],
+        'tips': [T('التأكيد والإلغاء، والاستبعاد أو الاسترجاع اللي بيغيّر الصنف في SOFTECH، بيتطلبوا إن دورك مسموح له يكتب في SOFTECH من المكان ده. لو لأ هتظهر «الكتابة في SOFTECH غير متاحة لدورك من هذا المكان» والصنف ما بيتغيّرش.',
+                   'Confirm and unflag, and a dismiss or restore that changes the item in SOFTECH, need your role to be allowed to write to SOFTECH from this place. If not, a refusal shows and the item does not change.')],
         'related': ['shortage.list', 'shortage.phantom', 'purchasing.engine'],
         'tour': [
             {'target': 'shortage-market-run', 'label': T('🔄 تشغيل المحرك ومزامنة البيانات', '🔄 Run engine and sync data'),
@@ -575,8 +577,8 @@ SCREENS = [
              'text': T('يعرض المستبعدة بسبب واحد بس، والرقم = عددها.', 'Shows dismissed items with one reason only; the number = their count.'),
              'open_hint': T('في تبويب «المستبعدة».', 'In the "Dismissed" tab.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-02',
+        'change_note': T('التأكيد والإلغاء والاستبعاد والاسترجاع اللي بتكتب في SOFTECH بتترفض لو دورك مش مسموح له يكتب من المكان ده', 'Confirm, unflag, dismiss and restore that write to SOFTECH are refused when your role may not write from this place'),
     },
     {
         'key': 'shortage.phantom',

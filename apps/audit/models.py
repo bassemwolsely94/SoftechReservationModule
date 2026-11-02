@@ -226,9 +226,11 @@ class AuditLog(models.Model):
     @classmethod
     def log(cls, action, user=None, obj=None,
             old_data=None, new_data=None, changes=None,
-            extra=None, note='', request=None):
+            extra=None, note='', request=None, using=None):
         """
         Non-fatal audit log factory. Call from anywhere.
+        `using` picks the database alias (default: the router's choice, i.e. 'default'); the
+        SOFTECH gate writes through 'audit_log' so a caller's rollback cannot erase its row.
 
         Usage:
             AuditLog.log(
@@ -267,7 +269,7 @@ class AuditLog(models.Model):
             if request:
                 entry.ip_address = _get_ip(request)
 
-            entry.save()
+            entry.save(using=using)
             return entry
         except Exception:
             # Never propagate audit failures
