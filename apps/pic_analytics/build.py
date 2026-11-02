@@ -68,11 +68,11 @@ def _earliest_sale_days(excluded) -> dict[str, date]:
 
 
 def _new_row():
-    return {'invoices': 0, 'returns': 0, 'net': ZERO, 'cost': ZERO, 'units': ZERO, 'lines': 0,
+    return {'invoices': 0, 'returns': 0, 'net': ZERO, 'cost': ZERO, 'gp_net': ZERO, 'gp': ZERO, 'units': ZERO, 'lines': 0,
             'cats': defaultdict(lambda: ZERO)}
 
 
-def _build_chunk(start: date, end: date, excluded, buckets, first_days) -> int:
+def _build_chunk(start: date, end: date, excluded, buckets, first_days, kpi) -> int:
     lo, hi = _start_dt(start), _start_dt(end + timedelta(days=1))
     hdr = (PurchaseHistory.objects.filter(invoice_date__gte=lo, invoice_date__lt=hi, doc_code__in=[SALE, RETURN])
            .annotate(day=TruncDate('invoice_date', tzinfo=CAIRO))
@@ -88,6 +88,17 @@ def _build_chunk(start: date, end: date, excluded, buckets, first_days) -> int:
                     doc_code=F('purchase__doc_code'), mt=F('item__medicine_type'))
           .values('softech_phcode', 'day', 'branch_id', 'softech_user', 'sales_channel', 'doc_code', 'mt')
           .annotate(n=Count('id'), qty=Sum('quantity'), val=Sum('line_total'), cost=Sum(cost_expr)))
+    # gross profit exactly as KpiResolver._net_profit: profit channels only, excluded items out
+    gpq = (PurchaseHistoryLine.objects.filter(purchase__invoice_date__gte=lo, purchase__invoice_date__lt=hi,
+                                              purchase__doc_code__in=[SALE, RETURN],
+                                              purchase__sales_channel__in=kpi.profit_channels)
+           .exclude(item_id__in=kpi.profit_excluded_items)
+           .annotate(day=TruncDate('purchase__invoice_date', tzinfo=CAIRO),
+                     softech_phcode=F('purchase__softech_phcode'), branch_id=F('purchase__branch_id'),
+                     softech_user=F('purchase__softech_user'), sales_channel=F('purchase__sales_channel'),
+                     doc_code=F('purchase__doc_code'))
+           .values('softech_phcode', 'day', 'branch_id', 'softech_user', 'sales_channel', 'doc_code')
+           .annotate(val=Sum('line_total'), cost=Sum(cost_expr)))
     rows = defaultdict(_new_row)
 
     def key(r):
@@ -111,9 +122,17 @@ def _build_chunk(start: date, end: date, excluded, buckets, first_days) -> int:
         if sign == 1:
             row['lines'] += r['n']
 
+    for r in gpq:
+        row = rows[key(r)]
+        sign = 1 if r['doc_code'] == SALE else -1
+        val, cost = abs(r['val'] or ZERO), abs(r['cost'] or ZERO)
+        row['gp_net'] += sign * val
+        row['gp'] += sign * (val - cost)
+
     objs = [PicDayFact(
         pic=k[0], day=k[1], branch_id=k[2], salesperson=k[3], channel_bucket=k[4],
         invoices=v['invoices'], returns=v['returns'], net=v['net'], cost=round(v['cost'], 2),
+        gp_net=round(v['gp_net'], 2), gp=round(v['gp'], 2),
         units=v['units'], lines=v['lines'], net_by_category={c: str(a) for c, a in v['cats'].items()},
         is_first_purchase=bool(k[0] and v['invoices'] and first_days.get(k[0]) == k[1]),
     ) for k, v in rows.items()]
@@ -127,10 +146,12 @@ def build_day_facts(start: date, end: date) -> int:
     """Delete + rebuild PicDayFact for days in [start, end]; returns rows written."""
     excluded, buckets = excluded_pics(), channel_bucket_map()
     first_days = _earliest_sale_days(excluded)
+    from apps.forecasting.kpi import KpiResolver
+    kpi = KpiResolver()          # the KPI board's profit channels / excluded items — one source of truth
     total, cur = 0, start
     while cur <= end:
         chunk_end = min(cur + timedelta(days=CHUNK_DAYS - 1), end)
-        total += _build_chunk(cur, chunk_end, excluded, buckets, first_days)
+        total += _build_chunk(cur, chunk_end, excluded, buckets, first_days, kpi)
         cur = chunk_end + timedelta(days=1)
     return total
 

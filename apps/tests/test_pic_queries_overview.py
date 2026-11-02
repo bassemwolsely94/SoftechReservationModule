@@ -52,6 +52,7 @@ class Base(TestCase):
     def fact(pic, day, branch, inv, net, cost, units, cats, sp='', chan='cash'):
         return PicDayFact.objects.create(pic=pic, day=day, branch=branch, salesperson=sp, channel_bucket=chan,
                                          invoices=inv, net=D_(net), cost=D_(cost), units=D_(units),
+                                         gp_net=D_(net), gp=D_(net) - D_(cost),
                                          lines=1, net_by_category={k: str(v) for k, v in cats.items()})
 
     def flt(self, **kw):
@@ -82,6 +83,15 @@ class OverviewTests(Base):
         self.assertEqual(o['gp_pct'], round(D_(190) / D_(470) * 100, 2))
         self.assertEqual(o['no_pic_net'], D_('30'))
         self.assertEqual(o['calls_in'], 0)
+
+    def test_gp_uses_gp_fields_not_header_net(self):
+        PicDayFact.objects.filter(pic='N1', day=D(2026, 10, 5)).update(gp_net=D_('1000'), gp=D_('250'))
+        base = PicDayFact.objects.filter(day__gte=D(2026, 10, 1), day__lte=D(2026, 10, 31)).exclude(pic='')
+        from django.db.models import Sum
+        a = base.aggregate(g=Sum('gp'), n=Sum('gp_net'))
+        o = overview(self.flt(), self.mgmt)
+        self.assertEqual(o['gp'], a['g'])
+        self.assertEqual(o['gp_pct'], round(a['g'] / a['n'] * 100, 2))
 
     def test_no_pic_sales_line_reconciles(self):
         PicDayFact.objects.all().delete()

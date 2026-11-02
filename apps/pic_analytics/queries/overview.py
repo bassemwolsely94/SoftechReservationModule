@@ -67,13 +67,14 @@ def retention_pct_for(f, access, current_pics):
 def overview(f, access) -> dict:
     qs = f.facts(access).exclude(pic='')
     per_pic = list(qs.values('pic').annotate(
-        s_net=Sum('enet'), s_cost=Sum('cost'), s_units=Sum('units'), s_inv=Sum('invoices'),
+        s_net=Sum('enet'), s_gp=Sum('gp'), s_gpnet=Sum('gp_net'), s_units=Sum('units'), s_inv=Sum('invoices'),
         s_vis=Count('day', distinct=True, filter=Q(invoices__gt=0))))
     visitors = [r for r in per_pic if r['s_vis'] > 0]
     n_pics = len(visitors)
     visits = sum(r['s_vis'] for r in visitors)
     net = sum((r['s_net'] or ZERO for r in per_pic), ZERO)
-    cost = sum((r['s_cost'] or ZERO for r in per_pic), ZERO)
+    gp_sum = sum((r['s_gp'] or ZERO for r in per_pic), ZERO)
+    gp_net = sum((r['s_gpnet'] or ZERO for r in per_pic), ZERO)
     units = sum((r['s_units'] or ZERO for r in per_pic), ZERO)
     invoices = sum(r['s_inv'] or 0 for r in per_pic)
 
@@ -132,8 +133,9 @@ def overview(f, access) -> dict:
         'by_month': [months[k] for k in sorted(months)],
     }
     if access.sees_cost:
-        # cost is per whole fact row, so a category-filtered GP cannot be split honestly
-        gp = None if f.category else net - cost
+        # GP follows the KPI board (profit channels, line revenue); per whole fact row, so a
+        # category-filtered GP cannot be split honestly
+        gp = None if f.category else gp_sum
         out['gp'] = gp
-        out['gp_pct'] = round(gp / net * 100, 2) if gp is not None and net else None
+        out['gp_pct'] = round(gp / gp_net * 100, 2) if gp is not None and gp_net else None
     return out

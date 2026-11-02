@@ -36,7 +36,7 @@ def pic_rows(f, access, order='-net', page=1, page_size=50) -> dict:
     qs = f.facts(access).exclude(pic='')
     name = Customer.objects.filter(softech_pic=OuterRef('pic')).order_by('pk').values('name')[:1]
     agg = (qs.values('pic').annotate(
-        s_net=Sum('enet'), s_cost=Sum('cost'), s_units=Sum('units'), s_inv=Sum('invoices'),
+        s_net=Sum('enet'), s_gp=Sum('gp'), s_units=Sum('units'), s_inv=Sum('invoices'),
         visits=Count('day', distinct=True, filter=Q(invoices__gt=0)),
         last_day=Max('day', filter=Q(invoices__gt=0)), name_sub=Subquery(name))
         .filter(visits__gt=0))
@@ -106,7 +106,7 @@ def pic_rows(f, access, order='-net', page=1, page_size=50) -> dict:
             visible = False
         cust_access.mask_fields(row, ['phone'], visible)
         if access.sees_cost:
-            gp = None if f.category else (r['s_net'] or ZERO) - (r['s_cost'] or ZERO)
+            gp = None if f.category else (r['s_gp'] or ZERO)
             row['gp'] = gp
         rows.append(row)
     return {'count': count, 'rows': rows}

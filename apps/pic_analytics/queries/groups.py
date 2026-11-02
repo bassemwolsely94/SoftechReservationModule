@@ -27,7 +27,7 @@ def _qs(f, access):
 
 
 def _row(key, label, pic_stats, labels, new_pics, access, f):
-    """pic_stats: {pic: (net, cost, units, visits)} for one group."""
+    """pic_stats: {pic: (net, gp, units, visits)} for one group; gp = KPI-board gross profit."""
     visitors = [p for p, s in pic_stats.items() if s[3] > 0]
     visits = sum(s[3] for s in pic_stats.values() if s[3] > 0)
     net = sum((s[0] for s in pic_stats.values()), ZERO)
@@ -42,27 +42,27 @@ def _row(key, label, pic_stats, labels, new_pics, access, f):
         'units_per_visit': round(units / visits, 2) if visits and not f.category else None,
     }
     if access.sees_cost:
-        row['gp'] = None if f.category else net - sum((s[1] for s in pic_stats.values()), ZERO)
+        row['gp'] = None if f.category else sum((s[1] for s in pic_stats.values()), ZERO)
     return row
 
 
 def _aggregate(qs, *group_fields):
     return qs.values(*group_fields, 'pic').annotate(
-        s_net=Sum('enet'), s_cost=Sum('cost'), s_units=Sum('units'),
+        s_net=Sum('enet'), s_gp=Sum('gp'), s_units=Sum('units'),
         s_vis=Count('day', distinct=True, filter=Q(invoices__gt=0)))
 
 
 def _pic_stats(qs, group_field):
-    """{group_key: {pic: (net, cost, units, visits)}} — visits = distinct days with invoices > 0."""
+    """{group_key: {pic: (net, gp, units, visits)}} — visits = distinct days with invoices > 0."""
     out = {}
     for r in _aggregate(qs, group_field):
         out.setdefault(r[group_field], {})[r['pic']] = (
-            r['s_net'] or ZERO, r['s_cost'] or ZERO, r['s_units'] or ZERO, r['s_vis'])
+            r['s_net'] or ZERO, r['s_gp'] or ZERO, r['s_units'] or ZERO, r['s_vis'])
     return out
 
 
 def _pic_stats_all(qs):
-    return {r['pic']: (r['s_net'] or ZERO, r['s_cost'] or ZERO, r['s_units'] or ZERO, r['s_vis'])
+    return {r['pic']: (r['s_net'] or ZERO, r['s_gp'] or ZERO, r['s_units'] or ZERO, r['s_vis'])
             for r in _aggregate(qs)}
 
 
@@ -175,7 +175,7 @@ def by_category(f, access) -> dict:
             'units_per_visit': None,
         }
         if access.sees_cost:
-            row['gp'] = None      # cost is per whole fact row, never split by category
+            row['gp'] = None      # gp is per whole fact row, never split by category
         rows.append(row)
     rows.sort(key=lambda r: r['net'], reverse=True)
 

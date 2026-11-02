@@ -7,7 +7,8 @@ from django.utils import timezone
 from apps.branches.models import Branch
 from apps.catalog.models import Item
 from apps.customers.models import Customer, PurchaseHistory, PurchaseHistoryLine
-from apps.forecasting.models import ChannelBucketMap
+from apps.forecasting.kpi import KpiResolver
+from apps.forecasting.models import ChannelBucketMap, ProfitExclusion
 from apps.pic_analytics import build, rules
 from apps.pic_analytics.models import PicDayFact, PicRollup
 
@@ -82,6 +83,43 @@ class PicBuildTests(TestCase):
         self.assertEqual(f.lines, 2)
         self.assertEqual({k: Decimal(v) for k, v in f.net_by_category.items()},
                          {'10': Decimal('100'), '50': Decimal('200')})
+
+    def gp_seed(self):
+        ChannelBucketMap.objects.create(person_type='10', channel='95', label='ins', bucket='exclude',
+                                        include_in_profit=False, active=True)
+        dlv = Item.objects.create(softech_id='T4D', name='dlv', medicine_type='10')
+        ProfitExclusion.objects.create(item=dlv, active=True)
+        # profit channel: 200 revenue - 60 cost, plus an excluded item (30 revenue, 1 cost) -> gp 140 over gp_net 200
+        self.inv(self.c1, 'P1', at(2026, 10, 5), '230', lines=[(self.m10, 2, '200', '30'), (dlv, 1, '30', '1')])
+        # non-profit channel line: ignored by gp
+        self.inv(self.c1, 'P1', at(2026, 10, 5), '500', channel='95', lines=[(self.m50, 1, '500', '100')])
+        # return of 50 revenue / 20 cost on the profit channel
+        self.inv(self.c1, 'P1', at(2026, 10, 7), '50', doc='30', lines=[(self.m10, 1, '50', '20')])
+
+    def test_gp_counts_profit_channels_and_skips_excluded_items(self):
+        self.gp_seed()
+        build.build_day_facts(D(2026, 10, 1), D(2026, 10, 31))
+        f = PicDayFact.objects.get(pic='P1', day=D(2026, 10, 5), channel_bucket='cash')
+        self.assertEqual((f.gp_net, f.gp), (Decimal('200.00'), Decimal('140.00')))
+        x = PicDayFact.objects.get(pic='P1', day=D(2026, 10, 5), channel_bucket='exclude')
+        self.assertEqual((x.gp_net, x.gp), (Decimal('0'), Decimal('0')))
+
+    def test_return_reduces_gp(self):
+        self.gp_seed()
+        build.build_day_facts(D(2026, 10, 1), D(2026, 10, 31))
+        r = PicDayFact.objects.get(pic='P1', day=D(2026, 10, 7))
+        self.assertEqual((r.gp_net, r.gp), (Decimal('-50.00'), Decimal('-30.00')))
+
+    def test_gp_equals_kpi_board_net_profit(self):
+        from django.db.models import Sum
+        self.gp_seed()
+        self.seed()
+        build.build_day_facts(D(2026, 10, 1), D(2026, 10, 31))
+        kr = KpiResolver()
+        kpi = kr._net_profit(None, D(2026, 10, 1), D(2026, 10, 31), kr.profit_channels)
+        got = PicDayFact.objects.aggregate(s=Sum('gp'))['s']
+        self.assertEqual(got, kpi.quantize(Decimal('0.01')))
+        self.assertNotEqual(got, 0)
 
     def test_placeholder_sales_go_to_blank_pic(self):
         self.seed()

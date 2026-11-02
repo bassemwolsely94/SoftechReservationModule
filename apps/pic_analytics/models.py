@@ -13,6 +13,9 @@ class PicDayFact(models.Model):
     returns = models.IntegerField(default=0)
     net = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     cost = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    # KPI-board gross profit (profit channels, excluded items out): gp_net = line revenue, gp = gp_net - cost
+    gp_net = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    gp = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     units = models.DecimalField(max_digits=14, decimal_places=3, default=0)
     lines = models.IntegerField(default=0)
     net_by_category = models.JSONField(default=dict, blank=True)               # {medicine_type: net}
