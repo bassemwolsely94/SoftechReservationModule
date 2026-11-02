@@ -4,7 +4,7 @@ apps/pic_analytics/access.py — who may open PIC Analytics and what they see (s
   • Management: admin, or a role granted RBAC module `pic_analytics` 'view' (seeded: supervisor
     view+export) → every branch, cost / GP visible, the calls tabs, Excel if 'export'.
   • Named branch managers: an active PicAnalyticsAccess row → THEIR OWN branches only
-    (core.branch_scope: home + allowed branches, never a restricted one), view + export.
+    (home + allowed branches, never a restricted one; no all-branch shortcut), view + export.
     Never cost / GP, never the calls tabs, never the grants.
   • Granting / revoking branch managers: admin only.
 """
@@ -28,14 +28,16 @@ def active_grant(profile):
 
 
 def own_branch_ids(profile):
-    """Branch pks a branch manager may see. branch_scope returns None for an all-branch role —
-    a grantee is still a branch manager, so that becomes every branch pk (still no cost/calls)."""
-    from apps.branches.models import Branch
-    from core.branch_scope import branch_ids
-    ids = branch_ids(profile)
-    if ids is None:
-        ids = set(Branch.objects.values_list('pk', flat=True))
-    return set(ids)
+    """Branch pks a named branch manager may see: home branch + allowed - restricted.
+    Computed directly, WITHOUT core.branch_scope's all-branch shortcut (all-branch roles /
+    access_all_branches): a grantee sees only their own branch(es), doc 33 §5. No home branch
+    and no allowed branches -> empty set -> no access."""
+    ids = set()
+    if profile.branch_id:
+        ids.add(profile.branch_id)
+    ids |= set(profile.allowed_branches.values_list('pk', flat=True))
+    ids -= set(profile.restricted_branches.values_list('pk', flat=True))
+    return ids
 
 
 class Access:

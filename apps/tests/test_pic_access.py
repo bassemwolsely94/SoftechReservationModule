@@ -69,6 +69,45 @@ class AccessTests(Base):
         self.assertTrue(can_open(self.ph_p.user))
         self.assertTrue(self.ph.get('/api/auth/me/').json()['can_pic_analytics'])
 
+    def test_all_branch_grantees_still_own_branch_only(self):
+        # quality_manager (ALL_BRANCH_ROLE) and access_all_branches=True never widen a grantee
+        _, qm_p, _ = make_user('pa_qm', role='quality_manager', branch=self.b1)
+        self.grant(qm_p)
+        self.assertEqual(Access(qm_p.user).branch_ids, {self.b1.pk})
+        self.ph_p.access_all_branches = True
+        self.ph_p.save()
+        self.grant()
+        a = Access(self.ph_p.user)
+        self.assertEqual(a.branch_ids, {self.b1.pk})
+        self.assertEqual(list(a.scope_facts(PicDayFact.objects.all())), [self.f1])
+
+    def test_grantee_allowed_minus_restricted_and_no_branch(self):
+        self.ph_p.allowed_branches.add(self.b2)
+        self.grant()
+        self.assertEqual(Access(self.ph_p.user).branch_ids, {self.b1.pk, self.b2.pk})
+        self.ph_p.restricted_branches.add(self.b2)
+        self.assertEqual(Access(self.ph_p.user).branch_ids, {self.b1.pk})
+        _, nb_p, _ = make_user('pa_nb', role='pharmacist', branch=self.b1)
+        nb_p.branch = None
+        nb_p.save()
+        self.grant(nb_p)
+        a = Access(nb_p.user)
+        self.assertEqual(a.branch_ids, set())
+        self.assertFalse(a.can_view)
+
+    def test_migration_seeds_supervisor_permissions(self):
+        # rows come from migration 0002, not from Base.setUp (which uses update_or_create)
+        from importlib import import_module
+        mod = import_module('apps.pic_analytics.migrations.0002_seed_pic_analytics_permissions')
+        self.assertEqual(RoleModuleAccess.objects.filter(module='pic_analytics', role='supervisor', is_allowed=True).count(), 2)
+        RoleModuleAccess.objects.filter(module='pic_analytics').delete()
+        from django.apps import apps as dj_apps
+        mod.grant(dj_apps, None)
+        mod.grant(dj_apps, None)  # idempotent
+        rows = RoleModuleAccess.objects.filter(module='pic_analytics')
+        self.assertEqual(set(rows.values_list('role', 'action')), {('supervisor', 'view'), ('supervisor', 'export')})
+        self.assertTrue(all(r.is_allowed for r in rows))
+
     def test_revoked_grant_denies(self):
         g = self.grant()
         self.assertTrue(Access(self.ph_p.user).can_view)
