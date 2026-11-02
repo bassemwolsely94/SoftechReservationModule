@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from django.conf import settings
 from django.core.cache import cache
-from django.db import transaction
+from django.db import connections, transaction
 
 from . import context as access_context
 from . import policy, session_policy
@@ -193,30 +193,50 @@ def _audit_aliases():
 
 
 def _insert_row(alias, user_id, note_text, extra):
-    """One AuditLog row on `alias`. True only when the row was saved."""
+    """One AuditLog row on `alias`. True only when the row was saved.
+
+    The `audit_log` alias is its own autocommit connection: no savepoint on `default` there (N1),
+    so a broken caller transaction cannot stop the write. Only the `default` fallback needs its
+    own savepoint, so nothing here poisons the caller's transaction (connects happen inside
+    writers' atomic blocks, e.g. the POS push)."""
     from apps.audit.models import AuditLog
     from apps.users.models import StaffProfile
-    # Own savepoint on `default` whatever the alias: connects happen inside writers' atomic blocks
-    # (the POS push), and nothing here may poison the caller's transaction.
-    with transaction.atomic(using='default'):
+
+    def _save():
         staff = None
         if user_id is not None:
             staff = StaffProfile.objects.using(alias).filter(user_id=user_id).first()
-        entry = AuditLog.log(AUDIT_ACTION, user=staff, note=note_text, extra=extra, using=alias)
-    return entry is not None
+        return AuditLog.log(AUDIT_ACTION, user=staff, note=note_text, extra=extra, using=alias)
+
+    if alias == AUDIT_DB_ALIAS:
+        # connect first, outside AuditLog.log (which swallows every error): a refused or dead
+        # connection must reach _write_row, so a fallback is seen as a fallback
+        connections[alias].ensure_connection()
+        return _save() is not None
+    with transaction.atomic(using=alias):
+        return _save() is not None
 
 
 def _write_row(user_id, note_text, extra):
-    for alias in _audit_aliases():
+    """'primary' when the row was saved on the first alias, 'fallback' when only a later one took
+    it (N2), False when none did."""
+    aliases = _audit_aliases()
+    degraded = False
+    for i, alias in enumerate(aliases):
         try:
             if _insert_row(alias, user_id, note_text, extra):
-                return True
+                return 'fallback' if degraded else 'primary'
         except Exception as exc:
             # a test that does not list `audit_log` refuses it (DatabaseOperationForbidden):
-            # quiet; anything else is worth a line
-            if type(exc).__name__ != 'DatabaseOperationForbidden':
-                log.warning('softech gate: audit write on %s failed - trying the next', alias,
-                            exc_info=True)
+            # that is the test's choice, not a degradation - quiet
+            if type(exc).__name__ == 'DatabaseOperationForbidden':
+                continue
+            log.warning('softech gate: audit write on %s failed - trying the next', alias,
+                        exc_info=True)
+        degraded = True
+        if i + 1 < len(aliases) and _dedupe(f'access:softech-gate:audit-fallback:{alias}'):
+            log.warning('softech gate: audit write on %s failed - falling back to %s '
+                        '(the row may be lost if the caller rolls back)', alias, aliases[i + 1])
     return False
 
 
@@ -247,9 +267,14 @@ def note(decision, label, *, enforced, mode=None, extra=None):
                      'enforced': enforced}
         for k, v in (extra or {}).items():
             row_extra.setdefault(k, v)
-        if not _write_row(user_id, f'{decision.reason} / {decision.zone}'[:255], row_extra):
-            log.error('softech gate: audit row lost (%s %s)', decision, label)
+        saved = _write_row(user_id, f'{decision.reason} / {decision.zone}'[:255], row_extra)
+        if not saved:
+            # N4: a persistent failure (PG outage) is one ERROR per key per window
+            if _dedupe(f'{key}:lost'):
+                log.error('softech gate: audit row lost (%s %s)', decision, label)
             return
+        if saved == 'fallback':
+            return          # N2: the row sits in the caller's transaction; retry next time
         try:
             cache.add(key, 1, LOG_DEDUPE_SECONDS)
         except Exception:

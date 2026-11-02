@@ -146,6 +146,27 @@ class InvoicePushBatchGateTests(TestCase):
         push.assert_not_called()
 
 
+class InvoiceSinglePushGateTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        _, profile, self.client = make_user('inv1_admin', role='admin')
+        profile.softech_user_id = '1509'
+        profile.save(update_fields=['softech_user_id'])
+
+    def test_refused_single_push_is_403_and_changes_nothing(self):
+        from apps.invoices import writer as inv_writer
+        from apps.invoices.models import SupplierInvoice
+        inv = SupplierInvoice.objects.create(branch=make_branch(), status='confirmed')
+        with mock.patch(CHECK, return_value=NONE_Z3), mock.patch(MODE, return_value='enforce'),                 mock.patch.object(inv_writer, 'push_final') as push:
+            r = self.client.post(f'/api/invoices/invoices/{inv.pk}/push/', {}, format='json')
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.json(), {'detail': gate.DENY_MESSAGE, 'code': 'softech_zone'})
+        push.assert_not_called()
+        inv.refresh_from_db()
+        self.assertEqual(inv.status, 'confirmed')
+
+
 class ShortageGateTests(TestCase):
     PUSH = 'apps.purchasing.shortage_writer.push_item'
 
@@ -194,12 +215,36 @@ class ShortageGateTests(TestCase):
         self.assertFalse(self.item.shortage_dismissed)
         self.assertTrue(self.item.in_shortage)
 
-    def test_dismiss_without_softech_write_is_not_gated(self):
+    def test_dismiss_with_no_softech_write_is_gated_too(self):         # I3: always, any state
         r, push = self._post('dismiss', READ_Z2, reason='other')
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.json()['code'], 'softech_zone')
+        push.assert_not_called()
+        self.item.refresh_from_db()
+        self.assertFalse(self.item.shortage_dismissed)
+
+    def test_dismiss_allowed_when_not_refused(self):
+        r, push = self._post('dismiss', READ_Z2, mode='log', reason='other')
         self.assertEqual(r.status_code, 200)
         push.assert_not_called()
         self.item.refresh_from_db()
         self.assertTrue(self.item.shortage_dismissed)
+
+    def test_refused_retrieve_of_a_pending_unsynced_item(self):        # I3: the narrow hole
+        self.item.shortage_dismissed = True
+        self.item.shortage_dismiss_reason = 'on_request'
+        self.item.shortage_supply_suspended = False
+        self.item.shortage_softech_synced = False
+        self.item.save(update_fields=['shortage_dismissed', 'shortage_dismiss_reason',
+                                      'shortage_supply_suspended', 'shortage_softech_synced'])
+        r, push = self._post('retrieve', READ_Z2)
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.json()['code'], 'softech_zone')
+        push.assert_not_called()
+        self.item.refresh_from_db()
+        self.assertTrue(self.item.shortage_dismissed)
+        self.assertEqual(self.item.shortage_dismiss_reason, 'on_request')
+        self.assertFalse(self.item.shortage_softech_synced)
 
     def test_refused_retrieve_of_a_suspended_item(self):
         self.item.shortage_dismissed = True
@@ -339,6 +384,42 @@ class DedupeAfterInsertTests(TestCase):
         self.assertEqual(_rows().count(), 1)
         gate.note(NONE_Z3, 'probe', enforced=True, mode='enforce')     # now deduped
         self.assertEqual(_rows().count(), 1)
+
+    def test_n1_audit_log_write_has_no_default_savepoint(self):
+        with mock.patch.object(gate.transaction, 'atomic', side_effect=AssertionError('savepoint')),                 mock.patch.object(gate, 'connections', mock.MagicMock()):
+            with mock.patch('apps.audit.models.AuditLog.log', return_value=object()):
+                self.assertTrue(gate._insert_row(gate.AUDIT_DB_ALIAS, None, 'n1', {}))
+            with mock.patch('apps.audit.models.AuditLog.log', return_value=object()):
+                with self.assertRaises(AssertionError):      # the default fallback does use one
+                    gate._insert_row('default', None, 'n1', {})
+
+    def test_n2_fallback_warns_once_and_does_not_set_the_dedupe_key(self):
+        def fake(alias, *a):
+            return alias == 'default'
+        with mock.patch.object(gate, '_audit_aliases', return_value=('audit_log', 'default')),                 mock.patch.object(gate, '_insert_row', side_effect=lambda al, *a: fake(al)):
+            with self.assertLogs('elrezeiky.access', 'WARNING') as cm:
+                gate.note(NONE_Z3, 'probe', enforced=True, mode='enforce')
+            self.assertTrue(any('falling back' in m for m in cm.output))
+            gate.note(NONE_Z3, 'probe', enforced=True, mode='enforce')   # the warning is deduped
+        self.assertEqual(len([m for m in cm.output if 'falling back' in m]), 1)
+
+    def test_n2_fallback_retries_the_row_next_time(self):
+        calls = []
+
+        def fake(alias, *a):
+            calls.append(alias)
+            return alias == 'default'
+        with mock.patch.object(gate, '_audit_aliases', return_value=('audit_log', 'default')),                 mock.patch.object(gate, '_insert_row', side_effect=fake):
+            gate.note(NONE_Z3, 'probe', enforced=True, mode='enforce')
+            gate.note(NONE_Z3, 'probe', enforced=True, mode='enforce')
+        self.assertEqual(calls.count('default'), 2)
+
+    def test_n4_lost_error_is_throttled(self):
+        with mock.patch.object(gate, '_write_row', return_value=False):
+            with self.assertLogs('elrezeiky.access', 'ERROR') as cm:
+                for _ in range(5):
+                    gate.note(NONE_Z3, 'probe', enforced=True, mode='enforce')
+        self.assertEqual(len([m for m in cm.output if 'audit row lost' in m]), 1)
 
     def test_audit_alias_is_configured_as_a_mirror(self):
         self.assertIn('audit_log', connections.databases)
@@ -513,6 +594,11 @@ class WhoamiAnonymousTests(TestCase):                                           
         self.assertIsNone(d['softech_gate_mode'])
         self.assertIsNone(d['softech_access'])
 
+    def test_anonymous_gets_no_policy_mode(self):
+        cache.clear()
+        d = APIClient().get('/api/access/whoami/', HTTP_X_ELR_NETWORK='external').json()
+        self.assertIsNone(d['policy_mode'])
+
     def test_signed_in_still_gets_it(self):
         from rest_framework_simplejwt.tokens import AccessToken
         cache.clear()
@@ -520,6 +606,7 @@ class WhoamiAnonymousTests(TestCase):                                           
         d = APIClient().get('/api/access/whoami/', HTTP_X_ELR_NETWORK='internal',
                             HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}').json()
         self.assertEqual(d['softech_gate_mode'], 'enforce')
+        self.assertEqual(d['policy_mode'], 'log')
 
 
 class ObservationSignatureTests(TestCase):                                          # M10

@@ -309,10 +309,11 @@ def shortage_dismiss(request):
     was_flagged = item.in_shortage
     # push if we must clear a shortage flag OR suspend ordering (on_request / obsolete)
     needs_push = was_flagged or reason in ('on_request', 'obsolete')
-    if needs_push:                     # a dismissal that writes nothing to SOFTECH is not gated
-        refused = _gate_refusal('shortage_dismiss')
-        if refused is not None:
-            return refused
+    # always gated (I3): a refused user's PG change would otherwise reach SOFTECH later through
+    # sync_pending, which writes the item's CURRENT state with system rights
+    refused = _gate_refusal('shortage_dismiss')
+    if refused is not None:
+        return refused
     item.shortage_dismissed = True
     item.shortage_dismiss_reason = reason
     item.shortage_dismiss_note = (request.data.get('note') or '')[:300]
@@ -349,10 +350,9 @@ def shortage_retrieve(request):
     if item is None:
         return Response({'detail': 'item not found'}, status=status.HTTP_404_NOT_FOUND)
     restore_supply = item.shortage_supply_suspended   # we had موقوف'd it → restore ordering
-    if restore_supply:                 # a retrieval that writes nothing to SOFTECH is not gated
-        refused = _gate_refusal('shortage_retrieve')
-        if refused is not None:
-            return refused
+    refused = _gate_refusal('shortage_retrieve')      # always gated (I3), see dismiss
+    if refused is not None:
+        return refused
     item.shortage_dismissed = False
     item.shortage_dismiss_reason = ''
     item.shortage_dismiss_note = ''

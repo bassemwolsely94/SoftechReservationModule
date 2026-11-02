@@ -51,7 +51,7 @@ def whoami(request):
         'access_zone': access_zone,
         'access_zone_label': ZONE_LABELS.get(access_zone),
         # what the banner may honestly say: the mode and this role's row in this zone
-        'policy_mode': _policy_mode(),
+        'policy_mode': _policy_mode() if access is not None and access.user_id is not None else None,
         'zone_access': _zone_access(subj, access_zone),
         # N4: the effective SOFTECH grant for this request (full / read / none) and the gate mode
         **_softech_access(subj, access),

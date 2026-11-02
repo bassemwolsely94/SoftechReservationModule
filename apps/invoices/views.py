@@ -780,6 +780,12 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         if not self._can_push(request):
             return Response({'detail': 'غير مصرح بترحيل الفواتير إلى ERP'},
                             status=status.HTTP_403_FORBIDDEN)
+        # N4: refused by the gate (enforce) -> 403 before anything is claimed or changed
+        from apps.access import softech_gate
+        from core.exceptions import softech_zone_response
+        refused = softech_gate.require_write('invoice_push')
+        if refused is not None:
+            return softech_zone_response(refused)
         if invoice.status not in ('confirmed', 'queued', 'push_failed'):
             return Response({'detail': 'يجب تأكيد الفاتورة قبل الترحيل'},
                             status=status.HTTP_400_BAD_REQUEST)
