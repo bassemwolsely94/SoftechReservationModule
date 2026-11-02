@@ -13032,6 +13032,47 @@
    "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
    "test_id": "B608",
    "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "325             ph = ','.join('?' for _ in chunk)\n326             cur.execute(f\"SELECT itemcode, itemarchive, itemnomoreuse FROM items WHERE itemcode IN ({ph})\", chunk)\n327             for r in cur.fetchall() or []:\n",
+   "col_offset": 26,
+   "end_col_offset": 100,
+   "filename": "./apps/purchasing/isr_guards.py",
+   "issue_confidence": "MEDIUM",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 326,
+   "line_range": [
+    326
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "328                 master[str(r[0]).strip()] = (str(r[1] or '0').strip(), str(r[2] or '0').strip())\n329             cur.execute(f\"SELECT itemcode, sum(nowqty) FROM stkbal WHERE branchcode=? \"\n330                         f\"AND storecode NOT IN ('102','103','105') AND itemcode IN ({ph}) GROUP BY itemcode\",\n331                         [str(p.branchcode), *chunk])\n",
+   "col_offset": 26,
+   "end_col_offset": 84,
+   "filename": "./apps/purchasing/isr_guards.py",
+   "issue_confidence": "MEDIUM",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 329,
+   "line_range": [
+    329,
+    330
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
   }
  ]
 }
