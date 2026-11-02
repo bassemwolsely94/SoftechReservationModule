@@ -2442,6 +2442,15 @@ def _run_pbx_cdr_relink():
         logger.warning('pbx cdr relink failed: %s', exc)
 
 
+def _run_pic_facts():
+    """PIC Analytics: nightly rebuild of PicDayFact (last 7 days) + PicRollup (as of yesterday)."""
+    try:
+        from django.core.management import call_command
+        call_command('build_pic_facts')
+    except Exception as exc:
+        logger.warning('pic facts build failed: %s', exc)
+
+
 def _run_stock_ledger_sync(days=3):
     """Doc 32: mirror stktrans (all doccodes) from HQ — replaces the last `days` docdate
     days — then run the audit checks. READ-ONLY vs SOFTECH. Off with STOCK_AUDIT_ENABLED=False."""
@@ -3636,6 +3645,10 @@ def start_scheduler():
     )
     _scheduler.add_job(
         _run_pbx_cdr_relink, 'cron', hour=3, minute=55, id='pbx_cdr_relink',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    _scheduler.add_job(
+        _run_pic_facts, 'cron', hour=4, minute=15, id='pic_facts',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # Stock Transactions Audit ledger (doc 32): every 2 h from 08:00 replaces the last 3 days;
