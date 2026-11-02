@@ -2942,7 +2942,12 @@ class InsurancePortfolioView(APIView):
 
     def get(self, request):
         from datetime import date as _date
+        from rest_framework.exceptions import PermissionDenied
+        from core import branch_scope
         from .portfolio import select_claims, build_report
+        # every branch's motalbas and gross profit — owner decision B-1: all-branch roles only
+        if not branch_scope.sees_everything(request.user):
+            raise PermissionDenied('تقارير المطالبات تقارن كل الفروع — متاحة للإدارة فقط.')
         q = request.query_params
 
         def _day(k):

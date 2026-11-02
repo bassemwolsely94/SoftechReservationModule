@@ -104,3 +104,26 @@ class PortfolioTests(TestCase):
         wb = openpyxl.load_workbook(io.BytesIO(x.content))
         self.assertIn('جسر القيمة', wb.sheetnames)
         self.assertIn('البائعون', wb.sheetnames)
+
+
+class PortfolioAccessTests(TestCase):
+    """The claims report compares every branch's motalbas and gross profit — owner decision B-1:
+    cross-branch money boards are for all-branch roles only (canary sweep, 2026-11-02)."""
+
+    def setUp(self):
+        from apps.users.models import RoleModuleAccess
+        from core.middleware import module_access
+        from .factories import make_branch, make_user
+        module_access.clear_cache()
+        self.addCleanup(module_access.clear_cache)
+        for role in ('pharmacist', 'supervisor'):
+            RoleModuleAccess.objects.create(role=role, module='insurance', action='view', is_allowed=True)
+        _, _, self.branch_c = make_user('pf_pharm', role='pharmacist', branch=make_branch())
+        _, _, self.sup_c = make_user('pf_sup', role='supervisor', access_all=True)
+
+    def test_branch_user_refused(self):
+        r = self.branch_c.get('/api/insurance/portfolio/')
+        self.assertEqual(r.status_code, 403)
+
+    def test_all_branch_user_allowed(self):
+        self.assertEqual(self.sup_c.get('/api/insurance/portfolio/').status_code, 200)
