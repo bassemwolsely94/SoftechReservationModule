@@ -1245,6 +1245,8 @@ def sync_customers(conn, sync_run):
                 customer.softech_locked = bool(row[16])
                 customer.softech_deceased = bool(row[17])
                 customer.points_enrolled = bool(row[18])
+            if len(row) > 19:            # PIC analytics: SOFTECH creation date
+                customer.softech_created_at = _to_date(row[19])
 
             objs.append(customer)
             for p in (phone, phone2):
@@ -1277,6 +1279,7 @@ def sync_customers(conn, sync_run):
         'softech_global_code', 'order_branch_code',
         'is_guest',
         'softech_status', 'softech_locked', 'softech_deceased', 'points_enrolled',
+        'softech_created_at',
     ]
     if hasattr(Customer, 'is_chronic_softech'):
         update_fields.append('is_chronic_softech')

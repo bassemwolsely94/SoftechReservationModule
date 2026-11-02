@@ -220,6 +220,7 @@ QUERY_PERSONTYPESCLASSIF = """
 #  [16] lc.piclock                 (1 = entity / locked account)
 #  [17] lc.picdied                 (1 = deceased)
 #  [18] lc.picpoints               (points enrollment flag 1/0)
+#  [19] lc.custdate                (SOFTECH customer creation date -> Customer.softech_created_at)
 #
 # personsdata is LEFT JOINed on phcode = personcode, so rows without a PIC still
 # appear but pd.* columns will be NULL.
@@ -234,7 +235,8 @@ QUERY_CUSTOMERS = """
         pd.ptcode,
         pd.ptclassifcode,
         pd.personglobalcode,
-        lc.phcodestatus, lc.piclock, lc.picdied, lc.picpoints
+        lc.phcodestatus, lc.piclock, lc.picdied, lc.picpoints,
+        lc.custdate
     FROM SOFTECHDB9.dbo.localcustomers lc
     LEFT JOIN SOFTECHDB9.dbo.personsdata pd
         ON pd.personcode = lc.phcode

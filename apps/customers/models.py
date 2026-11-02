@@ -89,6 +89,9 @@ class Customer(models.Model):
     softech_deceased = models.BooleanField(default=False, help_text='picdied')
     points_enrolled = models.BooleanField(
         default=True, help_text='localcustomers.picpoints — registered in the points system')
+    softech_created_at = models.DateField(
+        null=True, blank=True, db_index=True,
+        help_text='localcustomers.custdate — when SOFTECH created this customer (PIC analytics: new PICs)')
     merged_into_pic = models.CharField(
         max_length=13, blank=True, default='', db_index=True,
         help_text='B7: this duplicate code was merged into that main code (apps/customers/merge_write.py)')
