@@ -155,6 +155,17 @@ check for the owner. Spec files:
   (finance/0019; inputs audited in ReconAuditEvent `cash_input_changed`, not AuditLog — same finance trail as P-41/42,
   no audit migration), Saturday 06:00 snapshot job, `/finance/cash` (`/finance/cashflow` redirects). Not built: the
   separate off-hours forward read of post-dated cheques (stop-and-ask: a new SOFTECH read job); card lag (open).
+- **Wave 2 specs written 2026-10-31** (build not authorised; each lists its owner questions):
+  - [P-27](06_SPEC_P-27_dead_stock_recovery.md) — read-only «مخزون راكد» tab on `/cash-optimization` (move / return /
+    stop lanes); a «يُباع بفرع آخر» lane inside «التوزيعة» later (doc 30 phase B; ISR push = stop-and-ask).
+  - [P-28](06_SPEC_P-28_near_expiry_worklist.md) — per-lot at-risk (same rule as P-26), one suggested action in the
+    order return → move → corner → loss, weekly outcome check from `StockLedgerLine`; extends «إنقاذ قبل الانتهاء».
+  - [P-30](06_SPEC_P-30_measured_availability.md) — step 0 `newqty` verification gate (20 samples, branch 160), then
+    measured stock-outs, the 08:30 «ناقص هنا — متوفر هناك» list, and hand-off to the P-33 transfer plan.
+  - [P-32](06_SPEC_P-32_consolidate_replenishment.md) — one authority per decision; TransferEngine (MODULE 12 of the
+    demand engine) feeds the توزيعة wave; no-double-post acceptance (overlap check at push, draft expiry, planner tags).
+  - [P-34](06_SPEC_P-34_tiered_cover_budget.md) — read-only tiered-cover report first (proposed fast / medium / slow
+    tiers for confirmation; chronic items never on-demand), `PurchaseBudget` feeding P-40's new-purchases line.
 - **Owner decisions 2026-10-31** (written into each spec):
   - P-26: store 110 is excluded from everything; the alert and the clean-up export are dropped.
   - P-29: returns are owned by the HQ purchasing and replenishment specialists (`purchasing` role).

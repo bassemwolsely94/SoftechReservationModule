@@ -161,6 +161,12 @@ class Item(models.Model):
     shortage_supply_suspended = models.BooleanField(
         default=False, verbose_name='أوقفنا التوريد (موقوف)',
     )
+    # SOFTECH's own values read just before this module first changed the item
+    # ({'itemmodified': '0'|'1', 'itemnomoreuse': '0'|'1'}): un-flag / retrieve put THESE
+    # back instead of a fixed '0', so a flag someone set by hand in SOFTECH survives.
+    shortage_softech_before = models.JSONField(
+        null=True, blank=True, verbose_name='قيم سوفتك قبل تعديلنا',
+    )
     shortage_confirmed_by = models.ForeignKey(
         'users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='confirmed_market_shortages', verbose_name='أكَّده',

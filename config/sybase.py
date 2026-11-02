@@ -134,69 +134,16 @@ def _apply_query_timeout(stmt, timeout=None):
         pass  # not all drivers honor it; LOGIN_TIMEOUT still bounds connect
 
 
-# jConnect resolves column TYPE NAMES lazily: for SOFTECH's user-defined datatypes
-# RowFormatToken.getColumnTypeName runs a hidden callable statement whose query timeout
-# is 0 (wait forever). If a branch drops the session at that moment the read blocks for
-# good — 2026-10-27 the 05:30 stock_expiry_sync stalled 13 min on a flapping branch 150
-# and another scheduler thread stayed blocked in this call for 5+ hours.
-# RawDbio re-arms SO_TIMEOUT from each statement's own timeout on every read, so a
-# socket timeout cannot be set from outside; a watchdog CLOSES the socket instead,
-# which unblocks the read with an exception the caller's per-node try/except handles.
-SYBASE_METADATA_TIMEOUT_SECONDS = int(getattr(settings, 'SYBASE_METADATA_TIMEOUT', 60))
+# The query timeout is ONE deadline over the whole read, rows included, so a big master
+# read (items: 52k rows ≈ 46 s through JPype) dies at 30 s. Once the first result is back
+# the statement is re-armed with this longer budget for streaming its rows; a branch that
+# drops mid-fetch still fails within it instead of hanging. Live-verified 2026-11-01.
+SYBASE_FETCH_TIMEOUT_SECONDS = int(getattr(settings, 'SYBASE_FETCH_TIMEOUT', 600))
 
 
-class SybaseDeadlineExceeded(Exception):
-    """A driver call outlived its watchdog deadline; the connection was aborted."""
-
-
-def _jfield(obj, name):
-    """Read a (private/protected) Java field, searching up the class hierarchy."""
-    cls = obj.getClass()
-    while cls is not None:
-        try:
-            f = cls.getDeclaredField(name)
-        except Exception:
-            cls = cls.getSuperclass()
-            continue
-        f.setAccessible(True)
-        return f.get(obj)
-    raise AttributeError(name)
-
-
-def abort_connection(java_conn):
-    """Close the jConnect connection's TCP socket from any thread — unblocks a hung
-    read. The connection is unusable afterwards. Returns True when the socket closed."""
-    try:
-        conn = getattr(java_conn, '_jc', java_conn)          # unwrap the read-only proxy
-        dbio = _jfield(_jfield(_jfield(conn, '_protocol'), '_inStreamMgr'), '_dbio')
-        _jfield(dbio, '_socket').close()
-        return True
-    except Exception as exc:
-        logger.warning('[sybase] could not abort connection: %s', str(exc)[:120])
-        return False
-
-
-def _with_deadline(java_conn, seconds, fn, what='driver call'):
-    """Run fn(); if it is still running after `seconds`, abort the connection so the
-    blocked read raises instead of hanging the thread (and its scheduler job)."""
-    fired = threading.Event()
-
-    def _kill():
-        fired.set()
-        logger.warning('[sybase] %s exceeded %ss — aborting connection', what, seconds)
-        abort_connection(java_conn)
-
-    timer = threading.Timer(seconds, _kill)
-    timer.daemon = True
-    timer.start()
-    try:
-        return fn()
-    except Exception as exc:
-        if fired.is_set():
-            raise SybaseDeadlineExceeded(f'{what} exceeded {seconds}s; connection aborted') from exc
-        raise
-    finally:
-        timer.cancel()
+def _apply_fetch_timeout(stmt, timeout=None):
+    secs = SYBASE_QUERY_TIMEOUT_SECONDS if timeout is None else int(timeout)
+    _apply_query_timeout(stmt, max(secs, SYBASE_FETCH_TIMEOUT_SECONDS))
 
 
 # Branch Sybase servers reach HQ over an intermittent VPN/link, so driver.connect()
@@ -606,6 +553,18 @@ def _convert_date(val):
         return None
 
 
+# java.sql.Types code → the type-family name _convert_row switches on. Verified against every
+# column type in SOFTECHDB9 (2026-11-01): varchar/char/text, datetime, decimal/numeric,
+# int/smallint/tinyint, float ("double precision"); image/binary stay unconverted.
+_JDBC_TYPE_CLASS = {
+    12: 'varchar', 1: 'char', -1: 'text', -9: 'nvarchar', -15: 'nchar', -16: 'text',
+    93: 'datetime', 91: 'date', 92: 'time',
+    2: 'numeric', 3: 'decimal',
+    4: 'int', 5: 'smallint', -6: 'tinyint', -5: 'bigint',
+    6: 'float', 7: 'real', 8: 'double',
+}
+
+
 class CursorWrapper:
     def __init__(self, java_conn, node=''):
         self._conn      = java_conn
@@ -668,6 +627,7 @@ class CursorWrapper:
 
         if has_rs:
             self._rs = self._stmt.getResultSet()
+            _apply_fetch_timeout(self._stmt, timeout)
 
     # ── Metadata helpers ──────────────────────────────────────────────────────
 
@@ -688,17 +648,17 @@ class CursorWrapper:
 
     @staticmethod
     def _build_type_sets(meta, col_count):
-        return [str(meta.getColumnTypeName(i)).lower() for i in range(1, col_count + 1)]
+        # getColumnType() comes from the row-format header — no round trip. Never use
+        # getColumnTypeName(): it runs a hidden statement, which first makes jConnect buffer
+        # every remaining row of the open result (47 s for the items table, 2026-11-01).
+        return [_JDBC_TYPE_CLASS.get(int(meta.getColumnType(i)), 'other')
+                for i in range(1, col_count + 1)]
 
     def _ensure_col_types(self):
         """Lazily build and cache column-type list from the current ResultSet."""
         if self._col_types is None:
             meta = self._rs.getMetaData()
-            # the type-name lookup is the one driver read with no query timeout
-            self._col_types = _with_deadline(
-                self._conn, SYBASE_METADATA_TIMEOUT_SECONDS,
-                lambda: self._build_type_sets(meta, meta.getColumnCount()),
-                what='column-type metadata')
+            self._col_types = self._build_type_sets(meta, meta.getColumnCount())
         return self._col_types
 
     # ── Row conversion ────────────────────────────────────────────────────────

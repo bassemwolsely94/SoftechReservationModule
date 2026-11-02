@@ -180,11 +180,13 @@ def _screen_payload(request, key, s, modules, screens, override):
     workflows = m.get('workflows') or []
     if s.get('workflows') is not None:      # a screen may show only some of its module's workflows
         workflows = [w for w in workflows if w.get('key') in s['workflows']]
+    shell_keys = set(registry.SHELL_HINT_SOURCES.values())
     all_ov = {o.screen_key: o for o in HelpOverride.objects.filter(
-        screen_key__in=[key, s.get('tour_continue') or ''])}
+        screen_key__in=[key, s.get('tour_continue') or '', *shell_keys])}
     payload = {
         **{k: v for k, v in eff.items() if k != 'workflows'},
         'tour_flow': registry.tour_flow(key, screens, all_ov) if eff.get('tour') else [],
+        'shell_hints': registry.shell_hints(screens, all_ov),
         'module': {'key': m.get('key'), 'title': m.get('title'), 'icon': m.get('icon', ''),
                    'summary': m.get('summary'), 'workflows': workflows,
                    'flows': _module_flows(m['key']) if m else [],

@@ -21,6 +21,7 @@ import { LearnedButton } from './Onboarding'
 import TourRunner, { startScreenTour } from './Tour'
 import { HintsLayer, TourOffer } from './Hints'
 import AskBox from './AskBox'
+import { useStartProductTour } from './Journeys'
 import { pick, label } from './text'
 
 /** Global keyboard / event wiring — mount once per shell. */
@@ -211,6 +212,7 @@ function PanelBody() {
               </button>
             )}
             {data && !term && <LearnedButton screenKey={data.key} lang={lang} />}
+            {!term && <ModulesTourButton lang={lang} onStart={close} />}
             <Link to="/help" onClick={close} className="text-brand-600 hover:underline">{label('openCenter', lang)}</Link>
             <Link to="/help?tab=path" onClick={close} className="text-brand-600 hover:underline">🎓 {lang === 'en' ? 'My path' : 'مساري'}</Link>
             {data?.can_edit && !term && (
@@ -247,5 +249,20 @@ export function FlowList({ flows, role, lang, onStart, mobile = null }) {
         </button>
       ))}
     </section>
+  )
+}
+
+/** «🗺️ جولة في موديولات دورك» from the panel — the one entry point on the phone layout too
+ *  (the start hook picks desktop / mobile from the route). Says so when the role has none there. */
+function ModulesTourButton({ lang, onStart }) {
+  const start = useStartProductTour()
+  const [none, setNone] = useState(false)
+  const en = lang === 'en'
+  return (
+    <button type="button" data-tour="general-help-center-panel-modules" disabled={none}
+            onClick={async () => { if (await start()) onStart(); else setNone(true) }}
+            className="text-xs rounded-lg px-3 py-1.5 border border-line text-content hover:bg-surface-2 disabled:opacity-50">
+      🗺️ {none ? (en ? 'No modules tour here' : 'مفيش جولة لدورك هنا') : (en ? 'Your modules tour' : 'جولة في موديولات دورك')}
+    </button>
   )
 }

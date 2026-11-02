@@ -46,7 +46,7 @@ function EditIcon({ onClick, active }) {
 const inp = 'w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500'
 const lbl = 'block text-xs font-medium text-gray-600 mb-1'
 
-const EMPTY_CLIENT   = { name: '', name_short: '', softech_personcode: '', address: '', notes: '' }
+const EMPTY_CLIENT   = { name: '', name_short: '', softech_personcode: '', address: '', notes: '', parent: '', new_parent: '' }
 const EMPTY_SUB      = { name: '', softech_personcode: '', additional_personcodes: '', notes: '' }
 const EMPTY_CONTRACT = {
   name: '', effective_from: '', effective_to: '',
@@ -62,8 +62,13 @@ function ClientPanel({ selected, onSelect }) {
   const [form, setForm]         = useState(EMPTY_CLIENT)
   const [saving, setSaving]     = useState(false)
 
-  const load = () => insuranceApi.clients({}).then(r => setClients(r.data.results || r.data))
+  const [parents, setParents]   = useState([])
+  const load = () => {
+    insuranceApi.clients({}).then(r => setClients(r.data.results || r.data))
+    insuranceApi.parentClients({}).then(r => setParents(r.data.results || r.data)).catch(() => {})
+  }
   useEffect(() => { load() }, [])
+  const parentName = (id) => parents.find(p => p.id === id)?.name
 
   const openAdd = () => { setEditId(null); setForm(EMPTY_CLIENT); setShowForm(true) }
   const openEdit = (c) => {
@@ -72,6 +77,7 @@ function ClientPanel({ selected, onSelect }) {
       name: c.name || '', name_short: c.name_short || '',
       softech_personcode: c.softech_personcode || '',
       address: c.address || '', notes: c.notes || '',
+      parent: c.parent || '', new_parent: '',
     })
     setShowForm(true)
   }
@@ -80,11 +86,19 @@ function ClientPanel({ selected, onSelect }) {
   const save = async () => {
     setSaving(true)
     try {
+      // «الشركة الأم» groups records of one company (e.g. العاملين + المعاشات) for the
+      // patient-roster check: a name billed on a sister record is «نفس الشركة», not «جهة خاطئة».
+      let parent = form.parent || null
+      if (form.new_parent.trim()) {
+        parent = (await insuranceApi.createParentClient({ name: form.new_parent.trim() })).data.id
+      }
+      const { new_parent, ...rest } = form
+      const payload = { ...rest, parent }
       if (editId) {
-        const { data } = await insuranceApi.updateClient(editId, form)
+        const { data } = await insuranceApi.updateClient(editId, payload)
         if (selected?.id === editId) onSelect(data)   // refresh the selected object
       } else {
-        await insuranceApi.createClient(form)
+        await insuranceApi.createClient(payload)
       }
       close(); load()
     } finally { setSaving(false) }
@@ -113,6 +127,15 @@ function ClientPanel({ selected, onSelect }) {
           <div>
             <label className={lbl}>كود العميل في سوفتك</label>
             <input className={inp} data-tour="insurance-clients-payer-code" value={form.softech_personcode} onChange={e => setForm(p => ({...p, softech_personcode: e.target.value}))} placeholder="personcode..." />
+          </div>
+          <div data-tour="insurance-clients-parent">
+            <label className={lbl}>الشركة الأم (تجمع سجلات نفس الشركة مثل العاملين والمعاشات)</label>
+            <select className={inp} value={form.parent || ''} onChange={e => setForm(p => ({...p, parent: e.target.value ? Number(e.target.value) : '', new_parent: ''}))}>
+              <option value="">— بدون —</option>
+              {parents.map(pc => <option key={pc.id} value={pc.id}>{pc.name} ({pc.clients_count})</option>)}
+            </select>
+            <input className={`${inp} mt-1`} value={form.new_parent} placeholder="أو اكتب اسم شركة أم جديدة…"
+              onChange={e => setForm(p => ({...p, new_parent: e.target.value, parent: e.target.value ? '' : p.parent}))} />
           </div>
           <div>
             <label className={lbl}>العنوان</label>
@@ -144,6 +167,11 @@ function ClientPanel({ selected, onSelect }) {
                 {c.softech_personcode && (
                   <div className={`text-xs mt-0.5 ${active ? 'text-blue-200' : 'text-gray-400'}`}>
                     كود: {c.softech_personcode}
+                  </div>
+                )}
+                {c.parent && parentName(c.parent) && (
+                  <div className={`text-[11px] mt-0.5 ${active ? 'text-blue-100' : 'text-indigo-600'}`}>
+                    ⌂ {parentName(c.parent)}
                   </div>
                 )}
               </div>

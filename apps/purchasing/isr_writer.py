@@ -317,7 +317,8 @@ def push_isr(branchcode, *, run=None, dry_run=True, positive_only=True,
 
 
 # ── push an APPROVED IsrPush record's snapshot to SOFTECH (israpp=1) ────────────
-def push_isr_record(isr_push, *, executed_by=None, force_reason=''):
+def push_isr_record(isr_push, *, executed_by=None, force_reason='', confirm_count=None,
+                    push_reason='', unattended=False):
     """Write an APPROVED IsrPush's stored line snapshot to SOFTECH (stockisrm header
     israpp=1 + stockisr lines), record the allocated isrdocnumber, update the record.
     Gate + status checked before any SOFTECH connection. One push of a draft at a time:
@@ -330,10 +331,12 @@ def push_isr_record(isr_push, *, executed_by=None, force_reason=''):
         if not got:
             raise ValueError('هذا الطلب قيد الترحيل من عملية أخرى — لم يُرحَّل مرة ثانية.')
         isr_push.refresh_from_db()
-        return _push_isr_record(isr_push, executed_by=executed_by, force_reason=force_reason)
+        return _push_isr_record(isr_push, executed_by=executed_by, force_reason=force_reason,
+                                confirm_count=confirm_count, push_reason=push_reason, unattended=unattended)
 
 
-def _push_isr_record(isr_push, *, executed_by=None, force_reason=''):
+def _push_isr_record(isr_push, *, executed_by=None, force_reason='', confirm_count=None,
+                     push_reason='', unattended=False):
     from apps.purchasing.models import IsrPush
     from apps.branches.models import Branch
     from config.sybase import get_branch_connection
@@ -355,6 +358,17 @@ def _push_isr_record(isr_push, *, executed_by=None, force_reason=''):
     try:
         conn = get_branch_connection(branch.effective_db_host, branch.effective_db_port,
                                      branch.db_name or 'SOFTECHDB9')
+        # W3: re-check what is about to be written against SOFTECH now, on this connection
+        review = isr_guards.review_push(isr_push, conn)
+        isr_guards.enforce_review(review, confirm_count=confirm_count, push_reason=push_reason,
+                                  unattended=unattended)
+        if review['needs_reason']:
+            params = dict(isr_push.params or {})
+            params['push_review'] = {'reason': (push_reason or '').strip(),
+                                     'warnings': [i['message'] for i in review['issues'] if i['level'] == 'warn'][:50],
+                                     'by': getattr(executed_by, 'username', None), 'at': timezone.now().isoformat()}
+            isr_push.params = params
+            isr_push.save(update_fields=['params'])
         w = _write_isr(conn, isr_push.branchcode, (isr_push.dest_branchcode or isr_push.branchcode), lines, usercode, do_commit=True, approved=True)
     finally:
         if conn is not None:
@@ -377,7 +391,9 @@ def _push_isr_record(isr_push, *, executed_by=None, force_reason=''):
     if isr_push.status == IsrPush.STATUS_PUSHED:                # who pushed it (Batch 2, P-16)
         from core.softech_audit import audit_softech_write
         audit_softech_write('softech_isr_pushed', actor=executed_by, obj=isr_push,
-                            after={'isrdocnumber': w.get('isrdocnumber'), 'lines': len(lines)},
+                            after={'isrdocnumber': w.get('isrdocnumber'), 'lines': len(lines),
+                                   'push_reason': (push_reason or '').strip(),
+                                   'unattended': bool(unattended)},
                             route=f'{isr_push.branchcode}→{isr_push.dest_branchcode or isr_push.branchcode}')
     logger.info('[isr_writer] push_isr_record %s → isr=%s status=%s',
                 isr_push.pk, w.get('isrdocnumber'), isr_push.status)
@@ -438,7 +454,7 @@ def build_items_plan(node_branch, items):
 # ── create a proposal (PG only) + optional auto-approve+push ────────────────────
 def _persist_proposal(*, source, dest, kind, lines, run_id=None, created_by=None, linked=None,
                       coverage_months=None, params=None, origin_isr=None, origin_request=None,
-                      origin_shortage_list=None, origin_donor='', notes=''):
+                      origin_shortage_list=None, origin_donor='', notes='', planner=None):
     """Save one PROPOSED draft. Guards (isr_guards, doc 30 phase A): the route must be valid
     (never HQ → HQ); a GENERAL draft (no origin request) supersedes an older proposed draft
     on the same route and is refused while an approved one waits there. Drafts tied to a
@@ -454,7 +470,9 @@ def _persist_proposal(*, source, dest, kind, lines, run_id=None, created_by=None
     branch = Branch.objects.filter(softech_branch_id=str(source)).first()
     general = origin_isr is None and origin_request is None and origin_shortage_list is None
     with transaction.atomic():
-        older = isr_guards.check_route_free(kind, source, dest) if general else []
+        if general and planner:
+            params = {**(params or {}), 'planner': planner}       # P-32 §2.3: who made this draft
+        older = isr_guards.check_route_free(kind, source, dest, planner=planner) if general else []
         isr_guards.retire(older, user=created_by)        # one live draft per route, always
         p = IsrPush.objects.create(
             branch=branch, branchcode=str(source), dest_branchcode=str(dest), kind=kind,
@@ -492,7 +510,7 @@ def create_proposal(branchcode, *, created_by=None, max_lines=None, run=None, fr
     kind = IsrPush.KIND_HQ_TO_BRANCH if from_hq else IsrPush.KIND_SELF
     p = _persist_proposal(source=source, dest=str(branchcode), kind=kind,
                           lines=plan['lines'], run_id=plan.get('run_id'), created_by=created_by,
-                          coverage_months=plan.get('coverage_months'), params=params)
+                          coverage_months=plan.get('coverage_months'), params=params, planner='replenishment')
     return (p, plan) if return_plan else p
 
 
@@ -531,7 +549,7 @@ def generate_transfers_from_run(*, run=None, from_branch=None, to_branch=None,
         if max_pairs and len(out) >= max_pairs:
             break
         try:
-            leg1, leg2 = create_transfer_proposals(a, b, items, created_by=created_by)
+            leg1, leg2 = create_transfer_proposals(a, b, items, created_by=created_by, planner='transfer')
         except ValueError as exc:                # a guard refused this route (isr_guards)
             if skipped is not None:
                 skipped.append({'route': f'{a} ← {b}', 'path': [a, b], 'reason': str(exc)})
@@ -543,7 +561,7 @@ def generate_transfers_from_run(*, run=None, from_branch=None, to_branch=None,
     return out
 
 
-def create_transfer_proposals(from_branch, to_branch, items, *, created_by=None):
+def create_transfer_proposals(from_branch, to_branch, items, *, created_by=None, planner=None):
     """L2: two linked ISR proposals for a surplus→HQ→deficit allocation.
       Leg 1: source=from_branch (surplus, prepares), dest=100 (HQ receives)  [branch_to_hq]
       Leg 2: source=100 (HQ prepares),      dest=to_branch (deficit receives) [hq_to_branch]
@@ -557,19 +575,20 @@ def create_transfer_proposals(from_branch, to_branch, items, *, created_by=None)
         return None, None
     if dst == HQ_CODE:                                       # surplus branch → HQ only
         return _persist_proposal(source=src, dest=HQ_CODE, kind=IsrPush.KIND_BRANCH_TO_HQ,
-                                 lines=build_items_plan(src, items), created_by=created_by), None
+                                 lines=build_items_plan(src, items), created_by=created_by, planner=planner), None
     if src == HQ_CODE:                                       # HQ → deficit branch only
         return None, _persist_proposal(source=HQ_CODE, dest=dst, kind=IsrPush.KIND_HQ_TO_BRANCH,
-                                       lines=build_items_plan(HQ_CODE, items), created_by=created_by)
+                                       lines=build_items_plan(HQ_CODE, items), created_by=created_by, planner=planner)
     leg1_lines = build_items_plan(src, items)                # nowqty from surplus branch
     leg2_lines = build_items_plan(HQ_CODE, items)            # nowqty from HQ
     if not leg1_lines and not leg2_lines:
         return None, None
     with transaction.atomic():                               # both legs or neither
         leg1 = _persist_proposal(source=src, dest=HQ_CODE, kind=IsrPush.KIND_BRANCH_TO_HQ,
-                                 lines=leg1_lines, created_by=created_by)
+                                 lines=leg1_lines, created_by=created_by, planner=planner)
         leg2 = _persist_proposal(source=HQ_CODE, dest=dst, kind=IsrPush.KIND_HQ_TO_BRANCH,
-                                 lines=leg2_lines, created_by=created_by, linked=leg1)
+                                 lines=leg2_lines, created_by=created_by, linked=leg1,
+                                 planner=planner)
         if leg1 and leg2:
             leg1.linked_push = leg2
             leg1.save(update_fields=['linked_push'])
@@ -600,12 +619,12 @@ def create_distribution_proposals(*, categories=None, limit=None, created_by=Non
             if src == HQ_CODE:
                 lines = build_items_plan(HQ_CODE, items)
                 p = _persist_proposal(source=HQ_CODE, dest=dest, kind=IsrPush.KIND_HQ_TO_BRANCH,
-                                      lines=lines, created_by=created_by)
+                                      lines=lines, created_by=created_by, planner='distribution')
                 if p:
                     created.append({'route': f'{HQ_CODE} ← {dest}', 'path': [HQ_CODE, dest], 'kind': 'hq_to_branch',
                                     'ids': [p.id], 'items': len(items)})
                 continue
-            leg1, leg2 = create_transfer_proposals(src, dest, items, created_by=created_by)
+            leg1, leg2 = create_transfer_proposals(src, dest, items, created_by=created_by, planner='distribution')
         except ValueError as exc:                # a guard refused this route (isr_guards)
             if skipped is not None:
                 skipped.append({'route': f'{src} ← {dest}', 'path': [src, dest], 'reason': str(exc)})
@@ -631,7 +650,9 @@ def auto_generate(branchcode, *, created_by=None, max_lines=None, auto_approve=F
         p.approved_by = created_by
         p.approved_at = timezone.now()
         p.save(update_fields=['status', 'approved_by', 'approved_at'])
-        push_isr_record(p, executed_by=created_by)   # gated ISR_WRITER_ENABLED → israpp=1
+        # gated ISR_WRITER_ENABLED → israpp=1; with nobody to give a reason, any review
+        # warning leaves it approved for a human push in /supply
+        push_isr_record(p, executed_by=created_by, unattended=True)
     return p
 
 

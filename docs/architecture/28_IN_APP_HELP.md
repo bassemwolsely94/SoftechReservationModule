@@ -226,8 +226,10 @@ notifications) — both exist; this one visits the modules of the person's work.
   «مساري التدريبي» (follows the role a trainer previews), and a card in «👋 ابدأ من هنا» on the home page
   (`module_tour` in `GET /api/help/first-day/`, ticked ✓ once finished). Started with the same runner as
   journeys (`useStartProductTour` in `Journeys.jsx`).
-- **Not wired yet:** a mobile entry point (the API supports `shell=mobile`); the tours for roles whose
-  path is mostly mobile are thin on desktop.
+- **Mobile entry point (built 2026-11-01):** «🗺️ جولة في موديولات دورك» in the «؟ مساعدة» panel footer
+  (`ModulesTourButton` in `HelpPanel.jsx`) — on every screen of both shells; the start hook sends
+  `shell=mobile` on `/m/` routes, and the button says «مفيش جولة لدورك هنا» when the role's path has no
+  screen on that shell. Roles whose path is mostly mobile still get a thin desktop tour.
 
 ## «اسأل النظام» (built 2026-10-10)
 
@@ -427,5 +429,9 @@ The two help lines were merged (branch `claude/help-reconcile`). Nothing was dro
   so a shared component's own anchor never hides the screen's wrapper hint.
 - `test_hints_valid`: rich-step limits, «label», ⚠ for push / send / cancel … anchors, a real anchor,
   no anchor twice in tour + hints. Adding a button: anchor it and add a hint to its screen.
-- Not covered: the desktop shell's logout / notification-panel anchors are explained on the dashboard
-  only (they sit in the layout on every screen).
+- Shell buttons (side menu, search, help, 🔔 bell + its panel and reminders, notification settings,
+  logout, the help panel's own buttons) are explained on every screen: `registry.SHELL_HINT_SOURCES`
+  maps each anchor to the screen holding its text (mostly `general.dashboard`), and every screen
+  payload carries `shell_hints`, the lowest layer in `hintSteps` (tour > hints > journey > shell).
+  Hints now also work on a screen with no tour. `test_shell_hints_resolve` checks each source step
+  exists and its anchor sits in a shell file.

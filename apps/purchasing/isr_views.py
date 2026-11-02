@@ -308,7 +308,9 @@ def isr_push(request, pk):
     p = get_object_or_404(IsrPush, pk=pk)
     try:
         isr_writer.push_isr_record(p, executed_by=request.user,
-                                   force_reason=str(request.data.get('force_reason') or ''))
+                                   force_reason=str(request.data.get('force_reason') or ''),
+                                   confirm_count=request.data.get('confirm_count'),
+                                   push_reason=str(request.data.get('push_reason') or ''))
     except isr_writer.WriterDisabled as exc:
         return Response({'detail': str(exc), 'gated': True}, status=http.HTTP_409_CONFLICT)
     except GuardError as exc:                 # duplicate / feeder-first — nothing was written
@@ -317,6 +319,34 @@ def isr_push(request, pk):
     except ValueError as exc:
         return Response({'detail': str(exc)}, status=http.HTTP_400_BAD_REQUEST)
     return Response(_detail(p))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, PURCHASING])
+def isr_push_review(request, pk):
+    """READ-ONLY: what «ترحيل إلى SOFTECH» would write and its checks against SOFTECH now."""
+    from apps.branches.models import Branch
+    from apps.purchasing import isr_guards
+    from config.sybase import get_branch_connection
+    p = get_object_or_404(IsrPush, pk=pk)
+    branch = Branch.objects.filter(softech_branch_id=p.branchcode).first()
+    if branch is None:
+        return Response({'detail': f'الفرع {p.branchcode} غير معرّف'}, status=http.HTTP_400_BAD_REQUEST)
+    conn = None
+    try:
+        conn = get_branch_connection(branch.effective_db_host, branch.effective_db_port,
+                                     branch.db_name or 'SOFTECHDB9')
+        return Response(isr_guards.review_push(p, conn))
+    except Exception as exc:
+        from core.errors import public_error
+        return Response({'detail': f'تعذّر الاتصال بسوفتك: {public_error(request, exc)}'},
+                        status=http.HTTP_502_BAD_GATEWAY)
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @api_view(['POST'])

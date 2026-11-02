@@ -57,6 +57,8 @@ import InsurancePrintPage from './pages/InsurancePrintPage'
 import InsuranceClientsPage from './pages/InsuranceClientsPage'
 import InsuranceItemOverridesPage from './pages/InsuranceItemOverridesPage'
 import InsuranceSeparationListsPage from './pages/InsuranceSeparationListsPage'
+import InsuranceRostersPage from './pages/InsuranceRostersPage'
+import InsuranceReportsPage from './pages/InsuranceReportsPage'
 import MyIncentivesPage from './pages/MyIncentivesPage'
 import GamificationPage from './pages/GamificationPage'
 import StockAuditPage from './pages/StockAuditPage'
@@ -477,6 +479,8 @@ export default function App() {
             <Route path="insurance/clients"                   element={<InsuranceClientsPage />} />
             <Route path="insurance/item-overrides"            element={<InsuranceItemOverridesPage />} />
             <Route path="insurance/separation-lists"          element={<InsuranceSeparationListsPage />} />
+            <Route path="insurance/rosters"                   element={<InsuranceRostersPage />} />
+            <Route path="insurance/reports"                   element={<InsuranceReportsPage />} />
             <Route path="insurance/print-profiles"            element={<InsurancePrintProfilesPage />} />
             <Route path="insurance/claims/:id"                element={<InsuranceClaimDetailPage />} />
             <Route path="insurance/claims/:id/print"          element={<InsurancePrintPage />} />
