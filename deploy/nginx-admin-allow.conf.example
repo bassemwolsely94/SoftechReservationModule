@@ -1,0 +1,7 @@
+# Django admin allow-list (N0/H9). Copy to /etc/nginx/elrezeiky-admin-allow.conf on the VPS.
+# Only the addresses listed here can reach /admin/ — NOT the whole 10.0.0.0/8 ZeroTier range.
+# Add one line per owner device (use its fixed ZeroTier IP), then `sudo nginx -t && sudo systemctl reload nginx`.
+allow 127.0.0.1;
+# allow <owner ZeroTier IP>;
+# allow <second owner ZeroTier IP>;
+deny all;

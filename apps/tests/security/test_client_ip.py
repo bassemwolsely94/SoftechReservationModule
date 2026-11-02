@@ -31,8 +31,8 @@ class LoginThrottleTests(TestCase):
         cache.clear()
         make_user('a6_user', role='pharmacist', password='A6-Strong-pw-26')
 
-    def _try(self, forwarded, remote=NGINX):
-        return APIClient().post(LOGIN, {'username': 'a6_user', 'password': 'wrong-password'},
+    def _try(self, forwarded, remote=NGINX, username='a6_user'):
+        return APIClient().post(LOGIN, {'username': username, 'password': 'wrong-password'},
                                 format='json', REMOTE_ADDR=remote, HTTP_X_FORWARDED_FOR=forwarded)
 
     def test_made_up_forwarded_for_does_not_dodge_the_limit(self):
@@ -51,7 +51,8 @@ class LoginThrottleTests(TestCase):
         with _behind_proxy():
             for i in range(10):
                 self._try(f'10.66.{i}.1, {REAL}')
-            self.assertNotEqual(self._try('198.51.100.20').status_code, 429)
+            # another account: ten misses on a6_user now lock THAT account too (N0/H8)
+            self.assertNotEqual(self._try('198.51.100.20', username='a6_other').status_code, 429)
 
 
 class AuditAddressTests(TestCase):
@@ -78,3 +79,60 @@ class AuditAddressTests(TestCase):
         request = RequestFactory().get('/', REMOTE_ADDR=NGINX, HTTP_X_FORWARDED_FOR=f'6.6.6.6, {REAL}')
         with override_settings(NUM_PROXIES=1):
             self.assertEqual(_get_ip(request), REAL)
+
+
+# --- N0 / H6: one trusted client IP, from the code through to nginx ---------------------------------
+
+import re
+from pathlib import Path
+
+_ROOT = Path(settings.BASE_DIR)
+_PROXY_INCLUDE = 'include /etc/nginx/elrezeiky-proxy-headers.conf;'
+
+
+def _location_blocks(text):
+    """(header, body) for every `location ... {` block, tracked by brace depth."""
+    blocks = []
+    for m in re.finditer(r'^\s*location\s[^{]*\{', text, re.M):
+        depth, i = 1, m.end()
+        while depth and i < len(text):
+            depth += {'{': 1, '}': -1}.get(text[i], 0)
+            i += 1
+        blocks.append((m.group(0).strip(), text[m.end():i - 1]))
+    return blocks
+
+
+class TrustedClientIpTests(TestCase):
+
+    def test_no_remote_addr_reads_outside_helper(self):
+        offenders = []
+        for top in ('apps', 'core', 'config'):
+            for path in (_ROOT / top).rglob('*.py'):
+                parts = path.relative_to(_ROOT).parts
+                if 'tests' in parts or 'migrations' in parts or parts[-2:] == ('core', 'client_ip.py'):
+                    continue
+                if 'REMOTE_ADDR' in path.read_text(encoding='utf-8', errors='ignore'):
+                    offenders.append('/'.join(parts))
+        self.assertEqual(offenders, [])
+
+    def test_nginx_overwrites_forwarded_for(self):
+        text = (_ROOT / 'deploy' / 'nginx-proxy-headers.conf').read_text(encoding='utf-8')
+        self.assertIn('proxy_set_header X-Forwarded-For $remote_addr;', text)
+        self.assertNotIn('$proxy_add_x_forwarded_for', text)
+
+    def test_every_proxy_location_uses_trusted_headers(self):
+        text = (_ROOT / 'deploy' / 'nginx.conf').read_text(encoding='utf-8')
+        self.assertNotIn('proxy_params', text)
+        proxied = [(h, b) for h, b in _location_blocks(text) if 'proxy_pass' in b]
+        self.assertTrue(any('/ws/' in h for h, _ in proxied))
+        for header, body in proxied:
+            self.assertIn(_PROXY_INCLUDE, body, header)
+
+    def test_login_failure_logs_proxy_ip_not_forged(self):
+        cache.clear()
+        make_user('n0_user', role='pharmacist', password='A6-Strong-pw-26')
+        with _behind_proxy():
+            APIClient().post(LOGIN, {'username': 'n0_user', 'password': 'wrong-password'}, format='json',
+                             REMOTE_ADDR='6.6.6.6', HTTP_X_FORWARDED_FOR='6.6.6.6, 41.32.31.187')
+        row = UserActivityLog.objects.filter(action='login_failed').latest('id')
+        self.assertEqual(row.ip_address, '41.32.31.187')

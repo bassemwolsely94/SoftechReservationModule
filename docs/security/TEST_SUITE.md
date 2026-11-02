@@ -259,6 +259,14 @@ Branch `claude/security-batch5-branch-scoping`. Tests: `test_branch_scope.py`, `
 
 Still open: owner decisions on the insurance / incentives all-branch gate and a tasks module permission.
 
+## Batch N0 — network/device holes H1-H3, H5-H9 (done 2026-10-31)
+
+[Design §5](2026-10-31-network-device-access-design.md). One trusted client IP (nginx overwrites
+X-Forwarded-For; no `REMOTE_ADDR` reads), per-account login lockout + admin unlock, revocable
+remembered devices, audited and throttled person search, rider GPS no longer moves the drop-off
+target and riders cannot cancel/close, admin-only SOFTECH probe with cooldown, Django admin off
+in production with a per-IP nginx allow-list. H4 moves to N3; H10 is an owner decision.
+
 ## Pending owner decisions
 
 A test exposing a hole whose fix needs the owner's OK (SOFTECH writes, auth, pricing, checkout)

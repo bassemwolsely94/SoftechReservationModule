@@ -468,6 +468,7 @@ const ACTION_LABELS = {
   deactivated:         'تعطيل الحساب',
   permissions_changed: 'تغيير الصلاحيات',
   created:             'إنشاء المستخدم',
+  mfa_devices_forgotten: 'إلغاء الأجهزة المحفوظة',
 }
 
 const ACTION_ICON = {
@@ -481,6 +482,7 @@ const ACTION_ICON = {
   deactivated:      '🚫',
   permissions_changed: '🔒',
   created:          '👤',
+  mfa_devices_forgotten: '📵',
 }
 
 function ActivityLogModal({ user, onClose }) {
@@ -508,7 +510,7 @@ function ActivityLogModal({ user, onClose }) {
                   <span className="text-xl w-7 text-center mt-0.5">{ACTION_ICON[log.action] || '•'}</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-gray-800">{ACTION_LABELS[log.action] || log.action}</span>
+                      <span className="font-medium text-gray-800">{ACTION_LABELS[log.action] || log.action_label || log.action}</span>
                       {log.changed_by_name && (
                         <span className="text-gray-400 text-xs">بواسطة {log.changed_by_name}</span>
                       )}
@@ -571,6 +573,16 @@ export default function UserManagementPage() {
 
   const toggleActiveMutation = useMutation({
     mutationFn: (id) => usersApi.toggleActive(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  })
+
+  const unlockLoginMutation = useMutation({
+    mutationFn: (id) => usersApi.unlockLogin(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  })
+
+  const forgetDevicesMutation = useMutation({
+    mutationFn: (id) => usersApi.forgetDevices(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
   })
 
@@ -688,7 +700,25 @@ export default function UserManagementPage() {
                 <td className="px-4 py-3 text-gray-500 font-mono text-xs">{u.softech_username || '—'}</td>
 
                 {/* Status */}
-                <td className="px-4 py-3"><StatusBadge isActive={u.is_active} /></td>
+                <td className="px-4 py-3">
+                  <StatusBadge isActive={u.is_active} />
+                  {u.login_locked_until && (
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800"
+                        title={`حتى ${new Date(u.login_locked_until).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}`}>
+                        🔒 دخول موقوف مؤقتاً
+                      </span>
+                      {isAdmin && (
+                        <button data-tour="admin-users-unlock-login"
+                          onClick={() => unlockLoginMutation.mutate(u.id)}
+                          disabled={unlockLoginMutation.isPending}
+                          className="text-xs font-medium text-brand-600 hover:underline disabled:opacity-50">
+                          رفع الإيقاف
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </td>
 
                 {/* Actions */}
                 {isAdmin && (
@@ -735,6 +765,16 @@ export default function UserManagementPage() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                         }
+                      </button>
+
+                      {/* Forget saved devices (2FA "remember this device") */}
+                      <button data-tour="admin-users-forget-devices"
+                        onClick={() => forgetDevicesMutation.mutate(u.id)}
+                        disabled={forgetDevicesMutation.isPending}
+                        title="إلغاء الأجهزة المحفوظة (يطلب رمز التحقق عند الدخول التالي)"
+                        className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {forgetDevicesMutation.isSuccess && forgetDevicesMutation.variables === u.id ? '✓' : '📵'}
                       </button>
 
                       {/* Activity log */}

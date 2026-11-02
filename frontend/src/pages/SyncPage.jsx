@@ -71,6 +71,12 @@ function BranchHealthPanel({ data, onProbe, probing }) {
           <span className="text-xs font-bold text-gray-500 mr-auto">
             {summary.ok}/{summary.total} نقطة متصلة
           </span>
+          {data.probe === 'refused' && (
+            <span className="text-xs text-amber-700">الفحص المباشر للمدير فقط</span>
+          )}
+          {data.probe === 'cooldown' && (
+            <span className="text-xs text-amber-700">انتظر دقيقة</span>
+          )}
           {onProbe && (
             <button data-tour="admin-sync-probe"
               onClick={onProbe}

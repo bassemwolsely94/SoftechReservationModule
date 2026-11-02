@@ -235,6 +235,10 @@ def required(path, method):
             return 'approvals', ('approve',)
         if tail == 'purchase-expiry/request-markdown':
             return 'approvals', ('create', 'approve')
+        # disposal status: the screen (catalog view); the view decides who (managers approve,
+        # finish and reopen; the drafter cancels their own draft — owner 2026-11-01)
+        if parts[3:5] == ['stock-expiry', 'disposal'] and parts[6:7] == ['status']:
+            return 'catalog', ('view',)
     # Sales targets sit beside the KPI board (analytics; edits keep their role check), and HR
     # self-service is every employee's own filing: any hr grant (Z-9a, map by screen)
     if prefix == 'incentives' and parts[3:4] == ['targets']:
