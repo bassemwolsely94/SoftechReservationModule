@@ -1113,7 +1113,8 @@ SCREENS = [
         'title': T('تقارير المطالبات', 'Claims reports'),
         'summary': T('لوحة وتقارير لكل المطالبات التى تتقاطع فترتها مع التواريخ المختارة: عدد الروشتات، محلى/مستورد/ترسية، الخصم والصافى، نصيب المريض، التكلفة ومجمل الربح لكل مطالبة ولكل فئة مالية، الفروع، البائعين، جسر القيمة (من الاستيراد إلى النهائى) والتحويلات بين المطالبات، مع تصدير Excel شامل. للعرض فقط.',
                      'A dashboard and reports for every claim whose period overlaps the chosen dates: receipts, local/imported/tender, discount and net, patient share, cost and gross profit per claim and per financial category, branches, salespeople, the value bridge (import to final) and receipts moved between claims, with a full Excel export. Read only.'),
-        'audience': T('الإدارة وفريق التأمين والمالية.', 'Management, the insurance team and finance.'),
+        'audience': T('الإدارة وفريق التأمين والمالية — مستخدمو كل الفروع فقط، لأن التقرير يجمع مطالبات كل الفروع. مستخدم الفرع الواحد لا يفتحه حتى مع صلاحية التأمين.',
+                      'Management, the insurance team and finance — all-branch users only, because the report covers every branch\'s claims. A single-branch user cannot open it, even with the insurance permission.'),
         'tips': [T('التكلفة = سعر التكلفة وقت البيع فى سوفتك × الكمية؛ الإيراد = صافى المطالبة + نصيب المريض (إجمالى الإيصال فى سوفتك ناقص نصيب الجهة).',
                    'Cost = SOFTECH cost at the time of sale × quantity; revenue = claim net + patient share (receipt total in SOFTECH minus the payer part).')],
         'related': ['insurance.claims', 'insurance.claim'],
@@ -1136,7 +1137,7 @@ SCREENS = [
              'text': T('ملف واحد بورقة لكل تقرير مع الإجماليات الفرعية والعامة.', 'One workbook with a sheet per report, with subtotals and grand totals.')},
         ],
         'updated': '2026-11-02',
-        'change_note': T('شاشة جديدة: تقارير المطالبات ولوحة المؤشرات', 'New screen: claims reports and dashboard'),
+        'change_note': T('شاشة جديدة: تقارير المطالبات ولوحة المؤشرات — لمستخدمي كل الفروع فقط', 'New screen: claims reports and dashboard — all-branch users only'),
     },
     {
         'key': 'insurance.rosters',

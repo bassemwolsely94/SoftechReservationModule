@@ -50,5 +50,15 @@ class InsuranceModuleAccess(_ModuleAccess):
     module = 'insurance'
 
 
+class InsuranceCompanyAccess(InsuranceModuleAccess):
+    """Chain-wide insurance reports: on top of the insurance grant, only an all-branch user
+    (owner decision 2026-11-02, the finance B-1 rule — core.branch_scope)."""
+    message = 'تقارير المطالبات متاحة للإدارة فقط.'
+
+    def has_permission(self, request, view):
+        from core.branch_scope import sees_everything
+        return sees_everything(request.user) and super().has_permission(request, view)
+
+
 class CommerceModuleAccess(_ModuleAccess):
     module = 'commerce'

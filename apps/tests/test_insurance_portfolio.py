@@ -104,3 +104,25 @@ class PortfolioTests(TestCase):
         wb = openpyxl.load_workbook(io.BytesIO(x.content))
         self.assertIn('جسر القيمة', wb.sheetnames)
         self.assertIn('البائعون', wb.sheetnames)
+
+
+class PortfolioAllBranchOnlyTests(TestCase):
+    """The portfolio reports every branch's claims, so only an all-branch user may open it — on
+    top of the insurance grant (owner decision 2026-11-02, same rule as finance B-1)."""
+
+    def setUp(self):
+        from apps.tests.factories import make_user
+        from apps.users.models import RoleModuleAccess
+        RoleModuleAccess.objects.get_or_create(role='pharmacist', module='insurance', action='view')
+        self.branch_user = make_user('ins_branch', role='pharmacist')[0]
+        self.all_user = make_user('ins_all', role='pharmacist', access_all=True)[0]
+
+    def _get(self, user):
+        api = APIClient(); api.force_authenticate(user)
+        return api.get('/api/insurance/portfolio/', {'from': '2026-10-01', 'to': '2026-10-31'})
+
+    def test_branch_scoped_user_is_refused(self):
+        self.assertEqual(self._get(self.branch_user).status_code, 403)
+
+    def test_all_branch_user_with_the_grant_sees_it(self):
+        self.assertEqual(self._get(self.all_user).status_code, 200)

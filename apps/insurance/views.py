@@ -8,7 +8,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import MethodNotAllowed
 from rest_framework.permissions import IsAuthenticated
-from .permissions import InsuranceModuleAccess
+from .permissions import InsuranceModuleAccess, InsuranceCompanyAccess
 from rest_framework.response import Response
 
 from .models import (
@@ -2937,8 +2937,9 @@ class InsuranceSeparationListViewSet(viewsets.ModelViewSet):
 class InsurancePortfolioView(APIView):
     """READ-ONLY «تقارير المطالبات»: motalbas whose period overlaps [from, to].
     GET /api/insurance/portfolio/?from=&to=&client_id=&subclient_id=&status=a,b
-        &sort=<key>&dir=asc|desc&order=<claim ids, custom order>&group_by_client=1&format=xlsx"""
-    permission_classes = [InsuranceModuleAccess]
+        &sort=<key>&dir=asc|desc&order=<claim ids, custom order>&group_by_client=1&format=xlsx
+    All branches' claims → all-branch users only."""
+    permission_classes = [InsuranceCompanyAccess]
 
     def get(self, request):
         from datetime import date as _date
