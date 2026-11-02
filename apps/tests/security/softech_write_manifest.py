@@ -116,11 +116,11 @@ WRITE_SITES = {
         tables=('stktransm', 'stktrans'), flag='INSURANCE_SOFTECH_WRITE_ENABLED', dry_run_default=True,
         idempotency='refused while an applied edit is open on the receipt; date-edit lock 7301008 (P-15)',
         audit='SoftechDateEditRun + InsuranceAuditEvent',
-        trigger='POST insurance claims <pk>/softech-date/apply|runs/<id>/revert/ (insurance edit)'),
+        trigger='POST insurance claims <pk>/softech-date/plan/<id>/apply|runs/<id>/revert/ (insurance edit; softech_guard.check_date)'),
     'apps/insurance/date_service.py::_set_motalba_docdate': WriteSite(
         tables=('motalba',), flag='INSURANCE_SOFTECH_WRITE_ENABLED', dry_run_default=True,
         idempotency=None, audit='SoftechDateEditRun + InsuranceAuditEvent (motalba before-value not kept)',
-        trigger='POST insurance claims <pk>/softech-date/apply/'),
+        trigger='POST insurance claims <pk>/softech-date/plan/<id>/apply/'),
     'apps/insurance/management/commands/backfill_bonusqty.py::Command.handle': WriteSite(
         tables=('stktrans',), flag='INSURANCE_SOFTECH_WRITE_ENABLED', dry_run_default=True,
         idempotency='writes only drifted lines', audit='SoftechRepriceRun/Edit (no user)',
@@ -131,9 +131,10 @@ WRITE_SITES = {
         trigger='via apply_reprice'),
     'apps/insurance/reprice_service.py::apply_reprice': WriteSite(
         tables=('motalba', 'stktrans', 'stktransm', 'branchesales'), flag='INSURANCE_SOFTECH_WRITE_ENABLED',
-        dry_run_default=True, idempotency='recomputed from live data (retry is a no-op in SOFTECH, new run row)',
-        audit='SoftechRepriceRun/Edit + InsuranceAuditEvent',
-        trigger='POST insurance claims <pk>/softech-reprice/apply|apply-batch/ (insurance edit)'),
+        dry_run_default=True, idempotency='plan previewed→applying atomic flip + preview docvalue re-check; '
+                                          'recomputed from live data (retry is a no-op in SOFTECH, new run row)',
+        audit='SoftechWritePlan + SoftechRepriceRun/Edit (reason, guard warnings) + InsuranceAuditEvent',
+        trigger='POST insurance claims <pk>/softech-reprice/plan/<id>/apply/ (insurance edit; softech_guard)'),
     'apps/insurance/reprice_service.py::_rebalance_locked': WriteSite(
         tables=('stktransm',), flag='INSURANCE_SOFTECH_WRITE_ENABLED', dry_run_default=True,
         idempotency='run lock 7301007 + run re-read; PG record before SOFTECH commit (P-15)',
@@ -177,8 +178,9 @@ WRITE_SITES = {
         trigger='SQL builder — native after-save steps, executed by _run_write_batch', kind='sql-builder'),
     'apps/invoices/writer.py::_run_write_batch': WriteSite(
         tables=('stktransm', 'stktrans', 'lastdocnumbers', 'personsdata', 'itemssuppliers'), flag='INVOICE_WRITER_ENABLED', dry_run_default=True,
-        idempotency='PG status/softech_docnumber; purchases: SOFTECH docnumber2 duplicate guard; returns: PG only; '
-                    'vf2 token defined but never written',
+        idempotency='atomic PG flip into pushing (one writer per invoice); PG status/softech_docnumber; purchases: '
+                    'SOFTECH docnumber2 duplicate guard; returns: cumulative received − already-returned check; '
+                    'overrides need a written reason (duplicate / warnings, audited)',
         audit='SupplierInvoice erp_payload/readback + AuditLog softech_invoice_pushed (who) — P-16 (views)',
         trigger='POST invoices <pk>/push|push-batch/ (finalize + admin/purchasing/supervisor); probe → '
                 'SOFTECH_PROBES_ENABLED; coupons push/probe; cmd push_coupon_batch; cmd clone_purchase; replacement legs'),
@@ -246,8 +248,9 @@ WRITE_SITES = {
     'apps/purchasing/isr_writer.py::_insert_sql': WriteSite(
         tables=('stockisrm', 'stockisr'), flag='ISR_WRITER_ENABLED', dry_run_default=True,
         idempotency='push_isr_record: per-draft lock + status re-read + isr_guards duplicate check; '
-                    'push_isr --commit retired (P-15)',
-        audit='IsrPush + AuditLog softech_isr_pushed (who) — P-16 (+ forced duplicate)',
+                    'W3 review_push re-checked on the write connection (missing/archived refused, odd qty / '
+                    'stale need a reason, typed line count; unattended never overrides); push_isr --commit retired (P-15)',
+        audit='IsrPush + AuditLog softech_isr_pushed (who, push reason) — P-16 (+ forced duplicate, params.push_review)',
         trigger='POST purchasing isr/pushes/<pk>/push/ (can_supply_write); cmd generate_isr --auto-approve; '
                 'probe → SOFTECH_PROBES_ENABLED', kind='sql-builder'),
     'apps/purchasing/isr_writer.py::approve_isr': WriteSite(
@@ -273,8 +276,10 @@ WRITE_SITES = {
         trigger='cmd push_sales_rates --probe-branch/--probe-item', kind='rehearsal'),
     'apps/purchasing/shortage_writer.py::_write_softech': WriteSite(
         tables=('items',), flag='SHORTAGE_SOFTECH_WRITE_ENABLED', dry_run_default=False,
-        idempotency='absolute desired state; synced flag in PG',
-        audit='AuditLog softech_shortage_written (who, before → after) — P-16 (queue flush: no actor)',
+        idempotency='absolute desired state; synced flag in PG; read → write → verify on one connection; '
+                    'missing item refused (not marked synced)',
+        audit='AuditLog softech_shortage_written (who, real SOFTECH before → after; undo restores the recorded '
+              'pre-change values, Item.shortage_softech_before) — P-16, W2 (queue flush: no actor, retry=True)',
         trigger="POST purchasing shortage flag|unflag|dismiss|retrieve/ (shortage/approve, P-2); cmd sync_shortage_softech"),
     # ── sync investigations (all SOFTECH_PROBES_ENABLED, P-7) ───────────────────
     'apps/sync/management/commands/investigate_britems.py::Command._investigate': WriteSite(

@@ -61,6 +61,21 @@ def _net(line):
     return n
 
 
+def _qty_history(codes):
+    """{itemcode: (purchase lines, largest qty)} from the year of SOFTECH purchase
+    lines mirrored in stock_audit (doccode 10, every branch via HQ)."""
+    from django.db.models import Count, Max
+    from apps.stock_audit.models import StockLedgerLine
+    if not codes:
+        return {}
+    try:
+        return {r['itemcode'].strip(): (r['n'], _f(r['mx'])) for r in
+                StockLedgerLine.objects.filter(doccode='10', transqty__gt=0, itemcode__in=codes)
+                .values('itemcode').annotate(n=Count('id'), mx=Max('transqty'))}
+    except Exception:          # no purchase history readable → the quantity guard simply has no baseline
+        return {}
+
+
 def validate_invoice(invoice, *, live=True):
     errors, warnings, notices = [], [], []
 
@@ -93,6 +108,16 @@ def validate_invoice(invoice, *, live=True):
         err('item_unmatched', 'لا توجد أصناف مطابقة لترحيلها')
     zero_ok = zero_cost_items()
     batch_flagged = set()          # line ids already reported batch_required
+    # Quantity / value plausibility (owner decision 2026-11-01, sized on a year of
+    # purchases): over 3× the item's largest purchase, a new item over 200 units or a
+    # line over 50,000 needs a written reason; over 20× AND over 500 units is refused.
+    qty_warn_ratio = _f(_cfg('INVOICE_QTY_WARN_RATIO', 3))
+    qty_block_ratio = _f(_cfg('INVOICE_QTY_BLOCK_RATIO', 20))
+    qty_block_min = _f(_cfg('INVOICE_QTY_BLOCK_MIN', 500))
+    qty_new_warn = _f(_cfg('INVOICE_QTY_NEW_ITEM_WARN', 200))
+    line_value_warn = _f(_cfg('INVOICE_LINE_VALUE_WARN', 50000))
+    qty_hist = {} if is_return else _qty_history(
+        list(dict.fromkeys(str(l.item.softech_id).strip() for l in lines if l.item_id)))
 
     def need_batch(l):
         # SOFTECH items.itempartno («رقم القطعة أو الباتش») = 1 → the batch must be
@@ -113,6 +138,19 @@ def validate_invoice(invoice, *, live=True):
             err('price_invalid', f'سعر شراء غير صحيح (≤0): {l.item.name}', l.id)
         if getattr(l.item, 'batch_required', False):      # catalog mirror (works offline)
             need_batch(l)
+        if not is_return and _f(l.quantity) > 0:
+            q = _f(l.quantity)
+            n, mx = qty_hist.get(str(l.item.softech_id).strip(), (0, 0.0))
+            if n >= 3 and mx > 0:
+                if q > qty_block_ratio * mx and q > qty_block_min:
+                    err('qty_absurd', f'كمية غير منطقية ({q:g}) — أكبر من {qty_block_ratio:g}× أكبر شراء سابق '
+                                      f'({mx:g}): {l.item.name} — صحّح الكمية', l.id)
+                elif q > qty_warn_ratio * mx:
+                    warn('qty_spike', f'كمية أكبر من المعتاد ({q:g} مقابل أكبر شراء سابق {mx:g}): {l.item.name}', l.id)
+            elif q > qty_new_warn:
+                warn('qty_high_new_item', f'كمية كبيرة ({q:g}) لصنف بلا سجل شراء كافٍ: {l.item.name}', l.id)
+            if _net(l) * q > line_value_warn:
+                warn('line_value_high', f'قيمة البند {_net(l) * q:,.0f} أكبر من {line_value_warn:,.0f}: {l.item.name}', l.id)
 
     if not live or not matched:
         return {'ok': not errors, 'errors': errors, 'warnings': warnings, 'notices': notices}
@@ -129,6 +167,7 @@ def validate_invoice(invoice, *, live=True):
     branch = invoice.softech_branchcode
     codes = list(dict.fromkeys(str(l.item.softech_id).strip() for l in matched))
     items, credit, maxbal, linked, orig_qty, orig_present = {}, 0.0, 0.0, set(), {}, True
+    returned_qty = {}   # what earlier returns of the same original already sent back
     conn = get_branch_connection(host, invoice.branch.db_port or 5000,
                                  invoice.branch.db_name or 'SOFTECHDB9', charset=writer._write_charset())
     try:
@@ -161,6 +200,12 @@ def validate_invoice(invoice, *, live=True):
                          "AND docnumber=? GROUP BY itemcode", [branch, int(invoice.return_of_docnumber)])
             for r in cur3.fetchall():
                 orig_qty[str(r[0]).strip()] = _f(r[1])
+            cur4 = conn.cursor()
+            cur4.execute("SELECT itemcode, SUM(transqty) FROM stktrans WHERE branchcode=? AND doccode='120' "
+                         "AND r_doccode='10' AND r_docnumber=? GROUP BY itemcode",
+                         [branch, int(invoice.return_of_docnumber)])
+            for r in cur4.fetchall():
+                returned_qty[str(r[0]).strip()] = _f(r[1])
     finally:
         try:
             conn.close()
@@ -204,6 +249,12 @@ def validate_invoice(invoice, *, live=True):
         if is_return and code in orig_qty and _f(l.quantity) > orig_qty[code] + 0.0001:
             err('return_exceeds_received',
                 f'كمية المرتجع ({_f(l.quantity):g}) أكبر من المستلَم ({orig_qty[code]:g}): {l.item.name}', l.id)
+        elif (is_return and code in orig_qty and returned_qty.get(code)
+              and _f(l.quantity) + returned_qty[code] > orig_qty[code] + 0.0001):
+            # an earlier return of the same purchase already sent part (or all) of it back
+            err('return_exceeds_remaining',
+                f'سبق إرجاع {returned_qty[code]:g} من {orig_qty[code]:g} — المتبقى '
+                f'{max(orig_qty[code] - returned_qty[code], 0):g} فقط: {l.item.name}', l.id)
         # ── warnings ──
         if it['public'] > 0 and net > it['public']:
             warn('cost_gt_public',

@@ -541,7 +541,7 @@ function IsrTab() {
   })
   const approveM = useMutation({ mutationFn: (id) => supplyApi.isrApprove(id).then(r => r.data), onSuccess: invalidate })
   const pushM = useMutation({
-    mutationFn: ({ id, force_reason }) => supplyApi.isrPush(id, force_reason ? { force_reason } : {}).then(r => r.data),
+    mutationFn: ({ id, ...body }) => supplyApi.isrPush(id, body).then(r => r.data),
     onSuccess: invalidate,
   })
   const cancelM = useMutation({ mutationFn: ({ id, reason }) => supplyApi.isrCancel(id, reason).then(r => r.data), onSuccess: invalidate })
@@ -690,7 +690,7 @@ function IsrTab() {
           {selected && detailQ.data && (
             <IsrDetail key={detailQ.data.id} push={detailQ.data} gated={gated} canWrite={canWrite}
               onApprove={() => approveM.mutate(detailQ.data.id)}
-              onPush={(force_reason) => pushM.mutate({ id: detailQ.data.id, force_reason })}
+              onPush={(body) => pushM.mutate({ id: detailQ.data.id, ...(body || {}) })}
               onCancel={(reason) => cancelM.mutate({ id: detailQ.data.id, reason })}
               approving={approveM.isPending} pushing={pushM.isPending} cancelling={cancelM.isPending}
               approveWarning={approveM.data?.id === detailQ.data.id ? approveM.data?.warning : null}
@@ -709,6 +709,21 @@ function IsrDetail({ push, gated, canWrite, onApprove, onPush, onCancel, approvi
   const [cancelling_, setCancelOpen] = useState(false)
   const [reason, setReason] = useState('')
   const [forceReason, setForceReason] = useState('')
+  // W3: «ترحيل» opens a read-only review (checked against SOFTECH now) → typed line count
+  const [review, setReview]       = useState(null)
+  const [reviewErr, setReviewErr] = useState(null)
+  const [reviewing, setReviewing] = useState(false)
+  const [typed, setTyped]         = useState('')
+  const [pushReason, setPushReason] = useState('')
+  const openReview = async () => {
+    setReviewing(true); setReviewErr(null); setTyped(''); setPushReason('')
+    try { setReview((await supplyApi.isrPushReview(push.id)).data) }
+    catch (e) { setReviewErr(e.response?.data?.detail || 'تعذّرت المراجعة') }
+    finally { setReviewing(false) }
+  }
+  const reviewBody = () => ({ confirm_count: typed.trim(), push_reason: pushReason.trim() })
+  const canConfirm = review && !review.blocked && typed.trim() === String(review.line_count)
+    && (!review.needs_reason || pushReason.trim().length >= (review.reason_min_chars || 10))
   const errCode = actionError?.response?.data?.code
   const cancelled = push.params?.cancelled
   const allLines = push.lines || []
@@ -775,10 +790,10 @@ function IsrDetail({ push, gated, canWrite, onApprove, onPush, onCancel, approvi
             </button>
           )}
           {push.status === 'approved' && (
-            <button data-tour="purchasing-supply-isr-push" onClick={() => onPush()} disabled={!canWrite || gated || pushing}
+            <button data-tour="purchasing-supply-isr-push" onClick={openReview} disabled={!canWrite || gated || pushing || reviewing || !!review}
               className="px-3 py-1.5 rounded bg-emerald-600 text-white text-sm disabled:opacity-50"
               title={gated ? 'الترحيل معطّل (البوابة مغلقة)' : (canWrite ? '' : 'يتطلب صلاحية ترحيل')}>
-              {pushing ? '…' : 'ترحيل إلى SOFTECH'}
+              {reviewing ? 'جارٍ المراجعة…' : 'ترحيل إلى SOFTECH…'}
             </button>
           )}
           {['proposed', 'approved', 'failed'].includes(push.status) && canWrite && !cancelling_ && (
@@ -804,9 +819,56 @@ function IsrDetail({ push, gated, canWrite, onApprove, onPush, onCancel, approvi
         </div>
       )}
       {approveWarning && <div className="px-3 py-2 border-b border-line text-xs text-amber-800 bg-amber-50">{approveWarning}</div>}
+      {reviewErr && <div className="px-3 py-2 border-b border-line text-xs text-rose-600">{reviewErr}</div>}
+      {review && push.status === 'approved' && (
+        <div className="px-3 py-3 border-b border-line bg-emerald-50/40 space-y-2 text-sm" data-tour="purchasing-supply-isr-push-review">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-semibold text-content">مراجعة الترحيل (من سوفتك الآن):</span>
+            <span className="px-2 py-0.5 rounded bg-surface border border-line">{review.line_count} سطر</span>
+            <span className="px-2 py-0.5 rounded bg-surface border border-line">{review.total_qty} وحدة</span>
+            <span className="px-2 py-0.5 rounded bg-surface border border-line">{Number(review.docvalue).toLocaleString('ar-EG', { maximumFractionDigits: 0 })} ج</span>
+            <span className={`px-2 py-0.5 rounded border ${review.age_days > 3 ? 'border-amber-300 text-amber-800 bg-amber-50' : 'border-line bg-surface'}`}>
+              عمر الطلب {review.age_days} يوم</span>
+            <button onClick={() => setReview(null)} className="mr-auto text-content/60 underline">إغلاق</button>
+          </div>
+          {review.issues.length === 0
+            ? <div className="text-xs text-emerald-700">✓ لا ملاحظات</div>
+            : <div className="max-h-40 overflow-auto space-y-0.5">{review.issues.map((i, k) => (
+                <div key={k} className={`text-xs rounded px-2 py-0.5 border ${i.level === 'block' ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>{i.message}</div>
+              ))}</div>}
+          {review.blocked ? (
+            <div className="text-xs text-rose-700">⛔ لا يمكن الترحيل — صحّح الأصناف المرفوضة (ألغِ الطلب وأعد اقتراحه).</div>
+          ) : (
+            <div className="flex flex-wrap items-end gap-2">
+              {review.needs_reason && (
+                <label className="text-xs text-amber-800">سبب الترحيل رغم الملاحظات (إلزامى)
+                  <input value={pushReason} onChange={e => setPushReason(e.target.value)}
+                    className="block mt-0.5 w-80 border border-amber-300 rounded px-2 py-1 text-sm bg-surface text-content" /></label>
+              )}
+              <label className="text-xs text-content/70">للتأكيد اكتب عدد الأسطر: <b className="font-mono">{review.line_count}</b>
+                <input value={typed} onChange={e => setTyped(e.target.value)} inputMode="numeric" dir="ltr"
+                  data-tour="purchasing-supply-isr-push-count"
+                  className="block mt-0.5 w-24 border border-line rounded px-2 py-1 text-sm text-center font-mono bg-surface text-content" /></label>
+              <button onClick={() => onPush(reviewBody())} disabled={!canConfirm || pushing} data-tour="purchasing-supply-isr-push-confirm"
+                className="px-3 py-1.5 rounded bg-emerald-600 text-white text-sm disabled:opacity-40">
+                {pushing ? '…' : `تأكيد الترحيل (${review.line_count} سطر)`}</button>
+            </div>
+          )}
+        </div>
+      )}
+      {push.params?.push_review?.reason && (
+        <div className="px-3 py-2 border-b border-line text-xs text-amber-800 bg-amber-50">
+          رُحِّل رغم ملاحظات المراجعة — السبب: {push.params.push_review.reason}
+        </div>
+      )}
       {push.params?.forced_push && (
         <div className="px-3 py-2 border-b border-line text-xs text-amber-800 bg-amber-50">
           رُحِّل رغم تطابقه مع الطلب #{push.params.forced_push.duplicate_of} — السبب: {push.params.forced_push.reason}
+        </div>
+      )}
+      {push.params?.forced_overlap && (
+        <div className="px-3 py-2 border-b border-line text-xs text-amber-800 bg-amber-50">
+          رُحِّل رغم تكرار {push.params.forced_overlap.items.length} صنف من الطلب {push.params.forced_overlap.earlier.map(n => `#${n}`).join('، ')} — السبب: {push.params.forced_overlap.reason}
         </div>
       )}
       <IsrParamsSummary push={push} />
@@ -814,15 +876,17 @@ function IsrDetail({ push, gated, canWrite, onApprove, onPush, onCancel, approvi
       {(actionError || push.error) && (
         <div className="px-3 py-2 text-xs text-rose-600 border-b border-line space-y-1.5">
           <div>{actionError?.response?.data?.detail || push.error || 'خطأ'}</div>
-          {errCode === 'duplicate_push' && push.status === 'approved' && (
-            // the guard refused an identical re-send — only a written reason lets it through
+          {(errCode === 'duplicate_push' || errCode === 'overlap_push') && push.status === 'approved' && (
+            // the guard refused an identical re-send (or, P-32, items already sent to this branch) —
+            // only a written reason lets it through
             <div className="flex flex-wrap items-center gap-2 text-content">
               <input value={forceReason} onChange={e => setForceReason(e.target.value)}
                 placeholder="سبب إعادة الإرسال عن قصد (مطلوب)"
                 className="border border-line rounded px-2 py-1 text-sm bg-surface text-content w-72" />
-              <button data-tour="purchasing-supply-isr-push-force" onClick={() => onPush(forceReason)} disabled={pushing || forceReason.trim().length < 5}
+              <button data-tour="purchasing-supply-isr-push-force" onClick={() => onPush({ force_reason: forceReason, ...reviewBody() })}
+                disabled={pushing || forceReason.trim().length < 5 || !canConfirm}
                 className="px-3 py-1 rounded border border-rose-300 text-rose-700 text-sm disabled:opacity-50">
-                ترحيل رغم التطابق</button>
+                {errCode === 'overlap_push' ? 'ترحيل رغم التكرار' : 'ترحيل رغم التطابق'}</button>
             </div>
           )}
         </div>

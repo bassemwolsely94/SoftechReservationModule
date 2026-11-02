@@ -441,6 +441,17 @@ class DeliveryOrder(models.Model):
         max_digits=10, decimal_places=7, null=True, blank=True,
         verbose_name='خط الطول',
     )
+    # Where the rider's phone last reported itself. Kept apart from delivery_lat/lng, which
+    # is the drop-off target the geofence and the dispatch map use (N0/H2).
+    rider_lat = models.DecimalField(
+        max_digits=10, decimal_places=7, null=True, blank=True,
+        verbose_name='خط عرض السائق',
+    )
+    rider_lng = models.DecimalField(
+        max_digits=10, decimal_places=7, null=True, blank=True,
+        verbose_name='خط طول السائق',
+    )
+    rider_location_at = models.DateTimeField(null=True, blank=True, verbose_name='وقت موقع السائق')
     google_maps_url = models.CharField(
         max_length=500, blank=True,
         verbose_name='رابط خرائط جوجل',

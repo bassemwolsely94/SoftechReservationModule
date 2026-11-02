@@ -27,9 +27,11 @@ MODULE = {
                 {'key': 'done', 'label': T('مكتمل — تم الشراء', 'Done — purchased'),
                  'desc': T('المريض أكّد أو اشترى. مرحلة نهائية.', 'The patient confirmed or bought. Final.')},
                 {'key': 'missed', 'label': T('فائت — لا استجابة', 'Missed — no response'),
-                 'desc': T('لم يستجب بعد عدة محاولات. مرحلة نهائية.', 'No response after several attempts. Final.')},
+                 'desc': T('لم يستجب بعد عدة محاولات، أو عدّى 3 أيام على موعدها وهي مفتوحة 3 أيام على الأقل (المهمة الجديدة المتأخرة بتاخد فرصتها الأول). مرحلة نهائية.',
+                           'No response after several attempts, or 3 days past due after being open at least 3 days (a task created already late gets its chance first). Final.')},
                 {'key': 'auto_closed', 'label': T('أُغلق تلقائياً — SOFTECH أكّد البيع', 'Auto-closed — SOFTECH confirmed the sale'),
-                 'desc': T('ظهرت فاتورة بيع جديدة للمريض لنفس الدواء، فأُغلقت المهمة بدون تدخل.', 'A new sale of the same medicine appeared for the patient, so the task closed by itself.')},
+                 'desc': T('ظهرت فاتورة بيع جديدة على نفس الـPIC لنفس الدواء (أو بديل بنفس التشخيص) بعد الفاتورة اللي طلّعت المهمة، فأُغلقت بدون تدخل. رقم الفاتورة بيتسجّل في المهمة.',
+                           'A new sale on the same PIC of the same medicine (or a same-diagnosis substitute) appeared after the sale that created the task, so it closed by itself. The invoice number is saved on the task.')},
                 {'key': 'cancelled', 'label': T('ملغي', 'Cancelled'), 'desc': T('لم تعد مطلوبة (مثلاً الطبيب أوقف الدواء).', 'No longer needed (e.g. the doctor stopped the medicine).')},
             ],
         },
@@ -206,7 +208,9 @@ SCREENS = [
                        'Supervisors: select tasks then "Assign to" an employee, role or branch, with a preview of who will get them.'),
              'roles': ['admin', 'supervisor']},
         ],
-        'tips': [
+        'tips': [T('لو عرض الأرقام مقفول عندك، زرار واتساب بيختفي كمان (الرابط فيه الرقم).', 'If phone numbers are turned off for you, the WhatsApp button is hidden too (its link contains the number).'),
+                 T('موظف الفرع بيشوف متابعات فرعه بس، والأرقام في اللوحة لفرعه. المشرف ومدير الجودة بيشوفوا كل الفروع.', "Branch staff see their branch's follow-ups only, and the dashboard figures are for their branch. Supervisors and the quality manager see every branch."),
+                 
             T('الهاتف يظهر محجوباً (●●●) لو دورك لا يسمح برؤيته؛ في هذه الحالة زر واتساب لا يظهر.',
               'The phone appears masked (●●●) if your role may not see it; then the WhatsApp button is hidden.'),
             T('لا تغلق المهمة «مكتمل» إلا لو العميل اشترى أو أكد فعلاً؛ لو اشترى من فرع آخر ستُغلق تلقائياً.',
@@ -464,7 +468,8 @@ SCREENS = [
             {'text': T('«تشغيل الآن» يرسل دفعة اليوم فوراً (عند تفعيل الإرسال).', '"Run now" sends today\'s batch immediately (when sending is enabled).'),
              'roles': ['admin', 'supervisor']},
         ],
-        'tips': [
+        'tips': [T('بتشوف تذكيرات فروعك بس.', "You see your own branches' reminders only."),
+                 
             T('الرسالة لا تذكر اسم الدواء (خصوصية المريض)؛ الصيدلي يؤكد الأصناف عند التجهيز.',
               'The message does not name the medicine (patient privacy); the pharmacist confirms the items when preparing.'),
         ],
@@ -513,7 +518,7 @@ SCREENS = [
                  'بيشغّل دفعة النهارده فوراً بدل ما تستنى الميعاد التلقائي، وبيظهر بعدها «أُرسل X · فشل Y».\n• لو الإرسال متوقف بيقولك بس كان هيبعت كام تذكير — مفيش رسالة بتطلع.\n• الزر بيظهر للمدير والمشرف بس.',
                  'It runs today\'s batch right away instead of waiting for the automatic time, then shows "sent X · failed Y".\n• If sending is off, it only tells you how many reminders it would have sent — no message goes out.\n• The button shows for admins and supervisors only.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]

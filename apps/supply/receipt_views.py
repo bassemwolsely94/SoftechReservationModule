@@ -16,6 +16,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from core import branch_scope
+
 from .permissions import CanOperateSupply
 
 ACCEPT_REASONS = ('عرض بونص', 'طلب هاتفي', 'توزيع على الفروع', 'بديل متفق عليه')
@@ -54,7 +56,7 @@ def _row(r, items, sups, today):
 def receipt_checks(request):
     from apps.procurement.models import ReceiptCheck
     st = request.query_params.get('status') or 'open'
-    qs = ReceiptCheck.objects.select_related('sheet', 'decided_by')
+    qs = branch_scope.scope_code(ReceiptCheck.objects.select_related('sheet', 'decided_by'), request.user)
     if st != 'all':
         qs = qs.filter(status=st)
     rows = list(qs.order_by('-doc_date', 'item_code')[:2000])
@@ -72,7 +74,7 @@ def receipt_checks(request):
 def receipt_check_decide(request, pk):
     from apps.audit.models import AuditLog
     from apps.procurement.models import ReceiptCheck
-    row = ReceiptCheck.objects.filter(pk=pk).first()
+    row = branch_scope.scope_code(ReceiptCheck.objects.filter(pk=pk), request.user).first()
     if row is None:
         return Response({'detail': 'غير موجود'}, status=status.HTTP_404_NOT_FOUND)
     action = str(request.data.get('action') or '')

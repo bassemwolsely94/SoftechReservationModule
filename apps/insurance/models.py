@@ -700,6 +700,7 @@ class InsuranceDeduction(models.Model):
     REASON_OVER_LIMIT     = 'over_limit'
     REASON_MISSING_DOCS   = 'missing_docs'
     REASON_CLASSIFICATION = 'classification'
+    REASON_NOT_MEMBER     = 'not_member'    # patient billed to the wrong جهة/فئة — feeds the roster
     REASON_OTHER          = 'other'
 
     REASON_CHOICES = [
@@ -708,6 +709,7 @@ class InsuranceDeduction(models.Model):
         (REASON_OVER_LIMIT,     'تجاوز الحد المسموح'),
         (REASON_MISSING_DOCS,   'وثائق ناقصة'),
         (REASON_CLASSIFICATION, 'خطأ في التصنيف'),
+        (REASON_NOT_MEMBER,     'المريض لا يتبع الجهة'),
         (REASON_OTHER,          'أخرى'),
     ]
 
@@ -875,9 +877,10 @@ class InsuranceClaimBillingGroup(models.Model):
         return f'{self.claim.claim_number} / {self.name}'
 
     def refresh_totals(self):
-        """Recompute denormalised totals from assigned prescriptions + manual Rx."""
+        """Recompute denormalised totals from assigned prescriptions + manual Rx.
+        Excluded receipts never count (they leave the claim, so they leave its groups)."""
         from django.db.models import Sum, Count
-        agg = self.prescriptions.aggregate(
+        agg = self.prescriptions.filter(exclusion__isnull=True).aggregate(
             cnt=Count('id'),
             gb=Sum('gross_before'),
             td=Sum('total_discount'),
@@ -905,14 +908,18 @@ class InsuranceClaimBillingGroup(models.Model):
 
     def auto_assign_prescriptions(self):
         """
-        Assign prescriptions that match this group's filter rules.
-        Skips prescriptions already assigned to another group.
-        Returns count of newly assigned prescriptions.
+        Assign what is left to this group: the claim's unassigned, NOT excluded receipts
+        that match the group's filter rules. With no filter rule set («add the rest») the
+        unassigned manual receipts and non-standalone supplements join too. Skips anything
+        already in another group. Returns the count newly assigned.
         """
         qs = InsuranceClaimPrescription.objects.filter(
             claim=self.claim,
             billing_group__isnull=True,
+            exclusion__isnull=True,
         )
+        has_filter = any([self.filter_relative_degree, self.filter_dept_name,
+                          self.filter_hi_type_code, self.filter_patient_no_prefix])
         if self.filter_relative_degree:
             qs = qs.filter(relative_degree=self.filter_relative_degree)
         if self.filter_dept_name:
@@ -922,6 +929,11 @@ class InsuranceClaimBillingGroup(models.Model):
         if self.filter_patient_no_prefix:
             qs = qs.filter(patient_no__startswith=self.filter_patient_no_prefix)
         count = qs.update(billing_group=self)
+        if not has_filter:     # manual entries / supplements carry none of those fields
+            count += self.claim.manual_rx.filter(billing_group__isnull=True, is_excluded=False) \
+                .update(billing_group=self)
+            count += self.claim.supplements.filter(billing_group__isnull=True, is_excluded=False) \
+                .exclude(supplement_type='standalone').update(billing_group=self)
         if count:
             self.refresh_totals()
         return count
@@ -1156,6 +1168,7 @@ class InsuranceAuditEvent(models.Model):
         ('deduction',       'خصم/استقطاع'),
         ('billing_group',   'فئة فوترة'),
         ('bulk_exclude',    'استبعاد جماعي (فصل)'),
+        ('roster_decision', 'قرار سجل المرضى'),
         ('other',           'أخرى'),
     ]
 
@@ -1199,6 +1212,47 @@ class InsuranceAuditEvent(models.Model):
 # SOFTECH RE-PRICE WRITEBACK — audit + revert store for edits pushed INTO SOFTECH
 # ═══════════════════════════════════════════════════════════════════════════════
 
+class SoftechWritePlan(models.Model):
+    """
+    A previewed set of SOFTECH receipt re-prices (one receipt or a batch).  Nothing is
+    written until this exact plan is applied: the apply must name a fresh, unblocked
+    plan, carry the typed receipt count (and a reason when the guard warned), and the
+    status flip previewed → applying is atomic so a double-click cannot post twice.
+    """
+    STATUS_PREVIEWED = 'previewed'
+    STATUS_APPLYING  = 'applying'
+    STATUS_APPLIED   = 'applied'
+    STATUS_REVERTED  = 'reverted'
+    STATUS_CHOICES = [
+        (STATUS_PREVIEWED, 'معاينة'), (STATUS_APPLYING, 'جارٍ التطبيق'),
+        (STATUS_APPLIED, 'مُطبَّق'), (STATUS_REVERTED, 'مُتراجَع'),
+    ]
+
+    claim        = models.ForeignKey('InsuranceClaim', on_delete=models.CASCADE,
+                                     related_name='softech_write_plans')
+    source       = models.CharField(max_length=20, default='receipt')   # receipt | item | catalog
+    status       = models.CharField(max_length=10, choices=STATUS_CHOICES,
+                                    default=STATUS_PREVIEWED, db_index=True)
+    plan         = models.JSONField(default=list)    # [{docno, branch, prices:{code: price}}]
+    preview      = models.JSONField(default=dict)    # per-receipt diff + guard issues + totals
+    blocked      = models.BooleanField(default=False)
+    needs_reason = models.BooleanField(default=False)
+    receipt_count = models.PositiveIntegerField(default=0)
+    net_delta    = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    reason       = models.TextField(blank=True)
+    created_by   = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True,
+                                     blank=True, related_name='+')
+    created_at   = models.DateTimeField(auto_now_add=True)
+    applied_at   = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'خطة تعديل سوفتك'
+        ordering = ['-created_at', '-id']
+
+    def __str__(self):
+        return f'plan #{self.pk} claim={self.claim_id} [{self.status}] {self.receipt_count} rx'
+
+
 class SoftechRepriceRun(models.Model):
     """
     One writeback operation that edited an insurance receipt's price(s) in SOFTECH
@@ -1234,6 +1288,10 @@ class SoftechRepriceRun(models.Model):
     applied_at  = models.DateTimeField(auto_now_add=True)
     reverted_at = models.DateTimeField(null=True, blank=True)
     error       = models.TextField(blank=True)
+    plan        = models.ForeignKey(SoftechWritePlan, on_delete=models.SET_NULL, null=True,
+                                    blank=True, related_name='runs')
+    reason      = models.TextField(blank=True, verbose_name='سبب التجاوز')
+    warnings    = models.JSONField(default=list, blank=True)   # guard warnings acknowledged
 
     class Meta:
         verbose_name = 'عملية تعديل سعر سوفتك'
@@ -1323,6 +1381,9 @@ class SoftechDateEditRun(models.Model):
                                     null=True, blank=True, related_name='+')
     applied_at  = models.DateTimeField(auto_now_add=True)
     reverted_at = models.DateTimeField(null=True, blank=True)
+    plan        = models.ForeignKey('SoftechWritePlan', on_delete=models.SET_NULL, null=True,
+                                    blank=True, related_name='date_runs')
+    reason      = models.TextField(blank=True, verbose_name='سبب التجاوز')
 
     class Meta:
         verbose_name = 'تعديل تاريخ إيصال سوفتك'
@@ -1530,6 +1591,16 @@ class InsuranceSeparationList(models.Model):
                                     help_text='مثال: شركة الخدمات الطبية')
     description = models.TextField(blank=True, verbose_name='وصف')
     is_active   = models.BooleanField(default=True, verbose_name='مُفعَّلة')
+    # Optional: the insurer these names actually BELONG to.  When set, the names
+    # count as confirmed members of that insurer's patient roster (roster.py) and
+    # are not flagged on that insurer's own claims.
+    target_client = models.ForeignKey('InsuranceClient', on_delete=models.SET_NULL,
+                                      null=True, blank=True, related_name='separation_lists',
+                                      verbose_name='الجهة التي تتبعها الأسماء')
+    # …and the فئة فوترة (billing group) inside that جهة they belong to, e.g. «تشغيل».
+    # Matched loosely against each claim's billing groups (roster.same_group).
+    target_group_label = models.CharField(max_length=200, blank=True, default='',
+                                          verbose_name='فئة الفوترة التي تتبعها الأسماء')
     created_by  = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL,
                                     null=True, blank=True, related_name='+',
                                     verbose_name='أُنشئت بواسطة')
@@ -1567,3 +1638,55 @@ class InsuranceSeparationName(models.Model):
 
     def __str__(self):
         return self.name
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PATIENT ROSTER DECISIONS — wrong-insurer allocation review (roster.py)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class InsuranceRosterDecision(models.Model):
+    """
+    A reviewer's verdict on whether a patient name belongs to an insurer's roster.
+    Rosters themselves are DERIVED from claim history (roster.py); these rows only
+    override that history, so a decided name stops being re-flagged every month.
+
+      member      — the name belongs to `client` (confirmed / shared name, not a mistake)
+      not_member  — the name does NOT belong to `client` (it was a wrong allocation)
+    """
+    VERDICT_MEMBER     = 'member'
+    VERDICT_NOT_MEMBER = 'not_member'
+    VERDICT_CHOICES = [
+        (VERDICT_MEMBER,     'يتبع الجهة'),
+        (VERDICT_NOT_MEMBER, 'لا يتبع الجهة'),
+    ]
+
+    # The roster UNIT: جهة → فئة (optional) → فئة فوترة (optional, stored as
+    # roster.group_key so the same division matches across months).
+    client     = models.ForeignKey(InsuranceClient, on_delete=models.CASCADE,
+                                   related_name='roster_decisions', verbose_name='الجهة')
+    subclient  = models.ForeignKey(InsuranceSubClient, on_delete=models.CASCADE, null=True, blank=True,
+                                   related_name='roster_decisions', verbose_name='الفئة')
+    group_key  = models.CharField(max_length=200, blank=True, default='', verbose_name='فئة الفوترة (مُعيَّرة)')
+    group_label = models.CharField(max_length=200, blank=True, default='', verbose_name='فئة الفوترة')
+    name      = models.CharField(max_length=200, verbose_name='الاسم')
+    normalized = models.CharField(max_length=200, db_index=True, verbose_name='الاسم المُعيَّر')
+    verdict    = models.CharField(max_length=20, choices=VERDICT_CHOICES, verbose_name='القرار')
+    note       = models.CharField(max_length=300, blank=True, verbose_name='ملاحظة')
+    claim      = models.ForeignKey(InsuranceClaim, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+', verbose_name='المطالبة التي اتُّخذ فيها القرار')
+    decided_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL,
+                                   null=True, blank=True, related_name='+', verbose_name='بواسطة')
+    decided_at = models.DateTimeField(auto_now=True, verbose_name='وقت القرار')
+
+    class Meta:
+        verbose_name        = 'قرار سجل مرضى'
+        verbose_name_plural = 'قرارات سجل المرضى'
+        unique_together     = [['client', 'subclient', 'group_key', 'normalized']]
+
+    def save(self, *args, **kwargs):
+        from .separation import normalize_name
+        self.normalized = normalize_name(self.name)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.name} → {self.client_id}/{self.subclient_id}/{self.group_key}: {self.verdict}'

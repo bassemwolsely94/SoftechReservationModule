@@ -19,6 +19,7 @@ import useAuthStore from '../store/authStore'
 import ErrorBoundary from './ErrorBoundary'
 import { approvalsApi, pricingApprovalsApi, notificationsApi } from '../api/client'
 import { useOnline, useOfflineQueue } from './mobileUi'
+import NetworkBadge from './NetworkBadge'
 import HelpButton from '../help/HelpButton'
 import HelpPanel from '../help/HelpPanel'
 import { useThemeMode } from '../theme/useThemeMode'
@@ -105,6 +106,7 @@ export default function MobileLayout({ title = 'صيدليات الرزيقي', 
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <NetworkBadge variant="mobile" />
           <HelpButton variant="mobile" />
           <button
             onClick={cycle}

@@ -8,6 +8,8 @@ from apps.omni.models import (
 )
 
 
+from apps.customers.phone_mask import RecordPhoneMask, CustomerPhoneMask  # Batch 5b
+
 class ChannelAccountSerializer(serializers.ModelSerializer):
     branch_name = serializers.CharField(source='branch.name', read_only=True, default=None)
     supervisor_name = serializers.CharField(source='supervisor.full_name', read_only=True, default=None)
@@ -76,7 +78,8 @@ class ChannelAccountSerializer(serializers.ModelSerializer):
         return account
 
 
-class ConversationSerializer(serializers.ModelSerializer):
+class ConversationSerializer(RecordPhoneMask, serializers.ModelSerializer):
+    phone_mask_fields = ('customer_phone', 'contact_phone')
     customer_name = serializers.CharField(source='customer.name', read_only=True, default=None)
     customer_phone = serializers.CharField(source='customer.phone', read_only=True, default=None)
     assigned_to_name = serializers.CharField(source='assigned_to.full_name', read_only=True, default=None)

@@ -839,11 +839,15 @@ You flip them to the office values only at cutover (section 11). Fill in:
 
 ```env
 DEBUG=False
+DJANGO_ADMIN_ENABLED=False        # Django admin has no 2FA; set True only for a maintenance window, then back to False
 SECRET_KEY=<python3 -c "import secrets; print(secrets.token_urlsafe(50))">
 ALLOWED_HOSTS=elrezeikyapp.dawalvry.com,localhost,127.0.0.1
 CSRF_TRUSTED_ORIGINS=https://elrezeikyapp.dawalvry.com
 FRONTEND_BASE_URL=https://elrezeikyapp.dawalvry.com
 BEHIND_HTTPS_PROXY=True
+NETWORK_HEADER_TRUSTED=True         # ONLY because our nginx + elrezeiky-proxy-headers.conf is the sole way in (N1)
+NETWORK_UNTRUSTED_ZONE=external     # if the header is ever untrusted, treat everyone as external
+NETWORK_POLICY_ENFORCEMENT=log      # off | log | enforce (N3)
 SCHEDULER_AUTOSTART=False
 MEDIA_ACCEL_REDIRECT=True
 RBAC_ENFORCEMENT=log                # same as office today; 'enforce' once the rbac log is quiet
@@ -1014,18 +1018,196 @@ WireGuard is dormant and disabled — section 5.0.)
 ### 9.2 Nginx (from `deploy/nginx.conf`)
 
 ```bash
+sudo cp deploy/nginx-proxy-headers.conf /etc/nginx/elrezeiky-proxy-headers.conf   # overwrites X-Forwarded-For
+sudo cp deploy/nginx-admin-allow.conf.example /etc/nginx/elrezeiky-admin-allow.conf   # then add the owner's ZeroTier IP(s)
 sudo cp deploy/nginx.conf /etc/nginx/sites-available/elrezeiky
 sudo sed -i 's#YOUR_DOMAIN_OR_IP#elrezeikyapp.dawalvry.com#g; s#YOUR_DOMAIN#elrezeikyapp.dawalvry.com#g; s#/opt/elrezeiky/#/opt/elrezeiky/app/#g; s#root /opt/elrezeiky;#root /opt/elrezeiky/app;#' \
      /etc/nginx/sites-available/elrezeiky
 sudo ln -s /etc/nginx/sites-available/elrezeiky /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 ```
-`/admin/` is limited to private ranges. Through the public name your request arrives from a
-public address and is refused; over ZeroTier your laptop (a 10.50.50.x member, section 13.3) is
-inside 10/8, so open Django admin at `https://10.50.50.77/admin/` (accept the name warning) —
-admin works only via the VPN. Good.
+`/admin/` is limited to the addresses in `/etc/nginx/elrezeiky-admin-allow.conf` (127.0.0.1 plus the
+owner's ZeroTier IP(s) you add — not the whole 10/8 range), and Django only mounts it when
+`DJANGO_ADMIN_ENABLED=True` (off in production; otherwise `/admin/` is a 404). For a maintenance
+window: set it True in `.env`, restart the app, open `https://10.50.50.77/admin/` (accept the name
+warning) from an allowed address, then set it back to False and restart.
+
+#### Applying security batch N0 to the live server
+
+The live site file was hand-edited (certbot, `listen` lines) and still uses `proxy_params` and the
+10/8 admin allows, so do **not** re-copy the template over it. Edit the live file in place:
+
+```bash
+sudo cp deploy/nginx-proxy-headers.conf /etc/nginx/elrezeiky-proxy-headers.conf
+sudo cp deploy/nginx-admin-allow.conf.example /etc/nginx/elrezeiky-admin-allow.conf   # then add the admin IPs
+sudo nano /etc/nginx/sites-available/elrezeiky
+#  - replace EVERY `include /etc/nginx/proxy_params;` with `include /etc/nginx/elrezeiky-proxy-headers.conf;`
+#  - add that same include inside `location /ws/ { ... }`
+#  - in `location /admin/` replace the private-range allow/deny lines with `include /etc/nginx/elrezeiky-admin-allow.conf;`
+sudo nginx -t && sudo systemctl reload nginx
+# .env: DJANGO_ADMIN_ENABLED=False, then: sudo systemctl restart elrezeiky-web
+```
+Verify the forged header no longer reaches the app: make one failed login with
+`curl -s -H 'X-Forwarded-For: 6.6.6.6' -H 'Content-Type: application/json' -d '{"username":"nobody","password":"x"}' https://elrezeikyapp.dawalvry.com/api/auth/login/`
+then check the activity log / `journalctl -u elrezeiky-web` — the logged IP must be your real
+address, not `6.6.6.6`.
+
+#### Batch N1 on the live server
+
+N1 only labels each request `internal` / `external` (log only, nothing is refused). Order matters:
+the `map` must exist **before** the include that uses `$elr_network` is copied, otherwise a restart
+in between fails with `unknown "elr_network" variable` and the site is down.
+
+```bash
+sudo nano /etc/nginx/sites-available/elrezeiky
+#  - next to the `limit_req_zone` lines (http level, OUTSIDE every server block) add:
+#      map $server_addr $elr_network {
+#          10.50.50.77 internal;   # ZeroTier
+#          10.0.0.77   internal;   # SSTP backup
+#          default     external;
+#      }
+sudo cp deploy/nginx-proxy-headers.conf /etc/nginx/elrezeiky-proxy-headers.conf   # adds X-ElR-Network (map already in place)
+sudo nginx -t && sudo systemctl reload nginx
+```
+Also make sure `.env` has `NETWORK_HEADER_TRUSTED=True` and `NETWORK_UNTRUSTED_ZONE=external`
+(see the `.env` block above), then `sudo systemctl restart elrezeiky-web`. `NETWORK_HEADER_TRUSTED`
+may be True only because our nginx is the sole way in; never set it where a tunnel/CDN reaches
+Daphne directly. `manage.py check` warns when it is False outside DEBUG and errors on a typo in
+`NETWORK_UNTRUSTED_ZONE` / `NETWORK_POLICY_ENFORCEMENT`.
+
+Check (the forged header must lose). A browser cannot do the second one (the certificate does not
+match the IP), so use curl with `--resolve`:
+- from mobile data: `curl -H 'X-ElR-Network: internal' https://elrezeikyapp.dawalvry.com/api/access/whoami/` -> `external`
+- from a ZeroTier laptop: `curl --resolve elrezeikyapp.dawalvry.com:443:10.50.50.77 https://elrezeikyapp.dawalvry.com/api/access/whoami/` -> `internal`
 
 Nginx needs to read static/media files: `sudo chmod 755 /opt/elrezeiky /opt/elrezeiky/app`.
+
+#### Company network through the tunnel (split DNS)
+
+Goal: a company device resolves `elrezeikyapp.dawalvry.com` to `10.50.50.77` and reaches the VPS
+through the tunnel **with its own address intact**, so nginx labels the request `internal` and
+the app can tell which site it came from. Anything else (mobile data, home, guest Wi-Fi) goes to
+the public address and is labelled `external`. Design: `docs/security/2026-10-31-network-device-access-design.md` §6.8 (T1–T7).
+
+> **IT-only.** Every step below is done on routers, ZeroTier Central or the VPS by the network
+> administrator, never from the app. Work in Safe Mode (Ctrl+X) and leave it with Ctrl+X after
+> each block, as in 5.2. Take `/export file=before-n1-split-dns` first. Replace every
+> `<PLACEHOLDER>` from the T1 table; never guess an address.
+
+**T1 — inventory (IT-only, no commands).** Fill one row per site before touching any router:
+
+| Site | Router (model) | Staff LAN(s) | Guest Wi-Fi subnet (stays OUT) | Link to HQ (SSTP RC0x / ZeroTier / IPsec) | Staff VPN pools counted internal |
+|---|---|---|---|---|---|
+| HQ Bab El Haded | MikroTik RouterOS 7 | `<HQ_LAN>` | `<GUEST_LAN>` | — | vpn_pool 10.10.10.0/24; wg-mobile 10.30.30/24, wg0 10.20.20/24, wg-Mohsen 10.60.60/24, back-to-home 10.250.250/24 only if you decide so |
+| `<SITE>` | `<MODEL>` | `<BRANCH_LAN>` | `<GUEST_LAN>` | `<RC0x / ZT / IPsec>` | `<VPN_POOL or none>` |
+
+Decide per VPN pool whether it counts as internal; only the listed ones go into the address list below.
+
+**T2 — HQ MikroTik: forward + no-NAT (IT-only)**
+
+```routeros
+/ip firewall address-list
+add list=elrezeiky-internal-clients address=<HQ_LAN>       comment="HQ staff LAN"
+add list=elrezeiky-internal-clients address=<BRANCH_LAN>   comment="<SITE> staff LAN"
+add list=elrezeiky-internal-clients address=10.10.10.0/24  comment="staff VPN pool vpn_pool"
+# one line per site / chosen VPN pool from T1. NEVER add a guest Wi-Fi subnet.
+add list=elrezeiky-app-addresses address=10.50.50.77       comment="app, ZeroTier"
+add list=elrezeiky-app-addresses address=10.0.0.77         comment="app, SSTP backup"
+
+/ip firewall filter
+add chain=forward src-address-list=elrezeiky-internal-clients dst-address-list=elrezeiky-app-addresses \
+    protocol=tcp dst-port=80,443 action=accept place-before=[find where comment~"^VPS: "] comment="N1: staff -> app (80 redirect, 443)"
+
+/ip firewall nat
+add chain=srcnat src-address-list=elrezeiky-internal-clients dst-address-list=elrezeiky-app-addresses \
+    action=accept place-before=[find where chain=srcnat action=masquerade] comment="N1: staff -> app WITHOUT NAT"
+```
+Why the NAT rule is an `accept` placed **above** masquerade: an `accept` in the `srcnat` chain stops
+RouterOS from evaluating any later NAT rule for that packet, so the source address is left
+untouched. If the packet reached the masquerade rule it would leave with the router's own address
+(`10.50.50.1` / `10.0.0.1`), nginx would see every device as "the router", and the app could no
+longer tell the Ain Shams PC from the HQ PC (the trusted-network match by site would fail).
+The filter rule must sit above the first forward `drop`; the existing `VPS:` rules stay unchanged.
+Check the order with `/ip firewall nat print` and `/ip firewall filter print`.
+
+**T3 — each branch router: split DNS, route, DNS-bypass block (IT-only)**
+
+```routeros
+# 1. staff LAN uses the router as DNS, and the router answers this one name locally
+/ip dns set allow-remote-requests=yes
+/ip dns static add name=elrezeikyapp.dawalvry.com address=10.50.50.77 comment="N1 split DNS"
+/ip dhcp-server network set [find where address=<BRANCH_LAN>] dns-server=<BRANCH_ROUTER>
+
+# 2. the app addresses go through the tunnel to HQ (the same tunnel the branch uses today)
+/ip route add dst-address=10.50.50.77/32 gateway=<HQ_TUNNEL_IFACE> comment="N1 app via HQ"
+/ip route add dst-address=10.0.0.77/32   gateway=<HQ_TUNNEL_IFACE> distance=5 comment="N1 app via HQ (backup address)"
+
+# 3. the staff LAN may not use any other resolver, otherwise the entry can be bypassed
+/ip firewall address-list add list=staff-lan address=<BRANCH_LAN>
+/ip firewall filter
+add chain=forward src-address-list=staff-lan protocol=udp dst-port=53 dst-address=!<BRANCH_ROUTER> action=drop comment="N1: no outside DNS (udp 53)"
+add chain=forward src-address-list=staff-lan protocol=tcp dst-port=53,853 dst-address=!<BRANCH_ROUTER> action=drop comment="N1: no outside DNS / DoT (tcp 53, 853)"
+```
+Move the two `drop` rules above any general `accept` for the LAN. A PC with a hard-coded 8.8.8.8
+stops resolving until it uses the router; that is intended. (DNS-over-HTTPS inside a browser is
+not visible on port 53; switch it off in the browser policy.)
+
+**Guest Wi-Fi must never get the DNS entry or the route.** Keep the guest network on its own DHCP
+server whose `dns-server` is a public resolver (or the router without the static entry), keep
+`<GUEST_LAN>` out of `elrezeiky-internal-clients`, and add a forward drop from `<GUEST_LAN>` to
+`elrezeiky-app-addresses`. Guest devices then reach only the public address and are `external`.
+
+**T4 — HQ router (IT-only):** the same static entry for the HQ LAN (no route needed, ZeroTier is local):
+```routeros
+/ip dns static add name=elrezeikyapp.dawalvry.com address=10.50.50.77 comment="N1 split DNS"
+```
+plus the same DNS-bypass block with `<BRANCH_LAN>` = `<HQ_LAN>` and `<BRANCH_ROUTER>` = `192.168.1.201`.
+
+**T5 — ZeroTier laptops (IT-only, ZeroTier Central)**
+1. my.zerotier.com -> network `8d1c312afae365aa` -> **DNS**: Search Domain `dawalvry.com`, Server
+   Address = a resolver that answers `elrezeikyapp.dawalvry.com` -> `10.50.50.77`. Use the HQ router's
+   DNS `10.50.50.1` (the static entry from T4 answers it).
+2. On each laptop open the ZeroTier client and tick **Allow DNS** for the network; without it the
+   push is ignored.
+3. Name every member and de-authorise leavers. Off ZeroTier a laptop uses the public address and
+   is correctly `external`.
+
+**T6 — VPS return routes (IT-only, on the server)**
+Packets come back to the device's real address, so the VPS needs a route for every internal range
+from T1. They live in the tunnel watcher `/usr/local/sbin/elrezeiky-tunnel-watch`: the list of
+office ranges `192.168.1 / 3 / 4 / 30 / 70` that it re-applies every 20 s via `10.50.50.1` or
+`dev sstp-hq`. Add each new staff LAN and counted VPN pool from T1 to that list:
+```bash
+sudo nano /usr/local/sbin/elrezeiky-tunnel-watch
+sudo systemctl restart elrezeiky-tunnel-watch
+ip route | grep -E '<BRANCH_LAN>|10.10.10.0'      # via 10.50.50.1 (or dev sstp-hq when failed over)
+```
+The nginx `map $server_addr $elr_network` from «Batch N1 on the live server» already labels by the
+address a request arrived on; ufw 443 stays open on all three addresses.
+
+**T7 — tests (every site).** Use `https://elrezeikyapp.dawalvry.com/api/access/whoami/`
+(returns `zone`, `ip`, `label`, `site`):
+
+| From | Expect |
+|---|---|
+| Branch PC: `nslookup elrezeikyapp.dawalvry.com` | `10.50.50.77` |
+| Branch PC: open `/api/access/whoami/` | `zone: internal`, `ip` = the PC's own LAN address, `label`/`site` = that branch (after registering it, below) |
+| Branch PC with DNS forced to 8.8.8.8 | no resolution (bypass block works) |
+| Guest Wi-Fi device: `nslookup` and `whoami` | public address; `zone: external` |
+| Mobile data | `zone: external`; a forged `X-ElR-Network: internal` header is ignored |
+| ZeroTier laptop with Allow DNS | `nslookup` = `10.50.50.77`, `zone: internal` |
+| Branch PC: `ip` is `10.50.50.1` or `10.0.0.1` | **FAIL** - the router is NATing (T2 srcnat `accept` missing or below masquerade). Every device looks like the router and shows a healthy «داخل الشبكة — ZeroTier»; fix the rule order before registering sites |
+| Stop ZeroTier (VPS side or router link) | within about a minute the watcher moves to SSTP; the same PC is still `internal` |
+
+**Last step:** register each site so it shows a name instead of a bare range: open «الشبكات
+الموثوقة» (`/access/networks`, admin) and add the staff LAN / pool of every site, or run on the
+VPS (dry-run first, then `--apply`):
+```bash
+cd /opt/elrezeiky/app
+sudo -u elrezeiky /opt/elrezeiky/venv/bin/python manage.py seed_trusted_networks
+sudo -u elrezeiky /opt/elrezeiky/venv/bin/python manage.py seed_trusted_networks --apply
+```
+The site labels appear within a minute (the trusted-network list is cached per process for 60 s, and the seed command runs in its own process). In N1 nothing is refused because of the network (log only); blocking starts in batch N3.
 
 ### 9.3 TLS certificate (DNS must resolve first — section 3)
 
@@ -1517,7 +1699,10 @@ $U git fetch origin && $U git checkout main && $U git pull --ff-only
 NEW=$($U git rev-parse HEAD)
 if [[ $OLD == "$NEW" ]]; then echo "Nothing new on main."; exit 0; fi
 $U git log --oneline $OLD..$NEW
-echo "== python deps (app)";  $U /opt/elrezeiky/venv/bin/pip install -q -r requirements.txt
+# torch from the CPU index first: requirements.txt has a torch security floor, and if pip had to
+# satisfy it from PyPI it would pull the ~3 GB CUDA build. No-op when the installed torch is new enough.
+echo "== python deps (app)";  $U /opt/elrezeiky/venv/bin/pip install -q "torch>=2.13.0" --index-url https://download.pytorch.org/whl/cpu
+$U /opt/elrezeiky/venv/bin/pip install -q -r requirements.txt
 if ! $U git diff --quiet $OLD $NEW -- ocr_sidecar/requirements.txt; then
   echo "== python deps (OCR sidecar)"; $U /opt/elrezeiky/ocr-venv/bin/pip install -q -r ocr_sidecar/requirements.txt
 fi
@@ -1564,6 +1749,7 @@ schema, pricing/discount logic, checkout/payment, or any writer.
 | Out of memory / swapping | `htop`: stop workbench Vite/tests; keep EasyOCR/Whisper off; `journalctl -u elrezeiky-ocr` (sidecar hitting its 2 GB cap?); ask LDC for 16 GB |
 | OCR slow / screens slow during OCR | expected on 4 vCPU during big bundles; check `OMP_THREAD_LIMIT=1`, sidecar `CPUQuota`; run big bundles after hours; 16 GB / 8 vCPU plan |
 | `paddleocr` engine unavailable | `systemctl status elrezeiky-ocr` · `curl 127.0.0.1:8077/health` · `PADDLE_OCR_URL` in `.env` |
+| Every admin is login-locked (5 wrong tries) | On the server: `cd /opt/elrezeiky/app && sudo -u elrezeiky /opt/elrezeiky/venv/bin/python manage.py unlock_login <username>` — lifts the lock and logs it |
 | Cert expired | `sudo certbot renew` · `systemctl list-timers | grep certbot` |
 
 ---

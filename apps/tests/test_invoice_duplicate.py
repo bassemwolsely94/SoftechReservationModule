@@ -95,12 +95,24 @@ class PushDuplicateGuardTests(TestCase):
         self.assertEqual(r.status_code, 409)
         self.assertTrue(r.json().get('duplicate'))
 
-    def test_push_allows_with_force(self):
+    def test_push_allows_duplicate_override_with_reason(self):
         self._inv(status='finalized')
         new = self._inv(status='confirmed')
-        r = self.client.post(f'/api/invoices/invoices/{new.pk}/push/', {'force': 'true'}, format='json')
-        # writer gate is OFF → dry-run plan returned (not the 409 duplicate block)
+        r = self.client.post(f'/api/invoices/invoices/{new.pk}/push/',
+                             {'override_duplicate': 'true', 'duplicate_reason': 'فاتورة مكملة بنفس الرقم'}, format='json')
+        # past the duplicate block and the reason check (it then stops on the test user's
+        # missing SOFTECH code, which is a later, unrelated gate)
         self.assertNotEqual(r.status_code, 409)
+        self.assertNotIn('سبب', r.json().get('detail', ''))
+
+    def test_bare_force_and_short_reasons_are_refused(self):
+        self._inv(status='finalized')
+        new = self._inv(status='confirmed')
+        url = f'/api/invoices/invoices/{new.pk}/push/'
+        self.assertEqual(self.client.post(url, {'force': 'true'}, format='json').status_code, 400)
+        self.assertEqual(self.client.post(url, {'override_duplicate': 'true', 'duplicate_reason': 'ok'},
+                                          format='json').status_code, 400)
+        self.assertEqual(self.client.post(url, {'acknowledge_warnings': 'true'}, format='json').status_code, 400)
 
 
 class CandidateScoringTests(TestCase):

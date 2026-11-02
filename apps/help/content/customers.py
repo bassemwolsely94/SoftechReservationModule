@@ -374,9 +374,12 @@ SCREENS = [
             T('سجّل الأمراض المزمنة في البطاقة (تعديل) لو العميل أخبرك بها.', 'Record chronic conditions on the card (edit) if the customer tells you.'),
             T('«+ حجز جديد» يفتح نموذج الحجز (اختر العميل فيه)، و«طلبات لم تُلبَّ» تفتح طلبات العميل.', '"+ New reservation" opens the reservation form (pick the customer there); "Unmet requests" opens the customer\'s requests.'),
         ],
-        'tips': [
+        'tips': [T('أرقام عميل فرع تاني بتظهر مخفية (آخر 3 أرقام) — حتى في ملخص الكاشير والفاتورة والملف الطبي.', "Another branch's customer's numbers show hidden (last 3 digits) — also in the cashier summary, the receipt and the patient profile."),
+                 
             T('الملف الصحي معلومة حساسة — لا تشاركها خارج العمل.', 'The health profile is sensitive — never share it outside work.'),
             T('تعديل النقاط يؤثر على رصيد العميل في كل الفروع ويُسجَّل باسمك.', 'Adjusting points affects the customer\'s balance in all branches and is recorded under your name.'),
+            T('مبيعات العميل في «الجدول الزمني» = كل فواتير SOFTECH اللي عليها الـPIC بتاعه، من المزامنة اليومية (مش بس الفواتير المربوطة باسمه).',
+              'The customer\'s sales on the "Timeline" = every SOFTECH invoice carrying their PIC, from the daily sync (not only invoices linked to their name).'),
         ],
         'related': ['customers.list', 'reservations.new', 'followups.tasks', 'loyalty.program'],
         'workflows': [],
@@ -491,7 +494,7 @@ SCREENS = [
              'open_hint': T('بعد «تعديل» في كارت «أمراض مزمنة».', 'After "Edit" on the "Chronic conditions" card.')},
         ],
         'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'change_note': T('الجدول الزمني يعرض كل مبيعات العميل بالـPIC من المزامنة اليومية', 'The timeline shows all of the customer\'s sales by PIC from the daily sync'),
     },
     {
         'key': 'customers.merge',

@@ -25,6 +25,7 @@ import ReservationDetailPage from './pages/ReservationDetailPage'
 import CustomersPage from './pages/CustomersPage'
 import CustomerDetailPage from './pages/CustomerDetailPage'
 import SyncPage from './pages/SyncPage'
+import TrustedNetworksPage from './pages/TrustedNetworksPage'
 import TransfersPage from './pages/TransfersPage'
 import TransitsPage from './pages/TransitsPage'
 import NewTransferPage from './pages/NewTransferPage'
@@ -54,6 +55,8 @@ import InsurancePrintPage from './pages/InsurancePrintPage'
 import InsuranceClientsPage from './pages/InsuranceClientsPage'
 import InsuranceItemOverridesPage from './pages/InsuranceItemOverridesPage'
 import InsuranceSeparationListsPage from './pages/InsuranceSeparationListsPage'
+import InsuranceRostersPage from './pages/InsuranceRostersPage'
+import InsuranceReportsPage from './pages/InsuranceReportsPage'
 import MyIncentivesPage from './pages/MyIncentivesPage'
 import GamificationPage from './pages/GamificationPage'
 import StockAuditPage from './pages/StockAuditPage'
@@ -461,6 +464,8 @@ export default function App() {
             <Route path="insurance/clients"                   element={<InsuranceClientsPage />} />
             <Route path="insurance/item-overrides"            element={<InsuranceItemOverridesPage />} />
             <Route path="insurance/separation-lists"          element={<InsuranceSeparationListsPage />} />
+            <Route path="insurance/rosters"                   element={<InsuranceRostersPage />} />
+            <Route path="insurance/reports"                   element={<InsuranceReportsPage />} />
             <Route path="insurance/print-profiles"            element={<InsurancePrintProfilesPage />} />
             <Route path="insurance/claims/:id"                element={<InsuranceClaimDetailPage />} />
             <Route path="insurance/claims/:id/print"          element={<InsurancePrintPage />} />
@@ -518,6 +523,9 @@ export default function App() {
             {/* sync: admin only */}
             <Route path="sync"
               element={<RequireRole roles={['admin']}><SyncPage /></RequireRole>} />
+            {/* trusted networks (security N1): admin only */}
+            <Route path="access/networks"
+              element={<RequireRole roles={['admin']}><TrustedNetworksPage /></RequireRole>} />
             {/* procurement: purchasing + admin */}
             <Route path="invoices"
               element={<RequireRole roles={['admin','purchasing']}><InvoicePage /></RequireRole>} />

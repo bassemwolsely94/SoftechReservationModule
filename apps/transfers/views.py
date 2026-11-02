@@ -4,6 +4,7 @@ apps/transfers/views.py
 Transfer Request ViewSet — full state machine + item management + chatter.
 NO stock mutations. NO ERP calls. Communication + approval only.
 """
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
@@ -13,6 +14,7 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import TransferRequest, TransferRequestItem, TransferRequestMessage
+from core import branch_scope
 from core.errors import public_error
 from .serializers import (
     TransferRequestListSerializer,
@@ -38,13 +40,26 @@ def _is_hq(profile):
     """HQ-wide oversight roles."""
     return profile and profile.role in ('admin', 'purchasing', 'call_center')
 
+def _on_side(profile, branch_id):
+    """Is `branch_id` one of this user's own branches — for the workflow side checks below?
+    Branch staff: home + allowed − restricted (core.branch_scope). An all-branch role (supervisor,
+    quality manager…) keeps its home-branch side only: seeing every branch (B-3) does not make it
+    the requesting / supplying side of every transfer — that stays with the HQ lists above."""
+    if not branch_id:
+        return False
+    ids = branch_scope.branch_ids(profile)
+    if ids is None:
+        return profile.branch_id == branch_id
+    return branch_id in ids
+
+
 def _can_supply_side(profile, tr):
     """Supplying branch staff + admin/purchasing can approve/reject/send-to-ERP."""
     if not profile:
         return False
     if profile.role in ('admin', 'purchasing'):
         return True
-    return bool(profile.branch_id and profile.branch_id == tr.supplying_branch_id)
+    return _on_side(profile, tr.supplying_branch_id)
 
 def _can_request_side(profile, tr):
     """Requesting branch staff + HQ can submit/edit/complete/cancel."""
@@ -52,7 +67,16 @@ def _can_request_side(profile, tr):
         return False
     if _is_hq(profile):
         return True
-    return bool(profile.branch_id and profile.branch_id == tr.requesting_branch_id)
+    return _on_side(profile, tr.requesting_branch_id)
+
+
+def _visible_transfers(qs, user):
+    """Owner decision 3: a branch sees a transfer when it is the requesting OR the supplying side.
+    Batch 5: through the one helper — all-branch roles (B-3) see all."""
+    ids = branch_scope.branch_ids(user)
+    if ids is None:
+        return qs
+    return qs.filter(Q(requesting_branch_id__in=ids) | Q(supplying_branch_id__in=ids))
 
 
 def _system_log(request_obj, message):
@@ -138,18 +162,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
             'messages__created_by__user',
         )
 
-        profile = _profile(self.request)
-        if not profile:
-            return qs.none()
-
-        # HQ roles see all
-        if profile.role in ('admin', 'purchasing', 'call_center'):
-            pass
-        elif profile.branch:
-            # Branch staff see requests where they are source OR destination
-            qs = qs.filter(requesting_branch=profile.branch) | qs.filter(supplying_branch=profile.branch)
-        else:
-            return qs.none()
+        qs = _visible_transfers(qs, self.request.user)
 
         # Date range filters — wrap in try/except so malformed input returns
         # an empty queryset rather than a 500 from the DB driver
@@ -175,11 +188,24 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         return TransferRequestDetailSerializer
 
     def perform_create(self, serializer):
+        # a branch requests for itself; HQ may request on any branch's behalf
+        branch_scope.check_branch_value(self.request.user, serializer, 'requesting_branch')
         profile = _profile(self.request)
         tr = serializer.save(created_by=profile)
         _system_log(tr, f'تم إنشاء الطلب بواسطة {profile.full_name}')
 
+    def perform_update(self, serializer):
+        # Batch 5: only the requesting side (or HQ) edits the request, and not onto a foreign branch
+        from rest_framework.exceptions import PermissionDenied
+        if not _can_request_side(_profile(self.request), serializer.instance):
+            raise PermissionDenied('تعديل الطلب للفرع الطالب أو الإدارة فقط.')
+        branch_scope.check_branch_value(self.request.user, serializer, 'requesting_branch')
+        serializer.save()
+
     def perform_destroy(self, instance):
+        from rest_framework.exceptions import PermissionDenied
+        if not _can_request_side(_profile(self.request), instance):
+            raise PermissionDenied('حذف الطلب للفرع الطالب أو الإدارة فقط.')
         if instance.status not in ('draft', 'cancelled'):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied('لا يمكن حذف طلب تم تقديمه. استخدم الإلغاء بدلاً من ذلك.')
@@ -931,14 +957,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         qs = TransferRequest.objects.filter(created_at__gte=since)
 
         # Branch-scope the same way the list view does
-        if profile.role not in ('admin', 'purchasing', 'call_center'):
-            if profile.branch_id:
-                qs = qs.filter(
-                    Q(requesting_branch_id=profile.branch_id) |
-                    Q(supplying_branch_id=profile.branch_id)
-                )
-            else:
-                qs = qs.none()
+        qs = _visible_transfers(qs, request.user)
 
         total     = qs.count()
         completed = qs.filter(status='completed').count()

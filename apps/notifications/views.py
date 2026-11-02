@@ -117,8 +117,9 @@ def _visible_categories(profile):
 
 # ── Gap-4: chatter branch scope ───────────────────────────────────────────────
 
-# Roles that can read chatter for ANY branch (HQ / oversight roles).
-_CHATTER_BYPASS_ROLES = frozenset({'admin', 'call_center', 'manager', 'purchasing'})
+# Batch 5: which branches' chatter a user may read = core.branch_scope (all-branch roles incl.
+# supervisor / quality manager per B-3, access_all_branches; branch staff home + allowed −
+# restricted). Replaces the old role list ('manager' was never a real role).
 
 
 def _get_record_branch_id(model_name: str, record_id: int):
@@ -133,8 +134,11 @@ def _get_record_branch_id(model_name: str, record_id: int):
             from apps.reservations.models import Reservation
             return Reservation.objects.values_list('branch_id', flat=True).get(pk=record_id)
         if model_name == 'transfer':
-            from apps.transfers.models import Transfer
-            return Transfer.objects.values_list('from_branch_id', flat=True).get(pk=record_id)
+            # both sides may read it (owner decision 3). Was `Transfer.from_branch_id` — neither
+            # exists, so the lookup always failed and transfer chatter was open to every branch.
+            from apps.transfers.models import TransferRequest
+            return set(TransferRequest.objects.values_list(
+                'requesting_branch_id', 'supplying_branch_id').get(pk=record_id)) - {None} or None
         if model_name == 'voucher':
             from apps.vouchers.models import Voucher
             return Voucher.objects.values_list('branch_id', flat=True).get(pk=record_id)
@@ -740,14 +744,17 @@ def chatter_list(request, model_name, record_id):
         return Response(status=status.HTTP_403_FORBIDDEN)
 
     # Branch scope enforcement
-    if profile.role not in _CHATTER_BYPASS_ROLES and not getattr(profile, 'access_all_branches', False):
+    from core import branch_scope
+    if branch_scope.branch_ids(request.user) is not None:
         try:
             record_id_int = int(record_id)
         except (ValueError, TypeError):
             record_id_int = None
         if record_id_int is not None:
             record_branch_id = _get_record_branch_id(model_name, record_id_int)
-            if record_branch_id is not None and record_branch_id != profile.branch_id:
+            sides = record_branch_id if isinstance(record_branch_id, set) else (
+                {record_branch_id} if record_branch_id is not None else set())
+            if sides and not any(branch_scope.allows(request.user, b) for b in sides):
                 return Response(
                     {'detail': 'ليس لديك صلاحية الاطلاع على سجلات هذا الفرع'},
                     status=status.HTTP_403_FORBIDDEN,

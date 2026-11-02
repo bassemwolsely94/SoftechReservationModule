@@ -32,7 +32,7 @@ from .serializers import (
     UserActivityLogSerializer,
     ERPUserSerializer,
 )
-from .middleware import get_current_ip
+from core.client_ip import client_ip
 from .passwords import password_problem
 from core.permissions import IsAdminRole, MatrixPermission, matrix_allows, matrix_permission
 
@@ -109,7 +109,24 @@ def _resolve_user(identifier: str):
     return None
 
 
-def _log_auth(action: str, profile, ip: str, note: str = ''):
+def _request_network_fields(request):
+    """The network label and browser of a request, for the activity log (blank without one)."""
+    if request is None:
+        return {}
+    try:
+        from apps.access.network import request_network
+        acc = getattr(request, 'access', None)
+        net = acc.network if acc else request_network(request)
+        return {
+            'network': net.zone,
+            'network_site': net.site.name if net.site else '',
+            'user_agent': (request.META.get('HTTP_USER_AGENT') or '')[:300],
+        }
+    except Exception:
+        return {}
+
+
+def _log_auth(action: str, profile, ip: str, note: str = '', request=None):
     try:
         UserActivityLog.objects.create(
             target_user=profile,
@@ -117,9 +134,22 @@ def _log_auth(action: str, profile, ip: str, note: str = ''):
             action=action,
             ip_address=ip,
             note=note,
+            **_request_network_fields(request),
         )
     except Exception:
         pass
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdminRole])
+def forget_devices_admin_view(request, pk):
+    """Admin cancels another user's saved "remember this device" tokens (N0/H7)."""
+    from . import mfa
+    profile = StaffProfile.objects.select_related('user').filter(pk=pk).first()
+    if not profile:
+        return Response({'error': 'المستخدم غير موجود'}, status=status.HTTP_404_NOT_FOUND)
+    mfa.forget_devices(profile, getattr(request.user, 'staff_profile', None), client_ip(request))
+    return Response({'detail': f'تم إلغاء الأجهزة المحفوظة لـ {profile.full_name or profile.user.username}'})
 
 
 @api_view(['POST'])
@@ -128,13 +158,24 @@ def _log_auth(action: str, profile, ip: str, note: str = ''):
 def login_view(request):
     identifier = request.data.get('username', '').strip()
     password   = request.data.get('password', '')
-    ip         = get_current_ip() or request.META.get('REMOTE_ADDR')
+    ip         = client_ip(request)
 
     if not identifier or not password:
         return Response({'error': 'يرجى إدخال اسم المستخدم وكلمة المرور'}, status=status.HTTP_400_BAD_REQUEST)
 
     # Resolve the identifier to a Django User object
     resolved_user = _resolve_user(identifier)
+
+    # H8: a locked account answers 429 before the password is even checked (the right password
+    # included); an identifier that matches no account answers the same way after the same
+    # number of misses, so the two cannot be told apart.
+    from . import lockout
+    lock_profile = getattr(resolved_user, 'staff_profile', None) if resolved_user else None
+    if lock_profile:
+        if lockout.locked_until(lock_profile):
+            return Response({'error': lockout.LOCKED_MESSAGE}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+    elif lockout.unknown_identifier_locked(identifier):
+        return Response({'error': lockout.LOCKED_MESSAGE}, status=status.HTTP_429_TOO_MANY_REQUESTS)
 
     if resolved_user:
         user = authenticate(username=resolved_user.username, password=password)
@@ -144,7 +185,12 @@ def login_view(request):
     if not user:
         # Log failed attempt if profile found
         profile = getattr(resolved_user, 'staff_profile', None) if resolved_user else None
-        _log_auth('login_failed', profile, ip, note=f'identifier={identifier}')
+        _log_auth('login_failed', profile, ip, note=f'identifier={identifier}', request=request)
+        if profile:
+            if lockout.locked_until(profile):
+                lockout.register_lock(profile, ip, request=request)
+        else:
+            lockout.note_unknown_failure(identifier)
         return Response({'error': 'بيانات الدخول غير صحيحة'}, status=status.HTTP_401_UNAUTHORIZED)
 
     if not user.is_active:
@@ -162,16 +208,16 @@ def login_view(request):
     if profile and profile.mfa_enabled:
         device_token = request.data.get('device_token', '')
         if not _mfa.valid_device_token(device_token, user):
-            _log_auth('login_success', profile, ip, note='mfa_challenge')
+            _log_auth('mfa_challenge', profile, ip, request=request)
             return Response({'mfa_required': True,
                              'mfa_token': _mfa.make_preauth_token(user, 'login')})
     elif _mfa.mfa_required_for(profile):
         # Enforcement on + required role + not yet enrolled → force enrollment now.
-        _log_auth('login_success', profile, ip, note='mfa_setup_required')
+        _log_auth('mfa_challenge', profile, ip, note='mfa_setup_required', request=request)
         return Response({'mfa_setup_required': True,
                          'mfa_token': _mfa.make_preauth_token(user, 'enroll')})
 
-    _log_auth('login_success', profile, ip)
+    _log_auth('login_success', profile, ip, request=request)
 
     refresh = RefreshToken.for_user(user)
     resp = Response({
@@ -185,6 +231,18 @@ def login_view(request):
     # The SPA uses the httpOnly cookies and ignores the body tokens (kept for
     # scripts / non-browser clients, which need the password anyway).
     return set_auth_cookies(resp, refresh.access_token, refresh)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdminRole])
+def unlock_login_view(request, pk):
+    """Admin lifts a login lock (H8) before it runs out."""
+    from . import lockout
+    profile = StaffProfile.objects.select_related('user').filter(pk=pk).first()
+    if not profile:
+        return Response({'error': 'المستخدم غير موجود'}, status=status.HTTP_404_NOT_FOUND)
+    lockout.unlock(profile, getattr(request.user, 'staff_profile', None), client_ip(request), request=request)
+    return Response({'detail': f'تم رفع إيقاف الدخول عن {profile.full_name or profile.user.username}'})
 
 
 @api_view(['POST'])
@@ -295,8 +353,8 @@ def change_password_view(request):
     end_sessions(user)
 
     profile = getattr(user, 'staff_profile', None)
-    ip      = get_current_ip() or request.META.get('REMOTE_ADDR')
-    _log_auth('password_changed', profile, ip)
+    ip      = client_ip(request)
+    _log_auth('password_changed', profile, ip, request=request)
 
     return Response({'detail': 'تم تغيير كلمة المرور بنجاح'})
 
@@ -357,7 +415,7 @@ class StaffProfileViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         profile = serializer.save()
         actor   = getattr(self.request.user, 'staff_profile', None)
-        ip      = get_current_ip() or self.request.META.get('REMOTE_ADDR')
+        ip      = client_ip(self.request)
         try:
             UserActivityLog.objects.create(
                 target_user=profile,
@@ -383,7 +441,7 @@ class StaffProfileViewSet(viewsets.ModelViewSet):
         end_sessions(profile.user)
 
         actor = getattr(request.user, 'staff_profile', None)
-        ip    = get_current_ip() or request.META.get('REMOTE_ADDR')
+        ip    = client_ip(request)
         UserActivityLog.objects.create(
             target_user=profile,
             changed_by=actor,
@@ -403,7 +461,7 @@ class StaffProfileViewSet(viewsets.ModelViewSet):
             end_sessions(profile.user)
 
         actor  = getattr(request.user, 'staff_profile', None)
-        ip     = get_current_ip() or request.META.get('REMOTE_ADDR')
+        ip     = client_ip(request)
         action_name = 'activated' if profile.is_active else 'deactivated'
         UserActivityLog.objects.create(
             target_user=profile,
@@ -562,7 +620,7 @@ class PermissionsMatrixView(viewsets.ViewSet):
                     changed_by=actor,
                     action='permissions_changed',
                     new_value={'changes': changed},
-                    ip_address=get_current_ip() or request.META.get('REMOTE_ADDR'),
+                    ip_address=client_ip(request),
                 )
             except Exception:
                 pass

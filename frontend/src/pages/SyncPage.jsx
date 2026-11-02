@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { syncApi } from '../api/client'
+import { ROLE_LABELS } from '../utils/roleLabels'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 
@@ -71,6 +72,12 @@ function BranchHealthPanel({ data, onProbe, probing }) {
           <span className="text-xs font-bold text-gray-500 mr-auto">
             {summary.ok}/{summary.total} نقطة متصلة
           </span>
+          {data.probe === 'refused' && (
+            <span className="text-xs text-amber-700">الفحص المباشر للمدير فقط</span>
+          )}
+          {data.probe === 'cooldown' && (
+            <span className="text-xs text-amber-700">انتظر دقيقة</span>
+          )}
           {onProbe && (
             <button data-tour="admin-sync-probe"
               onClick={onProbe}
@@ -136,9 +143,17 @@ const LOAD_GROUPS = [['by_scope', 'حسب المهمة', 'scope'], ['by_caller',
 const n0 = v => (v || 0).toLocaleString('en-US')
 const secs = ms => (ms || 0) >= 60_000 ? `${n0(Math.round(ms / 60_000))} د` : `${n0(Math.round((ms || 0) / 1000))} ث`
 
+// roles the user screen does not offer in its picker, but whose traffic still shows here
+const EXTRA_ROLE_LABELS = { supervisor: 'مشرف', quality_manager: 'مدير الجودة' }
+
 function scopeLabel(s) {
   if (!s) return '—'
   if (s === 'web') return 'الشاشات (طلبات المستخدمين)'
+  if (s.startsWith('web:')) {
+    const [, zone, role] = s.split(':')
+    const where = zone === 'internal' ? 'داخل الشبكة' : 'خارج الشبكة'
+    return `الشاشات · ${where} · ${role === 'anon' ? 'غير مسجّل الدخول' : (ROLE_LABELS[role] || EXTRA_ROLE_LABELS[role] || role)}`
+  }
   if (s.startsWith('job:')) return `مهمة مجدولة · ${s.slice(4)}`
   if (s.startsWith('cmd:')) return `أمر يدوي · ${s.slice(4)}`
   return s

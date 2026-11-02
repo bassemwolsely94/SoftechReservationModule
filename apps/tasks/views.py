@@ -12,6 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.notifications.models import Notification
+from core import branch_scope
 
 from .models import (
     OperationalTask, TaskAssignment, TaskItem,
@@ -34,6 +35,25 @@ def _get_staff(request):
         return request.user.staff_profile
     except Exception:
         return None
+
+
+def _visible_tasks(request):
+    """Tasks this user may see and act on (Batch 5 part 2): their branches' tasks, the
+    «جميع الفروع» tasks (branch = NULL — meant for everyone), and any task they created or are
+    assigned to wherever it lives. All-branch roles see every task."""
+    qs = OperationalTask.objects.all()
+    ids = branch_scope.branch_ids(request.user)
+    if ids is None:
+        return qs
+    q = Q(branch_id__in=ids) | Q(branch__isnull=True)
+    staff = _get_staff(request)
+    if staff:
+        q |= Q(assigned_to=staff) | Q(assignments__staff=staff) | Q(created_by=staff)
+    return qs.filter(pk__in=OperationalTask.objects.filter(q).values('pk'))
+
+
+def _task_visible(request, pk):
+    return _visible_tasks(request).filter(pk=pk).exists()
 
 
 def _log_audit(task, action, actor, field_name='', old_value='', new_value='', extra=None):
@@ -107,7 +127,7 @@ class TaskListCreateView(generics.ListCreateAPIView):
         return TaskListSerializer
 
     def get_queryset(self):
-        qs = OperationalTask.objects.select_related(
+        qs = _visible_tasks(self.request).select_related(
             'assigned_to', 'branch', 'created_by',
         ).annotate(
             subtask_count=Count('subtasks', distinct=True),
@@ -172,6 +192,8 @@ class TaskListCreateView(generics.ListCreateAPIView):
         return qs
 
     def perform_create(self, serializer):
+        if serializer.validated_data.get('branch') is not None:
+            branch_scope.check_branch_value(self.request.user, serializer)
         staff = _get_staff(self.request)
         task = serializer.save(created_by=staff)
         _log_audit(task, 'created', staff)
@@ -197,7 +219,7 @@ class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return OperationalTask.objects.select_related(
+        return _visible_tasks(self.request).select_related(
             'assigned_to', 'branch', 'created_by', 'completed_by',
         ).prefetch_related(
             'assignments__staff',
@@ -238,6 +260,8 @@ class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
         return super().destroy(request, *args, **kwargs)
 
     def perform_update(self, serializer):
+        if serializer.validated_data.get('branch') is not None:
+            branch_scope.check_branch_value(self.request.user, serializer)
         task = self.get_object()
         staff = _get_staff(self.request)
         old_status = task.status
@@ -277,7 +301,7 @@ class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
 @permission_classes([IsAuthenticated])
 def task_complete(request, pk):
     try:
-        task = OperationalTask.objects.get(pk=pk)
+        task = _visible_tasks(request).get(pk=pk)
     except OperationalTask.DoesNotExist:
         return Response({'detail': 'Not found.'}, status=404)
 
@@ -313,7 +337,7 @@ def task_complete(request, pk):
 @permission_classes([IsAuthenticated])
 def task_reopen(request, pk):
     try:
-        task = OperationalTask.objects.get(pk=pk)
+        task = _visible_tasks(request).get(pk=pk)
     except OperationalTask.DoesNotExist:
         return Response({'detail': 'Not found.'}, status=404)
 
@@ -340,7 +364,7 @@ def task_reopen(request, pk):
 @permission_classes([IsAuthenticated])
 def task_assignments(request, pk):
     try:
-        task = OperationalTask.objects.get(pk=pk)
+        task = _visible_tasks(request).get(pk=pk)
     except OperationalTask.DoesNotExist:
         return Response({'detail': 'Not found.'}, status=404)
 
@@ -379,6 +403,8 @@ def task_assignments(request, pk):
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def task_assignment_remove(request, pk, assignment_pk):
+    if not _task_visible(request, pk):
+        return Response({'detail': 'Not found.'}, status=404)
     try:
         assignment = TaskAssignment.objects.get(pk=assignment_pk, task_id=pk)
     except TaskAssignment.DoesNotExist:
@@ -388,7 +414,7 @@ def task_assignment_remove(request, pk, assignment_pk):
     staff_name = assignment.staff.full_name
     assignment.delete()
     _log_audit(
-        OperationalTask.objects.get(pk=pk),
+        _visible_tasks(request).get(pk=pk),
         'unassigned', actor, new_value=staff_name
     )
     return Response(status=status.HTTP_204_NO_CONTENT)
@@ -400,7 +426,7 @@ def task_assignment_remove(request, pk, assignment_pk):
 @permission_classes([IsAuthenticated])
 def task_items(request, pk):
     try:
-        task = OperationalTask.objects.get(pk=pk)
+        task = _visible_tasks(request).get(pk=pk)
     except OperationalTask.DoesNotExist:
         return Response({'detail': 'Not found.'}, status=404)
 
@@ -416,6 +442,8 @@ def task_items(request, pk):
 @api_view(['PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def task_item_detail(request, pk, item_pk):
+    if not _task_visible(request, pk):
+        return Response({'detail': 'Not found.'}, status=404)
     try:
         item = TaskItem.objects.get(pk=item_pk, task_id=pk)
     except TaskItem.DoesNotExist:
@@ -446,7 +474,7 @@ def task_item_detail(request, pk, item_pk):
 @permission_classes([IsAuthenticated])
 def task_messages(request, pk):
     try:
-        task = OperationalTask.objects.get(pk=pk)
+        task = _visible_tasks(request).get(pk=pk)
     except OperationalTask.DoesNotExist:
         return Response({'detail': 'Not found.'}, status=404)
 
@@ -477,6 +505,8 @@ def task_messages(request, pk):
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def task_message_delete(request, pk, message_pk):
+    if not _task_visible(request, pk):
+        return Response({'detail': 'Not found.'}, status=404)
     try:
         msg = TaskMessage.objects.get(pk=message_pk, task_id=pk, message_type='comment')
     except TaskMessage.DoesNotExist:
@@ -501,7 +531,7 @@ def task_message_delete(request, pk, message_pk):
 @parser_classes([MultiPartParser, FormParser])
 def task_attachments(request, pk):
     try:
-        task = OperationalTask.objects.get(pk=pk)
+        task = _visible_tasks(request).get(pk=pk)
     except OperationalTask.DoesNotExist:
         return Response({'detail': 'Not found.'}, status=404)
 
@@ -541,6 +571,8 @@ def task_attachments(request, pk):
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def task_attachment_delete(request, pk, att_pk):
+    if not _task_visible(request, pk):
+        return Response({'detail': 'Not found.'}, status=404)
     try:
         att = TaskAttachment.objects.get(pk=att_pk, task_id=pk)
     except TaskAttachment.DoesNotExist:
@@ -582,7 +614,7 @@ def task_dashboard(request):
     date_from = p.get('date_from')
     date_to = p.get('date_to')
 
-    qs = OperationalTask.objects.all()
+    qs = _visible_tasks(request)
     if branch:
         qs = qs.filter(branch_id=branch)
     if date_from:
@@ -660,7 +692,7 @@ def task_dashboard(request):
 @permission_classes([IsAuthenticated])
 def task_audit_logs(request, pk):
     try:
-        task = OperationalTask.objects.get(pk=pk)
+        task = _visible_tasks(request).get(pk=pk)
     except OperationalTask.DoesNotExist:
         return Response({'detail': 'Not found.'}, status=404)
 
@@ -670,12 +702,25 @@ def task_audit_logs(request, pk):
 
 # ── TaskSchedule ───────────────────────────────────────────────────────────────
 
+def _schedules(request, writing=False):
+    """Batch 5 part 2: branch users read their branches' schedules and the «جميع الفروع» ones
+    (branch = NULL); they change / run only their own branches' schedules."""
+    qs = TaskSchedule.objects.select_related('branch', 'assign_to')
+    ids = branch_scope.branch_ids(request.user)
+    if ids is None:
+        return qs
+    q = Q(branch_id__in=ids)
+    if not writing:
+        q |= Q(branch__isnull=True)
+    return qs.filter(q)
+
+
 class TaskScheduleListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = TaskScheduleSerializer
 
     def get_queryset(self):
-        qs = TaskSchedule.objects.select_related('branch', 'assign_to')
+        qs = _schedules(self.request)
         if branch := self.request.query_params.get('branch'):
             qs = qs.filter(Q(branch_id=branch) | Q(branch__isnull=True))
         if active := self.request.query_params.get('active'):
@@ -683,13 +728,23 @@ class TaskScheduleListCreateView(generics.ListCreateAPIView):
         return qs
 
     def perform_create(self, serializer):
+        # an all-branch schedule (branch = NULL) is for the all-branch roles
+        if branch_scope.branch_ids(self.request.user) is not None:
+            branch_scope.require(self.request.user, getattr(serializer.validated_data.get('branch'), 'pk', None))
         serializer.save(created_by=_get_staff(self.request))
 
 
 class TaskScheduleDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = TaskScheduleSerializer
-    queryset = TaskSchedule.objects.select_related('branch', 'assign_to')
+
+    def get_queryset(self):
+        return _schedules(self.request, writing=self.request.method not in ('GET', 'HEAD', 'OPTIONS'))
+
+    def perform_update(self, serializer):
+        if 'branch' in serializer.validated_data and branch_scope.branch_ids(self.request.user) is not None:
+            branch_scope.require(self.request.user, getattr(serializer.validated_data['branch'], 'pk', None))
+        serializer.save()
 
 
 @api_view(['POST'])
@@ -697,7 +752,7 @@ class TaskScheduleDetailView(generics.RetrieveUpdateDestroyAPIView):
 def schedule_run_now(request, pk):
     """Manually trigger a schedule to generate its task immediately."""
     try:
-        schedule = TaskSchedule.objects.get(pk=pk)
+        schedule = _schedules(request, writing=True).get(pk=pk)
     except TaskSchedule.DoesNotExist:
         return Response({'detail': 'Not found.'}, status=404)
 

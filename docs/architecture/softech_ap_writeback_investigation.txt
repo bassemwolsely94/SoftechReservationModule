@@ -1,4 +1,4 @@
-AP write-back discovery: 2026-10-26T19:56:11.924566
+AP write-back discovery: 2026-10-31T02:43:47.828046
 Mode: DISCOVERY = SELECT-only. REHEARSAL (opt-in) = INSERT then ROLLBACK, never COMMIT.
 
 ================================================================================
@@ -70,7 +70,7 @@ Mode: DISCOVERY = SELECT-only. REHEARSAL (opt-in) = INSERT then ROLLBACK, never 
 ================================================================================
   G: ROLLBACK INSERT REHEARSAL (real INSERT → observe → ROLLBACK)
 ================================================================================
-  marker note = APPROBE1793033771  (unique tag to find the row & detect serial reassignment)
+  marker note = APPROBE1793407427  (unique tag to find the row & detect serial reassignment)
   allocated cheqsno=51710 ourcheqsno=31794 (branch 130)
   target invoice: docnumber=12362 docdate=2026-09-17 docvalue=840.0 docvaluepay(before)=0.0
   BEGIN TRAN
@@ -83,4 +83,4 @@ Mode: DISCOVERY = SELECT-only. REHEARSAL (opt-in) = INSERT then ROLLBACK, never 
   ROLLBACK issued
   RESIDUE CHECK: rows with marker after rollback = 51710 (must be 0)
 
-Complete: 2026-10-26T19:56:11.929051
+Complete: 2026-10-31T02:43:47.836675

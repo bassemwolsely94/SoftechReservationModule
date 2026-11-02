@@ -300,6 +300,8 @@ SCREENS = [
               'After delivery: "Cash collection" and enter the collected amount — the system shows any shortage or excess vs (items + delivery fee).'),
         ],
         'tips': [
+            T('إلغاء الطلب وإغلاقه من صلاحيات المشرف/مسؤول التوزيع — السائق لا يستطيع ذلك حتى على طلبه.',
+              'Cancelling and closing belong to the supervisor/dispatcher — a driver cannot, even on their own order.'),
             T('لو السائق لم يسجل حالة من تطبيقه يمكنك تسجيلها يدوياً من هنا، وتظهر «إدخال يدوي» في السجل.',
               'If the driver did not record a status in their app, you can record it here; it shows as "manual entry".'),
             T('كل زر بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول التوصيل): «تكليف سائق» يحتاج «إسناد»، «إلغاء» يحتاج «اعتماد»، و«إغلاق» و«تحصيل نقدي» يحتاجوا «إنهاء» أو «اعتماد». لو ظهرت رسالة «ليس لديك صلاحية» اطلبها من المدير.',
@@ -454,6 +456,7 @@ SCREENS = [
         'summary': T('جمّع الطلبات الجاهزة في «مسار» لسائق واحد ثم أطلق المسار دفعة واحدة، وتابع حالة مسارات اليوم والنقد المتوقع لكل مسار.',
                      'Group ready orders into one driver\'s "route", launch the whole route at once, and watch today\'s routes and the cash expected per route.'),
         'audience': T('مسؤول التوزيع، الكول سنتر، المشرفون.', 'The dispatcher, call center, supervisors.'),
+        'tips': [T('المندوب بيشوف رقم المستلم في الطلبات المسندة له حتى لو من فرع تاني. البحث برقم العميل لازم يكون بالرقم كامل.', "A rider sees the recipient's number on orders assigned to them, even from another branch. Looking a customer up by phone needs the full number.")],
         'steps': [
             T('من «جاهزة للتكليف» حدد الطلبات المتقاربة جغرافياً.', 'From "Ready to assign" select orders that are close to each other.'),
             T('اختر السائق ثم «إنشاء مسار».', 'Choose the driver, then "Create route".'),
@@ -522,7 +525,8 @@ SCREENS = [
             T('عند العميل: «تم التسليم» ← اسم المستلم، المبلغ المحصَّل، صورة اختيارية وملاحظة (مثال: سُلّم للبواب) ← «تأكيد التسليم». موقعك يُسجَّل تلقائياً كإثبات.',
               'At the customer: "Delivered" → recipient name, amount collected, optional photo and note (e.g. left with the doorman) → "Confirm". Your location is recorded automatically as proof.'),
         ],
-        'tips': [T('«متوقّع نقدي» أعلى الشاشة = إجمالي النقد الذي يجب أن تحصّله في مسار اليوم.', '"Expected cash" at the top = the total cash you should collect on today\'s route.'),
+        'tips': [T('السائق لا يلغي الطلب ولا يغلقه — الإلغاء والإغلاق من مسؤول التوزيع أو المشرف. لو الطلب لازم يتلغي كلّم المسؤول. موقعك بيتبعت للتتبع بس ولا يغيّر عنوان العميل المسجَّل.', 'A driver cannot cancel or close an order — cancelling and closing are done by the dispatcher or supervisor. If an order must be cancelled, tell them. Your location is only sent for tracking and never changes the customer recorded address.'),
+                 T('«متوقّع نقدي» أعلى الشاشة = إجمالي النقد الذي يجب أن تحصّله في مسار اليوم.', '"Expected cash" at the top = the total cash you should collect on today\'s route.'),
                  T('تقدر تسجّل حالة أو نقدية على الطلبات المكلَّف بيها إنت بس — طلب سائق تاني بيترفض برسالة «هذا الطلب غير مسند إليك».',
                    'You can record a status or cash only on orders assigned to you — another rider\'s order is refused with "this order is not assigned to you".')],
         'tour': [
@@ -586,8 +590,8 @@ SCREENS = [
                        'Final from the app. It may be refused if you are far from the recorded customer address.'),
              'open_hint': T('اضغط «تم التسليم ✅» على طلب في الطريق.', 'Press "Delivered ✅" on an order on the way.')},
         ],
-        'updated': '2026-10-26',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-10-31',
+        'change_note': T('السائق لم يعد يلغي أو يغلق الطلبات — دور المشرف/مسؤول التوزيع', 'Drivers can no longer cancel or close orders — that is the supervisor/dispatcher job'),
     },
     {
         'key': 'delivery.analytics',

@@ -34,6 +34,8 @@ KNOWN_PUBLIC_VIEWS = {
     'apps.delivery.views.delivery_public_track',
     'apps.pbx.views.RecordingView',
     'apps.users.mfa',
+    # network badge: the caller's own zone + IP (+ site name when internal), throttled
+    'apps.access.views.whoami',
 }
 
 _CONVERTERS = {

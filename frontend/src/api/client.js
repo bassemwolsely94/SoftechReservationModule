@@ -74,6 +74,7 @@ export const authApi = {
     api.post('/auth/2fa/enable/', { code, ...(mfaToken ? { mfa_token: mfaToken } : {}) }),
   disable2fa:(password, code) => api.post('/auth/2fa/disable/', { password, code }),
   status2fa: () => api.get('/auth/2fa/status/'),
+  forgetDevices: () => api.post('/auth/2fa/forget-devices/'),
 }
 
 // ── Reservations ──────────────────────────────────────────────────────────────
@@ -340,6 +341,16 @@ export const syncApi = {
   freshness:    (domains) => api.get('/sync/freshness/', domains?.length ? { params: { domains: domains.join(',') } } : undefined),
   // Trigger a specific tiered lane ('fast' = stock+sales, ~15s; 'slow'; 'full').
   triggerLane:  (lane) => api.post('/sync/trigger/', { lane }),
+}
+
+// ── Access (network badge + trusted networks, security N1) ───────────────────
+
+export const accessApi = {
+  whoami:        () => api.get('/access/whoami/'),
+  networks:      () => api.get('/access/networks/'),
+  createNetwork: (data) => api.post('/access/networks/', data),
+  updateNetwork: (id, data) => api.patch(`/access/networks/${id}/`, data),
+  deleteNetwork: (id) => api.delete(`/access/networks/${id}/`),
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -714,6 +725,14 @@ export const purchasingApi = {
   spikeMedTypes:      ()            => api.get('/purchasing/spike/med-types/'),
   spikeConfirm:       (itemId)      => api.post('/purchasing/spike/confirm/', { item_id: itemId }),
   spikeUnconfirm:     (itemId)      => api.post('/purchasing/spike/unconfirm/', { item_id: itemId }),
+  // P-27 dead stock («🧊 مخزون راكد», read-only)
+  deadStockSummary:   ()            => api.get('/purchasing/dead-stock/summary/'),
+  deadStockLines:     (params)      => api.get('/purchasing/dead-stock/lines/', { params }),
+  deadStockExport:    (params)      => api.get('/purchasing/dead-stock/lines/', { params: { ...params, format: 'xlsx' }, responseType: 'blob' }),
+  deadStockRecompute: ()            => api.post('/purchasing/dead-stock/recompute/'),
+  deadStockRecomputeStatus: ()      => api.get('/purchasing/dead-stock/recompute/'),
+  deadStockDecide:    (body)        => api.post('/purchasing/dead-stock/decisions/', body),
+  deadStockHold:      (body)        => api.post('/purchasing/dead-stock/strategic-hold/', body),
 
   // EngineConfig singleton — GET returns current weights/thresholds; PATCH updates them (admin only)
   config:       ()       => api.get('/purchasing/config/'),
@@ -758,6 +777,7 @@ export const supplyApi = {
   isrFilterOptions: ()       => api.get('/purchasing/isr/filter-options/'),
   isrApprove: (id, data = {}) => api.post(`/purchasing/isr/pushes/${id}/approve/`, data),
   isrPush:    (id, data = {}) => api.post(`/purchasing/isr/pushes/${id}/push/`, data),
+  isrPushReview: (id) => api.get(`/purchasing/isr/pushes/${id}/push-review/`),
   isrCancel:  (id, reason)   => api.post(`/purchasing/isr/pushes/${id}/cancel/`, { reason }),
   isrTransferPreview: ()     => api.get('/purchasing/isr/transfer-preview/'),
   isrTransfer: (data = {})   => api.post('/purchasing/isr/transfer/', data),
@@ -975,8 +995,9 @@ export const invoicesApi = {
   listPurchaseOrders: (params)  => api.get('/invoices/purchase-orders/', { params }),
   createPurchaseOrder:(data)    => api.post('/invoices/purchase-orders/', data),
   validateErp:   (id)           => api.post(`/invoices/invoices/${id}/validate/`),
-  push:          (id, force)    => api.post(`/invoices/invoices/${id}/push/`, { force: !!force }),
-  pushBatch:     (ids, force)   => api.post(`/invoices/invoices/push-batch/`, { invoice_ids: ids, force: !!force }),
+  // overrides: {acknowledge_warnings, warnings_reason, override_duplicate, duplicate_reason}
+  push:          (id, overrides)  => api.post(`/invoices/invoices/${id}/push/`, { ...(overrides || {}) }),
+  pushBatch:     (ids, extra)     => api.post(`/invoices/invoices/push-batch/`, { invoice_ids: ids, ...(extra || {}) }),
   reconcile:     (id)           => api.post(`/invoices/invoices/${id}/reconcile/`),
   createReturn:  (id)           => api.post(`/invoices/invoices/${id}/create-return/`),
 
@@ -1309,6 +1330,8 @@ export const usersApi = {
   resetPassword: (id, newPassword) =>
     api.post(`/users/staff/${id}/reset-password/`, { new_password: newPassword }),
   toggleActive:  (id) => api.post(`/users/staff/${id}/toggle-active/`),
+  unlockLogin:   (id) => api.post(`/users/${id}/unlock-login/`),
+  forgetDevices: (id) => api.post(`/users/${id}/forget-devices/`),
   activityLog:   (id) => api.get(`/users/staff/${id}/activity-log/`),
 
   // Self-service
@@ -2282,11 +2305,15 @@ export const insuranceApi = {
   repricePreview:     (claimId, data) => api.post(`/insurance/claims/${claimId}/softech-reprice/preview/`, data),
   repriceReceiptLines:(claimId, docno, branch) => api.get(`/insurance/claims/${claimId}/softech-reprice/receipt-lines/`, { params: { docno, branch } }),
   repriceItemReceipts:(claimId, itemcode)   => api.get(`/insurance/claims/${claimId}/softech-reprice/item-receipts/`, { params: { itemcode } }),
-  repriceApplyBatch:  (claimId, data)       => api.post(`/insurance/claims/${claimId}/softech-reprice/apply-batch/`, data),
-  repriceApply:       (claimId, data) => api.post(`/insurance/claims/${claimId}/softech-reprice/apply/`, data),
+  // preview → typed confirmation → apply (the only write path; guard-checked server-side)
+  repricePlan:        (claimId, data)         => api.post(`/insurance/claims/${claimId}/softech-reprice/plan/`, data),
+  repricePlanFromCatalog: (claimId)          => api.post(`/insurance/claims/${claimId}/softech-reprice/plan-from-catalog/`),
+  repricePlanApply:   (claimId, planId, data) => api.post(`/insurance/claims/${claimId}/softech-reprice/plan/${planId}/apply/`, data),
+  repricePlanRevert:  (claimId, planId)       => api.post(`/insurance/claims/${claimId}/softech-reprice/plan/${planId}/revert/`),
   repriceRebalance:   (claimId, runId, data) => api.post(`/insurance/claims/${claimId}/softech-reprice/runs/${runId}/rebalance/`, data),
   dateEditPreview:    (claimId, params) => api.get(`/insurance/claims/${claimId}/softech-date/preview/`, { params }),
-  dateEditApply:      (claimId, data) => api.post(`/insurance/claims/${claimId}/softech-date/apply/`, data),
+  dateEditPlan:       (claimId, data) => api.post(`/insurance/claims/${claimId}/softech-date/plan/`, data),
+  dateEditPlanApply:  (claimId, planId, data) => api.post(`/insurance/claims/${claimId}/softech-date/plan/${planId}/apply/`, data),
   dateEditRuns:       (claimId)       => api.get(`/insurance/claims/${claimId}/softech-date/runs/`),
   dateEditRevert:     (claimId, runId) => api.post(`/insurance/claims/${claimId}/softech-date/runs/${runId}/revert/`),
   repriceRuns:        (claimId)       => api.get(`/insurance/claims/${claimId}/softech-reprice/runs/`),
@@ -2330,6 +2357,10 @@ export const insuranceApi = {
 
   // Parent clients (عميل أب)
   parentClients:      (params)              => api.get('/insurance/parent-clients/', { params }),
+  rosters:            (params)              => api.get('/insurance/rosters/', { params }),
+  portfolio:          (params)              => api.get('/insurance/portfolio/', { params }),
+  portfolioExport:    (params)              => api.get('/insurance/portfolio/', { params: { ...params, format: 'xlsx' }, responseType: 'blob' }),
+  billingGroupSuggestions: (claimId)        => api.get(`/insurance/claims/${claimId}/billing-group-suggestions/`),
   createParentClient: (data)                => api.post('/insurance/parent-clients/', data),
   updateParentClient: (id, data)            => api.patch(`/insurance/parent-clients/${id}/`, data),
   deleteParentClient: (id)                  => api.delete(`/insurance/parent-clients/${id}/`),
@@ -2398,6 +2429,8 @@ export const insuranceApi = {
   separationMatches:   (claimId, listId)    => api.get(`/insurance/claims/${claimId}/separation-matches/`, { params: listId ? { list_id: listId } : {} }),
   bulkExclude:         (claimId, ids, reason) => api.post(`/insurance/claims/${claimId}/bulk-exclude/`, { prescription_ids: ids, reason }),
   markReviewed:        (claimId, ids, reviewed) => api.post(`/insurance/claims/${claimId}/mark-reviewed/`, { prescription_ids: ids, reviewed }),
+  rosterCheck:         (claimId)            => api.get(`/insurance/claims/${claimId}/roster-check/`),
+  rosterDecision:      (claimId, data)      => api.post(`/insurance/claims/${claimId}/roster-decision/`, data),
   reviewItems:         (claimId)            => api.get(`/insurance/claims/${claimId}/review-items/`),
   applyReviewDecision: (claimId, item_code, category) => api.post(`/insurance/claims/${claimId}/apply-review-decision/`, { item_code, category }),
 

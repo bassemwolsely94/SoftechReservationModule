@@ -52,13 +52,39 @@ def _poster_usercode(request):
     return code or None
 
 
-def _audit_invoice_push(request, invoice, result, force):
-    """Who pushed this invoice into SOFTECH (Batch 2, P-16) — only when it really wrote."""
+_OVERRIDE_REASON_MIN = 10
+
+
+def _push_overrides(data):
+    """The two separate overrides a push may carry — each needs its own written reason.
+    Returns (override_duplicate, duplicate_reason, acknowledge_warnings, warnings_reason,
+    error). A bare legacy `force` is refused: it used to skip both checks silently."""
+    yes = lambda k: str(data.get(k, '')).lower() in ('1', 'true', 'yes')
+    od, ack = yes('override_duplicate'), yes('acknowledge_warnings')
+    dr = str(data.get('duplicate_reason') or '').strip()
+    wr = str(data.get('warnings_reason') or '').strip()
+    if yes('force') and not (od or ack):
+        return od, dr, ack, wr, 'اختر ما تتجاوزه (التكرار أو التحذيرات) واكتب السبب.'
+    if od and len(dr) < _OVERRIDE_REASON_MIN:
+        return od, dr, ack, wr, f'اكتب سبب ترحيل فاتورة مكررة ({_OVERRIDE_REASON_MIN} أحرف على الأقل).'
+    if ack and len(wr) < _OVERRIDE_REASON_MIN:
+        return od, dr, ack, wr, f'اكتب سبب تجاوز التحذيرات ({_OVERRIDE_REASON_MIN} أحرف على الأقل).'
+    return od, dr, ack, wr, None
+
+
+def _audit_invoice_push(request, invoice, result, overrides=None):
+    """Who pushed this invoice into SOFTECH (Batch 2, P-16) — only when it really wrote —
+    and which check they overrode, with their reason."""
     if isinstance(result, dict) and result.get('wrote_to_softech'):
         from core.softech_audit import audit_softech_write
+        o = overrides or {}
         audit_softech_write('softech_invoice_pushed', actor=request.user, obj=invoice,
-                            after={'docnumber': result.get('docnumber'), 'mode': result.get('mode')},
-                            force=bool(force))
+                            after={'docnumber': result.get('docnumber'), 'mode': result.get('mode'),
+                                   'override_duplicate': bool(o.get('override_duplicate')),
+                                   'duplicate_reason': o.get('duplicate_reason', ''),
+                                   'acknowledge_warnings': bool(o.get('acknowledge_warnings')),
+                                   'warnings_reason': o.get('warnings_reason', '')},
+                            force=bool(o.get('override_duplicate') or o.get('acknowledge_warnings')))
 
 
 def _bank_invoice_sample(invoice, candidates, engine='gemini'):
@@ -776,7 +802,8 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         """Write the invoice into SOFTECH as a FINAL purchase document (doccode 10/120).
         Gated by INVOICE_WRITER_ENABLED — while off this returns the dry-run plan.
         Requires a privileged role and a confirmed invoice. Validation errors refuse the
-        push; warnings refuse unless force=true is sent."""
+        push; warnings refuse unless acknowledge_warnings + warnings_reason are sent, a
+        duplicate refuses unless override_duplicate + duplicate_reason are sent."""
         from . import writer
         invoice = self.get_object()
         if not self._can_push(request):
@@ -785,13 +812,17 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         if invoice.status not in ('confirmed', 'queued', 'push_failed'):
             return Response({'detail': 'يجب تأكيد الفاتورة قبل الترحيل'},
                             status=status.HTTP_400_BAD_REQUEST)
-        force = str(request.data.get('force', '')).lower() in ('1', 'true', 'yes')
+        od, dr, ack, wr, bad = _push_overrides(request.data)
+        if bad:
+            return Response({'detail': bad}, status=status.HTTP_400_BAD_REQUEST)
+        overrides = {'override_duplicate': od, 'duplicate_reason': dr,
+                     'acknowledge_warnings': ack, 'warnings_reason': wr}
         from . import suppliers
         suppliers.ensure_invoice_vendor(invoice)
         # Fast duplicate guard (our module): same vendor + printed number already
         # posted here. SOFTECH double-posting is prevented by the writer's own
-        # idempotent dn2 guard. force=true overrides.
-        if not force and invoice.vendor_id and (invoice.invoice_number or '').strip():
+        # idempotent dn2 guard. Only an explicit override with a reason passes.
+        if not od and invoice.vendor_id and (invoice.invoice_number or '').strip():
             if (SupplierInvoice.objects
                     .filter(vendor_id=invoice.vendor_id, invoice_number=invoice.invoice_number)
                     .exclude(pk=invoice.pk)
@@ -803,8 +834,8 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         if not usercode:
             return Response({'detail': _NO_SOFTECH_USER}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            result = writer.push_final(invoice, dry_run=False, force=force, usercode=usercode)
-            _audit_invoice_push(request, invoice, result, force)
+            result = writer.push_final(invoice, dry_run=False, force=ack, usercode=usercode)
+            _audit_invoice_push(request, invoice, result, overrides)
         except writer.WriterDisabled as e:
             return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
         except ValueError as e:
@@ -827,7 +858,17 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         ids = request.data.get('invoice_ids') or []
         if not isinstance(ids, list) or not ids:
             return Response({'detail': 'لم يتم تحديد فواتير'}, status=status.HTTP_400_BAD_REQUEST)
-        force = str(request.data.get('force', '')).lower() in ('1', 'true', 'yes')
+        # A batch is confirmed by typing how many invoices it posts; it never overrides a
+        # duplicate (that is decided invoice by invoice), and warnings need one reason.
+        if str(request.data.get('confirm_count', '')).strip() != str(len(ids)):
+            return Response({'detail': f'اكتب عدد الفواتير ({len(ids)}) للتأكيد.'}, status=status.HTTP_400_BAD_REQUEST)
+        od, dr, ack, wr, bad = _push_overrides(request.data)
+        if od:
+            return Response({'detail': 'لا يمكن تجاوز التكرار فى دفعة — رحّل الفاتورة المكررة منفردة.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if bad:
+            return Response({'detail': bad}, status=status.HTTP_400_BAD_REQUEST)
+        overrides = {'acknowledge_warnings': ack, 'warnings_reason': wr}
         usercode = _poster_usercode(request)
         if not usercode:
             return Response({'detail': _NO_SOFTECH_USER}, status=status.HTTP_400_BAD_REQUEST)
@@ -846,9 +887,15 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
             if inv.status not in ('confirmed', 'queued', 'push_failed'):
                 results.append({'id': iid, 'ok': False, 'skipped': True, 'status': inv.status,
                                 'error': 'يجب تأكيد الفاتورة قبل الترحيل'}); continue
+            if inv.vendor_id and (inv.invoice_number or '').strip() and (
+                    SupplierInvoice.objects.filter(vendor_id=inv.vendor_id, invoice_number=inv.invoice_number)
+                    .exclude(pk=inv.pk).filter(**writer.same_kind(inv))
+                    .filter(status__in=['queued', 'pushing', 'finalized']).exists()):
+                results.append({'id': iid, 'ok': False, 'duplicate': True,
+                                'error': 'فاتورة بنفس المورد والرقم مُرحَّلة بالفعل — رحّلها منفردة إن كانت صحيحة'}); continue
             try:
-                r = writer.push_final(inv, dry_run=False, force=force, usercode=usercode)
-                _audit_invoice_push(request, inv, r, force)
+                r = writer.push_final(inv, dry_run=False, force=ack, usercode=usercode)
+                _audit_invoice_push(request, inv, r, overrides)
                 results.append({'id': iid, 'ok': bool(r.get('ok', True)),
                                 'supplier': inv.supplier_name, **_slim(r)})
             except writer.WriterDisabled as e:

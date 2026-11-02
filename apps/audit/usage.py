@@ -21,6 +21,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from core import branch_scope
+
 from .models import ScreenView
 
 DEDUP_SECONDS = 30
@@ -95,6 +97,7 @@ def usage_report(request):
     if not people:
         qs = qs.filter(branch_id=profile.branch_id)        # a branch manager: own branch only
     else:
+        qs = branch_scope.scope(qs, request.user)          # an HR approver tied to branches: those branches
         if request.query_params.get('branch'):
             qs = qs.filter(branch_id=request.query_params['branch'])
         if request.query_params.get('role'):

@@ -21,7 +21,10 @@ from .models import (
 # AddressUpdate
 # ─────────────────────────────────────────────────────────────────────────────
 
-class AddressUpdateSerializer(serializers.ModelSerializer):
+from apps.customers.phone_mask import RecordPhoneMask, CustomerPhoneMask  # Batch 5b
+
+class AddressUpdateSerializer(RecordPhoneMask, serializers.ModelSerializer):
+    phone_mask_fields = ('delivery_phone',)
     customer_name   = serializers.CharField(source='customer.name',        read_only=True)
     applied_by_name = serializers.CharField(source='applied_by.full_name', read_only=True, default=None)
     status_label    = serializers.CharField(source='get_status_display',   read_only=True)
@@ -117,7 +120,8 @@ class CaseEventSerializer(serializers.ModelSerializer):
 # CustomerCase
 # ─────────────────────────────────────────────────────────────────────────────
 
-class CustomerCaseListSerializer(serializers.ModelSerializer):
+class CustomerCaseListSerializer(RecordPhoneMask, serializers.ModelSerializer):
+    phone_mask_fields = ('customer_phone',)
     customer_name    = serializers.CharField(source='customer.name',           read_only=True)
     customer_phone   = serializers.CharField(source='customer.phone',          read_only=True)
     branch_name      = serializers.CharField(source='branch.name_ar',          read_only=True, default=None)
@@ -147,7 +151,8 @@ class CustomerCaseListSerializer(serializers.ModelSerializer):
         ]
 
 
-class CustomerCaseDetailSerializer(serializers.ModelSerializer):
+class CustomerCaseDetailSerializer(RecordPhoneMask, serializers.ModelSerializer):
+    phone_mask_fields = ('customer_phone',)
     customer_name      = serializers.CharField(source='customer.name',         read_only=True)
     customer_phone     = serializers.CharField(source='customer.phone',        read_only=True)
     customer_segment   = serializers.CharField(source='customer.segment',      read_only=True, default=None)
@@ -259,7 +264,9 @@ def call_has_recording(call) -> bool:
     return bool(session and (session.recording_url or session.recording_path))
 
 
-class CallLogListSerializer(serializers.ModelSerializer):
+class CallLogListSerializer(RecordPhoneMask, serializers.ModelSerializer):
+    phone_mask_fields = ('phone_number', 'customer_phone')
+    phone_mask_links = ('whatsapp_url',)
     customer_name   = serializers.CharField(source='customer.name',        read_only=True)
     customer_segment = serializers.CharField(source='customer.segment',    read_only=True, default=None)
     handled_by_name = serializers.CharField(source='handled_by.full_name', read_only=True)
@@ -303,7 +310,9 @@ class CallLogListSerializer(serializers.ModelSerializer):
         return bool(obj.voice_transcript)
 
 
-class CallLogDetailSerializer(serializers.ModelSerializer):
+class CallLogDetailSerializer(RecordPhoneMask, serializers.ModelSerializer):
+    phone_mask_fields = ('phone_number', 'customer_phone')
+    phone_mask_links = ('whatsapp_url',)
     customer_name    = serializers.CharField(source='customer.name',          read_only=True)
     customer_phone   = serializers.CharField(source='customer.phone',         read_only=True)
     customer_segment = serializers.CharField(source='customer.segment',       read_only=True, default=None)

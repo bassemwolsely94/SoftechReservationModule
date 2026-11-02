@@ -97,8 +97,11 @@ class ExpiryDisposalTests(TestCase):
         from django.contrib.auth import get_user_model
         from apps.users.models import StaffProfile
         from rest_framework.test import APIClient
+        from apps.tests.factories import make_branch
         u = get_user_model().objects.create_user(username='sales1', password='x')
-        StaffProfile.objects.create(user=u, role='salesperson')
+        # same branch as the record (Batch 5 part 2: another branch's disposal is a 404), so the
+        # refusal below is the approve-role rule
+        StaffProfile.objects.create(user=u, role='salesperson', branch=make_branch('B130', softech_id='130'))
         c = APIClient(); c.force_authenticate(user=u)
         rid = self.client.post(self.URL, {'item_code': 'DZ1', 'branch_code': '130',
                                           'qty': 1, 'decision': 'destroy'}, format='json').data['id']

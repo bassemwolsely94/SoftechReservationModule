@@ -80,7 +80,7 @@ def procurement_overview(request):
     snap_data = ProcurementSnapshotSerializer(snap).data
 
     # Monthly trend (last 13 months for MoM chart)
-    today = timezone.now().date()
+    today = timezone.localdate()
     trend = []
     for i in range(12, -1, -1):
         month_start = (today.replace(day=1) - _dt.timedelta(days=i * 30)).replace(day=1)
@@ -163,7 +163,7 @@ def supplier_purchase_history(request, supplier_code):
     """
     Monthly purchase history for a specific supplier (last 12 months).
     """
-    today = timezone.now().date()
+    today = timezone.localdate()
     lines = PurchaseLine.objects.filter(
         supplier_code=supplier_code,
         doc_date__gte=today - _dt.timedelta(days=365),
@@ -211,7 +211,7 @@ def item_procurement_analysis(request, item_code):
     Per-item procurement analysis: all suppliers, price history, best supplier.
     """
     days = _parse_int(request, 'days', 365)
-    today = timezone.now().date()
+    today = timezone.localdate()
     since = today - _dt.timedelta(days=days)
 
     mappings = SupplierItemMapping.objects.filter(item_code=item_code).order_by('-confidence_score')
@@ -287,7 +287,7 @@ def margin_analysis(request):
     Margin breakdown: by supplier, by item, distribution histogram.
     """
     days = _parse_int(request, 'days', 90)
-    today = timezone.now().date()
+    today = timezone.localdate()
     since = today - _dt.timedelta(days=days)
 
     base_qs = PurchaseLine.objects.filter(doc_date__gte=since, is_return=False)
@@ -359,7 +359,7 @@ def return_analysis(request):
     Supplier return analysis: return rate, top returners, return trend.
     """
     days = _parse_int(request, 'days', 90)
-    today = timezone.now().date()
+    today = timezone.localdate()
     since = today - _dt.timedelta(days=days)
 
     top_returners = list(
@@ -423,7 +423,7 @@ def procurement_optimization(request):
     Buy/avoid recommendations: best suppliers per item, underperformers.
     """
     days = _parse_int(request, 'days', 90)
-    today = timezone.now().date()
+    today = timezone.localdate()
     since = today - _dt.timedelta(days=days)
 
     # Best-value suppliers (high score, low return, high margin)
@@ -503,7 +503,7 @@ def branch_procurement(request):
     Branch-level procurement KPIs.
     """
     days = _parse_int(request, 'days', 90)
-    today = timezone.now().date()
+    today = timezone.localdate()
     since = today - _dt.timedelta(days=days)
 
     branches = list(
@@ -721,7 +721,7 @@ def resolve_period(params):
     Presets mirror the narrative-reports selector: today / week / month(mtd) /
     quarter / year / all.
     """
-    today = timezone.now().date()
+    today = timezone.localdate()
     df, dtt = params.get('date_from', '').strip(), params.get('date_to', '').strip()
     if df or dtt:
         return (_parse_date(df) or (today - _dt.timedelta(days=3650)),
