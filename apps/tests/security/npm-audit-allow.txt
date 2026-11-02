@@ -1,7 +1,5 @@
 # Known npm advisories (npm audit --omit=dev). CI fails on any advisory NOT listed here.
 # Remove a line when the upgrade lands.
 # 2026-11-01: axios 1.21, react-router(-dom) 6.30.6, form-data 4.0.6, follow-redirects 1.16.2 —
-# 35 → 2. The two left are fixed only in react-router 7 (a major upgrade). Owner: the react-router 7 batch.
-
-GHSA-wrjc-x8rr-h8h6  # react-router moderate — open redirect via a backslash path; our navigate()/<Link> targets are app routes from our own server data, never a URL parameter
-GHSA-337j-9hxr-rhxg  # react-router moderate — SSR hydration only; this is a client-rendered SPA (no server rendering)
+# 35 → 2; then react-router-dom 7.18.5 cleared the last two (GHSA-wrjc, GHSA-337j) → 0.
+# Empty on purpose: add a line only with a reason it is unreachable and an owner.
