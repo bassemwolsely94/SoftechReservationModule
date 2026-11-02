@@ -13037,7 +13037,7 @@
    "code": "325             ph = ','.join('?' for _ in chunk)\n326             cur.execute(f\"SELECT itemcode, itemarchive, itemnomoreuse FROM items WHERE itemcode IN ({ph})\", chunk)\n327             for r in cur.fetchall() or []:\n",
    "col_offset": 26,
    "end_col_offset": 100,
-   "filename": "./apps/purchasing/isr_guards.py",
+   "filename": "apps/purchasing/isr_guards.py",
    "issue_confidence": "MEDIUM",
    "issue_cwe": {
     "id": 89,
@@ -13057,7 +13057,7 @@
    "code": "328                 master[str(r[0]).strip()] = (str(r[1] or '0').strip(), str(r[2] or '0').strip())\n329             cur.execute(f\"SELECT itemcode, sum(nowqty) FROM stkbal WHERE branchcode=? \"\n330                         f\"AND storecode NOT IN ('102','103','105') AND itemcode IN ({ph}) GROUP BY itemcode\",\n331                         [str(p.branchcode), *chunk])\n",
    "col_offset": 26,
    "end_col_offset": 84,
-   "filename": "./apps/purchasing/isr_guards.py",
+   "filename": "apps/purchasing/isr_guards.py",
    "issue_confidence": "MEDIUM",
    "issue_cwe": {
     "id": 89,
