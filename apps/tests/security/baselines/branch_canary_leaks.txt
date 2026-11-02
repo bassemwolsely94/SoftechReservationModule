@@ -1,0 +1,42 @@
+# Batch 5 canary sweep: a branch-B pharmacist (holding every module action) saw a record planted in
+# branch A on these list routes. Each block needs a '# reason:' — a route that shows other branches on
+# purpose (owner decision 3: stock / transfers are network-wide), configuration, or a module branch
+# roles are not granted (the sweep grants everything to prove scoping alone). Anything else: fix it.
+
+# reason: filter vocabularies (customer-class codes, item effect / medicine-type lists) — labels to
+#   pick from, no records.
+GET /api/analytics/filter-options/
+GET /api/followups/tasks/filter-meta/
+
+# reason: configuration lists shared across branches — delivery area fees and the rider roster
+#   (riders are dispatched across branches), shift templates, PBX queues, omni channel accounts,
+#   replacement rules, transit pick zones and item overrides.
+GET /api/delivery/area-fees/
+GET /api/delivery/drivers/
+GET /api/hr/shifts/
+GET /api/omni/accounts/
+GET /api/pbx/queues/
+GET /api/replacement/rules/
+GET /api/transits/item-overrides/
+GET /api/transits/pick-zones/
+
+# reason: rankings are network-wide by design (permission matrix: gamification).
+GET /api/gamification/champions/
+GET /api/gamification/reports/overview/
+
+# reason: vouchers are redeemed chain-wide (permission matrix: vouchers). The phone numbers inside
+#   assignments / redemptions are the B-2 phone-masking follow-up, not branch scoping.
+GET /api/vouchers/vouchers/
+
+# reason: HQ modules no branch role is granted in the matrix (invoices, purchasing / procurement,
+#   users, incentives payroll — the latter's all-branch-only gate is an open owner decision).
+GET /api/incentives/transactions/
+GET /api/invoices/invoice-batches/
+GET /api/invoices/invoices/
+GET /api/invoices/purchase-orders/
+GET /api/procurement/history/
+GET /api/procurement/lines/
+GET /api/procurement/margins/
+GET /api/procurement/segments/summary/
+GET /api/purchasing/isr/pushes/
+GET /api/users/erp-users/

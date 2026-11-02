@@ -160,7 +160,8 @@ SCREENS = [
                        'When the return document (120) is entered in SOFTECH, the line closes by itself on supplier and item — the return document carries no expiry date, so the match cannot tell batches apart. Branch lines say "send to HQ before…" (14 days before the window closes by default); the move is a normal SOFTECH transfer. '
                        'Supplier policies at the bottom of the tab are edited by purchasing, and every change is logged.')},
         ],
-        'tips': [
+        'tips': [T('التشغيلات وتنبيهات قرب الانتهاء وتقارير الصلاحية وقرارات الإتلاف والمرتجع بتظهر لموظف الفرع لفرعه بس. اقتراحات إعادة التوزيع بتفضل تشوف كل الفروع علشان تعرف تبعت لمين.', 'Batches, near-expiry alerts, expiry reports and disposal / return decisions show a branch user their own branch only. Rebalance suggestions still look at every branch so you know where to send stock.'),
+                 
             T('اقتراحات الإنقاذ تحتاج تشغيل محرك الطلب لحساب معدلات البيع.', 'Rescue suggestions need the demand engine to have run to compute sales rates.'),
             T('أرقام الصلاحية مقسومة حسب المخزن: المخزون القابل للبيع، مرشح المرتجع (105)، الإتلاف (102)، التجميل المنتهي (103). مخزن الفرع المغلق (110) مستبعد من كل الأرقام والقوائم.',
               'Expiry figures are split by store: sellable stock, return candidates (105), write-off (102) and expired cosmetics (103). The closed branch\'s store (110) is excluded from every figure and list.'),

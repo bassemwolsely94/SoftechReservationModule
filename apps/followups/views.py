@@ -35,6 +35,7 @@ from .serializers import (
 )
 from . import services
 from apps.catalog.wildcard import wq
+from core import branch_scope
 from core.errors import public_error
 
 
@@ -112,17 +113,9 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
             'assigned_to__user', 'created_by__user', 'pinned_by__user',
             'chronic_profile',
         ).prefetch_related('assignments__staff__user')
-        profile = _profile(self.request)
-        if not profile:
-            return qs.none()
-
-        # Branch staff see only their branch tasks
-        if profile.role not in ('admin', 'call_center', 'purchasing'):
-            if profile.branch:
-                qs = qs.filter(branch=profile.branch)
-            else:
-                return qs.none()
-
+        # Batch 5: the one branch helper — all-branch roles (incl. supervisor / quality manager,
+        # B-3) see every branch; branch staff home + allowed − restricted; fail-closed.
+        qs = branch_scope.scope(qs, self.request.user)
         return self._apply_filters(qs, self.request.query_params)
 
     def _apply_filters(self, qs, p):
@@ -280,6 +273,7 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
         raise MethodNotAllowed(request.method)
 
     def perform_create(self, serializer):
+        branch_scope.check_branch_value(self.request.user, serializer)
         serializer.save(created_by=_profile(self.request))
 
     # ── Pin / Assign actions ──────────────────────────────────────────────────
@@ -466,16 +460,16 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
     # ── Dashboard stats ───────────────────────────────────────────────────────
     @action(detail=False, methods=['get'])
     def dashboard(self, request):
-        profile   = _profile(request)
         branch_id = request.query_params.get('branch')
         days      = int(request.query_params.get('days', 30))
         branch = None
         if branch_id:
+            branch_scope.require(request.user, branch_id)      # ?branch= narrows, never widens
             from apps.branches.models import Branch
             branch = Branch.objects.filter(pk=branch_id).first()
-        elif profile and profile.branch and profile.role not in ('admin', 'call_center'):
-            branch = profile.branch
-        return Response(services.get_dashboard_stats(branch=branch, days=days))
+        # (a branch role without a branch used to get every branch's figures — fail-closed now)
+        return Response(services.get_dashboard_stats(
+            branch=branch, days=days, branch_ids=branch_scope.branch_ids(request.user)))
 
     # ── Filter metadata for the advanced-filter UI dropdowns ──────────────────
     @action(detail=False, methods=['get'], url_path='filter-meta')
@@ -556,7 +550,15 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
         branch_id    = request.data.get('branch_id')
         overdue_days = int(request.data.get('overdue_days', 3))
         branch       = None
+        # Batch 5: a branch user generates for their own branch only (no branch = every branch,
+        # which stays with the all-branch roles)
+        mine = branch_scope.branch_ids(request.user)
+        if not branch_id and mine is not None:
+            if len(mine) != 1:
+                return Response({'detail': 'اختر الفرع.'}, status=status.HTTP_400_BAD_REQUEST)
+            branch_id = next(iter(mine))
         if branch_id:
+            branch_scope.require(request.user, branch_id)
             from apps.branches.models import Branch
             branch = Branch.objects.filter(pk=branch_id).first()
 
