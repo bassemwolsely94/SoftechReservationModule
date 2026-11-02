@@ -89,7 +89,7 @@ def missed_rows(f, access, only_not_returned, page, page_size=50) -> dict:
     for c in chunk:
         cust = c.customer if c.customer_id else customers.get(c.pic)
         row = {
-            'call_at': timezone.localtime(c.call_at).isoformat(),
+            'call_id': c.id, 'call_at': timezone.localtime(c.call_at).isoformat(),
             'customer_number': c.customer_number, 'queue': c.queue,
             'pic': c.pic, 'shared_pics': c.shared_pics or [],
             'customer_name': cust.name if cust else '', 'segment': cust.segment if cust else '',

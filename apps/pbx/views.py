@@ -243,38 +243,18 @@ class DialView(APIView):
     permission_classes = [IsAuthenticated, PBX]
 
     def post(self, request):
-        destination = str(request.data.get('destination', '')).strip()
-        if not destination:
-            return Response({'detail': 'destination مطلوب'}, status=400)
-
-        # Strip any non-digit chars except leading +
-        import re as _re
-        clean = _re.sub(r'[^\d+]', '', destination)
-        if not clean:
-            return Response({'detail': 'رقم هاتف غير صحيح'}, status=400)
-
+        from apps.pbx.actions import DialError, dial_for
         profile = getattr(request.user, 'staff_profile', None)
-        ext = AgentExtension.objects.filter(staff=profile).first() if profile else None
-        if ext is None:
-            return Response(
-                {'detail': 'لا توجد تحويلة مرتبطة بحسابك — اربطها من إدارة التحويلات'},
-                status=400,
-            )
-
-        caller_id_name = request.data.get('caller_id_name', '') or (profile.full_name if profile else 'ElRezeiky')
-
-        from apps.pbx.actions import AMIActionError, originate_call
         try:
-            originate_call(ext.extension, clean, caller_id_name)
-        except AMIActionError as exc:
-            return Response({'detail': str(exc)}, status=502)
-        except Exception as exc:
-            return Response({'detail': f'خطأ AMI غير متوقع: {public_error(request, exc)}'}, status=502)
+            res = dial_for(profile, request.data.get('destination', ''),
+                           request.data.get('caller_id_name', ''), request=request)
+        except DialError as exc:
+            return Response({'detail': exc.detail}, status=exc.status)
 
         return Response({
             'detail': 'سيرن هاتفك الآن — عند الرد سيُحوَّل إلى الرقم المطلوب',
-            'caller_ext': ext.extension,
-            'destination': clean,
+            'caller_ext': res['ext'],
+            'destination': res['clean'],
         })
 
 

@@ -1,6 +1,10 @@
 """
 apps/pic_analytics/views.py — mounted at /api/pic-analytics/ (doc 33)
 
+  GET   access/ overview/ pics/ groups/<kind>/ retention/ retention/overdue/
+  GET   calls/center/ calls/missed/ calls/missed/rows/ calls/unanswered/   (management only)
+  GET   numbers/ numbers/conversions/   POST numbers/label/ numbers/<key>/dial/ calls/missed/<id>/dial/
+  GET   export/                    audited .xlsx
   GET|POST grants/                 named branch managers (admin only)
   POST     grants/<id>/revoke/
   GET      grants/candidates/?q=   staff to grant
@@ -16,6 +20,15 @@ from rest_framework.response import Response
 
 from .access import Access
 from .models import PicAnalyticsAccess
+from .queries import groups as q_groups
+from .queries import missed as q_missed
+from .queries import numbers as q_numbers
+from .queries import overview as q_overview
+from .queries import pics as q_pics
+from .queries import retention as q_retention
+from .queries.calls import call_center
+from .queries.filters import FilterError, Filters
+from .queries.retention import MAX_PAGE_SIZE, _int_param
 
 
 def _deny(msg='ليس لديك صلاحية — Not allowed'):
@@ -91,3 +104,213 @@ def grant_candidates(request):
     rows = [{'id': p.id, 'name': p.full_name, 'role': p.role, 'branch': p.branch_name,
              'granted': p.id in granted} for p in qs.order_by('branch__softech_branch_id')[:30]]
     return Response({'rows': rows})
+
+
+# ── the dashboard's read endpoints ───────────────────────────────────────────────────────────────
+# /api/pic-analytics/ is exempt from the RBAC middleware: every view checks Access itself.
+
+def _run(request, fn, calls=False):
+    """Access gate + filter bar + error mapping shared by every read endpoint. fn(f, access) -> data."""
+    acc = Access(request)
+    if not acc.can_view or (calls and not acc.sees_calls_tabs):
+        return _deny()
+    try:
+        f = Filters.from_request(request, acc)
+        return Response(fn(f, acc))
+    except FilterError as exc:
+        return _bad(str(exc))
+    except PermissionError as exc:
+        return _deny(str(exc))
+    except ValueError as exc:
+        return _bad(str(exc))
+
+
+def _paging(request, default_size=50):
+    q = request.query_params
+    return (_int_param(q.get('page', 1), 'الصفحة', 1),
+            _int_param(q.get('page_size', default_size), 'حجم الصفحة', 1, MAX_PAGE_SIZE))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def access_info(request):
+    acc = Access(request)
+    if not acc.can_view:
+        return _deny()
+    from apps.customers.models import Customer
+    out = acc.as_dict()
+    out['new_reliable_from'] = (None if Customer.objects.filter(softech_created_at__isnull=False).exists()
+                                else q_overview.NEW_RELIABLE_FROM)
+    return Response(out)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def overview(request):
+    return _run(request, q_overview.overview)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pic_list(request):
+    def go(f, acc):
+        page, size = _paging(request)
+        return q_pics.pic_rows(f, acc, request.query_params.get('order') or '-net', page, size)
+    return _run(request, go)
+
+
+GROUPS = {'branch': q_groups.by_branch, 'salesperson': q_groups.by_salesperson,
+          'channel': q_groups.by_channel, 'category': q_groups.by_category}
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def group_list(request, kind):
+    acc = Access(request)
+    if not acc.can_view:
+        return _deny()
+    if kind not in GROUPS:
+        return Response({'detail': 'غير موجود — Not found'}, status=404)
+    return _run(request, GROUPS[kind])
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def retention(request):
+    return _run(request, lambda f, acc: {'frequency': q_retention.frequency(f, acc),
+                                         'retention': q_retention.retention_summary(f, acc),
+                                         'cohorts': q_retention.cohorts(f, acc)})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def retention_overdue(request):
+    def go(f, acc):
+        page, size = _paging(request)
+        return q_retention.overdue_list(f, acc, page, size)
+    return _run(request, go)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def calls_center(request):
+    return _run(request, call_center, calls=True)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def calls_missed(request):
+    return _run(request, q_missed.missed_summary, calls=True)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def calls_missed_rows(request):
+    def go(f, acc):
+        only = _int_param(request.query_params.get('only_not_returned', 0), 'غير المردودة', 0, 1)
+        page, size = _paging(request)
+        return q_missed.missed_rows(f, acc, bool(only), page, size)
+    return _run(request, go, calls=True)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def calls_unanswered(request):
+    return _run(request, lambda f, acc: {'rows': q_missed.unanswered_summary(f, acc)}, calls=True)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def numbers_list(request):
+    def go(f, acc):
+        page, size = _paging(request)
+        return q_numbers.new_numbers(f, acc, page, size)
+    return _run(request, go, calls=True)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def numbers_conversions(request):
+    return _run(request, q_numbers.conversions, calls=True)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def numbers_label(request):
+    acc = Access(request)
+    if not acc.can_view or not acc.sees_calls_tabs:
+        return _deny()
+    try:
+        pl = q_numbers.label_number(request.data.get('phone_key'), request.data.get('label'),
+                                    request.data.get('note'), acc.profile)
+    except ValueError as exc:
+        return _bad(str(exc))
+    return Response({'phone_key': pl.phone_key, 'label': pl.label, 'note': pl.note})
+
+
+# ── server-side dial: unknown numbers stay masked, so the browser never receives them ──────────
+
+def _dial(request, acc, number, what, ref):
+    from apps.customers.access import mask
+    from apps.pbx.actions import DialError, dial_for
+    try:
+        dial_for(acc.profile, number, request=request)
+    except DialError as exc:
+        return Response({'detail': exc.detail}, status=exc.status)
+    from apps.audit.models import AuditLog
+    AuditLog.log('pic_analytics_dialled', user=acc.profile, request=request, note=what, extra=ref)
+    return Response({'detail': 'سيرن هاتفك الآن — عند الرد سيُحوَّل إلى الرقم المطلوب', 'number': mask(number)})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def missed_dial(request, call_id):
+    acc = Access(request)
+    if not acc.can_view or not acc.sees_calls_tabs:
+        return _deny()
+    from apps.pbx.models import CdrCall
+    call = (CdrCall.objects.filter(pk=call_id, is_transfer=False, direction='inbound')
+            .exclude(status='answered').exclude(customer_number='').first())
+    if call is None:
+        return Response({'detail': 'غير موجود — Not found'}, status=404)
+    return _dial(request, acc, call.customer_number, 'missed call',
+                 {'call_id': call.pk, 'phone_key': call.phone_key})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def number_dial(request, phone_key):
+    acc = Access(request)
+    if not acc.can_view or not acc.sees_calls_tabs:
+        return _deny()
+    from apps.pbx.models import CdrCall
+    call = (CdrCall.objects.filter(phone_key=phone_key, is_transfer=False).exclude(customer_number='')
+            .order_by('-call_at').first()) if phone_key else None
+    if call is None:
+        return Response({'detail': 'غير موجود — Not found'}, status=404)
+    return _dial(request, acc, call.customer_number, 'new number', {'phone_key': phone_key})
+
+
+# ── Excel ────────────────────────────────────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def export(request):
+    from django.http import HttpResponse
+
+    from .export import build_workbook, filters_dict
+    acc = Access(request)
+    if not acc.can_view or not acc.can_export:
+        return _deny()
+    try:
+        f = Filters.from_request(request, acc)
+        data, counts = build_workbook(f, acc, exported_by=acc.profile.full_name if acc.profile else '')
+    except ValueError as exc:                  # FilterError is a ValueError
+        return _bad(str(exc))
+    name = f'pic-analytics_{f.start.isoformat()}_{f.end.isoformat()}.xlsx'
+    from apps.audit.models import AuditLog
+    AuditLog.log('pic_analytics_exported', user=acc.profile, request=request, note=name,
+                 extra={'filters': filters_dict(f), 'rows': counts})
+    resp = HttpResponse(data, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resp['Content-Disposition'] = f'attachment; filename="{name}"'
+    return resp
