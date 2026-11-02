@@ -296,3 +296,90 @@ def expire_drafts(*, now=None):
         _cancel(p, reason=f'انتهت صلاحية المقترح: أقدم من {days} أيام دون اعتماد')
         done.append(p.pk)
     return done
+
+
+# ── push review (W3, owner 2026-11-02): what the push is about to write, checked
+#    against SOFTECH *now* — the snapshot can be days old ───────────────────────
+ISR_QTY_WARN_RATIO = 3        # qty over 3× the line's gap …
+ISR_QTY_WARN_EXTRA = 10       # … and at least 10 units over it
+ISR_LINE_VALUE_WARN = 50000   # qty × cost
+ISR_STALE_DAYS = 3            # a draft older than this was built on old stock
+PUSH_REASON_MIN = 10
+
+
+def _issue(level, code, message, itemcode=None):
+    return {'level': level, 'code': code, 'message': message, 'itemcode': itemcode}
+
+
+def review_push(p, conn) -> dict:
+    """READ-ONLY on `conn` (the node the ISR is written on): every line to be written,
+    the item master and stock as they are now, and the issues — block (never written)
+    or warn (written only with a reason). The push runs this again just before writing."""
+    lines = [l for l in (p.lines_snapshot or []) if _qty(l) > 0]
+    codes = list(dict.fromkeys(str(l.get('itemcode', '')).strip() for l in lines if l.get('itemcode')))
+    master, stock = {}, {}
+    if codes:
+        cur = conn.cursor()
+        for i in range(0, len(codes), 400):
+            chunk = codes[i:i + 400]
+            ph = ','.join('?' for _ in chunk)
+            cur.execute(f"SELECT itemcode, itemarchive, itemnomoreuse FROM items WHERE itemcode IN ({ph})", chunk)
+            for r in cur.fetchall() or []:
+                master[str(r[0]).strip()] = (str(r[1] or '0').strip(), str(r[2] or '0').strip())
+            cur.execute(f"SELECT itemcode, sum(nowqty) FROM stkbal WHERE branchcode=? "
+                        f"AND storecode NOT IN ('102','103','105') AND itemcode IN ({ph}) GROUP BY itemcode",
+                        [str(p.branchcode), *chunk])
+            for r in cur.fetchall() or []:
+                stock[str(r[0]).strip()] = float(r[1] or 0)
+    issues = []
+    total_qty = 0
+    value = 0.0
+    for l in lines:
+        code = str(l.get('itemcode', '')).strip()
+        name = l.get('item_name') or code
+        q = _qty(l)
+        total_qty += q
+        cost = float(l.get('itemcostprice') or 0)
+        value += q * cost
+        if code not in master:
+            issues.append(_issue('block', 'item_missing', f'الصنف {code} غير موجود فى سوفتك: {name}', code))
+            continue
+        archive, nomore = master[code]
+        if archive == '1':
+            issues.append(_issue('block', 'item_archived', f'صنف مؤرشف فى سوفتك: {name}', code))
+        if nomore == '1':
+            issues.append(_issue('warn', 'item_suspended', f'أوامر التوريد موقوفة للصنف فى سوفتك: {name}', code))
+        gap = float(l.get('gap') or 0)
+        if gap <= 0:
+            issues.append(_issue('warn', 'no_gap', f'الصنف بلا عجز وقت إعداد الطلب وكميته {q}: {name}', code))
+        elif q > ISR_QTY_WARN_RATIO * gap and q - gap >= ISR_QTY_WARN_EXTRA:
+            issues.append(_issue('warn', 'qty_over_gap', f'الكمية {q} أكبر بكثير من العجز {gap:g}: {name}', code))
+        if q * cost > ISR_LINE_VALUE_WARN:
+            issues.append(_issue('warn', 'line_value', f'قيمة السطر {q * cost:,.0f} أكبر من {ISR_LINE_VALUE_WARN:,}: {name}', code))
+        then = l.get('nowqty')
+        if then is not None and code in stock and stock[code] - float(then or 0) >= q:
+            issues.append(_issue('warn', 'stock_arrived',
+                                 f'مخزون الصنف زاد {stock[code] - float(then or 0):g} منذ إعداد الطلب (≥ الكمية المطلوبة): {name}', code))
+    age = (timezone.now() - p.created_at).days if p.created_at else 0
+    if age > ISR_STALE_DAYS:
+        issues.append(_issue('warn', 'stale', f'الطلب أُعد منذ {age} يوم — المخزون والعجز تغيّرا غالباً.'))
+    return {'line_count': len(lines), 'total_qty': total_qty, 'docvalue': round(value, 2), 'age_days': age,
+            'issues': issues,
+            'blocked': any(i['level'] == 'block' for i in issues),
+            'needs_reason': any(i['level'] == 'warn' for i in issues),
+            'reason_min_chars': PUSH_REASON_MIN}
+
+
+def enforce_review(review, *, confirm_count=None, push_reason='', unattended=False):
+    """Raise ValueError unless the reviewed push may be written now."""
+    if review['blocked']:
+        raise ValueError('مرفوض: ' + ' · '.join(i['message'] for i in review['issues'] if i['level'] == 'block'))
+    warns = [i['message'] for i in review['issues'] if i['level'] == 'warn']
+    if unattended:
+        if warns:   # no person to give a reason: leave it approved for a human push
+            raise ValueError('لم يُرحَّل تلقائياً — يحتاج مراجعة: ' + ' · '.join(warns))
+        return
+    if str(confirm_count if confirm_count is not None else '').strip() != str(review['line_count']):
+        raise ValueError(f'اكتب عدد الأسطر ({review["line_count"]}) للتأكيد.')
+    if warns and len((push_reason or '').strip()) < PUSH_REASON_MIN:
+        raise ValueError(f'تحذيرات تتطلب سبباً مكتوباً ({PUSH_REASON_MIN} أحرف على الأقل): ' + ' · '.join(warns))

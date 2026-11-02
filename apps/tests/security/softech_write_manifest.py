@@ -248,8 +248,9 @@ WRITE_SITES = {
     'apps/purchasing/isr_writer.py::_insert_sql': WriteSite(
         tables=('stockisrm', 'stockisr'), flag='ISR_WRITER_ENABLED', dry_run_default=True,
         idempotency='push_isr_record: per-draft lock + status re-read + isr_guards duplicate check; '
-                    'push_isr --commit retired (P-15)',
-        audit='IsrPush + AuditLog softech_isr_pushed (who) — P-16 (+ forced duplicate)',
+                    'W3 review_push re-checked on the write connection (missing/archived refused, odd qty / '
+                    'stale need a reason, typed line count; unattended never overrides); push_isr --commit retired (P-15)',
+        audit='IsrPush + AuditLog softech_isr_pushed (who, push reason) — P-16 (+ forced duplicate, params.push_review)',
         trigger='POST purchasing isr/pushes/<pk>/push/ (can_supply_write); cmd generate_isr --auto-approve; '
                 'probe → SOFTECH_PROBES_ENABLED', kind='sql-builder'),
     'apps/purchasing/isr_writer.py::approve_isr': WriteSite(

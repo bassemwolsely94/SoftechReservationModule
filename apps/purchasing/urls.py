@@ -98,6 +98,7 @@ urlpatterns = [
     path('isr/distribution/generate/', isr_views.distribution_generate, name='isr-distribution-generate'),
     path('isr/pushes/<int:pk>/approve/', isr_views.isr_approve, name='isr-push-approve'),
     path('isr/pushes/<int:pk>/push/',    isr_views.isr_push,    name='isr-push-push'),
+    path('isr/pushes/<int:pk>/push-review/', isr_views.isr_push_review, name='isr-push-review'),
     path('isr/pushes/<int:pk>/cancel/',  isr_views.isr_cancel,  name='isr-push-cancel'),
     path('isr/fulfilment/',        isr_views.isr_fulfilment,        name='isr-fulfilment'),
     path('isr/fulfilment/export/', isr_views.isr_fulfilment_export, name='isr-fulfilment-export'),

@@ -766,6 +766,7 @@ export const supplyApi = {
   isrFilterOptions: ()       => api.get('/purchasing/isr/filter-options/'),
   isrApprove: (id, data = {}) => api.post(`/purchasing/isr/pushes/${id}/approve/`, data),
   isrPush:    (id, data = {}) => api.post(`/purchasing/isr/pushes/${id}/push/`, data),
+  isrPushReview: (id) => api.get(`/purchasing/isr/pushes/${id}/push-review/`),
   isrCancel:  (id, reason)   => api.post(`/purchasing/isr/pushes/${id}/cancel/`, { reason }),
   isrTransferPreview: ()     => api.get('/purchasing/isr/transfer-preview/'),
   isrTransfer: (data = {})   => api.post('/purchasing/isr/transfer/', data),

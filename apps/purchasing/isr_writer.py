@@ -317,7 +317,8 @@ def push_isr(branchcode, *, run=None, dry_run=True, positive_only=True,
 
 
 # ── push an APPROVED IsrPush record's snapshot to SOFTECH (israpp=1) ────────────
-def push_isr_record(isr_push, *, executed_by=None, force_reason=''):
+def push_isr_record(isr_push, *, executed_by=None, force_reason='', confirm_count=None,
+                    push_reason='', unattended=False):
     """Write an APPROVED IsrPush's stored line snapshot to SOFTECH (stockisrm header
     israpp=1 + stockisr lines), record the allocated isrdocnumber, update the record.
     Gate + status checked before any SOFTECH connection. One push of a draft at a time:
@@ -330,10 +331,12 @@ def push_isr_record(isr_push, *, executed_by=None, force_reason=''):
         if not got:
             raise ValueError('هذا الطلب قيد الترحيل من عملية أخرى — لم يُرحَّل مرة ثانية.')
         isr_push.refresh_from_db()
-        return _push_isr_record(isr_push, executed_by=executed_by, force_reason=force_reason)
+        return _push_isr_record(isr_push, executed_by=executed_by, force_reason=force_reason,
+                                confirm_count=confirm_count, push_reason=push_reason, unattended=unattended)
 
 
-def _push_isr_record(isr_push, *, executed_by=None, force_reason=''):
+def _push_isr_record(isr_push, *, executed_by=None, force_reason='', confirm_count=None,
+                     push_reason='', unattended=False):
     from apps.purchasing.models import IsrPush
     from apps.branches.models import Branch
     from config.sybase import get_branch_connection
@@ -355,6 +358,17 @@ def _push_isr_record(isr_push, *, executed_by=None, force_reason=''):
     try:
         conn = get_branch_connection(branch.effective_db_host, branch.effective_db_port,
                                      branch.db_name or 'SOFTECHDB9')
+        # W3: re-check what is about to be written against SOFTECH now, on this connection
+        review = isr_guards.review_push(isr_push, conn)
+        isr_guards.enforce_review(review, confirm_count=confirm_count, push_reason=push_reason,
+                                  unattended=unattended)
+        if review['needs_reason']:
+            params = dict(isr_push.params or {})
+            params['push_review'] = {'reason': (push_reason or '').strip(),
+                                     'warnings': [i['message'] for i in review['issues'] if i['level'] == 'warn'][:50],
+                                     'by': getattr(executed_by, 'username', None), 'at': timezone.now().isoformat()}
+            isr_push.params = params
+            isr_push.save(update_fields=['params'])
         w = _write_isr(conn, isr_push.branchcode, (isr_push.dest_branchcode or isr_push.branchcode), lines, usercode, do_commit=True, approved=True)
     finally:
         if conn is not None:
@@ -377,7 +391,9 @@ def _push_isr_record(isr_push, *, executed_by=None, force_reason=''):
     if isr_push.status == IsrPush.STATUS_PUSHED:                # who pushed it (Batch 2, P-16)
         from core.softech_audit import audit_softech_write
         audit_softech_write('softech_isr_pushed', actor=executed_by, obj=isr_push,
-                            after={'isrdocnumber': w.get('isrdocnumber'), 'lines': len(lines)},
+                            after={'isrdocnumber': w.get('isrdocnumber'), 'lines': len(lines),
+                                   'push_reason': (push_reason or '').strip(),
+                                   'unattended': bool(unattended)},
                             route=f'{isr_push.branchcode}→{isr_push.dest_branchcode or isr_push.branchcode}')
     logger.info('[isr_writer] push_isr_record %s → isr=%s status=%s',
                 isr_push.pk, w.get('isrdocnumber'), isr_push.status)
@@ -634,7 +650,9 @@ def auto_generate(branchcode, *, created_by=None, max_lines=None, auto_approve=F
         p.approved_by = created_by
         p.approved_at = timezone.now()
         p.save(update_fields=['status', 'approved_by', 'approved_at'])
-        push_isr_record(p, executed_by=created_by)   # gated ISR_WRITER_ENABLED → israpp=1
+        # gated ISR_WRITER_ENABLED → israpp=1; with nobody to give a reason, any review
+        # warning leaves it approved for a human push in /supply
+        push_isr_record(p, executed_by=created_by, unattended=True)
     return p
 
 
