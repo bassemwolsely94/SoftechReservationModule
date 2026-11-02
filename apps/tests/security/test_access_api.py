@@ -238,3 +238,10 @@ class WhoamiSoftechTests(TestCase):
         user, _, _ = make_user('wh_sa_off', role='pharmacist')
         d = self._get(user)
         self.assertEqual((d['softech_access'], d['softech_gate_mode']), ('full', 'off'))
+
+    def test_whoami_anonymous_has_softech_access_and_no_audit(self):
+        before = AuditLog.objects.count()
+        r = APIClient().get(WHOAMI, HTTP_X_ELR_NETWORK='internal')
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('softech_access', r.json())
+        self.assertEqual(AuditLog.objects.count(), before)

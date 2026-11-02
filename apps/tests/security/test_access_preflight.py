@@ -137,3 +137,15 @@ class SoftechPreflightTests(TestCase):
         AuditLog.objects.update(created_at=timezone.now() - timedelta(days=30))
         items = preflight.check_softech(timezone.now())
         self.assertEqual(_codes(items), {'softech_mode'})
+
+
+@override_settings(**READY)
+class SoftechPreflightGroupingTests(TestCase):
+    def test_many_identical_rows_group_to_one_count(self):
+        from apps.audit.models import AuditLog
+        AuditLog.objects.bulk_create([
+            AuditLog(action='softech_gate_denied', user_role='pharmacist', note='x',
+                     extra={'scope': 'web', 'zone': 'Z2', 'reason': 'zone_no_write', 'label': 'l'})
+            for _ in range(40)])
+        item = next(i for i in preflight.check_softech(timezone.now()) if i.code == 'softech_would_deny')
+        self.assertEqual(item.names, ['pharmacist × Z2 × zone_no_write: 40'])

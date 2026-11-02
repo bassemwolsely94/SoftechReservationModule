@@ -183,22 +183,25 @@ def check_softech(now):
     from collections import Counter
 
     from django.conf import settings as dj
+    from django.db.models import Count
 
     from apps.audit.models import AuditLog
     from . import softech_gate
-    rows = list(AuditLog.objects.filter(action=softech_gate.AUDIT_ACTION,
-                                        created_at__gte=now - timedelta(days=RECENT_DAYS))
-                .values_list('user_role', 'extra'))
+    # grouped in the database: cost is the number of distinct combinations, not of rows
+    rows = (AuditLog.objects.filter(action=softech_gate.AUDIT_ACTION,
+                                    created_at__gte=now - timedelta(days=RECENT_DAYS))
+            .order_by()
+            .values('user_role', 'extra__reason', 'extra__zone', 'extra__scope', 'extra__label')
+            .annotate(n=Count('id')))
     out = []
     no_ctx = Counter()
     would = Counter()
-    for role, extra in rows:
-        extra = extra or {}
-        reason = extra.get('reason')
+    for r in rows:
+        reason = r['extra__reason']
         if reason == 'no_context':
-            no_ctx[f"{extra.get('scope')} / {extra.get('label') or '-'}"] += 1
+            no_ctx[f"{r['extra__scope']} / {r['extra__label'] or '-'}"] += r['n']
         else:
-            would[f"{role or '?'} × {extra.get('zone') or '-'} × {reason}"] += 1
+            would[f"{r['user_role'] or '?'} × {r['extra__zone'] or '-'} × {reason}"] += r['n']
     if no_ctx:
         out.append(Item(BLOCK, 'softech_no_context',
                         'شاشة تفتح SOFTECH من خيط أو مسار بلا سياق طلب — ستنكسر عند التطبيق الفعلي لبوابة SOFTECH',

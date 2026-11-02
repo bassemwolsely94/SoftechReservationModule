@@ -45,15 +45,16 @@ def whoami(request):
         device = {'status': d.status, 'status_label': dict(Device.STATUS_CHOICES).get(d.status, d.status),
                   'name': d.name}
     access_zone = access.zone if access is not None else None
+    subj = _subject(request)
     return Response({
         'device': device,
         'access_zone': access_zone,
         'access_zone_label': ZONE_LABELS.get(access_zone),
         # what the banner may honestly say: the mode and this role's row in this zone
         'policy_mode': _policy_mode(),
-        'zone_access': _zone_access(request, access_zone),
+        'zone_access': _zone_access(subj, access_zone),
         # N4: the effective SOFTECH grant for this request (full / read / none) and the gate mode
-        **_softech_access(request, access),
+        **_softech_access(subj, access),
         'zone': net.zone,
         'ip': net.ip,
         'label': net.label_ar,
@@ -70,7 +71,16 @@ def _policy_mode():
     return _mode()
 
 
-def _softech_access(request, access):
+def _subject(request):
+    try:
+        from .session_policy import subject
+        user = request.user if getattr(request.user, 'is_authenticated', False) else None
+        return subject(user)
+    except Exception:
+        return None
+
+
+def _softech_access(subj, access):
     """The SOFTECH gate's grant for a web request, for the banner. Computed with decide() and
     mode() only: whoami is not a SOFTECH use, so it never calls check()/note() and never audits."""
     from . import softech_gate
@@ -81,23 +91,18 @@ def _softech_access(request, access):
     grant = softech_gate.FULL
     try:
         if gate_mode != 'off' and access is not None and access.user_id is not None:
-            from .session_policy import subject
-            user = request.user if getattr(request.user, 'is_authenticated', False) else None
-            grant = softech_gate.decide('web', access, subject(user) if user is not None else None).grant
+            grant = softech_gate.decide('web', access, subj).grant
     except Exception:
         grant = softech_gate.FULL
     return {'softech_access': grant, 'softech_gate_mode': gate_mode}
 
 
-def _zone_access(request, zone):
+def _zone_access(subj, zone):
     """The signed-in user's policy row access in `zone` ('full', 'read_only', ...), or None."""
     if zone is None:
         return None
     try:
         from .policy import policy_for
-        from .session_policy import subject
-        user = request.user if getattr(request.user, 'is_authenticated', False) else None
-        subj = subject(user)
         row = policy_for(subj.role, zone) if subj is not None else None
         return row.access if row is not None else None
     except Exception:
