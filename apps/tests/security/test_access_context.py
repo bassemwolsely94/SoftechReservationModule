@@ -66,11 +66,15 @@ class AccessContextTests(TestCase):
     def test_middleware_never_raises(self):
         from unittest import mock
         with mock.patch('apps.access.context.request_network', side_effect=RuntimeError('boom')), \
-                self.assertLogs('elrezeiky.access', 'WARNING'):
+                self.assertLogs('elrezeiky.access', 'ERROR'):
             r = self.client.get('/probe/', HTTP_X_ELR_NETWORK='internal', REMOTE_ADDR=SITE_IP)
         self.assertEqual(r.status_code, 200)
+        # the fallback keeps the nginx label (header + key, no database) - final wave M2
+        self.assertEqual(r.json()['zone'], 'internal')
+        self.assertEqual(r.json()['scope'], 'web:internal:anon')
+        with mock.patch('apps.access.context.request_network', side_effect=RuntimeError('boom')),                 self.assertLogs('elrezeiky.access', 'ERROR'):
+            r = self.client.get('/probe/', REMOTE_ADDR=SITE_IP)
         self.assertEqual(r.json()['zone'], 'external')
-        self.assertEqual(r.json()['scope'], 'web:external:anon')
 
     @override_settings(NETWORK_POLICY_ENFORCEMENT='log')
     def test_external_api_request_logged_in_log_mode(self):
@@ -92,7 +96,8 @@ class AccessContextTests(TestCase):
     def test_log_dedupe_never_raises_when_cache_fails(self):
         from unittest import mock
         with mock.patch('apps.access.middleware.cache.add', side_effect=RuntimeError('boom')):
-            r = self.client.get('/api/probe/', REMOTE_ADDR='203.0.113.9')
+            with self.assertLogs('elrezeiky.access', 'WARNING'):
+                r = self.client.get('/api/probe/', REMOTE_ADDR='203.0.113.9')
         self.assertEqual(r.status_code, 200)
 
     @override_settings(NETWORK_POLICY_ENFORCEMENT='off')

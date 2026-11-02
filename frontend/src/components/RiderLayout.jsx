@@ -3,7 +3,7 @@
  * No sidebar / desktop chrome — just a slim top bar + the screen content,
  * sized for a smartphone browser.
  */
-import { useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import useAuthStore from '../store/authStore'
 import HelpButton from '../help/HelpButton'
 import HelpPanel from '../help/HelpPanel'
@@ -11,6 +11,7 @@ import HelpPanel from '../help/HelpPanel'
 export default function RiderLayout({ children }) {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
+  const onSecurity = useLocation().pathname.startsWith('/rider/security')
 
   return (
     <div className="min-h-screen bg-gray-50 font-cairo flex flex-col" dir="rtl">
@@ -24,6 +25,11 @@ export default function RiderLayout({ children }) {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <HelpButton variant="mobile" />
+          {/* «أمان الحساب»: the rider enrols two-factor here (N3, C1) */}
+          <Link to={onSecurity ? '/rider' : '/rider/security'} data-tour="rider-security-link"
+                className="text-xs bg-white/15 hover:bg-white/25 rounded-lg px-3 py-1.5 font-medium">
+            {onSecurity ? 'الطلبات' : '🔒 أمان الحساب'}
+          </Link>
           <button
             onClick={() => { logout(); navigate('/login') }}
             className="text-xs bg-white/15 hover:bg-white/25 rounded-lg px-3 py-1.5 font-medium"

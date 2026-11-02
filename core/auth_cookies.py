@@ -33,16 +33,26 @@ def _cookie_kwargs():
     }
 
 
-def set_auth_cookies(response, access=None, refresh=None):
+def set_auth_cookies(response, access=None, refresh=None, refresh_max_age=None):
+    """`refresh_max_age` (seconds) shortens the refresh cookie, e.g. to the zone's session cap (N3)."""
     jwt = settings.SIMPLE_JWT
     if access:
         response.set_cookie(ACCESS_COOKIE, str(access), path='/',
                             max_age=int(jwt['ACCESS_TOKEN_LIFETIME'].total_seconds()),
                             **_cookie_kwargs())
     if refresh:
+        max_age = int(jwt['REFRESH_TOKEN_LIFETIME'].total_seconds())
+        if refresh_max_age is not None:
+            max_age = max(0, min(max_age, int(refresh_max_age)))
         response.set_cookie(REFRESH_COOKIE, str(refresh), path=REFRESH_COOKIE_PATH,
-                            max_age=int(jwt['REFRESH_TOKEN_LIFETIME'].total_seconds()),
-                            **_cookie_kwargs())
+                            max_age=max_age, **_cookie_kwargs())
+    return response
+
+
+def set_device_cookie(response, secret):
+    """The long-lived device cookie (N2): random secret, only its sha256 is stored."""
+    from apps.access.devices import COOKIE, COOKIE_MAX_AGE
+    response.set_cookie(COOKIE, secret, path='/', max_age=COOKIE_MAX_AGE, **_cookie_kwargs())
     return response
 
 
@@ -75,12 +85,31 @@ class CookieJWTAuthentication(JWTAuthentication):
         user = super().get_user(validated_token)
         if not account_active(user):
             raise AuthenticationFailed('الحساب موقوف', code='user_inactive')
+        from apps.access import devices
+        if devices.is_revoked(validated_token.get('dev')):     # a blocked/retired device ends its sessions (N2)
+            raise AuthenticationFailed(devices.BLOCKED_MESSAGE, code='device_blocked')
         return user
+
+
+_USER_MEMO = '_elr_jwt_user'
 
 
 def user_from_request(request):
     """Header or cookie JWT → user, without the CSRF check (read-only callers
-    such as the RBAC middleware). None when absent/invalid."""
+    such as the RBAC middleware). None when absent/invalid. Worked out once per request: the
+    access-context, RBAC and zone-policy middlewares all ask (N3, F6)."""
+    memo = getattr(request, '__dict__', {})
+    if _USER_MEMO in memo:
+        return memo[_USER_MEMO]
+    user = _user_from_request(request)
+    try:
+        memo[_USER_MEMO] = user
+    except Exception:
+        pass
+    return user
+
+
+def _user_from_request(request):
     auth = CookieJWTAuthentication()
     try:
         if auth.get_header(request) is not None:

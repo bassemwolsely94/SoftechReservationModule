@@ -66,7 +66,7 @@ class SessionEndTests(TestCase):
 
 
 class RememberedDeviceTests(TestCase):
-    """A trusted-device token is cancelled by a password change, an admin reset or a 2FA reset."""
+    """A remembered device is cancelled by a password change, an admin reset or a 2FA reset."""
 
     def setUp(self):
         cache.clear()
@@ -77,16 +77,21 @@ class RememberedDeviceTests(TestCase):
         self.profile.refresh_from_db()
         self.secret = self.profile.mfa_secret
         self.me.post('/api/auth/2fa/enable/', {'code': pyotp.TOTP(self.secret).now()}, format='json')
-        login = APIClient().post('/api/auth/login/', {'username': 'a3_dev', 'password': PASSWORD},
-                                 format='json').data
-        v = APIClient().post('/api/auth/2fa/verify/', {'mfa_token': login['mfa_token'],
-                                                       'code': pyotp.TOTP(self.secret).now(),
-                                                       'remember_device': True}, format='json')
-        self.device = v.data['device_token']
+        # The approved-device remember (N2); the legacy signed device_token was removed in N3.
+        from apps.access import devices
+        from apps.access.models import Device
+        self.profile.refresh_from_db()
+        self.device = devices.new_secret()
+        dev = Device.objects.create(secret_hash=devices.hash_secret(self.device), name='جهاز',
+                                    status='approved')
+        devices.remember_mfa(dev, self.profile)
 
     def _login_with_device(self, password=PASSWORD):
-        return APIClient().post('/api/auth/login/', {'username': 'a3_dev', 'password': password,
-                                                     'device_token': self.device}, format='json').data
+        from apps.access import devices
+        c = APIClient()
+        c.cookies[devices.COOKIE] = self.device
+        return c.post('/api/auth/login/', {'username': 'a3_dev', 'password': password},
+                      format='json').data
 
     def test_remembered_device_skips_the_code(self):
         self.assertIn('access', self._login_with_device())

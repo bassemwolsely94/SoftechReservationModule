@@ -40,6 +40,7 @@ except ImportError:
 from .invoice_builder import build_invoice_dataset
 from .models import InsuranceClaim
 from apps.finance.recon_labels import branch_label as BL      # '170' → '170 · name'
+from core.export_safety import neutralise_formulas
 
 logger = logging.getLogger('elrezeiky.insurance')
 
@@ -1300,7 +1301,7 @@ def generate_excel(claim: InsuranceClaim, template: str = 'all',
             _apply_watermark(ws, st)
 
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     buf.seek(0)
 
     period   = claim.period_from.strftime('%Y%m') if claim.period_from else ''
@@ -1385,7 +1386,7 @@ def generate_pivot_excel(result: dict, title: str = 'تحليل البيانات
             _w(ws, r, n_rd + 1, float(result.get('grand_total', 0) or 0),
                font=FONT_GRAND, fill=FILL_GRAND, align=_a('left', 'center'), fmt='#,##0.00')
         ws.print_title_rows = '1:1'
-        buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+        buf = io.BytesIO(); neutralise_formulas(wb).save(buf); buf.seek(0)
         safe_title = (title or 'تحليل').replace('/', '-').replace('\\', '-')
         resp = HttpResponse(buf.getvalue(),
                             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -1448,7 +1449,7 @@ def generate_pivot_excel(result: dict, title: str = 'تحليل البيانات
     ws.print_title_rows = '1:1'
 
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     buf.seek(0)
 
     safe_title = (title or 'تحليل').replace('/', '-').replace('\\', '-')
@@ -1546,7 +1547,7 @@ def generate_discrepancy_excel(report: dict, claim_number: str = '') -> HttpResp
     ws.print_title_rows = f'{header_row}:{header_row}'
 
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     buf.seek(0)
     filename = f'فروقات_{claim_number or "مطالبة"}.xlsx'
     response = HttpResponse(
@@ -1616,7 +1617,7 @@ def generate_reprice_runs_excel(runs, claim_number: str = '', seq_map=None) -> H
     ws.print_title_rows = f'{header_row}:{header_row}'
 
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     buf.seek(0)
     filename = f'تعديلات_سوفتك_{claim_number or "مطالبة"}.xlsx'
     response = HttpResponse(
@@ -1715,7 +1716,7 @@ def generate_statistical_excel(claim: InsuranceClaim) -> HttpResponse:
     ws.print_title_rows = f'{header_row}:{header_row}'
 
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     buf.seek(0)
     filename = f'احصائية_{claim.claim_number}.xlsx'
     response = HttpResponse(
@@ -1840,10 +1841,10 @@ def generate_reprice_reconciliation_excel(runs, save_path=None):
     ws.print_title_rows = f'{header_row}:{header_row}'
 
     if save_path:
-        wb.save(save_path)
+        neutralise_formulas(wb).save(save_path)
         return save_path
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     buf.seek(0)
     response = HttpResponse(
         buf.getvalue(),

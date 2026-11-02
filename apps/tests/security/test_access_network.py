@@ -6,11 +6,13 @@ from django.core.exceptions import ValidationError
 from django.test import RequestFactory, TestCase, override_settings
 
 from apps.access.models import TrustedNetwork
-from apps.access.network import EXTERNAL, INTERNAL, match_site, request_network, zone_from_request
+from apps.access.network import EXTERNAL, INTERNAL, match_site, proxy_key_ok, request_network, zone_from_request
 
 
-def _req(header=None, ip='10.50.50.9'):
+def _req(header=None, ip='10.50.50.9', key=None):
     extra = {'REMOTE_ADDR': ip}
+    if key is not None:
+        extra['HTTP_X_ELR_PROXY_KEY'] = key
     if header is not None:
         extra['HTTP_X_ELR_NETWORK'] = header
     return RequestFactory().get('/', **extra)
@@ -41,6 +43,34 @@ class ZoneTests(TestCase):
         self.assertEqual(zone_from_request(_req('external')), INTERNAL)
         with override_settings(NETWORK_UNTRUSTED_ZONE='external'):
             self.assertEqual(zone_from_request(_req('internal')), EXTERNAL)
+
+
+@override_settings(ACCESS_NETWORKS_TTL=0, NETWORK_HEADER_TRUSTED=True, NETWORK_PROXY_KEY='s3cret-key')
+class ProxyKeyTests(TestCase):
+
+    def test_key_set_and_missing_header_is_external(self):
+        self.assertEqual(zone_from_request(_req('internal')), EXTERNAL)
+        self.assertFalse(proxy_key_ok(_req('internal')))
+
+    def test_key_set_and_wrong_key_is_external(self):
+        self.assertEqual(zone_from_request(_req('internal', key='nope')), EXTERNAL)
+        self.assertEqual(zone_from_request(_req('internal', key='')), EXTERNAL)
+
+    def test_key_matches_internal_trusted(self):
+        self.assertTrue(proxy_key_ok(_req('internal', key='s3cret-key')))
+        self.assertEqual(zone_from_request(_req('internal', key='s3cret-key')), INTERNAL)
+        self.assertEqual(zone_from_request(_req('external', key='s3cret-key')), EXTERNAL)
+
+    def test_non_ascii_key_header_is_external_not_error(self):
+        for junk in ('éال', 'caf\udce9'):
+            self.assertEqual(zone_from_request(_req('internal', key=junk)), EXTERNAL)
+            self.assertFalse(proxy_key_ok(_req('internal', key=junk)))
+
+    @override_settings(NETWORK_PROXY_KEY='')
+    def test_no_key_configured_keeps_n1_behaviour(self):
+        self.assertTrue(proxy_key_ok(_req()))
+        self.assertEqual(zone_from_request(_req('internal')), INTERNAL)
+        self.assertEqual(zone_from_request(_req()), EXTERNAL)
 
 
 @override_settings(ACCESS_NETWORKS_TTL=0, NETWORK_HEADER_TRUSTED=True, NUM_PROXIES=0)

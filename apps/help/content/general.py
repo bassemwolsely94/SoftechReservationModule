@@ -231,8 +231,8 @@ SCREENS = [
               'If the sync shows "failed" or the last update is old, stock figures may be out of date — tell the system admin.'),
             T('شريط «التحفيز» أعلى الصفحة يعرض مستواك ونقاط اليوم وسلسلة الأيام النظيفة وترتيبك في الفرع، وزر «بند ينتظرك» يفتح ما تبقّى عليك.',
               'The "Gamification" strip at the top shows your level, today\'s points, clean-day streak and branch rank; the "items waiting" button opens what is still on you.'),
-            T('الشارة الصغيرة في أعلى الشاشة «🏢 داخل الشبكة — فرع …» أو «🌐 خارج الشبكة» تقول من أين تتصل الآن؛ للعلم فقط ولا تمنع أي شغل.',
-              'The small badge at the top of the screen, "🏢 On the network — branch …" or "🌐 Outside the network", tells you where you are connecting from; information only, it blocks nothing.'),
+            T('الشارة الصغيرة في أعلى الشاشة تقول من أين تتصل الآن وحالة جهازك: «داخل الشبكة — جهاز معتمد» أو «داخل الشبكة — جهاز غير معتمد» أو «خارج الشبكة — جهاز معتمد» أو «خارج الشبكة — جهاز غير معتمد». وتحت الشريط العلوي قد يظهر شريط هادئ: «جهاز غير معتمد — اطلب اعتماده من المدير» معناه إن جهازك لسه ما اتعتمدش؛ و«جهاز غير معتمد — للعرض فقط» (أصفر) يظهر بس لما السياسة مطبّقة فعلاً ودورك على الجهاز ده للعرض بس — تشوف ولا تعدّل لحد ما المدير يعتمد الجهاز؛ و«خارج شبكة الشركة» للعلم.',
+              'The small badge at the top of the screen tells you where you connect from and your device status: "Inside the network — approved device", "Inside the network — unapproved device", "Outside the network — approved device" or "Outside the network — unapproved device". Under the top bar a calm strip may appear: "Unapproved device — ask the admin to approve it" means your device is not approved yet; "Unapproved device — view-only" (amber) shows only when the policy is really enforced and your role is view-only on this device — you can look but not change anything until an admin approves it; "Outside the company network" is for information.'),
             T('سطر «⏳ الصلاحية» (لمن يرى الأصناف): المنتهي على الرف والمعرّض خلال 180 يوماً، وبعده مرشح المرتجع (105) والإتلاف (102) والتجميل المنتهي (103). الفرع المغلق لا يُحسب. اضغطه لفتح «الدفعات والصلاحية».',
               'The "⏳ Expiry" line (for users who see the catalog): expired on the shelf and at risk within 180 days, then return candidates (105), write-off (102) and expired cosmetics (103). The closed branch is not counted. Click it to open "Batches & expiry".'),
         ],
@@ -431,7 +431,7 @@ SCREENS = [
              'open_hint': T('الجرس ← «⚙️ الإعدادات».', 'Bell → "⚙️ Settings".')},
         ],
         'updated': '2026-11-01',
-        'change_note': T('تلميحات الجرس والقائمة والخروج بقت في كل الشاشات', 'Bell, menu and logout hints now on every screen'),
+        'change_note': T('تلميحات الجرس والقائمة والخروج في كل الشاشات؛ الشارة العلوية تذكر حالة الجهاز؛ وشريط «جهاز غير معتمد» يقول «للعرض فقط» بس لما السياسة مطبّقة', 'Bell, menu and logout hints on every screen; the top badge states the device status; the "unapproved device" strip says "view-only" only when the policy is enforced'),
     },
     {
         'key': 'general.me',
@@ -627,7 +627,7 @@ SCREENS = [
     },
     {
         'key': 'general.security',
-        'routes': ['/security'],
+        'routes': ['/security', '/rider/security'],
         'title': T('أمان الحساب (المصادقة الثنائية)', 'Account security (two-factor)'),
         'summary': T(
             'تفعيل المصادقة الثنائية (TOTP) لحسابك: بعد كلمة المرور يطلب النظام رمزاً من تطبيق على موبايلك '
@@ -650,6 +650,16 @@ SCREENS = [
         'tips': [
             T('كل رمز استرجاع يُستخدم مرة واحدة فقط؛ الشاشة توضح كم رمزاً تبقّى.',
               'Each recovery code works once; the screen shows how many are left.'),
+            T('«تذكّر هذا الجهاز» بيشتغل بس على جهاز معتمد من المدير (شاشة الأجهزة)؛ على جهاز غير معتمد الرمز بيتطلب كل مرة.',
+              '"Remember this device" works only on a device the admin approved (Devices screen); on an unapproved device the code is asked every time.'),
+            T('الدخول من خارج شبكة الشركة: الأدوار المسموح لها بس، وبعد كلمة المرور لازم رمز التحقق، والجلسة بتنتهي بعد 8 ساعات من الدخول (الطيار 12 ساعة) فتسجّل دخول من جديد. بيوصلك إشعار «دخول من خارج الشبكة» ويوصل للمدير — لو مش إنت غيّر كلمة المرور فوراً.',
+              'Signing in from outside the company network: only the roles allowed to, the verification code is required after the password, and the session ends 8 hours after sign-in (riders 12 hours) so you sign in again. You and the admins get an "outside the network sign-in" notification — if it was not you, change your password at once.'),
+            T('أول تفعيل للمصادقة الثنائية وقت الدخول بيتم من داخل شبكة الشركة بس؛ من برّه هتظهر «فعّل المصادقة الثنائية من داخل شبكة الشركة أولاً». فعّلها مرة من الفرع (أو من الشاشة دي وإنت داخل بالفعل).',
+              'The first two-factor enrolment at sign-in is done only inside the company network; from outside you see "Enable two-factor authentication from inside the company network first". Enrol once at the branch (or from this screen while already signed in).'),
+            T('الطيار: افتح «🔒 أمان الحساب» من الشريط الأزرق في شاشة الطيار وفعّل المصادقة الثنائية وإنت في الفرع — من غيرها مش هتقدر تدخل من بيانات الموبايل.',
+              'Riders: open "🔒 Account security" from the blue bar on the rider screen and turn on two-factor while at a branch — without it you cannot sign in over mobile data.'),
+            T('لو دورك مش مسموح له بالدخول من خارج الشبكة هتظهر رسالة «الدخول من خارج شبكة الشركة غير متاح لدورك» — ادخل من الفرع أو من جهاز معتمد على شبكة الشركة.',
+              'If your role may not sign in from outside the network you see "Sign-in from outside the company network is not available for your role" — sign in at the branch or on an approved device on the company network.'),
         ],
         'tour': [
             {'target': 'general-security-header', 'text': T('دي شاشة أمان حسابك: منها بتفعّل أو توقف المصادقة الثنائية (TOTP).',
@@ -717,8 +727,9 @@ SCREENS = [
                        'Turning it off needs your password + a current code from the app or a recovery code, so nobody can switch it off from your device while you are away.\n• After turning it off, login is by password only — better to keep it on.'),
          },
         ],
-        'change_note': T('زر «إلغاء كل الأجهزة المحفوظة»', 'A "Forget all saved devices" button'),
-        'updated': '2026-10-31',
+        'change_note': T('الطيار يفتح «أمان الحساب» من شاشة الطيار ويفعّل المصادقة الثنائية؛ «تذكّر هذا الجهاز» على الأجهزة المعتمدة فقط؛ قواعد الدخول من خارج الشبكة',
+                         'Riders open "Account security" from the rider screen to turn on two-factor; "Remember this device" on approved devices only; outside-the-network sign-in rules'),
+        'updated': '2026-11-01',
     },
     {
         'key': 'general.notifications',

@@ -27,6 +27,7 @@ from rest_framework.response import Response
 
 from . import engine, services
 from .models import Badge, GamificationChange, Level, PointRule
+from core.export_safety import neutralise_formulas
 
 MODULE = 'gamification'
 MAX_MANUAL_POINTS = 500
@@ -399,7 +400,7 @@ def report_export(request):
     resp = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     resp['Content-Disposition'] = f'attachment; filename="gamification_{start}_{end}.xlsx"'
-    wb.save(resp)
+    neutralise_formulas(wb).save(resp)
     return resp
 
 

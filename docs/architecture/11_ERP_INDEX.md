@@ -53,7 +53,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | System Config | `apps/config` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#config) |
 | Analytics | `apps/analytics` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#analytics) |
 | Audit Trail | `apps/audit` | PARTIAL | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#audit) |
-| Network Access (trusted networks, request zone) | `apps/access` | COMPLETE (N1: log only) | [network-device-access design](../security/2026-10-31-network-device-access-design.md) |
+| Network Access (trusted networks, request zone, device registry) | `apps/access` | COMPLETE (N1 log only; N2 device registry: enroll, approve/block/retire, remember 2FA on approved devices) | [network-device-access design](../security/2026-10-31-network-device-access-design.md) |
 | ERP Sync | `apps/sync` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#sync) |
 | Finance | `apps/finance` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#finance) |
 | Product Enrichment | `apps/enrichment` | PARTIAL | |
@@ -124,7 +124,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | Sync | `/api/sync/` | sync |
 | Finance | `/api/finance/` | finance |
 | Audit | `/api/audit/` | audit |
-| Access (whoami, trusted networks) | `/api/access/` | access |
+| Access (whoami, trusted networks, devices) | `/api/access/` | access |
 | Products | `/api/products/` | enrichment |
 | Campaigns | `/api/campaigns/` | campaigns |
 | Tasks | `/api/tasks/` | tasks |
@@ -312,6 +312,8 @@ Full schema: [03_DATABASE_DICTIONARY.md](03_DATABASE_DICTIONARY.md)
 | Comms Analytics (Omni) | `/omni/analytics` | Omni / CEP | COMPLETE (Phase 5 — cross-channel BI) |
 | Audit | `/audit` | Audit | PARTIAL |
 | Trusted Networks (الشبكات الموثوقة) | `/access/networks` | Access (admin only) | COMPLETE (N1) |
+| Devices (الأجهزة) | `/access/devices` | Access (admin only) | COMPLETE (N2) |
+| Network policy (سياسة الشبكات) | `/access/zone-policy` | Access (admin only) | COMPLETE (N3) |
 | Account Security (2FA) | `/security` | Users (all roles) | COMPLETE |
 | Help guide (دليل الاستخدام) | `/help` (+ «؟ مساعدة»/F1 panel on every screen) | Help (all roles) | COMPLETE |
 | Gamification (التحفيز) | `/gamification` (`?tab=me\|leaderboard\|branches\|badges\|rules\|champions\|rewards\|redemptions\|reports\|settings`) + card on `/dashboard` and `/me` | Gamification (all roles; reports/settings by RBAC) | COMPLETE |

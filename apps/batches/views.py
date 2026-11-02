@@ -69,6 +69,7 @@ from .serializers import (
 )
 from .service import BatchService
 from core.errors import public_error
+from core.export_safety import neutralise_formulas
 
 logger = logging.getLogger('elrezeiky.batches')
 
@@ -344,7 +345,7 @@ def export_purchase_expiry(request):
 
     from io import BytesIO
     buf = BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     buf.seek(0)
     fname = f'expiry_audit_{branch_label}_{date_from}_{date_to}.xlsx'.replace(' ', '_')
     resp = HttpResponse(
@@ -784,7 +785,7 @@ def export_stock_expiry(request):
                 ws.cell(row=ws.max_row, column=i).font = red
     ws.freeze_panes = 'A4'
 
-    buf = BytesIO(); wb.save(buf); buf.seek(0)
+    buf = BytesIO(); neutralise_formulas(wb).save(buf); buf.seek(0)
     resp = HttpResponse(
         buf.getvalue(),
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -1008,7 +1009,7 @@ def export_disposal(request):
     for row in items:
         ws.append([row.get(c[1]) if row.get(c[1]) is not None else '' for c in cols])
     ws.freeze_panes = 'A4'
-    buf = BytesIO(); wb.save(buf); buf.seek(0)
+    buf = BytesIO(); neutralise_formulas(wb).save(buf); buf.seek(0)
     resp = HttpResponse(buf.getvalue(),
                         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     resp['Content-Disposition'] = 'attachment; filename="disposal_return.xlsx"'
@@ -1356,7 +1357,7 @@ def return_window_export(request):
         ws.append([l.get(c[1]) if l.get(c[1]) is not None else '' for c in cols])
     ws.freeze_panes = 'A4'
     buf = BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     resp = HttpResponse(buf.getvalue(),
                         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     resp['Content-Disposition'] = f'attachment; filename="return_window_{sup or "all"}.xlsx"'

@@ -283,10 +283,18 @@ class DeliveryRouteSerializer(serializers.ModelSerializer):
     orders          = serializers.SerializerMethodField()
 
     def get_orders(self, obj):
+        from apps.customers import access as phone_access
+        from apps.customers.phone_mask import _user
         rows = obj.orders.order_by('route_sequence', 'id')
+        user = _user(self)
+        visible = user is None or phone_access.record_phones_visible(user)   # same rule as the order rows
+
+        def phone(value):
+            return value if visible else phone_access.mask(value)
+
         return [{
             'id': o.id, 'order_number': o.order_number, 'seq': o.route_sequence,
-            'customer_name': o.customer_name, 'customer_phone': o.customer_phone,
+            'customer_name': o.customer_name, 'customer_phone': phone(o.customer_phone),
             'address': o.delivery_address, 'area': o.delivery_area,
             'lat': float(o.delivery_lat) if o.delivery_lat else None,
             'lng': float(o.delivery_lng) if o.delivery_lng else None,

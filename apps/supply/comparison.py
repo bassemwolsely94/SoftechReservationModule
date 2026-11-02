@@ -31,6 +31,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import timedelta
+from core.export_safety import neutralise_formulas
 
 OFFER_DAYS = 14
 HISTORY_DAYS = 365
@@ -552,5 +553,5 @@ def to_excel(board) -> bytes:
     notes.column_dimensions['A'].width = 120
     notes.cell(1, 1, IC.ITEM_NOTE).font = Font(name='Arial', size=11)
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     return buf.getvalue()

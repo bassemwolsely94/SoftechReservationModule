@@ -5,6 +5,8 @@ from . import views
 
 router = SimpleRouter()   # no browsable API root / format routes
 router.register('networks', views.TrustedNetworkViewSet, basename='trusted-network')
+router.register('zone-policies', views.ZonePolicyViewSet, basename='zone-policy')
+router.register('devices', views.DeviceViewSet, basename='device')
 
 urlpatterns = [
     path('whoami/', views.whoami),

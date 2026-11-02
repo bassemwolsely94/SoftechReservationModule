@@ -5,7 +5,10 @@ Customer self-service portal API. Two public entry points (magic-link request +
 token exchange); all other endpoints require a portal session and are HARD-SCOPED
 to `request.user.customer`. A customer id is never accepted from the client.
 """
+from django.conf import settings
 from django.core import signing
+from django.db import transaction
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import (
     api_view, authentication_classes, permission_classes, throttle_classes,
@@ -17,11 +20,15 @@ from apps.portal.auth import IsPortalCustomer, PortalSessionAuthentication
 from apps.portal.serializers import (
     AuthExchangeSerializer, ReorderSerializer, RequestLinkSerializer,
 )
-from apps.portal.services import find_customer_by_phone, send_magic_link
-from apps.portal.throttles import AuthExchangeThrottle, RequestLinkThrottle
-from apps.portal.tokens import make_magic_token, make_session_token, read_magic_token
+from apps.portal.services import (
+    exchange_magic_link, find_customer_by_phone, issue_magic_link, send_magic_link,
+)
+from apps.portal.throttles import AuthExchangeThrottle, RequestLinkIPThrottle, RequestLinkThrottle
 
 _GENERIC_LINK_MSG = 'إذا كان لديك حساب، فسيصلك رابط الدخول عبر واتساب.'
+
+# Owner 2026-11-01 (Batch 6, W-5): at most this many online reorders per customer per day.
+REORDER_DAILY_MAX = int(getattr(settings, 'PORTAL_REORDER_DAILY_MAX', 10))
 
 
 def _mask_phone(phone: str) -> str:
@@ -38,11 +45,11 @@ def _mask_phone(phone: str) -> str:
 @api_view(['POST'])
 @authentication_classes([])
 @permission_classes([AllowAny])
-@throttle_classes([RequestLinkThrottle])
+@throttle_classes([RequestLinkThrottle, RequestLinkIPThrottle])
 def request_link(request):
     """
     POST {phone} → ALWAYS 200 (never leaks whether the account exists).
-    If a customer matches, mint a short-lived magic token and WhatsApp the link.
+    If a customer matches, mint a short-lived one-login magic link and WhatsApp it.
     """
     ser = RequestLinkSerializer(data=request.data)
     ser.is_valid(raise_exception=True)
@@ -50,8 +57,7 @@ def request_link(request):
 
     customer = find_customer_by_phone(phone)
     if customer is not None:
-        token = make_magic_token(customer.softech_pic)
-        send_magic_link(customer, token)
+        send_magic_link(customer, issue_magic_link(customer))
 
     return Response({'detail': _GENERIC_LINK_MSG}, status=status.HTTP_200_OK)
 
@@ -61,27 +67,20 @@ def request_link(request):
 @permission_classes([AllowAny])
 @throttle_classes([AuthExchangeThrottle])
 def auth_exchange(request):
-    """POST {token} (magic-link) → issue a customer-scoped session token."""
+    """POST {token} (magic-link) → issue a customer-scoped session token. A link works once."""
     ser = AuthExchangeSerializer(data=request.data)
     ser.is_valid(raise_exception=True)
 
-    pic = read_magic_token(ser.validated_data['token'])
-    if not pic:
+    spent = exchange_magic_link(ser.validated_data['token'])
+    if spent is None:
         return Response(
-            {'detail': 'الرابط غير صالح أو منتهي الصلاحية'},
+            {'detail': 'الرابط غير صالح أو منتهي الصلاحية أو استُخدم من قبل'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    from apps.customers.models import Customer
-    customer = Customer.objects.filter(softech_pic=pic).first()
-    if customer is None:
-        return Response(
-            {'detail': 'الحساب غير موجود'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
+    customer, session_token = spent
     return Response({
-        'session_token': make_session_token(pic),
+        'session_token': session_token,
         'customer': {'name': customer.name},
     })
 
@@ -95,6 +94,14 @@ def _portal(view):
     view = authentication_classes([PortalSessionAuthentication])(view)
     view = permission_classes([IsPortalCustomer])(view)
     return view
+
+
+@api_view(['POST'])
+@_portal
+def logout(request):
+    """End THIS session on the server (the browser forgetting the token is not enough)."""
+    request.user.login.revoke()
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(['GET'])
@@ -259,19 +266,29 @@ def reorder(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+    from apps.customers.models import Customer
     from apps.reservations.models import Reservation
-    reservation = Reservation.objects.create(
-        customer=c,
-        item=item,
-        manual_item_name='' if item else manual_name,
-        branch=branch,
-        quantity_requested=data.get('quantity') or 1,
-        status='pending',
-        order_source='online',
-        contact_name=c.name or '',
-        contact_phone=(c.whatsapp_phone or c.phone or ''),
-        notes=(data.get('notes') or '').strip(),
-    )
+    with transaction.atomic():
+        Customer.objects.select_for_update().filter(pk=c.pk).first()     # one reorder at a time
+        start = timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
+        if Reservation.objects.filter(customer=c, order_source='online',
+                                      created_at__gte=start).count() >= REORDER_DAILY_MAX:
+            return Response(
+                {'detail': f'وصلت للحد اليومي ({REORDER_DAILY_MAX} طلبات) — اتصل بالفرع لأي طلب إضافي'},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        reservation = Reservation.objects.create(
+            customer=c,
+            item=item,
+            manual_item_name='' if item else manual_name,
+            branch=branch,
+            quantity_requested=data.get('quantity') or 1,
+            status='pending',
+            order_source='online',
+            contact_name=c.name or '',
+            contact_phone=(c.whatsapp_phone or c.phone or ''),
+            notes=(data.get('notes') or '').strip(),
+        )
 
     return Response({
         'id': reservation.id,

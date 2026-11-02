@@ -58,6 +58,8 @@ BEHIND_HTTPS_PROXY=True            # Nginx terminates TLS (sets X-Forwarded-Prot
 NETWORK_HEADER_TRUSTED=True              # ONLY when our nginx + elrezeiky-proxy-headers.conf is the sole way in (N1 network label)
 NETWORK_UNTRUSTED_ZONE=external            # zone assumed if the header is not trusted; never internal on a server
 NETWORK_POLICY_ENFORCEMENT=log             # off | log | enforce (N3)
+NETWORK_PROXY_KEY=<openssl rand -hex 32>   # N3: same value as in /etc/nginx/elrezeiky-proxy-key.conf; required to enforce
+# N3: nginx-proxy-headers.conf now includes /etc/nginx/elrezeiky-proxy-key.conf - create it (runbook, Batch N3 step 1) BEFORE reloading nginx or `nginx -t` fails.
 NUM_PROXIES=1                      # nginx appends the client to X-Forwarded-For (throttles + audit IP)
 CSRF_TRUSTED_ORIGINS=https://yourdomain.com
 RBAC_ENFORCEMENT=log               # then 'enforce' once the rbac log is clean

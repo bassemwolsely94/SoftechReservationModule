@@ -256,6 +256,22 @@ class HelpContentCoverageTests(SimpleTestCase):
         no_tour = [k for k, s in self.screens.items() if not s.get('tour')]
         self.assertEqual(no_tour, [], 'Every screen needs a «اعرض لي» tour (add data-tour anchors + tour steps)')
 
+    def test_no_duplicate_keys_in_help_content(self):
+        """A key written twice in one dict (two 'tour' lists, two 'change_note's after a merge)
+        is legal Python — the later one silently replaces the earlier, dropping its help."""
+        import ast
+        dups = []
+        for path in sorted((Path(settings.BASE_DIR) / 'apps' / 'help' / 'content').glob('*.py')):
+            for node in ast.walk(ast.parse(path.read_text(encoding='utf-8'))):
+                if isinstance(node, ast.Dict):
+                    seen = set()
+                    for k in node.keys:
+                        if isinstance(k, ast.Constant):
+                            if k.value in seen:
+                                dups.append(f'{path.name}:{k.lineno} {k.value!r}')
+                            seen.add(k.value)
+        self.assertEqual(dups, [], 'Duplicate keys — merge the two blocks into one')
+
     def test_rich_tours_in_finished_modules(self):
         """Modules out of TOUR_PENDING: every screen has a tour of rich steps."""
         self.assertLessEqual(registry.TOUR_PENDING, set(self.modules), 'TOUR_PENDING has unknown modules')

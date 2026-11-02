@@ -54,17 +54,12 @@ def _resolve_call_audio(log) -> tuple[bytes | None, str]:
         return recordings.load_session_audio(session)
     remote = log.recording_url
 
-    if remote:
-        try:
-            import requests
-            resp = requests.get(remote, timeout=30)
-            resp.raise_for_status()
-            mime = resp.headers.get('Content-Type', '') or \
-                mimetypes.guess_type(remote)[0] or 'audio/wav'
-            return resp.content, mime.split(';')[0]
-        except Exception as exc:
-            logger.warning('transcription: recording download failed for call %s: %s',
-                           log.pk, exc)
+    if remote:                       # call-centre editable → only safe hosts, capped (Batch 6, W-6)
+        from apps.pbx.recordings import fetch_recording
+        audio = fetch_recording(remote)
+        if audio[0] is None:
+            logger.warning('transcription: recording download failed for call %s', log.pk)
+        return audio
     return None, ''
 
 

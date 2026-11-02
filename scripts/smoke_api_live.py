@@ -1,12 +1,17 @@
 """
 Comprehensive live API test - runs against http://localhost:8001
+
+Credentials come from SMOKE_ADMIN_USER / SMOKE_ADMIN_PASS (security Batch 6, W-10: the
+admin password that used to sit here is still in git history — rotate it on every server).
 """
-import requests, sys, json
+import os, requests, sys, json
 from datetime import date
 
 BASE = 'http://localhost:8001/api'
-ADMIN_USER = 'bassemwolsely94'
-ADMIN_PASS = 'TestAdmin123'
+ADMIN_USER = os.environ.get('SMOKE_ADMIN_USER', '')
+ADMIN_PASS = os.environ.get('SMOKE_ADMIN_PASS', '')
+if not (ADMIN_USER and ADMIN_PASS):
+    sys.exit('Set SMOKE_ADMIN_USER and SMOKE_ADMIN_PASS (a test admin on the target) — no credentials live in this file.')
 
 results = {'pass': 0, 'fail': 0, 'warn': 0}
 _token = None

@@ -234,6 +234,8 @@ SCREENS = [
             T('«إضافة مستخدم»: ابحث عن اسم المستخدم في SOFTECH ليُربط به، ثم كلمة المرور والاسم والهاتف وكود الموارد البشرية.', '"Add user": search the SOFTECH username to link, then password, name, phone and HR code.'),
             T('حدد الدور والفرع الأساسي، وصلاحيات الوصول: وصول لكل الفروع، قنوات البيع المسموح بها في نقطة البيع (فارغ = كلها)، رؤية عملاء كل الفروع، رؤية رقم هاتف العميل.', 'Set the role and main branch, and access: all branches, allowed POS sales channels (empty = all), see customers of all branches, see customer phone numbers.'),
             T('«الحساب نشط» لإيقاف أو تفعيل الدخول بدون حذف المستخدم.', '"Account active" stops or allows login without deleting the user.'),
+            T('لمستخدم بدور «مدير»: خياران تحت صلاحيات الوصول «التصدير من خارج الشبكة» و«الكتابة في SOFTECH من خارج الشبكة». مطفيان افتراضياً، ولا يعملان إلا من جهاز معتمد خارج شبكة الشركة، وأي تغيير يُسجَّل في سجل نشاط المستخدم.',
+              'For a user with the admin role: two options under access, "Export from outside the network" and "SOFTECH writes from outside the network". Both are off by default, work only from an approved device outside the company network, and any change is written to the user activity log.'),
         ],
         'tips': [T('ربط المستخدم بمستخدم SOFTECH ضروري للاعتمادات التي تُنفَّذ في SOFTECH باسمه.', 'Linking the user to a SOFTECH user is required for approvals executed in SOFTECH under their name.'),
                  T('بعد 5 محاولات دخول خاطئة (كلمة مرور أو رمز تحقق) خلال 15 دقيقة يُوقف دخول الحساب 15 دقيقة تلقائياً ويصل المديرين إشعار؛ يظهر «🔒 دخول موقوف مؤقتاً» وزر «رفع الإيقاف».',
@@ -242,7 +244,7 @@ SCREENS = [
                    'Resetting a password does not lift a login pause — use "Lift the lock". If every admin is paused, run the unlock_login command on the server.'),
                  T('كلمة المرور 10 أحرف على الأقل، وتُرفض إن كانت شائعة (مثل password123) أو أرقاماً فقط أو قريبة من اسم المستخدم — عند الإنشاء وإعادة التعيين وتغيير كلمة المرور.',
                    'Passwords need at least 10 characters and are refused if common (like password123), digits only, or close to the username — on create, reset and password change.')],
-        'related': ['admin.permissions', 'admin.erp_permissions'],
+        'related': ['admin.permissions', 'admin.erp_permissions', 'admin.zone_policy'],
         'tour': [
             {'target': 'admin-users-add', 'label': T('إضافة مستخدم', 'Add user'),
              'text': T('يفتح نموذج «إضافة مستخدم جديد» على الجنب.', 'Opens the "Add new user" form on the side.'),
@@ -363,8 +365,7 @@ SCREENS = [
              'open_hint': T('اضغط «🔑 إعادة تعيين كلمة المرور» على صف المستخدم.', 'Press "🔑 Reset password" on the user\'s row.')},
         ],
         'updated': '2026-11-01',
-    
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'change_note': T('خياران للمدير (التصدير والكتابة في SOFTECH من جهاز معتمد خارج الشبكة)، وشرح أوضح لأزرار «اعرض لي»', 'Two admin options (export and SOFTECH writes from an approved device outside the network); clearer "Show me" buttons'),
     },
     {
         'key': 'admin.permissions',
@@ -454,7 +455,6 @@ SCREENS = [
              'open_hint': T('«🔔 ظهور الإشعارات» ← اختار دور — للمدير.', '"🔔 Notification visibility" → pick a role — admins.')},
         ],
         'updated': '2026-11-01',
-    
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
@@ -539,7 +539,6 @@ SCREENS = [
              'open_hint': T('افتح تبويب «أنظمة Softech».', 'Open the "SOFTECH systems" tab.')},
         ],
         'updated': '2026-10-30',
-    
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
@@ -559,9 +558,9 @@ SCREENS = [
             {'key': 'vouchers', 'title': T('🎫 القسائم', '🎫 Vouchers'), 'body': T('إعدادات رموز التحقق وحدود القيم.', 'OTP settings and value limits.')},
             {'key': 'dropdowns', 'title': T('📝 القوائم المنسدلة', '📝 Dropdowns'), 'body': T('خيارات القوائم المنسدلة في الشاشات (قنوات الحجز، أولويات الحجز، حالات التحويل…): أضف خياراً (تسمية عربية، قيمة، أيقونة) أو عطّله.', 'The dropdown options used in screens (reservation channels, priorities, transfer statuses…): add an option (Arabic label, value, icon) or disable it.')},
         ],
-        'tips': [T('تغيير لغة الواجهة فوري ويُحفظ في المتصفح.', 'Changing the interface language is instant and saved in the browser.')],
         'tour': [
-            {'target': 'admin-settings-header', 'text': T('إعدادات النظام؛ غير المدير يرى «عرض فقط».',
+            {'target': 'admin-settings-header', 'label': T('إعدادات النظام', 'System Settings'),
+             'text': T('إعدادات النظام؛ غير المدير يرى «عرض فقط».',
                                               'System settings; non-admins see "View only".'),
              'more': T('هنا بتتظبط بيانات الصيدلية والفروع وقواعد كل موديول.\n'
                        'المدير بس اللي يعدّل؛ الصيدلي بيشوف الإعدادات مع شارة «عرض فقط — يحتاج صلاحية مدير للتعديل».',
@@ -574,20 +573,24 @@ SCREENS = [
                        '• «المظهر»: ألوان الهوية.',
                        'Click a section in the side column and the content beside it changes.\n'
                        '• "Reservations", "Transfers", "Notifications", "Sync" and "Vouchers": each module\'s rules.\n'
-                       '• "Appearance": brand colours.')},
-            {'target': 'admin-settings-content', 'text': T('إعدادات القسم المختار تظهر هنا؛ التعديل للمدير فقط.',
+                       '• "Appearance": brand colours.'),
+             'label': T('عام · المظهر · الفروع · …', 'General · Appearance · Branches · …')},
+            {'target': 'admin-settings-content', 'label': T('محتوى القسم', 'Section content'),
+             'text': T('إعدادات القسم المختار تظهر هنا؛ التعديل للمدير فقط.',
                                               'The selected section\'s settings appear here; editing is admin only.'),
              'more': T('كل إعداد في سطر بقيمته الحالية. اضغط «تعديل» جنبه، غيّر القيمة، وبعدين «حفظ» — كل إعداد بيتحفظ لوحده وتظهر «تم الحفظ ✓».\n'
                        'التغيير بيأثر على شغل الموديول على طول، فغيّر بس اللي فاهم تأثيره.',
                        'Each setting is a row with its current value. Click "Edit" next to it, change the value, then "Save" — each setting saves on its own and "Saved ✓" shows.\n'
                        'The change affects how the module works right away, so only change what you understand.')},
-            {'target': 'admin-settings-general', 'text': T('في «عام»: لغة الواجهة وبيانات الصيدلية الظاهرة في الإيصالات وواتساب.',
+            {'target': 'admin-settings-general', 'label': T('الإعدادات العامة', 'General Settings'),
+             'text': T('في «عام»: لغة الواجهة وبيانات الصيدلية الظاهرة في الإيصالات وواتساب.',
                                               'In "General": interface language and pharmacy details shown on receipts and WhatsApp.'),
              'more': T('• لغة الواجهة (العربية / English): التغيير فوري ومتسجّل في المتصفح.\n'
                        '• «معلومات سلسلة الصيدليات»: بتظهر في إيصالات العملاء ورسائل واتساب ورمز QR — راجعها كويس.',
                        '• Interface language (Arabic / English): the change is instant and saved in the browser.\n'
                        '• "Pharmacy chain profile": shown on customer receipts, WhatsApp messages and the QR code — check it carefully.')},
-            {'target': 'admin-settings-branches', 'text': T('في «الفروع»: بطاقة لكل فرع بحالته وميزاته وبياناته وموقعه.',
+            {'target': 'admin-settings-branches', 'label': T('إدارة الفروع', 'Branch Management'),
+             'text': T('في «الفروع»: بطاقة لكل فرع بحالته وميزاته وبياناته وموقعه.',
                                               'In "Branches": a card per branch with status, features, details and location.'),
              'more': T('• «✎ تعديل»: الاسم والهاتف والعنوان والإحداثيات («استخدم موقعي الحالي» وإنت جوه الفرع).\n'
                        '• «نشط» و«قيد التشغيل» بيتغيّروا بضغطة واحدة فوراً.\n'
@@ -597,7 +600,8 @@ SCREENS = [
                        '• "Active" and "Operational" switch with one click, immediately.\n'
                        '• "Available features": click a feature to enable or disable it for the branch.\n'
                        'Without coordinates, attendance and pickup geo-checks will not work.')},
-            {'target': 'admin-settings-dropdowns', 'text': T('في «القوائم المنسدلة»: خيارات القوائم المستخدمة في الشاشات مثل قنوات الحجز.',
+            {'target': 'admin-settings-dropdowns', 'label': T('القوائم المنسدلة', 'Dropdown Options'),
+             'text': T('في «القوائم المنسدلة»: خيارات القوائم المستخدمة في الشاشات مثل قنوات الحجز.',
                                               'In "Dropdowns": the options used in screens, such as reservation channels.'),
              'more': T('• «+ إضافة خيار جديد»: التسمية العربية والقيمة إجباريين، والإنجليزي والأيقونة اختياريين.\n'
                        '• «مفعّل / معطّل» بيخفي الخيار من الشاشات من غير ما يمسحه.\n'
@@ -605,16 +609,6 @@ SCREENS = [
                        '• "+ Add new option": Arabic label and value are required; English label and icon are optional.\n'
                        '• "Enabled / Disabled" hides the option from screens without deleting it.\n'
                        '• ✕ deletes after a confirmation; "System" options cannot be deleted.')},
-        ],
-        'tips': [
-            T('تغيير لغة الواجهة فوري ويُحفظ في المتصفح.', 'Changing the interface language is instant and saved in the browser.'),
-            T('كل تعديل بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الإعدادات): القراءة متاحة للكل، لكن تعديل الإعدادات والقوائم وبيانات الصيدلية يحتاج «تعديل» (أو «إضافة» / «حذف» للقوائم).',
-              'Every change is checked on the server (Permissions Matrix, settings module): anyone can read, but changing settings, dropdown lists and the pharmacy profile needs "edit" (or "create" / "delete" for list options).'),
-        ],
-        'tour': [
-            {'target': 'admin-settings-tabs', 'label': T('عام · المظهر · الفروع · …', 'General · Appearance · Branches · …'),
-             'text': T('كل مجموعة إعدادات في تبويب: عام، المظهر، الفروع، الحجوزات، التحويل، الإشعارات، المزامنة، القسائم، القوائم.',
-                       'Each settings group has a tab: general, appearance, branches, reservations, transfers, notifications, sync, vouchers, dropdowns.')},
             {'target': 'admin-settings-language', 'label': T('العربية · English', 'العربية · English'),
              'text': T('لغة الواجهة واتجاهها. التغيير فوري ومن غير إعادة تحميل.', 'Interface language and direction. The change is instant, no reload.'),
              'open_hint': T('في تبويب «عام».', 'On the "General" tab.')},
@@ -658,6 +652,12 @@ SCREENS = [
                        'Saves the brand colours and font for the whole system. "↺ Reset to brand default" restores them.'),
              'open_hint': T('افتح تبويب «🎨 المظهر» وغيّر حاجة.', 'Open the "🎨 Appearance" tab and change something.')},
         ],
+        'tips': [
+            T('تغيير لغة الواجهة فوري ويُحفظ في المتصفح.', 'Changing the interface language is instant and saved in the browser.'),
+            T('كل تعديل بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الإعدادات): القراءة متاحة للكل، لكن تعديل الإعدادات والقوائم وبيانات الصيدلية يحتاج «تعديل» (أو «إضافة» / «حذف» للقوائم).',
+              'Every change is checked on the server (Permissions Matrix, settings module): anyone can read, but changing settings, dropdown lists and the pharmacy profile needs "edit" (or "create" / "delete" for list options).'),
+        ],
+
         'hints': [
             {'target': 'admin-settings-setting-save', 'label': T('حفظ', 'Save'),
              'text': T('يحفظ القيمة الجديدة للإعداد ده، وبتسري على الشاشات المرتبطة بيه.', 'Saves the new value of this setting; it applies to the screens that use it.'),
@@ -695,8 +695,7 @@ SCREENS = [
              'open_hint': T('في تبويب «🎨 المظهر».', 'On the "🎨 Appearance" tab.')},
         ],
         'updated': '2026-11-01',
-    
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'change_note': T('جولة «اعرض لي» رجعت كاملة: شرح كل خطوة مع تلميح الزر', 'The full "Show me" tour is back: every step\'s explanation with its button hint'),
     },
     {
         'key': 'admin.sync',
@@ -792,7 +791,7 @@ SCREENS = [
          },
         ],
         'updated': '2026-11-01',
-        'change_note': T('«حمل SOFTECH» يفرّق الشاشات حسب الشبكة والدور', '"SOFTECH load" splits screens by network and role'),
+        'change_note': T('«حمل SOFTECH» يفرّق الشاشات حسب الشبكة والدور؛ مفاتيح الكتابة، تنظيف يومي، تنبيه الفشل المتكرر، وأبطأ الطلبات', '"SOFTECH load" splits screens by network and role; writer switches, daily clean-up, repeated-failure alert, slowest requests'),
     },
     {
         'key': 'admin.audit',
@@ -889,7 +888,6 @@ SCREENS = [
              'open_hint': T('اضغط «مراجعة» على إشارة مفتوحة.', 'Press "Review" on an open flag.')},
         ],
         'updated': '2026-11-01',
-    
         'change_note': T('تبويب جديد: استخدام الشاشات', 'New tab: screen usage'),
     },
     {
@@ -931,5 +929,100 @@ SCREENS = [
         ],
         'change_note': T('شاشة جديدة: الشبكات الموثوقة وشارة «من أين أتصل؟»', 'New screen: trusted networks and the "where am I connecting from?" badge'),
         'updated': '2026-10-31',
+    },
+    {
+        'key': 'admin.devices',
+        'routes': ['/access/devices'],
+        'title': T('الأجهزة', 'Devices'),
+        'summary': T('كل جهاز (كمبيوتر فرع، لابتوب، موبايل) دخل منه موظف على النظام. الجهاز الجديد يظهر «بانتظار الاعتماد» والمدير يعتمده أو يحظره. الجهاز المعتمد يقدر يحفظ التحقق بخطوتين، والجهاز المحظور تنتهي جلساته فوراً.',
+                     'Every device (branch PC, laptop, phone) a user signed in from. A new device shows as "Pending"; the admin approves or blocks it. An approved device can remember two-step verification; a blocked device has its sessions ended at once.'),
+        'audience': T('المدير فقط.', 'Admins only.'),
+        'tabs': [
+            {'key': 'pending', 'title': T('بانتظار الاعتماد', 'Pending'), 'body': T('الأجهزة الجديدة اللي لسه ما اتراجعتش. حدّد جهاز أو أكثر واضغط «اعتماد المحدد»، أو Enter لاعتماد الصف الحالي.', 'New devices not yet reviewed. Tick one or more and press "Approve selected", or Enter to approve the current row.')},
+            {'key': 'approved', 'title': T('المعتمدة', 'Approved'), 'body': T('الأجهزة المعتمدة. يمكن حظرها (مع سبب) أو تقاعدها لو خرجت من الخدمة.', 'Approved devices. They can be blocked (with a reason) or retired when taken out of service.')},
+            {'key': 'closed', 'title': T('المحظورة والمتقاعدة', 'Blocked and retired'), 'body': T('الأجهزة المحظورة (يمكن إعادة اعتمادها) والمتقاعدة (نهائي — لا تعود).', 'Blocked devices (can be approved again) and retired ones (final — they never come back).')},
+        ],
+        'steps': [
+            T('بعد ما الموظفين يسجلوا دخول مرة من كمبيوتر الفرع، افتح «بانتظار الاعتماد»، صفّي بالفرع والنوع «جهاز فرع» (والشبكة داخلية)، ثم Ctrl+A و«اعتماد المحدد». الأجهزة الشخصية (لابتوب/موبايل من خارج الشبكة) تُعتمد واحداً واحداً بعد التأكد من صاحبها.', 'After staff sign in once from the branch PC, open "Pending", filter by branch and kind "Branch PC" (internal network), then Ctrl+A and "Approve selected". Personal devices (laptops/phones seen from outside the network) are approved one by one after checking the owner.'),
+            T('اكتب اسماً واضحاً للجهاز (مثلاً «كاشير 1 — فرع المعادي») واختر النوع والفرع من الصف نفسه.', 'Give the device a clear name (e.g. "Cashier 1 — Maadi") and pick its kind and branch in the row itself.'),
+            T('«حظر» يحتاج سبباً تكتبه في الخانة بجانب الزر. بعدها أي طلب من الجهاز يُرفض فوراً. الحظر يوقف هذا المتصفح فقط — لإيقاف شخص عطّل حسابه. ولا يمكنك حظر الجهاز الذي تستخدمه الآن.', '"Block" needs a reason typed in the field next to the button. After that every request from the device is refused at once. Blocking stops this one browser only — to stop a person, disable their account. You cannot block the device you are using right now.'),
+            T('«تقاعد» نهائي ويطلب ضغطة تأكيد ثانية: الجهاز لا يمكن إعادة تفعيله، وأي دخول من نفس المتصفح بعدها يُنشئ جهازاً جديداً.', '"Retire" is final and asks for a second click to confirm: the device cannot be reactivated, and the next sign-in from that browser creates a new device.'),
+            T('كل اعتماد أو حظر أو تقاعد أو تعديل بيتسجل في سجل المراجعة بالمستخدم وقبل/بعد.', 'Every approve, block, retire or edit is written to the audit log with the user and before/after.'),
+        ],
+        'tips': [T('كمبيوتر الفرع المشترك جهاز واحد بعدة مستخدمين — اعتمده مرة واحدة.', 'A shared branch PC is one device with several users — approve it once.'),
+                 T('في وضع «التسجيل» الجهاز المعلّق مش بيتمنع من الشغل؛ المحظور والمتقاعد بس. بعد التطبيق الفعلي، المتصفح غير المعتمد داخل الفرع يعرض بس ومايبيعش (Z2) — وده يشمل كمبيوتر جديد أو متصفح تاني أو نافذة InPrivate أو متصفح اتمسحت بياناته. وحفظ التحقق بخطوتين يبدأ من أول تحقق بعد اعتماد الجهاز.',
+                   'In "log" mode a pending device is not stopped from working; only blocked and retired ones are. Once enforced, an unapproved browser at a branch can look but not sell (Z2) — that covers a new PC, a second browser, an InPrivate window or a browser whose data was cleared. Remembering two-step verification starts with the first verification after the device is approved.'),
+                 T('كمبيوتر جديد بعد التطبيق الفعلي: الكاشير يسجّل دخول مرة (يشتغل عرض فقط لحد الاعتماد)، والمدير يعتمده من «بانتظار الاعتماد» في نفس اليوم من جهاز معتمد. المدير على متصفح غير معتمد داخل الشبكة (أو عبر ZeroTier) يقدر برضه يعتمد الأجهزة ويعدّل الشبكات الموثوقة — علشان حد يقدر دايماً يرجّع الشغل.',
+                   'A new PC after enforcement: the cashier signs in once (it works view-only until approved) and an admin approves it from "Pending" the same day from an approved device. An admin on an unapproved browser inside the network (or over ZeroTier) can still approve devices and edit the trusted networks — so someone can always get work going again.'),
+                 T('لو مسحت المتصفح أو غيّرته بيظهر كجهاز جديد بانتظار الاعتماد.', 'Clearing or changing the browser shows up as a new device waiting for approval.'),
+                 T('اعتماد الجهاز هو اللي يحوّل الاتصال من «جهاز غير معتمد — للعرض فقط» إلى جهاز معتمد، وبعده تطبّق عليه سياسة الشبكات (شاشة «سياسة الشبكات»). اعتمد أجهزة الفروع قبل ما المالك يحوّل السياسة إلى التطبيق الفعلي.',
+                   'Approving a device is what turns "unapproved device — view-only" into an approved one, and the network policy (the "Network policy" screen) then applies to it. Approve the branch devices before the owner switches the policy to enforcement.'),
+                 T('الكيبورد: ↑↓ تنقل · مسافة تحديد · Enter اعتماد الصف · M تعديل الجهاز · Ctrl+A تحديد الكل.', 'Keyboard: ↑↓ move · Space select · Enter approve the row · M edit the device · Ctrl+A select all.')],
+        'related': ['admin.networks', 'admin.users', 'admin.zone_policy'],
+        'tour': [
+            {'target': 'admin-devices-tabs', 'label': T('التبويبات', 'Tabs'),
+             'text': T('بانتظار الاعتماد (الافتراضي)، المعتمدة، والمحظورة والمتقاعدة.', 'Pending (default), Approved, and Blocked and retired.')},
+            {'target': 'admin-devices-table', 'label': T('جدول الأجهزة', 'Devices table'),
+             'text': T('الجهاز والنوع والفرع والمستخدمون والشبكة وأول/آخر ظهور. ↑↓ للتنقل ومسافة للتحديد وEnter للاعتماد.', 'Device, kind, branch, users, network and first/last seen. ↑↓ to move, Space to select, Enter to approve.'),
+             'more': T('الاسم والنوع والفرع تتعدّل مباشرة في الصف نفسه من غير نافذة منفصلة، والتعديل يتحفظ أول ما تغادر الخانة.\nزر M ينقلك لتعديل اسم الجهاز المحدد.', 'Name, kind and branch are edited right in the row, with no separate window, and the change is saved as soon as you leave the field.\nThe M key jumps to editing the name of the focused device.')},
+            {'target': 'admin-devices-approve', 'label': T('اعتماد المحدد', 'Approve selected'),
+             'text': T('يعتمد كل الأجهزة المحددة دفعة واحدة.', 'Approves every selected device in one go.'),
+             'warn': T('الاعتماد يسمح للجهاز بحفظ التحقق بخطوتين؛ اعتمد الأجهزة اللي تعرفها بس.', 'Approval lets the device remember two-step verification; approve only devices you recognise.'),
+             'when': T('بعد ما تراجع أجهزة الفرع.', 'After reviewing a branch\'s devices.')},
+            {'target': 'admin-devices-block', 'label': T('حظر', 'Block'),
+             'text': T('اكتب السبب في الخانة المجاورة ثم اضغط «حظر».', 'Type the reason in the adjacent field, then press "Block".'),
+             'warn': T('الحظر يقطع جلسات الجهاز فوراً.', 'Blocking ends the device\'s sessions at once.'),
+             'open_hint': T('يظهر على كل صف معتمد أو معلّق.', 'Shown on every approved or pending row.')},
+        ],
+        'change_note': T('بعد التطبيق الفعلي المتصفح غير المعتمد يعرض بس؛ خطوات الكمبيوتر الجديد؛ المدير يعتمد من متصفح غير معتمد داخل الشبكة',
+                         'After enforcement an unapproved browser can only look; the new-PC steps; an admin can approve from an unapproved browser inside'),
+        'updated': '2026-11-01',
+    },
+    {
+        'key': 'admin.zone_policy',
+        'routes': ['/access/zone-policy'],
+        'title': T('سياسة الشبكات', 'Network policy'),
+        'summary': T('جدول الدور × المنطقة: إيه اللي يقدر كل دور يعمله حسب مكان الاتصال (داخل/خارج شبكة الشركة) وحالة الجهاز (معتمد/غير معتمد). السياسة بتضيّق صلاحيات الدور ولا تزوّدها.',
+                     'A role × zone grid: what each role may do depending on where it connects from (inside or outside the company network) and the device status (approved or not). The policy narrows the role\'s own permissions; it never adds to them.'),
+        'audience': T('المدير فقط.', 'Admins only.'),
+        'steps': [
+            T('المناطق: Z1 داخل الشبكة بجهاز معتمد، Z2 داخل الشبكة بجهاز غير معتمد، Z3 خارج الشبكة بجهاز معتمد، Z4 خارج الشبكة بجهاز غير معتمد.',
+              'Zones: Z1 inside the network on an approved device, Z2 inside on an unapproved device, Z3 outside on an approved device, Z4 outside on an unapproved device.'),
+            T('اختر مستوى الوصول من القائمة في كل خانة: كامل، عرض فقط، شاشات محددة، واجهة الطيار، أو محظور. التغيير بيتحفظ فوراً.',
+              'Pick the access level from the list in each cell: full, view-only, listed screens, rider surface, or blocked. The change is saved at once.'),
+            T('زر ⚙ يفتح تفاصيل الخانة تحت الجدول: الشاشات المسموحة (لمستوى «شاشات محددة»)، عرض فقط، التصدير، إلزام التحقق بخطوتين، أقصى مدة جلسة (1 إلى 72 ساعة أو فارغ)، وقراءة/كتابة SOFTECH.',
+              'The ⚙ button opens the cell details under the grid: the allowed screens (for "listed screens"), view-only, export, requiring two-step verification, maximum session length (1 to 72 hours or empty), and SOFTECH read/write.'),
+            T('«عرض فقط» معناها view-only: كل طلب يغيّر بيانات مرفوض. ولأن بعض التقارير تُحسب بطلب POST، فالتقارير دي بتتمنع كمان في Z2 ولأدوار العرض فقط من الخارج، حتى لو كانت بتقرأ بس.',
+              'View-only means exactly that: every request that changes data is refused. Because some reports are computed with a POST request, those reports are refused too in Z2 and for view-only roles outside the network, even though they only read.'),
+            T('كل تعديل بيتسجل في سجل المراجعة (سياسة منطقة — تعديل) بالمستخدم وقبل/بعد.',
+              'Every change is written to the audit log (zone policy changed) with the user and before/after.'),
+        ],
+        'tips': [T('التحويل من وضع «التسجيل» إلى «التطبيق الفعلي» (NETWORK_POLICY_ENFORCEMENT) قرار المالك على السيرفر، مش من هذه الشاشة. قبلها اقرأ سطور «zone would-deny» في السجل لمدة أسبوع على الأقل.',
+                   'Switching from "log" mode to real enforcement (NETWORK_POLICY_ENFORCEMENT) is the owner\'s decision on the server, not made from this screen. Before it, read the "zone would-deny" lines in the log for at least a week.'),
+                 T('اعتمد أجهزة الفروع من شاشة «الأجهزة»، وخلي الطيارين وكل من يحتاج التحقق بخطوتين يفعّلونه مرة واحدة من داخل الشبكة قبل التطبيق الفعلي.',
+                   'Approve the branch devices on the Devices screen, and have riders and everyone who needs two-step verification enrol it once inside the network before enforcement.'),
+                 T('قبل التطبيق الفعلي لازم أمر الفحص manage.py access_preflight يعدّي من غير أي عائق: لافتة الشبكة ومفتاح nginx، دخول «داخل الشبكة» من كل فرع، كل من يدخل من الخارج مفعّل التحقق بخطوتين (والطيارين أولاً)، جهاز معتمد في كل فرع، وجهازين معتمدين للمديرين.',
+                   'Before enforcement the check command manage.py access_preflight must pass with no blocker: the network label and the nginx key, "inside" sign-ins from every branch, two-step verification on for everyone who signs in from outside (riders first), an approved device at every branch, and two approved admin devices.'),
+                 T('خانة المدير في Z1 لازم تفضل «كامل» — الشاشة ترفض غير كده علشان ماتقفلش على نفسك. الطيار في Z2 (موبايله على واي فاي الفرع) بياخد واجهة الطيار زي بيانات الموبايل.',
+                   'The admin cell in Z1 must stay "full" — the screen refuses anything else so you cannot lock yourself out. A rider in Z2 (phone on the branch Wi-Fi) gets the rider surface, as on mobile data.'),
+                 T('لو اتقفل عليك: ادخل عبر ZeroTier (بيُحسب داخل الشبكة) واعتمد جهازك من «الأجهزة» — المدير يقدر يعتمد حتى من متصفح غير معتمد داخل الشبكة. أو من السيرفر (SSH) رجّع الإعداد إلى «log» وأعد التشغيل.',
+                   'If you get locked out: connect through ZeroTier (it counts as inside) and approve your device on "Devices" — an admin can approve even from an unapproved browser inside the network. Or, on the server (SSH), set the mode back to "log" and restart.')],
+        'related': ['admin.networks', 'admin.devices', 'admin.users'],
+        'tour': [
+            {'target': 'admin-zone-grid', 'label': T('جدول الدور × المنطقة', 'Role × zone grid'),
+             'text': T('كل صف دور وكل عمود منطقة (Z1 إلى Z4). القائمة في كل خانة تحدد مستوى الوصول.',
+                       'Each row is a role and each column a zone (Z1 to Z4). The list in each cell sets the access level.'),
+             'more': T('الخانة بتعرض ملخصاً صغيراً تحتها (تصدير، عرض فقط، 2FA، مدة الجلسة). زر ⚙ يفتح تفاصيلها.',
+                       'Each cell shows a short summary under it (export, view-only, 2FA, session length). The ⚙ button opens its details.'),
+             'warn': T('محظور في Z3 وZ4 يعني إن الدور مش هيقدر يدخل من خارج الشبكة.', 'Blocked in Z3 and Z4 means the role cannot sign in from outside the network.'),
+             'when': T('قبل ما المالك يحوّل السياسة إلى التطبيق الفعلي.', 'Before the owner switches the policy to enforcement.')},
+            {'target': 'admin-zone-details', 'label': T('تفاصيل الخانة', 'Cell details'),
+             'text': T('الشاشات المسموحة وعرض فقط والتصدير والتحقق بخطوتين ومدة الجلسة وSOFTECH.',
+                       'Allowed screens, view-only, export, two-step verification, session length and SOFTECH.'),
+             'open_hint': T('اضغط ⚙ في أي خانة.', 'Press ⚙ in any cell.')},
+        ],
+        'change_note': T('فحص access_preflight قبل التطبيق؛ خانة المدير في Z1 ثابتة «كامل»؛ الطيار في Z2 بواجهة الطيار؛ طريق الرجوع',
+                         'The access_preflight check before enforcement; the admin Z1 cell stays "full"; riders in Z2 get the rider surface; the way back'),
+        'updated': '2026-11-01',
     },
 ]

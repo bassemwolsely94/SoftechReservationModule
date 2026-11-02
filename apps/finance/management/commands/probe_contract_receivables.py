@@ -8,7 +8,6 @@ type and the SOFTECH balance. Prints a table and writes a CSV. Writes nothing to
 Run it off-hours: three queries per contract, each filtered to that contract's account.
 --list-only prints the contract list without reading SOFTECH.
 """
-import csv
 import datetime as dt
 import os
 
@@ -16,6 +15,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from apps.finance import receivables_probe as P
+from core.export_safety import csv_dict_writer
 
 
 class Command(BaseCommand):
@@ -70,7 +70,7 @@ class Command(BaseCommand):
                   'returns', 'return_value', 'receipts_10', 'receipts_10_value', 'receipts_other', 'receipt_types',
                   'collection_days', 'collection_days_max', 'link_coverage_pct', 'on_account', 'reliable', 'error']
         with open(path, 'w', newline='', encoding='utf-8-sig') as f:
-            w = csv.DictWriter(f, fieldnames=fields)
+            w = csv_dict_writer(f, fieldnames=fields)
             w.writeheader()
             for r in out:
                 w.writerow({k: r.get(k, '') for k in fields})

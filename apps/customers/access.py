@@ -82,7 +82,23 @@ def can_edit(user, customer):
     return is_own(user, customer)
 
 
+EXTERNAL_PHONE_ROLES = ('delivery', 'call_center')   # records already scoped: own orders / the active customer
+
+
+def _external():
+    """N3 leakage control: True when the request comes from outside the network (Z3 / Z4) and the
+    zone policy is enforced. In log mode nothing changes, so the log period never alters what
+    staff see."""
+    from apps.access.policy_middleware import _mode
+    if _mode() != 'enforce':
+        return False
+    from apps.access import zones
+    return zones.current_zone() in (zones.Z3, zones.Z4)
+
+
 def phones_visible(user, customer):
+    if _external():
+        return False
     profile = _profile(user)
     if profile is not None and not profile.can_see_customer_phone:
         return False
@@ -113,6 +129,8 @@ def record_phones_visible(user):
     branch. Masked for `can_see_customer_phone = False` (D3) and for the read-only viewer role
     (D4 / D7)."""
     profile = _profile(user)
+    if _external() and (profile is None or profile.role not in EXTERNAL_PHONE_ROLES):
+        return False
     if profile is None:
         return bool(getattr(user, 'is_superuser', False))
     return bool(profile.can_see_customer_phone and profile.role != 'viewer')

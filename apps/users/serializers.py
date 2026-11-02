@@ -1,6 +1,10 @@
+import logging
+
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import StaffProfile, ERPUser, UserActivityLog
+
+logger = logging.getLogger('elrezeiky.users')
 
 
 # ── ERP User (read-only) ──────────────────────────────────────────────────────
@@ -77,6 +81,7 @@ class StaffProfileListSerializer(serializers.ModelSerializer):
             'access_all_branches', 'softech_username', 'hr_code', 'phone',
             'allowed_pos_channels',
             'can_see_all_customers', 'can_see_customer_phone',
+            'external_export', 'external_softech_write',
             'login_locked_until',
         ]
 
@@ -111,7 +116,22 @@ class StaffProfileUpdateSerializer(serializers.ModelSerializer):
             'phone', 'is_active', 'hr_code',
             'first_name', 'last_name', 'email',
             'can_see_all_customers', 'can_see_customer_phone',
+            'external_export', 'external_softech_write',
         ]
+
+    def validate(self, attrs):
+        # the per-user "outside the network" flags exist for the admin role only (N3)
+        role = attrs.get('role', getattr(self.instance, 'role', None))
+        if role != 'admin':
+            on = [f for f in EXTERNAL_FLAGS if attrs.get(f)]
+            if on:
+                raise serializers.ValidationError(
+                    {on[0]: 'صلاحيات «من خارج الشبكة» للمدير فقط'})
+            if self.instance is not None:      # a role change away from admin clears them
+                for f in EXTERNAL_FLAGS:
+                    if getattr(self.instance, f, False):
+                        attrs[f] = False
+        return attrs
 
     def update(self, instance, validated_data):
         # Pop nested user fields
@@ -123,6 +143,7 @@ class StaffProfileUpdateSerializer(serializers.ModelSerializer):
 
         old_role   = instance.role
         old_branch = instance.branch_id
+        old_ext    = {f: getattr(instance, f) for f in EXTERNAL_FLAGS}
 
         # Update M2M
         allowed    = validated_data.pop('allowed_branches',    None)
@@ -139,6 +160,8 @@ class StaffProfileUpdateSerializer(serializers.ModelSerializer):
 
         # Audit log
         _log_user_change(instance, old_role, old_branch, validated_data)
+        req = self.context.get('request')
+        _log_external_flags(instance, old_ext, getattr(getattr(req, 'user', None), 'staff_profile', None))
         return instance
 
 
@@ -207,6 +230,10 @@ class UserActivityLogSerializer(serializers.ModelSerializer):
     target_name    = serializers.CharField(source='target_user.full_name', read_only=True)
     changed_by_name = serializers.CharField(source='changed_by.full_name', read_only=True)
     action_label   = serializers.CharField(source='get_action_display',    read_only=True)
+    device_name    = serializers.SerializerMethodField()
+
+    def get_device_name(self, obj):
+        return obj.device.name if obj.device_id else None
 
     class Meta:
         model  = UserActivityLog
@@ -215,12 +242,30 @@ class UserActivityLogSerializer(serializers.ModelSerializer):
             'changed_by', 'changed_by_name',
             'action', 'action_label',
             'old_value', 'new_value', 'note', 'ip_address',
-            'network', 'network_site', 'user_agent', 'created_at',
+            'network', 'network_site', 'device', 'device_name', 'user_agent', 'created_at',
         ]
         read_only_fields = fields
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+EXTERNAL_FLAGS = ('external_export', 'external_softech_write')
+
+
+def _log_external_flags(profile, old, actor=None):
+    new = {f: getattr(profile, f) for f in EXTERNAL_FLAGS}
+    if new == old:
+        return
+    try:
+        from apps.users.middleware import get_current_user_profile
+        UserActivityLog.objects.create(
+            target_user=profile, changed_by=actor or get_current_user_profile(), action='permissions_changed',
+            old_value=old, new_value=new,
+        )
+    except Exception:
+        logger.error('external access flags audit row failed for %s', getattr(profile, 'pk', None),
+                     exc_info=True)
+
 
 def _log_user_change(profile, old_role, old_branch_id, changes):
     try:

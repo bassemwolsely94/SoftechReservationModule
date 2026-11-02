@@ -396,6 +396,8 @@ def print_workbook(batch, title=None):
     from openpyxl.styles import Alignment, Font
     from openpyxl.worksheet.pagebreak import Break
 
+    from core.export_safety import neutralise_formulas
+
     title = title or getattr(settings, 'COUPON_PRINT_TITLE',
                              'قسيمة مشتروات من صيدليات الرزيقى بقيمة 50ج.م')
     serials = list(batch.serials.order_by('number'))
@@ -427,7 +429,7 @@ def print_workbook(batch, title=None):
         if (slot + 1) % 4 == 0 and slot + 1 < len(order):
             ws.row_breaks.append(Break(id=r0 + 9))
     ws.column_dimensions['F'].width = 16
-    return wb
+    return neutralise_formulas(wb)
 
 
 # ── SOFTECH reads (SELECT only) ────────────────────────────────────────────────

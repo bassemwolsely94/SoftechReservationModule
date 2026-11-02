@@ -1082,6 +1082,155 @@ match the IP), so use curl with `--resolve`:
 
 Nginx needs to read static/media files: `sudo chmod 755 /opt/elrezeiky /opt/elrezeiky/app`.
 
+#### Batch N2 on the live server
+
+N2 adds the device registry (`erp_device` cookie, `access_device` tables). No nginx change.
+
+```bash
+cd /opt/elrezeiky/app && git pull
+venv/bin/python manage.py migrate
+sudo systemctl restart elrezeiky-web
+```
+Nothing is refused for a pending or unknown device; only blocked / retired devices lose access.
+Rollout: staff who are already signed in are enrolled automatically on their next token refresh
+(no forced sign-in), so «الأجهزة» fills up within the hour; new sign-ins enrol at once. Only the
+web app enrols: scripts / body-token clients get no device. Open «الأجهزة» (`/access/devices`),
+filter by branch **and** kind «جهاز فرع» (internal network only), tick all (Ctrl+A) and press
+«اعتماد المحدد». Approve personal laptops and phones (seen from outside the network) **one by
+one** after checking the owner: approval is what lets a device remember 2FA (a device earns the
+remember only on the first 2FA after it is approved). Name each branch PC clearly.
+Blocking a device ends that browser's sessions (and its WebSocket on reconnect) on the next
+request. It stops one browser, not the person: to stop a person, disable the account. An admin
+cannot block or retire the device they are using.
+Alerts: the user gets one alert per new device; each admin gets one digest per hour
+(«أجهزة جديدة بانتظار الاعتماد»), expect it to repeat during the first days of rollout. A refused
+blocked-device sign-in is logged as `login_refused_device` and never counts toward the account lockout.
+
+#### Batch N3 on the live server
+
+N3 turns the network label into a policy (zones Z1–Z4, «سياسة الشبكات»). Do the steps **in this
+order**. Until Step 9 the mode stays `log`: nothing is refused, only `zone would-deny` lines are
+written. Every Python command uses the app venv `/opt/elrezeiky/venv/bin/python` as the
+`elrezeiky` user; `.env` is `/opt/elrezeiky/app/.env`.
+
+**What staff notice from the release day (tell them before Step 1).**
+- Everyone with two-factor on is asked for the code at every sign-in until their device is
+  approved (Step 5) and they tick «تذكّر هذا الجهاز» again after the next code: the old
+  browser-stored "remember" token is gone.
+- Riders (the delivery role) always land on the rider screen `/rider`; other staff screens send
+  them back there. Their «🔒 أمان الحساب» button is in the rider screen's blue bar.
+- On the day of Step 9 (enforce), everyone working from outside signs in once more: sessions started
+  before the switch have not passed the two-factor code that outside work now needs.
+
+**Step 1 - release the code (migrations, frontend, every service) with `release.sh`.**
+```bash
+sudo /opt/elrezeiky/release.sh        # section 13.5: backup, pull main, migrate (asks y), npm build, restart all
+```
+The migrations create and seed the zone policy table (owner table, design doc 7.3) and add the
+two per-user flags. Never `git pull` or `migrate` by hand in `/opt/elrezeiky/app`: that skips the
+backup, the frontend build and the scheduler restart (P-56).
+
+**Step 2 - proxy key (only nginx can say "internal").** After Step 1, so the headers file copied
+here is the N3 one (it includes the key file).
+```bash
+# the key never appears in a command line: it lives only in root-only files (re-running replaces it)
+sudo bash -c '
+umask 077
+K=/root/.elr-proxy-key
+openssl rand -hex 32 > $K
+{ printf "proxy_set_header X-ElR-Proxy-Key \""; tr -d "\n" < $K; echo "\";"; } > /etc/nginx/elrezeiky-proxy-key.conf
+ENV=/opt/elrezeiky/app/.env
+sed -i "/^NETWORK_PROXY_KEY=/d" $ENV
+[ -z "$(tail -c1 $ENV)" ] || echo >> $ENV
+{ printf "NETWORK_PROXY_KEY="; cat $K; } >> $ENV
+shred -u $K'
+sudo chmod 600 /etc/nginx/elrezeiky-proxy-key.conf
+sudo cp /opt/elrezeiky/app/deploy/nginx-proxy-headers.conf /etc/nginx/elrezeiky-proxy-headers.conf
+sudo nginx -t && sudo systemctl reload nginx && sudo systemctl restart elrezeiky-web
+```
+nginx must send the key **before** the web service reads it (`&&`): with a key in `.env` that nginx
+does not send, every request counts as external.
+
+**Step 3 - verify the label.**
+```bash
+# on the VPS: a forged header straight to Daphne must lose (no key) -> "zone": "external"
+curl -s -H 'X-ElR-Network: internal' http://127.0.0.1:8000/api/access/whoami/
+sudo -u elrezeiky /opt/elrezeiky/venv/bin/python /opt/elrezeiky/app/manage.py check   # no access.W002 / E003 / E004
+```
+From a PC in a branch, the network badge must show «داخل الشبكة — <الفرع>». That needs the split
+DNS and tunnel work below («Company network through the tunnel», T1–T7) to be finished for that
+branch; **do not go past Step 8 until every branch passes T7.**
+
+**Step 4 - stay in `log` for at least a week and read what would have been refused.**
+```bash
+sudo journalctl -u elrezeiky-web --since -7d | grep 'zone would-deny'
+```
+Every line is a request the policy would refuse in `enforce` (user, zone, reason, module). Fix the
+cause before switching: a wrong cell on «سياسة الشبكات» (`/access/zone-policy`), a device not yet
+approved, or a screen the role really needs from outside.
+
+**Step 5 - approve devices.** Open «الأجهزة» and approve the branch PCs and the known personal
+devices (see Batch N2). An unapproved browser is Z2 inside / Z4 outside; only an approved one gets
+Z1 / Z3. **After the switch, a cashier on an unapproved browser inside a branch can look but not
+sell** (new PC, second browser, InPrivate window, cleared browser data). Approve **at least two
+admin devices** (for example the owner's laptop and an HQ PC): an admin on an unapproved browser
+inside the network can still approve devices and edit the trusted networks, but only an approved
+admin device has full access.
+
+**Step 6 - two-factor enrolment inside the network.** Everyone whose role may sign in from
+outside must have 2FA before the switch — **every active rider first**. They enrol **once, inside
+the network**, from «أمان الحساب» while signed in (riders: «🔒 أمان الحساب» in the rider screen's
+blue bar, at the branch). In `enforce`, a first enrolment at sign-in from outside is refused.
+
+**Step 7 - the preflight gate.**
+```bash
+sudo -u elrezeiky /opt/elrezeiky/venv/bin/python /opt/elrezeiky/app/manage.py access_preflight
+```
+Read-only. It prints an Arabic + English checklist and exits 1 on a blocker: the trusted header and
+the proxy key; internal sign-ins (overall and per branch); riders and other outside-allowed users
+without 2FA (by name); selling branches without an approved device; admins with fewer than two
+approved devices; the admin Z1 row; roles missing rows. Fix every ✘ and read every `!`.
+
+**Step 8 - last look at the log.**
+```bash
+sudo journalctl -u elrezeiky-web --since -2d | grep 'zone would-deny' | grep -E 'role=(pharmacist|salesperson|call_center)'
+```
+No `reason=read_only` or `reason=blocked` lines for branch staff working inside. If there are, a
+branch PC is unapproved or a branch is not yet labelled internal — go back to Step 3 / 5.
+
+**Step 9 - switch to enforce (the owner's action).**
+```bash
+APP=/opt/elrezeiky/app; PY=/opt/elrezeiky/venv/bin/python
+sudo -u elrezeiky $PY $APP/manage.py access_preflight \
+  && sudo -u elrezeiky env NETWORK_POLICY_ENFORCEMENT=enforce $PY $APP/manage.py check \
+  && sudo sed -i '/^NETWORK_POLICY_ENFORCEMENT=/d' $APP/.env \
+  && echo 'NETWORK_POLICY_ENFORCEMENT=enforce' | sudo tee -a $APP/.env >/dev/null \
+  && sudo systemctl restart elrezeiky-web elrezeiky-scheduler
+```
+Each step runs only when the previous one passed, and `.env` changes only after `manage.py check`
+has passed against `enforce` (the value given on the command line wins over `.env`). The check refuses `enforce` when the
+header is not trusted (`access.E004`) or the key is empty (`access.E003`). If the service is
+started anyway with such a setup, it does **not** enforce: it runs as `log` and writes
+`NETWORK_POLICY_ENFORCEMENT=enforce refused (access.E00x …)` as an ERROR line at start-up and every
+ten minutes (`journalctl -u elrezeiky-web | grep 'enforce refused'`).
+
+**A new PC after the switch.** The cashier signs in once on the new PC; it works view-only and
+shows in «الأجهزة» → «بانتظار الاعتماد». An admin approves it the same day from an approved device
+(or from any browser inside the network, including ZeroTier). Name it and set its branch.
+
+**The way back if you are locked out.**
+1. Connect through ZeroTier (it counts as inside): even on an unapproved browser an admin can open
+   «الأجهزة» and approve their own device, then sign in again.
+2. Or, over SSH, go back to `log`:
+```bash
+APP=/opt/elrezeiky/app
+sudo sed -i '/^NETWORK_POLICY_ENFORCEMENT=/d' $APP/.env \
+  && echo 'NETWORK_POLICY_ENFORCEMENT=log' | sudo tee -a $APP/.env >/dev/null \
+  && sudo systemctl restart elrezeiky-web elrezeiky-scheduler
+```
+Policy edits on «سياسة الشبكات» take effect within a minute without a restart. The admin's own
+«داخل الشبكة — جهاز معتمد» (Z1) cell cannot be set below «كامل».
+
 #### Company network through the tunnel (split DNS)
 
 Goal: a company device resolves `elrezeikyapp.dawalvry.com` to `10.50.50.77` and reaches the VPS

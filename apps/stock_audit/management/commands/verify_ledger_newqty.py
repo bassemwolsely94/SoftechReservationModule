@@ -12,6 +12,7 @@ import datetime as dt
 from decimal import Decimal, InvalidOperation
 
 from django.core.management.base import BaseCommand, CommandError
+from core.export_safety import neutralise_formulas
 
 SAMPLE_SHEET = 'عينة للتحقق'
 SEEN = 'الرصيد في كارت الصنف'
@@ -130,7 +131,7 @@ class Command(BaseCommand):
                ('الوقت', 20), ('الكمية', 10), (MIRROR, 22), (SEEN, 22), ('ملاحظة', 30)],
               [[s['itemcode'], s['name'], s['storecode'], doc(s['doccode']), s['docnumber'], s['docdate'],
                 s['trans_time'], s['transqty'], s['newqty'], None, None] for s in r['samples']])
-        wb.save(path)
+        neutralise_formulas(wb).save(path)
 
     def _read_sheet(self, path):
         import openpyxl

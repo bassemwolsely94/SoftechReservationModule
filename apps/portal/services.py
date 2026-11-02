@@ -49,6 +49,24 @@ def find_customer_by_phone(phone: str) -> Customer | None:
     return qs.order_by('is_guest', 'id').first()
 
 
+def issue_magic_link(customer: Customer) -> str:
+    """A new one-login link for the customer (a PortalLogin row) — returns its signed token."""
+    from apps.portal.models import PortalLogin
+    from apps.portal.tokens import make_magic_token
+    return make_magic_token(customer.softech_pic, PortalLogin.objects.create(customer=customer).nonce)
+
+
+def exchange_magic_link(token: str):
+    """Spend a magic link: (customer, session token), or None if invalid, expired or already used."""
+    from apps.portal.models import PortalLogin
+    from apps.portal.tokens import make_session_token, read_magic_token
+    claims = read_magic_token(token)
+    login = PortalLogin.redeem(claims[1], claims[0]) if claims else None
+    if login is None:
+        return None
+    return login.customer, make_session_token(login.customer.softech_pic, login.session_key)
+
+
 def send_magic_link(customer: Customer, token: str) -> bool:
     """
     Send the magic-link to the customer's WhatsApp. Returns True on success.
@@ -65,12 +83,14 @@ def send_magic_link(customer: Customer, token: str) -> bool:
 
     body = (
         f'مرحباً {customer.name.split()[0] if customer.name else ""}،\n'
-        f'رابط الدخول لحسابك في صيدليات الرزيقي (صالح ١٥ دقيقة):\n{link}\n\n'
+        f'رابط الدخول لحسابك في صيدليات الرزيقي (صالح ١٥ دقيقة ولمرة واحدة):\n{link}\n\n'
         f'لا تشارك هذا الرابط مع أحد.'
     )
     try:
         from apps.whatsapp.sender import WhatsAppSender
-        WhatsAppSender().send_text(wa_id=wa_phone, body=body, preview_url=False)
+        # the inbox keeps a placeholder — staff reading it must not be able to log in as the customer
+        WhatsAppSender().send_text(wa_id=wa_phone, body=body, preview_url=False,
+                                   record_body='[رابط دخول بوابة العملاء — مخفي]')
         return True
     except Exception as exc:  # noqa: BLE001 — delivery must not break the flow
         logger.warning('portal magic-link send failed for %s: %s', customer.pk, exc)

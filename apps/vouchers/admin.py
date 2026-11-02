@@ -2,11 +2,19 @@ from django.contrib import admin
 from .models import Voucher, VoucherOTP, VoucherRedemption
 
 
+# The code hash is an HMAC keyed only by its salt: shown together they give the 6-digit code away
+# offline in seconds — admin never shows either (security Batch 6, W-11).
+_OTP_FIELDS = ('voucher', 'phone', 'is_used', 'expires_at', 'created_at', 'sent_via')
+
+
 class VoucherOTPInline(admin.TabularInline):
     model  = VoucherOTP
     extra  = 0
-    fields = ('phone', 'is_used', 'expires_at', 'created_at', 'sent_via')
-    readonly_fields = ('code_hash', 'created_at', 'expires_at')
+    fields = readonly_fields = _OTP_FIELDS[1:]
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 class VoucherRedemptionInline(admin.TabularInline):
@@ -29,7 +37,10 @@ class VoucherAdmin(admin.ModelAdmin):
 class VoucherOTPAdmin(admin.ModelAdmin):
     list_display  = ('voucher', 'phone', 'is_used', 'expires_at', 'created_at')
     list_filter   = ('is_used',)
-    readonly_fields = ('code_hash', 'created_at')
+    fields = readonly_fields = _OTP_FIELDS
+
+    def has_add_permission(self, request):
+        return False
 
 
 from .models import CouponBatch, CouponSerial  # noqa: E402

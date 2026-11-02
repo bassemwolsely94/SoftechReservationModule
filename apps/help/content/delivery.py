@@ -447,7 +447,6 @@ SCREENS = [
              'open_hint': T('افتح طلب واضغط «✍️ إدخال يدوي».', 'Open an order and press "✍️ Manual entry".')},
         ],
         'updated': '2026-11-01',
-        'change_note': T('شرح لكل أزرار الشاشة في «💡 تلميحات الأزرار»', 'Every button on the screen explained in "💡 Button hints"'),
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
@@ -526,7 +525,8 @@ SCREENS = [
             T('عند العميل: «تم التسليم» ← اسم المستلم، المبلغ المحصَّل، صورة اختيارية وملاحظة (مثال: سُلّم للبواب) ← «تأكيد التسليم». موقعك يُسجَّل تلقائياً كإثبات.',
               'At the customer: "Delivered" → recipient name, amount collected, optional photo and note (e.g. left with the doorman) → "Confirm". Your location is recorded automatically as proof.'),
         ],
-        'tips': [T('السائق لا يلغي الطلب ولا يغلقه — الإلغاء والإغلاق من مسؤول التوزيع أو المشرف. لو الطلب لازم يتلغي كلّم المسؤول. موقعك بيتبعت للتتبع بس ولا يغيّر عنوان العميل المسجَّل.', 'A driver cannot cancel or close an order — cancelling and closing are done by the dispatcher or supervisor. If an order must be cancelled, tell them. Your location is only sent for tracking and never changes the customer recorded address.'),
+        'tips': [T('«🔒 أمان الحساب» في الشريط الأزرق: فعّل المصادقة الثنائية مرة واحدة وإنت في الفرع — من غيرها مش هتقدر تدخل من بيانات الموبايل بعد تفعيل سياسة الشبكات. «الطلبات» يرجّعك للطلبات.', '"🔒 Account security" in the blue bar: turn on two-factor once while at a branch — without it you cannot sign in over mobile data once the network policy is enforced. "Orders" takes you back to your orders.'),
+                 T('السائق لا يلغي الطلب ولا يغلقه — الإلغاء والإغلاق من مسؤول التوزيع أو المشرف. لو الطلب لازم يتلغي كلّم المسؤول. موقعك بيتبعت للتتبع بس ولا يغيّر عنوان العميل المسجَّل.', 'A driver cannot cancel or close an order — cancelling and closing are done by the dispatcher or supervisor. If an order must be cancelled, tell them. Your location is only sent for tracking and never changes the customer recorded address.'),
                  T('«متوقّع نقدي» أعلى الشاشة = إجمالي النقد الذي يجب أن تحصّله في مسار اليوم.', '"Expected cash" at the top = the total cash you should collect on today\'s route.'),
                  T('تقدر تسجّل حالة أو نقدية على الطلبات المكلَّف بيها إنت بس — طلب سائق تاني بيترفض برسالة «هذا الطلب غير مسند إليك».',
                    'You can record a status or cash only on orders assigned to you — another rider\'s order is refused with "this order is not assigned to you".')],
@@ -591,8 +591,8 @@ SCREENS = [
                        'Final from the app. It may be refused if you are far from the recorded customer address.'),
              'open_hint': T('اضغط «تم التسليم ✅» على طلب في الطريق.', 'Press "Delivered ✅" on an order on the way.')},
         ],
-        'updated': '2026-10-31',
-        'change_note': T('السائق لم يعد يلغي أو يغلق الطلبات — دور المشرف/مسؤول التوزيع', 'Drivers can no longer cancel or close orders — that is the supervisor/dispatcher job'),
+        'updated': '2026-11-01',
+        'change_note': T('زر «🔒 أمان الحساب» في شاشة الطيار لتفعيل المصادقة الثنائية', 'An "🔒 Account security" button on the rider screen to turn on two-factor'),
     },
     {
         'key': 'delivery.analytics',

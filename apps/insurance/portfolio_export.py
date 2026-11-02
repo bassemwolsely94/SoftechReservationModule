@@ -8,6 +8,7 @@ from collections import OrderedDict
 from django.http import HttpResponse
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
+from core.export_safety import neutralise_formulas
 
 from .export import (_w, _margins, FONT_HEADER, FILL_HEADER, ALIGN_CENTER, ALIGN_RIGHT,
                      FONT_SUBTOTAL, FILL_SUBTOTAL, FONT_GRAND, FILL_GRAND, BL)
@@ -157,7 +158,7 @@ def generate_portfolio_excel(report, *, title='تقارير المطالبات',
     ], moves)
 
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     resp = HttpResponse(buf.getvalue(),
                         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     resp['Content-Disposition'] = 'attachment; filename="motalbas_report.xlsx"'

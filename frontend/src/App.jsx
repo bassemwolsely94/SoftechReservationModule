@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import useAuthStore from './store/authStore'
 import useLangStore from './store/langStore'
@@ -26,6 +26,8 @@ import CustomersPage from './pages/CustomersPage'
 import CustomerDetailPage from './pages/CustomerDetailPage'
 import SyncPage from './pages/SyncPage'
 import TrustedNetworksPage from './pages/TrustedNetworksPage'
+import DevicesPage from './pages/DevicesPage'
+import ZonePolicyPage from './pages/ZonePolicyPage'
 import TransfersPage from './pages/TransfersPage'
 import TransitsPage from './pages/TransitsPage'
 import NewTransferPage from './pages/NewTransferPage'
@@ -238,6 +240,18 @@ function RequireRole({ roles, children }) {
   return children
 }
 
+// A rider lives on /rider only (N3 H4): any other staff route sends the delivery role back there,
+// except «أمان الحساب» (/security), which opens inside the rider shell at /rider/security so a rider
+// can enrol two-factor (C1). The server (zone policy, access='rider') is the real guard.
+function RiderHome({ children }) {
+  const { user } = useAuthStore()
+  const { pathname } = useLocation()
+  if (user?.role === 'delivery') {
+    return <Navigate to={pathname.replace(/\/+$/, '') === '/security' ? '/rider/security' : '/rider'} replace />
+  }
+  return children
+}
+
 export default function App() {
   const loadMe        = useAuthStore(s => s.loadMe)
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
@@ -281,12 +295,13 @@ export default function App() {
             <Route path="loyalty"    element={<PortalLoyaltyPage />} />
           </Route>
           {/* Standalone mobile rider screen (no desktop sidebar) */}
-          <Route path="/rider" element={<RequireAuth><RiderLayout><DriverDeliveryApp /></RiderLayout></RequireAuth>} />
+          <Route path="/rider" element={<RequireAuth><RequireRole roles={['delivery','admin','supervisor']}><RiderLayout><DriverDeliveryApp /></RiderLayout></RequireRole></RequireAuth>} />
+          <Route path="/rider/security" element={<RequireAuth><RiderLayout><SecurityPage /></RiderLayout></RequireAuth>} />
 
           {/* ── Standalone mobile web surfaces (no desktop sidebar) ─────────
               Phone-friendly, thin views over the existing APIs. Pilot: reservations.
               Reached at /m — bookmark on a phone home screen. */}
-          <Route path="/m" element={<RequireAuth><MobileLayout title="صيدليات الرزيقي" tabs={MOBILE_TABS} /></RequireAuth>}>
+          <Route path="/m" element={<RequireAuth><RiderHome><MobileLayout title="صيدليات الرزيقي" tabs={MOBILE_TABS} /></RiderHome></RequireAuth>}>
             <Route index element={<Navigate to="/m/reservations" replace />} />
             <Route path="me"                element={<MyDashboardPage />} />
             <Route path="pos"               element={<MobilePOSOrderPage />} />
@@ -322,7 +337,7 @@ export default function App() {
 
           {/* printable training manual — own shell so it prints without the side menu */}
           <Route path="/help/manual" element={<RequireAuth><HelpManualPage /></RequireAuth>} />
-          <Route path="/" element={<RequireAuth><Layout /></RequireAuth>}>
+          <Route path="/" element={<RequireAuth><RiderHome><Layout /></RiderHome></RequireAuth>}>
             <Route index element={<Navigate to="/dashboard" replace />} />
 
             {/* ── Core ─────────────────────────────────────────────────── */}
@@ -526,6 +541,10 @@ export default function App() {
             {/* trusted networks (security N1): admin only */}
             <Route path="access/networks"
               element={<RequireRole roles={['admin']}><TrustedNetworksPage /></RequireRole>} />
+            <Route path="access/devices"
+              element={<RequireRole roles={['admin']}><DevicesPage /></RequireRole>} />
+            <Route path="access/zone-policy"
+              element={<RequireRole roles={['admin']}><ZonePolicyPage /></RequireRole>} />
             {/* procurement: purchasing + admin */}
             <Route path="invoices"
               element={<RequireRole roles={['admin','purchasing']}><InvoicePage /></RequireRole>} />
