@@ -388,7 +388,7 @@ function CandidateRow({ c, onApprove, onReject, onWrite, onGroup, onReverse, bus
                 <>
                   <span className="text-xs text-gray-400 self-center mr-2">المجموعة {c.group_key}:</span>
                   <button data-tour="finance-reconciliation-approve-group" disabled={busy} onClick={() => onGroup(c, 'approve')} className="px-3 py-1.5 text-sm rounded-lg bg-green-50 border border-green-300 text-green-700 hover:bg-green-100 disabled:opacity-50">✓ اعتماد المجموعة كاملة</button>
-                  <button disabled={busy} onClick={() => onGroup(c, 'reject')} className="px-3 py-1.5 text-sm rounded-lg bg-white border border-red-200 text-red-500 hover:bg-red-50 disabled:opacity-50">✕ رفض المجموعة</button>
+                  <button data-tour="finance-reconciliation-reject-group" disabled={busy} onClick={() => onGroup(c, 'reject')} className="px-3 py-1.5 text-sm rounded-lg bg-white border border-red-200 text-red-500 hover:bg-red-50 disabled:opacity-50">✕ رفض المجموعة</button>
                 </>
               )}
             </div>
@@ -602,7 +602,7 @@ function GroupCard({ g, by, sel, toggle, rowProps, onResolve, resolving }) {
             المحدد هنا {picked.length} · {money(pickedSum)} من {money(remaining)} {over && '— يتجاوز المتبقي، لن يُعتمد الزائد'}
           </span>
           {others.length > 0 && picked.some(c => c.status === 'proposed') && (
-            <button disabled={resolving} onClick={() => onResolve(picked.filter(c => c.status === 'proposed').map(c => c.id), others.map(c => c.id))}
+            <button data-tour="finance-reconciliation-approve-picked" disabled={resolving} onClick={() => onResolve(picked.filter(c => c.status === 'proposed').map(c => c.id), others.map(c => c.id))}
                     className="px-3 py-1 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50">
               ✓ اعتماد المحدد ({picked.length}) ورفض الباقي ({others.length})
             </button>
@@ -1113,7 +1113,7 @@ function PartialPanel({ scope }) {
           <div className="text-lg font-bold text-[#022871]">{t.vouchers}</div>
           <div className="text-[11px] text-gray-500">متبقٍّ {money(t.vouchers_unallocated)}</div>
         </div>
-        <button onClick={exportXlsx} disabled={exporting}
+        <button data-tour="finance-reconciliation-partial-export" onClick={exportXlsx} disabled={exporting}
                 className="rounded-xl border border-[#022871] text-[#022871] bg-white hover:bg-sky-50 p-3 text-sm font-semibold disabled:opacity-50">
           {exporting ? 'جارٍ التجهيز…' : '⬇ تصدير المدفوعات غير المكتملة'}
         </button>
@@ -1235,7 +1235,7 @@ function UnpaidTab({ scope }) {
                   className="rounded-xl border border-[#022871] text-[#022871] bg-white hover:bg-sky-50 p-3 text-sm font-semibold disabled:opacity-50">
             {exporting ? 'جارٍ التجهيز…' : '⬇ تصدير Excel للإدارة المالية'}
           </button>
-          <button onClick={exportReturns} disabled={exporting}
+          <button data-tour="finance-reconciliation-returns-export" onClick={exportReturns} disabled={exporting}
                   className="rounded-xl border border-sky-700 text-sky-800 bg-white hover:bg-sky-50 p-3 text-sm font-semibold disabled:opacity-50">
             ⬇ المرتجعات وسلاسل التصحيح (مدفوعات/مقبوضات)
           </button>

@@ -25,8 +25,9 @@ from django.utils import timezone
 
 from .reprice import recompute_line, refoot_header, _d, r2
 from .models import (
-    InsuranceClaim, SoftechRepriceRun, SoftechRepriceEdit,
+    InsuranceClaim, SoftechRepriceRun, SoftechRepriceEdit, SoftechWritePlan,
 )
+from . import softech_guard as guard
 from apps.branches.models import Branch
 
 _DOCCODE = '115'
@@ -246,14 +247,23 @@ def _write_receipt(cur, docno, branch, doccode, new_lines, header_new, tender_ne
                 [float(tender_new), docno, branch, doccode])
 
 
-def apply_reprice(claim, docno, branch, new_prices, user=None, confirm=False, doccode=_DOCCODE):
+def apply_reprice(claim, docno, branch, new_prices, user=None, confirm=False, doccode=_DOCCODE,
+                  plan=None, reason='', expected_docvalue=None):
     """
     GATED writeback of a receipt re-price to HQ + branch (transactional, audited).
     Does NOT rebalance personnewbal — call rebalance_contract_clients() afterwards.
+
+    Always re-runs the plausibility guard on the live receipt: a block refuses, a
+    warning needs `reason`.  `expected_docvalue` (from the plan preview) refuses the
+    write when the receipt changed in SOFTECH since it was previewed.
     """
     from .importer import _get_connection
     _guard(claim, branch, confirm)
-    new_prices = {str(k).strip(): _d(v) for k, v in new_prices.items()}
+    raw_prices = {str(k).strip(): v for k, v in new_prices.items()}
+    for code, v in raw_prices.items():
+        if guard._dec(v) is None or guard._dec(v) <= 0:
+            raise RepriceError(f'السعر «{v}» للصنف {code} غير صالح.')
+    new_prices = {k: _d(v) for k, v in raw_prices.items()}
 
     # preview must be consistent + branch reachable before we touch anything
     pv = build_preview(docno, branch, new_prices, doccode)
@@ -263,8 +273,23 @@ def apply_reprice(claim, docno, branch, new_prices, user=None, confirm=False, do
     hq = _hq_conn(charset='cp1256')
     bconn = _open_branch(branch, charset='cp1256')
     hcur, bcur = hq.cursor(), bconn.cursor()
-    lines, header = _read_receipt(hcur, docno, branch, doccode)
-    new_lines, h, _diffs = _compute(lines, header, new_prices)
+    try:
+        lines, header = _read_receipt(hcur, docno, branch, doccode)
+        if expected_docvalue is not None and r2(_d(header['docvalue'])) != r2(_d(expected_docvalue)):
+            raise RepriceError(f'الإيصال #{docno} تغيّر فى سوفتك منذ المعاينة '
+                               f'({expected_docvalue} → {r2(_d(header["docvalue"]))}) — أعد المعاينة.')
+        new_lines, h, _diffs = _compute(lines, header, new_prices)
+        issues = _receipt_issues(claim, docno, branch, raw_prices, lines,
+                                 r2(h['docvalue']) - r2(_d(header['docvalue'])))
+        blocks = [i['message'] for i in issues if i['level'] == 'block']
+        if blocks:
+            raise RepriceError('مرفوض: ' + ' · '.join(blocks))
+        warns = [i for i in issues if i['level'] == 'warn']
+        if warns and not guard.reason_ok(reason):
+            raise RepriceError('تحذيرات تتطلب كتابة سبب: ' + ' · '.join(i['message'] for i in warns))
+    except Exception:
+        hcur.close(); bcur.close(); hq.close(); bconn.close()
+        raise
     tender_new = h['docvalue']
 
     # motalba snapshot (HQ-ONLY): each motalba that included this receipt stored its
@@ -283,7 +308,8 @@ def apply_reprice(claim, docno, branch, new_prices, user=None, confirm=False, do
         cust_branch_code=pv['cust_branch_code'] or '', new_prices={k: str(v) for k, v in new_prices.items()},
         net_delta=_d(pv['net_delta']), nodes=['HQ', branch],
         applied_by=getattr(user, 'staff_profile', None) if user else None,
-        status=SoftechRepriceRun.STATUS_PREVIEW)
+        status=SoftechRepriceRun.STATUS_PREVIEW,
+        plan=plan, reason=(reason or '').strip(), warnings=[i['message'] for i in warns])
     edits = []
 
     # Read the branch node's own before-values (it may differ from HQ if a prior
@@ -605,6 +631,7 @@ def find_item_receipts(claim, itemcode):
             continue
         seen.add(key)
         out.append({
+            'sequence':   rx.sequence,
             'docno':      rx.softech_docnumber,
             'branch':     rx.softech_branchcode,
             'patient':    rx.patient_name,
@@ -613,74 +640,263 @@ def find_item_receipts(claim, itemcode):
             'unit_price': str(_d(ln.unit_price)),
             'quantity':   str(_d(ln.quantity)),
         })
-    out.sort(key=lambda r: (r['branch'] or '', str(r['docno'])))
+    out.sort(key=lambda r: (r['sequence'] or 0, r['branch'] or '', str(r['docno'])))   # م order
     return {'itemcode': code, 'receipts': out}
 
 
-def apply_batch(claim, itemcode, new_price, receipts, user=None, confirm=False, doccode=_DOCCODE):
-    """Apply the same new price for `itemcode` across several receipts.  Each receipt
-    is its own transactional, revertible run (via apply_reprice), so a failure on one
-    (e.g. an unreachable branch, a quirk line) does not block the others."""
+def _reference_prices(claim, receipts):
+    """Our own price references for the guard: the claim's frozen unit price per
+    (receipt, item), the catalog pack price per item, and every receipt number of the
+    claim (a price must never equal one)."""
+    from apps.catalog.models import Item
+    from .models import InsuranceClaimLine
+    if claim is None:
+        return {}, {}, set()
+    keys = {(str(d), str(b)) for d, b in receipts}
+    claim_px, codes = {}, set()
+    qs = (InsuranceClaimLine.objects.filter(prescription__claim=claim)
+          .values_list('prescription__softech_docnumber', 'prescription__softech_branchcode',
+                       'softech_itemcode', 'unit_price'))
+    for d, b, code, price in qs:
+        if (str(d), str(b)) in keys and code:
+            claim_px.setdefault((str(d), str(b)), {})[str(code).strip()] = _d(price)
+            codes.add(str(code).strip())
+    catalog = {str(i.softech_id): _d(i.pack_price)
+               for i in Item.objects.filter(softech_id__in=codes).only('softech_id', 'pack_price')}
+    numbers = set(claim.prescriptions.values_list('softech_docnumber', flat=True))
+    return claim_px, catalog, numbers
+
+
+def _receipt_issues(claim, docno, branch, raw_prices, lines, net_delta):
+    claim_px, catalog, numbers = _reference_prices(claim, [(docno, branch)])
+    softech = {}
+    for ln in lines:
+        softech.setdefault(str(ln['itemcode']).strip(), _d(ln['itemsaleprice']))
+    return guard.check_receipt(
+        docno=docno, new_prices=raw_prices, softech_prices=softech,
+        claim_prices=claim_px.get((str(docno), str(branch)), {}),
+        catalog_prices=catalog, net_delta=net_delta, known_numbers=numbers)
+
+
+def preview_plan(claim, plan, user=None, source='receipt', doccode=_DOCCODE,
+                 skip_matching=False, info=None):
+    """READ-ONLY on SOFTECH: preview every receipt of a plan on one HQ connection,
+    run the guard, and store the result as a SoftechWritePlan the user may apply.
+
+    plan = [{docno, branch, prices: {itemcode: price}}]  (one entry per receipt;
+    several items of one receipt go together in ONE run).
+    skip_matching drops items SOFTECH already has at the new price (and receipts
+    left with nothing to change) — used by the catalog sync, which re-offers its
+    whole plan however much of it was already written."""
+    from .importer import _get_connection
+    merged = {}
+    for p in plan or []:
+        key = (str(p.get('docno', '')).strip(), str(p.get('branch', '')).strip())
+        if not key[0] or not key[1]:
+            raise RepriceError('كل إيصال يحتاج رقم الإيصال والفرع.')
+        prices = {str(k).strip(): str(v).strip() for k, v in (p.get('prices') or {}).items()
+                  if str(k).strip()}
+        if not prices:
+            raise RepriceError(f'لا يوجد سعر للإيصال #{key[0]}.')
+        merged.setdefault(key, {}).update(prices)
+    if not merged:
+        raise RepriceError('لا توجد إيصالات فى الخطة.')
+
+    claim_px, catalog, numbers = _reference_prices(claim, list(merged))
+    rx_meta = {(str(d), str(b)): (n, dt, q) for d, b, n, dt, q in claim.prescriptions.values_list(
+        'softech_docnumber', 'softech_branchcode', 'patient_name', 'softech_docdate', 'sequence')}
+    names = {}
+    for d, b, code, nm in claim.prescriptions.values_list(
+            'softech_docnumber', 'softech_branchcode', 'lines__softech_itemcode', 'lines__item_name'):
+        if code:
+            names[(str(d), str(b), str(code).strip())] = nm or ''
+    hq = _get_connection(); hcur = hq.cursor()
+    receipts, total = [], Decimal('0')
+    already = {'receipts': 0, 'items': 0}
+    try:
+        for (docno, branch), prices in merged.items():
+            name, ddate, seq = rx_meta.get((docno, branch), ('', None, None))
+            entry = {'docno': docno, 'branch': branch, 'patient': name or '', 'sequence': seq,
+                     'docdate': ddate.isoformat() if ddate else None,
+                     'prices': prices, 'items': [], 'issues': [], 'net_delta': '0',
+                     'old_docvalue': None, 'new_docvalue': None}
+            try:
+                lines, header = _read_receipt(hcur, docno, branch, doccode)
+                if not lines or not header:
+                    raise RepriceError(f'الإيصال #{docno} فرع {branch} غير موجود فى سوفتك.')
+                softech = {}
+                for ln in lines:
+                    softech.setdefault(str(ln['itemcode']).strip(), _d(ln['itemsaleprice']))
+                if skip_matching:
+                    same = [c for c, v in prices.items()
+                            if c in softech and guard._dec(v) is not None and r2(softech[c]) == r2(guard._dec(v))]
+                    already['items'] += len(same)
+                    prices = {c: v for c, v in prices.items() if c not in same}
+                    if not prices:
+                        already['receipts'] += 1
+                        continue
+                    entry['prices'] = prices
+                parsed = {k: guard._dec(v) for k, v in prices.items()}
+                delta = Decimal('0')
+                if all(v is not None and v > 0 for v in parsed.values()):
+                    try:
+                        _nl, h, _ = _compute(lines, header, {k: v for k, v in parsed.items()
+                                                              if k in softech})
+                        delta = r2(h['docvalue']) - r2(_d(header['docvalue']))
+                        entry['new_docvalue'] = str(r2(h['docvalue']))
+                    except RepriceError as e:
+                        entry['issues'].append({'level': 'block', 'code': 'engine',
+                                                'message': str(e), 'itemcode': None})
+                entry['old_docvalue'] = str(r2(_d(header['docvalue'])))
+                entry['net_delta'] = str(delta)
+                total += delta
+                entry['issues'] += guard.check_receipt(
+                    docno=docno, new_prices=prices, softech_prices=softech,
+                    claim_prices=claim_px.get((docno, branch), {}), catalog_prices=catalog,
+                    net_delta=delta, known_numbers=numbers)
+                for code, price in prices.items():
+                    cp = claim_px.get((docno, branch), {}).get(code)
+                    entry['items'].append({
+                        'itemcode': code, 'item_name': names.get((docno, branch, code), ''),
+                        'softech_price': str(softech[code]) if code in softech else None,
+                        'new_price': price,
+                        'claim_price': str(cp) if cp is not None else None,
+                        'catalog_price': str(catalog[code]) if code in catalog else None,
+                    })
+            except RepriceError as e:
+                entry['issues'].append({'level': 'block', 'code': 'read', 'message': str(e), 'itemcode': None})
+            except Exception as e:
+                entry['issues'].append({'level': 'block', 'code': 'read',
+                                        'message': f'تعذّرت قراءة الإيصال من سوفتك: {str(e)[:100]}',
+                                        'itemcode': None})
+            entry.update(guard.summarize(entry['issues']))
+            receipts.append(entry)
+    finally:
+        hcur.close(); hq.close()
+
+    receipts.sort(key=lambda r: (r['sequence'] or 0, r['branch'], r['docno']))   # م order
+    plan_issues = guard.check_plan_total(total)
+    summ = guard.summarize(plan_issues + [i for r in receipts for i in r['issues']])
+    return SoftechWritePlan.objects.create(
+        claim=claim, source=source,
+        plan=[{'docno': r['docno'], 'branch': r['branch'], 'prices': r['prices']} for r in receipts],
+        preview={'receipts': receipts, 'plan_issues': plan_issues,
+                 'user_id': getattr(user, 'pk', None),
+                 'already_in_softech': already, 'info': info or {}},
+        blocked=summ['blocked'], needs_reason=summ['needs_reason'],
+        receipt_count=len(receipts), net_delta=r2(total),
+        created_by=getattr(user, 'staff_profile', None) if user else None)
+
+
+def plan_payload(plan):
+    age = (timezone.now() - plan.created_at).total_seconds()
+    return {
+        'id': plan.pk, 'status': plan.status, 'source': plan.source,
+        'receipt_count': plan.receipt_count, 'net_delta': str(plan.net_delta),
+        'blocked': plan.blocked, 'needs_reason': plan.needs_reason, 'reason': plan.reason,
+        'reason_min_chars': guard.REASON_MIN_CHARS,
+        'expires_in': max(0, guard.PREVIEW_TTL_SECONDS - int(age)),
+        'write_enabled': write_enabled(),
+        'created_at': plan.created_at.isoformat(),
+        **plan.preview,
+        'runs': [{'id': r.pk, 'docno': r.docnumber, 'branch': r.branchcode, 'status': r.status,
+                  'net_delta': str(r.net_delta), 'error': r.error}
+                 for r in plan.runs.all().order_by('id')],
+    }
+
+
+# A flaky branch VPN link drops the connection mid-write (JZ0C0 "Connection is
+# already closed" / SybConnectionDeadException).  That failure is SAFE — the
+# transaction rolls back, both nodes stay unchanged (verified) — so a single
+# fresh-connection retry is a legitimate way to ride out the flap.
+_TRANSIENT = ('JZ0C0', 'ConnectionDead', 'Connection is already closed',
+              'JZ006', 'IOException', 'socket', 'timed out', 'timeout')
+
+
+def _is_transient(msg):
+    return any(t.lower() in str(msg).lower() for t in _TRANSIENT)
+
+
+def apply_plan(plan, user=None, confirm_count=None, reason=''):
+    """GATED: write a previewed plan.  Refuses unless the plan is fresh, unblocked,
+    previewed by this user, the typed count equals its receipts, and a reason is given
+    when it carries warnings.  previewed → applying is one atomic UPDATE, so a double
+    submit cannot write twice.  Each receipt is its own revertible run."""
     if not write_enabled():
         raise RepriceError('الكتابة إلى سوفتك معطّلة.')
-    if not confirm:
-        raise RepriceError('التأكيد مطلوب.')
-    code = str(itemcode).strip()
+    claim = plan.claim
+    if claim.status != InsuranceClaim.STATUS_DRAFT:
+        raise RepriceError('المطالبة ليست مسودة — تعديل سوفتك محظور.')
+    if plan.status != SoftechWritePlan.STATUS_PREVIEWED:
+        raise RepriceError('هذه المعاينة طُبِّقت أو أُلغيت — أعد المعاينة.')
+    if (timezone.now() - plan.created_at).total_seconds() > guard.PREVIEW_TTL_SECONDS:
+        raise RepriceError('انتهت صلاحية المعاينة (10 دقائق) — أعد المعاينة.')
+    staff = getattr(user, 'staff_profile', None) if user else None
+    if plan.preview.get('user_id') != getattr(user, 'pk', None):
+        raise RepriceError('المعاينة أُعدّت بواسطة مستخدم آخر — أعد المعاينة بنفسك.')
+    if plan.blocked:
+        raise RepriceError('الخطة بها أخطاء مانعة — صحّحها وأعد المعاينة.')
+    try:
+        typed = int(str(confirm_count).strip())
+    except (TypeError, ValueError):
+        typed = None
+    if typed != plan.receipt_count:
+        raise RepriceError(f'اكتب عدد الإيصالات ({plan.receipt_count}) للتأكيد.')
+    if plan.needs_reason and not guard.reason_ok(reason):
+        raise RepriceError(f'اكتب سبب التجاوز ({guard.REASON_MIN_CHARS} أحرف على الأقل).')
+
+    flipped = SoftechWritePlan.objects.filter(pk=plan.pk, status=SoftechWritePlan.STATUS_PREVIEWED) \
+        .update(status=SoftechWritePlan.STATUS_APPLYING, reason=(reason or '').strip())
+    if not flipped:
+        raise RepriceError('هذه المعاينة قيد التطبيق أو طُبِّقت بالفعل.')
+    plan.refresh_from_db()
+
+    expected = {(r['docno'], r['branch']): r.get('old_docvalue') for r in plan.preview.get('receipts', [])}
     results = []
-
-    def _log_failure(docno, branch, err):
-        """Persist a FAILED run so the failed modification is auditable + exportable.
-        apply_reprice already logs failures that occur AFTER its run row is created
-        (write phase); this covers the EARLIER failures (guard/preview/read/compute
-        duplicate-line) that raise before any run row exists — otherwise they would
-        vanish from the log entirely."""
-        try:
-            already = SoftechRepriceRun.objects.filter(
-                claim=claim, docnumber=str(docno), branchcode=str(branch),
-                status=SoftechRepriceRun.STATUS_FAILED,
-            ).order_by('-id').first()
-            # apply_reprice may have already recorded this failure — don't double-log
-            # a fresh one from the same attempt.
-            if already and (timezone.now() - already.applied_at).total_seconds() < 30:
-                return already.pk
-            r = SoftechRepriceRun.objects.create(
-                claim=claim, docnumber=str(docno), branchcode=str(branch), doccode=doccode,
-                new_prices={code: str(new_price)}, nodes=['HQ', str(branch)],
-                applied_by=getattr(user, 'staff_profile', None) if user else None,
-                status=SoftechRepriceRun.STATUS_FAILED, error=str(err)[:2000],
-            )
-            return r.pk
-        except Exception:
-            return None
-
-    # A flaky branch VPN link drops the connection mid-write (JZ0C0 "Connection is
-    # already closed" / SybConnectionDeadException).  That failure is SAFE — the
-    # transaction rolls back, both nodes stay unchanged (verified) — so a single
-    # fresh-connection retry is a legitimate way to ride out the flap.
-    _TRANSIENT = ('JZ0C0', 'ConnectionDead', 'Connection is already closed',
-                  'JZ006', 'IOException', 'socket', 'timed out', 'timeout')
-    def _is_transient(msg):
-        return any(t.lower() in str(msg).lower() for t in _TRANSIENT)
-
-    for rc in receipts:
-        docno, branch = str(rc['docno']), str(rc['branch'])
+    for item in plan.plan:
+        docno, branch, prices = item['docno'], item['branch'], item['prices']
+        kw = dict(user=user, confirm=True, plan=plan, reason=reason,
+                  expected_docvalue=expected.get((docno, branch)))
         try:
             try:
-                res = apply_reprice(claim, docno, branch, {code: new_price},
-                                    user=user, confirm=True, doccode=doccode)
+                res = apply_reprice(claim, docno, branch, prices, **kw)
             except Exception as first:
                 if not _is_transient(first):
                     raise
-                # one retry with fresh connections after the link flapped
-                res = apply_reprice(claim, docno, branch, {code: new_price},
-                                    user=user, confirm=True, doccode=doccode)
+                res = apply_reprice(claim, docno, branch, prices, **kw)
             results.append({'docno': docno, 'branch': branch, 'ok': True,
                             'run_id': res['run_id'], 'net_delta': res['net_delta']})
-        except RepriceError as e:
-            results.append({'docno': docno, 'branch': branch, 'ok': False,
-                            'error': str(e), 'run_id': _log_failure(docno, branch, e)})
         except Exception as e:
-            results.append({'docno': docno, 'branch': branch, 'ok': False,
-                            'error': str(e)[:120], 'run_id': _log_failure(docno, branch, e)})
-    return {'itemcode': code, 'applied': sum(1 for r in results if r['ok']),
+            err = str(e)[:300]
+            # apply_reprice logs failures after its run row exists; log the earlier ones
+            if not SoftechRepriceRun.objects.filter(plan=plan, docnumber=str(docno),
+                                                    branchcode=str(branch)).exists():
+                SoftechRepriceRun.objects.create(
+                    claim=claim, docnumber=str(docno), branchcode=str(branch),
+                    new_prices={k: str(v) for k, v in prices.items()}, nodes=['HQ', str(branch)],
+                    applied_by=staff, status=SoftechRepriceRun.STATUS_FAILED, error=err,
+                    plan=plan, reason=(reason or '').strip())
+            results.append({'docno': docno, 'branch': branch, 'ok': False, 'error': err})
+    plan.status = SoftechWritePlan.STATUS_APPLIED
+    plan.applied_at = timezone.now()
+    plan.save(update_fields=['status', 'applied_at'])
+    return {'plan_id': plan.pk, 'applied': sum(1 for r in results if r['ok']),
             'failed': sum(1 for r in results if not r['ok']), 'results': results}
+
+
+def revert_plan(plan, user=None):
+    """Undo every still-applied run of a plan (each under its own run lock)."""
+    if not write_enabled():
+        raise RepriceError('الكتابة إلى سوفتك معطّلة.')
+    out = []
+    for run in plan.runs.filter(status=SoftechRepriceRun.STATUS_APPLIED).order_by('id'):
+        try:
+            revert_run(run, user=user)
+            out.append({'run_id': run.pk, 'docno': run.docnumber, 'ok': True})
+        except Exception as e:
+            out.append({'run_id': run.pk, 'docno': run.docnumber, 'ok': False, 'error': str(e)[:200]})
+    if not plan.runs.filter(status=SoftechRepriceRun.STATUS_APPLIED).exists():
+        plan.status = SoftechWritePlan.STATUS_REVERTED
+        plan.save(update_fields=['status'])
+    return {'plan_id': plan.pk, 'reverted': sum(1 for r in out if r['ok']),
+            'failed': sum(1 for r in out if not r['ok']), 'results': out}

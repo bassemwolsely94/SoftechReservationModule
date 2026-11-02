@@ -14,6 +14,8 @@ from .models import (
 )
 
 
+from apps.customers.phone_mask import RecordPhoneMask, CustomerPhoneMask  # Batch 5b
+
 class DeliveryDriverSerializer(serializers.ModelSerializer):
     branch_name       = serializers.CharField(source='branch.name', read_only=True)
     vehicle_label     = serializers.CharField(source='get_vehicle_type_display', read_only=True)
@@ -40,7 +42,8 @@ class DeliveryDriverSerializer(serializers.ModelSerializer):
         ).count()
 
 
-class CustomerLocationSerializer(serializers.ModelSerializer):
+class CustomerLocationSerializer(CustomerPhoneMask, serializers.ModelSerializer):
+    phone_mask_fields = ('delivery_phone',)
     label_display    = serializers.CharField(source='get_label_display', read_only=True)
     accuracy_display = serializers.CharField(source='get_location_accuracy_display', read_only=True)
     full_address     = serializers.CharField(read_only=True)
@@ -165,8 +168,9 @@ class DeliveryOrderCreateSerializer(serializers.ModelSerializer):
         return instance
 
 
-class DeliveryOrderListSerializer(serializers.ModelSerializer):
+class DeliveryOrderListSerializer(RecordPhoneMask, serializers.ModelSerializer):
     """Lightweight read serializer for list views."""
+    phone_mask_fields = ('customer_phone',)
     branch_name     = serializers.CharField(source='branch.name', read_only=True)
     status_label    = serializers.CharField(source='get_status_display', read_only=True)
     source_label    = serializers.CharField(source='get_source_type_display', read_only=True)
@@ -199,8 +203,9 @@ class DeliveryOrderListSerializer(serializers.ModelSerializer):
         return None
 
 
-class DeliveryOrderSerializer(serializers.ModelSerializer):
+class DeliveryOrderSerializer(RecordPhoneMask, serializers.ModelSerializer):
     """Full read serializer with all nested data."""
+    phone_mask_fields = ('customer_phone', 'customer_phone_alt')
     branch_name        = serializers.CharField(source='branch.name', read_only=True)
     status_label       = serializers.CharField(source='get_status_display', read_only=True)
     source_label       = serializers.CharField(source='get_source_type_display', read_only=True)
@@ -231,6 +236,7 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
             'delivery_address', 'delivery_area', 'delivery_district',
             'delivery_governorate', 'delivery_landmark',
             'delivery_lat', 'delivery_lng', 'google_maps_url',
+            'rider_lat', 'rider_lng', 'rider_location_at',
             'items_count', 'total_value', 'delivery_fees', 'total_with_fees',
             'payment_method', 'payment_label', 'collected_amount',
             'status', 'status_label',
@@ -246,7 +252,8 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
             'delivery_distance_km', 'suggested_driver_fee', 'pod_backfilled',
             'route', 'route_sequence',
         ]
-        read_only_fields = ['order_number', 'created_at', 'updated_at']
+        read_only_fields = ['order_number', 'created_at', 'updated_at',
+                            'rider_lat', 'rider_lng', 'rider_location_at']
 
     def get_driver_name(self, obj):
         if obj.assigned_driver:

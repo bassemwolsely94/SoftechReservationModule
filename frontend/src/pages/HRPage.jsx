@@ -217,7 +217,7 @@ function OvertimeTab() {
     <div>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-base font-semibold text-gray-800">طلبات الإضافي</h2>
-        <button onClick={() => setShowForm(s => !s)}
+        <button data-tour="hr-requests-new" onClick={() => setShowForm(s => !s)}
           className="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700">
           + طلب إضافي جديد
         </button>
@@ -245,7 +245,7 @@ function OvertimeTab() {
           {err && <p className="text-red-600 text-sm mb-3">{err}</p>}
           <div className="flex gap-3 justify-end">
             <button onClick={() => setShowForm(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>
-            <button onClick={() => submit.mutate()} disabled={submit.isPending}
+            <button data-tour="hr-requests-submit" onClick={() => submit.mutate()} disabled={submit.isPending}
               className="px-5 py-2 text-sm bg-brand-600 text-white rounded-lg disabled:opacity-50">
               {submit.isPending ? 'جاري...' : 'تقديم'}
             </button>
@@ -279,7 +279,7 @@ function OvertimeTab() {
                   <td className="px-4 py-3 whitespace-nowrap">
                     <PrintLink kind="overtime" row={r} />
                     {CANCELLABLE.has(r.status) && (
-                      <button onClick={() => cancel.mutate(r.id)} className="text-xs text-red-600 hover:underline mr-2">إلغاء</button>
+                      <button data-tour="hr-requests-cancel" onClick={() => cancel.mutate(r.id)} className="text-xs text-red-600 hover:underline mr-2">إلغاء</button>
                     )}
                   </td>
                 </tr>
@@ -321,7 +321,7 @@ function AdvancesTab() {
     <div>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-base font-semibold text-gray-800">سلف الرواتب</h2>
-        <button onClick={() => setShowForm(s => !s)}
+        <button data-tour="hr-requests-new" onClick={() => setShowForm(s => !s)}
           className="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700">
           + طلب سلفة جديدة
         </button>
@@ -349,7 +349,7 @@ function AdvancesTab() {
           {err && <p className="text-red-600 text-sm mb-3">{err}</p>}
           <div className="flex gap-3 justify-end">
             <button onClick={() => setShowForm(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>
-            <button onClick={() => submit.mutate()} disabled={submit.isPending}
+            <button data-tour="hr-requests-submit" onClick={() => submit.mutate()} disabled={submit.isPending}
               className="px-5 py-2 text-sm bg-brand-600 text-white rounded-lg disabled:opacity-50">
               {submit.isPending ? 'جاري...' : 'تقديم'}
             </button>
@@ -383,7 +383,7 @@ function AdvancesTab() {
                   <td className="px-4 py-3 whitespace-nowrap">
                     <PrintLink kind="advance" row={a} />
                     {CANCELLABLE.has(a.status) && (
-                      <button onClick={() => cancel.mutate(a.id)} className="text-xs text-red-600 hover:underline mr-2">إلغاء</button>
+                      <button data-tour="hr-requests-cancel" onClick={() => cancel.mutate(a.id)} className="text-xs text-red-600 hover:underline mr-2">إلغاء</button>
                     )}
                   </td>
                 </tr>
@@ -456,7 +456,7 @@ function ExpensesTab() {
     <div>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-base font-semibold text-gray-800">مطالبات المصروفات</h2>
-        <button onClick={() => setShowForm(s => !s)}
+        <button data-tour="hr-requests-new" onClick={() => setShowForm(s => !s)}
           className="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700">
           + مطالبة جديدة
         </button>
@@ -518,7 +518,7 @@ function ExpensesTab() {
           {err && <p className="text-red-600 text-sm mb-3">{err}</p>}
           <div className="flex gap-3 justify-end">
             <button onClick={() => setShowForm(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>
-            <button onClick={() => submit.mutate()} disabled={submit.isPending}
+            <button data-tour="hr-requests-submit" onClick={() => submit.mutate()} disabled={submit.isPending}
               className="px-5 py-2 text-sm bg-brand-600 text-white rounded-lg disabled:opacity-50">
               {submit.isPending ? 'جاري...' : 'تقديم'}
             </button>
@@ -552,7 +552,7 @@ function ExpensesTab() {
                   <td className="px-4 py-3 whitespace-nowrap">
                     <PrintLink kind="expense" row={c} />
                     {CANCELLABLE.has(c.status) && (
-                      <button onClick={() => cancel.mutate(c.id)} className="text-xs text-red-600 hover:underline mr-2">إلغاء</button>
+                      <button data-tour="hr-requests-cancel" onClick={() => cancel.mutate(c.id)} className="text-xs text-red-600 hover:underline mr-2">إلغاء</button>
                     )}
                   </td>
                 </tr>
@@ -611,7 +611,7 @@ function PermitsTab() {
     <div>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-base font-semibold text-gray-800">الأذونات (مأمورية / تعديل شيفت)</h2>
-        <button onClick={() => setShowForm(s => !s)}
+        <button data-tour="hr-requests-new" onClick={() => setShowForm(s => !s)}
           className="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700">
           + إذن جديد
         </button>
@@ -657,7 +657,7 @@ function PermitsTab() {
           {err && <p className="text-red-600 text-sm mb-3">{err}</p>}
           <div className="flex gap-3 justify-end">
             <button onClick={() => setShowForm(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>
-            <button onClick={() => submit.mutate()} disabled={submit.isPending}
+            <button data-tour="hr-requests-submit" onClick={() => submit.mutate()} disabled={submit.isPending}
               className="px-5 py-2 text-sm bg-brand-600 text-white rounded-lg disabled:opacity-50">
               {submit.isPending ? 'جاري...' : 'تقديم'}
             </button>
@@ -695,7 +695,7 @@ function PermitsTab() {
                   <td className="px-4 py-3 whitespace-nowrap">
                     <PrintLink kind="permit" row={p} />
                     {CANCELLABLE.has(p.status) && (
-                      <button onClick={() => cancel.mutate(p.id)} className="text-xs text-red-600 hover:underline mr-2">إلغاء</button>
+                      <button data-tour="hr-requests-cancel" onClick={() => cancel.mutate(p.id)} className="text-xs text-red-600 hover:underline mr-2">إلغاء</button>
                     )}
                   </td>
                 </tr>

@@ -22,9 +22,19 @@ export default function InsuranceSeparationListsPage() {
   const [editNameId, setEditNameId] = useState(null)
   const [editNameVal, setEditNameVal] = useState('')
   const [nameFilter, setNameFilter] = useState('')
+  const [clientOpts, setClientOpts] = useState([])   // [{id, label}] — جهة + its فئات (names repeat across جهات)
 
   const loadLists = () => insuranceApi.separationLists().then(r => setLists(r.data.results || r.data))
   useEffect(() => { loadLists() }, [])
+  useEffect(() => {
+    Promise.all([insuranceApi.clients(), insuranceApi.subclients()]).then(([c, sc]) => {
+      const subs = sc.data.results || sc.data
+      setClientOpts((c.data.results || c.data).map(cl => {
+        const names = subs.filter(x => x.client === cl.id).map(x => x.name).join('، ')
+        return { id: cl.id, label: names ? `${cl.name} — ${names}` : cl.name }
+      }))
+    }).catch(() => {})
+  }, [])
   const loadNames = (l) => { setSel(l); insuranceApi.separationNames(l.id).then(r => setNames(r.data)) }
 
   const flash = (t) => { setMsg(t); setTimeout(() => setMsg(null), 4000) }
@@ -61,6 +71,20 @@ export default function InsuranceSeparationListsPage() {
     await insuranceApi.updateSeparationList(l.id, { is_active: !l.is_active })
     loadLists()
   }
+  const setTargetClient = async (l, clientId) => {
+    const target_client = clientId ? Number(clientId) : null
+    await insuranceApi.updateSeparationList(l.id, { target_client })
+    loadLists(); setSel({ ...l, target_client })
+    flash(target_client ? 'أسماء القائمة أصبحت ضمن سجل مرضى هذه الجهة' : 'أُلغي ربط القائمة بجهة')
+  }
+  const [groupDraft, setGroupDraft] = useState('')
+  useEffect(() => { setGroupDraft(sel?.target_group_label || '') }, [sel?.id])   // eslint-disable-line
+  const saveGroupLabel = async () => {
+    const target_group_label = groupDraft.trim()
+    await insuranceApi.updateSeparationList(sel.id, { target_group_label })
+    loadLists(); setSel({ ...sel, target_group_label })
+    flash(target_group_label ? `أسماء القائمة تُقترح لفئة الفوترة «${target_group_label}»` : 'أُلغي ربط القائمة بفئة فوترة')
+  }
   const saveNameEdit = async (n) => {
     if (!editNameVal.trim()) return
     await insuranceApi.updateSeparationName(sel.id, n.id, { name: editNameVal.trim() })
@@ -94,17 +118,18 @@ export default function InsuranceSeparationListsPage() {
                   <div className="flex gap-1 items-center">
                     <input className={inp} value={editLabel} onChange={e => setEditLabel(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && saveListEdit(l)} autoFocus />
-                    <button onClick={() => saveListEdit(l)} className="text-blue-600 text-xs px-1">حفظ</button>
+                    <button data-tour="insurance-separation-lists-rename-save" onClick={() => saveListEdit(l)} className="text-blue-600 text-xs px-1">حفظ</button>
                     <button onClick={() => setEditListId(null)} className="text-gray-400 text-xs px-1">إلغاء</button>
                   </div>
                 ) : (
                   <div className="flex items-center justify-between">
                     <div className="cursor-pointer flex-1" onClick={() => loadNames(l)} data-tour="insurance-separation-lists-open">
                       <div className="text-sm font-medium text-gray-800">{l.label}</div>
-                      <div className="text-xs text-gray-400">{l.name_count} اسم {l.is_active ? '' : '· موقوفة'}</div>
+                      <div className="text-xs text-gray-400">{l.name_count} اسم {l.is_active ? '' : '· موقوفة'}
+                        {l.target_client_name && <span className="text-emerald-600"> · تتبع: {l.target_client_name}</span>}</div>
                     </div>
                     <div data-tour="insurance-separation-lists-list-actions" className="flex items-center gap-2 text-xs">
-                      <button onClick={() => { setEditListId(l.id); setEditLabel(l.label) }} title="تعديل الاسم" className="text-gray-400 hover:text-blue-600">✏️</button>
+                      <button data-tour="insurance-separation-lists-rename" onClick={() => { setEditListId(l.id); setEditLabel(l.label) }} title="تعديل الاسم" className="text-gray-400 hover:text-blue-600">✏️</button>
                       <button onClick={() => toggleListActive(l)} data-tour="insurance-separation-lists-toggle-active" title={l.is_active ? 'إيقاف' : 'تفعيل'}
                         className={l.is_active ? 'text-green-600' : 'text-gray-400'}>{l.is_active ? 'مُفعَّلة' : 'موقوفة'}</button>
                       <button onClick={() => delList(l)} data-tour="insurance-separation-lists-delete" className="text-red-500 hover:text-red-700">حذف</button>
@@ -128,6 +153,24 @@ export default function InsuranceSeparationListsPage() {
                 <input className="border border-gray-300 rounded px-3 py-1.5 text-sm w-56" placeholder="بحث في الأسماء…" data-tour="insurance-separation-lists-search"
                   value={nameFilter} onChange={e => setNameFilter(e.target.value)} />
               </div>
+              <div data-tour="insurance-separation-lists-target" className="mb-3 flex items-center gap-2 text-sm">
+                <label className="text-xs text-gray-600 whitespace-nowrap">الأسماء تتبع جهة:</label>
+                <select className="border border-gray-300 rounded px-2 py-1.5 text-sm flex-1"
+                  value={sel.target_client || ''} onChange={e => setTargetClient(sel, e.target.value)}>
+                  <option value="">— غير محددة (فصل فقط) —</option>
+                  {clientOpts.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </select>
+              </div>
+              {sel.target_client && (
+                <div data-tour="insurance-separation-lists-group" className="mb-3 flex items-center gap-2 text-sm">
+                  <label className="text-xs text-gray-600 whitespace-nowrap">فئة الفوترة:</label>
+                  <input className="border border-gray-300 rounded px-2 py-1.5 text-sm flex-1" value={groupDraft}
+                    placeholder="مثال: تشغيل — يُطابق فئة الفوترة بنفس الاسم فى كل مطالبة"
+                    onChange={e => setGroupDraft(e.target.value)} onKeyDown={e => e.key === 'Enter' && saveGroupLabel()} />
+                  <button onClick={saveGroupLabel} disabled={groupDraft.trim() === (sel.target_group_label || '')}
+                    className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded disabled:opacity-40">حفظ</button>
+                </div>
+              )}
               <div data-tour="insurance-separation-lists-add-names" className="mb-3">
                 <label className="block text-xs text-gray-600 mb-1">إضافة أسماء (اسم في كل سطر)</label>
                 <textarea className={inp + ' h-24 font-mono'} value={bulkText} data-tour="insurance-separation-lists-paste"
@@ -150,13 +193,13 @@ export default function InsuranceSeparationListsPage() {
                         <td className="px-2 py-1.5 text-left whitespace-nowrap">
                           {editNameId === n.id ? (
                             <>
-                              <button onClick={() => saveNameEdit(n)} className="text-blue-600 text-xs px-1">حفظ</button>
+                              <button data-tour="insurance-separation-lists-edit-name-save" onClick={() => saveNameEdit(n)} className="text-blue-600 text-xs px-1">حفظ</button>
                               <button onClick={() => setEditNameId(null)} className="text-gray-400 text-xs px-1">إلغاء</button>
                             </>
                           ) : (
                             <>
-                              <button onClick={() => { setEditNameId(n.id); setEditNameVal(n.name) }} className="text-gray-400 hover:text-blue-600 text-xs px-1">✏️</button>
-                              <button onClick={() => delName(n)} className="text-red-500 hover:text-red-700 text-xs px-1">حذف</button>
+                              <button data-tour="insurance-separation-lists-edit-name" onClick={() => { setEditNameId(n.id); setEditNameVal(n.name) }} className="text-gray-400 hover:text-blue-600 text-xs px-1">✏️</button>
+                              <button data-tour="insurance-separation-lists-delete-name" onClick={() => delName(n)} className="text-red-500 hover:text-red-700 text-xs px-1">حذف</button>
                             </>
                           )}
                         </td>

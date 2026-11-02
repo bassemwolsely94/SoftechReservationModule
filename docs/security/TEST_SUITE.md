@@ -236,10 +236,36 @@ Branch `claude/security-batch5-branch-scoping`. Tests: `test_branch_scope.py`, `
   orders and reservations. Tests: `test_customer_access.py` (mutation-checked: finding, masking, editing),
   `OwnerBranchDecisions`. Screenshots cannot be blocked by a web app — masking is what keeps them harmless.
 
-Still open in Batch 5: stockcount / shortage / batches / insurance / tasks / incentives / analytics / offers /
-supply scoping (`permission_matrix.py` `BRANCH_SCOPE` = "open"), customer phones shown by OTHER modules
-(reservations, delivery, POS order customer fields, call center, campaigns, analytics), the generic canary
-sweep over every list route, and moving demand / transfers / callcenter / followups' role lists onto the helper.
+- **B5 part 2 (2026-10-31)** — stockcount / shortage / batches / tasks / analytics / offers / supply /
+  sales targets on the helper (`test_branch_isolation_part2.py`); SOFTECH-code rows via `scope_code`.
+- **B5 canary sweep** — `test_branch_canary_sweep.py` plants one marked record per branch-linked model
+  (`canary.py`) in branch A and calls every list route as a branch-B pharmacist holding every module action;
+  the marker in a response = a cross-branch read. By-design routes (config, network rankings, HQ-only
+  modules) are in `baselines/branch_canary_leaks.txt` with reasons. It found and closed lost-sales trends,
+  the refill-reminder overview and the omni inbox.
+- **B5 helper migration** — demand, transfers, transits, call center, follow-ups, QA and record chatter moved
+  off their own role lists onto `core/branch_scope` (`test_branch_helper_migration.py`, red on the old code):
+  supervisor / quality manager see every branch (B-3); `allowed_branches` / `restricted_branches` count;
+  branch roles without a branch no longer fall open on dashboards; client-chosen branches on create are
+  checked. Transfer / transit workflow sides are NOT widened — an all-branch role acts on its home branch's
+  side only, HQ lists unchanged. Transfer chatter looked up a non-existent model, so it was open to everyone.
+
+- **B5b phones (2026-10-31)** — B-2 outside the customers screens, per `PHONE_MASKING_PLAN.md` (owner
+  decisions D1–D8). `test_phone_canary_sweep.py` plants a branch-A customer with a known number in every
+  phone-like field it can reach and checks no list, detail or lookup route returns it unmasked to another
+  branch's staff or to staff with `can_see_customer_phone = False`: 39 → 0 (baseline: riders' and channel
+  accounts' own numbers). `test_phone_rules.py` covers what must still show (own-branch records, assigned
+  riders, own customers) and the live-call channel.
+
+Still open: owner decisions on the insurance / incentives all-branch gate and a tasks module permission.
+
+## Batch N0 — network/device holes H1-H3, H5-H9 (done 2026-10-31)
+
+[Design §5](2026-10-31-network-device-access-design.md). One trusted client IP (nginx overwrites
+X-Forwarded-For; no `REMOTE_ADDR` reads), per-account login lockout + admin unlock, revocable
+remembered devices, audited and throttled person search, rider GPS no longer moves the drop-off
+target and riders cannot cancel/close, admin-only SOFTECH probe with cooldown, Django admin off
+in production with a per-IP nginx allow-list. H4 moves to N3; H10 is an owner decision.
 
 ## Pending owner decisions
 
@@ -256,12 +282,14 @@ Batch 7 sets it), `bandit -b bandit-baseline.json`, `pip_audit_check.py`, and in
 
 ## Known dependency advisories (2026-10-26)
 
-- **Python** (`pip-audit-ignore.txt`, owner Batch 6): direct pins — Django 4.2.13 (81; the 4.2
-  line is past end of support and several fixes ship only in 5.2+), djangorestframework 3.15.1 (7),
-  djangorestframework-simplejwt 5.3.1 (2), twisted 26.4.0 (6); installed transitive packages —
-  147 advisories in 21 packages, notably Pillow (62), **PyJWT (19 — login tokens)**, aiohttp (14),
-  cryptography (7), sqlparse (9), daphne (4). The CI check audits the installed environment
-  (exactly what requirements-ci.txt installs); run it inside the production venv to cover
-  production-only packages.
+- **Python — none (Batch 6, 2026-10-31).** The allow-list (`pip-audit-ignore.txt`) is empty. Before:
+  259 advisories in 25 packages (Django 4.2.13 alone 81). Upgraded: Django 5.2.18 (LTS, supported to
+  April 2028; 4.2 is past end of support and several fixes ship only in 5.2+), djangorestframework
+  3.18.3, simplejwt 5.5.1, django-filter 26.2, django-cors-headers 4.9.0, django-extensions 4.1,
+  Pillow 13, PyJWT 2.15.1, daphne 4.2.3; transitive packages get security floors in
+  `requirements*.txt` (Twisted, cryptography, sqlparse, aiohttp, filelock, msgpack, torch, …).
+  Checked both ways: the CI set (installed) and the full production set (`pip install --dry-run
+  --report -r requirements.txt`, then `pip-audit --no-deps -r` on the resolved pins) — no findings.
+  The CI check audits the installed environment; run it inside the production venv after a deploy.
 - **npm (production deps) — 35 advisories** (`npm-audit-allow.txt`): axios (most, several high),
   follow-redirects, form-data, react-router / react-router-dom. Owner: Batch 6.

@@ -19,6 +19,7 @@ from django.utils import timezone
 from django.db.models import Count, Q, Avg
 
 from .models import CallLog, AddressUpdate, CallLogAttachment, CustomerCase, CaseEvent, CallQualityScore, CallItem
+from core import branch_scope
 from core.errors import public_error
 from .serializers import (
     CallLogListSerializer, CallLogDetailSerializer, CallLogCreateSerializer,
@@ -81,19 +82,8 @@ class CallLogViewSet(viewsets.ModelViewSet):
             'reservation', 'followup_task', 'case', 'pbx_session',
         ).prefetch_related('address_updates', 'attachments', 'items__item')
 
-        profile = _profile(self.request)
-        if not profile:
-            return qs.none()
-
-        # Call center / supervisor / admin see all
-        if profile.role in ('admin', 'call_center', 'supervisor', 'quality_manager'):
-            return qs
-
-        # Branch staff see only their branch
-        if profile.branch:
-            return qs.filter(branch=profile.branch)
-
-        return qs.none()
+        # Batch 5: the one branch helper (all-branch roles see all; branch staff their branches)
+        return branch_scope.scope(qs, self.request.user)
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -185,6 +175,11 @@ class CallLogViewSet(viewsets.ModelViewSet):
         if not phone:
             return Response({'detail': 'phone مطلوب'}, status=400)
 
+        # Batch 5b (B-2): branch staff look a number up by the FULL number only — a fragment
+        # listed up to 10 customers with their full numbers. Call-center agents (all-branch) keep it.
+        from apps.customers import access as _ca
+        if branch_scope.branch_ids(request.user) is not None and len(_ca.digits(phone)) < _ca.MIN_PHONE_DIGITS:
+            return Response({'detail': 'اكتب رقم الموبايل كامل.'}, status=400)
         tail = phone.replace(' ', '')[-9:]
         result = {
             'phone':             phone,
@@ -392,8 +387,17 @@ class CallLogViewSet(viewsets.ModelViewSet):
         recent = CallLog.objects.filter(
             phone_number__endswith=tail
         ).select_related('handled_by__user', 'pbx_session').order_by('-called_at')[:5]
-        result['recent_calls'] = CallLogListSerializer(recent, many=True).data
+        result['recent_calls'] = CallLogListSerializer(recent, many=True, context={'request': request}).data
 
+        # mask what this user may not see (B-2 per customer; can_see_customer_phone)
+        from apps.customers.models import Customer as _Cust
+        _found = {c.id: c for c in _Cust.objects.filter(id__in=[r['id'] for r in result['customers']])
+                  .only('id', 'preferred_branch_id', 'created_by_id')}
+        for row in result['customers']:
+            _ca.mask_payload(row, row['id'] in _found and _ca.phones_visible(request.user, _found[row['id']]))
+        sel = result.get('customer')
+        if sel and not (sel.get('id') in _found and _ca.phones_visible(request.user, _found[sel['id']])):
+            _ca.mask_payload(result, False)
         return Response(result)
 
     # ── Attachments ───────────────────────────────────────────────────────────
@@ -513,7 +517,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
         # Log opening event
         case._log_event(f'حالة مفتوحة من مكالمة #{call.pk}', profile)
 
-        return Response(CustomerCaseDetailSerializer(case).data, status=201)
+        return Response(CustomerCaseDetailSerializer(case, context={'request': request}).data, status=201)
 
     @action(detail=True, methods=['patch'], url_path='link-case')
     def link_case(self, request, pk=None):
@@ -646,7 +650,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
             call_log=call,
             collected_by=_profile(request),
         )
-        return Response(AddressUpdateSerializer(update).data, status=201)
+        return Response(AddressUpdateSerializer(update, context={'request': request}).data, status=201)
 
     @action(detail=True, methods=['post'], url_path=r'address-updates/(?P<update_id>[0-9]+)/apply')
     def apply_address_update(self, request, pk=None, update_id=None):
@@ -682,7 +686,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
         if profile and profile.role not in ('admin', 'call_center', 'supervisor'):
             qs = qs.filter(handled_by=profile)
 
-        return Response(CallLogListSerializer(qs, many=True).data)
+        return Response(CallLogListSerializer(qs, many=True, context={'request': request}).data)
 
     @action(detail=False, methods=['get'], url_path='agents')
     def agents(self, request):
@@ -726,9 +730,11 @@ class CallLogViewSet(viewsets.ModelViewSet):
         serializer.save(call_log=call)
         return Response(serializer.data, status=201)
 
-    @action(detail=True, methods=['delete'], url_path=r'items/(?P<item_id>[0-9]+)')
+    @action(detail=True, methods=['delete', 'patch'], url_path=r'items/(?P<item_id>[0-9]+)')
     def remove_item(self, request, pk=None, item_id=None):
-        """DELETE /api/callcenter/calls/{id}/items/{item_id}/"""
+        """DELETE /api/callcenter/calls/{id}/items/{item_id}/
+        PATCH  … { quantity } — change the quantity of an item not yet converted, so a reservation
+        or transfer made from the call uses the quantity on screen."""
         call = self.get_object()
         try:
             ci = call.items.get(pk=item_id)
@@ -736,10 +742,23 @@ class CallLogViewSet(viewsets.ModelViewSet):
             return Response(status=404)
 
         if ci.converted_to != 'none':
+            verb = 'تعديله' if request.method == 'PATCH' else 'حذفه'
             return Response(
-                {'detail': f'هذا الصنف تم تحويله بالفعل ({ci.get_converted_to_display()}) ولا يمكن حذفه'},
+                {'detail': f'هذا الصنف تم تحويله بالفعل ({ci.get_converted_to_display()}) ولا يمكن {verb}'},
                 status=400,
             )
+
+        if request.method == 'PATCH':
+            from decimal import Decimal, InvalidOperation
+            try:
+                qty = Decimal(str(request.data.get('quantity')))
+            except (InvalidOperation, ValueError, TypeError):
+                qty = None
+            if qty is None or not qty.is_finite() or qty <= 0 or qty >= Decimal('100000000'):
+                return Response({'detail': 'الكمية يجب أن تكون رقماً أكبر من صفر'}, status=400)
+            ci.quantity = qty.quantize(Decimal('0.01'))
+            ci.save(update_fields=['quantity'])
+            return Response(CallItemSerializer(ci).data)
 
         ci.delete()
         return Response(status=204)
@@ -762,6 +781,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
         branch_id = request.data.get('branch_id') or (call.branch_id)
         if not branch_id:
             return Response({'detail': 'branch_id مطلوب'}, status=400)
+        branch_scope.require(request.user, branch_id)     # Batch 5: own branches (HQ: any)
 
         try:
             from apps.branches.models import Branch
@@ -833,6 +853,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
         )
         if not requesting_branch_id:
             return Response({'detail': 'requesting_branch_id مطلوب'}, status=400)
+        branch_scope.require(request.user, requesting_branch_id)   # Batch 5: request for own branch
 
         try:
             from apps.branches.models import Branch
@@ -913,10 +934,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
         cutoff = timezone.now() - timedelta(days=30)
         qs     = CallLog.objects.filter(called_at__gte=cutoff)
 
-        profile = _profile(request)
-        if profile and profile.role not in ('admin', 'call_center', 'supervisor', 'quality_manager'):
-            if profile.branch:
-                qs = qs.filter(branch=profile.branch)
+        qs = branch_scope.scope(qs, request.user)
 
         answered_qs = qs.filter(status='answered')
         stats = {
@@ -948,9 +966,9 @@ class CallLogViewSet(viewsets.ModelViewSet):
                 max(answered_qs.count(), 1) * 100, 1
             ),
             # Case metrics
-            'open_cases':      CustomerCase.objects.filter(status__in=('open', 'working', 'waiting')).count(),
-            'escalated_cases': CustomerCase.objects.filter(status='escalated').count(),
-            'resolved_today':  CustomerCase.objects.filter(resolved_at__date=today).count(),
+            'open_cases':      branch_scope.scope(CustomerCase.objects.all(), request.user).filter(status__in=('open', 'working', 'waiting')).count(),
+            'escalated_cases': branch_scope.scope(CustomerCase.objects.all(), request.user).filter(status='escalated').count(),
+            'resolved_today':  branch_scope.scope(CustomerCase.objects.all(), request.user).filter(resolved_at__date=today).count(),
             # Sentiment breakdown (AI)
             'sentiment': {
                 s: qs.filter(ai_sentiment=s).count()
@@ -983,18 +1001,13 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
         ).prefetch_related('events__created_by__user')
 
         profile = _profile(self.request)
+        ids = branch_scope.branch_ids(self.request.user)
+        if ids is None:
+            return qs
         if not profile:
             return qs.none()
-
-        if profile.role in ('admin', 'call_center', 'supervisor', 'quality_manager'):
-            return qs
-
-        # Regular staff see cases for their branch or assigned to them
-        if profile.branch:
-            return qs.filter(
-                Q(branch=profile.branch) | Q(assigned_to=profile)
-            )
-        return qs.filter(assigned_to=profile)
+        # Regular staff see cases for their branches or assigned to them
+        return qs.filter(Q(branch_id__in=ids) | Q(assigned_to=profile))
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -1030,7 +1043,7 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'الموظف غير موجود'}, status=404)
 
         case.assign(staff=staff, note=note)
-        return Response(CustomerCaseDetailSerializer(case).data)
+        return Response(CustomerCaseDetailSerializer(case, context={'request': request}).data)
 
     @action(detail=True, methods=['post'])
     def escalate(self, request, pk=None):
@@ -1050,7 +1063,7 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'الموظف غير موجود'}, status=404)
 
         case.escalate(to_staff=to_staff, reason=reason, by_staff=profile)
-        return Response(CustomerCaseDetailSerializer(case).data)
+        return Response(CustomerCaseDetailSerializer(case, context={'request': request}).data)
 
     @action(detail=True, methods=['post'])
     def resolve(self, request, pk=None):
@@ -1064,7 +1077,7 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'resolution مطلوب'}, status=400)
 
         case.resolve(resolution=resolution, root_cause=root_cause, by_staff=profile)
-        return Response(CustomerCaseDetailSerializer(case).data)
+        return Response(CustomerCaseDetailSerializer(case, context={'request': request}).data)
 
     @action(detail=True, methods=['post'])
     def close(self, request, pk=None):
@@ -1076,7 +1089,7 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
                 status=400,
             )
         case.close(by_staff=_profile(request))
-        return Response(CustomerCaseDetailSerializer(case).data)
+        return Response(CustomerCaseDetailSerializer(case, context={'request': request}).data)
 
     @action(detail=True, methods=['post'])
     def csat(self, request, pk=None):
@@ -1169,7 +1182,7 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
             status__in=('open', 'working', 'waiting', 'escalated'),
         ).select_related('customer', 'branch').order_by('-created_at')
 
-        return Response(CustomerCaseListSerializer(qs, many=True).data)
+        return Response(CustomerCaseListSerializer(qs, many=True, context={'request': request}).data)
 
     @action(detail=False, methods=['get'])
     def dashboard(self, request):
@@ -1178,10 +1191,7 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
         today   = date.today()
         qs      = CustomerCase.objects.all()
 
-        profile = _profile(request)
-        if profile and profile.role not in ('admin', 'call_center', 'supervisor', 'quality_manager'):
-            if profile.branch:
-                qs = qs.filter(branch=profile.branch)
+        qs = branch_scope.scope(qs, request.user)
 
         total = qs.count()
         stats = {

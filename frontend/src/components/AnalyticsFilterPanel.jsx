@@ -316,7 +316,7 @@ export default function AnalyticsFilterPanel({ filters = {}, onChange, options =
     <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
       {/* ── Row 1: Date range + quick presets ── */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex gap-1.5">
+        <div data-tour="filters-date-presets" className="flex gap-1.5">
           {QUICK_RANGES.map(r => (
             <button key={r.label} type="button"
               onClick={() => set({ date_from: r.from, date_to: r.to, date_exact: '' })}
@@ -349,7 +349,7 @@ export default function AnalyticsFilterPanel({ filters = {}, onChange, options =
           )}
         </div>
 
-        <button type="button" onClick={() => setExpanded(e => !e)}
+        <button data-tour="filters-advanced" type="button" onClick={() => setExpanded(e => !e)}
           className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors mr-auto
             ${activeCount > 0 ? 'border-brand-400 bg-brand-50 text-brand-700' : 'border-gray-300 text-gray-600 hover:border-brand-400'}`}>
           فلاتر متقدمة
@@ -360,7 +360,7 @@ export default function AnalyticsFilterPanel({ filters = {}, onChange, options =
         </button>
 
         {activeCount > 0 && (
-          <button type="button" onClick={clearAll} className="text-xs text-red-500 hover:text-red-700 underline">
+          <button data-tour="filters-clear" type="button" onClick={clearAll} className="text-xs text-red-500 hover:text-red-700 underline">
             مسح الفلاتر
           </button>
         )}

@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib import admin
 from django.urls import path, include
 
@@ -5,7 +6,6 @@ from core.csp import csp_report
 from core.media import serve_media
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
     path('api/auth/',  include('apps.users.auth_urls')),
     path('api/users/', include('apps.users.management_urls')),
     path('api/reservations/', include('apps.reservations.urls')),
@@ -67,6 +67,7 @@ urlpatterns = [
     path('api/csp-report/', csp_report),                     # CSP report-only collector (Batch 6, W-9)
     path('api/help/',       include('apps.help.urls')),     # in-app help; edits gated by help/edit
     path('api/gamification/', include('apps.gamification.urls')),  # own data open; reports/config gated by gamification/*
+    path('api/access/', include('apps.access.urls')),                # security N1 — network badge + trusted networks
     path('api/stock-audit/', include('apps.stock_audit.urls')),
     path('api/trace/', include('apps.trace.urls')),          # P-58 — dormant; parse/ is admin-only     # doc 32 — gated in apps/stock_audit/access.py
     # Customer-facing self-service portal (external; magic-link auth, customer-scoped)
@@ -75,3 +76,8 @@ urlpatterns = [
     # not just DEBUG — protected files need a signed, unexpired URL.
     path('media/<path:path>', serve_media, name='media'),
 ]
+
+# N0/H9: Django admin has no 2FA, so it is mounted only when DJANGO_ADMIN_ENABLED (default: DEBUG).
+# In production leave it off; turn it on for a maintenance window only.
+if settings.DJANGO_ADMIN_ENABLED:
+    urlpatterns.insert(0, path('admin/', admin.site.urls))

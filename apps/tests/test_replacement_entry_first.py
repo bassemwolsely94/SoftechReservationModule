@@ -5,8 +5,9 @@ tracked, claimable «شراء بدون حالة» record; a live case funds vouc
 only; anonymous receipts are never auto-confirmed; approvals follow the owner matrix (cash manager
 > 1,500, rate lowered manager > 5 pp, backdate bands).
 """
-from datetime import datetime, timedelta, timezone as dt_tz
+from datetime import date, datetime, timedelta, timezone as dt_tz
 from decimal import Decimal
+from unittest import mock
 
 from django.core.exceptions import ValidationError
 from django.test import override_settings
@@ -23,7 +24,12 @@ from . import test_replacement_workflow as TW
 from .test_replacement_workflow import PIC
 
 D = Decimal
-TODAY = timezone.localdate()
+_REAL_TODAY = timezone.localdate()
+# The clock is pinned to the 15th of the month (_MidMonthClock): «yesterday» must be in the same
+# month. On the 1st a 1-day backdate crosses a month end, which the owner matrix rightly sends to a
+# manager (level 2, HIGH) — the supervisor-band test then failed every 1st (first seen 2026-11-01).
+TODAY = _REAL_TODAY.replace(day=15)
+_SHIFT = TODAY - _REAL_TODAY
 YESTERDAY = TODAY - timedelta(days=1)
 CUTOVER = {'130': (TODAY - timedelta(days=20)).isoformat()}
 
@@ -32,8 +38,40 @@ def _at(day, h=9, mi=0):
     return datetime(day.year, day.month, day.day, h, mi, tzinfo=dt_tz.utc)
 
 
+class _MidMonthClock:
+    """Shifts django.utils.timezone.now (and so localdate) by _SHIFT for the whole class, test data
+    included — time keeps moving, so created_at ordering still works."""
+
+    @classmethod
+    def setUpClass(cls):
+        real_now = timezone.now
+        cls._clock = mock.patch('django.utils.timezone.now', lambda: real_now() + _SHIFT)
+        cls._clock.start()
+        super().setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            super().tearDownClass()
+        finally:
+            cls._clock.stop()
+
+
+class _ApprovalDay:
+    """`apps.replacement.workflow.timezone` with the date the approval route reads pinned to `day`
+    (everything else is the real module) — for a band that needs a specific calendar day."""
+    def __init__(self, day):
+        self.day = day
+
+    def localdate(self, *args, **kwargs):
+        return self.day
+
+    def __getattr__(self, name):
+        return getattr(timezone, name)
+
+
 @override_settings(REPLACEMENT_ENTRY_FIRST_FROM=CUTOVER)
-class EntryFirstTests(TW._Base):
+class EntryFirstTests(_MidMonthClock, TW._Base):
     approved = TW.LegTests.approved
 
     def setUp(self):
@@ -74,6 +112,17 @@ class EntryFirstTests(TW._Base):
                              settlement_mode=mode, softech_pic=PIC, contract_personcode='4479',
                              items=items if items is not None else [{'item_id': self.lokelma.pk, 'qty': 1}],
                              claim_of=src)
+
+    @override_settings(REPLACEMENT_ENTRY_FIRST_FROM={'130': '2026-09-01'})
+    def test_backdate_band_across_month_end_is_manager_even_one_day_later(self):
+        # a month-end purchase claimed the next morning: 1 day, but across the month end → manager
+        src = R.reconstruct_invoice(self.ap_invoice(docdate=date(2026, 9, 30)))['case']
+        self.assertEqual(src.status, RC.STATUS_UNCLAIMED)
+        c = self.calc(self.claim(src))
+        with mock.patch.object(W, 'timezone', _ApprovalDay(date(2026, 10, 1))):
+            wf, reasons = W.approval_route(RC.objects.get(pk=c.pk))
+        self.assertEqual(wf, 'replacement_manager', reasons)
+        self.assertTrue(any('عبر نهاية الشهر' in r for r in reasons), reasons)
 
     def test_claim_links_purchase_on_approval_and_retires_the_unclaimed_record(self):
         src = R.reconstruct_invoice(self.ap_invoice())['case']
@@ -211,7 +260,7 @@ class EntryFirstTests(TW._Base):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-class OwnerApprovalMatrixTests(TW._Base):
+class OwnerApprovalMatrixTests(_MidMonthClock, TW._Base):
     """Owner 2026-10-26. _Base keeps the value band at 2,000 / 6,000 so these isolate each control."""
 
     def route(self, case):
@@ -257,7 +306,7 @@ class OwnerApprovalMatrixTests(TW._Base):
 
 # ═══════════════════════════════════════════════════════════════════════════════
 @override_settings(REPLACEMENT_ENTRY_FIRST_FROM=CUTOVER)
-class EntryFirstApiTests(TW._Base):
+class EntryFirstApiTests(_MidMonthClock, TW._Base):
     def test_patient_lookup_by_mobile(self):
         from apps.customers.models import Customer
         Customer.objects.filter(softech_pic=PIC).update(phone='01001234567')

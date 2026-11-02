@@ -35,6 +35,7 @@ from .serializers import (
     DisqualifySerializer, OptOutSerializer, FromReservationSerializer,
 )
 from . import service
+from core import branch_scope
 from core.errors import public_error
 from core.permissions import deny_unless
 
@@ -104,19 +105,9 @@ class DemandViewSet(viewsets.ModelViewSet):
             'branch', 'customer', 'assigned_to__user', 'created_by__user',
         ).prefetch_related('items__item')
 
-        profile = _profile(self.request)
-        if not profile:
-            return qs.none()
-
-        # HQ roles see all
-        if profile.role in ('admin', 'call_center', 'purchasing'):
-            return qs
-
-        # Branch staff see their branch only
-        if profile.branch:
-            return qs.filter(branch=profile.branch)
-
-        return qs.none()
+        # Batch 5: the one branch helper — all-branch roles (incl. supervisor / quality manager,
+        # owner decision B-3) see every branch; branch staff home + allowed − restricted; fail-closed.
+        return branch_scope.scope(qs, self.request.user)
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -128,6 +119,7 @@ class DemandViewSet(viewsets.ModelViewSet):
         return DemandDetailSerializer
 
     def perform_create(self, serializer):
+        branch_scope.check_branch_value(self.request.user, serializer)
         profile = _profile(self.request)
         data = serializer.validated_data
         items_data = data.pop('items', [])
@@ -158,7 +150,7 @@ class DemandViewSet(viewsets.ModelViewSet):
             follow_up_date=data.get('follow_up_date'),
         )
         # Replace the serializer's instance with the created demand
-        serializer._data = DemandDetailSerializer(demand).data
+        serializer._data = DemandDetailSerializer(demand, context={'request': self.request}).data
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -191,7 +183,7 @@ class DemandViewSet(viewsets.ModelViewSet):
             note=request.data.get('note', ''),
             assigned_to=assignee,
         )
-        return Response(DemandDetailSerializer(demand).data)
+        return Response(DemandDetailSerializer(demand, context={'request': request}).data)
 
     # ── Follow-up ─────────────────────────────────────────────────────────────
 
@@ -202,7 +194,7 @@ class DemandViewSet(viewsets.ModelViewSet):
         s = TransitionSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         demand = service.transition_status(demand, 'follow_up', by=profile, **s.validated_data)
-        return Response(DemandDetailSerializer(demand).data)
+        return Response(DemandDetailSerializer(demand, context={'request': request}).data)
 
     # ── Stock ETA ─────────────────────────────────────────────────────────────
 
@@ -217,7 +209,7 @@ class DemandViewSet(viewsets.ModelViewSet):
             demand.expected_stock_date = eta_date
             demand.save(update_fields=['expected_stock_date'])
         demand = service.transition_status(demand, 'stock_eta', by=profile, **s.validated_data)
-        return Response(DemandDetailSerializer(demand).data)
+        return Response(DemandDetailSerializer(demand, context={'request': request}).data)
 
     # ── Suggest transfer ──────────────────────────────────────────────────────
 
@@ -228,7 +220,7 @@ class DemandViewSet(viewsets.ModelViewSet):
         s = TransitionSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         demand = service.transition_status(demand, 'transfer_suggested', by=profile, **s.validated_data)
-        return Response(DemandDetailSerializer(demand).data)
+        return Response(DemandDetailSerializer(demand, context={'request': request}).data)
 
     # ── Flag purchasing ───────────────────────────────────────────────────────
 
@@ -239,7 +231,7 @@ class DemandViewSet(viewsets.ModelViewSet):
         s = TransitionSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         demand = service.transition_status(demand, 'purchasing_flagged', by=profile, **s.validated_data)
-        return Response(DemandDetailSerializer(demand).data)
+        return Response(DemandDetailSerializer(demand, context={'request': request}).data)
 
     # ── Fulfill ───────────────────────────────────────────────────────────────
 
@@ -256,7 +248,7 @@ class DemandViewSet(viewsets.ModelViewSet):
             demand, 'fulfilled', by=profile,
             **s.validated_data,
         )
-        return Response(DemandDetailSerializer(demand).data)
+        return Response(DemandDetailSerializer(demand, context={'request': request}).data)
 
     # ── Lost sale ─────────────────────────────────────────────────────────────
 
@@ -273,7 +265,7 @@ class DemandViewSet(viewsets.ModelViewSet):
             demand, 'lost', by=profile,
             **s.validated_data,
         )
-        return Response(DemandDetailSerializer(demand).data)
+        return Response(DemandDetailSerializer(demand, context={'request': request}).data)
 
     # ── Cancel ────────────────────────────────────────────────────────────────
 
@@ -287,7 +279,7 @@ class DemandViewSet(viewsets.ModelViewSet):
         s = TransitionSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         demand = service.transition_status(demand, 'cancelled', by=profile, **s.validated_data)
-        return Response(DemandDetailSerializer(demand).data)
+        return Response(DemandDetailSerializer(demand, context={'request': request}).data)
 
     # ── Items ─────────────────────────────────────────────────────────────────
 
@@ -340,7 +332,7 @@ class DemandViewSet(viewsets.ModelViewSet):
         )
         page = self.paginate_queryset(qs)
         target = page if page is not None else qs
-        data = RecoveryQueueSerializer(target, many=True).data
+        data = RecoveryQueueSerializer(target, many=True, context={'request': request}).data
         return self.get_paginated_response(data) if page is not None else Response(data)
 
     @action(detail=True, methods=['post'], url_path=r'items/(?P<item_id>[0-9]+)/recover')
@@ -452,7 +444,7 @@ class DemandViewSet(viewsets.ModelViewSet):
             lost_reason=s.validated_data.get('lost_reason', 'no_stock'),
             disqualified_reason=s.validated_data.get('disqualified_reason', ''),
         )
-        return Response(DemandDetailSerializer(demand).data, status=201)
+        return Response(DemandDetailSerializer(demand, context={'request': request}).data, status=201)
 
     # ── Logs / Chatter ────────────────────────────────────────────────────────
 
@@ -525,7 +517,15 @@ class DemandViewSet(viewsets.ModelViewSet):
         phcode = request.query_params.get('phcode')
         if not phone and not phcode:
             return Response({'detail': 'phone أو phcode مطلوب'}, status=400)
+        # Batch 5b (B-2): SOFTECH customers have no branch here — branch staff search by the FULL
+        # number only, and get the number back masked
+        from apps.customers import access as _ca
+        branch_user = branch_scope.branch_ids(request.user) is not None
+        if phone and branch_user and len(_ca.digits(phone)) < _ca.MIN_PHONE_DIGITS:
+            return Response({'detail': 'اكتب رقم الموبايل كامل.'}, status=400)
         result = service.lookup_customer_in_erp(phone=phone, phcode=phcode)
+        if result:
+            _ca.mask_payload(result, not branch_user and _ca.record_phones_visible(request.user))
         return Response({'found': result is not None, 'data': result})
 
     @action(detail=False, methods=['get'], url_path='substitutes')

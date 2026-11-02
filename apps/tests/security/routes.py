@@ -34,6 +34,8 @@ KNOWN_PUBLIC_VIEWS = {
     'apps.delivery.views.delivery_public_track',
     'apps.pbx.views.RecordingView',
     'apps.users.mfa',
+    # network badge: the caller's own zone + IP (+ site name when internal), throttled
+    'apps.access.views.whoami',
     # browsers' CSP violation reports — log only, throttled, capped (Batch 6, W-9)
     'core.csp.csp_report',
 }

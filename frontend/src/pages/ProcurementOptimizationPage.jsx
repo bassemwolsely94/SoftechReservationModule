@@ -190,7 +190,7 @@ function MappingTab() {
           <input type="checkbox" checked={primaryOnly} onChange={e => setPrimaryOnly(e.target.checked)} className="rounded" />
           مورد رئيسي فقط
         </label>
-        <button onClick={load} className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg">
+        <button data-tour="purchasing-optimization-mapping-search" onClick={load} className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg">
           🔍 بحث
         </button>
       </div>
@@ -320,7 +320,7 @@ function AlertsTab() {
           <option value="true">محلولة</option>
           <option value="">الكل</option>
         </select>
-        <RefreshButton loading={loading} onClick={load}>
+        <RefreshButton data-tour="purchasing-optimization-alerts-refresh" loading={loading} onClick={load}>
           🔄 تحديث
         </RefreshButton>
         <span className="text-sm text-gray-500 mr-auto">{alerts.length} تنبيه</span>

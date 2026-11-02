@@ -180,11 +180,13 @@ def _screen_payload(request, key, s, modules, screens, override):
     workflows = m.get('workflows') or []
     if s.get('workflows') is not None:      # a screen may show only some of its module's workflows
         workflows = [w for w in workflows if w.get('key') in s['workflows']]
+    shell_keys = set(registry.SHELL_HINT_SOURCES.values())
     all_ov = {o.screen_key: o for o in HelpOverride.objects.filter(
-        screen_key__in=[key, s.get('tour_continue') or ''])}
+        screen_key__in=[key, s.get('tour_continue') or '', *shell_keys])}
     payload = {
         **{k: v for k, v in eff.items() if k != 'workflows'},
         'tour_flow': registry.tour_flow(key, screens, all_ov) if eff.get('tour') else [],
+        'shell_hints': registry.shell_hints(screens, all_ov),
         'module': {'key': m.get('key'), 'title': m.get('title'), 'icon': m.get('icon', ''),
                    'summary': m.get('summary'), 'workflows': workflows,
                    'flows': _module_flows(m['key']) if m else [],
@@ -478,7 +480,8 @@ def manual(request):
             out_modules.append({'key': mk, 'title': m['title'], 'icon': m.get('icon', ''),
                                 'summary': m['summary'], 'workflows': m.get('workflows') or []})
         item = {f: eff.get(f) for f in ('key', 'title', 'summary', 'audience', 'tabs', 'faq', 'notes')}
-        item['buttons'] = [{'text': t['text'], 'more': t.get('more')} for t in eff.get('tour') or []]
+        item['buttons'] = [{'text': t['text'], 'more': t.get('more')}
+                           for t in (eff.get('tour') or []) + (eff.get('hints') or [])]
         item.update(module=mk, routes=s['routes'], updated=_updated(s, ov.get(k)),
                     steps=_for_role(eff.get('steps'), role) if role else eff.get('steps') or [],
                     tips=_for_role(eff.get('tips'), role) if role else eff.get('tips') or [])

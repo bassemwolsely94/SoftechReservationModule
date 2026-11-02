@@ -96,7 +96,7 @@ function DomainFreshness({ domains, canEdit, compact, onRefresh }) {
         <span className="text-red-600 font-bold">· آخر مزامنة فشلت</span>
       )}
       {canRefresh && (
-        <button onClick={refresh} disabled={refreshing}
+        <button data-tour="freshness-sync-now" onClick={refresh} disabled={refreshing}
           className={`ml-auto px-2.5 py-1 rounded-md text-white text-[11px] font-bold disabled:opacity-50 ${anyStale ? 'bg-amber-600' : 'bg-emerald-600'}`}>
           {refreshing ? '⏳ جارٍ التحديث…' : '🔄 تحديث الآن'}
         </button>
@@ -154,7 +154,7 @@ export default function DataFreshnessBar({ domains, compact, dataThrough, daysEl
       {lastSync && <span className="opacity-80">· آخر مزامنة {new Date(lastSync).toLocaleString('ar-EG')}</span>}
       {stale && <span className="font-bold">· متأخّرة ~{behind} يوم عن أمس</span>}
       {canEdit && (
-        <button onClick={refresh} disabled={refreshing}
+        <button data-tour="freshness-kpi-rebuild" onClick={refresh} disabled={refreshing}
           className={`ml-auto px-2.5 py-1 rounded-md text-white text-[11px] font-bold disabled:opacity-50 ${stale ? 'bg-amber-600' : 'bg-emerald-600'}`}>
           {refreshing ? '⏳ جارٍ التحديث…' : '🔄 تحديث البيانات'}
         </button>

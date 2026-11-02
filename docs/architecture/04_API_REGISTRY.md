@@ -614,3 +614,10 @@ Default pagination: CursorPagination (50 items)
 | `/api/transits/{id}/export-picking\|export-stocking/` | GET | ورقة التجميع / ورقة الترصيص export (+ bulk POST) |
 | `/api/transits/pick-zones\|pick-rules\|item-overrides/` | GET, POST | Classification config (per location+purpose) |
 | `/api/transits/settings\|preview\|uncategorized\|classify-items\|seed-defaults/` | GET, POST | Threshold, preview, bulk classify |
+
+## ACCESS  `/api/access/`  *(security N1 — network zone; see docs/security/2026-10-31-network-device-access-design.md)*
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/access/whoami/` | GET | **Public**, throttled (60/min). `{zone: internal\|external, ip, label, site: {name, kind, branch_label}}` — the caller's own IP; site only when internal; zone comes from nginx's `X-ElR-Network`, never the client |
+| `/api/access/networks/` (`{id}/`) | GET, POST, PATCH, PUT, DELETE | Trusted networks (branch LAN / staff VPN / server CIDRs). Admin only; every change audited `trusted_network_changed` |

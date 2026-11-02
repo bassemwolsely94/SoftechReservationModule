@@ -375,6 +375,7 @@ def _ocr_gemini(image_file, api_key: str) -> tuple:
 
 
 from core.permissions import matrix_permission                     # noqa: E402
+from core import branch_scope                                     # noqa: E402
 
 # Branch shortage lists = the `shortage` matrix module (Batch 4, Z-9c — was any logged-in user):
 # reads need view; lists, items, OCR / voice import need create / edit / approve; removing an
@@ -392,6 +393,9 @@ class ShortageListViewSet(viewsets.ModelViewSet):
             confirmed_count=Count('items', filter=Q(items__is_confirmed=True)),
             unmatched_count=Count('items', filter=Q(items__is_unmatched=True)),
         )
+        # Batch 5 part 2: a branch user sees (and acts on) only their branches' lists; ?branch=
+        # can narrow that, never widen it.
+        qs = branch_scope.scope(qs, self.request.user)
         branch = self.request.query_params.get('branch')
         status_q = self.request.query_params.get('status')
         if branch:
@@ -414,6 +418,7 @@ class ShortageListViewSet(viewsets.ModelViewSet):
         raise MethodNotAllowed(request.method)
 
     def perform_create(self, serializer):
+        branch_scope.check_branch_value(self.request.user, serializer)
         profile = getattr(self.request.user, 'staff_profile', None)
         serializer.save(created_by=profile)
 
@@ -574,6 +579,7 @@ class ShortageListViewSet(viewsets.ModelViewSet):
 
         Returns { raw_text, lines: [...], line_count, engine }
         """
+        self.get_object()   # the list must exist and be in the user's branches (Batch 5 part 2)
         if 'image' not in request.FILES:
             return Response({'detail': 'لم يتم رفع صورة'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -753,6 +759,15 @@ class ShortageListViewSet(viewsets.ModelViewSet):
 
     # ─── P-33 (a): «إنشاء مقترحات التحويل» — the WhatsApp path's two-leg ISR proposals ──
 
+    def _list_for_transfers(self):
+        """Supply staff (can_supply_write) plan and propose transfers for any branch's list — a
+        network operation, like the WhatsApp path. Everyone else: the branch-scoped lookup."""
+        from apps.purchasing.access import can_supply_write
+        if can_supply_write(self.request.user):
+            from django.shortcuts import get_object_or_404
+            return get_object_or_404(ShortageList, pk=self.kwargs['pk'])
+        return self.get_object()
+
     def _transfer_source(self, sl, *, confirmed_only):
         """(pseudo ISR, origin kwargs). A list that came from a WhatsApp request moves through that
         request, so the same need is never transferred twice from the two screens."""
@@ -768,7 +783,7 @@ class ShortageListViewSet(viewsets.ModelViewSet):
         its whole packs cover the request) and the proposals already made. Read only."""
         from apps.purchasing import isr_fulfillment as F
         from apps.purchasing.access import can_supply_write
-        sl = self.get_object()
+        sl = self._list_for_transfers()
         try:
             cov = F.plan_settings(request.query_params)
         except ValueError as exc:
@@ -791,7 +806,7 @@ class ShortageListViewSet(viewsets.ModelViewSet):
         from apps.purchasing.access import can_supply_write
         if not can_supply_write(request.user):
             return Response({'detail': 'غير مصرح لك بإنشاء مقترحات التحويل.'}, status=status.HTTP_403_FORBIDDEN)
-        sl = self.get_object()
+        sl = self._list_for_transfers()
         try:
             cov = F.plan_settings(request.data)
         except ValueError as exc:
@@ -892,10 +907,10 @@ class ShortageListViewSet(viewsets.ModelViewSet):
         date_from   = request.query_params.get('date_from')
         date_to     = request.query_params.get('date_to')
 
-        qs = ShortageList.objects.all()
+        qs = branch_scope.scope(ShortageList.objects.all(), request.user)
         if branch_ids:
             ids = [b.strip() for b in branch_ids.split(',') if b.strip()]
-            qs = qs.filter(branch_id__in=ids)
+            qs = qs.filter(branch_id__in=branch_scope.narrow_ids(request.user, ids) or set())
         if status_q:
             qs = qs.filter(status=status_q)
         if date_from:
@@ -972,10 +987,10 @@ class ShortageListViewSet(viewsets.ModelViewSet):
         date_from  = request.query_params.get('date_from')
         date_to    = request.query_params.get('date_to')
 
-        qs = ShortageList.objects.all()
+        qs = branch_scope.scope(ShortageList.objects.all(), request.user)
         if branch_ids:
             ids = [b.strip() for b in branch_ids.split(',') if b.strip()]
-            qs = qs.filter(branch_id__in=ids)
+            qs = qs.filter(branch_id__in=branch_scope.narrow_ids(request.user, ids) or set())
         if status_q:
             qs = qs.filter(status=status_q)
         if date_from:

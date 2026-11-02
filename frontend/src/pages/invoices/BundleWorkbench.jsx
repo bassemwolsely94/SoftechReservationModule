@@ -114,7 +114,7 @@ function UploadBundle({ branches, onClose, onCreated }) {
         </div>
         {error && <div className="mt-3 text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
         <div className="flex gap-2 mt-5">
-          <button onClick={submit} disabled={saving}
+          <button data-tour="invoices-main-bundle-upload" onClick={submit} disabled={saving}
             className="flex-1 py-2.5 bg-brand-600 text-white rounded-xl font-medium hover:bg-brand-700 disabled:opacity-50 text-sm">
             {saving ? 'جارٍ الرفع والتقسيم…' : 'رفع وتقسيم'}
           </button>
@@ -170,13 +170,13 @@ function BundleDetail({ batchId, onBack, onOpenInvoice }) {
         <div className="flex items-center gap-2">
           <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${st.cls}`}>{st.label}</span>
           {batch.vendor && (
-            <button onClick={() => setEditTemplate(true)}
+            <button data-tour="invoices-main-bundle-template" onClick={() => setEditTemplate(true)}
               className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200">
               ⚙ قالب المورد
             </button>
           )}
           {batch.status !== 'processing' && (
-            <button onClick={reprocess} disabled={reprocessing}
+            <button data-tour="invoices-main-bundle-reprocess" onClick={reprocess} disabled={reprocessing}
               className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 disabled:opacity-50">
               {reprocessing ? '…' : '↻ إعادة التقسيم'}
             </button>

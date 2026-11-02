@@ -99,6 +99,10 @@ class AuditLog(models.Model):
         # Customer account flags → branch copy (B7)
         ('customer_branch_copy_written', 'عميل — نسخ حالة الرئيسي لنسخة الفرع'),
         ('customer_points_removed',      'عميل — استبعاد من نظام النقاط وتصفير الرصيد'),
+        ('customer_note_deleted',        'عميل — حذف ملاحظة'),
+        # Expiry disposal / return decisions (apps/batches) and transfer suggestions (purchasing)
+        ('disposal_status_changed',      'إتلاف/مرتجع — تغيير حالة'),
+        ('transfer_rec_status_changed',  'توصية تحويل — تغيير حالة'),
 
 
         # Sales targets / KPI forecasting (doc 16) — assigned & approved figures
@@ -113,6 +117,12 @@ class AuditLog(models.Model):
         ('stock_audit_finding_reviewed', 'تدقيق المخزون — مراجعة ملاحظة'),
         ('stock_audit_access_granted',   'تدقيق المخزون — منح صلاحية مدير فرع'),
         ('stock_audit_access_revoked',   'تدقيق المخزون — سحب صلاحية مدير فرع'),
+
+        # Personal dashboard live person search (N0/H1)
+        ('personal_person_search',       'لوحة شخصية — بحث عن شخص في SOFTECH'),
+
+        # Security N1
+        ('trusted_network_changed',      'شبكة موثوقة — إضافة / تعديل / حذف'),
 
         # Return-window calendar (P-29)
         ('return_policy_changed',        'مرتجع — تعديل سياسة مورد'),

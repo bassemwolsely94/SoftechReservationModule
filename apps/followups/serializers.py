@@ -16,6 +16,9 @@ from .models import ChronicMedicationProfile, FollowUpTask
 
 # ── Chronic Medication Profile ──────────────────────────────────────────────────
 
+from apps.customers.phone_mask import RecordPhoneMask  # Batch 5b
+
+
 class ChronicMedicationProfileSerializer(serializers.ModelSerializer):
     item_name       = serializers.CharField(source='item.name',       read_only=True)
     item_softech_id = serializers.CharField(source='item.softech_id', read_only=True)
@@ -228,7 +231,8 @@ def build_refill_block(task) -> dict:
 
 # ── Follow-up Task — LIST (rich card) ───────────────────────────────────────────
 
-class FollowUpTaskListSerializer(serializers.ModelSerializer):
+class FollowUpTaskListSerializer(RecordPhoneMask, serializers.ModelSerializer):
+    phone_mask_links = ('whatsapp_url',)              # Batch 5b (D3): the link carries the number
     customer         = serializers.SerializerMethodField()
     product          = serializers.SerializerMethodField()
     refill           = serializers.SerializerMethodField()
@@ -297,7 +301,8 @@ class FollowUpTaskListSerializer(serializers.ModelSerializer):
 
 # ── Follow-up Task — DETAIL (adds FBT + whatsapp message + call history) ─────────
 
-class FollowUpTaskDetailSerializer(serializers.ModelSerializer):
+class FollowUpTaskDetailSerializer(RecordPhoneMask, serializers.ModelSerializer):
+    phone_mask_links = ('whatsapp_url', 'whatsapp_url_with_message')   # Batch 5b (D3)
     customer          = serializers.SerializerMethodField()
     product           = serializers.SerializerMethodField()
     refill            = serializers.SerializerMethodField()

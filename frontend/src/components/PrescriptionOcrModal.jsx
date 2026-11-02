@@ -76,12 +76,12 @@ export default function PrescriptionOcrModal({ onAdd, onClose }) {
           <div className="flex items-center gap-2 flex-wrap">
             <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden"
                    onChange={e => run(e.target.files?.[0] || null)} />
-            <button onClick={() => fileRef.current?.click()} disabled={busy || recording}
+            <button data-tour="pos-order-ocr-photo" onClick={() => fileRef.current?.click()} disabled={busy || recording}
                     className="px-3 py-2 rounded text-white text-sm font-semibold disabled:opacity-50" style={{ background: '#022871' }}>
               📷 صورة الروشتة
             </button>
             {!recording ? (
-              <button onClick={startRec} disabled={busy}
+              <button data-tour="pos-order-ocr-voice" onClick={startRec} disabled={busy}
                       className="px-3 py-2 rounded text-white text-sm font-semibold disabled:opacity-50" style={{ background: '#0b7a5b' }}>
                 🎤 تسجيل صوتي
               </button>
@@ -114,7 +114,7 @@ export default function PrescriptionOcrModal({ onAdd, onClose }) {
                   <div className="flex flex-wrap gap-1.5">
                     {(ln.candidates || []).length === 0 && <span className="text-[11px] text-gray-400">لا مطابقة — أضِفه يدويًا من البحث.</span>}
                     {(ln.candidates || []).map(c => (
-                      <button key={c.item_id} onClick={() => confirm(li, c, rawName)}
+                      <button data-tour="pos-order-ocr-confirm" key={c.item_id} onClick={() => confirm(li, c, rawName)}
                               title={`ثقة ${(c.score * 100).toFixed(0)}%${c.learned ? ' · مُتعلَّم' : ''}`}
                               className="text-[11px] rounded px-2 py-1 border bg-white border-indigo-200 text-indigo-700 hover:bg-indigo-50 flex items-center gap-1">
                         <span className="truncate max-w-[200px]">{c.name}</span>

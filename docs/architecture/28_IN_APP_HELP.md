@@ -226,8 +226,10 @@ notifications) — both exist; this one visits the modules of the person's work.
   «مساري التدريبي» (follows the role a trainer previews), and a card in «👋 ابدأ من هنا» on the home page
   (`module_tour` in `GET /api/help/first-day/`, ticked ✓ once finished). Started with the same runner as
   journeys (`useStartProductTour` in `Journeys.jsx`).
-- **Not wired yet:** a mobile entry point (the API supports `shell=mobile`); the tours for roles whose
-  path is mostly mobile are thin on desktop.
+- **Mobile entry point (built 2026-11-01):** «🗺️ جولة في موديولات دورك» in the «؟ مساعدة» panel footer
+  (`ModulesTourButton` in `HelpPanel.jsx`) — on every screen of both shells; the start hook sends
+  `shell=mobile` on `/m/` routes, and the button says «مفيش جولة لدورك هنا» when the role's path has no
+  screen on that shell. Roles whose path is mostly mobile still get a thin desktop tour.
 
 ## «اسأل النظام» (built 2026-10-10)
 
@@ -409,7 +411,27 @@ The two help lines were merged (branch `claude/help-reconcile`). Nothing was dro
 - ~~Rich tours + journeys for every module~~ ✅ done (batches 1–6, last 2026-10-30).
 - ~~Batch 7: every step names its element~~ ✅ done 2026-10-30 — 189 steps got a «label» (every one that had neither label nor «متى؟» also got a «متى؟» — 155);
   `test_every_step_names_its_element` keeps it so.
-- ~~Batch 8: hints mode + once-per-screen «جديد هنا؟ اعرض لي» chip~~ ✅ built 2026-10-30. Still open:
-  anchor (and write steps for) the main buttons that have no `data-tour` yet (~half of all buttons).
+- ~~Batch 8: hints mode + once-per-screen «جديد هنا؟ اعرض لي» chip~~ ✅ built 2026-10-30.
+- ~~Anchor the untagged buttons~~ ✅ built 2026-11-01 — see «Button hints for every action» below.
 - ~~Batch 9: role module tour «🗺️ جولة في موديولات دورك»~~ ✅ built 2026-10-30 (desktop entry points; mobile
   entry still open).
+
+## Button hints for every action (built 2026-11-01)
+
+- A screen may carry `hints`: steps in the tour format (target, label, text, when, warn, open_hint) that
+  «💡 تلميحات الأزرار» explains but «اعرض لي» never walks through — the tour stays short, every action
+  button still gets a card. On a shared anchor the tour step wins over a hint, a hint over a journey step.
+  The printed manual lists tour + hints under «الأزرار».
+- 870 hints across all modules; close ✕, plain pagination, tab switches and sort headers stay untagged.
+  Shared components (item / customer search, module bell, freshness refresh, chatter, voice notes,
+  receipt print, WhatsApp share, filter bars) carry one wording copied onto every screen that shows them.
+- The hover card walks up from the hovered element to the nearest anchor the current screen explains,
+  so a shared component's own anchor never hides the screen's wrapper hint.
+- `test_hints_valid`: rich-step limits, «label», ⚠ for push / send / cancel … anchors, a real anchor,
+  no anchor twice in tour + hints. Adding a button: anchor it and add a hint to its screen.
+- Shell buttons (side menu, search, help, 🔔 bell + its panel and reminders, notification settings,
+  logout, the help panel's own buttons) are explained on every screen: `registry.SHELL_HINT_SOURCES`
+  maps each anchor to the screen holding its text (mostly `general.dashboard`), and every screen
+  payload carries `shell_hints`, the lowest layer in `hintSteps` (tour > hints > journey > shell).
+  Hints now also work on a screen with no tour. `test_shell_hints_resolve` checks each source step
+  exists and its anchor sits in a shell file.

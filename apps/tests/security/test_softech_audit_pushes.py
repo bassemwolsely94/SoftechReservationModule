@@ -45,8 +45,8 @@ class InvoicePushAuditTests(TestCase):
 
     def test_batch_push_records_who(self):
         with mock.patch('apps.invoices.writer.push_final', return_value=self.pushed):
-            self.client.post('/api/invoices/invoices/push-batch/', {'invoice_ids': [self.inv.id]},
-                             format='json')
+            self.client.post('/api/invoices/invoices/push-batch/', {'invoice_ids': [self.inv.id],
+                                                                    'confirm_count': 1}, format='json')
         row = _row('softech_invoice_pushed')
         self.assertIsNotNone(row)
         self.assertEqual(row.user_id, self.staff.pk)
@@ -132,10 +132,13 @@ class PurchasingAuditTests(TestCase):
         p = W._persist_proposal(source='100', dest='160', kind=P.KIND_HQ_TO_BRANCH, lines=_lines(('A', 2)))
         P.objects.filter(pk=p.pk).update(status=P.STATUS_APPROVED)
         p.refresh_from_db()
+        from apps.purchasing import isr_guards as G
         with mock.patch('config.sybase.get_branch_connection'), \
+                mock.patch.object(G, 'review_push', return_value={
+                    'line_count': 1, 'issues': [], 'blocked': False, 'needs_reason': False}), \
                 mock.patch.object(W, '_write_isr', return_value={'verified': True, 'committed': True,
                                                                  'isrdocnumber': 2610000042}):
-            W.push_isr_record(p, executed_by=self.user)
+            W.push_isr_record(p, executed_by=self.user, confirm_count=1)
         row = _row('softech_isr_pushed')
         self.assertIsNotNone(row)
         self.assertEqual(row.user_id, self.staff.pk)

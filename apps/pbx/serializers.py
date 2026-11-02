@@ -10,6 +10,8 @@ def _staff_display_name(staff):
     return full or staff.user.username if staff.user_id else str(staff.pk)
 
 
+from apps.customers.phone_mask import RecordPhoneMask, CustomerPhoneMask  # Batch 5b
+
 class AgentExtensionSerializer(serializers.ModelSerializer):
     staff_name = serializers.SerializerMethodField()
 
@@ -32,7 +34,14 @@ class PBXQueueSerializer(serializers.ModelSerializer):
         return obj.branch.name_ar if obj.branch_id else None
 
 
-class CallSessionSerializer(serializers.ModelSerializer):
+class CallSessionSerializer(RecordPhoneMask, serializers.ModelSerializer):
+    phone_mask_fields = ('caller_number',)
+
+    def phones_visible_for(self, user, instance):
+        # call sessions aren't branch-scoped — callers' numbers for the all-branch roles (agents)
+        from core import branch_scope
+        return super().phones_visible_for(user, instance) and branch_scope.branch_ids(user) is None
+
     direction_display = serializers.CharField(source='get_direction_display', read_only=True)
     state_display     = serializers.CharField(source='get_state_display', read_only=True)
     customer_name     = serializers.SerializerMethodField()

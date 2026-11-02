@@ -72,7 +72,7 @@ export default function ReceiptCheckTab() {
         </select>
         <span className="text-content/70">{totals.n} سطر · {money(totals.value)}</span>
         <span className="flex-1" />
-        <button onClick={() => refresh.mutate()} disabled={refresh.isPending} className={btnGhost}>⟳ المشتريات من SOFTECH</button>
+        <button data-tour="purchasing-supply-receipts-refresh" onClick={() => refresh.mutate()} disabled={refresh.isPending} className={btnGhost}>⟳ المشتريات من SOFTECH</button>
       </div>
       {refresh.isPending && <ProgressBar label="تحديث المشتريات" since={since} />}
       {msg && <div className="text-sm bg-surface-2 border border-line rounded px-3 py-2">{msg}</div>}
@@ -119,13 +119,13 @@ export default function ReceiptCheckTab() {
                     <td className="px-2 py-1.5">
                       {r.status === 'open' ? (
                         <span className="flex items-center gap-1">
-                          <button className={btnPrimary} disabled={decide.isPending}
+                          <button data-tour="purchasing-supply-receipts-return" className={btnPrimary} disabled={decide.isPending}
                                   onClick={() => decide.mutate({ id: r.id, action: 'return' })}>مرتجع مطلوب</button>
                           <select className={inputCls} value={reasons[r.id] || data?.accept_reasons?.[0] || ''}
                                   onChange={e => setReasons(x => ({ ...x, [r.id]: e.target.value }))}>
                             {(data?.accept_reasons || []).map(x => <option key={x} value={x}>{x}</option>)}
                           </select>
-                          <button className={btnGhost} disabled={decide.isPending} onClick={() => accept(r)}>مقبول</button>
+                          <button data-tour="purchasing-supply-receipts-accept" className={btnGhost} disabled={decide.isPending} onClick={() => accept(r)}>مقبول</button>
                         </span>
                       ) : (
                         <span className="flex items-center gap-1">
@@ -133,7 +133,7 @@ export default function ReceiptCheckTab() {
                           {r.decision_reason && <span className="text-xs text-content/60">{r.decision_reason}</span>}
                           {r.status === 'returned' && <span className="text-xs">{money(r.returned_value)}</span>}
                           {r.status !== 'returned' && (
-                            <button className="text-xs underline text-content/60"
+                            <button data-tour="purchasing-supply-receipts-reopen" className="text-xs underline text-content/60"
                                     onClick={() => decide.mutate({ id: r.id, action: 'reopen' })}>إعادة فتح</button>
                           )}
                         </span>

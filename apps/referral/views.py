@@ -87,7 +87,7 @@ class SubmitLeadView(APIView):
                 status=400,
             )
 
-        return Response(ReferralLeadSerializer(lead).data, status=201)
+        return Response(ReferralLeadSerializer(lead, context={'request': request}).data, status=201)
 
 
 class LeadListView(generics.ListAPIView):
@@ -170,7 +170,7 @@ class InviteLeadView(APIView):
         return Response({
             'detail': 'تم إرسال الدعوة',
             'sent_via': sent_via,
-            'lead': ReferralLeadSerializer(lead).data,
+            'lead': ReferralLeadSerializer(lead, context={'request': request}).data,
         })
 
 
@@ -201,4 +201,4 @@ class ValidateLeadView(APIView):
         except Exception as exc:
             logger.warning('Loyalty credit after referral validation failed: %s', exc)
 
-        return Response(ReferralLeadSerializer(lead).data)
+        return Response(ReferralLeadSerializer(lead, context={'request': request}).data)

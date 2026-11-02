@@ -4,6 +4,8 @@ from .models import DemandRecord, DemandItem, DemandFollowUp, DemandLog, ItemDem
 
 # ── Item serializers ──────────────────────────────────────────────────────────
 
+from apps.customers.phone_mask import RecordPhoneMask, CustomerPhoneMask  # Batch 5b
+
 class DemandItemSerializer(serializers.ModelSerializer):
     item_name        = serializers.CharField(source='item.name',            read_only=True)
     item_softech_id  = serializers.CharField(source='item.softech_id',       read_only=True)
@@ -129,7 +131,8 @@ class DemandLogCreateSerializer(serializers.ModelSerializer):
 
 # ── Demand list serializer ────────────────────────────────────────────────────
 
-class DemandListSerializer(serializers.ModelSerializer):
+class DemandListSerializer(RecordPhoneMask, serializers.ModelSerializer):
+    phone_mask_fields = ('phone',)
     branch_name    = serializers.CharField(source='branch.name_ar',           read_only=True)
     assigned_name  = serializers.CharField(source='assigned_to.full_name',    read_only=True)
     created_by_name = serializers.CharField(source='created_by.full_name',   read_only=True)
@@ -163,7 +166,8 @@ class DemandListSerializer(serializers.ModelSerializer):
 
 # ── Demand detail serializer ──────────────────────────────────────────────────
 
-class DemandDetailSerializer(serializers.ModelSerializer):
+class DemandDetailSerializer(RecordPhoneMask, serializers.ModelSerializer):
+    phone_mask_fields = ('phone',)
     branch_name         = serializers.CharField(source='branch.name_ar',         read_only=True)
     assigned_name       = serializers.CharField(source='assigned_to.full_name',  read_only=True)
     created_by_name     = serializers.CharField(source='created_by.full_name',   read_only=True)
@@ -289,8 +293,9 @@ class ScheduleFollowupSerializer(serializers.Serializer):
 
 # ── Recovery loop serializers (Phase 1) ───────────────────────────────────────
 
-class RecoveryQueueSerializer(serializers.ModelSerializer):
+class RecoveryQueueSerializer(RecordPhoneMask, serializers.ModelSerializer):
     """Flat worklist row for the back-in-stock recovery queue."""
+    phone_mask_fields = ('phone',)
     item_name       = serializers.CharField(source='item.name',        read_only=True)
     item_softech_id = serializers.CharField(source='item.softech_id',   read_only=True)
     display_name    = serializers.CharField(read_only=True)

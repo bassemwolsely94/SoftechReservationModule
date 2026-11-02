@@ -1359,3 +1359,85 @@ class PivotSheetSnapshot(models.Model):
         ordering = ['-exported_at']
         verbose_name = 'شيت احتياج مُرسَل (Pivot)'
         verbose_name_plural = 'شيتات الاحتياج المُرسَلة'
+
+
+# ── P-27 part A: dead-stock list (read-only; docs/product-review/06_SPEC_P-27_dead_stock_recovery.md) ──────────────
+
+class DeadStockSnapshot(models.Model):
+    """The dead-stock list built from one demand-engine run (one per run; re-computing replaces its lines)."""
+    run          = models.OneToOneField(DemandCalculationRun, on_delete=models.CASCADE, related_name='dead_stock')
+    computed_at  = models.DateTimeField(auto_now=True)
+    as_of        = models.DateField()
+    settings_used = models.JSONField(default=dict, blank=True)
+    totals       = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering            = ['-run_id']
+        verbose_name        = 'لقطة المخزون الراكد'
+        verbose_name_plural = 'لقطات المخزون الراكد'
+
+    def __str__(self):
+        return f'dead stock of run {self.run_id}'
+
+
+class DeadStockLine(models.Model):
+    """One item × branch on the dead-stock list, with its lane (move / return / stop) and suggested targets."""
+    LANE_CHOICES = [('move', 'يُباع بفرع آخر'), ('return', 'مرتجع للمورد'), ('stop', 'إيقاف (موقوف)')]
+    LOCATION_CHOICES = [('hq_only', 'الرئيسي فقط'), ('branches_only', 'فروع فقط'), ('both', 'الرئيسي والفروع')]
+    CAUSE_CHOICES = [('', '—'), ('supplier_push', 'دفع مورد / شراء مركزي'), ('demand_died', 'توقف الطلب'),
+                     ('obsolete', 'متقادم')]
+
+    snapshot     = models.ForeignKey(DeadStockSnapshot, on_delete=models.CASCADE, related_name='lines')
+    item         = models.ForeignKey('catalog.Item', on_delete=models.CASCADE, related_name='+')
+    branch_code  = models.CharField(max_length=10, db_index=True)
+    lane         = models.CharField(max_length=8, choices=LANE_CHOICES, db_index=True)
+    location     = models.CharField(max_length=14, choices=LOCATION_CHOICES)
+    cause        = models.CharField(max_length=14, choices=CAUSE_CHOICES, blank=True, default='')
+    qty          = models.DecimalField(max_digits=14, decimal_places=3, default=0)
+    value        = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    last_sale_date      = models.DateField(null=True, blank=True)
+    oldest_arrival_date = models.DateField(null=True, blank=True)
+    age_note     = models.CharField(max_length=20, blank=True, default='')
+    network_rate = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    targets      = models.JSONField(default=list, blank=True)     # [{branch, qty, room, rate}]
+    move_value   = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    soonest_expiry = models.DateField(null=True, blank=True)
+    supplier_code  = models.CharField(max_length=10, blank=True, default='')
+    supplier_class = models.CharField(max_length=10, blank=True, default='')
+    window_state   = models.CharField(max_length=20, blank=True, default='')
+    flags        = models.JSONField(default=dict, blank=True)     # fridge, below_threshold, conflict
+    rank         = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering            = ['rank']
+        verbose_name        = 'سطر مخزون راكد'
+        verbose_name_plural = 'سطور المخزون الراكد'
+        constraints = [models.UniqueConstraint(fields=['snapshot', 'item', 'branch_code'],
+                                               name='uq_dead_stock_line')]
+
+    def __str__(self):
+        return f'{self.item_id}@{self.branch_code} {self.lane}'
+
+
+class DeadStockDecision(models.Model):
+    """A buyer's review of a dead-stock line: excluded or kept at the branch until a date. Hides the line from the
+    default view; never deletes it. Audited (AuditLog dead_stock_decision)."""
+    DECISION_CHOICES = [('exclude', 'استبعاد'), ('keep_local', 'يبقى بالفرع')]
+    item        = models.ForeignKey('catalog.Item', on_delete=models.CASCADE, related_name='+')
+    branch_code = models.CharField(max_length=10, blank=True, default='', help_text='blank = every branch')
+    decision    = models.CharField(max_length=12, choices=DECISION_CHOICES, default='exclude')
+    reason      = models.CharField(max_length=300)
+    until       = models.DateField()
+    decided_by  = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name='+')
+    decided_at  = models.DateTimeField(auto_now_add=True)
+    closed_at   = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering            = ['-decided_at']
+        verbose_name        = 'قرار مخزون راكد'
+        verbose_name_plural = 'قرارات المخزون الراكد'
+        indexes = [models.Index(fields=['item', 'branch_code'])]
+
+    def __str__(self):
+        return f'{self.item_id}@{self.branch_code or "*"} {self.decision} until {self.until}'

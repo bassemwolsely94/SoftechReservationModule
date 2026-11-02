@@ -18,6 +18,18 @@ from django.utils import timezone
 from datetime import timedelta
 
 
+def _pic_sales(customer):
+    """The customer's synced SOFTECH sales + returns: invoices linked to them, or carrying their PIC.
+    PurchaseHistory is kept current by the sales sync (the old ERPTransaction mirror stopped
+    2026-04-30). PIC = Customer.softech_pic — softech_id is only the per-branch serial and never
+    equals a phcode like '130HD14864'."""
+    from apps.customers.models import PurchaseHistory
+    cond = Q(customer=customer)
+    if customer.softech_pic:
+        cond |= Q(softech_phcode=customer.softech_pic)
+    return PurchaseHistory.objects.filter(cond, doc_code__in=['115', '30'])
+
+
 def build_patient_profile(customer, request_user=None):
     """
     Build a complete patient profile dict for a given customer.
@@ -163,7 +175,7 @@ def _erp_identity_section(customer):
         from apps.erp.models import LocalCustomer
         lc = LocalCustomer.objects.filter(
             Q(linked_customer=customer) |
-            Q(phcode=customer.softech_id or '')
+            Q(phcode=customer.softech_pic or 'NOMATCH')
         ).select_related('branch').first()
 
         if lc:
@@ -179,7 +191,7 @@ def _erp_identity_section(customer):
             }
     except Exception:
         pass
-    return {'found': False, 'phcode': customer.softech_id}
+    return {'found': False, 'phcode': customer.softech_pic}
 
 
 def _purchase_summary(customer):
@@ -336,7 +348,7 @@ def _reservations(customer, limit=20):
     try:
         from apps.reservations.serializers import ReservationListSerializer
         from apps.reservations.models import Reservation
-        reservations = Reservation.objects.filter(Q(customer=customer) | Q(local_customer__phcode=customer.softech_id or '')).select_related('item', 'branch', 'assigned_to__user').order_by('-created_at')[:limit]
+        reservations = Reservation.objects.filter(Q(customer=customer) | Q(local_customer__phcode=customer.softech_pic or 'NOMATCH')).select_related('item', 'branch', 'assigned_to__user').order_by('-created_at')[:limit]
         return ReservationListSerializer(reservations, many=True).data
     except Exception:
         return []
@@ -388,21 +400,12 @@ def _locations(customer):
 
 
 def _erp_sales(customer, limit=20):
-    """Recent ERP sales (Phase 1) — richer than PurchaseHistory."""
+    """Recent SOFTECH sales + returns on the customer's PIC, with lines."""
     try:
-        from apps.erp.models import ERPTransaction
-        from apps.erp.serializers import ERPTransactionSerializer
-
-        qs = ERPTransaction.objects.filter(
-            doccode__in=['115', '30'],
-        ).filter(
-            Q(personsdata_customer=customer) |
-            Q(phcode=customer.softech_id or '' or 'NOMATCH')
-        ).select_related('branch').prefetch_related(
-            'lines__item'
-        ).order_by('-transaction_date')[:limit]
-
-        return ERPTransactionSerializer(qs, many=True).data
+        from apps.customers.serializers import PurchaseHistorySerializer
+        qs = (_pic_sales(customer).select_related('branch').prefetch_related('lines__item')
+              .order_by('-invoice_date')[:limit])
+        return PurchaseHistorySerializer(qs, many=True).data
     except Exception:
         return []
 
@@ -418,30 +421,22 @@ def build_timeline(customer, limit=50):
 
     # ── ERP sales ─────────────────────────────────────────────────────────────
     try:
-        from apps.erp.models import ERPTransaction
-        from django.db.models import Q
-
-        sales = ERPTransaction.objects.filter(
-            doccode__in=['115', '30'],
-        ).filter(
-            Q(personsdata_customer=customer) |
-            Q(phcode=customer.softech_id or 'NOMATCH')
-        ).prefetch_related('lines__item').order_by('-transaction_date')[:30]
+        sales = (_pic_sales(customer).exclude(invoice_date__isnull=True)
+                 .prefetch_related('lines__item').order_by('-invoice_date')[:30])
 
         for tx in sales:
             items_str = ', '.join([
-                l.item.name if l.item else l.item_code
-                for l in tx.lines.all()[:3]
+                l.item.name for l in tx.lines.all()[:3] if l.item
             ])
             events.append({
-                'type':   'erp_sale' if tx.doccode == '115' else 'erp_return',
-                'date':   tx.transaction_date.isoformat(),
-                'label':  'بيع في الصيدلية' if tx.doccode == '115' else 'مرتجع',
-                'detail': items_str or tx.transaction_id,
+                'type':   'erp_sale' if tx.doc_code == '115' else 'erp_return',
+                'date':   tx.invoice_date.isoformat(),
+                'label':  'بيع في الصيدلية' if tx.doc_code == '115' else 'مرتجع',
+                'detail': items_str or tx.softech_invoice_id,
                 'amount': float(tx.total_amount),
-                'color':  'green' if tx.doccode == '115' else 'orange',
-                'icon':   '💊' if tx.doccode == '115' else '↩️',
-                'ref':    tx.transaction_id,
+                'color':  'green' if tx.doc_code == '115' else 'orange',
+                'icon':   '💊' if tx.doc_code == '115' else '↩️',
+                'ref':    tx.softech_invoice_id,
             })
     except Exception:
         pass
@@ -449,7 +444,7 @@ def build_timeline(customer, limit=50):
     # ── Reservations ──────────────────────────────────────────────────────────
     try:
         from apps.reservations.models import Reservation
-        reservations = Reservation.objects.filter(Q(customer=customer) | Q(local_customer__phcode=customer.softech_id or '')
+        reservations = Reservation.objects.filter(Q(customer=customer) | Q(local_customer__phcode=customer.softech_pic or 'NOMATCH')
         ).select_related('item', 'branch').order_by('-created_at')[:20]
 
         STATUS_COLORS = {

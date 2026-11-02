@@ -25,6 +25,9 @@ const useAuthStore = create((set, get) => ({
     return { user: useAuthStore.getState().setSession(data) }
   },
 
+  // After "forget saved devices" succeeds the local token is dead; drop it too.
+  clearDeviceToken: () => localStorage.removeItem('mfa_device_token'),
+
   logout: () => {
     // Server side: blacklist the refresh token and clear the cookies.
     authApi.logout().catch(() => {})

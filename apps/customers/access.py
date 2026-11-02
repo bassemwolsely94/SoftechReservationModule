@@ -103,3 +103,68 @@ def mask_dict(user, customer, data):
             if data.get(f):
                 data[f] = mask(data[f])
     return data
+
+
+# ── Batch 5b: numbers outside the customers screens (docs/security/PHONE_MASKING_PLAN.md) ──────
+
+def record_phones_visible(user):
+    """A number needed to SERVE a record the user can already see (their branch's reservation,
+    delivery order, follow-up, call…) — owner decision D2: shown, whatever the customer's home
+    branch. Masked for `can_see_customer_phone = False` (D3) and for the read-only viewer role
+    (D4 / D7)."""
+    profile = _profile(user)
+    if profile is None:
+        return bool(getattr(user, 'is_superuser', False))
+    return bool(profile.can_see_customer_phone and profile.role != 'viewer')
+
+
+def record_phone(user, value):
+    return value if record_phones_visible(user) else mask(value)
+
+
+def customer_phone(user, customer, value):
+    """A number shown because of WHO the customer is (lookups, profiles, analytics lists): the
+    B-2 rule — own customers only, masked otherwise."""
+    if customer is None:
+        return value if branch_scope.branch_ids(user) is None and record_phones_visible(user) else mask(value)
+    return value if phones_visible(user, customer) else mask(value)
+
+
+def mask_fields(data, fields, visible, links=()):
+    """Mask `fields` of a dict in place when not `visible`; drop wa.me / tel links (D3) — they
+    carry the number."""
+    if visible:
+        return data
+    for f in fields:
+        if data.get(f):
+            data[f] = mask(data[f])
+    for f in links:
+        if f in data:
+            data[f] = None
+    return data
+
+
+PAYLOAD_PHONE_KEYS = frozenset({'phone', 'phone_alt', 'whatsapp_phone', 'customer_phone',
+                                'customer_phone_alt', 'contact_phone', 'delivery_phone',
+                                'lead_phone', 'phone_number', 'caller_number', 'mobileno'})
+PAYLOAD_LINK_KEYS = frozenset({'whatsapp_url', 'whatsapp_url_with_message', 'whatsapp_url_plain',
+                               'tel_url'})
+
+
+def mask_payload(data, visible):
+    """Function views that build nested dicts: mask every known phone key, drop wa.me / tel
+    links. Returns `data` (changed in place)."""
+    if visible:
+        return data
+    if isinstance(data, dict):
+        for k, v in list(data.items()):
+            if k in PAYLOAD_PHONE_KEYS and isinstance(v, str) and v:
+                data[k] = mask(v)
+            elif k in PAYLOAD_LINK_KEYS:
+                data[k] = None
+            else:
+                mask_payload(v, visible)
+    elif isinstance(data, list):
+        for v in data:
+            mask_payload(v, visible)
+    return data

@@ -87,6 +87,10 @@ USER_ACTIVITY_ACTION_CHOICES = [
     ('mfa_disabled',        'إيقاف المصادقة الثنائية'),
     ('mfa_verified',        'اجتياز المصادقة الثنائية'),
     ('mfa_failed',          'فشل المصادقة الثنائية'),
+    ('login_locked',        'إيقاف الدخول مؤقتاً'),
+    ('login_unlocked',      'رفع إيقاف الدخول'),
+    ('mfa_challenge',       'طلب رمز التحقق'),
+    ('mfa_devices_forgotten', 'إلغاء الأجهزة المحفوظة'),
 ]
 
 # Roles that must pass 2FA at login once enforcement is switched on
@@ -219,6 +223,8 @@ class StaffProfile(models.Model):
     mfa_secret       = models.CharField(max_length=64, blank=True, default='', verbose_name='سر TOTP')
     mfa_backup_codes = models.JSONField(default=list, blank=True, verbose_name='رموز الاسترجاع (مجزّأة)')
     mfa_confirmed_at = models.DateTimeField(null=True, blank=True, verbose_name='تاريخ تفعيل المصادقة الثنائية')
+    # Bumped by "forget saved devices"; part of the device-token fingerprint (N0/H7).
+    mfa_device_epoch = models.PositiveIntegerField(default=0, verbose_name='رقم إصدار الأجهزة المحفوظة')
 
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True, null=True, verbose_name='تاريخ الإنشاء')
@@ -320,6 +326,9 @@ class UserActivityLog(models.Model):
     new_value  = models.JSONField(null=True, blank=True, verbose_name='القيمة الجديدة')
     note       = models.TextField(blank=True, verbose_name='ملاحظة')
     ip_address = models.GenericIPAddressField(null=True, blank=True, verbose_name='عنوان IP')
+    network      = models.CharField(max_length=10, blank=True, verbose_name='الشبكة')
+    network_site = models.CharField(max_length=120, blank=True, verbose_name='موقع الشبكة')
+    user_agent   = models.CharField(max_length=300, blank=True, verbose_name='المتصفح')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='وقت الحدث', db_index=True)
 
     class Meta:

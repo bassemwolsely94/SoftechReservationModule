@@ -304,6 +304,41 @@ class HelpContentCoverageTests(SimpleTestCase):
                     for i, st in enumerate(j['steps']) if 'label' not in st]
         self.assertEqual(missing, [], 'Steps without a «label» (the element\'s name as on screen)')
 
+    def test_hints_valid(self):
+        """A screen's `hints` (buttons «💡 تلميحات الأزرار» explains outside the tour): rich
+        steps with a «label», a real anchor, no anchor twice and none already in the tour."""
+        anchors = self._anchors()
+        bad = []
+        for key, s in self.screens.items():
+            seen = {st['target'] for st in s.get('tour') or []}
+            for i, st in enumerate(s.get('hints') or []):
+                where = f'{key}.hints[{i}]'
+                self._check_rich_step(where, st, registry.HINT_STEP_KEYS)
+                self.assertIn('label', st, f'{where}: no «label»')
+                if st['target'] not in anchors:
+                    bad.append(f'{where}: no data-tour="{st["target"]}" in frontend/src')
+                if st['target'] in seen:
+                    bad.append(f'{where}: {st["target"]} is already a tour step or a hint')
+                seen.add(st['target'])
+        self.assertEqual(bad, [], 'Broken hints')
+
+    def test_shell_hints_resolve(self):
+        """Every shell button in SHELL_HINT_SOURCES has a labelled step on its source screen,
+        and its anchor really sits in the shell (top bar, side menu, bell, help panel)."""
+        src = Path(settings.BASE_DIR) / 'frontend' / 'src'
+        shell_files = [src / 'components' / f for f in (
+            'Layout.jsx', 'NotificationBell.jsx', 'NotificationPanel.jsx', 'NotificationPreferencesModal.jsx')]
+        shell_files += list((src / 'help').glob('*.jsx'))
+        in_shell = set()
+        for f in shell_files:
+            in_shell.update(re.findall(r'data-tour="([a-z0-9-]+)"', f.read_text(encoding='utf-8')))
+        got = {st['target']: st for st in registry.shell_hints(self.screens)}
+        for target, key in registry.SHELL_HINT_SOURCES.items():
+            self.assertIn(target, got, f'{target}: no step on {key}')
+            self.assertIn('label', got[target], f'{target}: no «label»')
+            self.assertLessEqual(set(got[target]), registry.HINT_STEP_KEYS, target)
+            self.assertIn(target, in_shell, f'{target}: not a shell anchor')
+
     def test_every_module_has_a_brief(self):
         """«🚀 جولة في النظام» shows each module's one-line brief — short and bilingual."""
         for key, m in self.modules.items():
@@ -1734,6 +1769,24 @@ class ProductTourApiTests(TestCase):
         self.assertEqual(ph.get('/api/help/product-tour/?role=admin').json()['id'], 'product.pharmacist.desktop')
         admin = self._client('admin', 'pt_admin')
         self.assertEqual(admin.get('/api/help/product-tour/?role=purchasing').json()['id'], 'product.purchasing.desktop')
+
+    def test_mobile_tour_stays_on_phone_screens(self):
+        """The help panel's «🗺️ جولة في موديولات دورك» on /m/ asks for shell=mobile: every stop is a
+        phone screen, and the welcome / finish point at the phone's help button."""
+        r = self._client('pharmacist', 'pt_ph_m').get('/api/help/product-tour/?shell=mobile')
+        self.assertEqual(r.status_code, 200)
+        j = r.json()
+        self.assertEqual((j['id'], j['shell']), ('product.pharmacist.mobile', 'mobile'))
+        self.assertGreater(len(j['steps']), 2)
+        self.assertTrue(all(any(rt.startswith('/m') for rt in st['routes']) for st in j['steps']), j['steps'])
+        self.assertEqual({j['steps'][0]['target'], j['steps'][-1]['target']}, {'general-help-center-open-help-mobile'})
+
+    def test_every_screen_sends_the_shell_hints(self):
+        """The bell / logout / menu hints ride along with any screen, not only the dashboard."""
+        r = self._client('pharmacist', 'pt_ph_shell').get('/api/help/screens/reservations.list/?log=0')
+        self.assertEqual(r.status_code, 200)
+        targets = {st['target'] for st in r.json()['shell_hints']}
+        self.assertLessEqual({'shell-logout', 'shell-notifications-read-all', 'shell-rail'}, targets)
 
     def test_no_tour_on_a_shell_is_404(self):
         c = self._client('viewer', 'pt_viewer')

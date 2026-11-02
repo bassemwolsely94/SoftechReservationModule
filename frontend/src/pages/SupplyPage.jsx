@@ -217,7 +217,7 @@ function RatesTab() {
           </select>
         </div>
         {method === 'advanced' && (
-          <button type="button" onClick={() => setShowAdv(v => !v)}
+          <button data-tour="purchasing-supply-rates-advanced" type="button" onClick={() => setShowAdv(v => !v)}
             className="text-xs text-primary underline underline-offset-2 pb-1.5">
             {showAdv ? 'إخفاء الإعدادات' : 'إعدادات متقدمة ⚙'}
           </button>
@@ -238,7 +238,7 @@ function RatesTab() {
         <div className="rounded-lg border border-line bg-surface p-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-content/80">إعدادات المحرك المتقدم (Croston / التنبؤ)</span>
-            <button type="button" onClick={() => setAdv({ ...ADV_DEFAULTS })}
+            <button data-tour="purchasing-supply-rates-advanced-reset" type="button" onClick={() => setAdv({ ...ADV_DEFAULTS })}
               className="text-xs text-content/50 hover:text-primary">إعادة الافتراضي</button>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -384,7 +384,7 @@ function PushDetail({ push, gated, canWrite, onApprove, onExecute, approving, ex
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => xlsM.mutate()} disabled={xlsM.isPending}
+          <button data-tour="purchasing-supply-rates-export" type="button" onClick={() => xlsM.mutate()} disabled={xlsM.isPending}
             className="px-3 py-1.5 rounded border border-line text-sm hover:bg-primary/5 disabled:opacity-50"
             title="كل أسطر الدفعة مع «بيانات الصنف» (التصنيف، المورد الرئيسي، الشركة المنتجة، الأسعار)">
             {xlsM.isPending ? '…' : '⬇ Excel'}
@@ -541,7 +541,7 @@ function IsrTab() {
   })
   const approveM = useMutation({ mutationFn: (id) => supplyApi.isrApprove(id).then(r => r.data), onSuccess: invalidate })
   const pushM = useMutation({
-    mutationFn: ({ id, force_reason }) => supplyApi.isrPush(id, force_reason ? { force_reason } : {}).then(r => r.data),
+    mutationFn: ({ id, ...body }) => supplyApi.isrPush(id, body).then(r => r.data),
     onSuccess: invalidate,
   })
   const cancelM = useMutation({ mutationFn: ({ id, reason }) => supplyApi.isrCancel(id, reason).then(r => r.data), onSuccess: invalidate })
@@ -596,7 +596,7 @@ function IsrTab() {
           className="px-4 py-1.5 rounded bg-primary text-white text-sm font-medium disabled:opacity-50">
           {proposeM.isPending ? 'جارٍ التحضير…' : '＋ طلب توريد جديد (معاينة)'}
         </button>
-        <button onClick={() => setShowXfer(v => !v)}
+        <button data-tour="purchasing-supply-isr-xfer-toggle" onClick={() => setShowXfer(v => !v)}
           className="px-3 py-1.5 rounded border border-line text-sm text-content/80 hover:border-primary/40">
           {showXfer ? '▲ إخفاء التوزيعة' : '⇄ توزيعة بين الفروع'}
         </button>
@@ -619,7 +619,7 @@ function IsrTab() {
             توزيعة بين الفروع (فائض ← الرئيسي ← عجز)
             {previewQ.data?.run_id && <span className="text-xs text-content/50">تشغيل #{previewQ.data.run_id}</span>}
             {previewQ.data?.pairs?.length > 0 && (
-              <button onClick={() => xferXlsM.mutate(null)} disabled={xferXlsM.isPending}
+              <button data-tour="purchasing-supply-isr-xfer-export-all" onClick={() => xferXlsM.mutate(null)} disabled={xferXlsM.isPending}
                 className="ms-auto px-2 py-0.5 rounded border border-line text-xs text-content/80 hover:border-primary/40 disabled:opacity-50">
                 {xferXlsM.isPending ? '…' : '⬇ Excel (كل المسارات)'}</button>)}
           </div>
@@ -635,10 +635,10 @@ function IsrTab() {
                 </span>
                 <span className="flex items-center gap-2 text-xs text-content/60">
                   {p.items} صنف · {Number(p.value).toLocaleString('ar-EG')} ج
-                  <button onClick={() => xferXlsM.mutate({ from: p.from, to: p.to })} disabled={xferXlsM.isPending}
+                  <button data-tour="purchasing-supply-isr-xfer-export" onClick={() => xferXlsM.mutate({ from: p.from, to: p.to })} disabled={xferXlsM.isPending}
                     className="px-2 py-0.5 rounded border border-line text-content/80 hover:border-primary/40 disabled:opacity-50"
                     title="أصناف هذا المسار مع الأرصدة ومعدلات البيع — للمراجعة قبل التوليد">Excel</button>
-                  <button onClick={() => xferM.mutate({ from: p.from, to: p.to })} disabled={xferM.isPending}
+                  <button data-tour="purchasing-supply-isr-xfer-generate" onClick={() => xferM.mutate({ from: p.from, to: p.to })} disabled={xferM.isPending}
                     className="px-2 py-0.5 rounded bg-primary text-white disabled:opacity-50">توليد</button>
                 </span>
               </div>
@@ -690,7 +690,7 @@ function IsrTab() {
           {selected && detailQ.data && (
             <IsrDetail key={detailQ.data.id} push={detailQ.data} gated={gated} canWrite={canWrite}
               onApprove={() => approveM.mutate(detailQ.data.id)}
-              onPush={(force_reason) => pushM.mutate({ id: detailQ.data.id, force_reason })}
+              onPush={(body) => pushM.mutate({ id: detailQ.data.id, ...(body || {}) })}
               onCancel={(reason) => cancelM.mutate({ id: detailQ.data.id, reason })}
               approving={approveM.isPending} pushing={pushM.isPending} cancelling={cancelM.isPending}
               approveWarning={approveM.data?.id === detailQ.data.id ? approveM.data?.warning : null}
@@ -709,6 +709,21 @@ function IsrDetail({ push, gated, canWrite, onApprove, onPush, onCancel, approvi
   const [cancelling_, setCancelOpen] = useState(false)
   const [reason, setReason] = useState('')
   const [forceReason, setForceReason] = useState('')
+  // W3: «ترحيل» opens a read-only review (checked against SOFTECH now) → typed line count
+  const [review, setReview]       = useState(null)
+  const [reviewErr, setReviewErr] = useState(null)
+  const [reviewing, setReviewing] = useState(false)
+  const [typed, setTyped]         = useState('')
+  const [pushReason, setPushReason] = useState('')
+  const openReview = async () => {
+    setReviewing(true); setReviewErr(null); setTyped(''); setPushReason('')
+    try { setReview((await supplyApi.isrPushReview(push.id)).data) }
+    catch (e) { setReviewErr(e.response?.data?.detail || 'تعذّرت المراجعة') }
+    finally { setReviewing(false) }
+  }
+  const reviewBody = () => ({ confirm_count: typed.trim(), push_reason: pushReason.trim() })
+  const canConfirm = review && !review.blocked && typed.trim() === String(review.line_count)
+    && (!review.needs_reason || pushReason.trim().length >= (review.reason_min_chars || 10))
   const errCode = actionError?.response?.data?.code
   const cancelled = push.params?.cancelled
   const allLines = push.lines || []
@@ -775,10 +790,10 @@ function IsrDetail({ push, gated, canWrite, onApprove, onPush, onCancel, approvi
             </button>
           )}
           {push.status === 'approved' && (
-            <button data-tour="purchasing-supply-isr-push" onClick={() => onPush()} disabled={!canWrite || gated || pushing}
+            <button data-tour="purchasing-supply-isr-push" onClick={openReview} disabled={!canWrite || gated || pushing || reviewing || !!review}
               className="px-3 py-1.5 rounded bg-emerald-600 text-white text-sm disabled:opacity-50"
               title={gated ? 'الترحيل معطّل (البوابة مغلقة)' : (canWrite ? '' : 'يتطلب صلاحية ترحيل')}>
-              {pushing ? '…' : 'ترحيل إلى SOFTECH'}
+              {reviewing ? 'جارٍ المراجعة…' : 'ترحيل إلى SOFTECH…'}
             </button>
           )}
           {['proposed', 'approved', 'failed'].includes(push.status) && canWrite && !cancelling_ && (
@@ -792,7 +807,7 @@ function IsrDetail({ push, gated, canWrite, onApprove, onPush, onCancel, approvi
         <div className="px-3 py-2 border-b border-line flex flex-wrap items-center gap-2 text-sm">
           <input value={reason} onChange={e => setReason(e.target.value)} placeholder="سبب الإلغاء (مطلوب)" autoFocus
             className="border border-line rounded px-2 py-1 text-sm bg-surface text-content w-72" />
-          <button onClick={() => onCancel(reason)} disabled={cancelling || reason.trim().length < 5}
+          <button data-tour="purchasing-supply-isr-cancel-confirm" onClick={() => onCancel(reason)} disabled={cancelling || reason.trim().length < 5}
             className="px-3 py-1 rounded bg-rose-600 text-white text-sm disabled:opacity-50">{cancelling ? '…' : 'تأكيد الإلغاء'}</button>
           <button onClick={() => setCancelOpen(false)} className="text-xs text-content/60 underline">تراجع</button>
         </div>
@@ -804,9 +819,56 @@ function IsrDetail({ push, gated, canWrite, onApprove, onPush, onCancel, approvi
         </div>
       )}
       {approveWarning && <div className="px-3 py-2 border-b border-line text-xs text-amber-800 bg-amber-50">{approveWarning}</div>}
+      {reviewErr && <div className="px-3 py-2 border-b border-line text-xs text-rose-600">{reviewErr}</div>}
+      {review && push.status === 'approved' && (
+        <div className="px-3 py-3 border-b border-line bg-emerald-50/40 space-y-2 text-sm" data-tour="purchasing-supply-isr-push-review">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-semibold text-content">مراجعة الترحيل (من سوفتك الآن):</span>
+            <span className="px-2 py-0.5 rounded bg-surface border border-line">{review.line_count} سطر</span>
+            <span className="px-2 py-0.5 rounded bg-surface border border-line">{review.total_qty} وحدة</span>
+            <span className="px-2 py-0.5 rounded bg-surface border border-line">{Number(review.docvalue).toLocaleString('ar-EG', { maximumFractionDigits: 0 })} ج</span>
+            <span className={`px-2 py-0.5 rounded border ${review.age_days > 3 ? 'border-amber-300 text-amber-800 bg-amber-50' : 'border-line bg-surface'}`}>
+              عمر الطلب {review.age_days} يوم</span>
+            <button onClick={() => setReview(null)} className="mr-auto text-content/60 underline">إغلاق</button>
+          </div>
+          {review.issues.length === 0
+            ? <div className="text-xs text-emerald-700">✓ لا ملاحظات</div>
+            : <div className="max-h-40 overflow-auto space-y-0.5">{review.issues.map((i, k) => (
+                <div key={k} className={`text-xs rounded px-2 py-0.5 border ${i.level === 'block' ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>{i.message}</div>
+              ))}</div>}
+          {review.blocked ? (
+            <div className="text-xs text-rose-700">⛔ لا يمكن الترحيل — صحّح الأصناف المرفوضة (ألغِ الطلب وأعد اقتراحه).</div>
+          ) : (
+            <div className="flex flex-wrap items-end gap-2">
+              {review.needs_reason && (
+                <label className="text-xs text-amber-800">سبب الترحيل رغم الملاحظات (إلزامى)
+                  <input value={pushReason} onChange={e => setPushReason(e.target.value)}
+                    className="block mt-0.5 w-80 border border-amber-300 rounded px-2 py-1 text-sm bg-surface text-content" /></label>
+              )}
+              <label className="text-xs text-content/70">للتأكيد اكتب عدد الأسطر: <b className="font-mono">{review.line_count}</b>
+                <input value={typed} onChange={e => setTyped(e.target.value)} inputMode="numeric" dir="ltr"
+                  data-tour="purchasing-supply-isr-push-count"
+                  className="block mt-0.5 w-24 border border-line rounded px-2 py-1 text-sm text-center font-mono bg-surface text-content" /></label>
+              <button onClick={() => onPush(reviewBody())} disabled={!canConfirm || pushing} data-tour="purchasing-supply-isr-push-confirm"
+                className="px-3 py-1.5 rounded bg-emerald-600 text-white text-sm disabled:opacity-40">
+                {pushing ? '…' : `تأكيد الترحيل (${review.line_count} سطر)`}</button>
+            </div>
+          )}
+        </div>
+      )}
+      {push.params?.push_review?.reason && (
+        <div className="px-3 py-2 border-b border-line text-xs text-amber-800 bg-amber-50">
+          رُحِّل رغم ملاحظات المراجعة — السبب: {push.params.push_review.reason}
+        </div>
+      )}
       {push.params?.forced_push && (
         <div className="px-3 py-2 border-b border-line text-xs text-amber-800 bg-amber-50">
           رُحِّل رغم تطابقه مع الطلب #{push.params.forced_push.duplicate_of} — السبب: {push.params.forced_push.reason}
+        </div>
+      )}
+      {push.params?.forced_overlap && (
+        <div className="px-3 py-2 border-b border-line text-xs text-amber-800 bg-amber-50">
+          رُحِّل رغم تكرار {push.params.forced_overlap.items.length} صنف من الطلب {push.params.forced_overlap.earlier.map(n => `#${n}`).join('، ')} — السبب: {push.params.forced_overlap.reason}
         </div>
       )}
       <IsrParamsSummary push={push} />
@@ -814,15 +876,17 @@ function IsrDetail({ push, gated, canWrite, onApprove, onPush, onCancel, approvi
       {(actionError || push.error) && (
         <div className="px-3 py-2 text-xs text-rose-600 border-b border-line space-y-1.5">
           <div>{actionError?.response?.data?.detail || push.error || 'خطأ'}</div>
-          {errCode === 'duplicate_push' && push.status === 'approved' && (
-            // the guard refused an identical re-send — only a written reason lets it through
+          {(errCode === 'duplicate_push' || errCode === 'overlap_push') && push.status === 'approved' && (
+            // the guard refused an identical re-send (or, P-32, items already sent to this branch) —
+            // only a written reason lets it through
             <div className="flex flex-wrap items-center gap-2 text-content">
               <input value={forceReason} onChange={e => setForceReason(e.target.value)}
                 placeholder="سبب إعادة الإرسال عن قصد (مطلوب)"
                 className="border border-line rounded px-2 py-1 text-sm bg-surface text-content w-72" />
-              <button onClick={() => onPush(forceReason)} disabled={pushing || forceReason.trim().length < 5}
+              <button data-tour="purchasing-supply-isr-push-force" onClick={() => onPush({ force_reason: forceReason, ...reviewBody() })}
+                disabled={pushing || forceReason.trim().length < 5 || !canConfirm}
                 className="px-3 py-1 rounded border border-rose-300 text-rose-700 text-sm disabled:opacity-50">
-                ترحيل رغم التطابق</button>
+                {errCode === 'overlap_push' ? 'ترحيل رغم التكرار' : 'ترحيل رغم التطابق'}</button>
             </div>
           )}
         </div>
@@ -957,7 +1021,7 @@ function DistributionTab() {
           ))}
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث بالصنف أو الكود… (* أو %)"
             className="border border-line rounded px-2 py-1 text-xs bg-surface text-content w-52" />
-          <button onClick={() => xlsM.mutate()} disabled={xlsM.isPending || !cats.length || !q.data}
+          <button data-tour="purchasing-supply-dist-export" onClick={() => xlsM.mutate()} disabled={xlsM.isPending || !cats.length || !q.data}
             className="px-3 py-1.5 rounded border border-line text-sm text-content/80 hover:border-primary/40 disabled:opacity-50 ms-auto"
             title="الصفوف الظاهرة بنفس الفلاتر، مع رصيد ومعدل بيع الفرع الحائز والمستهدف">
             {xlsM.isPending ? '…' : '⬇ Excel'}</button>

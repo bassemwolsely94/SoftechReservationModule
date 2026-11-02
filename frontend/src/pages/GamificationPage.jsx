@@ -550,7 +550,7 @@ function RuleRow({ r, t, lang, onSave }) {
                                                 onChange={e => setD({ ...d, is_active: e.target.checked })} /></td>
       <td className="py-1.5">
         {dirty && (
-          <button className="btn-primary text-xs"
+          <button data-tour="gamification-main-rule-save" className="btn-primary text-xs"
                   onClick={() => onSave(r.key, { points: d.points, is_active: d.is_active,
                                                  daily_cap: d.daily_cap === '' ? null : Number(d.daily_cap) })}>
             {t('حفظ', 'Save')}
@@ -694,7 +694,7 @@ function LevelRow({ lv, t, onSave }) {
       <input className="input-field text-xs flex-1" dir="ltr" value={d.title_en} onChange={e => setD({ ...d, title_en: e.target.value })} />
       <input type="number" className="input-field text-xs w-24" value={d.min_xp} disabled={lv.number === 1}
              onChange={e => setD({ ...d, min_xp: Number(e.target.value) })} />
-      {dirty && <button className="btn-primary text-xs" onClick={() => onSave(d)}>{t('حفظ', 'Save')}</button>}
+      {dirty && <button data-tour="gamification-main-level-save" className="btn-primary text-xs" onClick={() => onSave(d)}>{t('حفظ', 'Save')}</button>}
     </li>
   )
 }

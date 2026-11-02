@@ -38,9 +38,10 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import filters, generics, status
 from apps.catalog.wildcard import WildcardSearchFilter
+import datetime as _dt
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from .permissions import DeliveryModulePermission, driver_of, guard
+from .permissions import DENIED, DeliveryModulePermission, driver_of, guard
 from core import branch_scope
 from rest_framework.response import Response
 
@@ -83,6 +84,10 @@ VALID_TRANSITIONS = {
     DeliveryOrder.STATUS_CANCELLED:           set(),
     DeliveryOrder.STATUS_CLOSED:              set(),
 }
+
+
+# stages before «ready» — preparation itself is tracked in SOFTECH; assigning a driver passes them
+PRE_READY = {DeliveryOrder.STATUS_CREATED, DeliveryOrder.STATUS_PENDING_REVIEW, DeliveryOrder.STATUS_PREPARING}
 
 
 def _log_transition(order, from_status, to_status, user, notes='', source='manual'):
@@ -223,6 +228,12 @@ class CustomerLocationDetailView(generics.RetrieveUpdateDestroyAPIView):
 # Delivery Order CRUD
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+def _record_phone(request, value):
+    """Batch 5b (D2/D3): the number needed to deliver an order the user can see."""
+    from apps.customers import access as _ca
+    return _ca.record_phone(request.user, value)
+
+
 def _orders(request, qs=None):
     """Delivery orders this user may reach: their branches' (core.branch_scope), plus — for a
     rider — the orders assigned to them, whichever branch dispatched them."""
@@ -266,7 +277,7 @@ class DeliveryOrderListView(generics.ListCreateAPIView):
             # Live board: everything still in flight (excludes terminal statuses).
             qs = qs.exclude(status__in=DeliveryOrder.TERMINAL_STATUSES)
         if status_param:
-            qs = qs.filter(status=status_param)
+            qs = qs.filter(status__in=[s.strip() for s in status_param.split(',') if s.strip()])
         if branch_param:
             qs = qs.filter(branch_id=branch_param)
         if driver_param:
@@ -327,6 +338,11 @@ class DeliveryOrderDetailView(generics.RetrieveUpdateAPIView):
                     'total_value', 'delivery_fees', 'payment_method', 'items')
 
     def update(self, request, *args, **kwargs):
+        # A rider changes an order only through the /app/ endpoints: the generic PATCH would let
+        # them move the drop-off point (geofence target), address, phone, notes or fees.
+        profile = getattr(request.user, 'staff_profile', None)
+        if driver_of(profile) is not None and profile.role != 'admin':
+            return Response({'detail': DENIED}, status=status.HTTP_403_FORBIDDEN)
         order = self.get_object()
         if order.is_terminal or (order.status not in self.PRE_DISPATCH
                                  and any(f in request.data for f in self.VALUE_FIELDS)):
@@ -347,15 +363,20 @@ def delivery_assign(request, pk):
     Body: { driver_id (required or driver_name), vehicle (opt), notes (opt) }
     Assigns a driver and moves order to STATUS_ASSIGNED.
     Supersedes previous assignment (is_current=False on old one).
+    An order not yet marked ready (created / pending_review / preparing) is assigned in the
+    same click: preparation is tracked in SOFTECH (owner 2026-11-01), so the stage log gets a
+    «system» step to ready first and the tracking timeline stays complete.
     """
     denied = guard(request, 'assign')
     if denied:
         return denied
     order = get_object_or_404(_orders(request), pk=pk)
-    try:
-        _assert_transition(order, DeliveryOrder.STATUS_ASSIGNED)
-    except ValueError as e:
-        return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    skip_to_ready = order.status in PRE_READY
+    if not skip_to_ready:
+        try:
+            _assert_transition(order, DeliveryOrder.STATUS_ASSIGNED)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     driver_id   = request.data.get('driver_id')
     driver_name = request.data.get('driver_name', '').strip()
@@ -374,6 +395,11 @@ def delivery_assign(request, pk):
         return Response({'detail': 'يجب تحديد السائق.'}, status=status.HTTP_400_BAD_REQUEST)
 
     prev_status = order.status
+    if skip_to_ready:
+        _log_transition(order, prev_status, DeliveryOrder.STATUS_READY, request.user,
+                        notes='جاهز — تلقائياً عند تكليف السائق (التحضير متابَع في SOFTECH)',
+                        source='system')
+        prev_status = DeliveryOrder.STATUS_READY
 
     # Deactivate previous assignment
     order.assignments.filter(is_current=True).update(is_current=False)
@@ -420,7 +446,7 @@ def delivery_accept(request, pk):
     _log_transition(order, prev_status, DeliveryOrder.STATUS_DRIVER_ACCEPTED,
                     request.user, notes=request.data.get('notes', ''))
 
-    return Response(DeliveryOrderSerializer(order).data)
+    return Response(DeliveryOrderSerializer(order, context={'request': request}).data)
 
 
 @api_view(['POST'])
@@ -458,7 +484,7 @@ def delivery_dispatch(request, pk):
     _log_transition(order, prev_status, DeliveryOrder.STATUS_OUT,
                     request.user, notes=request.data.get('notes', ''))
 
-    return Response(DeliveryOrderSerializer(order).data)
+    return Response(DeliveryOrderSerializer(order, context={'request': request}).data)
 
 
 @api_view(['POST'])
@@ -553,7 +579,7 @@ def delivery_complete(request, pk):
             },
         )
 
-    return Response(DeliveryOrderSerializer(order).data)
+    return Response(DeliveryOrderSerializer(order, context={'request': request}).data)
 
 
 @api_view(['POST'])
@@ -577,7 +603,7 @@ def delivery_partial(request, pk):
     _log_transition(order, prev_status, DeliveryOrder.STATUS_PARTIAL,
                     request.user, notes=request.data.get('notes', ''))
 
-    return Response(DeliveryOrderSerializer(order).data)
+    return Response(DeliveryOrderSerializer(order, context={'request': request}).data)
 
 
 @api_view(['POST'])
@@ -600,7 +626,7 @@ def delivery_unavailable(request, pk):
     _log_transition(order, prev_status, DeliveryOrder.STATUS_CUSTOMER_UNAVAILABLE,
                     request.user, notes=request.data.get('notes', 'العميل غير متاح'))
 
-    return Response(DeliveryOrderSerializer(order).data)
+    return Response(DeliveryOrderSerializer(order, context={'request': request}).data)
 
 
 @api_view(['POST'])
@@ -629,7 +655,7 @@ def delivery_fail(request, pk):
     _log_transition(order, prev_status, DeliveryOrder.STATUS_FAILED,
                     request.user, notes=f'سبب: {reason}')
 
-    return Response(DeliveryOrderSerializer(order).data)
+    return Response(DeliveryOrderSerializer(order, context={'request': request}).data)
 
 
 @api_view(['POST'])
@@ -657,7 +683,7 @@ def delivery_cancel(request, pk):
     _log_transition(order, prev_status, DeliveryOrder.STATUS_CANCELLED,
                     request.user, notes=f'سبب: {reason}')
 
-    return Response(DeliveryOrderSerializer(order).data)
+    return Response(DeliveryOrderSerializer(order, context={'request': request}).data)
 
 
 @api_view(['POST'])
@@ -680,7 +706,7 @@ def delivery_return(request, pk):
     _log_transition(order, prev_status, DeliveryOrder.STATUS_RETURNED,
                     request.user, notes=request.data.get('notes', ''))
 
-    return Response(DeliveryOrderSerializer(order).data)
+    return Response(DeliveryOrderSerializer(order, context={'request': request}).data)
 
 
 @api_view(['POST'])
@@ -704,7 +730,7 @@ def delivery_close(request, pk):
     _log_transition(order, prev_status, DeliveryOrder.STATUS_CLOSED,
                     request.user, notes=request.data.get('notes', ''))
 
-    return Response(DeliveryOrderSerializer(order).data)
+    return Response(DeliveryOrderSerializer(order, context={'request': request}).data)
 
 
 @api_view(['POST'])
@@ -1236,7 +1262,7 @@ def delivery_route_plan(request):
             'id':            o.id,
             'order_number':  o.order_number,
             'customer_name': o.customer_name,
-            'customer_phone':o.customer_phone,
+            'customer_phone':_record_phone(request, o.customer_phone),
             'address':       o.delivery_address,
             'area':          o.delivery_area,
             'governorate':   o.delivery_governorate,
@@ -1310,7 +1336,7 @@ def driver_app_my_orders(request):
     ).select_related('branch', 'customer').order_by('ordered_at')
 
     from .serializers import DeliveryOrderListSerializer
-    return Response(DeliveryOrderListSerializer(orders, many=True).data)
+    return Response(DeliveryOrderListSerializer(orders, many=True, context={'request': request}).data)
 
 
 @api_view(['POST'])
@@ -1327,14 +1353,18 @@ def driver_app_update_location(request, pk):
     order = get_object_or_404(_orders(request), pk=pk)
     if order.assigned_driver_id != driver.pk:
         return Response({'detail': 'هذا الطلب غير مسند إليك.'}, status=status.HTTP_403_FORBIDDEN)
-    lat = request.data.get('lat')
-    lng = request.data.get('lng')
-    if not lat or not lng:
-        return Response({'detail': 'الإحداثيات مطلوبة.'}, status=status.HTTP_400_BAD_REQUEST)
-    # Store latest driver location on the order (can be extended to a tracking table later)
-    order.delivery_lat = lat
-    order.delivery_lng = lng
-    order.save(update_fields=['delivery_lat', 'delivery_lng', 'updated_at'])
+    try:
+        lat = float(request.data.get('lat'))
+        lng = float(request.data.get('lng'))
+    except (TypeError, ValueError):
+        lat = lng = float('nan')
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):    # NaN fails both comparisons
+        return Response({'detail': 'الإحداثيات غير صحيحة.'}, status=status.HTTP_400_BAD_REQUEST)
+    # The rider's own position only — delivery_lat/lng is the drop-off target (N0/H2).
+    order.rider_lat = lat
+    order.rider_lng = lng
+    order.rider_location_at = timezone.now()
+    order.save(update_fields=['rider_lat', 'rider_lng', 'rider_location_at', 'updated_at'])
     return Response({'status': 'ok', 'lat': lat, 'lng': lng})
 
 
@@ -1390,8 +1420,11 @@ def delivery_public_track(request, token):
     out    = order.status == DeliveryOrder.STATUS_OUT
     driver = order.assigned_driver
     loc = None
-    if out and order.delivery_lat and order.delivery_lng:
-        loc = {'lat': float(order.delivery_lat), 'lng': float(order.delivery_lng)}
+    # Only a fresh rider ping is shown; never the customer's drop-off address.
+    fresh = (order.rider_location_at is not None
+             and timezone.now() - order.rider_location_at <= _dt.timedelta(minutes=30))
+    if out and fresh and order.rider_lat is not None and order.rider_lng is not None:
+        loc = {'lat': float(order.rider_lat), 'lng': float(order.rider_lng)}
 
     return Response({
         'order_number':   order.order_number,
@@ -1710,6 +1743,11 @@ def customer_delivery_profile(request):
     from apps.customers.models import Customer
     from .serializers import CustomerLocationSerializer
 
+    # Batch 5b (B-2): branch staff find another branch's customer by the FULL number only
+    from apps.customers import access as _ca
+    from core import branch_scope as _bs
+    if _bs.branch_ids(request.user) is not None and len(_ca.digits(phone)) < _ca.MIN_PHONE_DIGITS:
+        return Response({'detail': 'اكتب رقم الموبايل كامل.'}, status=status.HTTP_400_BAD_REQUEST)
     # Find customer by phone (tail match for Egyptian numbers)
     tail = phone.replace(' ', '').replace('-', '')[-9:]
     customer = (
@@ -1724,7 +1762,7 @@ def customer_delivery_profile(request):
     if customer:
         # Saved locations
         locs = CustomerLocation.objects.filter(customer=customer).order_by('-is_default', 'label')
-        locations = CustomerLocationSerializer(locs, many=True).data
+        locations = CustomerLocationSerializer(locs, many=True, context={'request': request}).data
 
         # Order history summary
         history_qs = _orders(request).filter(customer=customer)
@@ -1762,7 +1800,7 @@ def customer_delivery_profile(request):
             except Exception:
                 pass
 
-    return Response({
+    payload = {
         'found':         customer is not None,
         'customer': {
             'id':      customer.id if customer else None,
@@ -1774,7 +1812,10 @@ def customer_delivery_profile(request):
         'locations':      locations,
         'softech_gps':    softech_gps,
         'order_history':  order_history,
-    })
+    }
+    if customer is not None:
+        _ca.mask_payload(payload, _ca.phones_visible(request.user, customer))
+    return Response(payload)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1856,6 +1897,8 @@ def delivery_csat_report(request):
     )
     if branch_id:
         qs = qs.filter(order__branch_id=branch_id)
+    # Batch 5b: own branches only (?branch= narrows); the low-score list shows no usable numbers
+    qs = branch_scope.scope(qs, request.user, 'order__branch')
 
     from django.db.models import Avg as DjAvg
     agg = qs.aggregate(avg=DjAvg('score'), total=Count('id'))
@@ -1872,6 +1915,10 @@ def delivery_csat_report(request):
               'responded_at',
           )
     )
+    from apps.customers.access import mask as _mask
+    for row in low_scores:
+        if row.get('order__customer_phone'):
+            row['order__customer_phone'] = _mask(row['order__customer_phone'])
 
     return Response({
         'date_from':   date_from,
@@ -1930,7 +1977,13 @@ def delivery_routes(request):
             continue
         o.route = route
         o.route_sequence = seq
-        # Assign the driver if the order can still be assigned (READY → ASSIGNED).
+        # Assign the driver if the order can still be assigned (READY → ASSIGNED; an order not
+        # yet marked ready passes through it, as in delivery_assign).
+        if o.status in PRE_READY:
+            _log_transition(o, o.status, DeliveryOrder.STATUS_READY, request.user,
+                            notes='جاهز — تلقائياً عند تكليف السائق (التحضير متابَع في SOFTECH)',
+                            source='system')
+            o.status = DeliveryOrder.STATUS_READY
         if o.status == DeliveryOrder.STATUS_READY:
             o.assignments.filter(is_current=True).update(is_current=False)
             DeliveryAssignment.objects.create(
@@ -2103,4 +2156,4 @@ def delivery_backfill(request, pk):
     if not changed:
         return Response({'detail': 'لا يوجد ما يُحدَّث'}, status=status.HTTP_400_BAD_REQUEST)
     order.save()
-    return Response(DeliveryOrderSerializer(order).data)
+    return Response(DeliveryOrderSerializer(order, context={'request': request}).data)

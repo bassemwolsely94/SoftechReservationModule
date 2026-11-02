@@ -13,6 +13,7 @@ import WhatsAppShareButton from '../components/WhatsAppShareButton'
 import VoiceNoteRecorder from '../components/VoiceNoteRecorder'
 import CanDo from '../components/CanDo'
 import ItemSearchWidget from '../components/ItemSearchWidget'
+import CancelReasonPicker, { cancelNote, EMPTY_CANCEL } from '../components/CancelReasonPicker'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -482,7 +483,7 @@ function ActivityEntry({ activity, onDelete }) {
           </span>
           {/* Delete button — only for author / admin */}
           {activity.can_delete && onDelete && (
-            <button
+            <button data-tour="reservations-detail-delete-activity"
               onClick={() => onDelete(activity.id)}
               className="text-gray-300 hover:text-red-400 transition-colors p-0.5 rounded"
               title="حذف الرسالة"
@@ -617,7 +618,7 @@ function ChatterInput({ reservationId, onPosted }) {
   return (
     <div className="border-t border-gray-100 pt-4 mt-2">
       {/* Type selector */}
-      <div className="flex gap-1 mb-3 flex-wrap">
+      <div data-tour="reservations-detail-chatter-type" className="flex gap-1 mb-3 flex-wrap">
         {ACTIVITY_TYPE_OPTIONS.map(opt => (
           <button
             key={opt.value}
@@ -658,7 +659,7 @@ function ChatterInput({ reservationId, onPosted }) {
         {/* File attach */}
         <input type="file" accept="image/*" ref={fileRef} className="hidden"
           onChange={e => setFile(e.target.files[0])} />
-        <button
+        <button data-tour="reservations-detail-chatter-attach"
           onClick={() => fileRef.current?.click()}
           className="text-gray-400 hover:text-brand-600 transition-colors p-1 rounded"
           title="إرفاق صورة"
@@ -681,7 +682,7 @@ function ChatterInput({ reservationId, onPosted }) {
         <div className="flex-1" />
 
         <span className="text-xs text-gray-300">Ctrl+Enter</span>
-        <button
+        <button data-tour="reservations-detail-chatter-send"
           onClick={handlePost}
           disabled={posting}
           className="bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors"
@@ -699,12 +700,15 @@ function ChangeStatusModal({ reservation, onClose, onSuccess }) {
   const qc = useQueryClient()
   const [newStatus, setNewStatus] = useState('')
   const [note, setNote] = useState('')
+  const [cancel, setCancel] = useState(EMPTY_CANCEL)
+  const isCancel = newStatus === 'cancelled'
+  const sendNote = isCancel ? cancelNote(cancel) : note
 
   const allowed = NEXT_STATUSES[reservation.status] || []
   const allowedOptions = STATUS_OPTIONS.filter(o => allowed.includes(o.value))
 
   const mutation = useMutation({
-    mutationFn: () => reservationsApi.changeStatus(reservation.id, newStatus, note),
+    mutationFn: () => reservationsApi.changeStatus(reservation.id, newStatus, sendNote),
     onSuccess: () => {
       qc.invalidateQueries(['reservation', String(reservation.id)])
       qc.invalidateQueries(['reservations-kanban'])
@@ -747,11 +751,18 @@ function ChangeStatusModal({ reservation, onClose, onSuccess }) {
             })}
           </div>
         </div>
-        <div className="mb-4">
-          <label className="label">ملاحظة (اختياري)</label>
-          <textarea rows={2} className="input-field" value={note}
-            onChange={e => setNote(e.target.value)} placeholder="سبب التغيير..." />
-        </div>
+        {isCancel ? (
+          <div className="mb-4">
+            <label className="label">سبب الإلغاء *</label>
+            <CancelReasonPicker value={cancel} onChange={setCancel} />
+          </div>
+        ) : (
+          <div className="mb-4">
+            <label className="label">ملاحظة (اختياري)</label>
+            <textarea rows={2} className="input-field" value={note}
+              onChange={e => setNote(e.target.value)} placeholder="سبب التغيير..." />
+          </div>
+        )}
         {mutation.isError && (
           <div className="text-red-600 text-xs mb-3 bg-red-50 rounded-lg px-3 py-2">
             {mutation.error?.response?.data?.detail || 'حدث خطأ'}
@@ -759,8 +770,8 @@ function ChangeStatusModal({ reservation, onClose, onSuccess }) {
         )}
         <div className="flex gap-2">
           <button onClick={onClose} className="btn-secondary flex-1">إلغاء</button>
-          <button
-            disabled={!newStatus || mutation.isPending}
+          <button data-tour="reservations-detail-status-confirm"
+            disabled={!newStatus || mutation.isPending || (isCancel && !sendNote)}
             onClick={() => mutation.mutate()}
             className="btn-primary flex-1 disabled:opacity-50"
           >
@@ -1207,7 +1218,7 @@ function AllItemsPanel({ r, onRefresh }) {
               <div className="shrink-0 flex items-center gap-1">
                 <div className="text-sm font-bold text-gray-700 bg-white border border-gray-200 rounded-lg px-2 py-1 tabular-nums">× {line.quantity_requested}</div>
                 {!isLocked && (
-                  <button
+                  <button data-tour="reservations-detail-delete-line"
                     onClick={async () => {
                       if (!window.confirm('حذف هذا الصنف؟')) return
                       await import('../api/client').then(m => m.reservationsApi).then(api => api.deleteLine(r.id, line.id))
@@ -1232,7 +1243,7 @@ function AllItemsPanel({ r, onRefresh }) {
         </div>
       ) : (
         <>
-          <button onClick={() => setAdding(a => !a)} className="mt-3 text-xs text-brand-600 hover:text-brand-700 font-medium">
+          <button data-tour="reservations-detail-add-item" onClick={() => setAdding(a => !a)} className="mt-3 text-xs text-brand-600 hover:text-brand-700 font-medium">
             {adding ? '▲ إغلاق' : '+ إضافة صنف'}
           </button>
           {adding && (
@@ -1263,7 +1274,7 @@ function AllItemsPanel({ r, onRefresh }) {
                   value={newItem.quantity_requested}
                   onChange={e => setNewItem(n => ({ ...n, quantity_requested: Number(e.target.value) }))}
                 />
-                <button
+                <button data-tour="reservations-detail-add-item-save"
                   disabled={saving || (!newItem.selectedItem && !newItem.manual_item_name.trim())}
                   className="btn-primary text-xs py-1.5 px-4 disabled:opacity-40"
                   onClick={async () => {
@@ -1489,6 +1500,19 @@ export default function ReservationDetailPage() {
     qc.invalidateQueries(['reservation', id])
     qc.invalidateQueries(['reservations-kanban'])
   }
+  // role quick buttons: a status change shows its error; a cancel asks for the reason first
+  const [quickCancel, setQuickCancel] = useState(null)      // { reason, text } while asking
+  const [quickBusy, setQuickBusy] = useState(false)
+  const quickChange = async (status, note = '') => {
+    setQuickBusy(true)
+    try {
+      await reservationsApi.changeStatus(r.id, status, note)
+      setQuickCancel(null)
+      invalidate()
+    } catch (e) {
+      alert(e.response?.data?.detail || 'تعذّر تغيير الحالة')
+    } finally { setQuickBusy(false) }
+  }
 
   const handleDeleteActivity = async (activityId) => {
     if (!window.confirm('هل تريد حذف هذه الرسالة؟ ستبقى علامة الحذف مرئية للجميع.')) return
@@ -1607,7 +1631,7 @@ export default function ReservationDetailPage() {
             <div className="flex items-center gap-1.5 border border-dashed border-gray-300 rounded-xl px-2.5 py-1.5 bg-gray-50">
               <span className="text-[10px] font-semibold text-gray-400 tracking-wide whitespace-nowrap">🔒 داخلي</span>
               <div className="w-px h-4 bg-gray-200" />
-              <button
+              <button data-tour="reservations-detail-print"
                 onClick={() => setShowPrintModal(true)}
                 className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border border-gray-300 text-gray-600 hover:bg-white transition-colors"
                 title="طباعة الإيصال الداخلي"
@@ -1647,11 +1671,10 @@ export default function ReservationDetailPage() {
               {roleActions.map(a => {
                 const asc = STATUS_COLOR_MAP[a.status] || {}
                 return (
-                  <button
+                  <button data-tour="reservations-detail-quick-status"
                     key={a.status}
-                    onClick={() => {
-                      reservationsApi.changeStatus(r.id, a.status, '').then(invalidate)
-                    }}
+                    disabled={quickBusy}
+                    onClick={() => a.status === 'cancelled' ? setQuickCancel(EMPTY_CANCEL) : quickChange(a.status)}
                     className="text-sm px-3 py-1.5 rounded-lg font-medium border transition-colors hover:opacity-90"
                     style={{
                       borderColor: asc.dot || '#d1d5db',
@@ -1671,6 +1694,21 @@ export default function ReservationDetailPage() {
               )}
             </CanDo>
           </div>
+          {quickCancel && (
+            <div className="mt-3 max-w-sm bg-red-50 border border-red-200 rounded-xl p-3 space-y-2" data-tour="reservations-detail-cancel-box">
+              <div className="text-xs font-semibold text-red-700">سبب إلغاء الحجز</div>
+              <CancelReasonPicker value={quickCancel} onChange={setQuickCancel} autoFocus compact />
+              <div className="flex gap-2">
+                <button data-tour="reservations-detail-cancel-confirm"
+                  disabled={quickBusy || !cancelNote(quickCancel)}
+                  onClick={() => quickChange('cancelled', cancelNote(quickCancel))}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-red-600 text-white disabled:opacity-40">
+                  تأكيد الإلغاء
+                </button>
+                <button onClick={() => setQuickCancel(null)} className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600">رجوع</button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1732,7 +1770,7 @@ export default function ReservationDetailPage() {
             <div className="card">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-bold text-gray-700 text-sm">المرفقات</h3>
-                <label className={`cursor-pointer text-xs px-2.5 py-1 rounded-lg border ${imageUploading ? 'opacity-50 pointer-events-none' : 'border-gray-300 hover:bg-gray-50'} text-gray-600 flex items-center gap-1`}>
+                <label data-tour="reservations-detail-images-add" className={`cursor-pointer text-xs px-2.5 py-1 rounded-lg border ${imageUploading ? 'opacity-50 pointer-events-none' : 'border-gray-300 hover:bg-gray-50'} text-gray-600 flex items-center gap-1`}>
                   <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleUploadImages} />
                   {imageUploading ? '⏳ جارٍ الرفع...' : '+ إضافة صور'}
                 </label>
@@ -1744,7 +1782,7 @@ export default function ReservationDetailPage() {
                 {extraImages.map(img => (
                   <div key={img.id} className="relative group">
                     <img src={img.image_url} alt="مرفق" className="rounded-xl border border-gray-200 object-contain w-full max-h-48 cursor-pointer hover:opacity-90" onClick={() => window.open(img.image_url, '_blank')} />
-                    <button onClick={() => handleDeleteImage(img.id)} className="absolute top-1 left-1 bg-red-600 text-white rounded-full w-5 h-5 text-xs hidden group-hover:flex items-center justify-center">×</button>
+                    <button data-tour="reservations-detail-delete-image" onClick={() => handleDeleteImage(img.id)} className="absolute top-1 left-1 bg-red-600 text-white rounded-full w-5 h-5 text-xs hidden group-hover:flex items-center justify-center">×</button>
                   </div>
                 ))}
               </div>
@@ -1755,7 +1793,7 @@ export default function ReservationDetailPage() {
           {!r.image_url && extraImages.length === 0 && (
             <div className="card">
               <h3 className="font-bold text-gray-700 text-sm mb-3">المرفقات</h3>
-              <label className={`cursor-pointer flex flex-col items-center gap-2 py-6 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 text-sm hover:border-brand-400 hover:text-brand-600 transition-colors ${imageUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+              <label data-tour="reservations-detail-images-add" className={`cursor-pointer flex flex-col items-center gap-2 py-6 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 text-sm hover:border-brand-400 hover:text-brand-600 transition-colors ${imageUploading ? 'opacity-50 pointer-events-none' : ''}`}>
                 <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleUploadImages} />
                 <span className="text-2xl">🖼️</span>
                 {imageUploading ? 'جارٍ الرفع...' : 'اضغط لرفع صور'}
@@ -1798,7 +1836,7 @@ export default function ReservationDetailPage() {
                 </div>
 
                 {/* WhatsApp to customer's number */}
-                <button
+                <button data-tour="reservations-detail-wa-customer"
                   onClick={() => {
                     const phone = toWhatsAppPhone(r.contact_phone)
                     if (!phone) return
@@ -1815,7 +1853,7 @@ export default function ReservationDetailPage() {
                 </button>
 
                 {/* Print customer receipt */}
-                <button
+                <button data-tour="reservations-detail-customer-receipt"
                   onClick={() => printCustomerReceipt(r, pharmacy)}
                   className="w-full flex items-center justify-center gap-2 border-2 border-emerald-400 text-emerald-700 hover:bg-emerald-50 active:bg-emerald-100 text-sm font-bold px-3 py-2 rounded-xl transition-colors"
                 >

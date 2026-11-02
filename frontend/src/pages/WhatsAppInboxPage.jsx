@@ -163,7 +163,7 @@ function MessageThread({ conv }) {
         {!windowOpen && !templateMode && (
           <div className="mb-2 bg-yellow-50 border border-yellow-200 rounded px-3 py-2 text-xs text-yellow-700">
             نافذة الـ 24 ساعة مغلقة — يمكنك إرسال قوالب معتمدة فقط.
-            <button className="mr-2 text-yellow-900 underline" onClick={() => setTemplateMode(true)}>
+            <button className="mr-2 text-yellow-900 underline" onClick={() => setTemplateMode(true)} data-tour="omni-whatsapp-inbox-template">
               إرسال قالب
             </button>
           </div>

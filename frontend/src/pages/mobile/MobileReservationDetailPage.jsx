@@ -17,6 +17,7 @@ import MobileChatter from '../../components/MobileChatter'
 import { MobileLoading, MobileError } from '../../components/mobileUi'
 import { format } from 'date-fns'
 import { ba } from '../../utils/flowArrow'
+import CancelReasonPicker, { cancelNote, EMPTY_CANCEL } from '../../components/CancelReasonPicker'
 
 // Mirror of the backend transition graph. Keep in sync with views.py.
 const TRANSITIONS = {
@@ -75,16 +76,19 @@ export default function MobileReservationDetailPage() {
 
   const [pendingStatus, setPendingStatus] = useState(null) // status awaiting confirm
   const [note, setNote]       = useState('')
+  const [cancel, setCancel]   = useState(EMPTY_CANCEL)
+  const isCancel = pendingStatus === 'cancelled'
+  const statusNote = isCancel ? cancelNote(cancel) : note
   const [saving, setSaving]   = useState(false)
   const [error, setError]     = useState('')
 
   async function confirmChange() {
     setSaving(true); setError('')
     try {
-      await reservationsApi.changeStatus(id, pendingStatus, note)
+      await reservationsApi.changeStatus(id, pendingStatus, statusNote)
       await qc.invalidateQueries({ queryKey: ['m-reservation', id] })
       qc.invalidateQueries({ queryKey: ['m-reservations'] })
-      setPendingStatus(null); setNote('')
+      setPendingStatus(null); setNote(''); setCancel(EMPTY_CANCEL)
     } catch (e) {
       setError(e.response?.data?.detail || 'تعذّر تغيير الحالة')
     } finally {
@@ -214,17 +218,21 @@ export default function MobileReservationDetailPage() {
             <h3 className="font-bold text-gray-800 text-base mb-1 text-center">
               تغيير الحالة إلى «{STATUS_LABELS[pendingStatus] || pendingStatus}»؟
             </h3>
-            <textarea
-              rows={2}
-              className="input-field w-full resize-none mt-3"
-              placeholder="ملاحظة (اختياري)..."
-              value={note}
-              onChange={e => setNote(e.target.value)}
-            />
+            {isCancel ? (
+              <div className="mt-3"><CancelReasonPicker value={cancel} onChange={setCancel} /></div>
+            ) : (
+              <textarea
+                rows={2}
+                className="input-field w-full resize-none mt-3"
+                placeholder="ملاحظة (اختياري)..."
+                value={note}
+                onChange={e => setNote(e.target.value)}
+              />
+            )}
             {error && <div className="text-sm text-red-600 mt-2 text-center">{error}</div>}
             <div className="flex gap-2 mt-4">
               <button onClick={() => setPendingStatus(null)} disabled={saving} className="btn-secondary flex-1 text-sm">إلغاء</button>
-              <button onClick={confirmChange} disabled={saving} className="btn-primary flex-1 text-sm disabled:opacity-50">
+              <button data-tour="reservations-detail-status-confirm" onClick={confirmChange} disabled={saving || (isCancel && !statusNote)} className="btn-primary flex-1 text-sm disabled:opacity-50">
                 {saving ? 'جارٍ الحفظ...' : 'تأكيد'}
               </button>
             </div>

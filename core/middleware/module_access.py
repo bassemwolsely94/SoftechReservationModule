@@ -66,6 +66,7 @@ MODULE_BY_PREFIX = {
     'audit': 'audit',
     'sync': 'sync',
     'users': 'users',
+    'access': 'settings',     # trusted networks (admin only in the view); whoami is open below
 }
 
 # Prefixes every staff screen reads (pickers, lookups, theme); only their
@@ -89,6 +90,7 @@ OPEN_READ_PATHS = ('/api/users/my-permissions/', '/api/sync/freshness/', '/api/s
 # Exact paths, not prefixes: the staff picker list every screen loads (tasks, demand, HR forms,
 # follow-ups, incentives) — slim fields for roles without users view; a record needs users (Z-4).
 OPEN_READ_EXACT = ('/api/users/staff/',
+                   '/api/access/whoami/',              # the header badge «من أين أتصل؟» (N1)
                    '/api/incentives/my-progress/',     # the caller's own incentive progress (Z-9a)
                    '/api/audit/usage/')                # P-57: own gate (admin / HR / own branch)
 # Exact paths any signed-in staff member may POST: the screen-usage beacon every page
@@ -197,11 +199,12 @@ def required(path, method):
                  or (prefix == 'invoices' and parts[3:4] == ['vendors'])):
         return 'shortage', ('view',)
     # Market Shortage → shortage; Phantom / Cash Optimization reads → analytics, phantom review =
-    # shortage (the Market Shortage reviewers), spike confirm = purchasing (Z-7b)
-    if prefix == 'purchasing' and parts[3:4] in (['shortage'], ['phantom'], ['spike']):
+    # shortage (the Market Shortage reviewers), spike confirm = purchasing (Z-7b); P-27 dead stock (the same
+    # Cash Optimization screen): reads analytics, decisions / strategic hold / recompute purchasing
+    if prefix == 'purchasing' and parts[3:4] in (['shortage'], ['phantom'], ['spike'], ['dead-stock']):
         if safe:
             return ('shortage' if parts[3] == 'shortage' else 'analytics'), ('view',)
-        if parts[3] == 'spike':
+        if parts[3] in ('spike', 'dead-stock'):
             return 'purchasing', _POST_ACTIONS
         return 'shortage', ('approve',)       # flag / dismiss / phantom review: approve, as the views
     # P-33 (a): creating transfer proposals from a shortage list is the WhatsApp path's purchasing
@@ -235,6 +238,10 @@ def required(path, method):
             return 'approvals', ('approve',)
         if tail == 'purchase-expiry/request-markdown':
             return 'approvals', ('create', 'approve')
+        # disposal status: the screen (catalog view); the view decides who (managers approve,
+        # finish and reopen; the drafter cancels their own draft — owner 2026-11-01)
+        if parts[3:5] == ['stock-expiry', 'disposal'] and parts[6:7] == ['status']:
+            return 'catalog', ('view',)
     # Sales targets sit beside the KPI board (analytics; edits keep their role check), and HR
     # self-service is every employee's own filing: any hr grant (Z-9a, map by screen)
     if prefix == 'incentives' and parts[3:4] == ['targets']:

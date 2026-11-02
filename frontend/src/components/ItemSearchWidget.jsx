@@ -113,7 +113,7 @@ function SelectedItemCard({ item, onClear, disabled }) {
         </div>
       </div>
       {!disabled && (
-        <button
+        <button data-tour="item-search-change"
           type="button"
           onClick={onClear}
           className="flex-shrink-0 text-xs text-gray-400 hover:text-red-500 transition-colors mt-0.5 font-medium"
@@ -380,7 +380,7 @@ export default function ItemSearchWidget({
         </div>
 
         {/* Advanced search button (magnifier) */}
-        <button
+        <button data-tour="item-search-advanced"
           type="button"
           onClick={() => setShowAdvanced(true)}
           disabled={disabled}
@@ -400,7 +400,7 @@ export default function ItemSearchWidget({
         {isPos
           ? 'اسم · كود · باركود · * أو % لأي حروف · ↑↓ تنقّل · Enter إضافة · → معاينة · F7 بدائل · Esc إغلاق ·'
           : 'اسم · كود · باركود (قارئ ضوئي متوافق) · لا حاجة لـ * (البحث الجزئي تلقائي) ·'}
-        <button
+        <button data-tour="item-search-advanced"
           type="button"
           onClick={() => setShowAdvanced(true)}
           disabled={disabled}
@@ -439,7 +439,7 @@ export default function ItemSearchWidget({
           <div className="w-full bg-white rounded-t-2xl max-h-[75vh] overflow-y-auto" onMouseDown={e => e.stopPropagation()}>
             <PosItemPreview item={results[sel]} hereBranchId={branchId} customerId={customerId} />
             <div className="p-3 pt-0">
-              <button type="button" onClick={() => handleSelect(results[sel])}
+              <button data-tour="item-search-add-to-order" type="button" onClick={() => handleSelect(results[sel])}
                       className="w-full rounded-lg bg-brand-600 text-white py-2 text-sm font-medium">إضافة للأمر</button>
             </div>
           </div>

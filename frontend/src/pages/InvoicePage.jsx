@@ -242,7 +242,7 @@ function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNoti
           <div className="flex items-center gap-1 shrink-0">
             {editing ? (
               <>
-                <button onClick={save} disabled={saving}
+                <button data-tour="invoices-main-line-save" onClick={save} disabled={saving}
                   className="px-2.5 py-1 bg-brand-600 text-white rounded-lg text-xs font-medium">
                   {saving ? '...' : 'حفظ'}
                 </button>
@@ -251,13 +251,13 @@ function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNoti
               </>
             ) : (
               <>
-                <button onClick={() => setEditing(true)}
+                <button data-tour="invoices-main-line-edit" onClick={() => setEditing(true)}
                   className="text-xs text-gray-400 hover:text-gray-600 px-1.5 py-1 rounded hover:bg-gray-100">✏️</button>
-                <button onClick={fetchMatches} disabled={loadingM}
+                <button data-tour="invoices-main-line-match" onClick={fetchMatches} disabled={loadingM}
                   className="text-xs text-blue-500 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50">
                   {loadingM ? '...' : '🔍'}
                 </button>
-                <button onClick={() => onDelete(line.id)}
+                <button data-tour="invoices-main-line-delete" onClick={() => onDelete(line.id)}
                   className="text-xs text-red-400 hover:text-red-600 px-1.5 py-1 rounded hover:bg-red-50">🗑</button>
               </>
             )}
@@ -279,7 +279,7 @@ function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNoti
           ) : (
             <div className="space-y-1">
               {matches.map(m => (
-                <button key={m.item_id} onClick={() => selectMatch(m)}
+                <button data-tour="invoices-main-line-pick-match" key={m.item_id} onClick={() => selectMatch(m)}
                   className="w-full text-right flex items-center justify-between px-3 py-2 rounded-lg hover:bg-brand-50 border border-transparent hover:border-brand-200 transition-colors">
                   <div>
                     <span className="text-sm font-medium text-gray-800">{m.item_name}</span>
@@ -368,7 +368,7 @@ function VendorLink({ inv, editable, onLinked, onNotify }) {
             </option>
           ))}
         </select>
-        <button onClick={save} disabled={!choice || saving}
+        <button data-tour="invoices-main-supplier-link-save" onClick={save} disabled={!choice || saving}
           className="px-2 py-1 bg-brand-600 text-white rounded-lg text-xs disabled:opacity-50">ربط</button>
         <button onClick={() => setOpen(false)}
           className="px-2 py-1 bg-gray-100 text-gray-600 rounded-lg text-xs">إلغاء</button>
@@ -387,7 +387,7 @@ function VendorLink({ inv, editable, onLinked, onNotify }) {
     <span className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 flex items-center gap-1">
       غير مربوط بمورد SOFTECH
       {!locked && (
-        <button onClick={start} className="font-medium hover:underline mr-1">ربط المورد</button>
+        <button data-tour="invoices-main-supplier-link" onClick={start} className="font-medium hover:underline mr-1">ربط المورد</button>
       )}
     </span>
   )
@@ -542,7 +542,9 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
   const [dupChecking, setDupChecking]       = useState(false)
   const [showDupPanel, setShowDupPanel]     = useState(false)
   const [previewVal, setPreviewVal]         = useState(null)   // {ok,errors,warnings} for the same invoice
-  const [ackWarnings, setAckWarnings]       = useState(false)  // user accepted the warnings
+  const [warnReason, setWarnReason]         = useState('')     // why the warnings are accepted
+  const [dupBlock, setDupBlock]             = useState(null)   // server said: duplicate → needs a reason
+  const [dupReason, setDupReason]           = useState('')
   const [previewLoading, setPreviewLoading] = useState(false)
 
   const [confirmingGreen, setConfirmingGreen] = useState(false)
@@ -612,31 +614,37 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
     }
   }
 
-  const handlePush = async (force = false) => {
+  // Each override is explicit and carries its own written reason (recorded with the push).
+  const handlePush = async () => {
     setPushing(true)
+    const hasWarn = (previewVal?.warnings?.length || 0) > 0
+    const overrides = {
+      ...(hasWarn ? { acknowledge_warnings: true, warnings_reason: warnReason.trim() } : {}),
+      ...(dupBlock ? { override_duplicate: true, duplicate_reason: dupReason.trim() } : {}),
+    }
     try {
-      const { data } = await invoicesApi.push(invoiceId, force)
+      const { data } = await invoicesApi.push(invoiceId, overrides)
       if (data?.blocked && data?.validation) {
         const v = data.validation
         if (v.errors?.length) {
           showToast('لا يمكن الترحيل — ' + v.errors.map(e => e.message).join('؛ '), 'error')
         } else if (v.warnings?.length) {
-          const ok = window.confirm('⚠ تحذيرات:\n' + v.warnings.map(w => '• ' + w.message).join('\n')
-                                    + '\n\nهل تريد الترحيل رغم التحذيرات؟')
-          if (ok) { setPushing(false); return handlePush(true) }
+          // warnings found at push time: show them in the dialog with the reason box
+          setPreviewVal(v)
+          showToast('توجد تحذيرات — اكتب سبب التجاوز ثم أكّد', 'error')
         }
-        load(); return
+        if (!preview) load()
+        return
       }
       if (data?.wrote_to_softech)        showToast(`تم الترحيل ✓ رقم المستند ${data.docnumber}`)
       else if (data?.already_finalized)  showToast(`مُرحّلة مسبقاً — رقم المستند ${data.docnumber}`)
       else if (data?.mode === 'dry_run') showToast('وضع المعاينة — ترحيل ERP غير مُفعّل بعد (INVOICE_WRITER_ENABLED)', 'error')
       else                               showToast('لم يكتمل الترحيل — راجع حالة الفاتورة', 'error')
-      setPreview(null)
+      setPreview(null); setWarnReason(''); setDupBlock(null); setDupReason('')
       load()
     } catch (e) {
-      if (e?.response?.status === 409 && e?.response?.data?.duplicate && !force) {
-        const ok = window.confirm((e.response.data.detail || 'فاتورة مكرّرة') + '\n\nهل تريد الترحيل رغم ذلك؟')
-        if (ok) { setPushing(false); return handlePush(true) }
+      if (e?.response?.status === 409 && e?.response?.data?.duplicate) {
+        setDupBlock(e.response.data.detail || 'فاتورة مكرّرة')   // shown in the dialog with its reason box
       } else {
         showToast(e?.response?.data?.detail || 'فشل الترحيل', 'error')
       }
@@ -829,9 +837,20 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                       <ul className="text-[11px] text-amber-700 list-disc pr-4 space-y-0.5">
                         {previewVal.warnings.map((w, i) => <li key={i}>{w.message}</li>)}
                       </ul>
-                      <label className="mt-2 flex items-center gap-2 text-[11px] text-amber-800 cursor-pointer">
-                        <input type="checkbox" checked={ackWarnings} onChange={e => setAckWarnings(e.target.checked)} />
-                        راجعت التحذيرات وأريد المتابعة
+                      <label className="mt-2 block text-[11px] text-amber-800" data-tour="invoices-main-push-warn-reason">
+                        سبب الترحيل رغم التحذيرات (إلزامى، 10 أحرف على الأقل — يُسجَّل مع الترحيل)
+                        <textarea rows={2} value={warnReason} onChange={e => setWarnReason(e.target.value)}
+                          className="mt-1 w-full border border-amber-300 rounded px-2 py-1 text-xs" />
+                      </label>
+                    </div>
+                  )}
+                  {dupBlock && (
+                    <div className="rounded-lg border border-red-300 bg-red-50 p-3" data-tour="invoices-main-push-dup-reason">
+                      <div className="text-xs font-bold text-red-700 mb-1">⛔ {dupBlock}</div>
+                      <label className="block text-[11px] text-red-800">
+                        للترحيل رغم ذلك اكتب السبب (إلزامى، 10 أحرف على الأقل — يُسجَّل مع الترحيل)
+                        <textarea rows={2} value={dupReason} onChange={e => setDupReason(e.target.value)}
+                          className="mt-1 w-full border border-red-300 rounded px-2 py-1 text-xs" />
                       </label>
                     </div>
                   )}
@@ -853,14 +872,15 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
             </div>
 
             <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2 shrink-0">
-              <button onClick={() => { setPreview(null); setPreviewVal(null) }} disabled={pushing}
+              <button onClick={() => { setPreview(null); setPreviewVal(null); setWarnReason(''); setDupBlock(null); setDupReason('') }} disabled={pushing}
                 className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50">
                 إلغاء
               </button>
               <button data-tour="invoices-main-push-confirm"
-                onClick={() => handlePush((previewVal?.warnings?.length || 0) > 0)}
+                onClick={handlePush}
                 disabled={pushing || (previewVal?.errors?.length > 0)
-                          || ((previewVal?.warnings?.length > 0) && !ackWarnings)}
+                          || ((previewVal?.warnings?.length > 0) && warnReason.trim().length < 10)
+                          || (!!dupBlock && dupReason.trim().length < 10)}
                 title={previewVal?.errors?.length > 0 ? 'صحّح الأخطاء أولاً' : ''}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
                 {pushing ? 'جارٍ الترحيل...' : (previewVal?.errors?.length > 0 ? '⛔ يوجد أخطاء' : '⇪ تأكيد الترحيل')}
@@ -894,7 +914,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
 
             {/* Anomaly check */}
             {lines.length > 0 && (
-              <button onClick={fetchAnomalies}
+              <button data-tour="invoices-main-anomalies" onClick={fetchAnomalies}
                 className="px-3 py-1.5 border border-amber-300 text-amber-700 bg-amber-50 rounded-lg text-xs font-medium hover:bg-amber-100">
                 ⚠ فحص الانحرافات
               </button>
@@ -902,7 +922,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
 
             {/* 3-way financial reconciliation */}
             {lines.length > 0 && (
-              <button onClick={async () => { try { const r = await invoicesApi.reconcile3way(invoiceId); setRecon(r.data) } catch { showToast('تعذّرت المطابقة المالية', 'error') } }}
+              <button data-tour="invoices-main-three-way" onClick={async () => { try { const r = await invoicesApi.reconcile3way(invoiceId); setRecon(r.data) } catch { showToast('تعذّرت المطابقة المالية', 'error') } }}
                 className="px-3 py-1.5 border border-indigo-300 text-indigo-700 bg-indigo-50 rounded-lg text-xs font-medium hover:bg-indigo-100">
                 ⚖ المطابقة المالية
               </button>
@@ -910,7 +930,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
 
             {/* PO / goods-received (separate advisory check) */}
             {lines.length > 0 && (
-              <button onClick={async () => { try { const r = await invoicesApi.poMatch(invoiceId); setPoResult(r.data) } catch { showToast('تعذّرت مطابقة أمر الشراء', 'error') } }}
+              <button data-tour="invoices-main-po-match" onClick={async () => { try { const r = await invoicesApi.poMatch(invoiceId); setPoResult(r.data) } catch { showToast('تعذّرت مطابقة أمر الشراء', 'error') } }}
                 className="px-3 py-1.5 border border-gray-300 text-gray-600 bg-gray-50 rounded-lg text-xs font-medium hover:bg-gray-100">
                 🔗 أمر الشراء
               </button>
@@ -919,11 +939,11 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
             {/* Export buttons */}
             {lines.length > 0 && (
               <>
-                <button onClick={handleExportExcel} disabled={exporting === 'excel'}
+                <button data-tour="invoices-main-export-excel" onClick={handleExportExcel} disabled={exporting === 'excel'}
                   className="px-3 py-1.5 border border-green-300 text-green-700 bg-green-50 rounded-lg text-xs font-medium hover:bg-green-100">
                   {exporting === 'excel' ? '...' : '⬇ Excel'}
                 </button>
-                <button onClick={handleExportCsv} disabled={exporting === 'csv'}
+                <button data-tour="invoices-main-export-csv" onClick={handleExportCsv} disabled={exporting === 'csv'}
                   className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-50">
                   {exporting === 'csv' ? '...' : '⬇ CSV'}
                 </button>
@@ -1032,7 +1052,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                 </div>
               ))}
               <div className="flex items-end gap-2">
-                <button onClick={saveHeader}
+                <button data-tour="invoices-main-header-save" onClick={saveHeader}
                   className="px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs font-medium">حفظ</button>
                 <button onClick={() => setHeaderEdit(false)}
                   className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs">إلغاء</button>
@@ -1060,7 +1080,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                 {Number(inv.total_after_discount || 0).toFixed(3)} {inv.currency}
               </div>
               {editable && (
-                <button onClick={() => setHeaderEdit(true)}
+                <button data-tour="invoices-main-header-edit" onClick={() => setHeaderEdit(true)}
                   className="text-xs text-brand-600 hover:underline mr-auto">تعديل</button>
               )}
             </div>
@@ -1073,7 +1093,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
           <span className="text-green-600">{confirmed} مُأكَّد</span>
           <span className="text-amber-600">{unmatched} بدون مطابقة</span>
           {editable && (
-            <button onClick={() => setAddLine(s => !s)}
+            <button data-tour="invoices-main-add-line" onClick={() => setAddLine(s => !s)}
               className="mr-auto px-3 py-1.5 border border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-brand-400 hover:text-brand-600 transition-colors">
               + إضافة سطر يدوي
             </button>
@@ -1108,7 +1128,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                   onChange={e => setNewLine(n => ({ ...n, discount_pct: e.target.value }))}
                   className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-20 focus:outline-none focus:ring-2 focus:ring-brand-400" />
               </div>
-              <button onClick={handleAddLine}
+              <button data-tour="invoices-main-add-line-save" onClick={handleAddLine}
                 className="px-3 py-1.5 bg-brand-600 text-white rounded-lg text-sm font-medium">إضافة</button>
               <button onClick={() => setAddLine(false)}
                 className="px-3 py-1.5 bg-white text-gray-500 rounded-lg text-sm border">إلغاء</button>
@@ -1436,6 +1456,8 @@ export default function InvoicePage() {
   const [selected,     setSelected]     = useState(() => new Set())  // batch push selection
   const [pushingBatch, setPushingBatch] = useState(false)
   const [batchResult,  setBatchResult]  = useState(null)
+  const [batchTyped,   setBatchTyped]   = useState('')
+  const [batchReason,  setBatchReason]  = useState('')   // optional: accept warnings for the whole batch
   const [tab,          setTab]          = useState('invoices')       // 'invoices' | 'bundles'
 
   const PUSHABLE = new Set(['confirmed', 'queued', 'push_failed'])
@@ -1447,9 +1469,12 @@ export default function InvoicePage() {
     if (!ids.length) return
     setPushingBatch(true); setBatchResult(null)
     try {
-      const r = await invoicesApi.pushBatch(ids)
+      const r = await invoicesApi.pushBatch(ids, {
+        confirm_count: batchTyped.trim(),
+        ...(batchReason.trim() ? { acknowledge_warnings: true, warnings_reason: batchReason.trim() } : {}),
+      })
       setBatchResult(r.data)
-      setSelected(new Set())
+      setSelected(new Set()); setBatchTyped(''); setBatchReason('')
       loadInvoices()
     } catch (e) {
       setBatchResult({ error: e.response?.data?.detail || 'فشل ترحيل الدفعة' })
@@ -1646,10 +1671,21 @@ export default function InvoicePage() {
             تم تحديد <b>{selected.size}</b> فاتورة للترحيل
             <button onClick={() => setSelected(new Set())} className="mr-3 text-xs text-gray-400 hover:text-gray-600">إلغاء التحديد</button>
           </div>
-          <button data-tour="invoices-main-batch-push" onClick={runBatchPush} disabled={pushingBatch}
+          <div className="flex items-end gap-2 flex-wrap">
+            <label className="text-[11px] text-gray-500">سبب تجاوز التحذيرات (اختيارى — لكل الدفعة)
+              <input value={batchReason} onChange={e => setBatchReason(e.target.value)} placeholder="اتركه فارغاً لرفض الفواتير ذات التحذيرات"
+                className="block mt-0.5 w-72 border border-gray-300 rounded px-2 py-1.5 text-xs" /></label>
+            <label className="text-[11px] text-gray-500">للتأكيد اكتب عدد الفواتير: <b className="font-mono">{selected.size}</b>
+              <input value={batchTyped} onChange={e => setBatchTyped(e.target.value)} inputMode="numeric" dir="ltr"
+                data-tour="invoices-main-batch-confirm-count"
+                className="block mt-0.5 w-24 border border-gray-300 rounded px-2 py-1.5 text-xs text-center font-mono" /></label>
+          <button data-tour="invoices-main-batch-push" onClick={runBatchPush}
+            disabled={pushingBatch || batchTyped.trim() !== String(selected.size)
+                      || (batchReason.trim() !== '' && batchReason.trim().length < 10)}
             className="px-4 py-2 bg-brand-600 text-white rounded-xl font-medium text-sm hover:bg-brand-700 disabled:opacity-50">
             {pushingBatch ? 'جارٍ الترحيل…' : `⇪ ترحيل المحدد (${selected.size})`}
           </button>
+          </div>
         </div>
       )}
 

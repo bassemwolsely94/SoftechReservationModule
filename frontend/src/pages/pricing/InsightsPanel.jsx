@@ -210,7 +210,7 @@ export default function InsightsPanel() {
                 إصلاح تلقائي يومي
                 <span className="block text-xs text-gray-400">يُعيد جدولة الفجوات تلقائياً بعد الفحص اليومي (وإلا تنبيه فقط)</span>
               </span>
-              <button
+              <button data-tour="pricing-approvals-insights-auto-repair"
                 onClick={() => savePolicy.mutate({ auto_repair_enabled: !policy.auto_repair_enabled })}
                 className={`relative w-12 h-6 rounded-full transition-colors ${policy.auto_repair_enabled ? 'bg-emerald-500' : 'bg-gray-300'}`}>
                 <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-all ${policy.auto_repair_enabled ? 'right-0.5' : 'right-6'}`} />
@@ -229,7 +229,7 @@ export default function InsightsPanel() {
                 فحص أسبوعي شامل
                 <span className="block text-xs text-gray-400">فحص عميق لكل الأصناف أسبوعياً (الجمعة 3ص) لاكتشاف الانحراف الصامت</span>
               </span>
-              <button
+              <button data-tour="pricing-approvals-insights-weekly-audit"
                 onClick={() => savePolicy.mutate({ weekly_full_audit: !policy.weekly_full_audit })}
                 className={`relative w-12 h-6 rounded-full transition-colors ${policy.weekly_full_audit ? 'bg-emerald-500' : 'bg-gray-300'}`}>
                 <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-all ${policy.weekly_full_audit ? 'right-0.5' : 'right-6'}`} />

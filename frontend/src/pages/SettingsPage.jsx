@@ -141,7 +141,7 @@ function SettingRow({ setting, onSaved, isAdmin = false }) {
         {editing ? (
           <>
             {renderInput()}
-            <button onClick={save} disabled={saving}
+            <button data-tour="admin-settings-setting-save" onClick={save} disabled={saving}
               className="px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs font-semibold hover:bg-brand-700 disabled:opacity-50">
               {saving ? '…' : 'حفظ'}
             </button>
@@ -251,7 +251,7 @@ function BranchHours({ branch, settings, isAdmin, onRefresh, showToast }) {
         <span className="text-[11px] text-gray-400 font-medium">🕘 مواعيد العمل</span>
         {!editing && <span className="text-[11px] text-gray-700" dir="ltr">{summary}</span>}
         {isAdmin && !editing && (
-          <button onClick={() => { setIs24(!!settings.is_24h); setWindows((settings.working_hours || []).map(w => ({ ...w, doccodes: (w.doccodes || []).join(', ') }))); setEditing(true) }}
+          <button data-tour="admin-settings-hours-edit" onClick={() => { setIs24(!!settings.is_24h); setWindows((settings.working_hours || []).map(w => ({ ...w, doccodes: (w.doccodes || []).join(', ') }))); setEditing(true) }}
             className="ms-auto text-[11px] text-brand-600 hover:underline">تعديل</button>
         )}
       </div>
@@ -275,7 +275,7 @@ function BranchHours({ branch, settings, isAdmin, onRefresh, showToast }) {
           )}
           <div className="text-[10px] text-gray-400">«إلى» قبل «من» = بعد منتصف الليل. فترة بأكواد مستندات تنطبق عليها فقط (مثل الكول سنتر).</div>
           <div className="flex gap-2">
-            <button onClick={save} disabled={saving} className="px-3 py-1 bg-brand-600 text-white rounded-lg text-xs font-semibold disabled:opacity-50">{saving ? '…' : 'حفظ'}</button>
+            <button data-tour="admin-settings-hours-save" onClick={save} disabled={saving} className="px-3 py-1 bg-brand-600 text-white rounded-lg text-xs font-semibold disabled:opacity-50">{saving ? '…' : 'حفظ'}</button>
             <button onClick={() => setEditing(false)} className="px-3 py-1 bg-gray-100 text-gray-600 rounded-lg text-xs">إلغاء</button>
           </div>
         </div>
@@ -392,14 +392,14 @@ function BranchCard({ branch, isAdmin, onRefresh, showToast }) {
                 placeholder="longitude" dir="ltr"
                 className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white" />
             </div>
-            <button type="button"
+            <button data-tour="admin-settings-branch-locate" type="button"
               onClick={() => navigator.geolocation?.getCurrentPosition(
                 p => setDraft(d => ({ ...d, latitude: p.coords.latitude.toFixed(6), longitude: p.coords.longitude.toFixed(6) })),
                 () => showToast('تعذّر تحديد الموقع', 'error'), { enableHighAccuracy: true })}
               className="mt-1.5 text-[11px] text-brand-600 hover:underline">استخدم موقعي الحالي (من داخل الفرع)</button>
           </div>
           <div className="flex gap-2 pt-1">
-            <button onClick={saveProfile} disabled={saving}
+            <button data-tour="admin-settings-branch-save" onClick={saveProfile} disabled={saving}
               className="px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs font-semibold hover:bg-brand-700 disabled:opacity-50">
               {saving ? '…' : 'حفظ'}
             </button>
@@ -527,7 +527,7 @@ function DropdownEditor({ dropdownKey, options, onRefresh, isAdmin }) {
               <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-200 shrink-0">ثابت</span>
             )}
             {isAdmin && (
-              <button onClick={() => toggle(opt)}
+              <button data-tour="admin-settings-dropdown-toggle" onClick={() => toggle(opt)}
                 className={`text-xs px-2 py-0.5 rounded-full border transition-colors shrink-0
                   ${opt.is_active ? 'bg-green-50 text-green-700 border-green-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200'
                                   : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-green-50 hover:text-green-700 hover:border-green-200'}`}>
@@ -535,7 +535,7 @@ function DropdownEditor({ dropdownKey, options, onRefresh, isAdmin }) {
               </button>
             )}
             {isAdmin && !opt.is_system && (
-              <button onClick={() => remove(opt)}
+              <button data-tour="admin-settings-dropdown-delete" onClick={() => remove(opt)}
                 className="text-xs text-red-400 hover:text-red-600 w-6 h-6 flex items-center justify-center rounded hover:bg-red-50 shrink-0">
                 ✕
               </button>
@@ -575,7 +575,7 @@ function DropdownEditor({ dropdownKey, options, onRefresh, isAdmin }) {
             </div>
             {error && <div className="text-xs text-red-600 bg-red-50 px-3 py-1.5 rounded-lg border border-red-200">{error}</div>}
             <div className="flex gap-2">
-              <button onClick={submit} disabled={saving}
+              <button data-tour="admin-settings-dropdown-add-confirm" onClick={submit} disabled={saving}
                 className="px-4 py-1.5 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50">
                 {saving ? '…' : 'إضافة'}
               </button>
@@ -764,7 +764,7 @@ function PharmacyProfileEditor({ isAdmin }) {
 
       {editing && (
         <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100">
-          <button
+          <button data-tour="admin-settings-profile-save"
             onClick={save}
             disabled={saving}
             className="px-4 py-2 bg-brand-600 text-white rounded-xl text-sm font-semibold hover:bg-brand-700 disabled:opacity-50 transition-colors"
@@ -972,7 +972,7 @@ function AppearanceTab({ isAdmin, lang, showToast }) {
               {t ? 'Cancel' : 'إلغاء'}
             </button>
           )}
-          <button onClick={resetToDefault}
+          <button data-tour="admin-settings-theme-reset" onClick={resetToDefault}
             className="px-4 py-2.5 border border-gray-300 text-gray-600 rounded-xl text-sm hover:bg-gray-50 ms-auto">
             {t ? '↺ Reset to brand default' : '↺ استعادة الافتراضي'}
           </button>

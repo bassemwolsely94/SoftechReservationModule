@@ -371,7 +371,7 @@ class VoucherViewSet(viewsets.ModelViewSet):
             existing.refresh_document_status()
             return Response({
                 'detail':   'تم التحقق مسبقاً — الوثيقة موجودة',
-                'document': VoucherRedemptionDocumentSerializer(existing).data,
+                'document': VoucherRedemptionDocumentSerializer(existing, context={'request': request}).data,
             })
 
         # Calculate discount
@@ -407,7 +407,7 @@ class VoucherViewSet(viewsets.ModelViewSet):
 
         return Response({
             'detail':   'تم التحقق بنجاح ✓',
-            'document': VoucherRedemptionDocumentSerializer(doc).data,
+            'document': VoucherRedemptionDocumentSerializer(doc, context={'request': request}).data,
         })
 
     # ── MODULE 4: Assignment ───────────────────────────────────────────────────
@@ -436,7 +436,7 @@ class VoucherViewSet(viewsets.ModelViewSet):
             expires_at     = ser.validated_data.get('expires_at'),
         )
         return Response(
-            VoucherAssignmentSerializer(assignment).data,
+            VoucherAssignmentSerializer(assignment, context={'request': request}).data,
             status=status.HTTP_201_CREATED,
         )
 
@@ -445,7 +445,7 @@ class VoucherViewSet(viewsets.ModelViewSet):
         """List assignments for this voucher."""
         voucher     = self.get_object()
         assignments = voucher.assignments.select_related('customer', 'assigned_by').all()
-        return Response(VoucherAssignmentSerializer(assignments, many=True).data)
+        return Response(VoucherAssignmentSerializer(assignments, many=True, context={'request': request}).data)
 
     # ── Cancel ─────────────────────────────────────────────────────────────────
 
@@ -489,7 +489,7 @@ class VoucherViewSet(viewsets.ModelViewSet):
         reds    = voucher.redemptions.select_related(
             'redeemed_by', 'branch', 'document'
         ).order_by('-redeemed_at')
-        return Response(VoucherRedemptionSerializer(reds, many=True).data)
+        return Response(VoucherRedemptionSerializer(reds, many=True, context={'request': request}).data)
 
     # ── Report ─────────────────────────────────────────────────────────────────
 
@@ -584,7 +584,7 @@ class DocumentViewSet(viewsets.GenericViewSet):
         except VoucherRedemptionDocument.DoesNotExist:
             return Response({'detail': 'الوثيقة غير موجودة'}, status=status.HTTP_404_NOT_FOUND)
         doc.refresh_document_status()
-        return Response(VoucherRedemptionDocumentSerializer(doc).data)
+        return Response(VoucherRedemptionDocumentSerializer(doc, context={'request': request}).data)
 
     @action(detail=True, methods=['post'], url_path='mark-used')
     @transaction.atomic

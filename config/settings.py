@@ -44,6 +44,9 @@ SECRET_KEY = config('SECRET_KEY', default='')
 
 DEBUG = config('DEBUG', default=False, cast=bool)
 
+# Django admin has no 2FA (N0/H9): off in production, on in dev. Turn on for a maintenance window only.
+DJANGO_ADMIN_ENABLED = config('DJANGO_ADMIN_ENABLED', default=DEBUG, cast=bool)
+
 # Signing key for JWTs, portal sessions, delivery-tracking / PBX-recording links and
 # (when OMNI_CREDENTIALS_KEY is unset) the encryption of stored channel credentials.
 # A missing or placeholder key would make all of those forgeable, so a non-DEBUG
@@ -96,6 +99,15 @@ if BEHIND_HTTPS_PROXY:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+# Network label (security N1, log only). nginx writes X-ElR-Network (internal|external) from the
+# address the request arrived on; Django believes it only behind our nginx, and a missing value
+# there means external. Without nginx (dev, tests) NETWORK_UNTRUSTED_ZONE stands in.
+NETWORK_HEADER_TRUSTED = config('NETWORK_HEADER_TRUSTED', default=BEHIND_HTTPS_PROXY, cast=bool)
+NETWORK_UNTRUSTED_ZONE = config('NETWORK_UNTRUSTED_ZONE', default='internal')
+# off | log only in N1 — no request is refused because of its network.
+NETWORK_POLICY_ENFORCEMENT = config('NETWORK_POLICY_ENFORCEMENT', default='off' if _RUNNING_TESTS else 'log')
+# Seconds the trusted-network list is cached per process; 0 under tests.
+ACCESS_NETWORKS_TTL = config('ACCESS_NETWORKS_TTL', default=0 if _RUNNING_TESTS else 60, cast=float)
 # Proxies in front of Django that APPEND the peer to X-Forwarded-For (nginx proxy_params: 1).
 # The client address is the NUM_PROXIES-th entry from the right; with 0 the header is ignored.
 # Used by core.client_ip (audit IPs) and DRF's throttles (Batch 3, A-6; owner 2026-10-27: 1 on
@@ -196,6 +208,7 @@ INSTALLED_APPS = [
     'apps.personal',       # Personal dashboard — per-user SOFTECH identity claims + configurable widgets
     'apps.gamification',   # Gamification — points, levels/titles, badges, streaks, rankings (recognition only)
     'apps.stock_audit',    # Stock Transactions Audit (doc 32) — read-only stktrans mirror + checks
+    'apps.access',         # Trusted networks + request network label (security N1, log only)
     'apps.trace',          # P-58 EDA track-and-trace foundation — dormant (TRACK_TRACE_ENABLED)
 ]
 
@@ -306,6 +319,8 @@ REST_FRAMEWORK = {
     'NUM_PROXIES': NUM_PROXIES,
     'DEFAULT_THROTTLE_RATES': {
         'login': '10/min',   # max 10 login attempts per IP per minute
+        'personal_person_search': '30/hour',   # live SOFTECH personsdata search (N0/H1)
+        'access_whoami': '60/min',             # network badge lookup, per client IP (N1)
         'csp_report': config('CSP_REPORT_RATE', default='60/min'),   # browsers' CSP reports (W-9)
         # Customer portal (external) magic-link request + token exchange. A link request is
         # limited per phone (whatever the IP) and per IP (Batch 6, W-5).
@@ -914,6 +929,8 @@ MIDDLEWARE += [
     'core.middleware.db_cleanup.CloseConnectionsMiddleware',
     # Stores current StaffProfile in thread-local for serializer audit helpers
     'apps.users.middleware.CurrentUserMiddleware',
+    # N1: request.access (network zone/site + role); files SOFTECH load by network (log only)
+    'apps.access.middleware.AccessContextMiddleware',
     # Server-side RoleModuleAccess check for /api/<module>/ (see core/middleware/module_access.py)
     'core.middleware.module_access.ModuleAccessMiddleware',
     # P-56: log API requests slower than SLOW_REQUEST_MS (route pattern only) for /sync

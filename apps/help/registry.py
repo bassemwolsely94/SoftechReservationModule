@@ -40,6 +40,9 @@ Content format (one file per module, see content/reservations.py for a full exam
                     'warn': T(..),            # optional ⚠: the costly mistake (required for
                                               # push / approve / discount … anchors, see TOUR_WARN_WORDS)
                     'open_hint': T(..)}],     # optional: how to make the element appear
+        'hints':  [{'target': …, 'label': T(..), 'text': T(..), 'when': T(..), 'warn': T(..)}],
+                                              # «💡 تلميحات الأزرار» only, never in the tour: the
+                                              # screen's other buttons (same rules as tour steps)
         'updated': '2026-10-10',              # bump when the text changes → "new" badge
     }]
 
@@ -69,6 +72,39 @@ TOUR_TEXT_KEYS = ('label', 'text', 'when', 'warn', 'open_hint', 'more')
 # see tour_flow() below
 TOUR_STEP_KEYS = {'target', *TOUR_TEXT_KEYS, 'route', 'wait', 'nav'}
 JOURNEY_STEP_KEYS = TOUR_STEP_KEYS | {'screen', 'perm'}
+# a screen's `hints`: buttons explained by «💡 تلميحات الأزرار» but kept out of «اعرض لي»
+HINT_STEP_KEYS = {'target', 'label', 'text', 'when', 'warn', 'open_hint'}
+# Buttons of the shell (top bar, side menu, 🔔 bell, help panel) sit on every screen, so
+# «💡 تلميحات الأزرار» explains them everywhere. target → the screen whose tour / hints hold
+# the text (one copy; a trainer's edit there shows on every screen).
+SHELL_HINT_SOURCES = {
+    'shell-rail': 'general.dashboard',
+    'shell-nav-panel': 'general.dashboard',
+    'shell-showme': 'general.dashboard',
+    'general-dashboard-search': 'general.dashboard',
+    'general-help-center-open-help': 'general.dashboard',
+    'general-notifications-bell': 'general.dashboard',
+    'general-security-open': 'general.dashboard',
+    'shell-notifications-read-all': 'general.dashboard',
+    'shell-notifications-delete-all': 'general.dashboard',
+    'shell-notifications-snooze': 'general.dashboard',
+    'shell-notifications-delete': 'general.dashboard',
+    'shell-notifications-reminders': 'general.dashboard',
+    'shell-notifications-reminder-add': 'general.dashboard',
+    'shell-notifications-reminder-delete': 'general.dashboard',
+    'shell-notifications-inbox': 'general.dashboard',
+    'shell-notifications-prefs': 'general.dashboard',
+    'shell-logout': 'general.dashboard',
+    'notification-prefs-save': 'general.dashboard',
+    'general-notifications-desktop-alerts': 'general.notifications',
+    'general-help-center-panel-show-me': 'general.help_center',
+    'general-help-center-panel-journey': 'general.help_center',
+    'general-help-center-panel-hints': 'general.help_center',
+    'general-help-center-panel-modules': 'general.help_center',
+    'general-help-center-hints-off': 'general.help_center',
+    'help-panel-flow': 'general.help_center',
+    'help-panel-edit': 'general.help_center',
+}
 # more = the longer explanation shown under the step (help tours)
 TOUR_LIMITS = {'label': 40, 'text': 160, 'when': 160, 'warn': 160, 'open_hint': 160, 'more': 600}
 # a step on a button whose anchor has one of these words must carry a ⚠ warning
@@ -343,6 +379,19 @@ def tour_flow(key, screens, overrides=None):
         route = n['routes'][0]
         out += [{**st, 'route': st.get('route') or route, 'screen': nxt, 'i': i}
                 for i, st in enumerate(effective(n, ov.get(nxt)).get('tour') or [])]
+    return out
+
+
+def shell_hints(screens, overrides=None):
+    """The shell's buttons as hint steps (SHELL_HINT_SOURCES), from each source screen's
+    effective tour / hints — sent with every screen so the hints work everywhere."""
+    ov = overrides or {}
+    out = []
+    for target, key in SHELL_HINT_SOURCES.items():
+        s = effective(screens[key], ov.get(key))
+        st = next((x for x in (s.get('tour') or []) + (s.get('hints') or []) if x['target'] == target), None)
+        if st:
+            out.append({k: v for k, v in st.items() if k in HINT_STEP_KEYS})
     return out
 
 

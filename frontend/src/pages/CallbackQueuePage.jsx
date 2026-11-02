@@ -151,7 +151,7 @@ export default function CallbackQueuePage() {
         )}
         {isError && (
           <div className="text-center py-16 text-red-500">
-            حدث خطأ — <button onClick={refetch} className="underline">إعادة المحاولة</button>
+            حدث خطأ — <button data-tour="callcenter-callbacks-retry" onClick={refetch} className="underline">إعادة المحاولة</button>
           </div>
         )}
         {!isLoading && !isError && callbacks.length === 0 && (

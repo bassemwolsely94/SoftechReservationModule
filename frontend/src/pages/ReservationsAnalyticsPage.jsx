@@ -111,7 +111,7 @@ export default function ReservationsAnalyticsPage() {
             <option value="">كل الفروع</option>
             {branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
           </select>
-          <button onClick={() => setFilters({ date_from: '', date_to: '', branch: '' })} className="btn-secondary text-xs py-1.5">مسح</button>
+          <button data-tour="analytics-reservations-clear" onClick={() => setFilters({ date_from: '', date_to: '', branch: '' })} className="btn-secondary text-xs py-1.5">مسح</button>
           <button onClick={() => refetch()} className="btn-secondary text-xs py-1.5" data-tour="analytics-reservations-refresh">🔄 تحديث</button>
         </div>
       </div>

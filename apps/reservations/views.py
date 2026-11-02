@@ -36,6 +36,9 @@ from .serializers import (
 # Roles that are allowed to see customer PII (name + phone)
 _PII_ROLES = frozenset({'admin', 'call_center', 'pharmacist'})
 
+# every cancellation says why (CLAUDE.md rule 8) — the screens offer a reason list + free text
+CANCEL_REASON_REQUIRED = 'اختر سبب الإلغاء.'
+
 
 def get_profile(request):
     return getattr(request.user, 'staff_profile', None)
@@ -347,6 +350,8 @@ class ReservationViewSet(viewsets.ModelViewSet):
         old_status = reservation.status
         if old_status == new_status:
             return Response({'detail': 'الحالة لم تتغير'}, status=status.HTTP_400_BAD_REQUEST)
+        if new_status == 'cancelled' and not (note or '').strip():
+            return Response({'detail': CANCEL_REASON_REQUIRED}, status=status.HTTP_400_BAD_REQUEST)
 
         # Gap-6: Enforce the transition graph.
         # Admins/call-center/managers get the full graph PLUS direct cancellation
@@ -1212,6 +1217,8 @@ class ReservationViewSet(viewsets.ModelViewSet):
         if act == 'change_status':
             new_status_val = d['status']
             note = d.get('note', '')
+            if new_status_val == 'cancelled' and not (note or '').strip():
+                return Response({'detail': CANCEL_REASON_REQUIRED}, status=status.HTTP_400_BAD_REQUEST)
             STATUS_LABELS = dict(Reservation.STATUS_CHOICES)
             updated = 0
             skipped = 0

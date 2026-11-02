@@ -175,8 +175,9 @@ PERMISSIONS = {
     # ─────────────────────────────────────────────────────────────────────
     'delivery': {
         'dashboard':    RO,
-        'delivery':     {'view', 'edit', 'approve', 'finalize'},
-        # edit = update delivery notes; approve = confirm pickup; finalize = delivered
+        'delivery':     {'view', 'edit'},
+        # edit = rider steps on their own orders (pickup, delivered, cash). approve/finalize
+        # (cancel, close) are the dispatcher's, not the rider's (N0/H3).
         'customers':    RO,   # address + phone for navigation
         'catalog':      RO,   # item names on delivery slip
         'hr':           {'view', 'create'},   # self-service

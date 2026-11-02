@@ -1,14 +1,14 @@
-Django==4.2.13
-djangorestframework==3.15.1
-djangorestframework-simplejwt==5.3.1
-django-cors-headers==4.3.1
+Django==5.2.18
+djangorestframework==3.18.3
+djangorestframework-simplejwt==5.5.1
+django-cors-headers==4.9.0
 psycopg2-binary>=2.9.9
 APScheduler==3.10.4
 python-decouple==3.8
-django-filter==23.5
-Pillow>=10.3.0
+django-filter==26.2
+Pillow>=13.0.0
 numpy>=1.26               # apps/invoices preprocess/ocr/engines (imported directly, not only via easyocr)
-django-extensions==3.2.3
+django-extensions==4.1
 pytesseract>=0.3.10           # optional: printed text OCR (requires Tesseract binary)
 easyocr>=1.7.0                # local handwriting OCR — no API key needed
 google-genai>=1.0.0           # optional: Gemini free-tier OCR (GEMINI_API_KEY in .env)
@@ -27,10 +27,10 @@ openpyxl>=3.1.0
 rapidfuzz>=3.6.0
 # ── WebSocket / real-time ─────────────────────────────────────────────────────
 channels>=4.0.0               # Django Channels — WebSocket support
-daphne>=4.0.0                 # ASGI server (required when channels is in INSTALLED_APPS)
-twisted[tls]==26.10.0rc1      # pinned pre-release (owner 2026-10-31): fixes every twisted 26.4.0 advisory incl. GHSA-vpp8-g58w-m8mp (HTTP/2 rapid reset); move to the stable 26.10 when it ships
+daphne>=4.2.3                 # ASGI server (required when channels is in INSTALLED_APPS)
+twisted[tls]>=26.10.0              # stable 26.10 (owner 2026-10-31 pinned rc1 "until the stable 26.10 ships"): fixes every 26.4.0 advisory incl. GHSA-vpp8-g58w-m8mp (HTTP/2 rapid reset)
 channels-redis>=4.2.0         # shared channel layer when REDIS_URL is set (web + scheduler are separate processes)
-PyJWT>=2.8.0                  # JWT decode in WS middleware (already pulled by simplejwt)
+PyJWT>=2.15.1                  # JWT decode in WS middleware (already pulled by simplejwt)
 imagehash>=4.3.0
 beautifulsoup4>=4.12.0
 # ── Web Push (VAPID) ──────────────────────────────────────────────────────────
@@ -38,3 +38,24 @@ pywebpush>=2.0.0              # browser push notifications (VAPID) — "alive" b
 PyMySQL==1.2.0  # Issabel CDR (call-center call counts, doc 16 Phase 5)
 python-dateutil>=2.8.2     # apps/cheques/engine.py (module-level import)
 JPype1>=1.5.0              # SOFTECH JDBC bridge (config/sybase.py) — needs a Java runtime only to CONNECT
+
+# ── Security floors for transitive packages (pip-audit, Batch 6 — 2026-10-31) ──
+# Not imported directly; listed so the resolver can't pick a version with a known advisory.
+cryptography>=50.0.2          # pyjwt / pywebpush
+sqlparse>=0.6.0               # Django
+urllib3>=2.8.0
+certifi>=2026.10.18
+anyio>=4.14.2
+autobahn>=26.7.1              # daphne
+pyasn1>=0.6.5
+setuptools>=84.1.0
+aiohttp>=3.14.4               # channels-redis / google-genai
+multidict>=6.9.1
+msgpack>=1.2.4                # channels-redis
+filelock>=4.2.5               # torch / huggingface (easyocr)
+fsspec>=2026.6.0
+brotli>=1.2.1
+httplib2>=0.32.0
+soupsieve>=2.9.0              # beautifulsoup4
+ujson>=5.13.0
+torch>=2.13.0                 # easyocr

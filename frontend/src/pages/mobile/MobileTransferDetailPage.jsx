@@ -170,7 +170,7 @@ export default function MobileTransferDetailPage() {
             {error && <div className="text-sm text-red-600 mt-2 text-center">{error}</div>}
             <div className="flex gap-2 mt-4">
               <button onClick={() => setAction(null)} disabled={saving} className="btn-secondary flex-1 text-sm">إلغاء</button>
-              <button onClick={run} disabled={saving} className="btn-primary flex-1 text-sm disabled:opacity-50">
+              <button data-tour="transfers-mdetail-confirm" onClick={run} disabled={saving} className="btn-primary flex-1 text-sm disabled:opacity-50">
                 {saving ? 'جارٍ التنفيذ...' : 'تأكيد'}
               </button>
             </div>

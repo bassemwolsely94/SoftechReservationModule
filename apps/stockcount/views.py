@@ -63,6 +63,7 @@ class SnapshotPagination(PageNumberPagination):
 
 
 from core.permissions import matrix_permission                     # noqa: E402
+from core import branch_scope                                     # noqa: E402
 
 # Stock counts = the `stockcount` matrix module (Batch 4, Z-9c — was any logged-in user): reads
 # need view; opening, counting, uploading and closing need create / edit / finalize; previewing
@@ -81,6 +82,9 @@ class StockCountSessionViewSet(viewsets.ModelViewSet):
         qs     = StockCountSession.objects.select_related(
             'created_by', 'snapshot_by', 'uploaded_by',
         )
+        # Batch 5 part 2: only the user's branches (sessions carry the SOFTECH code); every
+        # detail action goes through get_object(), so it inherits this.
+        qs     = branch_scope.scope_code(qs, self.request.user)
         branch = self.request.query_params.get('branch_code')
         st     = self.request.query_params.get('status')
         mode   = self.request.query_params.get('mode')
@@ -108,6 +112,7 @@ class StockCountSessionViewSet(viewsets.ModelViewSet):
         raise MethodNotAllowed(request.method)
 
     def perform_create(self, serializer):
+        branch_scope.require_code(self.request.user, serializer.validated_data.get('branch_code'))
         profile = getattr(self.request.user, 'staff_profile', None)
         serializer.save(created_by=profile)
 

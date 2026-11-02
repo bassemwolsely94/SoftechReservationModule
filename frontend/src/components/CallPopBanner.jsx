@@ -84,7 +84,7 @@ export default function CallPopBanner({ onLoadCustomer, onNewCustomer }) {
         <span className="flex items-center gap-1 flex-wrap">
           <span className="text-xs text-sky-700">{rows.length > 1 ? `${rows.length} عملاء بهذا الرقم — اختر:` : 'عميل:'}</span>
           {rows.map(c => (
-            <button key={c.id} type="button" onClick={() => onLoadCustomer?.(pick(c))}
+            <button data-tour="pos-order-callpop-load" key={c.id} type="button" onClick={() => onLoadCustomer?.(pick(c))}
                     title="تحميل كعميل (PIC) للأمر"
                     className="px-2 py-0.5 rounded-full border border-sky-300 bg-white text-xs text-sky-900 hover:bg-sky-100 flex items-center gap-1">
               <Icon name="usercheck" size={12} />
@@ -98,7 +98,7 @@ export default function CallPopBanner({ onLoadCustomer, onNewCustomer }) {
 
       <div className="mr-auto flex items-center gap-1.5">
         {rows && call.caller_number && (
-          <button type="button" onClick={() => onNewCustomer?.(call.caller_number)}
+          <button data-tour="pos-order-callpop-new" type="button" onClick={() => onNewCustomer?.(call.caller_number)}
                   className="px-2.5 py-1 rounded bg-sky-600 text-white text-xs flex items-center gap-1">
             <Icon name="plus" size={13} /> عميل جديد بهذا الرقم
           </button>

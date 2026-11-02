@@ -69,7 +69,7 @@ export default function Glossary({ index, go }) {
         </div>
       </details>
       <div className="flex items-center gap-2">
-        <button type="button" disabled={busy} onClick={save} className="text-sm bg-brand-600 text-white rounded-lg px-4 py-1 disabled:opacity-50">حفظ</button>
+        <button data-tour="general-help-glossary-save" type="button" disabled={busy} onClick={save} className="text-sm bg-brand-600 text-white rounded-lg px-4 py-1 disabled:opacity-50">حفظ</button>
         <button type="button" onClick={() => setEditing(null)} className="text-sm border border-line rounded-lg px-3 py-1">إلغاء</button>
         {err && <span className="text-xs text-red-600">{err}</span>}
       </div>
@@ -81,7 +81,7 @@ export default function Glossary({ index, go }) {
       <div className="flex items-center gap-2">
         <h3 className="text-sm font-bold text-content flex-1">📖 قاموس المصطلحات</h3>
         {data?.can_edit && editing !== 'new' && (
-          <button type="button" onClick={() => start(null)} className="text-xs text-brand-600 hover:underline">+ مصطلح</button>
+          <button data-tour="general-help-glossary-new" type="button" onClick={() => start(null)} className="text-xs text-brand-600 hover:underline">+ مصطلح</button>
         )}
       </div>
       <p className="text-xs text-faint">كلمة واحدة معتمدة لكل حاجة. وإنت بتكتب الشرح أو سطر «إيه الجديد» هيظهر «💡» لو استخدمت كلمة من «نتجنّب».</p>
@@ -111,10 +111,10 @@ export default function Glossary({ index, go }) {
             </div>
             {data.can_edit && (
               <div className="flex gap-2 text-xs">
-                <button type="button" onClick={() => start(t)} className="text-brand-600 hover:underline">تعديل</button>
+                <button data-tour="general-help-glossary-edit" type="button" onClick={() => start(t)} className="text-brand-600 hover:underline">تعديل</button>
                 {confirmDel === t.id
-                  ? <button type="button" disabled={busy} onClick={() => run(() => helpApi.deleteTerm(t.id))} className="text-red-600 font-semibold">متأكد؟ احذف</button>
-                  : <button type="button" onClick={() => setConfirmDel(t.id)} className="text-faint hover:text-red-600">حذف</button>}
+                  ? <button data-tour="general-help-glossary-delete-confirm" type="button" disabled={busy} onClick={() => run(() => helpApi.deleteTerm(t.id))} className="text-red-600 font-semibold">متأكد؟ احذف</button>
+                  : <button data-tour="general-help-glossary-delete" type="button" onClick={() => setConfirmDel(t.id)} className="text-faint hover:text-red-600">حذف</button>}
               </div>
             )}
           </div>

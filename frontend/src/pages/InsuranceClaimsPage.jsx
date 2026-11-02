@@ -401,6 +401,10 @@ function ImportModal({ subclients, onClose, onCreated }) {
       onCreated(data.claim)
     } catch (e) {
       setError(e.response?.data?.error || 'حدث خطأ')
+      // The dates span several SOFTECH motalbas — show them so one is picked by number.
+      if (e.response?.status === 409 && Array.isArray(e.response.data?.motalbas)) {
+        setMotalbas(e.response.data.motalbas)
+      }
     } finally { setLoading(false) }
   }
 
@@ -432,23 +436,26 @@ function ImportModal({ subclients, onClose, onCreated }) {
             <div data-tour="insurance-import-softech" className="border border-blue-200 rounded-lg p-3 bg-blue-50">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-xs font-semibold text-blue-800">المطالبات المتاحة في سوفتك</span>
-                <Btn onClick={loadMotalbas} disabled={loadingMot} size="sm" variant="secondary">
+                <Btn data-tour="insurance-claims-import-load-motalbas" onClick={loadMotalbas} disabled={loadingMot} size="sm" variant="secondary">
                   {loadingMot ? 'جارٍ التحميل...' : 'عرض المطالبات'}
                 </Btn>
               </div>
               {motalbas.length > 0 && (
                 <div className="max-h-44 overflow-y-auto border border-gray-200 rounded bg-white mb-2">
                   {motalbas.map(m => (
-                    <button key={m.motalbano} onClick={() => pickMotalba(m)}
+                    <button data-tour="insurance-claims-import-pick-motalba" key={m.motalbano ?? 'none'} onClick={() => m.motalbano && pickMotalba(m)}
+                      disabled={!m.motalbano}
                       className={`w-full text-right px-3 py-2 text-xs hover:bg-blue-50 border-b border-gray-100 flex justify-between items-center ${
                         String(m.motalbano) === form.softech_motalba_no ? 'bg-blue-100' : ''
                       }`}>
                       <div>
-                        <span className="font-mono font-bold text-blue-700 ml-2">#{m.motalbano}</span>
+                        <span className="font-mono font-bold text-blue-700 ml-2">{m.motalbano ? `#${m.motalbano}` : 'بدون رقم'}</span>
                         <span className="text-gray-500">{m.motfromdate} {fa()} {m.mottodate}</span>
                       </div>
                       <div>
-                        <span className="text-gray-500 ml-2">{m.rxcount} روشتة</span>
+                        <span className="text-gray-500 ml-2">
+                          {m.rxcount} روشتة{m.in_range != null && m.in_range !== m.rxcount ? ` (الاستيراد بالتاريخ كان سيأخذ ${m.in_range} منها)` : ''}
+                        </span>
                         <span className="font-mono text-gray-800">{fmtPlain(m.docvaluetotal)}</span>
                       </div>
                     </button>
@@ -735,6 +742,7 @@ export default function InsuranceClaimsPage() {
             <Btn variant="secondary" onClick={() => navigate('/insurance/item-overrides')} size="sm" data-tour="insurance-claims-item-overrides">
               🏷 تصويب تصنيف الأصناف
             </Btn>
+            <Btn variant="secondary" onClick={() => navigate('/insurance/reports')} size="sm" data-tour="insurance-claims-reports">📊 تقارير المطالبات</Btn>
             <Btn variant="secondary" onClick={() => setShowDiscover(true)} size="sm" data-tour="insurance-claims-discover">
               🔍 استعراض من سوفتك
             </Btn>
@@ -902,7 +910,7 @@ export default function InsuranceClaimsPage() {
                         className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-0.5">
                         طباعة
                       </button>
-                      <button
+                      <button data-tour="insurance-claims-row-delete"
                         onClick={() => deleteClaims([claim.id])} disabled={deleting}
                         title="حذف المطالبة (الاستيراد المحلى فقط)"
                         className="text-xs text-red-500 hover:text-white hover:bg-red-500 border border-red-200 rounded px-2 py-0.5 mr-1 disabled:opacity-50">

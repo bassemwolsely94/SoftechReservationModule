@@ -2,7 +2,6 @@
 
 call_center GET /api/replacement/cases/987654321/operations/987654321/post/
 call_center GET /api/replacement/cases/987654321/reversals/987654321/987654321/
-call_center POST /api/batches/stock-expiry/disposal/987654321/status/
 call_center POST /api/config/x
 call_center POST /api/enrichment/x
 call_center POST /api/products/x/track/
@@ -10,7 +9,6 @@ call_center POST /api/replacement/cases/987654321/operations/987654321/post/
 call_center POST /api/replacement/cases/987654321/reversals/987654321/987654321/
 delivery GET /api/replacement/cases/987654321/operations/987654321/post/
 delivery GET /api/replacement/cases/987654321/reversals/987654321/987654321/
-delivery POST /api/batches/stock-expiry/disposal/987654321/status/
 delivery POST /api/config/x
 delivery POST /api/customers/987654321/notes/
 delivery POST /api/customers/987654321/receipt/
@@ -26,13 +24,11 @@ delivery POST /api/replacement/cases/987654321/operations/987654321/post/
 delivery POST /api/replacement/cases/987654321/reversals/987654321/987654321/
 pharmacist POST /api/config/x
 purchasing POST /api/config/x
-quality_manager POST /api/batches/stock-expiry/disposal/987654321/status/
 quality_manager POST /api/config/x
 quality_manager POST /api/enrichment/x
 quality_manager POST /api/products/x/track/
 salesperson GET /api/replacement/cases/987654321/operations/987654321/post/
 salesperson GET /api/replacement/cases/987654321/reversals/987654321/987654321/
-salesperson POST /api/batches/stock-expiry/disposal/987654321/status/
 salesperson POST /api/config/x
 salesperson POST /api/customers/987654321/notes/
 salesperson POST /api/customers/987654321/receipt/
@@ -46,7 +42,6 @@ salesperson POST /api/referral/leads/987654321/invite/
 salesperson POST /api/referral/leads/987654321/validate/
 salesperson POST /api/replacement/cases/987654321/operations/987654321/post/
 salesperson POST /api/replacement/cases/987654321/reversals/987654321/987654321/
-supervisor POST /api/batches/stock-expiry/disposal/987654321/status/
 supervisor POST /api/config/x
 supervisor POST /api/enrichment/x
 supervisor POST /api/products/x/track/
@@ -54,7 +49,6 @@ viewer GET /api/replacement/cases/987654321/operations/987654321/post/
 viewer GET /api/replacement/cases/987654321/reversals/987654321/987654321/
 viewer POST /api/approvals/requests/987654321/cancel/
 viewer POST /api/approvals/requests/987654321/decide/
-viewer POST /api/batches/stock-expiry/disposal/987654321/status/
 viewer POST /api/config/x
 viewer POST /api/customers/987654321/notes/
 viewer POST /api/customers/987654321/receipt/

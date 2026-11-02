@@ -614,6 +614,7 @@ function WorkflowBar({ campaign, onAction }) {
                 className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm w-48"
               />
               <button
+                data-tour="omni-campaigns-reject-confirm"
                 onClick={() => { onAction('reject', rejectReason); setShowRejectBox(false) }}
                 disabled={!rejectReason}
                 className="px-3 py-1.5 bg-red-600 text-white text-sm rounded-lg disabled:opacity-50"

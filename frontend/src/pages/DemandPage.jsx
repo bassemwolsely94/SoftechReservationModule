@@ -120,7 +120,7 @@ function SubstitutesStrip({ item, branchId, addedIds, onAdd }) {
       </div>
       <div className="flex flex-wrap gap-1.5">
         {subs.map(s => (
-          <button key={s.id} type="button" onClick={() => onAdd(s, item.id)}
+          <button key={s.id} type="button" onClick={() => onAdd(s, item.id)} data-tour="demand-list-create-substitute"
             className="text-xs bg-white border border-blue-200 rounded-lg px-2 py-1 hover:bg-blue-100 text-blue-800 transition-colors"
             title={`متاح بالفرع: ${s.stock_at_branch} · الشبكة: ${s.stock_network} · ${s.pack_price} ج.م`}>
             + {s.name}
@@ -319,7 +319,7 @@ function CreateDemandModal({ branches, userBranchId, onClose, onCreated }) {
               onClear={() => {}}
               placeholder="ابحث باسم الصنف أو الكود أو الباركود (قارئ ضوئي متوافق)..."
             />
-            <button type="button" onClick={addUncoded}
+            <button type="button" onClick={addUncoded} data-tour="demand-list-create-uncoded"
               className="mt-2 text-xs text-brand-600 hover:text-brand-700 font-semibold">
               + إضافة صنف غير مكوَّد (يدوي)
             </button>
@@ -342,7 +342,7 @@ function CreateDemandModal({ branches, userBranchId, onClose, onCreated }) {
                     <input placeholder="اسم الصنف (نص حر)" value={row.name}
                       onChange={e => updateItem(idx, 'name', e.target.value)}
                       className="flex-1 min-w-0 border border-amber-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-amber-400" />
-                    <button onClick={() => removeItem(idx)}
+                    <button onClick={() => removeItem(idx)} data-tour="demand-list-create-item-remove"
                       className="text-gray-300 hover:text-red-400 text-xl leading-none shrink-0">✕</button>
                   </div>
                   <div className="flex items-center gap-2">
@@ -382,7 +382,7 @@ function CreateDemandModal({ branches, userBranchId, onClose, onCreated }) {
                     <input placeholder="ملاحظة" value={row.notes}
                       onChange={e => updateItem(idx, 'notes', e.target.value)}
                       className="w-28 border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-brand-400" />
-                    <button onClick={() => removeItem(idx)}
+                    <button onClick={() => removeItem(idx)} data-tour="demand-list-create-item-remove"
                       className="text-gray-300 hover:text-red-400 text-xl leading-none">✕</button>
                   </div>
                   {!row.substituteFor && (
@@ -498,7 +498,7 @@ function BulkBar({ count, staff, busy, onAssign, onFlag, onCancel, onClear }) {
         <button disabled={busy} onClick={onCancel} data-tour="demand-list-bulk-cancel"
           className="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-50">إلغاء</button>
       </CanDo>
-      <button onClick={onClear} className="text-xs text-gray-400 hover:text-gray-600 px-2">مسح التحديد</button>
+      <button onClick={onClear} data-tour="demand-list-bulk-clear" className="text-xs text-gray-400 hover:text-gray-600 px-2">مسح التحديد</button>
     </div>
   )
 }
@@ -694,7 +694,7 @@ useEffect(() => {
               <option value="">كل الطلبات</option>
               <option value="true">⚠ SLA تجاوز فقط</option>
             </select>
-            <button className="btn-secondary text-xs px-3"
+            <button className="btn-secondary text-xs px-3" data-tour="demand-list-filters-reset"
   onClick={() => {
     setFilters({ status: '', priority: '', branch: '', search: '', sla_breached: '' })
     setSearchInput('')
@@ -721,7 +721,7 @@ useEffect(() => {
               {!filters.status && !filters.search && 'اضغط "+ تسجيل طلب جديد" لبدء تتبع الطلب الضائع'}
             </div>
             {!filters.status && !filters.search && (
-              <button onClick={() => setShowCreate(true)} className="btn-primary text-sm">
+              <button onClick={() => setShowCreate(true)} className="btn-primary text-sm" data-tour="demand-list-empty-new">
                 + تسجيل طلب جديد
               </button>
             )}

@@ -5,7 +5,17 @@ from rest_framework import serializers
 from .models import WhatsAppCampaign, CampaignMessage
 
 
-class CampaignMessageSerializer(serializers.ModelSerializer):
+from apps.customers.phone_mask import RecordPhoneMask, CustomerPhoneMask  # Batch 5b
+
+class CampaignMessageSerializer(RecordPhoneMask, serializers.ModelSerializer):
+    phone_mask_fields = ('phone_number',)
+    phone_mask_links = ('whatsapp_url',)
+    def phones_visible_for(self, user, instance):
+        from core.permissions import matrix_allows
+        return (super().phones_visible_for(user, instance)
+                and (getattr(user, 'is_superuser', False)
+                     or matrix_allows(getattr(user, 'staff_profile', None), 'campaigns', 'approve', 'create', 'edit')))
+
     status_label = serializers.CharField(source='get_status_display', read_only=True)
 
     class Meta:

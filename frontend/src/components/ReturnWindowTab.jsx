@@ -63,7 +63,7 @@ function AnswerCell({ line, onSaved }) {
         <input type="date" value={allowed} onChange={e => setAllowed(e.target.value)}
                title="الصلاحية المسموحة" className="border rounded px-1 py-0.5 text-xs" />
       )}
-      <button disabled={!ans || save.isPending} onClick={() => save.mutate()}
+      <button data-tour="batches-main-return-answer-save" disabled={!ans || save.isPending} onClick={() => save.mutate()}
               className="px-2 py-0.5 text-xs bg-primary text-white rounded disabled:opacity-40">حفظ</button>
       {rec.returned_qty > 0 && <span className="text-xs text-indigo-600">مُرتجع {fmtNum(rec.returned_qty, 2)}</span>}
       {err && <span className="text-xs text-red-600">{err}</span>}
@@ -89,7 +89,7 @@ function PolicyTable({ canEdit }) {
       <div className="flex items-center justify-between mb-2">
         <h3 className="font-bold text-gray-800">سياسات مرتجع الموردين</h3>
         {canEdit && !edit && (
-          <button onClick={() => setEdit({ supplier_code: '', supplier_name: '', accepts_expiry_returns: true,
+          <button data-tour="batches-main-return-policy-new" onClick={() => setEdit({ supplier_code: '', supplier_name: '', accepts_expiry_returns: true,
                                            open_offset: -2, close_offset: 1, self_entry: false, notes: '', isNew: true })}
                   className="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">+ مورد</button>
         )}
@@ -130,12 +130,12 @@ function PolicyTable({ canEdit }) {
                 <td className="text-left">
                   {on ? (
                     <span className="flex gap-1 justify-end">
-                      <button onClick={() => save.mutate(edit)} disabled={save.isPending || !edit.supplier_code}
+                      <button data-tour="batches-main-return-policy-save" onClick={() => save.mutate(edit)} disabled={save.isPending || !edit.supplier_code}
                               className="px-2 py-0.5 text-xs bg-primary text-white rounded disabled:opacity-40">حفظ</button>
                       <button onClick={() => { setEdit(null); setErr(null) }} className="px-2 py-0.5 text-xs border rounded">إلغاء</button>
                     </span>
                   ) : canEdit && !edit && (
-                    <button onClick={() => setEdit({ ...p })} className="px-2 py-0.5 text-xs border rounded">تعديل</button>
+                    <button data-tour="batches-main-return-policy-edit" onClick={() => setEdit({ ...p })} className="px-2 py-0.5 text-xs border rounded">تعديل</button>
                   )}
                 </td>
               </tr>
@@ -244,10 +244,10 @@ export default function ReturnWindowTab() {
         </select>
         {stateF && <button onClick={() => setStateF('')} className="px-2 py-1 text-xs border rounded-lg">✕ {STATES.find(s => s.key === stateF)?.label}</button>}
         <span className="flex-1" />
-        <button onClick={() => refresh.mutate('expiry')} disabled={refresh.isPending} className="px-3 py-1.5 border rounded-lg hover:bg-gray-50 disabled:opacity-50">🔄 أرصدة الصلاحية</button>
-        <button onClick={() => refresh.mutate('purchase_expiry')} disabled={refresh.isPending} className="px-3 py-1.5 border rounded-lg hover:bg-gray-50 disabled:opacity-50">🔄 صلاحيات الشراء</button>
-        <button onClick={() => refresh.mutate('purchases')} disabled={refresh.isPending} className="px-3 py-1.5 border rounded-lg hover:bg-gray-50 disabled:opacity-50">🔄 المشتريات والمرتجعات</button>
-        <button onClick={() => refresh.mutate('reconcile')} disabled={refresh.isPending} className="px-3 py-1.5 border rounded-lg hover:bg-gray-50 disabled:opacity-50">↩️ مطابقة مستندات المرتجع</button>
+        <button data-tour="batches-main-return-refresh-expiry" onClick={() => refresh.mutate('expiry')} disabled={refresh.isPending} className="px-3 py-1.5 border rounded-lg hover:bg-gray-50 disabled:opacity-50">🔄 أرصدة الصلاحية</button>
+        <button data-tour="batches-main-return-refresh-purchase-expiry" onClick={() => refresh.mutate('purchase_expiry')} disabled={refresh.isPending} className="px-3 py-1.5 border rounded-lg hover:bg-gray-50 disabled:opacity-50">🔄 صلاحيات الشراء</button>
+        <button data-tour="batches-main-return-refresh-purchases" onClick={() => refresh.mutate('purchases')} disabled={refresh.isPending} className="px-3 py-1.5 border rounded-lg hover:bg-gray-50 disabled:opacity-50">🔄 المشتريات والمرتجعات</button>
+        <button data-tour="batches-main-return-reconcile" onClick={() => refresh.mutate('reconcile')} disabled={refresh.isPending} className="px-3 py-1.5 border rounded-lg hover:bg-gray-50 disabled:opacity-50">↩️ مطابقة مستندات المرتجع</button>
       </div>
       {refresh.isPending && <ProgressBar label="تحديث" message="جارٍ التحديث…" since={since} className="mb-3" />}
       {msg && <div className="mb-3 text-sm text-gray-700 bg-gray-50 border rounded-lg px-3 py-2">{msg}</div>}
@@ -274,7 +274,7 @@ export default function ReturnWindowTab() {
         <button data-tour="batches-main-return-export" onClick={() => exportX.mutate('supplier')} disabled={!supplier || exportX.isPending}
                 title={supplier ? '' : 'اختر المورد أولاً'}
                 className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40">⬇️ تصدير للمورد</button>
-        <button onClick={() => exportX.mutate('grid')} disabled={!lines.length || exportX.isPending}
+        <button data-tour="batches-main-return-export-grid" onClick={() => exportX.mutate('grid')} disabled={!lines.length || exportX.isPending}
                 className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40">⬇️ تصدير Excel</button>
         <span className="text-xs text-gray-400">{GRID_KEYS_HINT.replace(' · M مطابقة', '')} (Enter = مقبول)</span>
       </div>
