@@ -657,8 +657,12 @@ SCREENS = [
                  '• «الحجم حسب القناة»: عدد الرسائل والمكالمات لكل قناة، وجنبها الوارد منها — يوضح العملاء بيفضّلوا يكلمونا منين.\n• «حالات المحادثات»: كام مفتوحة ومنتظرة ومحلولة ومغلقة؛ لو المفتوحة كتير فيه تراكم.\n• تحتهم رسم «الحجم اليومي (وارد)» لكل يوم في الفترة.',
                  '• "Volume by channel": messages and calls per channel, with the inbound count beside it — shows where customers prefer to reach us.\n• "Conversation statuses": how many are open, pending, resolved and closed; many open ones means a backlog.\n• Below them is the "Daily volume (inbound)" chart for each day of the period.')},
         ],
-        'updated': '2026-10-26',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'tips': [
+            T('المكالمات الفائتة وأرقام الاتصال الجديدة وأداء موظفي مركز الاتصال في «تحليلات العملاء» ← تبويب «المكالمات الفائتة»: /customers/pic-analytics?tab=missed',
+              'Missed calls, new phone numbers and call-center agent performance are in Customer analytics → the "Missed calls" tab: /customers/pic-analytics?tab=missed'),
+        ],
+        'updated': '2026-11-03',
+        'change_note': T('إشارة إلى تبويب المكالمات الفائتة في تحليلات العملاء', 'Pointer to the missed-calls tab in customer analytics'),
     },
     {
         'key': 'omni.whatsapp_inbox',

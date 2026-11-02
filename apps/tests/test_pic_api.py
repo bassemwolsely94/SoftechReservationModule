@@ -221,6 +221,40 @@ class DialTests(ApiBase):
         self.assertEqual(bad.status_code, 400)
 
 
+class CallbackTests(ApiBase):
+    P = '/api/pic-analytics/'
+
+    def due(self, days=1):
+        from django.utils import timezone
+        from datetime import timedelta
+        return (timezone.now() + timedelta(days=days)).isoformat()
+
+    def test_creates_pending_callback(self):
+        from apps.callcenter.models import CallLog
+        r = self.admin_c.post(f'{self.P}calls/missed/{self.miss.pk}/callback/',
+                              {'due': self.due(), 'note': 'اتصل بعد الظهر'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        log = CallLog.objects.get(pk=r.json()['id'])
+        self.assertEqual((log.status, log.direction, log.source, log.handled_by), ('callback', 'inbound', 'manual', self.admin_p))
+        self.assertEqual(log.phone_number, RAW)
+        self.assertNotIn(RAW, r.content.decode())
+        self.assertNotIn('1000000010', r.content.decode())
+        pend = self.admin_c.get('/api/callcenter/calls/pending-callbacks/?mode=all').json()
+        self.assertIn(log.pk, [x['id'] for x in (pend.get('results') if isinstance(pend, dict) else pend)])
+        self.assertTrue(AuditLog.objects.filter(extra__calllog_id=log.pk).exists())
+
+    def test_past_due_and_missing_due_are_400(self):
+        for body in ({'due': self.due(-1)}, {}, {'due': 'nope'}, {'due': self.due(), 'note': 'x' * 501}):
+            r = self.admin_c.post(f'{self.P}calls/missed/{self.miss.pk}/callback/', body, format='json')
+            self.assertEqual(r.status_code, 400, body)
+
+    def test_branch_manager_forbidden_and_answered_404(self):
+        self.assertEqual(self.mgr_c.post(f'{self.P}calls/missed/{self.miss.pk}/callback/',
+                                         {'due': self.due()}, format='json').status_code, 403)
+        self.assertEqual(self.admin_c.post(f'{self.P}calls/missed/{self.lead.pk}/callback/',
+                                           {'due': self.due()}, format='json').status_code, 404)
+
+
 class ExportTests(ApiBase):
 
     def get(self, client, extra='', path='export/'):

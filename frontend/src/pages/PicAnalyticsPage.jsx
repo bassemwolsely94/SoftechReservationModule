@@ -6,9 +6,8 @@
  * filter bar and tab live in the URL (?tab=&from=&to=&branch=…) so a view can be shared.
  *
  * Tabs here: overview · pics · branches · salespeople · channels · retention.
- * EXTENSION POINT (Task 14): the three call tabs (calls · missed · numbers) are admin/supervisor
- * only — add them to CALLS_TABS (shown when access.sees_calls_tabs) and a renderer to
- * CALLS_PANELS; the tab key must equal the help tab key.
+ * Call tabs (calls · missed · numbers): management only — shown when access.sees_calls_tabs, and the
+ * server refuses them (403) to anyone else. The tab key equals the help tab key.
  */
 import { useMemo, useState } from 'react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -23,6 +22,9 @@ import PicTable from '../components/pic-analytics/PicTable'
 import GroupTable from '../components/pic-analytics/GroupTable'
 import RetentionPanel from '../components/pic-analytics/RetentionPanel'
 import AccessPanel from '../components/pic-analytics/AccessPanel'
+import CallCenterTab from '../components/pic-analytics/CallCenterTab'
+import MissedTab from '../components/pic-analytics/MissedTab'
+import NumbersTab from '../components/pic-analytics/NumbersTab'
 import { downloadBlob, errText } from './supply/supplyUi'
 
 const SALES_TABS = [
@@ -33,7 +35,11 @@ const SALES_TABS = [
   { key: 'channels',    label: '🧭 القنوات والأصناف' },
   { key: 'retention',   label: '🔁 الولاء والتكرار' },
 ]
-const CALLS_TABS = []        // Task 14: { key: 'calls' | 'missed' | 'numbers', label }
+const CALLS_TABS = [
+  { key: 'calls',   label: '☎️ مركز الاتصال' },
+  { key: 'missed',  label: '📵 المكالمات الفائتة' },
+  { key: 'numbers', label: '🆕 أرقام جديدة' },
+]
 const FILTER_KEYS = ['from', 'to', 'branch', 'salesperson', 'channel', 'category', 'segment', 'customer_type', 'frequency', 'agent']
 
 const pad = n => String(n).padStart(2, '0')
@@ -115,7 +121,8 @@ export default function PicAnalyticsPage() {
     queryFn: () => picAnalyticsApi.overdue({ ...params, page: overduePage, page_size: 50 }).then(r => r.data),
     enabled: ready && tab === 'retention', staleTime: 2 * 60_000, placeholderData: keepPreviousData,
   })
-  const active = { overview, pics, branches: branchG, salespeople: salesG, channels: chanG, retention }[tab]
+  const center = useGroup('calls-center', () => picAnalyticsApi.callCenter(params).then(r => r.data), tab === 'calls')
+  const active = { overview, pics, branches: branchG, salespeople: salesG, channels: chanG, retention, calls: center }[tab]
 
   const branchName = pk => {
     const b = branches.find(x => x.id === pk)
@@ -207,6 +214,10 @@ export default function PicAnalyticsPage() {
         <RetentionPanel data={retention.data} overdue={overdue.data}
                         overduePage={overduePage} onOverduePage={setOverduePage} />
       )}
+
+      {tab === 'calls' && <CallCenterTab data={center.data} />}
+      {tab === 'missed' && <MissedTab params={params} ready={ready} />}
+      {tab === 'numbers' && <NumbersTab params={params} ready={ready} />}
 
       {access?.can_manage_access && <AccessPanel />}
     </div>

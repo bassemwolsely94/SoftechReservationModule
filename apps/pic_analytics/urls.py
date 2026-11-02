@@ -14,6 +14,7 @@ urlpatterns = [
     path('calls/missed/', views.calls_missed),
     path('calls/missed/rows/', views.calls_missed_rows),
     path('calls/missed/<int:call_id>/dial/', views.missed_dial),
+    path('calls/missed/<int:call_id>/callback/', views.missed_callback),
     path('calls/unanswered/', views.calls_unanswered),
     path('numbers/', views.numbers_list),
     path('numbers/conversions/', views.numbers_conversions),

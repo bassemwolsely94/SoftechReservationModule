@@ -322,6 +322,44 @@ def missed_dial(request, call_id):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+def missed_callback(request, call_id):
+    """Schedule a call-back for a missed call: a CallLog(status='callback') that lands in the
+    call center's existing pending-callbacks list. The browser never gets the raw number."""
+    acc = Access(request)
+    if not acc.can_view or not acc.sees_calls_tabs:
+        return _deny()
+    from django.utils.dateparse import parse_datetime
+
+    from apps.callcenter.models import CallLog
+    from apps.customers.access import mask
+    from apps.pbx.models import CdrCall
+    call = (CdrCall.objects.filter(pk=call_id, is_transfer=False, direction='inbound')
+            .exclude(status='answered').exclude(customer_number='').first())
+    if call is None:
+        return Response({'detail': 'غير موجود — Not found'}, status=404)
+    raw_due = request.data.get('due')
+    due = parse_datetime(str(raw_due)) if raw_due else None
+    if due is None:
+        return _bad('موعد المعاودة مطلوب — due is required')
+    if timezone.is_naive(due):
+        due = timezone.make_aware(due)
+    if due <= timezone.now():
+        return _bad('موعد المعاودة يجب أن يكون في المستقبل')
+    note = str(request.data.get('note') or '').strip()
+    if len(note) > 500:
+        return _bad('الملاحظة أطول من 500 حرف')
+    log = CallLog.objects.create(
+        phone_number=call.customer_number, customer=call.customer, direction='inbound',
+        status='callback', callback_due=due, handled_by=acc.profile, notes=note, source='manual')
+    from apps.audit.models import AuditLog
+    AuditLog.log('pic_analytics_dialled', user=acc.profile, obj=log, request=request,
+                 note='callback scheduled (not a dial)', extra={'call_id': call.pk, 'calllog_id': log.pk})
+    return Response({'id': log.pk, 'callback_due': log.callback_due.isoformat(),
+                     'number': mask(call.customer_number)})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def number_dial(request, number_id):
     acc = Access(request)
     if not acc.can_view or not acc.sees_calls_tabs:
