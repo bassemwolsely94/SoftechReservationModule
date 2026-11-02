@@ -27,6 +27,11 @@ _FAIL_ACTIONS = ('login_failed', 'mfa_failed')
 _RESET_ACTIONS = ('login_success', 'mfa_verified', 'login_unlocked')
 
 
+def _network_fields(request):
+    from .views import _request_network_fields
+    return _request_network_fields(request)
+
+
 def _logs():
     from .models import UserActivityLog
     return UserActivityLog.objects
@@ -67,7 +72,7 @@ def locked_until(profile):
     return end if end and end > now else None
 
 
-def register_lock(profile, ip):
+def register_lock(profile, ip, request=None):
     """Record the lock once and tell the admins. Safe to call after every failure."""
     until = locked_until(profile)
     if not until:
@@ -77,7 +82,7 @@ def register_lock(profile, ip):
                       created_at__gt=began - LOCK_FOR).exists():
         return
     _logs().create(target_user=profile, changed_by=None, action='login_locked', ip_address=ip,
-                   new_value={'locked_until': until.isoformat()},
+                   new_value={'locked_until': until.isoformat()}, **_network_fields(request),
                    note=f'{FAIL_LIMIT} محاولات خاطئة خلال {int(WINDOW.total_seconds() // 60)} دقيقة')
     try:
         from apps.notifications.models import Notification
@@ -91,9 +96,9 @@ def register_lock(profile, ip):
         pass     # an alert transport problem must never change the login response
 
 
-def unlock(profile, by_profile, ip):
+def unlock(profile, by_profile, ip, request=None):
     _logs().create(target_user=profile, changed_by=by_profile, action='login_unlocked',
-                   ip_address=ip, note='رفع إيقاف الدخول')
+                   ip_address=ip, note='رفع إيقاف الدخول', **_network_fields(request))
 
 
 # ── Identifiers that match no account ────────────────────────────────────────

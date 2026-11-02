@@ -239,7 +239,7 @@ def _log(action, profile, request, note=''):
     from .views import _log_auth
     from core.client_ip import client_ip
     ip = client_ip(request)
-    _log_auth(action, profile, ip, note=note)
+    _log_auth(action, profile, ip, note=note, request=request)
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────────
@@ -271,7 +271,7 @@ def verify_2fa_view(request):
         _log('mfa_failed', profile, request, note=f'try {tries}/{MAX_CODE_TRIES}')
         if lockout.locked_until(profile):
             from core.client_ip import client_ip
-            lockout.register_lock(profile, client_ip(request))
+            lockout.register_lock(profile, client_ip(request), request=request)
         if tries >= MAX_CODE_TRIES:
             return Response({'error': 'محاولات كثيرة خاطئة — سجّل الدخول من جديد'},
                             status=status.HTTP_401_UNAUTHORIZED)

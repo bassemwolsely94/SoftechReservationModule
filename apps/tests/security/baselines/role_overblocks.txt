@@ -538,6 +538,13 @@ pharmacist GET /api/finance/cash-view/lines/x/
 pharmacist GET /api/finance/cash-view/opening-balance/
 quality_manager GET /api/finance/cash-view/export/
 
+# reason: security N1 — the trusted-network list decides who counts as "inside the company"; it is
+#   admin only (IsAdminRole) like the rest of the access settings, even for roles that can open settings.
+pharmacist GET /api/access/networks/
+pharmacist GET /api/access/networks/987654321/
+purchasing GET /api/access/networks/
+purchasing GET /api/access/networks/987654321/
+
 # reason: owner 2026-11-01 — disposal status changes are mapped to the expiry screen (catalog view) so
 #   supervisor / quality manager reach them; the view's gate then admits only admin / quality manager /
 #   supervisor (approve, done, reopen) and catalog editors (cancel their own draft).

@@ -326,6 +326,9 @@ class UserActivityLog(models.Model):
     new_value  = models.JSONField(null=True, blank=True, verbose_name='القيمة الجديدة')
     note       = models.TextField(blank=True, verbose_name='ملاحظة')
     ip_address = models.GenericIPAddressField(null=True, blank=True, verbose_name='عنوان IP')
+    network      = models.CharField(max_length=10, blank=True, verbose_name='الشبكة')
+    network_site = models.CharField(max_length=120, blank=True, verbose_name='موقع الشبكة')
+    user_agent   = models.CharField(max_length=300, blank=True, verbose_name='المتصفح')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='وقت الحدث', db_index=True)
 
     class Meta:

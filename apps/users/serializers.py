@@ -214,8 +214,10 @@ class UserActivityLogSerializer(serializers.ModelSerializer):
             'id', 'target_user', 'target_name',
             'changed_by', 'changed_by_name',
             'action', 'action_label',
-            'old_value', 'new_value', 'note', 'created_at',
+            'old_value', 'new_value', 'note', 'ip_address',
+            'network', 'network_site', 'user_agent', 'created_at',
         ]
+        read_only_fields = fields
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
