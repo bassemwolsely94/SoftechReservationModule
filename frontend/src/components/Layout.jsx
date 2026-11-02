@@ -230,6 +230,7 @@ export const NAV_GROUPS = [
       { to: '/settings',         icon: '⚙️', label: 'الإعدادات',         roles: ['admin','pharmacist'] },
       { to: '/sync',             icon: '⟳', label: 'المزامنة',            roles: ['admin'] },
       { to: '/access/networks',  icon: '🌐', label: 'الشبكات الموثوقة',   roles: ['admin'] },
+      { to: '/access/devices',   icon: '💻', label: 'الأجهزة',            roles: ['admin'] },
     ],
   },
 ]

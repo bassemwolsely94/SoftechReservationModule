@@ -621,3 +621,8 @@ Default pagination: CursorPagination (50 items)
 |----------|--------|---------|
 | `/api/access/whoami/` | GET | **Public**, throttled (60/min). `{zone: internal\|external, ip, label, site: {name, kind, branch_label}}` — the caller's own IP; site only when internal; zone comes from nginx's `X-ElR-Network`, never the client |
 | `/api/access/networks/` (`{id}/`) | GET, POST, PATCH, PUT, DELETE | Trusted networks (branch LAN / staff VPN / server CIDRs). Admin only; every change audited `trusted_network_changed` |
+| `/api/access/devices/` (`{id}/`) | GET, PATCH | Device registry (N2). Admin only. Filters `?status= ?kind= ?branch= ?q=`, pending first, unpaginated. PATCH edits name / kind / branch / owner / allowed_roles; status changes only via the actions below. Every change audited `device_changed` |
+| `/api/access/devices/{id}/approve/` | POST | Approve (pending or blocked -> approved) |
+| `/api/access/devices/{id}/block/` | POST | Block; `note` required (400 «اكتب سبب الحظر»). Ends the device's sessions: next call with its token answers 401 |
+| `/api/access/devices/{id}/retire/` | POST | Retire; final (400 «الجهاز متقاعد — لا يمكن إعادة تفعيله») |
+| `/api/access/devices/bulk-approve/` | POST | `{ids: [...]}` -> `{approved, skipped}`; only pending devices are approved |

@@ -197,18 +197,45 @@ def _qr_png_data_url(uri: str) -> str:
 
 # ── Shared login-response builder (lazy import to avoid an import cycle) ──────────
 
-def session_response(payload: dict, status_code=200):
-    """Response for a completed login: body as before + httpOnly JWT cookies."""
-    from core.auth_cookies import set_auth_cookies
+def session_response(payload: dict, status_code=200, device_secret=None):
+    """Response for a completed login: body as before + httpOnly JWT cookies (+ the device cookie
+    when a new device was enrolled)."""
+    from core.auth_cookies import set_auth_cookies, set_device_cookie
     resp = Response(payload, status=status_code)
-    return set_auth_cookies(resp, payload.get('access'), payload.get('refresh'))
+    set_auth_cookies(resp, payload.get('access'), payload.get('refresh'))
+    if device_secret:
+        set_device_cookie(resp, device_secret)
+    return resp
 
 
-def build_login_response(user) -> dict:
+def blocked_device_response(request, profile):
+    """401 (and a login_failed log row) when the request carries a BLOCKED device's cookie, else None."""
+    from apps.access import devices
+    if request is None or not devices.blocked_cookie(request):
+        return None
+    _log('login_refused_device', profile, request)   # not login_failed: never counts toward lockout
+    return Response({'error': devices.BLOCKED_MESSAGE}, status=status.HTTP_401_UNAUTHORIZED)
+
+
+def enroll_login(request, user):
+    """Enroll the browser's device for a completed sign-in: (device, new_secret) or (None, None)."""
+    profile = getattr(user, 'staff_profile', None)
+    if request is None or not profile:
+        return None, None
+    from apps.access import devices
+    device, secret, _created = devices.enroll(request, profile)
+    return device, secret
+
+
+def build_login_response(user, request=None, device=None) -> dict:
+    """Tokens + user for a completed sign-in. `device` (from enroll_login) adds the `dev` claim;
+    without a request or device there is no enrollment and no claim."""
     from rest_framework_simplejwt.tokens import RefreshToken
     from .views import _MeSerializer
     profile = getattr(user, 'staff_profile', None)
     refresh = RefreshToken.for_user(user)
+    if device is not None:
+        refresh['dev'] = str(device.public_id)   # before .access_token: the access token copies it
     return {
         'access':  str(refresh.access_token),
         'refresh': str(refresh),
@@ -235,11 +262,11 @@ def _actor_from_request(request, purposes=('enroll',)):
     return None, False
 
 
-def _log(action, profile, request, note=''):
+def _log(action, profile, request, note='', device=None):
     from .views import _log_auth
     from core.client_ip import client_ip
     ip = client_ip(request)
-    _log_auth(action, profile, ip, note=note, request=request)
+    _log_auth(action, profile, ip, note=note, request=request, device=device)
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────────
@@ -265,6 +292,10 @@ def verify_2fa_view(request):
     if not (profile and profile.mfa_enabled):
         return Response({'error': 'المصادقة الثنائية غير مفعّلة'}, status=status.HTTP_400_BAD_REQUEST)
 
+    refused = blocked_device_response(request, profile)
+    if refused is not None:
+        return refused
+
     if not (verify_login_code(profile, code) or consume_backup_code(profile, code)):
         cache.add(tries_key, 0, _PREAUTH_MAX_AGE)
         tries = cache.incr(tries_key)
@@ -278,11 +309,14 @@ def verify_2fa_view(request):
         return Response({'error': 'رمز التحقق غير صحيح'}, status=status.HTTP_401_UNAUTHORIZED)
 
     cache.set(done_key, 1, _PREAUTH_MAX_AGE)
-    _log('mfa_verified', profile, request)
-    resp = build_login_response(user)
+    device, device_secret = enroll_login(request, user)
+    _log('mfa_verified', profile, request, device=device)
+    resp = build_login_response(user, request, device=device)
     if request.data.get('remember_device'):
         resp['device_token'] = make_device_token(user)
-    return session_response(resp)
+        from apps.access import devices
+        devices.remember_mfa(device, profile)
+    return session_response(resp, device_secret=device_secret)
 
 
 @api_view(['POST'])
@@ -319,6 +353,10 @@ def enable_2fa_view(request):
     profile = getattr(user, 'staff_profile', None)
     if not profile or not profile.mfa_secret:
         return Response({'error': 'ابدأ الإعداد أولاً'}, status=status.HTTP_400_BAD_REQUEST)
+    if via_preauth:
+        refused = blocked_device_response(request, profile)
+        if refused is not None:
+            return refused
     if profile.mfa_enabled:      # A-1: no second set of backup codes / no login through here
         return Response({'error': 'المصادقة الثنائية مفعّلة بالفعل'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -334,11 +372,13 @@ def enable_2fa_view(request):
     _log('mfa_enabled', profile, request)
 
     resp = {'enabled': True, 'backup_codes': plain}
+    device_secret = None
     if via_preauth:
         # Enrolled as part of a forced login → log them in now.
-        resp.update(build_login_response(user))
-        _log('login_success', profile, request, note='دخول بعد تفعيل المصادقة الثنائية')
-    return session_response(resp)
+        device, device_secret = enroll_login(request, user)
+        resp.update(build_login_response(user, request, device=device))
+        _log('login_success', profile, request, note='دخول بعد تفعيل المصادقة الثنائية', device=device)
+    return session_response(resp, device_secret=device_secret)
 
 
 @api_view(['POST'])

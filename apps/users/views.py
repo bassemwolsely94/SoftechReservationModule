@@ -2,7 +2,7 @@ from rest_framework import serializers as drf_serializers, status, viewsets, fil
 from rest_framework.decorators import api_view, permission_classes, action, throttle_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
-from core.auth_cookies import set_auth_cookies
+from core.auth_cookies import set_auth_cookies, set_device_cookie
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.throttling import AnonRateThrottle
@@ -10,6 +10,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.utils import timezone
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # ── Gap-1: Brute-force throttle on login ──────────────────────────────────────
@@ -126,7 +129,7 @@ def _request_network_fields(request):
         return {}
 
 
-def _log_auth(action: str, profile, ip: str, note: str = '', request=None):
+def _log_auth(action: str, profile, ip: str, note: str = '', request=None, device=None):
     try:
         UserActivityLog.objects.create(
             target_user=profile,
@@ -134,6 +137,7 @@ def _log_auth(action: str, profile, ip: str, note: str = '', request=None):
             action=action,
             ip_address=ip,
             note=note,
+            device=device,
             **_request_network_fields(request),
         )
     except Exception:
@@ -200,26 +204,38 @@ def login_view(request):
     if profile and not profile.is_active:
         return Response({'error': 'الحساب موقوف. تواصل مع المدير'}, status=status.HTTP_403_FORBIDDEN)
 
+    from apps.access import devices as _devices
+    if _devices.blocked_cookie(request):         # a blocked device signs nobody in (N2)
+        _log_auth('login_refused_device', profile, ip, request=request)   # not login_failed: never counts toward lockout
+        return Response({'error': _devices.BLOCKED_MESSAGE}, status=status.HTTP_401_UNAUTHORIZED)
+
     # ── Two-factor gate ───────────────────────────────────────────────────────
     # Step 1 of login. If the user has 2FA on (or is in a required role once
     # enforcement is enabled), don't issue tokens yet — hand back a short-lived
     # pre-auth token the client exchanges at /auth/2fa/verify/ (or /enable/).
     from . import mfa as _mfa
+    login_note = ''
     if profile and profile.mfa_enabled:
         device_token = request.data.get('device_token', '')
         if not _mfa.valid_device_token(device_token, user):
-            _log_auth('mfa_challenge', profile, ip, request=request)
-            return Response({'mfa_required': True,
-                             'mfa_token': _mfa.make_preauth_token(user, 'login')})
+            if _devices.mfa_remembered(request, profile):
+                login_note = 'mfa_skipped_device'
+            else:
+                _log_auth('mfa_challenge', profile, ip, request=request)
+                return Response({'mfa_required': True,
+                                 'mfa_token': _mfa.make_preauth_token(user, 'login')})
     elif _mfa.mfa_required_for(profile):
         # Enforcement on + required role + not yet enrolled → force enrollment now.
         _log_auth('mfa_challenge', profile, ip, note='mfa_setup_required', request=request)
         return Response({'mfa_setup_required': True,
                          'mfa_token': _mfa.make_preauth_token(user, 'enroll')})
 
-    _log_auth('login_success', profile, ip, request=request)
+    device, device_secret = _mfa.enroll_login(request, user)
+    _log_auth('login_success', profile, ip, note=login_note, request=request, device=device)
 
     refresh = RefreshToken.for_user(user)
+    if device is not None:
+        refresh['dev'] = str(device.public_id)   # before .access_token: the access token copies it
     resp = Response({
         'access':  str(refresh.access_token),
         'refresh': str(refresh),
@@ -228,6 +244,8 @@ def login_view(request):
             'role': 'admin' if user.is_superuser else 'viewer',
         }
     })
+    if device_secret:
+        set_device_cookie(resp, device_secret)
     # The SPA uses the httpOnly cookies and ignores the body tokens (kept for
     # scripts / non-browser clients, which need the password anyway).
     return set_auth_cookies(resp, refresh.access_token, refresh)
@@ -264,6 +282,14 @@ def refresh_view(request):
         return Response({'detail': 'لا توجد جلسة'}, status=status.HTTP_401_UNAUTHORIZED)
     if not _refresh_owner_active(raw):           # a disabled account never renews (Batch 3, A-3)
         return clear_auth_cookies(Response({'detail': 'الحساب موقوف'}, status=status.HTTP_401_UNAUTHORIZED))
+    from apps.access import devices as _devices
+    try:
+        dev_claim = RefreshToken(raw).get('dev')
+    except Exception:
+        dev_claim = None
+    if _devices.is_revoked(dev_claim):           # a blocked/retired device never renews (N2)
+        return clear_auth_cookies(Response({'detail': _devices.BLOCKED_MESSAGE},
+                                           status=status.HTTP_401_UNAUTHORIZED))
     ser = TokenRefreshSerializer(data={'refresh': raw})
     try:
         ser.is_valid(raise_exception=True)
@@ -272,8 +298,43 @@ def refresh_view(request):
     except Exception:
         return clear_auth_cookies(Response({'detail': 'انتهت الجلسة'}, status=status.HTTP_401_UNAUTHORIZED))
     data = ser.validated_data
-    resp = Response(data if body_token else {'ok': True})
-    return set_auth_cookies(resp, data.get('access'), data.get('refresh'))
+    access, new_refresh, device_secret = data.get('access'), data.get('refresh'), None
+    if dev_claim is None and new_refresh:
+        # A session from before N2 has no device: enrol this browser now and stamp the rotated
+        # tokens, so existing users reach the registry without a forced sign-in (I-2).
+        access, new_refresh, device_secret = _stamp_device(request, raw, access, new_refresh)
+    resp = Response({'access': access, 'refresh': new_refresh} if body_token and new_refresh
+                    else (data if body_token else {'ok': True}))
+    if device_secret:
+        set_device_cookie(resp, device_secret)
+    return set_auth_cookies(resp, access, new_refresh)
+
+
+def _stamp_device(request, old_raw, access, refresh):
+    """(access, refresh, new_device_secret) with a `dev` claim added to the rotated tokens.
+    Any problem (no SPA header, blocked cookie, bad token) returns the tokens unchanged. Never raises."""
+    try:
+        from rest_framework_simplejwt.settings import api_settings
+        from rest_framework_simplejwt.tokens import AccessToken
+        from apps.access import devices as _devices
+        if _devices.blocked_cookie(request):
+            return access, refresh, None
+        uid = RefreshToken(refresh).get(api_settings.USER_ID_CLAIM)
+        user = User.objects.select_related('staff_profile').filter(**{api_settings.USER_ID_FIELD: uid}).first()
+        profile = getattr(user, 'staff_profile', None)
+        if not profile:
+            return access, refresh, None
+        device, secret, _created = _devices.enroll(request, profile)
+        if device is None:
+            return access, refresh, None
+        new_r = RefreshToken(refresh)
+        new_r['dev'] = str(device.public_id)
+        new_a = AccessToken(access)
+        new_a['dev'] = str(device.public_id)
+        return str(new_a), str(new_r), secret
+    except Exception as exc:
+        logger.warning('refresh device stamp skipped: %s', exc)
+        return access, refresh, None
 
 
 def _refresh_owner_active(raw) -> bool:
@@ -478,7 +539,7 @@ class StaffProfileViewSet(viewsets.ModelViewSet):
     def activity_log(self, request, pk=None):
         """Return the audit log for a specific staff member."""
         profile = self.get_object()
-        logs    = UserActivityLog.objects.filter(target_user=profile).select_related('changed_by')[:100]
+        logs    = UserActivityLog.objects.filter(target_user=profile).select_related('changed_by', 'device')[:100]
         return Response(UserActivityLogSerializer(logs, many=True).data)
 
 

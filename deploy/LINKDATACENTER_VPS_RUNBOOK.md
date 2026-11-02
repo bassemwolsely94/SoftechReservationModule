@@ -1082,6 +1082,30 @@ match the IP), so use curl with `--resolve`:
 
 Nginx needs to read static/media files: `sudo chmod 755 /opt/elrezeiky /opt/elrezeiky/app`.
 
+#### Batch N2 on the live server
+
+N2 adds the device registry (`erp_device` cookie, `access_device` tables). No nginx change.
+
+```bash
+cd /opt/elrezeiky/app && git pull
+venv/bin/python manage.py migrate
+sudo systemctl restart elrezeiky-web
+```
+Nothing is refused for a pending or unknown device; only blocked / retired devices lose access.
+Rollout: staff who are already signed in are enrolled automatically on their next token refresh
+(no forced sign-in), so «الأجهزة» fills up within the hour; new sign-ins enrol at once. Only the
+web app enrols: scripts / body-token clients get no device. Open «الأجهزة» (`/access/devices`),
+filter by branch **and** kind «جهاز فرع» (internal network only), tick all (Ctrl+A) and press
+«اعتماد المحدد». Approve personal laptops and phones (seen from outside the network) **one by
+one** after checking the owner: approval is what lets a device remember 2FA (a device earns the
+remember only on the first 2FA after it is approved). Name each branch PC clearly.
+Blocking a device ends that browser's sessions (and its WebSocket on reconnect) on the next
+request. It stops one browser, not the person: to stop a person, disable the account. An admin
+cannot block or retire the device they are using.
+Alerts: the user gets one alert per new device; each admin gets one digest per hour
+(«أجهزة جديدة بانتظار الاعتماد»), expect it to repeat during the first days of rollout. A refused
+blocked-device sign-in is logged as `login_refused_device` and never counts toward the account lockout.
+
 #### Company network through the tunnel (split DNS)
 
 Goal: a company device resolves `elrezeikyapp.dawalvry.com` to `10.50.50.77` and reaches the VPS

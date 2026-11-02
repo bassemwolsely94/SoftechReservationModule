@@ -6,6 +6,8 @@ from dataclasses import dataclass
 
 from core.auth_cookies import user_from_request
 
+from .devices import DeviceInfo
+from .devices import resolve as resolve_device
 from .network import EXTERNAL, NetworkInfo, request_network
 
 access_context = contextvars.ContextVar('access_context', default=None)
@@ -16,6 +18,7 @@ class AccessContext:
     network: NetworkInfo
     user_id: int | None
     role: str | None
+    device: DeviceInfo | None = None     # the device named by the erp_device cookie (N2)
 
 
 def current():
@@ -33,7 +36,8 @@ def for_request(request):
     network = request_network(request)
     user = user_from_request(request)
     return AccessContext(network=network, user_id=user.pk if user else None,
-                         role=_role(user) if user else None)
+                         role=_role(user) if user else None,
+                         device=resolve_device(request))
 
 
 def fallback():

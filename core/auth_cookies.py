@@ -46,6 +46,13 @@ def set_auth_cookies(response, access=None, refresh=None):
     return response
 
 
+def set_device_cookie(response, secret):
+    """The long-lived device cookie (N2): random secret, only its sha256 is stored."""
+    from apps.access.devices import COOKIE, COOKIE_MAX_AGE
+    response.set_cookie(COOKIE, secret, path='/', max_age=COOKIE_MAX_AGE, **_cookie_kwargs())
+    return response
+
+
 def clear_auth_cookies(response):
     response.delete_cookie(ACCESS_COOKIE, path='/', samesite='Strict')
     response.delete_cookie(REFRESH_COOKIE, path=REFRESH_COOKIE_PATH, samesite='Strict')
@@ -75,6 +82,9 @@ class CookieJWTAuthentication(JWTAuthentication):
         user = super().get_user(validated_token)
         if not account_active(user):
             raise AuthenticationFailed('الحساب موقوف', code='user_inactive')
+        from apps.access import devices
+        if devices.is_revoked(validated_token.get('dev')):     # a blocked/retired device ends its sessions (N2)
+            raise AuthenticationFailed(devices.BLOCKED_MESSAGE, code='device_blocked')
         return user
 
 

@@ -545,6 +545,13 @@ pharmacist GET /api/access/networks/987654321/
 purchasing GET /api/access/networks/
 purchasing GET /api/access/networks/987654321/
 
+# reason: security N2 — the device registry (approve / block / retire a browser) is admin only
+#   (IsAdminRole, §7.2 owner decision) even for roles that can open settings.
+pharmacist GET /api/access/devices/
+pharmacist GET /api/access/devices/987654321/
+purchasing GET /api/access/devices/
+purchasing GET /api/access/devices/987654321/
+
 # reason: owner 2026-11-01 — disposal status changes are mapped to the expiry screen (catalog view) so
 #   supervisor / quality manager reach them; the view's gate then admits only admin / quality manager /
 #   supervisor (approve, done, reopen) and catalog editors (cancel their own draft).

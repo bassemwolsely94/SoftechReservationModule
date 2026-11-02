@@ -207,6 +207,10 @@ class UserActivityLogSerializer(serializers.ModelSerializer):
     target_name    = serializers.CharField(source='target_user.full_name', read_only=True)
     changed_by_name = serializers.CharField(source='changed_by.full_name', read_only=True)
     action_label   = serializers.CharField(source='get_action_display',    read_only=True)
+    device_name    = serializers.SerializerMethodField()
+
+    def get_device_name(self, obj):
+        return obj.device.name if obj.device_id else None
 
     class Meta:
         model  = UserActivityLog
@@ -215,7 +219,7 @@ class UserActivityLogSerializer(serializers.ModelSerializer):
             'changed_by', 'changed_by_name',
             'action', 'action_label',
             'old_value', 'new_value', 'note', 'ip_address',
-            'network', 'network_site', 'user_agent', 'created_at',
+            'network', 'network_site', 'device', 'device_name', 'user_agent', 'created_at',
         ]
         read_only_fields = fields
 

@@ -124,6 +124,9 @@ class AuditLog(models.Model):
         # Security N1
         ('trusted_network_changed',      'شبكة موثوقة — إضافة / تعديل / حذف'),
 
+        # Security N2
+        ('device_changed',               'جهاز — اعتماد / حظر / تعديل'),
+
         # Return-window calendar (P-29)
         ('return_policy_changed',        'مرتجع — تعديل سياسة مورد'),
         ('return_requested',             'مرتجع — طلب مرتجع لمورد'),
