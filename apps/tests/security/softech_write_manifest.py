@@ -299,7 +299,7 @@ WRITE_SITES = {
         trigger='cmd investigate_replication', kind='write-then-restore'),
     'apps/sync/management/commands/probe_ap_writeback.py::Command._rehearse': WriteSite(
         tables=('cheques', 'chequestrans'), flag='SOFTECH_PROBES_ENABLED', dry_run_default=True,
-        idempotency='NONE — SoftechConnector begin/rollback are no-ops: the "rehearsal" COMMITS (cheques irreversible)',
+        idempotency='one transaction, always rolled back (begin/rollback real since P-12); refuses if its MAX+1 serials are already taken; residue check lists leftovers',
         audit='stdout + docs/architecture/softech_ap_writeback_investigation.txt',
         trigger='cmd probe_ap_writeback --rehearse --confirm-rollback-rehearsal', kind='write'),
     'apps/sync/management/commands/probe_itemlastupdate.py::Command._investigate': WriteSite(

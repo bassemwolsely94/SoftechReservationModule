@@ -275,10 +275,11 @@ apps/sync/management/commands/probe_ap_reconciliation.py::Command.handle
 apps/sync/management/commands/probe_ap_reconciliation.py::Command.handle.col_exists
 apps/sync/management/commands/probe_ap_reconciliation.py::Command.handle.schema
 apps/sync/management/commands/probe_ap_reconciliation.py::Command.handle.set_rowcount
+apps/sync/management/commands/probe_ap_writeback.py::Command._residue_check
 apps/sync/management/commands/probe_ap_writeback.py::Command._rehearse
 apps/sync/management/commands/probe_ap_writeback.py::Command.handle
-apps/sync/management/commands/probe_ap_writeback.py::Command.handle.run
 apps/sync/management/commands/probe_ap_writeback.py::Command.handle.schema
+apps/sync/management/commands/probe_ap_writeback.py::Command.handle.setrc
 apps/sync/management/commands/probe_hq_os.py::Command.handle.xp
 apps/sync/management/commands/probe_itemlastupdate.py::Command._investigate
 apps/sync/management/commands/probe_lib_db.py::Command.handle
