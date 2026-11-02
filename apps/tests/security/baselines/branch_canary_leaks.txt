@@ -40,9 +40,3 @@ GET /api/procurement/margins/
 GET /api/procurement/segments/summary/
 GET /api/purchasing/isr/pushes/
 GET /api/users/erp-users/
-
-# reason: «تقارير المطالبات» (insurance claims portfolio, added on main 2026-11-02) is an HQ report
-#   over every motalba, and motalbas span all branches. Insurance is still an open module (permission
-#   matrix: 'HQ claims module (later batch)'), so a branch role holding it also sees other branches'
-#   receipt patient names here. Who may see it is an owner decision for the insurance access batch.
-GET /api/insurance/portfolio/
