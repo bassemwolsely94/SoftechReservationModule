@@ -24,6 +24,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from core.permissions import matrix_permission
+from core.export_safety import neutralise_formulas
 
 from . import dead_stock as DS
 
@@ -205,7 +206,7 @@ def _excel(lines, snap):
     for k, v in LANE_AR.items():
         sheet(v[:31], by_lane[k])
     buf = BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     resp = HttpResponse(buf.getvalue(),
                         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     resp['Content-Disposition'] = f'attachment; filename="dead_stock_{timezone.localdate().isoformat()}.xlsx"'
