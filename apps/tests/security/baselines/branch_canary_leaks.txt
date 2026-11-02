@@ -30,7 +30,9 @@ GET /api/vouchers/vouchers/
 
 # reason: HQ modules no branch role is granted in the matrix (invoices, purchasing / procurement,
 #   users, incentives payroll — the latter's all-branch-only gate is an open owner decision).
+#   Insurance claims reports («تقارير المطالبات»): HQ-only, owner decision 2026-11-02.
 GET /api/incentives/transactions/
+GET /api/insurance/portfolio/
 GET /api/invoices/invoice-batches/
 GET /api/invoices/invoices/
 GET /api/invoices/purchase-orders/
