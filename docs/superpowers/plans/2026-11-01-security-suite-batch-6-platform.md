@@ -77,7 +77,8 @@ guard keeps every export going through the formula sanitiser; full suite green o
 
 | ID | State | Where |
 |---|---|---|
-| W-1 | **Held** (owner: wait until WhatsApp Cloud API + the approved `otp_delivery` template are live in production). Built: `scratch/batch6/w1/`; tests `test_platform_vouchers.OtpDeliveryTests` stay `@pending('W-1')`. | — |
+| W-1 | **Held** (owner: wait until WhatsApp Cloud API + the approved `otp_delivery` template are live in production). Built: `scratch/batch6/w1/`; tests `test_platform_vouchers.OtpDeliveryTests` stay `@pending('W-1')`. 2026-11-02 (owner): SMS fallback added to the built copy — WhatsApp first, else SMS, else 503 + code cancelled (`scratch/batch6/sms/w1_with_sms.patch`); W-1 can go live once **either** channel works. | — |
+| W-1 SMS layer | Applied 2026-11-02 — off until an SMS company is chosen (`SMS_PROVIDER` empty) | `core/sms.py` (`SmsSender`, provider-neutral HTTP gateway from `SMS_HTTP_*` settings; never logs the text), `config/settings.py`, `.env.example`, `apps/tests/test_sms_sender.py` |
 | W-2 | Applied | `apps/vouchers/models.py` (`_same_phone`) |
 | W-3 | Applied | `apps/notifications/chatter_access.py`, `consumers.py` |
 | W-4 | Applied (a + b) | `core/export_safety.py`; guard `test_static_guards.test_exports_neutralise_formulas` + `baselines/unsafe_exports.txt` (KPI board, ISR fulfilment = reviewed real formulas) |

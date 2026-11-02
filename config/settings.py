@@ -797,6 +797,16 @@ WHATSAPP_APP_SECRET      = config('WHATSAPP_APP_SECRET', default='')
 WHATSAPP_VERIFY_TOKEN    = config('WHATSAPP_VERIFY_TOKEN', default='')
 WHATSAPP_API_VERSION     = config('WHATSAPP_API_VERSION', default='v19.0')
 
+# ── SMS (core/sms.py) — off until an SMS company is chosen; 'http' = any HTTP gateway ─────────
+SMS_PROVIDER          = config('SMS_PROVIDER', default='')
+SMS_SENDER            = config('SMS_SENDER', default='')
+SMS_HTTP_URL          = config('SMS_HTTP_URL', default='')
+SMS_HTTP_METHOD       = config('SMS_HTTP_METHOD', default='POST')
+SMS_HTTP_FORMAT       = config('SMS_HTTP_FORMAT', default='json')
+SMS_HTTP_PARAMS       = config('SMS_HTTP_PARAMS', default='{"to": "{to}", "message": "{message}", "sender": "{sender}"}')
+SMS_HTTP_HEADERS      = config('SMS_HTTP_HEADERS', default='{}')
+SMS_HTTP_SUCCESS_TEXT = config('SMS_HTTP_SUCCESS_TEXT', default='')
+
 # ── Omni (CEP) ────────────────────────────────────────────────────────────────
 # Fernet key for ChannelAccount credential encryption (doc 15 §2.6).
 # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
