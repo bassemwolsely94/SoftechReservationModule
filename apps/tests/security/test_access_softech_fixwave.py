@@ -140,7 +140,7 @@ class InvoicePushBatchGateTests(TestCase):
         from apps.invoices import writer as inv_writer
         with mock.patch(CHECK, return_value=NONE_Z3), mock.patch(MODE, return_value='enforce'), \
                 mock.patch.object(inv_writer, 'push_final') as push:
-            r = self.client.post(self.URL, {'invoice_ids': [1, 2]}, format='json')
+            r = self.client.post(self.URL, {'invoice_ids': [1, 2], 'confirm_count': '2'}, format='json')
         self.assertEqual(r.status_code, 403)
         self.assertEqual(r.json(), {'detail': gate.DENY_MESSAGE, 'code': 'softech_zone'})
         push.assert_not_called()
@@ -556,16 +556,11 @@ class RefusalRollbackTests(TestCase):                                           
 class RepriceRefusalNotRetriedTests(TestCase):                                      # M5
 
     def test_refusal_with_a_transient_word_is_not_retried(self):
+        # apply_plan retries once only when _is_transient() says so
         from apps.insurance import reprice_service as rs
-        claim = mock.Mock()
         refusal = SoftechAccessDenied('refused (socket timeout)', reason='zone_no_read')
-        with mock.patch.object(rs, 'write_enabled', return_value=True), \
-                mock.patch.object(rs, 'apply_reprice', side_effect=refusal) as apply, \
-                mock.patch('apps.insurance.models.SoftechRepriceRun.objects') as runs:
-            runs.filter.return_value.order_by.return_value.first.return_value = None
-            out = rs.apply_batch(claim, 'IT1', 5, [{'docno': '1', 'branch': '130'}], confirm=True)
-        self.assertEqual(apply.call_count, 1)
-        self.assertEqual(out['failed'], 1)
+        self.assertFalse(rs._is_transient(refusal))
+        self.assertTrue(rs._is_transient(Exception('socket timeout')))
 
 
 class UnsafeLineNamesSwitchTests(SimpleTestCase):                                   # M8

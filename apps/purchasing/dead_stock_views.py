@@ -239,7 +239,7 @@ def dead_stock_recompute(request):
                 logger.exception('dead stock recompute failed')
             finally:
                 connections.close_all()
-    threading.Thread(target=_work, name='dead-stock-recompute', daemon=True).start()
+    start_thread(_work, name='dead-stock-recompute')
     return Response({'detail': f'بدأت إعادة حساب الراكد لتشغيل المحرك {run.pk}.', 'running': True},
                     status=status.HTTP_202_ACCEPTED)
 
