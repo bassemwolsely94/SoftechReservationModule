@@ -26,6 +26,7 @@ from rest_framework.response import Response
 from . import coupon_dashboard as dash
 from . import coupons
 from core.errors import public_error
+from core.export_safety import neutralise_formulas
 
 logger = logging.getLogger('elrezeiky.vouchers')
 
@@ -188,7 +189,7 @@ def batch_export(request, pk):
         resp['Content-Disposition'] = f'attachment; filename="coupon_batch_{batch.pk}_dataload.tsv"'
     else:
         buf = io.BytesIO()
-        coupons.print_workbook(batch).save(buf)
+        neutralise_formulas(coupons.print_workbook(batch)).save(buf)
         resp = HttpResponse(buf.getvalue(), content_type=(
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'))
         resp['Content-Disposition'] = f'attachment; filename="coupon_batch_{batch.pk}_print.xlsx"'

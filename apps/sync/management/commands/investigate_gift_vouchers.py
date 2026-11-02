@@ -32,11 +32,11 @@ ABSOLUTE RULE: SELECT only. Nothing is written to SOFTECH.
 Output -> docs/architecture/softech_gift_vouchers_investigation.txt
           docs/architecture/softech_gift_vouchers_lines.csv   (full line archive)
 """
-import csv
 import datetime
 import os
 
 from django.core.management.base import BaseCommand
+from core.export_safety import csv_writer
 
 _DOCS = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'docs', 'architecture')
 OUTPUT_FILE = os.path.join(_DOCS, 'softech_gift_vouchers_investigation.txt')
@@ -399,7 +399,7 @@ class Command(BaseCommand):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         try:
             with open(path, 'w', encoding='utf-8-sig', newline='') as f:
-                w = csv.writer(f)
+                w = csv_writer(f)
                 w.writerow(cols)
                 for r in rows:
                     w.writerow(['' if v is None else str(v).strip() for v in r])

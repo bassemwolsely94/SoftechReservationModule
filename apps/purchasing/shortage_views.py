@@ -38,6 +38,7 @@ SHORTAGE = matrix_permission('shortage', post=('approve',))
 SHORTAGE_EXPORT = matrix_permission('shortage', get=('export',))   # Excel download needs the export grant
 from . import shortage as S
 from apps.catalog.wildcard import wq
+from core.export_safety import neutralise_formulas
 
 logger = logging.getLogger(__name__)
 
@@ -405,7 +406,7 @@ def shortage_export(request):
     for r in rows:
         ws.append(r)
     ws.freeze_panes = 'A2'
-    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    buf = io.BytesIO(); neutralise_formulas(wb).save(buf); buf.seek(0)
     resp = HttpResponse(buf.read(),
                         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     resp['Content-Disposition'] = f'attachment; filename="market-shortage-{view}.xlsx"'

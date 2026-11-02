@@ -12,3 +12,4 @@ own branch only; supplier A/P reconciliation is company-only. B-2 customers: any
 customer by full phone; browse / name search / edit / churn list own branch; other branches' numbers
 masked; call center and all-branch roles edit anyone (`apps/customers/access.py`). B-3: supervisor
 and quality manager are all-branch roles (`core/branch_scope.ALL_BRANCH_ROLES`).
+- W-1: voucher generate-otp hands the plain code to the staff member (wa.me text + QR)

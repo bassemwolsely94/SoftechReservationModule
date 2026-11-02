@@ -15,6 +15,7 @@ from collections import defaultdict
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from core.export_safety import neutralise_formulas
 
 NEW_DAYS = 90          # stkbal.opendate within this many days → "new item"
 TOL = 0.05             # 1dp tolerance
@@ -196,5 +197,5 @@ class Command(BaseCommand):
         for w in (ws, ws2):
             for c in w[1]:
                 c.font = Font(bold=True)
-        wb.save(path)
+        neutralise_formulas(wb).save(path)
         return path

@@ -7,11 +7,11 @@ the balance earned since their reset cleared. Dry run unless --commit AND POINTS
     python manage.py remove_from_points --user <username> --batches 60 --quiet --commit      # all, 50 per batch
 Then the branch copies: push_customer_branch_copy --from-removals --branch N --batches 60 --quiet --commit.
 """
-import csv
 import os
 
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
+from core.export_safety import csv_writer
 
 
 class Command(BaseCommand):
@@ -63,7 +63,7 @@ class Command(BaseCommand):
             os.makedirs('scratch', exist_ok=True)
             path = os.path.join('scratch', f'points_removal_{timezone.localtime():%Y%m%d_%H%M%S_%f}.csv')
             with open(path, 'w', newline='', encoding='utf-8-sig') as f:
-                w = csv.writer(f)
+                w = csv_writer(f)
                 w.writerow(['pic', 'status', 'flag_before', 'balance_before', 'discount_before', 'flag_after',
                             'balance_after', 'discount_after', 'points_cleared', 'error'])
                 for r in recs:

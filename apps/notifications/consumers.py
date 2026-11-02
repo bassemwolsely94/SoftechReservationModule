@@ -171,6 +171,11 @@ class ChatterConsumer(AsyncWebsocketConsumer):
 
         self.model_name = self.scope['url_route']['kwargs']['model_name']
         self.record_id  = self.scope['url_route']['kwargs']['record_id']
+        # the REST rules: chattable models only, the record's branch for branch users (Batch 6,
+        # W-3 — any logged-in user could join and post to any record's thread)
+        if not await self._may_use(user):
+            await self.close(code=4003)
+            return
         self.group_name = f'chatter_{self.model_name}_{self.record_id}'
 
         # Cache the StaffProfile on connect so _create_message doesn't hit the
@@ -179,6 +184,11 @@ class ChatterConsumer(AsyncWebsocketConsumer):
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
+
+    @database_sync_to_async
+    def _may_use(self, user):
+        from apps.notifications.chatter_access import can_use_thread
+        return can_use_thread(user, self.model_name, self.record_id)
 
     @database_sync_to_async
     def _get_profile(self, user):
@@ -208,8 +218,9 @@ class ChatterConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({'event': 'pong'}))
 
         elif action == 'post':
+            from apps.notifications.chatter_access import MAX_MESSAGE_CHARS
             message = (data.get('message') or '').strip()
-            if message:
+            if message and len(message) <= MAX_MESSAGE_CHARS:
                 await self._create_message(message)
 
     async def chatter_message(self, event):

@@ -211,12 +211,21 @@ def load_session_audio(session) -> tuple[bytes | None, str]:
 
     remote = resolve_remote_url(session)
     if remote:
-        try:
-            import requests
-            resp = requests.get(remote, timeout=30)
-            resp.raise_for_status()
-            mime = resp.headers.get('Content-Type', '') or mimetypes.guess_type(remote)[0] or 'audio/wav'
-            return resp.content, mime.split(';')[0]
-        except Exception as exc:
-            logger.warning('recordings: HTTP fetch failed for %s: %s', remote, exc)
+        audio = fetch_recording(remote)
+        if audio[0] is not None:
+            return audio
     return None, ''
+
+
+def fetch_recording(url: str) -> tuple[bytes | None, str]:
+    """A recording over HTTP — public hosts, or the PBX host admins configured in
+    PBX_RECORDINGS_URL_BASE (it may sit on the LAN); ≤ MAX_AUDIO_BYTES (security Batch 6, W-6)."""
+    from core import safe_fetch
+    try:
+        data, ctype = safe_fetch.fetch(
+            url, max_bytes=MAX_AUDIO_BYTES, timeout=30,
+            allow_hosts=safe_fetch.configured_host(getattr(settings, 'PBX_RECORDINGS_URL_BASE', '')))
+    except Exception as exc:
+        logger.warning('recordings: HTTP fetch refused or failed for %s: %s', url, exc)
+        return None, ''
+    return data, ctype or mimetypes.guess_type(url)[0] or 'audio/wav'

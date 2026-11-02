@@ -104,6 +104,7 @@ EXEMPT_PREFIXES = {'auth', 'notifications', 'personal', 'search', 'help', 'porta
                    'gamification',   # own points open to all; its views check gamification/*
                    'tasks',          # every staff member's own task board (scoping: Batch 5)
                    'stock-audit',    # own gate apps/stock_audit/access.py: RBAC stock_audit
+                   'csp-report',     # browsers' CSP reports — public, log only (core/csp.py, W-9)
                    'trace'}          # P-58 own gates apps/trace/views.py: parse = admin,
                                      # scan = pos create (sale) / invoices create (receive)
                                      # + named branch managers the matrix doesn't know (Z-1)

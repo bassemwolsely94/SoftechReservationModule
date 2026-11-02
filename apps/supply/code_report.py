@@ -20,6 +20,7 @@ from collections import defaultdict
 from datetime import timedelta
 
 from django.utils import timezone
+from core.export_safety import neutralise_formulas
 
 SOURCE_LABELS = {'availability': 'قوائم إتاحة الموردين', 'invoices': 'فواتير الموردين'}
 
@@ -233,5 +234,5 @@ def to_excel(rep) -> bytes:
           [18, 10, 24, 12, 40, 9, 36, *IC.ITEM_WIDTHS])
     IC.style_columns(ws_m, 8, header_row=2)
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     return buf.getvalue()

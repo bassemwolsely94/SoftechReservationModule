@@ -46,6 +46,17 @@ class ProductMediaUploadSerializer(serializers.Serializer):
     order      = serializers.IntegerField(min_value=0, default=0)
     is_primary = serializers.BooleanField(default=False)
 
+    def validate(self, attrs):
+        # products/ is public: the file must really be what media_type says, and is renamed by
+        # what it is — the client's name and content type are ignored (security Batch 6, W-7)
+        from django.core.exceptions import ValidationError
+        from core.upload_safety import public_upload
+        try:
+            attrs['file'] = public_upload(attrs['file'], attrs.get('media_type', 'image'))
+        except ValidationError as exc:
+            raise serializers.ValidationError({'file': exc.messages})
+        return attrs
+
 
 # ── ProductContent ────────────────────────────────────────────────────────────
 

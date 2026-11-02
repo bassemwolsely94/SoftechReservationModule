@@ -8,6 +8,7 @@ urlpatterns = [
     path('auth/',         views.auth_exchange, name='portal-auth'),
 
     # Session-scoped (customer-only) endpoints
+    path('logout/',   views.logout,   name='portal-logout'),
     path('me/',       views.me,       name='portal-me'),
     path('orders/',   views.orders,   name='portal-orders'),
     path('loyalty/',  views.loyalty,  name='portal-loyalty'),

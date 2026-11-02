@@ -11,11 +11,11 @@ Customers removed from points at HQ (remove_from_points) → points off + specia
 --batches N repeats the batch until nothing is left or a problem stops it. Every batch writes a review list
 to scratch/ (codes only).
 """
-import csv
 import os
 
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
+from core.export_safety import csv_writer
 
 
 class Command(BaseCommand):
@@ -96,7 +96,7 @@ class Command(BaseCommand):
         path = os.path.join('scratch', f"branch_copy_{o['branch']}_{timezone.localtime():%Y%m%d_%H%M%S_%f}.csv")
         os.makedirs('scratch', exist_ok=True)
         with open(path, 'w', newline='', encoding='utf-8-sig') as f:
-            w = csv.writer(f)
+            w = csv_writer(f)
             w.writerow(['pic', 'branch', 'status', 'error'] + [f'{c}_branch' for c in BC.FLAGS]
                        + [f'{c}_hq' for c in BC.FLAGS] + [f'{c}_read_back' for c in BC.FLAGS])
             for r in recs:

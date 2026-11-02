@@ -6,8 +6,10 @@ Production (Nginx): set MEDIA_ACCEL_REDIRECT=True and the file itself is sent by
 Nginx through the internal /protected-media/ location (X-Accel-Redirect) — Django
 only checks the signature. Without it (Windows / dev) Django streams the file.
 
-Script-capable types (HTML/SVG/XML/JS) are always sent as a sandboxed download so
-an uploaded file can never run script on our origin.
+Only known-safe types (pictures, PDF, audio / video, office files the browser downloads anyway)
+are served as they are; ANY other type — HTML, SVG, XML, XSL, SHTML, unknown — is sent as a
+sandboxed download, so an uploaded file can never run script on our origin (an allow-list since
+security Batch 6, W-7: a deny-list always misses one).
 """
 import mimetypes
 import posixpath
@@ -19,7 +21,9 @@ from django.views.decorators.http import require_GET
 
 from .storage import is_public_media, verify_media_signature
 
-_SCRIPT_CAPABLE = ('.html', '.htm', '.xhtml', '.svg', '.svgz', '.xml', '.js', '.mjs')
+SAFE_INLINE = ('.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.pdf',
+               '.mp3', '.wav', '.ogg', '.oga', '.m4a', '.mp4', '.webm',
+               '.xlsx', '.xls', '.docx', '.doc', '.csv')
 
 
 def _clean(path: str) -> str | None:
@@ -52,7 +56,7 @@ def serve_media(request, path):
 
     resp['X-Content-Type-Options'] = 'nosniff'
     resp['Cache-Control'] = 'public, max-age=604800' if is_public_media(name) else 'private, max-age=3600'
-    if name.lower().endswith(_SCRIPT_CAPABLE):
+    if not name.lower().endswith(SAFE_INLINE):
         resp['Content-Security-Policy'] = 'sandbox'
         resp['Content-Disposition'] = f'attachment; filename="{posixpath.basename(name)}"'
     return resp
