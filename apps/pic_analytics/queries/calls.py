@@ -23,11 +23,12 @@ def _bounds(f):
     return lo, hi
 
 
-def calls_qs(f):
-    """Customer calls in the filter range (transfers out; the agent filter applies when set)."""
+def calls_qs(f, use_agent=True):
+    """Customer calls in the filter range (transfers out; the agent filter applies when set, unless
+    use_agent=False - missed calls lost in the queue have no agent)."""
     lo, hi = _bounds(f)
     qs = CdrCall.objects.filter(is_transfer=False, call_at__gte=lo, call_at__lt=hi)
-    if f.agent_ext:
+    if use_agent and f.agent_ext:
         qs = qs.filter(agent_ext=f.agent_ext)
     return qs
 
@@ -113,15 +114,13 @@ def call_totals(f, pics=None) -> dict:
     qs = calls_qs(f)
     if pics is not None:
         qs = qs.filter(pic__in=pics)
-    calls_in = calls_out = 0
-    missed = []
-    for c in qs.only('id', 'call_at', 'direction', 'status', 'phone_key'):
-        if c.direction == 'inbound':
-            calls_in += 1
-            if c.status != 'answered':
-                missed.append(c)
-        else:
-            calls_out += 1
+    calls_in = qs.filter(direction='inbound').count()
+    calls_out = qs.exclude(direction='inbound').count()
+    mq = calls_qs(f, use_agent=False)          # missed calls ignore the agent filter
+    if pics is not None:
+        mq = mq.filter(pic__in=pics)
+    missed = list(mq.filter(direction='inbound').exclude(status='answered')
+                  .only('id', 'call_at', 'phone_key'))
     rm = returned_map(missed)
     return {'calls_in': calls_in, 'calls_out': calls_out,
             'missed_not_returned': sum(1 for c in missed if rm[c.id] is None)}
@@ -143,6 +142,22 @@ def _new_pics_sold(f, access, codes):
     return sum(1 for _d, s in first.values() if s & codes)
 
 
+def reach_stats(attempts):
+    """attempts = outbound (ext, phone_key, day, answered) in time order. A number is 'reached' on a
+    day when one of that agent's tries was answered. -> ({ext: [tries until reached, ...]},
+    {ext: numbers never reached that day})."""
+    seqs = defaultdict(list)
+    for ext, key, day, answered in attempts:
+        seqs[(ext, key, day)].append(answered)
+    tries, not_reached = defaultdict(list), defaultdict(int)
+    for (ext, _key, _d), seq in seqs.items():
+        if True in seq:
+            tries[ext].append(seq.index(True) + 1)
+        else:
+            not_reached[ext] += 1
+    return tries, not_reached
+
+
 def call_center(f, access) -> dict:
     """Per agent extension (management only): {'rows': [...], 'team_new_pics_sold': n}."""
     if not access.sees_calls_tabs:
@@ -158,7 +173,7 @@ def call_center(f, access) -> dict:
         extension__in={r[0] for r in rows}).select_related('staff__user')}
 
     agg = {}
-    attempts = defaultdict(list)       # (ext, phone_key, day) -> [answered?, ...] in time order
+    attempts = []                      # outbound (ext, phone_key, day, answered) in time order
     for ext, name, at, direction, status, billable, pic, key in rows:
         a = agg.setdefault(ext, {'pbx_name': '', 'calls_in': 0, 'calls_out': 0, 'answered': 0,
                                  'talk_seconds': 0, 'pics': set(), 'ctp': 0, 'unanswered_out': 0})
@@ -171,7 +186,7 @@ def call_center(f, access) -> dict:
             if not answered:
                 a['unanswered_out'] += 1
             if key:
-                attempts[(ext, key, _day(at))].append(answered)
+                attempts.append((ext, key, _day(at), answered))
         if answered:
             a['answered'] += 1
             a['talk_seconds'] += billable or 0
@@ -179,12 +194,7 @@ def call_center(f, access) -> dict:
                 a['pics'].add(pic)
                 if _followed_by_purchase(pic, _day(at), days_by_pic, window):
                     a['ctp'] += 1
-    tries, not_reached = defaultdict(list), defaultdict(int)
-    for (ext, _key, _d), seq in attempts.items():
-        if True in seq:
-            tries[ext].append(seq.index(True) + 1)
-        else:
-            not_reached[ext] += 1
+    tries, not_reached = reach_stats(attempts)
 
     out = []
     for ext in sorted(agg, key=lambda e: (-(agg[e]['calls_in'] + agg[e]['calls_out']), e)):
