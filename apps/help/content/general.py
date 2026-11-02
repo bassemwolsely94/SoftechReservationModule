@@ -669,6 +669,11 @@ SCREENS = [
              'text': T('أدوار الاعتماد (المدير، المشرف، المشتريات) هتبقى ملزمة بيها. لو الإلزام اتفعّل، الدخول هيطلب التفعيل.',
                        'Approval roles (admin, supervisor, purchasing) will be required to use it. Once enforced, login asks you to enrol.'),
              'open_hint': T('يظهر لأدوار الاعتماد قبل التفعيل.', 'Shows for approval roles before enrolling.')},
+            {'target': 'general-security-forget-devices', 'label': T('إلغاء كل الأجهزة المحفوظة', 'Forget all saved devices'),
+             'text': T('بيلغي «تذكّر هذا الجهاز» على كل أجهزتك — هيتطلب منك الرمز في الدخول التالي على أي جهاز.',
+                       'Cancels "remember this device" on all your devices — the code is asked again at the next login on any of them.'),
+             'when': T('فقدت موبايلك أو كمبيوترك، أو دخلت من جهاز مش بتاعك وسبته محفوظ.', 'You lost your phone or computer, or saved a device that is not yours.'),
+             'open_hint': T('يظهر لما المصادقة مفعّلة.', 'Shows while 2FA is on.')},
             {'target': 'general-security-enable', 'label': T('تفعيل المصادقة الثنائية', 'Enable two-factor authentication'),
              'text': T('يبدأ الإعداد: رمز QR ومفتاح سري خاصين بيك.', 'Starts the setup: a QR code and a secret key just for you.'),
              'when': T('نزّل الأول تطبيق مصادقة على موبايلك (Google Authenticator أو Microsoft Authenticator).',
@@ -710,9 +715,8 @@ SCREENS = [
                        'Turning it off needs your password + a current code from the app or a recovery code, so nobody can switch it off from your device while you are away.\n• After turning it off, login is by password only — better to keep it on.'),
          },
         ],
-        'updated': '2026-10-30',
-    
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'change_note': T('زر «إلغاء كل الأجهزة المحفوظة»', 'A "Forget all saved devices" button'),
+        'updated': '2026-10-31',
     },
     {
         'key': 'general.notifications',

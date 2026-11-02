@@ -19,7 +19,7 @@ All-branch roles: admin, call_center, purchasing, supervisor, quality_manager �
 | `demand` | all | VCEXS | VCE | VCE | — | — | V | VCEAXS | VX | own — list, detail, actions, create (branch_scope); analytics pages network-wide (open) |
 | `transfers` | all | V | VCEAF | VC | VCEAXF | — | V | VAX | VX | own side — requesting OR supplying (decision 3) via branch_scope; workflow sides stay home-branch / HQ lists; create + edit own requesting side |
 | `followups` | all | VCEXS | VCEA | VCE | — | — | V | VCEDAXSF | VX | own — tasks, dashboard (?branch narrows), generate, reminders (branch_scope) |
-| `delivery` | all | VCS | VCEAF | VC | VX | VEAF | V | VCEAXS | VX | own (+ rider: orders assigned to them) |
+| `delivery` | all | VCS | VCEAF | VC | VX | VE | V | VCEAXS | VX | own (+ rider: orders assigned to them) |
 | `customers` | all | VE | VE | V | VX | V | V | VEX | VX | find any by full phone (masked), browse / name-search / edit / churn list own (B-2) |
 | `chronic` | all | VE | VE | V | V | — | V | VE | VX | all — catalogue data |
 | `campaigns` | all | VCE | V | — | VCEAX | — | — | VCEAX | V | all — HQ module |

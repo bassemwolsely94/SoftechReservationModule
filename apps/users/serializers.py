@@ -26,6 +26,11 @@ class StaffProfileSerializer(serializers.ModelSerializer):
     erp_username     = serializers.CharField(source='erp_user.username',       read_only=True)
     allowed_branch_ids    = serializers.SerializerMethodField()
     restricted_branch_ids = serializers.SerializerMethodField()
+    login_locked_until    = serializers.SerializerMethodField()
+
+    def get_login_locked_until(self, obj):
+        from .lockout import locked_until
+        return locked_until(obj)
 
     def get_allowed_branch_ids(self, obj):
         return list(obj.allowed_branches.values_list('id', flat=True))
@@ -44,7 +49,7 @@ class StaffProfileSerializer(serializers.ModelSerializer):
             'softech_username', 'softech_user_id', 'hr_code', 'erp_username',
             'phone', 'is_active',
             'can_see_all_customers', 'can_see_customer_phone',
-            'created_at', 'updated_at',
+            'created_at', 'updated_at', 'login_locked_until',
         ]
 
 
@@ -57,6 +62,11 @@ class StaffProfileListSerializer(serializers.ModelSerializer):
     full_name   = serializers.CharField(read_only=True)
     branch_name = serializers.CharField(read_only=True)
     role_label  = serializers.CharField(source='get_role_display', read_only=True)
+    login_locked_until = serializers.SerializerMethodField()
+
+    def get_login_locked_until(self, obj):
+        from .lockout import locked_until
+        return locked_until(obj)
 
     class Meta:
         model  = StaffProfile
@@ -67,6 +77,7 @@ class StaffProfileListSerializer(serializers.ModelSerializer):
             'access_all_branches', 'softech_username', 'hr_code', 'phone',
             'allowed_pos_channels',
             'can_see_all_customers', 'can_see_customer_phone',
+            'login_locked_until',
         ]
 
 
