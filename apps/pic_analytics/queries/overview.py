@@ -15,6 +15,7 @@ from django.db.models.functions import TruncMonth
 from apps.customers.models import Customer
 from apps.pic_analytics import rules
 from apps.pic_analytics.models import PicDayFact
+from apps.pic_analytics.queries.calls import call_totals
 
 NEW_RELIABLE_FROM = '2025-08-01'
 ZERO = Decimal('0')
@@ -124,7 +125,7 @@ def overview(f, access) -> dict:
         'basket_categories': None if f.category else basket_categories,
         'visits_per_pic': round(visits / n_pics, 2) if n_pics else None,
         'retention_pct': retention_pct,
-        'calls_in': None, 'calls_out': None, 'missed_not_returned': None,   # Task 9
+        **call_totals(f, {r['pic'] for r in visitors} if access.branch_manager else None),
         'no_pic_net': no_pic_net,
         'new_reliable_from': None if Customer.objects.filter(softech_created_at__isnull=False).exists()
         else NEW_RELIABLE_FROM,

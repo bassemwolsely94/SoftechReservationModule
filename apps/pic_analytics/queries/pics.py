@@ -12,6 +12,7 @@ from apps.customers import access as cust_access
 from apps.customers.models import Customer
 from apps.pic_analytics import rules
 from apps.pic_analytics.models import PicDayFact
+from apps.pic_analytics.queries.calls import calls_by_pic
 from apps.pic_analytics.queries.frequency import pic_frequency
 from apps.pic_analytics.settings import setting
 
@@ -63,6 +64,7 @@ def pic_rows(f, access, order='-net', page=1, page_size=50) -> dict:
                                 ).values('pic').annotate(first=Min('day'), last=Max('day')):
         span[r['pic']] = r
     freq = pic_frequency(pics, f.end)
+    calls = calls_by_pic(f, set(pics))      # the page's PICs are already scoped visitors
     customers = {}
     for c in Customer.objects.filter(softech_pic__in=pics).order_by('-pk'):
         customers[c.softech_pic] = c            # lowest pk wins (iterated last)
@@ -75,6 +77,7 @@ def pic_rows(f, access, order='-net', page=1, page_size=50) -> dict:
         pic = r['pic']
         cust, fr, sp = customers.get(pic), freq.get(pic), span.get(pic, {})
         visits = r['visits']
+        cl = calls.get(pic)
         last = sp.get('last')
         row = {
             'pic': pic, 'name': cust.name if cust else '', 'segment': cust.segment if cust else '',
@@ -91,8 +94,11 @@ def pic_rows(f, access, order='-net', page=1, page_size=50) -> dict:
             'overdue': bool(fr and fr['last_visit'] and rules.is_overdue(
                 fr['last_visit'], fr['cycle_days'], today, factor)),
             'phone': cust.phone if cust else '',
-            'calls_in': None, 'calls_out': None, 'missed': None, 'last_call': None,    # Task 9
-            'avg_days_between_calls': None, 'talk_time': None, 'call_to_purchase': None,
+            'calls_in': cl['in'] if cl else 0, 'calls_out': cl['out'] if cl else 0,
+            'missed': cl['missed'] if cl else 0, 'last_call': cl['last_call'] if cl else None,
+            'avg_days_between_calls': cl['avg_days_between'] if cl else None,
+            'talk_time': cl['talk_seconds'] if cl else 0,
+            'call_to_purchase': cl['call_to_purchase'] if cl else 0,
         }
         if cust and user is not None:
             visible = cust_access.phones_visible(user, cust)

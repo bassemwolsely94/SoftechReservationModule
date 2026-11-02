@@ -81,7 +81,7 @@ class OverviewTests(Base):
         self.assertEqual(o['gp'], D_('190'))
         self.assertEqual(o['gp_pct'], round(D_(190) / D_(470) * 100, 2))
         self.assertEqual(o['no_pic_net'], D_('30'))
-        self.assertIsNone(o['calls_in'])
+        self.assertEqual(o['calls_in'], 0)
 
     def test_no_pic_sales_line_reconciles(self):
         PicDayFact.objects.all().delete()
@@ -171,7 +171,7 @@ class PicListTests(Base):
         self.assertEqual((n1['categories'], n1['channels'], n1['last_branch']), (['10', '50'], ['cash'], self.bb.pk))
         self.assertEqual((n1['first_purchase'], n1['last_purchase']), (D(2026, 10, 5), D(2026, 10, 20)))
         self.assertEqual(n1['basket_net'], D_('175'))
-        self.assertIsNone(n1['calls_in'])
+        self.assertEqual(n1['calls_in'], 0)
         r1 = r['rows'][1]
         self.assertEqual((r1['months_a'], r1['cycle_bucket']), (3, 'm2'))   # computed to 2026-10-31, not the rollup's 9
         self.assertEqual(r1['first_purchase'], D(2026, 7, 1))
