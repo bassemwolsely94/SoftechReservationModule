@@ -431,7 +431,7 @@ SCREENS = [
              'open_hint': T('الجرس ← «⚙️ الإعدادات».', 'Bell → "⚙️ Settings".')},
         ],
         'updated': '2026-11-01',
-        'change_note': T('الشارة العلوية تذكر حالة الجهاز، وشريط «جهاز غير معتمد» يقول «للعرض فقط» بس لما السياسة مطبّقة', 'The top badge states the device status; the "unapproved device" strip says "view-only" only when the policy is enforced'),
+        'change_note': T('تلميحات الجرس والقائمة والخروج في كل الشاشات؛ الشارة العلوية تذكر حالة الجهاز؛ وشريط «جهاز غير معتمد» يقول «للعرض فقط» بس لما السياسة مطبّقة', 'Bell, menu and logout hints on every screen; the top badge states the device status; the "unapproved device" strip says "view-only" only when the policy is enforced'),
     },
     {
         'key': 'general.me',
