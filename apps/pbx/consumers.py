@@ -29,6 +29,20 @@ from django.utils import timezone
 logger = logging.getLogger('elrezeiky.pbx')
 
 
+def may_receive_calls(user, ext) -> bool:
+    """Owner decision D1 (Batch 5b): who gets the live incoming-call pop-up (every caller's number
+    and matched customer). A configured extension = an agent; otherwise call-center access AND
+    allowed to see numbers (not the read-only viewer, not can_see_customer_phone = False)."""
+    if ext is not None:
+        return True
+    if getattr(user, 'is_superuser', False):
+        return True
+    from apps.customers.access import record_phones_visible
+    from core.permissions import matrix_allows
+    profile = getattr(user, 'staff_profile', None)
+    return bool(record_phones_visible(user) and matrix_allows(profile, 'callcenter', 'view'))
+
+
 class AgentCallConsumer(AsyncWebsocketConsumer):
 
     async def connect(self):
@@ -40,9 +54,13 @@ class AgentCallConsumer(AsyncWebsocketConsumer):
         ext = await self._get_extension(user)
         self.extension = ext  # may be None if agent has no extension configured
 
-        # Subscribe to the broadcast group (all agents see all calls)
-        self.broadcast_group = 'pbx_all_agents'
-        await self.channel_layer.group_add(self.broadcast_group, self.channel_name)
+        # Every incoming call (number + matched customer) goes to the broadcast group. Owner
+        # decision D1 (Batch 5b): only call agents join it — an extension, or call-center access
+        # for someone who may see numbers. Everyone else used to get every caller in real time.
+        self.broadcast_group = None
+        if await self._may_receive_calls(user, ext):
+            self.broadcast_group = 'pbx_all_agents'
+            await self.channel_layer.group_add(self.broadcast_group, self.channel_name)
 
         # Also subscribe to agent-specific group if extension is mapped
         self.personal_group = None
@@ -57,7 +75,8 @@ class AgentCallConsumer(AsyncWebsocketConsumer):
         }))
 
     async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(self.broadcast_group, self.channel_name)
+        if getattr(self, 'broadcast_group', None):
+            await self.channel_layer.group_discard(self.broadcast_group, self.channel_name)
         if self.personal_group:
             await self.channel_layer.group_discard(self.personal_group, self.channel_name)
 
@@ -82,6 +101,10 @@ class AgentCallConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps(event))
 
     # ── DB helpers ────────────────────────────────────────────────────────────
+
+    @database_sync_to_async
+    def _may_receive_calls(self, user, ext):
+        return may_receive_calls(user, ext)
 
     @database_sync_to_async
     def _get_extension(self, user):

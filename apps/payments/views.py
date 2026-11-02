@@ -150,7 +150,7 @@ def payment_confirm(request, pk):
 
     _log_action(payment, 'confirmed', request.user, notes=notes)
 
-    return Response(ExternalPaymentSerializer(payment).data, status=status.HTTP_200_OK)
+    return Response(ExternalPaymentSerializer(payment, context={'request': request}).data, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
@@ -180,7 +180,7 @@ def payment_reconcile(request, pk):
 
     _log_action(payment, 'reconciled', request.user, notes=notes, variance=variance)
 
-    return Response(ExternalPaymentSerializer(payment).data, status=status.HTTP_200_OK)
+    return Response(ExternalPaymentSerializer(payment, context={'request': request}).data, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
@@ -206,7 +206,7 @@ def payment_dispute(request, pk):
 
     _log_action(payment, 'disputed', request.user, notes=reason)
 
-    return Response(ExternalPaymentSerializer(payment).data, status=status.HTTP_200_OK)
+    return Response(ExternalPaymentSerializer(payment, context={'request': request}).data, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])

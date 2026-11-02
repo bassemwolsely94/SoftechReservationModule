@@ -6,6 +6,8 @@ from rest_framework import serializers
 from .models import ExternalPayment, PaymentReconciliationLog
 
 
+from apps.customers.phone_mask import RecordPhoneMask, CustomerPhoneMask  # Batch 5b
+
 class PaymentReconciliationLogSerializer(serializers.ModelSerializer):
     performed_by_name = serializers.SerializerMethodField()
 
@@ -20,7 +22,8 @@ class PaymentReconciliationLogSerializer(serializers.ModelSerializer):
         return ''
 
 
-class ExternalPaymentSerializer(serializers.ModelSerializer):
+class ExternalPaymentSerializer(RecordPhoneMask, serializers.ModelSerializer):
+    phone_mask_fields = ('customer_phone',)
     reconciliation_logs = PaymentReconciliationLogSerializer(many=True, read_only=True)
     method_display      = serializers.CharField(source='get_method_display', read_only=True)
     status_display      = serializers.CharField(source='get_status_display', read_only=True)

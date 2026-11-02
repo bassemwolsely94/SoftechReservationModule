@@ -96,7 +96,7 @@ class LiveSessionsView(APIView):
             if not (bridge and bridge.is_alive):
                 return Response([])
             sessions = sessions.filter(started_at__gte=timezone.now() - self.FRESH_MAX_AGE)
-        return Response(CallSessionSerializer(sessions, many=True).data)
+        return Response(CallSessionSerializer(sessions, many=True, context={'request': request}).data)
 
 
 class MyExtensionView(APIView):

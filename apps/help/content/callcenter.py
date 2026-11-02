@@ -289,7 +289,8 @@ SCREENS = [
             T('شكوى أو طلب يحتاج متابعة؟ «فتح حالة جديدة» (التصنيف، الأولوية، العنوان، الوصف).', 'A complaint or request needing follow-up? "Open new case" (type, priority, title, description).'),
             T('«جدولة متابعة» لتذكير بموعد (تذكير إعادة صرف، متابعة مزمن، متابعة طلب، مهمة مخصصة).', '"Schedule follow-up" for a reminder (refill reminder, chronic follow-up, request follow-up, custom task).'),
         ],
-        'tips': [T('موظف الفرع بيشوف مكالمات فرعه ومحادثاته بس، ومينفعش يحوّل مكالمة لحجز أو تحويل باسم فرع تاني.', "Branch staff see their branch's calls and conversations only, and cannot turn a call into a reservation or transfer for another branch."),
+        'tips': [T('موظف الفرع لازم يكتب رقم الموبايل كامل في البحث؛ موظفو الكول سنتر يقدروا يبحثوا بجزء من الرقم.', 'Branch staff must type the full mobile number to look it up; call-center agents can search by part of it.'),
+                 T('موظف الفرع بيشوف مكالمات فرعه ومحادثاته بس، ومينفعش يحوّل مكالمة لحجز أو تحويل باسم فرع تاني.', "Branch staff see their branch's calls and conversations only, and cannot turn a call into a reservation or transfer for another branch."),
                  
             T('«مخاطر الشكوى» تظهر للعملاء ذوي التاريخ السلبي — تعامل بعناية.', '"Complaint risk" shows for customers with a negative history — handle with care.'),
             T('بعد «🤖 تلخيص AI» يظهر الملخص ومشاعر العميل ودرجة الأهمية والإجراء المقترح تحت الأزرار خلال ثوانٍ.',
@@ -778,7 +779,8 @@ SCREENS = [
                        '"Compare and correct" shows Whisper and Gemini side by side; saving the correct text teaches Whisper drug names and words '
                        'it keeps getting wrong.')},
         ],
-        'tips': [
+        'tips': [T('نافذة المكالمة الواردة بتوصل لموظفي الكول سنتر والتحويلات المسجلة بس — مش لكل المستخدمين.', 'The incoming-call pop-up reaches call-center staff and registered extensions only — not every user.'),
+                 
             T('«السنترال: متصل» يعني أن السيرفر يستقبل أحداث المكالمات من Issabel. «التحديث اللحظي» يعني اتصال متصفحك بالسيرفر فقط.',
               '"PBX: connected" means the server is receiving call events from Issabel. "Live updates" is only your browser\'s link to the server.'),
             T('لو «التحديث اللحظي» غير متصل أعد تحميل الصفحة.', 'If "Live updates" is disconnected, reload the page.'),

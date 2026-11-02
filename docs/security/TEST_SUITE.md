@@ -250,8 +250,14 @@ Branch `claude/security-batch5-branch-scoping`. Tests: `test_branch_scope.py`, `
   checked. Transfer / transit workflow sides are NOT widened — an all-branch role acts on its home branch's
   side only, HQ lists unchanged. Transfer chatter looked up a non-existent model, so it was open to everyone.
 
-Still open: customer phones shown by OTHER modules (B-2 outside `apps/customers`, see the Batch 5 phone audit),
-and owner decisions on the insurance / incentives all-branch gate and a tasks module permission.
+- **B5b phones (2026-10-31)** — B-2 outside the customers screens, per `PHONE_MASKING_PLAN.md` (owner
+  decisions D1–D8). `test_phone_canary_sweep.py` plants a branch-A customer with a known number in every
+  phone-like field it can reach and checks no list, detail or lookup route returns it unmasked to another
+  branch's staff or to staff with `can_see_customer_phone = False`: 39 → 0 (baseline: riders' and channel
+  accounts' own numbers). `test_phone_rules.py` covers what must still show (own-branch records, assigned
+  riders, own customers) and the live-call channel.
+
+Still open: owner decisions on the insurance / incentives all-branch gate and a tasks module permission.
 
 ## Pending owner decisions
 

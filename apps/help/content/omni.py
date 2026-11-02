@@ -743,7 +743,8 @@ SCREENS = [
             T('«حملة جديدة» ← الاسم ونص الرسالة (اضغط المتغير لإضافته مثل اسم العميل) ← الجمهور ← «معاينة الجمهور» ← «حفظ الحملة».', '"New campaign" → name and message text (click a variable such as the customer name to insert it) → audience → "Preview audience" → "Save campaign".'),
             T('«طلب الموافقة»؛ بعد الاعتماد «جدولة الإرسال» أو الإرسال يدوياً.', '"Request approval"; once approved, "Schedule sending" or send manually.'),
         ],
-        'tips': [T('فعّل «لديهم رقم واتساب مسجّل فقط» حتى لا تضيع رسائل.', 'Turn on "registered WhatsApp number only" so no messages are wasted.')],
+        'tips': [T('أرقام المستلمين بتظهر للي بيبعتوا أو بيعتمدوا الحملات بس؛ صلاحية العرض بس بتشوفها مخفية.', "Recipients' numbers show only to the people who send or approve campaigns; view-only access sees them hidden."),
+                 T('فعّل «لديهم رقم واتساب مسجّل فقط» حتى لا تضيع رسائل.', 'Turn on "registered WhatsApp number only" so no messages are wasted.')],
         'workflows': ['campaign'],
         'related': ['omni.inbox'],
         'tour': [

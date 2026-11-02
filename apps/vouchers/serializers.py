@@ -14,6 +14,8 @@ from .models import (
 
 # ── Voucher ────────────────────────────────────────────────────────────────────
 
+from apps.customers.phone_mask import RecordPhoneMask, CustomerPhoneMask  # Batch 5b
+
 class VoucherListSerializer(serializers.ModelSerializer):
     customer_name    = serializers.CharField(source='customer.name',      read_only=True, default=None)
     branch_name      = serializers.CharField(source='branch.name_ar',     read_only=True, default=None)
@@ -129,7 +131,13 @@ class VoucherCreateSerializer(serializers.ModelSerializer):
 
 # ── VoucherAssignment ─────────────────────────────────────────────────────────
 
-class VoucherAssignmentSerializer(serializers.ModelSerializer):
+class VoucherAssignmentSerializer(RecordPhoneMask, serializers.ModelSerializer):
+    phone_mask_fields = ('customer_phone',)
+
+    def phones_visible_for(self, user, instance):
+        # vouchers are redeemed chain-wide (not branch-scoped) — numbers for the all-branch roles
+        from core import branch_scope
+        return super().phones_visible_for(user, instance) and branch_scope.branch_ids(user) is None
     assigned_by_name = serializers.CharField(source='assigned_by.full_name',
                                               read_only=True, default=None)
     customer_name    = serializers.CharField(source='customer.name',
@@ -172,7 +180,14 @@ class VoucherOTPSerializer(serializers.ModelSerializer):
 
 # ── VoucherRedemptionDocument ─────────────────────────────────────────────────
 
-class VoucherRedemptionDocumentSerializer(serializers.ModelSerializer):
+class VoucherRedemptionDocumentSerializer(RecordPhoneMask, serializers.ModelSerializer):
+    # it sent the raw number right next to its own masked copy (Batch 5b)
+    phone_mask_fields = ('customer_phone',)
+
+    def phones_visible_for(self, user, instance):
+        # vouchers are redeemed chain-wide (not branch-scoped) — numbers for the all-branch roles
+        from core import branch_scope
+        return super().phones_visible_for(user, instance) and branch_scope.branch_ids(user) is None
     voucher_code     = serializers.CharField(source='voucher.code',       read_only=True)
     voucher_title    = serializers.CharField(source='voucher.title',      read_only=True)
     voucher_type     = serializers.CharField(source='voucher.voucher_type', read_only=True)
@@ -229,7 +244,13 @@ class VoucherRedemptionDocumentSerializer(serializers.ModelSerializer):
 
 # ── VoucherRedemption (audit) ─────────────────────────────────────────────────
 
-class VoucherRedemptionSerializer(serializers.ModelSerializer):
+class VoucherRedemptionSerializer(RecordPhoneMask, serializers.ModelSerializer):
+    phone_mask_fields = ('customer_phone',)
+
+    def phones_visible_for(self, user, instance):
+        # vouchers are redeemed chain-wide (not branch-scoped) — numbers for the all-branch roles
+        from core import branch_scope
+        return super().phones_visible_for(user, instance) and branch_scope.branch_ids(user) is None
     redeemed_by_name  = serializers.CharField(source='redeemed_by.full_name',
                                                read_only=True, default=None)
     branch_name       = serializers.CharField(source='branch.name_ar',
