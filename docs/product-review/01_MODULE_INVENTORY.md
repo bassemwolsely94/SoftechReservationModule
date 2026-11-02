@@ -6,7 +6,7 @@ counts on the **office PostgreSQL instance** (the instance the scheduler ran on 
 cut over). No code, config, data or SOFTECH was touched.
 
 **Stack verified:** Django 4.2.13, DRF 3.15.1, simplejwt 5.3.1, APScheduler 3.10.4, PostgreSQL (office PG16), React 18.2,
-Vite 5. ~255k backend LOC (excl. migrations). SOFTECH = Sybase ASE via jConnect/jpype (`config/sybase.py`).
+Vite 6. ~255k backend LOC (excl. migrations). SOFTECH = Sybase ASE via jConnect/jpype (`config/sybase.py`).
 
 ### How to read "adoption signal"
 Counts are **office-instance rows** — they show what staff actually *created*, not what engines generated. Caveats:
