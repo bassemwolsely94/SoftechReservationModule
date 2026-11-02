@@ -291,5 +291,20 @@ Batch 7 sets it), `bandit -b bandit-baseline.json`, `pip_audit_check.py`, and in
   Checked both ways: the CI set (installed) and the full production set (`pip install --dry-run
   --report -r requirements.txt`, then `pip-audit --no-deps -r` on the resolved pins) — no findings.
   The CI check audits the installed environment; run it inside the production venv after a deploy.
-- **npm (production deps) — 35 advisories** (`npm-audit-allow.txt`): axios (most, several high),
-  follow-redirects, form-data, react-router / react-router-dom. Owner: Batch 6.
+- **npm (production deps) — 2 left** (`npm-audit-allow.txt`, 2026-11-01): lockfile-only upgrades
+  (axios 1.21, react-router-dom 6.30.6, form-data 4.0.6, follow-redirects 1.16.2, postcss 8.5)
+  took it from 35 to 2. Both left are react-router moderates fixed only in v7 (a major upgrade) and
+  not reachable here: an open redirect through a backslash path (our `navigate()`/`<Link>` targets
+  are app routes from our own server data, never a URL parameter) and SSR hydration (this is a
+  client-rendered SPA). Dev-only, not gated: vite 5 / esbuild dev-server advisories — fixed in
+  vite 6+ (major); never expose `npm run dev` beyond localhost.
+- **OCR sidecar** (`ocr_sidecar/requirements.txt`, its own Python 3.10–3.12 venv, not in CI —
+  audit by hand with `pip-audit -r ocr_sidecar/requirements.txt` under Python 3.12). Pillow floor
+  raised to 13.0.0 (the only release with no open advisories; it decodes the uploaded image) and
+  `setuptools` added (paddle 2.6 imports it; 3.12 venvs lack it). 12 advisories remain, all held by
+  the paddleocr 2.7.3 pins and none reachable from `POST /boxes`: opencv 4.6.0.66 libwebp
+  (CVE-2023-4863 — OpenCV never decodes the upload, Pillow does), paddlepaddle 2.6.2 command
+  injection in `IrGraph.draw` / the model-download helper (never called with request data),
+  protobuf 3.20.2 DoS (no untrusted protobuf parsed), imgaug 0.4.0 pickle (training-time
+  `BackgroundAugmenter` only). Real fix: the PaddleOCR 3.x stack on the Linux server, with an
+  OCR-quality check. Smoke-tested 2026-11-01: `/boxes` reads a rendered page on Pillow 13.

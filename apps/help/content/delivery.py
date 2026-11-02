@@ -447,7 +447,6 @@ SCREENS = [
              'open_hint': T('افتح طلب واضغط «✍️ إدخال يدوي».', 'Open an order and press "✍️ Manual entry".')},
         ],
         'updated': '2026-11-01',
-        'change_note': T('شرح لكل أزرار الشاشة في «💡 تلميحات الأزرار»', 'Every button on the screen explained in "💡 Button hints"'),
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

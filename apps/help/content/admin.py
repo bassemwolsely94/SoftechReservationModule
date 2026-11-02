@@ -365,7 +365,7 @@ SCREENS = [
              'open_hint': T('اضغط «🔑 إعادة تعيين كلمة المرور» على صف المستخدم.', 'Press "🔑 Reset password" on the user\'s row.')},
         ],
         'updated': '2026-11-01',
-        'change_note': T('خياران للمدير: التصدير والكتابة في SOFTECH من جهاز معتمد خارج الشبكة', 'Two admin options: export and SOFTECH writes from an approved device outside the network'),
+        'change_note': T('خياران للمدير (التصدير والكتابة في SOFTECH من جهاز معتمد خارج الشبكة)، وشرح أوضح لأزرار «اعرض لي»', 'Two admin options (export and SOFTECH writes from an approved device outside the network); clearer "Show me" buttons'),
     },
     {
         'key': 'admin.permissions',
@@ -455,7 +455,6 @@ SCREENS = [
              'open_hint': T('«🔔 ظهور الإشعارات» ← اختار دور — للمدير.', '"🔔 Notification visibility" → pick a role — admins.')},
         ],
         'updated': '2026-11-01',
-    
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
@@ -540,7 +539,6 @@ SCREENS = [
              'open_hint': T('افتح تبويب «أنظمة Softech».', 'Open the "SOFTECH systems" tab.')},
         ],
         'updated': '2026-10-30',
-    
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
@@ -560,9 +558,9 @@ SCREENS = [
             {'key': 'vouchers', 'title': T('🎫 القسائم', '🎫 Vouchers'), 'body': T('إعدادات رموز التحقق وحدود القيم.', 'OTP settings and value limits.')},
             {'key': 'dropdowns', 'title': T('📝 القوائم المنسدلة', '📝 Dropdowns'), 'body': T('خيارات القوائم المنسدلة في الشاشات (قنوات الحجز، أولويات الحجز، حالات التحويل…): أضف خياراً (تسمية عربية، قيمة، أيقونة) أو عطّله.', 'The dropdown options used in screens (reservation channels, priorities, transfer statuses…): add an option (Arabic label, value, icon) or disable it.')},
         ],
-        'tips': [T('تغيير لغة الواجهة فوري ويُحفظ في المتصفح.', 'Changing the interface language is instant and saved in the browser.')],
         'tour': [
-            {'target': 'admin-settings-header', 'text': T('إعدادات النظام؛ غير المدير يرى «عرض فقط».',
+            {'target': 'admin-settings-header', 'label': T('إعدادات النظام', 'System Settings'),
+             'text': T('إعدادات النظام؛ غير المدير يرى «عرض فقط».',
                                               'System settings; non-admins see "View only".'),
              'more': T('هنا بتتظبط بيانات الصيدلية والفروع وقواعد كل موديول.\n'
                        'المدير بس اللي يعدّل؛ الصيدلي بيشوف الإعدادات مع شارة «عرض فقط — يحتاج صلاحية مدير للتعديل».',
@@ -575,20 +573,24 @@ SCREENS = [
                        '• «المظهر»: ألوان الهوية.',
                        'Click a section in the side column and the content beside it changes.\n'
                        '• "Reservations", "Transfers", "Notifications", "Sync" and "Vouchers": each module\'s rules.\n'
-                       '• "Appearance": brand colours.')},
-            {'target': 'admin-settings-content', 'text': T('إعدادات القسم المختار تظهر هنا؛ التعديل للمدير فقط.',
+                       '• "Appearance": brand colours.'),
+             'label': T('عام · المظهر · الفروع · …', 'General · Appearance · Branches · …')},
+            {'target': 'admin-settings-content', 'label': T('محتوى القسم', 'Section content'),
+             'text': T('إعدادات القسم المختار تظهر هنا؛ التعديل للمدير فقط.',
                                               'The selected section\'s settings appear here; editing is admin only.'),
              'more': T('كل إعداد في سطر بقيمته الحالية. اضغط «تعديل» جنبه، غيّر القيمة، وبعدين «حفظ» — كل إعداد بيتحفظ لوحده وتظهر «تم الحفظ ✓».\n'
                        'التغيير بيأثر على شغل الموديول على طول، فغيّر بس اللي فاهم تأثيره.',
                        'Each setting is a row with its current value. Click "Edit" next to it, change the value, then "Save" — each setting saves on its own and "Saved ✓" shows.\n'
                        'The change affects how the module works right away, so only change what you understand.')},
-            {'target': 'admin-settings-general', 'text': T('في «عام»: لغة الواجهة وبيانات الصيدلية الظاهرة في الإيصالات وواتساب.',
+            {'target': 'admin-settings-general', 'label': T('الإعدادات العامة', 'General Settings'),
+             'text': T('في «عام»: لغة الواجهة وبيانات الصيدلية الظاهرة في الإيصالات وواتساب.',
                                               'In "General": interface language and pharmacy details shown on receipts and WhatsApp.'),
              'more': T('• لغة الواجهة (العربية / English): التغيير فوري ومتسجّل في المتصفح.\n'
                        '• «معلومات سلسلة الصيدليات»: بتظهر في إيصالات العملاء ورسائل واتساب ورمز QR — راجعها كويس.',
                        '• Interface language (Arabic / English): the change is instant and saved in the browser.\n'
                        '• "Pharmacy chain profile": shown on customer receipts, WhatsApp messages and the QR code — check it carefully.')},
-            {'target': 'admin-settings-branches', 'text': T('في «الفروع»: بطاقة لكل فرع بحالته وميزاته وبياناته وموقعه.',
+            {'target': 'admin-settings-branches', 'label': T('إدارة الفروع', 'Branch Management'),
+             'text': T('في «الفروع»: بطاقة لكل فرع بحالته وميزاته وبياناته وموقعه.',
                                               'In "Branches": a card per branch with status, features, details and location.'),
              'more': T('• «✎ تعديل»: الاسم والهاتف والعنوان والإحداثيات («استخدم موقعي الحالي» وإنت جوه الفرع).\n'
                        '• «نشط» و«قيد التشغيل» بيتغيّروا بضغطة واحدة فوراً.\n'
@@ -598,7 +600,8 @@ SCREENS = [
                        '• "Active" and "Operational" switch with one click, immediately.\n'
                        '• "Available features": click a feature to enable or disable it for the branch.\n'
                        'Without coordinates, attendance and pickup geo-checks will not work.')},
-            {'target': 'admin-settings-dropdowns', 'text': T('في «القوائم المنسدلة»: خيارات القوائم المستخدمة في الشاشات مثل قنوات الحجز.',
+            {'target': 'admin-settings-dropdowns', 'label': T('القوائم المنسدلة', 'Dropdown Options'),
+             'text': T('في «القوائم المنسدلة»: خيارات القوائم المستخدمة في الشاشات مثل قنوات الحجز.',
                                               'In "Dropdowns": the options used in screens, such as reservation channels.'),
              'more': T('• «+ إضافة خيار جديد»: التسمية العربية والقيمة إجباريين، والإنجليزي والأيقونة اختياريين.\n'
                        '• «مفعّل / معطّل» بيخفي الخيار من الشاشات من غير ما يمسحه.\n'
@@ -606,16 +609,6 @@ SCREENS = [
                        '• "+ Add new option": Arabic label and value are required; English label and icon are optional.\n'
                        '• "Enabled / Disabled" hides the option from screens without deleting it.\n'
                        '• ✕ deletes after a confirmation; "System" options cannot be deleted.')},
-        ],
-        'tips': [
-            T('تغيير لغة الواجهة فوري ويُحفظ في المتصفح.', 'Changing the interface language is instant and saved in the browser.'),
-            T('كل تعديل بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الإعدادات): القراءة متاحة للكل، لكن تعديل الإعدادات والقوائم وبيانات الصيدلية يحتاج «تعديل» (أو «إضافة» / «حذف» للقوائم).',
-              'Every change is checked on the server (Permissions Matrix, settings module): anyone can read, but changing settings, dropdown lists and the pharmacy profile needs "edit" (or "create" / "delete" for list options).'),
-        ],
-        'tour': [
-            {'target': 'admin-settings-tabs', 'label': T('عام · المظهر · الفروع · …', 'General · Appearance · Branches · …'),
-             'text': T('كل مجموعة إعدادات في تبويب: عام، المظهر، الفروع، الحجوزات، التحويل، الإشعارات، المزامنة، القسائم، القوائم.',
-                       'Each settings group has a tab: general, appearance, branches, reservations, transfers, notifications, sync, vouchers, dropdowns.')},
             {'target': 'admin-settings-language', 'label': T('العربية · English', 'العربية · English'),
              'text': T('لغة الواجهة واتجاهها. التغيير فوري ومن غير إعادة تحميل.', 'Interface language and direction. The change is instant, no reload.'),
              'open_hint': T('في تبويب «عام».', 'On the "General" tab.')},
@@ -659,6 +652,12 @@ SCREENS = [
                        'Saves the brand colours and font for the whole system. "↺ Reset to brand default" restores them.'),
              'open_hint': T('افتح تبويب «🎨 المظهر» وغيّر حاجة.', 'Open the "🎨 Appearance" tab and change something.')},
         ],
+        'tips': [
+            T('تغيير لغة الواجهة فوري ويُحفظ في المتصفح.', 'Changing the interface language is instant and saved in the browser.'),
+            T('كل تعديل بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الإعدادات): القراءة متاحة للكل، لكن تعديل الإعدادات والقوائم وبيانات الصيدلية يحتاج «تعديل» (أو «إضافة» / «حذف» للقوائم).',
+              'Every change is checked on the server (Permissions Matrix, settings module): anyone can read, but changing settings, dropdown lists and the pharmacy profile needs "edit" (or "create" / "delete" for list options).'),
+        ],
+
         'hints': [
             {'target': 'admin-settings-setting-save', 'label': T('حفظ', 'Save'),
              'text': T('يحفظ القيمة الجديدة للإعداد ده، وبتسري على الشاشات المرتبطة بيه.', 'Saves the new value of this setting; it applies to the screens that use it.'),
@@ -696,8 +695,7 @@ SCREENS = [
              'open_hint': T('في تبويب «🎨 المظهر».', 'On the "🎨 Appearance" tab.')},
         ],
         'updated': '2026-11-01',
-    
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'change_note': T('جولة «اعرض لي» رجعت كاملة: شرح كل خطوة مع تلميح الزر', 'The full "Show me" tour is back: every step\'s explanation with its button hint'),
     },
     {
         'key': 'admin.sync',
@@ -793,7 +791,7 @@ SCREENS = [
          },
         ],
         'updated': '2026-11-01',
-        'change_note': T('«حمل SOFTECH» يفرّق الشاشات حسب الشبكة والدور', '"SOFTECH load" splits screens by network and role'),
+        'change_note': T('«حمل SOFTECH» يفرّق الشاشات حسب الشبكة والدور؛ مفاتيح الكتابة، تنظيف يومي، تنبيه الفشل المتكرر، وأبطأ الطلبات', '"SOFTECH load" splits screens by network and role; writer switches, daily clean-up, repeated-failure alert, slowest requests'),
     },
     {
         'key': 'admin.audit',
@@ -890,7 +888,6 @@ SCREENS = [
              'open_hint': T('اضغط «مراجعة» على إشارة مفتوحة.', 'Press "Review" on an open flag.')},
         ],
         'updated': '2026-11-01',
-    
         'change_note': T('تبويب جديد: استخدام الشاشات', 'New tab: screen usage'),
     },
     {
