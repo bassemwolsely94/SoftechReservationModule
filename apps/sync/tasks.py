@@ -2415,6 +2415,30 @@ def _run_stock_expiry_sync():
         logger.error('[APScheduler] stock-expiry sync failed: %s', exc)
 
 
+def _run_pbx_cdr_sync():
+    """Calls: copy new rows of the PBX's own CDR (read-only) → pbx.CdrCall linked to PICs,
+    then alert if the PBX is taking calls the AMI bridge is not hearing."""
+    try:
+        from config.issabel import cdr_configured
+        if not cdr_configured():
+            return
+        from apps.pbx import cdr
+        run = cdr.sync_cdr()
+        logger.info('[APScheduler] CDR sync %s: %s rows, %s calls', run.status, run.fetched, run.stored)
+        cdr.notify_bridge_silence()
+    except Exception as exc:
+        logger.warning('pbx cdr sync failed: %s', exc)
+
+
+def _run_pbx_cdr_relink():
+    """Calls: nightly re-link of every stored call to its PIC (new customers / purchases)."""
+    try:
+        from apps.pbx import cdr
+        logger.info('[APScheduler] CDR relink: %s calls changed', cdr.relink_all())
+    except Exception as exc:
+        logger.warning('pbx cdr relink failed: %s', exc)
+
+
 def _run_stock_ledger_sync(days=3):
     """Doc 32: mirror stktrans (all doccodes) from HQ — replaces the last `days` docdate
     days — then run the audit checks. READ-ONLY vs SOFTECH. Off with STOCK_AUDIT_ENABLED=False."""
@@ -3600,6 +3624,15 @@ def start_scheduler():
     # Daily multi-node stkbalexpiry mirror sweep (FEFO near-expiry / expired tabs).
     _scheduler.add_job(
         _run_stock_expiry_sync, 'cron', hour=5, minute=30, id='stock_expiry_sync',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Calls (PBX CDR mirror): every 10 min + 03:55 nightly PIC re-link.
+    _scheduler.add_job(
+        _run_pbx_cdr_sync, 'interval', minutes=10, id='pbx_cdr_sync',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=600,
+    )
+    _scheduler.add_job(
+        _run_pbx_cdr_relink, 'cron', hour=3, minute=55, id='pbx_cdr_relink',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # Stock Transactions Audit ledger (doc 32): every 2 h from 08:00 replaces the last 3 days;

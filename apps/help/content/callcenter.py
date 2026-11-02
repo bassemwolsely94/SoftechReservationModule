@@ -764,7 +764,12 @@ SCREENS = [
                        'ويشرح سبب أي عطل وطريقة إصلاحه. أول خطوة حمراء هي سبب المشكلة.\n\n'
                        '«التحويلات والهواتف»: كل تحويلة وحالة تسجيل هاتفها لحظياً (متصل / غير متصل / في مكالمة، عنوان IP، زمن الاستجابة)، '
                        'والموظف المرتبط بها، مع شرح أي مشكلة (هاتف مطفأ، تحويلة غير موجودة في السنترال، تحويلة غير مرتبطة بموظف). '
-                       '«ربط» يربط التحويلة بموظف عندنا فقط ولا يغيّر شيئاً في Issabel؛ الموظف له تحويلة واحدة فيُنقل من تحويلته السابقة تلقائياً.\n\n'
+                       '«ربط» يربط التحويلة بموظف عندنا فقط ولا يغيّر شيئاً في Issabel؛ الموظف له تحويلة واحدة فيُنقل من تحويلته السابقة تلقائياً. '
+                       'بجانب التحويلة غير المرتبطة يظهر «في السنترال: …» — الاسم الذي يستخدمه السنترال نفسه لها (مثل Agent -CC15)؛ '
+                       'عند «ربط» يُكتب أول اسم في البحث فيظهر الموظف المرجّح أولاً، والاختيار يبقى لك.\n\n'
+                       'سجل المكالمات للتقارير يُنسخ كل 10 دقائق من سجل السنترال نفسه (CDR) — قراءة فقط — فلا يضيع شيء حتى لو انقطع الربط اللحظي. '
+                       'كل مكالمة عميل تُربط بكود PIC من رقم الهاتف؛ الرقم المشترك بين أكثر من عميل يُحسب مرة واحدة لآخر من اشترى قبل المكالمة، '
+                       'وتُحفظ معه كل الأكواد المشتركة. لو السنترال سجّل مكالمات ولم يصل الربط اللحظي أي حدث خلال 30 دقيقة يصل تنبيه للمدير والمشرف.\n\n'
                        'التفريغ المحلي للمكالمات (Whisper): يعمل ليلاً في نافذته (افتراضياً 2–6 صباحاً) بأولوية منخفضة، وما لا يكتمل يُستكمل الليلة التالية. '
                        'يمكن الإيقاف المؤقت / الاستئناف / إيقاف التشغيل الحالي، وتغيير النافذة والنموذج وعدد أنوية المعالج. '
                        '«مقارنة وتصحيح» يعرض نص Whisper ونص Gemini جنباً إلى جنب؛ حفظ النص الصحيح يعلّم Whisper أسماء الأدوية والكلمات التي يخطئ فيها.',
@@ -773,7 +778,12 @@ SCREENS = [
                        'and explains the cause and fix of any fault. The first red step is the cause.\n\n'
                        '"Extensions and phones": every extension and its phone\'s live registration (online / offline / on a call, IP address, response time), '
                        'the staff member mapped to it, and an explanation of any problem (phone off, extension missing from the PBX, extension not mapped to anyone). '
-                       '"Map" links an extension to a staff member in our system only and changes nothing in Issabel; a staff member has one extension, so they are moved off their previous one automatically.\n\n'
+                       '"Map" links an extension to a staff member in our system only and changes nothing in Issabel; a staff member has one extension, so they are moved off their previous one automatically. '
+                       'An unmapped extension shows "In PBX: …" — the name the PBX itself uses for it (e.g. Agent -CC15); '
+                       '"Map" pre-fills the search with its first name so the likely person is on top, and you still choose.\n\n'
+                       'The call history used by reports is copied every 10 minutes from the PBX\'s own call record (CDR), read-only, so nothing is lost even when the live link drops. '
+                       'Each customer call is linked to a PIC by phone number; a number shared by several customers counts once, for whoever bought most recently before the call, '
+                       'and all the sharing codes are kept with it. If the PBX logs calls but the live link received no event for 30 minutes, admin and supervisors get an alert.\n\n'
                        'Local call transcription (Whisper): runs nightly in its window (default 2–6 AM) at low priority; whatever doesn\'t finish '
                        'continues the next night. Pause / resume / stop the current run, change the window, model and CPU cores. '
                        '"Compare and correct" shows Whisper and Gemini side by side; saving the correct text teaches Whisper drug names and words '
@@ -843,7 +853,7 @@ SCREENS = [
                        'A call in progress and its duration. If the caller is a known customer, clicking opens the customer card.'),
              'open_hint': T('في «مكالمات نشطة» أثناء وجود مكالمة.', 'Under "Active calls" while a call is in progress.')},
         ],
-        'updated': '2026-11-01',
+        'updated': '2026-11-02',
         'change_note': T('شرح لكل أزرار الشاشة في «💡 تلميحات الأزرار»', 'Every button on the screen explained in "💡 Button hints"'),
     },
 ]

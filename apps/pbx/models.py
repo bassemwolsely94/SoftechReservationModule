@@ -136,6 +136,9 @@ class AgentExtension(models.Model):
         max_length=50, blank=True,
         verbose_name='آخر IP مسجّل',
     )
+    # Caller name the PBX itself uses for this extension (CDR cnam, e.g.
+    # "Eman AbdelGhany -CC15") — filled by the CDR mirror; drives staff suggestions.
+    pbx_name    = models.CharField(max_length=100, blank=True, verbose_name='الاسم في السنترال')
     # ── Gateway-specific fields (only used when extension_type == 'gateway') ──
     gateway_type = models.CharField(
         max_length=12,
@@ -243,6 +246,9 @@ class PBXEvent(models.Model):
         ('QueueCallerJoin', 'عميل دخل القائمة'),
         ('QueueCallerLeave','عميل غادر القائمة'),
         ('QueueCallerAbandon','عميل أهمل القائمة'),
+        ('Join',            'دخول القائمة (AMI 1.3)'),
+        ('Leave',           'مغادرة القائمة (AMI 1.3)'),
+        ('Dial',            'طلب رقم'),
         ('MusicOnHold',     'انتظار موسيقى'),
         ('DTMFBegin',       'DTMF'),
         ('VarSet',          'متغير'),
@@ -441,17 +447,16 @@ class CallSession(models.Model):
         return self.wait_seconds + self.talk_seconds
 
     def _try_match_customer(self):
+        """Same PIC rule as the call reports (apps/pbx/cdr.py): exact phone key, and a
+        number shared by several PICs goes to the latest buyer before the call. An agent
+        extension still sitting in caller_number (outbound, no Dial seen) matches nothing."""
         if self.customer_id or not self.caller_number:
             return
         try:
-            from apps.customers.models import Customer
-            tail = self.caller_number.strip().replace(' ', '')[-9:]
-            c = (
-                Customer.objects.filter(phone__endswith=tail).first()
-                or Customer.objects.filter(phone_alt__endswith=tail).first()
-            )
-            if c:
-                self.customer = c
+            from apps.pbx.cdr import resolve_number
+            _pic, customer_id, _match, _shared = resolve_number(self.caller_number, self.started_at)
+            if customer_id:
+                self.customer_id = customer_id
         except Exception:
             pass
 
@@ -482,7 +487,9 @@ class CallSession(models.Model):
         self._create_call_log()
 
     def _create_call_log(self):
-        """Build a callcenter.CallLog from this session."""
+        """Build a callcenter.CallLog from this session (ext↔ext calls are not CRM calls)."""
+        if self.direction == 'internal':
+            return
         try:
             from apps.callcenter.models import CallLog
 
@@ -543,3 +550,102 @@ class CallSession(models.Model):
             logging.getLogger('elrezeiky.pbx').warning(
                 f'CallSession._create_call_log failed for session {self.unique_id}: {exc}'
             )
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# CdrCall — read-only mirror of Issabel's own CDR (asteriskcdrdb.cdr)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class CdrCall(models.Model):
+    """
+    One customer-facing call leg from the PBX's CDR (internal ext↔ext calls are skipped).
+    The PBX's CDR is the authority for call history — it keeps recording while the AMI
+    bridge is down. Built by apps/pbx/cdr.py (sync_pbx_cdr); the PIC link is re-resolved
+    nightly. A shared number is counted ONCE, on the latest buyer before the call
+    (`pic`); every PIC on that number is kept in `shared_pics` for display.
+    """
+
+    DIRECTION_CHOICES = [('inbound', 'وارد'), ('outbound', 'صادر')]
+    STATUS_CHOICES = [
+        ('answered',  'تم الرد'),
+        ('abandoned', 'لم يُرد عليه (أغلق أثناء الانتظار)'),
+        ('no_answer', 'لا رد'),
+        ('busy',      'مشغول'),
+        ('failed',    'فشل'),
+    ]
+    MATCH_CHOICES = [
+        ('single',            'رقم لعميل واحد'),
+        ('shared_latest',     'رقم مشترك — آخر مشترٍ قبل المكالمة'),
+        ('shared_next',       'رقم مشترك — أول مشترٍ بعد المكالمة'),
+        ('shared_unresolved', 'رقم مشترك — لا مشتريات'),
+        ('none',              'رقم غير مسجّل لأي عميل'),
+        ('no_number',         'بدون رقم'),
+    ]
+
+    cdr_key         = models.CharField(max_length=40, unique=True)   # sha1 of the CDR row identity
+    unique_id       = models.CharField(max_length=50, db_index=True, verbose_name='UniqueID')
+    call_at         = models.DateTimeField(db_index=True, verbose_name='وقت المكالمة')
+    direction       = models.CharField(max_length=10, choices=DIRECTION_CHOICES, db_index=True)
+    status          = models.CharField(max_length=10, choices=STATUS_CHOICES, db_index=True)
+    is_transfer     = models.BooleanField(default=False, help_text='ساق تحويل — لا تُحسب كمكالمة مستقلة')
+
+    customer_number = models.CharField(max_length=30, blank=True, verbose_name='رقم العميل')
+    phone_key       = models.CharField(max_length=15, blank=True, db_index=True)
+    agent_ext       = models.CharField(max_length=20, blank=True, db_index=True, verbose_name='التحويلة')
+    agent_name      = models.CharField(max_length=100, blank=True, help_text='الاسم كما في السنترال')
+    queue           = models.CharField(max_length=50, blank=True)
+    gateway         = models.CharField(max_length=30, blank=True)
+
+    duration_seconds = models.PositiveIntegerField(default=0, verbose_name='المدة الكلية')
+    billable_seconds = models.PositiveIntegerField(default=0, verbose_name='مدة الرد')
+    recording_file  = models.CharField(max_length=255, blank=True)
+
+    # Raw CDR identity (kept for audit / re-classification)
+    src             = models.CharField(max_length=80, blank=True)
+    dst             = models.CharField(max_length=80, blank=True)
+    dcontext        = models.CharField(max_length=80, blank=True)
+    channel         = models.CharField(max_length=80, blank=True)
+    dstchannel      = models.CharField(max_length=80, blank=True)
+    lastapp         = models.CharField(max_length=80, blank=True)
+    disposition     = models.CharField(max_length=45, blank=True)
+
+    # PIC resolution
+    customer        = models.ForeignKey('customers.Customer', on_delete=models.SET_NULL,
+                                        null=True, blank=True, related_name='cdr_calls')
+    pic             = models.CharField(max_length=30, blank=True, db_index=True, verbose_name='PIC')
+    pic_match       = models.CharField(max_length=20, choices=MATCH_CHOICES, default='none', db_index=True)
+    shared_pics     = models.JSONField(default=list, blank=True, help_text='كل أكواد PIC على نفس الرقم')
+
+    synced_at       = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-call_at']
+        verbose_name        = 'مكالمة (سجل السنترال)'
+        verbose_name_plural = 'مكالمات (سجل السنترال)'
+        indexes = [
+            models.Index(fields=['pic', 'call_at']),
+            models.Index(fields=['agent_ext', 'call_at']),
+            models.Index(fields=['direction', 'call_at']),
+        ]
+
+    def __str__(self):
+        return f'[{self.direction}/{self.status}] {self.customer_number} ext {self.agent_ext} @ {self.call_at:%Y-%m-%d %H:%M}'
+
+
+class CdrSyncRun(models.Model):
+    """Run log of the CDR mirror — feeds the 'calls' freshness domain."""
+    STATUS_CHOICES = [('running', 'جارٍ'), ('success', 'نجح'), ('failed', 'فشل')]
+
+    started_at   = models.DateTimeField(auto_now_add=True, db_index=True)
+    finished_at  = models.DateTimeField(null=True, blank=True)
+    status       = models.CharField(max_length=10, choices=STATUS_CHOICES, default='running')
+    window_from  = models.DateTimeField(null=True, blank=True)
+    window_to    = models.DateTimeField(null=True, blank=True)
+    fetched      = models.PositiveIntegerField(default=0)
+    stored       = models.PositiveIntegerField(default=0)
+    relinked     = models.PositiveIntegerField(default=0)
+    error        = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-started_at']
+        verbose_name = 'مزامنة سجل السنترال'

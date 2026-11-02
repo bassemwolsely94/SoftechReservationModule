@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('callcenter', '0006_callitem'),
-        ('pbx', '__latest__'),
+        ('pbx', '0006_bridge_status'),   # was __latest__ — pinned so later pbx migrations don't reorder it
     ]
 
     operations = [

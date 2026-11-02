@@ -202,7 +202,8 @@ class CallLog(models.Model):
     )
 
     # ── Timestamps ────────────────────────────────────────────────────────────
-    called_at  = models.DateTimeField(auto_now_add=True, db_index=True)
+    # default (not auto_now_add) so a PBX-built log keeps the call's real start time
+    called_at  = models.DateTimeField(default=timezone.now, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     # Callback scheduling

@@ -130,6 +130,9 @@ apps/loyalty/pic_bridge.py::read_softech_points_log
 # reason: internal-only — table from env ISSABEL_CDR_TABLE; uniqueid bound (MySQL) (triage 2026-10-26)
 apps/pbx/recordings.py::lookup_cdr_recording
 
+# reason: internal-only — table from env ISSABEL_CDR_TABLE, validated as \w+; dates bound (MySQL) (2026-11-02)
+apps/pbx/cdr.py::_fetch
+
 # reason: internal-only — DB constant + WHERE fragments; LIKE value bound (triage 2026-10-26)
 apps/personal/queries.py::search_persons
 
