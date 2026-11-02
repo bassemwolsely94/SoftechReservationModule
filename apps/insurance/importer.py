@@ -58,6 +58,18 @@ class InsuranceImportError(Exception):
     pass
 
 
+class InsuranceMixedMotalbaError(InsuranceImportError):
+    """A date-range import would merge receipts of several SOFTECH motalbas into one claim.
+
+    `motalbas` lists each one found ({motalbano, motfromdate, mottodate, rxcount,
+    in_range, docvaluetotal, personcode}) so the user can import the right one by number.
+    in_range = receipts the date import would have taken from it (first motalba wins a receipt).
+    """
+    def __init__(self, message, motalbas):
+        super().__init__(message)
+        self.motalbas = motalbas
+
+
 def _get_connection():
     from config.sybase import get_sybase_connection
     return get_sybase_connection()
@@ -863,6 +875,39 @@ def import_claim_from_softech(
             'لم يتم العثور على روشتات في جداول المطالبات. '
             'تحقق من كود العميل والفترة الزمنية.'
         )
+
+    # A date range must not stitch several SOFTECH motalbas into one claim: SOFTECH keeps
+    # superseded/partial motalbas (e.g. 127/128/129 next to the final 130), so the union of
+    # every line in the dates is a claim nobody issued. Refuse; the user imports by number.
+    groups: dict[tuple, list] = {}
+    for row in all_lines:
+        groups.setdefault((_safe(row[0]), _to_int(row[1]) or 0), []).append(row)
+    numbered = [k for k in groups if k[1]]
+    if len(numbered) > 1 or (numbered and len(groups) > len(numbered)):
+        found = []
+        for (pc, motno), rows in sorted(groups.items(), key=lambda kv: kv[0][1]):
+            entry = {'motalbano': motno or None, 'personcode': pc, 'in_range': len(rows),
+                     'rxcount': len(rows), 'motfromdate': None, 'mottodate': None,
+                     'docvaluetotal': float(sum(Decimal(str(r[7] or 0)) for r in rows))}
+            if motno:
+                try:
+                    cursor.execute(QUERY_MOTALBA_HEADER_FROM_DETAIL, [pc, motno])
+                    h = cursor.fetchone()
+                    if h:
+                        entry.update(motfromdate=str(_to_date(h[2]) or '') or None,
+                                     mottodate=str(_to_date(h[3]) or '') or None,
+                                     rxcount=int(h[4] or 0), docvaluetotal=float(h[5] or 0))
+                except Exception as e:
+                    logger.warning('Header query failed for %s/%s: %s', pc, motno, e)
+                    cursor = conn.cursor()
+            found.append(entry)
+        nos = '، '.join(str(f['motalbano']) if f['motalbano'] else 'بدون رقم' for f in found)
+        raise InsuranceMixedMotalbaError(
+            f'الفترة تشمل {len(found)} مطالبات مختلفة في سوفتك ({nos}). '
+            'لن يتم الاستيراد بالتاريخ حتى لا تختلط المطالبات — اختر رقم المطالبة الصحيحة.',
+            found)
+    if len(numbered) == 1 and not claim.softech_motalba_no:
+        claim.softech_motalba_no = str(numbered[0][1])
 
     # Sort by motalba_docorder, docdate
     all_lines.sort(key=lambda r: (_to_int(r[6]), str(r[4] or ''), str(r[3] or '')))

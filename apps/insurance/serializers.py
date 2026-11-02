@@ -363,6 +363,7 @@ class InsuranceSeparationNameSerializer(serializers.ModelSerializer):
 
 class InsuranceSeparationListSerializer(serializers.ModelSerializer):
     name_count = serializers.SerializerMethodField()
+    target_client_name = serializers.CharField(source='target_client.name', read_only=True, default='')
 
     def get_name_count(self, obj):
         return obj.names.filter(is_active=True).count()
@@ -370,5 +371,6 @@ class InsuranceSeparationListSerializer(serializers.ModelSerializer):
     class Meta:
         from .models import InsuranceSeparationList
         model  = InsuranceSeparationList
-        fields = ['id', 'label', 'description', 'is_active', 'name_count', 'created_at']
+        fields = ['id', 'label', 'description', 'is_active', 'target_client', 'target_client_name',
+                  'target_group_label', 'name_count', 'created_at']
         read_only_fields = ['id', 'created_at']

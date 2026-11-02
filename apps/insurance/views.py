@@ -31,7 +31,7 @@ from .serializers import (
 from .importer import (
     import_claim_from_softech, import_claim_by_motalbano,
     fetch_single_rx_from_softech,
-    recalculate_claim_final_totals, InsuranceImportError,
+    recalculate_claim_final_totals, InsuranceImportError, InsuranceMixedMotalbaError,
 )
 from .audit import record_audit
 from apps.catalog.wildcard import wq
@@ -158,6 +158,9 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        # list filters only — on one claim ?status= belongs to the action (e.g. failed re-price runs)
+        if self.kwargs.get(self.lookup_url_kwarg or self.lookup_field):
+            return qs
         params = self.request.query_params
 
         client_id    = params.get('client_id')
@@ -342,6 +345,8 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
                 branchcodes = data.get('branchcodes') or None,
                 user        = staff,
             )
+        except InsuranceMixedMotalbaError as e:
+            return Response({'error': str(e), 'motalbas': e.motalbas}, status=status.HTTP_409_CONFLICT)
         except InsuranceImportError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
@@ -420,6 +425,9 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
                     period_from=data['period_from'], period_to=data['period_to'],
                     branchcodes=data.get('branchcodes') or None, user=staff,
                 )
+        except InsuranceMixedMotalbaError as e:
+            claim.delete()
+            return Response({'error': str(e), 'motalbas': e.motalbas}, status=status.HTTP_409_CONFLICT)
         except InsuranceImportError as e:
             claim.delete()
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -710,6 +718,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
                 continue
             out.append({
                 'rx_id':        rx.id,
+                'sequence':     rx.sequence,
                 'docnumber':    rx.softech_docnumber,
                 'date':         rx.softech_docdate.isoformat() if rx.softech_docdate else None,
                 'branch':       rx.softech_branchcode,
@@ -1053,6 +1062,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
             rows.append({
                 'line_id':        ln.pk,
                 'prescription_id': ln.prescription_id,
+                'sequence':       ln.prescription.sequence,
                 'docnumber':      ln.prescription.softech_docnumber,
                 'branchcode':     ln.prescription.softech_branchcode,
                 'docdate':        ln.prescription.softech_docdate.isoformat() if ln.prescription.softech_docdate else None,
@@ -1128,41 +1138,97 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'itemcode مطلوب'}, status=400)
         return Response(find_item_receipts(claim, code))
 
+    # The direct write endpoints are retired: every SOFTECH re-price goes through a
+    # stored, guard-checked plan (preview → typed confirmation → apply).
     @action(detail=True, methods=['post'], url_path='softech-reprice/apply-batch')
     def softech_reprice_apply_batch(self, request, pk=None):
-        """GATED: apply one new price for an item across several receipts (each its own run)."""
-        from .reprice_service import apply_batch, RepriceError
-        claim = self.get_object()
-        d = request.data
-        try:
-            res = apply_batch(claim, str(d['itemcode']), d['new_price'],
-                              d.get('receipts') or [], user=request.user, confirm=bool(d.get('confirm')))
-            record_audit(claim, 'other', actor=getattr(request.user, 'staff_profile', None),
-                         summary=f"تعديل سعر صنف {d['itemcode']} فى {res['applied']} إيصال (دفعة)",
-                         target_type='item', target_ref=str(d['itemcode']))
-            return Response(res)
-        except RepriceError as e:
-            return Response({'detail': str(e)}, status=400)
-        except KeyError:
-            return Response({'detail': 'itemcode, new_price, receipts مطلوبة'}, status=400)
+        return Response({'detail': 'استخدم المعاينة ثم التأكيد (softech-reprice/plan).'}, status=410)
 
     @action(detail=True, methods=['post'], url_path='softech-reprice/apply')
     def softech_reprice_apply(self, request, pk=None):
-        """GATED write to SOFTECH (flag + confirm + draft-only + branch reachable)."""
-        from .reprice_service import apply_reprice, RepriceError
+        return Response({'detail': 'استخدم المعاينة ثم التأكيد (softech-reprice/plan).'}, status=410)
+
+    @action(detail=True, methods=['post'], url_path='softech-reprice/plan')
+    def softech_reprice_plan(self, request, pk=None):
+        """READ-ONLY on SOFTECH: preview a plan (one receipt or a batch) + guard checks.
+        Body: {source, receipts: [{docno, branch, prices: {itemcode: price}}]}"""
+        from .reprice_service import preview_plan, plan_payload, RepriceError
         claim = self.get_object()
-        d = request.data
         try:
-            res = apply_reprice(claim, str(d['docnumber']), str(d['branch']),
-                                d.get('prices') or {}, user=request.user,
-                                confirm=bool(d.get('confirm')), doccode=d.get('doccode', '115'))
-            record_audit(claim, 'other', actor=getattr(request.user, 'staff_profile', None),
-                         summary=f"تعديل سعر سوفتك للإيصال #{d['docnumber']} (Δ{res['net_delta']})",
-                         target_type='receipt', target_ref=str(d['docnumber']),
-                         after={'run_id': res['run_id'], 'net_delta': res['net_delta']})
-            return Response(res)
+            plan = preview_plan(claim, request.data.get('receipts') or [], user=request.user,
+                                source=str(request.data.get('source') or 'receipt')[:20])
         except RepriceError as e:
             return Response({'detail': str(e)}, status=400)
+        except Exception as e:
+            return Response({'detail': f'تعذّر الاتصال بسوفتك: {public_error(request, e)}'}, status=502)
+        return Response(plan_payload(plan))
+
+    @action(detail=True, methods=['post'], url_path='softech-reprice/plan-from-catalog')
+    def softech_reprice_plan_from_catalog(self, request, pk=None):
+        """READ-ONLY on SOFTECH: preview writing the prices «تطبيق بيانات الكتالوج» changed
+        on this claim into SOFTECH — one run per receipt with all its items; items SOFTECH
+        already has at that price are skipped. Applied like any plan (typed confirmation)."""
+        from .reprice_service import preview_plan, plan_payload, RepriceError
+        from .softech_sync import catalog_sync_receipts
+        claim = self.get_object()
+        receipts, info = catalog_sync_receipts(claim)
+        if not receipts:
+            return Response({'detail': 'لا توجد أسعار مُحدَّثة من الكتالوج على هذه المطالبة.', **info}, status=400)
+        try:
+            plan = preview_plan(claim, receipts, user=request.user, source='catalog',
+                                skip_matching=True, info=info)
+        except RepriceError as e:
+            return Response({'detail': str(e)}, status=400)
+        except Exception as e:
+            return Response({'detail': f'تعذّر الاتصال بسوفتك: {public_error(request, e)}'}, status=502)
+        if not plan.receipt_count:
+            plan.delete()
+            return Response({'detail': 'كل الأسعار المُحدَّثة موجودة فى سوفتك بالفعل — لا شيء للمزامنة.',
+                             'nothing_to_do': True, **info})
+        return Response(plan_payload(plan))
+
+    @action(detail=True, methods=['post'], url_path='softech-reprice/plan/(?P<plan_id>[0-9]+)/apply')
+    def softech_reprice_plan_apply(self, request, pk=None, plan_id=None):
+        """GATED write: apply a previewed plan. Body: {confirm_count, reason}"""
+        from .models import SoftechWritePlan
+        from .reprice_service import apply_plan, plan_payload, RepriceError
+        claim = self.get_object()
+        plan = SoftechWritePlan.objects.filter(pk=plan_id, claim=claim).first()
+        if not plan:
+            return Response({'detail': 'المعاينة غير موجودة'}, status=404)
+        try:
+            res = apply_plan(plan, user=request.user, confirm_count=request.data.get('confirm_count'),
+                             reason=request.data.get('reason') or '')
+        except RepriceError as e:
+            return Response({'detail': str(e)}, status=400)
+        failed = f" (فشل {res['failed']})" if res['failed'] else ''
+        record_audit(claim, 'other', actor=getattr(request.user, 'staff_profile', None),
+                     summary=f"تعديل أسعار سوفتك — خطة #{plan.pk}: {res['applied']} إيصال{failed}"
+                             f" · صافى Δ {plan.net_delta}",
+                     target_type='plan', target_ref=str(plan.pk),
+                     after={'plan_id': plan.pk, 'applied': res['applied'], 'failed': res['failed'],
+                            'reason': plan.reason})
+        plan.refresh_from_db()
+        return Response({**res, 'plan': plan_payload(plan)})
+
+    @action(detail=True, methods=['post'], url_path='softech-reprice/plan/(?P<plan_id>[0-9]+)/revert')
+    def softech_reprice_plan_revert(self, request, pk=None, plan_id=None):
+        """GATED write: undo every applied run of a plan."""
+        from .models import SoftechWritePlan
+        from .reprice_service import revert_plan, plan_payload, RepriceError
+        claim = self.get_object()
+        plan = SoftechWritePlan.objects.filter(pk=plan_id, claim=claim).first()
+        if not plan:
+            return Response({'detail': 'المعاينة غير موجودة'}, status=404)
+        try:
+            res = revert_plan(plan, user=request.user)
+        except RepriceError as e:
+            return Response({'detail': str(e)}, status=400)
+        record_audit(claim, 'other', actor=getattr(request.user, 'staff_profile', None),
+                     summary=f"تراجع عن خطة تعديل سوفتك #{plan.pk}: {res['reverted']} إيصال",
+                     target_type='plan', target_ref=str(plan.pk))
+        plan.refresh_from_db()
+        return Response({**res, 'plan': plan_payload(plan)})
 
     @action(detail=True, methods=['post'], url_path='softech-reprice/runs/(?P<run_id>[0-9]+)/rebalance')
     def softech_reprice_rebalance(self, request, pk=None, run_id=None):
@@ -1205,32 +1271,57 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='softech-date/apply')
     def softech_date_apply(self, request, pk=None):
-        """Set a receipt's printed date on HQ + branch (gated, revertible)."""
+        return Response({'error': 'استخدم المعاينة ثم التأكيد (softech-date/plan).'}, status=410)
+
+    @action(detail=True, methods=['post'], url_path='softech-date/plan')
+    def softech_date_plan(self, request, pk=None):
+        """READ-ONLY on SOFTECH: preview a receipt-date change + date guard. Body: {docno, branch, new_date}"""
         claim = self.get_object()
-        from .date_service import apply_date_edit
+        from .date_service import preview_date_plan, date_plan_payload
         from .reprice_service import RepriceError
         d = request.data
         try:
-            res = apply_date_edit(claim, str(d.get('docno', '')).strip(), str(d.get('branch', '')).strip(),
-                                  d.get('new_date'), user=request.user, confirm=bool(d.get('confirm')),
-                                  doccode=str(d.get('doccode', '115')))
+            plan = preview_date_plan(claim, d.get('docno', ''), d.get('branch', ''), d.get('new_date'),
+                                     user=request.user, doccode=str(d.get('doccode', '115')))
         except RepriceError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'error': f'تعذّرت المعاينة: {public_error(request, e)}'}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response(date_plan_payload(plan))
+
+    @action(detail=True, methods=['post'], url_path='softech-date/plan/(?P<plan_id>[0-9]+)/apply')
+    def softech_date_plan_apply(self, request, pk=None, plan_id=None):
+        """GATED: apply a previewed date plan. Body: {confirm_text (the receipt number), reason}"""
+        claim = self.get_object()
+        from .models import SoftechWritePlan
+        from .date_service import apply_date_plan
+        from .reprice_service import RepriceError
+        plan = SoftechWritePlan.objects.filter(pk=plan_id, claim=claim, source='date').first()
+        if not plan:
+            return Response({'error': 'المعاينة غير موجودة'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            res = apply_date_plan(plan, user=request.user, confirm_text=request.data.get('confirm_text'),
+                                  reason=request.data.get('reason') or '')
+        except RepriceError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        docno = plan.plan[0]['docno']
         record_audit(claim, 'softech_date_edit', actor=getattr(request.user, 'staff_profile', None),
-                     summary=f'تعديل تاريخ إيصال سوفتك #{d.get("docno")}: {res["old_date"]} → {res["new_date"]}',
-                     target_type='receipt', target_ref=str(d.get('docno')))
+                     summary=f'تعديل تاريخ إيصال سوفتك #{docno}: {res["old_date"]} → {res["new_date"]}',
+                     target_type='receipt', target_ref=docno, reason=plan.reason)
         return Response(res)
 
     @action(detail=True, methods=['get'], url_path='softech-date/runs')
     def softech_date_runs(self, request, pk=None):
         claim = self.get_object()
         from .models import SoftechDateEditRun
+        seq = {(str(d), str(b)): q for d, b, q in claim.prescriptions.values_list(
+            'softech_docnumber', 'softech_branchcode', 'sequence')}
         return Response([{
             'id': r.pk, 'docnumber': r.docnumber, 'branch': r.branchcode, 'status': r.status,
             'old_date': r.old_date.isoformat(), 'new_date': r.new_date.isoformat(),
             'applied_at': r.applied_at.isoformat(),
             'reverted_at': r.reverted_at.isoformat() if r.reverted_at else None,
-            'error': r.error,
+            'error': r.error, 'reason': r.reason, 'sequence': seq.get((r.docnumber, r.branchcode)),
         } for r in SoftechDateEditRun.objects.filter(claim=claim)])
 
     @action(detail=True, methods=['post'], url_path='softech-date/runs/(?P<run_id>[0-9]+)/revert')
@@ -1262,7 +1353,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
             'new_prices': r.new_prices, 'cust_branch_code': r.cust_branch_code,
             'rebalanced': r.rebalanced, 'applied_at': r.applied_at.isoformat(),
             'reverted_at': r.reverted_at.isoformat() if r.reverted_at else None,
-            'error': r.error,
+            'error': r.error, 'plan_id': r.plan_id, 'reason': r.reason, 'warnings': r.warnings,
         } for r in runs])
 
     @action(detail=True, methods=['get'], url_path='softech-reprice/runs/export')
@@ -1276,7 +1367,9 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
         status_f = request.query_params.get('status')
         if status_f:
             runs = runs.filter(status=status_f)
-        return generate_reprice_runs_excel(runs, claim_number=claim.claim_number)
+        seq_map = {(str(d), str(b)): q for d, b, q in claim.prescriptions.values_list(
+            'softech_docnumber', 'softech_branchcode', 'sequence')}
+        return generate_reprice_runs_excel(runs, claim_number=claim.claim_number, seq_map=seq_map)
 
     @action(detail=True, methods=['post'], url_path='softech-reprice/runs/(?P<run_id>[0-9]+)/revert')
     def softech_reprice_revert(self, request, pk=None, run_id=None):
@@ -1787,7 +1880,20 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
         claim = self.get_object()
         if request.method == 'GET':
             return Response(InsuranceDeductionSerializer(claim.deductions.all(), many=True).data)
-        ser = InsuranceDeductionSerializer(data=request.data)
+        data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+        docno = str(data.pop('docnumber', '') or '').strip().lstrip('#')
+        if isinstance(docno, list):
+            docno = docno[0] if docno else ''
+        if docno and not data.get('prescription'):
+            rxs = list(claim.prescriptions.filter(softech_docnumber=docno).values_list('id', flat=True)[:2])
+            if len(rxs) != 1:
+                return Response({'error': f'الإيصال #{docno} ' + ('غير موجود فى هذه المطالبة' if not rxs
+                                 else 'مكرر بأكثر من فرع — حدّده من الروشتات')}, status=status.HTTP_400_BAD_REQUEST)
+            data['prescription'] = rxs[0]
+        data['claim'] = claim.pk   # the claim is the URL's — the form never sent it, so every save failed
+        if data.get('reason_code') == 'not_member' and not data.get('prescription'):
+            return Response({'error': 'اكتب رقم إيصال المريض الذى لا يتبع الجهة'}, status=status.HTTP_400_BAD_REQUEST)
+        ser = InsuranceDeductionSerializer(data=data)
         ser.is_valid(raise_exception=True)
         staff = getattr(request.user, 'staff_profile', None)
         ded = ser.save(claim=claim, recorded_by=staff)
@@ -2285,6 +2391,54 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
         list_id = request.query_params.get('list_id') or None
         return Response(find_separation_matches(claim, sep_list_id=list_id))
 
+    @action(detail=True, methods=['get'], url_path='roster-check')
+    def roster_check(self, request, pk=None):
+        """READ-ONLY: classify each receipt against the cumulative patient rosters
+        (جهة → فئة → فئة فوترة) to catch wrong-insurer allocation."""
+        claim = self.get_object()
+        from .roster import check_claim_roster
+        return Response(check_claim_roster(claim))
+
+    @action(detail=True, methods=['get'], url_path='billing-group-suggestions')
+    def billing_group_suggestions(self, request, pk=None):
+        """READ-ONLY: the فئة فوترة each receipt's patient belongs to, from earlier
+        claims of the same جهة and from separation lists linked to a جهة + فئة فوترة."""
+        from .roster import suggest_billing_groups
+        return Response(suggest_billing_groups(self.get_object()))
+
+    @action(detail=True, methods=['post'], url_path='roster-decision')
+    def roster_decision(self, request, pk=None):
+        """Record a reviewer verdict on patients of this claim (does NOT change totals).
+
+        Body: { prescription_ids: [...], manual_rx_ids: [...], verdict: 'member'|'not_member'|'clear',
+                target: {client_id, subclient_id?, group_label?}?, note? }
+        """
+        claim = self.get_object()
+        from .roster import record_decision
+        ids = request.data.get('prescription_ids') or []
+        mids = request.data.get('manual_rx_ids') or []
+        verdict = request.data.get('verdict')
+        target = request.data.get('target') or None
+        note = (request.data.get('note') or '').strip()
+        if not (ids or mids) or verdict not in ('member', 'not_member', 'clear'):
+            return Response({'error': 'prescription_ids و verdict مطلوبان'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if target is not None and not InsuranceClient.objects.filter(pk=target.get('client_id')).exists():
+            return Response({'error': 'الجهة الهدف غير موجودة'}, status=status.HTTP_400_BAD_REQUEST)
+        staff = getattr(request.user, 'staff_profile', None)
+        rxs = list(claim.prescriptions.filter(id__in=ids).select_related('billing_group')) + \
+            list(claim.manual_rx.filter(id__in=mids).select_related('billing_group'))
+        for rx in rxs:
+            record_decision(claim, rx, verdict, target=target, note=note, actor=staff)
+        labels = {'member': 'يتبع هذه الجهة', 'not_member': 'لا يتبع هذه الجهة', 'clear': 'إلغاء القرار'}
+        record_audit(claim, 'roster_decision', actor=staff,
+                     summary=f'سجل المرضى: {labels[verdict]} — {len(rxs)} اسم',
+                     reason=note,
+                     meta={'verdict': verdict, 'target': target,
+                           'names': [rx.patient_name for rx in rxs][:200],
+                           'prescription_ids': [i for i in ids][:200], 'manual_rx_ids': mids[:200]})
+        return Response({'updated': len(rxs), 'verdict': verdict})
+
     @action(detail=True, methods=['get'], url_path='audit-log')
     def audit_log(self, request, pk=None):
         """Activity trail for this claim — every material change (who/what/when/
@@ -2780,6 +2934,58 @@ class InsuranceSeparationListViewSet(viewsets.ModelViewSet):
         return Response({'moved': n})
 
 
+class InsurancePortfolioView(APIView):
+    """READ-ONLY «تقارير المطالبات»: motalbas whose period overlaps [from, to].
+    GET /api/insurance/portfolio/?from=&to=&client_id=&subclient_id=&status=a,b
+        &sort=<key>&dir=asc|desc&order=<claim ids, custom order>&group_by_client=1&format=xlsx"""
+    permission_classes = [InsuranceModuleAccess]
+
+    def get(self, request):
+        from datetime import date as _date
+        from .portfolio import select_claims, build_report
+        q = request.query_params
+
+        def _day(k):
+            try:
+                return _date.fromisoformat(q.get(k)) if q.get(k) else None
+            except ValueError:
+                return None
+        claims = select_claims(_day('from'), _day('to'), client_id=q.get('client_id') or None,
+                               subclient_id=q.get('subclient_id') or None,
+                               statuses=[s for s in (q.get('status') or '').split(',') if s] or None)
+        report = build_report(claims)
+        order = [x for x in (q.get('order') or '').split(',') if x.strip().isdigit()]
+        if order:
+            pos = {int(x): i for i, x in enumerate(order)}
+            report['motalbas'].sort(key=lambda m: pos.get(m['claim_id'], len(pos)))
+        elif q.get('sort'):
+            k, rev = q.get('sort'), q.get('dir') == 'desc'
+            report['motalbas'].sort(key=lambda m: (m.get(k) is None, m.get(k) if not isinstance(m.get(k), dict) else 0),
+                                    reverse=rev)
+        if q.get('format') == 'xlsx':
+            from .portfolio_export import generate_portfolio_excel
+            title = f"تقارير المطالبات {q.get('from') or ''} ← {q.get('to') or ''}".strip()
+            return generate_portfolio_excel(report, title=title, group_by_client=q.get('group_by_client') == '1')
+        return Response(report)
+
+
+class InsuranceRosterView(APIView):
+    """READ-ONLY: the cumulative patient roster of one جهة (optionally one فئة),
+    derived from earlier claims + lists + decisions, with names ruled out.
+    GET /api/insurance/rosters/?client_id=&subclient_id=&q="""
+    permission_classes = [InsuranceModuleAccess]
+
+    def get(self, request):
+        from .roster import roster_for_unit
+        try:
+            client_id = int(request.query_params.get('client_id'))
+        except (TypeError, ValueError):
+            return Response({'error': 'اختر الجهة'}, status=status.HTTP_400_BAD_REQUEST)
+        sub = request.query_params.get('subclient_id')
+        return Response(roster_for_unit(client_id, int(sub) if sub else None,
+                                        q=(request.query_params.get('q') or '').strip()))
+
+
 class InsuranceParentClientViewSet(viewsets.ModelViewSet):
     """CRUD for parent clients (عملاء آباء)."""
     permission_classes = [InsuranceModuleAccess]
@@ -2842,6 +3048,11 @@ class InsuranceClaimBillingGroupViewSet(viewsets.ModelViewSet):
         claim_id = self.kwargs.get('claim_pk') or self.request.query_params.get('claim_id')
         if claim_id:
             qs = qs.filter(claim_id=claim_id)
+            if self.action == 'list':
+                # stored totals go stale when a receipt is excluded or edited elsewhere —
+                # a claim has a handful of groups, so re-count them on every listing
+                for g in qs:
+                    g.refresh_totals()
         return qs.order_by('sort_order', 'code')
 
     @staticmethod

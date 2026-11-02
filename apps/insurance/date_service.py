@@ -16,8 +16,9 @@ from datetime import date, datetime
 from django.conf import settings
 from django.utils import timezone
 
-from .models import SoftechDateEditRun
+from .models import InsuranceClaim, SoftechDateEditRun, SoftechWritePlan
 from .reprice_service import _hq_conn, _open_branch, RepriceError, write_enabled
+from . import softech_guard as guard
 
 _DOCCODE = '115'
 LOCK_DATE_EDIT = 7_301_008      # pg advisory lock: one receipt-date apply / revert at a time (P-15)
@@ -103,10 +104,30 @@ def date_preview(docno, branch, new_date, doccode=_DOCCODE):
     }
 
 
-def apply_date_edit(claim, docno, branch, new_date, user=None, confirm=False, doccode=_DOCCODE):
-    """Set the receipt's printed date on HQ + branch (transactional, revertible)."""
+def _parse(v):
+    if isinstance(v, date):
+        return v
+    try:
+        return datetime.strptime(str(v).strip(), '%Y-%m-%d').date()
+    except (TypeError, ValueError):
+        return None
+
+
+def _date_issues(claim, old, new):
+    return guard.check_date(old=old, new=new, today=timezone.localdate(),
+                            period_from=getattr(claim, 'period_from', None),
+                            period_to=getattr(claim, 'period_to', None))
+
+
+def apply_date_edit(claim, docno, branch, new_date, user=None, confirm=False, doccode=_DOCCODE,
+                    expected_old=None, reason='', plan=None):
+    """Set the receipt's printed date on HQ + branch (transactional, revertible).
+    Re-checks the date guard on the live date (block refuses, warning needs `reason`)
+    and refuses when the date changed since the preview (`expected_old`)."""
     _guard(claim, branch, confirm)
-    nd = new_date if isinstance(new_date, date) else datetime.strptime(str(new_date), '%Y-%m-%d').date()
+    nd = _parse(new_date)
+    if nd is None:
+        raise RepriceError('اختر التاريخ الجديد.')
     with _lock() as got:
         if not got:
             raise RepriceError('تعديل تاريخ آخر قيد التنفيذ — أعد المحاولة بعد لحظات.')
@@ -118,10 +139,10 @@ def apply_date_edit(claim, docno, branch, new_date, user=None, confirm=False, do
         if open_run:
             raise RepriceError(f'تاريخ هذا الإيصال مُعدَّل بالفعل (العملية #{open_run.pk}) — '
                                'تراجع عنها أولاً ثم طبّق التاريخ الجديد.')
-        return _apply_locked(claim, docno, branch, nd, user, doccode)
+        return _apply_locked(claim, docno, branch, nd, user, doccode, expected_old, reason, plan)
 
 
-def _apply_locked(claim, docno, branch, nd, user, doccode):
+def _apply_locked(claim, docno, branch, nd, user, doccode, expected_old=None, reason='', plan=None):
     nd_str = nd.strftime('%Y%m%d')
 
     hq = _hq_conn(charset='cp1256'); hcur = hq.cursor()
@@ -129,6 +150,17 @@ def _apply_locked(claim, docno, branch, nd, user, doccode):
     if old is None:
         hcur.close(); hq.close()
         raise RepriceError(f'الإيصال #{docno} فرع {branch} غير موجود فى HQ.')
+    exp = _parse(expected_old) if expected_old else None
+    if exp is not None and old != exp:
+        hcur.close(); hq.close()
+        raise RepriceError(f'تاريخ الإيصال #{docno} تغيّر فى سوفتك منذ المعاينة ({exp} → {old}) — أعد المعاينة.')
+    issues = _date_issues(claim, old, nd)
+    blocks = [i['message'] for i in issues if i['level'] == 'block']
+    warns = [i['message'] for i in issues if i['level'] == 'warn']
+    if blocks or (warns and not guard.reason_ok(reason)):
+        hcur.close(); hq.close()
+        raise RepriceError(('مرفوض: ' + ' · '.join(blocks)) if blocks
+                           else 'تحذيرات تتطلب كتابة سبب: ' + ' · '.join(warns))
 
     try:
         bconn = _open_branch(branch, charset='cp1256')
@@ -141,7 +173,7 @@ def _apply_locked(claim, docno, branch, nd, user, doccode):
         claim=claim, docnumber=str(docno), branchcode=str(branch), doccode=doccode,
         old_date=old, new_date=nd, nodes=['HQ', str(branch)],
         applied_by=getattr(user, 'staff_profile', None) if user else None,
-        status=SoftechDateEditRun.STATUS_APPLIED)
+        status=SoftechDateEditRun.STATUS_APPLIED, plan=plan, reason=(reason or '').strip())
     motalba_rows = None
     try:
         hq.begin(); bconn.begin()
@@ -200,3 +232,82 @@ def _revert_locked(run, user=None):
     finally:
         hcur.close(); bcur.close(); hq.close(); bconn.close()
     return {'reverted': True, 'restored_date': run.old_date.isoformat()}
+
+
+# ── preview → typed confirmation → apply (the only UI write path) ─────────────
+
+def preview_date_plan(claim, docno, branch, new_date, user=None, doccode=_DOCCODE):
+    """READ-ONLY on SOFTECH: current date, branch reachability and the date guard,
+    stored as a SoftechWritePlan (source='date') the same user may apply once."""
+    docno, branch = str(docno).strip(), str(branch).strip()
+    if not docno or not branch:
+        raise RepriceError('أدخل رقم الإيصال والفرع.')
+    nd = _parse(new_date)
+    pv = date_preview(docno, branch, nd or '', doccode)
+    old = _parse(pv['current_date'])
+    issues = _date_issues(claim, old, nd)
+    open_run = SoftechDateEditRun.objects.filter(
+        docnumber=docno, branchcode=branch, doccode=doccode,
+        status=SoftechDateEditRun.STATUS_APPLIED).first()
+    if open_run:
+        issues.append(guard._issue('block', 'date_open',
+                                   f'تاريخ هذا الإيصال مُعدَّل بالفعل (العملية #{open_run.pk}) — استرجعه أولاً.'))
+    if not pv['branch_reachable']:
+        issues.append(guard._issue('block', 'branch_down', f'عُقدة الفرع {branch} غير متاحة الآن.'))
+    rx = claim.prescriptions.filter(softech_docnumber=docno, softech_branchcode=branch) \
+        .values('patient_name', 'sequence').first() if claim else None
+    summ = guard.summarize(issues)
+    return SoftechWritePlan.objects.create(
+        claim=claim, source='date', plan=[{'docno': docno, 'branch': branch,
+                                           'new_date': nd.isoformat() if nd else None}],
+        preview={**pv, 'issues': issues, 'user_id': getattr(user, 'pk', None),
+                 'patient': (rx or {}).get('patient_name', ''), 'sequence': (rx or {}).get('sequence')},
+        blocked=summ['blocked'], needs_reason=summ['needs_reason'], receipt_count=1,
+        created_by=getattr(user, 'staff_profile', None) if user else None)
+
+
+def date_plan_payload(plan):
+    age = (timezone.now() - plan.created_at).total_seconds()
+    return {'id': plan.pk, 'status': plan.status, 'blocked': plan.blocked,
+            'needs_reason': plan.needs_reason, 'reason_min_chars': guard.REASON_MIN_CHARS,
+            'expires_in': max(0, guard.PREVIEW_TTL_SECONDS - int(age)),
+            'write_enabled': write_enabled(), **plan.preview,
+            'docno': plan.plan[0]['docno'], 'branch': plan.plan[0]['branch'],
+            'new_date': plan.plan[0]['new_date']}
+
+
+def apply_date_plan(plan, user=None, confirm_text='', reason=''):
+    """GATED: apply a previewed date plan once.  The user confirms by typing the
+    receipt number; a warning needs a reason; the date must be unchanged since."""
+    if plan.source != 'date':
+        raise RepriceError('ليست معاينة تعديل تاريخ.')
+    if not write_enabled():
+        raise RepriceError('الكتابة إلى سوفتك معطّلة.')
+    if plan.claim.status not in (InsuranceClaim.STATUS_DRAFT, InsuranceClaim.STATUS_READY):
+        raise RepriceError('لا يمكن تعديل التاريخ إلا لمطالبة مسودة/جاهزة.')
+    if plan.status != SoftechWritePlan.STATUS_PREVIEWED:
+        raise RepriceError('هذه المعاينة طُبِّقت أو أُلغيت — أعد المعاينة.')
+    if (timezone.now() - plan.created_at).total_seconds() > guard.PREVIEW_TTL_SECONDS:
+        raise RepriceError('انتهت صلاحية المعاينة (10 دقائق) — أعد المعاينة.')
+    if plan.preview.get('user_id') != getattr(user, 'pk', None):
+        raise RepriceError('المعاينة أُعدّت بواسطة مستخدم آخر — أعد المعاينة بنفسك.')
+    if plan.blocked:
+        raise RepriceError('المعاينة بها أخطاء مانعة — صحّحها وأعد المعاينة.')
+    item = plan.plan[0]
+    if str(confirm_text or '').strip().lstrip('#') != item['docno']:
+        raise RepriceError(f'اكتب رقم الإيصال ({item["docno"]}) للتأكيد.')
+    if plan.needs_reason and not guard.reason_ok(reason):
+        raise RepriceError(f'اكتب سبب التجاوز ({guard.REASON_MIN_CHARS} أحرف على الأقل).')
+    if not SoftechWritePlan.objects.filter(pk=plan.pk, status=SoftechWritePlan.STATUS_PREVIEWED) \
+            .update(status=SoftechWritePlan.STATUS_APPLYING, reason=(reason or '').strip()):
+        raise RepriceError('هذه المعاينة قيد التطبيق أو طُبِّقت بالفعل.')
+    plan.refresh_from_db()
+    try:
+        res = apply_date_edit(plan.claim, item['docno'], item['branch'], item['new_date'], user=user,
+                              confirm=True, expected_old=plan.preview.get('current_date'),
+                              reason=reason, plan=plan)
+    finally:
+        plan.status = SoftechWritePlan.STATUS_APPLIED
+        plan.applied_at = timezone.now()
+        plan.save(update_fields=['status', 'applied_at'])
+    return res

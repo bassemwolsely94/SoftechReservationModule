@@ -5,12 +5,13 @@
  * over-purchase (the Jutoxib pattern). A STRONG spike is auto-flagged; a human
  * confirms "unsustained burst" to make it eligible for the review-gated order cap
  * (which only cuts المطلوب when activated for the run). WATCH spikes are monitor-only.
- * Tabs 2–3 (راكد / فائض) land with the dead-stock & overstock detectors.
+ * Tab 2: 🧊 مخزون راكد (P-27 part A, read-only — cash/DeadStockTab.jsx). Tab 3 (فائض) is still to come.
  */
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { purchasingApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
+import DeadStockTab from './cash/DeadStockTab'   // P-27 part A
 
 const egp = (n) => (n ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
 const invalidate = (qc) => ['spike-candidates', 'spike-summary'].forEach(k => qc.invalidateQueries({ queryKey: [k] }))
@@ -149,13 +150,14 @@ export default function CashOptimizationPage() {
       <p className="text-sm text-gray-500 mb-4">رصد وتحرير الكاش المجمّد ومنع الشراء الزائد — تُظهر النتائج على شيت النواقص كتنبيهات.</p>
       <div className="flex gap-4 border-b mb-4" data-tour="purchasing-cash-tabs">
         {[['spike', '📈 ذروة الطلب'], ['dead', '🧊 مخزون راكد'], ['overstock', '📦 فائض']].map(([k, l]) => (
-          <button key={k} onClick={() => k === 'spike' && setTab(k)} disabled={k !== 'spike'}
-            className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${tab === k ? 'border-brand-600 text-brand-600' : 'border-transparent text-gray-400'} ${k !== 'spike' ? 'cursor-not-allowed' : ''}`}>
-            {l}{k !== 'spike' && <span className="text-xs"> (قريبًا)</span>}
+          <button key={k} onClick={() => k !== 'overstock' && setTab(k)} disabled={k === 'overstock'}
+            className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${tab === k ? 'border-brand-600 text-brand-600' : 'border-transparent text-gray-400'} ${k === 'overstock' ? 'cursor-not-allowed' : ''}`}>
+            {l}{k === 'overstock' && <span className="text-xs"> (قريبًا)</span>}
           </button>
         ))}
       </div>
       {tab === 'spike' && <SpikeTab />}
+      {tab === 'dead' && <DeadStockTab />}
     </div>
   )
 }

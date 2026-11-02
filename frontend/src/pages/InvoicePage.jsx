@@ -542,7 +542,9 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
   const [dupChecking, setDupChecking]       = useState(false)
   const [showDupPanel, setShowDupPanel]     = useState(false)
   const [previewVal, setPreviewVal]         = useState(null)   // {ok,errors,warnings} for the same invoice
-  const [ackWarnings, setAckWarnings]       = useState(false)  // user accepted the warnings
+  const [warnReason, setWarnReason]         = useState('')     // why the warnings are accepted
+  const [dupBlock, setDupBlock]             = useState(null)   // server said: duplicate → needs a reason
+  const [dupReason, setDupReason]           = useState('')
   const [previewLoading, setPreviewLoading] = useState(false)
 
   const [confirmingGreen, setConfirmingGreen] = useState(false)
@@ -612,31 +614,37 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
     }
   }
 
-  const handlePush = async (force = false) => {
+  // Each override is explicit and carries its own written reason (recorded with the push).
+  const handlePush = async () => {
     setPushing(true)
+    const hasWarn = (previewVal?.warnings?.length || 0) > 0
+    const overrides = {
+      ...(hasWarn ? { acknowledge_warnings: true, warnings_reason: warnReason.trim() } : {}),
+      ...(dupBlock ? { override_duplicate: true, duplicate_reason: dupReason.trim() } : {}),
+    }
     try {
-      const { data } = await invoicesApi.push(invoiceId, force)
+      const { data } = await invoicesApi.push(invoiceId, overrides)
       if (data?.blocked && data?.validation) {
         const v = data.validation
         if (v.errors?.length) {
           showToast('لا يمكن الترحيل — ' + v.errors.map(e => e.message).join('؛ '), 'error')
         } else if (v.warnings?.length) {
-          const ok = window.confirm('⚠ تحذيرات:\n' + v.warnings.map(w => '• ' + w.message).join('\n')
-                                    + '\n\nهل تريد الترحيل رغم التحذيرات؟')
-          if (ok) { setPushing(false); return handlePush(true) }
+          // warnings found at push time: show them in the dialog with the reason box
+          setPreviewVal(v)
+          showToast('توجد تحذيرات — اكتب سبب التجاوز ثم أكّد', 'error')
         }
-        load(); return
+        if (!preview) load()
+        return
       }
       if (data?.wrote_to_softech)        showToast(`تم الترحيل ✓ رقم المستند ${data.docnumber}`)
       else if (data?.already_finalized)  showToast(`مُرحّلة مسبقاً — رقم المستند ${data.docnumber}`)
       else if (data?.mode === 'dry_run') showToast('وضع المعاينة — ترحيل ERP غير مُفعّل بعد (INVOICE_WRITER_ENABLED)', 'error')
       else                               showToast('لم يكتمل الترحيل — راجع حالة الفاتورة', 'error')
-      setPreview(null)
+      setPreview(null); setWarnReason(''); setDupBlock(null); setDupReason('')
       load()
     } catch (e) {
-      if (e?.response?.status === 409 && e?.response?.data?.duplicate && !force) {
-        const ok = window.confirm((e.response.data.detail || 'فاتورة مكرّرة') + '\n\nهل تريد الترحيل رغم ذلك؟')
-        if (ok) { setPushing(false); return handlePush(true) }
+      if (e?.response?.status === 409 && e?.response?.data?.duplicate) {
+        setDupBlock(e.response.data.detail || 'فاتورة مكرّرة')   // shown in the dialog with its reason box
       } else {
         showToast(e?.response?.data?.detail || 'فشل الترحيل', 'error')
       }
@@ -829,9 +837,20 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                       <ul className="text-[11px] text-amber-700 list-disc pr-4 space-y-0.5">
                         {previewVal.warnings.map((w, i) => <li key={i}>{w.message}</li>)}
                       </ul>
-                      <label className="mt-2 flex items-center gap-2 text-[11px] text-amber-800 cursor-pointer">
-                        <input type="checkbox" checked={ackWarnings} onChange={e => setAckWarnings(e.target.checked)} />
-                        راجعت التحذيرات وأريد المتابعة
+                      <label className="mt-2 block text-[11px] text-amber-800" data-tour="invoices-main-push-warn-reason">
+                        سبب الترحيل رغم التحذيرات (إلزامى، 10 أحرف على الأقل — يُسجَّل مع الترحيل)
+                        <textarea rows={2} value={warnReason} onChange={e => setWarnReason(e.target.value)}
+                          className="mt-1 w-full border border-amber-300 rounded px-2 py-1 text-xs" />
+                      </label>
+                    </div>
+                  )}
+                  {dupBlock && (
+                    <div className="rounded-lg border border-red-300 bg-red-50 p-3" data-tour="invoices-main-push-dup-reason">
+                      <div className="text-xs font-bold text-red-700 mb-1">⛔ {dupBlock}</div>
+                      <label className="block text-[11px] text-red-800">
+                        للترحيل رغم ذلك اكتب السبب (إلزامى، 10 أحرف على الأقل — يُسجَّل مع الترحيل)
+                        <textarea rows={2} value={dupReason} onChange={e => setDupReason(e.target.value)}
+                          className="mt-1 w-full border border-red-300 rounded px-2 py-1 text-xs" />
                       </label>
                     </div>
                   )}
@@ -853,14 +872,15 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
             </div>
 
             <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2 shrink-0">
-              <button onClick={() => { setPreview(null); setPreviewVal(null) }} disabled={pushing}
+              <button onClick={() => { setPreview(null); setPreviewVal(null); setWarnReason(''); setDupBlock(null); setDupReason('') }} disabled={pushing}
                 className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50">
                 إلغاء
               </button>
               <button data-tour="invoices-main-push-confirm"
-                onClick={() => handlePush((previewVal?.warnings?.length || 0) > 0)}
+                onClick={handlePush}
                 disabled={pushing || (previewVal?.errors?.length > 0)
-                          || ((previewVal?.warnings?.length > 0) && !ackWarnings)}
+                          || ((previewVal?.warnings?.length > 0) && warnReason.trim().length < 10)
+                          || (!!dupBlock && dupReason.trim().length < 10)}
                 title={previewVal?.errors?.length > 0 ? 'صحّح الأخطاء أولاً' : ''}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
                 {pushing ? 'جارٍ الترحيل...' : (previewVal?.errors?.length > 0 ? '⛔ يوجد أخطاء' : '⇪ تأكيد الترحيل')}
@@ -1436,6 +1456,8 @@ export default function InvoicePage() {
   const [selected,     setSelected]     = useState(() => new Set())  // batch push selection
   const [pushingBatch, setPushingBatch] = useState(false)
   const [batchResult,  setBatchResult]  = useState(null)
+  const [batchTyped,   setBatchTyped]   = useState('')
+  const [batchReason,  setBatchReason]  = useState('')   // optional: accept warnings for the whole batch
   const [tab,          setTab]          = useState('invoices')       // 'invoices' | 'bundles'
 
   const PUSHABLE = new Set(['confirmed', 'queued', 'push_failed'])
@@ -1447,9 +1469,12 @@ export default function InvoicePage() {
     if (!ids.length) return
     setPushingBatch(true); setBatchResult(null)
     try {
-      const r = await invoicesApi.pushBatch(ids)
+      const r = await invoicesApi.pushBatch(ids, {
+        confirm_count: batchTyped.trim(),
+        ...(batchReason.trim() ? { acknowledge_warnings: true, warnings_reason: batchReason.trim() } : {}),
+      })
       setBatchResult(r.data)
-      setSelected(new Set())
+      setSelected(new Set()); setBatchTyped(''); setBatchReason('')
       loadInvoices()
     } catch (e) {
       setBatchResult({ error: e.response?.data?.detail || 'فشل ترحيل الدفعة' })
@@ -1646,10 +1671,21 @@ export default function InvoicePage() {
             تم تحديد <b>{selected.size}</b> فاتورة للترحيل
             <button onClick={() => setSelected(new Set())} className="mr-3 text-xs text-gray-400 hover:text-gray-600">إلغاء التحديد</button>
           </div>
-          <button data-tour="invoices-main-batch-push" onClick={runBatchPush} disabled={pushingBatch}
+          <div className="flex items-end gap-2 flex-wrap">
+            <label className="text-[11px] text-gray-500">سبب تجاوز التحذيرات (اختيارى — لكل الدفعة)
+              <input value={batchReason} onChange={e => setBatchReason(e.target.value)} placeholder="اتركه فارغاً لرفض الفواتير ذات التحذيرات"
+                className="block mt-0.5 w-72 border border-gray-300 rounded px-2 py-1.5 text-xs" /></label>
+            <label className="text-[11px] text-gray-500">للتأكيد اكتب عدد الفواتير: <b className="font-mono">{selected.size}</b>
+              <input value={batchTyped} onChange={e => setBatchTyped(e.target.value)} inputMode="numeric" dir="ltr"
+                data-tour="invoices-main-batch-confirm-count"
+                className="block mt-0.5 w-24 border border-gray-300 rounded px-2 py-1.5 text-xs text-center font-mono" /></label>
+          <button data-tour="invoices-main-batch-push" onClick={runBatchPush}
+            disabled={pushingBatch || batchTyped.trim() !== String(selected.size)
+                      || (batchReason.trim() !== '' && batchReason.trim().length < 10)}
             className="px-4 py-2 bg-brand-600 text-white rounded-xl font-medium text-sm hover:bg-brand-700 disabled:opacity-50">
             {pushingBatch ? 'جارٍ الترحيل…' : `⇪ ترحيل المحدد (${selected.size})`}
           </button>
+          </div>
         </div>
       )}
 

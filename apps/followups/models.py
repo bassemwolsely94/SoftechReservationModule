@@ -34,6 +34,7 @@ class ChronicMedicationProfile(models.Model):
     SOURCE_CHOICES = [
         ('manual',    '✍️ إدخال يدوي'),
         ('erp_infer', '🤖 استنتاج من الـ ERP'),
+        ('sales_infer', '🔁 استنتاج من تكرار الشراء'),
     ]
 
     # ── Item link ─────────────────────────────────────────────────────────────

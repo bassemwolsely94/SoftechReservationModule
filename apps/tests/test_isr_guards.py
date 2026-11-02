@@ -190,3 +190,190 @@ class ApiTests(TestCase):
         self.c.force_authenticate(self.admin)
         r = self.c.post(f'/api/purchasing/isr/pushes/{p.pk}/push/', {}, format='json')
         self.assertEqual((r.status_code, r.data['code']), (409, 'duplicate_push'))
+
+
+class OverlapGuardTests(TestCase):
+    """P-32 §2.4: a draft that shares some items with an ISR pushed to the same destination in the last
+    DUP_PUSH_DAYS days. Off by default (SystemSetting isr_overlap_guard) until the owner confirms the rule."""
+
+    def _pushed(self, lines, days_ago=1, dest='160', kind=P.KIND_HQ_TO_BRANCH, source='100'):
+        return P.objects.create(branchcode=source, dest_branchcode=dest, kind=kind, status=P.STATUS_PUSHED,
+                                lines_snapshot=lines, isrdocnumber=26100700,
+                                pushed_at=timezone.now() - datetime.timedelta(days=days_ago))
+
+    def _approved(self, lines, dest='160'):
+        return P.objects.create(branchcode='100', dest_branchcode=dest, kind=P.KIND_HQ_TO_BRANCH,
+                                status=P.STATUS_APPROVED, lines_snapshot=lines)
+
+    def _on(self):
+        from apps.config.models import SystemSetting
+        SystemSetting.objects.update_or_create(key='isr_overlap_guard', defaults={'value': 'on'})
+
+    def test_overlap_lists_shared_items_only(self):
+        earlier = self._pushed(_lines(('A', 2), ('B', 1)))
+        rows = G.overlapping_pushed(self._approved(_lines(('A', 5), ('C', 1))))
+        self.assertEqual([(r['itemcode'], r['qty'], r['earlier_qty'], r['push_id']) for r in rows],
+                         [('A', 5, 2, earlier.pk)])
+
+    def test_other_destination_old_push_or_identical_are_not_overlaps(self):
+        self._pushed(_lines(('A', 2)), dest='150')                   # other branch
+        self._pushed(_lines(('A', 2)), days_ago=10)                  # older than the window
+        self._pushed(_lines(('B', 1)))                               # identical → duplicate guard, not this one
+        first = self._approved(_lines(('A', 2)))
+        self.assertEqual(G.overlapping_pushed(first), [])
+        first.delete()                                               # one live draft per route
+        self.assertEqual(G.overlapping_pushed(self._approved(_lines(('B', 1)))), [])
+
+    def test_off_by_default_then_refused_without_reason(self):
+        self._pushed(_lines(('A', 2), ('B', 1)))
+        p = self._approved(_lines(('A', 5), ('C', 1)))
+        G.check_push(p)                                              # switch off: passes as before
+        self._on()
+        with self.assertRaises(G.GuardError) as e:
+            G.check_push(p)
+        self.assertEqual(e.exception.code, 'overlap_push')
+        self.assertIn('A', str(e.exception))
+
+    def test_reason_lets_it_through_once_and_is_audited(self):
+        from apps.audit.models import AuditLog
+        self._on()
+        earlier = self._pushed(_lines(('A', 2)))
+        p = self._approved(_lines(('A', 5), ('C', 1)))
+        G.check_push(p, force_reason='الفرع طلب كمية إضافية من A')
+        p.refresh_from_db()
+        self.assertEqual(p.params['forced_overlap']['items'], ['A'])
+        self.assertEqual(p.params['forced_overlap']['earlier'], [earlier.pk])
+        self.assertEqual(AuditLog.objects.filter(action='isr_overlap_push_forced').count(), 1)
+
+
+class OverlapDispensedTests(TestCase):
+    """Owner 2026-11-01: a repeat counts only while the earlier ISR is NOT dispensed. Dispensed = the source issued
+    that item to that destination (stock ledger doc 125, counterpart store = destination) after the earlier push."""
+
+    def setUp(self):
+        self.earlier = P.objects.create(branchcode='100', dest_branchcode='160', kind=P.KIND_HQ_TO_BRANCH,
+                                        status=P.STATUS_PUSHED, lines_snapshot=_lines(('A', 2), ('B', 1)),
+                                        isrdocnumber=26100701,
+                                        pushed_at=timezone.now() - datetime.timedelta(days=3))
+        self.draft = P.objects.create(branchcode='100', dest_branchcode='160', kind=P.KIND_HQ_TO_BRANCH,
+                                      status=P.STATUS_APPROVED, lines_snapshot=_lines(('A', 5), ('B', 2)))
+
+    def _issue(self, item, days_ago, to='160'):
+        from apps.stock_audit.models import StockLedgerLine
+        at = timezone.now() - datetime.timedelta(days=days_ago)
+        StockLedgerLine.objects.create(branchcode='100', doccode='125', docnumber=90000 + int(days_ago * 10),
+                                       docdate=timezone.localdate(at), trans_time=at, storecode='100',
+                                       storecode2=to, personcode=to, itemcode=item, transqty=1, newqty=0)
+
+    def test_dispensed_item_is_not_an_overlap(self):
+        self._issue('A', 1)                                         # HQ sent A to 160 after the earlier push
+        self.assertEqual([r['itemcode'] for r in G.overlapping_pushed(self.draft)], ['B'])
+
+    def test_issue_before_the_push_or_to_another_branch_does_not_count(self):
+        self._issue('A', 5)                                         # before the earlier push
+        self._issue('B', 1, to='150')                               # to another branch
+        self.assertEqual([r['itemcode'] for r in G.overlapping_pushed(self.draft)], ['A', 'B'])
+
+
+class OverlapReportTests(TestCase):
+
+    def test_report_counts_pushes_that_repeated_items(self):
+        from io import StringIO
+        from django.core.management import call_command
+        now = timezone.now()
+        for days, lines in ((5, _lines(('A', 2), ('B', 1))), (3, _lines(('A', 1), ('C', 4))), (1, _lines(('D', 1)))):
+            P.objects.create(branchcode='100', dest_branchcode='160', kind=P.KIND_HQ_TO_BRANCH,
+                             status=P.STATUS_PUSHED, lines_snapshot=lines,
+                             pushed_at=now - datetime.timedelta(days=days))
+        out = StringIO()
+        call_command('report_isr_overlaps', days=30, stdout=out)
+        self.assertIn('pushes 3 · with overlap 1 · overlapping lines 1', out.getvalue())
+
+
+class PlannerRuleTests(TestCase):
+    """P-32 §2.3: one live draft per route, whoever made it — a draft from another planner is refused with
+    `other_planner` instead of silently cancelling the waiting one; same planner still supersedes."""
+
+    def _draft(self, planner, *lines):
+        return W._persist_proposal(source='100', dest='160', kind=P.KIND_HQ_TO_BRANCH, lines=_lines(*lines),
+                                   planner=planner)
+
+    def test_planner_is_recorded(self):
+        p = self._draft('replenishment', ('A', 1))
+        self.assertEqual(p.params['planner'], 'replenishment')
+
+    def test_other_planner_refused_and_waiting_draft_kept(self):
+        waiting = self._draft('replenishment', ('A', 1))
+        with self.assertRaises(G.GuardError) as e:
+            self._draft('distribution', ('B', 2))
+        self.assertEqual((e.exception.code, e.exception.other), ('other_planner', waiting.pk))
+        waiting.refresh_from_db()
+        self.assertEqual(waiting.status, P.STATUS_PROPOSED)
+
+    def test_same_planner_and_untagged_drafts_still_supersede(self):
+        old = self._draft('distribution', ('A', 1))
+        new = self._draft('distribution', ('B', 1))
+        old.refresh_from_db()
+        self.assertEqual((old.status, old.params['cancelled']['superseded_by']), (P.STATUS_CANCELLED, new.pk))
+        P.objects.filter(pk=new.pk).update(params={})               # a draft made before planners were recorded
+        newer = self._draft('replenishment', ('C', 1))
+        self.assertEqual(P.objects.get(pk=new.pk).status, P.STATUS_CANCELLED)
+        self.assertEqual(newer.status, P.STATUS_PROPOSED)
+
+    def test_distribution_reports_the_refused_route(self):
+        waiting = self._draft('replenishment', ('A', 1))
+        sugs = [{'from_branch': '100', 'itemcode': 'B', 'qty_each': 1, 'to_branches': [{'code': '160', 'qty': 1}]}]
+        skipped = []
+        with mock.patch('apps.purchasing.distribution.analyze', return_value=sugs), \
+             mock.patch.object(W, 'build_items_plan', side_effect=_fake_items_plan):
+            created = W.create_distribution_proposals(skipped=skipped)
+        self.assertEqual(created, [])
+        self.assertIn(f'#{waiting.pk}', skipped[0]['reason'])
+
+
+class DraftExpiryTests(TestCase):
+    """P-32 §2.4 / doc 30 §2.6: proposed general drafts older than N days are cancelled with audit (PG only).
+    Off until switched on: SystemSetting isr_draft_expiry_days (0 = off)."""
+
+    def _draft(self, days_old, **kw):
+        p = P.objects.create(branchcode='100', dest_branchcode=kw.pop('dest', '160'), kind=P.KIND_HQ_TO_BRANCH,
+                             status=kw.pop('status', P.STATUS_PROPOSED), lines_snapshot=_lines(('A', 1)), **kw)
+        P.objects.filter(pk=p.pk).update(created_at=timezone.now() - datetime.timedelta(days=days_old))
+        return p
+
+    def test_off_by_default(self):
+        old = self._draft(30)
+        self.assertEqual(G.expire_drafts(), [])
+        old.refresh_from_db()
+        self.assertEqual(old.status, P.STATUS_PROPOSED)
+
+    def test_cancels_only_old_proposed_general_drafts(self):
+        from apps.audit.models import AuditLog
+        from apps.config.models import SystemSetting
+        SystemSetting.objects.update_or_create(key='isr_draft_expiry_days', defaults={'value': '7'})
+        old = self._draft(8)
+        fresh = self._draft(2, dest='150')
+        approved = self._draft(30, dest='140', status=P.STATUS_APPROVED)
+        tied = self._draft(30, dest='130', origin_isr=26130001)
+        self.assertEqual(G.expire_drafts(), [old.pk])
+        statuses = dict(P.objects.values_list('pk', 'status'))
+        self.assertEqual([statuses[x.pk] for x in (old, fresh, approved, tied)],
+                         [P.STATUS_CANCELLED, P.STATUS_PROPOSED, P.STATUS_APPROVED, P.STATUS_PROPOSED])
+        self.assertEqual(AuditLog.objects.filter(action='isr_draft_cancelled').count(), 1)
+        self.assertEqual(G.expire_drafts(), [])                       # idempotent
+
+    def test_scheduled_daily(self):
+        from apps.sync import tasks
+        from .test_scheduler_jobs import _FakeScheduler
+        captured = {}
+
+        class _Capture(_FakeScheduler):
+            def add_job(self, func, trigger, *args, **kwargs):
+                captured[kwargs.get('id')] = kwargs
+                super().add_job(func, trigger, *args, **kwargs)
+
+        with mock.patch.object(tasks, 'BackgroundScheduler', _Capture), \
+             mock.patch.object(tasks, '_patch_apscheduler_for_python312', lambda: None), \
+             mock.patch.object(tasks, '_scheduler', None):
+            tasks.start_scheduler()
+        self.assertIn('isr_draft_expiry', captured)
