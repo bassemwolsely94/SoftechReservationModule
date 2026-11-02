@@ -1,5 +1,6 @@
 """PIC Analytics Task 12 — the /api/pic-analytics/ endpoints, server-side dial and the Excel export (doc 33 §5, §9)."""
 import json
+from django.core import signing
 from datetime import date as D
 from io import BytesIO
 from unittest import mock
@@ -18,6 +19,7 @@ READ = ['access/', 'overview/', 'pics/', 'groups/branch/', 'groups/salesperson/'
         'groups/category/', 'retention/', 'retention/overdue/']
 CALLS = ['calls/center/', 'calls/missed/', 'calls/missed/rows/', 'calls/unanswered/', 'numbers/',
          'numbers/conversions/']
+NID = signing.dumps('1000000020', salt='pic_analytics.number')
 RAW = '01000000010'                 # CallBase.call stores customer_number = '0' + key
 
 
@@ -48,7 +50,7 @@ class AccessTests(ApiBase):
         for p in every:
             self.assertEqual(APIClient().get(url(p)).status_code, 401, p)
             self.assertEqual(self.ph_c.get(url(p)).status_code, 403, p)
-        for p in (f'calls/missed/{self.miss.pk}/dial/', 'numbers/1000000020/dial/', 'numbers/label/'):
+        for p in (f'calls/missed/{self.miss.pk}/dial/', f'numbers/{NID}/dial/', 'numbers/label/'):
             self.assertEqual(APIClient().post(f'/api/pic-analytics/{p}').status_code, 401, p)
             self.assertEqual(self.ph_c.post(f'/api/pic-analytics/{p}').status_code, 403, p)
 
@@ -63,9 +65,9 @@ class AccessTests(ApiBase):
         for p in CALLS:
             self.assertEqual(self.mgr_c.get(url(p)).status_code, 403, p)
         base = '/api/pic-analytics/'
-        self.assertEqual(self.mgr_c.post(f'{base}numbers/label/', {'phone_key': '1000000020', 'label': 'spam'}).status_code, 403)
+        self.assertEqual(self.mgr_c.post(f'{base}numbers/label/', {'number_id': NID, 'label': 'spam'}).status_code, 403)
         self.assertEqual(self.mgr_c.post(f'{base}calls/missed/{self.miss.pk}/dial/').status_code, 403)
-        self.assertEqual(self.mgr_c.post(f'{base}numbers/1000000020/dial/').status_code, 403)
+        self.assertEqual(self.mgr_c.post(f'{base}numbers/{NID}/dial/').status_code, 403)
 
     def test_branch_manager_never_gets_cost_keys(self):
         for p in ('overview/', 'groups/branch/', 'groups/channel/', 'pics/'):
@@ -99,12 +101,29 @@ class AccessTests(ApiBase):
         self.assertEqual(rows[0]['call_id'], self.miss.pk)
         self.assertEqual(self.admin_c.get(url('calls/unanswered/')).json(), {'rows': []})
 
+    def test_no_phone_key_or_raw_number_in_numbers_bodies(self):
+        for p in ('numbers/', 'numbers/conversions/'):
+            body = self.admin_c.get(url(p)).content.decode()
+            self.assertNotIn('1000000020', body, p)
+            self.assertNotIn('phone_key', body, p)
+        rows = self.admin_c.get(url('numbers/')).json()['rows']
+        self.assertTrue(rows and all('number_id' in r for r in rows))
+        self.assertIn('1000000020', [signing.loads(r['number_id'], salt='pic_analytics.number') for r in rows])
+
+    def test_tampered_number_id_is_400(self):
+        bad = NID[:-3] + ('abc' if not NID.endswith('abc') else 'xyz')
+        self.assertEqual(self.admin_c.post(f'/api/pic-analytics/numbers/{bad}/dial/').status_code, 400)
+        self.assertEqual(self.admin_c.post('/api/pic-analytics/numbers/label/',
+                                           {'number_id': bad, 'label': 'spam'}).status_code, 400)
+        self.assertEqual(self.admin_c.post('/api/pic-analytics/numbers/label/',
+                                           {'phone_key': '1000000020', 'label': 'spam'}).status_code, 400)
+
     def test_label_number(self):
         r = self.admin_c.post('/api/pic-analytics/numbers/label/',
-                              {'phone_key': '1000000020', 'label': 'spam', 'note': 'x'})
+                              {'number_id': NID, 'label': 'spam', 'note': 'x'})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(self.admin_c.post('/api/pic-analytics/numbers/label/',
-                                           {'phone_key': '1000000020', 'label': 'bogus'}).status_code, 400)
+                                           {'number_id': NID, 'label': 'bogus'}).status_code, 400)
         self.assertTrue(AuditLog.objects.filter(action='pic_phone_labelled').exists())
 
 
@@ -129,7 +148,7 @@ class DialTests(ApiBase):
     def test_number_dial_management(self):
         self.link_admin_ext()
         with mock.patch('apps.pbx.actions.originate_call') as orig:
-            r = self.admin_c.post(f'{self.P}numbers/1000000020/dial/')
+            r = self.admin_c.post(f'{self.P}numbers/{NID}/dial/')
         self.assertEqual(r.status_code, 200)
         self.assertEqual(orig.call_args[0][:2], ('201', '01000000020'))
         self.assertNotIn('01000000020', r.content.decode())
@@ -148,7 +167,7 @@ class DialTests(ApiBase):
             r = self.admin_c.post(f'{self.P}calls/missed/{self.miss.pk}/dial/')
         self.assertEqual((r.status_code, r.json()['detail']), (502, 'down'))
         self.assertEqual(self.admin_c.post(f'{self.P}calls/missed/999999/dial/').status_code, 404)
-        self.assertEqual(self.admin_c.post(f'{self.P}numbers/0000/dial/').status_code, 404)
+        self.assertEqual(self.admin_c.post(f'{self.P}numbers/tampered/dial/').status_code, 400)
         # an answered call is not a missed call
         self.assertEqual(self.admin_c.post(f'{self.P}calls/missed/{self.lead.pk}/dial/').status_code, 404)
 
@@ -203,6 +222,12 @@ class ExportTests(ApiBase):
         for ws in wb.worksheets:                      # nothing cost-like anywhere in the labels column either
             for row in ws.iter_rows(min_col=1, max_col=1, values_only=True):
                 self.assertFalse(any(b in str(row[0] or '') for b in ('تكلفة', 'الربح', 'هامش')), (ws.title, row))
+
+    def test_branch_manager_pic_sheet_keeps_call_columns(self):
+        heads = sheet_headers(self.wb(self.get(self.mgr_c)))['العملاء']
+        for h in ('مكالمات واردة', 'مكالمات صادرة'):
+            self.assertIn(h, heads)
+        self.assertFalse([h for h in heads if any(b in str(h) for b in ('تكلفة', 'ربح', 'هامش'))])
 
     def test_export_audited(self):
         self.get(self.admin_c, '&salesperson=u1')

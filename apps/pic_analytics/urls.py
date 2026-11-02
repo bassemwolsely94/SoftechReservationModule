@@ -17,7 +17,7 @@ urlpatterns = [
     path('numbers/', views.numbers_list),
     path('numbers/conversions/', views.numbers_conversions),
     path('numbers/label/', views.numbers_label),
-    path('numbers/<str:phone_key>/dial/', views.number_dial),
+    path('numbers/<str:number_id>/dial/', views.number_dial),
     path('export/', views.export),
     path('grants/', views.grants),
     path('grants/candidates/', views.grant_candidates),

@@ -58,7 +58,6 @@ OVERVIEW_ITEMS = [
     ('gp', 'الربح الإجمالي'), ('gp_pct', 'هامش الربح %'),
     ('calls_in', 'مكالمات واردة'), ('calls_out', 'مكالمات صادرة'), ('missed_not_returned', 'فائتة لم يُردّ عليها'),
 ]
-OVERVIEW_CALL_KEYS = {'calls_in', 'calls_out', 'missed_not_returned'}
 MONTH_COLS = [('month', 'الشهر'), ('distinct_pics', 'العملاء'), ('new', 'جدد'), ('visits', 'الزيارات'),
               ('net', 'صافي المبيعات')]
 PIC_COLS = [
@@ -71,7 +70,6 @@ PIC_COLS = [
     ('calls_in', 'مكالمات واردة'), ('calls_out', 'مكالمات صادرة'), ('missed', 'فائتة'),
     ('last_call', 'آخر مكالمة'), ('talk_time', 'مدة الحديث (ث)'), ('call_to_purchase', 'مكالمة ثم شراء'),
 ]
-PIC_CALL_KEYS = {'calls_in', 'calls_out', 'missed', 'last_call', 'talk_time', 'call_to_purchase'}
 GROUP_COLS = [
     ('label', 'البند'), ('distinct_pics', 'العملاء'), ('new', 'جدد'), ('returning', 'عائدون'),
     ('reactivated', 'معاد تنشيطهم'), ('visits', 'الزيارات'), ('net', 'صافي المبيعات'), ('gp', 'الربح الإجمالي'),
@@ -132,10 +130,11 @@ class _Book:
     def sheet(self, title, headers, widths=None):
         from openpyxl.cell import WriteOnlyCell
         from openpyxl.styles import Alignment, Font, PatternFill
+        from openpyxl.utils import get_column_letter
         ws = safe_sheet(self.wb.create_sheet(title=title))
         ws.sheet_view.rightToLeft = True
         for i, w in enumerate(widths or [], start=1):
-            ws.column_dimensions[chr(64 + i)].width = w
+            ws.column_dimensions[get_column_letter(i)].width = w
         ws.freeze_panes = 'A2'
         fill = PatternFill('solid', fgColor='022871')
         cells = []
@@ -170,9 +169,9 @@ def _all_pages(fn):
         page += 1
 
 
-def _cols(cols, access, call_keys=()):
+def _cols(cols, access):
     return [(k, h) for k, h in cols
-            if (access.sees_cost or k not in GP_KEYS) and (access.sees_calls_tabs or k not in call_keys)]
+            if (access.sees_cost or k not in GP_KEYS)]
 
 
 def build_workbook(f, access, exported_by=''):
@@ -209,8 +208,6 @@ def build_workbook(f, access, exported_by=''):
     for key, label in OVERVIEW_ITEMS:
         if key in GP_KEYS and not access.sees_cost:
             continue
-        if key in OVERVIEW_CALL_KEYS and not access.sees_calls_tabs:
-            continue
         book.row(ws, S_OVERVIEW, [label, o.get(key)])
     book.row(ws, S_OVERVIEW, ['', ''])
     book.row(ws, S_OVERVIEW, [h for _k, h in MONTH_COLS])
@@ -218,7 +215,7 @@ def build_workbook(f, access, exported_by=''):
         book.row(ws, S_OVERVIEW, [m.get(k) for k, _h in MONTH_COLS])
 
     # 3. customers (every page)
-    cols = _cols(PIC_COLS, access, PIC_CALL_KEYS)
+    cols = _cols(PIC_COLS, access)
     ws = book.sheet(S_PICS, [h for _k, h in cols], [16, 28] + [16] * (len(cols) - 2))
     for r in _all_pages(lambda p: pics.pic_rows(f, access, '-net', p, PAGE)):
         r = dict(r, last_branch=branch_names.get(r.get('last_branch'), r.get('last_branch')))

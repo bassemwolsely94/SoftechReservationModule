@@ -3,7 +3,7 @@ apps/pic_analytics/views.py — mounted at /api/pic-analytics/ (doc 33)
 
   GET   access/ overview/ pics/ groups/<kind>/ retention/ retention/overdue/
   GET   calls/center/ calls/missed/ calls/missed/rows/ calls/unanswered/   (management only)
-  GET   numbers/ numbers/conversions/   POST numbers/label/ numbers/<key>/dial/ calls/missed/<id>/dial/
+  GET   numbers/ numbers/conversions/   POST numbers/label/ numbers/<number_id>/dial/ calls/missed/<id>/dial/
   GET   export/                    audited .xlsx
   GET|POST grants/                 named branch managers (admin only)
   POST     grants/<id>/revoke/
@@ -11,6 +11,7 @@ apps/pic_analytics/views.py — mounted at /api/pic-analytics/ (doc 33)
 
 Every rule is enforced here; the screen only hides what the user cannot do.
 """
+from django.core import signing
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
@@ -219,19 +220,37 @@ def calls_unanswered(request):
     return _run(request, lambda f, acc: {'rows': q_missed.unanswered_summary(f, acc)}, calls=True)
 
 
+NUMBER_SALT = 'pic_analytics.number'
+
+
+def _opaque(result):
+    """The browser never gets a phone key (last 10 digits): swap it for a signed handle."""
+    for row in result.get('rows', []):
+        if 'phone_key' in row:
+            row['number_id'] = signing.dumps(row.pop('phone_key'), salt=NUMBER_SALT)
+    return result
+
+
+def _resolve_number_id(number_id):
+    try:
+        return signing.loads(number_id or '', salt=NUMBER_SALT)
+    except signing.BadSignature:
+        return None
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def numbers_list(request):
     def go(f, acc):
         page, size = _paging(request)
-        return q_numbers.new_numbers(f, acc, page, size)
+        return _opaque(q_numbers.new_numbers(f, acc, page, size))
     return _run(request, go, calls=True)
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def numbers_conversions(request):
-    return _run(request, q_numbers.conversions, calls=True)
+    return _run(request, lambda f, acc: _opaque(q_numbers.conversions(f, acc)), calls=True)
 
 
 @api_view(['POST'])
@@ -240,12 +259,15 @@ def numbers_label(request):
     acc = Access(request)
     if not acc.can_view or not acc.sees_calls_tabs:
         return _deny()
+    phone_key = _resolve_number_id(request.data.get('number_id'))
+    if phone_key is None:
+        return _bad('معرّف الرقم غير صالح — Invalid number_id')
     try:
-        pl = q_numbers.label_number(request.data.get('phone_key'), request.data.get('label'),
+        pl = q_numbers.label_number(phone_key, request.data.get('label'),
                                     request.data.get('note'), acc.profile)
     except ValueError as exc:
         return _bad(str(exc))
-    return Response({'phone_key': pl.phone_key, 'label': pl.label, 'note': pl.note})
+    return Response({'number_id': request.data.get('number_id'), 'label': pl.label, 'note': pl.note})
 
 
 # ── server-side dial: unknown numbers stay masked, so the browser never receives them ──────────
@@ -279,10 +301,13 @@ def missed_dial(request, call_id):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def number_dial(request, phone_key):
+def number_dial(request, number_id):
     acc = Access(request)
     if not acc.can_view or not acc.sees_calls_tabs:
         return _deny()
+    phone_key = _resolve_number_id(number_id)
+    if phone_key is None:
+        return _bad('معرّف الرقم غير صالح — Invalid number_id')
     from apps.pbx.models import CdrCall
     call = (CdrCall.objects.filter(phone_key=phone_key, is_transfer=False).exclude(customer_number='')
             .order_by('-call_at').first()) if phone_key else None
