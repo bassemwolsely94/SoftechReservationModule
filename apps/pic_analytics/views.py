@@ -1,7 +1,7 @@
 """
 apps/pic_analytics/views.py — mounted at /api/pic-analytics/ (doc 33)
 
-  GET   access/ overview/ pics/ groups/<kind>/ retention/ retention/overdue/
+  GET   access/ options/ overview/ pics/ groups/<kind>/ retention/ retention/overdue/
   GET   calls/center/ calls/missed/ calls/missed/rows/ calls/unanswered/   (management only)
   GET   numbers/ numbers/conversions/   POST numbers/label/ numbers/<number_id>/dial/ calls/missed/<id>/dial/
   GET   export/                    audited .xlsx
@@ -23,6 +23,7 @@ from .models import PicAnalyticsAccess
 from .queries import groups as q_groups
 from .queries import missed as q_missed
 from .queries import numbers as q_numbers
+from .queries import options as q_options
 from .queries import overview as q_overview
 from .queries import pics as q_pics
 from .queries import retention as q_retention
@@ -142,6 +143,12 @@ def access_info(request):
     out['new_reliable_from'] = (None if Customer.objects.filter(softech_created_at__isnull=False).exists()
                                 else q_overview.NEW_RELIABLE_FROM)
     return Response(out)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def filter_options(request):
+    return _run(request, q_options.filter_options)
 
 
 @api_view(['GET'])

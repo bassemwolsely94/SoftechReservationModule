@@ -10,11 +10,12 @@ from rest_framework.test import APIClient
 from apps.audit.models import AuditLog
 from apps.pbx.actions import AMIActionError
 from apps.pbx.models import AgentExtension
+from apps.customers.models import Customer
 from apps.tests.factories import make_user
 from apps.tests.test_pic_queries_calls import CallBase
 
 PERIOD = 'from=2026-10-01&to=2026-10-31'
-READ = ['access/', 'overview/', 'pics/', 'groups/branch/', 'groups/salesperson/', 'groups/channel/',
+READ = ['access/', 'options/', 'overview/', 'pics/', 'groups/branch/', 'groups/salesperson/', 'groups/channel/',
         'groups/category/', 'retention/', 'retention/overdue/']
 CALLS = ['calls/center/', 'calls/missed/', 'calls/missed/rows/', 'calls/unanswered/', 'numbers/',
          'numbers/conversions/']
@@ -130,6 +131,39 @@ class AccessTests(ApiBase):
         self.assertEqual(self.admin_c.post('/api/pic-analytics/numbers/label/',
                                            {'number_id': self.lead.pk, 'label': 'bogus'}).status_code, 400)
         self.assertTrue(AuditLog.objects.filter(action='pic_phone_labelled').exists())
+
+
+class OptionsTests(ApiBase):
+
+    def test_codes_and_labels(self):
+        Customer.objects.filter(softech_pic='N1').update(softech_ptclassifcode='90', person_classif_label='توصيل')
+        d = self.admin_c.get(url('options/')).json()
+        self.assertEqual({r['code'] for r in d['salespeople']}, {'u1', 'u2'})
+        self.assertTrue(all(r['label'] for r in d['salespeople']))
+        self.assertEqual({r['code'] for r in d['categories']}, {'10', '50'})
+        self.assertEqual(d['channels'], [{'code': 'cash', 'label': 'نقدي'}])
+        self.assertEqual(d['customer_types'], [{'code': '90', 'label': 'توصيل'}])
+        self.assertIn('vip', {r['code'] for r in d['segments']})
+        self.assertEqual([r['code'] for r in d['frequency']], ['m1', 'm2', 'm3', 'm4_6', 'm7_12', 'y1plus'])
+        self.assertIn('10', {a['ext'] for a in d['agents']})
+
+    def test_other_filters_do_not_narrow_options(self):
+        d = self.admin_c.get(url('options/', '&salesperson=u1')).json()
+        self.assertEqual({r['code'] for r in d['salespeople']}, {'u1', 'u2'})
+
+    def test_branch_manager_salespeople_only_from_own_branches(self):
+        self.fact('R1', D(2026, 10, 11), self.bb, 1, 10, 5, 1, {'10': 10}, sp='u3')
+        admin = {r['code'] for r in self.admin_c.get(url('options/')).json()['salespeople']}
+        mgr = self.mgr_c.get(url('options/')).json()
+        self.assertIn('u3', admin)
+        self.assertEqual({r['code'] for r in mgr['salespeople']}, {'u1', 'u2'})
+
+    def test_agents_absent_for_branch_manager(self):
+        self.assertNotIn('agents', self.mgr_c.get(url('options/')).json())
+
+    def test_requires_access_and_valid_period(self):
+        self.assertEqual(self.ph_c.get(url('options/')).status_code, 403)
+        self.assertEqual(self.admin_c.get('/api/pic-analytics/options/').status_code, 400)
 
 
 class DialTests(ApiBase):

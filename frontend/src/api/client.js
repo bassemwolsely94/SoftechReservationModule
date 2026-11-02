@@ -2896,6 +2896,7 @@ export const stockAuditApi = {
 // PIC Analytics (doc 33) — every read takes the filter bar as query params (from, to, branch, …).
 export const picAnalyticsApi = {
   access:     ()                => api.get('/pic-analytics/access/'),
+  options:    (params = {})     => api.get('/pic-analytics/options/', { params }),
   overview:   (params = {})     => api.get('/pic-analytics/overview/', { params }),
   pics:       (params = {})     => api.get('/pic-analytics/pics/', { params }),
   groups:     (kind, params = {}) => api.get(`/pic-analytics/groups/${kind}/`, { params }),

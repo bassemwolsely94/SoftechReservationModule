@@ -34,7 +34,7 @@ const SALES_TABS = [
   { key: 'retention',   label: '🔁 الولاء والتكرار' },
 ]
 const CALLS_TABS = []        // Task 14: { key: 'calls' | 'missed' | 'numbers', label }
-const FILTER_KEYS = ['from', 'to', 'branch', 'salesperson', 'channel', 'category', 'segment', 'customer_type', 'frequency']
+const FILTER_KEYS = ['from', 'to', 'branch', 'salesperson', 'channel', 'category', 'segment', 'customer_type', 'frequency', 'agent']
 
 const pad = n => String(n).padStart(2, '0')
 const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -63,6 +63,11 @@ export default function PicAnalyticsPage() {
     queryKey: ['pic-analytics', 'access'],
     queryFn: () => picAnalyticsApi.access().then(r => r.data),
     staleTime: 5 * 60_000,
+  })
+  const { data: options } = useQuery({
+    queryKey: ['pic-analytics', 'options', values.from, values.to],
+    queryFn: () => picAnalyticsApi.options({ from: values.from, to: values.to }).then(r => r.data),
+    enabled: !!access?.can_view, staleTime: 5 * 60_000, placeholderData: keepPreviousData,
   })
   const { data: branches = [] } = useQuery({
     queryKey: ['branches'],
@@ -153,7 +158,7 @@ export default function PicAnalyticsPage() {
 
       <DataFreshnessBar domains={['sales', 'customers', 'calls']} compact invalidateKeys={[['pic-analytics']]} />
 
-      <Filters values={shown} onChange={setParam} onClear={clear} branches={branches} access={access} />
+      <Filters values={shown} onChange={setParam} onClear={clear} branches={branches} access={access} options={options} />
 
       <div className="flex gap-1 border-b border-gray-200 overflow-x-auto" data-tour="pic-analytics-tabs">
         {tabs.map(t => (

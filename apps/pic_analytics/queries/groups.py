@@ -96,14 +96,34 @@ def by_branch(f, access) -> dict:
     return _grouped(f, access, 'branch_id', lambda k: names.get(k, 'بدون فرع' if k is None else str(k)), 0)
 
 
-def by_salesperson(f, access) -> dict:
+def salesperson_labeler():
+    """code -> display name (shared with the filter options)."""
     from apps.analytics.views import _build_user_map, _user_name
     umap = _build_user_map()
-    return _grouped(f, access, 'salesperson', lambda k: _user_name(umap, k) if k else 'غير محدد', 1)
+    return lambda k: _user_name(umap, k) if k else 'غير محدد'
+
+
+def by_salesperson(f, access) -> dict:
+    return _grouped(f, access, 'salesperson', salesperson_labeler(), 1)
 
 
 def by_channel(f, access) -> dict:
     return _grouped(f, access, 'channel_bucket', lambda k: CHANNEL_LABELS.get(k, k), 2)
+
+
+def category_names(codes) -> dict:
+    """{category code: Arabic (else English) name} from the catalog; shared with the filter options."""
+    from apps.catalog.models import Item
+    names = {}
+    for code, ar, en in (Item.objects.filter(medicine_type__in=list(codes))
+                         .values_list('medicine_type', 'medicine_type_name_ar', 'medicine_type_name').distinct()):
+        if ar or en:
+            names.setdefault(code, ar or en)
+    return names
+
+
+def category_label(code, names):
+    return UNCATEGORISED if code in ('', '00') else (names.get(code) or code)
 
 
 def by_category(f, access) -> dict:
@@ -139,18 +159,13 @@ def by_category(f, access) -> dict:
             per_cat[c]['pics'].add(pic)
             per_cat[c]['visits'] += 1
 
-    from apps.catalog.models import Item
-    names = {}
-    for code, ar, en in (Item.objects.filter(medicine_type__in=list(per_cat))
-                         .values_list('medicine_type', 'medicine_type_name_ar', 'medicine_type_name').distinct()):
-        if ar or en:
-            names.setdefault(code, ar or en)
+    names = category_names(list(per_cat))
 
     rows = []
     for code, b in per_cat.items():
         pics = b['pics']
         row = {
-            'key': code, 'label': UNCATEGORISED if code in ('', '00') else (names.get(code) or code),
+            'key': code, 'label': category_label(code, names),
             'distinct_pics': len(pics),
             'new': sum(1 for p in pics if new_cat.get(p) == code),
             'returning': sum(1 for p in pics if labels.get(p) in ('returning', 'reactivated')),
