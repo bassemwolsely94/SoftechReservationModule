@@ -53,6 +53,16 @@ def previous_period(f):
     return pend - timedelta(days=days - 1), pend
 
 
+def retention_pct_for(f, access, current_pics):
+    """% of the previous equal-length period's PICs that bought again in `current_pics`;
+    None when that period predates our history or had no PICs."""
+    pstart, pend = previous_period(f)
+    if pstart < f.data_from:
+        return None
+    r = rules.retention(visitor_set(f, access, pstart, pend), set(current_pics))
+    return None if r is None else round(r * 100, 2)
+
+
 def overview(f, access) -> dict:
     qs = f.facts(access).exclude(pic='')
     per_pic = list(qs.values('pic').annotate(
@@ -98,11 +108,7 @@ def overview(f, access) -> dict:
             months[key]['new'] += 1
 
     # retention against the previous period of equal length (None when it predates our history)
-    retention_pct = None
-    pstart, pend = previous_period(f)
-    if pstart >= f.data_from:
-        r = rules.retention(visitor_set(f, access, pstart, pend), {x['pic'] for x in visitors})
-        retention_pct = None if r is None else round(r * 100, 2)
+    retention_pct = retention_pct_for(f, access, {x['pic'] for x in visitors})
 
     no_pic_net = ZERO
     if not f.has_pic_filters:

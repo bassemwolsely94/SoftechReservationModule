@@ -44,10 +44,11 @@ def _from_rollup(qs):
                     'cycle_bucket': r.cycle_bucket, 'last_visit': r.last_purchase} for r in qs}
 
 
-def pic_frequency(pics, end) -> dict:
-    """Per PIC {'months_a','streak_b','cycle_days','cycle_bucket','last_visit'} as of `end`."""
+def pic_frequency(pics, end, force_compute=False) -> dict:
+    """Per PIC {'months_a','streak_b','cycle_days','cycle_bucket','last_visit'} as of `end`.
+    `force_compute` skips the rollup (used to prove both paths agree)."""
     pics = set(pics)
-    if _is_yesterday(end):
+    if _is_yesterday(end) and not force_compute:
         return _from_rollup(PicRollup.objects.filter(pic__in=pics))
     return _computed(pics, end)
 
