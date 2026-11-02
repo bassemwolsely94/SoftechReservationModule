@@ -263,7 +263,8 @@ SCREENS = [
             {'text': T('المشتريات: «مصفوفة الموردين» (كود كل مورد رئيسي + آخر شراء وأقل سعر) أو «أمر شراء لمورد» بأكواد مورد محدد.', 'Purchasing: "Supplier matrix" (each main supplier\'s code + last purchase and lowest price) or "Purchase order for a supplier" with that supplier\'s codes.'),
              'roles': ['admin', 'purchasing']},
         ],
-        'tips': [T('لا تؤكد مطابقة لست متأكداً منها — اختيار صنف خطأ يعني طلب صنف خطأ.', 'Never confirm a match you are unsure of — a wrong item means ordering the wrong item.'),
+        'tips': [T('موظف الفرع بيشوف قوائم نواقص فرعه بس، والعرض المجمّع بيجمع فروعه هو. «فحص المخزون» لسه بيوريك رصيد الفروع التانية علشان التحويل.', 'A branch user sees their own branch\'s shortage lists only, and the aggregated view adds up their branches only. "Check stock" still shows other branches\' stock so you can transfer.'),
+                 T('لا تؤكد مطابقة لست متأكداً منها — اختيار صنف خطأ يعني طلب صنف خطأ.', 'Never confirm a match you are unsure of — a wrong item means ordering the wrong item.'),
                  T('في «فحص المخزون»: «تحليل التحويل» ثم «إنشاء مقترحات التحويل» يعمل نفس تحويلات «طلبات واتساب»: لكل فرع مانح طلب توريد منه للرئيسي ومن الرئيسي لفرعك، من فائضه بعد تغطيته (وليس من رصيده كله). المشتريات تعتمدها وترسلها لـ SOFTECH من «طلبات التوريد». القائمة القادمة من طلب واتساب تُحوَّل مرة واحدة فقط مهما كانت الشاشة.',
                    'In "Stock check": "Analyse transfer" then "Create transfer proposals" makes the same transfers as "WhatsApp requests": for each donor branch a supply request from it to HQ and from HQ to your branch, from its excess after its own cover (not its whole stock). Purchasing approves and sends them to SOFTECH from "Supply requests". A list that came from a WhatsApp request moves only once, whichever screen is used.'),
                  T('ملفات «مصفوفة الموردين» و«أمر شراء» تُبنى من نسختنا لبيانات SOFTECH (موردو الأصناف وفواتير الشراء)، ولا تقرأ SOFTECH مباشرة إلا لو النسخة قديمة — وأعلى الملف يذكر المصدر.',
@@ -654,6 +655,7 @@ SCREENS = [
         'summary': T('تسجيل النواقص من بين الأرفف: افتح قائمة (أو أنشئ واحدة بعنوان اختياري)، أضف الصنف الناقص بسرعة، أو الصق قائمة، أو بالصوت، أو بصورة، ثم «إرسال القائمة». يعمل بدون إنترنت مؤقتاً.',
                      'Record shortages in the aisle: open a list (or create one with an optional title), add missing items quickly, or paste a list, use voice or a photo, then "Submit list". Works briefly offline.'),
         'audience': T('العاملون في الفروع.', 'Branch staff.'),
+        'tips': [T('بتشوف قوائم فرعك بس.', "You see your own branch's lists only.")],
         'steps': [
             T('«قائمة نواقص جديدة» ← «إنشاء وبدء التسجيل».', '"New shortage list" → "Create and start".'),
             T('اكتب اسم الصنف الناقص ← «إضافة» (يبقى المؤشر في الخانة للإضافة السريعة).', 'Type the missing item name → "Add" (the cursor stays for quick entry).'),

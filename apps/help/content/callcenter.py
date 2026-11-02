@@ -289,7 +289,8 @@ SCREENS = [
             T('شكوى أو طلب يحتاج متابعة؟ «فتح حالة جديدة» (التصنيف، الأولوية، العنوان، الوصف).', 'A complaint or request needing follow-up? "Open new case" (type, priority, title, description).'),
             T('«جدولة متابعة» لتذكير بموعد (تذكير إعادة صرف، متابعة مزمن، متابعة طلب، مهمة مخصصة).', '"Schedule follow-up" for a reminder (refill reminder, chronic follow-up, request follow-up, custom task).'),
         ],
-        'tips': [
+        'tips': [T('موظف الفرع بيشوف مكالمات فرعه ومحادثاته بس، ومينفعش يحوّل مكالمة لحجز أو تحويل باسم فرع تاني.', "Branch staff see their branch's calls and conversations only, and cannot turn a call into a reservation or transfer for another branch."),
+                 
             T('«مخاطر الشكوى» تظهر للعملاء ذوي التاريخ السلبي — تعامل بعناية.', '"Complaint risk" shows for customers with a negative history — handle with care.'),
             T('بعد «🤖 تلخيص AI» يظهر الملخص ومشاعر العميل ودرجة الأهمية والإجراء المقترح تحت الأزرار خلال ثوانٍ.',
               'After "🤖 AI summary" the summary, customer sentiment, urgency and suggested next action appear under the buttons within seconds.'),
@@ -517,7 +518,8 @@ SCREENS = [
             T('افتح الحالة ← «بدء المعالجة» ← سجّل كل خطوة في الملاحظات (@ لذكر زميل).', 'Open the case → "Start working" → log each step in notes (@ to mention a colleague).'),
             T('«حل الحالة» واشرح الحل والسبب الجذري، ثم «إغلاق».', '"Resolve case" with the solution and root cause, then "Close".'),
         ],
-        'tips': [
+        'tips': [T('موظف الفرع بيشوف شكاوى فرعه والشكاوى المسندة له.', "Branch staff see their branch's cases and the cases assigned to them."),
+                 
             T('لكل حالة موعد SLA تلقائي حسب الأولوية: عاجلة 4 ساعات، مرتفعة 8، عادية 24، منخفضة 72 (يمكن تحديد موعد آخر عند الفتح).',
               'Every case gets an automatic SLA deadline by priority: urgent 4 hours, high 8, normal 24, low 72 (a different deadline can be set when opening).'),
             T('كل ساعة: الحالة «مفتوحة» أو «قيد المعالجة» التي تجاوزت موعدها تُصعَّد تلقائياً ويُبلَّغ المسؤول والمشرفون. «انتظار العميل» لا تُصعَّد.',

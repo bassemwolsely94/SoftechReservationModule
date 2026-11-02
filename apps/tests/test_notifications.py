@@ -329,7 +329,7 @@ class ChatterListTests(TestCase):
                          'Branch-scoped staff must receive 403 for cross-branch chatter access')
 
     def test_admin_can_read_any_branch_chatter(self):
-        """Admin bypass: admins in _CHATTER_BYPASS_ROLES see all branches."""
+        """Admin is an all-branch role (core.branch_scope) — sees every branch's chatter."""
         r = self.admin_client.get(_chatter_list_url('reservation', self.res.id))
         self.assertEqual(r.status_code, status.HTTP_200_OK)
 

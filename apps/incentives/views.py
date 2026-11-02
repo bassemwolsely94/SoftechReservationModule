@@ -1762,6 +1762,10 @@ class SalesTargetViewSet(_viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = SalesTarget.objects.select_related('branch', 'category').all()
+        # Batch 5 part 2: analytics-view branch roles (pharmacist, viewer) see their branches'
+        # targets only — chain / category / salesperson targets carry company-wide attainment.
+        from core import branch_scope
+        qs = branch_scope.scope(qs, self.request.user)
         if self.request.query_params.get('active') == 'true':
             from datetime import date
             t = date.today()

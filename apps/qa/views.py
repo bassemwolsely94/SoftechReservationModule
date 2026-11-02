@@ -11,9 +11,7 @@ from .serializers import (
     QAInspectionCreateSerializer,
 )
 
-# Roles that see all branches' inspections; others are scoped to their branch.
-_ALL_BRANCH_ROLES = {'admin', 'quality_manager', 'supervisor'}
-
+from core import branch_scope                                     # noqa: E402
 from core.permissions import matrix_permission                     # noqa: E402
 
 # QA inspections sit in the `hr` module (as the middleware maps /api/qa/) — Batch 4, Z-9c: reads
@@ -40,9 +38,9 @@ class QAInspectionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = QAInspection.objects.select_related('template', 'branch', 'inspector__user')
-        profile = _profile(self.request)
-        if profile and profile.role not in _ALL_BRANCH_ROLES and profile.branch_id:
-            qs = qs.filter(branch_id=profile.branch_id)
+        # Batch 5: the one branch helper (all-branch roles see all; a branch role without a branch
+        # used to see every branch — fail-closed now)
+        qs = branch_scope.scope(qs, self.request.user)
         st = self.request.query_params.get('status')
         branch = self.request.query_params.get('branch')
         if st:
@@ -59,6 +57,7 @@ class QAInspectionViewSet(viewsets.ModelViewSet):
         return QAInspectionDetailSerializer
 
     def perform_create(self, serializer):
+        branch_scope.check_branch_value(self.request.user, serializer)
         template = serializer.validated_data['template']
         # Pre-fill the results scaffold from the template items (unanswered).
         results = [

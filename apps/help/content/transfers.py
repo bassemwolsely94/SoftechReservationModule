@@ -603,7 +603,8 @@ SCREENS = [
             T('«طلب تحويل جديد» لإنشاء طلب.', '"New transfer request" to create one.'),
             T('اضغط رقم الطلب لفتح تفاصيله واتخاذ الإجراء.', 'Click a request number to open it and act.'),
         ],
-        'tips': [
+        'tips': [T('الفرع بيشوف التحويل لو هو الطالب أو المورّد. المشرف ومدير الجودة بيشوفوا كل التحويلات، لكن الموافقة والإرسال والاستلام بتفضل لموظفي الفرعين والإدارة. تعديل أو حذف الطلب للفرع الطالب بس.', "A branch sees a transfer when it is the requesting or the supplying side. Supervisors and the quality manager see every transfer, but approving, sending and receiving stay with the two branches' staff and HQ. Only the requesting branch edits or deletes the request."),
+                 
             T('الطلب لا يؤثر على المخزون حتى يُصدر فعلاً في SOFTECH.', 'A request does not affect stock until it is actually issued in SOFTECH.'),
         ],
         'related': ['transfers.new', 'transfers.detail', 'transfers.transits'],
@@ -979,6 +980,7 @@ SCREENS = [
               '"Record receipt" on arrival, or "Force close" with a written reason (at least 10 characters) for exceptional cases.'),
         ],
         'tips': [
+            T('الفرع بيشوف التحويلات اللي بيبعتها أو بيستلمها بس؛ المشرف ومدير الجودة بيشوفوا الكل.', 'A branch sees the transits it sends or receives only; supervisors and the quality manager see all.'),
             T('الشحنة تُربط بطلب التحويل فقط لو رقم المستند والفرع المرسل والفرع المستلم متطابقين (وتاريخ مطابقة SOFTECH في حدود 3 أيام لو موجود). أرقام مستندات SOFTECH تتكرر بين الفروع، فلو فيه أكثر من طلب بنفس الرقم لا يُربط ويظهر «❔ أكثر من طلب بنفس الرقم» في السجل.', 'A shipment links to a transfer request only when the document number, the sending branch and the receiving branch all match (and the SOFTECH match date is within 3 days when known). SOFTECH document numbers repeat across branches, so when several requests share the number nothing is linked and the log shows "❔ several requests with the same number".'),
             T('تنبيهات التأخير بقت ملخص واحد في اليوم لكل فرع مستلم: «N تحويل في انتظار الاستلام — أقدمها من X يوم» — بيوصل لصيدلي/مشرف الفرع ولمنسّق التحويلات في الرئيسي (الإعداد transit_digest_recipients، والافتراضي المديرين). مفيش إشعار لكل تحويل لكل شخص تاني.', 'Delay alerts are now one summary a day per receiving branch: "N transfers awaiting receipt — oldest X days" — sent to the branch pharmacist/supervisor and the HQ transfers coordinator (setting transit_digest_recipients; default: admins). No more one notification per transfer per person.'),
             T('لو الاتصال بـ SOFTECH وقع أثناء المزامنة، التحويل بيفضل زي ما هو (مش بيرجع «قيد النقل») ومفيش تنبيه عنه — بيتراجع في المزامنة الجاية.', 'If the SOFTECH connection drops during the sync, the transfer stays as it was (it is not flipped back to "in transit") and is not alerted — it is re-checked on the next sync.'),

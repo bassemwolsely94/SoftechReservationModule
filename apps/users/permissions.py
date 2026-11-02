@@ -34,27 +34,6 @@ class CanSeeCustomerPII(BasePermission):
         return p.role != 'purchasing'
 
 
-class BranchScopedPermission(BasePermission):
-    """
-    Allows access only to data within the user's accessible branches.
-    Object-level check — use has_object_permission.
-    """
-    def has_permission(self, request, view):
-        return bool(_profile(request))
-
-    def has_object_permission(self, request, view, obj):
-        p = _profile(request)
-        if not p:
-            return False
-        if p.role == 'admin' or p.access_all_branches:
-            return True
-        # Get branch from object
-        branch = getattr(obj, 'branch', None)
-        if branch is None:
-            return True
-        return p.can_access_branch(branch)
-
-
 class IsActiveStaff(BasePermission):
     """User must have an active StaffProfile."""
     def has_permission(self, request, view):
