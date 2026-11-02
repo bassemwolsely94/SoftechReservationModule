@@ -52,6 +52,8 @@ def whoami(request):
         # what the banner may honestly say: the mode and this role's row in this zone
         'policy_mode': _policy_mode(),
         'zone_access': _zone_access(request, access_zone),
+        # N4: the effective SOFTECH grant for this request (full / read / none) and the gate mode
+        **_softech_access(request, access),
         'zone': net.zone,
         'ip': net.ip,
         'label': net.label_ar,
@@ -66,6 +68,25 @@ def whoami(request):
 def _policy_mode():
     from .policy_middleware import _mode
     return _mode()
+
+
+def _softech_access(request, access):
+    """The SOFTECH gate's grant for a web request, for the banner. Computed with decide() and
+    mode() only: whoami is not a SOFTECH use, so it never calls check()/note() and never audits."""
+    from . import softech_gate
+    try:
+        gate_mode = softech_gate.mode()
+    except Exception:
+        gate_mode = 'log'
+    grant = softech_gate.FULL
+    try:
+        if gate_mode != 'off' and access is not None and access.user_id is not None:
+            from .session_policy import subject
+            user = request.user if getattr(request.user, 'is_authenticated', False) else None
+            grant = softech_gate.decide('web', access, subject(user) if user is not None else None).grant
+    except Exception:
+        grant = softech_gate.FULL
+    return {'softech_access': grant, 'softech_gate_mode': gate_mode}
 
 
 def _zone_access(request, zone):

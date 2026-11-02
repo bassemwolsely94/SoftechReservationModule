@@ -5,10 +5,19 @@
  *   Z2 + enforce + read_only  «جهاز غير معتمد — للعرض فقط»          amber
  *   Z2 otherwise              «جهاز غير معتمد — اطلب اعتماده من المدير»  neutral
  *   Z3 / Z4                   «خارج شبكة الشركة»                     neutral info
+ * N4: in enforce mode, whoami.softech_access adds a second line when SOFTECH is read-only («read»)
+ * or unavailable («none») from this place. Same strip, no modal.
  * Nothing for Z1 or when signed out. No popup, no button: it only informs.
  */
 import { useQuery } from '@tanstack/react-query'
 import { accessApi } from '../api/client'
+
+export function softechLine(info) {
+  if (info?.softech_gate_mode !== 'enforce') return null
+  if (info?.softech_access === 'read') return 'SOFTECH للعرض فقط من هذا المكان'
+  if (info?.softech_access === 'none') return 'SOFTECH غير متاح من هذا المكان'
+  return null
+}
 
 export function zoneBannerParts(info) {
   const z = info?.access_zone
@@ -35,12 +44,16 @@ export default function ZoneBanner() {
     refetchOnWindowFocus: true,
     retry: false,
   })
-  const p = zoneBannerParts(data)
-  if (!p) return null
+  const base = zoneBannerParts(data)
+  const sf = softechLine(data)
+  if (!base && !sf) return null
+  const p = base || { tone: 'warn', text: sf }
   return (
     <div data-tour="shell-zone-banner" role="status"
          className={`shrink-0 border-b px-6 py-1.5 text-xs text-center ${TONE[p.tone]}`}>
       {p.text}
+      {base && sf ? <span className="mx-2">·</span> : null}
+      {base && sf ? sf : null}
     </div>
   )
 }

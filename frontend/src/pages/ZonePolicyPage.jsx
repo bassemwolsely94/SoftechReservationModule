@@ -62,8 +62,14 @@ function Details({ row, choices, onPatch, saving, error }) {
         <Check label="عرض فقط (مع «شاشات محددة»)" checked={!!row.view_only} onChange={v => onPatch({ view_only: v })} />
         <Check label="التصدير" checked={!!row.export} onChange={v => onPatch({ export: v })} />
         <Check label="إلزام التحقق بخطوتين" checked={!!row.require_mfa} onChange={v => onPatch({ require_mfa: v })} />
-        <Check label="قراءة SOFTECH" checked={!!row.softech_read} onChange={v => onPatch({ softech_read: v })} />
-        <Check label="كتابة SOFTECH" checked={!!row.softech_write} onChange={v => onPatch({ softech_write: v })} />
+        <div>
+          <Check label="قراءة SOFTECH" checked={!!row.softech_read} onChange={v => onPatch({ softech_read: v })} />
+          <p className="text-xs text-muted mt-0.5">تُطبَّق عند SOFTECH_GATE_ENFORCEMENT=enforce فقط</p>
+        </div>
+        <div>
+          <Check label="كتابة SOFTECH" checked={!!row.softech_write} onChange={v => onPatch({ softech_write: v })} />
+          <p className="text-xs text-muted mt-0.5">تُطبَّق عند SOFTECH_GATE_ENFORCEMENT=enforce فقط</p>
+        </div>
         <label className="flex items-center gap-2 text-sm">
           <span>أقصى مدة جلسة (ساعات)</span>
           <input key={`${row.id}-${row.max_session_hours}`} type="number" min={1} max={72} className="input w-20"
