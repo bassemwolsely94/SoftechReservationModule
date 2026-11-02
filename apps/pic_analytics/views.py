@@ -11,7 +11,6 @@ apps/pic_analytics/views.py — mounted at /api/pic-analytics/ (doc 33)
 
 Every rule is enforced here; the screen only hides what the user cannot do.
 """
-from django.core import signing
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
@@ -220,22 +219,35 @@ def calls_unanswered(request):
     return _run(request, lambda f, acc: {'rows': q_missed.unanswered_summary(f, acc)}, calls=True)
 
 
-NUMBER_SALT = 'pic_analytics.number'
-
-
 def _opaque(result):
-    """The browser never gets a phone key (last 10 digits): swap it for a signed handle."""
-    for row in result.get('rows', []):
+    """The browser never gets a phone key (last 10 digits): swap it for the id of that number's
+    latest call, which the server resolves back on dial/label."""
+    from apps.pbx.models import CdrCall
+    rows = result.get('rows', [])
+    keys = {r['phone_key'] for r in rows if 'phone_key' in r}
+    latest = {}
+    if keys:
+        for pk, key in (CdrCall.objects.filter(phone_key__in=keys, is_transfer=False)
+                        .exclude(customer_number='').order_by('call_at', 'pk')
+                        .values_list('pk', 'phone_key')):
+            latest[key] = pk                                  # last assignment = latest call
+    for row in rows:
         if 'phone_key' in row:
-            row['number_id'] = signing.dumps(row.pop('phone_key'), salt=NUMBER_SALT)
+            row['number_id'] = latest.get(row.pop('phone_key'))
     return result
 
 
 def _resolve_number_id(number_id):
+    """-> the still-unlinked CdrCall behind a number handle, 'gone' or 'linked'."""
+    from apps.pbx.models import CdrCall
     try:
-        return signing.loads(number_id or '', salt=NUMBER_SALT)
-    except signing.BadSignature:
-        return None
+        pk = int(number_id)
+    except (TypeError, ValueError):
+        return 'gone'
+    call = (CdrCall.objects.filter(pk=pk, is_transfer=False).exclude(phone_key='').first())
+    if call is None:
+        return 'gone'
+    return call if call.pic_match == 'none' else 'linked'
 
 
 @api_view(['GET'])
@@ -259,11 +271,13 @@ def numbers_label(request):
     acc = Access(request)
     if not acc.can_view or not acc.sees_calls_tabs:
         return _deny()
-    phone_key = _resolve_number_id(request.data.get('number_id'))
-    if phone_key is None:
+    call = _resolve_number_id(request.data.get('number_id'))
+    if call == 'gone':
         return _bad('معرّف الرقم غير صالح — Invalid number_id')
+    if call == 'linked':
+        return _bad('الرقم أصبح عميلاً')
     try:
-        pl = q_numbers.label_number(phone_key, request.data.get('label'),
+        pl = q_numbers.label_number(call.phone_key, request.data.get('label'),
                                     request.data.get('note'), acc.profile)
     except ValueError as exc:
         return _bad(str(exc))
@@ -305,15 +319,12 @@ def number_dial(request, number_id):
     acc = Access(request)
     if not acc.can_view or not acc.sees_calls_tabs:
         return _deny()
-    phone_key = _resolve_number_id(number_id)
-    if phone_key is None:
-        return _bad('معرّف الرقم غير صالح — Invalid number_id')
-    from apps.pbx.models import CdrCall
-    call = (CdrCall.objects.filter(phone_key=phone_key, is_transfer=False).exclude(customer_number='')
-            .order_by('-call_at').first()) if phone_key else None
-    if call is None:
+    call = _resolve_number_id(number_id)
+    if call == 'linked':
+        return _bad('الرقم أصبح عميلاً')
+    if call == 'gone' or not call.customer_number:
         return Response({'detail': 'غير موجود — Not found'}, status=404)
-    return _dial(request, acc, call.customer_number, 'new number', {'phone_key': phone_key})
+    return _dial(request, acc, call.customer_number, 'new number', {'call_id': call.pk})
 
 
 # ── Excel ────────────────────────────────────────────────────────────────────────────────────────
