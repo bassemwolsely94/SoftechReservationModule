@@ -2893,6 +2893,21 @@ export const stockAuditApi = {
   runs:         ()              => api.get('/stock-audit/runs/'),
 }
 
+// PIC Analytics (doc 33) — every read takes the filter bar as query params (from, to, branch, …).
+export const picAnalyticsApi = {
+  access:     ()                => api.get('/pic-analytics/access/'),
+  overview:   (params = {})     => api.get('/pic-analytics/overview/', { params }),
+  pics:       (params = {})     => api.get('/pic-analytics/pics/', { params }),
+  groups:     (kind, params = {}) => api.get(`/pic-analytics/groups/${kind}/`, { params }),
+  retention:  (params = {})     => api.get('/pic-analytics/retention/', { params }),
+  overdue:    (params = {})     => api.get('/pic-analytics/retention/overdue/', { params }),
+  exportXlsx: (params = {})     => api.get('/pic-analytics/export/', { params, responseType: 'blob' }),
+  grants:     ()                => api.get('/pic-analytics/grants/'),
+  grant:      (data)            => api.post('/pic-analytics/grants/', data),
+  revoke:     (id, data = {})   => api.post(`/pic-analytics/grants/${id}/revoke/`, data),
+  candidates: (q)               => api.get('/pic-analytics/grants/candidates/', { params: { q } }),
+}
+
 // Contract (تعاقد) fast-entry assist — read-only PG history (POS Speed Wave §5). `customer` = the
 // contract account's personcode (SoftechSalesOrder.cust_branch_code).
 export const posApi = {

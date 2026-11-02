@@ -147,6 +147,7 @@ export const NAV_GROUPS = [
     items: [
       { to: '/customers',          icon: '👥', label: 'العملاء',             roles: ['admin','call_center','pharmacist','salesperson','purchasing','supervisor','viewer','quality_manager','delivery'] },
       { to: '/customers/merge',    icon: '🔀', label: 'دمج الأكواد المكررة', roles: ['admin','supervisor','call_center'] },
+      { to: '/customers/pic-analytics', icon: '📊', label: 'تحليلات العملاء', roles: ['admin','supervisor'], cap: 'can_pic_analytics' },
       { to: '/vouchers',           icon: '🎫', label: 'القسائم',             roles: ['admin','call_center','pharmacist','salesperson','purchasing','supervisor','quality_manager'] },
       { to: '/vouchers?tab=coupons', icon: '🎟️', label: 'كوبونات الهدايا',   roles: ['admin','supervisor','purchasing','quality_manager'] },
       { to: '/loyalty',            icon: '🏆', label: 'النقاط والولاء',      roles: ['admin','call_center','pharmacist','salesperson','supervisor'] },

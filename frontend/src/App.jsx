@@ -62,6 +62,7 @@ import InsuranceReportsPage from './pages/InsuranceReportsPage'
 import MyIncentivesPage from './pages/MyIncentivesPage'
 import GamificationPage from './pages/GamificationPage'
 import StockAuditPage from './pages/StockAuditPage'
+import PicAnalyticsPage from './pages/PicAnalyticsPage'
 import UserManagementPage from './pages/UserManagementPage'
 import PermissionsMatrixPage from './pages/PermissionsMatrixPage'
 import PickZonesPage from './pages/PickZonesPage'
@@ -412,6 +413,7 @@ export default function App() {
             {/* ── Customers ────────────────────────────────────────────── */}
             <Route path="customers"          element={<CustomersPage />} />
             <Route path="customers/merge"    element={<CustomerMergePage />} />
+            <Route path="customers/pic-analytics" element={<PicAnalyticsPage />} />
             <Route path="customers/:id"      element={<CustomerDetailPage />} />
             <Route path="vouchers"           element={<VouchersPage />} />
             <Route path="offers"             element={<OffersPage />} />
