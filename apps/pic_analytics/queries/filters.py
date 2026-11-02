@@ -14,7 +14,8 @@ from django.db.models.functions import Cast
 from django.utils import timezone
 
 from apps.customers.models import Customer
-from apps.pic_analytics.models import PicDayFact, PicRollup
+from apps.pic_analytics.models import PicDayFact
+from apps.pic_analytics.queries.frequency import pics_in_bucket
 
 HISTORY_START = date(2024, 8, 1)
 
@@ -99,8 +100,6 @@ class Filters:
             qs = qs.filter(salesperson=self.salesperson)
         if self.channel_bucket:
             qs = qs.filter(channel_bucket=self.channel_bucket)
-        if self.category:
-            qs = qs.filter(net_by_category__has_key=self.category)
         if pic_filters:
             cust = Customer.objects.all()
             if self.segment:
@@ -110,5 +109,7 @@ class Filters:
             if self.segment or self.customer_type:
                 qs = qs.filter(pic__in=cust.values('softech_pic'))
             if self.frequency:
-                qs = qs.filter(pic__in=PicRollup.objects.filter(cycle_bucket=self.frequency).values('pic'))
-        return qs.annotate(enet=self.net_expr())
+                qs = qs.filter(pic__in=pics_in_bucket(self.frequency, self.end))
+        qs = qs.annotate(enet=self.net_expr())
+        # a category filter counts a fact only where that category's net is positive
+        return qs.filter(enet__gt=0) if self.category else qs

@@ -110,10 +110,12 @@ def overview(f, access) -> dict:
 
     out = {
         'distinct_pics': n_pics, 'new': n_new, 'returning': n_pics - n_new, 'reactivated': n_react,
-        'visits': visits, 'invoices': invoices, 'net': net, 'units': units,
+        'visits': visits, 'invoices': invoices, 'net': net,
+        # units / categories are whole-basket figures: not meaningful under a category filter
+        'units': None if f.category else units,
         'basket_net': round(net / visits, 2) if visits else None,
-        'basket_units': round(units / visits, 2) if visits else None,
-        'basket_categories': basket_categories,
+        'basket_units': None if f.category or not visits else round(units / visits, 2),
+        'basket_categories': None if f.category else basket_categories,
         'visits_per_pic': round(visits / n_pics, 2) if n_pics else None,
         'retention_pct': retention_pct,
         'calls_in': None, 'calls_out': None, 'missed_not_returned': None,   # Task 9

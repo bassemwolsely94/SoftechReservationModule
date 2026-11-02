@@ -11,7 +11,8 @@ from django.db.models import Count, Max, Min, OuterRef, Q, Subquery, Sum
 from apps.customers import access as cust_access
 from apps.customers.models import Customer
 from apps.pic_analytics import rules
-from apps.pic_analytics.models import PicDayFact, PicRollup
+from apps.pic_analytics.models import PicDayFact
+from apps.pic_analytics.queries.frequency import pic_frequency
 from apps.pic_analytics.settings import setting
 
 ZERO = Decimal('0')
@@ -61,35 +62,34 @@ def pic_rows(f, access, order='-net', page=1, page_size=50) -> dict:
     for r in access.scope_facts(PicDayFact.objects.filter(pic__in=pics, invoices__gt=0, day__lte=f.end)
                                 ).values('pic').annotate(first=Min('day'), last=Max('day')):
         span[r['pic']] = r
-    rollups = {r.pic: r for r in PicRollup.objects.filter(pic__in=pics)}
+    freq = pic_frequency(pics, f.end)
     customers = {}
     for c in Customer.objects.filter(softech_pic__in=pics).order_by('-pk'):
         customers[c.softech_pic] = c            # lowest pk wins (iterated last)
 
     user = getattr(access.profile, 'user', None)
     factor = float(setting('pic_overdue_factor'))
-    today = f.data_to
+    today = f.end
     rows = []
     for r in chunk:
         pic = r['pic']
-        cust, roll, sp = customers.get(pic), rollups.get(pic), span.get(pic, {})
+        cust, fr, sp = customers.get(pic), freq.get(pic), span.get(pic, {})
         visits = r['visits']
         last = sp.get('last')
         row = {
             'pic': pic, 'name': cust.name if cust else '', 'segment': cust.segment if cust else '',
             'last_branch': last_visit.get(pic, (None, None))[1],
             'net': r['s_net'] or ZERO, 'visits': visits, 'invoices': r['s_inv'] or 0,
-            'units': r['s_units'] or ZERO,
+            'units': None if f.category else (r['s_units'] or ZERO),
             'basket_net': round((r['s_net'] or ZERO) / visits, 2),
             'categories': sorted(k for k, v in cats.get(pic, {}).items() if v > 0),
             'channels': sorted(chans.get(pic, ())),
             'first_purchase': sp.get('first'), 'last_purchase': last,
             'days_since_last': (today - last).days if last else None,
-            'months_a': roll.months_a if roll else None, 'streak_b': roll.streak_b if roll else None,
-            'cycle_bucket': roll.cycle_bucket if roll else '',
-            'overdue': bool(roll and roll.last_purchase and rules.is_overdue(
-                roll.last_purchase, float(roll.cycle_days) if roll.cycle_days is not None else None,
-                today, factor)),
+            'months_a': fr['months_a'] if fr else None, 'streak_b': fr['streak_b'] if fr else None,
+            'cycle_bucket': fr['cycle_bucket'] if fr else '',
+            'overdue': bool(fr and fr['last_visit'] and rules.is_overdue(
+                fr['last_visit'], fr['cycle_days'], today, factor)),
             'phone': cust.phone if cust else '',
             'calls_in': None, 'calls_out': None, 'missed': None, 'last_call': None,    # Task 9
             'avg_days_between_calls': None, 'talk_time': None, 'call_to_purchase': None,

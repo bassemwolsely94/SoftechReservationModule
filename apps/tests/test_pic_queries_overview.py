@@ -45,7 +45,7 @@ class Base(TestCase):
         cls.fact('GONE', D(2026, 9, 20), cls.ba, 1, 10, 5, 1, {'10': 10})
         cls.fact('', D(2026, 10, 6), cls.ba, 1, 30, 20, 1, {'10': 30})
         PicRollup.objects.create(pic='R1', as_of=D(2026, 11, 1), first_purchase=D(2026, 7, 1),
-                                 last_purchase=D(2026, 10, 10), months_a=3, streak_b=2,
+                                 last_purchase=D(2026, 10, 10), months_a=9, streak_b=2,
                                  cycle_days=D_('10'), cycle_bucket='m1')
 
     @staticmethod
@@ -147,8 +147,13 @@ class OverviewTests(Base):
         o = overview(self.flt(category='50'), self.mgmt)     # category net only
         self.assertEqual((o['net'], o['distinct_pics']), (D_('80'), 2))
         self.assertIsNone(o['gp'])
+        self.assertEqual((o['units'], o['basket_units'], o['basket_categories']), (None, None, None))
+        self.assertIsNone(pic_rows(self.flt(category='50'), self.mgmt)['rows'][0]['units'])
+        self.fact('NEG', D(2026, 10, 8), self.ba, 1, 5, 1, 1, {'50': -5})     # key present, net <= 0
+        o = overview(self.flt(category='50'), self.mgmt)
+        self.assertEqual((o['net'], o['distinct_pics'], o['visits']), (D_('80'), 2, 2))
         self.assertEqual(overview(self.flt(segment='vip'), self.mgmt)['distinct_pics'], 1)
-        self.assertEqual(overview(self.flt(frequency='m1'), self.mgmt)['distinct_pics'], 1)
+        self.assertEqual(overview(self.flt(frequency='m2'), self.mgmt)['distinct_pics'], 1)
         self.assertEqual(overview(self.flt(channel_bucket='delivery'), self.mgmt)['distinct_pics'], 0)
         Customer.objects.update(softech_created_at=None)
         self.assertEqual(overview(self.flt(), self.mgmt)['new_reliable_from'], '2025-08-01')
@@ -168,9 +173,9 @@ class PicListTests(Base):
         self.assertEqual(n1['basket_net'], D_('175'))
         self.assertIsNone(n1['calls_in'])
         r1 = r['rows'][1]
-        self.assertEqual((r1['months_a'], r1['cycle_bucket']), (3, 'm1'))
+        self.assertEqual((r1['months_a'], r1['cycle_bucket']), (3, 'm2'))   # computed to 2026-10-31, not the rollup's 9
         self.assertEqual(r1['first_purchase'], D(2026, 7, 1))
-        self.assertTrue(r1['overdue'])
+        self.assertFalse(r1['overdue'])       # 21 days since last vs cycle 50.5 d
         self.assertEqual([x['pic'] for x in pic_rows(self.flt(), self.mgmt, 'net')['rows']], ['RE', 'R1', 'N1'])
         self.assertEqual([x['pic'] for x in pic_rows(self.flt(), self.mgmt, 'days_since_last')['rows']][0], 'N1')
         self.assertEqual([x['pic'] for x in pic_rows(self.flt(), self.mgmt, '-days_since_last')['rows']][0], 'R1')
@@ -185,3 +190,28 @@ class PicListTests(Base):
         m = {x['pic']: x for x in pic_rows(self.flt(), self.mgr)['rows']}
         self.assertNotEqual(m['N1']['phone'], '01000000001')  # not an own customer -> masked
         self.assertEqual((m['N1']['net'], m['N1']['visits'], m['N1']['last_purchase']), (D_('150'), 1, D(2026, 10, 5)))
+
+
+class FrequencyToDateTests(Base):
+
+    def test_frequency_follows_report_to_date_not_rollup(self):
+        from datetime import timedelta
+        from apps.pic_analytics.queries.frequency import pic_frequency
+        yesterday = timezone.localdate() - timedelta(days=1)
+        self.assertEqual(pic_frequency({'R1'}, yesterday)['R1']['months_a'], 9)          # rollup
+        fr = pic_frequency({'R1'}, D(2026, 10, 31))['R1']                                # computed
+        self.assertEqual((fr['months_a'], fr['streak_b'], fr['cycle_bucket'], fr['last_visit']),
+                         (3, 2, 'm2', D(2026, 10, 10)))
+        early = pic_frequency({'R1'}, D(2026, 9, 30))['R1']                              # later days ignored
+        self.assertEqual((early['months_a'], early['last_visit']), (2, D(2026, 9, 15)))
+        self.assertEqual(pic_rows(self.flt(), self.mgmt)['rows'][1]['months_a'], 3)
+
+    def test_overdue_and_days_since_last_relative_to_to_date(self):
+        self.fact('OD', D(2026, 10, 1), self.ba, 1, 10, 5, 1, {'10': 10})
+        self.fact('OD', D(2026, 10, 3), self.ba, 1, 10, 5, 1, {'10': 10})
+        late = {r['pic']: r for r in pic_rows(self.flt(), self.mgmt)['rows']}['OD']
+        self.assertTrue(late['overdue'])                       # 28 d since 10-03 > 1.5 x 2 d
+        self.assertEqual(late['days_since_last'], 28)
+        early = {r['pic']: r for r in pic_rows(self.flt(end=D(2026, 10, 4)), self.mgmt)['rows']}['OD']
+        self.assertFalse(early['overdue'])
+        self.assertEqual(early['days_since_last'], 1)
