@@ -30,6 +30,7 @@ from rest_framework.response import Response
 from . import supplier_terms as ST
 from .receivables_views import _as_of, _j
 from .recon_views import FINANCE, FINANCE_EDIT, FINANCE_EXPORT
+from core.export_safety import neutralise_formulas
 from core.threads import start_thread
 
 logger = logging.getLogger('elrezeiky.finance')
@@ -314,7 +315,7 @@ def supplier_terms_export(request):
         ws.append(r)
     ws.freeze_panes = 'A4'
     buf = BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     resp = HttpResponse(buf.getvalue(),
                         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     resp['Content-Disposition'] = f'attachment; filename="supplier_terms_{sheet}_{as_of.isoformat()}.xlsx"'

@@ -1,0 +1,21 @@
+# Excel / CSV exports that skip core/export_safety (Batch 6, W-4, 2026-11-01). Every save of a
+# workbook goes through neutralise_formulas(wb) and every CSV through export_safety.csv_writer;
+# what is left below builds REAL formulas on purpose and was reviewed. New lines need a reason.
+
+# reason: the KPI target / scenario board writes live formulas (targets, achievement %, incentive
+#   thresholds); its text is metric labels, branch names and code-made notes — the one typed value,
+#   the scenario name, sits after a fixed prefix so it can never start the cell
+apps/forecasting/management/commands/export_kpi_sheet.py::Command.handle
+apps/forecasting/views.py::KpiSheetExportView.get
+apps/forecasting/views.py::ForecastScenarioViewSet.export
+
+# reason: the ISR fulfilment sheet is an editable plan — coverage, fill and basis cells drive live
+#   formulas; its text is SOFTECH item / branch names and code-made labels (WhatsApp lines are
+#   matched to catalogue items before they reach it)
+apps/purchasing/branch_request_views.py::branch_request_analysis_export
+apps/purchasing/isr_views.py::isr_fulfilment_export
+apps/purchasing/management/commands/isr_fulfillment_report.py::Command.handle
+
+# reason: the sanitising wrapper itself — csv_writer / csv_dict_writer wrap the raw csv writers
+core/export_safety.py::csv_dict_writer
+core/export_safety.py::csv_writer

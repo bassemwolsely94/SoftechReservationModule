@@ -229,3 +229,14 @@ class ExceptionHandlerTests(SimpleTestCase):
         res = self.call(ValidationError({'qty': ['bad']}))
         self.assertEqual(res.status_code, 400)
         self.assertEqual(res.data, {'qty': ['bad']})
+
+
+class RepriceTransientTests(SimpleTestCase):
+    """The insurance re-price retries once on a flaky link — never on a refusal (N4)."""
+
+    def test_refusal_is_not_transient_even_with_marker_text(self):
+        from apps.insurance.reprice_service import _is_transient
+        from config.sybase import SoftechAccessDenied, SoftechZoneWriteDenied
+        self.assertFalse(_is_transient(SoftechAccessDenied('socket timeout')))
+        self.assertFalse(_is_transient(SoftechZoneWriteDenied('JZ0C0')))
+        self.assertTrue(_is_transient(RuntimeError('JZ0C0 Connection is already closed')))

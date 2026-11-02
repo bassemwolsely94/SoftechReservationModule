@@ -8,6 +8,8 @@ import io
 
 from django.http import HttpResponse
 
+from core.export_safety import neutralise_formulas
+
 try:
     import openpyxl
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -27,7 +29,7 @@ def _rtl(ws):
 
 
 def _resp(wb, number):
-    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    buf = io.BytesIO(); neutralise_formulas(wb).save(buf); buf.seek(0)
     resp = HttpResponse(
         buf.getvalue(),
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -175,7 +177,7 @@ def generate_invoice_excel(doc) -> HttpResponse:
         ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=ncols)
         nc = ws.cell(r, 1, f'ملاحظات: {doc.notes}'); nc.font = reg; nc.alignment = right
 
-    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    buf = io.BytesIO(); neutralise_formulas(wb).save(buf); buf.seek(0)
     resp = HttpResponse(
         buf.getvalue(),
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')

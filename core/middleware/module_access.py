@@ -104,6 +104,7 @@ EXEMPT_PREFIXES = {'auth', 'notifications', 'personal', 'search', 'help', 'porta
                    'gamification',   # own points open to all; its views check gamification/*
                    'tasks',          # every staff member's own task board (scoping: Batch 5)
                    'stock-audit',    # own gate apps/stock_audit/access.py: RBAC stock_audit
+                   'csp-report',     # browsers' CSP reports — public, log only (core/csp.py, W-9)
                    'trace'}          # P-58 own gates apps/trace/views.py: parse = admin,
                                      # scan = pos create (sale) / invoices create (receive)
                                      # + named branch managers the matrix doesn't know (Z-1)
@@ -198,11 +199,12 @@ def required(path, method):
                  or (prefix == 'invoices' and parts[3:4] == ['vendors'])):
         return 'shortage', ('view',)
     # Market Shortage → shortage; Phantom / Cash Optimization reads → analytics, phantom review =
-    # shortage (the Market Shortage reviewers), spike confirm = purchasing (Z-7b)
-    if prefix == 'purchasing' and parts[3:4] in (['shortage'], ['phantom'], ['spike']):
+    # shortage (the Market Shortage reviewers), spike confirm = purchasing (Z-7b); P-27 dead stock (the same
+    # Cash Optimization screen): reads analytics, decisions / strategic hold / recompute purchasing
+    if prefix == 'purchasing' and parts[3:4] in (['shortage'], ['phantom'], ['spike'], ['dead-stock']):
         if safe:
             return ('shortage' if parts[3] == 'shortage' else 'analytics'), ('view',)
-        if parts[3] == 'spike':
+        if parts[3] in ('spike', 'dead-stock'):
             return 'purchasing', _POST_ACTIONS
         return 'shortage', ('approve',)       # flag / dismiss / phantom review: approve, as the views
     # P-33 (a): creating transfer proposals from a shortage list is the WhatsApp path's purchasing

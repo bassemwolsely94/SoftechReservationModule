@@ -15,13 +15,19 @@ which was already PUSHED — approving either would have sent the same ISR again
     or cancelled first. A partial unique constraint backs this up in the database.
   • push guard — a draft whose lines are identical to an ISR pushed on the same route in
     the last DUP_PUSH_DAYS days is refused unless a reason is given (then recorded).
+  • overlap guard (P-32 §2.4) — a draft that shares SOME items with an ISR pushed to the same destination
+    (same kind) in the last DUP_PUSH_DAYS days and not yet dispensed (owner 2026-11-01; dispensed = the source
+    issued the item to that destination after the push, stock-ledger doc 125) is refused unless a reason is
+    given (then recorded). Off until
+    the owner confirms the rule: SystemSetting `isr_overlap_guard` = on. `report_isr_overlaps` measures it.
   • leg order — the HQ → branch leg of a transfer is pushed only after its branch → HQ
     leg (the goods must be on their way to HQ before HQ sends them on).
   • cancel — any unpushed draft, with a reason, audited.
 """
 import hashlib
 import logging
-from datetime import timedelta
+from collections import defaultdict
+from datetime import datetime, time, timedelta
 
 from django.utils import timezone
 
@@ -68,15 +74,26 @@ def live_on_route(kind, source, dest, *, exclude=None):
     return qs.exclude(pk=exclude) if exclude else qs
 
 
-def check_route_free(kind, source, dest):
-    """Before a new general draft: refuse when an APPROVED one waits on the route; return
-    the PROPOSED ones the new draft will supersede."""
+PLANNER_AR = {'replenishment': 'طلبات التوريد', 'distribution': 'التوزيعة', 'transfer': 'تحويلات المحرك'}
+
+
+def check_route_free(kind, source, dest, *, planner=None):
+    """Before a new general draft: refuse when an APPROVED one waits on the route, or (P-32 §2.3) when a PROPOSED
+    one from ANOTHER planner waits there — it is no longer silently cancelled. Return the PROPOSED drafts the new
+    draft will supersede (same planner, or drafts made before planners were recorded)."""
     live = list(live_on_route(kind, source, dest).select_for_update())
     approved = [p for p in live if p.status == 'approved']
     if approved:
         raise GuardError(f'يوجد طلب توريد معتمد #{approved[0].pk} لنفس المسار ({source} ← {dest or source}) '
                          f'لم يُرحَّل بعد — رحّله أو ألغه أولاً.', code='approved_exists', other=approved[0].pk)
-    return [p for p in live if p.status == 'proposed']
+    proposed = [p for p in live if p.status == 'proposed']
+    if planner:
+        other = next((p for p in proposed if (p.params or {}).get('planner') not in (None, '', planner)), None)
+        if other is not None:
+            who = PLANNER_AR.get(other.params['planner'], other.params['planner'])
+            raise GuardError(f'يوجد طلب مقترح #{other.pk} من «{who}» لنفس المسار ({source} ← {dest or source}) — '
+                             f'لن يُلغى تلقائياً. راجعه أو ألغه أولاً.', code='other_planner', other=other.pk)
+    return proposed
 
 
 def _audit(action, obj, *, user=None, note='', changes=None, extra=None):
@@ -149,6 +166,70 @@ def duplicate_pushed(p):
     return None
 
 
+def overlap_guard_on():
+    from apps.config.models import SystemSetting
+    return str(SystemSetting.get('isr_overlap_guard', 'off') or 'off').strip().lower() == 'on'
+
+
+def _qty(line):
+    return int(round(float(line.get('itemqty') or 0)))
+
+
+ISSUE_DOCCODE = '125'   # صرف لفرع — the source issues to the destination (counterpart store = destination)
+
+
+def _dispensed(rows, before):
+    """{(push_id, itemcode)} of `rows` the earlier ISR's source has already issued to the destination after that
+    push and before `before` (owner 2026-11-01: a repeat counts only while the earlier ISR is NOT dispensed).
+    From the stock ledger mirror (doc 125). SOFTECH does not put the ISR number on the issue line, so this is
+    item × route × time; the ledger refreshes every 2 hours, so a very recent issue still asks for a reason."""
+    from apps.stock_audit.models import StockLedgerLine
+    if not rows:
+        return set()
+    first = min(r['pushed_at'] for r in rows)
+    issues = defaultdict(list)
+    for src, dest, item, t, d in (StockLedgerLine.objects.filter(
+            doccode=ISSUE_DOCCODE, branchcode__in={r['source'] for r in rows},
+            storecode2__in={r['dest'] for r in rows}, itemcode__in={r['itemcode'] for r in rows},
+            docdate__gte=timezone.localdate(first))
+            .values_list('branchcode', 'storecode2', 'itemcode', 'trans_time', 'docdate')):
+        issues[(src, dest, item)].append(t or timezone.make_aware(datetime.combine(d, time.max)))
+    return {(r['push_id'], r['itemcode']) for r in rows
+            if any(r['pushed_at'] <= t < before for t in issues.get((r['source'], r['dest'], r['itemcode']), ()))}
+
+
+def overlapping_pushed(p, *, since=None, pushed=None, before=None):
+    """Lines of draft `p` whose item is also in an ISR PUSHED to the same destination (same kind) in the last
+    DUP_PUSH_DAYS days and NOT yet dispensed (see _dispensed). An identical ISR is the duplicate guard's case and is
+    not listed here. Returns [{itemcode, qty, earlier_qty, push_id, isrdocnumber, pushed_at}], one row per item."""
+    from apps.purchasing.models import IsrPush as P
+    if pushed is None:
+        since = since or timezone.now() - timedelta(days=DUP_PUSH_DAYS)
+        pushed = (P.objects.filter(kind=p.kind, dest_branchcode=p.dest_branchcode, status=P.STATUS_PUSHED,
+                                   pushed_at__gte=since).exclude(pk=p.pk)
+                  .only('id', 'lines_snapshot', 'isrdocnumber', 'pushed_at').order_by('pushed_at'))
+    mine = {str(l.get('itemcode') or '').strip(): _qty(l) for l in (p.lines_snapshot or [])}
+    fp = fingerprint(p.lines_snapshot)
+    cand = []
+    for o in pushed:
+        if fingerprint(o.lines_snapshot) == fp:
+            continue
+        for l in o.lines_snapshot or []:
+            code = str(l.get('itemcode') or '').strip()
+            if code in mine:
+                cand.append({'itemcode': code, 'qty': mine[code], 'earlier_qty': _qty(l), 'push_id': o.pk,
+                             'isrdocnumber': o.isrdocnumber, 'pushed_at': o.pushed_at,
+                             'source': str(o.branchcode), 'dest': str(o.dest_branchcode or o.branchcode)})
+    done = _dispensed(cand, before or timezone.now())
+    out, seen = [], set()
+    for r in cand:
+        if (r['push_id'], r['itemcode']) in done or r['itemcode'] in seen:
+            continue
+        seen.add(r['itemcode'])
+        out.append(r)
+    return sorted(out, key=lambda r: r['itemcode'])
+
+
 def check_push(p, *, user=None, force_reason=''):
     """Before writing a draft to SOFTECH: no identical recent ISR on the route (unless a
     reason is given), and a forwarding leg never goes before the leg that feeds it."""
@@ -172,3 +253,133 @@ def check_push(p, *, user=None, force_reason=''):
         p.params = params
         p.save(update_fields=['params'])
         _audit('isr_duplicate_push_forced', p, user=user, note=reason, extra={'duplicate_of': dup.pk})
+    if overlap_guard_on():
+        rows = overlapping_pushed(p)
+        if rows:
+            reason = (force_reason or '').strip()
+            shown = '، '.join(f"{r['itemcode']} (#{r['push_id']})" for r in rows[:10])
+            more = f' و{len(rows) - 10} صنف آخر' if len(rows) > 10 else ''
+            if len(reason) < MIN_REASON:
+                raise GuardError(f'{len(rows)} صنف في هذا الطلب رُحِّل بالفعل لنفس الفرع خلال آخر {DUP_PUSH_DAYS} أيام: '
+                                 f'{shown}{more}. لن يُرحَّل إلا بسبب مكتوب.', code='overlap_push',
+                                 other=rows[0]['push_id'])
+            earlier = sorted({r['push_id'] for r in rows})
+            params = dict(p.params or {})
+            params['forced_overlap'] = {'reason': reason, 'items': [r['itemcode'] for r in rows], 'earlier': earlier,
+                                        'by': getattr(user, 'username', None), 'at': timezone.now().isoformat()}
+            p.params = params
+            p.save(update_fields=['params'])
+            _audit('isr_overlap_push_forced', p, user=user, note=reason,
+                   extra={'earlier': earlier, 'items': len(rows)})
+
+
+def expiry_days():
+    """SystemSetting `isr_draft_expiry_days` (0 / missing = off)."""
+    from apps.config.models import SystemSetting
+    try:
+        return max(0, int(SystemSetting.get('isr_draft_expiry_days', 0) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def expire_drafts(*, now=None):
+    """P-32 §2.4 / doc 30 §2.6: cancel, with audit, every PROPOSED general draft older than `expiry_days()` (PG only,
+    never SOFTECH). Approved drafts (a person signed them off) and drafts tied to a branch / WhatsApp / shortage-list
+    request keep their own rules. Returns the cancelled ids. Idempotent."""
+    from apps.purchasing.models import IsrPush as P
+    days = expiry_days()
+    if not days:
+        return []
+    cutoff = (now or timezone.now()) - timedelta(days=days)
+    done = []
+    for p in _general(P.objects.filter(status=P.STATUS_PROPOSED, created_at__lt=cutoff)).order_by('pk'):
+        _cancel(p, reason=f'انتهت صلاحية المقترح: أقدم من {days} أيام دون اعتماد')
+        done.append(p.pk)
+    return done
+
+
+# ── push review (W3, owner 2026-11-02): what the push is about to write, checked
+#    against SOFTECH *now* — the snapshot can be days old ───────────────────────
+ISR_QTY_WARN_RATIO = 3        # qty over 3× the line's gap …
+ISR_QTY_WARN_EXTRA = 10       # … and at least 10 units over it
+ISR_LINE_VALUE_WARN = 50000   # qty × cost
+ISR_STALE_DAYS = 3            # a draft older than this was built on old stock
+PUSH_REASON_MIN = 10
+
+
+def _issue(level, code, message, itemcode=None):
+    return {'level': level, 'code': code, 'message': message, 'itemcode': itemcode}
+
+
+def review_push(p, conn) -> dict:
+    """READ-ONLY on `conn` (the node the ISR is written on): every line to be written,
+    the item master and stock as they are now, and the issues — block (never written)
+    or warn (written only with a reason). The push runs this again just before writing."""
+    lines = [l for l in (p.lines_snapshot or []) if _qty(l) > 0]
+    codes = list(dict.fromkeys(str(l.get('itemcode', '')).strip() for l in lines if l.get('itemcode')))
+    master, stock = {}, {}
+    if codes:
+        cur = conn.cursor()
+        for i in range(0, len(codes), 400):
+            chunk = codes[i:i + 400]
+            ph = ','.join('?' for _ in chunk)
+            cur.execute(f"SELECT itemcode, itemarchive, itemnomoreuse FROM items WHERE itemcode IN ({ph})", chunk)
+            for r in cur.fetchall() or []:
+                master[str(r[0]).strip()] = (str(r[1] or '0').strip(), str(r[2] or '0').strip())
+            cur.execute(f"SELECT itemcode, sum(nowqty) FROM stkbal WHERE branchcode=? "
+                        f"AND storecode NOT IN ('102','103','105') AND itemcode IN ({ph}) GROUP BY itemcode",
+                        [str(p.branchcode), *chunk])
+            for r in cur.fetchall() or []:
+                stock[str(r[0]).strip()] = float(r[1] or 0)
+    issues = []
+    total_qty = 0
+    value = 0.0
+    for l in lines:
+        code = str(l.get('itemcode', '')).strip()
+        name = l.get('item_name') or code
+        q = _qty(l)
+        total_qty += q
+        cost = float(l.get('itemcostprice') or 0)
+        value += q * cost
+        if code not in master:
+            issues.append(_issue('block', 'item_missing', f'الصنف {code} غير موجود فى سوفتك: {name}', code))
+            continue
+        archive, nomore = master[code]
+        if archive == '1':
+            issues.append(_issue('block', 'item_archived', f'صنف مؤرشف فى سوفتك: {name}', code))
+        if nomore == '1':
+            issues.append(_issue('warn', 'item_suspended', f'أوامر التوريد موقوفة للصنف فى سوفتك: {name}', code))
+        gap = float(l.get('gap') or 0)
+        if gap <= 0:
+            issues.append(_issue('warn', 'no_gap', f'الصنف بلا عجز وقت إعداد الطلب وكميته {q}: {name}', code))
+        elif q > ISR_QTY_WARN_RATIO * gap and q - gap >= ISR_QTY_WARN_EXTRA:
+            issues.append(_issue('warn', 'qty_over_gap', f'الكمية {q} أكبر بكثير من العجز {gap:g}: {name}', code))
+        if q * cost > ISR_LINE_VALUE_WARN:
+            issues.append(_issue('warn', 'line_value', f'قيمة السطر {q * cost:,.0f} أكبر من {ISR_LINE_VALUE_WARN:,}: {name}', code))
+        then = l.get('nowqty')
+        if then is not None and code in stock and stock[code] - float(then or 0) >= q:
+            issues.append(_issue('warn', 'stock_arrived',
+                                 f'مخزون الصنف زاد {stock[code] - float(then or 0):g} منذ إعداد الطلب (≥ الكمية المطلوبة): {name}', code))
+    age = (timezone.now() - p.created_at).days if p.created_at else 0
+    if age > ISR_STALE_DAYS:
+        issues.append(_issue('warn', 'stale', f'الطلب أُعد منذ {age} يوم — المخزون والعجز تغيّرا غالباً.'))
+    return {'line_count': len(lines), 'total_qty': total_qty, 'docvalue': round(value, 2), 'age_days': age,
+            'issues': issues,
+            'blocked': any(i['level'] == 'block' for i in issues),
+            'needs_reason': any(i['level'] == 'warn' for i in issues),
+            'reason_min_chars': PUSH_REASON_MIN}
+
+
+def enforce_review(review, *, confirm_count=None, push_reason='', unattended=False):
+    """Raise ValueError unless the reviewed push may be written now."""
+    if review['blocked']:
+        raise ValueError('مرفوض: ' + ' · '.join(i['message'] for i in review['issues'] if i['level'] == 'block'))
+    warns = [i['message'] for i in review['issues'] if i['level'] == 'warn']
+    if unattended:
+        if warns:   # no person to give a reason: leave it approved for a human push
+            raise ValueError('لم يُرحَّل تلقائياً — يحتاج مراجعة: ' + ' · '.join(warns))
+        return
+    if str(confirm_count if confirm_count is not None else '').strip() != str(review['line_count']):
+        raise ValueError(f'اكتب عدد الأسطر ({review["line_count"]}) للتأكيد.')
+    if warns and len((push_reason or '').strip()) < PUSH_REASON_MIN:
+        raise ValueError(f'تحذيرات تتطلب سبباً مكتوباً ({PUSH_REASON_MIN} أحرف على الأقل): ' + ' · '.join(warns))

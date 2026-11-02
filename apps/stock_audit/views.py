@@ -41,6 +41,7 @@ from .models import (StockAuditAccess, StockAuditFinding, StockAuditRule, StockA
 from .params import ParamError, ensure_rules, validate_params
 from .rules import RULES, adjustments_by_user
 from .sales_context import channel_options, personcodes_in_channels, sales_context
+from core.export_safety import neutralise_formulas
 from core.threads import start_thread
 
 logger = logging.getLogger('elrezeiky.stock_audit')
@@ -357,7 +358,7 @@ def export_findings(request):
             c.number_format = '#,##0.00'
     ws.freeze_panes = 'A2'
     buf = BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     resp = HttpResponse(buf.getvalue(),
                         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     resp['Content-Disposition'] = f'attachment; filename="stock-audit-{d_from}-{d_to}.xlsx"'

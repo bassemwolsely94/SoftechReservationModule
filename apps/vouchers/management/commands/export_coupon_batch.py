@@ -13,6 +13,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from apps.vouchers import coupons
 from apps.vouchers.models import CouponBatch
+from core.export_safety import neutralise_formulas
 
 
 class Command(BaseCommand):
@@ -29,7 +30,7 @@ class Command(BaseCommand):
             raise CommandError(f'batch {opts["batch_id"]} not found')
         os.makedirs(opts['out'], exist_ok=True)
         xlsx = os.path.join(opts['out'], f'coupon_batch_{batch.pk}_print.xlsx')
-        coupons.print_workbook(batch).save(xlsx)
+        neutralise_formulas(coupons.print_workbook(batch)).save(xlsx)
         tsv = os.path.join(opts['out'], f'coupon_batch_{batch.pk}_dataload.tsv')
         with open(tsv, 'w', encoding='utf-8', newline='') as f:
             for row in coupons.dataload_rows(batch):

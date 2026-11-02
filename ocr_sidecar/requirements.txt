@@ -8,5 +8,10 @@
 paddlepaddle==2.6.2         # CPU build; stable on Windows (no PIR/oneDNN crash)
 paddleocr==2.7.3            # PP-OCRv3 pipeline incl. the Arabic model
 flask>=3.0
-pillow>=10.0
+pillow>=13.0.0              # decodes the uploaded image (OpenCV only gets the pixel array) — keep it patched
 numpy<2                     # paddle 2.6 expects numpy 1.x
+setuptools                  # paddle 2.6 imports it at startup; Python 3.12 venvs no longer ship it
+#
+# pip-audit (2026-11-01, Python 3.12): 12 advisories remain, all pinned by this 2.x stack and
+# none reachable from POST /boxes — see docs/security/TEST_SUITE.md «OCR sidecar». The real
+# fix is the PaddleOCR 3.x stack on the Linux server (needs its own OCR-quality check).

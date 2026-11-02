@@ -67,11 +67,14 @@ class WhatsAppSender:
 
     # ── Public send methods ───────────────────────────────────────────────────
 
-    def send_text(self, wa_id: str, body: str, preview_url: bool = False) -> dict:
+    def send_text(self, wa_id: str, body: str, preview_url: bool = False,
+                  record_body: str | None = None) -> dict:
+        """record_body: what the inbox keeps instead of `body` — for a message that carries a
+        secret (the portal login link) staff must not be able to read back (Batch 6, W-5)."""
         payload = {**self._base(wa_id), 'type': 'text',
                    'text': {'body': body, 'preview_url': preview_url}}
         result = self._post(payload)
-        self._record_outbound(wa_id, 'text', body=body, result=result)
+        self._record_outbound(wa_id, 'text', body=body if record_body is None else record_body, result=result)
         return result
 
     def send_template(self, wa_id: str, template_name: str, language: str = 'ar',

@@ -135,12 +135,14 @@ class SoftechAuditTests(TestCase):
         from apps.purchasing import shortage_writer
         it = Item.objects.create(softech_id='91002', name='Y')
         with mock.patch.object(shortage_writer, '_desired_state', return_value=(True, None)), \
-                mock.patch.object(shortage_writer, '_write_softech'):
+                mock.patch.object(shortage_writer, '_write_softech', return_value=(
+                    {'itemmodified': '0', 'itemnomoreuse': '0'}, {'itemmodified': '1', 'itemnomoreuse': '0'})):
             shortage_writer.push_item(it, actor=self.user)
         row = _row('softech_shortage_written')
         self.assertIsNotNone(row)
         self.assertEqual(row.user_id, self.staff.pk)
         self.assertEqual(row.new_data['on_shortage'], True)
+        self.assertEqual(row.old_data['itemmodified'], '0')     # the real SOFTECH value before (W2)
 
     # ── vendor-code mapping ───────────────────────────────────────────────────
 

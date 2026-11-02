@@ -7,13 +7,14 @@ Export a SupplierInvoice to Excel (xlsx) or CSV.
   export_invoice_csv(invoice)    → str  (UTF-8 with BOM for Excel compatibility)
 """
 from __future__ import annotations
-import csv
 import io
 from datetime import datetime
 
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+
+from core.export_safety import csv_writer, neutralise_formulas
 
 # ── Styles ─────────────────────────────────────────────────────────────────────
 _HEADER_FILL  = PatternFill('solid', fgColor='1F3864')
@@ -142,7 +143,7 @@ def export_invoice_excel(invoice) -> bytes:
     tc2.number_format = '#,##0.###'
 
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     return buf.getvalue()
 
 
@@ -154,7 +155,7 @@ def export_invoice_csv(invoice) -> bytes:
     Returns raw bytes.
     """
     buf = io.StringIO()
-    writer = csv.writer(buf)
+    writer = csv_writer(buf)
 
     # Header metadata
     writer.writerow(['فاتورة مورد'])

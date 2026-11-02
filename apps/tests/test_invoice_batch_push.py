@@ -30,7 +30,7 @@ class BatchPushTests(TestCase):
         c = self._inv('confirmed', '111')
         p = self._inv('pending', '222')
         r = self.client.post('/api/invoices/invoices/push-batch/',
-                             {'invoice_ids': [c.id, p.id, 999999]}, format='json')
+                             {'invoice_ids': [c.id, p.id, 999999], 'confirm_count': 3}, format='json')
         self.assertEqual(r.status_code, 200)
         d = r.json()
         self.assertEqual(d['total'], 3)
@@ -49,9 +49,22 @@ class BatchPushTests(TestCase):
 
     def test_refused_without_softech_user_code(self):
         _, _, c = make_admin('nocode')
-        r = c.post('/api/invoices/invoices/push-batch/', {'invoice_ids': [self._inv().id]}, format='json')
+        r = c.post('/api/invoices/invoices/push-batch/', {'invoice_ids': [self._inv().id], 'confirm_count': 1},
+                   format='json')
         self.assertEqual(r.status_code, 400)
         self.assertIn('SofTech', r.json()['detail'])
+
+    @override_settings(INVOICE_WRITER_ENABLED=False)
+    def test_batch_needs_typed_count_and_never_overrides_duplicates(self):
+        c = self._inv('confirmed', '333')
+        url = '/api/invoices/invoices/push-batch/'
+        self.assertEqual(self.client.post(url, {'invoice_ids': [c.id]}, format='json').status_code, 400)
+        self.assertEqual(self.client.post(url, {'invoice_ids': [c.id], 'confirm_count': 2}, format='json').status_code, 400)
+        self.assertEqual(self.client.post(url, {'invoice_ids': [c.id], 'confirm_count': 1, 'override_duplicate': 'true',
+                                                'duplicate_reason': 'سبب طويل بما يكفى'}, format='json').status_code, 400)
+        self._inv('finalized', '333')            # same vendor + number already posted
+        d = self.client.post(url, {'invoice_ids': [c.id], 'confirm_count': 1}, format='json').json()
+        self.assertTrue(d['results'][0].get('duplicate'))
 
     def test_requires_push_role(self):
         _, _, c = make_pharmacist('ph2')

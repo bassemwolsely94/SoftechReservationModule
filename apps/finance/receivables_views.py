@@ -25,6 +25,7 @@ from rest_framework.response import Response
 
 from . import receivables as R
 from .recon_views import FINANCE, FINANCE_EDIT, FINANCE_EXPORT
+from core.export_safety import neutralise_formulas
 from core.threads import start_thread
 
 logger = logging.getLogger('elrezeiky.finance')
@@ -172,7 +173,7 @@ def receivables_export(request):
                        f(c['link_coverage_pct'])])
     ws.freeze_panes = 'A4'
     buf = BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     resp = HttpResponse(buf.getvalue(),
                         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     resp['Content-Disposition'] = f'attachment; filename="contract_receivables_{as_of.isoformat()}.xlsx"'

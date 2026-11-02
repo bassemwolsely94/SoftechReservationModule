@@ -282,12 +282,28 @@ Batch 7 sets it), `bandit -b bandit-baseline.json`, `pip_audit_check.py`, and in
 
 ## Known dependency advisories (2026-10-26)
 
-- **Python** (`pip-audit-ignore.txt`, owner Batch 6): direct pins — Django 4.2.13 (81; the 4.2
-  line is past end of support and several fixes ship only in 5.2+), djangorestframework 3.15.1 (7),
-  djangorestframework-simplejwt 5.3.1 (2), twisted 26.4.0 (6); installed transitive packages —
-  147 advisories in 21 packages, notably Pillow (62), **PyJWT (19 — login tokens)**, aiohttp (14),
-  cryptography (7), sqlparse (9), daphne (4). The CI check audits the installed environment
-  (exactly what requirements-ci.txt installs); run it inside the production venv to cover
-  production-only packages.
-- **npm (production deps) — 35 advisories** (`npm-audit-allow.txt`): axios (most, several high),
-  follow-redirects, form-data, react-router / react-router-dom. Owner: Batch 6.
+- **Python — none (Batch 6, 2026-10-31).** The allow-list (`pip-audit-ignore.txt`) is empty. Before:
+  259 advisories in 25 packages (Django 4.2.13 alone 81). Upgraded: Django 5.2.18 (LTS, supported to
+  April 2028; 4.2 is past end of support and several fixes ship only in 5.2+), djangorestframework
+  3.18.3, simplejwt 5.5.1, django-filter 26.2, django-cors-headers 4.9.0, django-extensions 4.1,
+  Pillow 13, PyJWT 2.15.1, daphne 4.2.3; transitive packages get security floors in
+  `requirements*.txt` (Twisted, cryptography, sqlparse, aiohttp, filelock, msgpack, torch, …).
+  Checked both ways: the CI set (installed) and the full production set (`pip install --dry-run
+  --report -r requirements.txt`, then `pip-audit --no-deps -r` on the resolved pins) — no findings.
+  The CI check audits the installed environment; run it inside the production venv after a deploy.
+- **npm — 0 left** (`npm-audit-allow.txt` empty, 2026-11-01): lockfile-only upgrades (axios 1.21,
+  react-router-dom 6.30.6, form-data 4.0.6, follow-redirects 1.16.2, postcss 8.5) took production
+  deps from 35 to 2; react-router-dom 6 → 7.18.5 cleared the last two (an open redirect through a
+  backslash path, and SSR hydration). Dev tooling: vite 5 → 6.4.5 (+ plugin-react 4.7, esbuild 0.25)
+  cleared the 9 dev-server advisories (8 vite, 1 esbuild). The full `npm audit`, dev deps included,
+  reports 0. Still never expose `npm run dev` beyond localhost.
+- **OCR sidecar** (`ocr_sidecar/requirements.txt`, its own Python 3.10–3.12 venv, not in CI —
+  audit by hand with `pip-audit -r ocr_sidecar/requirements.txt` under Python 3.12). Pillow floor
+  raised to 13.0.0 (the only release with no open advisories; it decodes the uploaded image) and
+  `setuptools` added (paddle 2.6 imports it; 3.12 venvs lack it). 12 advisories remain, all held by
+  the paddleocr 2.7.3 pins and none reachable from `POST /boxes`: opencv 4.6.0.66 libwebp
+  (CVE-2023-4863 — OpenCV never decodes the upload, Pillow does), paddlepaddle 2.6.2 command
+  injection in `IrGraph.draw` / the model-download helper (never called with request data),
+  protobuf 3.20.2 DoS (no untrusted protobuf parsed), imgaug 0.4.0 pickle (training-time
+  `BackgroundAugmenter` only). Real fix: the PaddleOCR 3.x stack on the Linux server, with an
+  OCR-quality check. Smoke-tested 2026-11-01: `/boxes` reads a rendered page on Pillow 13.

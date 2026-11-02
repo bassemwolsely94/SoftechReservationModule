@@ -556,16 +556,17 @@ class AvailabilityBatchViewSet(viewsets.ModelViewSet):
 
 def _read_tabular(f) -> list:
     """Yield rows (lists of cell values) from an uploaded .xlsx/.xls or .csv file."""
+    from core.upload_safety import capped_rows          # MAX_IMPORT_ROWS (security Batch 6, W-8)
     name = (f.name or '').lower()
     if name.endswith('.csv'):
         import csv, io
         text = f.read().decode('utf-8-sig', errors='replace')
-        return [row for row in csv.reader(io.StringIO(text))]
+        return [row for row in capped_rows(csv.reader(io.StringIO(text)))]
     # Excel
     import openpyxl
     wb = openpyxl.load_workbook(f, read_only=True, data_only=True)
     ws = wb.active
-    return [list(row) for row in ws.iter_rows(values_only=True)]
+    return [list(row) for row in capped_rows(ws.iter_rows(values_only=True))]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -550,10 +550,14 @@ def upload_product_image(request, item_pk):
     if not f:
         return Response({'detail': 'لم يتم رفع ملف'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Basic mime check
-    allowed = {'image/jpeg', 'image/png', 'image/webp', 'image/gif'}
-    if f.content_type not in allowed:
-        return Response({'detail': 'نوع الملف غير مدعوم'}, status=status.HTTP_400_BAD_REQUEST)
+    # products/ is public: the file must really be an image, named by what it is — never by the
+    # client's name or content type (security Batch 6, W-7)
+    from django.core.exceptions import ValidationError
+    from core.upload_safety import public_upload
+    try:
+        safe = public_upload(f, 'image', prefix=f'manual_{item.softech_id}_')
+    except ValidationError as exc:
+        return Response({'detail': exc.messages[0]}, status=status.HTTP_400_BAD_REQUEST)
 
     set_primary = str(request.data.get('set_primary', 'true')).lower() != 'false'
 
@@ -570,9 +574,7 @@ def upload_product_image(request, item_pk):
         approved   = True,
         uploaded_by= request.user,
     )
-    ext = f.name.rsplit('.', 1)[-1].lower() if '.' in f.name else 'jpg'
-    fname = f'manual_{item.softech_id}_{timezone.now().strftime("%Y%m%d%H%M%S")}.{ext}'
-    media.file.save(fname, f, save=True)
+    media.file.save(safe.name, safe, save=True)
 
     # Sync enrichment URL
     try:

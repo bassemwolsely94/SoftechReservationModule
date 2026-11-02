@@ -8,11 +8,11 @@ Approved pairs in approval order (≤ CUSTOMER_MERGE_BATCH_MAX per batch; stops 
 Then the branch copies: check_customer_status_drift → push_customer_branch_copy --from-drift --branch <code>.
 Every batch writes a review list to scratch/ (codes only).
 """
-import csv
 import os
 
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
+from core.export_safety import csv_writer
 
 
 class Command(BaseCommand):
@@ -81,7 +81,7 @@ class Command(BaseCommand):
         path = os.path.join('scratch', f'merge_codes_{timezone.localtime():%Y%m%d_%H%M%S_%f}.csv')
         os.makedirs('scratch', exist_ok=True)
         with open(path, 'w', newline='', encoding='utf-8-sig') as f:
-            w = csv.writer(f)
+            w = csv_writer(f)
             w.writerow(['old_pic', 'main_pic', 'status', 'points_moved', 'error'])
             for r in recs:
                 w.writerow([r.old_pic, r.main_pic, r.status, r.points_moved, r.error])

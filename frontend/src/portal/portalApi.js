@@ -43,9 +43,17 @@ portal.interceptors.response.use(
   }
 )
 
+// A magic link logs in ONCE (server-side). Share one exchange per link so a re-run effect
+// (React StrictMode in dev, a remount) does not spend it twice and show «invalid link».
+const exchanges = new Map()
+
 export const portalApi = {
   requestLink: (phone) => portal.post('/request-link/', { phone }),
-  exchange:    (token) => portal.post('/auth/', { token }),
+  exchange:    (token) => {
+    if (!exchanges.has(token)) exchanges.set(token, portal.post('/auth/', { token }))
+    return exchanges.get(token)
+  },
+  logout:      ()      => portal.post('/logout/'),
   me:          ()      => portal.get('/me/'),
   orders:      ()      => portal.get('/orders/'),
   loyalty:     ()      => portal.get('/loyalty/'),

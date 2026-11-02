@@ -5,7 +5,7 @@ tracked, claimable «شراء بدون حالة» record; a live case funds vouc
 only; anonymous receipts are never auto-confirmed; approvals follow the owner matrix (cash manager
 > 1,500, rate lowered manager > 5 pp, backdate bands).
 """
-from datetime import datetime, timedelta, timezone as dt_tz
+from datetime import date, datetime, timedelta, timezone as dt_tz
 from decimal import Decimal
 from unittest import mock
 
@@ -57,6 +57,19 @@ class _MidMonthClock:
             cls._clock.stop()
 
 
+class _ApprovalDay:
+    """`apps.replacement.workflow.timezone` with the date the approval route reads pinned to `day`
+    (everything else is the real module) — for a band that needs a specific calendar day."""
+    def __init__(self, day):
+        self.day = day
+
+    def localdate(self, *args, **kwargs):
+        return self.day
+
+    def __getattr__(self, name):
+        return getattr(timezone, name)
+
+
 @override_settings(REPLACEMENT_ENTRY_FIRST_FROM=CUTOVER)
 class EntryFirstTests(_MidMonthClock, TW._Base):
     approved = TW.LegTests.approved
@@ -100,13 +113,31 @@ class EntryFirstTests(_MidMonthClock, TW._Base):
                              items=items if items is not None else [{'item_id': self.lokelma.pk, 'qty': 1}],
                              claim_of=src)
 
+    @override_settings(REPLACEMENT_ENTRY_FIRST_FROM={'130': '2026-09-01'})
+    def test_backdate_band_across_month_end_is_manager_even_one_day_later(self):
+        # a month-end purchase claimed the next morning: 1 day, but across the month end → manager
+        src = R.reconstruct_invoice(self.ap_invoice(docdate=date(2026, 9, 30)))['case']
+        self.assertEqual(src.status, RC.STATUS_UNCLAIMED)
+        c = self.calc(self.claim(src))
+        with mock.patch.object(W, 'timezone', _ApprovalDay(date(2026, 10, 1))):
+            wf, reasons = W.approval_route(RC.objects.get(pk=c.pk))
+        self.assertEqual(wf, 'replacement_manager', reasons)
+        self.assertTrue(any('عبر نهاية الشهر' in r for r in reasons), reasons)
+
     def test_claim_links_purchase_on_approval_and_retires_the_unclaimed_record(self):
         src = R.reconstruct_invoice(self.ap_invoice())['case']
         X.objects.filter(case=src).update(status=X.STATUS_ACK)          # someone reviewed it — still claimable
         c = self.submit(self.calc(self.claim(src)))
         self.assertEqual(c.status, RC.STATUS_AWAITING_APPROVAL)
         self.assertTrue(any('بأثر رجعي' in r for r in c.approval_request.context_data['reasons']))
+        # yesterday's purchase is a supervisor claim — on the 1st of a month it crosses month-end and
+        # the route adds the manager after the supervisor (backdate bands), so walk whatever it asked
+        crossed = YESTERDAY.month != TODAY.month
+        self.assertEqual(c.approval_request.workflow.code,
+                         'replacement_manager' if crossed else 'replacement_supervisor')
         c = W.decide(c.pk, user=self.sup, version=c.version, approve=True)
+        if crossed:
+            c = W.decide(c.pk, user=self.admin, version=self.v(c), approve=True)
 
         c.refresh_from_db()
         op = Op.objects.get(case=c, idempotency_key=f'{c.pk}:purchase')
