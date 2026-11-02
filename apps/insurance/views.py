@@ -2934,6 +2934,41 @@ class InsuranceSeparationListViewSet(viewsets.ModelViewSet):
         return Response({'moved': n})
 
 
+class InsurancePortfolioView(APIView):
+    """READ-ONLY «تقارير المطالبات»: motalbas whose period overlaps [from, to].
+    GET /api/insurance/portfolio/?from=&to=&client_id=&subclient_id=&status=a,b
+        &sort=<key>&dir=asc|desc&order=<claim ids, custom order>&group_by_client=1&format=xlsx"""
+    permission_classes = [InsuranceModuleAccess]
+
+    def get(self, request):
+        from datetime import date as _date
+        from .portfolio import select_claims, build_report
+        q = request.query_params
+
+        def _day(k):
+            try:
+                return _date.fromisoformat(q.get(k)) if q.get(k) else None
+            except ValueError:
+                return None
+        claims = select_claims(_day('from'), _day('to'), client_id=q.get('client_id') or None,
+                               subclient_id=q.get('subclient_id') or None,
+                               statuses=[s for s in (q.get('status') or '').split(',') if s] or None)
+        report = build_report(claims)
+        order = [x for x in (q.get('order') or '').split(',') if x.strip().isdigit()]
+        if order:
+            pos = {int(x): i for i, x in enumerate(order)}
+            report['motalbas'].sort(key=lambda m: pos.get(m['claim_id'], len(pos)))
+        elif q.get('sort'):
+            k, rev = q.get('sort'), q.get('dir') == 'desc'
+            report['motalbas'].sort(key=lambda m: (m.get(k) is None, m.get(k) if not isinstance(m.get(k), dict) else 0),
+                                    reverse=rev)
+        if q.get('format') == 'xlsx':
+            from .portfolio_export import generate_portfolio_excel
+            title = f"تقارير المطالبات {q.get('from') or ''} ← {q.get('to') or ''}".strip()
+            return generate_portfolio_excel(report, title=title, group_by_client=q.get('group_by_client') == '1')
+        return Response(report)
+
+
 class InsuranceRosterView(APIView):
     """READ-ONLY: the cumulative patient roster of one جهة (optionally one فئة),
     derived from earlier claims + lists + decisions, with names ruled out.

@@ -742,6 +742,7 @@ export default function InsuranceClaimsPage() {
             <Btn variant="secondary" onClick={() => navigate('/insurance/item-overrides')} size="sm" data-tour="insurance-claims-item-overrides">
               🏷 تصويب تصنيف الأصناف
             </Btn>
+            <Btn variant="secondary" onClick={() => navigate('/insurance/reports')} size="sm" data-tour="insurance-claims-reports">📊 تقارير المطالبات</Btn>
             <Btn variant="secondary" onClick={() => setShowDiscover(true)} size="sm" data-tour="insurance-claims-discover">
               🔍 استعراض من سوفتك
             </Btn>
