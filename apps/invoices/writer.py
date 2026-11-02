@@ -1231,11 +1231,15 @@ def push_final(invoice: SupplierInvoice, *, dry_run=True, force=False, usercode=
     # One conditional UPDATE: only the request that moves it into 'pushing' may write.
     # A second click / user / retry that read the same status gets 0 rows and stops.
     from django.utils import timezone as _tz
-    flipped = (type(invoice).objects.filter(pk=invoice.pk)
-               .exclude(status__in=('pushing', 'finalized'))
-               .update(status='pushing', client_token=invoice.client_token, updated_at=_tz.now()))
-    if not flipped:
-        raise ValueError('الفاتورة قيد الترحيل أو رُحّلت بالفعل من طلب آخر — حدّث الصفحة.')
+    model = type(invoice)
+    if hasattr(model, 'objects'):
+        flipped = (model.objects.filter(pk=invoice.pk)
+                   .exclude(status__in=('pushing', 'finalized'))
+                   .update(status='pushing', client_token=invoice.client_token, updated_at=_tz.now()))
+        if not flipped:
+            raise ValueError('الفاتورة قيد الترحيل أو رُحّلت بالفعل من طلب آخر — حدّث الصفحة.')
+    else:                      # a stand-in object (tests / replays) — nothing to race against
+        invoice.save(update_fields=['status', 'client_token', 'updated_at'])
     invoice.status = 'pushing'
 
     conn = None

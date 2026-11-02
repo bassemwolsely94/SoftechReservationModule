@@ -338,7 +338,9 @@ def isr_push_review(request, pk):
                                      branch.db_name or 'SOFTECHDB9')
         return Response(isr_guards.review_push(p, conn))
     except Exception as exc:
-        return Response({'detail': f'تعذّر الاتصال بسوفتك: {str(exc)[:120]}'}, status=http.HTTP_502_BAD_GATEWAY)
+        from core.errors import public_error
+        return Response({'detail': f'تعذّر الاتصال بسوفتك: {public_error(request, exc)}'},
+                        status=http.HTTP_502_BAD_GATEWAY)
     finally:
         if conn is not None:
             try:

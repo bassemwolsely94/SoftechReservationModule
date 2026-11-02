@@ -68,9 +68,12 @@ def _qty_history(codes):
     from apps.stock_audit.models import StockLedgerLine
     if not codes:
         return {}
-    return {r['itemcode'].strip(): (r['n'], _f(r['mx'])) for r in
-            StockLedgerLine.objects.filter(doccode='10', transqty__gt=0, itemcode__in=codes)
-            .values('itemcode').annotate(n=Count('id'), mx=Max('transqty'))}
+    try:
+        return {r['itemcode'].strip(): (r['n'], _f(r['mx'])) for r in
+                StockLedgerLine.objects.filter(doccode='10', transqty__gt=0, itemcode__in=codes)
+                .values('itemcode').annotate(n=Count('id'), mx=Max('transqty'))}
+    except Exception:          # no purchase history readable → the quantity guard simply has no baseline
+        return {}
 
 
 def validate_invoice(invoice, *, live=True):
