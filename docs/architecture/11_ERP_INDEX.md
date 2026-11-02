@@ -53,6 +53,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | System Config | `apps/config` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#config) |
 | Analytics | `apps/analytics` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#analytics) |
 | Audit Trail | `apps/audit` | PARTIAL | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#audit) |
+| Network Access (trusted networks, request zone) | `apps/access` | COMPLETE (N1: log only) | [network-device-access design](../security/2026-10-31-network-device-access-design.md) |
 | ERP Sync | `apps/sync` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#sync) |
 | Finance | `apps/finance` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#finance) |
 | Product Enrichment | `apps/enrichment` | PARTIAL | |
@@ -123,6 +124,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | Sync | `/api/sync/` | sync |
 | Finance | `/api/finance/` | finance |
 | Audit | `/api/audit/` | audit |
+| Access (whoami, trusted networks) | `/api/access/` | access |
 | Products | `/api/products/` | enrichment |
 | Campaigns | `/api/campaigns/` | campaigns |
 | Tasks | `/api/tasks/` | tasks |
@@ -309,6 +311,7 @@ Full schema: [03_DATABASE_DICTIONARY.md](03_DATABASE_DICTIONARY.md)
 | Automations (Omni) | `/omni/automations` | Omni / CEP | COMPLETE (Phase 4 — no-code rule builder) |
 | Comms Analytics (Omni) | `/omni/analytics` | Omni / CEP | COMPLETE (Phase 5 — cross-channel BI) |
 | Audit | `/audit` | Audit | PARTIAL |
+| Trusted Networks (الشبكات الموثوقة) | `/access/networks` | Access (admin only) | COMPLETE (N1) |
 | Account Security (2FA) | `/security` | Users (all roles) | COMPLETE |
 | Help guide (دليل الاستخدام) | `/help` (+ «؟ مساعدة»/F1 panel on every screen) | Help (all roles) | COMPLETE |
 | Gamification (التحفيز) | `/gamification` (`?tab=me\|leaderboard\|branches\|badges\|rules\|champions\|rewards\|redemptions\|reports\|settings`) + card on `/dashboard` and `/me` | Gamification (all roles; reports/settings by RBAC) | COMPLETE |
@@ -407,6 +410,7 @@ Full report: [09_TECHNICAL_DEBT_REPORT.md](09_TECHNICAL_DEBT_REPORT.md)
 | `generate_followup_tasks` | followups | Create scheduled follow-up tasks | Daily |
 | `send_followup_reminders` | notifications | Send overdue follow-up reminders | Hourly |
 | `check_demand_sla` | demand | Escalate demand-intake SLA breaches (new>10m, assigned>20m) | Hourly |
+| `seed_trusted_networks` | access | Seed trusted networks from branch `db_host` values + ZeroTier staff VPN; dry run unless `--apply`, idempotent | One-time setup |
 | `seed_config` | config | Seed default settings + dropdown options (incl. `replenishment_pick_zones` rules) | One-time setup |
 | `seed_kpi_config` | forecasting | Seed branch-KPI config: `ChannelBucketMap` (from `SoftechPersonClassif`) + `BeautyClassRule` (doc 16); never overwrites owner edits unless `--reset-defaults` | One-time setup |
 | `build_kpi_rollups` | forecasting | Materialise `KpiActualRollup` monthly branch actuals from `PurchaseHistory` (`--year --month` \| `--months N`) (doc 16) | Daily / monthly close |
