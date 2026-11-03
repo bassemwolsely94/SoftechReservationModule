@@ -204,6 +204,11 @@ function ReferencesPanel({ canEdit }) {
     }),
     onSuccess: () => { setInfl(''); setRg(''); qc.invalidateQueries({ queryKey: ['forecast-references'] }) },
   })
+  const setMode = useMutation({
+    mutationFn: (mode) => forecastApi.computeReferences({ seasonality_mode: mode }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['forecast-references'] }); qc.invalidateQueries({ queryKey: ['forecast-plan'] }) },
+  })
+  const branchSeas = refs.branch_seasonality?.cash_delivery || {}
   const metrics = Object.keys(refs.growth_goal || {})
   const pct = v => v == null ? '—' : `${(Number(v) * 100).toFixed(1)}%`
   // seasonality for the running month + the next 5 (rolls forward with the calendar)
@@ -249,6 +254,22 @@ function ReferencesPanel({ canEdit }) {
                 ))}
               </tbody>
             </table>
+          )}
+          <div data-tour="analytics-scenarios-seasonality-mode" className="flex flex-wrap items-center gap-2 mt-3 text-[11px] text-gray-600">
+            <span className="font-bold">الموسمية في المحرك:</span>
+            {canEdit ? (
+              <select className="input-field !w-auto !py-1 text-[11px]" value={refs.engine_seasonality_mode || 'none'}
+                      disabled={setMode.isPending}
+                      onChange={e => { if (confirm('تغيير طريقة تطبيق الموسمية على كل التوقعات الجديدة؟')) setMode.mutate(e.target.value) }}>
+                {Object.entries(SEASON_MODES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            ) : <span>{SEASON_MODES[refs.engine_seasonality_mode || 'none']}</span>}
+            <span className="text-gray-400">اختر ما يفوز في «الدقة حسب المدى». موسمية كل فرع = نمطه الخاص بوزن تاريخه (كامل عند 36 شهراً) والباقى من نمط السلسلة — الفرع الجديد يبدأ بنمط السلسلة.</span>
+          </div>
+          {Object.keys(branchSeas).length > 0 && (
+            <div className="text-[10px] text-gray-400 mt-1">
+              وزن النمط الخاص (نقدى+توصيل): {Object.entries(branchSeas).map(([c, v]) => `${c}: ${Math.round(v.weight * 100)}% (${v.months} شهر)`).join(' · ')}
+            </div>
           )}
           <p className="text-[10px] text-gray-400 mt-2">
             الموسمية والنمو التاريخى محسوبان من {hist ? <>بيانات {hist.months} شهراً ({hist.from} → {hist.to})</> : 'البيانات التاريخية'}
@@ -652,6 +673,14 @@ function EstChip() {
   return <span className="mr-1 text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 align-middle" title="شهر لم يكتمل بعد — القيمة تقدير">متوقع</span>
 }
 
+const SEASON_MODES = { none: 'بدون موسمية', chain: 'موسمية السلسلة', branch: 'موسمية كل فرع' }
+
+const H_BRANCH_VARIANTS = [
+  ['br_b', 'بدون موسمية'],
+  ['br_chain', 'موسمية السلسلة'],
+  ['br_branch', 'موسمية كل فرع'],
+]
+
 const H_VARIANTS = [
   ['b', 'B بدون موسمية'],
   ['b_season', 'B × الموسمية (عند تطبيق المرجعية)'],
@@ -661,9 +690,26 @@ const H_VARIANTS = [
 function HorizonAccuracy({ data, labels }) {
   const metrics = Object.keys(data || {})
   if (!metrics.length) return null
+  const hasBranch = metrics.some(m => data[m]?.br_b)
   return (
     <div className="mt-4" data-tour="analytics-scenarios-horizon">
-      <div className="text-xs font-bold text-gray-700 mb-1">الدقة حسب المدى — WAPE% للتنبؤ قبل الشهر بـ 1 / 2 / 3 أشهر</div>
+      <div className="text-xs font-bold text-gray-700 mb-1">الدقة حسب المدى — WAPE% للتنبؤ قبل الشهر بـ 1 / 2 / 3 أشهر (الإجمالى)</div>
+      <HorizonTable data={data} metrics={metrics} labels={labels} variants={H_VARIANTS} />
+      {hasBranch && <>
+        <div className="text-xs font-bold text-gray-700 mt-3 mb-1">على مستوى الفروع (مجموع أخطاء الفروع — مستوى الأهداف)</div>
+        <HorizonTable data={data} metrics={metrics.filter(m => data[m]?.br_b)} labels={labels} variants={H_BRANCH_VARIANTS} />
+      </>}
+      <p className="text-[10px] text-gray-400 mt-1">
+        كل تنبؤ يستخدم فقط البيانات المتاحة وقتها (الأشهر بين آخر شهر مكتمل والشهر المستهدف تُتوقَّع بنفس النموذج).
+        اختر وضع الموسمية الذى يفوز هنا من «📐 القيم المرجعية» — ومع تاريخ قصير «بدون موسمية» هو الأدق غالباً.
+      </p>
+    </div>
+  )
+}
+
+function HorizonTable({ data, metrics, labels, variants }) {
+  const H_VARIANTS = variants
+  return (
       <table className="w-full text-xs">
         <thead>
           <tr className="text-gray-400 border-b border-gray-100">
@@ -693,11 +739,6 @@ function HorizonAccuracy({ data, labels }) {
           })}
         </tbody>
       </table>
-      <p className="text-[10px] text-gray-400 mt-1">
-        كل تنبؤ يستخدم فقط البيانات المتاحة وقتها (الأشهر بين آخر شهر مكتمل والشهر المستهدف تُتوقَّع بنفس النموذج).
-        مع سنتين فقط من التاريخ الموسمية تزيد الخطأ — لذلك المحرك يتوقع الأشهر القادمة بدونها؛ أعد الاختبار بعد تحميل سنوات أكثر.
-      </p>
-    </div>
   )
 }
 
@@ -761,7 +802,7 @@ function PlanPanel({ canEdit, onCreate }) {
               </tbody>
             </table>
             <p className="text-[10px] text-gray-400 mt-2">
-              الشهر الجارى = المحقق حتى الآن محسوباً لشهر كامل، ممزوجاً بالتوقع بنسبة الأيام الباقية. الأشهر القادمة = Model B (الشهر السابق وقبل السابق ونفس الشهر العام الماضى × النمو المرجعى)، وكل شهر يُبنى على توقع الشهر الذى قبله.
+              الشهر الجارى = المحقق حتى الآن محسوباً لشهر كامل، ممزوجاً بالتوقع بنسبة الأيام الباقية. الأشهر القادمة = Model B (الشهر السابق وقبل السابق ونفس الشهر العام الماضى × النمو المرجعى)، وكل شهر يُبنى على توقع الشهر الذى قبله — والموسمية حسب الوضع المختار فى «📐 القيم المرجعية».
               النسبة تحت الرقم = مقارنة بنفس الشهر العام الماضى. للأهداف: «+ سيناريو» للشهر المطلوب.
             </p>
           </div>

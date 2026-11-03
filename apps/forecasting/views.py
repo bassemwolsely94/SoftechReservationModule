@@ -547,7 +547,8 @@ class ForecastReferenceView(APIView):
 
     def get(self, request):
         from apps.forecasting import references as R
-        return Response(R.get() or {})
+        from apps.forecasting.engine import seasonality_mode
+        return Response({**(R.get() or {}), 'engine_seasonality_mode': seasonality_mode()})
 
     def post(self, request):
         sp = getattr(request.user, 'staff_profile', None)
@@ -555,6 +556,8 @@ class ForecastReferenceView(APIView):
             return Response({'detail': 'غير مصرح'}, status=status.HTTP_403_FORBIDDEN)
         from apps.forecasting import references as R
         d = request.data or {}
+        if 'seasonality_mode' in d:
+            return _set_seasonality_mode(request, sp, d.get('seasonality_mode'))
         prev = R.get() or {}
         rg = d.get('real_growth')
         rg = float(rg) if rg not in (None, '') else float(prev.get('real_growth', 0.15))
@@ -587,6 +590,24 @@ class ForecastPlanView(APIView):
         except Exception:
             logger.exception('forecast plan failed')
             return Response({'detail': 'تعذّر حساب الخطة'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def _set_seasonality_mode(request, sp, mode):
+    """Switch how the engine applies seasonality (none | chain | branch) — audited."""
+    from apps.config.models import SystemSetting
+    from apps.audit.models import AuditLog
+    from apps.forecasting.engine import SEASONALITY_MODES, seasonality_mode
+    mode = str(mode or '').strip().lower()
+    if mode not in SEASONALITY_MODES:
+        return Response({'detail': 'وضع غير صالح'}, status=status.HTTP_400_BAD_REQUEST)
+    old = seasonality_mode()
+    SystemSetting.objects.update_or_create(key='forecast_seasonality_mode', defaults={
+        'value': mode, 'label': 'وضع الموسمية في محرك التنبؤ', 'category': 'general'})
+    if old != mode:
+        AuditLog.log('forecast_seasonality_mode', user=sp, changes={'mode': [old, mode]},
+                     note=f'وضع الموسمية في محرك التنبؤ: {old} → {mode}')
+    from apps.forecasting import references as R
+    return Response({**(R.get() or {}), 'engine_seasonality_mode': mode})
 
 
 class GrowthView(APIView):
