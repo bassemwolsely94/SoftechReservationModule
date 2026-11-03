@@ -1158,6 +1158,21 @@ export const shortageApi = {
 
 // ── Stock Count ───────────────────────────────────────────────────────────────
 
+// Small daily counts (Project 2) — /api/stockcount/daily/ (404 while DAILY_COUNT_ENABLED is off).
+export const dailyCountApi = {
+  my:        ()           => api.get('/stockcount/daily/my/'),
+  board:     (params)     => api.get('/stockcount/daily/board/', { params }),
+  staff:     (branch)     => api.get('/stockcount/daily/staff/', { params: { branch } }),
+  report:    (params)     => api.get('/stockcount/daily/report/', { params }),
+  reportXlsx: (params)    => api.get('/stockcount/daily/report/', { params: { ...params, export: 'xlsx' }, responseType: 'blob' }),
+  recount:   (id, data)   => api.post(`/stockcount/daily/picks/${id}/recount/`, data),
+  accept:    (id, data)   => api.post(`/stockcount/daily/picks/${id}/accept/`, data),
+  escalate:  (id, data)   => api.post(`/stockcount/daily/picks/${id}/escalate/`, data),
+  generate:  (data)       => api.post('/stockcount/daily/generate/', data),
+  settings:  ()           => api.get('/stockcount/daily/settings/'),
+  saveSettings: (data)    => api.patch('/stockcount/daily/settings/', data),
+}
+
 export const stockCountApi = {
   // Session CRUD
   list:         (params) => api.get('/stockcount/sessions/', { params }),
