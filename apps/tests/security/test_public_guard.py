@@ -117,6 +117,33 @@ class PublicGuardTests(SimpleTestCase):
         self.clock.now += 5
         self.assertIsNone(check_submission(data, 'portal_link', phone='01012345678'))
 
+    def test_phone_reformatting_shares_one_counter(self):
+        variants = ['01012345678', '+201012345678', '0101 234 5678', '201012345678',
+                    '00201012345678']
+        for v in variants:
+            self.assertEqual(public_guard.normalize_phone(v), '01012345678', v)
+        for v in variants[:3]:
+            data = self._solved()
+            self.clock.now += 5
+            check_submission(data, 'notify', phone=v)
+        data = self._solved()
+        self.clock.now += 5
+        self.assertEqual(self._code(data, phone=variants[3]), 'phone_limit')
+        data = self._solved()
+        self.clock.now += 5
+        self.assertEqual(self._code(data, phone=variants[4]), 'phone_limit')
+
+    def test_refusal_logged_with_real_code_and_masked_phone(self):
+        data = self._solved(website='x')
+        self.clock.now += 5
+        with self.assertLogs('elrezeiky.public_guard', 'INFO') as logs:
+            self._code(data, phone='01012345678')
+        self.assertEqual(len(logs.output), 1)
+        self.assertIn('code=bot', logs.output[0])
+        self.assertIn('form=notify', logs.output[0])
+        self.assertIn('***5678', logs.output[0])
+        self.assertNotIn('01012345678', logs.output[0])
+
     def test_bot_and_phone_limit_look_like_success(self):
         self.assertEqual(GUARD_MESSAGES['bot'], GUARD_MESSAGES['phone_limit'])
         self.assertEqual(GUARD_MESSAGES['bot'], public_guard.PUBLIC_OK_MESSAGE)
@@ -170,7 +197,12 @@ class ChallengeEndpointTests(TestCase):
         for form in ('notify', 'portal_link'):
             r = self.client.get(CHALLENGE_URL, {'form': form})
             self.assertEqual(r.status_code, 200, r.content)
-            self.assertEqual(set(r.json()), {'challenge', 'difficulty'})
+            self.assertEqual(set(r.json()), {'challenge', 'difficulty', 'min_fill_seconds'})
+
+    @override_settings(PUBLIC_MIN_FILL_SECONDS=5)
+    def test_challenge_endpoint_returns_min_fill_seconds(self):
+        r = self.client.get(CHALLENGE_URL, {'form': 'notify'})
+        self.assertEqual(r.json()['min_fill_seconds'], 5)
 
     def test_challenge_endpoint_unknown_form_400(self):
         self.assertEqual(self.client.get(CHALLENGE_URL, {'form': 'nope'}).status_code, 400)

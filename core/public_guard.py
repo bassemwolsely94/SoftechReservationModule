@@ -19,6 +19,8 @@ submits challenge + nonce with the form. check_submission() then refuses:
 their normal success response for those two codes and log one INFO line.
 """
 import hashlib
+import logging
+import re
 import time
 import uuid
 
@@ -26,6 +28,8 @@ from django.conf import settings
 from django.core import signing
 from django.core.cache import cache
 from django.utils import timezone
+
+logger = logging.getLogger('elrezeiky.public_guard')
 
 SALT = 'public-pow'
 HONEYPOT_FIELD = 'website'
@@ -76,12 +80,37 @@ def issue_challenge(form: str) -> dict:
             'difficulty': int(settings.PUBLIC_POW_DIFFICULTY)}
 
 
+def normalize_phone(phone) -> str:
+    """One counter key per Egyptian number however it was typed: digits only, a 20 / 0020
+    country prefix on a 12-digit number becomes a leading 0, then the last 11 digits."""
+    digits = re.sub(r'\D', '', str(phone or ''))
+    if digits.startswith('0020'):
+        digits = digits[2:]
+    if len(digits) == 12 and digits.startswith('20'):
+        digits = '0' + digits[2:]
+    return digits[-11:]
+
+
 def _phone_key(form: str, phone: str) -> str:
     return f'public:phone:{form}:{phone}:{timezone.localdate():%Y%m%d}'
 
 
+def _masked(phone) -> str:
+    digits = normalize_phone(phone)
+    return f'***{digits[-4:]}' if digits else '-'
+
+
 def check_submission(data: dict, form: str, phone: str | None = None) -> None:
-    """Raise GuardError(code) unless the submission passes every check (see module docstring)."""
+    """Raise GuardError(code) unless the submission passes every check (see module docstring).
+    Every refusal is logged once at INFO with its real code, even where the user sees success."""
+    try:
+        _check(data, form, phone)
+    except GuardError as e:
+        logger.info('public guard refused code=%s form=%s phone=%s', e.code, form, _masked(phone))
+        raise
+
+
+def _check(data: dict, form: str, phone) -> None:
     if str(data.get(HONEYPOT_FIELD) or '').strip():
         raise GuardError('bot')
 
@@ -112,6 +141,7 @@ def check_submission(data: dict, form: str, phone: str | None = None) -> None:
     if not cache.add(f'public:pow:{pid}', 1, _ttl()):
         raise GuardError('replayed')
 
+    phone = normalize_phone(phone)
     if phone:
         key = _phone_key(form, phone)
         if (cache.get(key) or 0) >= int(settings.PUBLIC_PHONE_DAILY_MAX):
