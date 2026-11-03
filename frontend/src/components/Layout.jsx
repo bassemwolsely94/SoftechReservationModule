@@ -13,6 +13,7 @@ import NetworkBadge from './NetworkBadge'
 import ZoneBanner from './ZoneBanner'
 import ModuleNotificationBell from './ModuleNotificationBell'
 import ThemeToggle from './ThemeToggle'
+import DrugAssistantDrawer from '../counselling/DrugAssistantDrawer'
 import CommandPalette from './CommandPalette'
 import CustomerDrawer from './CustomerDrawer'
 import BrandMark from './BrandMark'
@@ -170,6 +171,7 @@ export const NAV_GROUPS = [
       { to: '/catalog-intelligence', icon: '🧠', label: 'ذكاء الكتالوج',   roles: ['admin','pharmacist','purchasing'] },
       { to: '/chronic-classifier',   icon: '🧬', label: 'الأدوية المزمنة',  roles: ['admin','pharmacist','call_center','supervisor'] },
       { to: '/composition',          icon: '⚗️', label: 'تنقية المواد الفعّالة', roles: ['admin','pharmacist','purchasing','supervisor'] },
+      { to: '/counselling',          icon: '📘', label: 'إرشادات الاستخدام', roles: ['admin','pharmacist','quality_manager'], module: 'counselling' },
       { to: '/ingredient-search',    icon: '🔬', label: 'بحث المواد الفعّالة', roles: ['admin','pharmacist','purchasing','supervisor','call_center','quality_manager'] },
       { to: '/image-enrichment',     icon: '🖼️', label: 'صور المنتجات',   roles: ['admin','pharmacist','purchasing'] },
       { to: '/recommendations',      icon: '🔗', label: 'التوصيات الذكية', roles: ['admin','pharmacist','call_center','purchasing'] },
@@ -572,6 +574,8 @@ export default function Layout() {
       <HelpPanel />
       {/* Global Customer-360 side-drawer (opens on window 'customer360:open') */}
       <CustomerDrawer />
+      {/* Drug assistant side-drawer (Ctrl+K Shift+Enter on an item → window 'drug-assistant:open') */}
+      <DrugAssistantDrawer />
     </div>
   )
 }

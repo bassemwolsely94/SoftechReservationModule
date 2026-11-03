@@ -107,6 +107,8 @@ import MobileQAPage from './pages/mobile/MobileQAPage'
 import MobileQADetailPage from './pages/mobile/MobileQADetailPage'
 import MobileAttendancePage from './pages/mobile/MobileAttendancePage'
 import DeliveryTrackPage from './pages/DeliveryTrackPage'
+import CounselCardPublicPage from './pages/CounselCardPublicPage'
+import CounsellingPage from './pages/CounsellingPage'
 import PaymentTracking from './pages/PaymentTracking'
 import SalesDashboard from './pages/SalesDashboard'
 import PerformanceDashboard from './pages/PerformanceDashboard'
@@ -284,6 +286,8 @@ export default function App() {
           <Route path="/notify" element={<NotifyPage />} />
           {/* Public customer delivery tracking (tokenized, no login) */}
           <Route path="/track/:token" element={<DeliveryTrackPage />} />
+          {/* Public customer counselling card (tokenized, no login) — Project 4 */}
+          <Route path="/c/:token" element={<CounselCardPublicPage />} />
 
           {/* ── Customer self-service portal (external; magic-link auth) ──────
               Fully isolated from staff auth: own API client, own session token,
@@ -423,6 +427,7 @@ export default function App() {
 
             {/* ── Inventory ────────────────────────────────────────────── */}
             <Route path="products"           element={<ProductCatalogPage />} />
+            <Route path="counselling"        element={<CounsellingPage />} />
             <Route path="products/:id"       element={<ProductDetailPage />} />
             <Route path="products/:id/admin" element={<ProductContentAdminPage />} />
             <Route path="products/:id/intel" element={<ItemIntelPage />} />

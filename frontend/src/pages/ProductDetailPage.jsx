@@ -11,6 +11,8 @@ import { productsApi, pickZonesApi } from '../api/client'
 import ShelfQrButton from '../components/ShelfQrButton'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import useHelpTab from '../help/useHelpTab'
+import DrugAssistantBody from '../counselling/DrugAssistantBody'
+import useCounsellingStatus from '../counselling/useCounsellingStatus'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -623,6 +625,8 @@ export default function ProductDetailPage() {
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState('info')
   useHelpTab(activeTab)
+  const { assistant } = useCounsellingStatus()
+  const tabs = assistant ? [...TABS, { key: 'assistant', label: '💊 للصيدلي' }] : TABS
 
   // Fetch detail
   const { data: product, isLoading, isError } = useQuery({
@@ -822,7 +826,7 @@ export default function ProductDetailPage() {
           <div className="md:col-span-3">
             {/* Tab bar */}
             <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 overflow-x-auto" data-tour="catalog-product-tabs">
-              {TABS.map(tab => (
+              {tabs.map(tab => (
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
@@ -845,6 +849,7 @@ export default function ProductDetailPage() {
               {activeTab === 'similar'      && <SimilarTab productId={id} />}
               {activeTab === 'related'      && <RelatedTab product={product} />}
               {activeTab === 'demand'       && <DemandTab productId={id} />}
+              {activeTab === 'assistant' && assistant && <DrugAssistantBody itemId={Number(id)} />}
             </div>
           </div>
         </div>
