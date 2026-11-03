@@ -60,6 +60,7 @@ MODULE_CHOICES = [
     ('gamification', 'التحفيز — النقاط والمستويات (تقارير وإعدادات)'),
     ('stock_audit',  'تدقيق حركات المخزون'),
     ('pic_analytics', 'تحليلات العملاء'),
+    ('tasks',        'المهام'),
 ]
 
 ACTION_CHOICES = [
