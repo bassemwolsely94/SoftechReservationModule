@@ -68,6 +68,7 @@ MODULE_BY_PREFIX = {
     'users': 'users',
     'access': 'settings',     # trusted networks (admin only in the view); whoami is open below
     'tasks': 'tasks',         # own module since 2026-11-03 (owner); views check it too
+    'counselling': 'counselling',   # Project 4 sheets; assistant + cards are POS (see required_access)
 }
 
 # Prefixes every staff screen reads (pickers, lookups, theme); only their
@@ -185,6 +186,14 @@ def required(path, method):
     if prefix in EXEMPT_PREFIXES or path in OPEN_WRITE_EXACT:
         return None
     method = method.upper()
+    # Project 4: the switches are read by every staff screen; the drug assistant and the counselling
+    # card are counter (POS) actions; approving / retiring a sheet needs counselling approve
+    if prefix == 'counselling' and parts[3:4] == ['status']:
+        return None
+    if prefix == 'counselling' and parts[3:4] in (['assistant'], ['cards']):
+        return 'pos', (('view',) if method in ('GET', 'HEAD', 'OPTIONS') else _POST_ACTIONS)
+    if prefix == 'counselling' and len(parts) > 5 and parts[3] == 'content' and parts[5] in ('approve', 'retire'):
+        return 'counselling', ('approve',)
     # POS alternatives live under /api/composition/ (chronic) but belong to the POS module
     if prefix == 'composition' and len(parts) > 3 and parts[3] == 'alternatives':
         return 'pos', (('view',) if method in ('GET', 'HEAD', 'OPTIONS') else _POST_ACTIONS)

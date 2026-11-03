@@ -37,6 +37,7 @@ ALL_MODULES = [
     'stock_audit',   # doc 32: 'view' = all branches, 'approve' = review findings, 'export', 'edit' = thresholds
     'pic_analytics', # doc 33: 'view' = all branches + cost/GP + calls tabs, 'export' = Excel (branch managers = named grants)
     'tasks',         # المهام: own module since 2026-11-03 (owner); every role keeps its access by default
+    'counselling',   # إرشادات الاستخدام (Project 4): 'edit' = write / AI-draft / link items, 'approve' = make customer-facing
 ]
 
 ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize']
@@ -288,6 +289,16 @@ PERMISSIONS = {
 TASKS = {'view', 'create', 'edit', 'delete', 'assign', 'finalize'}
 for _role, _modules in PERMISSIONS.items():
     _modules.setdefault('tasks', set(TASKS))
+
+# Counselling sheets (owner 2026-11-03): pharmacists write and approve the customer-facing usage text;
+# counter roles read it. supervisor = the call-center supervisor (not a clinician): read only.
+COUNSELLING_EDITORS = {'view', 'create', 'edit', 'approve'}
+COUNSELLING_READERS = ('pharmacist', 'salesperson', 'call_center', 'supervisor', 'quality_manager')
+for _role, _modules in PERMISSIONS.items():
+    if _role == 'pharmacist':
+        _modules.setdefault('counselling', set(COUNSELLING_EDITORS))
+    elif _role in COUNSELLING_READERS:
+        _modules.setdefault('counselling', {'view'})
 
 
 class Command(BaseCommand):
