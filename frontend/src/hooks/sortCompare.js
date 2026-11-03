@@ -108,3 +108,30 @@ export function nextOrdering(value, key, type = 'text', defaultOrdering = '') {
 }
 
 export const ariaSortOf = (active, dir) => (!active ? 'none' : dir === 'asc' ? 'ascending' : 'descending')
+
+const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/
+/**
+ * Column type for the /supply useSort adapter: a getter's declared `.type` wins; otherwise guessed conservatively over
+ * the first 50 non-blank values (JS numbers -> number, ISO dates -> date, plain decimal strings -> number,
+ * anything else, e.g. codes or "101 123", -> text). Never strips spaces, so code-like text is not read as a number.
+ */
+export function guessType(rows, get) {
+  if (get?.type) return get.type
+  let kind = null
+  let seen = 0
+  for (const r of rows || []) {
+    const v = get?.(r)
+    if (isEmpty(v)) continue
+    let k
+    if (typeof v === 'number' || typeof v === 'boolean') k = 'number'
+    else if (v instanceof Date) k = 'date'
+    else if (typeof v === 'string' && PLAIN_NUMBER.test(v)) k = 'number'
+    else if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) && !Number.isNaN(Date.parse(v))) k = 'date'
+    else return 'text'
+    if (kind && kind !== k) return 'text'
+    kind = k
+    if (++seen >= 50) break
+  }
+  return kind || 'text'
+}
+

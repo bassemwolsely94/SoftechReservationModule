@@ -4,7 +4,7 @@
  * Latin digits throughout (module-wide convention — no Arabic-Indic numerals).
  */
 import { useMemo, useState } from 'react'
-import { isEmpty, nextSort, sortRows, toNumber } from '../../hooks/sortCompare'
+import { guessType, nextSort, sortRows } from '../../hooks/sortCompare'
 import SharedSortTh from '../../components/SortTh'
 
 // ── Sortable tables (owner 2026-10-24 + 2026-11-03: every table sorts on every data column) ──
@@ -15,21 +15,13 @@ import SharedSortTh from '../../components/SortTh'
 // Click cycle: text A→Z, numbers / dates biggest-first → reversed → back to the original order.
 // `initial` = { key, dir: 1 | -1 | 'asc' | 'desc' } optional starting sort.
 
-// text | number | date, guessed from the first non-blank value of the column
-function guessType(rows, get) {
-  for (const r of rows || []) {
-    const v = get?.(r)
-    if (isEmpty(v)) continue
-    if (typeof v === 'number' || typeof v === 'boolean') return 'number'
-    if (v instanceof Date) return 'date'
-    if (typeof v === 'string') {
-      if (/^\d{4}-\d{2}-\d{2}/.test(v) && !Number.isNaN(Date.parse(v))) return 'date'
-      return toNumber(v) !== null ? 'number' : 'text'
-    }
-    return 'text'
-  }
-  return 'text'
-}
+// A getter may declare its column type: txt(r => r.code) / num(...) / dat(...). Undeclared getters are guessed
+// conservatively over the first 50 non-blank values: JS numbers / booleans -> number, ISO date strings -> date,
+// plain decimal strings ("12.50") -> number, EVERYTHING else (codes, "101 123", names) -> text with natural collation.
+export const typed = (type) => (get) => Object.assign(get, { type })
+export const txt = typed('text')
+export const num = typed('number')
+export const dat = typed('date')
 
 export function useSort(rows, getters, initial = null) {
   const [sort, setSort] = useState(() => initial

@@ -89,7 +89,7 @@ function PolicyTable({ canEdit }) {
     onSuccess: () => { setEdit(null); setErr(null); qc.invalidateQueries({ queryKey: ['batches'] }) },
     onError: e => setErr(e.response?.data?.detail || 'تعذّر الحفظ'),
   })
-  const { sorted: rows, headerProps: ph } = useSortableRows(data?.policies || [], {})
+  const { sorted: rows, headerProps: ph } = useSortableRows(data?.policies || [], { getValue: (p, k) => (k === 'supplier' ? (p.supplier_name || p.supplier_code) : p[k]) })
   const field = (k, v) => setEdit(e => ({ ...e, [k]: v }))
   return (
     <div data-tour="batches-main-return-policies" className="bg-white rounded-xl border border-gray-200 p-4 mt-6">
@@ -103,7 +103,7 @@ function PolicyTable({ canEdit }) {
       </div>
       <table className="w-full text-sm">
         <thead><tr className="text-gray-500 text-xs border-b">
-          <SortTh {...ph('supplier_code', 'text')} className="text-right py-2">المورد</SortTh><SortTh {...ph('accepts_expiry_returns', 'number')} className="text-right">يقبل مرتجع الصلاحية</SortTh>
+          <SortTh {...ph('supplier', 'text')} className="text-right py-2">المورد</SortTh><SortTh {...ph('accepts_expiry_returns', 'number')} className="text-right">يقبل مرتجع الصلاحية</SortTh>
           <SortTh {...ph('open_offset', 'number')} className="text-right">تفتح (شهور)</SortTh><SortTh {...ph('close_offset', 'number')} className="text-right">تُغلق (شهور)</SortTh>
           <SortTh {...ph('self_entry', 'number')} className="text-right">إدخال في نظام المورد</SortTh><SortTh {...ph('notes', 'text')} className="text-right">ملاحظات</SortTh><th />
         </tr></thead>

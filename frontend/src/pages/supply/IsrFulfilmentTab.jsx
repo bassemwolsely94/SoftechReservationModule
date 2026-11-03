@@ -12,7 +12,7 @@ import { Fragment, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supplyApi } from '../../api/client'
-import { Chip, q, money, downloadBlob, inputCls, btnPrimary, btnGhost, SortTh, useSort } from './supplyUi'
+import { Chip, q, money, downloadBlob, inputCls, btnPrimary, btnGhost, SortTh, useSort, txt } from './supplyUi'
 import useBranchLabels from '../../hooks/useBranchLabels'
 import ProgressBar from '../../components/ProgressBar'
 import { fa } from '../../utils/flowArrow'
@@ -188,7 +188,7 @@ function RecentPicker({ selected, onToggle, collapsed }) {
   })
   const rows = recentQ.data?.results || []
   const grid = useSort(rows, {
-    isr: r => r.isr, branch: r => r.branch, date: r => r.date, lines: r => r.lines, qty: r => r.qty,
+    isr: txt(r => r.isr), branch: txt(r => r.branch), date: r => r.date, lines: r => r.lines, qty: r => r.qty,
     value: r => r.value, user: r => r.user_name || r.user, status: r => (r.approved ? 1 : 0),
   })
   return (
@@ -261,7 +261,7 @@ export function PlanView({ plan, setPlan, isrText, coverageChanged }) {
   const t = plan.totals
   const T = (k) => (r) => r.totals[k]
   const grid = useSort(plan.isrs, {
-    isr: r => r.isr, branch: r => r.branch, items: T('items'), requested: T('requested'),
+    isr: txt(r => r.isr), branch: txt(r => r.branch), items: T('items'), requested: T('requested'),
     recommended: T('recommended'), planned: T('planned'), from_branches: T('from_branches'), from_hq: T('from_hq'),
     shortage: T('shortage'), full_branches: T('full_branches'), full_all: T('full_all'),
     over_ceiling: T('over_ceiling'), value_branches: T('value_branches'), value_shortage: T('value_shortage'),

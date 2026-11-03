@@ -207,9 +207,16 @@ export default function SupplierPerformancePage() {
   useEffect(() => { load() }, [load])
 
   // every supplier is loaded: sort them ALL, then page (a new sort goes back to page 1)
-  const { sorted: sortedSuppliers, sort: supSort, headerProps: sH } = useSortableRows(suppliers, {
+  const { sorted: headerSorted, sort: supSort, headerProps: rawSH } = useSortableRows(suppliers, {
     getValue: (s, k) => (k === 'supplier' ? s.supplier_name : s[k]),
   })
+  // choosing a server-ordering pill hands the order back to the server (the header sort is ignored until a header is clicked again)
+  const [headerOn, setHeaderOn] = useState(true)
+  const sortedSuppliers = headerOn ? headerSorted : suppliers
+  const sH = (k, t) => {
+    const p = rawSH(k, t)
+    return { ...p, active: headerOn && p.active, ariaSort: headerOn ? p.ariaSort : 'none', onSort: () => { setHeaderOn(true); p.onSort() } }
+  }
   useEffect(() => { setPage(0) }, [supSort])
 
   if (supplierCode) {
@@ -249,7 +256,7 @@ export default function SupplierPerformancePage() {
         />
         <select data-tour="purchasing-suppliers-sort"
           value={ordering}
-          onChange={e => setOrdering(e.target.value)}
+          onChange={e => { setOrdering(e.target.value); setHeaderOn(false) }}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
         >
           {cols.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}

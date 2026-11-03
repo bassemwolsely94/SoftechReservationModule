@@ -74,3 +74,18 @@ assert.deepEqual(col(R({ a: 1 }, 'b', [1], 'a'), { key: 'v', dir: 'asc', type: '
 const ARABIC_INPUT = ['إيمان', 'احمد', 'أحمد', 'آمال', 'يسرى', 'يسري', 'فرع 10', 'فرع 2', 'فرع ٣', 'سامى', 'سامي', 'مُحمد', 'محمد', 'Zed', 'abc', 'فاطمة', 'فاطمه']
 const ARABIC_EXPECTED = ['آمال', 'احمد', 'أحمد', 'إيمان', 'سامى', 'سامي', 'فاطمة', 'فاطمه', 'فرع 2', 'فرع ٣', 'فرع 10', 'مُحمد', 'محمد', 'يسرى', 'يسري', 'abc', 'Zed']
 assert.deepEqual(col(ARABIC_INPUT.map((v, i) => ({ v, i })), { key: 'v', dir: 'asc', type: 'text' }), ARABIC_EXPECTED)
+
+// /supply adapter column typing: code-like text must never be read as a number
+import { guessType } from '../src/hooks/sortCompare.js'
+const rowsOf = (...vs) => vs.map(v => ({ v }))
+assert.equal(guessType(rowsOf('101 123', '102 45'), r => r.v), 'text')
+assert.equal(guessType(rowsOf('00123', 'A9'), r => r.v), 'text')
+assert.equal(guessType(rowsOf(null, 5, 7), r => r.v), 'number')
+assert.equal(guessType(rowsOf('12.50', '3'), r => r.v), 'number')
+assert.equal(guessType(rowsOf('2026-11-03T10:00:00Z'), r => r.v), 'date')
+assert.equal(guessType(rowsOf('1', 'x'), r => r.v), 'text')
+const declared = Object.assign(r => r.v, { type: 'text' })
+assert.equal(guessType(rowsOf(5, 7), declared), 'text')
+// doc key "branch doc": 101/123 sorts BEFORE 102/45 as text with natural collation
+assert.deepEqual(col(R('102 45', '101 123', '101 9'), { key: 'v', dir: 'asc', type: 'text' }), ['101 9', '101 123', '102 45'])
+console.log('check-sort: supply adapter checks passed')

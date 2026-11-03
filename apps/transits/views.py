@@ -962,7 +962,12 @@ class PickZoneViewSet(viewsets.ModelViewSet):
         order_field = order_map.get(raw_order.lstrip('-'))
         if raw_order and order_field is None:
             return Response({'detail': 'ordering غير مدعوم'}, status=status.HTTP_400_BAD_REQUEST)
-        order_by = [(('-' if raw_order.startswith('-') else '') + order_field) if order_field else 'name']
+        desc = raw_order.startswith('-')
+        if order_field == 'pack_price':        # blank prices last in both directions
+            f = db_models.F(order_field)
+            order_by = [f.desc(nulls_last=True) if desc else f.asc(nulls_last=True)]
+        else:
+            order_by = [(('-' if desc else '') + order_field) if order_field else 'name']
         if order_field and order_field != 'name':
             order_by.append('name')
         if order_field != 'softech_id':

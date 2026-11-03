@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supplyApi } from '../../api/client'
-import { Chip, q, money, downloadBlob, inputCls, btnPrimary, btnGhost, fmtDate, SortTh, useSort } from './supplyUi'
+import { Chip, q, money, downloadBlob, inputCls, btnPrimary, btnGhost, fmtDate, SortTh, useSort, txt } from './supplyUi'
 import { PlanView, PlanSettings, DEFAULT_SETTINGS, settingsBody, planBody, settingsChanged } from './IsrFulfilmentTab'
 import useGridKeyboard from '../../hooks/useGridKeyboard'
 import useBranchLabels from '../../hooks/useBranchLabels'
@@ -469,7 +469,7 @@ function Choices({ l, reqId, update, busy }) {
   })
   const list = results || l.candidates || []
   const cgrid = useSort(list, {
-    code: c => c.code, name: c => c.name, stock: c => c.branch_stock, rate: c => c.network_rate,
+    code: txt(c => c.code), name: c => c.name, stock: c => c.branch_stock, rate: c => c.network_rate,
     price: c => c.pack_price, score: c => c.score,
   })
   const variants = (l.candidates || []).filter(c => c.variant).length
