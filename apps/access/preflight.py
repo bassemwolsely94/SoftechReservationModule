@@ -231,10 +231,24 @@ def check_softech(now):
     return out
 
 
+def check_bulk_read():
+    out = []
+    from . import bulk_read
+    bulk = bulk_read.mode()
+    if bulk == 'enforce':
+        out.append(Item(OK, 'bulk_read_mode', 'حماية قراءة البيانات الكبيرة: التطبيق الفعلي (enforce)',
+                        'Bulk-read guard: enforce'))
+    else:
+        out.append(Item(WARN, 'bulk_read_mode', f'حماية قراءة البيانات الكبيرة في وضع {bulk} — لا توقف أحداً بعد',
+                        f'Bulk-read guard mode is {bulk} — nobody is blocked yet'))
+    return out
+
+
 def run(now=None):
     now = now or timezone.now()
     items = []
     items += check_settings()
+    items += check_bulk_read()
     items += check_internal_traffic(now)
     items += check_rows()
     items += check_mfa()

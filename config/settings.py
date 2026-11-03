@@ -111,6 +111,13 @@ NETWORK_PROXY_KEY = config('NETWORK_PROXY_KEY', default='')
 NETWORK_POLICY_ENFORCEMENT = config('NETWORK_POLICY_ENFORCEMENT', default='off' if _RUNNING_TESTS else 'log')
 # SOFTECH gate (N4): off | log | enforce. Per role x zone: may a SOFTECH connection open, and may it write.
 SOFTECH_GATE_ENFORCEMENT = config('SOFTECH_GATE_ENFORCEMENT', default='off' if _RUNNING_TESTS else 'log')
+# Bulk-read anomaly (N5): off | log | enforce. Rows read from BULK_READ_PATHS / exports taken per user
+# per hour; the first crossing alerts the admins, in enforce a non-admin is blocked for a while.
+BULK_READ_ENFORCEMENT = config('BULK_READ_ENFORCEMENT', default='off' if _RUNNING_TESTS else 'log')
+BULK_READ_ROWS_PER_HOUR = config('BULK_READ_ROWS_PER_HOUR', default=3000, cast=int)
+BULK_EXPORTS_PER_HOUR = config('BULK_EXPORTS_PER_HOUR', default=30, cast=int)
+BULK_READ_BLOCK_MINUTES = config('BULK_READ_BLOCK_MINUTES', default=30, cast=int)
+BULK_READ_PATHS = ('/api/customers/',)
 # enforce on an unsafe setup (access.E003 / E004) runs as log with an ERROR line instead (N3, I5).
 # Not an .env setting: only the test suite turns it off, to exercise enforce without nginx.
 NETWORK_ENFORCE_GUARD = not _RUNNING_TESTS

@@ -64,3 +64,15 @@ def softech_gate_settings_check(app_configs, **kwargs):
                 'Fix the N3 network label first.',
                 id='access.E005'))
     return out
+
+
+@register()
+def bulk_read_settings_check(app_configs, **kwargs):
+    """N5: BULK_READ_ENFORCEMENT. An unknown value silently runs as `log` (W004)."""
+    raw = getattr(settings, 'BULK_READ_ENFORCEMENT', 'log')
+    if str(raw or 'log').lower() not in ENFORCEMENT:
+        return [Warning(
+            f'BULK_READ_ENFORCEMENT={raw!r} is not one of {ENFORCEMENT}: it runs as log (nobody is '
+            'blocked).',
+            id='access.W004')]
+    return []

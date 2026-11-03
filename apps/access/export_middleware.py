@@ -13,11 +13,12 @@ import uuid
 
 from django.conf import settings
 from django.core.cache import cache
+from django.http import JsonResponse
 from django.utils import timezone
 
 from core.export_stamp import ExportMark, stamp_ooxml
 
-from . import policy
+from . import bulk_read, policy
 from .audit import write_access_audit
 
 log = logging.getLogger('elrezeiky.access')
@@ -62,6 +63,8 @@ class ExportAuditMiddleware:
         except Exception:
             log.error('export audit: before-view step failed (%s)', getattr(request, 'path', '?'),
                       exc_info=True)
+        if state and state.get('deny') is not None:
+            return state['deny']
         response = self.get_response(request)
         try:
             self._after(request, response, state or {})
@@ -73,14 +76,45 @@ class ExportAuditMiddleware:
         """What has to be read before the view runs: the body of a body-selected export (the
         view consumes the stream). The same parse the zone policy uses (fails closed)."""
         from .policy_middleware import _json_body
-        return {'body': _json_body(request)}
+        state = {'body': _json_body(request)}
+        state['deny'] = self._bulk_block(request, state['body'])
+        return state
+
+    def _bulk_block(self, request, body):
+        """A user blocked for bulk reading (enforce only) gets no customer reads and no exports."""
+        if bulk_read.mode() != 'enforce':
+            return None
+        if not (bulk_read.is_bulk_path(request.path)
+                or policy.is_export(request.path, request.method, request.GET, body)):
+            return None
+        from .policy_middleware import _user
+        user = _user(request)
+        if user is None or not getattr(user, 'is_authenticated', False) or not bulk_read.blocked(user):
+            return None
+        return JsonResponse({'detail': bulk_read.BLOCK_MESSAGE, 'reason': 'bulk_read'}, status=403)
+
+    def _count_bulk(self, request, response, user, export):
+        if bulk_read.mode() == 'off':
+            return
+        rows = 0
+        if (request.method == 'GET' and bulk_read.is_bulk_path(request.path)
+                and 200 <= response.status_code < 300):
+            rows = bulk_read.rows_in(response)
+        kind = bulk_read.record(user, rows=rows, export=export) if (rows or export) else None
+        if kind:
+            bulk_read.alert(user, kind, request)
 
     def _after(self, request, response, state):
-        if not _is_export(request, response, state.get('body')):
-            return
+        export = _is_export(request, response, state.get('body'))
         from .policy_middleware import _user
         user = _user(request)
         if user is None or not getattr(user, 'is_authenticated', False):
+            return
+        try:
+            self._count_bulk(request, response, user, export)
+        except Exception:
+            log.error('bulk read count failed (%s)', request.path, exc_info=True)
+        if not export:
             return
         access = getattr(request, 'access', None)
         device = getattr(access, 'device', None)
