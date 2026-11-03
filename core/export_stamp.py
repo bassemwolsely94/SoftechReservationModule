@@ -10,7 +10,7 @@ import io
 import re
 import zipfile
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, replace
 from xml.sax.saxutils import escape, quoteattr
 
 NS = {
@@ -50,6 +50,16 @@ class ExportMark:
     device: str
     zone: str
     ip: str
+
+
+_XML_BAD = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f]')
+
+
+def _clean(mark):
+    """The mark with XML 1.0 control characters removed from every value (a bad username or
+    device name must not make an invalid core.xml / custom.xml)."""
+    return replace(mark, **{f.name: _XML_BAD.sub('', str(getattr(mark, f.name) or ''))
+                            for f in fields(mark)})
 
 
 def description(mark):
@@ -140,6 +150,7 @@ def _root_rels(xml_bytes, add_core):
 
 
 def stamp_ooxml(content: bytes, mark: ExportMark) -> bytes:
+    mark = _clean(mark)
     try:
         zin = zipfile.ZipFile(io.BytesIO(content))
         names = zin.namelist()

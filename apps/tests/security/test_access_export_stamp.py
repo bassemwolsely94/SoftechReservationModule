@@ -1,7 +1,9 @@
 """N5 / Task 4 - every export is audited; Excel and Word files are stamped."""
 import io
+import json
 import zipfile
 from types import SimpleNamespace
+from unittest import mock
 
 import openpyxl
 from django.core.cache import cache
@@ -80,12 +82,13 @@ class ExportMiddlewareTests(TestCase):
         self.rf = RequestFactory()
         self.user, self.profile, _ = make_user('exp_user', role='supervisor')
 
-    def _call(self, view, path='/api/customers/export/', user=True, **kw):
-        req = self.rf.get(path, **kw)
+    def _call(self, view, path='/api/customers/export/', user=True, method='get',
+              device_name='Front desk', **kw):
+        req = getattr(self.rf, method)(path, **kw)
         req.user = self.user if user else SimpleNamespace(is_authenticated=False)
         req.access = SimpleNamespace(
             zone='Z1', user_id=self.user.pk if user else None,
-            device=DeviceInfo(public_id='dev-1', status='approved', name='Front desk', kind='pc'),
+            device=DeviceInfo(public_id='dev-1', status='approved', name=device_name, kind='pc'),
             network=NetworkInfo(zone='internal', ip='10.0.0.5', site=None))
         return ExportAuditMiddleware(view)(req)
 
@@ -153,6 +156,72 @@ class ExportMiddlewareTests(TestCase):
     def test_failed_export_status_not_audited(self):
         self._call(lambda req: HttpResponse('no', status=403), path='/api/customers/export/')
         self.assertEqual(self._rows(), [])
+
+    # fix round 1
+    def test_head_and_304_not_audited(self):
+        def view(req):
+            resp = HttpResponse(b'', content_type=XLSX, status=304 if req.method == 'GET' else 200)
+            resp['Content-Disposition'] = 'attachment; filename="x.xlsx"'
+            return resp
+        self._call(view, method='head')
+        self._call(view)
+        self.assertEqual(self._rows(), [])
+
+    def test_inline_attachment_named_file_not_audited(self):
+        def view(req):
+            resp = HttpResponse(b'%PDF', content_type='application/pdf')
+            resp['Content-Disposition'] = 'inline; filename="attachment.pdf"'
+            return resp
+        r = self._call(view, path='/api/customers/1/')
+        self.assertFalse(r.has_header('X-ElR-Export-Id'))
+        self.assertEqual(self._rows(), [])
+
+    def test_control_character_username_stamps_and_roundtrips(self):
+        bad = 'ab' + chr(1) + 'c' + chr(0x1f)
+        mark = ExportMark('ex9', bad, MARK.at, 'dev' + chr(0x0b), 'Z1', '1.2.3.4')
+        wb = openpyxl.load_workbook(io.BytesIO(stamp_ooxml(_workbook_bytes(), mark)))
+        self.assertEqual(wb.properties.creator, 'abc')
+        self.assertEqual(wb.custom_doc_props['ElR-User'].value, 'abc')
+        self.assertEqual(wb.custom_doc_props['ElR-Device'].value, 'dev')
+
+    def test_device_without_name_labelled_by_public_id(self):
+        r = self._call(lambda req: HttpResponse(_workbook_bytes(), content_type=XLSX),
+                       device_name='')
+        wb = openpyxl.load_workbook(io.BytesIO(r.content))
+        self.assertEqual(wb.custom_doc_props['ElR-Device'].value, 'dev-1')
+
+    def test_body_selected_export_audited(self):
+        def view(req):
+            req.body            # the view consumes the body, as DRF does
+            return HttpResponse('{}', content_type='application/json')
+        r = self._call(view, path='/api/reservations/bulk/', method='post',
+                       data=json.dumps({'action': 'export', 'ids': [1]}),
+                       content_type='application/json')
+        self.assertTrue(r['X-ElR-Export-Id'])
+        self.assertEqual(len(self._rows()), 1)
+        self._call(view, path='/api/reservations/bulk/', method='post',
+                   data=json.dumps({'action': 'cancel'}), content_type='application/json')
+        self.assertEqual(len(self._rows()), 1)
+
+    def test_audit_failure_on_every_alias_returns_response_unchanged(self):
+        def view(req):
+            resp = HttpResponse(b'a,b\n', content_type='text/csv')
+            resp['Content-Disposition'] = 'attachment; filename="x.csv"'
+            return resp
+        with mock.patch('apps.audit.models.AuditLog.log', side_effect=RuntimeError('db down')), \
+                mock.patch('apps.access.softech_gate._audit_aliases',
+                           return_value=('audit_log', 'default')), \
+                self.assertLogs('elrezeiky.access', 'WARNING') as cm:
+            r = self._call(view, path='/api/customers/list/')
+        self.assertEqual((r.status_code, r.content), (200, b'a,b\n'))
+        self.assertTrue(any('export audit row lost' in line for line in cm.output))
+        self.assertEqual(self._rows(), [])
+
+    def test_ws_and_export_share_the_audit_helper(self):
+        from apps.access import ws
+        with mock.patch('apps.access.audit.write_access_audit', return_value=True) as m:
+            self.assertTrue(ws._write_audit(self.user.pk, 'n', {}))
+        m.assert_called_once_with('ws_zone_denied', self.user.pk, 'n', {}, label='ws')
 
     def test_anonymous_skipped(self):
         r = self._call(lambda req: HttpResponse(_workbook_bytes(), content_type=XLSX), user=False)

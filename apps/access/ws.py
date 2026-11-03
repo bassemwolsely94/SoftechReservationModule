@@ -174,24 +174,9 @@ def _fresh_user(user_id):
 
 
 def _write_audit(user_id, note_text, extra):
-    """One `ws_zone_denied` row, through the `audit_log` alias first (as the SOFTECH gate does),
-    then `default`. True when a row was saved. Never raises."""
-    from apps.audit.models import AuditLog
-    from apps.users.models import StaffProfile
-
-    from .softech_gate import _audit_aliases
-    for alias in _audit_aliases():
-        try:
-            staff = None
-            if user_id is not None:
-                staff = StaffProfile.objects.using(alias).filter(user_id=user_id).first()
-            if AuditLog.log(AUDIT_ACTION, user=staff, note=note_text, extra=extra,
-                            using=alias) is not None:
-                return True
-        except Exception as exc:
-            if type(exc).__name__ != 'DatabaseOperationForbidden':
-                log.warning('ws audit write on %s failed - trying the next', alias, exc_info=True)
-    return False
+    """One `ws_zone_denied` row (apps.access.audit). True when a row was saved. Never raises."""
+    from .audit import write_access_audit
+    return write_access_audit(AUDIT_ACTION, user_id, note_text, extra, label='ws')
 
 
 def _note_refusal(scope, user_id, kind, v):
