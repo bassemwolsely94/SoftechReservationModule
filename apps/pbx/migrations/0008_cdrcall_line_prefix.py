@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='cdrcall',
             name='line_prefix',
-            field=models.CharField(blank=True, help_text='81-85 / 91-95: الخط المستخدم في المكالمة (يُحذف من الرقم)', max_length=2, verbose_name='بادئة الخط'),
+            field=models.CharField(blank=True, default='', db_default='', help_text='81-85 / 91-95: الخط المستخدم في المكالمة (يُحذف من الرقم)', max_length=2, verbose_name='بادئة الخط'),
         ),
     ]

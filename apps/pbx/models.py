@@ -590,7 +590,9 @@ class CdrCall(models.Model):
 
     customer_number = models.CharField(max_length=30, blank=True, verbose_name='رقم العميل')
     phone_key       = models.CharField(max_length=15, blank=True, db_index=True)
-    line_prefix     = models.CharField(max_length=2, blank=True, verbose_name='بادئة الخط',
+    # db_default: older code still running against the same DB (e.g. the scheduler before a deploy)
+    # inserts rows without this column
+    line_prefix     = models.CharField(max_length=2, blank=True, default='', db_default='', verbose_name='بادئة الخط',
                                        help_text='81-85 / 91-95: الخط المستخدم في المكالمة (يُحذف من الرقم)')
     agent_ext       = models.CharField(max_length=20, blank=True, db_index=True, verbose_name='التحويلة')
     agent_name      = models.CharField(max_length=100, blank=True, help_text='الاسم كما في السنترال')
