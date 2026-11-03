@@ -13,6 +13,8 @@ import { useQuery } from '@tanstack/react-query'
 import { procurementIntelApi } from '../api/client'
 import { useProcurementFilters } from '../components/ProcurementFilters'
 import useHelpTab from '../help/useHelpTab'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 const fmt  = (n, dp = 2) => n == null ? '—' : Number(n).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp })
 const fmtK = (n)          => n == null ? '—' : `${(Number(n) / 1000).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}K`
@@ -97,6 +99,7 @@ export default function FocAnalysisPage() {
   const foc    = focQ.data
   const expiry = expiryQ.data
   const tax    = taxQ.data
+  const { sorted: taxRows, headerProps: taxH } = useSortableRows(tax?.by_supplier ?? [], { getValue: (s, k) => k === 'supplier' ? (s.supplier_name || s.supplier_code) : s[k] })
 
   const TABS = [
     { id: 'foc',    label: '🎁 تحليل FOC',      data: foc },
@@ -423,6 +426,7 @@ export default function FocAnalysisPage() {
           {/* Top suppliers by tax burden */}
           <div data-tour="purchasing-foc-tax-suppliers" className="md:col-span-2 bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
             <h3 className="font-semibold text-gray-800 mb-3">🏆 أعلى الموردين من حيث العبء الضريبي</h3>
+            <p className="text-[11px] text-gray-400 mb-2">الترتيب بالعناوين على القائمة المعروضة فقط.</p>
             {taxQ.isLoading ? (
               <div className="animate-pulse space-y-2">
                 {[...Array(5)].map((_, i) => <div key={i} className="h-8 bg-gray-100 rounded" />)}
@@ -436,13 +440,13 @@ export default function FocAnalysisPage() {
                 <table className="w-full text-sm">
                   <thead className="border-b border-gray-100">
                     <tr>
-                      {['المورد', 'إجمالي الشراء', 'إجمالي الضريبة', 'نسبة الضريبة'].map(h => (
-                        <th key={h} className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{h}</th>
+                      {[['المورد', 'supplier', 'text'], ['إجمالي الشراء', 'total_value', 'number'], ['إجمالي الضريبة', 'total_vat', 'number'], ['نسبة الضريبة', 'tax_rate_pct', 'number']].map(([h, k, t]) => (
+                        <SortTh key={h} {...taxH(k, t)} className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{h}</SortTh>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {(tax?.by_supplier ?? []).map((s, i) => (
+                    {taxRows.map((s, i) => (
                       <tr key={i} className="hover:bg-gray-50">
                         <td className="px-3 py-2">
                           <div className="font-medium text-gray-800">{s.supplier_name || s.supplier_code}</div>

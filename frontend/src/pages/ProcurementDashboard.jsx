@@ -9,6 +9,8 @@ import { useNavigate } from 'react-router-dom'
 import { procurementIntelApi } from '../api/client'
 import { useProcurementFilters } from '../components/ProcurementFilters'
 import RefreshButton from '../components/RefreshButton'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -148,6 +150,8 @@ export default function ProcurementDashboard() {
   }, [params])
 
   useEffect(() => { load() }, [load])
+
+  const { sorted: topSuppliers, headerProps: tsH } = useSortableRows(data?.top_suppliers || [], {})
 
   const handleTrigger = async () => {
     if (!confirm('تشغيل محرك المشتريات الآن؟')) return
@@ -324,19 +328,20 @@ export default function ProcurementDashboard() {
           </div>
         )}
         <div className="overflow-x-auto">
+          <p className="text-[11px] text-gray-400 mb-1">الترتيب بالعناوين على القائمة المعروضة فقط.</p>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 text-xs text-gray-500">
-                <th className="text-right pb-2 font-medium">المورد</th>
-                <th className="text-right pb-2 font-medium">الدرجة</th>
-                <th className="text-right pb-2 font-medium">الشراء 30ي</th>
-                <th className="text-right pb-2 font-medium">هامش%</th>
-                <th className="text-right pb-2 font-medium">مرتجع%</th>
-                <th className="text-right pb-2 font-medium">أصناف</th>
+                <SortTh {...tsH('supplier_name', 'text')} className="text-right pb-2 font-medium">المورد</SortTh>
+                <SortTh {...tsH('total_score', 'number')} className="text-right pb-2 font-medium">الدرجة</SortTh>
+                <SortTh {...tsH('value_30d', 'number')} className="text-right pb-2 font-medium">الشراء 30ي</SortTh>
+                <SortTh {...tsH('avg_margin_pct', 'number')} className="text-right pb-2 font-medium">هامش%</SortTh>
+                <SortTh {...tsH('return_pct', 'number')} className="text-right pb-2 font-medium">مرتجع%</SortTh>
+                <SortTh {...tsH('distinct_items', 'number')} className="text-right pb-2 font-medium">أصناف</SortTh>
               </tr>
             </thead>
             <tbody>
-              {(data?.top_suppliers || []).map(s => (
+              {topSuppliers.map(s => (
                 <tr
                   key={s.supplier_code}
                   className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"

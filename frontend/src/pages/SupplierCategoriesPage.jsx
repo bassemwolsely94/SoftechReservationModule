@@ -13,6 +13,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { procurementIntelApi } from '../api/client'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 const TONES = {
   blue:   'bg-blue-100 text-blue-800',      green:  'bg-green-100 text-green-800',
@@ -77,6 +79,14 @@ export default function SupplierCategoriesPage() {
     return c ? `${cl} — ${c.ptclassifdescr}` : cl
   }
 
+  const { sorted: sortedCats, headerProps: cH } = useSortableRows(cats, {
+    getValue: (c, k) => (k === 'status' ? (c.is_active ? 1 : 0) : c[k]),
+  })
+  const { sorted: sortedRules, headerProps: rH } = useSortableRows(rules, {
+    getValue: (r, k) => (k === 'type' ? typeLabel(r.ptcode) : k === 'classif' ? classifLabel(r.ptcode, r.ptclassifcode)
+      : k === 'status' ? (r.is_active ? 1 : 0) : r[k]),
+  })
+
   return (
     <div className="p-6 space-y-6" dir="rtl">
       <div className="flex items-center justify-between">
@@ -111,11 +121,12 @@ export default function SupplierCategoriesPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200 text-xs text-gray-600">
-              <tr>{['#', 'الاسم', 'الكود', 'موردون', 'قواعد', 'الحالة', ''].map(h =>
-                <th key={h} className="px-3 py-2 text-right font-semibold whitespace-nowrap">{h}</th>)}</tr>
+              <tr>{[['#', 'sort_order', 'number'], ['الاسم', 'name_ar', 'text'], ['الكود', 'code', 'text'], ['موردون', 'supplier_count', 'number'],
+                ['قواعد', 'rule_count', 'number'], ['الحالة', 'status', 'number'], ['']].map(([h, k, t]) =>
+                <SortTh key={h} {...(k ? cH(k, t) : {})} className="px-3 py-2 text-right font-semibold whitespace-nowrap">{h}</SortTh>)}</tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {cats.map(c => (
+              {sortedCats.map(c => (
                 <tr key={c.id} className="hover:bg-gray-50">
                   <td className="px-3 py-2 text-gray-400">{c.sort_order}</td>
                   <td className="px-3 py-2">
@@ -154,11 +165,12 @@ export default function SupplierCategoriesPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200 text-xs text-gray-600">
-              <tr>{['نوع الشخص', 'التصنيف', 'الفئة', 'الأولوية', 'الحالة', ''].map(h =>
-                <th key={h} className="px-3 py-2 text-right font-semibold whitespace-nowrap">{h}</th>)}</tr>
+              <tr>{[['نوع الشخص', 'type', 'text'], ['التصنيف', 'classif', 'text'], ['الفئة', 'category_name', 'text'],
+                ['الأولوية', 'priority', 'number'], ['الحالة', 'status', 'number'], ['']].map(([h, k, t]) =>
+                <SortTh key={h} {...(k ? rH(k, t) : {})} className="px-3 py-2 text-right font-semibold whitespace-nowrap">{h}</SortTh>)}</tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {rules.map(r => (
+              {sortedRules.map(r => (
                 <tr key={r.id} className="hover:bg-gray-50">
                   <td className="px-3 py-2 text-gray-700">{typeLabel(r.ptcode)}</td>
                   <td className="px-3 py-2 text-gray-600">{classifLabel(r.ptcode, r.ptclassifcode)}</td>
