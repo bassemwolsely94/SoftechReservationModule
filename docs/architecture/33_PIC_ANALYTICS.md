@@ -302,11 +302,14 @@ Branch-manager scope and call visibility: decided 2026-11-02 (§5).
 - **Missed-calls action list** drops a row as soon as ANY answered call (either direction) on its number follows it; the returned / not-returned KPIs keep the 24 h window. A row with a pending call-back (`CallLog` status `callback` on that number, due ≥ the missed call) carries `callback_pending` and a second call-back for it is refused with 409.
 - **Export computes each list once** (internal `page_size=None` = all rows, never reachable from the HTTP params; the API cap stays 200), resolves phone visibility once per user (`customers.access.phones_checker`) and shares the classification / overdue maps within one request. It also carries the overdue sheet and the unanswered-outgoing sheet, with labels instead of codes. Measured on the local dev DB (all branches, management): one month 8.8-14 s; twelve months (2025-11-01..2026-10-31, 45,615 PICs) 55-72 s, noisy machine. That is at nginx's 60 s limit: raise `proxy_read_timeout` for `/api/pic-analytics/export/` (or make it a background job) before offering year-long exports.
 
-### Follow-ups (not built)
+### Follow-ups (built, Task 16)
 
-- PIC search (name / PIC / phone) in the PIC list.
-- Conversion KPI (call → purchase) per agent and per branch.
-- New PICs sold per agent (today one team figure, because SOFTECH user codes are not tied to PBX extensions).
-- Same-day call → purchase subset next to the 7-day figure.
-- `basket_lines` (lines per visit) basket metric.
-- Undo for a number label, and a «labelled numbers» list to review / reverse labels.
+- **PIC search.** `pics/?q=` (and the Excel customers sheet): name contains (any case) OR exact PIC code OR a phone (>= 7 digits) compared by `phone_key` on phone / phone_alt / whatsapp_phone. It narrows the already scoped facts, so a branch manager never finds a PIC outside their branches; the raw phone is never returned, and the filters sheet / audit entry mask a searched phone. Limit 100 characters (`Filters.q`).
+- **Basket lines.** Overview `basket_lines` and group rows `lines_per_visit` = Σ lines / visits; `None` under a category filter.
+- **Same-day call -> purchase.** `calls_by_pic` -> `call_to_purchase_same_day`; call-center rows -> `call_to_purchase_same_day_pct` (same denominator as `call_to_purchase_pct`).
+- **New PICs sold per agent.** Call-center rows carry `new_pics_sold` through `AgentExtension.staff.softech_user_id` (None when the extension has no staff / no user code); `team_new_pics_sold` stays.
+- **Conversion per agent / branch.** `numbers/conversions/` adds `by_agent` (agent of the number's last answered call before the PIC was created) and `by_branch` (branch of the first sale on/after creation; `branch_id` None = not bought).
+- **Labelled numbers + undo.** `GET numbers/labels/` (newest first, masked number, opaque `number_id`) and `POST numbers/labels/<label_id>/delete/` (management; audit `pic_phone_unlabelled` with the old label).
+- **Labelled numbers leave the action list.** Missed rows with `only_not_returned=1` skip labelled phone keys; the KPIs still count them.
+- **Call-back match by number.** The pending marker and the 409 check compare `phone_key` (so `+20...` and `01...` are one number) and run inside a transaction that locks the number's `CdrCall` rows.
+- **Segment label** (not the code) in missed rows (`segment`; the code is `segment_code`) and the Excel sheets; the filter-option copy no longer shares the request memo; the export file name already uses the effective (clamped) period.
