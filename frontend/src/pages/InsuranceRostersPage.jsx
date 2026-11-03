@@ -6,13 +6,12 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
-import useSortableRows from '../hooks/useSortableRows'
+import useServerSort from '../hooks/useServerSort'
 import SortTh from '../components/SortTh'
 
 const inp = 'border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500'
 const SRC = { history: 'مطالبات سابقة', list: 'قائمة', decision: 'قرار مراجع' }
-const DEFAULT_SORT = { key: 'last', dir: 'desc', type: 'date' }
-const rosterValue = (m, k) => (k === 'elsewhere' ? m.other_companies.length : m[k])
+const SORT_KEYS = ['name', 'subclient', 'group_label', 'count', 'last', 'elsewhere']   // the server sorts ALL members before its 3000 cut
 
 export default function InsuranceRostersPage() {
   const navigate = useNavigate()
@@ -25,6 +24,7 @@ export default function InsuranceRostersPage() {
   const [loading, setLoading] = useState(false)
   const [err, setErr]         = useState(null)
   const [onlyElsewhere, setOnlyElsewhere] = useState(false)
+  const [ordering, setOrdering] = useState('')
 
   useEffect(() => {
     Promise.all([insuranceApi.clients(), insuranceApi.subclients()]).then(([c, sc]) => {
@@ -32,20 +32,20 @@ export default function InsuranceRostersPage() {
     }).catch(() => {})
   }, [])
 
-  const load = (query = q) => {
+  const load = (query = q, order = ordering) => {
     if (!clientId) return
     setLoading(true); setErr(null)
-    insuranceApi.rosters({ client_id: clientId, subclient_id: subId || undefined, q: query || undefined })
+    insuranceApi.rosters({ client_id: clientId, subclient_id: subId || undefined, q: query || undefined, ordering: order || undefined })
       .then(r => setData(r.data))
       .catch(e => setErr(e.response?.data?.error || 'تعذّر تحميل السجل'))
       .finally(() => setLoading(false))
   }
   useEffect(() => { load() }, [clientId, subId])   // eslint-disable-line
 
-  const filtered = useMemo(
+  const members = useMemo(
     () => (data?.members || []).filter(m => !onlyElsewhere || m.other_companies.length),
     [data, onlyElsewhere])
-  const { sorted: members, headerProps } = useSortableRows(filtered, { defaultSort: DEFAULT_SORT, getValue: rosterValue })
+  const { headerProps } = useServerSort(ordering, o => { setOrdering(o); load(q, o) }, { allowed: SORT_KEYS })
   const Th = (k, label, type = 'text', align = 'right') => (
     <SortTh {...headerProps(k, type)} className={`text-${align} px-2 py-2 font-semibold whitespace-nowrap`}>{label}</SortTh>
   )

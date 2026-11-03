@@ -232,7 +232,7 @@ export default function InsuranceReportsPage() {
           {tab === 'motalbas' && (
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2 text-xs" data-tour="insurance-reports-order">
-                <span className="text-gray-500">ترتيب المطالبات (يُطبَّق على التصدير):</span>
+                <span className="text-gray-500" title="الضغط على عنوان أى عمود فى الجدول يغيّر الترتيب ويغيّر ترتيب التصدير أيضاً">ترتيب المطالبات (يُطبَّق على التصدير — والضغط على عنوان عمود يغيّره أيضاً):</span>
                 {[['period_from', 'الفترة', 'asc', 'date'], ['client', 'الجهة', 'asc'], ['net', 'الصافى', 'desc', 'number'], ['gp_pct', 'نسبة الربح', 'desc', 'number'], ['claim_number', 'الرقم', 'asc']].map(([k, l, d, t]) => (
                   <button key={k} onClick={() => sortOrder(k, d, t)} className="px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50">{l}</button>
                 ))}

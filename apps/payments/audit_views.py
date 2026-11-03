@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from django.db.models import Q
 
 from core import branch_scope
+from core.stable_ordering import StableOrderingMixin
 from core.permissions import MatrixPermission
 
 from .audit_serializers import (
@@ -44,7 +45,7 @@ def _require_role(request, allowed_roles):
     return False
 
 
-class BankStatementImportViewSet(viewsets.ModelViewSet):
+class BankStatementImportViewSet(StableOrderingMixin, viewsets.ModelViewSet):
     """Upload CSV/XLSX bank statements and trigger automatic matching."""
     serializer_class    = BankStatementImportSerializer
     parser_classes      = [MultiPartParser, FormParser]
@@ -126,7 +127,7 @@ class BankStatementLineViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-class PaymentExceptionViewSet(viewsets.ReadOnlyModelViewSet):
+class PaymentExceptionViewSet(StableOrderingMixin, viewsets.ReadOnlyModelViewSet):
     """Triage, assign, and resolve payment exceptions.
 
     Read-only apart from resolve / dismiss / assign (Batch 4, Z-10a): exceptions are raised by the
@@ -137,7 +138,7 @@ class PaymentExceptionViewSet(viewsets.ReadOnlyModelViewSet):
     rbac_module        = 'finance'
     rbac_actions       = {'resolve': ('approve',), 'dismiss': ('approve',), 'assign': ('assign', 'approve')}
     # sortable headers of the exceptions grid (paged list: the server sorts all rows)
-    ordering_fields    = ['exception_type', 'payment__amount', 'payment__transaction_ref', 'status', 'created_at']
+    ordering_fields    = ['exception_type', 'payment__amount', 'payment__reference_number', 'status', 'created_at']
 
     def get_queryset(self):
         qs = PaymentException.objects.select_related(

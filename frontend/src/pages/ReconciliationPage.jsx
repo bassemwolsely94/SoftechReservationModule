@@ -1191,7 +1191,7 @@ function UnpaidTab({ scope }) {
     queryFn: () => reconciliationApi.unpaid(params).then(r => r.data),
     enabled: status !== 'partial',
   })
-  const { sorted: sortedSuppliers, headerProps: supHead } = useSortableRows(data?.suppliers)   // every supplier is loaded; the top 40 are cut AFTER sorting
+  const { sorted: sortedSuppliers, headerProps: supHead } = useSortableRows(data?.suppliers)   // the server returns the top 200 suppliers; sorting covers those 200, the top 40 are cut AFTER sorting
   const t = data?.totals
   const [exportError, setExportError] = useState(null)
   const exportXlsx = async () => {
@@ -1257,6 +1257,7 @@ function UnpaidTab({ scope }) {
       {isError && <div className="text-red-600 text-sm">تعذّر تحميل التقرير</div>}
       {data && (
         <>
+          <div className="text-[11px] text-gray-400">الترتيب هنا يشمل أكبر 200 مورد (يُعرض أول 40).</div>
           <div className="border border-gray-200 rounded-lg overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-gray-50 text-gray-500">

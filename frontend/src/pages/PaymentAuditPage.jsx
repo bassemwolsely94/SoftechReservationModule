@@ -9,7 +9,7 @@ import useHelpTab from '../help/useHelpTab'
 import useServerSort from '../hooks/useServerSort'
 import SortTh from '../components/SortTh'
 
-const EXC_SORT = ['exception_type', 'payment__amount', 'payment__transaction_ref', 'status', 'created_at']
+const EXC_SORT = ['exception_type', 'payment__amount', 'payment__reference_number', 'status', 'created_at']
 const STMT_SORT = ['id', 'total_lines', 'matched_lines', 'status', 'imported_at']
 
 const EXCEPTION_TYPE_LABELS = {
@@ -196,7 +196,7 @@ export default function PaymentAuditPage() {
                 <tr className="bg-gray-50 border-b border-gray-200">
                   <SortTh {...excSort('exception_type')} className="px-4 py-3 text-right font-semibold text-gray-600">نوع الاستثناء</SortTh>
                   <SortTh {...excSort('payment__amount', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">المبلغ</SortTh>
-                  <SortTh {...excSort('payment__transaction_ref')} className="px-4 py-3 text-right font-semibold text-gray-600">المرجع</SortTh>
+                  <SortTh {...excSort('payment__reference_number')} className="px-4 py-3 text-right font-semibold text-gray-600">المرجع</SortTh>
                   <SortTh {...excSort('status')} className="px-4 py-3 text-right font-semibold text-gray-600">الحالة</SortTh>
                   <SortTh {...excSort('created_at', 'date')} className="px-4 py-3 text-right font-semibold text-gray-600">التاريخ</SortTh>
                   <th className="px-4 py-3"></th>
@@ -209,10 +209,10 @@ export default function PaymentAuditPage() {
                       {EXCEPTION_TYPE_LABELS[ex.exception_type] || ex.exception_type}
                     </td>
                     <td className="px-4 py-3 font-semibold">
-                      {ex.amount ? Number(ex.amount).toLocaleString('ar-EG') + ' ج' : '—'}
+                      {ex.payment_amount ? Number(ex.payment_amount).toLocaleString('ar-EG') + ' ج' : '—'}
                     </td>
                     <td className="px-4 py-3 text-gray-500 font-mono text-xs">
-                      {ex.reference || '—'}
+                      {ex.payment_ref || '—'}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${EXCEPTION_STATUS_COLORS[ex.status] || 'bg-gray-100'}`}>
@@ -287,7 +287,7 @@ export default function PaymentAuditPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-500 text-xs">
-                      {s.created_at ? new Date(s.created_at).toLocaleDateString('ar-EG') : '—'}
+                      {s.imported_at ? new Date(s.imported_at).toLocaleDateString('ar-EG') : '—'}
                     </td>
                     <td className="px-4 py-3">
                       {s.status === 'pending' && (

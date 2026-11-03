@@ -5,6 +5,7 @@ All views require IsAuthenticated.
 Trigger endpoints (sync, discover) additionally require admin/pharmacist role.
 """
 
+from core.stable_ordering import StableOrderingMixin
 from decimal import Decimal
 
 from django.db.models import Count, Sum
@@ -172,7 +173,7 @@ class FinancialPeriodListView(generics.ListAPIView):
 # CHART OF ACCOUNTS
 # ══════════════════════════════════════════════════════════════════════════════
 
-class AccountListView(generics.ListAPIView):
+class AccountListView(StableOrderingMixin, generics.ListAPIView):
     permission_classes = [IsAuthenticated, FINANCE]
     serializer_class   = AccountSerializer
     filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
@@ -452,7 +453,7 @@ def cash_flow_summary(request):
 # EXPENSES
 # ══════════════════════════════════════════════════════════════════════════════
 
-class ExpenseRecordListView(generics.ListAPIView):
+class ExpenseRecordListView(StableOrderingMixin, generics.ListAPIView):
     permission_classes = [IsAuthenticated, FINANCE]
     serializer_class   = ExpenseRecordSerializer
     filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
