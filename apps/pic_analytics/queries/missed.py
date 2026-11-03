@@ -10,13 +10,14 @@ from collections import Counter, defaultdict
 from decimal import Decimal
 from statistics import median
 
-from django.db.models import Max, Sum
+from django.db.models import Max, Q, Sum
 from django.utils import timezone
 
 from apps.customers import access as cust_access
 from apps.customers.models import Customer
+from apps.pbx.cdr import phone_key
 from apps.pbx.models import AgentExtension
-from apps.pic_analytics.models import PicDayFact
+from apps.pic_analytics.models import PhoneLabel, PicDayFact
 from apps.pic_analytics.queries.calls import (
     _day, _followed_by_purchase, _purchase_days, calls_qs, reach_stats, returned_map)
 from apps.pic_analytics.queries.retention import MAX_PAGE_SIZE, _int_param
@@ -39,23 +40,36 @@ def _minutes(call, returned_at):
     return round((returned_at - call.call_at).total_seconds() / 60, 1)
 
 
-def _pending_callbacks(calls) -> dict:
-    """{call id: {'due': iso}} for missed calls whose number already has a scheduled call-back
-    (CallLog status='callback' on that number, due at/after the missed call)."""
+def callback_dues(calls) -> dict:
+    """{call id: [due datetimes]} of the scheduled call-backs (CallLog status='callback', due at/after
+    the missed call) on each call's NUMBER. The number is compared as a phone_key, so '+20100...',
+    '0100...' and '100...' are the same number; a call with no usable key falls back to the raw string."""
     from apps.callcenter.models import CallLog
-    numbers = {c.customer_number for c in calls if c.customer_number}
-    if not numbers:
+    calls = list(calls)
+    keys = {c.phone_key for c in calls if c.phone_key}
+    raws = {c.customer_number for c in calls if c.customer_number and not c.phone_key}
+    if not keys and not raws:
         return {}
-    logs = defaultdict(list)
-    for num, due in (CallLog.objects.filter(status='callback', phone_number__in=numbers, callback_due__isnull=False)
+    cond = Q(phone_number__in=raws)
+    for k in keys:
+        cond |= Q(phone_number__endswith=k[-9:])
+    by_key, by_raw = defaultdict(list), defaultdict(list)
+    for num, due in (CallLog.objects.filter(cond, status='callback', callback_due__isnull=False)
                      .values_list('phone_number', 'callback_due')):
-        logs[num].append(due)
+        k = phone_key(num)
+        (by_key if k else by_raw)[k or num].append(due)
     out = {}
     for c in calls:
-        dues = [d for d in logs.get(c.customer_number, ()) if d >= c.call_at]
+        pool = by_key.get(c.phone_key) if c.phone_key else by_raw.get(c.customer_number)
+        dues = [d for d in pool or () if d >= c.call_at]
         if dues:
-            out[c.id] = {'due': timezone.localtime(min(dues)).isoformat()}
+            out[c.id] = dues
     return out
+
+
+def _pending_callbacks(calls) -> dict:
+    """{call id: {'due': iso}} for missed calls whose number already has a scheduled call-back."""
+    return {cid: {'due': timezone.localtime(min(dues)).isoformat()} for cid, dues in callback_dues(calls).items()}
 
 
 def missed_summary(f, access) -> dict:
@@ -89,7 +103,10 @@ def missed_rows(f, access, only_not_returned, page, page_size=50) -> dict:
     if only_not_returned:
         # the action list: a row leaves as soon as ANY answered call on its number follows it (no 24 h cut-off)
         followed = returned_map(calls, any_time=True)
-        calls = [c for c in calls if followed[c.id] is None]
+        # a labelled number (staff / supplier / branch / doctor / spam / other) is not a customer to call
+        # back: it leaves the action list, while the KPIs above keep counting it
+        labelled = set(PhoneLabel.objects.values_list('phone_key', flat=True))
+        calls = [c for c in calls if followed[c.id] is None and c.phone_key not in labelled]
 
     pics = {c.pic for c in calls if c.pic}
     life = {r['pic']: r['s'] or Decimal('0') for r in PicDayFact.objects.filter(pic__in=pics, day__lte=f.end)
@@ -108,6 +125,7 @@ def missed_rows(f, access, only_not_returned, page, page_size=50) -> dict:
     window = int(setting('pic_call_purchase_days'))
     can_see = cust_access.phones_checker(getattr(access.profile, 'user', None))
     pending = _pending_callbacks(chunk)
+    seg_labels = dict(Customer.SEGMENT_CHOICES)
     rows = []
     for c in chunk:
         cust = c.customer if c.customer_id else customers.get(c.pic)
@@ -115,7 +133,9 @@ def missed_rows(f, access, only_not_returned, page, page_size=50) -> dict:
             'call_id': c.id, 'call_at': timezone.localtime(c.call_at).isoformat(),
             'customer_number': c.customer_number, 'queue': c.queue,
             'pic': c.pic, 'shared_pics': c.shared_pics or [],
-            'customer_name': cust.name if cust else '', 'segment': cust.segment if cust else '',
+            'customer_name': cust.name if cust else '',
+            'segment': seg_labels.get(cust.segment, cust.segment) if cust else '',
+            'segment_code': cust.segment if cust else '',
             'last_purchase': last.get(c.pic) if c.pic else None,
             'lifetime_net': life.get(c.pic) if c.pic else None,
             'bought_within_7d': bool(c.pic) and _followed_by_purchase(c.pic, _day(c.call_at), days, window),

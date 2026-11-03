@@ -10,9 +10,8 @@ from dataclasses import replace
 from django.db.models import CharField, F, Func
 
 from apps.customers.models import Customer
-from apps.pbx.models import AgentExtension
 from apps.pic_analytics.queries import groups
-from apps.pic_analytics.queries.calls import calls_qs
+from apps.pic_analytics.queries.calls import agent_labels, calls_qs
 
 FREQUENCY_LABELS = [
     ('m1', 'كل شهر أو أقل'), ('m2', 'كل شهرين'), ('m3', 'كل 3 شهور'),
@@ -22,7 +21,7 @@ FREQUENCY_LABELS = [
 
 def filter_options(f, access) -> dict:
     base = replace(f, salesperson='', channel_bucket='', category='', segment='', customer_type='',
-                   frequency='', agent_ext='')
+                   frequency='', agent_ext='', q='', memo={})
     facts = base.facts(access, pic_filters=False)
 
     label_of = groups.salesperson_labeler()
@@ -55,13 +54,6 @@ def filter_options(f, access) -> dict:
     }
     if access.sees_calls_tabs:
         exts = sorted(set(calls_qs(base).exclude(agent_ext='').values_list('agent_ext', flat=True).distinct()))
-        names_by_ext = {e.extension: e for e in AgentExtension.objects.filter(extension__in=exts)
-                        .select_related('staff__user')}
-        pbx = dict(calls_qs(base).exclude(agent_ext='').values_list('agent_ext', 'agent_name').distinct())
-        agents = []
-        for x in exts:
-            e = names_by_ext.get(x)
-            name = (e.staff.full_name if e and e.staff else '') or (e.pbx_name if e else '') or pbx.get(x) or x
-            agents.append({'ext': x, 'label': f'{name} ({x})'})
-        out['agents'] = agents
+        labels = agent_labels(exts)
+        out['agents'] = [{'ext': x, 'label': labels[x]} for x in exts]
     return out

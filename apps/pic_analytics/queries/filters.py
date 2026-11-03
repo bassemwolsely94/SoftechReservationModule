@@ -18,6 +18,7 @@ from apps.pic_analytics.models import PicDayFact
 from apps.pic_analytics.queries.frequency import pics_in_bucket
 
 HISTORY_START = date(2024, 8, 1)
+MAX_SEARCH_LEN = 100
 
 
 class FilterError(ValueError):
@@ -46,6 +47,7 @@ class Filters:
     segment: str = ''
     customer_type: str = ''
     frequency: str = ''
+    q: str = ''                  # PIC list search (name / PIC code / phone); read by pics.pic_rows only
     data_from: date = HISTORY_START
     data_to: date = field(default_factory=timezone.localdate)
     clamped: bool = False
@@ -77,9 +79,11 @@ class Filters:
             except ValueError:
                 raise FilterError('رقم الفرع غير صالح')
         g = lambda k: (params.get(k) or '').strip()      # noqa: E731
+        if len(g('q')) > MAX_SEARCH_LEN:
+            raise FilterError('نص البحث طويل جدًا')
         return cls(start=start, end=end, branch_ids=branch_ids, salesperson=g('salesperson'),
                    agent_ext=g('agent'), channel_bucket=g('channel'), category=g('category'),
-                   segment=g('segment'), customer_type=g('customer_type'), frequency=g('frequency'),
+                   segment=g('segment'), customer_type=g('customer_type'), frequency=g('frequency'), q=g('q'),
                    data_from=data_from, data_to=data_to, clamped=clamped)
 
     # ── the fact rows every query reads ──────────────────────────────────────────────────────

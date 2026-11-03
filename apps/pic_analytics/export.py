@@ -54,7 +54,7 @@ OVERVIEW_ITEMS = [
     ('distinct_pics', 'العملاء (PIC)'), ('new', 'جدد'), ('returning', 'عائدون'), ('reactivated', 'معاد تنشيطهم'),
     ('visits', 'الزيارات'), ('invoices', 'الفواتير'), ('net', 'صافي المبيعات'), ('units', 'الوحدات'),
     ('basket_net', 'متوسط صافي السلة'), ('basket_units', 'متوسط وحدات السلة'),
-    ('basket_categories', 'متوسط أصناف السلة'), ('visits_per_pic', 'زيارات لكل عميل'),
+    ('basket_categories', 'متوسط أصناف السلة'), ('basket_lines', 'متوسط بنود السلة'), ('visits_per_pic', 'زيارات لكل عميل'),
     ('retention_pct', 'الاستبقاء %'), ('no_pic_net', 'مبيعات بدون PIC'),
     ('gp', 'الربح الإجمالي'), ('gp_pct', 'هامش الربح %'),
     ('calls_in', 'مكالمات واردة'), ('calls_out', 'مكالمات صادرة'), ('missed_not_returned', 'فائتة لم يُردّ عليها'),
@@ -70,16 +70,18 @@ PIC_COLS = [
     ('overdue', 'متأخر'),
     ('calls_in', 'مكالمات واردة'), ('calls_out', 'مكالمات صادرة'), ('missed', 'فائتة'),
     ('last_call', 'آخر مكالمة'), ('talk_time', 'مدة الحديث (ث)'), ('call_to_purchase', 'مكالمة ثم شراء'),
+    ('call_to_purchase_same_day', 'مكالمة ثم شراء نفس اليوم'),
 ]
 GROUP_COLS = [
     ('label', 'البند'), ('distinct_pics', 'العملاء'), ('new', 'جدد'), ('returning', 'عائدون'),
     ('reactivated', 'معاد تنشيطهم'), ('visits', 'الزيارات'), ('net', 'صافي المبيعات'), ('gp', 'الربح الإجمالي'),
-    ('basket_net', 'صافي السلة'), ('units_per_visit', 'وحدات لكل زيارة'),
+    ('basket_net', 'صافي السلة'), ('units_per_visit', 'وحدات لكل زيارة'), ('lines_per_visit', 'بنود لكل زيارة'),
 ]
 CENTER_COLS = [
     ('agent_ext', 'التحويلة'), ('staff_name', 'الموظف'), ('pbx_name', 'اسم السنترال'), ('calls_in', 'واردة'),
     ('calls_out', 'صادرة'), ('answered', 'مجابة'), ('talk_seconds', 'مدة الحديث (ث)'),
     ('pics_reached', 'عملاء تم الوصول لهم'), ('call_to_purchase_pct', 'مكالمة ثم شراء %'),
+    ('call_to_purchase_same_day_pct', 'مكالمة ثم شراء نفس اليوم %'), ('new_pics_sold', 'عملاء جدد باعهم'),
     ('unanswered_out', 'صادرة بلا رد'), ('avg_attempts_to_reach', 'متوسط المحاولات'), ('not_reached', 'لم يتم الوصول'),
 ]
 MISSED_COLS = [
@@ -112,12 +114,19 @@ def _segment_labels():
     return dict(Customer.SEGMENT_CHOICES)
 
 
+def _q_shown(q):
+    """The search text as echoed in the file / audit entry: a phone is never written out."""
+    from apps.customers.access import mask
+    from apps.pbx.cdr import phone_key
+    return mask(q) if phone_key(q) else q
+
+
 def filters_dict(f):
     """The active filters as plain JSON (the audit entry and the filters sheet)."""
     return {'from': f.start.isoformat(), 'to': f.end.isoformat(),
             'branch': sorted(f.branch_ids) if f.branch_ids else [], 'salesperson': f.salesperson,
             'agent': f.agent_ext, 'channel': f.channel_bucket, 'category': f.category, 'segment': f.segment,
-            'customer_type': f.customer_type, 'frequency': f.frequency,
+            'customer_type': f.customer_type, 'frequency': f.frequency, 'q': _q_shown(f.q),
             'data_from': f.data_from.isoformat(), 'data_to': f.data_to.isoformat(), 'clamped': f.clamped}
 
 
@@ -187,9 +196,8 @@ def _cols(cols, access):
 def build_workbook(f, access, exported_by='', calls_f=None):
     """-> (bytes, {sheet: rows written}). Only called for a user who may export.
     calls_f: the same filters run to today (calls are live) for the calls sheets; defaults to f."""
-    from apps.branches.models import Branch
     book = _Book()
-    branch_names = {b.pk: f'{b.softech_branch_id} · {b.name_ar or b.name}' for b in Branch.objects.all()}
+    branch_names = groups.branch_labels()
 
     # 1. filters and definitions
     ws = book.sheet(S_FILTERS, ['البند', 'القيمة'], [34, 90])
@@ -201,7 +209,7 @@ def build_workbook(f, access, exported_by='', calls_f=None):
         ('القناة', CHANNEL_LABELS.get(f.channel_bucket, f.channel_bucket) or 'الكل'),
         ('الصنف', f.category or 'الكل'), ('الشريحة', f.segment or 'الكل'),
         ('نوع العميل', f.customer_type or 'الكل'), ('فئة التكرار', f.frequency or 'الكل'),
-        ('تحويلة الموظف', f.agent_ext or 'الكل'),
+        ('تحويلة الموظف', f.agent_ext or 'الكل'), ('بحث (ورقة العملاء فقط)', _q_shown(f.q) or 'بدون'),
         ('بيانات متاحة من', f.data_from.isoformat()), ('بيانات متاحة حتى', f.data_to.isoformat()),
         ('الفترة قُصّت على نطاق البيانات', 'نعم' if f.clamped else 'لا'),
         ('تاريخ التصدير', timezone.localtime().strftime('%Y-%m-%d %H:%M')), ('المصدّر', exported_by),

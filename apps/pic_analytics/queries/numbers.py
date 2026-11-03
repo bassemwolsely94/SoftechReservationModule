@@ -19,7 +19,8 @@ from apps.customers import access as cust_access
 from apps.customers.models import Customer
 from apps.pbx.models import AgentExtension, CdrCall
 from apps.pic_analytics.models import PhoneLabel, PicDayFact
-from apps.pic_analytics.queries.calls import _day, calls_qs
+from apps.pic_analytics.queries import groups
+from apps.pic_analytics.queries.calls import _day, agent_labels, calls_qs
 from apps.pic_analytics.queries.retention import MAX_PAGE_SIZE, _int_param
 
 DENIED = 'تبويب الأرقام الجديدة للإدارة فقط'
@@ -115,7 +116,52 @@ def conversions(f, access) -> dict:
         cust_access.mask_fields(row, ['number'], bool(user is not None and cust_access.phones_visible(user, c)))
         rows.append(row)
     return {'became_pic': len(first), 'became_pic_and_bought': sum(1 for p in first if bought[p]),
+            'by_agent': _by_agent(first, custs, bought), 'by_branch': _by_branch(first, custs, bought),
             'rows': rows}
+
+
+def _split(first, bought, key_of):
+    """{key: [became_pic, became_pic_and_bought]} over the converted PICs."""
+    out = defaultdict(lambda: [0, 0])
+    for p in first:
+        o = out[key_of(p)]
+        o[0] += 1
+        o[1] += 1 if bought[p] else 0
+    return out
+
+
+def _by_agent(first, custs, bought):
+    """Per agent: the one on the number's LAST ANSWERED call before the PIC was created ('' = none)."""
+    keys = {k for k, _n, _a in first.values()}
+    calls = defaultdict(list)
+    for key, ext, at in (CdrCall.objects.filter(phone_key__in=keys, status='answered', is_transfer=False)
+                         .order_by('call_at').values_list('phone_key', 'agent_ext', 'call_at')):
+        calls[key].append((_day(at), ext))
+    agent = {}
+    for p, (key, _n, _a) in first.items():
+        agent[p] = ''
+        for day, ext in calls.get(key, ()):             # ascending: the last one before creation wins
+            if day < custs[p].softech_created_at:
+                agent[p] = ext
+    split = _split(first, bought, agent.get)
+    labels = agent_labels(split)
+    rows = [{'agent_ext': ext, 'label': labels.get(ext) or 'غير محدد', 'became_pic': n, 'became_pic_and_bought': b}
+            for ext, (n, b) in split.items()]
+    return sorted(rows, key=lambda r: (-r['became_pic'], r['agent_ext']))
+
+
+def _by_branch(first, custs, bought):
+    """Per branch of the PIC's first sale on/after it was created (None = not bought yet)."""
+    where = {}
+    for pic, day, branch_id in (PicDayFact.objects.filter(pic__in=list(first), invoices__gt=0)
+                                .order_by('day', 'branch_id').values_list('pic', 'day', 'branch_id')):
+        if pic not in where and day >= custs[pic].softech_created_at:
+            where[pic] = branch_id
+    split = _split(first, bought, lambda p: where.get(p) if bought[p] else None)
+    names = groups.branch_labels()
+    rows = [{'branch_id': b, 'label': names.get(b) or ('لم يشترِ بعد' if b is None else str(b)),
+             'became_pic': n, 'became_pic_and_bought': bo} for b, (n, bo) in split.items()]
+    return sorted(rows, key=lambda r: (-r['became_pic'], str(r['branch_id'])))
 
 
 def label_number(phone_key, label, note, staff) -> PhoneLabel:
@@ -136,3 +182,39 @@ def label_number(phone_key, label, note, staff) -> PhoneLabel:
     AuditLog.log('pic_phone_labelled', user=staff, obj=pl, old_data=before,
                  new_data={'label': label, 'note': note}, note=phone_key)
     return pl
+
+
+def labelled_numbers(access, page, page_size=50) -> dict:
+    """The numbers someone labelled (newest first) so a wrong label can be reviewed and undone.
+    Rows carry `phone_key` (the HTTP layer swaps it for an opaque number_id) and a masked number."""
+    _require(access)
+    page = _int_param(page, 'الصفحة', 1)
+    page_size = _int_param(page_size, 'حجم الصفحة', 1, MAX_PAGE_SIZE)
+    qs = PhoneLabel.objects.select_related('created_by__user').order_by('-created_at', '-pk')
+    chunk = list(qs[(page - 1) * page_size: page * page_size])
+    shown = {}
+    for key, number in (CdrCall.objects.filter(phone_key__in=[p.phone_key for p in chunk], is_transfer=False)
+                        .exclude(customer_number='').order_by('call_at', 'pk')
+                        .values_list('phone_key', 'customer_number')):
+        shown[key] = number                                    # last assignment = latest call
+    labels = dict(PhoneLabel.LABEL_CHOICES)
+    rows = []
+    for pl in chunk:
+        row = {'label_id': pl.pk, 'phone_key': pl.phone_key, 'number': shown.get(pl.phone_key, ''),
+               'label': pl.label, 'label_display': labels.get(pl.label, pl.label), 'note': pl.note,
+               'created_by': pl.created_by.full_name if pl.created_by_id else '',
+               'created_at': timezone.localtime(pl.created_at).isoformat()}
+        cust_access.mask_fields(row, ['number'], False)         # a labelled number is not a customer: masked
+        rows.append(row)
+    return {'count': qs.count(), 'rows': rows}
+
+
+def unlabel_number(label_id, staff):
+    """Delete a PhoneLabel (the number returns to «new numbers» / the missed-call action list) and audit it."""
+    pl = PhoneLabel.objects.filter(pk=label_id).first()
+    if pl is None:
+        return None
+    before = {'label': pl.label, 'note': pl.note}
+    AuditLog.log('pic_phone_unlabelled', user=staff, obj=pl, old_data=before, new_data=None, note=pl.phone_key)
+    pl.delete()
+    return before

@@ -83,7 +83,7 @@ def retention_pct_for(f, access, current_pics):
 def overview(f, access) -> dict:
     qs = f.facts(access).exclude(pic='')
     per_pic = list(qs.values('pic').annotate(
-        s_net=Sum('enet'), s_gp=Sum('gp'), s_gpnet=Sum('gp_net'), s_units=Sum('units'), s_inv=Sum('invoices'),
+        s_net=Sum('enet'), s_gp=Sum('gp'), s_gpnet=Sum('gp_net'), s_units=Sum('units'), s_inv=Sum('invoices'), s_lines=Sum('lines'),
         s_vis=Count('day', distinct=True, filter=Q(invoices__gt=0))))
     visitors = [r for r in per_pic if r['s_vis'] > 0]
     n_pics = len(visitors)
@@ -93,6 +93,7 @@ def overview(f, access) -> dict:
     gp_net = sum((r['s_gpnet'] or ZERO for r in per_pic), ZERO)
     units = sum((r['s_units'] or ZERO for r in per_pic), ZERO)
     invoices = sum(r['s_inv'] or 0 for r in per_pic)
+    lines = sum(r['s_lines'] or 0 for r in per_pic)
 
     labels = classify_visitors(f, access)
     n_new = sum(1 for r in visitors if labels.get(r['pic']) == 'new')
@@ -139,6 +140,7 @@ def overview(f, access) -> dict:
         'units': None if f.category else units,
         'basket_net': round(net / visits, 2) if visits else None,
         'basket_units': None if f.category or not visits else round(units / visits, 2),
+        'basket_lines': None if f.category or not visits else round(lines / visits, 2),
         'basket_categories': None if f.category else basket_categories,
         'visits_per_pic': round(visits / n_pics, 2) if n_pics else None,
         'retention_pct': retention_pct,

@@ -27,11 +27,12 @@ def _qs(f, access):
 
 
 def _row(key, label, pic_stats, labels, new_pics, access, f):
-    """pic_stats: {pic: (net, gp, units, visits)} for one group; gp = KPI-board gross profit."""
+    """pic_stats: {pic: (net, gp, units, visits, lines)} for one group; gp = KPI-board gross profit."""
     visitors = [p for p, s in pic_stats.items() if s[3] > 0]
     visits = sum(s[3] for s in pic_stats.values() if s[3] > 0)
     net = sum((s[0] for s in pic_stats.values()), ZERO)
     units = sum((s[2] for s in pic_stats.values()), ZERO)
+    lines = sum(s[4] for s in pic_stats.values())
     row = {
         'key': key, 'label': label, 'distinct_pics': len(visitors),
         'new': sum(1 for p in visitors if p in new_pics),
@@ -40,6 +41,7 @@ def _row(key, label, pic_stats, labels, new_pics, access, f):
         'visits': visits, 'net': net,
         'basket_net': round(net / visits, 2) if visits else None,
         'units_per_visit': round(units / visits, 2) if visits and not f.category else None,
+        'lines_per_visit': round(lines / visits, 2) if visits and not f.category else None,
     }
     if access.sees_cost:
         row['gp'] = None if f.category else sum((s[1] for s in pic_stats.values()), ZERO)
@@ -48,21 +50,21 @@ def _row(key, label, pic_stats, labels, new_pics, access, f):
 
 def _aggregate(qs, *group_fields):
     return qs.values(*group_fields, 'pic').annotate(
-        s_net=Sum('enet'), s_gp=Sum('gp'), s_units=Sum('units'),
+        s_net=Sum('enet'), s_gp=Sum('gp'), s_units=Sum('units'), s_lines=Sum('lines'),
         s_vis=Count('day', distinct=True, filter=Q(invoices__gt=0)))
 
 
 def _pic_stats(qs, group_field):
-    """{group_key: {pic: (net, gp, units, visits)}} — visits = distinct days with invoices > 0."""
+    """{group_key: {pic: (net, gp, units, visits, lines)}} — visits = distinct days with invoices > 0."""
     out = {}
     for r in _aggregate(qs, group_field):
         out.setdefault(r[group_field], {})[r['pic']] = (
-            r['s_net'] or ZERO, r['s_gp'] or ZERO, r['s_units'] or ZERO, r['s_vis'])
+            r['s_net'] or ZERO, r['s_gp'] or ZERO, r['s_units'] or ZERO, r['s_vis'], r['s_lines'] or 0)
     return out
 
 
 def _pic_stats_all(qs):
-    return {r['pic']: (r['s_net'] or ZERO, r['s_gp'] or ZERO, r['s_units'] or ZERO, r['s_vis'])
+    return {r['pic']: (r['s_net'] or ZERO, r['s_gp'] or ZERO, r['s_units'] or ZERO, r['s_vis'], r['s_lines'] or 0)
             for r in _aggregate(qs)}
 
 
@@ -90,9 +92,14 @@ def _grouped(f, access, field, label_of, first_index):
     return {'rows': rows, 'total': _row('all', 'الإجمالي', _pic_stats_all(qs), labels, new_pics, access, f)}
 
 
-def by_branch(f, access) -> dict:
+def branch_labels() -> dict:
+    """{branch pk: «code · name»} - never a bare branch code (shared with the conversion split)."""
     from apps.branches.models import Branch
-    names = {b.pk: f'{b.softech_branch_id} · {b.name_ar or b.name}' for b in Branch.objects.all()}
+    return {b.pk: f'{b.softech_branch_id} · {b.name_ar or b.name}' for b in Branch.objects.all()}
+
+
+def by_branch(f, access) -> dict:
+    names = branch_labels()
     return _grouped(f, access, 'branch_id', lambda k: names.get(k, 'بدون فرع' if k is None else str(k)), 0)
 
 
@@ -172,7 +179,7 @@ def by_category(f, access) -> dict:
             'reactivated': sum(1 for p in pics if labels.get(p) == 'reactivated'),
             'visits': b['visits'], 'net': b['net'],
             'basket_net': round(b['net'] / b['visits'], 2) if b['visits'] else None,
-            'units_per_visit': None,
+            'units_per_visit': None, 'lines_per_visit': None,
         }
         if access.sees_cost:
             row['gp'] = None      # gp is per whole fact row, never split by category

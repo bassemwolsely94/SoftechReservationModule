@@ -108,7 +108,7 @@ class MissedTests(CallBase):
         self.assertEqual([r['call_at'] for r in res['rows']],
                          [iso(c1.call_at), iso(c4.call_at), iso(c2.call_at), iso(c3.call_at)])
         top = res['rows'][0]
-        self.assertEqual((top['pic'], top['customer_name'], top['segment']), ('N1', 'جديد', 'vip'))
+        self.assertEqual((top['pic'], top['customer_name'], top['segment_code']), ('N1', 'جديد', 'vip'))
         self.assertEqual(top['lifetime_net'], Decimal('350'))
         self.assertEqual(top['last_purchase'], D(2026, 10, 20))
         self.assertIsNone(res['rows'][3]['lifetime_net'])

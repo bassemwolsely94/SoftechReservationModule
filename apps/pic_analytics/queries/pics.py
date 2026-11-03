@@ -10,6 +10,7 @@ from django.db.models import Count, Max, Min, OuterRef, Q, Subquery, Sum
 
 from apps.customers import access as cust_access
 from apps.customers.models import Customer
+from apps.pbx.cdr import phone_key
 from apps.pic_analytics import rules
 from apps.pic_analytics.models import PicDayFact
 from apps.pic_analytics.queries.calls import calls_by_pic
@@ -33,8 +34,27 @@ def _order_by(order):
     return [('-' if desc else '') + field, 'pic']
 
 
+def _search(qs, q):
+    """Narrow a fact queryset to PICs matching the search text: customer name (contains, any case),
+    exact PIC code, or a phone (>= 7 digits) compared by phone_key on phone / phone_alt / whatsapp_phone.
+    The raw phone is only compared here, never returned."""
+    q = (q or '').strip()
+    if not q:
+        return qs
+    cond = Q(name__icontains=q) | Q(softech_pic=q)
+    key = phone_key(q)
+    if key:
+        pcond = Q(phone__endswith=key) | Q(phone_alt__endswith=key) | Q(whatsapp_phone__endswith=key)
+        matched = {pic for pic, *phones in Customer.objects.filter(pcond).exclude(softech_pic__isnull=True)
+                   .values_list('softech_pic', 'phone', 'phone_alt', 'whatsapp_phone')
+                   if any(phone_key(ph) == key for ph in phones)}
+        cond |= Q(softech_pic__in=matched)
+    return qs.filter(pic__in=Customer.objects.filter(cond).exclude(softech_pic__isnull=True)
+                     .exclude(softech_pic='').values('softech_pic'))
+
+
 def pic_rows(f, access, order='-net', page=1, page_size=50) -> dict:
-    qs = f.facts(access).exclude(pic='')
+    qs = _search(f.facts(access).exclude(pic=''), f.q)
     name = Customer.objects.filter(softech_pic=OuterRef('pic')).order_by('pk').values('name')[:1]
     agg = (qs.values('pic').annotate(
         s_net=Sum('enet'), s_gp=Sum('gp'), s_units=Sum('units'), s_inv=Sum('invoices'),

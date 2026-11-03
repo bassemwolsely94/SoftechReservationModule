@@ -83,7 +83,7 @@ def _followed_by_purchase(pic, call_day, days_by_pic, window):
 
 def calls_by_pic(f, pics=None) -> dict:
     """{pic: {in, out, answered, missed, last_call, avg_days_between, talk_seconds,
-    call_to_purchase}} counted on CdrCall.pic only; `pics` limits the PICs (None = all)."""
+    call_to_purchase, call_to_purchase_same_day}} counted on CdrCall.pic only; `pics` limits the PICs (None = all)."""
     qs = calls_qs(f).exclude(pic='')
     if pics is not None:
         qs = qs.filter(pic__in=pics)
@@ -93,7 +93,8 @@ def calls_by_pic(f, pics=None) -> dict:
     out = {}
     for pic, at, direction, status, billable in rows:
         o = out.setdefault(pic, {'in': 0, 'out': 0, 'answered': 0, 'missed': 0, 'last_call': None,
-                                 'talk_seconds': 0, 'call_to_purchase': 0, '_days': set()})
+                                 'talk_seconds': 0, 'call_to_purchase': 0, 'call_to_purchase_same_day': 0,
+                                 '_days': set()})
         o['in' if direction == 'inbound' else 'out'] += 1
         o['_days'].add(_day(at))
         if o['last_call'] is None or at > o['last_call']:
@@ -103,6 +104,8 @@ def calls_by_pic(f, pics=None) -> dict:
             o['talk_seconds'] += billable or 0
             if _followed_by_purchase(pic, _day(at), days_by_pic, window):
                 o['call_to_purchase'] += 1
+                if _followed_by_purchase(pic, _day(at), days_by_pic, 0):
+                    o['call_to_purchase_same_day'] += 1
         elif direction == 'inbound':
             o['missed'] += 1
     for o in out.values():
@@ -130,11 +133,9 @@ def call_totals(f, pics=None) -> dict:
             'missed_not_returned': sum(1 for c in missed if rm[c.id] is None)}
 
 
-def _new_pics_sold(f, access, codes):
-    """Distinct NEW PICs whose first fact row(s) in the period carry a sales-agent user code."""
+def _new_pic_salespeople(f, access):
+    """{pic: {salesperson codes on its first fact day in the period}} for the NEW PICs."""
     from apps.pic_analytics.queries.overview import classify_visitors
-    if not codes:
-        return 0
     new_pics = {p for p, lab in classify_visitors(f, access).items() if lab == 'new'}
     first = {}
     for pic, day, sp in f.facts(access).filter(pic__in=new_pics).values_list('pic', 'day', 'salesperson'):
@@ -143,7 +144,27 @@ def _new_pics_sold(f, access, codes):
             first[pic] = (day, {sp})
         elif day == cur[0]:
             cur[1].add(sp)
-    return sum(1 for _d, s in first.values() if s & codes)
+    return {pic: s for pic, (_d, s) in first.items()}
+
+
+def agent_labels(exts) -> dict:
+    """{extension: «name (ext)»} - staff name, else the PBX name, else the extension itself.
+    Shared by the filter options and the conversion split."""
+    exts = {x for x in exts if x}
+    by_ext = {e.extension: e for e in AgentExtension.objects.filter(extension__in=exts).select_related('staff__user')}
+    pbx = dict(CdrCall.objects.filter(agent_ext__in=exts).exclude(agent_name='')
+               .order_by('call_at').values_list('agent_ext', 'agent_name'))
+    out = {}
+    for x in exts:
+        e = by_ext.get(x)
+        name = (e.staff.full_name if e and e.staff else '') or (e.pbx_name if e else '') or pbx.get(x) or x
+        out[x] = f'{name} ({x})'
+    return out
+
+
+def _team_new_pics_sold(first_sp, codes):
+    """Distinct NEW PICs whose first fact day carries one of the team's sales-agent user codes."""
+    return sum(1 for s in first_sp.values() if s & codes) if codes else 0
 
 
 def reach_stats(attempts):
@@ -180,7 +201,7 @@ def call_center(f, access) -> dict:
     attempts = []                      # outbound (ext, phone_key, day, answered) in time order
     for ext, name, at, direction, status, billable, pic, key in rows:
         a = agg.setdefault(ext, {'pbx_name': '', 'calls_in': 0, 'calls_out': 0, 'answered': 0,
-                                 'answered_pic': 0, 'talk_seconds': 0, 'pics': set(), 'ctp': 0,
+                                 'answered_pic': 0, 'talk_seconds': 0, 'pics': set(), 'ctp': 0, 'ctp0': 0,
                                  'unanswered_out': 0})
         a['pbx_name'] = a['pbx_name'] or name
         answered = status == 'answered'
@@ -200,11 +221,21 @@ def call_center(f, access) -> dict:
                 a['pics'].add(pic)
                 if _followed_by_purchase(pic, _day(at), days_by_pic, window):
                     a['ctp'] += 1
+                    if _followed_by_purchase(pic, _day(at), days_by_pic, 0):
+                        a['ctp0'] += 1
     tries, not_reached = reach_stats(attempts)
+
+    # sales side: a NEW pic is credited to the agent whose SOFTECH user code rang up its first sale
+    first_sp = _new_pic_salespeople(f, access)
+    sold = defaultdict(int)
+    for codes_ in first_sp.values():
+        for code in codes_:
+            sold[code] += 1
 
     out = []
     for ext in sorted(agg, key=lambda e: (-(agg[e]['calls_in'] + agg[e]['calls_out']), e)):
         a, e = agg[ext], exts.get(ext)
+        code = (e.staff.softech_user_id or '') if e and e.staff else ''
         out.append({
             'agent_ext': ext,
             'staff_name': (e.staff.full_name or None) if e and e.staff else None,
@@ -212,11 +243,14 @@ def call_center(f, access) -> dict:
             'calls_in': a['calls_in'], 'calls_out': a['calls_out'], 'answered': a['answered'],
             'talk_seconds': a['talk_seconds'], 'pics_reached': len(a['pics']),
             'call_to_purchase_pct': round(a['ctp'] / a['answered_pic'] * 100, 1) if a['answered_pic'] else None,
+            'call_to_purchase_same_day_pct': (round(a['ctp0'] / a['answered_pic'] * 100, 1)
+                                              if a['answered_pic'] else None),
+            'new_pics_sold': sold.get(code, 0) if code else None,
             'unanswered_out': a['unanswered_out'],
             'avg_attempts_to_reach': round(sum(tries[ext]) / len(tries[ext]), 2) if tries.get(ext) else None,
             'not_reached': not_reached.get(ext, 0),
         })
 
-    # sales side: SOFTECH user codes are not tied to extensions -> one team figure
+    # the team figure: SOFTECH sales-agent user codes from the call-center config
     codes = set(CallCenterConfig.get_solo().sales_agent_usercodes or [])
-    return {'rows': out, 'team_new_pics_sold': _new_pics_sold(f, access, codes)}
+    return {'rows': out, 'team_new_pics_sold': _team_new_pics_sold(first_sp, codes)}

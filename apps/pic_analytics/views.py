@@ -3,7 +3,7 @@ apps/pic_analytics/views.py — mounted at /api/pic-analytics/ (doc 33)
 
   GET   access/ options/ overview/ pics/ groups/<kind>/ retention/ retention/overdue/
   GET   calls/center/ calls/missed/ calls/missed/rows/ calls/unanswered/   (management only)
-  GET   numbers/ numbers/conversions/   POST numbers/label/ numbers/<number_id>/dial/ calls/missed/<id>/dial/
+  GET   numbers/ numbers/conversions/ numbers/labels/   POST numbers/label/ numbers/labels/<id>/delete/ numbers/<number_id>/dial/ calls/missed/<id>/dial/
   GET   export/                    audited .xlsx
   GET|POST grants/                 named branch managers (admin only)
   POST     grants/<id>/revoke/
@@ -11,6 +11,7 @@ apps/pic_analytics/views.py — mounted at /api/pic-analytics/ (doc 33)
 
 Every rule is enforced here; the screen only hides what the user cannot do.
 """
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
@@ -286,6 +287,32 @@ def numbers_conversions(request):
     return _run(request, lambda f, acc: _opaque(q_numbers.conversions(f, acc)), calls=True)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def numbers_labels(request):
+    acc = Access(request)
+    if not acc.can_view or not acc.sees_calls_tabs:
+        return _deny()
+    try:
+        page, size = _paging(request)
+        return Response(_opaque(q_numbers.labelled_numbers(acc, page, size)))
+    except PermissionError as exc:
+        return _deny(str(exc))
+    except ValueError as exc:
+        return _bad(str(exc))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def numbers_label_delete(request, label_id):
+    acc = Access(request)
+    if not acc.can_view or not acc.sees_calls_tabs:
+        return _deny()
+    if q_numbers.unlabel_number(label_id, acc.profile) is None:
+        return Response({'detail': 'غير موجود — Not found'}, status=404)
+    return Response({'label_id': label_id, 'deleted': True})
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def numbers_label(request):
@@ -362,12 +389,16 @@ def missed_callback(request, call_id):
     note = str(request.data.get('note') or '').strip()
     if len(note) > 500:
         return _bad('الملاحظة أطول من 500 حرف')
-    if CallLog.objects.filter(status='callback', phone_number=call.customer_number,
-                              callback_due__gte=call.call_at).exists():
-        return Response({'detail': 'يوجد موعد معاودة مجدول لهذا الرقم بالفعل'}, status=status.HTTP_409_CONFLICT)
-    log = CallLog.objects.create(
-        phone_number=call.customer_number, customer=call.customer, direction='inbound',
-        status='callback', callback_due=due, handled_by=acc.profile, notes=note, source='manual')
+    with transaction.atomic():
+        # lock every call of this number, then re-check: two clicks can never book two call-backs
+        locked = list(CdrCall.objects.select_for_update().filter(
+            Q(pk=call.pk) | Q(phone_key=call.phone_key) if call.phone_key else Q(pk=call.pk)))
+        call = next(c for c in locked if c.pk == call.pk)
+        if q_missed.callback_dues([call]):
+            return Response({'detail': 'يوجد موعد معاودة مجدول لهذا الرقم بالفعل'}, status=status.HTTP_409_CONFLICT)
+        log = CallLog.objects.create(
+            phone_number=call.customer_number, customer=call.customer, direction='inbound',
+            status='callback', callback_due=due, handled_by=acc.profile, notes=note, source='manual')
     from apps.audit.models import AuditLog
     AuditLog.log('pic_analytics_callback_scheduled', user=acc.profile, obj=log, request=request,
                  note='missed call back', extra={'call_id': call.pk, 'calllog_id': log.pk,
