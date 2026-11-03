@@ -94,6 +94,23 @@ class AccessTests(ApiBase):
         self.assertEqual((p['to'], p['data_to'], p['clamped']), (latest.isoformat(), latest.isoformat(), True))
         self.assertIn('period', self.admin_c.get(url('options/')).json())
 
+    def test_call_tabs_run_to_today(self):
+        # calls are mirrored every 10 min, so the call tabs are not held back by the nightly fact build
+        from django.utils import timezone
+        today = timezone.localdate()
+        fresh = self.call(today, '', 'inbound', 'abandoned', key='1000000099', ext='')
+        q = f'?from={today.isoformat()}&to={today.isoformat()}'
+        r = self.admin_c.get(f'/api/pic-analytics/calls/missed/rows/{q}&only_not_returned=1')
+        self.assertEqual(r.status_code, 200, r.content[:200])
+        self.assertIn(fresh.pk, [row['call_id'] for row in r.json()['rows']])
+        p = r.json()['period']
+        self.assertEqual((p['to'], p['data_to'], p['clamped']), (today.isoformat(), today.isoformat(), False))
+        for path in CALLS:
+            self.assertEqual(self.admin_c.get(f'/api/pic-analytics/{path}{q}').status_code, 200, path)
+        # the sales tabs stay limited to the latest built fact day
+        p = self.admin_c.get(f'/api/pic-analytics/overview/?from=2026-10-01&to={today.isoformat()}').json()['period']
+        self.assertEqual((p['data_to'], p['clamped']), ('2026-10-20', True))
+
     def test_grant_bad_staff_id_and_duplicate(self):
         base = '/api/pic-analytics/grants/'
         self.assertEqual(self.admin_c.post(base, {'staff_id': 'abc'}, format='json').status_code, 400)

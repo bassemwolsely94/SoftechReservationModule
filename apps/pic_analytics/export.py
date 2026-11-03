@@ -184,8 +184,9 @@ def _cols(cols, access):
             if (access.sees_cost or k not in GP_KEYS)]
 
 
-def build_workbook(f, access, exported_by=''):
-    """-> (bytes, {sheet: rows written}). Only called for a user who may export."""
+def build_workbook(f, access, exported_by='', calls_f=None):
+    """-> (bytes, {sheet: rows written}). Only called for a user who may export.
+    calls_f: the same filters run to today (calls are live) for the calls sheets; defaults to f."""
     from apps.branches.models import Branch
     book = _Book()
     branch_names = {b.pk: f'{b.softech_branch_id} · {b.name_ar or b.name}' for b in Branch.objects.all()}
@@ -270,14 +271,15 @@ def build_workbook(f, access, exported_by=''):
 
     # 6. management only: calls
     if access.sees_calls_tabs:
-        cc = call_center(f, access)
+        cf = calls_f or f
+        cc = call_center(cf, access)
         ws = book.table(S_CENTER, CENTER_COLS, cc['rows'], [10, 24, 24] + [16] * 9)
         book.row(ws, S_CENTER, ['', 'عملاء جدد باعتهم الفريق', '', cc['team_new_pics_sold']])
-        book.table(S_UNANSWERED, UNANSWERED_COLS, missed.unanswered_summary(f, access), [10, 24, 24] + [14] * 5)
-        book.table(S_MISSED, MISSED_COLS, missed.missed_rows(f, access, False, 1, None)['rows'],
+        book.table(S_UNANSWERED, UNANSWERED_COLS, missed.unanswered_summary(cf, access), [10, 24, 24] + [14] * 5)
+        book.table(S_MISSED, MISSED_COLS, missed.missed_rows(cf, access, False, 1, None)['rows'],
                    [20, 18, 14, 14, 26] + [16] * 6)
         rows = []
-        for r in numbers.new_numbers(f, access, 1, None)['rows']:
+        for r in numbers.new_numbers(cf, access, 1, None)['rows']:
             agent = r.get('last_agent') or {}
             rows.append(dict(r, kind=KIND_LABELS.get(r['kind'], r['kind']),
                              last_agent=agent.get('staff_name') or agent.get('pbx_name') or agent.get('agent_ext', '')))

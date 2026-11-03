@@ -126,7 +126,7 @@ def _run(request, fn, calls=False):
     if not acc.can_view or (calls and not acc.sees_calls_tabs):
         return _deny()
     try:
-        f = Filters.from_request(request, acc)
+        f = Filters.from_request(request, acc, live=calls)
         data = fn(f, acc)
         if isinstance(data, dict):
             data['period'] = {'from': f.start, 'to': f.end, 'data_from': f.data_from,
@@ -403,7 +403,9 @@ def export(request):
         return _deny()
     try:
         f = Filters.from_request(request, acc)
-        data, counts = build_workbook(f, acc, exported_by=acc.profile.full_name if acc.profile else '')
+        calls_f = Filters.from_request(request, acc, live=True) if acc.sees_calls_tabs else None
+        data, counts = build_workbook(f, acc, exported_by=acc.profile.full_name if acc.profile else '',
+                                      calls_f=calls_f)
     except ValueError as exc:                  # FilterError is a ValueError
         return _bad(str(exc))
     name = f'pic-analytics_{f.start.isoformat()}_{f.end.isoformat()}.xlsx'

@@ -179,7 +179,12 @@ export default function PicAnalyticsPage() {
 
       <Filters values={shown} onChange={setParam} onClear={clear} branches={branches} access={access} options={options} />
 
-      {period?.data_to && (
+      {CALLS_TABS.some(t => t.key === tab) ? (
+        // call tabs read the PBX mirror (every 10 min), not the nightly sales facts
+        <p className="text-xs text-gray-500 -mt-2" data-tour="pic-analytics-data-to">
+          المكالمات محدّثة كل 10 دقائق — حتى اليوم
+        </p>
+      ) : period?.data_to && (
         <p className="text-xs text-gray-500 -mt-2" data-tour="pic-analytics-data-to">
           البيانات حتى {String(period.data_to).slice(0, 10)}
           {period.clamped && ' · تم ضبط الفترة على البيانات المتاحة'}

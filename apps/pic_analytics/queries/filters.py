@@ -53,14 +53,17 @@ class Filters:
     memo: dict = field(default_factory=dict, repr=False, compare=False)
 
     @classmethod
-    def from_request(cls, request, access):
+    def from_request(cls, request, access, live=False):
+        """live=True for the call tabs: calls are mirrored every 10 min, so they run to today instead
+        of stopping at the latest nightly-built fact day (sales facts are built through yesterday)."""
         params = request.query_params if hasattr(request, 'query_params') else request.GET
         start = _date(params, 'from', 'من')
         end = _date(params, 'to', 'إلى')
         if start > end:
             raise FilterError('تاريخ البداية بعد تاريخ النهاية')
         # facts exist only through the latest built day: never promise more than that
-        latest = PicDayFact.objects.aggregate(m=Max('day'))['m'] or timezone.localdate()
+        latest = timezone.localdate() if live else (PicDayFact.objects.aggregate(m=Max('day'))['m']
+                                                    or timezone.localdate())
         data_from, data_to = HISTORY_START, min(end, latest, timezone.localdate())
         clamped = start < data_from or end > data_to
         start, end = max(start, data_from), data_to
