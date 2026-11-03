@@ -120,6 +120,16 @@ def phone_key(number: str) -> str:
     """Comparable key: the national number for mobiles and Cairo landlines (so '1000000010',
     '01000000010' and '+201000000010' agree), otherwise the digits without leading zeros, last 10.
     Too short (< 7 digits) → ''. Customer phones go through the same function."""
+    k = _key_once(number)
+    for _ in range(4):         # re-parse until stable, so phone_key(phone_key(x)) == phone_key(x) for ANY input
+        k2 = _key_once(k)
+        if k2 == k:
+            return k
+        k = k2
+    return ''                  # never settles: junk
+
+
+def _key_once(number: str) -> str:
     n = national_number(number)
     if _MOBILE_RE.match(n) or _CAIRO_RE.match(n) or _NATIONAL0_RE.match(n):
         return n               # national 0-leading numbers are their own key (idempotent; Alexandria != Cairo)
@@ -129,7 +139,10 @@ def phone_key(number: str) -> str:
 
 def lookup_tail(number: str) -> str:
     """Suffix for `endswith` customer lookups from a typed/dialled number: the last 8 digits of a Cairo
-    landline (stored with or without its 02), otherwise the last 9 digits."""
+    landline (stored with or without its 02), otherwise the last 9 digits. '' when the number has fewer
+    than 7 digits (withheld caller, extension, short code): callers must skip the lookup, never match."""
+    if len(_digits(number)) < 7:
+        return ''
     k = phone_key(number)
     if _CAIRO_RE.match(k):
         return k[-8:]

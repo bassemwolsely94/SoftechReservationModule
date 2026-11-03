@@ -3,6 +3,8 @@ Egyptian phone normalisation for PBX calls <-> PIC matching (apps/pbx/cdr.py nat
 phone_key / inbound_number / outbound_number / renormalise_pbx_numbers). Synthetic numbers only.
 """
 import datetime as dt
+import random
+from unittest import mock
 from io import StringIO
 
 from django.core.management import call_command
@@ -164,11 +166,30 @@ class NationalZeroTests(SimpleTestCase):
             self.assertEqual(cdr.phone_key(k), k, x)
 
 
+class FuzzIdempotenceTests(SimpleTestCase):
+
+    def test_phone_key_idempotent_for_random_digit_strings(self):
+        rng = random.Random(20261103)
+        pool = '0123456789'
+        starts = ['', '0', '00', '20', '0020', '+20', '81', '83', '91', '95', '9', '8', '2', '1', '01']
+        for _ in range(20000):
+            x = rng.choice(starts) + ''.join(rng.choice(pool) for _ in range(rng.randint(0, 13)))
+            k = cdr.phone_key(x)
+            self.assertEqual(cdr.phone_key(k), k, x)
+
+    def test_known_junk_forms(self):
+        for x in ('901224731833', '88159655105', '08447300'):
+            k = cdr.phone_key(x)
+            self.assertEqual(cdr.phone_key(k), k, x)
+
+
 class LinkingAndBridgeTests(TestCase):
 
     def test_bridge_normalize(self):
         from apps.pbx import ami_bridge
-        ami_bridge._gateway_meta = {'goip4': {'prefix': '0', 'suffix': ''}}
+        patcher = mock.patch.object(ami_bridge, '_gateway_meta', {'goip4': {'prefix': '0', 'suffix': ''}})
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.assertEqual(ami_bridge._normalize_caller_num('1224747070', 'goip4'), '01224747070')
         self.assertEqual(ami_bridge._normalize_caller_num('031234567', 'goip4'), '031234567')
         self.assertEqual(ami_bridge._normalize_caller_num('911234', 'goip4'), '1234')
@@ -186,6 +207,42 @@ class LinkingAndBridgeTests(TestCase):
         self.assertEqual(find_session_for_agent_call(prof, '24842067'), s)
         self.assertEqual(find_session_for_agent_call(prof, '0224842067'), s)
         self.assertIsNone(find_session_for_agent_call(prof, '24842099'))
+
+    def test_lookup_tail_empty_for_short_or_digitless(self):
+        for x in ('anonymous', 'unknown', '', '15', '1234', '911234'):
+            self.assertEqual(cdr.lookup_tail(x), '', x)
+
+    def test_calllog_short_or_withheld_attaches_no_customer(self):
+        from apps.callcenter.models import CallLog
+        Customer.objects.create(name='Z', phone='01000000010', softech_pic='P-Z')
+        for ph in ('anonymous', '15', '1234'):
+            log = CallLog(phone_number=ph)
+            log._try_match_customer()
+            self.assertIsNone(log.customer, ph)
+            self.assertEqual(log.caller_name, '')
+
+    def test_calllog_exact_key_confirm(self):
+        from apps.callcenter.models import CallLog
+        Customer.objects.create(name='Mob', phone='01024842067', softech_pic='P-M')
+        land = Customer.objects.create(name='Land', phone='24842067', softech_pic='P-L')
+        log = CallLog(phone_number='0224842067')
+        log._try_match_customer()
+        self.assertEqual(log.customer, land)
+        Customer.objects.filter(pk=land.pk).delete()
+        log2 = CallLog(phone_number='0224842067')
+        log2._try_match_customer()
+        self.assertIsNone(log2.customer)       # the mobile sharing the last 8 digits is not a match
+
+    def test_lookup_endpoint_short_input_returns_nothing(self):
+        from apps.callcenter.models import CallLog
+        from .factories import make_call_center
+        Customer.objects.create(name='Z', phone='01000000010', softech_pic='P-Z')
+        _, _, c = make_call_center()
+        for ph in ('15', 'anonymous', '1234'):
+            r = c.get('/api/callcenter/calls/lookup/', {'phone': ph})
+            self.assertEqual(r.status_code, 200, (ph, r.content[:200]))
+            self.assertEqual(r.json()['customers'], [], ph)
+            self.assertEqual(r.json()['recent_calls'], [], ph)
 
     def test_lookup_tail(self):
         self.assertEqual(cdr.lookup_tail('0224842067'), '24842067')

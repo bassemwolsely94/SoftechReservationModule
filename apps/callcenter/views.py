@@ -199,9 +199,9 @@ class CallLogViewSet(viewsets.ModelViewSet):
             from apps.customers.models import Customer
 
             # All customers sharing this phone (up to 10)
-            customers_qs = Customer.objects.filter(
+            customers_qs = (Customer.objects.filter(
                 Q(phone__endswith=tail) | Q(phone_alt__endswith=tail)
-            ).select_related('preferred_branch').order_by('-created_at')[:10]
+            ).select_related('preferred_branch').order_by('-created_at')[:10]) if tail else []
             customers_qs = list(customers_qs)
 
             # ── Build summary list (always returned — used by picker) ──────────
@@ -386,9 +386,9 @@ class CallLogViewSet(viewsets.ModelViewSet):
             pass
 
         # Recent calls for this number (regardless of which customer is selected)
-        recent = CallLog.objects.filter(
-            phone_number__endswith=tail
-        ).select_related('handled_by__user', 'pbx_session').order_by('-called_at')[:5]
+        recent = (CallLog.objects.filter(phone_number__endswith=tail)
+                  .select_related('handled_by__user', 'pbx_session').order_by('-called_at')[:5]
+                  if tail else CallLog.objects.none())
         result['recent_calls'] = CallLogListSerializer(recent, many=True, context={'request': request}).data
 
         # mask what this user may not see (B-2 per customer; can_see_customer_phone)
