@@ -429,6 +429,16 @@ class ForecastScenario(models.Model):
                                   verbose_name='مستوى التنبؤ')
     model = models.CharField(max_length=4, choices=MODEL_CHOICES, default=MODEL_A,
                              verbose_name='النموذج')
+    # How THIS scenario applies seasonality (doc 16): none = no seasonal adjustment;
+    # chain / branch = recent months deseasonalised and the target month's index re-applied,
+    # with the chain pattern or each branch's own (history-weighted) pattern. New scenarios
+    # default to SystemSetting 'forecast_seasonality_mode'.
+    SEASON_NONE = 'none'; SEASON_CHAIN = 'chain'; SEASON_BRANCH = 'branch'
+    SEASON_CHOICES = [
+        (SEASON_NONE, 'بدون موسمية'), (SEASON_CHAIN, 'موسمية السلسلة'), (SEASON_BRANCH, 'موسمية كل فرع'),
+    ]
+    seasonality_mode = models.CharField(max_length=8, choices=SEASON_CHOICES, default=SEASON_NONE,
+                                        verbose_name='الموسمية')
     # Global factors (owner-editable)
     incentive_threshold = models.DecimalField(max_digits=5, decimal_places=4, default=Decimal('0.9000'),
                                               verbose_name='حد الحافز (÷)')
@@ -509,6 +519,9 @@ class ForecastResult(models.Model):
     # LM / PM not yet complete when generated → an estimate (running month scaled to a
     # full month, or a future month projected by the engine) — shown as «متوقع».
     lm_projected = models.BooleanField(default=False, verbose_name='الشهر السابق متوقع')
+    # target-month seasonal index the engine used for this member (null = no seasonality)
+    season_index = models.DecimalField(max_digits=6, decimal_places=4, null=True, blank=True,
+                                       verbose_name='مؤشر الموسمية المستخدم')
     pm_projected = models.BooleanField(default=False, verbose_name='قبل السابق متوقع')
     computed_at  = models.DateTimeField(auto_now=True)
 

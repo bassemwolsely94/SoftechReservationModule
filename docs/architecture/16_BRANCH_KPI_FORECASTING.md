@@ -37,6 +37,14 @@
   apply-references leaves the factor index at 1. Backtest adds branch-level variants
   `br_b / br_chain / br_branch`. On 27 months "none" still wins everywhere → mode stays none until
   the backfill (2021-11 → 2024-07, off-hours runner) lands and the backtest is re-run.
+- **Per-scenario seasonality (2026-11-03, owner):** `ForecastScenario.seasonality_mode`
+  none|chain|branch (migration forecasting/0013; new scenarios default to the global
+  `forecast_seasonality_mode`, which now only sets that default + the rolling plan). The engine
+  uses the scenario's mode; `ForecastResult.season_index` records the target-month index applied
+  per member. Apply-references copies growth/benchmark/inflation for the scenario's own month
+  (button shows it) and resets the factor `seasonality_index` to 1 — that field is now a manual
+  multiplier («تعديل يدوي»); old scenarios keep their stored ×S values. 55-month backtest still
+  favours none for money metrics.
 - **Phase 6 (salesperson & category scopes):** `KpiResolver.resolve` gained `category_id`
   (line-based, a category's own sales) alongside `softech_user` (salesperson, header-based);
   `SalesTarget.actual_value()` routes all three scopes. `ForecastScenario.scope_type`

@@ -109,7 +109,8 @@ class ForecastResultSerializer(serializers.ModelSerializer):
         model  = ForecastResult
         fields = ['id', 'branch', 'scope_key', 'scope_label', 'branch_name', 'metric', 'metric_label',
                   'base_value', 'lm_value', 'pm_value', 'model_a', 'model_b',
-                  'forecast_value', 'target_value', 'branch_share', 'lm_projected', 'pm_projected']
+                  'forecast_value', 'target_value', 'branch_share', 'lm_projected', 'pm_projected',
+                  'season_index']
 
 
 class ForecastScenarioSerializer(serializers.ModelSerializer):
@@ -119,6 +120,22 @@ class ForecastScenarioSerializer(serializers.ModelSerializer):
     status_label = serializers.CharField(source='get_status_display', read_only=True)
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, default='')
     signals_changed_at = serializers.SerializerMethodField()
+    seasonality_mode = serializers.ChoiceField(choices=ForecastScenario.SEASON_CHOICES, required=False)
+    seasonality_label = serializers.CharField(source='get_seasonality_mode_display', read_only=True)
+    target_season = serializers.SerializerMethodField()
+
+    def get_target_season(self, obj):
+        """Chain seasonal index of the target month per metric (reference values) — what
+        «موسمية السلسلة» applies; per-branch values are on each result row."""
+        from apps.forecasting import references as R
+        seas = (R.get() or {}).get('seasonality', {})
+        return {m: idx.get(str(obj.month)) for m, idx in seas.items()}
+
+    def create(self, validated_data):
+        if 'seasonality_mode' not in validated_data:
+            from apps.forecasting.engine import seasonality_mode
+            validated_data['seasonality_mode'] = seasonality_mode()
+        return super().create(validated_data)
 
     def get_signals_changed_at(self, obj):
         """When a CLOSED signal month (base M-12 / LM / PM) was re-rolled-up after this
@@ -161,7 +178,7 @@ class ForecastScenarioSerializer(serializers.ModelSerializer):
             'incentive_threshold', 'benchmark_growth', 'inflation', 'promotion_lift',
             'status', 'status_label', 'notes', 'factors',
             'created_by', 'created_by_name', 'created_at', 'generated_at', 'committed_at',
-            'signals_changed_at',
+            'signals_changed_at', 'seasonality_mode', 'seasonality_label', 'target_season',
         ]
         read_only_fields = ['status', 'created_by', 'created_at', 'generated_at', 'committed_at']
 

@@ -364,6 +364,9 @@ class ForecastEngine:
         self.ensure_factors(scenario)
         factors = {f.metric: f for f in ForecastFactor.objects.filter(scenario=scenario)}
         members = self._members(scenario)
+        # the scenario decides whether (and which) seasonality is used
+        self._mode = getattr(scenario, 'seasonality_mode', None) or seasonality_mode()
+        self._season, self._proj = {}, {}
 
         y, m = scenario.year, scenario.month
         by, bm  = _shift_month(y, m, -12)   # base: same month last year
@@ -426,6 +429,7 @@ class ForecastEngine:
                     forecast_value=forecast.quantize(Q2, ROUND_HALF_UP),
                     target_value=target.quantize(Q2, ROUND_HALF_UP),
                     lm_projected=lm_est, pm_projected=pm_est,
+                    season_index=(season[m] if season else None),
                 )
                 n += 1
                 # Chain aggregate: only members that are part of the chain (CC is an
