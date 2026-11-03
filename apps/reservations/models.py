@@ -64,6 +64,7 @@ class Reservation(models.Model):
     )
     quantity_requested = models.DecimalField(max_digits=10, decimal_places=2, default=1)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True)
+    phone_alert = models.BooleanField(default=False, verbose_name='نبّه على الموبايل')
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='normal', db_index=True)
     contact_phone = models.CharField(max_length=50)
     contact_name = models.CharField(max_length=255)

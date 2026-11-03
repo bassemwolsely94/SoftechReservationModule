@@ -117,6 +117,7 @@ class InsightRecipient(models.Model):
     period_types = models.CharField(max_length=30, default='day,week,month',
                                     verbose_name='الفترات المُرسلة')
     active    = models.BooleanField(default=True, db_index=True)
+    morning_brief = models.BooleanField(default=False, verbose_name='ملخص الصباح')
 
     class Meta:
         ordering = ['branch', 'name']

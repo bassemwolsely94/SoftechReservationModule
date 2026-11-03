@@ -978,3 +978,8 @@ TRACK_TRACE_ENABLED = config('TRACK_TRACE_ENABLED', default=False, cast=bool)
 RBAC_ENFORCEMENT = config('RBAC_ENFORCEMENT', default='off' if _RUNNING_TESTS else 'log')
 # Seconds the role matrix is cached per process; 0 under tests so no test sees another's rows.
 RBAC_GRANTS_TTL = config('RBAC_GRANTS_TTL', default=0 if _RUNNING_TESTS else 60, cast=float)
+
+# Phone alerts + morning brief: outward WhatsApp sending is OFF unless switched on.
+# Off => every step still runs and records PhoneAlertAttempt(result='dry_run').
+PHONE_ALERTS_SEND_ENABLED = config('PHONE_ALERTS_SEND_ENABLED', default=False, cast=bool)
+MORNING_BRIEF_SEND_ENABLED = config('MORNING_BRIEF_SEND_ENABLED', default=False, cast=bool)
