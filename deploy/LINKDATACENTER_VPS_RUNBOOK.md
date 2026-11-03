@@ -1381,6 +1381,58 @@ sudo -u elrezeiky /opt/elrezeiky/venv/bin/python /opt/elrezeiky/app/manage.py cl
 **The way back.** Set `BULK_READ_ENFORCEMENT=log` (or `off`) the same way and restart; blocks stop
 at once. Socket refusal goes back with `NETWORK_POLICY_ENFORCEMENT=log` (N3).
 
+#### Batch N6 on the live server
+
+N6 hardens the pages a visitor can open without signing in. (1) **Anonymous gate**: an anonymous
+`/api/` request outside the allow-list (auth, whoami, theme, csp-report, portal, demand/public,
+delivery/track, public, the WhatsApp / Meta / Telegram / TikTok webhooks and signed call-recording
+links) is logged as `public gate would-deny ...` in `log` mode and refused 401 in `enforce`. Switch
+`PUBLIC_API_ENFORCEMENT` off / log / enforce, default `log`; an unknown value runs as `log` and
+`manage.py check` warns `access.W005`. (2) **Self-hosted bot check** (no third-party service): a small
+puzzle solved in the visitor's browser (about 1-2 seconds, single use, 10 minutes of life), a minimum
+fill time of 3 seconds, a hidden honeypot field, and at most 3 submissions per phone per form per
+Cairo day (the phone is normalised, so +20 or spaces do not dodge it). It guards «أبلغني عند التوفر»
+(`/notify`) and the portal sign-in link. A refused visitor gets the usual generic answer and nothing
+is stored or sent. (3) `/notify` always answers the same `{ok:true}`, does no SOFTECH lookup and links
+no customer: staff match it with «بحث في ERP» on the demand. (4) Delivery tracking is
+`/api/public/track/<token>/` (the old address keeps working, links already sent stay valid), limited
+to 600 requests an hour per IP; the page refreshes every 60 seconds and slows down on a 429.
+Challenges and per-phone counters live in the process memory: fine for the single `elrezeiky-web`
+process; a restart only forgets today's counts.
+
+**Step 1 - release the code with `release.sh`** (no migrations).
+```bash
+sudo /opt/elrezeiky/release.sh
+```
+
+**Step 2 - read the log lines during the log week.**
+```bash
+sudo journalctl -u elrezeiky-web --since -7d | grep 'public gate would-deny'
+sudo journalctl -u elrezeiky-web --since -7d | grep 'elrezeiky.public_guard'
+```
+A `would-deny` line for a path a real visitor or a partner system uses (a webhook, a link in an SMS)
+means that path is missing from the allow-list: add it in `apps/access/public_paths.py` before
+enforcing. The `public_guard` lines carry the refusal code (bad or reused challenge, too fast,
+honeypot filled, phone limit); a steady stream of `phone_limit` from real customers means the limit
+of 3 a day is too tight.
+
+**Step 3 - try it from a phone.** On mobile data (outside the company network, over HTTPS - the
+puzzle needs it) open `/notify`, pick an item and a branch, and submit once; then open the portal and
+ask for a sign-in link once. Both must answer normally within a few seconds. Check the request
+appears on the demand screen (staff side).
+
+**Step 4 - enforce after a clean week** (owner's action; `.env` changes only after `manage.py check`
+passes, as in N3/N4/N5).
+```bash
+APP=/opt/elrezeiky/app; PY=/opt/elrezeiky/venv/bin/python
+sudo -u elrezeiky $PY $APP/manage.py access_preflight   && sudo -u elrezeiky env PUBLIC_API_ENFORCEMENT=enforce $PY $APP/manage.py check   && sudo sed -i '/^PUBLIC_API_ENFORCEMENT=/d' $APP/.env   && echo 'PUBLIC_API_ENFORCEMENT=enforce' | sudo tee -a $APP/.env >/dev/null   && sudo systemctl restart elrezeiky-web elrezeiky-scheduler
+```
+`access_preflight` shows an informational `public_api_mode` item with the current mode. Afterwards
+repeat Step 3.
+
+**The way back.** Set `PUBLIC_API_ENFORCEMENT=log` (or `off`) the same way and restart; refusals
+stop at once.
+
 #### Company network through the tunnel (split DNS)
 
 Goal: a company device resolves `elrezeikyapp.dawalvry.com` to `10.50.50.77` and reaches the VPS
