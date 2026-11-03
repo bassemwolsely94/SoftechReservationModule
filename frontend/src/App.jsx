@@ -144,6 +144,7 @@ import DemandDetailPage from './pages/DemandDetailPage'
 import FinanceHubPage from './pages/FinanceHubPage'
 import FinanceDashboardPage from './pages/FinanceDashboardPage'
 import GLAccountsPage from './pages/finance/gl/GLAccountsPage'   // finance's own chart of accounts (GL)
+import GLJournalPage from './pages/finance/gl/JournalPage'
 import ProfitLossPage from './pages/ProfitLossPage'
 import CashViewPage from './pages/CashViewPage'   // P-40 — replaces the retired cash-flow page (P-43)
 import ExpenseAnalyticsPage from './pages/ExpenseAnalyticsPage'
@@ -512,6 +513,7 @@ export default function App() {
               <Route index element={<Navigate to="dashboard" replace />} />
               <Route path="dashboard" element={<FinanceDashboardPage />} />
               <Route path="coa"       element={<GLAccountsPage />} />
+              <Route path="journal"   element={<GLJournalPage />} />
               <Route path="pnl"       element={<ProfitLossPage />} />
               {/* P-40: the 13-week cash view replaces the retired cash-flow page; the old URL redirects. */}
               <Route path="cash"      element={<CashViewPage />} />

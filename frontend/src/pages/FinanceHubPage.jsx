@@ -4,6 +4,7 @@
  *
  * Tabs:
  *   Dashboard   /finance/dashboard
+ *   Journal     /finance/journal    (GL)
  *   P&L         /finance/pnl
  *   Cash view   /finance/cash       (P-40; /finance/cashflow redirects here)
  *   Expenses    /finance/expenses
@@ -26,6 +27,7 @@ const GL_PATHS = ['/finance/coa', '/finance/journal', '/finance/trial-balance', 
 // GL tabs (`module: 'ledger'`) show only to users with ledger.view — the server refuses the rest anyway.
 const TABS = [
   { to: '/finance/dashboard', label: 'لوحة القيادة',     icon: '💹' },
+  { to: '/finance/journal',   label: 'القيود',           icon: '📒', module: 'ledger' },
   { to: '/finance/pnl',       label: 'الأرباح والخسائر', icon: '📊' },
   { to: '/finance/expenses',  label: 'المصروفات',        icon: '💸' },
   { to: '/finance/cash',      label: 'النقدية ١٣ أسبوع', icon: '💵' },
