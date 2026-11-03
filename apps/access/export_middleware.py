@@ -25,7 +25,7 @@ log = logging.getLogger('elrezeiky.access')
 
 AUDIT_ACTION = 'export_taken'
 STAMP_WARN_SECONDS = 600
-DEFAULT_MAX_BYTES = 50 * 1024 * 1024
+DEFAULT_MAX_BYTES = 20 * 1024 * 1024
 STAMPABLE = {
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -99,7 +99,7 @@ class ExportAuditMiddleware:
         rows = 0
         if (request.method == 'GET' and bulk_read.is_bulk_path(request.path)
                 and 200 <= response.status_code < 300):
-            rows = bulk_read.rows_in(response)
+            rows = bulk_read.rows_in(response, request.path)
         if not (rows or export):
             return
         kind, count = bulk_read.record_counted(user, rows=rows, export=export)
@@ -127,7 +127,9 @@ class ExportAuditMiddleware:
         size = None if streaming else len(response.content)
         extra = {
             'export_id': export_id, 'path': request.path, 'zone': getattr(access, 'zone', None),
-            'device_id': getattr(device, 'public_id', None), 'ip': getattr(network, 'ip', None),
+            'device_id': getattr(device, 'public_id', None),
+            'device_name': getattr(device, 'name', None) or None,
+            'ip': getattr(network, 'ip', None),
             'content_type': content_type, 'bytes': size, 'username': user.get_username(),
         }
         response['X-ElR-Export-Id'] = export_id
@@ -137,13 +139,11 @@ class ExportAuditMiddleware:
         max_bytes = getattr(settings, 'EXPORT_STAMP_MAX_BYTES', DEFAULT_MAX_BYTES)
         if streaming or content_type not in STAMPABLE or size > max_bytes:
             return
-        device_label = ''
-        if device is not None:
-            name = getattr(device, 'name', None)
-            device_label = f'{name} ({device.public_id})' if name else str(device.public_id or '')
+        # the file leaves the company: device public_id only (the name carries the employee's
+        # name), no IP - both stay in the audit row above (final review I2)
         mark = ExportMark(export_id=export_id, username=user.get_username(),
                           at=timezone.localtime().isoformat(timespec='seconds'),
-                          device=device_label, zone=extra['zone'] or '', ip=extra['ip'] or '')
+                          device=str(extra['device_id'] or ''), zone=extra['zone'] or '')
         try:
             response.content = stamp_ooxml(response.content, mark)
         except ValueError:

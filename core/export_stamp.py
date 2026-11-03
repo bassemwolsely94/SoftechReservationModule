@@ -1,6 +1,10 @@
 """
 Stamp an exported Excel / Word file (OOXML zip) with who took it, from where and when (N5).
 
+Files leave the company (suppliers, insurers), so the stamp holds only the export id, username,
+time, device public_id and zone. The IP address and the device name stay in the export_taken
+audit row, found by the export id.
+
 Only the package metadata is touched: docProps/core.xml (creator, last modified by, description,
 keywords), docProps/custom.xml (ElR-* properties), plus the custom-properties relationship and
 content-type override when they are missing. Every other zip member is copied byte for byte.
@@ -47,9 +51,8 @@ class ExportMark:
     export_id: str
     username: str
     at: str          # ISO, Africa/Cairo
-    device: str
+    device: str      # the device public_id only: a device name carries the employee's name
     zone: str
-    ip: str
 
 
 _XML_BAD = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f]')
@@ -70,7 +73,7 @@ def _core_xml(original, mark):
     if original is None:
         root = ET.Element(f'{{{NS["cp"]}}}coreProperties')
     else:
-        root = ET.fromstring(original)
+        root = ET.fromstring(original)  # nosec B314 — our own view's export, not an upload
     values = {
         ('dc', 'creator'): mark.username,
         ('cp', 'lastModifiedBy'): mark.username,
@@ -90,7 +93,7 @@ def _core_xml(original, mark):
 
 def _custom_xml(mark):
     props = (('ElR-ExportId', mark.export_id), ('ElR-User', mark.username), ('ElR-At', mark.at),
-             ('ElR-Device', mark.device), ('ElR-Zone', mark.zone), ('ElR-IP', mark.ip))
+             ('ElR-Device', mark.device), ('ElR-Zone', mark.zone))
     body = ''.join(
         f'<property fmtid="{FMTID}" pid="{pid}" name={quoteattr(name)}>'
         f'<vt:lpwstr>{escape(str(value or ""))}</vt:lpwstr></property>'
@@ -112,7 +115,7 @@ def _insert_before_close(xml_bytes, close_tag, fragment):
 
 
 def _content_types(xml_bytes, add_core):
-    root = ET.fromstring(xml_bytes)
+    root = ET.fromstring(xml_bytes)  # nosec B314 — our own view's export, not an upload
     parts = {el.get('PartName') for el in root.iter(f'{{{CT_NS}}}Override')}
     out = xml_bytes
     if '/' + CUSTOM not in parts:
@@ -125,7 +128,7 @@ def _content_types(xml_bytes, add_core):
 
 
 def _root_rels(xml_bytes, add_core):
-    root = ET.fromstring(xml_bytes)
+    root = ET.fromstring(xml_bytes)  # nosec B314 — our own view's export, not an upload
     rels = list(root.iter(f'{{{REL_NS}}}Relationship'))
     types = {el.get('Type') for el in rels}
     ids = {el.get('Id') for el in rels}

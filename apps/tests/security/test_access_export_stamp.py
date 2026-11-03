@@ -33,7 +33,7 @@ def _workbook_bytes():
 
 
 MARK = ExportMark(export_id='ex123abc', username='stamp_user', at='2026-11-03T10:00:00+02:00',
-                  device='Front desk (dev-1)', zone='Z1', ip='10.0.0.5')
+                  device='dev-1', zone='Z1')
 
 
 class StampTests(TestCase):
@@ -49,7 +49,8 @@ class StampTests(TestCase):
         self.assertIn('ex123abc', wb.properties.keywords)
         self.assertIn('تصدير ex123abc', wb.properties.description)
         self.assertEqual(wb.custom_doc_props['ElR-ExportId'].value, 'ex123abc')
-        self.assertEqual(wb.custom_doc_props['ElR-IP'].value, '10.0.0.5')
+        self.assertEqual(wb.custom_doc_props['ElR-Device'].value, 'dev-1')
+        self.assertNotIn('ElR-IP', wb.custom_doc_props.names)
 
     def test_stamp_keeps_other_members_identical(self):
         src = _workbook_bytes()
@@ -63,7 +64,7 @@ class StampTests(TestCase):
 
     def test_stamp_twice_replaces_custom(self):
         once = stamp_ooxml(_workbook_bytes(), MARK)
-        twice = stamp_ooxml(once, ExportMark('second', 'u2', MARK.at, '', 'Z2', ''))
+        twice = stamp_ooxml(once, ExportMark('second', 'u2', MARK.at, '', 'Z2'))
         wb = openpyxl.load_workbook(io.BytesIO(twice))
         self.assertEqual(wb.custom_doc_props['ElR-ExportId'].value, 'second')
         z = zipfile.ZipFile(io.BytesIO(twice))
@@ -113,6 +114,31 @@ class ExportMiddlewareTests(TestCase):
         self.assertEqual(wb.custom_doc_props['ElR-ExportId'].value, export_id)
         self.assertEqual(wb.properties.creator, 'exp_user')
         self.assertEqual(int(r['Content-Length']), len(r.content))
+
+    def test_file_carries_no_ip_and_no_device_name(self):
+        """Final review I2: files go to suppliers / insurers. The device appears by public_id only
+        (its name carries the employee's name) and the IP not at all; both stay in the audit row."""
+        r = self._call(lambda req: HttpResponse(_workbook_bytes(), content_type=XLSX),
+                       device_name='Ahmed Front desk')
+        wb = openpyxl.load_workbook(io.BytesIO(r.content))
+        props = {p.name: p.value for p in wb.custom_doc_props.props}
+        self.assertEqual(set(props), {'ElR-ExportId', 'ElR-User', 'ElR-At', 'ElR-Device', 'ElR-Zone'})
+        self.assertEqual(props['ElR-Device'], 'dev-1')
+        self.assertEqual(props['ElR-Zone'], 'Z1')
+        package = zipfile.ZipFile(io.BytesIO(r.content))
+        for part in ('docProps/core.xml', 'docProps/custom.xml'):
+            xml = package.read(part).decode('utf-8')
+            self.assertNotIn('10.0.0.5', xml, part)
+            self.assertNotIn('Ahmed', xml, part)
+        extra = self._rows()[0].extra
+        self.assertEqual((extra['ip'], extra['device_name'], extra['device_id']),
+                         ('10.0.0.5', 'Ahmed Front desk', 'dev-1'))
+
+    def test_default_stamp_limit_is_20_mb(self):
+        from django.conf import settings
+        from apps.access import export_middleware
+        self.assertEqual(settings.EXPORT_STAMP_MAX_BYTES, 20 * 1024 * 1024)
+        self.assertEqual(export_middleware.DEFAULT_MAX_BYTES, 20 * 1024 * 1024)
 
     def test_corrupt_xlsx_passes_through(self):
         with self.assertLogs('elrezeiky.access', 'WARNING'):
@@ -178,7 +204,7 @@ class ExportMiddlewareTests(TestCase):
 
     def test_control_character_username_stamps_and_roundtrips(self):
         bad = 'ab' + chr(1) + 'c' + chr(0x1f)
-        mark = ExportMark('ex9', bad, MARK.at, 'dev' + chr(0x0b), 'Z1', '1.2.3.4')
+        mark = ExportMark('ex9', bad, MARK.at, 'dev' + chr(0x0b), 'Z1')
         wb = openpyxl.load_workbook(io.BytesIO(stamp_ooxml(_workbook_bytes(), mark)))
         self.assertEqual(wb.properties.creator, 'abc')
         self.assertEqual(wb.custom_doc_props['ElR-User'].value, 'abc')
