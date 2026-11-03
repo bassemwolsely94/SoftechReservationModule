@@ -1,13 +1,25 @@
 name: CI
 
+# One run per commit that matters: main, and every pull request. Work-in-progress pushes to
+# other branches don't run (open a PR, or start it by hand from the Actions tab), and a commit
+# pushed to a PR branch runs once, not twice (push + pull_request).
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
+
+# A newer commit on the same PR/branch cancels the older run, so no failure mail arrives for a
+# commit that is already replaced. main always finishes.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   backend-tests:
     name: Backend tests (Django)
     runs-on: ubuntu-latest
+    timeout-minutes: 75
 
     services:
       postgres:
@@ -64,6 +76,7 @@ jobs:
   frontend-build:
     name: Frontend build (Vite)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: frontend

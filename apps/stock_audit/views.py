@@ -42,6 +42,7 @@ from .params import ParamError, ensure_rules, validate_params
 from .rules import RULES, adjustments_by_user
 from .sales_context import channel_options, personcodes_in_channels, sales_context
 from core.export_safety import neutralise_formulas
+from core.threads import start_thread
 
 logger = logging.getLogger('elrezeiky.stock_audit')
 
@@ -613,6 +614,6 @@ def refresh(request):
         finally:
             _refresh_lock.release()
 
-    threading.Thread(target=_work, daemon=True).start()
+    start_thread(_work)
     return Response({'detail': 'بدأ التحديث في الخلفية.', 'ledger_run_id': sync_run.pk},
                     status=status.HTTP_202_ACCEPTED)

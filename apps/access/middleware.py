@@ -1,6 +1,7 @@
 """
 Attaches request.access, and files the request's SOFTECH load under network + role (N1, log only).
 """
+import contextvars
 import logging
 
 from django.core.cache import cache
@@ -33,9 +34,40 @@ class AccessContextMiddleware:
         try:
             self._log_external(request, ctx)
             with softech_load.scope(f'web:{ctx.network.zone}:{ctx.role or "anon"}'):
-                return self.get_response(request)
+                response = self.get_response(request)
+                # A FileResponse is left alone: wrapping clears file_to_stream (the WSGI sendfile
+                # path), and reading a file never opens SOFTECH.
+                if (getattr(response, 'streaming', False) and not getattr(response, 'is_async', False)
+                        and getattr(response, 'file_to_stream', None) is None):
+                    # The body is produced after this frame returns and the reset below runs;
+                    # pull every chunk inside the request's own context so the generator
+                    # (a SOFTECH read, say) is still gated as this user.
+                    ctx_copy = contextvars.copy_context()
+                    # The view's generator is closed by response.close() through its own
+                    # closer, registered before this wrapper: run every closer in the same
+                    # context too, or a generator that resets a contextvar token in its
+                    # `finally` (client disconnect) raises ValueError and skips its cleanup.
+                    closers = getattr(response, '_resource_closers', None)
+                    if isinstance(closers, list):
+                        closers[:] = [self._run_in(ctx_copy, c) for c in closers]
+                    response.streaming_content = self._in_context(ctx_copy, response.streaming_content)
+                return response
         finally:
             context.access_context.reset(token)
+
+    @staticmethod
+    def _in_context(ctx, chunks):
+        it = iter(chunks)
+        while True:
+            try:
+                chunk = ctx.run(next, it)
+            except StopIteration:
+                return
+            yield chunk
+
+    @staticmethod
+    def _run_in(ctx, closer):
+        return lambda: ctx.run(closer)
 
     @staticmethod
     def _log_external(request, ctx):

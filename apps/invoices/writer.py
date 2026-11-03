@@ -62,6 +62,10 @@ _UNREACHABLE_HINTS = ('connection timed out', 'connection refused', 'jz006', 'jz
 
 
 def _is_unreachable(exc):
+    # N4: a gate/read-only refusal is never "unreachable" (a queued invoice is retried later).
+    from config.sybase import SoftechAccessDenied, SoftechReadOnlyError
+    if isinstance(exc, (SoftechAccessDenied, SoftechReadOnlyError)):
+        return False
     msg = str(exc).lower()
     return any(h in msg for h in _UNREACHABLE_HINTS)
 

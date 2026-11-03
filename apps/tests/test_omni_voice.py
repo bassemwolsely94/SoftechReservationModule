@@ -249,9 +249,8 @@ class AutoTranscribeTests(TestCase):
 
     def test_hangup_spawns_only_when_enabled(self):
         with mock.patch('apps.omni.transcription.auto_transcribe_after_hangup') as fn, \
-             mock.patch('threading.Thread') as thread:
-            thread.side_effect = lambda target, args, daemon: mock.Mock(
-                start=lambda: target(*args))
+             mock.patch('apps.pbx.models.start_thread',
+                        side_effect=lambda target, args=(), **kw: target(*args)):
             make_session(caller_number='01011111111').complete()
             self.assertFalse(fn.called)
             with override_settings(**AUTO_ON):

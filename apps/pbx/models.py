@@ -20,6 +20,7 @@ AMI bridge lives in apps/pbx/ami_bridge.py (async Channels worker).
 """
 from django.db import models
 from django.utils import timezone
+from core.threads import start_thread
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -541,10 +542,8 @@ class CallSession(models.Model):
             # The recording may only appear in the CDR after hangup; the
             # auto-transcriber waits, then looks it up.
             if getattr(settings, 'CALLCENTER_AUTO_TRANSCRIBE', False):
-                from threading import Thread
                 from apps.omni.transcription import auto_transcribe_after_hangup
-                Thread(target=auto_transcribe_after_hangup,
-                       args=(log.pk,), daemon=True).start()
+                start_thread(auto_transcribe_after_hangup, args=(log.pk,))
         except Exception as exc:
             import logging
             logging.getLogger('elrezeiky.pbx').warning(

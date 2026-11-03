@@ -40,6 +40,17 @@ from . import shortage as S
 from apps.catalog.wildcard import wq
 from core.export_safety import neutralise_formulas
 
+
+def _gate_refusal(label):
+    """N4 (I3): the SOFTECH gate's answer for this user BEFORE the item changes in PG. A change
+    that SOFTECH refuses would otherwise sit unsynced and be written later by
+    sync_shortage_softech with system rights. enforce: a 403 Response; off / log: None."""
+    from apps.access import softech_gate
+    from core.exceptions import softech_zone_response
+    refused = softech_gate.require_write(label)
+    return softech_zone_response(refused) if refused is not None else None
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -227,6 +238,9 @@ def shortage_flag(request):
     item = Item.objects.filter(id=request.data.get('item_id')).first()
     if item is None:
         return Response({'detail': 'item not found'}, status=status.HTTP_404_NOT_FOUND)
+    refused = _gate_refusal('shortage_flag')
+    if refused is not None:
+        return refused
     item.in_shortage = True
     item.shortage_source = request.data.get('source', 'auto')
     item.shortage_note = (request.data.get('note') or '')[:300]
@@ -257,6 +271,9 @@ def shortage_unflag(request):
     item = Item.objects.filter(id=request.data.get('item_id')).first()
     if item is None:
         return Response({'detail': 'item not found'}, status=status.HTTP_404_NOT_FOUND)
+    refused = _gate_refusal('shortage_unflag')
+    if refused is not None:
+        return refused
     item.in_shortage = False
     item.shortage_source = ''
     item.shortage_flagged_at = None
@@ -291,6 +308,13 @@ def shortage_dismiss(request):
         return Response({'detail': f'reason must be one of {sorted(valid)}'},
                         status=status.HTTP_400_BAD_REQUEST)
     was_flagged = item.in_shortage
+    # push if we must clear a shortage flag OR suspend ordering (on_request / obsolete)
+    needs_push = was_flagged or reason in ('on_request', 'obsolete')
+    # always gated (I3): a refused user's PG change would otherwise reach SOFTECH later through
+    # sync_pending, which writes the item's CURRENT state with system rights
+    refused = _gate_refusal('shortage_dismiss')
+    if refused is not None:
+        return refused
     item.shortage_dismissed = True
     item.shortage_dismiss_reason = reason
     item.shortage_dismiss_note = (request.data.get('note') or '')[:300]
@@ -298,8 +322,6 @@ def shortage_dismiss(request):
     item.shortage_dismissed_by = _staff(request)
     # dismissing supersedes a confirmed flag
     item.in_shortage = False
-    # push if we must clear a shortage flag OR suspend ordering (on_request / obsolete)
-    needs_push = was_flagged or reason in ('on_request', 'obsolete')
     if needs_push:
         item.shortage_softech_synced = False
     item.save(update_fields=['shortage_dismissed', 'shortage_dismiss_reason',
@@ -328,12 +350,15 @@ def shortage_retrieve(request):
     item = Item.objects.filter(id=request.data.get('item_id')).first()
     if item is None:
         return Response({'detail': 'item not found'}, status=status.HTTP_404_NOT_FOUND)
+    restore_supply = item.shortage_supply_suspended   # we had موقوف'd it → restore ordering
+    refused = _gate_refusal('shortage_retrieve')      # always gated (I3), see dismiss
+    if refused is not None:
+        return refused
     item.shortage_dismissed = False
     item.shortage_dismiss_reason = ''
     item.shortage_dismiss_note = ''
     item.shortage_dismissed_at = None
     item.shortage_dismissed_by = None
-    restore_supply = item.shortage_supply_suspended   # we had موقوف'd it → restore ordering
     if restore_supply:
         item.shortage_softech_synced = False
     item.save(update_fields=['shortage_dismissed', 'shortage_dismiss_reason',

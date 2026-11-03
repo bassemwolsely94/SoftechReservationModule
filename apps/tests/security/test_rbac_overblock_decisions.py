@@ -116,7 +116,7 @@ class RefreshButtonTests(_Base):
         c, _ = self._as('purchasing')
         DemandCalculationRun.objects.create(status='running', calc_date=date.today())
         self.assertEqual(c.post('/api/purchasing/catchup/', {}, format='json').status_code, 409)  # past the gate
-        with mock.patch('apps.purchasing.views.threading.Thread'):
+        with mock.patch('apps.purchasing.views.start_thread'):
             self.assertEqual(c.post('/api/purchasing/sync-items/', {}, format='json').status_code, 202)
 
     def test_catalog_editors_refresh_expiry_and_a_running_sync_is_not_doubled(self):
@@ -125,7 +125,7 @@ class RefreshButtonTests(_Base):
         StockExpirySyncRun.objects.create(status='running')
         self.assertEqual(c.post('/api/batches/stock-expiry/sync/', {}, format='json').status_code, 409)
         StockExpirySyncRun.objects.update(started_at=timezone.now() - timedelta(hours=7))   # a stale run
-        with mock.patch('apps.batches.views.threading.Thread'):
+        with mock.patch('apps.batches.views.start_thread'):
             self.assertEqual(c.post('/api/batches/stock-expiry/sync/', {}, format='json').status_code, 202)
 
     def test_roles_without_the_grant_stay_out(self):

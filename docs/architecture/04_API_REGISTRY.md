@@ -619,7 +619,7 @@ Default pagination: CursorPagination (50 items)
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/access/whoami/` | GET | **Public**, throttled (60/min). `{zone: internal\|external, ip, label, site: {name, kind, branch_label}}` — the caller's own IP; site only when internal; zone comes from nginx's `X-ElR-Network`, never the client |
+| `/api/access/whoami/` | GET | **Public**, throttled (60/min). `{zone: internal\|external, ip, label, site: {name, kind, branch_label}}` — the caller's own IP; site only when internal; zone comes from nginx's `X-ElR-Network`, never the client. (N4) also `softech_access` (`'full'\|'read'\|'none'`: the role's SOFTECH grant in this zone) and `softech_gate_mode` (`off\|log\|enforce`); the banner shows the SOFTECH lines only in `enforce` |
 | `/api/access/networks/` (`{id}/`) | GET, POST, PATCH, PUT, DELETE | Trusted networks (branch LAN / staff VPN / server CIDRs). Admin only; every change audited `trusted_network_changed` |
 | `/api/access/devices/` (`{id}/`) | GET, PATCH | Device registry (N2). Admin only. Filters `?status= ?kind= ?branch= ?q=`, pending first, unpaginated. PATCH edits name / kind / branch / owner / allowed_roles; status changes only via the actions below. Every change audited `device_changed` |
 | `/api/access/devices/{id}/approve/` | POST | Approve (pending or blocked -> approved) |

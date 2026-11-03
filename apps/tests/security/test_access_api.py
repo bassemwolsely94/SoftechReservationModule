@@ -180,3 +180,68 @@ class SeedCommandTests(TestCase):
         self._run('--apply')
         tn = TrustedNetwork.objects.get(cidr='192.168.3.0/24')
         self.assertEqual((tn.name, tn.kind, tn.is_active), ('يدوي', 'server', False))
+
+
+@override_settings(NETWORK_HEADER_TRUSTED=True, NETWORK_PROXY_KEY='', ACCESS_POLICY_TTL=0,
+                   SOFTECH_GATE_ENFORCEMENT='enforce', NETWORK_POLICY_ENFORCEMENT='log')
+class WhoamiSoftechTests(TestCase):
+    """N4: whoami tells the banner the effective SOFTECH grant; it never writes an audit row."""
+
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def _get(self, user, cookie=None):
+        from rest_framework_simplejwt.tokens import AccessToken
+        c = APIClient()
+        if cookie:
+            c.cookies['erp_device'] = cookie
+        return c.get(WHOAMI, HTTP_X_ELR_NETWORK='internal',
+                     HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}').json()
+
+    def test_whoami_softech_access_read_in_z2(self):
+        from apps.access.models import ZonePolicy
+        user, _, _ = make_user('wh_sa_z2', role='pharmacist')
+        ZonePolicy.objects.update_or_create(role='pharmacist', zone='Z2',
+                                            defaults=dict(access='full', softech_read=True,
+                                                          softech_write=False))
+        before = AuditLog.objects.count()
+        d = self._get(user)
+        self.assertEqual((d['access_zone'], d['softech_access'], d['softech_gate_mode']),
+                         ('Z2', 'read', 'enforce'))
+        self.assertEqual(AuditLog.objects.count(), before)    # whoami never audits
+
+    def test_whoami_softech_access_none_without_read(self):
+        from apps.access.models import ZonePolicy
+        user, _, _ = make_user('wh_sa_none', role='pharmacist')
+        ZonePolicy.objects.update_or_create(role='pharmacist', zone='Z2',
+                                            defaults=dict(access='full', softech_read=False,
+                                                          softech_write=False))
+        before = AuditLog.objects.count()
+        self.assertEqual(self._get(user)['softech_access'], 'none')
+        self.assertEqual(AuditLog.objects.count(), before)
+
+    def test_whoami_softech_access_full_in_z1(self):
+        from apps.access import devices
+        from apps.access.models import Device, ZonePolicy
+        user, _, _ = make_user('wh_sa_z1', role='pharmacist')
+        secret = devices.new_secret()
+        Device.objects.create(secret_hash=devices.hash_secret(secret), status='approved')
+        ZonePolicy.objects.update_or_create(role='pharmacist', zone='Z1',
+                                            defaults=dict(access='full', softech_read=True,
+                                                          softech_write=True))
+        d = self._get(user, cookie=secret)
+        self.assertEqual((d['access_zone'], d['softech_access']), ('Z1', 'full'))
+
+    @override_settings(SOFTECH_GATE_ENFORCEMENT='off')
+    def test_whoami_softech_access_full_when_gate_off(self):
+        user, _, _ = make_user('wh_sa_off', role='pharmacist')
+        d = self._get(user)
+        self.assertEqual((d['softech_access'], d['softech_gate_mode']), ('full', 'off'))
+
+    def test_whoami_anonymous_has_softech_access_and_no_audit(self):
+        before = AuditLog.objects.count()
+        r = APIClient().get(WHOAMI, HTTP_X_ELR_NETWORK='internal')
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('softech_access', r.json())
+        self.assertEqual(AuditLog.objects.count(), before)

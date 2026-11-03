@@ -10,7 +10,6 @@ The client polls GET /invoices/{id}/ until status changes to 'review'.
 import csv
 import io
 import logging
-import threading
 
 from django.db.models import Count, Q
 from django.http import HttpResponse
@@ -36,6 +35,7 @@ from .serializers import (
 from .anomalies import check_invoice_anomalies
 from apps.catalog.wildcard import wq
 from core.errors import public_error
+from core.threads import start_thread
 
 logger = logging.getLogger('elrezeiky.invoices')
 
@@ -235,14 +235,12 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         immediately with status='processing'.  The thread updates the invoice
         to status='review' once done (or appends an error note on failure).
         """
-        t = threading.Thread(
-            target=self._run_ocr,
+        start_thread(
+            self._run_ocr,
             args=(invoice,),
             kwargs={'engine': engine},
-            daemon=True,
             name=f'ocr-invoice-{invoice.pk}',
         )
-        t.start()
 
     def _run_ocr(self, invoice: SupplierInvoice, engine=None):
         import json
@@ -809,6 +807,12 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         if not self._can_push(request):
             return Response({'detail': 'غير مصرح بترحيل الفواتير إلى ERP'},
                             status=status.HTTP_403_FORBIDDEN)
+        # N4: refused by the gate (enforce) -> 403 before anything is claimed or changed
+        from apps.access import softech_gate
+        from core.exceptions import softech_zone_response
+        refused = softech_gate.require_write('invoice_push')
+        if refused is not None:
+            return softech_zone_response(refused)
         if invoice.status not in ('confirmed', 'queued', 'push_failed'):
             return Response({'detail': 'يجب تأكيد الفاتورة قبل الترحيل'},
                             status=status.HTTP_400_BAD_REQUEST)
@@ -872,6 +876,13 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         usercode = _poster_usercode(request)
         if not usercode:
             return Response({'detail': _NO_SOFTECH_USER}, status=status.HTTP_400_BAD_REQUEST)
+        # N4 (I1): refused by the gate (enforce) -> 403 before any invoice is claimed, so a
+        # queued invoice stays queued for the system job instead of landing in push_failed.
+        from apps.access import softech_gate
+        from core.exceptions import softech_zone_response
+        refused = softech_gate.require_write('invoice_push_batch')
+        if refused is not None:
+            return softech_zone_response(refused)
         found = {inv.pk: inv for inv in SupplierInvoice.objects.filter(pk__in=ids)}
 
         def _slim(r):

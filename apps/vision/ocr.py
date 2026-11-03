@@ -77,7 +77,8 @@ def run_engines(image_file, *, api_key=''):
 
     jobs = {'gemini': _gemini, 'inhouse': _inhouse, 'easyocr': _easyocr, 'tesseract': _tesseract}
     out = {}
-    with cf.ThreadPoolExecutor(max_workers=len(jobs)) as ex:
+    from core.threads import ContextThreadPoolExecutor
+    with ContextThreadPoolExecutor(max_workers=len(jobs)) as ex:
         futures = {ex.submit(_safe, fn): name for name, fn in jobs.items()}
         for fut in cf.as_completed(futures):
             r = fut.result()

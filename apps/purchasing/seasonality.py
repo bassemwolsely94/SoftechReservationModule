@@ -32,6 +32,7 @@ from decimal import Decimal
 
 from django.db import connections, transaction
 from django.utils import timezone
+from core.threads import start_thread
 
 logger = logging.getLogger('elrezeiky.purchasing')
 
@@ -286,7 +287,7 @@ def start_background(triggered_by) -> bool:
         finally:
             connections.close_all()
 
-    threading.Thread(target=_worker, name='seasonality', daemon=True).start()
+    start_thread(_worker, name='seasonality')
     return True
 
 

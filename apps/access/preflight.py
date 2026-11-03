@@ -176,6 +176,61 @@ def check_devices(now):
     return out
 
 
+def check_softech(now):
+    """N4: what the SOFTECH gate logged in the last RECENT_DAYS (rows `softech_gate_denied`).
+    A `no_context` row means a screen opens SOFTECH from a thread or path without a request
+    context, which breaks the moment SOFTECH_GATE_ENFORCEMENT is `enforce`."""
+    from collections import Counter
+
+    from django.conf import settings as dj
+    from django.db.models import Count
+
+    from apps.audit.models import AuditLog
+    from . import softech_gate
+    # grouped in the database: cost is the number of distinct combinations, not of rows
+    rows = (AuditLog.objects.filter(action=softech_gate.AUDIT_ACTION,
+                                    created_at__gte=now - timedelta(days=RECENT_DAYS))
+            .order_by()
+            .values('user_role', 'extra__reason', 'extra__zone', 'extra__scope', 'extra__label',
+                    'extra__sql_first', 'extra__write_word')
+            .annotate(n=Count('id')))
+    out = []
+    no_ctx = Counter()
+    would = Counter()
+    for r in rows:
+        reason = r['extra__reason']
+        if reason == 'no_context':
+            no_ctx[f"{r['extra__scope']} / {r['extra__label'] or '-'}"] += r['n']
+        else:
+            # M10: a write observation carries its first keyword and the write word it matched
+            # (SELECT / LOAD is a read with an odd identifier, UPDATE / UPDATE a real write)
+            sig = (f" [{r['extra__sql_first']} / {r['extra__write_word']}]"
+                   if r.get('extra__sql_first') else '')
+            would[f"{r['user_role'] or '?'} × {r['extra__zone'] or '-'} × {reason}{sig}"] += r['n']
+    if no_ctx:
+        out.append(Item(BLOCK, 'softech_no_context',
+                        'شاشة تفتح SOFTECH من خيط أو مسار بلا سياق طلب — ستنكسر عند التطبيق الفعلي لبوابة SOFTECH',
+                        'A screen opens SOFTECH from a thread or path with no request context — it would break once the SOFTECH gate enforces',
+                        _names(f'{k}: {n}' for k, n in no_ctx.most_common())))
+    if would:
+        out.append(Item(WARN, 'softech_would_deny',
+                        f'بوابة SOFTECH كانت سترفض (آخر {RECENT_DAYS} أيام) — راجع الدور × المنطقة × السبب',
+                        f'The SOFTECH gate would have refused (last {RECENT_DAYS} days) — review role × zone × reason',
+                        _names(f'{k}: {n}' for k, n in would.most_common())))
+    current = softech_gate.mode()
+    configured = str(getattr(dj, 'SOFTECH_GATE_ENFORCEMENT', 'log') or 'log').lower()
+    if current == 'enforce':
+        out.append(Item(OK, 'softech_mode', 'بوابة SOFTECH: التطبيق الفعلي (enforce)', 'SOFTECH gate: enforce'))
+    elif configured == 'enforce':
+        out.append(Item(WARN, 'softech_mode',
+                        'بوابة SOFTECH مضبوطة enforce لكنها تعمل كتسجيل فقط — الإعداد غير آمن (راجع سجل الأخطاء)',
+                        'SOFTECH gate is set to enforce but runs as log — unsafe setup (see the error log)'))
+    else:
+        out.append(Item(WARN, 'softech_mode', f'بوابة SOFTECH في وضع {current} — لا ترفض شيئاً بعد',
+                        f'SOFTECH gate mode is {current} — nothing is refused yet'))
+    return out
+
+
 def run(now=None):
     now = now or timezone.now()
     items = []
@@ -184,6 +239,7 @@ def run(now=None):
     items += check_rows()
     items += check_mfa()
     items += check_devices(now)
+    items += check_softech(now)
     return items
 
 

@@ -16,6 +16,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import RecommendationEngineRun, FrequentlyBoughtTogether, CustomerRecommendation
 from .serializers import EngineRunSerializer, FBTPairSerializer, CustomerRecSerializer
+from core.threads import start_thread
 
 
 def _profile(request):
@@ -78,7 +79,6 @@ def trigger_engine(request):
     min_support    = float(request.data.get('min_support',   0.001))
     min_confidence = float(request.data.get('min_confidence', 0.05))
 
-    from threading import Thread
     from apps.recommendations.engine import run_fbt_engine
 
     def _run():
@@ -89,7 +89,7 @@ def trigger_engine(request):
         except Exception:
             pass
 
-    Thread(target=_run, daemon=True).start()
+    start_thread(_run)
 
     return Response({'queued': True, 'message': 'محرك التوصيات يعمل في الخلفية'})
 

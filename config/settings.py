@@ -109,6 +109,8 @@ NETWORK_UNTRUSTED_ZONE = config('NETWORK_UNTRUSTED_ZONE', default='internal')
 NETWORK_PROXY_KEY = config('NETWORK_PROXY_KEY', default='')
 # off | log only in N1 — no request is refused because of its network.
 NETWORK_POLICY_ENFORCEMENT = config('NETWORK_POLICY_ENFORCEMENT', default='off' if _RUNNING_TESTS else 'log')
+# SOFTECH gate (N4): off | log | enforce. Per role x zone: may a SOFTECH connection open, and may it write.
+SOFTECH_GATE_ENFORCEMENT = config('SOFTECH_GATE_ENFORCEMENT', default='off' if _RUNNING_TESTS else 'log')
 # enforce on an unsafe setup (access.E003 / E004) runs as log with an ERROR line instead (N3, I5).
 # Not an .env setting: only the test suite turns it off, to exercise enforce without nginx.
 NETWORK_ENFORCE_GUARD = not _RUNNING_TESTS
@@ -297,6 +299,10 @@ DATABASES = {
         'TEST': {'NAME': config('TEST_DB_NAME', default=None)},
     }
 }
+# A second connection to the same database, used only for audit rows that must survive a rollback
+# of the caller's transaction (the SOFTECH gate's `softech_gate_denied`, N4 I2). Tests: a mirror
+# of default (no second test database).
+DATABASES['audit_log'] = {**DATABASES['default'], 'TEST': {'MIRROR': 'default'}}
 
 # ── REST FRAMEWORK ─────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
@@ -319,6 +325,8 @@ REST_FRAMEWORK = {
     # ?format=csv / ?format=xlsx as their own file-type parameter without
     # DRF intercepting it and returning 404 for unknown renderer types.
     'URL_FORMAT_OVERRIDE': None,
+    # N4: an uncaught SOFTECH gate refusal -> 403 code 'softech_zone'; all else = DRF default.
+    'EXCEPTION_HANDLER': 'core.exceptions.api_exception_handler',
     # Gap-1: Throttle classes applied per-view; no global throttle to avoid
     # breaking authenticated API endpoints.
     'DEFAULT_THROTTLE_CLASSES': [],

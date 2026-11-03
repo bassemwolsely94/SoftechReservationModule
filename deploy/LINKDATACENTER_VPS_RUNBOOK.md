@@ -1231,6 +1231,88 @@ sudo sed -i '/^NETWORK_POLICY_ENFORCEMENT=/d' $APP/.env \
 Policy edits on «سياسة الشبكات» take effect within a minute without a restart. The admin's own
 «داخل الشبكة — جهاز معتمد» (Z1) cell cannot be set below «كامل».
 
+#### Batch N4 on the live server
+
+N4 puts the same zone policy in front of every SOFTECH connection («SOFTECH» column of «سياسة الشبكات»):
+a role that is refused in its zone cannot open a connection, and a role limited to reading gets a
+read-only one. Jobs and commands (`job:*`, `cmd:*`) are never limited. The switch is
+`SOFTECH_GATE_ENFORCEMENT` = `off` / `log` / `enforce` (default `log`: nothing is refused, only
+`softech gate would-deny` lines and audit rows `softech_gate_denied` are written). **Do N3 first:** N3
+must already be on `enforce` (Step 9 of N3), because N4 relies on the same trusted header and
+proxy key. If the setup is unsafe, `enforce` runs as `log` and writes an ERROR line, as in N3.
+
+**What staff notice (tell them before Step 5).** A cashier who is refused (an unapproved PC, or a
+role without SOFTECH access in that zone) sees «SOFTECH غير متاح لدورك من هذا المكان» on «ترحيل». The order
+is **not** queued and is shown «فشل الترحيل»: the cashier retries from an approved PC, and the order
+posts once (never twice). Read-only roles see «SOFTECH للعرض فقط من هذا المكان» in the zone banner.
+
+**Step 1 - release the code with `release.sh`** (it migrates `audit 0022`, one new audit action).
+```bash
+sudo /opt/elrezeiky/release.sh
+```
+
+**Step 2 - confirm the mode is `log` (or absent).**
+```bash
+sudo grep -n '^SOFTECH_GATE_ENFORCEMENT=' /opt/elrezeiky/app/.env || echo 'absent = log'
+```
+
+**Step 3 - run a log week, then read the lines.** The gate writes `softech gate would-deny:` lines
+(one per user, zone and reason every 10 minutes).
+```bash
+sudo journalctl -u elrezeiky-web --since -7d | grep 'softech gate would-deny'
+```
+A line for branch staff working inside an approved PC means a PC is unapproved or a branch is not
+labelled internal: go back to N3 Step 3 / 5. Lines for roles that really must not use SOFTECH from
+that place are expected. Any `softech gate:` ERROR line (`mode lookup failed`, `audit row lost`) must be
+understood before Step 5.
+
+**Step 4 - preflight until no blockers.**
+```bash
+APP=/opt/elrezeiky/app; PY=/opt/elrezeiky/venv/bin/python
+sudo -u elrezeiky $PY $APP/manage.py access_preflight
+```
+No `softech_no_context` item (BLOCK: a SOFTECH use that carries no user/zone, which `enforce` would
+refuse). `softech_would_deny` (WARN) lists who would be refused; `softech_mode` shows the mode.
+
+**Step 5 - switch to enforce (the owner's action).**
+```bash
+APP=/opt/elrezeiky/app; PY=/opt/elrezeiky/venv/bin/python
+sudo -u elrezeiky $PY $APP/manage.py access_preflight \
+  && sudo -u elrezeiky env SOFTECH_GATE_ENFORCEMENT=enforce $PY $APP/manage.py check \
+  && sudo sed -i '/^SOFTECH_GATE_ENFORCEMENT=/d' $APP/.env \
+  && echo 'SOFTECH_GATE_ENFORCEMENT=enforce' | sudo tee -a $APP/.env >/dev/null \
+  && sudo systemctl restart elrezeiky-web elrezeiky-scheduler
+```
+As in N3, `.env` changes only after `manage.py check` passed against `enforce` (the value on the command
+line wins over `.env`). The check refuses `enforce` while the N3 label cannot be trusted
+(`access.E005`: header not trusted or proxy key empty) and warns about a misspelt value (`access.W003`,
+e.g. `enforced`, which would silently run as `log`): any `access.E005` stops the chain; read any
+`access.W003` before going on.
+
+**Step 6 - confirm it really enforces.** After the restart:
+```bash
+APP=/opt/elrezeiky/app; PY=/opt/elrezeiky/venv/bin/python
+sudo -u elrezeiky $PY $APP/manage.py access_preflight
+sudo journalctl -u elrezeiky-web --since -10min | grep 'SOFTECH_GATE_ENFORCEMENT=enforce refused'   || echo 'no unsafe-enforce line (good)'
+```
+`softech_mode` must be **OK** («بوابة SOFTECH: التطبيق الفعلي (enforce)»). A WARN «مضبوطة enforce لكنها تعمل
+كتسجيل فقط» or a `SOFTECH_GATE_ENFORCEMENT=enforce refused (…)` ERROR line means the setup is unsafe and
+the gate still runs as `log`: go back to N3 before trying again. (N3's own line starts with
+`NETWORK_POLICY_ENFORCEMENT=`, so the two are told apart.) Afterwards
+`journalctl -u elrezeiky-web | grep 'softech gate denied'` shows each refusal, and «الأمان» → سجل المراجعة
+shows `softech_gate_denied` with the user, zone and scope. A refused «تفريغ الطابور» / «ترحيل المحدد» /
+نواقص السوق action answers with the refusal (403, `code: softech_zone`) and changes nothing: queued
+orders stay queued for the scheduler.
+
+**The way back.** Set it to `log` and restart; refusals stop at once.
+```bash
+APP=/opt/elrezeiky/app
+sudo sed -i '/^SOFTECH_GATE_ENFORCEMENT=/d' $APP/.env \
+  && echo 'SOFTECH_GATE_ENFORCEMENT=log' | sudo tee -a $APP/.env >/dev/null \
+  && sudo systemctl restart elrezeiky-web elrezeiky-scheduler
+```
+The global kill switch `SOFTECH_READ_ONLY` and the writer switches stay in force on top of the gate.
+
 #### Company network through the tunnel (split DNS)
 
 Goal: a company device resolves `elrezeikyapp.dawalvry.com` to `10.50.50.77` and reaches the VPS

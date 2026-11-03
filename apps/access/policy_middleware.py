@@ -41,14 +41,16 @@ def enforce_problem():
     return None
 
 
-def _log_unsafe(problem):
-    """The ERROR line for an unsafe enforce, at most once per UNSAFE_LOG_SECONDS per process."""
+def _log_unsafe(problem, switch='NETWORK_POLICY_ENFORCEMENT'):
+    """The ERROR line for an unsafe enforce, at most once per UNSAFE_LOG_SECONDS per process and
+    switch. `switch` names the setting that was downgraded (N3's, or N4's SOFTECH_GATE_ENFORCEMENT),
+    so each has its own line and the runbook can grep for the one it switched."""
     try:
-        if not cache.add(f'access:unsafe-enforce:{problem[:12]}', 1, UNSAFE_LOG_SECONDS):
+        if not cache.add(f'access:unsafe-enforce:{switch}:{problem[:12]}', 1, UNSAFE_LOG_SECONDS):
             return
     except Exception:
         pass
-    log.error('NETWORK_POLICY_ENFORCEMENT=enforce refused (%s) — running as log until fixed', problem)
+    log.error('%s=enforce refused (%s) — running as log until fixed', switch, problem)
 
 
 def _mode():

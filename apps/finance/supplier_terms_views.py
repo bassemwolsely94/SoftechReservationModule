@@ -31,6 +31,7 @@ from . import supplier_terms as ST
 from .receivables_views import _as_of, _j
 from .recon_views import FINANCE, FINANCE_EDIT, FINANCE_EXPORT
 from core.export_safety import neutralise_formulas
+from core.threads import start_thread
 
 logger = logging.getLogger('elrezeiky.finance')
 
@@ -344,6 +345,6 @@ def supplier_terms_recompute(request):
                 logger.exception('supplier terms recompute failed')
             finally:
                 connections.close_all()
-    threading.Thread(target=_work, name='supplier-terms-recompute', daemon=True).start()
+    start_thread(_work, name='supplier-terms-recompute')
     return Response({'detail': 'بدأت إعادة حساب شرائح الفواتير ومواعيد الاستحقاق.', 'running': True},
                     status=status.HTTP_202_ACCEPTED)

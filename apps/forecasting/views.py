@@ -26,6 +26,7 @@ from .serializers import (
 from .service import ForecastService
 from .engine import ForecastEngine
 from .backtest import BacktestService
+from core.threads import start_thread
 
 logger = logging.getLogger('elrezeiky')
 
@@ -333,7 +334,6 @@ class KpiRefreshView(APIView):
         denied = deny_unless(request, 'purchasing', 'edit', 'create')   # /api/forecasting/ = purchasing (Z-2)
         if denied:
             return denied
-        import threading
         from datetime import date
 
         def _job():
@@ -352,7 +352,7 @@ class KpiRefreshView(APIView):
             finally:
                 connections.close_all()
 
-        threading.Thread(target=_job, daemon=True).start()
+        start_thread(_job)
         return Response({'started': True})
 
 

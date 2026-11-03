@@ -40,3 +40,27 @@ def network_settings_check(app_configs, **kwargs):
             f'request is {zone!r} (NETWORK_UNTRUSTED_ZONE), so the policy is either void or refuses everyone.',
             id='access.E004'))
     return out
+
+
+@register()
+def softech_gate_settings_check(app_configs, **kwargs):
+    """N4: SOFTECH_GATE_ENFORCEMENT. An unknown value silently runs as `log` (W003); `enforce` on a
+    setup that cannot tell inside from outside runs as `log` too (E005) - so the runbook's
+    `env SOFTECH_GATE_ENFORCEMENT=enforce manage.py check` step refuses it before .env changes."""
+    from .policy_middleware import enforce_problem
+    out = []
+    raw = getattr(settings, 'SOFTECH_GATE_ENFORCEMENT', 'log')
+    value = str(raw or 'log').lower()
+    if value not in ENFORCEMENT:
+        out.append(Warning(
+            f'SOFTECH_GATE_ENFORCEMENT={raw!r} is not one of {ENFORCEMENT}: it runs as log (nothing is '
+            'refused).',
+            id='access.W003'))
+    elif value == 'enforce':
+        problem = enforce_problem()
+        if problem:
+            out.append(Error(
+                f'SOFTECH_GATE_ENFORCEMENT=enforce cannot be trusted ({problem}): it would run as log. '
+                'Fix the N3 network label first.',
+                id='access.E005'))
+    return out

@@ -217,17 +217,14 @@ class ExportAndRankingTests(StockAuditApiBase):
         self.assertEqual([(r['usercode'], float(r['value_egp'])) for r in rows], [('7', 100.0)])
 
 
-class _SyncThread:
-    def __init__(self, target, daemon=None):
-        self.target = target
-
-    def start(self):
-        self.target()
+def _sync_start(target, *, args=(), kwargs=None, name=None, daemon=True):
+    """core.threads.start_thread run inline (N4: views start threads through it)."""
+    target(*args, **(kwargs or {}))
 
 
 class RefreshTests(StockAuditApiBase):
 
-    @patch('apps.stock_audit.views.threading.Thread', _SyncThread)
+    @patch('apps.stock_audit.views.start_thread', _sync_start)
     @patch('apps.stock_audit.engine.run_stock_audit')
     @patch('apps.stock_audit.ledger.sync_ledger')
     def test_refresh_runs_sync_then_checks(self, sync, engine):

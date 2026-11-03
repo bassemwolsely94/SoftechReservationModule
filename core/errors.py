@@ -11,11 +11,16 @@ exception with a short reference code and returns what the caller may see:
 
 Deliberate, user-facing domain errors (ValueError, *Error classes raised with an
 Arabic message) are NOT routed through this — they are meant to be shown.
+
+N4: a SOFTECH gate refusal (SoftechAccessDenied / SoftechZoneWriteDenied) carries fixed
+Arabic copy and nothing technical — it is logged, then shown as is to everyone.
 """
 import logging
 import uuid
 
 from django.conf import settings
+
+from core.exceptions import is_softech_refusal
 
 logger = logging.getLogger('elrezeiky.errors')
 
@@ -24,6 +29,10 @@ DETAIL_ROLES = frozenset({'admin'})
 
 def public_error(request, exc) -> str:
     ref = uuid.uuid4().hex[:8]
+    if is_softech_refusal(exc):
+        logger.warning('[ref %s] %s %s — SOFTECH refused (%s): %s', ref, getattr(request, 'method', '?'),
+                       getattr(request, 'path', '?'), getattr(exc, 'reason', None) or type(exc).__name__, exc)
+        return str(exc)
     logger.error('[ref %s] %s %s — %s: %s', ref, getattr(request, 'method', '?'),
                  getattr(request, 'path', '?'), type(exc).__name__, exc,
                  exc_info=(type(exc), exc, exc.__traceback__))

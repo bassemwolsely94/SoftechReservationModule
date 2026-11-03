@@ -23,18 +23,16 @@ from __future__ import annotations
 
 import logging
 import os
-import threading
 
 from django.conf import settings
+from core.threads import start_thread
 
 logger = logging.getLogger('elrezeiky.invoices')
 
 
 def start_async(batch):
     """Kick bundle processing onto a daemon thread; returns immediately."""
-    t = threading.Thread(target=process_bundle, args=(batch.pk,),
-                         daemon=True, name=f'invoice-batch-{batch.pk}')
-    t.start()
+    start_thread(process_bundle, args=(batch.pk,), name=f'invoice-batch-{batch.pk}')
 
 
 def _preprocess_pages(page_paths):

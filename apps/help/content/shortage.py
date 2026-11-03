@@ -451,7 +451,9 @@ SCREENS = [
         'summary': T('محرك يكتشف الأصناف الناقصة من السوق (تغطية منخفضة، أيام نفاد، انخفاض مبيعات آخر 30 يوماً عن المعدل) مع مراجعة بشرية: تأكيد أو استبعاد بسبب (مع البديل المتاح)، وتقدير الخسارة الشهرية.',
                      'An engine that detects items short in the market (low coverage, stock-out days, last-30-day sales below the yearly rate) with human review: confirm or dismiss with a reason (and the available alternative), plus the estimated monthly loss.'),
         'tips': [T('الكتابة فى سوفتك (صنف نواقص / التحذير / أوامر التوريد) تُقرأ قيمها قبل أول تعديل لنا وتُعاد كما كانت عند الإلغاء أو الاسترجاع — فلا يُمسح علم وُضع يدوياً فى سوفتك. صنف غير موجود فى سوفتك لا يُعتبر مُزامَناً.',
-                   'SOFTECH writes (shortage flag / warning / supply orders) read the values before our first change and put them back on undo or retrieve — a flag set by hand in SOFTECH is never wiped. An item missing in SOFTECH is not counted as synced.')],
+                   'SOFTECH writes (shortage flag / warning / supply orders) read the values before our first change and put them back on undo or retrieve — a flag set by hand in SOFTECH is never wiped. An item missing in SOFTECH is not counted as synced.'),
+                 T('التأكيد والإلغاء والاستبعاد والاسترجاع بيتطلبوا إن دورك مسموح له يكتب في SOFTECH من المكان ده. لو لأ هتظهر «الكتابة في SOFTECH غير متاحة لدورك من هذا المكان» والصنف مش هيتغير.',
+                   'Confirm, unflag, dismiss and restore need your role to be allowed to write to SOFTECH from this place. If not, a refusal shows and the item does not change.')],
         'audience': T('المشتريات والصيادلة والمشرفون والجودة.', 'Purchasing, pharmacists, supervisors and quality.'),
         'tabs': [
             {'key': 'changes', 'title': T('التغييرات', 'Changes'), 'body': T('ما تغيّر منذ آخر تشغيل: نواقص جديدة للمراجعة، وأصناف مؤكدة عاد مخزونها ومبيعاتها للطبيعي (أزل النقص إن توفّرت).', 'What changed since the last run: new shortages to review, and confirmed items whose stock and sales are back to normal (remove the shortage if available).')},
@@ -578,7 +580,7 @@ SCREENS = [
              'open_hint': T('في تبويب «المستبعدة».', 'In the "Dismissed" tab.')},
         ],
         'updated': '2026-11-02',
-        'change_note': T('الإلغاء يعيد قيم سوفتك السابقة بدل «0» ثابت، وكل كتابة تُتحقق', 'Undo restores the earlier SOFTECH values instead of a fixed "0", and every write is verified'),
+        'change_note': T('الإلغاء يعيد قيم سوفتك السابقة بدل «0» ثابت، وكل كتابة تُتحقق؛ والتأكيد والإلغاء والاستبعاد والاسترجاع بتترفض لو دورك مش مسموح له يكتب في SOFTECH من المكان ده', 'Undo restores the earlier SOFTECH values instead of a fixed "0", and every write is verified; confirm, unflag, dismiss and restore are refused when your role may not write to SOFTECH from this place'),
     },
     {
         'key': 'shortage.phantom',

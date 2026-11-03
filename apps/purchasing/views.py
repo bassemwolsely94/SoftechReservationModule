@@ -14,7 +14,6 @@ Endpoints:
 """
 import io
 import logging
-import threading
 from decimal import Decimal
 
 from django.http import HttpResponse, StreamingHttpResponse
@@ -32,6 +31,7 @@ from .serializers import RunSerializer, MetricsSerializer, AggregatedSerializer
 from apps.catalog.wildcard import wq
 from apps.finance.recon_labels import branch_label as BL      # '170' → '170 · name'
 from core.errors import public_error
+from core.threads import start_thread
 
 
 # ── Shared item-level filter helper ───────────────────────────────────────────
@@ -1864,8 +1864,7 @@ def sync_items_now(request):
             from django.db import connections as _conns
             _conns.close_all()
 
-    threading.Thread(target=_worker, args=(sync_run.pk,), daemon=True,
-                     name='purchasing-items-sync').start()
+    start_thread(_worker, args=(sync_run.pk,), name='purchasing-items-sync')
     return Response({'detail': 'بدأت مزامنة كتالوج الأصناف في الخلفية',
                      'sync_run_id': sync_run.pk},
                     status=status.HTTP_202_ACCEPTED)

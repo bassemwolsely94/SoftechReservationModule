@@ -154,8 +154,8 @@ class ZonePolicy(models.Model):
     modules = models.JSONField('الشاشات', default=list, blank=True)   # module keys, used when listed
     view_only = models.BooleanField('عرض فقط للشاشات المحددة', default=False)
     export = models.BooleanField('التصدير', default=False)
-    softech_read = models.BooleanField('قراءة SOFTECH', default=False)    # stored; enforced in N4
-    softech_write = models.BooleanField('كتابة SOFTECH', default=False)   # stored; enforced in N4
+    softech_read = models.BooleanField('قراءة SOFTECH', default=False)
+    softech_write = models.BooleanField('كتابة SOFTECH', default=False)
     require_mfa = models.BooleanField('إلزام التحقق بخطوتين', default=False)
     max_session_hours = models.PositiveSmallIntegerField('أقصى مدة جلسة (ساعات)', null=True, blank=True)
     updated_by = models.ForeignKey(

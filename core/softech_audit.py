@@ -34,12 +34,32 @@ def _plain(value):
     return json.loads(json.dumps(value, default=str))
 
 
+def _origin(extra):
+    """Where the write came from (N4): ip, device, zone, network, scope. Caller's keys win."""
+    try:
+        from apps.sync.softech_load import current_scope
+        extra.setdefault('scope', current_scope())
+    except Exception:
+        pass
+    try:
+        from apps.access import context as access_context
+        ctx = access_context.current()
+        if ctx is not None:
+            extra.setdefault('ip', ctx.network.ip)
+            extra.setdefault('device_id', ctx.device.public_id if ctx.device is not None else None)
+            extra.setdefault('zone', ctx.zone)
+            extra.setdefault('network', ctx.network.zone)
+    except Exception:
+        pass
+
+
 def audit_softech_write(action, *, actor=None, obj=None, before=None, after=None, note='', **extra):
     try:
         from apps.audit.models import AuditLog
         staff = _staff(actor)
         if actor is not None and staff is None:      # still say who, even without a profile
             extra.setdefault('actor', str(getattr(actor, 'username', actor)))
+        _origin(extra)
         row = AuditLog.log(action, user=staff, obj=obj, old_data=_plain(before),
                            new_data=_plain(after), note=str(note or '')[:255],
                            extra=_plain(extra) or None)

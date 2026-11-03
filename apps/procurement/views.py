@@ -7,7 +7,6 @@ All endpoints are read-only analytics except:
   - POST /trigger/          → trigger engine run (admin only)
   - PATCH /alerts/{id}/resolve/  → resolve alert
 """
-import threading
 import datetime as _dt
 from decimal import Decimal
 
@@ -42,6 +41,7 @@ from .serializers import (
     SupplierProfileEnhancedSerializer,
     SupplierCategorySerializer, SupplierClassificationRuleSerializer,
 )
+from core.threads import start_thread
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -618,8 +618,7 @@ def trigger_engine(request):
     def _run():
         run_procurement_engine(lookback_days=days, triggered_by=triggered_by)
 
-    t = threading.Thread(target=_run, daemon=True)
-    t.start()
+    start_thread(_run)
 
     return Response({
         'detail':  'Procurement engine started.',
@@ -1647,6 +1646,6 @@ def reclassify_suppliers(request):
         except Exception as e:  # pragma: no cover
             run.finish('failed', str(e))
 
-    threading.Thread(target=_run, daemon=True).start()
+    start_thread(_run)
     return Response({'detail': 'Supplier reclassification started.'},
                     status=status.HTTP_202_ACCEPTED)

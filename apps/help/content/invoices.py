@@ -382,7 +382,7 @@ SCREENS = [
             {'target': 'invoices-main-batch-push', 'label': T('⇪ ترحيل المحدد', '⇪ Post selected'),
              'text': T('يرحّل كل الفواتير المحددة إلى SOFTECH مرة واحدة ويعرض نتيجة كل فاتورة.',
                        'Posts every selected invoice to SOFTECH in one go and shows the result of each.'),
-             'when': T('بعد مراجعة كل فاتورة وحدها. فشل فاتورة لا يوقف الباقي.', 'After reviewing each invoice on its own. One failure does not stop the rest.'),
+             'when': T('بعد مراجعة كل فاتورة وحدها. فشل فاتورة لا يوقف الباقي؛ ولو دورك مش مسموح له يكتب من المكان ده الدفعة كلها تترفض.', 'After reviewing each invoice on its own. One failure does not stop the rest; where your role may not write, the whole batch is refused.'),
              'warn': T('اكتب عدد الفواتير للتأكيد. الفاتورة المكررة تُرفض (رحّلها منفردة)، وذات التحذيرات تُرفض ما لم تكتب سبباً للدفعة.',
                        'Type the invoice count to confirm. A duplicate is refused (post it on its own); warnings are refused unless you write a reason for the batch.'),
              'open_hint': T('حدّد مربع الاختيار على بطاقات الفواتير المُأكَّدة.', 'Tick the checkbox on confirmed invoice cards.')},
@@ -522,6 +522,6 @@ SCREENS = [
              'open_hint': T('اضغط «⚙ قالب المورد» الأول.', 'Press "⚙ Supplier template" first.')},
         ],
         'updated': '2026-11-02',
-        'change_note': T('الترحيل: سبب مكتوب للتحذيرات وللتكرار، حد للكميات غير المعتادة، وعدد الفواتير لتأكيد الدفعة', 'Posting: a written reason for warnings and duplicates, limits on unusual quantities, and the invoice count to confirm a batch'),
+        'change_note': T('الترحيل: سبب مكتوب للتحذيرات وللتكرار، حد للكميات غير المعتادة، وعدد الفواتير لتأكيد الدفعة؛ و«ترحيل المحدد» من مكان لا يسمح بالكتابة في SOFTECH يُرفض قبل تغيير أي فاتورة', 'Posting: a written reason for warnings and duplicates, limits on unusual quantities, and the invoice count to confirm a batch; "Post selected" from a place that may not write to SOFTECH is refused before any invoice changes'),
     },
 ]

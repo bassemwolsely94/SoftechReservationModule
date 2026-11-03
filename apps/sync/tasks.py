@@ -20,7 +20,7 @@ from collections import defaultdict
 from apscheduler.schedulers.background import BackgroundScheduler
 from django.utils import timezone
 
-from config.sybase import get_sybase_connection
+from config.sybase import SoftechAccessDenied, SoftechReadOnlyError, get_sybase_connection
 from config.writers import writer_allowed
 from apps.sync.sybase_queries import (
     QUERY_BRANCHES, QUERY_CATEGORIES, QUERY_ITEMS, QUERY_STOCK,
@@ -54,6 +54,9 @@ _CONNECTION_ERROR_MARKERS = (
 
 
 def _is_connection_error(exc):
+    # N4: a gate/read-only refusal is not a dropped session - never reconnect-and-retry it.
+    if isinstance(exc, (SoftechAccessDenied, SoftechReadOnlyError)):
+        return False
     msg = str(exc).lower()
     return any(m in msg for m in _CONNECTION_ERROR_MARKERS)
 

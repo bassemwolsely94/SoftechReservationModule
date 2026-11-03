@@ -31,6 +31,7 @@ from .serializers import (
     CallQualityScoreSerializer,
     CallItemSerializer,
 )
+from core.threads import start_thread
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -458,9 +459,8 @@ class CallLogViewSet(viewsets.ModelViewSet):
 
         # Non-blocking: fire in thread
         try:
-            from threading import Thread
             from apps.callcenter.ai import summarize_call_async
-            Thread(target=summarize_call_async, args=(call.pk,), daemon=True).start()
+            start_thread(summarize_call_async, args=(call.pk,))
         except Exception as e:
             return Response({'detail': f'فشل تشغيل التلخيص: {public_error(request, e)}'}, status=500)
 
@@ -481,9 +481,8 @@ class CallLogViewSet(viewsets.ModelViewSet):
         if call.voice_transcript and not request.data.get('force'):
             return Response({'detail': 'تم تفريغ هذه المكالمة من قبل'}, status=409)
 
-        from threading import Thread
         from apps.omni.transcription import transcribe_call_log
-        Thread(target=transcribe_call_log, args=(call.pk,), daemon=True).start()
+        start_thread(transcribe_call_log, args=(call.pk,))
         return Response({'queued': True, 'call_id': call.pk}, status=202)
 
     # ── Case management from call ─────────────────────────────────────────────

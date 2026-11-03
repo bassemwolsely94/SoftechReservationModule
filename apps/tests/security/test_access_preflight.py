@@ -1,4 +1,5 @@
 """N3 final wave - `manage.py access_preflight`: the read-only pre-enforce checklist (C1 / I1 / I2 / I4)."""
+from datetime import timedelta
 from io import StringIO
 
 from django.core.management import call_command
@@ -101,3 +102,50 @@ class PreflightTests(TestCase):
         self.assertIn('NOT ready', str(cm.exception))
         self.assertEqual(before, (Device.objects.count(), ZonePolicy.objects.count(),
                                   UserActivityLog.objects.count()))
+
+
+@override_settings(**READY)
+class SoftechPreflightTests(TestCase):
+    """N4: the SOFTECH gate items of the checklist."""
+
+    def _row(self, reason, zone='Z2', role='pharmacist', scope='web', label='x'):
+        from apps.audit.models import AuditLog
+        AuditLog.objects.create(action='softech_gate_denied', note=f'{reason} / {zone}', user_role=role,
+                                extra={'scope': scope, 'zone': zone, 'reason': reason,
+                                       'label': label})
+
+    def test_preflight_blocks_on_no_context_rows(self):
+        self._row('no_context', zone=None, scope='web:thread', label='probe_thread')
+        items = preflight.check_softech(timezone.now())
+        item = next(i for i in items if i.code == 'softech_no_context')
+        self.assertEqual(item.level, preflight.BLOCK)
+        self.assertTrue(any('probe_thread' in n for n in item.names), item.names)
+
+    def test_preflight_warns_with_counts(self):
+        self._row('zone_no_write')
+        self._row('zone_no_write')
+        self._row('zone_no_read', zone='Z4')
+        items = preflight.check_softech(timezone.now())
+        self.assertNotIn('softech_no_context', _codes(items))
+        item = next(i for i in items if i.code == 'softech_would_deny')
+        self.assertEqual(item.level, preflight.WARN)
+        self.assertTrue(any('Z2' in n and 'zone_no_write' in n and '2' in n for n in item.names), item.names)
+
+    def test_old_rows_are_ignored_and_mode_item_shown(self):
+        from apps.audit.models import AuditLog
+        self._row('no_context')
+        AuditLog.objects.update(created_at=timezone.now() - timedelta(days=30))
+        items = preflight.check_softech(timezone.now())
+        self.assertEqual(_codes(items), {'softech_mode'})
+
+
+@override_settings(**READY)
+class SoftechPreflightGroupingTests(TestCase):
+    def test_many_identical_rows_group_to_one_count(self):
+        from apps.audit.models import AuditLog
+        AuditLog.objects.bulk_create([
+            AuditLog(action='softech_gate_denied', user_role='pharmacist', note='x',
+                     extra={'scope': 'web', 'zone': 'Z2', 'reason': 'zone_no_write', 'label': 'l'})
+            for _ in range(40)])
+        item = next(i for i in preflight.check_softech(timezone.now()) if i.code == 'softech_would_deny')
+        self.assertEqual(item.names, ['pharmacist × Z2 × zone_no_write: 40'])
