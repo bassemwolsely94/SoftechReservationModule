@@ -255,6 +255,10 @@ purchasing DELETE /api/forecasting/scenarios/987654321/
 purchasing DELETE /api/forecasting/seasonality/987654321/
 purchasing DELETE /api/hr/x
 purchasing DELETE /api/images/products/987654321/images/987654321/
+purchasing DELETE /api/incentives/adjustments/987654321/
+purchasing DELETE /api/incentives/rules/987654321/
+purchasing DELETE /api/incentives/rules/987654321/clear-items/
+purchasing DELETE /api/incentives/rules/987654321/remove-item/
 purchasing DELETE /api/incentives/targets/987654321/
 purchasing DELETE /api/insights/rules/987654321/
 purchasing DELETE /api/invoices/invoices/987654321/

@@ -43,7 +43,7 @@ BRANCH_SCOPE = {
     'shortage':     'own — lists, items, exports, aggregate; stock-check shows other branches (transfers)',
     'purchasing':   'all — HQ module; supply cases / decisions own + network (viewer role)',
     'invoices':     'open — HQ module; branch roles have no grant',
-    'incentives':   'all-branch quality managers + admins only (owner 2026-11-03, apps/incentives/permissions.py); own progress open; sales targets (analytics view) own branch',
+    'incentives':   'all-branch admins, quality managers and purchasing only (owner 2026-11-03, apps/incentives/permissions.py); own progress open; sales targets (analytics view) own branch',
     'cheques':      'own — plans, instalments, treasury dashboard',
     'finance':      'own branch rows only; consolidated + supplier A/P = all-branch roles (B-1); payments own',
     'callcenter':   'own — calls, cases (+ assigned to me), dashboards, converts; omni inbox own + assigned (branch_scope)',

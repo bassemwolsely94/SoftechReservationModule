@@ -550,9 +550,9 @@ export default function App() {
             {/* procurement: purchasing + admin */}
             <Route path="invoices"
               element={<RequireRole roles={['admin','purchasing']}><InvoicePage /></RequireRole>} />
-            {/* incentives payroll: all-branch admin + quality_manager only (owner 2026-11-03; server enforces) */}
+            {/* incentives payroll: all-branch admin + quality_manager + purchasing only (owner 2026-11-03; server enforces) */}
             <Route path="incentives"
-              element={<RequireRole roles={['admin','quality_manager']}><IncentivesPage /></RequireRole>} />
+              element={<RequireRole roles={['admin','quality_manager','purchasing']}><IncentivesPage /></RequireRole>} />
             {/* cheques + finance: admin + purchasing + pharmacist */}
             <Route path="cheques"
               element={<RequireRole roles={['admin','purchasing','pharmacist']}><ChequePlanningPage /></RequireRole>} />

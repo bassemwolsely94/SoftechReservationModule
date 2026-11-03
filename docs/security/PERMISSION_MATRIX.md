@@ -30,7 +30,7 @@ All-branch roles: admin, call_center, purchasing, supervisor, quality_manager �
 | `offers` | all | — | — | — | VCED | — | — | VCED | — | all — offers are chain config; apply-to-order and evaluate own (part 2) |
 | `purchasing` | all | — | — | — | VCEAXF | — | V | — | — | all — HQ module; supply cases / decisions own + network (viewer role) |
 | `invoices` | all | — | — | — | VCEAXF | — | — | — | — | open — HQ module; branch roles have no grant |
-| `incentives` | all | — | — | — | — | — | — | — | VX | all-branch quality managers + admins only (owner 2026-11-03, apps/incentives/permissions.py); own progress open; sales targets (analytics view) own branch |
+| `incentives` | all | — | — | — | VCEAXF | — | — | — | VCEAXF | all-branch admins, quality managers and purchasing only (owner 2026-11-03, apps/incentives/permissions.py); own progress open; sales targets (analytics view) own branch |
 | `cheques` | all | — | V | — | VCEAXF | — | — | — | — | own — plans, instalments, treasury dashboard |
 | `finance` | all | — | V | — | VCEAXF | — | — | — | V | own branch rows only; consolidated + supplier A/P = all-branch roles (B-1); payments own |
 | `insurance` | all | — | — | — | VCEDAXF | — | — | — | — | open — HQ claims module; claims portfolio report all-branch users only (owner 2026-11-02) |

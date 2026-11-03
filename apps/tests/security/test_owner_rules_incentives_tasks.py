@@ -1,9 +1,10 @@
 """
 Owner decisions 2026-11-03 (the last two left open by Batch 5):
 
-1. Incentives payroll — all-branch quality managers and admins only. Every incentives route
-   except the caller's own progress refuses any other role, even one the matrix grants, and a
-   quality manager or admin without all-branch scope.
+1. Incentives payroll — all-branch admins, quality managers and purchasing only, each with the
+   full payroll set (view, export, create programs, calculate, approve, finalize). Every
+   incentives route except the caller's own progress refuses any other role, even one the matrix
+   grants, and one of these roles without all-branch scope.
 2. Tasks get their own module permission (`tasks`). Every role keeps today's access by default;
    switching a role's grant off in the matrix closes the task screens for it, server side.
 """
@@ -37,18 +38,37 @@ class IncentivesPayrollGateTests(TestCase):
         api = _client(user)
         return {path: api.get(path).status_code for path in PAYROLL_ROUTES}
 
-    def test_matrix_grants_incentives_to_quality_manager_and_admin_only(self):
+    def test_matrix_grants_full_payroll_to_admin_quality_manager_and_purchasing_only(self):
         holders = sorted(r for r, mods in PERMISSIONS.items() if mods.get('incentives'))
-        self.assertEqual(holders, ['admin', 'quality_manager'])
+        self.assertEqual(holders, ['admin', 'purchasing', 'quality_manager'])
+        payroll = {'view', 'export', 'create', 'edit', 'approve', 'finalize'}
+        for role in ('quality_manager', 'purchasing'):
+            self.assertTrue(payroll <= PERMISSIONS[role]['incentives'], role)
 
-    def test_quality_manager_and_admin_see_payroll(self):
-        for role in ('quality_manager', 'admin'):
+    def test_payroll_roles_see_payroll(self):
+        for role in ('quality_manager', 'purchasing', 'admin'):
             user = make_user(f'pay_{role}', role=role, branch=self.branch)[0]
             self.assertEqual(set(self._codes(user).values()), {200}, role)
 
-    def test_purchasing_is_refused(self):
-        user = make_user('pay_purchasing', role='purchasing', branch=self.branch)[0]
-        self.assertEqual(set(self._codes(user).values()), {403})
+    def test_quality_manager_and_purchasing_run_payroll(self):
+        from datetime import date
+        from apps.incentives.models import IncentiveProgram
+        program = IncentiveProgram.objects.create(name='برنامج', start_date=date(2026, 9, 1),
+                                                  end_date=date(2026, 9, 30))
+        period = {'period_start': '2026-09-01', 'period_end': '2026-09-30'}
+        for role in ('quality_manager', 'purchasing'):
+            api = _client(make_user(f'run_{role}', role=role, branch=self.branch)[0])
+            self.assertEqual(api.post('/api/incentives/programs/', {
+                'name': f'جديد {role}', 'start_date': '2026-10-01', 'end_date': '2026-10-31'},
+                format='json').status_code, 201, role)
+            for step in ('calculate/', 'finalize/'):
+                r = api.post(f'/api/incentives/programs/{program.pk}/{step}', period, format='json')
+                self.assertNotEqual(r.status_code, 403, (role, step, r.content[:200]))
+
+    def test_other_roles_are_refused(self):
+        for role in ('pharmacist', 'supervisor', 'call_center', 'viewer'):
+            user = make_user(f'pay_no_{role}', role=role, branch=self.branch)[0]
+            self.assertEqual(set(self._codes(user).values()), {403}, role)
 
     def test_matrix_grant_alone_does_not_open_it(self):
         # an admin-made matrix override for another role still can't open payroll

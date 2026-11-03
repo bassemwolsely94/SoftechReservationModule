@@ -4,9 +4,10 @@
 - tasks: its own module. Seed every role with what it had while the task board was open to all
   staff (view, create, edit, delete, assign, finalize), so nobody loses access on deploy; switch
   a role off afterwards in «الصلاحيات».
-- incentives: payroll is all-branch quality managers and admins only. Every other role's
-  incentives rows are switched off (the views refuse them anyway — apps/incentives/permissions.py);
-  quality_manager keeps its rows, admin bypasses the matrix.
+- incentives: payroll is all-branch admins, quality managers and purchasing only. quality_manager
+  and purchasing get the full payroll set (view, export, create, edit, approve, finalize); every
+  other role's incentives rows are switched off (the views refuse them anyway —
+  apps/incentives/permissions.py); admin bypasses the matrix.
 """
 from django.db import migrations, models
 
@@ -14,6 +15,8 @@ ROLES = ['admin', 'call_center', 'pharmacist', 'salesperson', 'purchasing', 'del
          'supervisor', 'quality_manager']
 ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize']
 TASKS = {'view', 'create', 'edit', 'delete', 'assign', 'finalize'}
+PAYROLL_ROLES = ('quality_manager', 'purchasing')
+PAYROLL = {'view', 'create', 'edit', 'approve', 'export', 'finalize'}
 
 
 def forwards(apps, schema_editor):
@@ -22,8 +25,12 @@ def forwards(apps, schema_editor):
         for action in ACTIONS:
             RMA.objects.get_or_create(role=role, module='tasks', action=action,
                                       defaults={'is_allowed': action in TASKS})
-    RMA.objects.filter(module='incentives').exclude(role__in=('admin', 'quality_manager')) \
+    RMA.objects.filter(module='incentives').exclude(role__in=('admin',) + PAYROLL_ROLES) \
         .update(is_allowed=False)
+    for role in PAYROLL_ROLES:
+        for action in ACTIONS:
+            RMA.objects.update_or_create(role=role, module='incentives', action=action,
+                                         defaults={'is_allowed': action in PAYROLL})
 
 
 def backwards(apps, schema_editor):

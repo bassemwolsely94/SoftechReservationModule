@@ -52,6 +52,11 @@ RO  = {'view'}                      # Read-only
 RE  = {'view', 'export'}            # Read + export
 RW  = {'view', 'create', 'edit'}    # Standard read-write (no delete/approve)
 
+# Incentives payroll (owner 2026-11-03): admin, quality_manager and purchasing — view, export,
+# create programs / rules / adjustments, run the calculation, approve, finalize settlements.
+# The views also require one of those roles with all-branch access (apps/incentives/permissions.py).
+INCENTIVES_PAYROLL = {'view', 'create', 'edit', 'approve', 'export', 'finalize'}
+
 
 PERMISSIONS = {
 
@@ -152,7 +157,7 @@ PERMISSIONS = {
         'stockcount':   RE,
         'purchasing':   {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
         'invoices':     {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
-        # incentives: none — payroll is all-branch quality managers and admins only (owner 2026-11-03)
+        'incentives':   INCENTIVES_PAYROLL,  # owner 2026-11-03: admin + QM + purchasing, all-branch
         'cheques':      {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
         'finance':      {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
         'insurance':    {'view', 'create', 'edit', 'delete', 'approve', 'export', 'finalize'},
@@ -265,7 +270,7 @@ PERMISSIONS = {
         'callcenter':   RE,
         'campaigns':    RO,
         'analytics':    RE,
-        'incentives':   RE,
+        'incentives':   INCENTIVES_PAYROLL,  # owner 2026-11-03: programs, calculate, finalize, payroll
         'delivery':     RE,
         'audit':        RE,
         'help':         {'view', 'edit'},   # trainers: edit the in-app help text

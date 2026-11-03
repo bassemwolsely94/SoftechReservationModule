@@ -192,7 +192,7 @@ export const NAV_GROUPS = [
     items: [
       { to: '/analytics',   icon: '📈', label: 'المبيعات والأداء', roles: ['admin','purchasing','pharmacist','supervisor','quality_manager','viewer'] },
       { to: '/forecasting', icon: '🔮', label: 'التنبؤ بالطلب',   roles: ['admin','purchasing','pharmacist','quality_manager'] },
-      { to: '/incentives',  icon: '💰', label: 'الحوافز',          roles: ['admin','quality_manager'] },
+      { to: '/incentives',  icon: '💰', label: 'الحوافز',          roles: ['admin','quality_manager','purchasing'] },
       { to: '/my-incentives', icon: '🏅', label: 'حوافزي',         roles: null },
       { to: '/targets',     icon: '🎯', label: 'الأهداف البيعية',  roles: ['admin','supervisor','purchasing','pharmacist','quality_manager','viewer'] },
       { to: '/kpi-board',   icon: '📊', label: 'لوحة مؤشرات الفروع', roles: ['admin','supervisor','purchasing','pharmacist','quality_manager','viewer'] },
