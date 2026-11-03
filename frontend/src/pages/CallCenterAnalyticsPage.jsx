@@ -20,6 +20,15 @@ import useAuthStore from '../store/authStore'
 import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import useHelpTab from '../help/useHelpTab'
+import useServerSort from '../hooks/useServerSort'
+import SortTh from '../components/SortTh'
+
+// header sorting runs on the server (the list is paged / cut at 50, so sorting only the visible rows would lie);
+// the caller's phone number is masked for some roles → only the PBX caller name is sortable
+const CALL_SORT = ['caller_name', 'called_at', 'purpose', 'status', 'duration_seconds', 'handled_by_name_key',
+                   'ai_sentiment', 'quality_score']
+const CASE_SORT = ['case_number', 'customer__name', 'title', 'category', 'priority_rank', 'status',
+                   'assigned_to_name_key', 'created_at']
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -359,6 +368,8 @@ function CallsTab() {
   const [statusF,    setStatusF]    = useState('')
   const [purposeF,   setPurposeF]   = useState('')
   const [directionF, setDirectionF] = useState('')
+  const [ordering,   setOrdering]   = useState('')
+  const { headerProps } = useServerSort(ordering, setOrdering, { allowed: CALL_SORT })
   const [scoringCall, setScoringCall] = useState(null)
   const timer = useRef(null)
 
@@ -370,12 +381,13 @@ function CallsTab() {
   }
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['callcenter-calls', debouncedSearch, statusF, purposeF, directionF],
+    queryKey: ['callcenter-calls', debouncedSearch, statusF, purposeF, directionF, ordering],
     queryFn: () => callCenterApi.list({
       search:    debouncedSearch || undefined,
       status:    statusF    || undefined,
       purpose:   purposeF   || undefined,
       direction: directionF || undefined,
+      ordering:  ordering   || undefined,
       page_size: 50,
     }).then(r => r.data),
     staleTime: 30_000,
@@ -427,14 +439,14 @@ function CallsTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 text-xs">
-                <th className="text-right px-4 py-3 font-medium">المتصل</th>
-                <th className="text-right px-4 py-3 font-medium">التوقيت</th>
-                <th className="text-right px-4 py-3 font-medium">الغرض</th>
-                <th className="text-right px-4 py-3 font-medium">الحالة</th>
-                <th className="text-right px-4 py-3 font-medium">المدة</th>
-                <th className="text-right px-4 py-3 font-medium">المندوب</th>
-                <th className="text-right px-4 py-3 font-medium">المشاعر</th>
-                <th className="text-right px-4 py-3 font-medium">جودة</th>
+                <SortTh {...headerProps('caller_name', 'text')} className="text-right px-4 py-3 font-medium">المتصل</SortTh>
+                <SortTh {...headerProps('called_at', 'date')} className="text-right px-4 py-3 font-medium">التوقيت</SortTh>
+                <SortTh {...headerProps('purpose', 'text')} className="text-right px-4 py-3 font-medium">الغرض</SortTh>
+                <SortTh {...headerProps('status', 'text')} className="text-right px-4 py-3 font-medium">الحالة</SortTh>
+                <SortTh {...headerProps('duration_seconds', 'number')} className="text-right px-4 py-3 font-medium">المدة</SortTh>
+                <SortTh {...headerProps('handled_by_name_key', 'text')} className="text-right px-4 py-3 font-medium">المندوب</SortTh>
+                <SortTh {...headerProps('ai_sentiment', 'text')} className="text-right px-4 py-3 font-medium">المشاعر</SortTh>
+                <SortTh {...headerProps('quality_score', 'number')} className="text-right px-4 py-3 font-medium">جودة</SortTh>
                 <th className="text-right px-4 py-3 font-medium w-10"></th>
               </tr>
             </thead>
@@ -571,12 +583,14 @@ function AgentTab() {
 
 function CasesBoardTab() {
   const [statusF, setStatusF] = useState('open')
+  const [ordering, setOrdering] = useState('-created_at')
+  const { headerProps } = useServerSort(ordering, setOrdering, { allowed: CASE_SORT, defaultOrdering: '-created_at' })
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['callcenter-cases-list', statusF],
+    queryKey: ['callcenter-cases-list', statusF, ordering],
     queryFn: () => callCenterApi.cases.list({
       status:    statusF || undefined,
-      ordering:  '-created_at',
+      ordering:  ordering || '-created_at',
       page_size: 50,
     }).then(r => r.data),
     staleTime: 30_000,
@@ -613,14 +627,14 @@ function CasesBoardTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 text-xs">
-                <th className="text-right px-4 py-3 font-medium">رقم الحالة</th>
-                <th className="text-right px-4 py-3 font-medium">العميل</th>
-                <th className="text-right px-4 py-3 font-medium">الموضوع</th>
-                <th className="text-right px-4 py-3 font-medium">التصنيف</th>
-                <th className="text-right px-4 py-3 font-medium">الأولوية</th>
-                <th className="text-right px-4 py-3 font-medium">الحالة</th>
-                <th className="text-right px-4 py-3 font-medium">المعيَّن له</th>
-                <th className="text-right px-4 py-3 font-medium">منذ</th>
+                <SortTh {...headerProps('case_number', 'text')} className="text-right px-4 py-3 font-medium">رقم الحالة</SortTh>
+                <SortTh {...headerProps('customer__name', 'text')} className="text-right px-4 py-3 font-medium">العميل</SortTh>
+                <SortTh {...headerProps('title', 'text')} className="text-right px-4 py-3 font-medium">الموضوع</SortTh>
+                <SortTh {...headerProps('category', 'text')} className="text-right px-4 py-3 font-medium">التصنيف</SortTh>
+                <SortTh {...headerProps('priority_rank', 'number')} className="text-right px-4 py-3 font-medium">الأولوية</SortTh>
+                <SortTh {...headerProps('status', 'text')} className="text-right px-4 py-3 font-medium">الحالة</SortTh>
+                <SortTh {...headerProps('assigned_to_name_key', 'text')} className="text-right px-4 py-3 font-medium">المعيَّن له</SortTh>
+                <SortTh {...headerProps('created_at', 'date')} className="text-right px-4 py-3 font-medium">منذ</SortTh>
               </tr>
             </thead>
             <tbody>

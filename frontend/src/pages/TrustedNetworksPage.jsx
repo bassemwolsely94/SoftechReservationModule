@@ -12,6 +12,8 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { accessApi, branchesApi } from '../api/client'
 import useGridKeyboard from '../hooks/useGridKeyboard'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 import { networkBadgeParts } from '../components/NetworkBadge'
 
 const KINDS = [
@@ -106,8 +108,11 @@ export default function TrustedNetworksPage() {
   function startNew() { setEditing('new'); setError(''); setArmed(null); setDraft(BLANK) }
   function cancel() { setEditing(null); setError('') }
 
+  const { sorted, headerProps } = useSortableRows(rows, {
+    getValue: (r, k) => (k === 'kind' ? (KIND_LABEL[r.kind] || r.kind) : k === 'branch' ? r.branch_label : r[k]),
+  })
   const kb = useGridKeyboard({
-    rows, getKey: r => r.id, enabled: editing == null,
+    rows: sorted, getKey: r => r.id, enabled: editing == null,
     onConfirm: startEdit, onClose: () => setArmed(null),
   })
   const mine = networkBadgeParts(me.data)
@@ -138,12 +143,12 @@ export default function TrustedNetworksPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="text-muted border-b border-line">
-              <th className="p-2 text-start">الاسم</th>
-              <th className="p-2 text-start">النطاق (CIDR)</th>
-              <th className="p-2 text-start">النوع</th>
-              <th className="p-2 text-start">الفرع</th>
-              <th className="p-2 text-center">مفعّل</th>
-              <th className="p-2 text-start">ملاحظات</th>
+              <SortTh {...headerProps('name')} className="p-2 text-start">الاسم</SortTh>
+              <SortTh {...headerProps('cidr')} className="p-2 text-start">النطاق (CIDR)</SortTh>
+              <SortTh {...headerProps('kind')} className="p-2 text-start">النوع</SortTh>
+              <SortTh {...headerProps('branch')} className="p-2 text-start">الفرع</SortTh>
+              <SortTh {...headerProps('is_active', 'number')} className="p-2 text-center">مفعّل</SortTh>
+              <SortTh {...headerProps('notes')} className="p-2 text-start">ملاحظات</SortTh>
               <th className="p-2" />
             </tr>
           </thead>
@@ -152,7 +157,7 @@ export default function TrustedNetworksPage() {
               <EditRow draft={draft} setDraft={setDraft} branches={branches} saving={save.isPending}
                        onSave={() => save.mutate()} onCancel={cancel} error={error} />
             )}
-            {rows.map(r => editing === r.id ? (
+            {sorted.map(r => editing === r.id ? (
               <EditRow key={r.id} draft={draft} setDraft={setDraft} branches={branches} saving={save.isPending}
                        onSave={() => save.mutate()} onCancel={cancel} error={error} />
             ) : (() => {

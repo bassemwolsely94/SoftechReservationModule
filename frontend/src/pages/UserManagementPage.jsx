@@ -6,6 +6,11 @@ import useAuthStore from '../store/authStore'
 import { fa } from '../utils/flowArrow'
 import { ROLE_LABELS } from '../utils/roleLabels'
 import { networkBadgeParts } from '../components/NetworkBadge'
+import SortTh from '../components/SortTh'
+import useServerSort from '../hooks/useServerSort'
+
+// Server-side ordering (paged list): DRF `ordering` whitelist on /users/staff/.
+const USER_SORT_KEYS = ['user__first_name', 'role', 'branch__name', 'softech_username', 'is_active']
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -571,6 +576,8 @@ export default function UserManagementPage() {
   const [roleFilter, setRoleFilter]   = useState('')
   const [activeFilter, setActiveFilter] = useState('')
   const [page, setPage]               = useState(1)
+  const [ordering, setOrdering]       = useState('')
+  const { headerProps } = useServerSort(ordering, o => { setOrdering(o); setPage(1) }, { allowed: USER_SORT_KEYS })
 
   const [drawerOpen, setDrawerOpen]   = useState(false)
   const [editUser, setEditUser]       = useState(null)
@@ -580,11 +587,12 @@ export default function UserManagementPage() {
   const qc = useQueryClient()
 
   const { data, isLoading } = useQuery({
-    queryKey: ['users', { search, role: roleFilter, active: activeFilter, page }],
+    queryKey: ['users', { search, role: roleFilter, active: activeFilter, page, ordering }],
     queryFn: () => usersApi.list({
       search: search || undefined,
       role: roleFilter || undefined,
       is_active: activeFilter || undefined,
+      ordering: ordering || undefined,
       page,
     }).then(r => r.data),
     keepPreviousData: true,
@@ -674,11 +682,11 @@ export default function UserManagementPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b text-right text-xs text-gray-500 uppercase tracking-wide font-semibold">
-              <th className="px-5 py-3">المستخدم</th>
-              <th className="px-4 py-3">الدور</th>
-              <th className="px-4 py-3">الفرع</th>
-              <th className="px-4 py-3">SOFTECH</th>
-              <th className="px-4 py-3">الحالة</th>
+              <SortTh {...headerProps('user__first_name')} className="px-5 py-3">المستخدم</SortTh>
+              <SortTh {...headerProps('role')} className="px-4 py-3">الدور</SortTh>
+              <SortTh {...headerProps('branch__name')} className="px-4 py-3">الفرع</SortTh>
+              <SortTh {...headerProps('softech_username')} className="px-4 py-3">SOFTECH</SortTh>
+              <SortTh {...headerProps('is_active')} className="px-4 py-3">الحالة</SortTh>
               {isAdmin && <th className="px-4 py-3 text-center" data-tour="admin-users-actions">إجراءات</th>}
             </tr>
           </thead>

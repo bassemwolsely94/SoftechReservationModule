@@ -10,6 +10,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { refillRemindersApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 const STATUS_TONE = { sent: 'bg-sky-50 text-sky-700', replied: 'bg-emerald-50 text-emerald-700', failed: 'bg-red-50 text-red-700' }
 const errMsg = (e) => e?.response?.data?.detail || e?.message || 'حدث خطأ'
@@ -38,6 +40,10 @@ export default function RefillRemindersPage() {
     refillRemindersApi.preview().then(r => setPv(r.data)).catch(() => {})
   }, [])
   useEffect(load, [load])
+  // both lists are fully in the browser; hooks run before the early returns. The log is the latest 200
+  // reminders, so its sorting covers those rows. The phone is masked → not sortable.
+  const logSort = useSortableRows(ov?.rows || [])
+  const nextSort = useSortableRows(pv?.to_send || [])
 
   const run = async () => {
     setRunning(true); setRunMsg('')
@@ -96,12 +102,22 @@ export default function RefillRemindersPage() {
 
       {view === 'log' && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto" data-tour="followups-reminders-log">
+          <div className="px-3 pt-2 text-[11px] text-gray-400">آخر 200 تذكير — الترتيب على القائمة المعروضة فقط</div>
           <table className="w-full text-sm text-right">
             <thead className="text-xs text-gray-500 border-b">
-              <tr><th className="py-2 px-3">العميل</th><th>الرقم</th><th>الفرع</th><th>موعد الصرف</th><th>الحالة</th><th>الرد</th><th>الحجز</th><th>أُرسل</th></tr>
+              <tr>
+                <SortTh {...logSort.headerProps('customer', 'text')} className="py-2 px-3">العميل</SortTh>
+                <th>الرقم</th>
+                <SortTh {...logSort.headerProps('branch', 'text')}>الفرع</SortTh>
+                <SortTh {...logSort.headerProps('due_date', 'date')}>موعد الصرف</SortTh>
+                <SortTh {...logSort.headerProps('status_label', 'text')}>الحالة</SortTh>
+                <SortTh {...logSort.headerProps('reply_label', 'text')}>الرد</SortTh>
+                <SortTh {...logSort.headerProps('reservation_id', 'number')}>الحجز</SortTh>
+                <SortTh {...logSort.headerProps('sent_at', 'date')}>أُرسل</SortTh>
+              </tr>
             </thead>
             <tbody>
-              {ov.rows.map(r => (
+              {logSort.sorted.map(r => (
                 <tr key={r.id} className="border-b border-gray-50">
                   <td className="py-1.5 px-3">{r.customer}<div className="text-[11px] text-gray-400">{r.item}</div></td>
                   <td className="font-mono" dir="ltr">{r.phone}</td>
@@ -132,10 +148,16 @@ export default function RefillRemindersPage() {
           <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
             <table className="w-full text-sm text-right">
               <thead className="text-xs text-gray-500 border-b">
-                <tr><th className="py-2 px-3">العميل</th><th>الرقم</th><th>الفرع</th><th>موعد الصرف</th><th>الصنف (لا يُذكر في الرسالة)</th></tr>
+                <tr>
+                  <SortTh {...nextSort.headerProps('customer', 'text')} className="py-2 px-3">العميل</SortTh>
+                  <th>الرقم</th>
+                  <SortTh {...nextSort.headerProps('branch', 'text')}>الفرع</SortTh>
+                  <SortTh {...nextSort.headerProps('due_date', 'date')}>موعد الصرف</SortTh>
+                  <SortTh {...nextSort.headerProps('item', 'text')}>الصنف (لا يُذكر في الرسالة)</SortTh>
+                </tr>
               </thead>
               <tbody>
-                {pv.to_send.map(r => (
+                {nextSort.sorted.map(r => (
                   <tr key={r.task_id} className="border-b border-gray-50">
                     <td className="py-1.5 px-3">{r.customer}</td>
                     <td className="font-mono" dir="ltr">{r.phone}</td>

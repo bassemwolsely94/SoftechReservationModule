@@ -15,6 +15,11 @@ import { pbxApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import useHelpTab from '../help/useHelpTab'
 import PbxConfigTab, { PbxStatusBadge } from '../components/pbx/PbxConfigTab'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
+
+// the ID column shows the last 6 characters of the unique id → sort by what is shown
+const sessionValue = (s, key) => (key === 'id6' ? (s.unique_id || '').slice(-6) : s[key])
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const fmtDuration = (seconds) => {
@@ -285,6 +290,8 @@ export default function PbxLivePage() {
   }
 
   const sessions = historyData?.results || historyData || []
+  // the history is the server's most-recent list: header sorting reorders the rows shown
+  const { sorted: sortedSessions, headerProps: sessionHeader } = useSortableRows(sessions, { getValue: sessionValue })
 
   return (
     <div className="flex flex-col h-full" dir="rtl">
@@ -342,24 +349,27 @@ export default function PbxLivePage() {
 
         {/* Recent history */}
         <section data-tour="callcenter-pbx-history">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase mb-3">سجل المكالمات الأخيرة</h2>
+          <h2 className="text-sm font-semibold text-gray-500 uppercase mb-3">
+            سجل المكالمات الأخيرة
+            <span className="ms-2 normal-case font-normal text-xs text-gray-400">الترتيب على القائمة المعروضة فقط</span>
+          </h2>
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-gray-500 text-xs uppercase">
-                  <th className="px-3 py-2 text-right">ID</th>
-                  <th className="px-3 py-2 text-right">رقم المتصل</th>
-                  <th className="px-3 py-2 text-right">العميل</th>
-                  <th className="px-3 py-2 text-right">الطابور</th>
-                  <th className="px-3 py-2 text-right">الموظف</th>
-                  <th className="px-3 py-2 text-right">الحالة</th>
-                  <th className="px-3 py-2 text-right">انتظار</th>
-                  <th className="px-3 py-2 text-right">مكالمة</th>
-                  <th className="px-3 py-2 text-right">الوقت</th>
+                  <SortTh {...sessionHeader('id6', 'text')} className="px-3 py-2 text-right">ID</SortTh>
+                  <SortTh {...sessionHeader('caller_number', 'text')} className="px-3 py-2 text-right">رقم المتصل</SortTh>
+                  <SortTh {...sessionHeader('customer_name', 'text')} className="px-3 py-2 text-right">العميل</SortTh>
+                  <SortTh {...sessionHeader('queue_name', 'text')} className="px-3 py-2 text-right">الطابور</SortTh>
+                  <SortTh {...sessionHeader('agent_name', 'text')} className="px-3 py-2 text-right">الموظف</SortTh>
+                  <SortTh {...sessionHeader('state', 'text')} className="px-3 py-2 text-right">الحالة</SortTh>
+                  <SortTh {...sessionHeader('wait_seconds', 'number')} className="px-3 py-2 text-right">انتظار</SortTh>
+                  <SortTh {...sessionHeader('talk_seconds', 'number')} className="px-3 py-2 text-right">مكالمة</SortTh>
+                  <SortTh {...sessionHeader('started_at', 'date')} className="px-3 py-2 text-right">الوقت</SortTh>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {sessions.map((s) => <SessionRow key={s.id} s={s} />)}
+                {sortedSessions.map((s) => <SessionRow key={s.id} s={s} />)}
                 {sessions.length === 0 && (
                   <tr>
                     <td colSpan={9} className="px-3 py-8 text-center text-gray-400">لا توجد مكالمات مسجَّلة</td>
