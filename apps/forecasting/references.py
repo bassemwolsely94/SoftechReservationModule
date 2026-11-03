@@ -100,10 +100,15 @@ def compute(real_growth=0.15, inflation_annual=None, inflation_source='', store=
 
     metrics = CORE_METRICS + ['call_count']
     seasonality, benchmark, growth_goal, hist_yoy = {}, {}, {}, {}
+    history = {}
     for m in metrics:
         s = _complete(_series(m))
         if not s:
             continue
+        if m == 'cash_delivery':      # the history window the screen reports
+            ks = sorted(s)
+            history = {'from': f'{ks[0][0]}-{ks[0][1]:02d}', 'to': f'{ks[-1][0]}-{ks[-1][1]:02d}',
+                       'months': len(ks)}
         seasonality[m] = {str(mo): v for mo, v in _seasonality(s).items()}
         yoy = round(_recent_yoy(s), 4)
         hist_yoy[m] = yoy
@@ -119,7 +124,7 @@ def compute(real_growth=0.15, inflation_annual=None, inflation_source='', store=
         'inflation_source': infl_source, 'real_growth': round(float(real_growth), 4),
         'bench_floor': BENCH_FLOOR, 'bench_cap': BENCH_CAP,
         'historical_yoy': hist_yoy, 'benchmark': benchmark,
-        'growth_goal': growth_goal, 'seasonality': seasonality,
+        'growth_goal': growth_goal, 'seasonality': seasonality, 'history': history,
     }
     if store:
         import json
@@ -139,6 +144,16 @@ def get():
         return json.loads(raw)
     except (ValueError, TypeError):
         return None
+
+
+def refresh_history():
+    """Recompute the history-derived parts (seasonality/YoY/benchmark/growth) keeping the
+    owner's inflation + real-growth inputs. Called after a closed month's rollup is rebuilt.
+    Values are only stored — applying them to a scenario stays a manual action."""
+    prev = get()
+    if prev is None:
+        return None
+    return compute(real_growth=float(prev.get('real_growth', 0.15)))
 
 
 def set_inflation(inflation_annual, source=''):
