@@ -8,6 +8,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { forecastApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import DataFreshnessBar from '../components/DataFreshnessBar'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 const MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر']
 const MODELS = { a: 'Model A — نمو الهدف', b: 'Model B — مزيج مرجّح', avg: 'المتوسط (A+B)/2' }
@@ -118,6 +120,12 @@ function BacktestPanel({ canEdit }) {
     byMetric[r.metric] = byMetric[r.metric] || { label: r.metric_label }
     byMetric[r.metric][r.model] = r
   }
+  const metricRows = Object.entries(byMetric).map(([m, row]) => ({
+    m, row, label: row.label, a_wape: row.a?.wape, b_wape: row.b?.wape,
+    winner: row.a?.is_winner ? 'A' : (row.b?.is_winner ? 'B' : null),
+    bias: row.a?.is_winner ? row.a?.bias : (row.b?.is_winner ? row.b?.bias : null),
+  }))
+  const { sorted: sortedMetrics, headerProps: btHp } = useSortableRows(metricRows)
 
   return (
     <div data-tour="analytics-scenarios-backtest" className="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
@@ -140,15 +148,15 @@ function BacktestPanel({ canEdit }) {
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-gray-400 border-b border-gray-100">
-                  <th className="text-right py-1">المؤشر</th>
-                  <th className="text-center">A — WAPE%</th>
-                  <th className="text-center">B — WAPE%</th>
-                  <th className="text-center">الأفضل</th>
-                  <th className="text-center">الانحياز (الفائز)</th>
+                  <SortTh {...btHp('label', 'text')} className="text-right py-1">المؤشر</SortTh>
+                  <SortTh {...btHp('a_wape', 'number')} className="text-center">A — WAPE%</SortTh>
+                  <SortTh {...btHp('b_wape', 'number')} className="text-center">B — WAPE%</SortTh>
+                  <SortTh {...btHp('winner', 'text')} className="text-center">الأفضل</SortTh>
+                  <SortTh {...btHp('bias', 'number')} className="text-center">الانحياز (الفائز)</SortTh>
                 </tr>
               </thead>
               <tbody>
-                {Object.entries(byMetric).map(([m, row]) => {
+                {sortedMetrics.map(({ m, row }) => {
                   const win = row.a?.is_winner ? 'a' : (row.b?.is_winner ? 'b' : null)
                   const winner = win ? row[win] : null
                   return (
@@ -201,6 +209,11 @@ function ReferencesPanel({ canEdit }) {
   })
   const metrics = Object.keys(refs.growth_goal || {})
   const pct = v => v == null ? '—' : `${(Number(v) * 100).toFixed(1)}%`
+  const refRows = metrics.map(m => ({
+    m, label: REF_LABELS[m] || m, yoy: refs.historical_yoy?.[m], bench: refs.benchmark?.[m],
+    goal: refs.growth_goal?.[m], season: refs.seasonality?.[m]?.['10'],
+  }))
+  const { sorted: sortedRefs, headerProps: refHp } = useSortableRows(refRows)
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
       <button data-tour="analytics-scenarios-references" onClick={() => setOpen(o => !o)} className="text-sm font-bold text-gray-800 flex items-center gap-2">
@@ -215,15 +228,15 @@ function ReferencesPanel({ canEdit }) {
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-gray-400 border-b border-gray-100">
-                  <th className="text-right py-1">المؤشر</th>
-                  <th className="text-center">النمو التاريخى YoY</th>
-                  <th className="text-center">النمو المرجعى (B)</th>
-                  <th className="text-center">هدف النمو (الخطة)</th>
-                  <th className="text-center">موسمية أكتوبر</th>
+                  <SortTh {...refHp('label', 'text')} className="text-right py-1">المؤشر</SortTh>
+                  <SortTh {...refHp('yoy', 'number')} className="text-center">النمو التاريخى YoY</SortTh>
+                  <SortTh {...refHp('bench', 'number')} className="text-center">النمو المرجعى (B)</SortTh>
+                  <SortTh {...refHp('goal', 'number')} className="text-center">هدف النمو (الخطة)</SortTh>
+                  <SortTh {...refHp('season', 'number')} className="text-center">موسمية أكتوبر</SortTh>
                 </tr>
               </thead>
               <tbody>
-                {metrics.map(m => (
+                {sortedRefs.map(({ m }) => (
                   <tr key={m} className="border-b border-gray-50">
                     <td className="py-1.5 font-medium text-gray-700">{REF_LABELS[m] || m}</td>
                     <td className="text-center tabular-nums text-gray-500">{pct(refs.historical_yoy?.[m])}</td>
@@ -269,6 +282,7 @@ function ProfitExclusionPanel({ canEdit }) {
     queryKey: ['profit-exclusions'],
     queryFn: () => forecastApi.profitExclusions().then(r => Array.isArray(r.data) ? r.data : (r.data.results || [])),
   })
+  const { sorted: sortedEx, headerProps: exHp } = useSortableRows(rows)
   const inval = () => qc.invalidateQueries({ queryKey: ['profit-exclusions'] })
   const add = useMutation({
     mutationFn: () => forecastApi.profitExclusionAdd({ code: code.trim(), note: note.trim() }),
@@ -289,17 +303,17 @@ function ProfitExclusionPanel({ canEdit }) {
           <table className="w-full text-xs">
             <thead>
               <tr className="text-gray-400 border-b border-gray-100">
-                <th className="text-right py-1">الكود</th>
-                <th className="text-right">الصنف</th>
-                <th className="text-center">النوع</th>
-                <th className="text-right">السبب</th>
-                <th className="text-center">نشط</th>
+                <SortTh {...exHp('item_code', 'text')} className="text-right py-1">الكود</SortTh>
+                <SortTh {...exHp('item_name', 'text')} className="text-right">الصنف</SortTh>
+                <SortTh {...exHp('medicine_type', 'text')} className="text-center">النوع</SortTh>
+                <SortTh {...exHp('note', 'text')} className="text-right">السبب</SortTh>
+                <SortTh {...exHp('active', 'number')} className="text-center">نشط</SortTh>
                 {canEdit && <th className="text-center">حذف</th>}
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && <tr><td colSpan={6} className="text-center text-gray-400 py-3">لا توجد استثناءات</td></tr>}
-              {rows.map(x => (
+              {sortedEx.map(x => (
                 <tr key={x.id} className="border-b border-gray-50">
                   <td className="py-1.5 font-mono text-gray-600">{x.item_code}</td>
                   <td className="font-medium text-gray-700">{x.item_name}</td>

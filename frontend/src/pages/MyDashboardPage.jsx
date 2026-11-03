@@ -15,6 +15,8 @@ import WhatsNewCard from '../help/WhatsNewCard'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { personalApi } from '../api/client'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 import useAuthStore from '../store/authStore'
 import GamificationCard from '../components/GamificationCard'
 import {
@@ -729,7 +731,8 @@ function MySalesBody({ payload }) {
 }
 
 function MyAnalyticsBody({ payload }) {
-  const items = payload.top_items || []
+  // the server's top-selling list (a ranking): headers re-order the rows shown, default stays the server rank
+  const { sorted: items, headerProps } = useSortableRows(payload.top_items || [])
   const channels = payload.channels || []
   return (
     <div className="space-y-4">
@@ -754,9 +757,9 @@ function MyAnalyticsBody({ payload }) {
             <table className="w-full text-sm">
               <thead className="text-gray-400 sticky top-0 bg-white z-10">
                 <tr>
-                  <th className="text-right px-1 py-1 font-medium">الصنف</th>
-                  <th className="text-left px-1 font-medium whitespace-nowrap">الكمية</th>
-                  <th className="text-left px-1 font-medium whitespace-nowrap">القيمة (ج.م)</th>
+                  <SortTh {...headerProps('name', 'text')} className="text-right px-1 py-1 font-medium">الصنف</SortTh>
+                  <SortTh {...headerProps('qty', 'number')} className="text-left px-1 font-medium whitespace-nowrap">الكمية</SortTh>
+                  <SortTh {...headerProps('value', 'number')} className="text-left px-1 font-medium whitespace-nowrap">القيمة (ج.م)</SortTh>
                 </tr>
               </thead>
               <tbody>
