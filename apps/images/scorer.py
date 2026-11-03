@@ -255,7 +255,7 @@ def _corner_text_density(img: Image.Image) -> float:
 
     corner_scores = []
     for corner in corners:
-        data = list(corner.getdata())
+        data = list(corner.get_flattened_data())
         if not data:
             continue
         # Local contrast: std dev of small 5×5 windows
@@ -291,7 +291,7 @@ def _alpha_transparency_score(img: Image.Image) -> float:
     """
     if img.mode not in ('RGBA', 'LA'):
         return 0.0
-    alpha_channel = list(img.split()[-1].getdata())
+    alpha_channel = list(img.split()[-1].get_flattened_data())
     if not alpha_channel:
         return 0.0
     # Semi-transparent: alpha in range [30, 200]
@@ -401,7 +401,7 @@ def _clean_watermark(img: Image.Image, wm_result: dict) -> Optional[Image.Image]
 
         for box in corner_boxes:
             corner_gray = gray.crop(box)
-            data        = list(corner_gray.getdata())
+            data        = list(corner_gray.get_flattened_data())
             if not data:
                 continue
 
