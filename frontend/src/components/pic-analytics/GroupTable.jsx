@@ -3,15 +3,18 @@
  * Rows come from the server as {rows, total}; GP is shown only when the rows carry it.
  */
 import useGridKeyboard from '../../hooks/useGridKeyboard'
+import useSortableRows from '../../hooks/useSortableRows'
+import SortTh from '../SortTh'
 import { fmt } from './KpiCards'
 import Explain from './Explain'
 
 const getKey = r => r.key
 
 export default function GroupTable({ data, title, note, firstLabel = 'الاسم', explain }) {
-  const rows = data?.rows || []
+  const allRows = data?.rows || []
+  const { sorted: rows, headerProps } = useSortableRows(allRows, { persistKey: `pic-group-${title || firstLabel}` })
   const total = data?.total
-  const hasGp = rows.some(r => 'gp' in r) || (total && 'gp' in total)
+  const hasGp = allRows.some(r => 'gp' in r) || (total && 'gp' in total)
   const kb = useGridKeyboard({ rows, getKey })
   const cell = 'px-3 py-2 tabular-nums'
   return (
@@ -22,17 +25,17 @@ export default function GroupTable({ data, title, note, firstLabel = 'الاسم
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-500">
             <tr>
-              <th className="px-3 py-2 text-right">{firstLabel}</th>
-              <th className={cell} title="عدد العملاء (PIC) المميّزين اللي اشتروا من هنا في الفترة">عملاء</th>
-              <th className={cell} title="أول شراء ليهم في الفترة، والكود اتسجل في SOFTECH قبل بداية الفترة بـ30 يوم أو أقل">جدد</th>
-              <th className={cell} title="اشتروا في الفترة وليسوا جدد">عائدون</th>
-              <th className={cell} title="عائدون ورجعوا بعد سنة أو أكتر من غير شراء">مُعاد تنشيطهم</th>
-              <th className={cell} title="فواتير العميل في نفس اليوم = زيارة واحدة">زيارات</th>
-              <th className={cell} title="صافي المبيعات بعد المرتجعات">صافي</th>
-              {hasGp && <th className={cell} title="إجمالي الربح = مجموع (إيراد السطر − تكلفته) على القنوات المحسوبة في الربح، بدون أصناف زي العبوات المجانية — نفس قواعد لوحة KPI. الهامش = الربح ÷ إيراد القنوات دي (مش ÷ صافي المبيعات)">الربح</th>}
-              <th className={cell} title="صافي المبيعات ÷ الزيارات">سلة (صافي)</th>
-              <th className={cell} title="متوسط عدد الوحدات في الزيارة">أصناف/زيارة</th>
-              <th className={cell} title="متوسط عدد سطور الفاتورة في الزيارة">سطور لكل زيارة</th>
+              <SortTh {...headerProps('label', 'text')} className="px-3 py-2 text-right">{firstLabel}</SortTh>
+              <SortTh {...headerProps('distinct_pics', 'number')} className={cell} title="عدد العملاء (PIC) المميّزين اللي اشتروا من هنا في الفترة">عملاء</SortTh>
+              <SortTh {...headerProps('new', 'number')} className={cell} title="أول شراء ليهم في الفترة، والكود اتسجل في SOFTECH قبل بداية الفترة بـ30 يوم أو أقل">جدد</SortTh>
+              <SortTh {...headerProps('returning', 'number')} className={cell} title="اشتروا في الفترة وليسوا جدد">عائدون</SortTh>
+              <SortTh {...headerProps('reactivated', 'number')} className={cell} title="عائدون ورجعوا بعد سنة أو أكتر من غير شراء">مُعاد تنشيطهم</SortTh>
+              <SortTh {...headerProps('visits', 'number')} className={cell} title="فواتير العميل في نفس اليوم = زيارة واحدة">زيارات</SortTh>
+              <SortTh {...headerProps('net', 'number')} className={cell} title="صافي المبيعات بعد المرتجعات">صافي</SortTh>
+              {hasGp && <SortTh {...headerProps('gp', 'number')} className={cell} title="إجمالي الربح = مجموع (إيراد السطر − تكلفته) على القنوات المحسوبة في الربح، بدون أصناف زي العبوات المجانية — نفس قواعد لوحة KPI. الهامش = الربح ÷ إيراد القنوات دي (مش ÷ صافي المبيعات)">الربح</SortTh>}
+              <SortTh {...headerProps('basket_net', 'number')} className={cell} title="صافي المبيعات ÷ الزيارات">سلة (صافي)</SortTh>
+              <SortTh {...headerProps('units_per_visit', 'number')} className={cell} title="متوسط عدد الوحدات في الزيارة">أصناف/زيارة</SortTh>
+              <SortTh {...headerProps('lines_per_visit', 'number')} className={cell} title="متوسط عدد سطور الفاتورة في الزيارة">سطور لكل زيارة</SortTh>
             </tr>
           </thead>
           <tbody>

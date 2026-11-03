@@ -5,11 +5,13 @@
  */
 import { useState } from 'react'
 import useGridKeyboard from '../../hooks/useGridKeyboard'
+import useServerSort from '../../hooks/useServerSort'
+import SortTh from '../SortTh'
 import { fmt, fmtDate, fmtDateTime, fmtDuration } from './KpiCards'
 
 export const PAGE_SIZE = 50
 const getKey = r => r.pic
-const SORTABLE = { name: 'name', net: 'net', visits: 'visits', last_purchase: 'last_purchase', days_since_last: 'days_since_last' }
+const SORTABLE = ['name', 'net', 'visits', 'last_purchase', 'days_since_last', 'invoices', 'units', 'basket_net', 'gp']      // the view's `order` whitelist (queries/pics.py)
 const BUCKET = { m1: 'شهري', m2: 'كل شهرين', m3: 'كل 3 شهور', m4_6: '4–6 شهور', m7_12: '7–12 شهر', y1plus: 'سنوي+', '': '—' }
 const SEGMENT = { vip: 'VIP', loyal: 'مخلص', regular: 'عادي', at_risk: 'في خطر', dormant: 'نائم', new: 'جديد', churned: 'مفقود' }
 
@@ -30,21 +32,11 @@ export default function PicTable({ data, order, onOrder, page, onPage, branchNam
   const hasGp = rows.some(r => 'gp' in r)
   const kb = useGridKeyboard({ rows, getKey })
 
-  const sortBy = (key) => {
-    const k = SORTABLE[key]
-    if (!k) return
-    onOrder(order === `-${k}` ? k : `-${k}`)
-  }
-  const Th = ({ k, children, title }) => {
-    const sk = SORTABLE[k]
-    const on = sk && order.replace('-', '') === sk
-    return (
-      <th title={title} className={`px-2 py-2 whitespace-nowrap ${sk ? 'cursor-pointer select-none hover:text-brand-700' : ''}`}
-          onClick={() => sortBy(k)}>
-        {children}{on ? (order.startsWith('-') ? ' ▼' : ' ▲') : ''}
-      </th>
-    )
-  }
+  const { headerProps } = useServerSort(order, onOrder, { allowed: SORTABLE, defaultOrdering: '-net' })
+  // a plain function (not a component) so the header button keeps focus when the order changes
+  const th = (k, type, label, title) => (
+    <SortTh {...headerProps(k, type)} title={title} className="px-2 py-2 whitespace-nowrap">{label}</SortTh>
+  )
   const c = 'px-2 py-1.5 tabular-nums whitespace-nowrap'
 
   return (
@@ -53,11 +45,11 @@ export default function PicTable({ data, order, onOrder, page, onPage, branchNam
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-500">
             <tr>
-              <Th k="name">العميل</Th><th className="px-2 py-2">آخر فرع</th><th className="px-2 py-2" title="تصنيف العميل حسب نشاطه (على كل الفروع)">الشريحة</th>
-              <Th k="net">صافي</Th>{hasGp && <th className="px-2 py-2">الربح</th>}
-              <Th k="visits">زيارات</Th><th className="px-2 py-2">فواتير</th><th className="px-2 py-2">أصناف</th>
-              <th className="px-2 py-2" title="صافي المشتريات ÷ الزيارات">سلة</th><th className="px-2 py-2" title="عدد الفئات المختلفة اللي اشتراها">الفئات</th><th className="px-2 py-2" title="عدد القنوات اللي اشترى منها">القنوات</th>
-              <th className="px-2 py-2">أول شراء</th><Th k="last_purchase">آخر شراء</Th><Th k="days_since_last" title="الأيام من آخر شراء لحد نهاية الفترة">أيام منذ آخر</Th>
+              {th('name', 'text', 'العميل')}<th className="px-2 py-2">آخر فرع</th><th className="px-2 py-2" title="تصنيف العميل حسب نشاطه (على كل الفروع)">الشريحة</th>
+              {th('net', 'number', 'صافي')}{hasGp && th('gp', 'number', 'الربح')}
+              {th('visits', 'number', 'زيارات')}{th('invoices', 'number', 'فواتير')}{th('units', 'number', 'أصناف')}
+              {th('basket_net', 'number', 'سلة', 'صافي المشتريات ÷ الزيارات')}<th className="px-2 py-2" title="عدد الفئات المختلفة اللي اشتراها">الفئات</th><th className="px-2 py-2" title="عدد القنوات اللي اشترى منها">القنوات</th>
+              <th className="px-2 py-2">أول شراء</th>{th('last_purchase', 'date', 'آخر شراء')}{th('days_since_last', 'number', 'أيام منذ آخر', 'الأيام من آخر شراء لحد نهاية الفترة')}
               <th className="px-2 py-2" title="أ: شهور الشراء من آخر 12 · ب: أطول تتابع شهري · ج: دورة الشراء (متوسط الأيام بين زياراته، مجمّع في فئات)">أ/ب/ج</th><th className="px-2 py-2" title="فات على آخر زيارة أكتر من معامل التأخر × دورته المعتادة (محتاج زيارتين على الأقل)">متأخر</th>
               <th className="px-2 py-2" title="عدد مكالماته الواردة في الفترة">وارد</th><th className="px-2 py-2" title="عدد المكالمات الصادرة له في الفترة">صادر</th><th className="px-2 py-2" title="واردة منه لم يرد عليها أحد">فائتة</th>
               <th className="px-2 py-2" title="تاريخ ووقت آخر مكالمة في الفترة">آخر مكالمة</th><th className="px-2 py-2">أيام بين المكالمات</th>

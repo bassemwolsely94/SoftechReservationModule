@@ -4,6 +4,9 @@
  * monthly cohort table. All numbers come from the server.
  */
 import useGridKeyboard from '../../hooks/useGridKeyboard'
+import useServerSort from '../../hooks/useServerSort'
+import useSortableRows from '../../hooks/useSortableRows'
+import SortTh from '../SortTh'
 import { BarRow, KpiCard, fmt, fmtDate, fmtPct } from './KpiCards'
 import Explain from './Explain'
 
@@ -23,11 +26,14 @@ function ClassBars({ title, rows, explain }) {
   )
 }
 
-function Overdue({ data, page, onPage, factor }) {
+const OVERDUE_SORTS = ['name', 'last_visit', 'cycle_days', 'days_overdue', 'lifetime_net']
+
+function Overdue({ data, page, onPage, factor, ordering, onOrdering }) {
   const rows = data?.rows || []
   const count = data?.count || 0
   const pages = Math.max(1, Math.ceil(count / 50))
   const kb = useGridKeyboard({ rows, getKey: r => r.pic })
+  const { headerProps } = useServerSort(ordering, onOrdering, { allowed: OVERDUE_SORTS })
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="pic-analytics-overdue">
       <h3 className="text-sm font-bold text-gray-700 px-4 pt-3">عملاء تأخروا عن دورة شرائهم</h3>
@@ -36,11 +42,11 @@ function Overdue({ data, page, onPage, factor }) {
       <div {...kb.containerProps} className={`overflow-x-auto ${kb.containerProps.className}`}>
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-500">
-            <tr><th className="px-3 py-2 text-right">العميل</th>
-              <th className="px-3 py-2" title="تاريخ آخر يوم شراء حتى نهاية الفترة">آخر زيارة</th>
-              <th className="px-3 py-2" title="متوسط الأيام بين زياراته">الدورة (يوم)</th>
-              <th className="px-3 py-2" title={`الأيام من آخر زيارة − ${fmt(factor, 1)}× الدورة`}>أيام التأخير</th>
-              <th className="px-3 py-2" title="صافي مشترياته (لمدير الفرع: من فرعه فقط)">إجمالي الشراء</th></tr>
+            <tr><SortTh {...headerProps('name', 'text')} className="px-3 py-2 text-right">العميل</SortTh>
+              <SortTh {...headerProps('last_visit', 'date')} className="px-3 py-2" title="تاريخ آخر يوم شراء حتى نهاية الفترة">آخر زيارة</SortTh>
+              <SortTh {...headerProps('cycle_days', 'number')} className="px-3 py-2" title="متوسط الأيام بين زياراته">الدورة (يوم)</SortTh>
+              <SortTh {...headerProps('days_overdue', 'number')} className="px-3 py-2" title={`الأيام من آخر زيارة − ${fmt(factor, 1)}× الدورة`}>أيام التأخير</SortTh>
+              <SortTh {...headerProps('lifetime_net', 'number')} className="px-3 py-2" title="صافي مشترياته (لمدير الفرع: من فرعه فقط)">إجمالي الشراء</SortTh></tr>
           </thead>
           <tbody>
             {rows.map(r => {
@@ -73,7 +79,9 @@ function Overdue({ data, page, onPage, factor }) {
   )
 }
 
-function Cohorts({ rows }) {
+function Cohorts({ rows: cohortRows }) {
+  const { sorted: rows, headerProps } = useSortableRows(cohortRows || [], { persistKey: 'pic-cohorts',
+    getValue: (r, k) => (k.startsWith('m') ? r.months[Number(k.slice(1)) - 1] : r[k]) })
   const cols = Array.from({ length: 12 }, (_, i) => i + 1)
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto" data-tour="pic-analytics-cohorts">
@@ -85,11 +93,12 @@ function Cohorts({ rows }) {
                example="فوج 2026-03 حجمه 200، و70 منهم اشتروا في أبريل ← +1 = 35%" />
       <table className="w-full text-xs">
         <thead className="bg-gray-50 text-gray-500">
-          <tr><th className="px-3 py-2 text-right">شهر أول شراء</th><th className="px-3 py-2">الحجم</th>
-            {cols.map(k => <th key={k} className="px-2 py-2">+{k}</th>)}</tr>
+          <tr><SortTh {...headerProps('cohort', 'text')} className="px-3 py-2 text-right">شهر أول شراء</SortTh>
+            <SortTh {...headerProps('size', 'number')} className="px-3 py-2">الحجم</SortTh>
+            {cols.map(k => <SortTh key={k} {...headerProps(`m${k}`, 'number')} className="px-2 py-2">+{k}</SortTh>)}</tr>
         </thead>
         <tbody>
-          {(rows || []).map(r => (
+          {rows.map(r => (
             <tr key={r.cohort} className="border-t border-gray-100">
               <td className="px-3 py-1.5 tabular-nums">{r.cohort}</td>
               <td className="px-3 py-1.5 tabular-nums text-center">{fmt(r.size)}</td>
@@ -110,7 +119,7 @@ function Cohorts({ rows }) {
   )
 }
 
-export default function RetentionPanel({ data, overdue, overduePage, onOverduePage }) {
+export default function RetentionPanel({ data, overdue, overduePage, onOverduePage, overdueOrdering = '', onOverdueOrdering }) {
   const fr = data?.frequency
   const th = data?.thresholds || {}
   const loyalMonths = fr?.loyal_months ?? th.loyal_months
@@ -166,7 +175,8 @@ export default function RetentionPanel({ data, overdue, overduePage, onOverduePa
                                       'فواتير نفس اليوم = زيارة واحدة.'],
                               example: 'زيارات في 1/1 و31/1 و2/3 ← متوسط 30 يوم ← «كل شهر أو أقل»' }} />
       </div>
-      <Overdue data={overdue} page={overduePage} onPage={onOverduePage} factor={factor} />
+      <Overdue data={overdue} page={overduePage} onPage={onOverduePage} factor={factor}
+               ordering={overdueOrdering} onOrdering={onOverdueOrdering} />
       <Cohorts rows={data?.cohorts} />
     </div>
   )

@@ -7,6 +7,9 @@ import { useEffect, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { picAnalyticsApi } from '../../api/client'
 import useGridKeyboard from '../../hooks/useGridKeyboard'
+import useServerSort from '../../hooks/useServerSort'
+import useSortableRows from '../../hooks/useSortableRows'
+import SortTh from '../SortTh'
 import { errText } from '../../pages/supply/supplyUi'
 import { KpiCard, fmt, fmtDate, fmtDateTime, fmtDuration } from './KpiCards'
 import { Pager } from './MissedTab'
@@ -18,9 +21,12 @@ const getConvKey = r => r.pic
 const getAgentKey = r => r.agent_ext
 const getBranchKey = r => r.branch_id ?? 'none'
 const getLabelKey = r => r.label_id
+const NUMBER_SORTS = ['kind', 'calls_in', 'calls_out', 'answered', 'missed', 'first_call', 'last_call', 'last_agent', 'talk_seconds']   // server whitelists
+const LABEL_SORTS = ['label', 'note', 'created_by', 'created_at']
 
 // small split table (conversions by agent / by branch): label + became PIC + became PIC and bought
-function SplitTable({ title, firstLabel, rows, getKey, tour }) {
+function SplitTable({ title, firstLabel, rows: allRows, getKey, tour }) {
+  const { sorted: rows, headerProps } = useSortableRows(allRows, { persistKey: `pic-split-${tour}` })
   const kb = useGridKeyboard({ rows, getKey })
   const cell = 'px-3 py-2 tabular-nums'
   return (
@@ -29,7 +35,11 @@ function SplitTable({ title, firstLabel, rows, getKey, tour }) {
       <div {...kb.containerProps} className={`overflow-x-auto ${kb.containerProps.className}`}>
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-500">
-            <tr><th className="px-3 py-2 text-right">{firstLabel}</th><th className={cell}>أصبحوا عملاء</th><th className={cell}>اشتروا</th></tr>
+            <tr>
+              <SortTh {...headerProps('label', 'text')} className="px-3 py-2 text-right">{firstLabel}</SortTh>
+              <SortTh {...headerProps('became_pic', 'number')} className={cell}>أصبحوا عملاء</SortTh>
+              <SortTh {...headerProps('became_pic_and_bought', 'number')} className={cell}>اشتروا</SortTh>
+            </tr>
           </thead>
           <tbody>
             {rows.map(r => {
@@ -52,10 +62,11 @@ function SplitTable({ title, firstLabel, rows, getKey, tour }) {
 function Labelled() {
   const qc = useQueryClient()
   const [page, setPage] = useState(1)
+  const [ordering, setOrdering] = useState('')
   const [err, setErr] = useState('')
   const list = useQuery({
-    queryKey: ['pic-analytics', 'labels', page],
-    queryFn: () => picAnalyticsApi.labels({ page, page_size: 50 }).then(r => r.data),
+    queryKey: ['pic-analytics', 'labels', page, ordering],
+    queryFn: () => picAnalyticsApi.labels({ page, page_size: 50, ...(ordering ? { ordering } : {}) }).then(r => r.data),
     staleTime: 2 * 60_000, placeholderData: keepPreviousData,
   })
   const undo = useMutation({
@@ -71,6 +82,7 @@ function Labelled() {
     if (page > 1 && list.data && rows.length === 0) setPage(p => p - 1)
   }, [page, list.data, rows.length])
   const kb = useGridKeyboard({ rows, getKey: getLabelKey })
+  const { headerProps } = useServerSort(ordering, o => { setOrdering(o); setPage(1) }, { allowed: LABEL_SORTS })
   const cell = 'px-3 py-2 tabular-nums'
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="pic-analytics-labelled">
@@ -81,9 +93,11 @@ function Labelled() {
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-500">
             <tr>
-              <th className="px-3 py-2 text-right">الرقم</th><th className="px-3 py-2 text-right">التصنيف</th>
-              <th className="px-3 py-2 text-right">ملاحظة</th><th className="px-3 py-2 text-right">بواسطة</th>
-              <th className={cell}>التاريخ</th><th className="px-3 py-2 text-right">إجراء</th>
+              <th className="px-3 py-2 text-right">الرقم</th>
+              <SortTh {...headerProps('label', 'text')} className="px-3 py-2 text-right">التصنيف</SortTh>
+              <SortTh {...headerProps('note', 'text')} className="px-3 py-2 text-right">ملاحظة</SortTh>
+              <SortTh {...headerProps('created_by', 'text')} className="px-3 py-2 text-right">بواسطة</SortTh>
+              <SortTh {...headerProps('created_at', 'date')} className={cell}>التاريخ</SortTh><th className="px-3 py-2 text-right">إجراء</th>
             </tr>
           </thead>
           <tbody>
@@ -113,7 +127,9 @@ function Labelled() {
 }
 
 function Conversions({ data }) {
-  const rows = data?.rows || []
+  // the server returns the newest 200 conversions: they are sorted here (no paging exists for this list)
+  const { sorted: rows, headerProps } = useSortableRows(data?.rows || [], {
+    persistKey: 'pic-conversions', getValue: (r, k) => (k === 'name' ? (r.customer_name || r.pic) : r[k]) })
   const kb = useGridKeyboard({ rows, getKey: getConvKey })
   const cell = 'px-3 py-2 tabular-nums'
   return (
@@ -136,8 +152,11 @@ function Conversions({ data }) {
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-gray-500">
               <tr>
-                <th className="px-3 py-2 text-right">العميل</th><th className="px-3 py-2 text-right">الرقم</th>
-                <th className={cell}>أول مكالمة</th><th className={cell}>تاريخ التسجيل</th><th className={cell}>اشترى</th>
+                <SortTh {...headerProps('name', 'text')} className="px-3 py-2 text-right">العميل</SortTh>
+                <th className="px-3 py-2 text-right">الرقم</th>
+                <SortTh {...headerProps('first_call', 'date')} className={cell}>أول مكالمة</SortTh>
+                <SortTh {...headerProps('created_at', 'date')} className={cell}>تاريخ التسجيل</SortTh>
+                <SortTh {...headerProps('bought', 'number')} className={cell}>اشترى</SortTh>
               </tr>
             </thead>
             <tbody>
@@ -164,12 +183,13 @@ function Conversions({ data }) {
 export default function NumbersTab({ params, ready }) {
   const qc = useQueryClient()
   const [page, setPage] = useState(1)
+  const [ordering, setOrdering] = useState('')
   const [status, setStatus] = useState({})
   const [label, setLabel] = useState({})
 
   const list = useQuery({
-    queryKey: ['pic-analytics', 'numbers', params, page],
-    queryFn: () => picAnalyticsApi.numbers({ ...params, page, page_size: 50 }).then(r => r.data),
+    queryKey: ['pic-analytics', 'numbers', params, page, ordering],
+    queryFn: () => picAnalyticsApi.numbers({ ...params, page, page_size: 50, ...(ordering ? { ordering } : {}) }).then(r => r.data),
     enabled: ready, staleTime: 2 * 60_000, placeholderData: keepPreviousData,
   })
   const conv = useQuery({
@@ -194,6 +214,7 @@ export default function NumbersTab({ params, ready }) {
 
   const rows = list.data?.rows || []
   const kb = useGridKeyboard({ rows, getKey })
+  const { headerProps } = useServerSort(ordering, o => { setOrdering(o); setPage(1) }, { allowed: NUMBER_SORTS })
   const cell = 'px-3 py-2 tabular-nums'
   return (
     <div className="space-y-4">
@@ -208,10 +229,16 @@ export default function NumbersTab({ params, ready }) {
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-gray-500">
               <tr>
-                <th className="px-3 py-2 text-right">الرقم</th><th className={cell}>النوع</th>
-                <th className={cell}>واردة</th><th className={cell}>صادرة</th><th className={cell}>تمت الإجابة</th><th className={cell}>فائتة</th>
-                <th className={cell}>أول مكالمة</th><th className={cell}>آخر مكالمة</th><th className="px-3 py-2 text-right">آخر موظف</th>
-                <th className={cell}>وقت الحديث</th><th className="px-3 py-2 text-right">إجراء</th>
+                <th className="px-3 py-2 text-right">الرقم</th>
+                <SortTh {...headerProps('kind', 'text')} className={cell}>النوع</SortTh>
+                <SortTh {...headerProps('calls_in', 'number')} className={cell}>واردة</SortTh>
+                <SortTh {...headerProps('calls_out', 'number')} className={cell}>صادرة</SortTh>
+                <SortTh {...headerProps('answered', 'number')} className={cell}>تمت الإجابة</SortTh>
+                <SortTh {...headerProps('missed', 'number')} className={cell}>فائتة</SortTh>
+                <SortTh {...headerProps('first_call', 'date')} className={cell}>أول مكالمة</SortTh>
+                <SortTh {...headerProps('last_call', 'date')} className={cell}>آخر مكالمة</SortTh>
+                <SortTh {...headerProps('last_agent', 'text')} className="px-3 py-2 text-right">آخر موظف</SortTh>
+                <SortTh {...headerProps('talk_seconds', 'number')} className={cell}>وقت الحديث</SortTh><th className="px-3 py-2 text-right">إجراء</th>
               </tr>
             </thead>
             <tbody>

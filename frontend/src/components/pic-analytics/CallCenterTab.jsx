@@ -3,13 +3,16 @@
  * extension plus the team's new-PICs-sold card. All numbers come from the server.
  */
 import useGridKeyboard from '../../hooks/useGridKeyboard'
+import useSortableRows from '../../hooks/useSortableRows'
+import SortTh from '../SortTh'
 import { KpiCard, fmt, fmtDuration } from './KpiCards'
 import Explain from './Explain'
 
 const getKey = r => r.agent_ext
+const getValue = (r, k) => (k === 'name' ? (r.staff_name || r.pbx_name || '') : r[k])
 
 export default function CallCenterTab({ data }) {
-  const rows = data?.rows || []
+  const { sorted: rows, headerProps } = useSortableRows(data?.rows || [], { getValue, persistKey: 'pic-call-center' })
   const kb = useGridKeyboard({ rows, getKey })
   const cell = 'px-3 py-2 tabular-nums'
   const th = data?.thresholds || {}
@@ -32,11 +35,19 @@ export default function CallCenterTab({ data }) {
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-gray-500">
               <tr>
-                <th className="px-3 py-2 text-right">الموظف</th><th className={cell}>تحويلة</th>
-                <th className={cell}>واردة</th><th className={cell}>صادرة</th><th className={cell}>تمت الإجابة</th>
-                <th className={cell}>وقت الحديث</th><th className={cell}>عملاء تم الوصول إليهم</th>
-                <th className={cell}>مكالمة ← شراء %</th><th className={cell}>شراء نفس اليوم %</th><th className={cell}>عملاء جدد باعهم</th><th className={cell}>صادرة بلا رد</th>
-                <th className={cell}>متوسط المحاولات</th><th className={cell}>لم يُوصل إليهم</th>
+                <SortTh {...headerProps('name', 'text')} className="px-3 py-2 text-right">الموظف</SortTh>
+                <SortTh {...headerProps('agent_ext', 'number')} className={cell}>تحويلة</SortTh>
+                <SortTh {...headerProps('calls_in', 'number')} className={cell}>واردة</SortTh>
+                <SortTh {...headerProps('calls_out', 'number')} className={cell}>صادرة</SortTh>
+                <SortTh {...headerProps('answered', 'number')} className={cell}>تمت الإجابة</SortTh>
+                <SortTh {...headerProps('talk_seconds', 'number')} className={cell}>وقت الحديث</SortTh>
+                <SortTh {...headerProps('pics_reached', 'number')} className={cell}>عملاء تم الوصول إليهم</SortTh>
+                <SortTh {...headerProps('call_to_purchase_pct', 'number')} className={cell}>مكالمة ← شراء %</SortTh>
+                <SortTh {...headerProps('call_to_purchase_same_day_pct', 'number')} className={cell}>شراء نفس اليوم %</SortTh>
+                <SortTh {...headerProps('new_pics_sold', 'number')} className={cell}>عملاء جدد باعهم</SortTh>
+                <SortTh {...headerProps('unanswered_out', 'number')} className={cell}>صادرة بلا رد</SortTh>
+                <SortTh {...headerProps('avg_attempts_to_reach', 'number')} className={cell}>متوسط المحاولات</SortTh>
+                <SortTh {...headerProps('not_reached', 'number')} className={cell}>لم يُوصل إليهم</SortTh>
               </tr>
             </thead>
             <tbody>

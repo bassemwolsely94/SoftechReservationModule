@@ -8,6 +8,9 @@ import { useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { picAnalyticsApi } from '../../api/client'
 import useGridKeyboard from '../../hooks/useGridKeyboard'
+import useServerSort from '../../hooks/useServerSort'
+import useSortableRows from '../../hooks/useSortableRows'
+import SortTh from '../SortTh'
 import { errText } from '../../pages/supply/supplyUi'
 import { KpiCard, fmt, fmtDateTime } from './KpiCards'
 import Heatmap from './Heatmap'
@@ -16,6 +19,8 @@ import Explain from './Explain'
 const PAGE_SIZE = 50
 const getKey = r => r.call_id
 const getAgent = r => r.agent_ext
+const getAgentValue = (r, k) => (k === 'name' ? (r.staff_name || r.pbx_name || r.agent_ext) : r[k])
+const MISSED_SORTS = ['call_at', 'customer_name', 'segment', 'lifetime_net', 'last_purchase', 'returned_at']      // server whitelist
 
 export function Pager({ count, page, onPage, noun }) {
   const pages = Math.max(1, Math.ceil(count / PAGE_SIZE))
@@ -30,7 +35,8 @@ export function Pager({ count, page, onPage, noun }) {
   )
 }
 
-function Unanswered({ rows }) {
+function Unanswered({ rows: allRows }) {
+  const { sorted: rows, headerProps } = useSortableRows(allRows, { getValue: getAgentValue, persistKey: 'pic-unanswered' })
   const kb = useGridKeyboard({ rows, getKey: getAgent })
   const cell = 'px-3 py-2 tabular-nums'
   return (
@@ -44,8 +50,12 @@ function Unanswered({ rows }) {
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-500">
             <tr>
-              <th className="px-3 py-2 text-right">الموظف</th><th className={cell}>محاولات</th><th className={cell}>بلا رد</th>
-              <th className={cell}>أرقام تم الوصول إليها</th><th className={cell}>لم يُوصل إليها</th><th className={cell}>متوسط المحاولات</th>
+              <SortTh {...headerProps('name', 'text')} className="px-3 py-2 text-right">الموظف</SortTh>
+              <SortTh {...headerProps('attempts', 'number')} className={cell}>محاولات</SortTh>
+              <SortTh {...headerProps('unanswered', 'number')} className={cell}>بلا رد</SortTh>
+              <SortTh {...headerProps('reached_numbers', 'number')} className={cell}>أرقام تم الوصول إليها</SortTh>
+              <SortTh {...headerProps('not_reached', 'number')} className={cell}>لم يُوصل إليها</SortTh>
+              <SortTh {...headerProps('avg_attempts_to_reach', 'number')} className={cell}>متوسط المحاولات</SortTh>
             </tr>
           </thead>
           <tbody>
@@ -72,6 +82,7 @@ export default function MissedTab({ params, ready }) {
   const qc = useQueryClient()
   const [onlyOpen, setOnlyOpen] = useState(true)
   const [page, setPage] = useState(1)
+  const [ordering, setOrdering] = useState('')         // '' = the server's default (biggest customer first)
   const [status, setStatus] = useState({})           // call_id -> {ok, text}
   const [cb, setCb] = useState(null)                 // call_id with the call-back form open
   const [due, setDue] = useState('')
@@ -83,8 +94,8 @@ export default function MissedTab({ params, ready }) {
     queryFn: () => picAnalyticsApi.missed(params).then(r => r.data), ...common,
   })
   const rowsQ = useQuery({
-    queryKey: ['pic-analytics', 'missed-rows', params, onlyOpen, page],
-    queryFn: () => picAnalyticsApi.missedRows({ ...params, only_not_returned: onlyOpen ? 1 : 0, page, page_size: PAGE_SIZE }).then(r => r.data),
+    queryKey: ['pic-analytics', 'missed-rows', params, onlyOpen, page, ordering],
+    queryFn: () => picAnalyticsApi.missedRows({ ...params, only_not_returned: onlyOpen ? 1 : 0, page, page_size: PAGE_SIZE, ...(ordering ? { ordering } : {}) }).then(r => r.data),
     ...common,
   })
   const unans = useQuery({
@@ -113,6 +124,7 @@ export default function MissedTab({ params, ready }) {
   const th = s?.thresholds || rowsQ.data?.thresholds || {}
   const rows = rowsQ.data?.rows || []
   const kb = useGridKeyboard({ rows, getKey })
+  const { headerProps } = useServerSort(ordering, o => { setOrdering(o); setPage(1) }, { allowed: MISSED_SORTS })
   const maxQ = Math.max(1, ...(s?.by_queue || []).map(x => x.missed))
   const cell = 'px-3 py-2 tabular-nums'
 
@@ -170,10 +182,14 @@ export default function MissedTab({ params, ready }) {
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-gray-500">
               <tr>
-                <th className="px-3 py-2 text-right">وقت المكالمة</th><th className="px-3 py-2 text-right">الرقم</th>
-                <th className="px-3 py-2 text-right">العميل</th><th className={cell}>الشريحة</th>
-                <th className={cell}>إجمالي صافي</th><th className={cell}>آخر شراء</th>
-                <th className={cell}>{`اشترى خلال ${th.purchase_days ?? '—'} أيام`}</th><th className={cell}>تم الرد</th><th className="px-3 py-2 text-right">إجراء</th>
+                <SortTh {...headerProps('call_at', 'date')} className="px-3 py-2 text-right">وقت المكالمة</SortTh>
+                <th className="px-3 py-2 text-right">الرقم</th>
+                <SortTh {...headerProps('customer_name', 'text')} className="px-3 py-2 text-right">العميل</SortTh>
+                <SortTh {...headerProps('segment', 'text')} className={cell}>الشريحة</SortTh>
+                <SortTh {...headerProps('lifetime_net', 'number')} className={cell}>إجمالي صافي</SortTh>
+                <SortTh {...headerProps('last_purchase', 'date')} className={cell}>آخر شراء</SortTh>
+                <th className={cell}>{`اشترى خلال ${th.purchase_days ?? '—'} أيام`}</th>
+                <SortTh {...headerProps('returned_at', 'date')} className={cell}>تم الرد</SortTh><th className="px-3 py-2 text-right">إجراء</th>
               </tr>
             </thead>
             <tbody>

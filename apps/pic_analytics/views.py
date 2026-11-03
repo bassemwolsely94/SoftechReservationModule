@@ -31,6 +31,7 @@ from .queries import pics as q_pics
 from .queries import retention as q_retention
 from .queries.calls import call_center
 from .queries.filters import FilterError, Filters
+from .queries.ordering import parse_ordering, sort_items
 from .queries.retention import MAX_PAGE_SIZE, _int_param
 from .settings import DEFAULTS, setting
 
@@ -198,6 +199,17 @@ def _run(request, fn, calls=False):
         return _bad(str(exc))
 
 
+# whitelisted `ordering` fields of the lists sorted here (the number itself is masked, so not sortable)
+NUMBER_ORDERS = {'kind': lambda r: r['kind'], 'calls_in': lambda r: r['calls_in'], 'calls_out': lambda r: r['calls_out'],
+                 'answered': lambda r: r['answered'], 'missed': lambda r: r['missed'],
+                 'first_call': lambda r: r['first_call'], 'last_call': lambda r: r['last_call'],
+                 'talk_seconds': lambda r: r['talk_seconds'],
+                 'last_agent': lambda r: (r['last_agent'] or {}).get('staff_name') or (r['last_agent'] or {}).get('pbx_name')
+                                          or (r['last_agent'] or {}).get('agent_ext')}
+LABEL_ORDERS = {'label': lambda r: r['label_display'], 'note': lambda r: r['note'],
+                'created_by': lambda r: r['created_by'], 'created_at': lambda r: r['created_at']}
+
+
 def _paging(request, default_size=50):
     q = request.query_params
     return (_int_param(q.get('page', 1), 'الصفحة', 1),
@@ -266,7 +278,7 @@ def retention(request):
 def retention_overdue(request):
     def go(f, acc):
         page, size = _paging(request)
-        return q_retention.overdue_list(f, acc, page, size)
+        return q_retention.overdue_list(f, acc, page, size, request.query_params.get('ordering', ''))
     return _run(request, go)
 
 
@@ -288,7 +300,7 @@ def calls_missed_rows(request):
     def go(f, acc):
         only = _int_param(request.query_params.get('only_not_returned', 0), 'غير المردودة', 0, 1)
         page, size = _paging(request)
-        return q_missed.missed_rows(f, acc, bool(only), page, size)
+        return q_missed.missed_rows(f, acc, bool(only), page, size, request.query_params.get('ordering', ''))
     return _run(request, go, calls=True)
 
 
@@ -334,7 +346,12 @@ def _resolve_number_id(number_id):
 def numbers_list(request):
     def go(f, acc):
         page, size = _paging(request)
-        return _opaque(q_numbers.new_numbers(f, acc, page, size))
+        key, desc = parse_ordering(request.query_params.get('ordering', ''), NUMBER_ORDERS)
+        if not key:
+            return _opaque(q_numbers.new_numbers(f, acc, page, size))
+        data = q_numbers.new_numbers(f, acc, 1, None)             # every number, then sort, then page
+        rows = sort_items(data['rows'], NUMBER_ORDERS[key], desc)
+        return _opaque({'count': data['count'], 'rows': rows[(page - 1) * size: page * size]})
     return _run(request, go, calls=True)
 
 
@@ -352,7 +369,18 @@ def numbers_labels(request):
         return _deny()
     try:
         page, size = _paging(request)
-        return Response(_opaque(q_numbers.labelled_numbers(acc, page, size)))
+        key, desc = parse_ordering(request.query_params.get('ordering', ''), LABEL_ORDERS)
+        if not key:
+            return Response(_opaque(q_numbers.labelled_numbers(acc, page, size)))
+        rows, got = [], 1                                          # a small table: read it all, sort, then page
+        while True:
+            part = q_numbers.labelled_numbers(acc, got, MAX_PAGE_SIZE)
+            rows += part['rows']
+            if len(rows) >= part['count'] or not part['rows']:
+                break
+            got += 1
+        rows = sort_items(rows, LABEL_ORDERS[key], desc)
+        return Response(_opaque({'count': len(rows), 'rows': rows[(page - 1) * size: page * size]}))
     except PermissionError as exc:
         return _deny(str(exc))
     except ValueError as exc:

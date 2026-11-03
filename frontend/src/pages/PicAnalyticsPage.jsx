@@ -58,6 +58,7 @@ export default function PicAnalyticsPage() {
   const [order, setOrder] = useState('-net')
   const [picPage, setPicPage] = useState(1)
   const [overduePage, setOverduePage] = useState(1)
+  const [overdueOrdering, setOverdueOrdering] = useState('')
   const [exporting, setExporting] = useState(false)
   const [msg, setMsg] = useState('')
   const urlQ = sp.get('q') || ''
@@ -124,8 +125,8 @@ export default function PicAnalyticsPage() {
   const catG = useGroup('g-category', () => picAnalyticsApi.groups('category', params).then(r => r.data), tab === 'channels')
   const retention = useGroup('retention', () => picAnalyticsApi.retention(params).then(r => r.data), tab === 'retention')
   const overdue = useQuery({
-    queryKey: ['pic-analytics', 'overdue', params, overduePage],
-    queryFn: () => picAnalyticsApi.overdue({ ...params, page: overduePage, page_size: 50 }).then(r => r.data),
+    queryKey: ['pic-analytics', 'overdue', params, overduePage, overdueOrdering],
+    queryFn: () => picAnalyticsApi.overdue({ ...params, page: overduePage, page_size: 50, ...(overdueOrdering ? { ordering: overdueOrdering } : {}) }).then(r => r.data),
     enabled: ready && tab === 'retention', staleTime: 2 * 60_000, placeholderData: keepPreviousData,
   })
   const center = useGroup('calls-center', () => picAnalyticsApi.callCenter(params).then(r => r.data), tab === 'calls')
@@ -289,7 +290,8 @@ export default function PicAnalyticsPage() {
       )}
       {tab === 'retention' && (
         <RetentionPanel data={retention.data} overdue={overdue.data}
-                        overduePage={overduePage} onOverduePage={setOverduePage} />
+                        overduePage={overduePage} onOverduePage={setOverduePage}
+                        overdueOrdering={overdueOrdering} onOverdueOrdering={o => { setOverdueOrdering(o); setOverduePage(1) }} />
       )}
 
       {tab === 'calls' && <CallCenterTab data={center.data} />}
