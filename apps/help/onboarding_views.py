@@ -598,7 +598,7 @@ def whats_new(request):
 NOTES_LOG_DAYS = 30
 ROLE_AR = {'pharmacist': 'الصيدلي', 'salesperson': 'البائع', 'call_center': 'الكول سنتر',
            'purchasing': 'المشتريات', 'delivery': 'الطيار / التوصيل', 'supervisor': 'المشرف',
-           'quality_manager': 'مدير الجودة', 'viewer': 'مشاهد', 'admin': 'مدير النظام'}
+           'quality_manager': 'مدير الجودة', 'accountant': 'محاسب', 'viewer': 'مشاهد', 'admin': 'مدير النظام'}
 
 
 def recent_notes(days=NOTES_LOG_DAYS, now=None):

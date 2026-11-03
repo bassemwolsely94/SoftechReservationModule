@@ -7,4 +7,5 @@ export const ROLE_LABELS = {
   purchasing:  'مشتريات',
   delivery:    'توصيل',
   viewer:      'مشاهد فقط',
+  accountant:  'محاسب',
 }

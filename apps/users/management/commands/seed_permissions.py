@@ -37,6 +37,7 @@ ALL_MODULES = [
     'stock_audit',   # doc 32: 'view' = all branches, 'approve' = review findings, 'export', 'edit' = thresholds
     'pic_analytics', # doc 33: 'view' = all branches + cost/GP + calls tabs, 'export' = Excel (branch managers = named grants)
     'tasks',         # المهام: own module since 2026-11-03 (owner); every role keeps its access by default
+    'ledger',        # الحسابات العامة (finance GL): view/create drafts/approve/export = accountant; edit (COA, rules) + finalize (period close) = admin or named grant
 ]
 
 ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize']
@@ -279,6 +280,18 @@ PERMISSIONS = {
         'approvals':    {'view', 'approve'}, # batch_quarantine authorization
         'replacement':  RE,                  # بدل الروشتة — audit/read (doc 25)
         'stock_audit':  {'view', 'approve', 'export', 'edit'},   # review + thresholds (doc 32)
+    },
+
+    # ─────────────────────────────────────────────────────────────────────
+    # accountant — General Ledger (finance GL). Reads finance + cheques, works the ledger.
+    # ledger edit (chart of accounts, rules) and finalize (period close) are NOT granted:
+    # admin only until the owner grants them in «الصلاحيات».
+    # ─────────────────────────────────────────────────────────────────────
+    'accountant': {
+        'dashboard':    RO,
+        'ledger':       {'view', 'create', 'approve', 'export'},
+        'finance':      RE,
+        'cheques':      RO,
     },
 }
 
