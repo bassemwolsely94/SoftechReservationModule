@@ -360,3 +360,50 @@ class ApiFollowupTests(ApiBase):
         wb = openpyxl.load_workbook(BytesIO(r.content))
         cells = [str(c.value) for row in wb['الفلاتر والتعريفات'].iter_rows() for c in row]
         self.assertFalse(any('01000000002' in c for c in cells))
+
+
+class Task17BackendTests(CallBase):
+    """Task 17 carried minors: one callback query, ordered locks, atomic+request audit, stripped codes."""
+
+    def test_callback_dues_uses_one_callback_query_without_like_terms(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from apps.pic_analytics.queries.missed import callback_dues
+        c1 = self.call(D(2026, 10, 5), '', 'inbound', 'abandoned', key='1000000041', ext='')
+        c2 = self.call(D(2026, 10, 6), '', 'inbound', 'abandoned', key='1000000042', ext='')
+        CallLog.objects.create(phone_number='+201000000041', direction='inbound', status='callback',
+                               callback_due=timezone.now() + timedelta(days=1), source='manual')
+        with CaptureQueriesContext(connection) as ctx:
+            res = callback_dues([c1, c2])
+        sql = [q['sql'] for q in ctx.captured_queries if 'callcenter_calllog' in q['sql']]
+        self.assertEqual(len(sql), 1)
+        self.assertNotIn('LIKE', sql[0].upper())
+        self.assertEqual(set(res), {c1.id})
+
+    def test_unlabel_audits_with_request_inside_a_transaction(self):
+        from apps.pic_analytics.queries.numbers import unlabel_number
+        pl = label_number('1000000020', 'spam', 'x', self.admin_p)
+        req = object()
+        with mock.patch('apps.pic_analytics.queries.numbers.AuditLog.log') as lg:
+            unlabel_number(pl.pk, self.admin_p, request=req)
+        self.assertIs(lg.call_args.kwargs.get('request'), req)
+        self.assertFalse(PhoneLabel.objects.exists())
+
+    def test_agent_code_with_spaces_still_matches_facts(self):
+        self.admin_p.softech_user_id = ' u1 '
+        self.admin_p.save()
+        AgentExtension.objects.create(extension='10', staff=self.admin_p, pbx_name='A')
+        self.call(D(2026, 10, 5), 'N1', ext='10')
+        self.assertEqual(call_center(self.flt(), self.mgmt)['rows'][0]['new_pics_sold'], 1)
+
+
+class CallbackLockOrderTests(ApiBase):
+    def test_lock_query_is_ordered_by_pk(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        with CaptureQueriesContext(connection) as ctx:
+            self.admin_c.post(f'/api/pic-analytics/calls/missed/{self.miss.pk}/callback/',
+                              {'due': (timezone.now() + timedelta(hours=24)).isoformat()}, format='json')
+        locks = [q['sql'] for q in ctx.captured_queries if 'FOR UPDATE' in q['sql'].upper() and 'pbx_cdrcall' in q['sql']]
+        self.assertTrue(locks)
+        self.assertIn('ORDER BY', locks[0].upper())

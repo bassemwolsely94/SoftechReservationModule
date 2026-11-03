@@ -235,7 +235,7 @@ def call_center(f, access) -> dict:
     out = []
     for ext in sorted(agg, key=lambda e: (-(agg[e]['calls_in'] + agg[e]['calls_out']), e)):
         a, e = agg[ext], exts.get(ext)
-        code = (e.staff.softech_user_id or '') if e and e.staff else ''
+        code = (e.staff.softech_user_id or '').strip() if e and e.staff else ''
         out.append({
             'agent_ext': ext,
             'staff_name': (e.staff.full_name or None) if e and e.staff else None,

@@ -10,7 +10,7 @@ from collections import Counter, defaultdict
 from decimal import Decimal
 from statistics import median
 
-from django.db.models import Max, Q, Sum
+from django.db.models import Max, Sum
 from django.utils import timezone
 
 from apps.customers import access as cust_access
@@ -50,11 +50,11 @@ def callback_dues(calls) -> dict:
     raws = {c.customer_number for c in calls if c.customer_number and not c.phone_key}
     if not keys and not raws:
         return {}
-    cond = Q(phone_number__in=raws)
-    for k in keys:
-        cond |= Q(phone_number__endswith=k[-9:])
+    earliest = min(c.call_at for c in calls)
     by_key, by_raw = defaultdict(list), defaultdict(list)
-    for num, due in (CallLog.objects.filter(cond, status='callback', callback_due__isnull=False)
+    # one query for every scheduled call-back from the earliest missed call on; the numbers are
+    # normalised to phone_keys in Python (no LIKE term per number)
+    for num, due in (CallLog.objects.filter(status='callback', callback_due__gte=earliest)
                      .values_list('phone_number', 'callback_due')):
         k = phone_key(num)
         (by_key if k else by_raw)[k or num].append(due)

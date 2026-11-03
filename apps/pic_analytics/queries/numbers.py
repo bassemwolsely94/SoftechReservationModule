@@ -12,6 +12,7 @@ dated (Cairo) before that date; «bought» = a PicDayFact visit for that PIC on/
 """
 from collections import defaultdict
 
+from django.db import transaction
 from django.utils import timezone
 
 from apps.audit.models import AuditLog
@@ -209,12 +210,14 @@ def labelled_numbers(access, page, page_size=50) -> dict:
     return {'count': qs.count(), 'rows': rows}
 
 
-def unlabel_number(label_id, staff):
+def unlabel_number(label_id, staff, request=None):
     """Delete a PhoneLabel (the number returns to «new numbers» / the missed-call action list) and audit it."""
-    pl = PhoneLabel.objects.filter(pk=label_id).first()
-    if pl is None:
-        return None
-    before = {'label': pl.label, 'note': pl.note}
-    AuditLog.log('pic_phone_unlabelled', user=staff, obj=pl, old_data=before, new_data=None, note=pl.phone_key)
-    pl.delete()
+    with transaction.atomic():
+        pl = PhoneLabel.objects.select_for_update().filter(pk=label_id).first()
+        if pl is None:
+            return None
+        before = {'label': pl.label, 'note': pl.note}
+        AuditLog.log('pic_phone_unlabelled', user=staff, obj=pl, old_data=before, new_data=None,
+                     note=pl.phone_key, request=request)
+        pl.delete()
     return before

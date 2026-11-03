@@ -308,7 +308,7 @@ def numbers_label_delete(request, label_id):
     acc = Access(request)
     if not acc.can_view or not acc.sees_calls_tabs:
         return _deny()
-    if q_numbers.unlabel_number(label_id, acc.profile) is None:
+    if q_numbers.unlabel_number(label_id, acc.profile, request=request) is None:
         return Response({'detail': 'غير موجود — Not found'}, status=404)
     return Response({'label_id': label_id, 'deleted': True})
 
@@ -392,7 +392,7 @@ def missed_callback(request, call_id):
     with transaction.atomic():
         # lock every call of this number, then re-check: two clicks can never book two call-backs
         locked = list(CdrCall.objects.select_for_update().filter(
-            Q(pk=call.pk) | Q(phone_key=call.phone_key) if call.phone_key else Q(pk=call.pk)))
+            Q(pk=call.pk) | Q(phone_key=call.phone_key) if call.phone_key else Q(pk=call.pk)).order_by('pk'))
         call = next(c for c in locked if c.pk == call.pk)
         if q_missed.callback_dues([call]):
             return Response({'detail': 'يوجد موعد معاودة مجدول لهذا الرقم بالفعل'}, status=status.HTTP_409_CONFLICT)
