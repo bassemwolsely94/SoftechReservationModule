@@ -82,6 +82,7 @@ class StaffProfileListSerializer(serializers.ModelSerializer):
             'allowed_pos_channels',
             'can_see_all_customers', 'can_see_customer_phone',
             'external_export', 'external_softech_write',
+            'alerts_only', 'phone_alerts_enabled',
             'login_locked_until',
         ]
 
@@ -117,9 +118,14 @@ class StaffProfileUpdateSerializer(serializers.ModelSerializer):
             'first_name', 'last_name', 'email',
             'can_see_all_customers', 'can_see_customer_phone',
             'external_export', 'external_softech_write',
+            'alerts_only', 'phone_alerts_enabled',
         ]
 
     def validate(self, attrs):
+        alerts_only = attrs.get('alerts_only', getattr(self.instance, 'alerts_only', False))
+        if alerts_only:
+            phone = _alert_phone(attrs.get('phone', getattr(self.instance, 'phone', '')))
+            attrs['phone'] = phone
         # the per-user "outside the network" flags exist for the admin role only (N3)
         role = attrs.get('role', getattr(self.instance, 'role', None))
         if role != 'admin':
@@ -152,6 +158,8 @@ class StaffProfileUpdateSerializer(serializers.ModelSerializer):
         for attr, val in validated_data.items():
             setattr(instance, attr, val)
         instance.save()
+        if instance.alerts_only:
+            _lock_alerts_only_user(instance.user)
 
         if allowed is not None:
             instance.allowed_branches.set(allowed)
@@ -168,8 +176,12 @@ class StaffProfileUpdateSerializer(serializers.ModelSerializer):
 class UserCreateSerializer(serializers.Serializer):
     """ERP-first user creation."""
     username   = serializers.CharField(max_length=50)
-    password   = serializers.CharField(write_only=True)      # rules in validate() (A-5)
-    role       = serializers.ChoiceField(choices=[r[0] for r in StaffProfile._meta.get_field('role').choices])
+    password   = serializers.CharField(write_only=True, required=False)   # rules in validate() (A-5)
+    role       = serializers.ChoiceField(choices=[r[0] for r in StaffProfile._meta.get_field('role').choices],
+                                         required=False)
+    # Alerts-only staff: gets WhatsApp alerts, has no login (no ERP user, no password).
+    alerts_only = serializers.BooleanField(required=False, default=False)
+    phone      = serializers.CharField(required=False, allow_blank=True, max_length=20)
     branch     = serializers.PrimaryKeyRelatedField(
         queryset=__import__('apps.branches.models', fromlist=['Branch']).Branch.objects.all(),
         required=False, allow_null=True,
@@ -180,6 +192,10 @@ class UserCreateSerializer(serializers.Serializer):
 
     def validate_username(self, value):
         from .models import ERPUser
+        if self.initial_data.get('alerts_only') in (True, 'true', 'True', '1', 1):
+            if User.objects.filter(username=value).exists():
+                raise serializers.ValidationError(f'المستخدم "{value}" موجود بالفعل في النظام.')
+            return value
         if not ERPUser.objects.filter(username=value, is_active=True).exists():
             raise serializers.ValidationError(
                 f'المستخدم "{value}" غير موجود في نظام الـ ERP. '
@@ -192,6 +208,15 @@ class UserCreateSerializer(serializers.Serializer):
         return value
 
     def validate(self, attrs):
+        if attrs.get('alerts_only'):
+            attrs['phone'] = _alert_phone(attrs.get('phone'))
+            attrs.pop('password', None)
+            attrs.setdefault('role', 'salesperson')
+            return attrs
+        for required in ('password', 'role'):
+            if required not in attrs:
+                raise serializers.ValidationError(
+                    {required: [self.fields[required].error_messages['required']]})
         from .passwords import password_problem
         probe = User(username=attrs.get('username', ''), email=attrs.get('email', ''),
                      first_name=attrs.get('first_name', ''), last_name=attrs.get('last_name', ''))
@@ -207,6 +232,8 @@ class UserCreateSerializer(serializers.Serializer):
 
     def create(self, validated_data):
         from .models import ERPUser
+        if validated_data.get('alerts_only'):
+            return self._create_alerts_only(validated_data)
         username   = validated_data['username']
         erp_user   = ERPUser.objects.get(username=username)
         user       = User.objects.create_user(
@@ -224,6 +251,17 @@ class UserCreateSerializer(serializers.Serializer):
             softech_username = username,
         )
         return profile
+
+    def _create_alerts_only(self, validated_data):
+        user = User.objects.create_user(
+            username=validated_data['username'], password=None,
+            first_name=validated_data.get('first_name', ''),
+            last_name=validated_data.get('last_name', ''),
+            email=validated_data.get('email', ''))
+        _lock_alerts_only_user(user)
+        return StaffProfile.objects.create(
+            user=user, role=validated_data.get('role', 'salesperson'),
+            branch=validated_data.get('branch'), phone=validated_data['phone'], alerts_only=True)
 
 
 class UserActivityLogSerializer(serializers.ModelSerializer):
@@ -250,6 +288,29 @@ class UserActivityLogSerializer(serializers.ModelSerializer):
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 EXTERNAL_FLAGS = ('external_export', 'external_softech_write')
+
+
+def _alert_phone(raw):
+    """Normalised plausible phone for an alerts-only member, else a 400."""
+    from apps.notifications.phone_alerts.serializers import BAD_PHONE
+    from apps.notifications.phone_alerts.recipients import is_plausible_phone
+    from core.sms import sms_number
+    phone = sms_number(raw) if str(raw or '').strip() else ''
+    if not is_plausible_phone(phone):
+        raise serializers.ValidationError({'phone': BAD_PHONE if phone else 'الموبايل مطلوب للموظف الذي يستقبل التنبيهات فقط'})
+    return phone
+
+
+def _lock_alerts_only_user(user):
+    """No app access: the Django user is inactive and has no usable password."""
+    user.is_active = False
+    user.set_unusable_password()
+    user.save(update_fields=['is_active', 'password'])
+    try:
+        from .sessions import end_sessions
+        end_sessions(user)
+    except Exception:
+        logger.warning('could not end sessions for alerts-only user %s', user.pk, exc_info=True)
 
 
 def _log_external_flags(profile, old, actor=None):

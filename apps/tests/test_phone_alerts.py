@@ -1307,3 +1307,262 @@ class WorkflowHookTests(TestCase):
         self.assertEqual(len(rows), 3)
         self.assertTrue(all(x['phone_alert_status'] == 'queued' for x in rows))
         self.assertEqual(sum('notifications_phonealert' in q['sql'] for q in ctx.captured_queries), 1)
+
+
+# ── Task 7: admin API + alerts-only staff ────────────────────────────────────
+
+class AdminApiTests(TestCase):
+    BASE = '/api/notifications/phone-alerts/'
+
+    @classmethod
+    def setUpTestData(cls):
+        from .factories import make_admin, make_pharmacist, make_user
+        cls.branch = Branch.objects.create(softech_branch_id='971', name='API Br')
+        _, cls.admin, cls.admin_client = make_admin('pa7_admin')
+        _, cls.sup, cls.sup_client = make_user('pa7_sup', role='supervisor', branch=cls.branch)
+        _, cls.pharm, cls.pharm_client = make_pharmacist('pa7_pharm', branch=cls.branch)
+        cls.owner_staff = _staff('pa7_owner', '01000000701', branch=cls.branch)
+
+    def _audit(self, action):
+        from apps.audit.models import AuditLog
+        return AuditLog.objects.filter(action=action)
+
+    def test_non_admin_forbidden(self):
+        for url in ('policies/', 'owners/', 'branch-mobiles/', 'channel/', 'log/', 'switches/'):
+            self.assertEqual(self.pharm_client.get(self.BASE + url).status_code, 403, url)
+        self.assertEqual(self.pharm_client.patch(self.BASE + 'policies/', {'event': 'task_status', 'mode': 'never'},
+                                                 format='json').status_code, 403)
+        self.assertEqual(self.pharm_client.post(f'{self.BASE}branch-mobiles/{self.branch.pk}/test/').status_code, 403)
+        from rest_framework.test import APIClient
+        self.assertIn(APIClient().get(self.BASE + 'policies/').status_code, (401, 403))
+        self.assertEqual(self.sup_client.get(self.BASE + 'policies/').status_code, 200)
+        self.assertEqual(self.admin_client.get(self.BASE + 'switches/').data,
+                         {'send_enabled': False, 'brief_enabled': False, 'account_set': False})
+
+    def test_policy_patch_audited(self):
+        r = self.admin_client.patch(self.BASE + 'policies/', {
+            'event': 'task_status', 'mode': 'never', 'remind_after_min': 10, 'escalate_after_min': 20,
+            'max_reminders': 3, 'escalate_to': [self.owner_staff.pk]}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        p = PhoneAlertPolicy.for_event('task_status')
+        self.assertEqual((p.mode, p.remind_after_min, p.escalate_after_min, p.max_reminders), ('never', 10, 20, 3))
+        self.assertEqual(list(p.escalate_to.all()), [self.owner_staff])
+        self.assertEqual(p.updated_by_id, self.admin.pk)
+        a = self._audit('phone_alert_policy_changed').get()
+        self.assertEqual(a.old_data['mode'], 'optional')
+        self.assertEqual(a.new_data['mode'], 'never')
+        self.assertEqual(len(self.admin_client.get(self.BASE + 'policies/').data), 7)
+
+    def test_policy_patch_validation(self):
+        bad = [{'remind_after_min': 0}, {'remind_after_min': 30, 'escalate_after_min': 30},
+               {'escalate_after_min': 10}, {'max_reminders': 6}, {'max_reminders': -1}, {'mode': 'x'}]
+        for body in bad:
+            r = self.admin_client.patch(self.BASE + 'policies/', {'event': 'task_status', **body}, format='json')
+            self.assertEqual(r.status_code, 400, body)
+        r = self.admin_client.patch(self.BASE + 'policies/', {'event': 'nope', 'mode': 'never'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        p = PhoneAlertPolicy.for_event('task_status')
+        self.assertEqual((p.mode, p.remind_after_min, p.escalate_after_min, p.max_reminders), ('optional', 15, 30, 2))
+        self.assertFalse(self._audit('phone_alert_policy_changed').exists())
+        ok = self.admin_client.patch(self.BASE + 'policies/', {'event': 'task_status', 'max_reminders': 0}, format='json')
+        self.assertEqual(ok.status_code, 200)
+
+    def test_owner_crud(self):
+        r = self.admin_client.post(self.BASE + 'owners/', {
+            'kind': 'reservation_sourcing', 'staff': self.owner_staff.pk, 'branch': self.branch.pk}, format='json')
+        self.assertEqual(r.status_code, 201, r.data)
+        oid = r.data['id']
+        self.assertEqual(r.data['staff_name'], self.owner_staff.full_name)
+        r = self.admin_client.patch(f'{self.BASE}owners/{oid}/', {'active': False, 'is_escalation': True}, format='json')
+        self.assertEqual(r.status_code, 200)
+        o = WorkOwner.objects.get(pk=oid)
+        self.assertFalse(o.active)
+        self.assertTrue(o.is_escalation)
+        self.assertEqual(len(self.sup_client.get(self.BASE + 'owners/?kind=reservation_sourcing').data), 1)
+        self.assertEqual(self.admin_client.delete(f'{self.BASE}owners/{oid}/').status_code, 204)
+        self.assertFalse(WorkOwner.objects.filter(pk=oid).exists())
+        self.assertEqual(self._audit('phone_alert_owner_changed').count(), 3)
+        self.assertEqual(self.admin_client.post(self.BASE + 'owners/', {'kind': 'bogus', 'staff': 1}, format='json').status_code, 400)
+
+    def test_branch_mobile_patch_normalises_and_rejects_invalid(self):
+        url = self.BASE + 'branch-mobiles/'
+        r = self.admin_client.patch(url, {'branch_id': self.branch.pk, 'alert_mobile': '010 1234 5678'}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data['alert_mobile'], '201012345678')
+        self.assertEqual(BranchSettings.for_branch(self.branch).alert_mobile, '201012345678')
+        a = self._audit('phone_alert_mobile_changed').get()
+        self.assertEqual(a.new_data, {'alert_mobile': '201012345678'})
+        for junk in ('12345', 'abc', '0101234'):
+            r = self.admin_client.patch(url, {'branch_id': self.branch.pk, 'alert_mobile': junk}, format='json')
+            self.assertEqual(r.status_code, 400, junk)
+            self.assertIn('alert_mobile', r.data)
+        self.assertEqual(BranchSettings.for_branch(self.branch).alert_mobile, '201012345678')
+        r = self.admin_client.patch(url, {'branch_id': self.branch.pk, 'alert_mobile': ''}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(BranchSettings.for_branch(self.branch).alert_mobile, '')
+        rows = self.admin_client.get(url).data
+        self.assertIn(self.branch.pk, [x['branch_id'] for x in rows])
+
+    def test_test_send_dry_run(self):
+        url = f'{self.BASE}branch-mobiles/{self.branch.pk}/test/'
+        self.assertEqual(self.admin_client.post(url).status_code, 400)       # no mobile yet
+        BranchSettings.for_branch(self.branch)
+        BranchSettings.objects.filter(branch=self.branch).update(alert_mobile='201012345678')
+        r = self.admin_client.post(url)
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertTrue(r.data['dry_run'])
+        a = PhoneAlert.objects.get(pk=r.data['alert_id'])
+        self.assertEqual((a.event, a.kind, a.phone, a.status), ('test', 'alert', '201012345678', 'sent'))
+        self.assertEqual([x.result for x in a.attempts.all()], ['dry_run'])
+        self.assertTrue(self._audit('phone_alert_test_sent').exists())
+        from apps.notifications.phone_alerts import jobs
+        later = timezone.now() + timedelta(hours=3)
+        self.assertEqual(jobs.tick(now=later), {'reminded': 0, 'escalated': 0, 'expired': 0})
+        self.assertEqual(PhoneAlert.objects.count(), 1)
+
+    def test_channel_put_flags_account_and_is_audited(self):
+        from apps.config.models import SystemSetting
+        from apps.omni.models import ChannelAccount
+        a1 = ChannelAccount.objects.create(channel='whatsapp', name='A1', phone_or_handle='2010')
+        a2 = ChannelAccount.objects.create(channel='whatsapp', name='A2', phone_or_handle='2011')
+        sms = ChannelAccount.objects.create(channel='sms', name='S', phone_or_handle='2012')
+        url = self.BASE + 'channel/'
+        self.assertEqual(self.admin_client.put(url, {'channel_account_id': sms.pk}, format='json').status_code, 400)
+        self.assertEqual(self.admin_client.put(url, {'channel_account_id': 99999}, format='json').status_code, 400)
+        r = self.admin_client.put(url, {'channel_account_id': a1.pk}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data['channel_account_id'], a1.pk)
+        self.assertEqual(SystemSetting.get('phone_alerts_channel_account'), str(a1.pk))
+        a1.refresh_from_db()
+        self.assertTrue(a1.is_staff_alerts)
+        self.assertTrue(self.admin_client.get(self.BASE + 'switches/').data['account_set'])
+        self.admin_client.put(url, {'channel_account_id': a2.pk}, format='json')
+        a1.refresh_from_db()
+        a2.refresh_from_db()
+        self.assertTrue(a1.is_staff_alerts)             # never auto-cleared
+        self.assertTrue(a2.is_staff_alerts)
+        self.assertEqual(self._audit('phone_alert_channel_changed').count(), 2)
+        self.assertEqual({x['id'] for x in self.admin_client.get(url).data['accounts']}, {a1.pk, a2.pk})
+
+    def test_log_masks_phone_for_supervisor(self):
+        a = PhoneAlert.objects.create(event='task_status', phone='201012345678', recipient_staff=self.owner_staff)
+        from apps.notifications.phone_alerts.models import PhoneAlertAttempt
+        PhoneAlertAttempt.objects.create(alert=a, result='dry_run')
+        rows = self.sup_client.get(self.BASE + 'log/').data['results']
+        self.assertEqual(rows[0]['phone'], '…5678')
+        self.assertEqual(self.admin_client.get(self.BASE + 'log/').data['results'][0]['phone'], '201012345678')
+        d = self.sup_client.get(f'{self.BASE}log/{a.pk}/').data
+        self.assertEqual(d['phone'], '…5678')
+        self.assertEqual([x['result'] for x in d['attempts']], ['dry_run'])
+        self.assertEqual(self.admin_client.get(f'{self.BASE}log/{a.pk}/').data['phone'], '201012345678')
+
+    def test_log_filters(self):
+        PhoneAlert.objects.create(event='task_status', phone='201012345678', recipient_staff=self.owner_staff)
+        PhoneAlert.objects.create(event='task_assigned', phone='201012345679', status='acknowledged')
+        g = lambda q: self.admin_client.get(self.BASE + 'log/?' + q).data['results']
+        self.assertEqual(len(g('')), 2)
+        self.assertEqual([x['event'] for x in g('event=task_status')], ['task_status'])
+        self.assertEqual([x['event'] for x in g('status=acknowledged')], ['task_assigned'])
+        self.assertEqual(len(g(f'staff={self.owner_staff.pk}')), 1)
+        self.assertEqual(len(g(f'branch={self.branch.pk}')), 1)
+        self.assertEqual(len(g('date=' + timezone.localdate().isoformat())), 2)
+        self.assertEqual(len(g('date=2001-01-01')), 0)
+
+    def test_deliver_many_skips_non_queued_alerts(self):
+        from apps.notifications.phone_alerts.sender import deliver_many
+        q = PhoneAlert.objects.create(event='task_status', phone='201012345678')
+        ex = PhoneAlert.objects.create(event='task_status', phone='201012345679', status='expired')
+        deliver_many([q.pk, ex.pk])
+        q.refresh_from_db()
+        ex.refresh_from_db()
+        self.assertEqual(q.status, 'sent')
+        self.assertEqual(ex.status, 'expired')
+        self.assertEqual(q.attempts.count(), 1)
+        self.assertEqual(ex.attempts.count(), 0)
+
+
+class AlertsOnlyStaffTests(TestCase):
+    URL = '/api/users/staff/'
+
+    @classmethod
+    def setUpTestData(cls):
+        from .factories import make_admin
+        cls.branch = Branch.objects.create(softech_branch_id='981', name='AO Br')
+        _, cls.admin, cls.client_admin = make_admin('pa7ao_admin')
+
+    def _create(self, **extra):
+        body = {'username': 'ao_user', 'alerts_only': True, 'phone': '01012345678',
+                'first_name': 'منبّه', 'branch': self.branch.pk, **extra}
+        return self.client_admin.post(self.URL, body, format='json')
+
+    def test_create_alerts_only_locks_the_account(self):
+        r = self._create()
+        self.assertEqual(r.status_code, 201, r.data)
+        u = User.objects.get(username='ao_user')
+        self.assertFalse(u.is_active)
+        self.assertFalse(u.has_usable_password())
+        p = u.staff_profile
+        self.assertTrue(p.alerts_only)
+        self.assertTrue(p.is_active)                      # still eligible for alerts
+        self.assertEqual(p.phone, '201012345678')
+
+    def test_alerts_only_requires_plausible_phone(self):
+        self.assertEqual(self._create(phone='').status_code, 400)
+        self.assertEqual(self._create(phone='123').status_code, 400)
+        self.assertFalse(User.objects.filter(username='ao_user').exists())
+
+    def test_normal_create_still_requires_password_and_erp_user(self):
+        from apps.users.models import ERPUser
+        ERPUser.objects.create(username='ghost', full_name='Ghost User')
+        r = self.client_admin.post(self.URL, {'username': 'ghost', 'role': 'salesperson'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('password', r.data)
+        r = self.client_admin.post(self.URL, {'username': 'nobody', 'password': 'Xy7!longEnoughPw',
+                                              'role': 'salesperson'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('username', r.data)
+        r = self.client_admin.post(self.URL, {'username': 'ghost', 'password': 'Xy7!longEnoughPw',
+                                              'role': 'salesperson'}, format='json')
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertTrue(User.objects.get(username='ghost').is_active)
+
+    def test_edit_to_alerts_only_locks_user_and_needs_phone(self):
+        from .factories import make_pharmacist
+        u, p, _ = make_pharmacist('pa7ao_edit', branch=self.branch)
+        r = self.client_admin.patch(f'{self.URL}{p.pk}/', {'alerts_only': True}, format='json')
+        self.assertEqual(r.status_code, 400)
+        r = self.client_admin.patch(f'{self.URL}{p.pk}/', {'alerts_only': True, 'phone': '01022223333'}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        u.refresh_from_db()
+        p.refresh_from_db()
+        self.assertFalse(u.is_active)
+        self.assertFalse(u.has_usable_password())
+        self.assertEqual(p.phone, '201022223333')
+
+    def test_alerts_only_hidden_from_users_list(self):
+        from .factories import make_pharmacist
+        make_pharmacist('pa7ao_normal', branch=self.branch)
+        self._create()
+
+        def names(q=''):
+            data = self.client_admin.get(self.URL + q).data
+            return {x['username'] for x in (data['results'] if isinstance(data, dict) else data)}
+        self.assertIn('pa7ao_normal', names())
+        self.assertNotIn('ao_user', names())
+        self.assertEqual(names('?alerts_only=1'), {'ao_user'})
+
+    def test_alerts_only_cannot_log_in(self):
+        self._create()
+        u = User.objects.get(username='ao_user')
+        from rest_framework.test import APIClient
+        for pw in ('anything', 'TestPass123'):
+            r = APIClient().post('/api/auth/login/', {'username': 'ao_user', 'password': pw}, format='json')
+            self.assertIn(r.status_code, (400, 401, 403), pw)
+            self.assertNotIn('access', r.data)
+        self.assertFalse(Device.objects.filter(owner=u.staff_profile).exists())
+        # even a profile whose Django user was re-activated is refused a device
+        from apps.access import devices
+        from django.test import RequestFactory
+        req = RequestFactory().post('/', HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(devices.enroll(req, u.staff_profile), (None, None, False))
+        self.assertFalse(Device.objects.filter(owner=u.staff_profile).exists())

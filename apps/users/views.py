@@ -565,6 +565,10 @@ class StaffProfileViewSet(StableOrderingMixin, viewsets.ModelViewSet):
             qs = qs.filter(branch_id=branch)
         if active is not None:
             qs = qs.filter(is_active=active.lower() in ('1', 'true', 'yes'))
+        if self.action == 'list':
+            # alerts-only members (phone alerts, no login) are listed only on request
+            wanted = (self.request.query_params.get('alerts_only') or '').lower() in ('1', 'true', 'yes')
+            qs = qs.filter(alerts_only=wanted)
         return qs
 
     def perform_create(self, serializer):

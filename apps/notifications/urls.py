@@ -1,7 +1,10 @@
-from django.urls import path
+from django.urls import include, path
 from . import views
 
 urlpatterns = [
+    # ── Phone alerts admin (admin + supervisor; checked in the views) ─────────
+    path('phone-alerts/',       include('apps.notifications.phone_alerts.urls')),
+
     # ── Notification list & counts ────────────────────────────────────────────
     path('',                    views.notification_list,    name='notification-list'),
     path('unread-count/',       views.unread_count,         name='notification-unread-count'),

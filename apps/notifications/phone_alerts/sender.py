@@ -162,9 +162,11 @@ def _deliver(alert, reminder, template, variables, payloads):
 
 
 def deliver_many(alert_ids):
-    """Deliver the alerts with these ids (used from transaction.on_commit)."""
+    """Deliver the alerts with these ids (used from transaction.on_commit).
+
+    Only alerts still 'queued': one superseded/expired between creation and commit is not sent."""
     try:
-        for alert in PhoneAlert.objects.filter(pk__in=alert_ids).order_by('pk'):
+        for alert in PhoneAlert.objects.filter(pk__in=alert_ids, status='queued').order_by('pk'):
             deliver(alert)
     except Exception:
         logger.exception('phone alerts: deliver_many failed for %s', alert_ids)
