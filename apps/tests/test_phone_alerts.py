@@ -774,3 +774,220 @@ class InboundFixRound1Tests(InboundTests):
                                              provider='meta_cloud', provider_ref='889')
         WhatsAppSender(account=cust)._record_outbound('201122222222', 'text', body='hi')
         self.assertEqual(TimelineEvent.objects.count(), 1)
+
+
+# ── Task 5: reminder / escalation / expiry tick ──────────────────────────────
+from apps.notifications.phone_alerts import jobs
+
+
+class EventIsOpenTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.b1 = Branch.objects.create(softech_branch_id='931', name='ف١')
+        cls.b2 = Branch.objects.create(softech_branch_id='932', name='ف٢')
+        cls.person = _staff('iop', '01000000061', cls.b1)
+
+    def _res(self):
+        return Reservation.objects.create(item=make_item(), branch=self.b1, quantity_requested=1,
+                                          contact_name='ع', contact_phone='01033333333')
+
+    def test_reservation_open_only_when_pending_for_sourcing(self):
+        res = self._res()
+        ev = EVENTS['reservation_sourcing']
+        self.assertEqual(res.status, 'pending')
+        self.assertTrue(ev.is_open(res))
+        res.status = 'fulfilled'
+        self.assertFalse(ev.is_open(res))
+
+    def test_reservation_urgent_status_open_until_closed(self):
+        res = self._res()
+        ev = EVENTS['reservation_status_urgent']
+        self.assertTrue(ev.is_open(res))
+        for closed in ('fulfilled', 'cancelled', 'expired'):
+            res.status = closed
+            self.assertFalse(ev.is_open(res), closed)
+
+    def test_transfer_open_and_closed(self):
+        tr = TransferRequest.objects.create(requesting_branch=self.b1, supplying_branch=self.b2)
+        for key in ('transfer_hq_submitted', 'transfer_status'):
+            self.assertTrue(EVENTS[key].is_open(tr), key)
+        for closed in ('sent_to_erp', 'completed', 'rejected', 'cancelled'):
+            tr.status = closed
+            for key in ('transfer_hq_submitted', 'transfer_status'):
+                self.assertFalse(EVENTS[key].is_open(tr), (key, closed))
+
+    def test_task_open_and_closed(self):
+        task = OperationalTask.objects.create(title='t', created_by=self.person)
+        for key in ('task_assigned', 'task_status'):
+            self.assertTrue(EVENTS[key].is_open(task), key)
+        for closed in ('completed', 'cancelled'):
+            task.status = closed
+            for key in ('task_assigned', 'task_status'):
+                self.assertFalse(EVENTS[key].is_open(task), (key, closed))
+
+    def test_deleted_source_is_closed(self):
+        for ev in EVENTS.values():
+            self.assertFalse(ev.is_open(None), ev.key)
+
+    def test_escalation_open_follows_original(self):
+        tr = TransferRequest.objects.create(requesting_branch=self.b1, supplying_branch=self.b2)
+        ct = ContentType.objects.get_for_model(tr)
+        orig = PhoneAlert.objects.create(event='transfer_hq_submitted', source_ct=ct, source_id=tr.pk,
+                                         phone='201000000061', status='escalated')
+        esc = PhoneAlert.objects.create(
+            event='escalation', phone='201000000062', escalation_of=orig, status='sent',
+            source_ct=ContentType.objects.get_for_model(PhoneAlert), source_id=orig.pk)
+        ev = EVENTS['escalation']
+
+        def fresh():
+            return PhoneAlert.objects.get(pk=esc.pk)
+
+        # an escalated original keeps its escalation open until it is acknowledged
+        self.assertTrue(ev.is_open(fresh()))
+        for done in ('acknowledged', 'expired'):
+            PhoneAlert.objects.filter(pk=orig.pk).update(status=done)
+            self.assertFalse(ev.is_open(fresh()), done)
+        PhoneAlert.objects.filter(pk=orig.pk).update(status='escalated')
+        self.assertTrue(ev.is_open(fresh()))
+        tr.status = 'completed'
+        tr.save()
+        self.assertFalse(ev.is_open(fresh()))
+
+
+class TickTests(TestCase):
+    T0 = timezone.now().replace(hour=12, minute=0, second=0, microsecond=0)
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.b1 = Branch.objects.create(softech_branch_id='941', name='فرع ١')
+        cls.b2 = Branch.objects.create(softech_branch_id='942', name='فرع ٢')
+        cls.owner = _staff('tk_own', '01000000071')
+        cls.boss = _staff('tk_boss', '01000000072')
+        WorkOwner.objects.create(kind='hq_transfer_dispatch', staff=cls.owner)
+        WorkOwner.objects.create(kind='hq_transfer_dispatch', staff=cls.boss, is_escalation=True)
+
+    def setUp(self):
+        PhoneAlertPolicy.objects.filter(event='escalation').update(mode='always')
+        self.tr = TransferRequest.objects.create(requesting_branch=self.b1, supplying_branch=self.b2)
+
+    def _alert(self, status='sent', at=None, **kw):
+        at = at or self.T0
+        a = PhoneAlert.objects.create(
+            event='transfer_hq_submitted', source_ct=ContentType.objects.get_for_model(self.tr),
+            source_id=self.tr.pk, recipient_staff=self.owner, phone='201000000071',
+            status=status, **kw)
+        PhoneAlert.objects.filter(pk=a.pk).update(created_at=at, last_sent_at=at)
+        return PhoneAlert.objects.get(pk=a.pk)
+
+    def _min(self, n):
+        return self.T0 + timedelta(minutes=n)
+
+    def _no_escalation(self):
+        PhoneAlertPolicy.objects.filter(event='transfer_hq_submitted').update(escalate_after_min=9999)
+
+    def test_nothing_before_15_min(self):
+        a = self._alert()
+        self.assertEqual(jobs.tick(now=self._min(14)), {'reminded': 0, 'escalated': 0, 'expired': 0})
+        a.refresh_from_db()
+        self.assertEqual((a.status, a.reminders_sent), ('sent', 0))
+
+    def test_reminder_after_15_min(self):
+        self._no_escalation()
+        a = self._alert()
+        self.assertEqual(jobs.tick(now=self._min(15))['reminded'], 1)
+        a.refresh_from_db()
+        self.assertEqual((a.reminders_sent, a.status), (1, 'sent'))
+        self.assertEqual(a.attempts.get().result, 'dry_run')
+        # the next reminder is measured from the last send, not from creation
+        self.assertEqual(jobs.tick(now=self._min(16))['reminded'], 0)
+
+    def test_max_two_reminders(self):
+        self._no_escalation()
+        a = self._alert()
+        total = 0
+        for m in (15, 40, 70, 100):
+            total += jobs.tick(now=self._min(m))['reminded']
+            PhoneAlert.objects.filter(pk=a.pk).update(last_sent_at=self._min(m))
+        a.refresh_from_db()
+        self.assertEqual((total, a.reminders_sent), (2, 2))
+
+    def test_escalates_after_30_min_once(self):
+        a = self._alert()
+        self.assertEqual(jobs.tick(now=self._min(30))['escalated'], 1)
+        a.refresh_from_db()
+        self.assertEqual((a.status, a.escalated_at), ('escalated', self._min(30)))
+        esc = PhoneAlert.objects.get(event='escalation')
+        self.assertEqual((esc.escalation_of, esc.recipient_staff), (a, self.boss))
+        self.assertEqual(jobs.tick(now=self._min(31))['escalated'], 0)
+        self.assertEqual(PhoneAlert.objects.filter(event='escalation').count(), 1)
+
+    def test_escalation_alert_never_escalates_again(self):
+        self._alert()
+        jobs.tick(now=self._min(30))
+        esc = PhoneAlert.objects.get(event='escalation')
+        PhoneAlert.objects.filter(pk=esc.pk).update(created_at=self._min(30), last_sent_at=self._min(30))
+        self.assertEqual(jobs.tick(now=self._min(120))['escalated'], 0)
+        self.assertEqual(PhoneAlert.objects.filter(event='escalation').count(), 1)
+
+    def test_closed_source_expires_alert(self):
+        a = self._alert()
+        self.tr.status = 'completed'
+        self.tr.save()
+        self.assertEqual(jobs.tick(now=self._min(60)), {'reminded': 0, 'escalated': 0, 'expired': 1})
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'expired')
+        self.assertFalse(a.attempts.exists())
+        self.assertFalse(PhoneAlert.objects.filter(event='escalation').exists())
+
+    def test_deleted_source_expires_alert(self):
+        a = self._alert()
+        self.tr.delete()
+        self.assertEqual(jobs.tick(now=self._min(60))['expired'], 1)
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'expired')
+
+    def test_acknowledged_not_reminded(self):
+        for status in ('acknowledged', 'queued', 'failed', 'expired', 'escalated'):
+            self._alert(status=status)
+        self.assertEqual(jobs.tick(now=self._min(120)), {'reminded': 0, 'escalated': 0, 'expired': 0})
+
+    def test_delivered_and_read_are_open(self):
+        self._no_escalation()
+        self._alert(status='delivered')
+        self._alert(status='read')
+        self.assertEqual(jobs.tick(now=self._min(15))['reminded'], 2)
+
+    def test_night_time_still_reminds(self):
+        self._no_escalation()
+        night = self.T0.replace(hour=3, minute=0) - timedelta(minutes=15)
+        a = self._alert(at=night)
+        self.assertEqual(jobs.tick(now=night + timedelta(minutes=15))['reminded'], 1)
+        a.refresh_from_db()
+        self.assertEqual(a.reminders_sent, 1)
+
+    def test_event_without_policy_is_skipped(self):
+        a = self._alert()
+        PhoneAlertPolicy.objects.filter(event='transfer_hq_submitted').delete()
+        b = PhoneAlert.objects.create(event='morning_brief', kind='brief', phone='201000000071', status='sent')
+        PhoneAlert.objects.filter(pk=b.pk).update(created_at=self.T0, last_sent_at=self.T0)
+        self.assertEqual(jobs.tick(now=self._min(120)), {'reminded': 0, 'escalated': 0, 'expired': 0})
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'sent')
+
+    def test_tick_survives_one_bad_alert(self):
+        self._no_escalation()
+        self._alert()
+        good = self._alert()
+        with mock.patch.object(jobs.sender, 'deliver', side_effect=[RuntimeError('boom'), None]):
+            counts = jobs.tick(now=self._min(15))
+        self.assertEqual(counts['reminded'], 1)
+        good.refresh_from_db()
+        self.assertEqual(good.reminders_sent, 1)
+
+    def test_scheduler_wrapper_swallows_errors(self):
+        from apps.sync import tasks
+        with mock.patch.object(jobs, 'tick', side_effect=RuntimeError('x')):
+            tasks._run_phone_alerts_tick()
+        with mock.patch.object(jobs, 'tick') as t:
+            tasks._run_phone_alerts_tick()
+        t.assert_called_once_with()

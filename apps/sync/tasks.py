@@ -2661,6 +2661,15 @@ def _run_demand_engine_scheduled():
         logger.error('[APScheduler] scheduled engine run failed: %s', exc)
 
 
+def _run_phone_alerts_tick():
+    """Phone alerts: remind / escalate / expire (every minute)."""
+    try:
+        from apps.notifications.phone_alerts.jobs import tick
+        tick()
+    except Exception:
+        logger.exception('phone_alerts_tick failed')
+
+
 def _run_coverage_topup():
     """Every 30 min: if a new engine run finished and hasn't been topped up yet, give
     items with no coverage the default and refresh stale maxes on the branch servers.
@@ -3365,6 +3374,16 @@ def start_scheduler():
         'interval',
         minutes=1,
         id='reminders_and_snoozes',
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=55,
+    )
+    # Phone alerts — remind / escalate / expire, every minute
+    _scheduler.add_job(
+        _run_phone_alerts_tick,
+        'interval',
+        minutes=1,
+        id='phone_alerts_tick',
         replace_existing=True,
         max_instances=1,
         misfire_grace_time=55,
