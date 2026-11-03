@@ -346,6 +346,18 @@ class DailyCountTests(TestCase):
         with mock.patch('apps.stockcount.daily.service.now_local', return_value=at(TODAY + dt.timedelta(days=1), 3)):
             self.assertEqual(self.c1.get('/api/stockcount/daily/my/').json()['picks'], [])
 
+    def test_distribute_now_button(self):
+        r = self.ca.get('/api/stockcount/daily/board/')
+        self.assertEqual([b['code'] for b in r.json()['pilot_branches']], [self.branch.softech_branch_id])
+        self.assertNotIn('pilot_branches', self.cm.get('/api/stockcount/daily/board/').json())   # manager: no button
+        r = self.ca.post('/api/stockcount/daily/generate/', {'branch_code': self.branch.softech_branch_id}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()['created'], 30)
+        r = self.ca.post('/api/stockcount/daily/generate/', {'branch_code': self.branch.softech_branch_id}, format='json')
+        self.assertEqual(r.json()['created'], 0)                                            # idempotent
+        self.assertEqual(self.cm.post('/api/stockcount/daily/generate/', {'branch_code': self.branch.softech_branch_id},
+                                      format='json').status_code, 403)
+
     def test_existing_session_list_hides_daily(self):
         self._gen()
         r = self.ca.get('/api/stockcount/sessions/')

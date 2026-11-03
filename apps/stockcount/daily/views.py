@@ -204,8 +204,15 @@ def board(request):
     if branch:
         picks = picks.filter(session__branch_code=branch)
     diffs = [_diff_row(x, acc, names, s.match_tolerance) for x in picks.order_by('-latest_attempt__value_egp', 'pk')]
-    return Response({'date': day.isoformat(), 'people': people, 'differences': diffs,
-                     'reasons': service.REVIEW_REASONS, 'management': acc.management})
+    out = {'date': day.isoformat(), 'people': people, 'differences': diffs,
+           'reasons': service.REVIEW_REASONS, 'management': acc.management}
+    if acc.management:
+        # «توزيع الآن»: the pilot branches management may hand today's lists out for by hand
+        from apps.branches.models import Branch
+        out['pilot_branches'] = [
+            {'code': b.softech_branch_id, 'name': b.name_ar or b.name}
+            for b in Branch.objects.filter(is_active=True, settings__daily_count_enabled=True).order_by('softech_branch_id')]
+    return Response(out)
 
 
 def _pick_for_review(request, pk):
