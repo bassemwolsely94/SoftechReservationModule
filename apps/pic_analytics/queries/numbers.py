@@ -4,8 +4,8 @@ apps/pic_analytics/queries/numbers.py — the «أرقام جديدة» tab (doc
 New numbers = customer calls (transfer legs excluded, agent filter ignored) in range whose number
 matches NO PIC (pic_match='none'; 'no_number' and shared numbers are not leads) and that carry no
 PhoneLabel. Unlinked numbers stay masked, same as the missed-calls tab.
-kind: CdrCall.phone_key is the last 10 digits without the leading 0, so a mobile (national
-'01xxxxxxxxx') is a 10-digit key starting '1'; everything else is a landline.
+kind: CdrCall.phone_key is the national number (apps/pbx/cdr.py), so a mobile is '01[0125]xxxxxxxx'
+(older 10-digit '1…' keys are still read as mobile); everything else is a landline.
 Conversion: a number «became a PIC» when its PIC (now on CdrCall.pic) was created
 (Customer.softech_created_at, a date; null = skipped) inside the period AND the number had a call
 dated (Cairo) before that date; «bought» = a PicDayFact visit for that PIC on/after it.
@@ -34,7 +34,8 @@ def _require(access):
 
 
 def _kind(key):
-    return 'mobile' if len(key) == 10 and key.startswith('1') else 'landline'
+    mobile = (len(key) == 11 and key.startswith('01')) or (len(key) == 10 and key.startswith('1'))
+    return 'mobile' if mobile else 'landline'
 
 
 def new_numbers(f, access, page, page_size=50) -> dict:

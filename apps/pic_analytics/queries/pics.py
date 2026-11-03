@@ -44,7 +44,8 @@ def _search(qs, q):
     cond = Q(name__icontains=q) | Q(softech_pic=q)
     key = phone_key(q)
     if key:
-        pcond = Q(phone__endswith=key) | Q(phone_alt__endswith=key) | Q(whatsapp_phone__endswith=key)
+        t = key[-8:]       # prefilter on the last 8 digits (stored forms differ); exact phone_key compare below
+        pcond = Q(phone__endswith=t) | Q(phone_alt__endswith=t) | Q(whatsapp_phone__endswith=t)
         matched = {pic for pic, *phones in Customer.objects.filter(pcond).exclude(softech_pic__isnull=True)
                    .values_list('softech_pic', 'phone', 'phone_alt', 'whatsapp_phone')
                    if any(phone_key(ph) == key for ph in phones)}

@@ -99,20 +99,12 @@ def _normalize_caller_num(caller_num: str, gateway_ext: str) -> str:
     Strip any PBX-added prefix/suffix from the caller number based on
     which gateway the call arrived on.
 
-    goip4 (mobile) might add '0' prefix → strip it to get the clean number.
-    grandstream (landline) might add '9' access prefix → strip it.
+    Returns the Egyptian national number (apps/pbx/cdr.py national_number): the gateway's
+    prefix/suffix is only stripped when the raw number is not already national, so a real
+    leading 0 is never lost; line prefixes 81-85 / 91-95 are removed.
     """
-    meta = _gateway_meta.get(gateway_ext)
-    if not meta:
-        return caller_num
-    num = (caller_num or '').strip()
-    prefix = meta['prefix']
-    suffix = meta['suffix']
-    if prefix and num.startswith(prefix):
-        num = num[len(prefix):]
-    if suffix and num.endswith(suffix):
-        num = num[:-len(suffix)]
-    return num or caller_num
+    from apps.pbx.cdr import inbound_number
+    return inbound_number(caller_num, _gateway_meta.get(gateway_ext)) or caller_num
 
 
 class AMILoginError(ConnectionError):

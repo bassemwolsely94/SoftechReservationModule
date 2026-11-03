@@ -1,0 +1,229 @@
+"""
+Egyptian phone normalisation for PBX calls <-> PIC matching (apps/pbx/cdr.py national_number /
+phone_key / inbound_number / outbound_number / renormalise_pbx_numbers). Synthetic numbers only.
+"""
+import datetime as dt
+from io import StringIO
+
+from django.core.management import call_command
+from django.test import SimpleTestCase, TestCase
+from django.utils import timezone
+
+from apps.customers.models import Customer
+from apps.pbx import cdr
+from apps.pbx.models import AgentExtension, CdrCall
+
+GW = frozenset({'goip4', 'grandstream'})
+GW_META = {'goip4': {'prefix': '0', 'suffix': ''}, 'grandstream': {'prefix': '', 'suffix': ''}}
+
+
+def row(src, dst, channel='SIP/goip4-0001', dstchannel='SIP/15-0002', uid='1.1', **kw):
+    base = {'calldate': dt.datetime(2026, 10, 28, 9, 0, 0), 'src': src, 'dst': dst,
+            'dcontext': 'ext-queues', 'channel': channel, 'dstchannel': dstchannel,
+            'lastapp': 'Queue', 'duration': 10, 'billsec': 10, 'disposition': 'ANSWERED',
+            'uniqueid': uid, 'recordingfile': '', 'cnam': '', 'dst_cnam': ''}
+    base.update(kw)
+    return base
+
+
+class NationalNumberTests(SimpleTestCase):
+
+    def test_mobile_forms(self):
+        for raw in ('01000000010', '1000000010', '+201000000010', '00201000000010',
+                    '201000000010', '010-0000-0010'):
+            self.assertEqual(cdr.national_number(raw), '01000000010', raw)
+
+    def test_cairo_landline_forms(self):
+        for raw in ('24842067', '0224842067', '224842067', '+20224842067', '0020224842067'):
+            self.assertEqual(cdr.national_number(raw), '0224842067', raw)
+
+    def test_22_local(self):
+        self.assertEqual(cdr.national_number('22290016'), '0222290016')
+
+    def test_other_governorate_kept(self):
+        self.assertEqual(cdr.national_number('0482123456'), '0482123456')
+
+    def test_junk_and_short_codes_as_is(self):
+        self.assertEqual(cdr.national_number('15'), '15')
+        self.assertEqual(cdr.national_number('anonymous'), '')
+
+    def test_twelve_digit_typo_kept(self):
+        self.assertEqual(cdr.national_number('012000000066'), '012000000066')
+
+    def test_every_line_prefix_both_forms(self):
+        for p in cdr.LINE_PREFIXES:
+            self.assertEqual(cdr.split_line_prefix(p + '01000000010'), (p, '01000000010'), p)
+            self.assertEqual(cdr.national_number(p + '01000000010'), '01000000010', p)
+            self.assertEqual(cdr.national_number(p + '1000000010'), '01000000010', p)
+            self.assertEqual(cdr.national_number(p + '0224842067'), '0224842067', p)
+            self.assertEqual(cdr.national_number(p + '24842067'), '0224842067', p)
+            self.assertEqual(cdr.national_number(p + '012000000066'), '012000000066', p)
+
+    def test_prefix_with_short_remainder_is_short_code(self):
+        self.assertEqual(cdr.split_line_prefix('911234'), ('91', '1234'))
+        self.assertEqual(cdr.national_number('911234'), '1234')
+        self.assertEqual(cdr.phone_key('911234'), '')
+
+    def test_valid_national_has_no_prefix(self):
+        self.assertEqual(cdr.split_line_prefix('01000000010'), ('', '01000000010'))
+        self.assertEqual(cdr.split_line_prefix('24842067'), ('', '24842067'))
+
+
+class PhoneKeyTests(SimpleTestCase):
+
+    def test_keys_agree_across_forms(self):
+        self.assertEqual({cdr.phone_key(x) for x in ('01000000010', '1000000010', '+201000000010')},
+                         {'01000000010'})
+        self.assertEqual({cdr.phone_key(x) for x in ('0224842067', '24842067')}, {'0224842067'})
+
+    def test_too_short(self):
+        self.assertEqual(cdr.phone_key('15'), '')
+        self.assertEqual(cdr.phone_key(''), '')
+
+
+class ClassifyNumberTests(SimpleTestCase):
+
+    def inbound(self, src, **kw):
+        return cdr.classify(row(src, '101', **kw), GW, GW_META)
+
+    def test_goip4_keeps_real_leading_zero(self):
+        f = self.inbound('01551000018')
+        self.assertEqual((f['customer_number'], f['phone_key']), ('01551000018', '01551000018'))
+
+    def test_goip4_ten_digit_gets_zero(self):
+        self.assertEqual(self.inbound('1224747070')['customer_number'], '01224747070')
+
+    def test_international_forms(self):
+        for src in ('+201224747070', '00201224747070', '201224747070'):
+            self.assertEqual(self.inbound(src)['customer_number'], '01224747070', src)
+
+    def test_genuine_added_prefix_still_stripped(self):
+        meta = {'grandstream': {'prefix': '7', 'suffix': ''}}
+        f = cdr.classify(row('70224842067', '101', channel='SIP/grandstream-0001'), GW, meta)
+        self.assertEqual(f['customer_number'], '0224842067')
+
+    def test_inbound_landline_nine_digits(self):
+        f = self.inbound('222900016', channel='SIP/grandstream-0001')
+        self.assertEqual(f['customer_number'], '0222900016')
+
+    def test_outbound_route_prefixed_mobile(self):
+        f = cdr.classify(row('15', '8301200000066', channel='SIP/15-1', dstchannel='SIP/goip4-2',
+                             dcontext='from-internal'), GW, GW_META)
+        self.assertEqual(f['customer_number'], '01200000066')
+        self.assertEqual(f['line_prefix'], '83')
+
+    def test_outbound_long_typo_prefix_stripped(self):
+        f = cdr.classify(row('15', '83012000000066', channel='SIP/15-1', dstchannel='SIP/goip4-2'), GW, GW_META)
+        self.assertEqual(f['customer_number'], '012000000066')
+        self.assertEqual(f['line_prefix'], '83')
+
+    def test_outbound_cairo_local_and_nine_dial(self):
+        def o(dst):
+            return cdr.classify(row('15', dst, channel='SIP/15-1', dstchannel='SIP/grandstream-2'), GW, GW_META)
+        self.assertEqual(o('24842067')['customer_number'], '0224842067')
+        f = o('9111234')
+        self.assertEqual((f['customer_number'], f['phone_key'], f['line_prefix']), ('11234', '', '91'))
+        self.assertEqual(o('9101000000010')['customer_number'], '01000000010')
+
+    def test_inbound_line_prefix_recorded(self):
+        f = self.inbound('8101000000010')
+        self.assertEqual((f['customer_number'], f['line_prefix']), ('01000000010', '81'))
+        self.assertEqual(self.inbound('01000000010')['line_prefix'], '')
+
+    def test_inbound_prefix_all_families(self):
+        for p in cdr.LINE_PREFIXES:
+            f = self.inbound(p + '24842067', channel='SIP/grandstream-0001')
+            self.assertEqual((f['customer_number'], f['line_prefix']), ('0224842067', p), p)
+
+    def test_outbound_prefix_all_families(self):
+        for p in cdr.LINE_PREFIXES:
+            f = cdr.classify(row('15', p + '01000000010', channel='SIP/15-1', dstchannel='SIP/goip4-2'),
+                             GW, GW_META)
+            self.assertEqual((f['customer_number'], f['line_prefix']), ('01000000010', p), p)
+
+
+class MatchingTests(TestCase):
+
+    def setUp(self):
+        Customer.objects.create(name='A', phone='01000000010', softech_pic='P-1')
+        Customer.objects.create(name='B', phone='0224842067', softech_pic='P-2')
+        Customer.objects.create(name='C', phone='24842068', softech_pic='P-3')
+        Customer.objects.create(name='D', phone='1000000011', softech_pic='P-4')
+
+    def test_resolver_matches_all_forms(self):
+        for num, pic in (('1000000010', 'P-1'), ('01000000010', 'P-1'), ('+201000000010', 'P-1'),
+                         ('24842067', 'P-2'), ('0224842067', 'P-2'),
+                         ('24842068', 'P-3'), ('0224842068', 'P-3'),
+                         ('01000000011', 'P-4')):
+            got = cdr.resolve_number(num)
+            self.assertEqual((num, got[0], got[2]), (num, pic, 'single'))
+
+    def test_resolver_bulk(self):
+        r = cdr.PicResolver()
+        self.assertEqual(r.resolve(cdr.phone_key('24842067'), dt.date(2026, 10, 1))[0], 'P-2')
+        self.assertEqual(r.resolve(cdr.phone_key('1000000011'), dt.date(2026, 10, 1))[0], 'P-4')
+
+    def test_pic_search_by_phone(self):
+        from apps.pic_analytics.models import PicDayFact
+        from apps.pic_analytics.queries.pics import _search
+        for pic in ('P-1', 'P-2', 'P-3'):
+            PicDayFact.objects.create(pic=pic, day=dt.date(2026, 10, 1), invoices=1)
+        for q, want in (('1000000010', {'P-1'}), ('01000000010', {'P-1'}), ('24842067', {'P-2'}),
+                        ('0224842067', {'P-2'}), ('0224842068', {'P-3'})):
+            got = set(_search(PicDayFact.objects.all(), q).values_list('pic', flat=True))
+            self.assertEqual(got, want, q)
+
+    def test_callback_matching_across_forms(self):
+        from apps.callcenter.models import CallLog
+        from apps.pic_analytics.queries.missed import callback_dues
+        at = timezone.make_aware(dt.datetime(2026, 10, 28, 9, 0))
+        call = CdrCall.objects.create(
+            cdr_key='kc', unique_id='1', call_at=at, direction='inbound', status='abandoned',
+            customer_number='24842067', phone_key=cdr.phone_key('24842067'))
+        for ph in ('0224842067',):
+            CallLog.objects.create(phone_number=ph, status='callback', callback_due=at + dt.timedelta(hours=2))
+        self.assertIn(call.id, callback_dues([call]))
+
+
+class RenormaliseCommandTests(TestCase):
+
+    def setUp(self):
+        Customer.objects.create(name='A', phone='01000000010', softech_pic='P-1')
+        Customer.objects.create(name='B', phone='0224842067', softech_pic='P-2')
+        at = timezone.make_aware(dt.datetime(2026, 10, 28, 9, 0))
+        self.old = CdrCall.objects.create(
+            cdr_key='k1', unique_id='1', call_at=at, direction='inbound', status='answered',
+            customer_number='1000000010', phone_key='1000000010', src='01000000010', dst='101',
+            channel='SIP/goip4-0001', dstchannel='SIP/15-0002', pic_match='none')
+        self.land = CdrCall.objects.create(
+            cdr_key='k2', unique_id='2', call_at=at, direction='outbound', status='answered',
+            customer_number='24842067', phone_key='24842067', src='15', dst='24842067',
+            channel='SIP/15-0002', dstchannel='SIP/grandstream-0001', pic_match='none')
+        AgentExtension.objects.create(extension='goip4', extension_type=AgentExtension.TYPE_GATEWAY,
+                                      call_prefix='0')
+
+    def run_cmd(self, *args):
+        out = StringIO()
+        call_command('renormalise_pbx_numbers', *args, stdout=out)
+        return out.getvalue()
+
+    def test_dry_run_changes_nothing(self):
+        self.run_cmd()
+        self.old.refresh_from_db()
+        self.assertEqual(self.old.phone_key, '1000000010')
+
+    def test_commit_renormalises_and_relinks_idempotently(self):
+        self.run_cmd('--commit')
+        self.old.refresh_from_db()
+        self.land.refresh_from_db()
+        self.assertEqual((self.old.customer_number, self.old.phone_key, self.old.pic, self.old.pic_match),
+                         ('01000000010', '01000000010', 'P-1', 'single'))
+        self.assertEqual((self.land.customer_number, self.land.phone_key, self.land.pic),
+                         ('0224842067', '0224842067', 'P-2'))
+        self.assertIn('changed 0', self.run_cmd('--commit'))
+
+    def test_phone_labels_follow_new_key(self):
+        from apps.pic_analytics.models import PhoneLabel
+        PhoneLabel.objects.create(phone_key='1000000010', label='spam')
+        self.run_cmd('--commit')
+        self.assertTrue(PhoneLabel.objects.filter(phone_key='01000000010').exists())

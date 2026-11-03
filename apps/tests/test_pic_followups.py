@@ -190,7 +190,7 @@ class LabelListTests(ApiBase):
     P = '/api/pic-analytics/numbers/labels/'
 
     def test_list_and_delete(self):
-        pl = label_number('1000000020', 'spam', 'ملاحظة', self.admin_p)
+        pl = label_number('01000000020', 'spam', 'ملاحظة', self.admin_p)
         r = self.admin_c.get(self.P)
         self.assertEqual(r.status_code, 200, r.content)
         row = r.json()['rows'][0]
@@ -210,8 +210,8 @@ class LabelListTests(ApiBase):
         self.assertEqual(self.admin_c.post(f'{self.P}{pl.pk}/delete/').status_code, 404)
 
     def test_newest_first_and_paging(self):
-        a = label_number('1000000020', 'spam', '', self.admin_p)
-        b = label_number('1000000010', 'staff', '', self.admin_p)
+        a = label_number('01000000020', 'spam', '', self.admin_p)
+        b = label_number('01000000010', 'staff', '', self.admin_p)
         ids = [x['label_id'] for x in self.admin_c.get(self.P).json()['rows']]
         self.assertEqual(ids, [b.pk, a.pk])
         r = self.admin_c.get(self.P + '?page=2&page_size=1').json()
@@ -224,7 +224,7 @@ class LabelListTests(ApiBase):
         self.assertIsNone(row['number_id'])
 
     def test_management_only(self):
-        pl = label_number('1000000020', 'spam', '', self.admin_p)
+        pl = label_number('01000000020', 'spam', '', self.admin_p)
         self.assertEqual(self.mgr_c.get(self.P).status_code, 403)
         self.assertEqual(self.mgr_c.post(f'{self.P}{pl.pk}/delete/').status_code, 403)
         self.assertEqual(self.ph_c.get(self.P).status_code, 403)
@@ -237,7 +237,7 @@ class ActionListLabelTests(CallBase):
     def test_labelled_numbers_leave_the_action_list_but_not_the_kpi(self):
         self.call(D(2026, 10, 5), '', 'inbound', 'abandoned', key='1000000010', hh=9)
         self.call(D(2026, 10, 5), '', 'inbound', 'abandoned', key='1000000011', hh=9)
-        label_number('1000000010', 'supplier', '', self.admin_p)
+        label_number('01000000010', 'supplier', '', self.admin_p)
         rows = missed_rows(self.flt(), self.mgmt, True, 1)
         self.assertEqual([r['customer_number'][-2:] for r in rows['rows']], ['11'])
         self.assertEqual(rows['count'], 1)
@@ -382,7 +382,7 @@ class Task17BackendTests(CallBase):
 
     def test_unlabel_audits_with_request_inside_a_transaction(self):
         from apps.pic_analytics.queries.numbers import unlabel_number
-        pl = label_number('1000000020', 'spam', 'x', self.admin_p)
+        pl = label_number('01000000020', 'spam', 'x', self.admin_p)
         req = object()
         with mock.patch('apps.pic_analytics.queries.numbers.AuditLog.log') as lg:
             unlabel_number(pl.pk, self.admin_p, request=req)

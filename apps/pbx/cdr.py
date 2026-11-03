@@ -37,7 +37,6 @@ OVERLAP = timedelta(hours=3)          # CDR rows land at hang-up, stamped with t
 SALE_DOC = '115'
 
 _PEER_RE = re.compile(r'^(?:SIP|PJSIP|IAX2|DAHDI|Local)/([^-@/;]+)', re.I)
-_ROUTE_RE = re.compile(r'^8\d(0\d{8,10})$')     # outbound route prefix 81/82/83… + national number
 _GATEWAY_HINTS = ('goip', 'grandstream', 'trunk')
 
 
@@ -57,34 +56,109 @@ def is_gateway(channel: str, gateways=frozenset()) -> bool:
     return bool(peer) and (peer in gateways or peer.lower().startswith(_GATEWAY_HINTS))
 
 
-def phone_key(number: str) -> str:
-    """Comparable key for a phone: digits, no country code / leading zeros, last 10.
-    '01003118567', '+201003118567', '1003118567' → '1003118567'; too short → ''."""
-    d = re.sub(r'\D', '', number or '')
-    if d.startswith('0020'):
+# OWNER RULE (2026-11-03): these two-digit prefixes mark WHICH landline (81-85) or mobile (91-95)
+# line an incoming or outgoing call used. They are stripped whenever present, in both directions,
+# and the stripped prefix is kept in CdrCall.line_prefix.
+LINE_PREFIXES = ('81', '82', '83', '84', '85', '91', '92', '93', '94', '95')
+
+_MOBILE_RE = re.compile(r'^01[0125]\d{8}$')     # national mobile, 11 digits
+_CAIRO_RE = re.compile(r'^02\d{8}$')            # national Cairo landline, 10 digits
+
+
+def _digits(number) -> str:
+    return re.sub(r'\D', '', number or '')
+
+
+def _plausible_remainder(rest: str) -> bool:
+    """A number that could stand without its line prefix: national '0…', a mobile missing its 0,
+    an 8/9-digit Cairo landline, or the 12-digit '20…' / '0020…' international forms."""
+    return bool(
+        (rest.startswith('0') and len(rest) >= 9)
+        or re.fullmatch(r'1[0125]\d{8}', rest)
+        or re.fullmatch(r'[2-9]\d{7}', rest) or re.fullmatch(r'2\d{8}', rest)
+        or (rest.startswith('20') and len(rest) == 12))
+
+
+def split_line_prefix(digits: str):
+    """(prefix, rest). '8301000000010' → ('83', '01000000010'); '911234' → ('91', '1234') (a short
+    code). Nothing is split when the remainder is long but implausible, or no prefix is present."""
+    p = digits[:2]
+    if p in LINE_PREFIXES:
+        rest = digits[2:]
+        if _plausible_remainder(rest) or len(rest) < 7:
+            return p, rest
+    return '', digits
+
+
+def _national(d: str) -> str:
+    """Digits (line prefix already removed) → Egyptian national form."""
+    if d.startswith('0020'):                                   # '00201224747070'
         d = d[4:]
-    elif d.startswith('20') and len(d) == 12:
-        d = d[2:]
-    d = d.lstrip('0')
+    elif d.startswith('20') and (len(d) == 12 or (len(d) == 11 and d[2] == '2')):
+        d = d[2:]                                              # '201224747070', '20224842067'
+    if re.fullmatch(r'0?1[0125]\d{8}', d):                     # mobile, with or without its 0
+        return '0' + d[-10:]
+    if re.fullmatch(r'[2-9]\d{7}', d):                         # Cairo local '24842067' → '0224842067'
+        return '02' + d
+    if re.fullmatch(r'2\d{8}', d):                             # '224842067' → '0224842067'
+        return '0' + d
+    return d                                                   # '0…' landline/typo, short code, junk
+
+
+def national_number(raw) -> str:
+    """Single source of truth for Egyptian numbers (digits only; '' when none).
+      '+201224747070' / '1224747070' / '01224747070' → '01224747070'   (mobile, 11 digits)
+      '24842067' / '224842067' / '+20224842067'      → '0224842067'    (Cairo landline)
+      '8301000000010' (line prefix 83)                → '01000000010'
+      '012000000066' (12-digit typo), '15', '0482123456' → unchanged"""
+    d = _digits(raw)
+    return _national(split_line_prefix(d)[1])
+
+
+def phone_key(number: str) -> str:
+    """Comparable key: the national number for mobiles and Cairo landlines (so '1000000010',
+    '01000000010' and '+201000000010' agree), otherwise the digits without leading zeros, last 10.
+    Too short (< 7 digits) → ''. Customer phones go through the same function."""
+    n = national_number(number)
+    if _MOBILE_RE.match(n) or _CAIRO_RE.match(n):
+        return n
+    d = n.lstrip('0')
     return d[-10:] if len(d) >= 7 else ''
 
 
+def parse_outbound(dst: str):
+    """(national number, line prefix) of a dialled number."""
+    d = _digits(dst)
+    prefix, rest = split_line_prefix(d)
+    return _national(rest), prefix
+
+
 def outbound_number(dst: str) -> str:
-    d = re.sub(r'\D', '', dst or '')
-    m = _ROUTE_RE.match(d)
-    return m.group(1) if m else d
+    return parse_outbound(dst)[0]
+
+
+def parse_inbound(src: str, meta=None):
+    """(national number, line prefix) of a caller id. The gateway's call_prefix/suffix (meant for a
+    genuinely PBX-added prefix) is only stripped when the raw number is not already national."""
+    num = (src or '').strip()
+    if not re.search(r'\d', num):          # 'unknown', 'anonymous', withheld
+        return '', ''
+    d = _digits(num)
+    prefix, rest = split_line_prefix(d)
+    nat = _national(rest)
+    if _MOBILE_RE.match(nat) or _CAIRO_RE.match(nat) or not meta:
+        return nat, prefix
+    if meta.get('prefix') and num.startswith(meta['prefix']):
+        num = num[len(meta['prefix']):]
+    if meta.get('suffix') and num.endswith(meta['suffix']):
+        num = num[:-len(meta['suffix'])]
+    d2 = _digits(num)
+    prefix2, rest2 = split_line_prefix(d2)
+    return _national(rest2), prefix2 or prefix
 
 
 def inbound_number(src: str, meta=None) -> str:
-    num = (src or '').strip()
-    if not re.search(r'\d', num):          # 'unknown', 'anonymous', withheld
-        return ''
-    if meta:
-        if meta.get('prefix') and num.startswith(meta['prefix']):
-            num = num[len(meta['prefix']):]
-        if meta.get('suffix') and num.endswith(meta['suffix']):
-            num = num[:-len(meta['suffix'])]
-    return re.sub(r'[^\d+]', '', num)
+    return parse_inbound(src, meta)[0]
 
 
 _DISPOSITION = {'ANSWERED': 'answered', 'BUSY': 'busy', 'NO ANSWER': 'no_answer'}
@@ -97,13 +171,13 @@ def classify(row: dict, gateways=frozenset(), gw_meta=None):
     dcontext = row.get('dcontext') or ''
     if is_gateway(ch, gateways):
         direction, gateway = 'inbound', peer_of(ch)
-        number = inbound_number(row.get('src'), (gw_meta or {}).get(gateway))
+        number, line_prefix = parse_inbound(row.get('src'), (gw_meta or {}).get(gateway))
         agent_ext = peer_of(dch)
         agent_name = row.get('dst_cnam') or ''
         status = 'abandoned' if not dch else _DISPOSITION.get(disp, 'failed')
     elif is_gateway(dch, gateways):
         direction, gateway = 'outbound', peer_of(dch)
-        number = outbound_number(row.get('dst'))
+        number, line_prefix = parse_outbound(row.get('dst'))
         agent_ext = peer_of(ch) or (row.get('src') or '')[:20]
         agent_name = row.get('cnam') or ''
         status = _DISPOSITION.get(disp, 'failed')
@@ -117,6 +191,7 @@ def classify(row: dict, gateways=frozenset(), gw_meta=None):
         'is_transfer': dcontext.startswith('from-internal-xfer'),
         'customer_number': number[:30],
         'phone_key': phone_key(number),
+        'line_prefix': line_prefix,
         'agent_ext': agent_ext[:20],
         'agent_name': agent_name[:100],
         'queue': (row.get('dst') or '')[:50] if dcontext == 'ext-queues' else '',
@@ -175,7 +250,8 @@ class PicResolver:
             else:
                 cond = Q()
                 for k in keys:
-                    cond |= Q(phone__endswith=k) | Q(phone_alt__endswith=k) | Q(whatsapp_phone__endswith=k)
+                    t = k[-8:]      # prefilter on the last 8 digits; the exact phone_key compare is below
+                    cond |= Q(phone__endswith=t) | Q(phone_alt__endswith=t) | Q(whatsapp_phone__endswith=t)
                 qs = qs.filter(cond)
         self.by_key = defaultdict(set)
         self.customer_id = {}
@@ -247,7 +323,7 @@ def _fetch(start, end):
 
 
 _UPDATE_FIELDS = ['unique_id', 'call_at', 'direction', 'status', 'is_transfer', 'customer_number',
-                  'phone_key', 'agent_ext', 'agent_name', 'queue', 'gateway', 'duration_seconds',
+                  'phone_key', 'line_prefix', 'agent_ext', 'agent_name', 'queue', 'gateway', 'duration_seconds',
                   'billable_seconds', 'recording_file', 'src', 'dst', 'dcontext', 'channel',
                   'dstchannel', 'lastapp', 'disposition', 'customer', 'pic', 'pic_match',
                   'shared_pics', 'synced_at']

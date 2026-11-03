@@ -155,7 +155,7 @@ class AccessTests(ApiBase):
         self.assertEqual(self.admin_c.post(f'{base}numbers/label/',
                                            {'number_id': 99999999, 'label': 'spam'}).status_code, 400)
         self.assertEqual(self.admin_c.post(f'{base}numbers/label/',
-                                           {'phone_key': '1000000020', 'label': 'spam'}).status_code, 400)
+                                           {'phone_key': '01000000020', 'label': 'spam'}).status_code, 400)
 
     def test_linked_number_is_400(self):
         linked = self.call(D(2026, 10, 7), 'N1', 'inbound', 'answered', key='1000000030')
