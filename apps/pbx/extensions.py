@@ -110,6 +110,7 @@ def _row(extension, reg, ext, on_call, live):
             'staff_role': staff.role if staff else None,
             'branch': (staff.branch.name_ar if staff and staff.branch_id else None),
             'is_active': ext.is_active, 'sip_peer': ext.sip_peer,
+            'pbx_name': ext.pbx_name,      # the PBX's own caller name (CDR) — mapping hint
         }
 
     online = bool(reg and reg['online'])

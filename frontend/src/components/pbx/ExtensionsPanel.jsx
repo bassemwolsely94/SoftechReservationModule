@@ -6,9 +6,13 @@ const TYPES = [
   ['agent', 'مركز اتصال'], ['branch', 'فرع'], ['hq', 'إداري'], ['gateway', 'بوابة خارجية'], ['other', 'أخرى'],
 ]
 
+// "Eman AbdelGhany -CC15" → "Eman": the PBX's caller name pre-fills the staff search so the
+// likely person is on top — the supervisor still picks (nothing is mapped automatically).
+const suggestQuery = (pbxName) => (pbxName || '').replace(/\s*-?\s*CC\d+\s*$/i, '').trim().split(/\s+/)[0] || ''
+
 function MapEditor({ row, onDone }) {
   const qc = useQueryClient()
-  const [q, setQ] = useState('')
+  const [q, setQ] = useState(row.mapping?.staff_id ? '' : suggestQuery(row.mapping?.pbx_name))
   const [type, setType] = useState(row.mapping?.type || 'agent')
   const { data: staff = [] } = useQuery({
     queryKey: ['pbx-staff-choices', q],
@@ -32,6 +36,9 @@ function MapEditor({ row, onDone }) {
         )}
         <button onClick={onDone} className="btn-secondary text-xs px-2 py-1">إلغاء</button>
       </div>
+      {row.mapping?.pbx_name && (
+        <div className="text-gray-500">الاسم في السنترال: <span className="font-medium" dir="ltr">{row.mapping.pbx_name}</span></div>
+      )}
       <div className="max-h-48 overflow-auto divide-y divide-gray-100 dark:divide-gray-700">
         {staff.map(s => (
           <button key={s.id} onClick={() => save.mutate(s.id)} disabled={save.isPending}
@@ -111,6 +118,9 @@ export default function ExtensionsPanel() {
                 {r.mapping?.staff_name
                   ? <>{r.mapping.staff_name} <span className="text-xs text-gray-400">· {r.mapping.type_label}{r.mapping.branch ? ` · ${r.mapping.branch}` : ''}</span></>
                   : <span className="text-gray-400">{r.mapping ? `${r.mapping.type_label} — بدون موظف` : 'غير مرتبطة'}</span>}
+                {r.mapping?.pbx_name && !r.mapping?.staff_id && (
+                  <span className="text-xs text-amber-700 dark:text-amber-400"> · في السنترال: <span dir="ltr">{r.mapping.pbx_name}</span></span>
+                )}
               </span>
               <span className="text-xs text-gray-500 font-mono hidden md:inline" dir="ltr">{r.ip || '—'}</span>
               <span className="text-xs tabular-nums w-16 text-left" dir="ltr">{r.rtt_ms != null ? `${r.rtt_ms} ms` : ''}</span>
