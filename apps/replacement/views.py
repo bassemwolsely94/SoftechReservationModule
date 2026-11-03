@@ -22,6 +22,8 @@ from .permissions import CanUseReplacement, scoped_cases
 from .serializers import (CaseDetailSerializer, CaseListSerializer, ExceptionSerializer, GrantSerializer,
                           RuleSerializer, RunSerializer)
 from apps.catalog.wildcard import wq
+from core.sort_ordering import explicit_order_by
+from core.sort_rank import branch_label, choice_rank
 
 
 def _staff(request):
@@ -68,14 +70,29 @@ def _filter_cases(request, qs):
 
 class ReplacementCaseViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet):
     permission_classes = [CanUseReplacement]
+    filter_backends = []   # filters + ordering are applied in get_queryset (the default OrderingFilter would re-sort by raw column)
+    ORDERING_KEYS = {
+        'purchase_date': 'purchase_date', 'entitlement': 'entitlement', 'outstanding': 'outstanding',
+        'open_exceptions': 'open_exceptions', 'number': 'number', 'patient_name': 'patient_name',
+        'branch': 'branch_sort', 'supplier_personcode': 'supplier_personcode',
+        'redeemed_products': 'redeemed_products', 'redeemed_cash': 'redeemed_cash',
+        'redeemed_unclassified': 'redeemed_unclassified', 'status': 'status_rank', 'link_confidence': 'confidence_rank',
+    }
 
     def get_queryset(self):
         qs = RC.objects.select_related('branch', 'purchase_ref', 'customer')
         qs = _filter_cases(self.request, scoped_cases(self.request, qs))
-        order = self.request.query_params.get('ordering') or '-purchase_date'
-        allowed = {'purchase_date', 'entitlement', 'outstanding', 'open_exceptions', 'number'}
-        if order.lstrip('-') in allowed:
-            qs = qs.order_by(order, '-id')
+        # sortable list grid: whitelisted ?ordering= (unknown = default), NULLs last, unique pk tiebreak
+        order = self.request.query_params.get('ordering') or ''
+        if order.lstrip('-') in self.ORDERING_KEYS:
+            qs = qs.annotate(
+                branch_sort=branch_label('branch'),
+                status_rank=choice_rank('status', RC.STATUS_CHOICES),
+                confidence_rank=choice_rank('link_confidence', [('low',), ('medium',), ('high',)]),
+            )
+            qs = qs.order_by(*explicit_order_by(order, self.ORDERING_KEYS, ()))
+        else:
+            qs = qs.order_by('-purchase_date', '-id')
         return qs
 
     def get_serializer_class(self):

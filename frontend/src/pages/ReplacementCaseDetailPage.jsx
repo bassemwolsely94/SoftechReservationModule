@@ -14,6 +14,8 @@ import { Chip, errText, money } from './supply/supplyUi'
 import { SEV_LABEL, SEV_TONE, STATUS_TONE } from './ReplacementCasesPage'
 import WorkflowPanel from './replacement/WorkflowPanel'
 import useHelpTab from '../help/useHelpTab'
+import SortTh from '../components/SortTh'
+import useSortableRows from '../hooks/useSortableRows'
 
 const KIND_ICON = {
   case: '📁', prescription: '📋', item: '💊', contract_sale: '🧾', contract_return: '↩️', contract_void: '🚫',
@@ -137,6 +139,14 @@ function ExceptionRow({ e, onDecide, busy }) {
 
 const TABS = [['workflow', 'سير العمل'], ['docs', 'المستندات'], ['items', 'الأصناف'], ['ledger', 'دفتر الرصيد'], ['exceptions', 'الاستثناءات'], ['recon', 'المطابقة']]
 
+const ITEM_COLS = [
+  ['الصنف', 'item_name', 'text'], ['الكود', 'itemcode', 'text'], ['الحالة', 'disposition_label', 'text'],
+  ['كمية الروشتة', 'qty_prescribed', 'number'], ['كمية البدل', 'qty_replaced', 'number'],
+  ['سعر الجمهور', 'public_unit_price', 'number'], ['سعر التعاقد', 'contract_unit_price', 'number'],
+  ['سعر الشراء', 'purchase_unit_price', 'number'], ['الخصم', 'applied_deduction_pct', 'number'],
+  ['قيمة الجمهور المؤهلة', 'eligible_public_value', 'number'],
+]
+
 export default function ReplacementCaseDetailPage() {
   const { id } = useParams()
   const qc = useQueryClient()
@@ -151,6 +161,9 @@ export default function ReplacementCaseDetailPage() {
   const link = useMutation({ mutationFn: ({ cd, confirm }) => replacementApi.decideLink(id, cd, { confirm }), onSuccess: done, onError: fail })
   const exc = useMutation({ mutationFn: ({ eid, status, note }) => replacementApi.decideException(id, eid, { status, note }), onSuccess: done, onError: fail })
   const rebuild = useMutation({ mutationFn: () => replacementApi.rebuild(id), onSuccess: done, onError: fail })
+
+  // prescription lines: all loaded → sort in the browser (hook before the early returns)
+  const lines = useSortableRows(c?.items || [])
 
   if (isLoading) return <div className="p-6 text-gray-400">جارٍ التحميل…</div>
   if (error) return <div className="p-6 text-rose-700">{errText(error, 'تعذّر تحميل الحالة')}</div>
@@ -247,10 +260,12 @@ export default function ReplacementCaseDetailPage() {
         <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-[11px] text-gray-500"><tr>
-              {['الصنف', 'الكود', 'الحالة', 'كمية الروشتة', 'كمية البدل', 'سعر الجمهور', 'سعر التعاقد', 'سعر الشراء', 'الخصم', 'قيمة الجمهور المؤهلة'].map((h) => <th key={h} className="px-3 py-2 text-right font-medium">{h}</th>)}
+              {ITEM_COLS.map(([h, key, type]) => (
+                <SortTh key={h} {...lines.headerProps(key, type)} className="px-3 py-2 text-right font-medium">{h}</SortTh>
+              ))}
             </tr></thead>
             <tbody>
-              {c.items.map((i) => (
+              {lines.sorted.map((i) => (
                 <tr key={i.id} className={`border-t border-gray-100 ${i.disposition === 'selected_for_replacement' ? 'bg-amber-50' : ''}`}>
                   <td className="px-3 py-2">{i.item_name}</td>
                   <td className="px-3 py-2 font-mono text-xs">{i.itemcode}</td>

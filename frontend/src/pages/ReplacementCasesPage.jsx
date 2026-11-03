@@ -8,10 +8,12 @@
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { replacementApi } from '../api/client'
 import useBranchLabels from '../hooks/useBranchLabels'
 import { Chip, money } from './supply/supplyUi'
+import SortTh from '../components/SortTh'
+import useServerSort from '../hooks/useServerSort'
 
 export const STATUS_TONE = {
   entitlement_active: 'amber', settled: 'blue', reconciled: 'emerald', closed: 'gray',
@@ -57,6 +59,15 @@ function Kpi({ label, value, sub, tone = 'text-gray-900' }) {
   )
 }
 
+// [header, ordering key, type] — in column order; the ⚠ column (open exceptions) is sortable too
+const SORT_KEYS = [
+  ['الحالة', 'number', 'text'], ['المريض', 'patient_name', 'text'], ['الفرع', 'branch', 'text'],
+  ['المورد', 'supplier_personcode', 'text'], ['فاتورة الشراء', 'purchase_date', 'date'], ['الرصيد', 'entitlement', 'number'],
+  ['منتجات', 'redeemed_products', 'number'], ['نقدي', 'redeemed_cash', 'number'],
+  ['غير مصنّف', 'redeemed_unclassified', 'number'], ['المتبقي', 'outstanding', 'number'],
+  ['الوضع', 'status', 'number'], ['الثقة', 'link_confidence', 'number'], ['⚠', 'open_exceptions', 'number'],
+]
+
 export default function ReplacementCasesPage() {
   const nav = useNavigate()
   const [f, setF] = useState({ q: '', branch: '', supplier: '', status: '', open_balance: '', has_exceptions: '',
@@ -67,8 +78,14 @@ export default function ReplacementCasesPage() {
 
   const summary = useQuery({ queryKey: ['replacement-summary', filterOnly],
                              queryFn: () => replacementApi.summary(filterOnly).then((r) => r.data) })
-  const list = useQuery({ queryKey: ['replacement-list', params], keepPreviousData: true,
-                          queryFn: () => replacementApi.list(params).then((r) => r.data) })
+  // paged list → the server sorts every case (not just this page); the summary tiles ignore the sort
+  const [ordering, setOrdering] = useState('')
+  const { headerProps } = useServerSort(ordering, (o) => { setOrdering(o); setF((x) => ({ ...x, page: 1 })) }, {
+    allowed: SORT_KEYS.map(([, k]) => k),
+  })
+  const listParams = ordering ? { ...params, ordering } : params
+  const list = useQuery({ queryKey: ['replacement-list', listParams], placeholderData: keepPreviousData,
+                          queryFn: () => replacementApi.list(listParams).then((r) => r.data) })
   const s = summary.data
   const t = s?.totals || {}
   const split = s?.outstanding_split || {}
@@ -154,8 +171,8 @@ export default function ReplacementCasesPage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-[11px] text-gray-500">
             <tr>
-              {['الحالة', 'المريض', 'الفرع', 'المورد', 'فاتورة الشراء', 'الرصيد', 'منتجات', 'نقدي', 'غير مصنّف', 'المتبقي', 'الوضع', 'الثقة', '⚠'].map((h) => (
-                <th key={h} className="px-3 py-2 text-right font-medium whitespace-nowrap">{h}</th>
+              {SORT_KEYS.map(([h, key, type]) => (
+                <SortTh key={h} {...headerProps(key, type)} className="px-3 py-2 text-right font-medium whitespace-nowrap">{h}</SortTh>
               ))}
             </tr>
           </thead>
