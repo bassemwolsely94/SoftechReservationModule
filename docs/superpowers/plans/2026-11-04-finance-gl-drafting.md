@@ -40,7 +40,7 @@ Why `cheques` is read directly instead of the A/P `Payment` mirror: the mirror h
 - Rules decide amounts from a fixed per-source whitelist of fields; no expressions, no LLM, no fuzzy matching (spec §4, CLAUDE.md rule 10). A computed negative amount moves the line to the other side; zero lines are dropped; an unbalanced result is an exception, never a draft.
 - Money is `Decimal`, quantised to 0.01 with `ROUND_HALF_UP` exactly once — when a reader builds a doc's amounts.
 - Rules and maps are versioned / audited and never deleted (spec §7, §10). Editing a rule creates a new version; editing a map writes `AuditLog` with before/after.
-- Late changes (spec §11a): changed doc in an open month → draft replaced, or approved entry reversed + new draft; in a closed period → `SourceException('late_change_closed')`, nothing posted (Plan 3 posts the correction).
+- Late changes (spec §11a): changed doc in an open month → draft replaced, or approved entry reversed + new draft; in a month that does not accept postings → `SourceException(kind='closed_period_change', original_entry, proposed_lines)`, nothing posted (Plan 3 posts the correction).
 - Unconfirmed party → that doc only becomes an exception (spec §7); other docs keep drafting.
 - RBAC module `ledger`: drafting runs and exception handling need `create`; party confirmation needs `approve`; rules and maps need `edit`. All GL views keep Plan 1's all-branch gate (`core.branch_scope.sees_everything`).
 - Every engine/sync-fed screen gets the FreshnessBar with a forced-refresh button (`DataFreshnessBar domains=[…] onRefresh`); long runs show a `ProgressBar`; branch names via `useBranchLabels` / `BL`, never bare codes; wording «سيرفر» not «خادم».
@@ -94,11 +94,11 @@ Why `cheques` is read directly instead of the A/P `Payment` mirror: the mirror h
 
 **Interfaces:**
 - Produces (all `app_label='finance'`, Arabic verbose names):
-  - `GLParty(party_type supplier|customer|employee|partner|other, code CharField(20), name, softech_personcode CharField(12) blank, recon_party FK finance.ReconParty null SET_NULL, status unmapped|proposed|confirmed|rejected = unmapped, proposal_basis exact|tokens|manual|'' , confirmed_by FK StaffProfile null, confirmed_at null, is_active=True)`. `UniqueConstraint(party_type, code)`; `UniqueConstraint(party_type, softech_personcode, condition=Q(status='confirmed') & ~Q(softech_personcode=''), name='gl_party_personcode_confirmed_unique')`. `supplier` covers both 2341 suppliers and 2351 creditors (finance uses one code space: code 92 تكنوفارم appears in both sheets).
+  - `GLParty(party_type supplier|customer|employee|partner|other, code CharField(20), name, softech_personcode CharField(12) blank, recon_party FK finance.ReconParty null SET_NULL, status unmapped|proposed|confirmed|rejected = unmapped, proposal_basis exact|tokens|manual|'' , confirmed_by FK StaffProfile null, confirmed_at null, is_active=True)`; property `is_confirmed` (`status == 'confirmed'`) — Plan 3's adapter reads `code, party_type, name, softech_personcode, is_confirmed`. `UniqueConstraint(party_type, code)`; `UniqueConstraint(party_type, softech_personcode, condition=Q(status='confirmed') & ~Q(softech_personcode=''), name='gl_party_personcode_confirmed_unique')`. `supplier` covers both 2341 suppliers and 2351 creditors (finance uses one code space: code 92 تكنوفارم appears in both sheets).
   - `GLSourceMap(kind bank|expense|card_clearing, source_value CharField(20), account FK GLAccount PROTECT, branch FK branches.Branch null — the branch dimension a box carries, note, updated_by, updated_at)`. `UniqueConstraint(kind, source_value)`.
   - `PostingRule(code SlugField(60), version PositiveInteger, source_type CharField(30), description, conditions JSONField(default=dict), action post|skip = post, granularity document|branch_day|party_day = document, lines JSONField(default=list), book cash|credit|general = general, priority SmallInteger = 100, effective_from date, effective_to date null, is_active=True, created_by FK, created_at)`. `UniqueConstraint(code, version)`. Never deleted (`delete()` raises).
   - `GLSourceDoc(source_type, source_key CharField(120) unique, doc_date, branch_code CharField(5) blank, kind CharField(30) blank, personcode CharField(12) blank, amounts JSONField, attrs JSONField, content_hash CharField(64), version PositiveInteger=1, status new|drafted|skipped|exception|vanished = new, rule FK PostingRule null, group_key CharField(160) blank, entry FK LedgerEntry null SET_NULL, first_seen auto, last_seen, last_run FK GLDraftRun null)`. Index `(source_type, doc_date)`, `(group_key)`.
-  - `SourceException(source_doc FK CASCADE related_name='exceptions', code unmapped_party|unmapped_account|no_rule|ambiguous_rule|unbalanced_rule|late_change_closed|duplicate_source_key|ledger_error, message, detail JSON, status open|resolved|ignored = open, created_at, resolved_by FK null, resolved_at null, resolution_note)`. `UniqueConstraint(source_doc, code, condition=Q(status='open'))`.
+  - `SourceException(source_doc FK CASCADE related_name='exceptions', kind unmapped_party|unmapped_account|no_rule|ambiguous_rule|unbalanced_rule|closed_period_change|duplicate_source_key|ledger_error, source_date date (= the doc's date), message, detail JSON, original_entry FK LedgerEntry null PROTECT, proposed_lines JSON null — Plan 1 `save_draft` line dicts, status open|resolved|ignored = open, created_at, resolved_by FK null, resolved_at null, resolution_note)`. `UniqueConstraint(source_doc, kind, condition=Q(status='open'))`. Shape agreed with Plan 3 (shared note `gl-plan3-contract-for-plan2.md`): Plan 3's `post_late_correction(original_id, new_lines, user, reason, exception_id)` resolves `closed_period_change`.
   - `GLDraftRun(started_at auto, finished_at null, status running|success|partial|failed, date_from, date_to, source_types JSON list, triggered_by CharField(60), counts JSON — keys read, new, unchanged, changed, vanished, drafted, skipped, exceptions, reversed —, detail JSON)`. `UniqueConstraint(fields=['status'], condition=Q(status='running'), name='gl_one_running_draft')` — at most one run at a time.
   - Data step: `StaffProfile` `gl-drafting` (inactive login, role `viewer`) created if missing; backwards leaves it. Used as `created_by` of drafted entries.
 
@@ -250,6 +250,7 @@ Why `cheques` is read directly instead of the A/P `Payment` mirror: the mirror h
 - Consumes: `READERS`, `select_rule`, `build_lines`, `resolve_party`, `save_draft`, `reverse`, `LedgerError`.
 - Produces:
   - `system_user() -> StaffProfile` — the `gl-drafting` profile from Task 1's data step.
+  - `accepts_postings(d: date) -> bool` — imported from `apps.finance.gl.periods` (Plan 3 Task 2) when that module exists; until then a local fallback with the same contract: the month's `FinancialPeriod` is missing or has `status == 'open'` (`closing` and `closed` → False).
   - `draft_range(date_from, date_to, *, source_types=None, run: GLDraftRun, fetch=None) -> GLDraftRun`. Per source type:
     1. Read docs; for each: upsert `GLSourceDoc` by `source_key`. New → `new`. Same hash → untouched (counts `unchanged`). Different hash → `version += 1`, `changed`.
     2. Docs of this type in the window that the reader no longer returned → `vanished` (only for types whose read covered the whole window without error).
@@ -258,9 +259,10 @@ Why `cheques` is read directly instead of the A/P `Payment` mirror: the mirror h
        - none → `save_draft(user=system_user(), entry_date, description, lines, book=rule.book, branch, source_type, source_key=group_key)`;
        - draft → `save_draft(..., entry=existing)` (lines replaced);
        - approved, period open → `reverse(entry, user=system_user(), reason='تغير مستند سوفتيك')` then `save_draft` (counts `reversed`);
-       - approved, period `closed`/`closing` → `SourceException('late_change_closed')` on each changed doc, entry untouched.
+       - approved, `accepts_postings(entry_date)` False → `SourceException(kind='closed_period_change', original_entry=entry, proposed_lines=<rebuilt lines>)` on each changed doc, entry untouched; never reversed.
+       - Before **any** create/replace/reverse: `accepts_postings(entry_date)`. A new group in a non-accepting month → the same exception with `original_entry=None`.
        Members → `drafted`, `entry` set. A group whose members all vanished: draft deleted / approved reversed / closed → exception.
-    5. `RuleMiss` / `LedgerError` → `SourceException(code, message, detail)` on the doc(s), status `exception`; an open exception of a doc that now drafts → `resolved` (`resolution_note='حُلّ تلقائياً عند إعادة الترحيل'`).
+    5. `RuleMiss` / `LedgerError` → `SourceException(kind, message, detail)` on the doc(s), status `exception`; an open exception of a doc that now drafts → `resolved` (`resolution_note='حُلّ تلقائياً عند إعادة الترحيل'`).
     6. `run.counts` filled; `success` if no reader failed, `partial` if one failed (others still drafted), `failed` on a fatal error.
   - `start_run(*, triggered_by, date_from, date_to, source_types) -> GLDraftRun` — first marks `running` runs older than 2 h `failed` (crashed process), then creates the run; the `gl_one_running_draft` constraint turns a concurrent start into `DraftBusy` (the API maps it to 409).
   - Entry date: the doc date; book from the rule; description from the rule's first line template.
@@ -317,7 +319,7 @@ Why `cheques` is read directly instead of the A/P `Payment` mirror: the mirror h
 - [ ] **Step 2: Run** `python manage.py test apps.tests.test_gl_seed` — Expected: FAIL.
 - [ ] **Step 3: Implement** seed, command, freshness domain, scheduled job and run endpoints (urls under `apps/finance/gl/urls.py`).
 - [ ] **Step 4: Run** — Expected: PASS.
-- [ ] **Step 5: Dry run on real data (local, read-only, not CI):** after Plan 1's COA import on the dev DB, `seed_gl_drafting` then `SOFTECH_READ_ONLY=True python manage.py gl_draft --from 2026-08-01 --to 2026-08-31 --dry-run` — Expected: counts per type and an exception list grouped by code; paste in the task report together with August `sales.cash` per branch vs SOFTECH tenders (e.g. 160: pt30 sales 1,187,916.69 − returns 16,872.60 = 1,171,044.09 on 6002).
+- [ ] **Step 5: Dry run on real data (local, read-only, not CI):** after Plan 1's COA import on the dev DB, `seed_gl_drafting` then `SOFTECH_READ_ONLY=True python manage.py gl_draft --from 2026-08-01 --to 2026-08-31 --dry-run` — Expected: counts per type and an exception list grouped by kind; paste in the task report together with August `sales.cash` per branch vs SOFTECH tenders (e.g. 160: pt30 sales 1,187,916.69 − returns 16,872.60 = 1,171,044.09 on 6002).
 - [ ] **Step 6: Commit** — `feat(finance-gl): seed rules, scheduled drafting and draft-now`
 
 ### Task 8: API — parties, maps, rules, exceptions, source drill-down
@@ -337,7 +339,7 @@ Why `cheques` is read directly instead of the A/P `Payment` mirror: the mirror h
 | `GET rules/?source_type=&active=` · `GET rules/{code}/versions/` | view | |
 | `POST rules/ {…}` (new or new version) | edit | `validate_rule` errors → 400 `{errors:[…]}` |
 | `POST rules/preview/ {rule, date_from, date_to}` | view | `preview_rule`; range ≤ 31 days (400 otherwise) |
-| `GET exceptions/?status=open&code=&source_type=&date_from=&date_to=&branch=` | view | cursor-paginated, with doc summary |
+| `GET exceptions/?status=open&kind=&source_type=&date_from=&date_to=&branch=` | view | cursor-paginated, with doc summary |
 | `POST exceptions/{id}/ignore/ {note}` · `POST exceptions/redraft/ {ids}` | create | redraft = `draft_range` on those docs' dates and types (same lock) |
 | `GET entries/{id}/source/` | view | member `GLSourceDoc`s (amounts, attrs, SOFTECH key parts, version, rule code+version) |
 
@@ -371,7 +373,7 @@ Why `cheques` is read directly instead of the A/P `Payment` mirror: the mirror h
 
 **Interfaces:**
 - `JournalPage` gains: a `DataFreshnessBar domains={['gl_drafting','ap_reconciliation']} canEdit={can('ledger','create')} onRefresh={draftNow}` (draft-now = run for the current open month, `ProgressBar` from `drafting/runs/{id}` counts); a `source` filter (source types + «يدوي»); tabs «المسودات» (existing) and «الاستثناءات» (`ExceptionsTab`, badge = open count); `useHelpTab(tab)`.
-- `ExceptionsTab`: grouped by code with counts; grid date · branch (`BL`) · source · SOFTECH reference · amount · message; actions inline per row by code — `unmapped_party` → confirm/create party; `unmapped_account` → map now (kind/value prefilled); `no_rule`/`ambiguous_rule` → open rule editor prefilled with the doc's type and conditions; `late_change_closed` → read-only note «يُصحح عند إقفال الفترة» (Plan 3); any → ignore with note; multi-select + «إعادة الترحيل» (redraft). `useGridKeyboard`.
+- `ExceptionsTab`: grouped by kind with counts; grid date · branch (`BL`) · source · SOFTECH reference · amount · message; actions inline per row by kind — `unmapped_party` → confirm/create party; `unmapped_account` → map now (kind/value prefilled); `no_rule`/`ambiguous_rule` → open rule editor prefilled with the doc's type and conditions; `closed_period_change` → read-only note «يُصحح في أول شهر مفتوح» with the original entry linked (Plan 3 adds the correction button); any → ignore with note; multi-select + «إعادة الترحيل» (redraft). `useGridKeyboard`.
 - `SourcePanel` (inside `EntryEditor` for entries with `source_type`): member docs, their amounts/attrs, SOFTECH key, version history, rule code + version, link to the rule.
 - `data-tour`: `finance-gl-journal-freshness`, `finance-gl-exceptions-grid`, `finance-gl-entry-source`.
 
@@ -383,7 +385,7 @@ Why `cheques` is read directly instead of the A/P `Payment` mirror: the mirror h
 ### Task 11: Help, docs, regression
 
 **Files:**
-- Modify: `apps/help/content/finance.py` — new screens `finance.gl_parties`, `finance.gl_rules` (tabs `rules`, `maps`), and the `finance.gl_journal` tabs (`drafts`, `exceptions`) with the exception codes explained; Arabic + English; `updated` bumped; targets from Tasks 9–10.
+- Modify: `apps/help/content/finance.py` — new screens `finance.gl_parties`, `finance.gl_rules` (tabs `rules`, `maps`), and the `finance.gl_journal` tabs (`drafts`, `exceptions`) with the exception kinds explained; Arabic + English; `updated` bumped; targets from Tasks 9–10.
 - Modify: `docs/architecture/34_FINANCE_GENERAL_LEDGER.md` (drafting section: readers, verified fields table from this plan, rules model, late-change behaviour, schedule), `02_MODULE_REGISTRY.md`, `04_API_REGISTRY.md`, `05_UI_REGISTRY.md`, `03_DATABASE_DICTIONARY.md`.
 
 - [ ] **Step 1: Write** help and docs.
