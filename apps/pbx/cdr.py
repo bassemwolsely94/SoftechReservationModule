@@ -63,6 +63,7 @@ LINE_PREFIXES = ('81', '82', '83', '84', '85', '91', '92', '93', '94', '95')
 
 _MOBILE_RE = re.compile(r'^01[0125]\d{8}$')     # national mobile, 11 digits
 _CAIRO_RE = re.compile(r'^02\d{8}$')            # national Cairo landline, 10 digits
+_NATIONAL0_RE = re.compile(r'^0\d{8,10}$')       # any national 0-leading number, 9-11 digits
 
 
 def _digits(number) -> str:
@@ -120,10 +121,19 @@ def phone_key(number: str) -> str:
     '01000000010' and '+201000000010' agree), otherwise the digits without leading zeros, last 10.
     Too short (< 7 digits) → ''. Customer phones go through the same function."""
     n = national_number(number)
-    if _MOBILE_RE.match(n) or _CAIRO_RE.match(n):
-        return n
+    if _MOBILE_RE.match(n) or _CAIRO_RE.match(n) or _NATIONAL0_RE.match(n):
+        return n               # national 0-leading numbers are their own key (idempotent; Alexandria != Cairo)
     d = n.lstrip('0')
     return d[-10:] if len(d) >= 7 else ''
+
+
+def lookup_tail(number: str) -> str:
+    """Suffix for `endswith` customer lookups from a typed/dialled number: the last 8 digits of a Cairo
+    landline (stored with or without its 02), otherwise the last 9 digits."""
+    k = phone_key(number)
+    if _CAIRO_RE.match(k):
+        return k[-8:]
+    return _digits(number)[-9:]
 
 
 def parse_outbound(dst: str):
@@ -146,8 +156,8 @@ def parse_inbound(src: str, meta=None):
     d = _digits(num)
     prefix, rest = split_line_prefix(d)
     nat = _national(rest)
-    if _MOBILE_RE.match(nat) or _CAIRO_RE.match(nat) or not meta:
-        return nat, prefix
+    if _MOBILE_RE.match(nat) or _NATIONAL0_RE.match(nat) or not meta:
+        return nat, prefix      # already national: a real leading 0 is never stripped
     if meta.get('prefix') and num.startswith(meta['prefix']):
         num = num[len(meta['prefix']):]
     if meta.get('suffix') and num.endswith(meta['suffix']):

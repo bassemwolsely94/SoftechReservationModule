@@ -34,7 +34,7 @@ def _require(access):
 
 
 def _kind(key):
-    mobile = (len(key) == 11 and key.startswith('01')) or (len(key) == 10 and key.startswith('1'))
+    mobile = key.startswith('01') or (len(key) == 10 and key.startswith('1'))
     return 'mobile' if mobile else 'landline'
 
 

@@ -181,7 +181,8 @@ class CallLogViewSet(viewsets.ModelViewSet):
         from apps.customers import access as _ca
         if branch_scope.branch_ids(request.user) is not None and len(_ca.digits(phone)) < _ca.MIN_PHONE_DIGITS:
             return Response({'detail': 'اكتب رقم الموبايل كامل.'}, status=400)
-        tail = phone.replace(' ', '')[-9:]
+        from apps.pbx.cdr import lookup_tail
+        tail = lookup_tail(phone)
         result = {
             'phone':             phone,
             'customers':         [],   # summary list — always populated

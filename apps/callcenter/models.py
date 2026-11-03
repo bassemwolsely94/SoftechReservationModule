@@ -249,7 +249,8 @@ class CallLog(models.Model):
         """Non-blocking phone → Customer + LocalCustomer match."""
         try:
             from apps.customers.models import Customer
-            tail = self.phone_number.strip().replace(' ', '')[-9:]
+            from apps.pbx.cdr import lookup_tail
+            tail = lookup_tail(self.phone_number)
 
             customer = Customer.objects.filter(
                 phone__endswith=tail

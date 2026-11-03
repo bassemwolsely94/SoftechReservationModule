@@ -46,8 +46,9 @@ class Command(BaseCommand):
             after[nmatch] += 1
             if (nnum, nkey, nlp, npic, nmatch, nshared, ncust) != (num, key, lp, pic, match, shared, cust):
                 changed += 1
-                batch.append(CdrCall(id=cid, customer_number=nnum, phone_key=nkey, line_prefix=nlp,
-                                     pic=npic, pic_match=nmatch, shared_pics=nshared, customer_id=ncust))
+                if commit:
+                    batch.append(CdrCall(id=cid, customer_number=nnum, phone_key=nkey, line_prefix=nlp,
+                                         pic=npic, pic_match=nmatch, shared_pics=nshared, customer_id=ncust))
             if commit and len(batch) >= 2000:
                 self._save(batch)
                 batch = []
@@ -68,21 +69,28 @@ class Command(BaseCommand):
         CdrCall.objects.bulk_update(
             batch, ['customer_number', 'phone_key', 'line_prefix', 'pic', 'pic_match', 'shared_pics', 'customer'])
 
-    @staticmethod
-    def _relabel(commit):
-        """PhoneLabel keys follow the new phone_key (a label on '1000000010' → '01000000010')."""
+    def _relabel(self, commit):
+        """PhoneLabel keys follow the new phone_key (a label on '1000000010' -> '01000000010').
+        When several labels collapse to one key the newest wins; the dropped ones are reported."""
+        from collections import defaultdict
         from apps.pbx.cdr import phone_key
         from apps.pic_analytics.models import PhoneLabel
-        n = 0
+        groups = defaultdict(list)
+        for pl in PhoneLabel.objects.order_by('created_at', 'pk'):
+            groups[phone_key(pl.phone_key) or pl.phone_key].append(pl)
+        moved = 0
         with transaction.atomic():
-            existing = set(PhoneLabel.objects.values_list('phone_key', flat=True))
-            for pl in PhoneLabel.objects.all():
-                nk = phone_key(pl.phone_key)
-                if nk and nk != pl.phone_key and nk not in existing:
-                    n += 1
-                    if commit:
-                        existing.discard(pl.phone_key)
-                        existing.add(nk)
-                        pl.phone_key = nk
-                        pl.save(update_fields=['phone_key'])
-        return n
+            for nk, pls in groups.items():
+                keep, drop = pls[-1], pls[:-1]
+                for d in drop:
+                    self.stdout.write(f'  label collision on {nk}: dropping older label {d.pk} '
+                                      f'({d.label}, key {d.phone_key}); keeping {keep.pk} ({keep.label})')
+                if keep.phone_key != nk:
+                    moved += 1
+                if commit:
+                    for d in drop:
+                        d.delete()
+                    if keep.phone_key != nk:
+                        keep.phone_key = nk
+                        keep.save(update_fields=['phone_key'])
+        return moved

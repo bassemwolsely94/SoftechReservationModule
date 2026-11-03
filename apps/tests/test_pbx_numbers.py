@@ -142,6 +142,56 @@ class ClassifyNumberTests(SimpleTestCase):
             self.assertEqual((f['customer_number'], f['line_prefix']), ('01000000010', p), p)
 
 
+class NationalZeroTests(SimpleTestCase):
+
+    def inbound(self, src):
+        return cdr.classify(row(src, '101'), GW, GW_META)['customer_number']
+
+    def test_goip4_keeps_zero_of_non_cairo_landlines(self):
+        for src in ('031234567', '0842123456', '0931234567', '0402123456', '0224842067'):
+            self.assertEqual(self.inbound(src), src, src)
+
+    def test_alexandria_distinct_from_cairo(self):
+        self.assertNotEqual(cdr.phone_key('031234567'), cdr.phone_key('31234567'))
+        self.assertEqual(cdr.phone_key('031234567'), '031234567')
+
+    def test_phone_key_idempotent_over_many_forms(self):
+        forms = ['01000000010', '1000000010', '+201000000010', '24842067', '0224842067', '224842067',
+                 '031234567', '0842123456', '0931234567', '0402123456', '012000000066', '911234',
+                 '8301000000010', '9101000000010', '9124842067', '15', '', '0020224842067', '482123456']
+        for x in forms:
+            k = cdr.phone_key(x)
+            self.assertEqual(cdr.phone_key(k), k, x)
+
+
+class LinkingAndBridgeTests(TestCase):
+
+    def test_bridge_normalize(self):
+        from apps.pbx import ami_bridge
+        ami_bridge._gateway_meta = {'goip4': {'prefix': '0', 'suffix': ''}}
+        self.assertEqual(ami_bridge._normalize_caller_num('1224747070', 'goip4'), '01224747070')
+        self.assertEqual(ami_bridge._normalize_caller_num('031234567', 'goip4'), '031234567')
+        self.assertEqual(ami_bridge._normalize_caller_num('911234', 'goip4'), '1234')
+
+    def test_agent_save_matches_session_by_key(self):
+        from apps.pbx.linking import find_session_for_agent_call
+        from apps.pbx.models import CallSession
+        from apps.users.models import StaffProfile
+        from django.contrib.auth import get_user_model
+        u = get_user_model().objects.create_user(username='lk1', password='x')
+        prof = StaffProfile.objects.get(user=u) if StaffProfile.objects.filter(user=u).exists()             else StaffProfile.objects.create(user=u, role='call_center')
+        ext = AgentExtension.objects.create(extension='15', staff=prof)
+        s = CallSession.objects.create(unique_id='lk-1', direction='outbound', state='ringing',
+                                       caller_number='0224842067', agent=ext, started_at=timezone.now())
+        self.assertEqual(find_session_for_agent_call(prof, '24842067'), s)
+        self.assertEqual(find_session_for_agent_call(prof, '0224842067'), s)
+        self.assertIsNone(find_session_for_agent_call(prof, '24842099'))
+
+    def test_lookup_tail(self):
+        self.assertEqual(cdr.lookup_tail('0224842067'), '24842067')
+        self.assertEqual(cdr.lookup_tail('01000000010'), '000000010')
+
+
 class MatchingTests(TestCase):
 
     def setUp(self):
@@ -221,6 +271,14 @@ class RenormaliseCommandTests(TestCase):
         self.assertEqual((self.land.customer_number, self.land.phone_key, self.land.pic),
                          ('0224842067', '0224842067', 'P-2'))
         self.assertIn('changed 0', self.run_cmd('--commit'))
+
+    def test_label_collisions_keep_newest_and_report(self):
+        from apps.pic_analytics.models import PhoneLabel
+        PhoneLabel.objects.create(phone_key='1000000010', label='spam')
+        PhoneLabel.objects.create(phone_key='01000000010', label='staff')
+        out = self.run_cmd('--commit')
+        self.assertIn('collision', out)
+        self.assertEqual(list(PhoneLabel.objects.values_list('phone_key', 'label')), [('01000000010', 'staff')])
 
     def test_phone_labels_follow_new_key(self):
         from apps.pic_analytics.models import PhoneLabel
