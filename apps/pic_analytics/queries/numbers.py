@@ -92,6 +92,7 @@ def conversions(f, access) -> dict:
     for c in (Customer.objects.filter(softech_created_at__gte=f.start, softech_created_at__lte=f.end,
                                       is_account_placeholder=False, merged_into_pic='')
               .exclude(softech_pic__isnull=True).exclude(softech_pic='').exclude(softech_pic__startswith='ACCT-')
+              .exclude(softech_pic__in=f.excluded())
               .order_by('-pk')):
         custs[c.softech_pic] = c                                  # lowest pk wins (iterated last)
     first = {}

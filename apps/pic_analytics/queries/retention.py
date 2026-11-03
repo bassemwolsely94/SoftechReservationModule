@@ -113,7 +113,8 @@ def cohorts(f, access) -> list:
     start = date(first // 12, first % 12 + 1, 1)
     # first sale day of each PIC (chain-wide flag); a branch manager keeps those first seen at their branches
     firsts = access.scope_facts(PicDayFact.objects.filter(
-        is_first_purchase=True, invoices__gt=0, day__gte=start, day__lte=f.end).exclude(pic=''))
+        is_first_purchase=True, invoices__gt=0, day__gte=start, day__lte=f.end).exclude(pic='')
+        .exclude(pic__in=f.excluded()))
     cohort_of = {}
     for pic, day in firsts.values_list('pic', 'day').distinct():
         cohort_of[pic] = _month_index(day)

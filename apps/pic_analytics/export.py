@@ -56,6 +56,7 @@ OVERVIEW_ITEMS = [
     ('basket_net', 'متوسط صافي السلة'), ('basket_units', 'متوسط وحدات السلة'),
     ('basket_categories', 'متوسط أصناف السلة'), ('basket_lines', 'متوسط بنود السلة'), ('visits_per_pic', 'زيارات لكل عميل'),
     ('retention_pct', 'الاستبقاء %'), ('no_pic_net', 'مبيعات بدون PIC'),
+    ('excluded_net', 'مبيعات عملاء مستبعدون'), ('excluded_pics', 'عدد العملاء المستبعدين'),
     ('gp', 'الربح الإجمالي'), ('gp_pct', 'هامش الربح %'),
     ('calls_in', 'مكالمات واردة'), ('calls_out', 'مكالمات صادرة'), ('missed_not_returned', 'فائتة لم يُردّ عليها'),
 ]
@@ -216,6 +217,14 @@ def build_workbook(f, access, exported_by='', calls_f=None):
     ]
     for r in rows:
         book.row(ws, S_FILTERS, r)
+    # PICs left out of every figure below (doc 33 §15): management sees which and why, others only how many
+    excl = f.excluded()
+    if access.management:
+        from . import exclusions
+        for x in exclusions.exclusion_rows():
+            book.row(ws, S_FILTERS, ['عميل مستبعد من التحليل', f"{x['pic']} — {x['reason']}"])
+    else:
+        book.row(ws, S_FILTERS, ['عملاء مستبعدون من التحليل', len(excl)])
     book.row(ws, S_FILTERS, ['', ''])
     book.row(ws, S_FILTERS, ['التعريفات', ''])
     for line in DEFINITIONS:

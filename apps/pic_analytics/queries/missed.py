@@ -108,7 +108,8 @@ def missed_rows(f, access, only_not_returned, page, page_size=50) -> dict:
         labelled = set(PhoneLabel.objects.values_list('phone_key', flat=True))
         calls = [c for c in calls if followed[c.id] is None and c.phone_key not in labelled]
 
-    pics = {c.pic for c in calls if c.pic}
+    excluded = f.excluded()         # the call stays, but its PIC is «مستبعد» and not analysed
+    pics = {c.pic for c in calls if c.pic and c.pic not in excluded}
     life = {r['pic']: r['s'] or Decimal('0') for r in PicDayFact.objects.filter(pic__in=pics, day__lte=f.end)
             .values('pic').annotate(s=Sum('net'))}
     last = {r['pic']: r['m'] for r in PicDayFact.objects.filter(pic__in=pics, invoices__gt=0, day__lte=f.end)
@@ -117,7 +118,7 @@ def missed_rows(f, access, only_not_returned, page, page_size=50) -> dict:
     calls.sort(key=lambda c: (0, 0) if c.pic not in life else (1, life[c.pic]), reverse=True)
 
     chunk = calls if page_size is None else calls[(page - 1) * page_size: page * page_size]
-    cpics = {c.pic for c in chunk if c.pic}
+    cpics = {c.pic for c in chunk if c.pic and c.pic not in excluded}
     customers = {}
     for cu in Customer.objects.filter(softech_pic__in=cpics).order_by('-pk'):
         customers[cu.softech_pic] = cu              # lowest pk wins (iterated last)
@@ -128,17 +129,18 @@ def missed_rows(f, access, only_not_returned, page, page_size=50) -> dict:
     seg_labels = dict(Customer.SEGMENT_CHOICES)
     rows = []
     for c in chunk:
+        is_excl = c.pic in excluded
         cust = c.customer if c.customer_id else customers.get(c.pic)
         row = {
             'call_id': c.id, 'call_at': timezone.localtime(c.call_at).isoformat(),
             'customer_number': c.customer_number, 'queue': c.queue,
-            'pic': c.pic, 'shared_pics': c.shared_pics or [],
+            'pic': c.pic, 'pic_excluded': is_excl, 'shared_pics': c.shared_pics or [],
             'customer_name': cust.name if cust else '',
             'segment': seg_labels.get(cust.segment, cust.segment) if cust else '',
             'segment_code': cust.segment if cust else '',
-            'last_purchase': last.get(c.pic) if c.pic else None,
-            'lifetime_net': life.get(c.pic) if c.pic else None,
-            'bought_within_7d': bool(c.pic) and _followed_by_purchase(c.pic, _day(c.call_at), days, window),
+            'last_purchase': last.get(c.pic) if c.pic and not is_excl else None,
+            'lifetime_net': life.get(c.pic) if c.pic and not is_excl else None,
+            'bought_within_7d': bool(c.pic) and not is_excl and _followed_by_purchase(c.pic, _day(c.call_at), days, window),
             'returned_at': rm[c.id].astimezone(timezone.get_current_timezone()).isoformat() if rm[c.id] else None,
             'minutes_to_return': _minutes(c, rm[c.id]) if rm[c.id] else None,
             'callback_pending': pending.get(c.id),

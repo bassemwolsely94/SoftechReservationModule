@@ -14,6 +14,7 @@ from django.db.models.functions import Cast
 from django.utils import timezone
 
 from apps.customers.models import Customer
+from apps.pic_analytics.exclusions import excluded_pics
 from apps.pic_analytics.models import PicDayFact
 from apps.pic_analytics.queries.frequency import pics_in_bucket
 
@@ -100,10 +101,21 @@ class Filters:
             return Cast(text, DecimalField(max_digits=14, decimal_places=2))
         return F('net')
 
-    def facts(self, access, *, start=None, end=None, pic_filters=True):
+    def excluded(self) -> frozenset:
+        """The active excluded PICs (exclusions.py), read once per request."""
+        return excluded_pics(self.memo)
+
+    def facts(self, access, *, start=None, end=None, pic_filters=True, only_excluded=False):
         """PicDayFact rows in range, annotated `enet` (the net to sum). Scoped to the branches the
-        user may see; `pic_filters=False` skips segment/type/frequency (used for the no-PIC line)."""
+        user may see; `pic_filters=False` skips segment/type/frequency (used for the no-PIC line).
+        Excluded PICs (doc 33 §15) are left out of every result; `only_excluded=True` returns just
+        their rows — the one «عملاء مستبعدون» line."""
         qs = PicDayFact.objects.filter(day__gte=start or self.start, day__lte=end or self.end)
+        ex = self.excluded()
+        if only_excluded:
+            qs = qs.filter(pic__in=ex)
+        elif ex:
+            qs = qs.exclude(pic__in=ex)
         ids = access.allowed_branch_ids(self.branch_ids)
         if ids is not None:
             qs = qs.filter(branch__in=ids)

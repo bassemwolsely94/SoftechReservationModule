@@ -5,6 +5,7 @@ apps/pic_analytics/views.py — mounted at /api/pic-analytics/ (doc 33)
   GET   calls/center/ calls/missed/ calls/missed/rows/ calls/unanswered/   (management only)
   GET   numbers/ numbers/conversions/ numbers/labels/   POST numbers/label/ numbers/labels/<id>/delete/ numbers/<number_id>/dial/ calls/missed/<id>/dial/
   GET   export/                    audited .xlsx
+  GET|POST exclusions/  GET exclusions/suggestions/  POST exclusions/<id>/remove/   PIC exclusion list (management only)
   GET|POST grants/                 named branch managers (admin only)
   POST     grants/<id>/revoke/
   GET      grants/candidates/?q=   staff to grant
@@ -116,6 +117,47 @@ def grant_candidates(request):
     rows = [{'id': p.id, 'name': p.full_name, 'role': p.role, 'branch': p.branch_name,
              'granted': p.id in granted} for p in qs.order_by('branch__softech_branch_id')[:30]]
     return Response({'rows': rows})
+
+
+# ── the PIC exclusion list (management only; doc 33 §15) ────────────────────────────────────────
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def exclusions(request):
+    acc = Access(request)
+    if not acc.can_view or not acc.can_manage_exclusions:
+        return _deny()
+    from . import exclusions as ex
+    if request.method == 'GET':
+        return Response({'rows': ex.exclusion_rows()})
+    try:
+        x = ex.add_exclusion(request.data.get('pic'), request.data.get('reason'), acc.profile, request=request)
+    except ex.ExclusionError as exc:
+        return _bad(str(exc))
+    return Response(ex.exclusion_json(x), status=201)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def exclusion_remove(request, pk):
+    acc = Access(request)
+    if not acc.can_view or not acc.can_manage_exclusions:
+        return _deny()
+    from . import exclusions as ex
+    x = ex.remove_exclusion(pk, acc.profile, request=request, note=request.data.get('note'))
+    if x is None:
+        return Response({'detail': 'غير موجود — Not found'}, status=404)
+    return Response({'id': x.pk, 'pic': x.pic, 'removed_at': x.removed_at})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def exclusion_suggestions(request):
+    from . import exclusions as ex
+    acc = Access(request)
+    if not acc.can_view or not acc.can_manage_exclusions:
+        return _deny()
+    return _run(request, lambda f, a: {'rows': ex.suggestions(f, a)})
 
 
 # ── the dashboard's read endpoints ───────────────────────────────────────────────────────────────

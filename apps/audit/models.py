@@ -126,6 +126,8 @@ class AuditLog(models.Model):
         ('pic_phone_unlabelled',          'تحليلات العملاء — إلغاء تصنيف رقم هاتف'),
         ('pic_analytics_dialled',         'تحليلات العملاء — اتصال من التقرير'),
         ('pic_analytics_callback_scheduled', 'تحليلات العملاء — جدولة معاودة اتصال'),
+        ('pic_analytics_pic_excluded',    'تحليلات العملاء — استبعاد عميل من التحليل'),
+        ('pic_analytics_pic_included',    'تحليلات العملاء — إرجاع عميل للتحليل'),
 
         # Personal dashboard live person search (N0/H1)
         ('personal_person_search',       'لوحة شخصية — بحث عن شخص في SOFTECH'),
