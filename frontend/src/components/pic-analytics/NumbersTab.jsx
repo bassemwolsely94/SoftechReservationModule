@@ -3,7 +3,7 @@
  * with no PIC, plus the conversions (became a PIC / bought). Numbers arrive masked; the server
  * dials and labels by an opaque number id. Labelling a number removes it from the list.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { picAnalyticsApi } from '../../api/client'
 import useGridKeyboard from '../../hooks/useGridKeyboard'
@@ -59,10 +59,16 @@ function Labelled() {
   })
   const undo = useMutation({
     mutationFn: id => picAnalyticsApi.unlabel(id).then(r => r.data),
-    onSuccess: () => { setErr(''); qc.invalidateQueries({ queryKey: ['pic-analytics'] }) },   // the number returns to the list
+    onSuccess: () => setErr(''),
     onError: e => setErr(errText(e, 'تعذّر إلغاء التصنيف')),
+    // refresh either way: the number returns to the list, or a label removed elsewhere (404) disappears
+    onSettled: () => qc.invalidateQueries({ queryKey: ['pic-analytics'] }),
   })
   const rows = list.data?.rows || []
+  // undoing the last row of a later page: step back instead of showing an empty page
+  useEffect(() => {
+    if (page > 1 && list.data && rows.length === 0) setPage(p => p - 1)
+  }, [page, list.data, rows.length])
   const kb = useGridKeyboard({ rows, getKey: getLabelKey })
   const cell = 'px-3 py-2 tabular-nums'
   return (

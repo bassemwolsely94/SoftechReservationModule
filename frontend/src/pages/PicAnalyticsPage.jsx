@@ -88,7 +88,9 @@ export default function PicAnalyticsPage() {
   useHelpTab(tab)
 
   const setParam = (k, v) => {
-    const next = new URLSearchParams(sp)
+    // start from the live URL, not a render's `sp`: a delayed call (the search debounce) must not
+    // overwrite a filter changed meanwhile (react-router's functional form also sees the stale params)
+    const next = new URLSearchParams(window.location.search)
     if (v) next.set(k, v); else next.delete(k)
     setSp(next, { replace: true })
     setPicPage(1); setOverduePage(1)
