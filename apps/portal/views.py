@@ -16,6 +16,7 @@ from rest_framework.decorators import (
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
+from core import public_guard
 from apps.portal.auth import IsPortalCustomer, PortalSessionAuthentication
 from apps.portal.serializers import (
     AuthExchangeSerializer, ReorderSerializer, RequestLinkSerializer,
@@ -52,8 +53,19 @@ def request_link(request):
     If a customer matches, mint a short-lived one-login magic link and WhatsApp it.
     """
     ser = RequestLinkSerializer(data=request.data)
-    ser.is_valid(raise_exception=True)
+    ser.is_valid(raise_exception=True)          # own fields first: a bad request never burns a slot
     phone = ser.validated_data['phone']
+
+    # Self-hosted guard (N6). Bots and the per-phone daily cap get the same generic 200 as everyone
+    # (nothing sent, nothing learnt); a stale/replayed/too-fast form is told to reload.
+    try:
+        public_guard.check_submission(request.data, 'portal_link',
+                                      phone=public_guard.normalize_phone(phone))
+    except public_guard.GuardError as e:
+        if e.code in public_guard.SILENT_CODES:
+            return Response({'detail': _GENERIC_LINK_MSG}, status=status.HTTP_200_OK)
+        return Response({'detail': public_guard.GUARD_MESSAGES[e.code]},
+                        status=status.HTTP_400_BAD_REQUEST)
 
     customer = find_customer_by_phone(phone)
     if customer is not None:

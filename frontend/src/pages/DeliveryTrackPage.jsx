@@ -29,7 +29,7 @@ export default function DeliveryTrackPage() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['public-track', token],
-    queryFn: () => fetch(`/api/delivery/track/${token}/`).then(r => { if (!r.ok) throw new Error(); return r.json() }),
+    queryFn: () => fetch(`/api/public/track/${token}/`).then(r => { if (!r.ok) throw new Error(); return r.json() }),
     refetchInterval: 30_000,
     retry: false,
   })

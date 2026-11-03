@@ -17,6 +17,7 @@ REORDER_MAX_QTY = Decimal(str(getattr(settings, 'PORTAL_REORDER_MAX_QTY', 20)))
 
 class RequestLinkSerializer(serializers.Serializer):
     phone = serializers.CharField(max_length=50)
+    # challenge / nonce / website are read by core.public_guard from request.data, not validated here.
 
 
 class AuthExchangeSerializer(serializers.Serializer):

@@ -16,16 +16,18 @@ phone and per IP; a reorder line is 1–20 and a customer places at most 10 onli
 from unittest import mock
 
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from apps.customers.models import Customer
 from apps.reservations.models import Reservation
 from apps.tests.factories import make_branch, make_item
+from apps.tests.public_guard_helpers import solved
 
 LINK, AUTH, ME, LOGOUT, REORDER = ('/api/portal/request-link/', '/api/portal/auth/', '/api/portal/me/',
                                    '/api/portal/logout/', '/api/portal/reorder/')
 
 
+@override_settings(PUBLIC_POW_DIFFICULTY=4, PUBLIC_MIN_FILL_SECONDS=0, PUBLIC_PHONE_DAILY_MAX=100)
 class _Base(TestCase):
 
     def setUp(self):
@@ -37,7 +39,7 @@ class _Base(TestCase):
     def _magic_token(self):
         """Ask for a link the way the customer does; return the token the server sent."""
         with mock.patch('apps.whatsapp.sender.WhatsAppSender') as sender:
-            self.client.post(LINK, {'phone': '01055667788'}, content_type='application/json')
+            self.client.post(LINK, solved('portal_link', phone='01055667788'), content_type='application/json')
         call = sender.return_value.send_text.call_args
         body = call.kwargs.get('body') or call.args[1]
         return body.split('/portal/auth/')[1].split()[0]
@@ -59,7 +61,7 @@ class MagicLinkTests(_Base):
     def test_the_inbox_keeps_no_link(self):
         from apps.whatsapp.models import WAMessage
         with mock.patch('apps.whatsapp.sender.WhatsAppSender._post', return_value={'messages': [{'id': 'w1'}]}):
-            self.client.post(LINK, {'phone': '01055667788'}, content_type='application/json')
+            self.client.post(LINK, solved('portal_link', phone='01055667788'), content_type='application/json')
         bodies = list(WAMessage.objects.values_list('body', flat=True))
         self.assertTrue(bodies, 'the send should still be recorded in the inbox')
         self.assertFalse(any('/portal/auth/' in b for b in bodies), bodies)
@@ -68,7 +70,7 @@ class MagicLinkTests(_Base):
         codes = []
         with mock.patch('apps.whatsapp.sender.WhatsAppSender'):
             for i in range(8):
-                codes.append(self.client.post(LINK, {'phone': '01055667788'}, content_type='application/json',
+                codes.append(self.client.post(LINK, solved('portal_link', phone='01055667788'), content_type='application/json',
                                               REMOTE_ADDR=f'10.0.0.{i + 1}').status_code)
         self.assertIn(429, codes)
 

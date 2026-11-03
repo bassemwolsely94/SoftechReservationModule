@@ -3,15 +3,12 @@
  * Customer self-service: scan a shelf QR (or open a link) for an out-of-stock
  * item and leave a phone number to be notified when it's back. Lands as a demand.
  */
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { solveChallenge } from '../utils/publicGuard'
+import { usePublicGuard, guardFailureMessage } from '../utils/publicGuard'
+import Honeypot from '../components/public/Honeypot'
 
 const BRAND = 'rgb(var(--c-brand-600))'
-const STALE_MS = 9 * 60 * 1000   // a solved challenge dies at 10 min on the server; refresh before that
-const NO_DEVICE = 'تعذر التحقق من الجهاز — جرّب متصفحاً آخر أو اتصل بالفرع'
-const HIDDEN = { position: 'absolute', left: '-9999px', width: 1, height: 1, opacity: 0, overflow: 'hidden' }
-
 function validPhone(raw) {
   const d = (raw || '').replace(/\D/g, '')
   return /^01\d{9}$/.test(d) || /^0[2-9]\d{6,8}$/.test(d)
@@ -30,21 +27,8 @@ export default function NotifyPage() {
   const [state, setState]     = useState('form')   // form | done | error
   const [err, setErr]         = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [verifying, setVerifying]   = useState(false)
   const [website, setWebsite]       = useState('')   // honeypot: humans never see or fill it
-  const solving = useRef(null)   // { promise, at } - one solution is single-use
-
-  // Start solving as soon as the form is shown so the submit rarely waits.
-  function startSolve() {
-    const p = solveChallenge('notify')
-    p.catch(() => {})            // handled where it is awaited
-    solving.current = { promise: p, at: Date.now() }
-  }
-  function ensureSolve() {
-    if (!solving.current || Date.now() - solving.current.at > STALE_MS) startSolve()
-    return solving.current.promise
-  }
-  useEffect(() => { if (itemId) startSolve() }, [itemId])   // eslint-disable-line react-hooks/exhaustive-deps
+  const { getSolution, verifying } = usePublicGuard('notify', !!itemId)
 
   useEffect(() => {
     if (itemId) {
@@ -62,17 +46,9 @@ export default function NotifyPage() {
     if (!branch)            { setErr('اختر الفرع'); return }
     setSubmitting(true); setErr('')
     try {
-      const held = ensureSolve()
       let sol
-      setVerifying(true)
-      try { sol = await held }
-      catch (e) {
-        solving.current = null
-        setErr(e.message === 'unsupported' || e.message === 'timeout'
-          ? NO_DEVICE : 'تعذّر الاتصال، حاول مرة أخرى')
-        return
-      } finally { setVerifying(false) }
-      solving.current = null    // single-use: the next submit solves afresh
+      try { sol = await getSolution() }
+      catch (e) { setErr(guardFailureMessage(e)); return }
       const res = await fetch('/api/public/notify/interest/', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ item: itemId, branch, phone, name,
@@ -139,8 +115,7 @@ export default function NotifyPage() {
                 placeholder="اسمك" value={name} onChange={e => setName(e.target.value)} />
             </div>
 
-            <input type="text" name="website" value={website} onChange={e => setWebsite(e.target.value)}
-              autoComplete="off" tabIndex={-1} aria-hidden="true" style={HIDDEN} />
+            <Honeypot value={website} onChange={setWebsite} />
 
             {err && <div className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2">{err}</div>}
 

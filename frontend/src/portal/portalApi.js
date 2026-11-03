@@ -48,7 +48,7 @@ portal.interceptors.response.use(
 const exchanges = new Map()
 
 export const portalApi = {
-  requestLink: (phone) => portal.post('/request-link/', { phone }),
+  requestLink: (phone, guard = {}) => portal.post('/request-link/', { phone, ...guard }),
   exchange:    (token) => {
     if (!exchanges.has(token)) exchanges.set(token, portal.post('/auth/', { token }))
     return exchanges.get(token)

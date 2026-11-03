@@ -4,6 +4,8 @@
  */
 import { useState } from 'react'
 import { portalApi } from '../../portal/portalApi'
+import { usePublicGuard, guardFailureMessage } from '../../utils/publicGuard'
+import Honeypot from '../../components/public/Honeypot'
 
 function Shell({ children }) {
   return (
@@ -21,16 +23,26 @@ export default function PortalLoginPage() {
   const [phone, setPhone] = useState('')
   const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [err, setErr] = useState('')
+  const [website, setWebsite] = useState('')   // honeypot: humans never see or fill it
+  const { getSolution, verifying } = usePublicGuard('portal_link', !sent)
 
   const submit = async (e) => {
     e.preventDefault()
     if (!phone.trim() || loading) return
-    setLoading(true)
+    setLoading(true); setErr('')
     try {
-      await portalApi.requestLink(phone.trim())
+      let sol
+      try { sol = await getSolution() }
+      catch (e2) { setErr(guardFailureMessage(e2)); return }
+      await portalApi.requestLink(phone.trim(), { challenge: sol.challenge, nonce: sol.nonce, website })
       setSent(true)
-    } catch {
-      setSent(true)  // still show generic confirmation (no existence leak)
+    } catch (e3) {
+      // A refused form (400: stale page, bad number) is said plainly; anything else still shows
+      // the generic confirmation (no existence leak).
+      const d = e3?.response?.status === 400 && e3.response.data?.detail
+      if (typeof d === 'string') setErr(d)
+      else setSent(true)
     } finally {
       setLoading(false)
     }
@@ -63,11 +75,13 @@ export default function PortalLoginPage() {
               onChange={e => setPhone(e.target.value)} placeholder="01XXXXXXXXX"
               className="w-full text-center text-lg tracking-wider border border-gray-300 rounded-xl py-3 focus:outline-none focus:ring-2 focus:ring-brand-600"
             />
+            <Honeypot value={website} onChange={setWebsite} />
+            {err && <div className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2">{err}</div>}
             <button
               type="submit" disabled={loading || !phone.trim()}
               className="w-full bg-brand-600 text-white rounded-xl py-3 font-bold disabled:opacity-50"
             >
-              {loading ? 'جارٍ الإرسال...' : 'إرسال رابط الدخول'}
+              {verifying ? 'جارٍ التحقق…' : loading ? 'جارٍ الإرسال...' : 'إرسال رابط الدخول'}
             </button>
           </form>
         )}

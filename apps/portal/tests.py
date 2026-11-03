@@ -8,6 +8,7 @@ token is useless on staff APIs, and a staff JWT is useless on portal APIs.
 from unittest import mock
 
 from django.core.cache import cache
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import AccessToken
@@ -17,6 +18,7 @@ from apps.reservations.models import Reservation
 from apps.portal.services import exchange_magic_link, issue_magic_link
 from apps.portal.tokens import read_session_token
 from apps.tests.factories import make_branch, make_item, make_user
+from apps.tests.public_guard_helpers import solved
 
 
 class PortalTestBase(APITestCase):
@@ -40,21 +42,22 @@ class PortalTestBase(APITestCase):
         return token
 
 
+@override_settings(PUBLIC_POW_DIFFICULTY=4, PUBLIC_MIN_FILL_SECONDS=0, PUBLIC_PHONE_DAILY_MAX=100)
 class RequestLinkTests(PortalTestBase):
     def test_always_200_no_existence_leak(self):
         with mock.patch('apps.whatsapp.sender.WhatsAppSender') as Sender:
-            r1 = self.client.post(reverse('portal-request-link'), {'phone': '01055667788'})
-            r2 = self.client.post(reverse('portal-request-link'), {'phone': '01000000000'})
+            r1 = self.client.post(reverse('portal-request-link'), solved('portal_link', phone='01055667788'), format='json')
+            r2 = self.client.post(reverse('portal-request-link'), solved('portal_link', phone='01000000000'), format='json')
         self.assertEqual(r1.status_code, 200)
         self.assertEqual(r2.status_code, 200)
         self.assertEqual(r1.json(), r2.json())  # identical body → no leak
 
     def test_whatsapp_sent_only_when_customer_found(self):
         with mock.patch('apps.whatsapp.sender.WhatsAppSender') as Sender:
-            self.client.post(reverse('portal-request-link'), {'phone': '01055667788'})
+            self.client.post(reverse('portal-request-link'), solved('portal_link', phone='01055667788'), format='json')
             self.assertTrue(Sender.return_value.send_text.called)
         with mock.patch('apps.whatsapp.sender.WhatsAppSender') as Sender2:
-            self.client.post(reverse('portal-request-link'), {'phone': '01000000000'})
+            self.client.post(reverse('portal-request-link'), solved('portal_link', phone='01000000000'), format='json')
             self.assertFalse(Sender2.return_value.send_text.called)
 
     def test_throttle_blocks_after_limit(self):
@@ -62,7 +65,7 @@ class RequestLinkTests(PortalTestBase):
         codes = []
         with mock.patch('apps.whatsapp.sender.WhatsAppSender'):
             for _ in range(7):
-                codes.append(self.client.post(url, {'phone': '01055667788'}).status_code)
+                codes.append(self.client.post(url, solved('portal_link', phone='01055667788'), format='json').status_code)
         self.assertIn(429, codes)  # default rate is 5/hour per phone
 
 
