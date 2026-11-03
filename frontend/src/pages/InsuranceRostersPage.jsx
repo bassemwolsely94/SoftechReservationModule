@@ -3,13 +3,16 @@
  * (optionally one فئة), derived by the backend from earlier claims, separation lists
  * and reviewer decisions. Read-only: decisions are taken in each claim's «فصل الأسماء».
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 const inp = 'border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500'
 const SRC = { history: 'مطالبات سابقة', list: 'قائمة', decision: 'قرار مراجع' }
-const NUM = new Set(['count'])
+const DEFAULT_SORT = { key: 'last', dir: 'desc', type: 'date' }
+const rosterValue = (m, k) => (k === 'elsewhere' ? m.other_companies.length : m[k])
 
 export default function InsuranceRostersPage() {
   const navigate = useNavigate()
@@ -22,8 +25,6 @@ export default function InsuranceRostersPage() {
   const [loading, setLoading] = useState(false)
   const [err, setErr]         = useState(null)
   const [onlyElsewhere, setOnlyElsewhere] = useState(false)
-  const [sortKey, setSortKey] = useState('last')
-  const [sortDir, setSortDir] = useState('desc')
 
   useEffect(() => {
     Promise.all([insuranceApi.clients(), insuranceApi.subclients()]).then(([c, sc]) => {
@@ -41,23 +42,12 @@ export default function InsuranceRostersPage() {
   }
   useEffect(() => { load() }, [clientId, subId])   // eslint-disable-line
 
-  const sortBy = (k) => {
-    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortKey(k); setSortDir(k === 'name' || k === 'subclient' ? 'asc' : 'desc') }
-  }
-  const val = (m, k) => k === 'elsewhere' ? m.other_companies.length : NUM.has(k) ? Number(m[k] || 0) : (m[k] || '')
-  const members = (data?.members || [])
-    .filter(m => !onlyElsewhere || m.other_companies.length)
-    .sort((a, b) => {
-      const va = val(a, sortKey), vb = val(b, sortKey)
-      const c = typeof va === 'number' ? va - vb : String(va).localeCompare(String(vb), 'ar')
-      return sortDir === 'asc' ? c : -c
-    })
-  const Th = ({ k, children, align = 'right' }) => (
-    <th onClick={() => sortBy(k)}
-      className={`text-${align} px-2 py-2 font-semibold cursor-pointer select-none whitespace-nowrap hover:bg-gray-100 ${sortKey === k ? 'text-blue-600' : ''}`}>
-      {children}{sortKey === k ? (sortDir === 'asc' ? ' ▲' : ' ▼') : <span className="opacity-25"> ↕</span>}
-    </th>
+  const filtered = useMemo(
+    () => (data?.members || []).filter(m => !onlyElsewhere || m.other_companies.length),
+    [data, onlyElsewhere])
+  const { sorted: members, headerProps } = useSortableRows(filtered, { defaultSort: DEFAULT_SORT, getValue: rosterValue })
+  const Th = (k, label, type = 'text', align = 'right') => (
+    <SortTh {...headerProps(k, type)} className={`text-${align} px-2 py-2 font-semibold whitespace-nowrap`}>{label}</SortTh>
   )
   const clientLabel = (c) => {
     const names = subs.filter(x => x.client === c.id).map(x => x.name).join('، ')
@@ -118,13 +108,13 @@ export default function InsuranceRostersPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200 text-gray-500 text-xs sticky top-0 z-10">
                 <tr>
-                  <Th k="name">الاسم</Th>
-                  <Th k="subclient">الفئة</Th>
-                  <Th k="group_label">فئة الفوترة</Th>
-                  <Th k="count" align="center">مرات الفوترة</Th>
-                  <Th k="last">آخر فوترة</Th>
+                  {Th('name', 'الاسم')}
+                  {Th('subclient', 'الفئة')}
+                  {Th('group_label', 'فئة الفوترة')}
+                  {Th('count', 'مرات الفوترة', 'number', 'center')}
+                  {Th('last', 'آخر فوترة', 'date')}
                   <th className="text-right px-2 py-2 font-semibold">المصدر</th>
-                  <Th k="elsewhere">مُفوتر أيضاً على</Th>
+                  {Th('elsewhere', 'مُفوتر أيضاً على', 'number')}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">

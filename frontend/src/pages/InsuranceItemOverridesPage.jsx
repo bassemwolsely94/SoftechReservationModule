@@ -8,6 +8,8 @@
 import { useState, useEffect, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 const CATS = [
   { value: 'local',    label: 'محلى',   cls: 'bg-green-100 text-green-700' },
@@ -47,6 +49,7 @@ const BLANK = { item_code: '', item_name: '', mode: 'force', forced_category: 'l
 export default function InsuranceItemOverridesPage() {
   const navigate = useNavigate()
   const [rows, setRows]       = useState([])
+  const { sorted: sortedRows, headerProps } = useSortableRows(rows)
   const [loading, setLoading] = useState(true)
   const [search, setSearch]   = useState('')
   const [form, setForm]       = useState(BLANK)
@@ -149,9 +152,13 @@ export default function InsuranceItemOverridesPage() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200 text-gray-500">
               <tr>
-                {['كود الصنف', 'اسم الصنف', 'النوع', 'التصنيف', 'الحالة', 'السبب', ''].map((h, i) => (
-                  <th key={i} className="text-right px-3 py-2 text-xs font-semibold">{h}</th>
-                ))}
+                <SortTh {...headerProps('item_code')} className="text-right px-3 py-2 text-xs font-semibold">كود الصنف</SortTh>
+                <SortTh {...headerProps('item_name')} className="text-right px-3 py-2 text-xs font-semibold">اسم الصنف</SortTh>
+                <SortTh {...headerProps('mode')} className="text-right px-3 py-2 text-xs font-semibold">النوع</SortTh>
+                <SortTh {...headerProps('forced_category')} className="text-right px-3 py-2 text-xs font-semibold">التصنيف</SortTh>
+                <SortTh {...headerProps('is_active', 'number')} className="text-right px-3 py-2 text-xs font-semibold">الحالة</SortTh>
+                <SortTh {...headerProps('reason')} className="text-right px-3 py-2 text-xs font-semibold">السبب</SortTh>
+                <th className="text-right px-3 py-2 text-xs font-semibold" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -161,7 +168,7 @@ export default function InsuranceItemOverridesPage() {
                 <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400">
                   لا توجد تصويبات — أضف تصويباً لتصحيح صنف مُعرّف خطأً أو تحديد صنف مزدوج المنشأ.
                 </td></tr>
-              ) : rows.map(o => (
+              ) : sortedRows.map(o => (
                 <Fragment key={o.id}>
                   <tr className="hover:bg-gray-50">
                     <td className="px-3 py-2 font-mono">{o.item_code}</td>

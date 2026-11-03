@@ -7,6 +7,9 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
 import useBranchLabels from '../hooks/useBranchLabels'
+import useSortableRows from '../hooks/useSortableRows'
+import { nextSort, sortRows, ariaSortOf } from '../hooks/sortCompare'
+import SortTh from '../components/SortTh'
 
 const inp = 'border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500'
 const n0 = (v) => Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
@@ -25,14 +28,9 @@ function monthEnd() { const d = new Date(); d.setDate(0); return d.toISOString()
 
 // a sortable table over plain rows; cols = [key, label, kind(text|int|money|pct), total?]
 function Grid({ rows, cols, initial, tour, total = true }) {
-  const [sk, setSk] = useState(initial || cols[0][0])
-  const [dir, setDir] = useState('desc')
-  const sorted = useMemo(() => [...rows].sort((a, b) => {
-    const va = a[sk], vb = b[sk]
-    const c = typeof va === 'number' ? va - vb : String(va ?? '').localeCompare(String(vb ?? ''), 'ar')
-    return dir === 'asc' ? c : -c
-  }), [rows, sk, dir])
-  const by = (k) => { if (k === sk) setDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSk(k); setDir('desc') } }
+  const kindOf = Object.fromEntries(cols.map(([k, , kind]) => [k, kind === 'text' ? 'text' : 'number']))
+  const first = initial || cols[0][0]
+  const { sorted, headerProps } = useSortableRows(rows, { defaultSort: { key: first, dir: 'desc', type: kindOf[first] || 'number' } })
   const fmt = (v, kind) => kind === 'money' ? n2(v) : kind === 'int' ? n0(v) : kind === 'pct' ? pct(v) : (v ?? '—')
   const sums = cols.filter(c => c[2] === 'money' || c[2] === 'int')
   return (
@@ -40,9 +38,8 @@ function Grid({ rows, cols, initial, tour, total = true }) {
       <table className="w-full text-xs">
         <thead className="bg-gray-50 text-gray-500 sticky top-0 z-10"><tr>
           {cols.map(([k, l, kind]) => (
-            <th key={k} onClick={() => by(k)}
-              className={`px-2 py-2 font-semibold cursor-pointer whitespace-nowrap hover:bg-gray-100 ${kind === 'text' ? 'text-right' : 'text-left'} ${sk === k ? 'text-blue-600' : ''}`}>
-              {l}{sk === k ? (dir === 'asc' ? ' ▲' : ' ▼') : <span className="opacity-25"> ↕</span>}</th>
+            <SortTh key={k} {...headerProps(k, kindOf[k])}
+              className={`px-2 py-2 font-semibold whitespace-nowrap ${kind === 'text' ? 'text-right' : 'text-left'}`}>{l}</SortTh>
           ))}</tr></thead>
         <tbody className="divide-y divide-gray-100">
           {sorted.map((r, i) => (
@@ -109,7 +106,7 @@ export default function InsuranceReportsPage() {
   const load = () => {
     setLoading(true); setErr(null)
     insuranceApi.portfolio(params())
-      .then(r => { setData(r.data); setOrder(r.data.motalbas.map(m => m.claim_id)) })
+      .then(r => { setData(r.data); setOrd(null); setOrder(r.data.motalbas.map(m => m.claim_id)) })
       .catch(e => setErr(e.response?.data?.detail || 'تعذّر تحميل التقرير'))
       .finally(() => setLoading(false))
   }
@@ -120,16 +117,22 @@ export default function InsuranceReportsPage() {
     const pos = Object.fromEntries(order.map((id, i) => [id, i]))
     return [...data.motalbas].sort((a, b) => (pos[a.claim_id] ?? 1e9) - (pos[b.claim_id] ?? 1e9))
   }, [data, order])
-  const move = (id, d) => setOrder(o => {
+  const move = (id, d) => { setOrd(null); setOrder(o => {
     const i = o.indexOf(id), j = i + d
     if (i < 0 || j < 0 || j >= o.length) return o
     const n = [...o]; [n[i], n[j]] = [n[j], n[i]]; return n
-  })
-  const sortOrder = (k, dir = 'desc') => setOrder([...(data?.motalbas || [])].sort((a, b) => {
-    const va = a[k], vb = b[k]
-    const c = typeof va === 'number' ? va - vb : String(va ?? '').localeCompare(String(vb ?? ''), 'ar')
-    return dir === 'asc' ? c : -c
-  }).map(m => m.claim_id))
+  }) }
+  // header clicks and the quick buttons both re-order the motalbas (and so the export); a third click restores the server order
+  const [ord, setOrd] = useState(null)
+  const applyOrd = (next) => {
+    setOrd(next)
+    setOrder((next ? sortRows(data?.motalbas || [], next, (m, k) => m[k]) : (data?.motalbas || [])).map(m => m.claim_id))
+  }
+  const sortOrder = (k, dir = 'desc', type = 'text') => applyOrd({ key: k, dir, type, step: 1 })
+  const orderHead = (key, type = 'text') => {
+    const active = ord?.key === key
+    return { active, dir: active ? ord.dir : undefined, ariaSort: ariaSortOf(active, ord?.dir), onSort: () => applyOrd(nextSort(ord, key, type)) }
+  }
 
   const exportXlsx = async () => {
     setExporting(true)
@@ -230,8 +233,8 @@ export default function InsuranceReportsPage() {
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2 text-xs" data-tour="insurance-reports-order">
                 <span className="text-gray-500">ترتيب المطالبات (يُطبَّق على التصدير):</span>
-                {[['period_from', 'الفترة', 'asc'], ['client', 'الجهة', 'asc'], ['net', 'الصافى', 'desc'], ['gp_pct', 'نسبة الربح', 'desc'], ['claim_number', 'الرقم', 'asc']].map(([k, l, d]) => (
-                  <button key={k} onClick={() => sortOrder(k, d)} className="px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50">{l}</button>
+                {[['period_from', 'الفترة', 'asc', 'date'], ['client', 'الجهة', 'asc'], ['net', 'الصافى', 'desc', 'number'], ['gp_pct', 'نسبة الربح', 'desc', 'number'], ['claim_number', 'الرقم', 'asc']].map(([k, l, d, t]) => (
+                  <button key={k} onClick={() => sortOrder(k, d, t)} className="px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50">{l}</button>
                 ))}
                 <label className="flex items-center gap-1 mr-3"><input type="checkbox" checked={groupByClient} onChange={e => setGroupByClient(e.target.checked)} />
                   إجماليات فرعية لكل جهة فى التصدير</label>
@@ -239,8 +242,16 @@ export default function InsuranceReportsPage() {
               <div className="bg-white rounded-xl border border-gray-200 overflow-auto max-h-[calc(100vh-360px)]" data-tour="insurance-reports-motalbas">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 text-gray-500 sticky top-0"><tr>
-                    {['', 'المطالبة', 'الجهة', 'الفئة', 'الفترة', 'الحالة', 'روشتات', 'محلى', 'مستورد', 'ترسية', 'الإجمالى', 'الخصم', 'الصافى', 'نصيب المريض', 'التكلفة', 'مجمل الربح', 'GP%', 'محلى%', 'مستورد%', 'ترسية%', 'الرصيد'].map(h =>
-                      <th key={h} className="px-2 py-2 text-right whitespace-nowrap">{h}</th>)}
+                    <th className="px-2 py-2" />
+                    {[['claim_number', 'المطالبة'], ['client', 'الجهة'], ['subclient', 'الفئة'], ['period_from', 'الفترة', 'date'],
+                      ['status', 'الحالة'], ['rx_count', 'روشتات', 'number'], ['local_before', 'محلى', 'number'],
+                      ['imported_before', 'مستورد', 'number'], ['tarsia_before', 'ترسية', 'number'], ['gross', 'الإجمالى', 'number'],
+                      ['discount', 'الخصم', 'number'], ['net', 'الصافى', 'number'], ['patient_share', 'نصيب المريض', 'number'],
+                      ['cost', 'التكلفة', 'number'], ['gp', 'مجمل الربح', 'number'], ['gp_pct', 'GP%', 'number'],
+                      ['local_gp_pct', 'محلى%', 'number'], ['imported_gp_pct', 'مستورد%', 'number'],
+                      ['tarsia_gp_pct', 'ترسية%', 'number'], ['balance', 'الرصيد', 'number']].map(([k, l, t]) => (
+                      <SortTh key={k} {...orderHead(k, t)} className="px-2 py-2 text-right whitespace-nowrap">{l}</SortTh>
+                    ))}
                   </tr></thead>
                   <tbody className="divide-y divide-gray-100">
                     {ordered.map((m, i) => (
