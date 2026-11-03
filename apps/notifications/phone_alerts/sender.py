@@ -18,6 +18,7 @@ logger = logging.getLogger('elrezeiky.phone_alerts')
 
 ACCOUNT_SETTING = 'phone_alerts_channel_account'
 REMINDER_PREFIX = 'تذكير: '
+ESCALATION_PREFIX = 'تصعيد: '
 SUBJECT_MAX = 60
 
 
@@ -42,17 +43,22 @@ def _one_line(value, limit=None):
 
 def build_staff_alert(alert, reminder=False):
     """(variables, payloads) of the ``staff_alert`` template for ``alert``."""
-    from .recipients import _source_branch
+    from .recipients import source_branch
     event = EVENTS.get(alert.event)
     source = alert.source
     title = event.label_ar if event else alert.event
+    if event is not None and event.key == 'escalation' and source is not None:
+        # source is the escalated PhoneAlert: describe ITS record, flagged as an escalation.
+        original = EVENTS.get(source.event)
+        title = ESCALATION_PREFIX + (original.label_ar if original else source.event)
+        event, source = original, source.source
     if reminder:
         title = REMINDER_PREFIX + title
     branch = None
     try:
-        branch = _source_branch(event, source)
+        branch = source_branch(event, source)
     except Exception:
-        pass
+        logger.debug('phone alert %s: branch lookup failed', alert.pk, exc_info=True)
     reference = ''
     if source is not None:
         reference = (getattr(source, 'request_number', '') or getattr(source, 'task_number', '')
@@ -114,7 +120,7 @@ def deliver(alert, *, reminder=False, template='staff_alert', variables=None, pa
     except Exception as exc:  # last-resort guard: delivery must not break callers
         logger.exception('phone alert %s: deliver crashed', getattr(alert, 'pk', None))
         try:
-            PhoneAlert.objects.filter(pk=alert.pk).update(status='failed')
+            PhoneAlert.objects.filter(pk=alert.pk, status__in=('queued', 'failed')).update(status='failed')
             return _attempt(alert, 'whatsapp', 'failed', error=exc)
         except Exception:
             return None
@@ -157,5 +163,8 @@ def _deliver(alert, reminder, template, variables, payloads):
 
 def deliver_many(alert_ids):
     """Deliver the alerts with these ids (used from transaction.on_commit)."""
-    for alert in PhoneAlert.objects.filter(pk__in=alert_ids).order_by('pk'):
-        deliver(alert)
+    try:
+        for alert in PhoneAlert.objects.filter(pk__in=alert_ids).order_by('pk'):
+            deliver(alert)
+    except Exception:
+        logger.exception('phone alerts: deliver_many failed for %s', alert_ids)

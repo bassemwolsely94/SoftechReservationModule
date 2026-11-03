@@ -177,10 +177,10 @@ class RecipientTests(TestCase):
         TaskAssignment.objects.create(task=task, staff=a2)
         self.assertEqual([x.staff for x in resolve(EVENTS['task_assigned'], task)], [a1, a2])
         # No task.branch -> creator's branch drives branch-group resolution.
-        from apps.notifications.phone_alerts.recipients import _source_branch
-        self.assertEqual(_source_branch(EVENTS['task_assigned'], task), self.b1)
+        from apps.notifications.phone_alerts.recipients import source_branch
+        self.assertEqual(source_branch(EVENTS['task_assigned'], task), self.b1)
         task.branch = self.b2
-        self.assertEqual(_source_branch(EVENTS['task_assigned'], task), self.b2)
+        self.assertEqual(source_branch(EVENTS['task_assigned'], task), self.b2)
 
     def test_escalation_falls_back_to_supervisors_without_owner_kind(self):
         u = User.objects.create_user('sup', password='x')
@@ -386,3 +386,85 @@ class DispatchSenderTests(TestCase):
     def test_fire_never_raises(self):
         with mock.patch.object(dispatch, 'resolve', side_effect=RuntimeError('x')):
             self.assertEqual(dispatch.fire('transfer_hq_submitted', self._transfer(True)), [])
+
+
+class DispatchFixRound1Tests(DispatchSenderTests):
+    """Fix round 1 (inherits helpers; its own tests re-run harmlessly)."""
+
+    def test_fire_failure_rolls_back_and_keeps_transaction_usable(self):
+        second = _staff('own2', '01000000042')
+        WorkOwner.objects.create(kind='hq_transfer_dispatch', staff=second)
+        tr = self._transfer(True)
+        real = PhoneAlert.objects.create
+        calls = []
+
+        def flaky(*a, **kw):
+            calls.append(1)
+            if len(calls) == 2:
+                raise RuntimeError('db')
+            return real(*a, **kw)
+        with mock.patch.object(PhoneAlert.objects, 'create', side_effect=flaky):
+            self.assertEqual(dispatch.fire('transfer_hq_submitted', tr), [])
+        self.assertEqual(PhoneAlert.objects.count(), 0)
+        self.assertEqual(TransferRequest.objects.count(), 1)   # caller can keep querying
+
+    def test_crash_guard_keeps_acknowledged_status(self):
+        self._fire(self._transfer(True))
+        a = PhoneAlert.objects.get()
+        PhoneAlert.objects.filter(pk=a.pk).update(status='acknowledged')
+        a.refresh_from_db()
+        with mock.patch.object(sender, 'staff_account', side_effect=RuntimeError('x')):
+            sender.deliver(a, reminder=True)
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'acknowledged')
+
+    def test_escalation_alert_describes_original_and_sets_escalation_of(self):
+        PhoneAlertPolicy.objects.filter(event='escalation').update(mode='always')
+        tr = self._transfer(True)
+        self._fire(tr)
+        orig = PhoneAlert.objects.get()
+        sup = _staff('sup3', '01000000043')
+        WorkOwner.objects.create(kind='hq_transfer_dispatch', staff=sup, is_escalation=True)
+        with self.captureOnCommitCallbacks(execute=True):
+            esc = dispatch.fire('escalation', orig)
+        self.assertEqual(len(esc), 1)
+        self.assertEqual(esc[0].escalation_of, orig)
+        self.assertEqual(esc[0].recipient_staff, sup)
+        variables, _ = sender.build_staff_alert(esc[0])
+        texts = [v['text'] for v in variables]
+        self.assertEqual(texts[0], 'تصعيد: تحويل جديد للمخزن الرئيسي')
+        self.assertEqual(texts[1], 'فرع ١')
+        self.assertEqual(texts[3], str(tr.request_number or tr.pk))
+
+    @override_settings(PHONE_ALERTS_SEND_ENABLED=False, MORNING_BRIEF_SEND_ENABLED=True)
+    def test_brief_kind_uses_brief_switch(self):
+        acc = _account()
+        _use_account(acc)
+        self._fire(self._transfer(True))
+        a = PhoneAlert.objects.get()
+        a.kind = 'brief'
+        with _conf(), mock.patch(SEND_TPL, return_value={}) as send:
+            sender.deliver(a)
+        send.assert_called_once()
+
+    @override_settings(PHONE_ALERTS_SEND_ENABLED=True)
+    def test_sms_send_failure_marks_failed(self):
+        _use_account(_account())
+        self._fire(self._transfer(True))
+        a = PhoneAlert.objects.get()
+        with _conf(), mock.patch(SEND_TPL, side_effect=RuntimeError('boom')), _sms_conf(True), \
+                mock.patch('core.sms.SmsSender.send', side_effect=RuntimeError('smsdown')):
+            att = sender.deliver(a)
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'failed')
+        self.assertEqual((att.channel, att.result), ('sms', 'failed'))
+
+    @override_settings(PHONE_ALERTS_SEND_ENABLED=True)
+    def test_inactive_account_through_deliver_is_dry_run(self):
+        _use_account(_account(active=False))
+        self._fire(self._transfer(True))
+        a = PhoneAlert.objects.get()
+        with mock.patch(SEND_TPL) as send:
+            att = sender.deliver(a)
+        send.assert_not_called()
+        self.assertEqual(att.result, 'dry_run')

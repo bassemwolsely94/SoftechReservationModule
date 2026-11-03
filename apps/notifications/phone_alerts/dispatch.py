@@ -34,7 +34,8 @@ def _wanted(policy, source, requested):
 def fire(event_key, source, *, actor=None, notification=None, requested=None):
     """Create (and schedule delivery of) the alerts for ``event_key`` on ``source``."""
     try:
-        return _fire(event_key, source, actor, notification, requested)
+        with transaction.atomic():   # savepoint: a failure leaves no half-created alerts
+            return _fire(event_key, source, actor, notification, requested)
     except Exception:
         logger.exception('phone alert fire(%s) failed', event_key)
         return []

@@ -84,12 +84,12 @@ def on_shift_staff(branch, now=None):
     return list(_eligible(StaffProfile.objects.filter(pk__in=ids)).order_by('pk'))
 
 
-def _source_branch(event, source):
+def source_branch(event, source):
     """The branch a source record belongs to (None if it has none)."""
     if source is None or event is None:
         return None
     if event.source_model == 'notifications.phonealert':
-        return _source_branch(EVENTS.get(source.event), source.source)
+        return source_branch(EVENTS.get(source.event), source.source)
     if event.source_model == 'transfers.transferrequest':
         return source.requesting_branch
     if event.source_model == 'tasks.operationaltask':
@@ -124,7 +124,7 @@ def _branch_mobile(branch):
 def resolve(event, source, actor=None, now=None):
     """Recipients for ``event`` on ``source`` (for 'escalation', ``source`` is the original PhoneAlert)."""
     staff_list, extra = [], []
-    branch = _source_branch(event, source)
+    branch = source_branch(event, source)
 
     if event.recipients == 'owner':
         staff_list = _owners(event.owner_kind, branch)
