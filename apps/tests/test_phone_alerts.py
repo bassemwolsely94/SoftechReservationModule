@@ -223,3 +223,166 @@ class RecipientTests(TestCase):
         self.assertEqual([(x.staff, x.phone) for x in r], [(on1, '201000000032'), (None, '201099999997')])
         task.branch = self.b2
         self.assertEqual([x.staff for x in resolve(EVENTS['task_status'], task)], [on2])
+
+
+# ── Task 3: dispatch + sender ────────────────────────────────────────────────
+from unittest import mock
+
+from django.test import override_settings
+
+from apps.config.models import SystemSetting
+from apps.notifications.phone_alerts import dispatch, sender
+from apps.notifications.phone_alerts.models import PhoneAlertAttempt
+from apps.omni.models import ChannelAccount
+
+SEND_TPL = 'apps.whatsapp.sender.WhatsAppSender.send_template'
+
+
+def _conf(value=True):
+    return mock.patch('apps.whatsapp.sender.WhatsAppSender.is_configured',
+                      new_callable=mock.PropertyMock, return_value=value)
+
+
+def _sms_conf(value):
+    return mock.patch('core.sms.SmsSender.is_configured', new_callable=mock.PropertyMock,
+                      return_value=value)
+
+
+def _account(active=True):
+    return ChannelAccount.objects.create(channel='whatsapp', name='Staff', phone_or_handle='201000000999',
+                                         provider='meta_cloud', is_active=active)
+
+
+def _use_account(acc):
+    SystemSetting.objects.update_or_create(
+        key='phone_alerts_channel_account',
+        defaults={'label': 'x', 'value': str(acc.pk), 'value_type': 'integer'})
+
+
+class DispatchSenderTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.b1 = Branch.objects.create(softech_branch_id='911', name='فرع ١')
+        cls.b2 = Branch.objects.create(softech_branch_id='912', name='فرع ٢')
+        cls.owner = _staff('own', '01000000041')
+        WorkOwner.objects.create(kind='hq_transfer_dispatch', staff=cls.owner)
+
+    def _transfer(self, phone_alert=False):
+        return TransferRequest.objects.create(requesting_branch=self.b1, supplying_branch=self.b2,
+                                              phone_alert=phone_alert)
+
+    def _fire(self, tr, **kw):
+        with self.captureOnCommitCallbacks(execute=True):
+            return dispatch.fire('transfer_hq_submitted', tr, **kw)
+
+    def test_optional_needs_request(self):
+        tr = self._transfer(phone_alert=False)
+        self.assertEqual(self._fire(tr), [])
+        self.assertEqual(PhoneAlert.objects.count(), 0)
+        self.assertEqual(len(self._fire(tr, requested=True)), 1)
+        tr2 = self._transfer(phone_alert=True)
+        self.assertEqual(len(self._fire(tr2)), 1)
+
+    def test_never_ignores_request(self):
+        PhoneAlertPolicy.objects.filter(event='transfer_hq_submitted').update(mode='never')
+        self.assertEqual(self._fire(self._transfer(True), requested=True), [])
+
+    def test_always_sends_without_request(self):
+        PhoneAlertPolicy.objects.filter(event='transfer_hq_submitted').update(mode='always')
+        alerts = self._fire(self._transfer(False))
+        self.assertEqual(len(alerts), 1)
+        self.assertEqual(alerts[0].phone, '201000000041')
+        self.assertEqual(alerts[0].recipient_staff, self.owner)
+
+    def test_unknown_event_returns_empty(self):
+        self.assertEqual(dispatch.fire('nope', self._transfer(True)), [])
+
+    @override_settings(PHONE_ALERTS_SEND_ENABLED=False)
+    def test_dry_run_when_switch_off(self):
+        _use_account(_account())
+        with mock.patch(SEND_TPL) as send:
+            alerts = self._fire(self._transfer(True))
+        send.assert_not_called()
+        a = PhoneAlert.objects.get(pk=alerts[0].pk)
+        self.assertEqual(a.status, 'sent')
+        self.assertIsNotNone(a.last_sent_at)
+        self.assertEqual(list(a.attempts.values_list('result', flat=True)), ['dry_run'])
+
+    @override_settings(PHONE_ALERTS_SEND_ENABLED=True)
+    def test_dry_run_when_no_account(self):
+        with mock.patch(SEND_TPL) as send:
+            alerts = self._fire(self._transfer(True))
+        send.assert_not_called()
+        self.assertEqual(alerts[0].attempts.get().result, 'dry_run')
+        # inactive account is the same as none
+        _use_account(_account(active=False))
+        self.assertIsNone(sender.staff_account())
+
+    @override_settings(PHONE_ALERTS_SEND_ENABLED=True)
+    def test_sends_payload_with_token(self):
+        acc = _account()
+        _use_account(acc)
+        self.assertEqual(sender.staff_account(), acc)
+        tr = self._transfer(True)
+        with _conf(), mock.patch(SEND_TPL, return_value={'messages': [{'id': 'wamid.X'}]}) as send:
+            alerts = self._fire(tr)
+        a = PhoneAlert.objects.get(pk=alerts[0].pk)
+        kw = send.call_args.kwargs
+        self.assertEqual(kw['quick_reply_payloads'], [f'alert:{a.token}:ack'])
+        self.assertEqual(kw['template_name'], 'staff_alert')
+        self.assertEqual(kw['wa_id'], '201000000041')
+        texts = [v['text'] for v in kw['variables']]
+        self.assertEqual(texts[0], 'تحويل جديد للمخزن الرئيسي')
+        self.assertEqual(texts[1], 'فرع ١')
+        self.assertEqual(texts[3], str(tr.request_number or tr.pk))
+        self.assertTrue(all('\n' not in t and t == t.strip() for t in texts))
+        self.assertEqual((a.status, a.wa_message_id), ('sent', 'wamid.X'))
+        self.assertEqual(a.attempts.get().result, 'sent')
+
+    @override_settings(PHONE_ALERTS_SEND_ENABLED=True)
+    def test_reminder_prefix(self):
+        _use_account(_account())
+        self._fire(self._transfer(True))
+        a = PhoneAlert.objects.get()
+        with _conf(), mock.patch(SEND_TPL, return_value={}) as send:
+            sender.deliver(a, reminder=True)
+        self.assertTrue(send.call_args.kwargs['variables'][0]['text'].startswith('تذكير: '))
+
+    def test_no_duplicate_open_alert(self):
+        tr = self._transfer(True)
+        self.assertEqual(len(self._fire(tr)), 1)
+        self.assertEqual(self._fire(tr), [])
+        self.assertEqual(PhoneAlert.objects.count(), 1)
+        PhoneAlert.objects.update(status='acknowledged')
+        self.assertEqual(len(self._fire(tr)), 1)
+
+    @override_settings(PHONE_ALERTS_SEND_ENABLED=True)
+    def test_whatsapp_failure_falls_back_to_sms_when_configured(self):
+        _use_account(_account())
+        self._fire(self._transfer(True))
+        a = PhoneAlert.objects.get()
+        with _conf(), mock.patch(SEND_TPL, side_effect=RuntimeError('boom')), _sms_conf(True), \
+                mock.patch('core.sms.SmsSender.send', return_value={'ok': True}) as sms:
+            sender.deliver(a)
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'sent')
+        sms.assert_called_once()
+        self.assertEqual(sms.call_args.args[0], '201000000041')
+        self.assertEqual([(t.channel, t.result) for t in a.attempts.all()][-2:],
+                         [('whatsapp', 'failed'), ('sms', 'sent')])
+
+    @override_settings(PHONE_ALERTS_SEND_ENABLED=True)
+    def test_whatsapp_failure_without_sms_marks_failed_and_never_raises(self):
+        _use_account(_account())
+        self._fire(self._transfer(True))
+        a = PhoneAlert.objects.get()
+        with _conf(), mock.patch(SEND_TPL, side_effect=RuntimeError('boom')), _sms_conf(False):
+            att = sender.deliver(a)
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'failed')
+        self.assertEqual(att.result, 'failed')
+        self.assertIn('boom', att.error)
+
+    def test_fire_never_raises(self):
+        with mock.patch.object(dispatch, 'resolve', side_effect=RuntimeError('x')):
+            self.assertEqual(dispatch.fire('transfer_hq_submitted', self._transfer(True)), [])
