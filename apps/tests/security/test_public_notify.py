@@ -25,7 +25,7 @@ def _solve(challenge, difficulty):
     return str(n)
 
 
-@override_settings(PUBLIC_POW_DIFFICULTY=4, PUBLIC_MIN_FILL_SECONDS=0, PUBLIC_PHONE_DAILY_MAX=3)
+@override_settings(PUBLIC_POW_DIFFICULTY=4, PUBLIC_MIN_FILL_SECONDS=0, PUBLIC_NOTIFY_DAILY_MAX=3)
 class PublicNotifyTests(TestCase):
 
     def setUp(self):
@@ -108,6 +108,28 @@ class PublicNotifyTests(TestCase):
         r = self.c.post(NOTIFY, body, format='json')
         self.assertEqual(r.status_code, 400)
         self.assertEqual(DemandRecord.objects.count(), 0)
+
+    def test_non_numeric_ids_never_500(self):
+        for junk in ('abc', '1.5', '-3', '99999999999999999999', '', ' '):
+            r = self.c.get('/api/public/notify/item/', {'id': junk})
+            self.assertEqual((r.status_code, r.json()), (200, {'found': False}), junk)
+        r = self._post(item='abc')
+        self.assertEqual((r.status_code, r.json()['detail']), (400, 'الصنف غير متاح'))
+        r = self._post(item=[1])
+        self.assertEqual((r.status_code, r.json()['detail']), (400, 'الصنف غير متاح'))
+        r = self._post(branch='x1')
+        self.assertEqual((r.status_code, r.json()['detail']), (400, 'الفرع غير صحيح'))
+        r = self._post(branch='99999999999999999999')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(DemandRecord.objects.count(), 0)
+
+    def test_ten_items_a_day_per_phone_by_default(self):
+        with override_settings(PUBLIC_NOTIFY_DAILY_MAX=10):
+            items = [Item.objects.create(softech_id=f'9402{i:02d}', name=f'J{i}', pack_price=1)
+                     for i in range(11)]
+            for it in items:
+                self.assertEqual(self._post(item=it.id).status_code, 200)
+        self.assertEqual(DemandRecord.objects.count(), 10)
 
     def test_canonical_and_old_routes_both_work(self):
         self.assertEqual(self._post(NOTIFY).status_code, 200)

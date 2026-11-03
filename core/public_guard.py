@@ -13,7 +13,9 @@ submits challenge + nonce with the form. check_submission() then refuses:
   too_fast     submitted under PUBLIC_MIN_FILL_SECONDS after the challenge was issued
   bad_solution the nonce does not give enough leading zero bits
   replayed     the challenge was already used once
-  phone_limit  this phone already sent PUBLIC_PHONE_DAILY_MAX of this form today (Cairo day)
+  phone_limit  this phone already sent its daily cap of this form today (Cairo day):
+               'notify' PUBLIC_NOTIFY_DAILY_MAX (default 10 - shelf-QR customers scan several
+               items), 'portal_link' PUBLIC_PHONE_DAILY_MAX (default 3)
 
 'bot' and 'phone_limit' must look like success to the caller's client: callers return
 their normal success response for those two codes and log one INFO line.
@@ -91,6 +93,12 @@ def normalize_phone(phone) -> str:
     return digits[-11:]
 
 
+def daily_max(form: str) -> int:
+    if form == 'notify':
+        return int(getattr(settings, 'PUBLIC_NOTIFY_DAILY_MAX', 10))
+    return int(settings.PUBLIC_PHONE_DAILY_MAX)
+
+
 def _phone_key(form: str, phone: str) -> str:
     return f'public:phone:{form}:{phone}:{timezone.localdate():%Y%m%d}'
 
@@ -144,7 +152,7 @@ def _check(data: dict, form: str, phone) -> None:
     phone = normalize_phone(phone)
     if phone:
         key = _phone_key(form, phone)
-        if (cache.get(key) or 0) >= int(settings.PUBLIC_PHONE_DAILY_MAX):
+        if (cache.get(key) or 0) >= daily_max(form):
             raise GuardError('phone_limit')
         if cache.add(key, 1, 86400 + 3600):   # outlives the Cairo day the key names
             return

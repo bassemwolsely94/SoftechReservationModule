@@ -5,7 +5,9 @@ Views are thin — all business logic lives in service.py.
 """
 from rest_framework import viewsets, status
 from apps.catalog.wildcard import WildcardSearchFilter
-from rest_framework.decorators import action, api_view, permission_classes, throttle_classes
+from rest_framework.decorators import (
+    action, api_view, authentication_classes, permission_classes, throttle_classes,
+)
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.response import Response
@@ -1188,7 +1190,18 @@ def _valid_eg_phone(raw):
     return d if (_re.fullmatch(r'01\d{9}', d) or _re.fullmatch(r'0[2-9]\d{6,8}', d)) else None
 
 
+def _public_pk(raw):
+    """A caller-supplied id as a positive int, else None (a public page never 500s on junk)."""
+    try:
+        n = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+    return n if 0 < n < 2 ** 31 else None
+
+
+# Public views take no staff authentication: a stale staff cookie must never 401 a public page.
 @api_view(['GET'])
+@authentication_classes([])
 @permission_classes([AllowAny])
 @throttle_classes([PublicDemandThrottle])
 def public_item_lookup(request):
@@ -1196,7 +1209,8 @@ def public_item_lookup(request):
     from apps.catalog.models import Item, ItemBarcode
     item = None
     if request.query_params.get('id'):
-        item = Item.objects.filter(pk=request.query_params['id'], is_active=True).first()
+        pk = _public_pk(request.query_params['id'])
+        item = Item.objects.filter(pk=pk, is_active=True).first() if pk else None
     elif request.query_params.get('barcode'):
         b = (ItemBarcode.objects.filter(barcode=request.query_params['barcode'], is_active=True)
              .select_related('item').first())
@@ -1207,6 +1221,7 @@ def public_item_lookup(request):
 
 
 @api_view(['GET'])
+@authentication_classes([])
 @permission_classes([AllowAny])
 @throttle_classes([PublicDemandThrottle])
 def public_branches(request):
@@ -1222,6 +1237,7 @@ def public_branches(request):
 
 
 @api_view(['POST'])
+@authentication_classes([])
 @permission_classes([AllowAny])
 @throttle_classes([PublicDemandThrottle])
 def public_demand_interest(request):
@@ -1242,10 +1258,11 @@ def public_demand_interest(request):
     from apps.branches.models import Branch
     from .models import DemandItem
 
-    item = Item.objects.filter(pk=request.data.get('item'), is_active=True).first()
+    item_pk, branch_pk = _public_pk(request.data.get('item')), _public_pk(request.data.get('branch'))
+    item = Item.objects.filter(pk=item_pk, is_active=True).first() if item_pk else None
     if not item:
         return Response({'detail': 'الصنف غير متاح'}, status=400)
-    branch = Branch.objects.filter(pk=request.data.get('branch'), is_active=True).first()
+    branch = Branch.objects.filter(pk=branch_pk, is_active=True).first() if branch_pk else None
     if not branch:
         return Response({'detail': 'الفرع غير صحيح'}, status=400)
 

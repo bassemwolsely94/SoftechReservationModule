@@ -21,7 +21,7 @@ from django.test import TestCase, override_settings
 from apps.customers.models import Customer
 from apps.reservations.models import Reservation
 from apps.tests.factories import make_branch, make_item
-from apps.tests.public_guard_helpers import solved
+from apps.tests.public_guard_helpers import portal_send_inline, solved
 
 LINK, AUTH, ME, LOGOUT, REORDER = ('/api/portal/request-link/', '/api/portal/auth/', '/api/portal/me/',
                                    '/api/portal/logout/', '/api/portal/reorder/')
@@ -32,6 +32,7 @@ class _Base(TestCase):
 
     def setUp(self):
         cache.clear()                                   # throttle history
+        portal_send_inline(self)
         self.branch = make_branch()
         self.customer = Customer.objects.create(softech_pic='01W5100', name='سعيد علي',
                                                 phone='01055667788', preferred_branch=self.branch)

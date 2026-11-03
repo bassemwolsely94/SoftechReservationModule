@@ -9,7 +9,7 @@ from rest_framework.test import APIClient
 from apps.customers.models import Customer
 from apps.delivery.models import DeliveryOrder
 from apps.tests.factories import make_branch
-from apps.tests.public_guard_helpers import solved
+from apps.tests.public_guard_helpers import portal_send_inline, solved
 from core import public_guard
 
 LINK = '/api/portal/request-link/'
@@ -22,6 +22,7 @@ class PortalLinkGuardTests(TestCase):
     def setUp(self):
         cache.clear()
         self.addCleanup(cache.clear)
+        self.start_thread = portal_send_inline(self)
         self.c = APIClient()
         self.branch = make_branch()
         Customer.objects.create(softech_pic='01N6T4', name='سعيد', phone='01055667788',
@@ -56,6 +57,22 @@ class PortalLinkGuardTests(TestCase):
         self.assertEqual((r1.status_code, r1.content), (r2.status_code, r2.content))
         self.assertEqual(send.call_count, 1)
 
+    def test_link_is_sent_on_a_thread_not_in_the_request(self):
+        # I3: the WhatsApp send is handed to start_thread, so a known phone answers as fast as an
+        # unknown one; the link itself is minted before the hand-off.
+        self.start_thread.side_effect = None            # record only, do not run
+        with mock.patch('apps.portal.views.send_magic_link') as send:
+            r1 = self._post(solved('portal_link', phone='01055667788'))
+            r2 = self._post(solved('portal_link', phone='01000000000'))
+        self.assertEqual((r1.status_code, r1.content), (r2.status_code, r2.content))
+        send.assert_not_called()
+        self.assertEqual(self.start_thread.call_count, 1)
+        call = self.start_thread.call_args
+        self.assertIs(call.args[0], send)
+        customer, token = call.kwargs['args']
+        self.assertEqual(customer.phone, '01055667788')
+        self.assertTrue(token)
+
     def test_invalid_phone_does_not_burn_a_slot(self):
         for _ in range(5):
             r = self._post(solved('portal_link', phone=''))
@@ -84,6 +101,11 @@ class TrackTests(TestCase):
 
     def test_old_track_path_still_works(self):
         self.assertEqual(self.c.get(f'/api/delivery/track/{self.token}/').status_code, 200)
+
+    def test_stale_staff_cookie_still_gets_200(self):
+        self.c.cookies['erp_access'] = 'not-a-real-jwt'
+        self.assertEqual(self.c.get(f'/api/public/track/{self.token}/').status_code, 200)
+        self.assertEqual(self.c.get('/api/public/notify/branches/').status_code, 200)
 
     def test_track_throttled(self):
         codes = [self.c.get(f'/api/public/track/{self.token}/').status_code for _ in range(601)]

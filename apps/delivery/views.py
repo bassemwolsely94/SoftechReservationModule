@@ -39,7 +39,9 @@ from django.utils import timezone
 from rest_framework import filters, generics, status
 from apps.catalog.wildcard import WildcardSearchFilter
 import datetime as _dt
-from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.decorators import (
+    api_view, authentication_classes, permission_classes, throttle_classes,
+)
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .permissions import DENIED, DeliveryModulePermission, driver_of, guard
@@ -1409,6 +1411,7 @@ class PublicTrackThrottle(AnonRateThrottle):
 
 
 @api_view(['GET'])
+@authentication_classes([])          # a stale staff cookie must never 401 the public page
 @permission_classes([AllowAny])
 @throttle_classes([PublicTrackThrottle])
 def delivery_public_track(request, token):

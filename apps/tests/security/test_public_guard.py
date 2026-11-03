@@ -32,7 +32,7 @@ class _Clock:
 
 
 @override_settings(PUBLIC_POW_DIFFICULTY=8, PUBLIC_POW_TTL_SECONDS=600, PUBLIC_MIN_FILL_SECONDS=3,
-                   PUBLIC_PHONE_DAILY_MAX=3)
+                   PUBLIC_PHONE_DAILY_MAX=3, PUBLIC_NOTIFY_DAILY_MAX=3)
 class PublicGuardTests(SimpleTestCase):
 
     def setUp(self):
@@ -117,6 +117,18 @@ class PublicGuardTests(SimpleTestCase):
         self.clock.now += 5
         self.assertIsNone(check_submission(data, 'portal_link', phone='01012345678'))
 
+    @override_settings(PUBLIC_NOTIFY_DAILY_MAX=5, PUBLIC_PHONE_DAILY_MAX=2)
+    def test_each_form_has_its_own_daily_cap(self):
+        phone = '01012345678'
+        for form, cap in (('notify', 5), ('portal_link', 2)):
+            for _ in range(cap):
+                data = self._solved(form)
+                self.clock.now += 5
+                check_submission(data, form, phone=phone)
+            data = self._solved(form)
+            self.clock.now += 5
+            self.assertEqual(self._code(data, form=form, phone=phone), 'phone_limit', form)
+
     def test_phone_reformatting_shares_one_counter(self):
         variants = ['01012345678', '+201012345678', '0101 234 5678', '201012345678',
                     '00201012345678']
@@ -184,6 +196,9 @@ class DifficultyTests(SimpleTestCase):
         self.assertEqual(settings.PUBLIC_POW_DIFFICULTY, 16)
         self.assertEqual(settings.PUBLIC_MIN_FILL_SECONDS, 3)
         self.assertEqual(settings.PUBLIC_PHONE_DAILY_MAX, 3)
+        self.assertEqual(settings.PUBLIC_NOTIFY_DAILY_MAX, 10)
+        self.assertEqual(public_guard.daily_max('notify'), 10)
+        self.assertEqual(public_guard.daily_max('portal_link'), 3)
 
 
 class ChallengeEndpointTests(TestCase):

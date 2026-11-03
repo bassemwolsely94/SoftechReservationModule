@@ -18,12 +18,13 @@ from apps.reservations.models import Reservation
 from apps.portal.services import exchange_magic_link, issue_magic_link
 from apps.portal.tokens import read_session_token
 from apps.tests.factories import make_branch, make_item, make_user
-from apps.tests.public_guard_helpers import solved
+from apps.tests.public_guard_helpers import portal_send_inline, solved
 
 
 class PortalTestBase(APITestCase):
     def setUp(self):
         cache.clear()  # throttle history lives in the cache
+        portal_send_inline(self)
         self.branch = make_branch()
         self.customer = Customer.objects.create(
             softech_pic='01HD100', name='سعيد علي',
