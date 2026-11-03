@@ -109,7 +109,7 @@ class ForecastResultSerializer(serializers.ModelSerializer):
         model  = ForecastResult
         fields = ['id', 'branch', 'scope_key', 'scope_label', 'branch_name', 'metric', 'metric_label',
                   'base_value', 'lm_value', 'pm_value', 'model_a', 'model_b',
-                  'forecast_value', 'target_value', 'branch_share']
+                  'forecast_value', 'target_value', 'branch_share', 'lm_projected', 'pm_projected']
 
 
 class ForecastScenarioSerializer(serializers.ModelSerializer):
@@ -139,6 +139,20 @@ class ForecastScenarioSerializer(serializers.ModelSerializer):
             return None
         last = KpiActualRollup.objects.filter(q).aggregate(t=Max('computed_at'))['t']
         return last if last and last > obj.generated_at else None
+
+    def validate(self, data):
+        """Target month at most PLAN_HORIZON months after the running one (the signals of a
+        further month would be projections of projections)."""
+        from apps.forecasting.engine import PLAN_HORIZON, _shift_month, current_ym
+        y = data.get('year', getattr(self.instance, 'year', None))
+        m = data.get('month', getattr(self.instance, 'month', None))
+        if y and m:
+            if not 1 <= int(m) <= 12:
+                raise serializers.ValidationError({'month': 'شهر غير صالح'})
+            if (int(y), int(m)) > _shift_month(*current_ym(), PLAN_HORIZON):
+                raise serializers.ValidationError(
+                    {'month': f'أقصى مدى للتنبؤ {PLAN_HORIZON} أشهر بعد الشهر الجاري'})
+        return data
 
     class Meta:
         model  = ForecastScenario
@@ -178,5 +192,5 @@ class BacktestRunSerializer(serializers.ModelSerializer):
             'id', 'created_at', 'window_start_year', 'window_start_month',
             'window_end_year', 'window_end_month', 'n_months',
             'benchmark_growth', 'incentive_threshold', 'inflation', 'promotion_lift',
-            'scenario', 'results', 'winners',
+            'scenario', 'results', 'winners', 'horizon_accuracy',
         ]

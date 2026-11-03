@@ -569,6 +569,26 @@ class ForecastReferenceView(APIView):
         return Response(refs)
 
 
+class ForecastPlanView(APIView):
+    """GET /api/forecasting/plan/?horizon=6 — rolling outlook: the running month (estimate)
+    + the next N months, per branch + chain, with same-month-last-year YoY. Read-only:
+    computed on the fly from the rollups, nothing stored; targets still need a scenario."""
+    permission_classes = [IsAuthenticated, CanUseForecasting]
+
+    def get(self, request):
+        from apps.forecasting.engine import ForecastEngine, PLAN_HORIZON
+        try:
+            horizon = int(request.query_params.get('horizon', PLAN_HORIZON))
+        except (TypeError, ValueError):
+            horizon = PLAN_HORIZON
+        horizon = max(1, min(horizon, PLAN_HORIZON))
+        try:
+            return Response(ForecastEngine().plan(horizon=horizon))
+        except Exception:
+            logger.exception('forecast plan failed')
+            return Response({'detail': 'تعذّر حساب الخطة'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class GrowthView(APIView):
     """GET /api/forecasting/growth/?metric=&year=&period=&period_type=&comparison=&branch=&salesperson=&category="""
     permission_classes = [IsAuthenticated, CanUseForecasting]
