@@ -84,25 +84,34 @@ export function guardFailureMessage(e) {
 /**
  * Pre-solves the challenge for `form` as soon as `enabled` (the form is on screen), so the submit
  * rarely waits. `getSolution()` resolves `{challenge, nonce}` - single use: the next call solves
- * afresh; one held longer than ~9 min is re-solved. `verifying` is true while a submit waits on it.
+ * afresh; one held longer than ~9 min is re-solved. A failed PRE-solve (started when the form
+ * opened, not by this submit) is retried once with a fresh solve before the error surfaces.
+ * `verifying` is true while a submit waits on it.
  */
 export function usePublicGuard(form, enabled = true) {
-  const solving = useRef(null)   // { promise, at }
+  const solving = useRef(null)   // { promise, at, pre }
   const [verifying, setVerifying] = useState(false)
 
-  const start = useCallback(() => {
+  const start = useCallback((pre = false) => {
     const p = solveChallenge(form)
     p.catch(() => {})            // handled where it is awaited
-    solving.current = { promise: p, at: Date.now() }
+    solving.current = { promise: p, at: Date.now(), pre }
+    return solving.current
   }, [form])
 
-  useEffect(() => { if (enabled) start() }, [enabled, start])
+  useEffect(() => { if (enabled) start(true) }, [enabled, start])
 
   const getSolution = useCallback(async () => {
-    if (!solving.current || Date.now() - solving.current.at > STALE_MS) start()
-    const held = solving.current.promise
+    let held = solving.current
+    if (!held || Date.now() - held.at > STALE_MS) held = start(false)
     setVerifying(true)
-    try { return await held }
+    try {
+      try { return await held.promise }
+      catch (e) {
+        if (!held.pre) throw e
+        return await start(false).promise   // the pre-solve failed earlier: one fresh try
+      }
+    }
     finally { solving.current = null; setVerifying(false) }   // single-use, also after a failure
   }, [start])
 

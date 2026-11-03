@@ -32,6 +32,7 @@ export default function DeliveryTrackPage() {
   const { token } = useParams()
 
   // Poll every 60 s; a 429 doubles the wait (max 5 min) and the last good data stays on screen.
+  // Polling stops for good once the order is delivered / cancelled (is_terminal) or the link 404s.
   const delay = useRef(POLL_MS)
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['public-track', token],
@@ -44,7 +45,12 @@ export default function DeliveryTrackPage() {
       delay.current = POLL_MS
       return r.json()
     },
-    refetchInterval: () => delay.current,
+    refetchInterval: (query) => {
+      const { data: last, error: err } = query.state
+      if (err?.status === 404) return false
+      if (last && (last.is_terminal || last.is_delivered)) return false
+      return delay.current
+    },
     refetchOnWindowFocus: false,
     retry: false,
   })

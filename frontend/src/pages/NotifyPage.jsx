@@ -56,6 +56,7 @@ export default function NotifyPage() {
       })
       const data = await res.json().catch(() => ({}))
       if (res.ok && data.ok) setState('done')
+      else if (res.status === 429) setErr('طلبات كثيرة — حاول بعد قليل')   // never DRF's English text
       else { setErr(data.detail || 'تعذّر التسجيل، حاول مرة أخرى') }
     } catch { setErr('تعذّر الاتصال، حاول مرة أخرى') }
     finally { setSubmitting(false) }
