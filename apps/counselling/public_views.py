@@ -2,7 +2,7 @@
 Public (no login) counselling card page — /api/public/counsel/<token>/ (listed in
 apps/access/public_paths.py under /api/public/ and in the security test's KNOWN_PUBLIC_VIEWS).
 
-The token is a signed send id (cards.TOKEN_SALT), valid COUNSEL_CARD_TOKEN_DAYS. The page shows the
+The token is a signed send id (cards.CARD_SIGNING_SALT), valid COUNSEL_CARD_TOKEN_DAYS. The page shows the
 customer's first name, the branch and, per item, the pinned APPROVED sheet; if the pharmacist has
 since re-approved it the current approved text («تم تحديث»), if withdrawn a notice and no text.
 Never a phone number, customer id, staff name or price. Drafts are never shown.
@@ -18,7 +18,7 @@ from rest_framework.throttling import AnonRateThrottle
 
 from apps.audit.models import AuditLog
 
-from .cards import TOKEN_SALT
+from .cards import CARD_SIGNING_SALT
 from .models import CounselCardOptOut, CounselCardSend
 
 _GONE = {'detail': 'الرابط غير صالح أو منتهي الصلاحية'}
@@ -32,7 +32,7 @@ class PublicCounselThrottle(AnonRateThrottle):
 
 def _send_from(token):
     try:
-        data = signing.loads(str(token), salt=TOKEN_SALT,
+        data = signing.loads(str(token), salt=CARD_SIGNING_SALT,
                              max_age=int(getattr(settings, 'COUNSEL_CARD_TOKEN_DAYS', 90)) * 86400)
     except (signing.BadSignature, ValueError, TypeError):
         return None

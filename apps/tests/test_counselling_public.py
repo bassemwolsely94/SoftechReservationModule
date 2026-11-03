@@ -58,8 +58,8 @@ class PublicCardTests(TestCase):
         self.assertEqual(self.anon.get(_url(other_salt)).status_code, 404)
 
     def test_junk_token_404_not_500(self):
-        for junk in ('x', '%00', 'a' * 500, signing.dumps({'s': 'drop'}, salt=cards.TOKEN_SALT),
-                     signing.dumps([1], salt=cards.TOKEN_SALT)):
+        for junk in ('x', '%00', 'a' * 500, signing.dumps({'s': 'drop'}, salt=cards.CARD_SIGNING_SALT),
+                     signing.dumps([1], salt=cards.CARD_SIGNING_SALT)):
             self.assertEqual(self.anon.get(_url(junk)).status_code, 404, junk)
 
     def test_page_shows_current_approved_not_draft(self):

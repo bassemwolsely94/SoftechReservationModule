@@ -30,7 +30,7 @@ from .models import CounselCardItem, CounselCardOptOut, CounselCardSend
 from .selectors import approved_content, sheet_for
 
 logger = logging.getLogger(__name__)
-TOKEN_SALT = 'counsel-card'
+CARD_SIGNING_SALT = 'counsel-card'
 
 
 def enabled() -> bool:
@@ -69,7 +69,7 @@ def default_phone(customer) -> str:
 
 
 def token_for(send) -> str:
-    return signing.dumps({'s': send.pk}, salt=TOKEN_SALT)
+    return signing.dumps({'s': send.pk}, salt=CARD_SIGNING_SALT)
 
 
 def link_for(send) -> str:
