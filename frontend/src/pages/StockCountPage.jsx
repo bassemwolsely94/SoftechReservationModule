@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { stockCountApi } from '../api/client';
 import CanDo from '../components/CanDo';
 import useHelpTab from '../help/useHelpTab'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -404,6 +406,8 @@ function SnapshotTab({ session, onRefresh }) {
   const [loading, setLoading]   = useState(false);
   const [snapping, setSnapping] = useState(false);
   const [msg, setMsg]           = useState('');
+  // all previewed items are sorted, then the first 100 are shown
+  const { sorted: previewSorted, headerProps: pvHp } = useSortableRows(preview?.items || []);
 
   async function handlePreview() {
     setLoading(true); setMsg(''); setPreview(null);
@@ -475,14 +479,14 @@ function SnapshotTab({ session, onRefresh }) {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: '#1e3a5f', color: '#fff' }}>
-                  <th style={th}>كود الصنف</th>
-                  <th style={th}>اسم الصنف</th>
-                  <th style={th}>التصنيف</th>
-                  <th style={th}>الكمية المتوقعة</th>
+                  <SortTh {...pvHp('item_code', 'text')} style={th}>كود الصنف</SortTh>
+                  <SortTh {...pvHp('item_name', 'text')} style={th}>اسم الصنف</SortTh>
+                  <SortTh {...pvHp('category_name', 'text')} style={th}>التصنيف</SortTh>
+                  <SortTh {...pvHp('expected_qty', 'number')} style={th}>الكمية المتوقعة</SortTh>
                 </tr>
               </thead>
               <tbody>
-                {(preview.items || []).slice(0, 100).map((item, i) => (
+                {previewSorted.slice(0, 100).map((item, i) => (
                   <tr key={item.item_code} style={{ background: i % 2 === 0 ? '#fff' : '#f9fafb' }}>
                     <td style={td}>{item.item_code}</td>
                     <td style={td}>{item.item_name}</td>
@@ -649,6 +653,9 @@ function VarianceTab({ session, onRefresh }) {
   const [minDiff, setMinDiff] = useState('');
   const [exporting, setExporting] = useState(false);
   const [closing, setClosing]     = useState(false);
+  const { sorted: sortedItems, headerProps: vHp } = useSortableRows(data?.items || [], {
+    getValue: (r, k) => (k === 'difference' ? parseFloat(r.difference || 0) : r[k]),
+  });
 
   const load = useCallback(async () => {
     if (!['variance_ready', 'closed', 'uploaded'].includes(session.status)) return;
@@ -771,17 +778,17 @@ function VarianceTab({ session, onRefresh }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: '#1e3a5f', color: '#fff' }}>
-                <th style={th}>كود الصنف</th>
-                <th style={th}>اسم الصنف</th>
-                <th style={th}>الكمية المتوقعة</th>
-                <th style={th}>الكمية المعدودة</th>
-                <th style={th}>الفارق</th>
-                <th style={th}>النوع</th>
-                <th style={th}>كود ERP</th>
+                <SortTh {...vHp('item_code', 'text')} style={th}>كود الصنف</SortTh>
+                <SortTh {...vHp('item_name', 'text')} style={th}>اسم الصنف</SortTh>
+                <SortTh {...vHp('expected_qty', 'number')} style={th}>الكمية المتوقعة</SortTh>
+                <SortTh {...vHp('counted_qty', 'number')} style={th}>الكمية المعدودة</SortTh>
+                <SortTh {...vHp('difference', 'number')} style={th}>الفارق</SortTh>
+                <SortTh {...vHp('variance_type', 'text')} style={th}>النوع</SortTh>
+                <SortTh {...vHp('erp_doccode', 'text')} style={th}>كود ERP</SortTh>
               </tr>
             </thead>
             <tbody>
-              {(data.items || []).map((row, i) => {
+              {sortedItems.map((row, i) => {
                 const diff   = parseFloat(row.difference || 0);
                 const rowBg  = row.variance_type === 'surplus' ? '#fefce8'
                              : row.variance_type === 'deficit' ? '#fef2f2'

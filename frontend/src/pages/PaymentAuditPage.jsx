@@ -6,6 +6,11 @@ import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { paymentAuditApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
+import useServerSort from '../hooks/useServerSort'
+import SortTh from '../components/SortTh'
+
+const EXC_SORT = ['exception_type', 'payment__amount', 'payment__reference_number', 'status', 'created_at']
+const STMT_SORT = ['id', 'total_lines', 'matched_lines', 'status', 'imported_at']
 
 const EXCEPTION_TYPE_LABELS = {
   unrecorded:         'غير مسجل',
@@ -119,15 +124,19 @@ export default function PaymentAuditPage() {
   const [showUpload, setShowUpload] = useState(false)
   const [resolving, setResolving]   = useState(null)
 
+  const [excOrdering, setExcOrdering]   = useState('')
+  const [stmtOrdering, setStmtOrdering] = useState('')
+  const excSort  = useServerSort(excOrdering,  setExcOrdering,  { allowed: EXC_SORT }).headerProps
+  const stmtSort = useServerSort(stmtOrdering, setStmtOrdering, { allowed: STMT_SORT }).headerProps
   const { data: stmtsData, isLoading: stmtsLoading } = useQuery({
-    queryKey: ['payment-audit', 'statements'],
-    queryFn:  () => paymentAuditApi.statements({}).then(r => r.data),
+    queryKey: ['payment-audit', 'statements', stmtOrdering],
+    queryFn:  () => paymentAuditApi.statements(stmtOrdering ? { ordering: stmtOrdering } : {}).then(r => r.data),
     enabled:  tab === 'statements',
   })
 
   const { data: excData, isLoading: excLoading } = useQuery({
-    queryKey: ['payment-audit', 'exceptions'],
-    queryFn:  () => paymentAuditApi.exceptions({ status: 'open' }).then(r => r.data),
+    queryKey: ['payment-audit', 'exceptions', excOrdering],
+    queryFn:  () => paymentAuditApi.exceptions({ status: 'open', ...(excOrdering ? { ordering: excOrdering } : {}) }).then(r => r.data),
     enabled:  tab === 'exceptions',
   })
 
@@ -185,11 +194,11 @@ export default function PaymentAuditPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">نوع الاستثناء</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">المبلغ</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">المرجع</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">الحالة</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">التاريخ</th>
+                  <SortTh {...excSort('exception_type')} className="px-4 py-3 text-right font-semibold text-gray-600">نوع الاستثناء</SortTh>
+                  <SortTh {...excSort('payment__amount', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">المبلغ</SortTh>
+                  <SortTh {...excSort('payment__reference_number')} className="px-4 py-3 text-right font-semibold text-gray-600">المرجع</SortTh>
+                  <SortTh {...excSort('status')} className="px-4 py-3 text-right font-semibold text-gray-600">الحالة</SortTh>
+                  <SortTh {...excSort('created_at', 'date')} className="px-4 py-3 text-right font-semibold text-gray-600">التاريخ</SortTh>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
@@ -200,10 +209,10 @@ export default function PaymentAuditPage() {
                       {EXCEPTION_TYPE_LABELS[ex.exception_type] || ex.exception_type}
                     </td>
                     <td className="px-4 py-3 font-semibold">
-                      {ex.amount ? Number(ex.amount).toLocaleString('ar-EG') + ' ج' : '—'}
+                      {ex.payment_amount ? Number(ex.payment_amount).toLocaleString('ar-EG') + ' ج' : '—'}
                     </td>
                     <td className="px-4 py-3 text-gray-500 font-mono text-xs">
-                      {ex.reference || '—'}
+                      {ex.payment_ref || '—'}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${EXCEPTION_STATUS_COLORS[ex.status] || 'bg-gray-100'}`}>
@@ -242,12 +251,12 @@ export default function PaymentAuditPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">المرجع البنكي</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">إجمالي السطور</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">مطابق</th>
+                  <SortTh {...stmtSort('id', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">المرجع البنكي</SortTh>
+                  <SortTh {...stmtSort('total_lines', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">إجمالي السطور</SortTh>
+                  <SortTh {...stmtSort('matched_lines', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">مطابق</SortTh>
                   <th className="px-4 py-3 text-right font-semibold text-gray-600">نسبة المطابقة</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">الحالة</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">التاريخ</th>
+                  <SortTh {...stmtSort('status')} className="px-4 py-3 text-right font-semibold text-gray-600">الحالة</SortTh>
+                  <SortTh {...stmtSort('imported_at', 'date')} className="px-4 py-3 text-right font-semibold text-gray-600">التاريخ</SortTh>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
@@ -278,7 +287,7 @@ export default function PaymentAuditPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-500 text-xs">
-                      {s.created_at ? new Date(s.created_at).toLocaleDateString('ar-EG') : '—'}
+                      {s.imported_at ? new Date(s.imported_at).toLocaleDateString('ar-EG') : '—'}
                     </td>
                     <td className="px-4 py-3">
                       {s.status === 'pending' && (

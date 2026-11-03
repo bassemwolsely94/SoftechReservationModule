@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { transfersApi, branchesApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import BranchSelect from '../components/BranchSelect'
@@ -10,6 +10,8 @@ import DataFreshnessBar from '../components/DataFreshnessBar'
 import { formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { fa } from '../utils/flowArrow'
+import SortTh from '../components/SortTh'
+import useServerSort from '../hooks/useServerSort'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -111,21 +113,24 @@ function KanbanView({ requests, navigate }) {
 
 // ── List View ─────────────────────────────────────────────────────────────────
 
-function ListView({ requests, navigate }) {
+function ListView({ requests, navigate, headerProps }) {
+  const th = (key, type, label) => (
+    <SortTh {...headerProps(key, type)} className="text-right px-4 py-3 text-xs font-semibold text-gray-500">{label}</SortTh>
+  )
   return (
     <div className="px-6 py-4" data-tour="transfers-list-table">
       <div className="card p-0 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">رقم الطلب</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">الفرع الطالب</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">الفرع المصدر</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">الأصناف</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">الحالة</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">بواسطة</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">ملاحظات</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">التاريخ</th>
+              {th('request_number', 'text', 'رقم الطلب')}
+              {th('requesting_sort', 'text', 'الفرع الطالب')}
+              {th('supplying_sort', 'text', 'الفرع المصدر')}
+              {th('items_count', 'number', 'الأصناف')}
+              {th('status_rank', 'number', 'الحالة')}
+              {th('created_by_sort', 'text', 'بواسطة')}
+              {th('notes', 'text', 'ملاحظات')}
+              {th('created_at', 'date', 'التاريخ')}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -180,6 +185,7 @@ export default function TransfersPage() {
     status: '', requesting_branch: '', supplying_branch: '',
     search: '', date_from: '', date_to: '',
   })
+  const [ordering, setOrdering] = useState('')
 
   const userBranchId = user?.branch_id
 
@@ -189,7 +195,7 @@ export default function TransfersPage() {
   })
 
   const { data: requests = [], isLoading } = useQuery({
-    queryKey: ['transfers', filters],
+    queryKey: ['transfers', filters, ordering],
     queryFn: () => transfersApi.list({
       status:             filters.status             || undefined,
       requesting_branch:  filters.requesting_branch  || undefined,
@@ -197,9 +203,11 @@ export default function TransfersPage() {
       search:             filters.search             || undefined,
       date_from:          filters.date_from          || undefined,
       date_to:            filters.date_to            || undefined,
+      ordering:           ordering                   || undefined,
       page_size:          500,
     }).then(r => r.data.results || r.data),
     refetchInterval: 30_000,
+    placeholderData: keepPreviousData,
   })
 
   // Auto-dismiss toast that came from NewTransferPage navigation state
@@ -211,6 +219,11 @@ export default function TransfersPage() {
       return () => clearTimeout(t)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // the list is cut at 500 by the server → the server sorts (the kanban just takes the same rows)
+  const { headerProps } = useServerSort(ordering, setOrdering, {
+    allowed: ['request_number', 'requesting_sort', 'supplying_sort', 'items_count', 'status_rank', 'created_by_sort', 'notes', 'created_at'],
+  })
 
   const pendingCount  = requests.filter(r => r.status === 'pending').length
   const draftCount    = requests.filter(r => r.status === 'draft').length
@@ -370,7 +383,7 @@ export default function TransfersPage() {
       ) : viewMode === 'kanban' ? (
         <KanbanView requests={requests} navigate={navigate} />
       ) : (
-        <ListView requests={requests} navigate={navigate} />
+        <ListView requests={requests} navigate={navigate} headerProps={headerProps} />
       )}
 
     </div>

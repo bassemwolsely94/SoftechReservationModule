@@ -665,7 +665,7 @@ export const transfersApi = {
 
   // Analytics & reporting
   analytics:         (params) => api.get('/transfers/analytics/', { params }),
-  discrepancyReport: ()       => api.get('/transfers/discrepancy-report/'),
+  discrepancyReport: (params) => api.get('/transfers/discrepancy-report/', { params }),
 }
 
 
@@ -2923,6 +2923,10 @@ export const picAnalyticsApi = {
   grant:      (data)            => api.post('/pic-analytics/grants/', data),
   revoke:     (id, data = {})   => api.post(`/pic-analytics/grants/${id}/revoke/`, data),
   candidates: (q)               => api.get('/pic-analytics/grants/candidates/', { params: { q } }),
+  exclusions: ()                => api.get('/pic-analytics/exclusions/'),
+  exclude:    (data)            => api.post('/pic-analytics/exclusions/', data),
+  include:    (id, data = {})   => api.post(`/pic-analytics/exclusions/${id}/remove/`, data),
+  exclusionSuggestions: (params = {}) => api.get('/pic-analytics/exclusions/suggestions/', { params }),
 }
 
 // Contract (تعاقد) fast-entry assist — read-only PG history (POS Speed Wave §5). `customer` = the

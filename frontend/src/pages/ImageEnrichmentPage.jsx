@@ -13,6 +13,9 @@ import { useState, useCallback, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { imageApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
+import useServerSort from '../hooks/useServerSort'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const card  = { background: '#fff', borderRadius: 10, padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,.08)', marginBottom: 16 }
@@ -503,9 +506,12 @@ function ReviseTab({ meta }) {
 // ── Tab 5: Job History ────────────────────────────────────────────────────────
 function HistoryTab() {
   const [sf, setSf] = useState('')
+  const [ordering, setOrdering] = useState('')
+  const { headerProps } = useServerSort(ordering, setOrdering,
+    { allowed: ['id', 'item__name', 'status', 'candidates_scored', 'best_score', 'duration', 'triggered_by__first_name'] })
   const {data:jobs,isLoading} = useQuery({
-    queryKey:['img-jobs',sf],
-    queryFn:()=>imageApi.jobs({status:sf||undefined,page_size:60}).then(r=>r.data),
+    queryKey:['img-jobs',sf,ordering],
+    queryFn:()=>imageApi.jobs({status:sf||undefined,page_size:60,ordering:ordering||undefined}).then(r=>r.data),
     refetchInterval:10000,
   })
 
@@ -527,8 +533,8 @@ function HistoryTab() {
           <table style={{width:'100%',borderCollapse:'collapse'}}>
             <thead>
               <tr style={{background:'#f8fafc'}}>
-                {['#','المنتج','الحالة','مرشحين','أفضل نقطة','وقت','بواسطة'].map(h=>(
-                  <th key={h} style={{padding:'10px 12px',textAlign:'right',fontSize:12,color:'#64748b',fontWeight:600,borderBottom:'1px solid #f1f5f9'}}>{h}</th>
+                {[['id','number','#'],['item__name','text','المنتج'],['status','text','الحالة'],['candidates_scored','number','مرشحين'],['best_score','number','أفضل نقطة'],['duration','number','وقت'],['triggered_by__first_name','text','بواسطة']].map(([k,t,h])=>(
+                  <SortTh key={k} {...headerProps(k,t)} style={{padding:'10px 12px',textAlign:'right',fontSize:12,color:'#64748b',fontWeight:600,borderBottom:'1px solid #f1f5f9'}}>{h}</SortTh>
                 ))}
               </tr>
             </thead>
@@ -1150,11 +1156,12 @@ function InsightsTab() {
   const [srcFilter,   setSrcFilter]   = useState('')
 
   const top     = data?.top_sources || []
-  const filtered = top.filter(r =>
+  const filteredRaw = top.filter(r =>
     (!brandFilter || r.brand.toLowerCase().includes(brandFilter.toLowerCase())) &&
     (!srcFilter   || r.source_type.includes(srcFilter))
   )
 
+  const { sorted: filtered, headerProps } = useSortableRows(filteredRaw)
   const sourceTypes = [...new Set(top.map(r => r.source_type))].sort()
 
   const weightColor = w => w >= 1.2 ? '#059669' : w <= 0.8 ? '#dc2626' : '#f59e0b'
@@ -1198,7 +1205,7 @@ function InsightsTab() {
             {sourceTypes.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           <span style={{fontSize:13, color:'#64748b', marginRight:'auto'}}>
-            {filtered.length} سجل
+            {filtered.length} سجل · الترتيب يشمل أعلى 50 سجل فقط
           </span>
         </div>
       </div>
@@ -1210,11 +1217,11 @@ function InsightsTab() {
           <table style={{width:'100%', borderCollapse:'collapse'}}>
             <thead>
               <tr style={{background:'#f8fafc'}}>
-                {['الماركة','المصدر','موافق','مرشح','معدل الموافقة','متوسط الجودة','الوزن (تعزيز/تقليل)'].map(h => (
-                  <th key={h} style={{padding:'10px 12px', textAlign:'right', fontSize:12,
+                {[['brand','text','الماركة'],['source_type','text','المصدر'],['approved','number','موافق'],['considered','number','مرشح'],['approval_rate','number','معدل الموافقة'],['avg_quality_score','number','متوسط الجودة'],['weight','number','الوزن (تعزيز/تقليل)']].map(([k,t,h]) => (
+                  <SortTh key={k} {...headerProps(k,t)} style={{padding:'10px 12px', textAlign:'right', fontSize:12,
                                      color:'#64748b', fontWeight:600, borderBottom:'1px solid #f1f5f9'}}>
                     {h}
-                  </th>
+                  </SortTh>
                 ))}
               </tr>
             </thead>

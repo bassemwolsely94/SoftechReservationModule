@@ -54,6 +54,7 @@ class Access:
         self.sees_cost = self.management
         self.sees_calls_tabs = self.management
         self.can_manage_access = bool(p and p.is_active and p.role == 'admin')
+        self.can_manage_exclusions = self.management        # admin + supervisor (the PIC exclusion list)
 
     def allowed_branch_ids(self, requested=None):
         """The branches a query may cover. A requested set only narrows, never widens."""
@@ -70,7 +71,8 @@ class Access:
                 'branch_manager': self.branch_manager,
                 'branch_ids': None if self.branch_ids is None else sorted(self.branch_ids),
                 'can_export': self.can_export, 'sees_cost': self.sees_cost,
-                'sees_calls_tabs': self.sees_calls_tabs, 'can_manage_access': self.can_manage_access}
+                'sees_calls_tabs': self.sees_calls_tabs, 'can_manage_access': self.can_manage_access,
+                'can_manage_exclusions': self.can_manage_exclusions}
 
 
 def can_open(user):

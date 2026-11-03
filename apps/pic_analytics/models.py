@@ -97,3 +97,25 @@ class PhoneLabel(models.Model):
 
     def __str__(self):
         return f'{self.phone_key} {self.label}'
+
+
+class PicExclusion(models.Model):
+    """A PIC that is not a real individual customer (a running account, a doctor's code, junk phones...)
+    and so distorts the analytics. Applied at QUERY time (queries/filters.py + exclusions.py): the list can
+    change without any rebuild. Soft delete (removed_at) keeps the history; re-adding creates a new row."""
+    pic = models.CharField(max_length=30, db_index=True)
+    reason = models.CharField(max_length=255)
+    added_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, related_name='+')
+    added_at = models.DateTimeField(auto_now_add=True)
+    removed_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    removed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-added_at']
+        constraints = [models.UniqueConstraint(fields=['pic'], condition=models.Q(removed_at__isnull=True),
+                                               name='uniq_active_pic_exclusion')]
+        verbose_name = 'عميل مستبعد من التحليل'
+        verbose_name_plural = 'عملاء مستبعدون من التحليل'
+
+    def __str__(self):
+        return f'{self.pic} {"removed" if self.removed_at else "excluded"}'

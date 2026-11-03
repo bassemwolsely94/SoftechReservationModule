@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { invoicesApi, branchesApi } from '../api/client'
 import BranchSelect from '../components/BranchSelect'
 import useGridKeyboard from '../hooks/useGridKeyboard'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 import SoftechGrid from './invoices/SoftechGrid'
 import BundleWorkbench from './invoices/BundleWorkbench'
 import ItemSearchInput from '../components/ItemSearchInput'
@@ -546,6 +548,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
   const [dupBlock, setDupBlock]             = useState(null)   // server said: duplicate → needs a reason
   const [dupReason, setDupReason]           = useState('')
   const [previewLoading, setPreviewLoading] = useState(false)
+  const { sorted: previewLines, headerProps: pvH } = useSortableRows(preview?.lines || [], {})   // read-only dry-run table
 
   const [confirmingGreen, setConfirmingGreen] = useState(false)
   const confirmGreen = async () => {
@@ -788,17 +791,17 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 text-gray-500">
                     <tr className="text-right">
-                      <th className="px-2 py-1.5 font-medium">الصنف</th>
-                      <th className="px-2 py-1.5 font-medium">الكمية</th>
-                      <th className="px-2 py-1.5 font-medium">سعر الشراء</th>
-                      <th className="px-2 py-1.5 font-medium">سعر الجمهور</th>
-                      <th className="px-2 py-1.5 font-medium">خصم%</th>
-                      <th className="px-2 py-1.5 font-medium">الإجمالي</th>
-                      <th className="px-2 py-1.5 font-medium">الصلاحية</th>
+                      <SortTh {...pvH('item_name', 'text')} className="px-2 py-1.5 font-medium">الصنف</SortTh>
+                      <SortTh {...pvH('transqty', 'number')} className="px-2 py-1.5 font-medium">الكمية</SortTh>
+                      <SortTh {...pvH('transprice', 'number')} className="px-2 py-1.5 font-medium">سعر الشراء</SortTh>
+                      <SortTh {...pvH('itemsaleprice', 'number')} className="px-2 py-1.5 font-medium">سعر الجمهور</SortTh>
+                      <SortTh {...pvH('pharmacydiscp', 'number')} className="px-2 py-1.5 font-medium">خصم%</SortTh>
+                      <SortTh {...pvH('transprice_total', 'number')} className="px-2 py-1.5 font-medium">الإجمالي</SortTh>
+                      <SortTh {...pvH('itemexpirydate', 'date')} className="px-2 py-1.5 font-medium">الصلاحية</SortTh>
                     </tr>
                   </thead>
                   <tbody>
-                    {(preview.lines || []).map((l, i) => (
+                    {previewLines.map((l, i) => (
                       <tr key={i} className="border-t border-gray-100">
                         <td className="px-2 py-1.5">
                           {l.item_name}

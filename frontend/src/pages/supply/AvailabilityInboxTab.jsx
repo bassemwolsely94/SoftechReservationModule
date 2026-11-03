@@ -20,6 +20,7 @@ import ColumnMapper from './ColumnMapper'
 import SupplierCodeReport from './SupplierCodeReport'
 import { Chip, btnGhost, btnPrimary, downloadBlob, errText, fmtDate, inputCls, money, pct, q } from './supplyUi'
 import { wildcardMatch } from '../../utils/wildcard'
+import SharedSortTh from '../../components/SortTh'
 import useGridKeyboard, { GRID_KEYS_HINT } from '../../hooks/useGridKeyboard'
 
 const SOURCES = [['whatsapp', 'واتساب'], ['text', 'نص'], ['email', 'بريد'], ['manual', 'يدوي']]
@@ -252,13 +253,13 @@ const SORT_COLS = {
   flags:      r => STATE_ORDER[r.state] * 100 - r.flags.length,
 }
 
+// The review grid keeps its own sort state (the shown order is FROZEN while you match, see `frozen` below);
+// only the header is the shared one (keyboard button, aria-sort, shared icon).
 function SortTh({ k, sort, onSort, className = '', title, children }) {
   const on = sort?.key === k
   return (
-    <th title={title} onClick={() => onSort(k)} aria-sort={on ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'}
-      className={`py-2 px-2 cursor-pointer select-none whitespace-nowrap hover:text-primary ${on ? 'text-primary' : ''} ${className}`}>
-      {children}<span className="ms-1 text-[10px]">{on ? (sort.dir === 1 ? '▲' : '▼') : '↕'}</span>
-    </th>
+    <SharedSortTh active={on} dir={on ? (sort.dir === 1 ? 'asc' : 'desc') : undefined} onSort={() => onSort(k)}
+                  className={`py-2 px-2 whitespace-nowrap ${className}`} title={title}>{children}</SharedSortTh>
   )
 }
 

@@ -455,6 +455,7 @@ Full report: [09_TECHNICAL_DEBT_REPORT.md](09_TECHNICAL_DEBT_REPORT.md)
 | `run_gamification` | gamification | Award points for recorded work (`--days N` backfill + close yesterday; `--seed [--reset-defaults]` rules/levels/badges). READ-ONLY vs everything else, never SOFTECH; idempotent (unique source key per event) | Scheduler: `gamification_score` every 30 min + `gamification_day_close` 00:20 + `gamification_champions` 1st of month 01:05 (`--crown YYYY-MM` manual) (`GAMIFICATION_ENABLED`) |
 | `build_pic_facts` | pic_analytics | Rebuild `PicDayFact` (delete+rebuild per day range, idempotent) and `PicRollup` for PIC Analytics; `--since YYYY-MM-DD` (history starts 2024-08-01). Read-only vs SOFTECH | Scheduler `pic_facts` daily 04:15 |
 | `sync_pbx_cdr` | pbx | Pull PBX call records into `CdrCall` (idempotent on `unique_id`), resolve the PIC per call; feeds PIC Analytics call tabs | Scheduler `pbx_cdr_sync` every 10 min + `pbx_cdr_relink` daily 03:55 (re-resolves PICs) |
+| `renormalise_pbx_numbers` | pbx | Recompute `CdrCall.customer_number` / `phone_key` / `line_prefix` from the stored raw numbers (Egyptian national form, line prefixes 81-85 / 91-95 stripped), relink PICs, re-key `PhoneLabel`; dry run by default, `--commit` writes. Our tables only | Manual (after a numbering-rule change) |
 
 > **Web Push (VAPID):** keys live in env (`WEBPUSH_VAPID_PUBLIC_KEY` /
 > `_PRIVATE_KEY` / `_ADMIN_EMAIL`). Generate with `npx web-push generate-vapid-keys`

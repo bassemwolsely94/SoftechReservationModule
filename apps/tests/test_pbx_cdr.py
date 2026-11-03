@@ -51,7 +51,7 @@ class ClassifyTests(SimpleTestCase):
         self.assertEqual((f['direction'], f['status'], f['agent_ext'], f['queue']),
                          ('inbound', 'answered', '15', '101'))
         self.assertEqual(f['customer_number'], '01000000301')
-        self.assertEqual(f['phone_key'], '1000000301')
+        self.assertEqual(f['phone_key'], '01000000301')
 
     def test_inbound_without_agent_is_abandoned(self):
         self.assertEqual(cdr.classify(INBOUND_ABANDONED, GW)['status'], 'abandoned')
@@ -83,7 +83,7 @@ class ClassifyTests(SimpleTestCase):
 
     def test_phone_key_forms(self):
         for raw in ('01000000401', '+201000000401', '00201000000401', '1000000401', '010-000-00401'):
-            self.assertEqual(cdr.phone_key(raw), '1000000401', raw)
+            self.assertEqual(cdr.phone_key(raw), '01000000401', raw)
         self.assertEqual(cdr.phone_key('15'), '')
 
     def test_cdr_key_is_stable(self):

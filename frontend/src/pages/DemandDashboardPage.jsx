@@ -2,13 +2,15 @@
  * DemandDashboardPage.jsx  —  /demand/dashboard
  * Lost Sales Analytics + Demand Intelligence
  */
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { demandApi } from '../api/client'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import useAuthStore from '../store/authStore'
 import { tint } from '../theme/theme'
+import SortTh from '../components/SortTh'
+import useSortableRows from '../hooks/useSortableRows'
 
 const BRAND  = 'rgb(var(--c-brand-600))'
 const GREEN  = '#10b981'
@@ -151,6 +153,14 @@ export default function DemandDashboardPage() {
   const maxLostItem  = Math.max(...topLost.map(i => i.count || 0), 1)
   const maxBranch    = Math.max(...branches.map(b => b.total || 0), 1)
   const maxReason    = Math.max(...reasons.map(r => r.count || 0), 1)
+
+  // The three boards are «top N» lists ranked by the server (value / total) → headers re-order the N shown.
+  const reconTop = useMemo(() => (recon?.items || []).slice(0, 15), [recon])
+  const sugTop   = useMemo(() => (suggestions?.suggestions || []).slice(0, 15), [suggestions])
+  const boardTop = useMemo(() => (leaderboard?.rows || []).slice(0, 20), [leaderboard])
+  const reconSort = useSortableRows(reconTop, { getValue: (r, k) => (k === 'name' ? r.item_name : r[k]) })
+  const sugSort   = useSortableRows(sugTop, { getValue: (r, k) => (k === 'name' ? r.item__name : r[k]) })
+  const boardSort = useSortableRows(boardTop)
 
   return (
     <div className="min-h-full bg-gray-50" dir="rtl">
@@ -435,14 +445,14 @@ export default function DemandDashboardPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
-                      <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500">الصنف</th>
-                      <th className="text-left px-3 py-2 text-xs font-semibold text-green-600">مؤكد</th>
-                      <th className="text-left px-3 py-2 text-xs font-semibold text-red-600">تقديري</th>
-                      <th className="text-left px-3 py-2 text-xs font-semibold text-blue-600">الالتقاط</th>
+                      <SortTh {...reconSort.headerProps('name', 'text')} className="text-right px-3 py-2 text-xs font-semibold text-gray-500">الصنف</SortTh>
+                      <SortTh {...reconSort.headerProps('confirmed_lost_value', 'number')} className="text-left px-3 py-2 text-xs font-semibold text-green-600">مؤكد</SortTh>
+                      <SortTh {...reconSort.headerProps('inferred_lost_revenue', 'number')} className="text-left px-3 py-2 text-xs font-semibold text-red-600">تقديري</SortTh>
+                      <SortTh {...reconSort.headerProps('coverage_pct', 'number')} className="text-left px-3 py-2 text-xs font-semibold text-blue-600">الالتقاط</SortTh>
                     </tr>
                   </thead>
                   <tbody>
-                    {recon.items.slice(0, 15).map(r => (
+                    {reconSort.sorted.map(r => (
                       <tr key={r.item_id} className="border-b border-gray-50 last:border-0">
                         <td className="px-3 py-2">
                           <div className="text-sm text-gray-800 break-words max-w-[260px]">{r.item_name}</div>
@@ -493,15 +503,15 @@ export default function DemandDashboardPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500">الصنف</th>
-                    <th className="text-left px-3 py-2 text-xs font-semibold text-brand-600">الكمية المقترحة</th>
-                    <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">عدد الطلبات</th>
-                    <th className="text-left px-3 py-2 text-xs font-semibold text-red-600">قيمة ضائعة</th>
-                    <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">المخزون الآن</th>
+                    <SortTh {...sugSort.headerProps('name', 'text')} className="text-right px-3 py-2 text-xs font-semibold text-gray-500">الصنف</SortTh>
+                    <SortTh {...sugSort.headerProps('suggested_qty', 'number')} className="text-left px-3 py-2 text-xs font-semibold text-brand-600">الكمية المقترحة</SortTh>
+                    <SortTh {...sugSort.headerProps('demand_count', 'number')} className="text-left px-3 py-2 text-xs font-semibold text-gray-500">عدد الطلبات</SortTh>
+                    <SortTh {...sugSort.headerProps('lost_value', 'number')} className="text-left px-3 py-2 text-xs font-semibold text-red-600">قيمة ضائعة</SortTh>
+                    <SortTh {...sugSort.headerProps('network_stock', 'number')} className="text-left px-3 py-2 text-xs font-semibold text-gray-500">المخزون الآن</SortTh>
                   </tr>
                 </thead>
                 <tbody>
-                  {suggestions.suggestions.slice(0, 15).map(r => (
+                  {sugSort.sorted.map(r => (
                     <tr key={r.item_id} className="border-b border-gray-50 last:border-0">
                       <td className="px-3 py-2">
                         <div className="text-sm text-gray-800 break-words max-w-[260px]">{r.item__name}</div>
@@ -536,15 +546,15 @@ export default function DemandDashboardPage() {
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
                     <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500">#</th>
-                    <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500">الموظف</th>
-                    <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500">الفرع</th>
-                    <th className="text-left px-3 py-2 text-xs font-semibold text-brand-600">طلبات</th>
-                    <th className="text-left px-3 py-2 text-xs font-semibold text-green-600">توريد %</th>
-                    <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">قيمة مُسجَّلة</th>
+                    <SortTh {...boardSort.headerProps('name', 'text')} className="text-right px-3 py-2 text-xs font-semibold text-gray-500">الموظف</SortTh>
+                    <SortTh {...boardSort.headerProps('branch', 'text')} className="text-right px-3 py-2 text-xs font-semibold text-gray-500">الفرع</SortTh>
+                    <SortTh {...boardSort.headerProps('total', 'number')} className="text-left px-3 py-2 text-xs font-semibold text-brand-600">طلبات</SortTh>
+                    <SortTh {...boardSort.headerProps('fulfillment_rate', 'number')} className="text-left px-3 py-2 text-xs font-semibold text-green-600">توريد %</SortTh>
+                    <SortTh {...boardSort.headerProps('captured_value', 'number')} className="text-left px-3 py-2 text-xs font-semibold text-gray-500">قيمة مُسجَّلة</SortTh>
                   </tr>
                 </thead>
                 <tbody>
-                  {leaderboard.rows.slice(0, 20).map((r, i) => (
+                  {boardSort.sorted.map((r, i) => (
                     <tr key={r.created_by} className="border-b border-gray-50 last:border-0">
                       <td className="px-3 py-2 text-gray-400 tabular-nums">{i + 1}</td>
                       <td className="px-3 py-2 font-semibold text-gray-800">{r.name}</td>

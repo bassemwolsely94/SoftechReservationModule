@@ -8,13 +8,19 @@ import { useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { picAnalyticsApi } from '../../api/client'
 import useGridKeyboard from '../../hooks/useGridKeyboard'
+import useServerSort from '../../hooks/useServerSort'
+import useSortableRows from '../../hooks/useSortableRows'
+import SortTh from '../SortTh'
 import { errText } from '../../pages/supply/supplyUi'
 import { KpiCard, fmt, fmtDateTime } from './KpiCards'
 import Heatmap from './Heatmap'
+import Explain from './Explain'
 
 const PAGE_SIZE = 50
 const getKey = r => r.call_id
 const getAgent = r => r.agent_ext
+const getAgentValue = (r, k) => (k === 'name' ? (r.staff_name || r.pbx_name || r.agent_ext) : r[k])
+const MISSED_SORTS = ['call_at', 'customer_name', 'segment', 'lifetime_net', 'last_purchase', 'returned_at']      // server whitelist
 
 export function Pager({ count, page, onPage, noun }) {
   const pages = Math.max(1, Math.ceil(count / PAGE_SIZE))
@@ -29,18 +35,27 @@ export function Pager({ count, page, onPage, noun }) {
   )
 }
 
-function Unanswered({ rows }) {
+function Unanswered({ rows: allRows }) {
+  const { sorted: rows, headerProps } = useSortableRows(allRows, { getValue: getAgentValue, persistKey: 'pic-unanswered' })
   const kb = useGridKeyboard({ rows, getKey: getAgent })
   const cell = 'px-3 py-2 tabular-nums'
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="pic-analytics-unanswered">
       <h3 className="text-sm font-bold text-gray-700 px-4 pt-3">مكالمات صادرة لم يُرد عليها</h3>
+      <Explain className="px-4 pb-1" hint="مكالمات اتصلنا بيها والعميل ما ردّش (لا رد، مشغول، فشل) — لكل موظف."
+               lines={['محاولات = كل المكالمات الصادرة للأرقام دي، بلا رد = اللي ماتردش منها. أرقام تم الوصول إليها = أرقام رد صاحبها في نفس اليوم، ولم يُوصل إليها = أرقام ما ردّتش خلال اليوم.',
+                       'متوسط المحاولات = كام اتصال لنفس الرقم في اليوم لحد أول رد.']}
+               example="اتصلنا بنفس الرقم 3 مرات في يوم، والتالتة ردّ ← تم الوصول بعد 3 محاولات" />
       <div {...kb.containerProps} className={`overflow-x-auto ${kb.containerProps.className}`}>
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-500">
             <tr>
-              <th className="px-3 py-2 text-right">الموظف</th><th className={cell}>محاولات</th><th className={cell}>بلا رد</th>
-              <th className={cell}>أرقام تم الوصول إليها</th><th className={cell}>لم يُوصل إليها</th><th className={cell}>متوسط المحاولات</th>
+              <SortTh {...headerProps('name', 'text')} className="px-3 py-2 text-right">الموظف</SortTh>
+              <SortTh {...headerProps('attempts', 'number')} className={cell}>محاولات</SortTh>
+              <SortTh {...headerProps('unanswered', 'number')} className={cell}>بلا رد</SortTh>
+              <SortTh {...headerProps('reached_numbers', 'number')} className={cell}>أرقام تم الوصول إليها</SortTh>
+              <SortTh {...headerProps('not_reached', 'number')} className={cell}>لم يُوصل إليها</SortTh>
+              <SortTh {...headerProps('avg_attempts_to_reach', 'number')} className={cell}>متوسط المحاولات</SortTh>
             </tr>
           </thead>
           <tbody>
@@ -67,6 +82,7 @@ export default function MissedTab({ params, ready }) {
   const qc = useQueryClient()
   const [onlyOpen, setOnlyOpen] = useState(true)
   const [page, setPage] = useState(1)
+  const [ordering, setOrdering] = useState('')         // '' = the server's default (biggest customer first)
   const [status, setStatus] = useState({})           // call_id -> {ok, text}
   const [cb, setCb] = useState(null)                 // call_id with the call-back form open
   const [due, setDue] = useState('')
@@ -78,8 +94,8 @@ export default function MissedTab({ params, ready }) {
     queryFn: () => picAnalyticsApi.missed(params).then(r => r.data), ...common,
   })
   const rowsQ = useQuery({
-    queryKey: ['pic-analytics', 'missed-rows', params, onlyOpen, page],
-    queryFn: () => picAnalyticsApi.missedRows({ ...params, only_not_returned: onlyOpen ? 1 : 0, page, page_size: PAGE_SIZE }).then(r => r.data),
+    queryKey: ['pic-analytics', 'missed-rows', params, onlyOpen, page, ordering],
+    queryFn: () => picAnalyticsApi.missedRows({ ...params, only_not_returned: onlyOpen ? 1 : 0, page, page_size: PAGE_SIZE, ...(ordering ? { ordering } : {}) }).then(r => r.data),
     ...common,
   })
   const unans = useQuery({
@@ -105,8 +121,10 @@ export default function MissedTab({ params, ready }) {
   })
 
   const s = summary.data
+  const th = s?.thresholds || rowsQ.data?.thresholds || {}
   const rows = rowsQ.data?.rows || []
   const kb = useGridKeyboard({ rows, getKey })
+  const { headerProps } = useServerSort(ordering, o => { setOrdering(o); setPage(1) }, { allowed: MISSED_SORTS })
   const maxQ = Math.max(1, ...(s?.by_queue || []).map(x => x.missed))
   const cell = 'px-3 py-2 tabular-nums'
 
@@ -120,13 +138,22 @@ export default function MissedTab({ params, ready }) {
         <KpiCard label="وسيط الدقائق للرد" value={fmt(s?.median_minutes_to_return, 1)} tone="blue" />
       </div>
 
+      <Explain id="ms-cards" hint="الفائتة = مكالمة واردة ما رد عليها حد (تركها في الانتظار، لا رد، مشغول). مكالمات التحويل مش بتتعد."
+               lines={[
+                 `«تم الرد عليها» = بعدها مكالمة مُجابة بنفس الرقم (واردة أو صادرة) خلال ${th.return_hours ?? '—'} ساعة. «لم يُرد عليها» = مفيش اتصال مُجاب خلال المهلة دي.`,
+                 'أرقام فائتة = عدد الأرقام المختلفة (الرقم ممكن يفوت أكتر من مرة). وسيط الدقائق للرد = نص المكالمات اللي اتردّ عليها اتردّ عليها في المدة دي أو أقل.',
+                 'قائمة الاتصال تحت = الفائتة اللي لسه محدش كلّم رقمها، والصف بيختفي أول ما حد يكلّمهم.',
+               ]}
+               example={`اتصل 3 مرات ولا حد رد، وبعد ساعة كلّمناه فرد ← الفائتة اتردّ عليها (ضمن ${th.return_hours ?? '—'} ساعة)`} />
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-4" data-tour="pic-analytics-missed-heatmap">
-          <h3 className="text-sm font-bold text-gray-700 mb-2">الفائتة حسب اليوم والساعة</h3>
+          <h3 className="text-sm font-bold text-gray-700">الفائتة حسب اليوم والساعة</h3>
+          <Explain className="mb-2" id="ms-heatmap" hint="كل خانة = عدد المكالمات الفائتة في يوم وساعة معيّنين (السبت أول الأسبوع). الأحمر الأغمق = أكتر. بيوضح أنهي أوقات بنخسر فيها مكالمات." />
           <Heatmap cells={s?.heatmap} />
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <h3 className="text-sm font-bold text-gray-700 mb-2">حسب الطابور</h3>
+          <h3 className="text-sm font-bold text-gray-700">حسب الطابور</h3>
+          <Explain className="mb-2" hint="الطابور = خط الاستقبال اللي دخلت عليه المكالمة الفائتة." />
           {(s?.by_queue || []).map(x => (
             <div key={x.queue || '—'} className="flex items-center gap-2 py-1 text-xs">
               <span className="w-24 truncate text-gray-600" title={x.queue}>{x.queue || '—'}</span>
@@ -146,15 +173,23 @@ export default function MissedTab({ params, ready }) {
             غير المُعاد الاتصال بها فقط
           </label>
         </div>
+        <Explain id="ms-rows" className="px-4 pt-1"
+                 hint="كل صف = مكالمة فائتة واحدة، مربوطة بالعميل (لو الرقم معروف) وقيمته وهل اشترى بعدها."
+                 lines={[`«اشترى خلال ${th.purchase_days ?? '—'} أيام» = فيه فاتورة لنفس العميل بعد المكالمة في المدة دي. «تم الرد» = أول مكالمة مُجابة بنفس الرقم بعدها، وكام دقيقة بعد.`,
+                         '«اتصل» بيرنّ تليفونك أنت وبيوصّلك بالعميل. «جدولة معاودة» بتسجّل موعد في قايمة المعاودات.']} />
         {onlyOpen && <p className="text-xs text-gray-400 px-4 pt-1">الأرقام المصنّفة (موظف، مورد…) لا تظهر هنا — تجدها في تبويب «أرقام جديدة» ← الأرقام المصنّفة.</p>}
         <div {...kb.containerProps} className={`overflow-x-auto ${kb.containerProps.className}`}>
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-gray-500">
               <tr>
-                <th className="px-3 py-2 text-right">وقت المكالمة</th><th className="px-3 py-2 text-right">الرقم</th>
-                <th className="px-3 py-2 text-right">العميل</th><th className={cell}>الشريحة</th>
-                <th className={cell}>إجمالي صافي</th><th className={cell}>آخر شراء</th>
-                <th className={cell}>اشترى خلال 7 أيام</th><th className={cell}>تم الرد</th><th className="px-3 py-2 text-right">إجراء</th>
+                <SortTh {...headerProps('call_at', 'date')} className="px-3 py-2 text-right">وقت المكالمة</SortTh>
+                <th className="px-3 py-2 text-right">الرقم</th>
+                <SortTh {...headerProps('customer_name', 'text')} className="px-3 py-2 text-right">العميل</SortTh>
+                <SortTh {...headerProps('segment', 'text')} className={cell}>الشريحة</SortTh>
+                <SortTh {...headerProps('lifetime_net', 'number')} className={cell}>إجمالي صافي</SortTh>
+                <SortTh {...headerProps('last_purchase', 'date')} className={cell}>آخر شراء</SortTh>
+                <th className={cell}>{`اشترى خلال ${th.purchase_days ?? '—'} أيام`}</th>
+                <SortTh {...headerProps('returned_at', 'date')} className={cell}>تم الرد</SortTh><th className="px-3 py-2 text-right">إجراء</th>
               </tr>
             </thead>
             <tbody>
@@ -165,11 +200,14 @@ export default function MissedTab({ params, ready }) {
                   <tr key={r.call_id} {...rp} className={`border-t border-gray-100 hover:bg-gray-50 align-top ${rp.className}`}>
                     <td className="px-3 py-2 whitespace-nowrap">{fmtDateTime(r.call_at)}</td>
                     <td className="px-3 py-2 tabular-nums" dir="ltr">{r.customer_number || '—'}</td>
-                    <td className="px-3 py-2">{r.customer_name || (r.shared_pics?.length > 1 ? 'رقم مشترك' : '—')}</td>
+                    <td className="px-3 py-2">
+                      {r.customer_name || (r.shared_pics?.length > 1 ? 'رقم مشترك' : '—')}
+                      {r.pic_excluded && <span className="ms-1 text-gray-400">(مستبعد)</span>}
+                    </td>
                     <td className={cell}>{r.segment || '—'}</td>
                     <td className={cell}>{fmt(r.lifetime_net)}</td>
                     <td className={cell}>{r.last_purchase ? String(r.last_purchase).slice(0, 10) : '—'}</td>
-                    <td className={cell}>{r.pic ? (r.bought_within_7d ? 'نعم' : 'لا') : '—'}</td>
+                    <td className={cell}>{r.pic_excluded ? 'مستبعد' : r.pic ? (r.bought_within_7d ? 'نعم' : 'لا') : '—'}</td>
                     <td className={cell}>{r.returned_at ? `${fmtDateTime(r.returned_at)} (${fmt(r.minutes_to_return, 0)}د)` : '—'}</td>
                     <td className="px-3 py-2">
                       <div className="flex gap-1.5 flex-wrap">

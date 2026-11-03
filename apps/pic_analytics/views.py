@@ -5,6 +5,7 @@ apps/pic_analytics/views.py — mounted at /api/pic-analytics/ (doc 33)
   GET   calls/center/ calls/missed/ calls/missed/rows/ calls/unanswered/   (management only)
   GET   numbers/ numbers/conversions/ numbers/labels/   POST numbers/label/ numbers/labels/<id>/delete/ numbers/<number_id>/dial/ calls/missed/<id>/dial/
   GET   export/                    audited .xlsx
+  GET|POST exclusions/  GET exclusions/suggestions/  POST exclusions/<id>/remove/   PIC exclusion list (management only)
   GET|POST grants/                 named branch managers (admin only)
   POST     grants/<id>/revoke/
   GET      grants/candidates/?q=   staff to grant
@@ -30,7 +31,9 @@ from .queries import pics as q_pics
 from .queries import retention as q_retention
 from .queries.calls import call_center
 from .queries.filters import FilterError, Filters
+from .queries.ordering import parse_ordering, sort_items
 from .queries.retention import MAX_PAGE_SIZE, _int_param
+from .settings import DEFAULTS, setting
 
 
 def _deny(msg='ليس لديك صلاحية — Not allowed'):
@@ -118,8 +121,61 @@ def grant_candidates(request):
     return Response({'rows': rows})
 
 
+# ── the PIC exclusion list (management only; doc 33 §15) ────────────────────────────────────────
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def exclusions(request):
+    acc = Access(request)
+    if not acc.can_view or not acc.can_manage_exclusions:
+        return _deny()
+    from . import exclusions as ex
+    if request.method == 'GET':
+        return Response({'rows': ex.exclusion_rows()})
+    try:
+        x = ex.add_exclusion(request.data.get('pic'), request.data.get('reason'), acc.profile, request=request)
+    except ex.ExclusionError as exc:
+        return _bad(str(exc))
+    return Response(ex.exclusion_json(x), status=201)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def exclusion_remove(request, pk):
+    acc = Access(request)
+    if not acc.can_view or not acc.can_manage_exclusions:
+        return _deny()
+    from . import exclusions as ex
+    x = ex.remove_exclusion(pk, acc.profile, request=request, note=request.data.get('note'))
+    if x is None:
+        return Response({'detail': 'غير موجود — Not found'}, status=404)
+    return Response({'id': x.pk, 'pic': x.pic, 'removed_at': x.removed_at})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def exclusion_suggestions(request):
+    from . import exclusions as ex
+    acc = Access(request)
+    if not acc.can_view or not acc.can_manage_exclusions:
+        return _deny()
+    return _run(request, lambda f, a: {'rows': ex.suggestions(f, a)})
+
+
 # ── the dashboard's read endpoints ───────────────────────────────────────────────────────────────
 # /api/pic-analytics/ is exempt from the RBAC middleware: every view checks Access itself.
+
+def _thresholds():
+    """The tunables the screen quotes; a bad setting value falls back to its default, never a 500."""
+    out = {}
+    for key, name, cast in (('pic_loyal_months', 'loyal_months', int), ('pic_overdue_factor', 'overdue_factor', float),
+                            ('pic_call_return_hours', 'return_hours', int), ('pic_call_purchase_days', 'purchase_days', int)):
+        try:
+            out[name] = cast(setting(key))
+        except (TypeError, ValueError):
+            out[name] = cast(DEFAULTS[key])
+    return out
+
 
 def _run(request, fn, calls=False):
     """Access gate + filter bar + error mapping shared by every read endpoint. fn(f, access) -> data."""
@@ -132,6 +188,8 @@ def _run(request, fn, calls=False):
         if isinstance(data, dict):
             data['period'] = {'from': f.start, 'to': f.end, 'data_from': f.data_from,
                               'data_to': f.data_to, 'clamped': f.clamped}
+            # the tunables the on-screen explanations quote (the screen never hard-codes them)
+            data['thresholds'] = _thresholds()
         return Response(data)
     except FilterError as exc:
         return _bad(str(exc))
@@ -139,6 +197,17 @@ def _run(request, fn, calls=False):
         return _deny(str(exc))
     except ValueError as exc:
         return _bad(str(exc))
+
+
+# whitelisted `ordering` fields of the lists sorted here (the number itself is masked, so not sortable)
+NUMBER_ORDERS = {'kind': lambda r: r['kind'], 'calls_in': lambda r: r['calls_in'], 'calls_out': lambda r: r['calls_out'],
+                 'answered': lambda r: r['answered'], 'missed': lambda r: r['missed'],
+                 'first_call': lambda r: r['first_call'], 'last_call': lambda r: r['last_call'],
+                 'talk_seconds': lambda r: r['talk_seconds'],
+                 'last_agent': lambda r: (r['last_agent'] or {}).get('staff_name') or (r['last_agent'] or {}).get('pbx_name')
+                                          or (r['last_agent'] or {}).get('agent_ext')}
+LABEL_ORDERS = {'label': lambda r: r['label_display'], 'note': lambda r: r['note'],
+                'created_by': lambda r: r['created_by'], 'created_at': lambda r: r['created_at']}
 
 
 def _paging(request, default_size=50):
@@ -177,7 +246,10 @@ def overview(request):
 def pic_list(request):
     def go(f, acc):
         page, size = _paging(request)
-        return q_pics.pic_rows(f, acc, request.query_params.get('order') or '-net', page, size)
+        # `ordering` (DRF style) like every other list; `order` stays as a backward-compatible alias
+        raw = request.query_params.get('ordering') or request.query_params.get('order') or ''
+        key, desc = parse_ordering(raw, q_pics.ORDERS)          # unknown field -> 400
+        return q_pics.pic_rows(f, acc, (('-' if desc else '') + key) if key else '-net', page, size)
     return _run(request, go)
 
 
@@ -209,7 +281,7 @@ def retention(request):
 def retention_overdue(request):
     def go(f, acc):
         page, size = _paging(request)
-        return q_retention.overdue_list(f, acc, page, size)
+        return q_retention.overdue_list(f, acc, page, size, request.query_params.get('ordering', ''))
     return _run(request, go)
 
 
@@ -231,7 +303,7 @@ def calls_missed_rows(request):
     def go(f, acc):
         only = _int_param(request.query_params.get('only_not_returned', 0), 'غير المردودة', 0, 1)
         page, size = _paging(request)
-        return q_missed.missed_rows(f, acc, bool(only), page, size)
+        return q_missed.missed_rows(f, acc, bool(only), page, size, request.query_params.get('ordering', ''))
     return _run(request, go, calls=True)
 
 
@@ -277,7 +349,12 @@ def _resolve_number_id(number_id):
 def numbers_list(request):
     def go(f, acc):
         page, size = _paging(request)
-        return _opaque(q_numbers.new_numbers(f, acc, page, size))
+        key, desc = parse_ordering(request.query_params.get('ordering', ''), NUMBER_ORDERS)
+        if not key:
+            return _opaque(q_numbers.new_numbers(f, acc, page, size))
+        data = q_numbers.new_numbers(f, acc, 1, None)             # every number, then sort, then page
+        rows = sort_items(data['rows'], NUMBER_ORDERS[key], desc)
+        return _opaque({'count': data['count'], 'rows': rows[(page - 1) * size: page * size]})
     return _run(request, go, calls=True)
 
 
@@ -295,7 +372,18 @@ def numbers_labels(request):
         return _deny()
     try:
         page, size = _paging(request)
-        return Response(_opaque(q_numbers.labelled_numbers(acc, page, size)))
+        key, desc = parse_ordering(request.query_params.get('ordering', ''), LABEL_ORDERS)
+        if not key:
+            return Response(_opaque(q_numbers.labelled_numbers(acc, page, size)))
+        rows, got = [], 1                                          # a small table: read it all, sort, then page
+        while True:
+            part = q_numbers.labelled_numbers(acc, got, MAX_PAGE_SIZE)
+            rows += part['rows']
+            if len(rows) >= part['count'] or not part['rows']:
+                break
+            got += 1
+        rows = sort_items(rows, LABEL_ORDERS[key], desc)
+        return Response(_opaque({'count': len(rows), 'rows': rows[(page - 1) * size: page * size]}))
     except PermissionError as exc:
         return _deny(str(exc))
     except ValueError as exc:

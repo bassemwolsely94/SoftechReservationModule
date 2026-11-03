@@ -6,6 +6,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { commerceApi } from '../api/client'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 const fmt = n => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -60,6 +62,8 @@ export default function CommerceDocumentsPage() {
     }
   }
 
+  const { sorted: sortedDocs, headerProps } = useSortableRows(docs, {})
+
   if (loading) return <div className="p-8 text-center text-gray-400">جارٍ التحميل…</div>
   if (enabled === false) return (
     <div className="p-10 max-w-lg mx-auto text-center">
@@ -83,13 +87,14 @@ export default function CommerceDocumentsPage() {
       <div data-tour="commerce-documents-table" className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>{['رقم المستند', 'النوع', 'الجهة', 'التاريخ', 'الحالة', 'البنود', 'الإجمالى', ''].map(h =>
-              <th key={h} className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>)}</tr>
+            <tr>{[['رقم المستند', 'number', 'text'], ['النوع', 'type_name', 'text'], ['الجهة', 'recipient_name', 'text'], ['التاريخ', 'doc_date', 'date'],
+              ['الحالة', 'status', 'text'], ['البنود', 'line_count', 'number'], ['الإجمالى', 'total', 'number'], ['']].map(([h, k, t]) =>
+              <SortTh key={h} {...(k ? headerProps(k, t) : {})} className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</SortTh>)}</tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {docs.length === 0 ? (
               <tr><td colSpan={8} className="text-center py-12 text-gray-400">لا توجد مستندات — أنشئ أول مستند</td></tr>
-            ) : docs.map(d => (
+            ) : sortedDocs.map(d => (
               <tr key={d.id} data-tour="commerce-documents-row" className="hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/commerce/documents/${d.id}`)}>
                 <td className="px-3 py-2.5 font-mono text-blue-700 font-semibold">{d.number}</td>
                 <td className="px-3 py-2.5 text-gray-700">{d.type_name}</td>

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { reservationsApi, branchesApi } from '../api/client'
 import { StatusBadge, PriorityBadge, STATUS_OPTIONS, PRIORITY_OPTIONS } from '../components/StatusBadge'
 import BranchSelect from '../components/BranchSelect'
@@ -9,6 +9,8 @@ import CancelReasonPicker, { cancelNote, EMPTY_CANCEL } from '../components/Canc
 import useAuthStore from '../store/authStore'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import SortTh from '../components/SortTh'
+import useServerSort from '../hooks/useServerSort'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -72,7 +74,7 @@ function FilterBar({ filters, onChange, branches }) {
       />
       <button data-tour="reservations-list-clear-filters"
         className="btn-secondary text-sm"
-        onClick={() => onChange({ search: '', status: '', priority: '', branch: '', page: 1 })}
+        onClick={() => onChange({ search: '', status: '', priority: '', branch: '', ordering: filters.ordering, page: 1 })}
       >
         مسح الفلاتر
       </button>
@@ -218,6 +220,7 @@ export default function ReservationsPage() {
     status: searchParams.get('status') || '',
     priority: '',
     branch: '',
+    ordering: '',
     page: 1,
   })
 
@@ -228,9 +231,10 @@ export default function ReservationsPage() {
       status: filters.status || undefined,
       priority: filters.priority || undefined,
       branch: filters.branch || undefined,
+      ordering: filters.ordering || undefined,
       page: filters.page,
     }).then(r => r.data),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
     staleTime: 30_000,
   })
 
@@ -240,6 +244,13 @@ export default function ReservationsPage() {
   })
 
   const reservations = data?.results || []
+  // paged list → the server sorts every reservation, not just this page
+  const { headerProps } = useServerSort(filters.ordering, o => setFilters(f => ({ ...f, ordering: o, page: 1 })), {
+    allowed: ['id', 'customer_sort', 'item_sort', 'branch__name', 'status_rank', 'priority_rank', 'follow_up_date', 'created_at'],
+  })
+  const th = (key, type, label) => (
+    <SortTh {...headerProps(key, type)} className="text-right px-4 py-3 font-semibold text-gray-600">{label}</SortTh>
+  )
   const totalCount = data?.count || 0
   const totalPages = Math.ceil(totalCount / 50)
   const allPageIds = reservations.map(r => r.id)
@@ -345,14 +356,14 @@ export default function ReservationsPage() {
                     className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                   />
                 </th>
-                <th className="text-right px-4 py-3 font-semibold text-gray-600">#</th>
-                <th className="text-right px-4 py-3 font-semibold text-gray-600">العميل</th>
-                <th className="text-right px-4 py-3 font-semibold text-gray-600">الصنف</th>
-                <th className="text-right px-4 py-3 font-semibold text-gray-600">الفرع</th>
-                <th className="text-right px-4 py-3 font-semibold text-gray-600">الحالة</th>
-                <th className="text-right px-4 py-3 font-semibold text-gray-600">الأولوية</th>
-                <th className="text-right px-4 py-3 font-semibold text-gray-600">المتابعة</th>
-                <th className="text-right px-4 py-3 font-semibold text-gray-600">تاريخ الإنشاء</th>
+                {th('id', 'number', '#')}
+                {th('customer_sort', 'text', 'العميل')}
+                {th('item_sort', 'text', 'الصنف')}
+                {th('branch__name', 'text', 'الفرع')}
+                {th('status_rank', 'number', 'الحالة')}
+                {th('priority_rank', 'number', 'الأولوية')}
+                {th('follow_up_date', 'date', 'المتابعة')}
+                {th('created_at', 'date', 'تاريخ الإنشاء')}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">

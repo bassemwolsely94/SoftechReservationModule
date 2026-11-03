@@ -10,6 +10,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { procurementIntelApi } from '../api/client'
 import { useProcurementFilters } from '../components/ProcurementFilters'
 import useAuthStore from '../store/authStore'
+import useServerSort from '../hooks/useServerSort'
+import SortTh from '../components/SortTh'
 
 const TONES = {
   blue:   { badge: 'bg-blue-100 text-blue-800',   bar: 'bg-blue-500' },
@@ -80,6 +82,15 @@ function OverrideModal({ seg, catList, onClose, onSave }) {
   )
 }
 
+// header -> server `ordering` key (whitelist in SupplierSegmentationListView; '' = server default, biggest purchases)
+const SEG_COLS = [
+  ['كود المورد', 'supplier_code', 'text'], ['اسم المورد', 'supplier_name', 'text'], ['الفئة', 'supplier_category', 'text'],
+  ['ptcode', 'ptcode', 'text'], ['classif', 'ptclassifcode', 'text'], ['قيمة الشراء', 'purchase_value_365d', 'number'],
+  ['الفواتير', 'invoice_count_365d', 'number'], ['معدل FOC', 'foc_rate_pct', 'number'],
+  ['معدل الإرجاع', 'return_pct', 'number'], ['النوع', 'manual_override', 'number'],
+]
+const SEG_SORT_KEYS = SEG_COLS.map(c => c[1])
+
 export default function SupplierSegmentationPage() {
   const { user } = useAuthStore()
   const isAdmin = user?.role === 'admin'
@@ -89,6 +100,8 @@ export default function SupplierSegmentationPage() {
   const [activeCategory, setActiveCategory] = useState('')
   const [searchQ, setSearchQ] = useState('')
   const [editingSeg, setEditingSeg] = useState(null)
+  const [ordering, setOrdering] = useState('')
+  const { headerProps } = useServerSort(ordering, setOrdering, { allowed: SEG_SORT_KEYS })
 
   const catList = options.supplier_categories ?? []
   const catMap  = Object.fromEntries(catList.map(c => [c.code, c]))
@@ -101,10 +114,11 @@ export default function SupplierSegmentationPage() {
   })
 
   const { data: listData, isLoading: listLoading } = useQuery({
-    queryKey: ['segments-list', activeCategory, searchQ],
+    queryKey: ['segments-list', activeCategory, searchQ, ordering],
     queryFn:  () => procurementIntelApi.listSegments({
       category: activeCategory || undefined,
       q:        searchQ || undefined,
+      ordering: ordering || undefined,
     }).then(r => r.data),
     keepPreviousData: true,
   })
@@ -190,10 +204,10 @@ export default function SupplierSegmentationPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  {['كود المورد', 'اسم المورد', 'الفئة', 'ptcode', 'classif', 'قيمة الشراء', 'الفواتير',
-                    'معدل FOC', 'معدل الإرجاع', 'النوع', isAdmin && 'إجراء'].filter(Boolean).map(h => (
-                    <th key={h} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-600 whitespace-nowrap">{h}</th>
+                  {SEG_COLS.map(([h, k, t]) => (
+                    <SortTh key={h} {...headerProps(k, t)} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-600 whitespace-nowrap">{h}</SortTh>
                   ))}
+                  {isAdmin && <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-600 whitespace-nowrap">إجراء</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">

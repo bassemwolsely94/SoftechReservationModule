@@ -12,34 +12,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { purchasingApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
 import DeadStockTab from './cash/DeadStockTab'   // P-27 part A
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 const egp = (n) => (n ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
 const invalidate = (qc) => ['spike-candidates', 'spike-summary'].forEach(k => qc.invalidateQueries({ queryKey: [k] }))
 const onErr = (e) => window.alert(e?.response?.data?.detail || e?.message || 'تعذّر تنفيذ الإجراء.')
 
-function useSort(initKey = 'ratio', initDir = 'desc') {
-  const [key, setKey] = useState(initKey); const [dir, setDir] = useState(initDir)
-  const toggle = (k) => { if (k === key) setDir(d => d === 'asc' ? 'desc' : 'asc'); else { setKey(k); setDir('desc') } }
-  return { key, dir, toggle }
-}
-const applySort = (rows, sort, acc) => {
-  if (!sort.key || !acc[sort.key]) return rows
-  const f = acc[sort.key]
-  const out = [...rows].sort((a, b) => {
-    const x = f(a), y = f(b)
-    if (typeof x === 'number' && typeof y === 'number') return x - y
-    return String(x ?? '').localeCompare(String(y ?? ''), 'ar')
-  })
-  return sort.dir === 'asc' ? out : out.reverse()
-}
-function Th({ label, k, sort }) {
-  const on = sort.key === k
-  return (
-    <th onClick={() => sort.toggle(k)} className="px-3 py-2 font-semibold cursor-pointer select-none whitespace-nowrap hover:text-brand-600">
-      {label}<span className={on ? 'text-brand-600' : 'text-gray-300'}>{on ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ' ⇅'}</span>
-    </th>
-  )
-}
+const spikeValue = (r, k) => (k === 'order' ? r.order_qty : k === 'tierRank' ? (r.tier === 'strong' ? 1 : 0) : r[k])
 function Stat({ label, value, tone = 'text-gray-800' }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4">
@@ -52,18 +32,15 @@ function Stat({ label, value, tone = 'text-gray-800' }) {
 function SpikeTab() {
   const qc = useQueryClient()
   const [tier, setTier] = useState(''); const [med, setMed] = useState(''); const [q, setQ] = useState('')
-  const sort = useSort('ratio', 'desc')
   const params = { ...(tier ? { tier } : {}), ...(med ? { med } : {}), ...(q.trim() ? { q: q.trim() } : {}) }
   const { data: summary } = useQuery({ queryKey: ['spike-summary'], queryFn: () => purchasingApi.spikeSummary().then(r => r.data) })
   const { data: medTypes } = useQuery({ queryKey: ['spike-medtypes'], queryFn: () => purchasingApi.spikeMedTypes().then(r => r.data.med_types) })
   const { data, isLoading } = useQuery({ queryKey: ['spike-candidates', params], queryFn: () => purchasingApi.spikeCandidates(params).then(r => r.data) })
   const confirm = useMutation({ mutationFn: (id) => purchasingApi.spikeConfirm(id), onSuccess: () => invalidate(qc), onError: onErr })
   const unconfirm = useMutation({ mutationFn: (id) => purchasingApi.spikeUnconfirm(id), onSuccess: () => invalidate(qc), onError: onErr })
-  const acc = {
-    code: r => r.code, name: r => r.name, ratio: r => r.ratio, recent: r => r.recent,
-    stock: r => r.stock, order: r => r.order_qty, avoided: r => r.avoided_value,
-  }
-  const rows = applySort(data?.items || [], sort, acc)
+  const { sorted: rows, headerProps } = useSortableRows(data?.items, {
+    defaultSort: { key: 'ratio', dir: 'desc', type: 'number' }, getValue: spikeValue,
+  })
   return (
     <div>
       <p className="text-sm text-gray-500 mb-3">
@@ -96,13 +73,16 @@ function SpikeTab() {
               <table className="w-full text-sm text-right">
                 <thead className="bg-gray-50 text-gray-600 border-b">
                   <tr>
-                    <th className="px-3 py-2 font-semibold">الدرجة</th>
-                    <Th label="الكود" k="code" sort={sort} /><Th label="الصنف" k="name" sort={sort} />
-                    <Th label="المضاعف" k="ratio" sort={sort} /><Th label="المعدل الحديث/شهر" k="recent" sort={sort} />
-                    <th className="px-3 py-2 font-semibold">السابق/شهر</th>
-                    <Th label="الرصيد" k="stock" sort={sort} /><Th label="المطلوب" k="order" sort={sort} />
-                    <th className="px-3 py-2 font-semibold">بعد التقليل</th>
-                    <Th label="توفير محتمل" k="avoided" sort={sort} />
+                    <SortTh {...headerProps('tierRank', 'number')} className="px-3 py-2 font-semibold">الدرجة</SortTh>
+                    <SortTh {...headerProps('code')} className="px-3 py-2 font-semibold">الكود</SortTh>
+                    <SortTh {...headerProps('name')} className="px-3 py-2 font-semibold">الصنف</SortTh>
+                    <SortTh {...headerProps('ratio', 'number')} className="px-3 py-2 font-semibold">المضاعف</SortTh>
+                    <SortTh {...headerProps('recent', 'number')} className="px-3 py-2 font-semibold">المعدل الحديث/شهر</SortTh>
+                    <SortTh {...headerProps('prior', 'number')} className="px-3 py-2 font-semibold">السابق/شهر</SortTh>
+                    <SortTh {...headerProps('stock', 'number')} className="px-3 py-2 font-semibold">الرصيد</SortTh>
+                    <SortTh {...headerProps('order', 'number')} className="px-3 py-2 font-semibold">المطلوب</SortTh>
+                    <SortTh {...headerProps('capped_qty', 'number')} className="px-3 py-2 font-semibold">بعد التقليل</SortTh>
+                    <SortTh {...headerProps('avoided_value', 'number')} className="px-3 py-2 font-semibold">توفير محتمل</SortTh>
                     <th className="px-3 py-2 font-semibold">إجراء</th>
                   </tr>
                 </thead>

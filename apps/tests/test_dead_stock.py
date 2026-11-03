@@ -224,3 +224,24 @@ class PagingTests(ApiTests):
         self.assertNotIn(last[0]['id'], first_ids)
         s = self.admin.get(self.URL + 'summary/').data
         self.assertEqual(s['branches'], [{'code': '130', 'name': 'فرع 130'}])
+
+
+class OrderingTests(ApiTests):
+    """`ordering` sorts ALL lines before paging; unknown fields are refused."""
+
+    def test_ordering_sorts_before_paging_and_rejects_unknown_fields(self):
+        from apps.catalog.models import Item
+        from apps.purchasing import dead_stock
+        from apps.purchasing.models import ItemDemandMetrics
+        from apps.branches.models import Branch
+        b130 = Branch.objects.get(softech_branch_id='130')
+        for n in range(4):
+            it = Item.objects.create(softech_id=f'O{n}', name=f'ترتيب {n}', cost_price=D(10 + n))
+            ItemDemandMetrics.objects.create(run=self.run, item=it, branch=b130, calc_date=TODAY, current_stock=5)
+        dead_stock.compute_snapshot(self.run, today=TODAY)
+        everything = self.admin.get(self.URL + 'lines/?ordering=value&page_size=200').data['lines']
+        values = [x['value'] for x in everything]
+        self.assertEqual(values, sorted(values))
+        page1 = self.admin.get(self.URL + 'lines/?ordering=-value&page_size=2&page=1').data['lines']
+        self.assertEqual([x['value'] for x in page1], sorted(values, reverse=True)[:2])
+        self.assertEqual(self.admin.get(self.URL + 'lines/?ordering=password').status_code, 400)

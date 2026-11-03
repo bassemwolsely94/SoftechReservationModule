@@ -5,6 +5,8 @@
 import { useEffect, useState } from 'react'
 import api from '../api/client'
 import { money } from '../hooks/usePosOrder'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 export default function ReferralStatsPage() {
   const [data, setData] = useState(null)
@@ -21,6 +23,7 @@ export default function ReferralStatsPage() {
   useEffect(() => { load() }, [])   // eslint-disable-line
 
   const rows = data?.results || []
+  const { sorted, headerProps } = useSortableRows(rows, { persistKey: 'referral-stats' })
   const sum = data?.summary || {}
 
   return (
@@ -48,10 +51,15 @@ export default function ReferralStatsPage() {
       <div className="card p-0 overflow-x-auto" data-tour="analytics-referral-stats-table">
         <table className="data-table">
           <thead><tr>
-            <th>الطبيب</th><th>الكود</th><th>عدد الطلبات</th><th>إجمالي الصافي</th><th>عدد المرضى</th><th>آخر إحالة</th>
+            <SortTh {...headerProps('doctor_name', 'text')}>الطبيب</SortTh>
+            <SortTh {...headerProps('doctor_code', 'text')}>الكود</SortTh>
+            <SortTh {...headerProps('orders', 'number')}>عدد الطلبات</SortTh>
+            <SortTh {...headerProps('total_net', 'number')}>إجمالي الصافي</SortTh>
+            <SortTh {...headerProps('patients', 'number')}>عدد المرضى</SortTh>
+            <SortTh {...headerProps('last_referral', 'date')}>آخر إحالة</SortTh>
           </tr></thead>
           <tbody>
-            {rows.map((r, i) => (
+            {sorted.map((r, i) => (
               <tr key={i}>
                 <td className="font-semibold text-content">{r.doctor_name}</td>
                 <td className="mono text-xs text-faint">{r.doctor_code || '—'}</td>

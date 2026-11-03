@@ -4,7 +4,7 @@
  */
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { demandApi, branchesApi, usersApi } from '../api/client'
 import BranchSelect from '../components/BranchSelect'
 import useAuthStore from '../store/authStore'
@@ -14,6 +14,8 @@ import CustomerSearchWidget from '../components/CustomerSearchWidget'
 import ModuleNotificationBell from '../components/ModuleNotificationBell'
 import { formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import SortTh from '../components/SortTh'
+import useServerSort from '../hooks/useServerSort'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -517,6 +519,15 @@ export default function DemandPage() {
 
   const [searchInput, setSearchInput] = useState('')
 
+  // the list is paged by the server → the server sorts every demand, not just this page
+  const [ordering, setOrdering] = useState('')
+  const { headerProps } = useServerSort(ordering, setOrdering, {
+    allowed: ['demand_number', 'customer_name', 'branch_sort', 'items_count', 'status_rank', 'priority_rank', 'sla_sort', 'assignee_sort'],
+  })
+  const th = (key, type, label) => (
+    <SortTh {...headerProps(key, type)} className="text-right px-4 py-3 text-xs font-semibold text-gray-500">{label}</SortTh>
+  )
+
 // Debounce search
 useEffect(() => {
   const delay = setTimeout(() => {
@@ -550,13 +561,16 @@ useEffect(() => {
   filters.branch,
   filters.search,
   filters.sla_breached,
+  ordering,
 ],
     queryFn: () => demandApi.list({
       status:       filters.status       || undefined,
       priority:     filters.priority     || undefined,
       branch:       filters.branch       || undefined,
       search:       filters.search       || undefined,
+      ordering:     ordering             || undefined,
     }).then(r => r.data.results || r.data),
+    placeholderData: keepPreviousData,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   })
@@ -748,14 +762,14 @@ useEffect(() => {
                       <input type="checkbox" className="w-4 h-4 accent-brand-600 cursor-pointer" data-tour="demand-list-select"
                         checked={allSelected} onChange={toggleAll} />
                     </th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">رقم الطلب</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">العميل</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">الفرع</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">الأصناف</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">الحالة</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">الأولوية</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">SLA</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">مُعيَّن لـ</th>
+                    {th('demand_number', 'text', 'رقم الطلب')}
+                    {th('customer_name', 'text', 'العميل')}
+                    {th('branch_sort', 'text', 'الفرع')}
+                    {th('items_count', 'number', 'الأصناف')}
+                    {th('status_rank', 'number', 'الحالة')}
+                    {th('priority_rank', 'number', 'الأولوية')}
+                    {th('sla_sort', 'date', 'SLA')}
+                    {th('assignee_sort', 'text', 'مُعيَّن لـ')}
                   </tr>
                 </thead>
                 <tbody>

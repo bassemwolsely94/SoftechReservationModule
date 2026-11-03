@@ -30,6 +30,7 @@ from .models import DemandCalculationRun, ItemDemandMetrics, ItemDemandAggregate
 from .serializers import RunSerializer, MetricsSerializer, AggregatedSerializer
 from apps.catalog.wildcard import wq
 from apps.finance.recon_labels import branch_label as BL      # '170' → '170 · name'
+from core.stable_ordering import StableOrderingMixin
 from core.errors import public_error
 from core.threads import start_thread
 
@@ -355,7 +356,7 @@ def seasonality_refresh(request):
 
 # ── Per-branch metrics ────────────────────────────────────────────────────────
 
-class MetricsListView(generics.ListAPIView):
+class MetricsListView(StableOrderingMixin, generics.ListAPIView):
     """
     Per-item × per-branch metrics for the latest run.
 
@@ -375,6 +376,7 @@ class MetricsListView(generics.ListAPIView):
         'priority', 'monthly_avg', 'gap', 'coverage_months',
         'monthly_value', 'current_stock', 'in_transit_qty', 'abc_class',
         'rate_30d', 'rate_90d', 'rate_365d', 'safety_stock', 'season_sort',
+        'item__name', 'item__softech_id', 'branch__name_ar',   # the grid's الصنف / الفرع headers
     ]
     ordering = ['-priority']
 
@@ -398,7 +400,7 @@ class MetricsListView(generics.ListAPIView):
 
 # ── Aggregated (network) ──────────────────────────────────────────────────────
 
-class AggregatedListView(generics.ListAPIView):
+class AggregatedListView(StableOrderingMixin, generics.ListAPIView):
     """
     Cross-branch aggregated metrics for the latest run.
 
@@ -416,6 +418,7 @@ class AggregatedListView(generics.ListAPIView):
     ordering_fields    = [
         'total_monthly_value', 'total_monthly_avg', 'total_gap',
         'total_current_stock', 'cumulative_pct', 'abc_class', 'season_sort',
+        'item__name', 'item__softech_id',   # the grid's الصنف / كود headers
     ]
     ordering = ['-total_monthly_value']
 
@@ -2186,7 +2189,7 @@ def _latest_transfer_run(demand_run=None):
     return qs.order_by('-started_at').first()
 
 
-class TransferRecommendationListView(generics.ListAPIView):
+class TransferRecommendationListView(StableOrderingMixin, generics.ListAPIView):
     """
     Per-item × per-branch-pair transfer recommendations for the latest run.
 
@@ -2203,7 +2206,11 @@ class TransferRecommendationListView(generics.ListAPIView):
     filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['abc_class', 'status', 'from_branch', 'to_branch']
     search_fields      = ['item__name', 'item__softech_id']
-    ordering_fields    = ['priority_score', 'estimated_value', 'quantity', 'to_gap']
+    ordering_fields    = [
+        'priority_score', 'estimated_value', 'quantity', 'to_gap',
+        'item__name', 'item__softech_id', 'from_branch__name_ar', 'to_branch__name_ar',
+        'from_stock', 'from_monthly_avg', 'to_stock', 'to_monthly_avg', 'abc_class', 'status',
+    ]   # every sortable header of the transfer-recommendations grid
     ordering           = ['-priority_score']
 
     def get_queryset(self):

@@ -13,6 +13,8 @@ import { financeApi } from '../api/client'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import ProgressBar from '../components/ProgressBar'
 import useBranchLabels from '../hooks/useBranchLabels'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 import useHelpTab from '../help/useHelpTab'
 import { wildcardMatch } from '../utils/wildcard'
 
@@ -124,8 +126,12 @@ function TermsTab({ onSaved }) {
     for (const t of data?.terms || []) (m[t.personcode] ||= []).push(t)
     return m
   }, [data])
-  const rows = (data?.suppliers || []).filter(s => (!top || s.is_top10 || s.has_terms)
+  const filteredRows = (data?.suppliers || []).filter(s => (!top || s.is_top10 || s.has_terms)
     && (!q || wildcardMatch(`${s.personcode} ${s.supplier}`, q)))
+  // category columns sort by the credit days of the term in force
+  const { sorted: rows, headerProps: tH } = useSortableRows(filteredRows, {
+    getValue: (s, k) => (k.startsWith('cat:') ? current((byParty[s.personcode] || []).filter(t => t.category === k.slice(4)), today)?.credit_days : s[k]),
+  })
   const cov = data?.coverage || {}
   return (
     <div className="space-y-3">
@@ -146,8 +152,8 @@ function TermsTab({ onSaved }) {
         <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <table className="w-full text-sm whitespace-nowrap">
             <thead className="bg-gray-50 text-gray-600 text-xs"><tr>
-              <th className="text-right px-2 py-2">المورد</th><th className="text-right px-2 py-2">المفتوح</th>
-              {CATS.map(([c, l]) => <th key={c} className="text-right px-2 py-2">{l} (يوم)</th>)}
+              <SortTh {...tH('supplier', 'text')} className="text-right px-2 py-2">المورد</SortTh><SortTh {...tH('open', 'number')} className="text-right px-2 py-2">المفتوح</SortTh>
+              {CATS.map(([c, l]) => <SortTh key={c} {...tH(`cat:${c}`, 'number')} className="text-right px-2 py-2">{l} (يوم)</SortTh>)}
             </tr></thead>
             <tbody>
               {rows.map(s => {
@@ -186,6 +192,10 @@ function TermsTab({ onSaved }) {
 
 function CalendarTab() {
   const { data, isLoading } = useQuery({ queryKey: ['supplier-terms', 'calendar'], queryFn: () => financeApi.supplierTermsCalendar({ weeks: 13 }).then(r => r.data) })
+  // week columns sort by their amount (key w0..w12); the totals row stays on top
+  const { sorted: calRows, headerProps: cH } = useSortableRows(data?.rows || [], {
+    getValue: (r, k) => (/^w\d+$/.test(k) ? r.weeks?.[Number(k.slice(1))] : k === 'category' ? CAT_LABEL[r.category] : r[k]),
+  })
   if (isLoading) return <div className="text-center py-10 text-gray-400">جارٍ التحميل…</div>
   const weeks = data?.weeks || []
   return (
@@ -199,10 +209,10 @@ function CalendarTab() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <table className="w-full text-xs whitespace-nowrap">
           <thead className="bg-gray-50 text-gray-600"><tr>
-            <th className="text-right px-2 py-2">المورد</th><th className="text-right px-2 py-2">الفئة</th>
-            <th className="text-right px-2 py-2">متأخر</th><th className="text-right px-2 py-2">بدون شروط</th>
-            {weeks.map(w => <th key={w.start} className="text-right px-2 py-2" title={`${w.start} → ${w.end}`}>{w.start.slice(8, 10)}/{w.start.slice(5, 7)}</th>)}
-            <th className="text-right px-2 py-2">بعد ذلك</th>
+            <SortTh {...cH('supplier', 'text')} className="text-right px-2 py-2">المورد</SortTh><SortTh {...cH('category', 'text')} className="text-right px-2 py-2">الفئة</SortTh>
+            <SortTh {...cH('overdue', 'number')} className="text-right px-2 py-2">متأخر</SortTh><SortTh {...cH('no_terms', 'number')} className="text-right px-2 py-2">بدون شروط</SortTh>
+            {weeks.map((w, i) => <SortTh key={w.start} {...cH(`w${i}`, 'number')} className="text-right px-2 py-2" title={`${w.start} → ${w.end}`}>{w.start.slice(8, 10)}/{w.start.slice(5, 7)}</SortTh>)}
+            <SortTh {...cH('later', 'number')} className="text-right px-2 py-2">بعد ذلك</SortTh>
           </tr></thead>
           <tbody>
             <tr className="border-t font-semibold bg-gray-50/60">
@@ -211,7 +221,7 @@ function CalendarTab() {
               {weeks.map(w => <td key={w.start} className="px-2 py-1.5">{fmt(w.due)}</td>)}
               <td className="px-2 py-1.5">{fmt(data?.later)}</td>
             </tr>
-            {(data?.rows || []).map(r => (
+            {calRows.map(r => (
               <tr key={`${r.personcode}-${r.category}`} className="border-t">
                 <td className="px-2 py-1.5">{r.personcode} · {r.supplier}</td>
                 <td className="px-2 py-1.5">{CAT_LABEL[r.category]}</td>
@@ -241,6 +251,9 @@ function CalendarTab() {
 function EarlyTab() {
   const bl = useBranchLabels()
   const { data, isLoading } = useQuery({ queryKey: ['supplier-terms', 'early'], queryFn: () => financeApi.supplierTermsEarlyPay().then(r => r.data) })
+  const { sorted: earlyRows, headerProps: eH } = useSortableRows(data?.open || [], {
+    getValue: (r, k) => (k === 'categories' ? (r.categories || []).map(c => CAT_LABEL[c]).join('، ') : r[k]),
+  })
   if (isLoading) return <div className="text-center py-10 text-gray-400">جارٍ التحميل…</div>
   return (
     <div className="space-y-3">
@@ -252,11 +265,13 @@ function EarlyTab() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <table className="w-full text-xs whitespace-nowrap">
           <thead className="bg-gray-50 text-gray-600"><tr>
-            {['المورد', 'الفاتورة', 'الفئة', 'المفتوح', 'آخر موعد', 'الاستحقاق', 'أيام مكسوبة', 'خصم %', 'قيمة الخصم', 'العائد السنوي %'].map(h =>
-              <th key={h} className="text-right px-2 py-2">{h}</th>)}
+            {[['المورد', 'supplier', 'text'], ['الفاتورة', 'docdate', 'date'], ['الفئة', 'categories', 'text'], ['المفتوح', 'open_amount', 'number'],
+              ['آخر موعد', 'deadline', 'date'], ['الاستحقاق', 'due_date', 'date'], ['أيام مكسوبة', 'days_gained', 'number'], ['خصم %', 'discount_pct', 'number'],
+              ['قيمة الخصم', 'discount_value', 'number'], ['العائد السنوي %', 'annualised_return_pct', 'number']].map(([h, k, t]) =>
+              <SortTh key={h} {...eH(k, t)} className="text-right px-2 py-2">{h}</SortTh>)}
           </tr></thead>
           <tbody>
-            {(data?.open || []).map(r => (
+            {earlyRows.map(r => (
               <tr key={`${r.invoice_id}-${r.categories.join()}`} className="border-t">
                 <td className="px-2 py-1.5">{r.personcode} · {r.supplier}</td>
                 <td className="px-2 py-1.5">{bl(r.branchcode)} · #{r.docnumber} · {r.docdate}</td>
@@ -279,6 +294,9 @@ function EarlyTab() {
 
 function OnTimeTab() {
   const { data, isLoading } = useQuery({ queryKey: ['supplier-terms', 'ontime'], queryFn: () => financeApi.supplierTermsOnTime().then(r => r.data) })
+  const { sorted: onTimeRows, headerProps: oH } = useSortableRows(data?.rows || [], {
+    getValue: (r, k) => (k === 'local' || k === 'imported' ? r.by_category?.find(x => x.category === k)?.days_vs_terms : r[k]),
+  })
   if (isLoading) return <div className="text-center py-10 text-gray-400">جارٍ التحميل…</div>
   return (
     <div className="space-y-3">
@@ -290,11 +308,13 @@ function OnTimeTab() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <table className="w-full text-xs whitespace-nowrap">
           <thead className="bg-gray-50 text-gray-600"><tr>
-            {['المورد', 'أيام مقابل الشروط', 'محلي', 'مستورد', 'قيمة مقاسة', 'بدون شروط', 'المدفوع', 'تغطية الربط %'].map(h =>
-              <th key={h} className="text-right px-2 py-2">{h}</th>)}
+            {[['المورد', 'supplier', 'text'], ['أيام مقابل الشروط', 'days_vs_terms', 'number'], ['محلي', 'local', 'number'], ['مستورد', 'imported', 'number'],
+              ['قيمة مقاسة', 'value', 'number'], ['بدون شروط', 'no_terms_value', 'number'], ['المدفوع', 'paid_value', 'number'],
+              ['تغطية الربط %', 'coverage_pct', 'number']].map(([h, k, t]) =>
+              <SortTh key={h} {...oH(k, t)} className="text-right px-2 py-2">{h}</SortTh>)}
           </tr></thead>
           <tbody>
-            {(data?.rows || []).map(r => {
+            {onTimeRows.map(r => {
               const cat = (c) => r.by_category.find(x => x.category === c)?.days_vs_terms
               return (
                 <tr key={r.personcode} className="border-t">
@@ -319,8 +339,11 @@ function OnTimeTab() {
 function ResidueTab() {
   const [cls, setCls] = useState('real')
   const { data, isLoading } = useQuery({ queryKey: ['supplier-terms', 'residue'], queryFn: () => financeApi.supplierTermsResidue().then(r => r.data) })
+  const clsRows = (data?.rows || []).filter(r => r.account_class === cls)
+  const { sorted: rows, headerProps: rsH } = useSortableRows(clsRows, {
+    getValue: (r, k) => (k === 'matched' ? Number(r.matched_approved || 0) + Number(r.matched_high_pending || 0) + Number(r.under_review || 0) : r[k]),
+  })
   if (isLoading) return <div className="text-center py-10 text-gray-400">جارٍ التحميل…</div>
-  const rows = (data?.rows || []).filter(r => r.account_class === cls)
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
@@ -336,8 +359,10 @@ function ResidueTab() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <table className="w-full text-xs whitespace-nowrap">
           <thead className="bg-gray-50 text-gray-600"><tr>
-            {['المورد', 'الفرع', 'الفاتورة', 'التاريخ', 'العمر (يوم)', 'القيمة', 'المفتوح', 'مطابقة مقترحة', 'الحالة'].map(h =>
-              <th key={h} className="text-right px-2 py-2">{h}</th>)}
+            {[['المورد', 'supplier', 'text'], ['الفرع', 'branch_name', 'text'], ['الفاتورة', 'docnumber', 'text'], ['التاريخ', 'docdate', 'date'],
+              ['العمر (يوم)', 'age_days', 'number'], ['القيمة', 'doc_value', 'number'], ['المفتوح', 'open_in_softech', 'number'],
+              ['مطابقة مقترحة', 'matched', 'number'], ['الحالة', 'status', 'text']].map(([h, k, t]) =>
+              <SortTh key={h} {...rsH(k, t)} className="text-right px-2 py-2">{h}</SortTh>)}
           </tr></thead>
           <tbody>
             {rows.map(r => (

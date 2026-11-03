@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { transfersApi, itemsApi } from '../api/client'
@@ -14,6 +14,8 @@ import WhatsAppShareButton from '../components/WhatsAppShareButton'
 import VoiceNoteRecorder from '../components/VoiceNoteRecorder'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import { fa } from '../utils/flowArrow'
+import SortTh from '../components/SortTh'
+import useSortableRows from '../hooks/useSortableRows'
 
 // ── Status config ─────────────────────────────────────────────────────────────
 
@@ -406,11 +408,16 @@ const SOFTECH_DOCTYPE = {
   '600': 'تسوية مخزون',
 }
 
+const matchedValue = (it, k) => (
+  k === 'name' ? (it.itemname || it.itemcode) : k === 'level' ? (MATCH_LEVEL_CFG[it.match_level] || MATCH_LEVEL_CFG.not_found).label : it[k])
+
 function ERPMatchPanel({ tr, onRefresh }) {
   const [checking, setChecking] = useState(false)
   const [cooldown, setCooldown]  = useState(0)   // seconds remaining before button re-enables
   const cooldownRef              = useRef(null)
   const status = tr.erp_match_status
+  // matched ERP lines: all loaded → sort in the browser (hook before the early returns)
+  const matched = useSortableRows(tr.erp_matched_items || [], { getValue: matchedValue })
 
   // Clean up cooldown timer on unmount
   useEffect(() => () => { if (cooldownRef.current) clearInterval(cooldownRef.current) }, [])
@@ -559,14 +566,14 @@ function ERPMatchPanel({ tr, onRefresh }) {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-gray-100">
-                <th className="text-right pb-1.5 text-gray-400 font-semibold">الصنف</th>
-                <th className="text-right pb-1.5 text-gray-400 font-semibold">الكمية المطلوبة</th>
-                <th className="text-right pb-1.5 text-gray-400 font-semibold">كمية ERP</th>
-                <th className="text-right pb-1.5 text-gray-400 font-semibold">الحالة</th>
+                <SortTh {...matched.headerProps('name', 'text')} className="text-right pb-1.5 text-gray-400 font-semibold">الصنف</SortTh>
+                <SortTh {...matched.headerProps('requested_qty', 'number')} className="text-right pb-1.5 text-gray-400 font-semibold">الكمية المطلوبة</SortTh>
+                <SortTh {...matched.headerProps('erp_qty', 'number')} className="text-right pb-1.5 text-gray-400 font-semibold">كمية ERP</SortTh>
+                <SortTh {...matched.headerProps('level', 'text')} className="text-right pb-1.5 text-gray-400 font-semibold">الحالة</SortTh>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {items.map((it, i) => {
+              {matched.sorted.map((it, i) => {
                 const lv = MATCH_LEVEL_CFG[it.match_level] || MATCH_LEVEL_CFG.not_found
                 return (
                   <tr key={i} className="hover:bg-gray-50">
@@ -800,6 +807,12 @@ function ItemsTab({ tr, onRefresh }) {
   }
 
   const destStock = tr.destination_stock || {}
+  // every line is loaded → sort in the browser (display lines; add / remove stay as they are)
+  const lineValue = useCallback((l, k) => (
+    k === 'name' ? l.item_name
+    : k === 'avail' ? (destStock[String(l.item)] ?? l.available_stock ?? null)
+    : l[k]), [destStock])
+  const lines = useSortableRows(tr.items, { getValue: lineValue })
 
   return (
     <div>
@@ -813,17 +826,17 @@ function ItemsTab({ tr, onRefresh }) {
         <table className="w-full text-sm mb-4">
           <thead>
             <tr className="border-b border-gray-100">
-              <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">الصنف</th>
-              <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">مطلوب</th>
-              <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">معتمد</th>
-              <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">مستلم</th>
-              <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">متاح بالمصدر</th>
-              <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">ملاحظة</th>
+              <SortTh {...lines.headerProps('name', 'text')} className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">الصنف</SortTh>
+              <SortTh {...lines.headerProps('quantity', 'number')} className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">مطلوب</SortTh>
+              <SortTh {...lines.headerProps('approved_quantity', 'number')} className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">معتمد</SortTh>
+              <SortTh {...lines.headerProps('received_quantity', 'number')} className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">مستلم</SortTh>
+              <SortTh {...lines.headerProps('avail', 'number')} className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">متاح بالمصدر</SortTh>
+              <SortTh {...lines.headerProps('notes', 'text')} className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">ملاحظة</SortTh>
               {tr.is_editable && <th className="pb-2 px-2" />}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {tr.items.map(line => {
+            {lines.sorted.map(line => {
               const avail = destStock[String(line.item)] ?? line.available_stock ?? null
               return (
                 <tr key={line.id} className="hover:bg-gray-50">

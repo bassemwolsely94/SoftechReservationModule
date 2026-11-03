@@ -92,7 +92,7 @@ class SpyTests(TestCase):
     def test_requires_supervisor_extension(self):
         resp = self.supervisor.post(SPY_URL, {'target_ext': '201', 'mode': 'listen'})
         self.assertEqual(resp.status_code, 400)
-        self.assertIn('تحويلة', resp.data['detail'])
+        self.assertIn('رقم داخلي', resp.data['detail'])
 
     def test_mode_validation(self):
         AgentExtension.objects.create(

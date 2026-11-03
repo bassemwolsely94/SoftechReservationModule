@@ -20,6 +20,8 @@ import useAuthStore from '../store/authStore'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 // ── Tiny helpers ─────────────────────────────────────────────────────────────
 
@@ -431,6 +433,7 @@ function SlabEditor({ value, onChange }) {
 
 function RuleItemsManager({ rule, onItemsChanged }) {
   const [items, setItems]         = useState(rule.rule_items || [])
+  const { sorted: sortedItems, headerProps: itemHp } = useSortableRows(items)
   const [adding, setAdding]       = useState(false)
   const [manualCode, setManualCode] = useState('')
   const [manualName, setManualName] = useState('')
@@ -611,14 +614,14 @@ function RuleItemsManager({ rule, onItemsChanged }) {
           <table className="w-full text-xs">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-2 py-1.5 text-right text-gray-500 font-medium">كود الصنف</th>
-                <th className="px-2 py-1.5 text-right text-gray-500 font-medium">الاسم</th>
-                <th className="px-2 py-1.5 text-right text-gray-500 font-medium">حافز خاص</th>
+                <SortTh {...itemHp('item_code', 'text')} className="px-2 py-1.5 text-right text-gray-500 font-medium">كود الصنف</SortTh>
+                <SortTh {...itemHp('item_name', 'text')} className="px-2 py-1.5 text-right text-gray-500 font-medium">الاسم</SortTh>
+                <SortTh {...itemHp('incentive_override', 'number')} className="px-2 py-1.5 text-right text-gray-500 font-medium">حافز خاص</SortTh>
                 <th className="px-2 py-1.5 w-8" />
               </tr>
             </thead>
             <tbody>
-              {items.map(ri => (
+              {sortedItems.map(ri => (
                 <tr key={ri.item_code} className="border-t border-gray-100 hover:bg-gray-50">
                   <td className="px-2 py-1.5 font-mono">{ri.item_code}</td>
                   <td className="px-2 py-1.5 text-gray-600 max-w-[180px] break-words">{ri.item_name || '—'}</td>
@@ -1323,6 +1326,9 @@ function TransactionDrillDown({ programId, userId, periodStart, periodEnd, onClo
   const [rows, setRows]   = useState([])
   const [adjustments, setAdjustments] = useState([])
   const [loading, setLoading] = useState(true)
+  const { sorted: sortedTx, headerProps: txHp } = useSortableRows(rows, {
+    getValue: (t, k) => (k === 'quantity' || k === 'unit_price' || k === 'incentive_amount' ? Number(t[k]) : (k === 'status' ? (t.is_reversed ? 1 : 0) : t[k])),
+  })
 
   useEffect(() => {
     incentivesApi
@@ -1350,13 +1356,15 @@ function TransactionDrillDown({ programId, userId, periodStart, periodEnd, onClo
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 sticky top-0">
                   <tr>
-                    {['التاريخ', 'رقم الفاتورة', 'الصنف', 'النوع', 'الكمية', 'السعر', 'الحافز', 'حالة'].map(h => (
-                      <th key={h} className="px-3 py-2 text-right text-xs text-gray-500 font-medium">{h}</th>
+                    {[['erp_date', 'date', 'التاريخ'], ['doc_no', 'text', 'رقم الفاتورة'], ['item_name', 'text', 'الصنف'],
+                      ['doc_type', 'text', 'النوع'], ['quantity', 'number', 'الكمية'], ['unit_price', 'number', 'السعر'],
+                      ['incentive_amount', 'number', 'الحافز'], ['status', 'number', 'حالة']].map(([k, ty, h]) => (
+                      <SortTh key={k} {...txHp(k, ty)} className="px-3 py-2 text-right text-xs text-gray-500 font-medium">{h}</SortTh>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(t => (
+                  {sortedTx.map(t => (
                     <tr key={t.id} className={`border-b hover:bg-gray-50 ${t.is_reversed ? 'opacity-50' : ''}`}>
                       <td className="px-3 py-2 text-gray-500 text-xs">{t.erp_date || '—'}</td>
                       <td className="px-3 py-2 font-mono text-xs">{t.doc_no}</td>
@@ -1414,6 +1422,9 @@ function ReportTab({ selectedProgram }) {
   const [drillUser, setDrillUser] = useState(null)
   const [finalizing, setFinalizing] = useState(false)
   const [finalMsg, setFinalMsg]     = useState('')
+  const { sorted: sortedReport, headerProps: repHp } = useSortableRows(rows, {
+    getValue: (r, k) => (k === 'final_total' ? Number(r.final_total ?? r.total_incentive) : (k === 'is_finalized' ? (r.is_finalized ? 1 : 0) : r[k])),
+  })
 
   const loadReport = async () => {
     if (!selectedProgram) { setErr('اختر برنامجاً أولاً'); return }
@@ -1497,17 +1508,19 @@ function ReportTab({ selectedProgram }) {
                 <thead className="bg-gray-50/50">
                   <tr>
                     {[
-                      'المندوب', 'كود المندوب', 'مبيعات', 'مرتجعات',
-                      'إجمالي الحوافز',
-                      ...(hasAdjustments ? ['التسويات اليدوية', 'الصافي النهائي'] : []),
-                      'الحالة', '',
-                    ].map(h => (
-                      <th key={h} className="px-4 py-2 text-right text-xs text-gray-500 font-medium whitespace-nowrap">{h}</th>
+                      ['user_name', 'text', 'المندوب'], ['person_code', 'text', 'كود المندوب'],
+                      ['sale_count', 'number', 'مبيعات'], ['return_count', 'number', 'مرتجعات'],
+                      ['total_incentive', 'number', 'إجمالي الحوافز'],
+                      ...(hasAdjustments ? [['total_adjustments', 'number', 'التسويات اليدوية'], ['final_total', 'number', 'الصافي النهائي']] : []),
+                      ['is_finalized', 'number', 'الحالة'],
+                    ].map(([k, ty, h]) => (
+                      <SortTh key={k} {...repHp(k, ty)} className="px-4 py-2 text-right text-xs text-gray-500 font-medium whitespace-nowrap">{h}</SortTh>
                     ))}
+                    <th className="px-4 py-2" />
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(r => (
+                  {sortedReport.map(r => (
                     <tr key={r.user_id} className="border-t hover:bg-gray-50">
                       <td className="px-4 py-3 font-medium text-gray-800">{r.user_name || `#${r.user_id}`}</td>
                       <td className="px-4 py-3 font-mono text-xs text-gray-500">{r.person_code || '—'}</td>
@@ -2057,6 +2070,39 @@ function SettlementsTab({ selectedProgram }) {
 // History tab — read-only calculation audit log
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Per-run user summaries; highest incentive first until a header is clicked.
+function UserSummariesTable({ summaries }) {
+  const rows = (Array.isArray(summaries)
+    ? summaries
+    : Object.entries(summaries).map(([uid, total]) => ({ user_id: uid, user_name: `#${uid}`, total }))
+  ).slice().sort((a, b) => Number(b.total) - Number(a.total))
+  const { sorted, headerProps } = useSortableRows(rows, {
+    getValue: (u, k) => (k === 'total' ? Number(u.total) : u[k]),
+  })
+  return (
+    <div className="rounded-xl border border-gray-200 overflow-hidden">
+      <table className="w-full text-xs">
+        <thead className="bg-gray-100">
+          <tr>
+            <SortTh {...headerProps('user_name', 'text')} className="px-3 py-1.5 text-right font-medium text-gray-500">المندوب</SortTh>
+            <SortTh {...headerProps('person_code', 'text')} className="px-3 py-1.5 text-right font-medium text-gray-500">كود المندوب</SortTh>
+            <SortTh {...headerProps('total', 'number')} className="px-3 py-1.5 text-right font-medium text-gray-500">الحوافز</SortTh>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map(u => (
+            <tr key={u.user_id} className="border-t">
+              <td className="px-3 py-1.5 font-medium text-gray-700">{u.user_name || `#${u.user_id}`}</td>
+              <td className="px-3 py-1.5 font-mono text-gray-400">{u.person_code || '—'}</td>
+              <td className="px-3 py-1.5 font-bold text-brand-700 text-left">{fmt(u.total)} ج.م</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function HistoryTab({ selectedProgram }) {
   const [logs, setLogs]         = useState([])
   const [loading, setLoading]   = useState(false)
@@ -2153,29 +2199,7 @@ function HistoryTab({ selectedProgram }) {
                   {log.user_summaries && Object.keys(log.user_summaries).length > 0 && (
                     <div>
                       <div className="text-xs font-semibold text-gray-600 mb-2">ملخص المندوبين</div>
-                      <div className="rounded-xl border border-gray-200 overflow-hidden">
-                        <table className="w-full text-xs">
-                          <thead className="bg-gray-100">
-                            <tr>
-                              <th className="px-3 py-1.5 text-right font-medium text-gray-500">المندوب</th>
-                              <th className="px-3 py-1.5 text-right font-medium text-gray-500">كود المندوب</th>
-                              <th className="px-3 py-1.5 text-right font-medium text-gray-500">الحوافز</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(Array.isArray(log.user_summaries)
-                              ? log.user_summaries
-                              : Object.entries(log.user_summaries).map(([uid, total]) => ({ user_id: uid, user_name: `#${uid}`, total }))
-                            ).sort((a, b) => Number(b.total) - Number(a.total)).map(u => (
-                              <tr key={u.user_id} className="border-t">
-                                <td className="px-3 py-1.5 font-medium text-gray-700">{u.user_name || `#${u.user_id}`}</td>
-                                <td className="px-3 py-1.5 font-mono text-gray-400">{u.person_code || '—'}</td>
-                                <td className="px-3 py-1.5 font-bold text-brand-700 text-left">{fmt(u.total)} ج.م</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                      <UserSummariesTable summaries={log.user_summaries} />
                     </div>
                   )}
                 </div>
@@ -2222,6 +2246,11 @@ function NearExpiryTab({ selectedProgram }) {
   const [reportData, setReportData]     = useState(null)
   const [reportLoading, setReportLoading] = useState(false)
   const [reportErr, setReportErr]       = useState('')
+  const { sorted: stockItems, headerProps: stkHp } = useSortableRows(stockData?.items || [])
+  const { sorted: empRank, headerProps: empHp } = useSortableRows(
+    (reportData?.employee_ranking || []).map((e, i) => ({ ...e, rank: i + 1 })))
+  const { sorted: itemRank, headerProps: irHp } = useSortableRows(
+    (reportData?.item_ranking || []).map((it, i) => ({ ...it, rank: i + 1 })))
 
   const loadStock = async () => {
     setStockLoading(true); setStockErr('')
@@ -2353,17 +2382,17 @@ function NearExpiryTab({ selectedProgram }) {
                       <table className="w-full text-xs">
                         <thead className="bg-gray-50">
                           <tr>
-                            <th className="px-3 py-2 text-right font-medium text-gray-500">الصنف</th>
-                            <th className="px-3 py-2 text-right font-medium text-gray-500">الكود</th>
-                            <th className="px-3 py-2 text-right font-medium text-gray-500">الكمية</th>
-                            <th className="px-3 py-2 text-right font-medium text-gray-500">رقم الدُفعة</th>
-                            <th className="px-3 py-2 text-right font-medium text-gray-500">تاريخ الصلاحية</th>
-                            <th className="px-3 py-2 text-right font-medium text-gray-500">الأيام المتبقية</th>
-                            <th className="px-3 py-2 text-right font-medium text-gray-500">المخزن</th>
+                            <SortTh {...stkHp('item_name', 'text')} className="px-3 py-2 text-right font-medium text-gray-500">الصنف</SortTh>
+                            <SortTh {...stkHp('itemcode', 'text')} className="px-3 py-2 text-right font-medium text-gray-500">الكود</SortTh>
+                            <SortTh {...stkHp('itemqty', 'number')} className="px-3 py-2 text-right font-medium text-gray-500">الكمية</SortTh>
+                            <SortTh {...stkHp('batchno', 'text')} className="px-3 py-2 text-right font-medium text-gray-500">رقم الدُفعة</SortTh>
+                            <SortTh {...stkHp('itemexpirydate', 'date')} className="px-3 py-2 text-right font-medium text-gray-500">تاريخ الصلاحية</SortTh>
+                            <SortTh {...stkHp('days_remaining', 'number')} className="px-3 py-2 text-right font-medium text-gray-500">الأيام المتبقية</SortTh>
+                            <SortTh {...stkHp('storecode', 'text')} className="px-3 py-2 text-right font-medium text-gray-500">المخزن</SortTh>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                          {stockData.items.map((item, idx) => (
+                          {stockItems.map((item, idx) => (
                             <tr key={idx} className="hover:bg-gray-50">
                               <td className="px-3 py-2">{item.item_name}</td>
                               <td className="px-3 py-2 font-mono text-gray-500">{item.itemcode}</td>
@@ -2487,17 +2516,17 @@ function NearExpiryTab({ selectedProgram }) {
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-4 py-2 text-right font-medium text-gray-500">#</th>
-                          <th className="px-4 py-2 text-right font-medium text-gray-500">المندوب</th>
-                          <th className="px-4 py-2 text-right font-medium text-gray-500">كود المندوب</th>
-                          <th className="px-4 py-2 text-right font-medium text-gray-500">إجمالي الحوافز</th>
-                          <th className="px-4 py-2 text-right font-medium text-gray-500">الحركات</th>
+                          <SortTh {...empHp('rank', 'number')} className="px-4 py-2 text-right font-medium text-gray-500">#</SortTh>
+                          <SortTh {...empHp('user_name', 'text')} className="px-4 py-2 text-right font-medium text-gray-500">المندوب</SortTh>
+                          <SortTh {...empHp('person_code', 'text')} className="px-4 py-2 text-right font-medium text-gray-500">كود المندوب</SortTh>
+                          <SortTh {...empHp('total', 'number')} className="px-4 py-2 text-right font-medium text-gray-500">إجمالي الحوافز</SortTh>
+                          <SortTh {...empHp('txn_count', 'number')} className="px-4 py-2 text-right font-medium text-gray-500">الحركات</SortTh>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {reportData.employee_ranking.map((e, i) => (
+                        {empRank.map(e => (
                           <tr key={e.user_id} className="hover:bg-gray-50">
-                            <td className="px-4 py-2 text-gray-400">{i + 1}</td>
+                            <td className="px-4 py-2 text-gray-400">{e.rank}</td>
                             <td className="px-4 py-2 font-medium">{e.user_name}</td>
                             <td className="px-4 py-2 font-mono text-gray-500 text-xs">{e.person_code}</td>
                             <td className="px-4 py-2 font-bold text-green-700">{fmt(e.total)} ج.م</td>
@@ -2520,17 +2549,17 @@ function NearExpiryTab({ selectedProgram }) {
                     <table className="w-full text-xs">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-3 py-2 text-right font-medium text-gray-500">#</th>
-                          <th className="px-3 py-2 text-right font-medium text-gray-500">الصنف</th>
-                          <th className="px-3 py-2 text-right font-medium text-gray-500">الكمية المُباعة</th>
-                          <th className="px-3 py-2 text-right font-medium text-gray-500">إجمالي الحوافز</th>
-                          <th className="px-3 py-2 text-right font-medium text-gray-500">متوسط أيام الصلاحية</th>
+                          <SortTh {...irHp('rank', 'number')} className="px-3 py-2 text-right font-medium text-gray-500">#</SortTh>
+                          <SortTh {...irHp('item_name', 'text')} className="px-3 py-2 text-right font-medium text-gray-500">الصنف</SortTh>
+                          <SortTh {...irHp('qty_sold', 'number')} className="px-3 py-2 text-right font-medium text-gray-500">الكمية المُباعة</SortTh>
+                          <SortTh {...irHp('total_incentive', 'number')} className="px-3 py-2 text-right font-medium text-gray-500">إجمالي الحوافز</SortTh>
+                          <SortTh {...irHp('avg_expiry_days', 'number')} className="px-3 py-2 text-right font-medium text-gray-500">متوسط أيام الصلاحية</SortTh>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {reportData.item_ranking.map((it, i) => (
+                        {itemRank.map(it => (
                           <tr key={it.item_code} className="hover:bg-gray-50">
-                            <td className="px-3 py-2 text-gray-400">{i + 1}</td>
+                            <td className="px-3 py-2 text-gray-400">{it.rank}</td>
                             <td className="px-3 py-2">
                               <div className="font-medium">{it.item_name}</div>
                               <div className="text-gray-400 font-mono text-xs">{it.item_code}</div>
@@ -2622,6 +2651,7 @@ function ROITab({ selectedProgram }) {
   const [data, setData]               = useState(null)
   const [loading, setLoading]         = useState(false)
   const [err, setErr]                 = useState('')
+  const { sorted: roiItems, headerProps: roiHp } = useSortableRows(data?.item_breakdown || [])
 
   const load = async () => {
     if (!selectedProgram) { setErr('اختر برنامجاً أولاً'); return }
@@ -2740,16 +2770,16 @@ function ROITab({ selectedProgram }) {
               <table className="w-full text-xs">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-2 text-right font-medium text-gray-500">الصنف</th>
-                    <th className="px-4 py-2 text-right font-medium text-gray-500">قبل</th>
-                    <th className="px-4 py-2 text-right font-medium text-gray-500">خلال</th>
-                    <th className="px-4 py-2 text-right font-medium text-gray-500">بعد</th>
-                    <th className="px-4 py-2 text-right font-medium text-gray-500">الزيادة</th>
-                    <th className="px-4 py-2 text-right font-medium text-gray-500">الإيراد</th>
+                    <SortTh {...roiHp('item_code', 'text')} className="px-4 py-2 text-right font-medium text-gray-500">الصنف</SortTh>
+                    <SortTh {...roiHp('before_daily_qty', 'number')} className="px-4 py-2 text-right font-medium text-gray-500">قبل</SortTh>
+                    <SortTh {...roiHp('during_daily_qty', 'number')} className="px-4 py-2 text-right font-medium text-gray-500">خلال</SortTh>
+                    <SortTh {...roiHp('after_daily_qty', 'number')} className="px-4 py-2 text-right font-medium text-gray-500">بعد</SortTh>
+                    <SortTh {...roiHp('velocity_uplift', 'number')} className="px-4 py-2 text-right font-medium text-gray-500">الزيادة</SortTh>
+                    <SortTh {...roiHp('during_revenue', 'number')} className="px-4 py-2 text-right font-medium text-gray-500">الإيراد</SortTh>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {data.item_breakdown.map(it => (
+                  {roiItems.map(it => (
                     <tr key={it.item_code} className="hover:bg-gray-50">
                       <td className="px-4 py-2 font-mono text-gray-500">{it.item_code}</td>
                       <td className="px-4 py-2">{it.before_daily_qty}</td>
@@ -2793,6 +2823,10 @@ function SuggestionsTab({ selectedProgram }) {
   const [targetRuleId, setTargetRuleId] = useState('')
   const [adding, setAdding]         = useState(false)
   const [addMsg, setAddMsg]         = useState('')
+  // the server returns its best 50 suggestions (max_results); headers re-order those rows
+  const { sorted: sugItems, headerProps: sugHp } = useSortableRows(data?.items || [], {
+    getValue: (it, k) => (k === 'tags' ? (it.tags || []).map(t => TAG_LABELS[t]?.label || t).join(' ') : it[k]),
+  })
 
   // Load the selected program's rules (so suggestions can be added to one)
   useEffect(() => {
@@ -2911,6 +2945,7 @@ function SuggestionsTab({ selectedProgram }) {
             )}
           </div>
 
+          {data.items.length >= 50 && <div className="px-4 pt-2 text-[11px] text-gray-400">الترتيب يشمل أفضل 50 اقتراح فقط</div>}
           {data.items.length === 0 ? (
             <div className="p-12 text-center text-gray-400">
               لا توجد اقتراحات بالمعايير الحالية
@@ -2925,17 +2960,17 @@ function SuggestionsTab({ selectedProgram }) {
                         checked={selected.size === data.items.length && data.items.length > 0}
                         onChange={toggleAll} />
                     </th>
-                    <th className="px-3 py-2 text-right font-medium text-gray-500">الصنف</th>
-                    <th className="px-3 py-2 text-right font-medium text-gray-500">السبب</th>
-                    <th className="px-3 py-2 text-right font-medium text-gray-500">الصلاحية</th>
-                    <th className="px-3 py-2 text-right font-medium text-gray-500">الكمية قريبة الصلاحية</th>
-                    <th className="px-3 py-2 text-right font-medium text-gray-500">الحركة الشهرية</th>
-                    <th className="px-3 py-2 text-right font-medium text-gray-500">الهامش %</th>
-                    <th className="px-3 py-2 text-right font-medium text-gray-500">السعر</th>
+                    <SortTh {...sugHp('item_name', 'text')} className="px-3 py-2 text-right font-medium text-gray-500">الصنف</SortTh>
+                    <SortTh {...sugHp('tags', 'text')} className="px-3 py-2 text-right font-medium text-gray-500">السبب</SortTh>
+                    <SortTh {...sugHp('expiry_days', 'number')} className="px-3 py-2 text-right font-medium text-gray-500">الصلاحية</SortTh>
+                    <SortTh {...sugHp('expiry_qty', 'number')} className="px-3 py-2 text-right font-medium text-gray-500">الكمية قريبة الصلاحية</SortTh>
+                    <SortTh {...sugHp('monthly_avg', 'number')} className="px-3 py-2 text-right font-medium text-gray-500">الحركة الشهرية</SortTh>
+                    <SortTh {...sugHp('margin_pct', 'number')} className="px-3 py-2 text-right font-medium text-gray-500">الهامش %</SortTh>
+                    <SortTh {...sugHp('pack_price', 'number')} className="px-3 py-2 text-right font-medium text-gray-500">السعر</SortTh>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {data.items.map(item => (
+                  {sugItems.map(item => (
                     <tr key={item.item_code}
                       className={`hover:bg-gray-50 ${selected.has(item.item_code) ? 'bg-brand-50' : ''}`}
                       onClick={() => setSelected(s => {

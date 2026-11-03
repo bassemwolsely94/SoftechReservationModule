@@ -16,11 +16,12 @@ from rest_framework.response import Response
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
-from django.db.models import Count, Q, Avg
+from django.db.models import Count, Q, Avg, Case, When, IntegerField
 
 from .models import CallLog, AddressUpdate, CallLogAttachment, CustomerCase, CaseEvent, CallQualityScore, CallItem
 from core import branch_scope
 from core.errors import public_error
+from core.sort_ordering import NullsLastOrderingFilter, staff_name_key
 from .serializers import (
     CallLogListSerializer, CallLogDetailSerializer, CallLogCreateSerializer,
     AddressUpdateSerializer, AddressUpdateWriteSerializer,
@@ -68,20 +69,23 @@ class CallLogViewSet(viewsets.ModelViewSet):
       - branch staff: own logs only
     """
     permission_classes = [IsAuthenticated, CALLCENTER]
-    filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
+    filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, NullsLastOrderingFilter]
     filterset_fields   = ['direction', 'status', 'purpose', 'handled_by', 'branch', 'ai_sentiment']
     search_fields      = [
         'phone_number', 'caller_name', 'notes', 'summary',
         'customer__name', 'customer__phone',
     ]
-    ordering_fields    = ['called_at', 'duration_seconds', 'quality_score']
+    # sortable grid headers (phone_number is masked for some roles — never an ordering field)
+    ordering_fields    = ['called_at', 'duration_seconds', 'quality_score', 'caller_name', 'purpose', 'status',
+                          'ai_sentiment', 'handled_by_name_key']
     ordering           = ['-called_at']
 
     def get_queryset(self):
         qs = CallLog.objects.select_related(
             'customer', 'handled_by__user', 'branch',
             'reservation', 'followup_task', 'case', 'pbx_session',
-        ).prefetch_related('address_updates', 'attachments', 'items__item')
+        ).prefetch_related('address_updates', 'attachments', 'items__item'
+                           ).annotate(handled_by_name_key=staff_name_key('handled_by'))
 
         # Batch 5: the one branch helper (all-branch roles see all; branch staff their branches)
         return branch_scope.scope(qs, self.request.user)
@@ -181,7 +185,8 @@ class CallLogViewSet(viewsets.ModelViewSet):
         from apps.customers import access as _ca
         if branch_scope.branch_ids(request.user) is not None and len(_ca.digits(phone)) < _ca.MIN_PHONE_DIGITS:
             return Response({'detail': 'اكتب رقم الموبايل كامل.'}, status=400)
-        tail = phone.replace(' ', '')[-9:]
+        from apps.pbx.cdr import lookup_tail
+        tail = lookup_tail(phone)
         result = {
             'phone':             phone,
             'customers':         [],   # summary list — always populated
@@ -198,9 +203,9 @@ class CallLogViewSet(viewsets.ModelViewSet):
             from apps.customers.models import Customer
 
             # All customers sharing this phone (up to 10)
-            customers_qs = Customer.objects.filter(
+            customers_qs = (Customer.objects.filter(
                 Q(phone__endswith=tail) | Q(phone_alt__endswith=tail)
-            ).select_related('preferred_branch').order_by('-created_at')[:10]
+            ).select_related('preferred_branch').order_by('-created_at')[:10]) if tail else []
             customers_qs = list(customers_qs)
 
             # ── Build summary list (always returned — used by picker) ──────────
@@ -385,9 +390,9 @@ class CallLogViewSet(viewsets.ModelViewSet):
             pass
 
         # Recent calls for this number (regardless of which customer is selected)
-        recent = CallLog.objects.filter(
-            phone_number__endswith=tail
-        ).select_related('handled_by__user', 'pbx_session').order_by('-called_at')[:5]
+        recent = (CallLog.objects.filter(phone_number__endswith=tail)
+                  .select_related('handled_by__user', 'pbx_session').order_by('-called_at')[:5]
+                  if tail else CallLog.objects.none())
         result['recent_calls'] = CallLogListSerializer(recent, many=True, context={'request': request}).data
 
         # mask what this user may not see (B-2 per customer; can_see_customer_phone)
@@ -986,10 +991,11 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
     CRUD for CustomerCase with state-machine actions.
     """
     permission_classes = [IsAuthenticated, CALLCENTER]
-    filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
+    filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, NullsLastOrderingFilter]
     filterset_fields   = ['status', 'category', 'priority', 'branch', 'assigned_to']
     search_fields      = ['case_number', 'title', 'description', 'customer__name', 'customer__phone']
-    ordering_fields    = ['created_at', 'updated_at', 'sla_due', 'priority']
+    ordering_fields    = ['created_at', 'updated_at', 'sla_due', 'priority_rank', 'case_number', 'title',
+                          'category', 'status', 'customer__name', 'assigned_to_name_key']
     ordering           = ['-created_at']
 
     def get_queryset(self):
@@ -997,7 +1003,11 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
             'customer', 'branch',
             'opened_by__user', 'assigned_to__user', 'escalated_to__user',
             'demand', 'reservation', 'delivery',
-        ).prefetch_related('events__created_by__user')
+        ).prefetch_related('events__created_by__user').annotate(
+            # urgent > high > normal > low (the raw choice text sorts alphabetically, which means nothing)
+            priority_rank=Case(When(priority='urgent', then=4), When(priority='high', then=3),
+                               When(priority='normal', then=2), default=1, output_field=IntegerField()),
+            assigned_to_name_key=staff_name_key('assigned_to'))
 
         profile = _profile(self.request)
         ids = branch_scope.branch_ids(self.request.user)

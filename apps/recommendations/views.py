@@ -96,6 +96,8 @@ def trigger_engine(request):
 
 # ── FBT list ──────────────────────────────────────────────────────────────────
 
+from core.stable_ordering import StableOrderingFilter
+
 class FBTPairListView(generics.ListAPIView):
     """
     GET /api/recommendations/fbt/
@@ -103,10 +105,11 @@ class FBTPairListView(generics.ListAPIView):
     """
     permission_classes = [IsAuthenticated]
     serializer_class   = FBTPairSerializer
-    filter_backends    = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filter_backends    = [DjangoFilterBackend, filters.SearchFilter, StableOrderingFilter]
     filterset_fields   = ['item_a', 'item_b']
     search_fields      = ['item_a__name', 'item_b__name', 'item_a__softech_id', 'item_b__softech_id']
-    ordering_fields    = ['score', 'confidence', 'co_occurrences', 'lift']
+    ordering_fields    = ['score', 'confidence', 'co_occurrences', 'lift', 'support',
+                          'item_a__name', 'item_b__name']
     ordering           = ['-score']
 
     def get_queryset(self):

@@ -8,6 +8,7 @@ from django.db.models import Sum, Count
 
 from .models import Customer, CustomerNote, CustomerHealthProfile, PurchaseHistory
 from core.errors import public_error
+from core.sort_ordering import NullsLastOrderingFilter
 from rest_framework.exceptions import PermissionDenied
 
 from . import access
@@ -40,12 +41,15 @@ class _CreateNeedsEdit(BasePermission):
 class CustomerViewSet(viewsets.ModelViewSet):
     permission_classes  = [IsAuthenticated, _CreateNeedsEdit]
     # search after ordering: exact text first, the chosen sort within each rank
-    filter_backends     = [DjangoFilterBackend, filters.OrderingFilter, WildcardSearchFilter]
+    filter_backends     = [DjangoFilterBackend, NullsLastOrderingFilter, WildcardSearchFilter]
     filterset_fields    = ['softech_ptclassifcode', 'preferred_branch', 'segment', 'churn_segment']
     search_fields       = ['name', 'phone', 'phone_alt', 'softech_id', 'softech_pic']
+    # sortable grid headers (the phone column is masked — never an ordering field)
     ordering_fields     = ['name', 'created_at', 'updated_at', 'churn_score', 'ltv',
-                           'days_since_last_visit', 'last_visit_date']
+                           'days_since_last_visit', 'last_visit_date', 'segment',
+                           'preferred_branch__name_ar']
     ordering            = ['name']
+    empty_last_fields   = ('segment',)     # blank segment ('' not NULL) sorts last too
 
     def get_queryset(self):
         qs = Customer.objects.select_related(

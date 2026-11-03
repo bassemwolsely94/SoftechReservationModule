@@ -11,6 +11,8 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { financeApi } from '../api/client'
 import RefreshButton from '../components/RefreshButton'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 
@@ -137,6 +139,7 @@ export default function FinanceDashboardPage() {
   const kpi = data || KPI_EMPTY
   const trend = data?.monthly_trend || []
   const branches = data?.branch_snapshots || []
+  const { sorted: sortedBranches, headerProps } = useSortableRows(data?.branch_snapshots)
 
   const MONTHS_AR = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر']
   const YEARS     = Array.from({ length: 5 }, (_, i) => today.getFullYear() - i)
@@ -250,16 +253,16 @@ export default function FinanceDashboardPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="bg-gray-50 text-xs text-gray-500">
-                      <th className="px-3 py-2 text-right">الفرع</th>
-                      <th className="px-3 py-2 text-left">صافي الإيرادات</th>
-                      <th className="px-3 py-2 text-left">إجمالي الربح</th>
-                      <th className="px-3 py-2 text-center">هامش الربح</th>
-                      <th className="px-3 py-2 text-left">صافي الربح</th>
-                      <th className="px-3 py-2 text-center">مكتمل</th>
+                      <SortTh {...headerProps('branch_name')} className="px-3 py-2 text-right">الفرع</SortTh>
+                      <SortTh {...headerProps('net_revenue', 'number')} className="px-3 py-2 text-left">صافي الإيرادات</SortTh>
+                      <SortTh {...headerProps('gross_profit', 'number')} className="px-3 py-2 text-left">إجمالي الربح</SortTh>
+                      <SortTh {...headerProps('gross_margin_pct', 'number')} className="px-3 py-2 text-center">هامش الربح</SortTh>
+                      <SortTh {...headerProps('net_profit', 'number')} className="px-3 py-2 text-left">صافي الربح</SortTh>
+                      <SortTh {...headerProps('is_complete', 'number')} className="px-3 py-2 text-center">مكتمل</SortTh>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {branches.map(snap => (
+                    {sortedBranches.map(snap => (
                       <BranchRow key={snap.id} snap={snap} />
                     ))}
                   </tbody>

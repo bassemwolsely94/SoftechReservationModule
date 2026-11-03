@@ -50,13 +50,15 @@ def _mask_margin(plan, can_see_cost):
     return plan
 
 
-class OfferViewSet(viewsets.ModelViewSet):
+from core.stable_ordering import StableOrderingMixin  # noqa: E402
+
+class OfferViewSet(StableOrderingMixin, viewsets.ModelViewSet):
     queryset = Offer.objects.all().prefetch_related('items', 'categories', 'tags', 'branches')
     serializer_class = OfferSerializer
     permission_classes = [CanManageOffers]
     filterset_fields = ['status', 'offer_type', 'stackable', 'is_clearance']
     search_fields = ['name', 'name_ar']
-    ordering_fields = ['priority', 'name', 'created_at']
+    ordering_fields = ['priority', 'name', 'name_ar', 'offer_type', 'status', 'authorization_source', 'created_at']
 
     def perform_create(self, serializer):
         serializer.save(created_by=_profile(self.request))

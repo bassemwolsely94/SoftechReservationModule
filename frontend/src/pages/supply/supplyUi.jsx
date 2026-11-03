@@ -4,35 +4,36 @@
  * Latin digits throughout (module-wide convention — no Arabic-Indic numerals).
  */
 import { useMemo, useState } from 'react'
+import { guessType, nextSort, sortRows } from '../../hooks/sortCompare'
+import SharedSortTh from '../../components/SortTh'
 
-// ── Sortable tables (owner 2026-10-24: every table in the module sorts on every column) ──
-// useSort(rows, getters): getters = { key: row => value }. Click a header: ascending →
-// descending → back to the original order. Blanks always last; text sorts Arabic-aware.
-const blank = v => v === null || v === undefined || v === '' || (typeof v === 'number' && Number.isNaN(v))
+// ── Sortable tables (owner 2026-10-24 + 2026-11-03: every table sorts on every data column) ──
+// Thin adapter over the shared engine (hooks/sortCompare + components/SortTh), so the /supply tabs sort exactly
+// like the rest of the app: Arabic-aware, blanks always last, stable, header = keyboard-reachable button.
+//   useSort(rows, getters, initial?)  getters = { key: row => value }
+//   <SortTh k="net" {...grid}>صافي</SortTh>                (grid = { sorted, sort, onSort })
+// Click cycle: text A→Z, numbers / dates biggest-first → reversed → back to the original order.
+// `initial` = { key, dir: 1 | -1 | 'asc' | 'desc' } optional starting sort.
 
-export function compareValues(a, b) {
-  const ea = blank(a), eb = blank(b)
-  if (ea || eb) return ea === eb ? 0 : (ea ? 1 : -1)
-  if (typeof a === 'number' && typeof b === 'number') return a - b
-  const na = Number(a), nb = Number(b)
-  if (a !== '' && b !== '' && !Number.isNaN(na) && !Number.isNaN(nb)
-      && typeof a !== 'boolean' && typeof b !== 'boolean') return na - nb
-  return String(a).localeCompare(String(b), 'ar', { numeric: true })
-}
+// A getter may declare its column type: txt(r => r.code) / num(...) / dat(...). Undeclared getters are guessed
+// conservatively over the first 50 non-blank values: JS numbers / booleans -> number, ISO date strings -> date,
+// plain decimal strings ("12.50") -> number, EVERYTHING else (codes, "101 123", names) -> text with natural collation.
+export const typed = (type) => (get) => Object.assign(get, { type })
+export const txt = typed('text')
+export const num = typed('number')
+export const dat = typed('date')
 
 export function useSort(rows, getters, initial = null) {
-  const [sort, setSort] = useState(initial)              // { key, dir: 1 | -1 } | null
-  const onSort = (key) => setSort(s => (!s || s.key !== key) ? { key, dir: 1 }
-    : s.dir === 1 ? { key, dir: -1 } : null)
+  const [sort, setSort] = useState(() => initial
+    ? { key: initial.key, dir: (initial.dir === -1 || initial.dir === 'desc') ? 'desc' : 'asc',
+        type: guessType(rows, getters[initial.key]), step: 1 }
+    : null)
+  const onSort = (key) => setSort(cur => nextSort(cur, key, guessType(rows, getters[key]), null))
   const sorted = useMemo(() => {
     const list = rows || []
     const get = sort && getters[sort.key]
     if (!get) return list
-    return list.map((r, i) => [r, i]).sort((x, y) => {
-      const va = get(x[0]), vb = get(y[0])
-      if (blank(va) !== blank(vb)) return blank(va) ? 1 : -1  // blanks last in BOTH directions
-      return (compareValues(va, vb) * sort.dir) || (x[1] - y[1])
-    }).map(x => x[0])
+    return sortRows(list, sort, (r) => get(r))
   }, [rows, sort]) // eslint-disable-line react-hooks/exhaustive-deps
   return { sorted, sort, onSort }
 }
@@ -40,10 +41,8 @@ export function useSort(rows, getters, initial = null) {
 export function SortTh({ k, sort, onSort, className = '', title, children }) {
   const on = sort?.key === k
   return (
-    <th title={title} onClick={() => onSort(k)} aria-sort={on ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'}
-      className={`cursor-pointer select-none whitespace-nowrap hover:text-primary ${on ? 'text-primary' : ''} ${className}`}>
-      {children}<span className="ms-1 text-[10px] opacity-70">{on ? (sort.dir === 1 ? '▲' : '▼') : '↕'}</span>
-    </th>
+    <SharedSortTh active={on} dir={on ? sort.dir : undefined} onSort={() => onSort(k)}
+                  className={className} title={title}>{children}</SharedSortTh>
   )
 }
 

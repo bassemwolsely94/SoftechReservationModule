@@ -10,6 +10,8 @@ import { useNavigate } from 'react-router-dom'
 import { procurementIntelApi } from '../api/client'
 import RefreshButton from '../components/RefreshButton'
 import useHelpTab from '../help/useHelpTab'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 const fmt  = (n, d = 0) => n == null ? '—' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const pct  = (n, d = 1) => n == null ? '—' : `${Number(n).toFixed(d)}%`
@@ -31,6 +33,10 @@ function OptimizationTab({ days }) {
     setLoading(true)
     procurementIntelApi.optimization({ days }).then(r => setData(r.data)).finally(() => setLoading(false))
   }, [days])
+
+  const { sorted: savingItems, headerProps: svH } = useSortableRows(data?.price_saving_items || [], {
+    getValue: (it, k) => (k === 'item' ? (it.item_name || it.item_code) : it[k]),
+  })
 
   if (loading) return <div className="py-12 text-center text-brand-600 animate-pulse">جارٍ التحميل…</div>
   if (!data) return null
@@ -95,21 +101,22 @@ function OptimizationTab({ days }) {
       {/* Price Saving Opportunities */}
       <div data-tour="purchasing-optimization-savings" className="bg-white border border-gray-200 rounded-xl p-5 overflow-x-auto">
         <h3 className="font-semibold text-blue-700 mb-3">💡 فرص توفير السعر (أصناف بعدة موردين)</h3>
+        <p className="text-[11px] text-gray-400 mb-2">الترتيب بالعناوين على القائمة المعروضة فقط.</p>
         {(data.price_saving_items || []).length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-4">لا توجد فرص مكتشفة</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 text-xs text-gray-500">
-                <th className="text-right pb-2 font-medium">الصنف</th>
-                <th className="text-right pb-2 font-medium">عدد الموردين</th>
-                <th className="text-right pb-2 font-medium">أقل سعر</th>
-                <th className="text-right pb-2 font-medium">أعلى سعر</th>
-                <th className="text-right pb-2 font-medium">فرصة التوفير</th>
+                <SortTh {...svH('item', 'text')} className="text-right pb-2 font-medium">الصنف</SortTh>
+                <SortTh {...svH('supplier_count', 'number')} className="text-right pb-2 font-medium">عدد الموردين</SortTh>
+                <SortTh {...svH('min_price', 'number')} className="text-right pb-2 font-medium">أقل سعر</SortTh>
+                <SortTh {...svH('max_price', 'number')} className="text-right pb-2 font-medium">أعلى سعر</SortTh>
+                <SortTh {...svH('saving_pct', 'number')} className="text-right pb-2 font-medium">فرصة التوفير</SortTh>
               </tr>
             </thead>
             <tbody>
-              {(data.price_saving_items || []).map(item => (
+              {savingItems.map(item => (
                 <tr key={item.item_code} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="py-2">
                     <p className="font-medium text-gray-800">{item.item_name || item.item_code}</p>
@@ -165,7 +172,12 @@ function MappingTab() {
 
   useEffect(() => { load() }, [load])
 
-  const paged = data.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  // all mappings are loaded: sort them ALL, then page (a new sort goes back to page 1)
+  const { sorted: sortedData, sort, headerProps: mH } = useSortableRows(data, {
+    getValue: (m, k) => (k === 'item' ? (m.item_name || m.item_code) : k === 'supplier' ? (m.supplier_name || m.supplier_code) : m[k]),
+  })
+  useEffect(() => { setPage(0) }, [sort])
+  const paged = sortedData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
   const totalPages = Math.ceil(data.length / PAGE_SIZE)
 
   return (
@@ -202,14 +214,14 @@ function MappingTab() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr className="border-b border-gray-200 text-xs text-gray-500">
-              <th className="text-right px-4 py-3 font-medium">الصنف</th>
-              <th className="text-right px-3 py-3 font-medium">المورد</th>
-              <th className="text-right px-3 py-3 font-medium">درجة الثقة</th>
-              <th className="text-right px-3 py-3 font-medium">رئيسي</th>
-              <th className="text-right px-3 py-3 font-medium">مشتريات</th>
-              <th className="text-right px-3 py-3 font-medium">متوسط السعر</th>
-              <th className="text-right px-3 py-3 font-medium">تذبذب%</th>
-              <th className="text-right px-3 py-3 font-medium">آخر شراء</th>
+              <SortTh {...mH('item', 'text')} className="text-right px-4 py-3 font-medium">الصنف</SortTh>
+              <SortTh {...mH('supplier', 'text')} className="text-right px-3 py-3 font-medium">المورد</SortTh>
+              <SortTh {...mH('confidence_score', 'number')} className="text-right px-3 py-3 font-medium">درجة الثقة</SortTh>
+              <SortTh {...mH('is_primary', 'number')} className="text-right px-3 py-3 font-medium">رئيسي</SortTh>
+              <SortTh {...mH('purchase_count', 'number')} className="text-right px-3 py-3 font-medium">مشتريات</SortTh>
+              <SortTh {...mH('avg_price', 'number')} className="text-right px-3 py-3 font-medium">متوسط السعر</SortTh>
+              <SortTh {...mH('price_drift_pct', 'number')} className="text-right px-3 py-3 font-medium">تذبذب%</SortTh>
+              <SortTh {...mH('last_purchase_date', 'date')} className="text-right px-3 py-3 font-medium">آخر شراء</SortTh>
             </tr>
           </thead>
           <tbody>

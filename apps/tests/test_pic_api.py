@@ -94,6 +94,22 @@ class AccessTests(ApiBase):
         self.assertEqual((p['to'], p['data_to'], p['clamped']), (latest.isoformat(), latest.isoformat(), True))
         self.assertIn('period', self.admin_c.get(url('options/')).json())
 
+    def test_thresholds_block(self):
+        # the on-screen explanations quote these; the screen never hard-codes them
+        for path in ('overview/', 'retention/', 'groups/branch/'):
+            t = self.admin_c.get(url(path)).json()['thresholds']
+            self.assertEqual(set(t), {'loyal_months', 'overdue_factor', 'return_hours', 'purchase_days'}, path)
+        t = self.admin_c.get(url('overview/')).json()['thresholds']
+        self.assertEqual((t['loyal_months'], t['overdue_factor'], t['return_hours'], t['purchase_days']), (10, 1.5, 24, 7))
+
+    def test_thresholds_bad_setting_falls_back(self):
+        from unittest import mock
+        with mock.patch('apps.pic_analytics.views.setting', side_effect=ValueError('bad')):
+            r = self.admin_c.get(url('overview/'))
+        self.assertEqual(r.status_code, 200)
+        t = r.json()['thresholds']
+        self.assertEqual((t['loyal_months'], t['overdue_factor'], t['return_hours'], t['purchase_days']), (10, 1.5, 24, 7))
+
     def test_call_tabs_run_to_today(self):
         # calls are mirrored every 10 min, so the call tabs are not held back by the nightly fact build
         from django.utils import timezone
@@ -132,7 +148,7 @@ class AccessTests(ApiBase):
 
     def test_shapes(self):
         r = self.admin_c.get(url('retention/')).json()
-        self.assertEqual(set(r), {'frequency', 'retention', 'cohorts', 'period'})
+        self.assertEqual(set(r), {'frequency', 'retention', 'cohorts', 'period', 'thresholds'})
         self.assertEqual(r['frequency']['loyal_months'], 10)
         self.assertEqual(self.admin_c.get(url('pics/')).json()['count'], 3)
         self.assertEqual(self.admin_c.get(url('groups/branch/')).json()['total']['key'], 'all')
@@ -155,7 +171,7 @@ class AccessTests(ApiBase):
         self.assertEqual(self.admin_c.post(f'{base}numbers/label/',
                                            {'number_id': 99999999, 'label': 'spam'}).status_code, 400)
         self.assertEqual(self.admin_c.post(f'{base}numbers/label/',
-                                           {'phone_key': '1000000020', 'label': 'spam'}).status_code, 400)
+                                           {'phone_key': '01000000020', 'label': 'spam'}).status_code, 400)
 
     def test_linked_number_is_400(self):
         linked = self.call(D(2026, 10, 7), 'N1', 'inbound', 'answered', key='1000000030')
@@ -341,7 +357,7 @@ class ExportTests(ApiBase):
         wb = self.wb(self.get(self.admin_c))
         heads = sheet_headers(wb)
         self.assertEqual(heads['متأخرون عن الشراء'][0], 'PIC')
-        self.assertEqual(heads['صادرة لم يُرد عليها'][0], 'التحويلة')
+        self.assertEqual(heads['صادرة لم يُرد عليها'][0], 'الداخلي')
         pic_heads = heads['العملاء']
         rows = list(wb['العملاء'].iter_rows(min_row=2, values_only=True))
         for col in ('الأصناف', 'القنوات', 'دورة الشراء (ج)', 'الشريحة'):

@@ -6,11 +6,13 @@
  * filter by general classification, Excel export, WhatsApp copy, recovery &
  * auto-detectable flags.
  */
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { purchasingApi } from '../api/client'
 import { wildcardMatch } from '../utils/wildcard'
 import useHelpTab from '../help/useHelpTab'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 const daysBehind = (d) => { if (!d) return null; const ms = Date.now() - new Date(d).getTime(); return Math.max(0, Math.floor(ms / 86400000)) }
 
@@ -87,36 +89,6 @@ const invalidate = (qc) => ['shortage-candidates', 'shortage-confirmed', 'shorta
   'shortage-deltas', 'shortage-medtypes'].forEach(k => qc.invalidateQueries({ queryKey: [k] }))
 // Surface a failed action instead of failing silently (buttons used to give no feedback).
 const onErr = (e) => window.alert(e?.response?.data?.detail || e?.message || 'تعذّر تنفيذ الإجراء — حاول مجددًا.')
-
-// ── Sortable-table helpers (shared) ──────────────────────────────────────────
-function useSort(initKey = '', initDir = 'desc') {
-  const [key, setKey] = useState(initKey)
-  const [dir, setDir] = useState(initDir)
-  const toggle = (k, numeric = true) => {
-    if (k === key) setDir(d => (d === 'asc' ? 'desc' : 'asc'))
-    else { setKey(k); setDir(numeric ? 'desc' : 'asc') }   // numeric → biggest first; text → A→Z
-  }
-  return { key, dir, toggle }
-}
-function applySort(rows, sort, acc) {
-  if (!sort.key || !acc[sort.key]) return rows
-  const f = acc[sort.key]
-  const out = [...rows].sort((a, b) => {
-    const x = f(a), y = f(b)
-    if (typeof x === 'number' && typeof y === 'number') return x - y
-    return String(x ?? '').localeCompare(String(y ?? ''), 'ar')
-  })
-  return sort.dir === 'asc' ? out : out.reverse()
-}
-function Th({ label, k, sort, numeric = true, cls = '' }) {
-  const on = sort.key === k
-  return (
-    <th onClick={() => sort.toggle(k, numeric)}
-      className={`px-3 py-2 font-semibold cursor-pointer select-none whitespace-nowrap hover:text-brand-600 ${cls}`}>
-      {label}<span className={on ? 'text-brand-600' : 'text-gray-300'}>{on ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ' ⇅'}</span>
-    </th>
-  )
-}
 
 // Client-side filter shared by every tab (instant, no refetch).
 const matchFilter = (r, med, q) => {
@@ -311,24 +283,20 @@ function Toolbar({ med, setMed, q, setQ, view }) {
 
 /* ── Candidate table (shared by candidates + delta sections) ─────────────── */
 function CandidateTable({ rows, onConfirm, onDismiss, onNotShortage, confirming }) {
-  const sort = useSort()
-  const sorted = applySort(rows, sort, {
-    tier: r => r.tier, code: r => r.code, name: r => r.name, med: r => r.med_type,
-    lost: r => r.lost_monthly, cov: r => r.coverage, supp: r => r.suppression, sod: r => r.stockout_days,
-  })
+  const { sorted, headerProps: hp } = useSortableRows(rows, {})
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto" data-tour="shortage-market-table">
       <table className="w-full text-sm min-w-[900px]">
         <thead>
           <tr className="text-xs text-gray-500 bg-gray-50 text-right">
-            <Th label="التصنيف" k="tier" sort={sort} numeric={false} />
-            <Th label="الكود" k="code" sort={sort} numeric={false} />
-            <Th label="الصنف" k="name" sort={sort} numeric={false} />
-            <Th label="التصنيف العام" k="med" sort={sort} numeric={false} />
-            <Th label="خسارة/شهر (ج.م)" k="lost" sort={sort} cls="text-center" />
-            <Th label="تغطية" k="cov" sort={sort} cls="text-center" />
-            <Th label="قمع" k="supp" sort={sort} cls="text-center" />
-            <Th label="أيام نفاد" k="sod" sort={sort} cls="text-center" />
+            <SortTh {...hp('tier', 'text')} className="px-3 py-2 font-semibold whitespace-nowrap">التصنيف</SortTh>
+            <SortTh {...hp('code', 'text')} className="px-3 py-2 font-semibold whitespace-nowrap">الكود</SortTh>
+            <SortTh {...hp('name', 'text')} className="px-3 py-2 font-semibold whitespace-nowrap">الصنف</SortTh>
+            <SortTh {...hp('med_type', 'text')} className="px-3 py-2 font-semibold whitespace-nowrap">التصنيف العام</SortTh>
+            <SortTh {...hp('lost_monthly', 'number')} className="px-3 py-2 font-semibold whitespace-nowrap text-center">خسارة/شهر (ج.م)</SortTh>
+            <SortTh {...hp('coverage', 'number')} className="px-3 py-2 font-semibold whitespace-nowrap text-center">تغطية</SortTh>
+            <SortTh {...hp('suppression', 'number')} className="px-3 py-2 font-semibold whitespace-nowrap text-center">قمع</SortTh>
+            <SortTh {...hp('stockout_days', 'number')} className="px-3 py-2 font-semibold whitespace-nowrap text-center">أيام نفاد</SortTh>
             <th className="px-3 py-2 font-semibold">إجراء</th>
           </tr>
         </thead>
@@ -504,11 +472,8 @@ function ConfirmedTab({ med, q }) {
   const { data, isLoading } = useQuery({ queryKey: ['shortage-confirmed', ''],
     queryFn: () => purchasingApi.shortageConfirmed().then(r => r.data) })
   const clear = useMutation({ mutationFn: (id) => purchasingApi.shortageUnflag(id), onSuccess: () => invalidate(qc), onError: onErr })
-  const sort = useSort()
-  const items = applySort((data?.items || []).filter(r => matchFilter(r, med, q)), sort, {
-    code: r => r.code, name: r => r.name, med: r => r.med_type,
-    lost: r => r.lost_monthly, source: r => r.source, waiting: r => r.waiting_customers || 0,
-  })
+  const filtered = useMemo(() => (data?.items || []).filter(r => matchFilter(r, med, q)), [data, med, q])
+  const { sorted: items, headerProps: hp } = useSortableRows(filtered, {})
   return (
     <div>
       <ManualAdd />
@@ -516,10 +481,10 @@ function ConfirmedTab({ med, q }) {
         <table className="w-full text-sm min-w-[760px]">
           <thead>
             <tr className="text-xs text-gray-500 bg-gray-50 text-right">
-              <Th label="الكود" k="code" sort={sort} numeric={false} /><Th label="الصنف" k="name" sort={sort} numeric={false} />
-              <Th label="التصنيف العام" k="med" sort={sort} numeric={false} />
-              <Th label="خسارة/شهر" k="lost" sort={sort} cls="text-center" />
-              <Th label="المصدر" k="source" sort={sort} numeric={false} />
+              <SortTh {...hp('code', 'text')} className="px-3 py-2 font-semibold whitespace-nowrap">الكود</SortTh><SortTh {...hp('name', 'text')} className="px-3 py-2 font-semibold whitespace-nowrap">الصنف</SortTh>
+              <SortTh {...hp('med_type', 'text')} className="px-3 py-2 font-semibold whitespace-nowrap">التصنيف العام</SortTh>
+              <SortTh {...hp('lost_monthly', 'number')} className="px-3 py-2 font-semibold whitespace-nowrap text-center">خسارة/شهر</SortTh>
+              <SortTh {...hp('source', 'text')} className="px-3 py-2 font-semibold whitespace-nowrap">المصدر</SortTh>
               <th className="px-3 py-2 font-semibold">الحالة</th><th className="px-3 py-2 font-semibold">ملاحظة</th>
               <th className="px-3 py-2 font-semibold">إجراء</th>
             </tr>
@@ -564,10 +529,8 @@ function DismissedTab({ med, q }) {
   const { data, isLoading } = useQuery({ queryKey: ['shortage-dismissed'],
     queryFn: () => purchasingApi.shortageDismissed().then(r => r.data) })
   const retrieve = useMutation({ mutationFn: (id) => purchasingApi.shortageRetrieve(id), onSuccess: () => invalidate(qc), onError: onErr })
-  const sort = useSort('', 'asc')
-  const items = applySort((data?.items || []).filter(r => (!reason || r.reason === reason) && matchFilter(r, med, q)), sort, {
-    code: r => r.code, name: r => r.name, reason: r => r.reason_label,
-  })
+  const filtered = useMemo(() => (data?.items || []).filter(r => (!reason || r.reason === reason) && matchFilter(r, med, q)), [data, reason, med, q])
+  const { sorted: items, headerProps: hp } = useSortableRows(filtered, {})
   const reasonCounts = (data?.items || []).reduce((a, r) => { a[r.reason] = (a[r.reason] || 0) + 1; return a }, {})
   return (
     <div>
@@ -581,8 +544,8 @@ function DismissedTab({ med, q }) {
       <table className="w-full text-sm min-w-[820px]">
         <thead>
           <tr className="text-xs text-gray-500 bg-gray-50 text-right">
-            <Th label="الكود" k="code" sort={sort} numeric={false} /><Th label="الصنف" k="name" sort={sort} numeric={false} />
-            <Th label="السبب" k="reason" sort={sort} numeric={false} /><th className="px-3 py-2 font-semibold">المنتج البديل</th>
+            <SortTh {...hp('code', 'text')} className="px-3 py-2 font-semibold whitespace-nowrap">الكود</SortTh><SortTh {...hp('name', 'text')} className="px-3 py-2 font-semibold whitespace-nowrap">الصنف</SortTh>
+            <SortTh {...hp('reason_label', 'text')} className="px-3 py-2 font-semibold whitespace-nowrap">السبب</SortTh><th className="px-3 py-2 font-semibold">المنتج البديل</th>
             <th className="px-3 py-2 font-semibold">ملاحظة</th><th className="px-3 py-2 font-semibold">إجراء</th>
           </tr>
         </thead>

@@ -14,7 +14,8 @@ URL layout (all under /api/hr/):
   shift-assignments/             — assign shifts to staff
 """
 import math
-from django.db.models import Q
+from django.db.models import CharField, F, Q, Value
+from django.db.models.functions import Coalesce, NullIf
 from django.utils import timezone
 from rest_framework import viewsets, mixins, status
 from rest_framework.decorators import action
@@ -22,6 +23,8 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 
+from core.sort_ordering import NullsLastOrderingFilter, staff_name_key
+from core.sort_rank import choice_rank, label_sort, text_or
 from .models import (
     LeaveType, LeaveBalance, LeaveRequest,
     ShiftTemplate, ShiftAssignment,
@@ -133,12 +136,16 @@ class LeaveRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     POST /api/hr/leave-requests/submit/       — create + submit
     POST /api/hr/leave-requests/{id}/cancel/  — cancel
     """
+    # sortable grid: whitelisted ?ordering= (annotations = what the cell shows), NULLs last, pk tiebreak
+    filter_backends    = [NullsLastOrderingFilter]
+    ordering_fields    = ['staff_sort', 'code_sort', 'leave_type__name_ar', 'start_date', 'end_date', 'days_requested', 'status_rank', 'created_at']
     permission_classes = [IsAuthenticated]
     serializer_class   = LeaveRequestSerializer
 
     def get_queryset(self):
         profile = _profile(self.request)
-        qs = LeaveRequest.objects.select_related('staff', 'leave_type', 'approval_request', 'submitted_by')
+        qs = LeaveRequest.objects.select_related('staff', 'leave_type', 'approval_request', 'submitted_by').annotate(
+            **_sort_keys(LeaveRequest))
         if _is_manager(profile):
             if self.request.query_params.get('staff'):
                 qs = qs.filter(staff_id=self.request.query_params['staff'])
@@ -180,6 +187,18 @@ class LeaveRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         return Response({'detail': 'تم الإلغاء.'})
 
 
+def _sort_keys(model, employee_first=False):
+    """Annotations behind the sortable request grids: the identity / code / status exactly as the cell shows
+    them (employee_first = «employee_name, else the staff member», as on advances and expense claims)."""
+    staff = staff_name_key('staff')
+    return dict(
+        staff_sort=Coalesce(NullIf(F('employee_name'), Value('')), staff, output_field=CharField())
+        if employee_first else staff,
+        code_sort=text_or('employee_hr_code', 'staff__softech_user_id', 'staff__softech_username'),
+        status_rank=choice_rank('status', model.STATUS_CHOICES),
+    )
+
+
 # ── Overtime ───────────────────────────────────────────────────────────────────
 
 class OvertimeRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
@@ -189,12 +208,15 @@ class OvertimeRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     GET  /api/hr/overtime/{id}/
     POST /api/hr/overtime/submit/
     """
+    # sortable grid: whitelisted ?ordering= (annotations = what the cell shows), NULLs last, pk tiebreak
+    filter_backends    = [NullsLastOrderingFilter]
+    ordering_fields    = ['staff_sort', 'code_sort', 'date', 'hours', 'status_rank', 'created_at']
     permission_classes = [IsAuthenticated]
     serializer_class   = OvertimeRequestSerializer
 
     def get_queryset(self):
         profile = _profile(self.request)
-        qs = OvertimeRequest.objects.select_related('staff', 'branch', 'submitted_by')
+        qs = OvertimeRequest.objects.select_related('staff', 'branch', 'submitted_by').annotate(**_sort_keys(OvertimeRequest))
         if not _is_manager(profile):
             qs = qs.filter(Q(staff=profile) | Q(submitted_by=profile))
         if self.request.query_params.get('status'):
@@ -237,12 +259,16 @@ class SalaryAdvanceViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     GET  /api/hr/salary-advances/{id}/
     POST /api/hr/salary-advances/submit/
     """
+    # sortable grid: whitelisted ?ordering= (annotations = what the cell shows), NULLs last, pk tiebreak
+    filter_backends    = [NullsLastOrderingFilter]
+    ordering_fields    = ['staff_sort', 'amount', 'repayment_date', 'reason', 'status_rank', 'created_at']
     permission_classes = [IsAuthenticated]
     serializer_class   = SalaryAdvanceSerializer
 
     def get_queryset(self):
         profile = _profile(self.request)
-        qs = SalaryAdvance.objects.select_related('staff', 'submitted_by')
+        qs = SalaryAdvance.objects.select_related('staff', 'submitted_by').annotate(
+            **_sort_keys(SalaryAdvance, employee_first=True))
         if not _is_manager(profile):
             qs = qs.filter(Q(staff=profile) | Q(submitted_by=profile))
         if self.request.query_params.get('status'):
@@ -284,12 +310,17 @@ class ExpenseClaimViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     GET  /api/hr/expense-claims/{id}/
     POST /api/hr/expense-claims/submit/
     """
+    # sortable grid: whitelisted ?ordering= (annotations = what the cell shows), NULLs last, pk tiebreak
+    filter_backends    = [NullsLastOrderingFilter]
+    ordering_fields    = ['staff_sort', 'amount', 'category_sort', 'description', 'status_rank', 'created_at']
     permission_classes = [IsAuthenticated]
     serializer_class   = ExpenseClaimSerializer
 
     def get_queryset(self):
         profile = _profile(self.request)
-        qs = ExpenseClaim.objects.select_related('staff', 'branch', 'submitted_by')
+        qs = ExpenseClaim.objects.select_related('staff', 'branch', 'submitted_by').annotate(
+            category_sort=label_sort('category', ExpenseClaim.CATEGORY_CHOICES),
+            **_sort_keys(ExpenseClaim, employee_first=True))
         if not _is_manager(profile):
             qs = qs.filter(Q(staff=profile) | Q(submitted_by=profile))
         if self.request.query_params.get('status'):
@@ -344,12 +375,17 @@ class PermitViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     POST /api/hr/permits/submit/
     POST /api/hr/permits/{id}/cancel/
     """
+    # sortable grid: whitelisted ?ordering= (annotations = what the cell shows), NULLs last, pk tiebreak
+    filter_backends    = [NullsLastOrderingFilter]
+    ordering_fields    = ['staff_sort', 'code_sort', 'type_sort', 'date', 'time_from', 'destination', 'status_rank', 'created_at']
     permission_classes = [IsAuthenticated]
     serializer_class   = PermitSerializer
 
     def get_queryset(self):
         profile = _profile(self.request)
-        qs = Permit.objects.select_related('staff', 'branch', 'submitted_by')
+        qs = Permit.objects.select_related('staff', 'branch', 'submitted_by').annotate(
+            type_sort=label_sort('permit_type', Permit.TYPE_CHOICES),
+            **_sort_keys(Permit))
         if not _is_manager(profile):
             qs = qs.filter(Q(staff=profile) | Q(submitted_by=profile))
         elif self.request.query_params.get('staff'):

@@ -13,6 +13,8 @@ import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { accessApi, branchesApi } from '../api/client'
 import useGridKeyboard from '../hooks/useGridKeyboard'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 import useHelpTab from '../help/useHelpTab'
 
 const KINDS = [
@@ -76,7 +78,17 @@ export default function DevicesPage() {
 
   const counts = useMemo(() => Object.fromEntries(TABS.map(t => [t.key, all.filter(d => t.match(d.status)).length])), [all])
   const cur = TABS.find(t => t.key === tab)
-  const rows = useMemo(() => all.filter(d => cur.match(d.status)), [all, cur])
+  const filtered = useMemo(() => all.filter(d => cur.match(d.status)), [all, cur])
+  const branchName = useMemo(() => Object.fromEntries(branches.map(b => [b.id, b.name_ar || b.name])), [branches])
+  const kindLabel = useMemo(() => Object.fromEntries(KINDS.map(k => [k.value, k.label])), [])
+  const getSortValue = useCallback((r, k) => (
+    k === 'kind' ? (kindLabel[r.kind] || r.kind)
+      : k === 'branch' ? (r.branch == null ? null : branchName[r.branch])
+        : k === 'users' ? r.users?.[0]?.name
+          : k === 'network' ? (r.last_network_label || r.last_ip)
+            : r[k]
+  ), [kindLabel, branchName])
+  const { sorted: rows, headerProps } = useSortableRows(filtered, { getValue: getSortValue })
 
   const refresh = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['access-devices'] })
@@ -191,13 +203,13 @@ export default function DevicesPage() {
           <thead>
             <tr className="text-muted border-b border-line">
               <th className="p-2 w-8" />
-              <th className="p-2 text-start">الجهاز</th>
-              <th className="p-2 text-start">النوع</th>
-              <th className="p-2 text-start">الفرع</th>
-              <th className="p-2 text-start">المستخدمون</th>
-              <th className="p-2 text-start">الشبكة / IP</th>
-              <th className="p-2 text-start">أول ظهور</th>
-              <th className="p-2 text-start">آخر ظهور</th>
+              <SortTh {...headerProps('name')} className="p-2 text-start">الجهاز</SortTh>
+              <SortTh {...headerProps('kind')} className="p-2 text-start">النوع</SortTh>
+              <SortTh {...headerProps('branch')} className="p-2 text-start">الفرع</SortTh>
+              <SortTh {...headerProps('users')} className="p-2 text-start">المستخدمون</SortTh>
+              <SortTh {...headerProps('network')} className="p-2 text-start">الشبكة / IP</SortTh>
+              <SortTh {...headerProps('first_seen', 'date')} className="p-2 text-start">أول ظهور</SortTh>
+              <SortTh {...headerProps('last_seen', 'date')} className="p-2 text-start">آخر ظهور</SortTh>
               <th className="p-2" />
             </tr>
           </thead>

@@ -20,6 +20,7 @@ from apps.pic_analytics import rules
 from apps.pic_analytics.models import PicDayFact
 from apps.pic_analytics.queries.filters import FilterError
 from apps.pic_analytics.queries.frequency import pic_frequency
+from apps.pic_analytics.queries.ordering import parse_ordering, sort_items
 from apps.pic_analytics.queries.overview import previous_period, retention_pct_for, visitor_set
 from apps.pic_analytics.settings import setting
 
@@ -68,21 +69,40 @@ def _int_param(value, label, lo, hi=None):
     return n
 
 
-def overdue_list(f, access, page=1, page_size=50) -> dict:
-    """PICs that visited in the period but are overdue at f.end, biggest lifetime net first."""
+OVERDUE_ORDERS = {'name', 'last_visit', 'cycle_days', 'days_overdue', 'lifetime_net'}
+
+
+def overdue_list(f, access, page=1, page_size=50, ordering='') -> dict:
+    """PICs that visited in the period but are overdue at f.end, biggest lifetime net first
+    (or `ordering`: one of OVERDUE_ORDERS, `-field` = descending; sorts all rows before paging)."""
     page = _int_param(page, 'الصفحة', 1)
     # page_size=None = everything (internal, Excel export only; the HTTP layer always passes a capped int)
     page_size = None if page_size is None else _int_param(page_size, 'حجم الصفحة', 1, MAX_PAGE_SIZE)
+    okey, odesc = parse_ordering(ordering, OVERDUE_ORDERS)
     freq, overdue = _overdue_map(f, access)
     net = {r['pic']: r['s'] or ZERO for r in access.scope_facts(
         PicDayFact.objects.filter(pic__in=overdue, day__lte=f.end)).values('pic').annotate(s=Sum('net'))}
     overdue.sort(key=lambda p: (-net.get(p, ZERO), p))
-    chunk = overdue if page_size is None else overdue[(page - 1) * page_size: page * page_size]
-    customers = {}
-    for c in Customer.objects.filter(softech_pic__in=chunk).order_by('-pk'):
-        customers[c.softech_pic] = c            # lowest pk wins (iterated last)
-    can_see = cust_access.phones_checker(getattr(access.profile, 'user', None))
     factor = float(setting('pic_overdue_factor'))
+
+    def customers_of(pics):
+        found = {}
+        for c in Customer.objects.filter(softech_pic__in=pics).order_by('-pk'):
+            found[c.softech_pic] = c            # lowest pk wins (iterated last)
+        return found
+
+    customers = {}
+    if okey:
+        if okey == 'name':
+            customers = customers_of(overdue)
+        by = {'last_visit': lambda p: freq[p]['last_visit'], 'cycle_days': lambda p: freq[p]['cycle_days'],
+              'days_overdue': lambda p: (f.end - freq[p]['last_visit']).days - factor * freq[p]['cycle_days'],
+              'lifetime_net': lambda p: net.get(p, ZERO),
+              'name': lambda p: customers[p].name if p in customers else ''}[okey]
+        overdue = sort_items(overdue, by, odesc)
+    chunk = overdue if page_size is None else overdue[(page - 1) * page_size: page * page_size]
+    customers = {**customers, **customers_of([p for p in chunk if p not in customers])}
+    can_see = cust_access.phones_checker(getattr(access.profile, 'user', None))
     rows = []
     for pic in chunk:
         v, cust = freq[pic], customers.get(pic)
@@ -113,7 +133,8 @@ def cohorts(f, access) -> list:
     start = date(first // 12, first % 12 + 1, 1)
     # first sale day of each PIC (chain-wide flag); a branch manager keeps those first seen at their branches
     firsts = access.scope_facts(PicDayFact.objects.filter(
-        is_first_purchase=True, invoices__gt=0, day__gte=start, day__lte=f.end).exclude(pic=''))
+        is_first_purchase=True, invoices__gt=0, day__gte=start, day__lte=f.end).exclude(pic='')
+        .exclude(pic__in=f.excluded()))
     cohort_of = {}
     for pic, day in firsts.values_list('pic', 'day').distinct():
         cohort_of[pic] = _month_index(day)

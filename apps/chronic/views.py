@@ -1,8 +1,9 @@
-from django.db.models import Count, Q
+from django.db.models import Case, Count, Exists, F, IntegerField, OuterRef, Q, Subquery, Value, When
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -243,6 +244,33 @@ class ItemClassifierViewSet(viewsets.ViewSet):
             item._prefetched_ingredient_maps = list(item.ingredient_maps.all())
         return items
 
+    ORDERING_FIELDS = ('name', 'softech_id', 'ingredient', 'classification')
+
+    def _apply_ordering(self, qs, raw):
+        """Sortable grid headers: explicit whitelist, asc/desc, unique pk tiebreak. Unknown → 400."""
+        raw = (raw or '').strip()
+        if not raw:
+            return qs
+        desc = raw.startswith('-')
+        key = raw.lstrip('-')
+        if key not in self.ORDERING_FIELDS:
+            raise ValidationError({'ordering': 'حقل ترتيب غير مدعوم'})
+        maps = ItemIngredientMap.objects.filter(item=OuterRef('pk'))
+        if key == 'ingredient':
+            qs = qs.annotate(_sort=Subquery(
+                maps.order_by('active_ingredient__name').values('active_ingredient__name')[:1]))
+            field = '_sort'
+        elif key == 'classification':      # 2 chronic · 1 classified · 0 not classified
+            qs = qs.annotate(_sort=Case(
+                When(Exists(maps.filter(active_ingredient__is_chronic=True)), then=Value(2)),
+                When(Exists(maps), then=Value(1)),
+                default=Value(0), output_field=IntegerField()))
+            field = '_sort'
+        else:
+            field = key
+        f = F(field).desc(nulls_last=True) if desc else F(field).asc(nulls_last=True)
+        return qs.order_by(f, 'pk')
+
     # ── GET /api/chronic/items/ ───────────────────────────────────────────────
     def list(self, request):
         qs = self._base_qs()
@@ -278,6 +306,8 @@ class ItemClassifierViewSet(viewsets.ViewSet):
         family_code = request.query_params.get('family_code')
         if family_code:
             qs = qs.filter(family_code=family_code)
+
+        qs = self._apply_ordering(qs, request.query_params.get('ordering'))
 
         # ── Pagination ──
         paginator = self.pagination_class()

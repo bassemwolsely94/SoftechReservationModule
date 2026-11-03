@@ -4,6 +4,7 @@ from datetime import date as D, datetime, timedelta
 from django.utils import timezone
 
 from apps.customers.models import Customer
+from apps.pbx.cdr import phone_key
 from apps.pbx.models import AgentExtension, CdrCall
 from apps.pic_analytics.queries.calls import call_center, calls_by_pic, returned_map
 from apps.pic_analytics.queries.overview import overview
@@ -24,7 +25,7 @@ class CallBase(Base):
         cls._n += 1
         return CdrCall.objects.create(
             cdr_key=f'k{cls._n}', unique_id=f'u{cls._n}', call_at=at(day, hh, mm), direction=direction,
-            status=status, is_transfer=transfer, customer_number='0' + key, phone_key=key,
+            status=status, is_transfer=transfer, customer_number=phone_key(key), phone_key=phone_key(key),   # synthetic 10-digit input -> national form
             agent_ext=ext, agent_name='Agent ' + ext, billable_seconds=billable if status == 'answered' else 0,
             pic=pic, pic_match=match or ('single' if pic else 'none'))
 

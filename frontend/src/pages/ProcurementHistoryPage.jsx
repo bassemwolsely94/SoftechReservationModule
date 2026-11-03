@@ -10,11 +10,24 @@ import { useState, useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { procurementIntelApi } from '../api/client'
 import { useProcurementFilters } from '../components/ProcurementFilters'
+import useServerSort from '../hooks/useServerSort'
+import SortTh from '../components/SortTh'
 
 const RETURN_TYPES = [
   { code: 'expiry', label: 'تالف / منتهي' },
   { code: 'normal', label: 'مرتجع عادي' },
 ]
+
+// column header -> server `ordering` key (= apps.procurement.views._HIST_ORDER_FIELDS)
+const COLS = [
+  ['التاريخ', 'doc_date', 'date'], ['رقم الفاتورة', 'doc_number', 'text'], ['الفرع', 'branch_code', 'text'],
+  ['المورد', 'supplier_code', 'text'], ['فئة المورد', 'supplier_category', 'text'], ['كود الصنف', 'item_code', 'text'],
+  ['الصنف', 'item_name', 'text'], ['اتجاه', 'is_return', 'number'], ['كمية', 'net_qty', 'number'],
+  ['بونص', 'bonus_qty', 'number'], ['سعر الوحدة', 'unit_price', 'number'], ['التكلفة الفعلية', 'effective_cost', 'number'],
+  ['القيمة الصافية', 'net_value', 'number'], ['الهامش%', 'margin_pct', 'number'], ['ضريبة', 'vat_value', 'number'],
+  ['FOC', 'is_foc', 'number'], ['نوع المرتجع', 'return_type', 'text'],
+]
+const SORT_KEYS = COLS.map(c => c[1])
 
 const ORDERINGS = [
   { value: '-doc_date',       label: 'التاريخ (أحدث أولاً)' },
@@ -72,6 +85,13 @@ export default function ProcurementHistoryPage() {
 
   const set = useCallback((name, value) => setFilters(f => ({ ...f, [name]: value })), [])
   const onInput = useCallback(e => set(e.target.name, e.target.value), [set])
+
+  // header click = server ordering (all matching rows, up to the 1,000 cap); keeps the dropdown in step
+  const setOrdering = useCallback(o => {
+    const ordering = o || '-doc_date'
+    setFilters(f => ({ ...f, ordering })); setApplied(a => ({ ...a, ordering }))
+  }, [])
+  const { headerProps } = useServerSort(applied.ordering, setOrdering, { allowed: SORT_KEYS, defaultOrdering: '-doc_date' })
 
   const handleSearch = useCallback(() => setApplied({ ...filters }), [filters])
   const handleReset  = useCallback(() => { setFilters(EMPTY); setApplied(EMPTY) }, [])
@@ -146,6 +166,7 @@ export default function ProcurementHistoryPage() {
             <input name="buyer_code" value={filters.buyer_code} onChange={onInput} placeholder="اختياري" className="input-field w-full text-sm" /></div>
           <div><label className="text-xs text-gray-500 block mb-1">الترتيب</label>
             <select name="ordering" value={filters.ordering} onChange={onInput} className="input-field w-full text-sm">
+              {!ORDERINGS.some(o => o.value === filters.ordering) && <option value={filters.ordering}>حسب عمود الجدول</option>}
               {ORDERINGS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select></div>
         </div>
@@ -215,10 +236,8 @@ export default function ProcurementHistoryPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  {['التاريخ', 'رقم الفاتورة', 'الفرع', 'المورد', 'فئة المورد', 'كود الصنف', 'الصنف',
-                    'اتجاه', 'كمية', 'بونص', 'سعر الوحدة', 'التكلفة الفعلية', 'القيمة الصافية',
-                    'الهامش%', 'ضريبة', 'FOC', 'نوع المرتجع'].map(h => (
-                    <th key={h} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-600 whitespace-nowrap">{h}</th>
+                  {COLS.map(([h, k, t]) => (
+                    <SortTh key={h} {...headerProps(k, t)} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-600 whitespace-nowrap">{h}</SortTh>
                   ))}
                 </tr>
               </thead>

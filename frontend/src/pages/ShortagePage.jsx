@@ -20,6 +20,8 @@ import useAuthStore from '../store/authStore'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import ItemSearchInput from '../components/ItemSearchInput'
 import useGridKeyboard from '../hooks/useGridKeyboard'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 import { createWorker } from 'tesseract.js'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
@@ -1527,6 +1529,10 @@ function AggregateView({ branches, onClose }) {
   const [dateFrom,   setDateFrom]   = useState('')
   const [dateTo,     setDateTo]     = useState('')
   const [exporting,  setExporting]  = useState(false)
+  // status column sorts by its label order: unmatched, partial, confirmed
+  const { sorted: aggRows, headerProps: agH } = useSortableRows(data, {
+    getValue: (r, k) => (k === 'status' ? (r.unmatched ? 0 : r.confirmed ? 2 : 1) : r[k]),
+  })
 
   const load = async () => {
     setLoading(true)
@@ -1620,15 +1626,15 @@ function AggregateView({ branches, onClose }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-2.5 text-right font-semibold text-gray-700">الصنف</th>
-                    <th className="px-4 py-2.5 text-center font-semibold text-gray-700 w-20">الكمية</th>
+                    <SortTh {...agH('item_name', 'text')} className="px-4 py-2.5 text-right font-semibold text-gray-700">الصنف</SortTh>
+                    <SortTh {...agH('total_qty', 'number')} className="px-4 py-2.5 text-center font-semibold text-gray-700 w-20">الكمية</SortTh>
                     <th className="px-4 py-2.5 text-right font-semibold text-gray-700">توزيع الفروع</th>
                     <th className="px-4 py-2.5 text-center font-semibold text-gray-700 w-24">المصادر</th>
-                    <th className="px-4 py-2.5 text-center font-semibold text-gray-700 w-20">الحالة</th>
+                    <SortTh {...agH('status', 'number')} className="px-4 py-2.5 text-center font-semibold text-gray-700 w-20">الحالة</SortTh>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.map((row, i) => (
+                  {aggRows.map((row, i) => (
                     <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? '' : 'bg-gray-50/50'}`}>
                       <td className="px-4 py-2.5">
                         <div className="font-medium text-gray-900">{row.item_name}</div>

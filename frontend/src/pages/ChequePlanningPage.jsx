@@ -10,6 +10,8 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { chequesApi, branchesApi } from '../api/client'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const PLAN_STATUS = {
@@ -517,6 +519,30 @@ function InstalmentRow({ inst, planId, planStatus }) {
   )
 }
 
+// ── Instalments table (sortable; the schedule order stays until a header is clicked) ──
+function InstalmentsTable({ plan }) {
+  const { sorted, headerProps } = useSortableRows(plan.instalments)
+  return (
+    <table className="w-full text-sm" dir="rtl">
+      <thead className="bg-gray-50 text-xs text-gray-600">
+        <tr>
+          <SortTh {...headerProps('instalment_no', 'number')} className="px-3 py-2 text-center">#</SortTh>
+          <SortTh {...headerProps('due_date', 'date')} className="px-3 py-2 text-right">تاريخ الاستحقاق</SortTh>
+          <SortTh {...headerProps('amount', 'number')} className="px-3 py-2 text-right">المبلغ</SortTh>
+          <SortTh {...headerProps('cheque_number')} className="px-3 py-2 text-right">رقم الشيك</SortTh>
+          <SortTh {...headerProps('status')} className="px-3 py-2 text-right">الحالة</SortTh>
+          <th className="px-3 py-2" />
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.map(inst => (
+          <InstalmentRow key={inst.id} inst={inst} planId={plan.id} planStatus={plan.status} />
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
 // ── Plan detail ───────────────────────────────────────────────────────────────
 function PlanDetail({ planId, onClose }) {
   const qc = useQueryClient()
@@ -660,28 +686,7 @@ function PlanDetail({ planId, onClose }) {
         <div data-tour="finance-cheques-schedule">
           <h3 className="text-sm font-semibold text-gray-700 mb-2">جدول الشيكات</h3>
           <div data-tour="finance-cheques-schedule" className="border border-gray-200 rounded-lg overflow-x-auto">
-            <table className="w-full text-sm" dir="rtl">
-              <thead className="bg-gray-50 text-xs text-gray-600">
-                <tr>
-                  <th className="px-3 py-2 text-center">#</th>
-                  <th className="px-3 py-2 text-right">تاريخ الاستحقاق</th>
-                  <th className="px-3 py-2 text-right">المبلغ</th>
-                  <th className="px-3 py-2 text-right">رقم الشيك</th>
-                  <th className="px-3 py-2 text-right">الحالة</th>
-                  <th className="px-3 py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {(plan.instalments || []).map(inst => (
-                  <InstalmentRow
-                    key={inst.id}
-                    inst={inst}
-                    planId={plan.id}
-                    planStatus={plan.status}
-                  />
-                ))}
-              </tbody>
-            </table>
+            <InstalmentsTable plan={plan} />
           </div>
         </div>
       </div>

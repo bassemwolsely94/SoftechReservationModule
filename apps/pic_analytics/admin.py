@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import PhoneLabel, PicAnalyticsAccess, PicDayFact, PicRollup
+from .models import PhoneLabel, PicAnalyticsAccess, PicDayFact, PicExclusion, PicRollup
 
 
 class _ReadOnly(admin.ModelAdmin):
@@ -36,3 +36,9 @@ class PicAnalyticsAccessAdmin(_ReadOnly):
 class PhoneLabelAdmin(_ReadOnly):
     list_display = ('phone_key', 'label', 'created_by', 'created_at')
     search_fields = ('=phone_key',)
+
+
+@admin.register(PicExclusion)
+class PicExclusionAdmin(_ReadOnly):
+    list_display = ('pic', 'reason', 'added_by', 'added_at', 'removed_at')
+    search_fields = ('=pic',)

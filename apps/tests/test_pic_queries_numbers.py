@@ -20,7 +20,7 @@ class NewNumbersTests(CallBase):
         self.assertEqual(res['count'], 1)
         r = res['rows'][0]
         self.assertEqual((r['phone_key'], r['calls_in'], r['calls_out'], r['answered'], r['missed']),
-                         ('1000000050', 2, 1, 2, 1))
+                         ('01000000050', 2, 1, 2, 1))
         self.assertEqual((r['talk_seconds'], r['last_agent']['agent_ext']), (120, '11'))
         self.assertIn('•', r['number'])
         self.assertLess(r['first_call'], r['last_call'])
@@ -33,15 +33,15 @@ class NewNumbersTests(CallBase):
     def test_labelled_numbers_excluded(self):
         self.call(D(2026, 10, 5), '', key='1000000052')
         self.call(D(2026, 10, 5), '', key='1000000053')
-        label_number('1000000052', 'staff', '', self.admin_p)
+        label_number('01000000052', 'staff', '', self.admin_p)
         res = new_numbers(self.flt(), self.mgmt, 1)
-        self.assertEqual([r['phone_key'] for r in res['rows']], ['1000000053'])
+        self.assertEqual([r['phone_key'] for r in res['rows']], ['01000000053'])
 
     def test_mobile_vs_landline(self):
         self.call(D(2026, 10, 5), '', key='1000000054')
         self.call(D(2026, 10, 5), '', key='23456789')
         kinds = {r['phone_key']: r['kind'] for r in new_numbers(self.flt(), self.mgmt, 1)['rows']}
-        self.assertEqual(kinds, {'1000000054': 'mobile', '23456789': 'landline'})
+        self.assertEqual(kinds, {'01000000054': 'mobile', '0223456789': 'landline'})
 
     def test_management_only(self):
         with self.assertRaises(PermissionError):
@@ -85,10 +85,10 @@ class ConversionTests(CallBase):
 class LabelTests(CallBase):
 
     def test_label_audited(self):
-        pl = label_number('1000000070', 'supplier', 'مورد أدوية', self.admin_p)
+        pl = label_number('01000000070', 'supplier', 'مورد أدوية', self.admin_p)
         self.assertEqual((pl.label, pl.created_by), ('supplier', self.admin_p))
-        label_number('1000000070', 'spam', '', self.admin_p)
-        self.assertEqual(PhoneLabel.objects.filter(phone_key='1000000070').count(), 1)
+        label_number('01000000070', 'spam', '', self.admin_p)
+        self.assertEqual(PhoneLabel.objects.filter(phone_key='01000000070').count(), 1)
         logs = list(AuditLog.objects.filter(action='pic_phone_labelled').order_by('id'))
         self.assertEqual(len(logs), 2)
         self.assertEqual(logs[1].old_data['label'], 'supplier')
@@ -96,7 +96,7 @@ class LabelTests(CallBase):
 
     def test_label_validation(self):
         with self.assertRaises(ValueError):
-            label_number('1000000070', 'bogus', '', self.admin_p)
+            label_number('01000000070', 'bogus', '', self.admin_p)
         with self.assertRaises(ValueError):
             label_number('', 'staff', '', self.admin_p)
         with self.assertRaises(ValueError):

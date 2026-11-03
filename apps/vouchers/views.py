@@ -15,6 +15,7 @@ import io
 import logging
 
 import qrcode
+from core.sort_ordering import explicit_order_by
 from django.db import transaction
 from django.db.models import F, Sum, Count, Q
 from django.utils import timezone
@@ -120,6 +121,9 @@ class VoucherViewSet(viewsets.ModelViewSet):
       POST /api/vouchers/documents/{ref}/whatsapp/ — WhatsApp share message
     """
     permission_classes = [IsAuthenticated, VOUCHERS]
+    # filtering/search/ordering are done by get_queryset (own whitelist); DRF's default OrderingFilter would
+    # re-order by any serializer field with NULLs first
+    filter_backends    = []
 
     def get_queryset(self):
         qs = Voucher.objects.select_related(
@@ -147,7 +151,16 @@ class VoucherViewSet(viewsets.ModelViewSet):
         if search:
             qs = qs.filter(Q(code__icontains=search) | Q(title__icontains=search))
 
+        if self.action == 'list':
+            # sortable grid headers: whitelisted, NULLs last, unique pk tiebreak (a 400 on anything else)
+            return qs.order_by(*explicit_order_by(p.get('ordering'), self.LIST_ORDERINGS, ('-created_at', 'pk')))
         return qs.order_by('-created_at')
+
+    LIST_ORDERINGS = {
+        'code': 'code', 'title': 'title', 'voucher_category': 'voucher_category', 'voucher_type': 'voucher_type',
+        'times_used': 'times_used', 'valid_from': 'valid_from', 'valid_until': 'valid_until', 'status': 'status',
+        'created_at': 'created_at',
+    }
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):

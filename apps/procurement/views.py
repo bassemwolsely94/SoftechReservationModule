@@ -904,14 +904,24 @@ def apply_history_filters(qs, p):
     return qs
 
 
-_HIST_ORDERINGS = {
-    'doc_date', '-doc_date',
-    'net_value', '-net_value',
-    'margin_pct', '-margin_pct',
-    'effective_cost', '-effective_cost',
-    'vat_value', '-vat_value',
-    'bonus_qty', '-bonus_qty',
+# ordering key (what the grid sends; `-` = desc) -> model field. Explicit whitelist: nothing else orders.
+_HIST_ORDER_FIELDS = {
+    'doc_date': 'doc_date', 'doc_number': 'doc_number', 'branch_code': 'branch_code',
+    'supplier_code': 'supplier_code', 'supplier_category': 'supplier_category',
+    'item_code': 'item_code', 'item_name': 'item__name', 'is_return': 'is_return',
+    'net_qty': 'net_qty', 'bonus_qty': 'bonus_qty', 'unit_price': 'unit_price',
+    'effective_cost': 'effective_cost', 'net_value': 'net_value', 'margin_pct': 'margin_pct',
+    'vat_value': 'vat_value', 'is_foc': 'is_foc', 'return_type': 'return_type',
 }
+_HIST_ORDERINGS = set(_HIST_ORDER_FIELDS) | {'-' + k for k in _HIST_ORDER_FIELDS}
+
+
+def history_order_by(raw):
+    """order_by() args for the history ?ordering= value; unknown -> newest first. `id` breaks ties."""
+    if raw in _HIST_ORDERINGS:
+        field = _HIST_ORDER_FIELDS[raw.lstrip('-')]
+        return (('-' if raw.startswith('-') else '') + field, 'id')
+    return ('-doc_date', 'id')
 
 
 # ── v2/v3: Purchase History (enhanced, with SOFTECH + range filters) ──────────
@@ -940,8 +950,7 @@ class PurchaseHistoryView(generics.ListAPIView):
             self.request.query_params,
         )
         ordering = self.request.query_params.get('ordering', '-doc_date')
-        if ordering in _HIST_ORDERINGS:
-            qs = qs.order_by(ordering)
+        qs = qs.order_by(*history_order_by(ordering))
         return qs[:1000]
 
 
@@ -1071,14 +1080,11 @@ class SupplierSegmentationListView(generics.ListAPIView):
             qs = qs.filter(purchase_value_365d__gte=min_val)
 
         ordering = self.request.query_params.get('ordering', '-purchase_value_365d')
-        allowed  = {
-            'purchase_value_365d', '-purchase_value_365d',
-            'supplier_category', '-supplier_category',
-            'foc_rate_pct', '-foc_rate_pct',
-            'return_pct', '-return_pct',
-        }
+        fields   = ('purchase_value_365d', 'supplier_category', 'foc_rate_pct', 'return_pct', 'supplier_code',
+                    'supplier_name', 'ptcode', 'ptclassifcode', 'invoice_count_365d', 'manual_override')
+        allowed  = set(fields) | {'-' + f for f in fields}
         if ordering in allowed:
-            qs = qs.order_by(ordering)
+            qs = qs.order_by(ordering, 'supplier_code')
 
         return qs
 
