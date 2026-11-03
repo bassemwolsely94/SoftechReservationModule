@@ -26,14 +26,16 @@
 
 ## Plan 2 contract (what this plan assumes Plan 2 provides)
 
-Confirm these against Plan 2 as merged before Task 1; adjust only `gl/plan2_adapter.py` if names differ.
+Confirmed by Plan 2 (`docs/superpowers/plans/2026-11-04-finance-gl-drafting.md`, commit f909702d); re-check against Plan 2 as merged before Task 1 and adjust only `gl/plan2_adapter.py` if anything moved.
 
-| Name | Used for | Assumed shape |
+| Name | Used for | Shape (per Plan 2) |
 |---|---|---|
-| `GLParty` | sub-ledger names, supplier ↔ A/P recon link | `code` (finance party code, = `LedgerLine.party_code`), `party_type`, `name`, `softech_personcode` (blank if none), `is_confirmed` |
-| `SourceException` | close checklist; late corrections | `status` (open/resolved/…), a date of the source document, `kind`; for a change to a document whose entry is in a closed month: `kind='closed_period_change'`, FK to the original `LedgerEntry`, and the re-drafted lines as JSON in `save_draft` line-dict format |
-| drafting job | must not post into a non-open month | calls `gl.periods.accepts_postings(entry_date)` (Task 2) before creating/replacing drafts; on `False` for a changed source it raises the `closed_period_change` exception above instead of reversing |
+| `GLParty` | sub-ledger names, supplier ↔ A/P recon link | `code` (= `LedgerLine.party_code`), `party_type`, `name`, `softech_personcode` (blank if none), `status` + property `is_confirmed` |
+| `SourceException` | close checklist; late corrections | `kind` (incl. `closed_period_change`), `source_date`, `status` `open|resolved|ignored`, `original_entry` FK `LedgerEntry` (PROTECT; **null** when a brand-new document lands in a non-accepting month), `proposed_lines` JSON in `save_draft` line-dict format |
+| drafting job | must not post into a non-open month | calls `gl.periods.accepts_postings(entry_date)` before any create/replace/reverse (Plan 2 ships a local fallback with the same contract — month missing or `open` — which Task 2 replaces); on `False` it raises `closed_period_change` and never reverses |
 | `PostingRule` | not used here | — |
+
+Plan 2 adds no `GLAccount.feed`; Task 1 adds it. Plan 2's source verification (shared note `gl-plan2-source-verification.md`): branch cash sales reproduce finance's 6002 within 0–1.7 %; card, purchase returns (5101) and VAT do not yet — Task 4 Step 1 sets `blocks_close=False` on any check whose SOFTECH side does not reproduce finance's figure.
 
 ## Review Focus
 
@@ -87,7 +89,7 @@ Confirm these against Plan 2 as merged before Task 1; adjust only `gl/plan2_adap
   - `ClosingStockStore(snapshot FK CASCADE related_name='stores', store_code, store_name, branch FK null, included bool, rows int, value Decimal(18,2))`.
   - `GLSoftechCheck(key unique, label, kind movement|balance, account_codes JSON list, group_names JSON list, source sales|purchases|stock_at_cost|expenses|supplier_balance, sign debit|credit, per_party bool, blocks_close bool=True, tolerance Decimal(18,2)=1.00, is_active bool, order)`. Seeded by Task 4's data migration.
   - `GLComparisonLine(period FK, check FK GLSoftechCheck, branch FK null, party_code blank, ledger_amount, softech_amount, difference Decimal(18,2), computed_at, explanation text blank, explained_by FK null, explained_at null, explained_difference Decimal(18,2) null)`; unique `(period, check, branch, party_code)`. Property `needs_explanation = abs(difference) > check.tolerance and (explanation == '' or explained_difference != difference)`.
-  - `plan2_adapter`: `party_names(codes: list[str]) -> dict[str, str]`, `party_personcodes(codes) -> dict[str, str]` (code → SOFTECH personcode, confirmed parties only), `open_exception_count(date_from, date_to) -> int`, `closed_period_change(exception_id) -> tuple[LedgerEntry, list[dict]]`, `mark_exception_resolved(exception_id, *, user, entry)`.
+  - `plan2_adapter`: `party_names(codes: list[str]) -> dict[str, str]`, `party_personcodes(codes) -> dict[str, str]` (code → SOFTECH personcode, confirmed parties only), `open_exception_count(date_from, date_to) -> int` (status `open`, `source_date` in range), `closed_period_change(exception_id) -> tuple[LedgerEntry | None, date, list[dict]]` (`original_entry`, `source_date`, `proposed_lines`), `mark_exception_resolved(exception_id, *, user, entry)`.
 
 - [ ] **Step 1: Write the failing tests** — `test_comparison_line_unique_per_period_check_branch_party`, `test_needs_explanation_when_difference_changes_after_explaining`, `test_account_feed_defaults_manual`, `test_entry_corrects_protects_original` (deleting the original raises `ProtectedError`), `test_period_closing_stock_link`.
 - [ ] **Step 2: Run** `python manage.py test apps.tests.test_gl_close_models` — Expected: FAIL (import error).
@@ -112,6 +114,7 @@ Confirm these against Plan 2 as merged before Task 1; adjust only `gl/plan2_adap
   - `ledger.reverse(...)` — when the original's period is not open: if `entry_date` is None, the reversal is dated `first_open_period_after(original.entry_date).period_start` and gets `corrects=original`; an explicit `entry_date` in a non-open period still raises `closed_period`.
   - `effective_lines(original: LedgerEntry) -> dict[tuple[account_code, branch_id, party_code], Decimal]` — signed net (debit − credit) of the original plus every approved entry with `corrects=original`.
   - `post_late_correction(original_id: int, new_lines: list[dict], *, user, reason: str, exception_id: int | None = None) -> LedgerEntry` — draft dated `first_open_period_after(original.entry_date).period_start`, `book=original.book`, `source_type=original.source_type`, `source_key=f'{original.source_key}#corr:{YYYY-MM of correction date}:{n}'` (n = count of existing corrections + 1), `corrects=original`, description «تصحيح قيد <number> — <reason>». Lines = `new_lines` aggregated by (account, branch, party) minus `effective_lines(original)`; zero nets dropped; positive net → debit, negative → credit. All nets zero → `LedgerError('nothing_to_correct')`. Refuses if the original's period is open (`LedgerError('period_open')` — use normal re-drafting there). With `exception_id`, calls `mark_exception_resolved` after the draft is saved. Audited `gl_late_correction_drafted`.
+  - `post_late_document(exception_id: int, *, user) -> LedgerEntry` — for a `closed_period_change` exception with **no** `original_entry` (a brand-new SOFTECH document in a closed month): a draft of `proposed_lines` as-is, dated `first_open_period_after(source_date).period_start`, `source_key` = the exception's source key, description noting the original document date; resolves the exception. With an `original_entry`, the API calls `post_late_correction` instead.
 
 - [ ] **Step 1: Write the failing tests** —
   - `test_accepts_postings_false_for_closing_and_closed`
@@ -123,6 +126,7 @@ Confirm these against Plan 2 as merged before Task 1; adjust only `gl/plan2_adap
   - `test_correction_refused_when_original_period_open`
   - `test_nothing_to_correct`
   - `test_correction_resolves_exception` (adapter mocked)
+  - `test_new_document_in_closed_month_drafted_in_first_open_month` (exception without `original_entry`)
 - [ ] **Step 2: Run** `python manage.py test apps.tests.test_gl_corrections apps.tests.test_gl_ledger` — Expected: new tests FAIL, Plan 1's ledger tests still PASS.
 - [ ] **Step 3: Implement** `periods.py`, `corrections.py` and the two `ledger.py` changes.
 - [ ] **Step 4: Run** the same command — Expected: all PASS.
@@ -324,6 +328,7 @@ Confirm these against Plan 2 as merged before Task 1; adjust only `gl/plan2_adap
   | `GET/PATCH compare/checks/` | view / edit | edit: tolerance, accounts, groups, blocks_close, is_active; audited |
   | `GET subledgers/{kind}/?from&to` · `GET subledgers/suppliers-vs-ap/?as_of` | view | `?format=xlsx` needs export |
   | `POST corrections/ {original_id, lines, reason, exception_id?}` | create | `post_late_correction` |
+  | `POST corrections/from-exception/ {exception_id, reason}` | create | `original_entry` set → `post_late_correction` with `proposed_lines`; else `post_late_document` |
   | `POST manual-import/preview/` · `POST manual-import/ {include_mixed}` (multipart) | create | upload is size/type checked with the existing upload helper in `core/` |
   | `POST validation/` (multipart, `through`) | view + export | returns the xlsx |
   | `GET closing-stock-stores/` · `PATCH closing-stock-stores/` | view / edit | the `gl_closing_stock_stores` setting with defaults filled in; audited |
