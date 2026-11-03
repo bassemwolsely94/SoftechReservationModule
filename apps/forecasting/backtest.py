@@ -14,6 +14,14 @@ Accumulate errors → per (metric, model):
 Winner per metric = lowest WAPE.
 
 Factors: from a ForecastScenario if given, else ForecastEngine.DEFAULT_FACTORS.
+
+Horizon accuracy (2026-11-03) — `horizon_accuracy(...)`, stored on the run: Model B
+forecast h = 1..3 months ahead (months between the last complete month and the target
+projected by the same blend), chain level, three seasonality variants, each using ONLY
+data available at the forecast date (point-in-time seasonality index):
+    b          — no seasonality (what the engine projects with)
+    b_season   — blend × S[target]  (Model B when reference seasonality is applied)
+    b_deseason — (w_lm·LM/S[LM] + w_pm·PM/S[PM])·S[target] + w_yoy·base·(1+bench)
 """
 from decimal import Decimal
 from math import sqrt
@@ -53,12 +61,18 @@ class BacktestService:
         return val
 
     def _testable_months(self, metric):
-        """Months M with base(M-12), LM(M-1), PM(M-2) and actual(M) all present."""
+        """Months M with base(M-12), LM(M-1), PM(M-2) and actual(M) all present. The running
+        month is never a test month — its actual is only a few days (scored it as a ~95% miss
+        and pushed B's WAPE from ~6% to ~15%)."""
+        from apps.forecasting.engine import current_ym
         from apps.forecasting.models import KpiActualRollup
         have = set(KpiActualRollup.objects.filter(metric=metric)
                    .values_list('year', 'month').distinct())
+        cur = current_ym()
         out = []
         for (y, m) in sorted(have):
+            if (y, m) >= cur:
+                continue
             need = [(y, m), _shift_month(y, m, -1), _shift_month(y, m, -2), _shift_month(y, m, -12)]
             if all((ny, nm) in have for (ny, nm) in need):
                 out.append((y, m))
@@ -82,7 +96,9 @@ class BacktestService:
         scen_factors = {}
         if scenario:
             ForecastEngine.ensure_factors(scenario)
-            scen_factors = {f.metric: f for f in ForecastFactor.objects.filter(scenario=scenario)}
+            scen_factors = {f.metric: {'growth_goal': f.growth_goal, 'w_lm': f.w_lm, 'w_pm': f.w_pm,
+                                       'w_yoy': f.w_yoy, 'seasonality_index': f.seasonality_index}
+                            for f in ForecastFactor.objects.filter(scenario=scenario)}
 
         # window bounds from union of testable months across metrics (bounded to months_back)
         all_months = sorted(set().union(*[set(self._testable_months(m)) for m in metrics]))
@@ -137,7 +153,75 @@ class BacktestService:
                 winner = min(scored, key=scored.get)
                 BacktestResult.objects.filter(run=run, metric=metric, model=winner).update(is_winner=True)
 
+        run.horizon_accuracy = self.horizon_accuracy(
+            metrics=metrics, factors={m: (scen_factors.get(m) or self._default_factor(m)) for m in metrics},
+            bench=bench, window=set(window))
+        run.save(update_fields=['horizon_accuracy'])
         return run
+
+    VARIANTS = ('b', 'b_season', 'b_deseason')
+    HORIZONS = (1, 2, 3)
+
+    @classmethod
+    def horizon_accuracy(cls, *, metrics, factors, bench, window=None):
+        """{metric: {variant: {h: {'wape', 'n'}}}} over the target months in `window`."""
+        from apps.forecasting import references as R
+        out = {}
+        for metric in metrics:
+            s = R._complete(R._series(metric))
+            if not s:
+                continue
+            f = factors[metric]
+            w_lm, w_pm, w_yoy = (float(f['w_lm']), float(f['w_pm']), float(f['w_yoy']))
+            b = float(bench)
+            res = {v: {} for v in cls.VARIANTS}
+            for h in cls.HORIZONS:
+                acc = {v: [0.0, 0.0, 0] for v in cls.VARIANTS}     # Σ|err|, Σactual, n
+                for (y, m) in sorted(s):
+                    if window is not None and (y, m) not in window:
+                        continue
+                    origin = _shift_month(y, m, -h)                 # last complete month
+                    if _shift_month(y, m, -12) not in s:
+                        continue
+                    hist = {k: v for k, v in s.items() if k <= origin}
+                    S = R._seasonality(hist)
+                    for var in cls.VARIANTS:
+                        fc = cls._recursive(s, origin, (y, m), var, S, w_lm, w_pm, w_yoy, b)
+                        if fc is None:
+                            continue
+                        a = acc[var]
+                        a[0] += abs(fc - s[(y, m)]); a[1] += s[(y, m)]; a[2] += 1
+                for var, (err, act, n) in acc.items():
+                    if n and act:
+                        res[var][str(h)] = {'wape': round(100 * err / act, 2), 'n': n}
+            out[metric] = res
+        return out
+
+    @staticmethod
+    def _recursive(s, origin, target, var, S, w_lm, w_pm, w_yoy, bench):
+        memo = {}
+
+        def val(ym):
+            if ym <= origin:
+                return s.get(ym)
+            if ym in memo:
+                return memo[ym]
+            lm, pm = val(_shift_month(*ym, -1)), val(_shift_month(*ym, -2))
+            base = s.get(_shift_month(*ym, -12))
+            if lm is None or pm is None or base is None:
+                return None
+            yoy = w_yoy * base * (1 + bench)
+            st = S[ym[1]]
+            if var == 'b':
+                f = w_lm * lm + w_pm * pm + yoy
+            elif var == 'b_season':
+                f = (w_lm * lm + w_pm * pm + yoy) * st
+            else:
+                sl, sp = S[_shift_month(*ym, -1)[1]], S[_shift_month(*ym, -2)[1]]
+                f = (w_lm * lm / sl + w_pm * pm / sp) * st + yoy
+            memo[ym] = f
+            return f
+        return val(target)
 
     # ── helpers ────────────────────────────────────────────────────────────────
     @staticmethod

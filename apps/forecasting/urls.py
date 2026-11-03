@@ -3,7 +3,7 @@ from rest_framework.routers import SimpleRouter
 from .views import (
     SeasonalityIndexViewSet, ForecastRunViewSet, ForecastAccuracyViewSet, KpiBoardView,
     KpiSheetExportView, KpiRefreshView, ForecastScenarioViewSet, BacktestViewSet, GrowthView,
-    ProfitExclusionViewSet, ForecastReferenceView,
+    ProfitExclusionViewSet, ForecastReferenceView, ForecastPlanView,
 )
 
 router = SimpleRouter()     # no API-root index page (Z-7b)
@@ -20,4 +20,5 @@ urlpatterns = router.urls + [
     path('kpi-board/refresh/', KpiRefreshView.as_view(),     name='kpi-board-refresh'),
     path('growth/',           GrowthView.as_view(),         name='kpi-growth'),
     path('references/',       ForecastReferenceView.as_view(), name='forecast-references'),
+    path('plan/',             ForecastPlanView.as_view(),   name='forecast-plan'),
 ]

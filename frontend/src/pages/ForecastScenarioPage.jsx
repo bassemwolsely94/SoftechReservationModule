@@ -3,7 +3,7 @@
  * Factor-driven target generation: create a scenario, tune factors, generate
  * Model A / B / avg forecasts per branch, review, then commit to sales targets.
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { forecastApi } from '../api/client'
 import useAuthStore from '../store/authStore'
@@ -40,6 +40,7 @@ export default function ForecastScenarioPage() {
   const canEdit = ['admin', 'supervisor', 'purchasing'].includes(user?.role)
   const [selId, setSelId] = useState(null)
   const [showForm, setShowForm] = useState(false)
+  const [formMonth, setFormMonth] = useState(null)   // {year, month} preset from the rolling plan
 
   const { data: scenarios = [], isLoading } = useQuery({
     queryKey: ['forecast-scenarios'],
@@ -54,20 +55,23 @@ export default function ForecastScenarioPage() {
           <p className="text-sm text-gray-500 mt-0.5">اضبط العوامل، احسب النموذج، ثم اعتمد الأهداف للفروع</p>
         </div>
         {canEdit && (
-          <button onClick={() => setShowForm(s => !s)} className="btn-primary text-sm" data-tour="analytics-scenarios-new">
+          <button onClick={() => { setFormMonth(null); setShowForm(s => !s) }} className="btn-primary text-sm" data-tour="analytics-scenarios-new">
             {showForm ? 'إغلاق' : '+ سيناريو جديد'}
           </button>
         )}
       </div>
 
-      <DataFreshnessBar canEdit={canEdit} invalidateKeys={[['forecast-scenario'], ['forecast-results'], ['forecast-references']]} />
+      <DataFreshnessBar canEdit={canEdit} invalidateKeys={[['forecast-scenario'], ['forecast-results'], ['forecast-references'], ['forecast-plan']]} />
+
+      {showForm && canEdit && (
+        <NewScenarioForm key={formMonth ? `${formMonth.year}-${formMonth.month}` : 'new'} preset={formMonth}
+          onDone={(id) => { setShowForm(false); setSelId(id); qc.invalidateQueries({ queryKey: ['forecast-scenarios'] }) }} />
+      )}
+
+      <PlanPanel canEdit={canEdit} onCreate={(ym) => { setFormMonth(ym); setShowForm(true); window.scrollTo({ top: 0, behavior: 'smooth' }) }} />
       <BacktestPanel canEdit={canEdit} />
       <ReferencesPanel canEdit={canEdit} />
       <ProfitExclusionPanel canEdit={canEdit} />
-
-      {showForm && canEdit && (
-        <NewScenarioForm onDone={(id) => { setShowForm(false); setSelId(id); qc.invalidateQueries({ queryKey: ['forecast-scenarios'] }) }} />
-      )}
 
       <div className="grid md:grid-cols-[280px_1fr] gap-4">
         {/* scenario list */}
@@ -166,6 +170,7 @@ function BacktestPanel({ canEdit }) {
             <p className="text-[11px] text-gray-400 mt-2">
               WAPE = متوسط الخطأ المطلق الموزون (أقل = أفضل). الفائز يعيد إنتاج التاريخ بأعلى دقة — استخدمه عند إنشاء السيناريو.
             </p>
+            <HorizonAccuracy data={latest.horizon_accuracy} labels={Object.fromEntries(Object.entries(byMetric).map(([m, r]) => [m, r.label]))} />
           </div>
         ) : (
           <p className="text-xs text-gray-400 mt-2">لا يوجد اختبار بعد — شغّل اختباراً لمقارنة النموذجين على بيانات الأشهر السابقة.</p>
@@ -348,12 +353,21 @@ function ProfitExclusionPanel({ canEdit }) {
   )
 }
 
-function NewScenarioForm({ onDone }) {
-  const now = new Date()
-  const [f, setF] = useState({ name: '', year: now.getFullYear(), month: now.getMonth() + 1, scope_type: 'branch', model: 'a' })
+function defaultTargetMonth() {
+  // from the 20th the next month is the one being planned
+  const d = new Date()
+  if (d.getDate() >= 20) d.setMonth(d.getMonth() + 1, 1)
+  return { year: d.getFullYear(), month: d.getMonth() + 1 }
+}
+
+function NewScenarioForm({ onDone, preset }) {
+  const ym = preset || defaultTargetMonth()
+  const [f, setF] = useState({ name: `${MONTHS[ym.month - 1]} ${ym.year}`, year: ym.year, month: ym.month, scope_type: 'branch', model: 'b' })
+  const [err, setErr] = useState('')
   const create = useMutation({
     mutationFn: () => forecastApi.create(f),
     onSuccess: (r) => onDone(r.data.id),
+    onError: (e) => setErr(Object.values(e?.response?.data || {}).flat().join(' — ') || 'تعذّر الإنشاء'),
   })
   const set = (k, v) => setF(s => ({ ...s, [k]: v }))
   return (
@@ -373,6 +387,7 @@ function NewScenarioForm({ onDone }) {
         className="btn-primary text-sm md:col-span-5 disabled:opacity-40">
         {create.isPending ? 'جارٍ الإنشاء…' : 'إنشاء'}
       </button>
+      {err && <div className="md:col-span-5 text-[11px] text-red-600">{err}</div>}
     </div>
   )
 }
@@ -493,7 +508,10 @@ function ScenarioDetail({ id, canEdit, onDeleted }) {
             </div>
             <ExportScenarioButton id={id} year={sc.year} month={sc.month} />
           </div>
-          <p className="text-[11px] text-gray-400 mb-3">الهدف = التنبؤ ÷ حد الحافز ({sc.incentive_threshold}) — لكل مؤشر: الفروع ثم الإجمالى.</p>
+          <p className="text-[11px] text-gray-400 mb-3">
+            الهدف = التنبؤ ÷ حد الحافز ({sc.incentive_threshold}) — لكل مؤشر: الفروع ثم الإجمالى.
+            {results.some(r => r.lm_projected || r.pm_projected) && <> «متوقع» = شهر لم يكتمل بعد، قيمته تقدير (الشهر الجاري أو شهر قادم) — أعد الحساب بعد اكتماله.</>}
+          </p>
           <div className="space-y-5">
             {byMetric.map(({ metric, label, members, chain }) => (
               <div key={metric} className="overflow-x-auto">
@@ -515,8 +533,8 @@ function ScenarioDetail({ id, canEdit, onDeleted }) {
                       <tr key={r.id} className="border-t border-gray-50 hover:bg-gray-50/40">
                         <td className="py-1.5 px-3 font-medium text-gray-700">{r.scope_label}</td>
                         <td className="text-center tabular-nums text-gray-500">{fmt(r.base_value)}</td>
-                        <td className="text-center tabular-nums text-gray-500">{fmt(r.lm_value)}</td>
-                        <td className="text-center tabular-nums text-gray-500">{fmt(r.pm_value)}</td>
+                        <td className="text-center tabular-nums text-gray-500">{fmt(r.lm_value)}{r.lm_projected && <EstChip />}</td>
+                        <td className="text-center tabular-nums text-gray-500">{fmt(r.pm_value)}{r.pm_projected && <EstChip />}</td>
                         <td className="text-center tabular-nums">{fmt(r.model_a)}</td>
                         <td className="text-center tabular-nums">{fmt(r.model_b)}</td>
                         <td className="text-center tabular-nums font-semibold text-blue-700">{fmt(r.forecast_value)}</td>
@@ -527,8 +545,8 @@ function ScenarioDetail({ id, canEdit, onDeleted }) {
                       <tr className="border-t-2 border-gray-200 bg-emerald-50/40 font-bold">
                         <td className="py-2 px-3 text-gray-900">الإجمالى</td>
                         <td className="text-center tabular-nums text-gray-600">{fmt(chain.base_value)}</td>
-                        <td className="text-center tabular-nums text-gray-600">{fmt(chain.lm_value)}</td>
-                        <td className="text-center tabular-nums text-gray-600">{fmt(chain.pm_value)}</td>
+                        <td className="text-center tabular-nums text-gray-600">{fmt(chain.lm_value)}{chain.lm_projected && <EstChip />}</td>
+                        <td className="text-center tabular-nums text-gray-600">{fmt(chain.pm_value)}{chain.pm_projected && <EstChip />}</td>
                         <td className="text-center tabular-nums">{fmt(chain.model_a)}</td>
                         <td className="text-center tabular-nums">{fmt(chain.model_b)}</td>
                         <td className="text-center tabular-nums text-blue-700">{fmt(chain.forecast_value)}</td>
@@ -626,6 +644,129 @@ function FactorTable({ rows, onChange, canEdit }) {
       <p className="text-[10px] text-gray-400 mt-1">
         A: هدف النمو · B: النمو المرجعي + أوزان الأشهر (يُفضّل مجموعها 1.0) + الموسمية. اضغط «حفظ واحسب التنبؤ» لتطبيق أى تعديل.
       </p>
+    </div>
+  )
+}
+
+function EstChip() {
+  return <span className="mr-1 text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 align-middle" title="شهر لم يكتمل بعد — القيمة تقدير">متوقع</span>
+}
+
+const H_VARIANTS = [
+  ['b', 'B بدون موسمية'],
+  ['b_season', 'B × الموسمية (عند تطبيق المرجعية)'],
+  ['b_deseason', 'B بموسمية مصحّحة'],
+]
+
+function HorizonAccuracy({ data, labels }) {
+  const metrics = Object.keys(data || {})
+  if (!metrics.length) return null
+  return (
+    <div className="mt-4" data-tour="analytics-scenarios-horizon">
+      <div className="text-xs font-bold text-gray-700 mb-1">الدقة حسب المدى — WAPE% للتنبؤ قبل الشهر بـ 1 / 2 / 3 أشهر</div>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-gray-400 border-b border-gray-100">
+            <th className="text-right py-1">المؤشر</th>
+            {H_VARIANTS.map(([k, l]) => <th key={k} className="text-center">{l}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {metrics.map(m => {
+            const row = data[m] || {}
+            const h1 = H_VARIANTS.map(([k]) => row[k]?.['1']?.wape).filter(v => v != null)
+            const best = h1.length ? Math.min(...h1) : null
+            return (
+              <tr key={m} className="border-b border-gray-50">
+                <td className="py-1.5 font-medium text-gray-700">{labels[m] || REF_LABELS[m] || m}</td>
+                {H_VARIANTS.map(([k]) => {
+                  const v = row[k] || {}
+                  const isBest = best != null && v['1']?.wape === best
+                  return (
+                    <td key={k} className={`text-center tabular-nums ${isBest ? 'font-bold text-emerald-600' : 'text-gray-500'}`}>
+                      {['1', '2', '3'].map(h => v[h]?.wape ?? '—').join(' / ')}
+                    </td>
+                  )
+                })}
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      <p className="text-[10px] text-gray-400 mt-1">
+        كل تنبؤ يستخدم فقط البيانات المتاحة وقتها (الأشهر بين آخر شهر مكتمل والشهر المستهدف تُتوقَّع بنفس النموذج).
+        مع سنتين فقط من التاريخ الموسمية تزيد الخطأ — لذلك المحرك يتوقع الأشهر القادمة بدونها؛ أعد الاختبار بعد تحميل سنوات أكثر.
+      </p>
+    </div>
+  )
+}
+
+function PlanPanel({ canEdit, onCreate }) {
+  const [open, setOpen] = useState(true)
+  const [expanded, setExpanded] = useState(null)
+  const { data: plan, isLoading } = useQuery({
+    queryKey: ['forecast-plan'],
+    queryFn: () => forecastApi.plan().then(r => r.data),
+    staleTime: 5 * 60 * 1000,
+  })
+  const months = plan?.months || []
+  const pctCls = v => v == null ? 'text-gray-300' : v >= 0 ? 'text-emerald-600' : 'text-red-500'
+  return (
+    <div data-tour="analytics-scenarios-plan" className="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
+      <button onClick={() => setOpen(o => !o)} className="text-sm font-bold text-gray-800 flex items-center gap-2">
+        <span>{open ? '▾' : '▸'}</span> 📅 الخطة المتجددة (الشهر الجارى + {Math.max(months.length - 1, 0)} أشهر قادمة)
+        <span className="text-[11px] text-gray-400 font-normal">— توقع تلقائى، ليس أهدافاً</span>
+      </button>
+      {open && (
+        isLoading ? <div className="text-xs text-gray-400 py-4">جارٍ الحساب…</div> : (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-gray-400 border-b border-gray-100">
+                  <th className="text-right py-1">المؤشر</th>
+                  {months.map(m => (
+                    <th key={`${m.year}-${m.month}`} className="text-center py-1 whitespace-nowrap">
+                      <div className={m.running ? 'text-gray-700' : ''}>{MONTHS[m.month - 1]} {m.year}{m.running ? ' (جارٍ)' : ''}</div>
+                      {canEdit && !m.running && (
+                        <button data-tour="analytics-scenarios-plan-create" onClick={() => onCreate({ year: m.year, month: m.month })}
+                          className="mt-0.5 text-[10px] text-blue-600 hover:underline">+ سيناريو</button>
+                      )}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(plan?.metrics || []).map(r => (
+                  <Fragment key={r.metric}>
+                    <tr className="border-b border-gray-50 hover:bg-gray-50/40 cursor-pointer"
+                        onClick={() => setExpanded(e => e === r.metric ? null : r.metric)}>
+                      <td className="py-1.5 font-medium text-gray-700">{expanded === r.metric ? '▾' : '▸'} {r.label}</td>
+                      {r.chain.map((v, i) => (
+                        <td key={i} className="text-center tabular-nums">
+                          <div className={`font-semibold ${months[i]?.running ? 'text-gray-600' : 'text-blue-700'}`}>{fmt(v)}</div>
+                          <div className={`text-[10px] ${pctCls(r.yoy[i])}`} title={`نفس الشهر العام السابق: ${fmt(r.last_year[i])}`}>
+                            {r.yoy[i] == null ? '—' : `${r.yoy[i] > 0 ? '+' : ''}${r.yoy[i]}%`}
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                    {expanded === r.metric && r.branches.map(b => (
+                      <tr key={`${r.metric}-${b.key}`} className="bg-gray-50/40 text-gray-500">
+                        <td className="py-1 pr-5">{b.label}</td>
+                        {b.values.map((v, i) => <td key={i} className="text-center tabular-nums">{fmt(v)}</td>)}
+                      </tr>
+                    ))}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-[10px] text-gray-400 mt-2">
+              الشهر الجارى = المحقق حتى الآن محسوباً لشهر كامل، ممزوجاً بالتوقع بنسبة الأيام الباقية. الأشهر القادمة = Model B (الشهر السابق وقبل السابق ونفس الشهر العام الماضى × النمو المرجعى)، وكل شهر يُبنى على توقع الشهر الذى قبله.
+              النسبة تحت الرقم = مقارنة بنفس الشهر العام الماضى. للأهداف: «+ سيناريو» للشهر المطلوب.
+            </p>
+          </div>
+        )
+      )}
     </div>
   )
 }

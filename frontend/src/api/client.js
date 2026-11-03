@@ -510,6 +510,8 @@ export const forecastApi = {
   generate:(id)          => api.post(`/forecasting/scenarios/${id}/generate/`),
   results: (id, params={})=> api.get(`/forecasting/scenarios/${id}/results/`, { params }),
   commit:  (id)          => api.post(`/forecasting/scenarios/${id}/commit/`),
+  // rolling outlook: running month + next N months per branch + chain (read-only)
+  plan:    (params = {}) => api.get('/forecasting/plan/', { params }),
   // backtest — model accuracy on history
   backtestList:  ()      => api.get('/forecasting/backtest/'),
   backtestRun:   (data={})=> api.post('/forecasting/backtest/run/', data),
