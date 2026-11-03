@@ -260,6 +260,10 @@ purchasing DELETE /api/incentives/rules/987654321/
 purchasing DELETE /api/incentives/rules/987654321/clear-items/
 purchasing DELETE /api/incentives/rules/987654321/remove-item/
 purchasing DELETE /api/incentives/targets/987654321/
+quality_manager DELETE /api/incentives/adjustments/987654321/
+quality_manager DELETE /api/incentives/rules/987654321/
+quality_manager DELETE /api/incentives/rules/987654321/clear-items/
+quality_manager DELETE /api/incentives/rules/987654321/remove-item/
 purchasing DELETE /api/insights/rules/987654321/
 purchasing DELETE /api/invoices/invoices/987654321/
 purchasing DELETE /api/invoices/invoices/987654321/lines/987654321/delete/

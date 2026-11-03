@@ -257,7 +257,13 @@ Branch `claude/security-batch5-branch-scoping`. Tests: `test_branch_scope.py`, `
   accounts' own numbers). `test_phone_rules.py` covers what must still show (own-branch records, assigned
   riders, own customers) and the live-call channel.
 
-Still open: owner decisions on the insurance / incentives all-branch gate and a tasks module permission.
+- **Owner decisions closed (2026-11-02/03).** Insurance claims report: all-branch users only (`InsurancePortfolioView`,
+  `PortfolioAccessTests`). Incentives payroll: all-branch admins, quality managers and purchasing only (full payroll actions) — every
+  incentives route but `my-progress` checks role + `sees_everything` + no restricted branches
+  (`apps/incentives/permissions.py`); a matrix grant to any other role no longer opens it; the canary
+  baseline line is gone.
+  Tasks: its own matrix module `tasks`, checked in every task view and by the middleware; every role
+  keeps its earlier access (users 0042), switchable per role. `test_owner_rules_incentives_tasks.py`.
 
 ## Batch N0 — network/device holes H1-H3, H5-H9 (done 2026-10-31)
 

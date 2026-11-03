@@ -13,7 +13,7 @@ MODULE = {
         '(% of net sale, amount per unit, amount per invoice, or a quantity slab) with conditions (minimum, salesperson, branch, local/imported, expiry…). '
         'It is calculated from SOFTECH sales per salesperson, manual adjustments are added, then it is "finalized", locking the period. Calculated entries are never edited after finalizing.'),
     'journeys': [
-        {'key': 'cycle', 'shell': 'desktop', 'roles': ['admin', 'purchasing', 'quality_manager'],
+        {'key': 'cycle', 'shell': 'desktop', 'roles': ['admin', 'quality_manager', 'purchasing'],
          'title': T('دورة الحوافز: من البرنامج للصرف', 'Incentive cycle: from program to payout'),
          'summary': T('إنشاء البرنامج وقواعده، المعاينة، الاحتساب، التسويات اليدوية، المراجعة، الاعتماد، والتصدير للرواتب.',
                       'Create the program and rules, preview, calculate, add adjustments, review, finalize and export for payroll.'),
@@ -208,7 +208,7 @@ SCREENS = [
         'title': T('إدارة الحوافز', 'Incentive management'),
         'summary': T('كل خطوات الحوافز في تبويبات، بالترتيب من البرنامج حتى التسوية النهائية. اختر البرنامج أولاً من «البرامج» — باقي التبويبات تعمل على البرنامج المختار.',
                      'Every incentive step in tabs, in order from the program to the final settlement. Pick the program first in "Programs" — the other tabs work on the chosen program.'),
-        'audience': T('المدير والمشتريات والجودة.', 'Admins, purchasing and quality.'),
+        'audience': T('المدير ومدير الجودة والمشتريات على كل الفروع فقط (قرار الإدارة 2026-11-03): عرض وتصدير وإنشاء البرامج والاحتساب والاعتماد والصرف. أي دور آخر يُرفض حتى لو أُعطي صلاحية الحوافز.', 'Admins, quality managers and purchasing with all-branch access only (owner decision 2026-11-03): view, export, create programs, calculate, finalize and pay out. Any other role is refused even if granted the incentives permission.'),
         'tabs': [
             {'key': 'programs', 'title': T('🏆 البرامج', '🏆 Programs'), 'body': T('إنشاء برنامج (الاسم، الوصف، البداية والنهاية، دورة الاحتساب، المورد الراعي ونسبة مساهمته) أو «نسخ البرنامج» بقواعده، واختيار البرنامج للعمل عليه.', 'Create a program (name, description, start and end, cycle, sponsoring supplier and its share) or "Copy program" with its rules, and select the program to work on.')},
             {'key': 'rules', 'title': T('📐 القواعد', '📐 Rules'), 'body': T('قواعد البرنامج: الأصناف (إضافة يدوية أو استيراد CSV)، نوع الحافز، السلاب المتدرج (من-إلى وحدة والسعر — يُطبَّق على إجمالي كمية الفترة)، والشروط.', 'The program\'s rules: items (manual or CSV import), incentive type, the slab (from-to units and rate — applied to the period\'s total quantity), and conditions.')},
@@ -422,8 +422,8 @@ SCREENS = [
                        'Opens the advanced item search with more filters; the item you choose fills the code box.'),
              'open_hint': T('«▼ الأصناف» ← «+ إضافة صنف».', '"▼ Items" → "+ Add item".')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-03',
+        'change_note': T('الحوافز للمدير ومدير الجودة والمشتريات على كل الفروع فقط — بكل خطوات الصرف', 'Incentives are for all-branch admins, quality managers and purchasing only — with every payroll step'),
     },
     {
         'key': 'incentives.mine',

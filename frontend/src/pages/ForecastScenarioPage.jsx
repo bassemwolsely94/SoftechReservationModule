@@ -270,7 +270,7 @@ function ReferencesPanel({ canEdit }) {
             </table>
           )}
           <div data-tour="analytics-scenarios-seasonality-mode" className="flex flex-wrap items-center gap-2 mt-3 text-[11px] text-gray-600">
-            <span className="font-bold">الموسمية في المحرك:</span>
+            <span className="font-bold">الموسمية الافتراضية (السيناريوهات الجديدة + الخطة المتجددة):</span>
             {canEdit ? (
               <select className="input-field !w-auto !py-1 text-[11px]" value={refs.engine_seasonality_mode || 'none'}
                       disabled={setMode.isPending}
@@ -389,6 +389,15 @@ function ProfitExclusionPanel({ canEdit }) {
   )
 }
 
+function horizonText(year, month) {
+  const now = new Date()
+  const d = (year * 12 + month) - (now.getFullYear() * 12 + now.getMonth() + 1)
+  if (d < 0) return 'شهر سابق — مفيد لمقارنة الأرقام بالمحقق فعلاً.'
+  if (d === 0) return 'الشهر الجارى — الشهر السابق مكتمل، والجارى يُقدَّر من المحقق حتى الآن.'
+  if (d === 1) return 'الشهر القادم — الشهر الجارى (الشهر السابق للهدف) يُقدَّر ويُعلَّم «متوقع».'
+  return `بعد ${d} أشهر — الأشهر بين الآن والهدف تُتوقَّع شهراً بشهر وتُعلَّم «متوقع» (الحد الأقصى 6 أشهر).`
+}
+
 function defaultTargetMonth() {
   // from the 20th the next month is the one being planned
   const d = new Date()
@@ -398,16 +407,18 @@ function defaultTargetMonth() {
 
 function NewScenarioForm({ onDone, preset }) {
   const ym = preset || defaultTargetMonth()
-  const [f, setF] = useState({ name: `${MONTHS[ym.month - 1]} ${ym.year}`, year: ym.year, month: ym.month, scope_type: 'branch', model: 'b' })
+  const { data: refs = {} } = useQuery({ queryKey: ['forecast-references'], queryFn: () => forecastApi.references().then(r => r.data) })
+  const [f, setF] = useState({ name: `${MONTHS[ym.month - 1]} ${ym.year}`, year: ym.year, month: ym.month, scope_type: 'branch', model: 'b', seasonality_mode: null })
   const [err, setErr] = useState('')
+  const season = f.seasonality_mode ?? refs.engine_seasonality_mode ?? 'none'
   const create = useMutation({
-    mutationFn: () => forecastApi.create(f),
+    mutationFn: () => forecastApi.create({ ...f, seasonality_mode: season }),
     onSuccess: (r) => onDone(r.data.id),
     onError: (e) => setErr(Object.values(e?.response?.data || {}).flat().join(' — ') || 'تعذّر الإنشاء'),
   })
   const set = (k, v) => setF(s => ({ ...s, [k]: v }))
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4 grid gap-2 md:grid-cols-5">
+    <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4 grid gap-2 md:grid-cols-6">
       <input className="input-field" placeholder="اسم السيناريو" value={f.name} onChange={e => set('name', e.target.value)} />
       <select className="input-field" value={f.scope_type} onChange={e => set('scope_type', e.target.value)}>
         {Object.entries(SCOPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -419,11 +430,17 @@ function NewScenarioForm({ onDone, preset }) {
       <select className="input-field" value={f.model} onChange={e => set('model', e.target.value)}>
         {Object.entries(MODELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
       </select>
+      <select className="input-field" value={season} onChange={e => set('seasonality_mode', e.target.value)} title="الموسمية المستخدمة فى هذا السيناريو">
+        {Object.entries(SEASON_MODES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+      </select>
+      <div className="md:col-span-6 text-[11px] text-gray-400">
+        {horizonText(f.year, f.month)}
+      </div>
       <button data-tour="analytics-scenarios-create" onClick={() => create.mutate()} disabled={!f.name || create.isPending}
-        className="btn-primary text-sm md:col-span-5 disabled:opacity-40">
+        className="btn-primary text-sm md:col-span-6 disabled:opacity-40">
         {create.isPending ? 'جارٍ الإنشاء…' : 'إنشاء'}
       </button>
-      {err && <div className="md:col-span-5 text-[11px] text-red-600">{err}</div>}
+      {err && <div className="md:col-span-6 text-[11px] text-red-600">{err}</div>}
     </div>
   )
 }
@@ -455,9 +472,9 @@ function ScenarioDetail({ id, canEdit, onDeleted }) {
     if (!sc) return
     setKnobs({ model: sc.model, incentive_threshold: sc.incentive_threshold,
                benchmark_growth: sc.benchmark_growth, inflation: sc.inflation,
-               promotion_lift: sc.promotion_lift })
+               promotion_lift: sc.promotion_lift, seasonality_mode: sc.seasonality_mode })
     setFactorRows((sc.factors || []).map(f => ({ ...f })))
-  }, [sc?.id, sc?.generated_at, sc?.model, sc?.inflation, JSON.stringify(sc?.factors)])
+  }, [sc?.id, sc?.generated_at, sc?.model, sc?.inflation, sc?.seasonality_mode, JSON.stringify(sc?.factors)])
 
   // "احسب التنبؤ" — PERSIST the current edits (knobs + factors) then generate,
   // so changing a factor or the model is always reflected in the numbers.
@@ -493,7 +510,13 @@ function ScenarioDetail({ id, canEdit, onDeleted }) {
     <div className="space-y-4">
       <div className="bg-white rounded-2xl border border-gray-100 p-4">
         <div className="flex items-center justify-between mb-3">
-          <div className="font-bold text-gray-900">{sc.name}</div>
+          <div>
+            <div className="font-bold text-gray-900">{sc.name}</div>
+            <div className="text-[11px] text-gray-500 mt-0.5" data-tour="analytics-scenarios-month">
+              <span className="font-bold text-blue-700">{MONTHS[sc.month - 1]} {sc.year}</span> · {SCOPES[sc.scope_type] || 'الفروع'} · {sc.seasonality_label}
+              <span className="text-gray-400"> — {horizonText(sc.year, sc.month)}</span>
+            </div>
+          </div>
           {canEdit && <button data-tour="analytics-scenarios-delete" onClick={() => { if (confirm('حذف السيناريو؟')) del.mutate() }} className="text-gray-300 hover:text-red-500 text-sm">حذف</button>}
         </div>
 
@@ -512,14 +535,15 @@ function ScenarioDetail({ id, canEdit, onDeleted }) {
         <GlobalKnobs value={knobs} onChange={setKnobs} canEdit={canEdit} />
 
         {/* per-metric factors */}
-        <FactorTable rows={factorRows} onChange={setFactorRows} canEdit={canEdit} />
+        <FactorTable rows={factorRows} onChange={setFactorRows} canEdit={canEdit}
+          season={knobs?.seasonality_mode && knobs.seasonality_mode !== 'none' ? sc.target_season : null} month={sc.month} />
 
         {canEdit && (
           <div data-tour="analytics-scenarios-actions" className="flex gap-2 mt-4 flex-wrap items-center">
             <button data-tour="analytics-scenarios-apply-references" onClick={() => applyRefs.mutate()} disabled={applyRefs.isPending}
                     title="تطبيق القيم المرجعية (الموسمية + النمو المرجعي + التضخم) على عوامل هذا السيناريو"
                     className="text-sm px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40">
-              {applyRefs.isPending ? '…' : '📐 تطبيق المرجعية'}
+              {applyRefs.isPending ? '…' : `📐 تطبيق المرجعية (${MONTHS[sc.month - 1]} ${sc.year})`}
             </button>
             <button data-tour="analytics-scenarios-calculate" onClick={recalc} disabled={recalcBusy} className="btn-primary text-sm disabled:opacity-40">
               {recalcBusy ? 'جارٍ الحساب…' : '⚙️ حفظ واحسب التنبؤ'}
@@ -573,7 +597,10 @@ function ScenarioDetail({ id, canEdit, onDeleted }) {
                         <td className="text-center tabular-nums text-gray-500">{fmt(r.pm_value)}{r.pm_projected && <EstChip />}</td>
                         <td className="text-center tabular-nums">{fmt(r.model_a)}</td>
                         <td className="text-center tabular-nums">{fmt(r.model_b)}</td>
-                        <td className="text-center tabular-nums font-semibold text-blue-700">{fmt(r.forecast_value)}</td>
+                        <td className="text-center tabular-nums font-semibold text-blue-700">
+                          {fmt(r.forecast_value)}
+                          {r.season_index && <span className="mr-1 text-[9px] text-indigo-500" title="مؤشر الموسمية المستخدم لهذا الشهر">×{Number(r.season_index).toFixed(3)}</span>}
+                        </td>
                         <td className="text-center tabular-nums font-bold text-emerald-700">{fmt(r.target_value)}</td>
                       </tr>
                     ))}
@@ -631,7 +658,7 @@ function GlobalKnobs({ value, onChange, canEdit }) {
     </label>
   )
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3 pb-3 border-b border-gray-50" data-tour="analytics-scenarios-knobs">
+    <div className="grid grid-cols-2 md:grid-cols-6 gap-2 mb-3 pb-3 border-b border-gray-50" data-tour="analytics-scenarios-knobs">
       <label className="text-xs text-gray-500">النموذج
         <select disabled={!canEdit} className="input-field mt-0.5" value={value.model} onChange={e => set('model', e.target.value)}>
           {Object.entries(MODELS).map(([k, x]) => <option key={k} value={k}>{x}</option>)}
@@ -641,6 +668,11 @@ function GlobalKnobs({ value, onChange, canEdit }) {
       <Field k="benchmark_growth" label="نمو مرجعي عام" />
       <Field k="inflation" label="التضخم (شهري)" />
       <Field k="promotion_lift" label="رفع العروض" />
+      <label className="text-xs text-gray-500" data-tour="analytics-scenarios-season">الموسمية
+        <select disabled={!canEdit} className="input-field mt-0.5" value={value.seasonality_mode || 'none'} onChange={e => set('seasonality_mode', e.target.value)}>
+          {Object.entries(SEASON_MODES).map(([k, x]) => <option key={k} value={k}>{x}</option>)}
+        </select>
+      </label>
     </div>
   )
 }
@@ -648,10 +680,10 @@ function GlobalKnobs({ value, onChange, canEdit }) {
 const FACTOR_COLS = [
   ['growth_goal', 'هدف النمو (A)'], ['benchmark', 'نمو مرجعي (B)'],
   ['w_lm', 'وزن الشهر السابق'], ['w_pm', 'وزن قبل السابق'],
-  ['w_yoy', 'وزن العام السابق'], ['seasonality_index', 'مؤشر موسمي'],
+  ['w_yoy', 'وزن العام السابق'], ['seasonality_index', 'تعديل يدوى (×)'],
 ]
 
-function FactorTable({ rows, onChange, canEdit }) {
+function FactorTable({ rows, onChange, canEdit, season, month }) {
   const upd = (i, k, val) => onChange(rows.map((r, j) => j === i ? { ...r, [k]: val } : r))
   return (
     <div className="overflow-x-auto" data-tour="analytics-scenarios-factors">
@@ -660,6 +692,7 @@ function FactorTable({ rows, onChange, canEdit }) {
           <tr className="text-gray-400 border-b border-gray-100">
             <th className="text-right py-1">المؤشر</th>
             {FACTOR_COLS.map(([k, label]) => <th key={k} className="text-center px-1">{label}</th>)}
+            {season && <th className="text-center px-1 text-indigo-500">موسمية {MONTHS[month - 1]} (السلسلة)</th>}
           </tr>
         </thead>
         <tbody>
@@ -673,12 +706,13 @@ function FactorTable({ rows, onChange, canEdit }) {
                     value={r[k] ?? ''} onChange={e => upd(i, k, e.target.value === '' ? null : e.target.value)} />
                 </td>
               ))}
+              {season && <td className="text-center tabular-nums text-indigo-600">{season[r.metric] ?? '—'}</td>}
             </tr>
           ))}
         </tbody>
       </table>
       <p className="text-[10px] text-gray-400 mt-1">
-        A: هدف النمو · B: النمو المرجعي + أوزان الأشهر (يُفضّل مجموعها 1.0) + الموسمية. اضغط «حفظ واحسب التنبؤ» لتطبيق أى تعديل.
+        A: هدف النمو · B: النمو المرجعي + أوزان الأشهر (يُفضّل مجموعها 1.0). الموسمية تُختار من «الموسمية» أعلاه (والفروع تأخذ نمطها الخاص فى «موسمية كل فرع»)؛ «تعديل يدوى» مُضاعِف إضافى اختيارى (1 = بدون). اضغط «حفظ واحسب التنبؤ» لتطبيق أى تعديل.
       </p>
     </div>
   )

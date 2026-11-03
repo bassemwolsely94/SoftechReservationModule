@@ -219,16 +219,15 @@ def set_inflation(inflation_annual, source=''):
 
 # ── manual application to a scenario ────────────────────────────────────────────
 def apply_to_scenario(scenario):
-    """Set the scenario's factors from the stored references (manual action).
-    Per metric: growth_goal, benchmark, and the TARGET-MONTH seasonality. Plus the
-    scenario-global monthly inflation. Returns a short summary."""
+    """Set the scenario's factors from the stored references (manual action), for the
+    scenario's own target month. Per metric: growth_goal, benchmark; the manual seasonal
+    multiplier back to 1 (seasonality comes from the scenario's seasonality_mode). Plus
+    the scenario-global monthly inflation. Returns a short summary."""
     from apps.forecasting.engine import ForecastEngine
     refs = get()
     if not refs:
         raise ValueError('لا توجد قيم مرجعية محسوبة بعد — شغّل compute_forecast_references')
-    from apps.forecasting.engine import seasonality_mode
     ForecastEngine.ensure_factors(scenario)
-    seasonal_engine = seasonality_mode() != 'none'
     mo = str(scenario.month)
     applied = 0
     for f in scenario.factors.all():
@@ -237,16 +236,16 @@ def apply_to_scenario(scenario):
             f.growth_goal = Decimal(str(refs['growth_goal'][f.metric])); changed = True
         if f.metric in refs.get('benchmark', {}):
             f.benchmark = Decimal(str(refs['benchmark'][f.metric])); changed = True
-        seas = refs.get('seasonality', {}).get(f.metric, {})
-        if seasonal_engine:
-            # the engine applies (branch/chain) seasonality itself — a factor index on
-            # top would count the season twice
+        # Seasonality is the scenario's own choice (seasonality_mode): the engine applies
+        # the chain / branch index itself, so the factor's manual multiplier resets to 1 —
+        # writing the index here too would count the season twice (or force it on a
+        # scenario set to «بدون موسمية»).
+        if f.seasonality_index != Decimal('1'):
             f.seasonality_index = Decimal('1'); changed = True
-        elif mo in seas:
-            f.seasonality_index = Decimal(str(seas[mo])); changed = True
         if changed:
             f.save(); applied += 1
     scenario.inflation = Decimal(str(refs.get('inflation_monthly', 0)))
     scenario.save(update_fields=['inflation'])
     return {'factors_updated': applied, 'inflation': float(scenario.inflation),
-            'as_of': refs.get('as_of')}
+            'as_of': refs.get('as_of'), 'month': scenario.month, 'year': scenario.year,
+            'seasonality_mode': scenario.seasonality_mode}

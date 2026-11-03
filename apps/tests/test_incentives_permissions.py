@@ -23,6 +23,8 @@ PERIOD = {'period_start': '2026-09-01', 'period_end': '2026-09-30'}
 class IncentivesPermissionTests(TestCase):
     def setUp(self):
         module_access.clear_cache()
+        # this test sets its own incentives grants (users 0042 seeds the owner's set)
+        RoleModuleAccess.objects.filter(module='incentives').delete()
         for role, actions in GRANTS.items():
             for a in actions:
                 RoleModuleAccess.objects.create(role=role, module='incentives', action=a)
@@ -89,4 +91,6 @@ class IncentivesPermissionTests(TestCase):
         self.assertNotEqual(self._client('admin').post(self._url('finalize/'), PERIOD, format='json').status_code, 403)
         RoleModuleAccess.objects.all().delete()
         module_access.clear_cache()
-        self.assertEqual(self._client('pharmacist').get('/api/incentives/programs/').status_code, 200)
+        # an unseeded matrix doesn't lock the payroll roles out; the role gate still refuses others (owner 2026-11-03)
+        self.assertEqual(self._client('quality_manager').get('/api/incentives/programs/').status_code, 200)
+        self.assertEqual(self._client('pharmacist').get('/api/incentives/programs/').status_code, 403)

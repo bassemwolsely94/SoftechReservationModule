@@ -36,6 +36,7 @@ ALL_MODULES = [
     'gamification',  # points/levels: 'view' = reports, 'export' = Excel, 'edit' = rules + manual awards
     'stock_audit',   # doc 32: 'view' = all branches, 'approve' = review findings, 'export', 'edit' = thresholds
     'pic_analytics', # doc 33: 'view' = all branches + cost/GP + calls tabs, 'export' = Excel (branch managers = named grants)
+    'tasks',         # المهام: own module since 2026-11-03 (owner); every role keeps its access by default
 ]
 
 ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize']
@@ -50,6 +51,11 @@ ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign'
 RO  = {'view'}                      # Read-only
 RE  = {'view', 'export'}            # Read + export
 RW  = {'view', 'create', 'edit'}    # Standard read-write (no delete/approve)
+
+# Incentives payroll (owner 2026-11-03): admin, quality_manager and purchasing — view, export,
+# create programs / rules / adjustments, run the calculation, approve, finalize settlements.
+# The views also require one of those roles with all-branch access (apps/incentives/permissions.py).
+INCENTIVES_PAYROLL = {'view', 'create', 'edit', 'approve', 'export', 'finalize'}
 
 
 PERMISSIONS = {
@@ -151,7 +157,7 @@ PERMISSIONS = {
         'stockcount':   RE,
         'purchasing':   {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
         'invoices':     {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
-        'incentives':   {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
+        'incentives':   INCENTIVES_PAYROLL,  # owner 2026-11-03: admin + QM + purchasing, all-branch
         'cheques':      {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
         'finance':      {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
         'insurance':    {'view', 'create', 'edit', 'delete', 'approve', 'export', 'finalize'},
@@ -264,7 +270,7 @@ PERMISSIONS = {
         'callcenter':   RE,
         'campaigns':    RO,
         'analytics':    RE,
-        'incentives':   RE,
+        'incentives':   INCENTIVES_PAYROLL,  # owner 2026-11-03: programs, calculate, finalize, payroll
         'delivery':     RE,
         'audit':        RE,
         'help':         {'view', 'edit'},   # trainers: edit the in-app help text
@@ -275,6 +281,13 @@ PERMISSIONS = {
         'stock_audit':  {'view', 'approve', 'export', 'edit'},   # review + thresholds (doc 32)
     },
 }
+
+# Tasks (owner decision 2026-11-03): its own module. Every role keeps what it had while the task
+# board was open to all staff — the views still limit changes to the creator, the assignees and
+# admin / supervisor. Switch a role off here or in «الصلاحيات» to close the task screens for it.
+TASKS = {'view', 'create', 'edit', 'delete', 'assign', 'finalize'}
+for _role, _modules in PERMISSIONS.items():
+    _modules.setdefault('tasks', set(TASKS))
 
 
 class Command(BaseCommand):

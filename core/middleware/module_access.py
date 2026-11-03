@@ -67,6 +67,7 @@ MODULE_BY_PREFIX = {
     'sync': 'sync',
     'users': 'users',
     'access': 'settings',     # trusted networks (admin only in the view); whoami is open below
+    'tasks': 'tasks',         # own module since 2026-11-03 (owner); views check it too
 }
 
 # Prefixes every staff screen reads (pickers, lookups, theme); only their
@@ -102,7 +103,6 @@ OPEN_WRITE_EXACT = ('/api/audit/screen-view/',)
 # trainer edits), the external customer portal and inbound webhooks (own auth).
 EXEMPT_PREFIXES = {'auth', 'notifications', 'personal', 'search', 'help', 'portal', 'social',
                    'gamification',   # own points open to all; its views check gamification/*
-                   'tasks',          # every staff member's own task board (scoping: Batch 5)
                    'stock-audit',    # own gate apps/stock_audit/access.py: RBAC stock_audit
                    'pic-analytics',  # own gate apps/pic_analytics/access.py: RBAC pic_analytics + named grants
                    'csp-report',     # browsers' CSP reports — public, log only (core/csp.py, W-9)

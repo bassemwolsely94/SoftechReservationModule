@@ -13,6 +13,7 @@ from rest_framework.response import Response
 
 from apps.notifications.models import Notification
 from core import branch_scope
+from core.permissions import matrix_permission
 from core.sort_ordering import explicit_order_by, staff_name_key
 from core.sort_rank import branch_label, choice_rank, label_sort
 
@@ -27,6 +28,11 @@ from .serializers import (
     TaskMessageSerializer, TaskAttachmentSerializer,
     TaskScheduleSerializer, TaskAuditLogSerializer,
 )
+
+# Matrix module 'tasks' (owner decision 2026-11-03): reading needs view; every POST (create, complete,
+# assign, items, messages, attachments, run a schedule) any write grant. Who may change a given task
+# is still decided below (creator / assignees / admin / supervisor).
+TASKS = matrix_permission('tasks', post=('create', 'edit', 'assign', 'finalize'))
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -121,7 +127,7 @@ def _notify_watchers(task, message, exclude_staff=None):
 # ── Task List / Create ─────────────────────────────────────────────────────────
 
 class TaskListCreateView(generics.ListCreateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, TASKS]
     filter_backends = []   # filters + ordering are applied in get_queryset (the default OrderingFilter would re-sort by raw column)
     # public ordering key -> model field / annotation (status & priority sort by lifecycle rank, not by code)
     ORDERING_KEYS = {
@@ -230,7 +236,7 @@ class TaskListCreateView(generics.ListCreateAPIView):
 # ── Task Retrieve / Update / Delete ───────────────────────────────────────────
 
 class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, TASKS]
 
     def get_queryset(self):
         return _visible_tasks(self.request).select_related(
@@ -312,7 +318,7 @@ class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
 # ── Complete Task ──────────────────────────────────────────────────────────────
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, TASKS])
 def task_complete(request, pk):
     try:
         task = _visible_tasks(request).get(pk=pk)
@@ -348,7 +354,7 @@ def task_complete(request, pk):
 # ── Reopen Task ────────────────────────────────────────────────────────────────
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, TASKS])
 def task_reopen(request, pk):
     try:
         task = _visible_tasks(request).get(pk=pk)
@@ -375,7 +381,7 @@ def task_reopen(request, pk):
 # ── Assignments ────────────────────────────────────────────────────────────────
 
 @api_view(['GET', 'POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, TASKS])
 def task_assignments(request, pk):
     try:
         task = _visible_tasks(request).get(pk=pk)
@@ -415,7 +421,7 @@ def task_assignments(request, pk):
 
 
 @api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, TASKS])
 def task_assignment_remove(request, pk, assignment_pk):
     if not _task_visible(request, pk):
         return Response({'detail': 'Not found.'}, status=404)
@@ -437,7 +443,7 @@ def task_assignment_remove(request, pk, assignment_pk):
 # ── Items / Checklist ──────────────────────────────────────────────────────────
 
 @api_view(['GET', 'POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, TASKS])
 def task_items(request, pk):
     try:
         task = _visible_tasks(request).get(pk=pk)
@@ -454,7 +460,7 @@ def task_items(request, pk):
 
 
 @api_view(['PATCH', 'DELETE'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, TASKS])
 def task_item_detail(request, pk, item_pk):
     if not _task_visible(request, pk):
         return Response({'detail': 'Not found.'}, status=404)
@@ -485,7 +491,7 @@ def task_item_detail(request, pk, item_pk):
 # ── Messages / Chatter ────────────────────────────────────────────────────────
 
 @api_view(['GET', 'POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, TASKS])
 def task_messages(request, pk):
     try:
         task = _visible_tasks(request).get(pk=pk)
@@ -517,7 +523,7 @@ def task_messages(request, pk):
 
 
 @api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, TASKS])
 def task_message_delete(request, pk, message_pk):
     if not _task_visible(request, pk):
         return Response({'detail': 'Not found.'}, status=404)
@@ -541,7 +547,7 @@ def task_message_delete(request, pk, message_pk):
 # ── Attachments ────────────────────────────────────────────────────────────────
 
 @api_view(['GET', 'POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, TASKS])
 @parser_classes([MultiPartParser, FormParser])
 def task_attachments(request, pk):
     try:
@@ -583,7 +589,7 @@ def task_attachments(request, pk):
 
 
 @api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, TASKS])
 def task_attachment_delete(request, pk, att_pk):
     if not _task_visible(request, pk):
         return Response({'detail': 'Not found.'}, status=404)
@@ -604,7 +610,7 @@ def task_attachment_delete(request, pk, att_pk):
 # ── My Tasks ──────────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, TASKS])
 def my_tasks(request):
     staff = _get_staff(request)
     if not staff:
@@ -621,7 +627,7 @@ def my_tasks(request):
 # ── Dashboard / Stats ──────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, TASKS])
 def task_dashboard(request):
     p = request.query_params
     branch = p.get('branch')
@@ -703,7 +709,7 @@ def task_dashboard(request):
 # ── Audit Log ─────────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, TASKS])
 def task_audit_logs(request, pk):
     try:
         task = _visible_tasks(request).get(pk=pk)
@@ -730,7 +736,7 @@ def _schedules(request, writing=False):
 
 
 class TaskScheduleListCreateView(generics.ListCreateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, TASKS]
     serializer_class = TaskScheduleSerializer
     filter_backends = []   # ordering is applied in get_queryset (the default OrderingFilter would re-sort by raw column)
     # sortable grid: public key -> field / annotation (frequency sorts by its natural order)
@@ -763,7 +769,7 @@ class TaskScheduleListCreateView(generics.ListCreateAPIView):
 
 
 class TaskScheduleDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, TASKS]
     serializer_class = TaskScheduleSerializer
 
     def get_queryset(self):
@@ -776,7 +782,7 @@ class TaskScheduleDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, TASKS])
 def schedule_run_now(request, pk):
     """Manually trigger a schedule to generate its task immediately."""
     try:
@@ -796,7 +802,7 @@ def schedule_run_now(request, pk):
 # ── Filter options ─────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, TASKS])
 def task_filter_options(request):
     return Response({
         'statuses': [{'value': k, 'label': v} for k, v in STATUS_CHOICES],
