@@ -194,3 +194,94 @@ class ZoneRecheckTests(_SocketCase):
             after_disconnect, later = async_to_sync(go)()
         self.assertGreater(after_disconnect, 2, 'the re-check loop never ran')
         self.assertEqual(later, after_disconnect, 're-check loop still running after disconnect')
+
+
+def _in_group(group, channel):
+    """Whether `channel` is a member of `group` on the in-memory channel layer."""
+    return channel in get_channel_layer().groups.get(group, {})
+
+
+class ZoneCleanupTests(_SocketCase):
+    """Final review I1: the re-check task and the access groups never outlive the consumer."""
+
+    def _capture(self):
+        seen = []
+        real = ws.ZoneGuardMixin.zone_start
+
+        async def spy(consumer):
+            seen.append(consumer)
+            await real(consumer)
+        return seen, mock.patch.object(ws.ZoneGuardMixin, 'zone_start', spy)
+
+    def test_failure_after_accept_leaves_no_task_and_no_group(self):
+        from apps.notifications.consumers import NotificationConsumer
+        user, _, _ = make_user('n5c_orphan', role='pharmacist')
+        tok = self._token(user)
+        seen, p_spy = self._capture()
+
+        async def boom(consumer):
+            raise RuntimeError('post-accept step failed')
+
+        async def go():
+            c = self._comm('/ws/notifications/', tok)
+            ok, _ = await c.connect()
+            assert ok
+            try:
+                await c.wait(timeout=3)
+            except RuntimeError:
+                pass
+            await asyncio.sleep(0.2)
+            return seen[0]
+        with p_spy, mock.patch.object(NotificationConsumer, '_send_pending', boom), \
+                mock.patch('apps.access.ws.WS_RECHECK_SECONDS', 0.05):
+            consumer = async_to_sync(go)()
+        self.assertIsNone(consumer._zone_task)
+        self.assertFalse(_in_group('access_all', consumer.channel_name))
+        self.assertFalse(_in_group(f'access_user_{user.pk}', consumer.channel_name))
+
+    def test_zone_stop_leaves_both_groups(self):
+        user, _, _ = make_user('n5c_stop', role='pharmacist')
+        tok = self._token(user)
+        seen, p_spy = self._capture()
+
+        async def go():
+            c = self._comm('/ws/notifications/', tok)
+            ok, _ = await c.connect()
+            assert ok
+            await c.receive_nothing(timeout=0.2)
+            consumer = seen[0]
+            inside = (_in_group('access_all', consumer.channel_name),
+                      _in_group(f'access_user_{user.pk}', consumer.channel_name))
+            await consumer.zone_stop()
+            after = (_in_group('access_all', consumer.channel_name),
+                     _in_group(f'access_user_{user.pk}', consumer.channel_name))
+            task = consumer._zone_task
+            await c.disconnect()
+            return inside, after, task
+        with p_spy:
+            inside, after, task = async_to_sync(go)()
+        self.assertEqual(inside, (True, True))
+        self.assertEqual(after, (False, False))
+        self.assertIsNone(task)
+
+    def test_recheck_push_error_does_not_crash_the_consumer(self):
+        user, _, _ = make_user('n5c_push_err', role='pharmacist')
+        tok = self._token(user)
+
+        async def go():
+            c = self._comm('/ws/notifications/', tok)
+            ok, _ = await c.connect()
+            assert ok
+            await c.receive_nothing(timeout=0.2)
+            with mock.patch('apps.access.ws._check', side_effect=RuntimeError('db down')):
+                await get_channel_layer().group_send(f'access_user_{user.pk}',
+                                                     {'type': 'access.recheck'})
+                quiet = await c.receive_nothing(timeout=0.5)
+            await c.send_json_to({'action': 'ping'})
+            pong = await c.receive_json_from(timeout=3)
+            await c.disconnect()
+            return quiet, pong
+        with self.assertLogs('elrezeiky.access', 'WARNING'):
+            quiet, pong = async_to_sync(go)()
+        self.assertTrue(quiet)
+        self.assertEqual(pong, {'event': 'pong'})

@@ -221,6 +221,28 @@ class ZoneGuardMixin:
     before its record checks (ruling F2)."""
     socket_kind: str = ''
 
+    async def __call__(self, scope, receive, send):
+        """Run the consumer; whatever way it ends (disconnect, an exception after accept), the
+        re-check task is cancelled and the socket leaves its access groups. Never raises from
+        the clean-up."""
+        try:
+            return await super().__call__(scope, receive, send)
+        finally:
+            task = getattr(self, '_zone_task', None)
+            if task is not None:
+                task.cancel()
+                self._zone_task = None
+            groups = list(getattr(self, '_zone_groups', ()) or ())
+            self._zone_groups = []
+            layer = getattr(self, 'channel_layer', None)
+            name = getattr(self, 'channel_name', None)
+            if layer is not None and name:
+                for group in groups:
+                    try:
+                        await layer.group_discard(group, name)
+                    except Exception:
+                        log.warning('ws group discard failed (%s)', group, exc_info=True)
+
     def _zone_user_id(self):
         return getattr(self.scope.get('user'), 'pk', None)
 
@@ -260,6 +282,8 @@ class ZoneGuardMixin:
     async def _zone_loop(self):
         while True:
             await asyncio.sleep(WS_RECHECK_SECONDS)
+            if getattr(self, '_zone_closed', False):
+                return
             try:
                 if not await self._zone_apply():
                     return
@@ -272,4 +296,9 @@ class ZoneGuardMixin:
         """`access.recheck` pushed to the user's or everyone's group: check once, now."""
         if getattr(self, '_zone_closed', False):
             return
-        await self._zone_apply()
+        try:
+            await self._zone_apply()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.warning('ws re-check push failed (%s)', self.socket_kind, exc_info=True)
