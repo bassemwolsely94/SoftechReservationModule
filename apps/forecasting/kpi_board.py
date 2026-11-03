@@ -72,6 +72,20 @@ def make_cell(a, t, tid, data_through, m_end, frac):
     }
 
 
+def month_targets(m_start, m_end, metrics, scope_types, branch_ids=None):
+    """Editable targets overlapping the month, as dict rows ordered by id.
+
+    The view and ``branch_mtd`` both read targets only through here and build their lookup by
+    iterating in this order (last row wins), so overlapping targets resolve to the same row
+    (the newest id) in both."""
+    from apps.incentives.models import SalesTarget
+    qs = SalesTarget.objects.filter(metric__in=metrics, period_start__lte=m_end,
+                                    period_end__gte=m_start, scope_type__in=scope_types)
+    if branch_ids is not None:
+        qs = qs.filter(branch_id__in=list(branch_ids))
+    return qs.order_by('id').values('id', 'scope_type', 'branch_id', 'metric', 'target_value')
+
+
 def _dec(value):
     return None if value is None else Decimal(str(value))
 
@@ -90,10 +104,9 @@ def branch_mtd(branch_ids, year, month):
     actual = {r['branch_id']: float(r['value']) for r in KpiActualRollup.objects.filter(
         year=year, month=month, metric=SALES_METRIC, branch_id__in=ids).values('branch_id', 'value')}
     target = {}
-    for t in SalesTarget.objects.filter(
-            metric=SALES_METRIC, scope_type=SalesTarget.SCOPE_BRANCH, branch_id__in=ids,
-            period_start__lte=m_end, period_end__gte=m_start).values('branch_id', 'target_value'):
-        target[t['branch_id']] = float(t['target_value'] or 0)
+    for t in month_targets(m_start, m_end, [SALES_METRIC], [SalesTarget.SCOPE_BRANCH], ids):
+        if t['branch_id']:
+            target[t['branch_id']] = float(t['target_value'] or 0)
     out = {}
     for bid in ids:
         a, t = actual.get(bid, 0.0), target.get(bid, 0.0)

@@ -58,6 +58,26 @@ class KpiBoardExtractTests(TestCase):
             self.assertEqual(got['as_of'], date(2026, 5, 31))
             self.assertIsNone(got['daily_needed'])          # month over
 
+    def test_view_mid_month_golden(self):
+        from apps.forecasting import kpi_board
+        with mock.patch.object(kpi_board, 'latest_complete_date', return_value=date(2026, 5, 20)):
+            data = self._board()
+        rows = {r['branch_id']: r['cells'][K.M_CASH_DELIVERY] for r in data['branches']}
+        a, b = rows[self.a.id], rows[self.b.id]
+        self.assertEqual((a['target_todate'], a['pct'], a['pct_full'], a['pace']),
+                         (6451.61, 186.0, 120.0, 'ahead'))
+        self.assertEqual((b['target_todate'], b['pct'], b['pct_full'], b['pace']),
+                         (6451.61, 62.0, 40.0, 'behind'))
+
+    def test_overlapping_targets_pick_same_row_in_view_and_mtd(self):
+        from apps.forecasting import kpi_board
+        SalesTarget.objects.create(scope_type='branch', branch=self.b, metric=K.M_CASH_DELIVERY,
+                                   period_start=date(2026, 5, 1), period_end=date(2026, 5, 31),
+                                   target_value=Decimal('8000'))        # newer row (highest id) wins
+        cell = {r['branch_id']: r['cells'][K.M_CASH_DELIVERY] for r in self._board()['branches']}[self.b.id]
+        self.assertEqual(cell['target'], 8000.0)
+        self.assertEqual(kpi_board.branch_mtd([self.b.id], 2026, 5)[self.b.id]['target'], Decimal('8000.0'))
+
     def test_branch_mtd_daily_needed_and_missing_target(self):
         from apps.forecasting import kpi_board
         c = Branch.objects.create(softech_branch_id='953', code='953', name='C', name_ar='فرع ج')

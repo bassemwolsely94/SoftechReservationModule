@@ -114,6 +114,39 @@ class ComposeTests(_Base):
         self.assertIn('%', c.headline_vars[2])
         self.assertTrue(all('\n' not in v for v in c.headline_vars))
 
+    def test_drops_only_genuine_declines_ordered_by_magnitude(self):
+        run = InsightRun.objects.create(domain='sales', period_type='day', period_start=YESTERDAY,
+                                        period_end=YESTERDAY)
+        for cat, sev, val, msg in (('coverage', 'critical', 999, 'لا توصيل'),
+                                   ('discount', 'critical', 999, 'خصم'),
+                                   ('comparison', 'warning', -10, 'صغير'),
+                                   ('volume', 'warning', -40, 'كبير'),
+                                   ('volume', 'critical', -5, 'حرج')):
+            InsightFinding.objects.create(run=run, rule_code='r', category=cat, severity=sev, value=val,
+                                          scope_type='branch', scope_key='961', message_ar=msg, message_en=msg)
+        t = _compose(self.branch).text
+        self.assertNotIn('لا توصيل', t)
+        self.assertNotIn('خصم', t)
+        self.assertLess(t.index('حرج'), t.index('كبير'))
+        self.assertLess(t.index('كبير'), t.index('صغير'))
+
+    def test_transfer_followups_do_not_query_per_transfer(self):
+        def make(n):
+            for i in range(n):
+                tr = TransferRequest.objects.create(requesting_branch=self.branch, status='pending',
+                                                    request_number=f'TQ-{n}-{i}')
+                TransferRequestItem.objects.create(request=tr, item=self.item, quantity=1)
+            TransferRequest.objects.update(updated_at=_when(TODAY - timedelta(days=5)))
+        make(2)
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        with CaptureQueriesContext(connection) as small:
+            _compose(self.branch)
+        make(20)
+        with CaptureQueriesContext(connection) as big:
+            _compose(self.branch)
+        self.assertEqual(len(big), len(small))
+
     def test_compose_without_data_still_works(self):
         c = _compose(self.other)
         self.assertIn('فرع المعادي', c.text)
@@ -201,10 +234,23 @@ class SendAllTests(_Base):
             self.assertEqual(kw['quick_reply_payloads'], [f'brief:{token}'])
             self.assertEqual(len(kw['variables']), 3)
 
-    def test_send_all_is_once_per_day(self):
-        self.assertEqual(self._send(), 2)
-        self.assertEqual(self._send(), 0)
+    def test_send_all_is_once_per_calendar_day(self):
+        today = timezone.localdate()
+        self.assertEqual(self._send(day=today), 2)
+        self.assertEqual(self._send(day=today), 0)
         self.assertEqual(PhoneAlert.objects.filter(kind='brief').count(), 2)
+        # a brief created on an earlier Cairo day does not block today's
+        PhoneAlert.objects.filter(kind='brief').update(created_at=timezone.now() - timedelta(days=1))
+        self.assertEqual(self._send(day=today), 2)
+
+    def test_dedup_is_calendar_day_not_rolling_window(self):
+        today = timezone.localdate()
+        self._send(day=today)
+        midnight = timezone.make_aware(datetime(today.year, today.month, today.day))
+        PhoneAlert.objects.filter(kind='brief').update(created_at=midnight - timedelta(minutes=1))
+        # 09:00 the next morning: the old brief is only 9 h 1 min old, but it is yesterday's
+        with mock.patch.object(timezone, 'now', return_value=midnight + timedelta(hours=9)):
+            self.assertEqual(self._send(day=today), 2)
 
     def test_one_branch_failure_does_not_stop_the_others(self):
         InsightRecipient.objects.create(name='o', wa_number='01066666666', branch=self.other,
@@ -250,6 +296,27 @@ class BriefTapTests(_Base):
             self.assertEqual(WA.return_value.send_text.call_count, 2)
         self.alert.refresh_from_db()
         self.assertIsNotNone(self.alert.ack_at)
+        # audit: each free-text send is an attempt (the first is the dry-run template send)
+        self.assertEqual([a.result for a in self.alert.attempts.order_by('pk')],
+                         ['dry_run', 'sent', 'sent'])
+
+    @override_settings(MORNING_BRIEF_SEND_ENABLED=True)
+    def test_tap_composes_for_the_alerts_own_day(self):
+        old = timezone.make_aware(datetime(2026, 10, 20, 9, 0))
+        PhoneAlert.objects.filter(pk=self.alert.pk).update(created_at=old)
+        from apps.insights import brief
+        with mock.patch('apps.whatsapp.sender.WhatsAppSender'), \
+                mock.patch.object(brief, 'compose', wraps=brief.compose) as comp:
+            self._tap()
+        self.assertEqual(comp.call_args.args[1], date(2026, 10, 20))
+
+    @override_settings(MORNING_BRIEF_SEND_ENABLED=True)
+    def test_tap_failure_recorded(self):
+        with mock.patch('apps.whatsapp.sender.WhatsAppSender') as WA:
+            WA.return_value.is_configured = True
+            WA.return_value.send_text.side_effect = RuntimeError('x')
+            self.assertEqual(self._tap(), 'failed')
+        self.assertEqual(self.alert.attempts.order_by('pk').last().result, 'failed')
 
     @override_settings(MORNING_BRIEF_SEND_ENABLED=True)
     def test_tap_from_other_phone_or_unknown_token_sends_nothing(self):
@@ -272,27 +339,53 @@ class BriefTapTests(_Base):
 
 
 class OtherJobsTests(_Base):
-    def test_insights_0730_skips_brief_recipients(self):
-        from apps.insights.engine import InsightEngine
+    def _insight_send(self, run, account=True, switch=True):
         from apps.insights.management.commands.generate_insights import Command
-        InsightRecipient.objects.create(name='brief', wa_number='201011111111', branch=self.branch,
-                                        morning_brief=True)
-        InsightRecipient.objects.create(name='plain', wa_number='201022222222', branch=self.branch)
-        run = InsightRun.objects.create(domain='sales', period_type='day', period_start=YESTERDAY,
+        cmd = Command()
+        cmd.stdout, cmd.stderr = StringIO(), StringIO()
+        acct = mock.Mock() if account else None
+        with override_settings(MORNING_BRIEF_SEND_ENABLED=switch), \
+                mock.patch('apps.notifications.phone_alerts.sender.staff_account', return_value=acct), \
+                mock.patch('apps.whatsapp.sender.WhatsAppSender') as WA:
+            cmd._send(run)
+        return sorted(c.kwargs['wa_id'] for c in WA.return_value.send_text.call_args_list)
+
+    def _run(self, domain='sales', period='day'):
+        run = InsightRun.objects.create(domain=domain, period_type=period, period_start=YESTERDAY,
                                         period_end=YESTERDAY)
         InsightFinding.objects.create(run=run, rule_code='r', category='volume', severity='warning',
                                       scope_type='branch', scope_key='961', message_ar='م', message_en='m')
-        cmd = Command()
-        cmd.stdout, cmd.stderr = StringIO(), StringIO()
-        with mock.patch('apps.whatsapp.sender.WhatsAppSender') as WA:
-            sent = cmd._send(run)
-        self.assertEqual(sent, 1)
-        self.assertEqual([c.kwargs['wa_id'] for c in WA.return_value.send_text.call_args_list],
-                         ['201022222222'])
-        # weekly/monthly reports are not part of the brief: those recipients still get them
-        run.period_type = 'week'
-        with mock.patch('apps.whatsapp.sender.WhatsAppSender') as WA:
-            self.assertEqual(cmd._send(run), 2)
+        return run
+
+    def _recipients(self, brief_branch=True):
+        InsightRecipient.objects.create(name='brief', wa_number='201011111111',
+                                        branch=self.branch if brief_branch else None, morning_brief=True)
+        InsightRecipient.objects.create(name='plain', wa_number='201022222222', branch=self.branch)
+
+    def test_insights_0730_skips_brief_recipients_only_when_brief_goes_out(self):
+        self._recipients()
+        run = self._run()
+        self.assertEqual(self._insight_send(run), ['201022222222'])
+
+    def test_insights_0730_switch_off_or_no_account_keeps_recipient(self):
+        self._recipients()
+        run = self._run()
+        self.assertEqual(self._insight_send(run, switch=False), ['201011111111', '201022222222'])
+        self.assertEqual(self._insight_send(run, account=False), ['201011111111', '201022222222'])
+
+    def test_insights_0730_recipient_without_branch_keeps_report(self):
+        self._recipients(brief_branch=False)
+        run = self._run()
+        InsightRecipient.objects.filter(name='plain').delete()
+        self.assertEqual(self._insight_send(run), ['201011111111'])
+
+    def test_insights_0730_purchasing_and_other_periods_still_go(self):
+        self._recipients()
+        # the purchasing daily report is not part of the brief (sales only)
+        self.assertEqual(self._insight_send(self._run(domain='purchasing')),
+                         ['201011111111', '201022222222'])
+        self.assertEqual(self._insight_send(self._run(period='week')),
+                         ['201011111111', '201022222222'])
 
     def test_tick_never_reminds_or_escalates_briefs(self):
         from apps.notifications.phone_alerts import jobs

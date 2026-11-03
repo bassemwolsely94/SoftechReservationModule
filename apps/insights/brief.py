@@ -11,7 +11,7 @@ shared alert mobile through the phone-alerts sender (dry-run rules and the
 """
 import logging
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.contrib.contenttypes.models import ContentType
@@ -23,7 +23,6 @@ MAX_FOLLOWUPS = 5
 STUCK_AFTER_DAYS = 2
 ACTIVE_RESERVATION = ('pending', 'available', 'contacted', 'confirmed')
 STUCK_TRANSFER = ('pending', 'approved', 'needs_revision')
-DEDUP_WINDOW = timedelta(hours=12)
 
 H_YESTERDAY = 'أمس'
 H_MTD = 'الشهر حتى الآن'
@@ -95,11 +94,18 @@ def _drops_section(branch, yesterday):
     return [f'*{H_DROPS}*'] + [f'• {m}' for m in msgs]
 
 
-def _capped(lines):
-    shown = lines[:MAX_FOLLOWUPS]
-    if len(lines) > MAX_FOLLOWUPS:
-        shown.append(f'  +{len(lines) - MAX_FOLLOWUPS} أخرى')
-    return shown
+def _capped(qs, line_of):
+    """First MAX_FOLLOWUPS rows of ``qs`` as lines, plus «+N أخرى» for the rest (one COUNT, one slice)."""
+    total = qs.count()
+    lines = [line_of(r) for r in qs[:MAX_FOLLOWUPS]]
+    if total > MAX_FOLLOWUPS:
+        lines.append(f'  +{total - MAX_FOLLOWUPS} أخرى')
+    return lines
+
+
+def _transfer_line(t):
+    items = sorted(t.items.all(), key=lambda i: i.pk)           # prefetched: no per-transfer query
+    return f'• {t.request_number or "#" + str(t.pk)} — {items[0].item.name if items else "—"}'
 
 
 def _followups_section(branch, day):
@@ -113,14 +119,9 @@ def _followups_section(branch, day):
            .select_related('item').order_by('pk'))
     trs = (TransferRequest.objects.filter(status__in=STUCK_TRANSFER, updated_at__date__lt=cutoff)
            .filter(Q(requesting_branch=branch) | Q(supplying_branch=branch))
-           .order_by('pk'))
-    lines = [f'• #{r.pk} — {r.item_label}' for r in res]
-    lines = _capped(lines)
-    tlines = []
-    for t in trs:
-        first = t.items.select_related('item').first()
-        tlines.append(f'• {t.request_number or "#" + str(t.pk)} — {first.item.name if first else "—"}')
-    lines += _capped(tlines)
+           .prefetch_related('items__item').order_by('pk'))
+    lines = _capped(res, lambda r: f'• #{r.pk} — {r.item_label}')
+    lines += _capped(trs, _transfer_line)
     if not lines:
         return []
     return [f'*{H_FOLLOWUP}*'] + lines
@@ -162,14 +163,16 @@ def _phones(branch):
 def send_all(day=None) -> int:
     """Send today's brief to every branch that has recipients. Returns the number of alerts sent.
 
-    A phone that already got this branch's brief in the last 12 h is skipped (safe to re-run);
+    A phone that already got this branch's brief on that Cairo calendar day is skipped (safe to re-run);
     one branch failing never stops the others."""
     from apps.branches.models import Branch
     from apps.insights.models import InsightRecipient
     from apps.notifications.phone_alerts import sender
     from apps.notifications.phone_alerts.models import PhoneAlert
     day = day or timezone.localdate()
-    ct = ContentType.objects.get_for_model(Branch)
+    start = timezone.make_aware(datetime.combine(day, time.min))        # the brief's Cairo calendar day
+    end = timezone.make_aware(datetime.combine(day + timedelta(days=1), time.min))
+    ct =ContentType.objects.get_for_model(Branch)
     branch_ids = set(InsightRecipient.objects.filter(morning_brief=True, active=True, branch__isnull=False)
                      .values_list('branch_id', flat=True))
     count = 0
@@ -177,7 +180,7 @@ def send_all(day=None) -> int:
         try:
             recent = set(PhoneAlert.objects.filter(
                 kind='brief', source_ct=ct, source_id=branch.pk,
-                created_at__gte=timezone.now() - DEDUP_WINDOW).values_list('phone', flat=True))
+                created_at__gte=start, created_at__lt=end).values_list('phone', flat=True))
             phones = [p for p in _phones(branch) if p not in recent]
             if not phones:
                 continue

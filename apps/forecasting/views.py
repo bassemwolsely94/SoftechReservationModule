@@ -208,10 +208,8 @@ class KpiBoardView(APIView):
         branch_ids_with_data = {r['branch_id'] for r in rollups}
 
         # editable targets overlapping the month (branch + chain scope) → value + id
-        tqs = SalesTarget.objects.filter(
-            metric__in=BOARD_METRICS, period_start__lte=m_end, period_end__gte=m_start,
-            scope_type__in=[SalesTarget.SCOPE_BRANCH, SalesTarget.SCOPE_CHAIN],
-        ).values('id', 'scope_type', 'branch_id', 'metric', 'target_value')
+        tqs = kpi_board.month_targets(m_start, m_end, BOARD_METRICS,
+                                      [SalesTarget.SCOPE_BRANCH, SalesTarget.SCOPE_CHAIN])
         branch_target = {}
         chain_target  = {}
         for t in tqs:

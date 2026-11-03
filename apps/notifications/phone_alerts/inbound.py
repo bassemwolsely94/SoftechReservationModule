@@ -216,12 +216,21 @@ def handle_brief_tap(*, wa_id, payload, context_wamid='', account=None) -> str:
         from apps.insights import brief
         from apps.whatsapp.sender import WhatsAppSender
         from .sender import staff_account
+        # the alert's own Cairo day, so the full text matches the data date of the 09:00 headline
         text = brief.compose(alert.source, timezone.localdate(alert.created_at)).text
         wa = WhatsAppSender(account=account or staff_account())
         if not wa.is_configured:
-            return 'failed'
-        wa.send_text(wa_id=wa_id, body=text[:4000])
+            raise RuntimeError('WhatsApp account has no credentials')
+        result = wa.send_text(wa_id=wa_id, body=text[:4000])
     except Exception as exc:
         logger.warning('morning brief %s: full text failed: %s', alert.pk, type(exc).__name__)
+        PhoneAlertAttempt.objects.create(alert=alert, channel='whatsapp', result='failed',
+                                         error=str(exc)[:1000])
         return 'failed'
+    try:
+        wamid = result['messages'][0]['id']
+    except (TypeError, KeyError, IndexError):
+        wamid = ''
+    PhoneAlertAttempt.objects.create(alert=alert, channel='whatsapp', result='sent',
+                                     provider_message_id=wamid if isinstance(wamid, str) else '')
     return 'sent'
