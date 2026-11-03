@@ -711,8 +711,8 @@ class InboundFixRound1Tests(InboundTests):
         staff_conv = WAConversation.objects.get(account=self.acc)
         self.assertEqual(client.get(f'/api/whatsapp/conversations/{staff_conv.pk}/').status_code, 404)
         omni = client.get('/api/omni/wallboard/')
-        if omni.status_code == 200:
-            self.assertEqual(omni.json()['conversations']['wa_unread'], 3)
+        self.assertEqual(omni.status_code, 200)
+        self.assertEqual(omni.json()['conversations']['wa_unread'], 3)
         del a
 
     def test_flagged_account_no_longer_configured_still_routes_to_staff(self):
@@ -755,3 +755,22 @@ class InboundFixRound1Tests(InboundTests):
             self._post_webhook([{'from': self.WA, 'id': 'wamid.v', 'timestamp': '1', 'type': 'audio',
                                  'audio': {'id': 'm1'}}])
         self.assertTrue(any('unsupported audio' in m for m in cm.output))
+
+
+    def test_staff_account_messages_not_ingested_into_omni(self):
+        from django.core.management import call_command
+        from apps.omni.models import Conversation, TimelineEvent
+        ChannelAccount.objects.filter(pk=self.acc.pk).update(is_staff_alerts=True)
+        self.acc.refresh_from_db()
+        from apps.whatsapp.sender import WhatsAppSender
+        WhatsAppSender(account=self.acc)._record_outbound(self.WA, 'template', body='alert')
+        WhatsAppSender(account=self.acc)._record_outbound(self.WA, 'text', body=inbound.REPLY_TEXT)
+        self.assertEqual(WAMessage.objects.filter(conversation__account=self.acc).count(), 2)
+        self.assertEqual((Conversation.objects.count(), TimelineEvent.objects.count()), (0, 0))
+        call_command('backfill_omni', verbosity=0)
+        self.assertEqual((Conversation.objects.count(), TimelineEvent.objects.count()), (0, 0))
+        # a customer account is still ingested
+        cust = ChannelAccount.objects.create(channel='whatsapp', name='C2', phone_or_handle='2',
+                                             provider='meta_cloud', provider_ref='889')
+        WhatsAppSender(account=cust)._record_outbound('201122222222', 'text', body='hi')
+        self.assertEqual(TimelineEvent.objects.count(), 1)

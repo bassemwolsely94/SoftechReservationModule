@@ -88,7 +88,8 @@ class Command(BaseCommand):
         self.stdout.write(f'WAConversations: {wa_convs.count()} total, {linked} linked to account')
 
         msg_count = 0
-        messages = WAMessage.objects.select_related('conversation__customer', 'sent_by').order_by('created_at')
+        messages = (WAMessage.objects.select_related('conversation__customer', 'sent_by')
+                    .exclude(conversation__account__is_staff_alerts=True).order_by('created_at'))
         self.stdout.write(f'WAMessages to scan: {messages.count()}')
         if not dry:
             for msg in messages.iterator(chunk_size=500):

@@ -170,6 +170,8 @@ def ingest_wa_message(msg) -> TimelineEvent | None:
         return None
 
     wa_conv = msg.conversation
+    if getattr(getattr(wa_conv, 'account', None), 'is_staff_alerts', False):
+        return None          # staff phone-alerts number: never part of the customer timeline
 
     with transaction.atomic():
         convo = wa_conv.omni_conversation
