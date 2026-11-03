@@ -24,7 +24,7 @@ export default function GroupTable({ data, title, note, firstLabel = 'الاسم
               <th className={cell}>عملاء</th><th className={cell}>جدد</th><th className={cell}>عائدون</th>
               <th className={cell}>مُعاد تنشيطهم</th><th className={cell}>زيارات</th><th className={cell}>صافي</th>
               {hasGp && <th className={cell}>الربح</th>}
-              <th className={cell}>سلة (صافي)</th><th className={cell}>أصناف/زيارة</th>
+              <th className={cell}>سلة (صافي)</th><th className={cell}>أصناف/زيارة</th><th className={cell}>سطور لكل زيارة</th>
             </tr>
           </thead>
           <tbody>
@@ -38,6 +38,7 @@ export default function GroupTable({ data, title, note, firstLabel = 'الاسم
                   <td className={cell}>{fmt(r.visits)}</td><td className={cell}>{fmt(r.net)}</td>
                   {hasGp && <td className={cell}>{fmt(r.gp)}</td>}
                   <td className={cell}>{fmt(r.basket_net, 2)}</td><td className={cell}>{fmt(r.units_per_visit, 2)}</td>
+                  <td className={cell}>{fmt(r.lines_per_visit, 2)}</td>
                 </tr>
               )
             })}
@@ -49,10 +50,11 @@ export default function GroupTable({ data, title, note, firstLabel = 'الاسم
                 <td className={cell}>{fmt(total.visits)}</td><td className={cell}>{fmt(total.net)}</td>
                 {hasGp && <td className={cell}>{fmt(total.gp)}</td>}
                 <td className={cell}>{fmt(total.basket_net, 2)}</td><td className={cell}>{fmt(total.units_per_visit, 2)}</td>
+                <td className={cell}>{fmt(total.lines_per_visit, 2)}</td>
               </tr>
             )}
             {rows.length === 0 && (
-              <tr><td colSpan={10} className="px-3 py-6 text-center text-gray-400">لا بيانات</td></tr>
+              <tr><td colSpan={11} className="px-3 py-6 text-center text-gray-400">لا بيانات</td></tr>
             )}
           </tbody>
         </table>

@@ -97,6 +97,7 @@ export default function MissedTab({ params, ready }) {
     mutationFn: ({ id }) => picAnalyticsApi.missedCallback(id, { due: new Date(due).toISOString(), note }).then(r => r.data),
     onSuccess: (d, { id }) => {
       mark(id, true, 'تمت جدولة المعاودة ✓'); setCb(null); setDue(''); setNote('')
+      qc.invalidateQueries({ queryKey: ['pic-analytics'] })      // the row shows its call-back marker now
       qc.invalidateQueries({ queryKey: ['callbacks'] })
       qc.invalidateQueries({ queryKey: ['callcenter-dashboard'] })
     },
@@ -145,6 +146,7 @@ export default function MissedTab({ params, ready }) {
             غير المُعاد الاتصال بها فقط
           </label>
         </div>
+        {onlyOpen && <p className="text-xs text-gray-400 px-4 pt-1">الأرقام المصنّفة (موظف، مورد…) لا تظهر هنا — تجدها في تبويب «أرقام جديدة» ← الأرقام المصنّفة.</p>}
         <div {...kb.containerProps} className={`overflow-x-auto ${kb.containerProps.className}`}>
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-gray-500">

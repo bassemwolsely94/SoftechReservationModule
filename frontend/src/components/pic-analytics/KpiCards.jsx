@@ -68,6 +68,7 @@ export default function KpiCards({ data, management = false }) {
         <KpiCard label="صافي المبيعات" value={fmt(data.net)} tone="green" sub={data.no_pic_net != null ? `بدون PIC: ${fmt(data.no_pic_net)}` : undefined} />
         {hasGp && <KpiCard label="إجمالي الربح" value={fmt(data.gp)} tone="amber" sub={`هامش ${fmtPct(data.gp_pct)}`} />}
         <KpiCard label="متوسط السلة (صافي)" value={fmt(data.basket_net, 2)} sub={`أصناف ${fmt(data.basket_units, 1)} · فئات ${fmt(data.basket_categories, 1)}`} />
+        {data.basket_lines != null && <KpiCard label="سطور لكل زيارة" value={fmt(data.basket_lines, 2)} />}
         <KpiCard label="زيارات لكل عميل" value={fmt(data.visits_per_pic, 2)} />
         <KpiCard label="الاحتفاظ بالعملاء" value={fmtPct(data.retention_pct)} tone="blue" sub="من الفترة السابقة" />
         <KpiCard label="إجمالي الأصناف" value={fmt(data.units)} tone="gray" />

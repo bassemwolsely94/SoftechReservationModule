@@ -14,6 +14,96 @@ import { Pager } from './MissedTab'
 const LABELS = [['staff', 'موظف'], ['supplier', 'مورد'], ['branch', 'فرع'], ['doctor', 'طبيب'], ['spam', 'مزعج'], ['other', 'أخرى']]
 const getKey = r => r.number_id
 const getConvKey = r => r.pic
+const getAgentKey = r => r.agent_ext
+const getBranchKey = r => r.branch_id ?? 'none'
+const getLabelKey = r => r.label_id
+
+// small split table (conversions by agent / by branch): label + became PIC + became PIC and bought
+function SplitTable({ title, firstLabel, rows, getKey, tour }) {
+  const kb = useGridKeyboard({ rows, getKey })
+  const cell = 'px-3 py-2 tabular-nums'
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour={tour}>
+      <h3 className="text-sm font-bold text-gray-700 px-4 pt-3">{title}</h3>
+      <div {...kb.containerProps} className={`overflow-x-auto ${kb.containerProps.className}`}>
+        <table className="w-full text-xs">
+          <thead className="bg-gray-50 text-gray-500">
+            <tr><th className="px-3 py-2 text-right">{firstLabel}</th><th className={cell}>أصبحوا عملاء</th><th className={cell}>اشتروا</th></tr>
+          </thead>
+          <tbody>
+            {rows.map(r => {
+              const rp = kb.rowProps(r)
+              return (
+                <tr key={getKey(r)} {...rp} className={`border-t border-gray-100 hover:bg-gray-50 ${rp.className}`}>
+                  <td className="px-3 py-2 font-medium text-gray-800">{r.label || '—'}</td>
+                  <td className={cell}>{fmt(r.became_pic)}</td><td className={cell}>{fmt(r.became_pic_and_bought)}</td>
+                </tr>
+              )
+            })}
+            {rows.length === 0 && <tr><td colSpan={3} className="px-3 py-6 text-center text-gray-400">لا بيانات</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function Labelled() {
+  const qc = useQueryClient()
+  const [page, setPage] = useState(1)
+  const [err, setErr] = useState('')
+  const list = useQuery({
+    queryKey: ['pic-analytics', 'labels', page],
+    queryFn: () => picAnalyticsApi.labels({ page, page_size: 50 }).then(r => r.data),
+    staleTime: 2 * 60_000, placeholderData: keepPreviousData,
+  })
+  const undo = useMutation({
+    mutationFn: id => picAnalyticsApi.unlabel(id).then(r => r.data),
+    onSuccess: () => { setErr(''); qc.invalidateQueries({ queryKey: ['pic-analytics'] }) },   // the number returns to the list
+    onError: e => setErr(errText(e, 'تعذّر إلغاء التصنيف')),
+  })
+  const rows = list.data?.rows || []
+  const kb = useGridKeyboard({ rows, getKey: getLabelKey })
+  const cell = 'px-3 py-2 tabular-nums'
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="pic-analytics-labelled">
+      <h3 className="text-sm font-bold text-gray-700 px-4 pt-3">الأرقام المصنّفة</h3>
+      <p className="text-xs text-gray-400 px-4">أرقام صنّفتها (موظف، مورد…) فخرجت من قائمة الأرقام الجديدة والفائتة. «إلغاء التصنيف» يعيدها.</p>
+      {err && <p className="text-xs text-red-700 px-4 pt-1">{err}</p>}
+      <div {...kb.containerProps} className={`overflow-x-auto ${kb.containerProps.className}`}>
+        <table className="w-full text-xs">
+          <thead className="bg-gray-50 text-gray-500">
+            <tr>
+              <th className="px-3 py-2 text-right">الرقم</th><th className="px-3 py-2 text-right">التصنيف</th>
+              <th className="px-3 py-2 text-right">ملاحظة</th><th className="px-3 py-2 text-right">بواسطة</th>
+              <th className={cell}>التاريخ</th><th className="px-3 py-2 text-right">إجراء</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => {
+              const rp = kb.rowProps(r)
+              return (
+                <tr key={r.label_id} {...rp} className={`border-t border-gray-100 hover:bg-gray-50 ${rp.className}`}>
+                  <td className="px-3 py-2 tabular-nums" dir="ltr">{r.number || '—'}</td>
+                  <td className="px-3 py-2">{r.label_display || r.label || '—'}</td>
+                  <td className="px-3 py-2">{r.note || '—'}</td>
+                  <td className="px-3 py-2">{r.created_by || '—'}</td>
+                  <td className={cell}>{fmtDateTime(r.created_at)}</td>
+                  <td className="px-3 py-2">
+                    <button className="btn-secondary text-xs py-1" disabled={undo.isPending && undo.variables === r.label_id}
+                            onClick={() => undo.mutate(r.label_id)}>إلغاء التصنيف</button>
+                  </td>
+                </tr>
+              )
+            })}
+            {rows.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400">لا أرقام مصنّفة</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <Pager count={list.data?.count || 0} page={page} onPage={setPage} noun="رقم" />
+    </div>
+  )
+}
 
 function Conversions({ data }) {
   const rows = data?.rows || []
@@ -24,6 +114,10 @@ function Conversions({ data }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <KpiCard label="أصبحوا عملاء" value={fmt(data?.became_pic)} tone="green" />
         <KpiCard label="أصبحوا عملاء واشتروا" value={fmt(data?.became_pic_and_bought)} tone="brand" />
+      </div>
+      <div className="grid lg:grid-cols-2 gap-3">
+        <SplitTable title="التحوّل حسب الموظف" firstLabel="الموظف" rows={data?.by_agent || []} getKey={getAgentKey} tour="pic-analytics-conv-agent" />
+        <SplitTable title="التحوّل حسب الفرع" firstLabel="الفرع" rows={data?.by_branch || []} getKey={getBranchKey} tour="pic-analytics-conv-branch" />
       </div>
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <h3 className="text-sm font-bold text-gray-700 px-4 pt-3">أرقام تحوّلت إلى عملاء</h3>
@@ -143,6 +237,7 @@ export default function NumbersTab({ params, ready }) {
         <Pager count={list.data?.count || 0} page={page} onPage={setPage} noun="رقم" />
       </div>
       <Conversions data={conv.data} />
+      <Labelled />
     </div>
   )
 }

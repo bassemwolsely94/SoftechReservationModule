@@ -2913,6 +2913,8 @@ export const picAnalyticsApi = {
   conversions: (params = {})    => api.get('/pic-analytics/numbers/conversions/', { params }),
   numberDial: (numberId)        => api.post(`/pic-analytics/numbers/${numberId}/dial/`),
   labelNumber: (data)           => api.post('/pic-analytics/numbers/label/', data),
+  labels:     (params = {})     => api.get('/pic-analytics/numbers/labels/', { params }),
+  unlabel:    (labelId)         => api.post(`/pic-analytics/numbers/labels/${labelId}/delete/`),
   grants:     ()                => api.get('/pic-analytics/grants/'),
   grant:      (data)            => api.post('/pic-analytics/grants/', data),
   revoke:     (id, data = {})   => api.post(`/pic-analytics/grants/${id}/revoke/`, data),

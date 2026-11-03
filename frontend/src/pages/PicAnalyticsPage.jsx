@@ -9,7 +9,7 @@
  * Call tabs (calls · missed · numbers): management only — shown when access.sees_calls_tabs, and the
  * server refuses them (403) to anyone else. The tab key equals the help tab key.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { branchesApi, picAnalyticsApi } from '../api/client'
@@ -58,6 +58,8 @@ export default function PicAnalyticsPage() {
   const [overduePage, setOverduePage] = useState(1)
   const [exporting, setExporting] = useState(false)
   const [msg, setMsg] = useState('')
+  const urlQ = sp.get('q') || ''
+  const [qText, setQText] = useState(urlQ)            // typed text; the URL param follows after a pause
 
   const dflt = useMemo(defaultRange, [])
   const values = {
@@ -91,7 +93,7 @@ export default function PicAnalyticsPage() {
     setSp(next, { replace: true })
     setPicPage(1); setOverduePage(1)
   }
-  const clear = () => { const next = new URLSearchParams(); if (sp.get('tab')) next.set('tab', sp.get('tab')); setSp(next, { replace: true }); setPicPage(1); setOverduePage(1) }
+  const clear = () => { const next = new URLSearchParams(); if (sp.get('tab')) next.set('tab', sp.get('tab')); setSp(next, { replace: true }); setQText(''); setPicPage(1); setOverduePage(1) }
 
   // a locked branch manager with one branch: show that branch, the server scopes anyway
   const lockedBranch = access?.branch_manager && (access.branch_ids || []).length === 1 ? String(access.branch_ids[0]) : ''
@@ -99,6 +101,7 @@ export default function PicAnalyticsPage() {
 
   const params = Object.fromEntries(
     FILTER_KEYS.map(k => [k, values[k] || undefined]))
+  const picParams = { ...params, q: urlQ || undefined }       // the search belongs to the PIC list (and its export)
   const ready = !!access?.can_view
   const useGroup = (key, fn, enabled = true) => useQuery({
     queryKey: ['pic-analytics', key, params], queryFn: fn, enabled: ready && enabled,
@@ -107,8 +110,8 @@ export default function PicAnalyticsPage() {
 
   const overview = useGroup('overview', () => picAnalyticsApi.overview(params).then(r => r.data), tab === 'overview')
   const pics = useQuery({
-    queryKey: ['pic-analytics', 'pics', params, order, picPage],
-    queryFn: () => picAnalyticsApi.pics({ ...params, order, page: picPage, page_size: 50 }).then(r => r.data),
+    queryKey: ['pic-analytics', 'pics', picParams, order, picPage],
+    queryFn: () => picAnalyticsApi.pics({ ...picParams, order, page: picPage, page_size: 50 }).then(r => r.data),
     enabled: ready && tab === 'pics', staleTime: 2 * 60_000, placeholderData: keepPreviousData,
   })
   const branchG = useGroup('g-branch', () => picAnalyticsApi.groups('branch', params).then(r => r.data), tab === 'branches')
@@ -129,12 +132,25 @@ export default function PicAnalyticsPage() {
     return b ? bl(b.softech_branch_id ?? b.code) : String(pk)
   }
 
+  // debounce the search box into the URL (?q=) and back to page 1
+  useEffect(() => {
+    if (qText.trim() === urlQ) return undefined
+    const t = setTimeout(() => setParam('q', qText.trim()), 350)
+    return () => clearTimeout(t)
+  }, [qText]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const refresh = () => { qc.invalidateQueries({ queryKey: ['pic-analytics'] }) }
   const doExport = async () => {
     setExporting(true); setMsg('')
     try {
-      const r = await picAnalyticsApi.exportXlsx(params)
-      downloadBlob(r.data, `pic-analytics_${values.from}_${values.to}.xlsx`)
+      const r = await picAnalyticsApi.exportXlsx(tab === 'pics' ? picParams : params)
+      // the server names the file (it knows the effective, clamped period)
+      const cd = r.headers?.['content-disposition'] || ''
+      const star = cd.match(/filename\*=UTF-8''([^;]+)/i)
+      const plain = cd.match(/filename="?([^";]+)"?/i)
+      let name = ''
+      try { name = star ? decodeURIComponent(star[1]) : (plain ? plain[1] : '') } catch { name = plain ? plain[1] : '' }
+      downloadBlob(r.data, name || 'pic-analytics.xlsx')
     } catch (e) {
       setMsg(errText(e, 'تعذّر تصدير الملف'))
     } finally { setExporting(false) }
@@ -205,6 +221,14 @@ export default function PicAnalyticsPage() {
       {pending && <p className="text-xs text-gray-400">… جارٍ التحميل</p>}
 
       {tab === 'overview' && <KpiCards data={overview.data} management={!!access?.management} />}
+      {tab === 'pics' && (
+        <div className="flex items-center gap-2" data-tour="pic-analytics-search">
+          <input className="input text-sm w-full max-w-md" value={qText} maxLength={100}
+                 onChange={e => setQText(e.target.value)}
+                 placeholder="ابحث بالاسم أو كود PIC أو رقم الهاتف" />
+          {qText && <button className="btn-secondary text-xs py-1" onClick={() => setQText('')}>مسح</button>}
+        </div>
+      )}
       {tab === 'pics' && (
         <PicTable data={pics.data} order={order} onOrder={o => { setOrder(o); setPicPage(1) }}
                   page={picPage} onPage={setPicPage} branchName={branchName} />

@@ -25,7 +25,7 @@ export default function CallCenterTab({ data }) {
                 <th className="px-3 py-2 text-right">الموظف</th><th className={cell}>تحويلة</th>
                 <th className={cell}>واردة</th><th className={cell}>صادرة</th><th className={cell}>تمت الإجابة</th>
                 <th className={cell}>وقت الحديث</th><th className={cell}>عملاء تم الوصول إليهم</th>
-                <th className={cell}>مكالمة ← شراء %</th><th className={cell}>صادرة بلا رد</th>
+                <th className={cell}>مكالمة ← شراء %</th><th className={cell}>شراء نفس اليوم %</th><th className={cell}>عملاء جدد باعهم</th><th className={cell}>صادرة بلا رد</th>
                 <th className={cell}>متوسط المحاولات</th><th className={cell}>لم يُوصل إليهم</th>
               </tr>
             </thead>
@@ -40,12 +40,14 @@ export default function CallCenterTab({ data }) {
                     <td className={cell}>{fmt(r.answered)}</td><td className={cell}>{fmtDuration(r.talk_seconds)}</td>
                     <td className={cell}>{fmt(r.pics_reached)}</td>
                     <td className={cell}>{r.call_to_purchase_pct == null ? '—' : `${fmt(r.call_to_purchase_pct, 1)}%`}</td>
+                    <td className={cell}>{r.call_to_purchase_same_day_pct == null ? '—' : `${fmt(r.call_to_purchase_same_day_pct, 1)}%`}</td>
+                    <td className={cell} title={r.new_pics_sold == null ? 'التحويلة غير مرتبطة بموظف له كود سوفتك' : undefined}>{fmt(r.new_pics_sold)}</td>
                     <td className={cell}>{fmt(r.unanswered_out)}</td>
                     <td className={cell}>{fmt(r.avg_attempts_to_reach, 2)}</td><td className={cell}>{fmt(r.not_reached)}</td>
                   </tr>
                 )
               })}
-              {rows.length === 0 && <tr><td colSpan={11} className="px-3 py-6 text-center text-gray-400">لا مكالمات في هذه الفترة</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={13} className="px-3 py-6 text-center text-gray-400">لا مكالمات في هذه الفترة</td></tr>}
             </tbody>
           </table>
         </div>
