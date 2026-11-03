@@ -116,7 +116,7 @@ export default function PicAnalyticsPage() {
   const overview = useGroup('overview', () => picAnalyticsApi.overview(params).then(r => r.data), tab === 'overview')
   const pics = useQuery({
     queryKey: ['pic-analytics', 'pics', picParams, order, picPage],
-    queryFn: () => picAnalyticsApi.pics({ ...picParams, order, page: picPage, page_size: 50 }).then(r => r.data),
+    queryFn: () => picAnalyticsApi.pics({ ...picParams, ordering: order, page: picPage, page_size: 50 }).then(r => r.data),
     enabled: ready && tab === 'pics', staleTime: 2 * 60_000, placeholderData: keepPreviousData,
   })
   const branchG = useGroup('g-branch', () => picAnalyticsApi.groups('branch', params).then(r => r.data), tab === 'branches')

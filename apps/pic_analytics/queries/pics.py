@@ -33,7 +33,9 @@ def _order_by(order):
     field = ORDERS[key]
     if key == 'days_since_last':          # most days since last = oldest last purchase
         desc = not desc
-    return [('-' if desc else '') + field, 'pic']
+    expr = F(field)
+    # Postgres puts NULLs first on DESC: a PIC without a name / profit must sort last in both directions
+    return [expr.desc(nulls_last=True) if desc else expr.asc(nulls_last=True), 'pic']
 
 
 def _search(qs, q):

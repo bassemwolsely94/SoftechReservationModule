@@ -59,3 +59,18 @@ assert.equal(ariaSortOf(true, 'asc'), 'ascending')
 assert.equal(ariaSortOf(false), 'none')
 
 console.log('check-sort: all checks passed')
+
+// decimal comma, objects, unit cells
+assert.equal(toNumber('1,5'), 1.5)
+assert.equal(toNumber('1,25'), 1.25)
+assert.equal(toNumber('1,234'), 1234)
+assert.equal(toNumber('1,234,567'), 1234567)
+assert.equal(toNumber('1,234.5'), 1234.5)
+assert.equal(toNumber('5 د'), null)
+assert.deepEqual(col(R({ a: 1 }, 'b', [1], 'a'), { key: 'v', dir: 'asc', type: 'text' }), ['a', 'b', { a: 1 }, [1]])
+
+// Arabic order: the server's text_key (apps/pic_analytics/queries/ordering.py) must give this same order;
+// apps/tests/test_pic_ordering.py holds the identical expected list.
+const ARABIC_INPUT = ['إيمان', 'احمد', 'أحمد', 'آمال', 'يسرى', 'يسري', 'فرع 10', 'فرع 2', 'فرع ٣', 'سامى', 'سامي', 'مُحمد', 'محمد', 'Zed', 'abc', 'فاطمة', 'فاطمه']
+const ARABIC_EXPECTED = ['آمال', 'احمد', 'أحمد', 'إيمان', 'سامى', 'سامي', 'فاطمة', 'فاطمه', 'فرع 2', 'فرع ٣', 'فرع 10', 'مُحمد', 'محمد', 'يسرى', 'يسري', 'abc', 'Zed']
+assert.deepEqual(col(ARABIC_INPUT.map((v, i) => ({ v, i })), { key: 'v', dir: 'asc', type: 'text' }), ARABIC_EXPECTED)

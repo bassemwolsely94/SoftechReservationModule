@@ -11,17 +11,24 @@
  *   defaultSort  { key, dir: 'asc'|'desc', type } or null (= the order the rows arrive in)
  *   getValue     (row, key) => value; default row[key]
  *   persistKey   remember the choice per table in sessionStorage
+ *   keys         optional list of this table's sortable keys: a remembered sort on any other key is ignored
+ *
+ * getValue is part of the memo dependencies: pass a stable function (module-level or useCallback) when you
+ * can. An inline arrow works too (it re-sorts each render, cheap) and never reads a stale lookup map.
  */
 import { useCallback, useMemo, useState } from 'react'
 import { ariaSortOf, nextSort, sortRows } from './sortCompare'
 
 const defaultGet = (row, key) => row?.[key]
 
-function load(persistKey) {
+const TYPES = ['text', 'number', 'date']
+
+function load(persistKey, keys) {
   if (!persistKey) return null
   try {
     const s = JSON.parse(sessionStorage.getItem(`sort:${persistKey}`) || 'null')
-    if (s && typeof s.key === 'string' && (s.dir === 'asc' || s.dir === 'desc')) return s
+    if (s && typeof s.key === 'string' && (s.dir === 'asc' || s.dir === 'desc') && TYPES.includes(s.type)
+        && (!keys || keys.includes(s.key))) return s
   } catch { /* storage unavailable */ }
   return null
 }
@@ -34,8 +41,8 @@ function save(persistKey, sort) {
   } catch { /* storage unavailable */ }
 }
 
-export default function useSortableRows(rows, { defaultSort = null, getValue = defaultGet, persistKey } = {}) {
-  const [sort, setSort] = useState(() => load(persistKey))
+export default function useSortableRows(rows, { defaultSort = null, getValue = defaultGet, persistKey, keys } = {}) {
+  const [sort, setSort] = useState(() => load(persistKey, keys))
   const effective = sort || (defaultSort ? { type: 'number', ...defaultSort } : null)
 
   const toggle = useCallback((key, type = 'text') => {
@@ -46,11 +53,9 @@ export default function useSortableRows(rows, { defaultSort = null, getValue = d
     })
   }, [defaultSort, persistKey])
 
-  // getValue is usually an inline function, so it is read from the latest render only
   const sorted = useMemo(
     () => sortRows(rows || [], effective, getValue),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, effective?.key, effective?.dir, effective?.type],
+    [rows, effective?.key, effective?.dir, effective?.type, getValue],
   )
 
   const headerProps = useCallback((key, type = 'text') => {

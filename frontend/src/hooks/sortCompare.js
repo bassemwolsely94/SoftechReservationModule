@@ -13,15 +13,23 @@ export function isEmpty(v) {
   if (v === null || v === undefined) return true
   if (typeof v === 'number') return Number.isNaN(v)
   if (typeof v === 'string') { const s = v.trim(); return s === '' || s === '—' || s === '-' }
+  if (typeof v === 'object' && !(v instanceof Date)) return true      // objects / arrays are not sortable values: last, never '[object Object]'
   return false
 }
 
-/** number from a number or a display string ("1,234.5", "٣٢٫٥", "12%"); null when it is not a number. */
+/**
+ * number from a number or a display string ("1,234.5", "٣٢٫٥", "12%"); null when it is not a number.
+ * A single comma followed by 1-2 digits and no dot is a decimal comma ("1,5" = 1.5); otherwise commas are
+ * thousands separators ("1,234" = 1234). Cells with units such as "5 د" are NOT numeric: sort on the raw
+ * number with getValue instead of the displayed text.
+ */
 export function toNumber(v) {
   if (typeof v === 'number') return Number.isNaN(v) ? null : v
   if (typeof v === 'boolean') return v ? 1 : 0
   if (typeof v !== 'string') return null
-  const s = v.replace(/[٠-٩۰-۹]/g, d => ARABIC_DIGITS[d]).replace(/[٫]/g, '.').replace(/[,٬\s%]/g, '')
+  let s = v.replace(/[٠-٩۰-۹]/g, d => ARABIC_DIGITS[d]).replace(/[٫]/g, '.').trim()
+  if (/^[+-]?\d+,\d{1,2}$/.test(s)) s = s.replace(',', '.')
+  s = s.replace(/[,٬\s%]/g, '')
   if (s === '' || !/^[+-]?(\d+\.?\d*|\.\d+)$/.test(s)) return null
   return Number(s)
 }

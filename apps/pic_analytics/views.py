@@ -246,7 +246,10 @@ def overview(request):
 def pic_list(request):
     def go(f, acc):
         page, size = _paging(request)
-        return q_pics.pic_rows(f, acc, request.query_params.get('order') or '-net', page, size)
+        # `ordering` (DRF style) like every other list; `order` stays as a backward-compatible alias
+        raw = request.query_params.get('ordering') or request.query_params.get('order') or ''
+        key, desc = parse_ordering(raw, q_pics.ORDERS)          # unknown field -> 400
+        return q_pics.pic_rows(f, acc, (('-' if desc else '') + key) if key else '-net', page, size)
     return _run(request, go)
 
 

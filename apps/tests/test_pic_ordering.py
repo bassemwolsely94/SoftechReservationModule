@@ -9,7 +9,7 @@ from apps.customers.models import Customer
 from apps.pic_analytics.models import PhoneLabel
 from apps.pic_analytics.queries.missed import missed_rows
 from apps.pic_analytics.queries.pics import pic_rows
-from apps.pic_analytics.queries.ordering import parse_ordering, sort_items
+from apps.pic_analytics.queries.ordering import parse_ordering, sort_items, text_key
 from apps.pic_analytics.queries.retention import overdue_list
 from apps.tests.test_pic_api import ApiBase, url
 from apps.tests.test_pic_queries_calls import CallBase
@@ -162,3 +162,42 @@ class PicListOrderingTests(Base):
 
     def test_branch_manager_cannot_sort_by_profit(self):
         self.assertEqual(self.first(self.mgr, 'gp'), self.first(self.mgr, '-net'))      # silently the default order
+
+
+class ArabicOrderTests(SimpleTestCase):
+    """The server text order equals the browser's Intl.Collator('ar', {numeric: true, sensitivity: 'base'}):
+    the expected list below is what that collator returns (also asserted in frontend/scripts/check-sort.mjs)."""
+    INPUT = ['إيمان', 'احمد', 'أحمد', 'آمال', 'يسرى', 'يسري', 'فرع 10', 'فرع 2', 'فرع ٣', 'سامى', 'سامي', 'مُحمد',
+             'محمد', 'Zed', 'abc', 'فاطمة', 'فاطمه']
+    EXPECTED = ['آمال', 'احمد', 'أحمد', 'إيمان', 'سامى', 'سامي', 'فاطمة', 'فاطمه', 'فرع 2', 'فرع ٣', 'فرع 10', 'مُحمد',
+                'محمد', 'يسرى', 'يسري', 'abc', 'Zed']
+
+    def test_matches_client_collator(self):
+        self.assertEqual(sort_items(self.INPUT, lambda s: s), self.EXPECTED)
+
+    def test_desc_reverses_but_empty_stays_last(self):
+        got = sort_items(self.INPUT + ['', None], lambda s: s, desc=True)
+        keys = [text_key(x) for x in got[:-2]]
+        self.assertEqual(keys, sorted(keys, reverse=True))          # equal spellings (أ/ا) keep their input order
+        self.assertEqual(got[-2:], ['', None])
+
+    def test_digits_are_numeric(self):
+        self.assertEqual(sort_items(['ب 10', 'ب ٢', 'ب 1'], lambda s: s), ['ب 1', 'ب ٢', 'ب 10'])
+
+
+class PicListNullsLastTests(Base):
+
+    def test_pic_without_customer_name_sorts_last_both_ways(self):
+        self.fact('NONAME', D(2026, 10, 14), self.ba, 1, 5, 2, 1, {'10': 5})       # no Customer row -> name is NULL
+        for order in ('name', '-name'):
+            self.assertEqual(pic_rows(self.flt(), self.mgmt, order, 1)['rows'][-1]['pic'], 'NONAME', order)
+
+    def test_ordering_param_alias_and_400(self):
+        from apps.tests.factories import make_user
+        c = make_user('ord_admin', role='admin', branch=self.ba)[2]
+        q = '/api/pic-analytics/pics/?from=2026-10-01&to=2026-10-31'
+        a = c.get(q + '&ordering=-visits').json()['rows']
+        b = c.get(q + '&order=-visits').json()['rows']
+        self.assertEqual([r['pic'] for r in a], [r['pic'] for r in b])
+        self.assertEqual(c.get(q + '&ordering=cost').status_code, 400)
+        self.assertEqual(c.get(q).status_code, 200)
