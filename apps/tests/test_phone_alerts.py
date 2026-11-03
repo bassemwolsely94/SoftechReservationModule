@@ -1051,3 +1051,173 @@ class TickTests(TestCase):
         self.assertEqual(jobs.tick(now=self._min(16))['reminded'], 0)
         a.refresh_from_db()
         self.assertEqual(a.reminders_sent, 1)
+
+
+# ── Task 6: workflow hooks ───────────────────────────────────────────────────
+
+class WorkflowHookTests(TestCase):
+    """Reservation / transfer / task APIs call fire() once per real transition."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from .factories import make_admin, make_item, make_pharmacist
+        cls.branch = Branch.objects.create(softech_branch_id='951', name='Req')
+        cls.hq = Branch.objects.create(softech_branch_id='952', name='HQ', kind=Branch.KIND_HQ)
+        cls.other = Branch.objects.create(softech_branch_id='953', name='Other')
+        cls.item = make_item(softech_id='PA6')
+        _, cls.pharm, cls.pharm_client = make_pharmacist('pa6_pharm', branch=cls.branch)
+        _, cls.admin, cls.admin_client = make_admin('pa6_admin')
+        cls.owner = _staff('pa6_owner', '01000000601')
+        WorkOwner.objects.create(kind='reservation_sourcing', staff=cls.owner)
+        WorkOwner.objects.create(kind='hq_transfer_dispatch', staff=cls.owner)
+        cls.assignee = _staff('pa6_assignee', '01000000602', branch=cls.branch)
+
+    def _mode(self, event, mode):
+        PhoneAlertPolicy.objects.update_or_create(event=event, defaults={'mode': mode})
+
+    def _alerts(self, event=None):
+        qs = PhoneAlert.objects.all()
+        return qs.filter(event=event) if event else qs
+
+    def _fired(self, fn):
+        """Run ``fn`` with hooks.fire recorded (and neutralised); return the event keys fired."""
+        from apps.notifications.phone_alerts import hooks
+        calls, orig = [], hooks.fire
+        hooks.fire = lambda *a, **k: calls.append(a[0])
+        try:
+            fn()
+        finally:
+            hooks.fire = orig
+        return calls
+
+    def _reservation(self, **extra):
+        body = {'item': self.item.id, 'branch': self.branch.id, 'quantity_requested': 1,
+                'contact_phone': '01099999999', 'contact_name': 'ع'}
+        body.update(extra)
+        return self.pharm_client.post('/api/reservations/', body, format='json')
+
+    def _transfer(self, supplying, **extra):
+        from apps.transfers.models import TransferRequest, TransferRequestItem
+        r = self.pharm_client.post('/api/transfers/', {
+            'requesting_branch': self.branch.id, 'supplying_branch': supplying.id, **extra,
+        }, format='json')
+        self.assertEqual(r.status_code, 201, r.data)
+        tr = TransferRequest.objects.get(pk=r.data['id'])
+        TransferRequestItem.objects.create(request=tr, item=self.item, quantity=2)
+        return tr
+
+    # reservations
+    def test_reservation_pending_alerts_sourcing_owner(self):
+        r = self._reservation(phone_alert=True)
+        self.assertEqual(r.status_code, 201, r.data)
+        alerts = self._alerts('reservation_sourcing')
+        self.assertEqual([a.recipient_staff_id for a in alerts], [self.owner.pk])
+        self.assertTrue(r.data['phone_alert'])
+
+    def test_reservation_without_toggle_sends_nothing(self):
+        self.assertEqual(self._reservation().status_code, 201)
+        self.assertEqual(self._alerts().count(), 0)
+
+    def test_urgent_reservation_status_change_fires_once(self):
+        rid = self._reservation(priority='urgent', phone_alert=True).data['id']
+        self.assertEqual(self._fired(lambda: self.pharm_client.post(
+            f'/api/reservations/{rid}/change-status/', {'status': 'available'}, format='json')),
+            ['reservation_status_urgent'])
+
+    def test_creation_is_not_a_status_alert_and_normal_priority_is_silent(self):
+        self.assertEqual(self._fired(lambda: self._reservation(priority='urgent')),
+                         ['reservation_sourcing'])
+        rid = self._reservation().data['id']
+        self.assertEqual(self._fired(lambda: self.pharm_client.post(
+            f'/api/reservations/{rid}/change-status/', {'status': 'available'}, format='json')), [])
+
+    # transfers
+    def test_transfer_from_hq_alerts_dispatcher(self):
+        tr = self._transfer(self.hq, phone_alert=True)
+        self.assertTrue(tr.phone_alert)
+        r = self.pharm_client.post(f'/api/transfers/{tr.pk}/submit/')
+        self.assertEqual(r.status_code, 200, r.data)
+        alerts = self._alerts('transfer_hq_submitted')
+        self.assertEqual([a.recipient_staff_id for a in alerts], [self.owner.pk])
+        self.assertEqual(self._alerts('transfer_status').count(), 0)   # submit is not also a status alert
+
+    def test_transfer_from_branch_not_dispatcher(self):
+        tr = self._transfer(self.other, phone_alert=True)
+        self.assertEqual(self._fired(lambda: self.pharm_client.post(f'/api/transfers/{tr.pk}/submit/')), [])
+
+    def test_transfer_later_status_change_fires_transfer_status(self):
+        tr = self._transfer(self.other, phone_alert=True)
+        self.pharm_client.post(f'/api/transfers/{tr.pk}/submit/')
+        self.assertEqual(self._fired(lambda: self.pharm_client.post(f'/api/transfers/{tr.pk}/cancel/')),
+                         ['transfer_status'])
+
+    # tasks
+    def test_task_assign_alerts_assignee(self):
+        r = self.admin_client.post('/api/tasks/', {
+            'title': 'مهمة', 'assigned_to': self.assignee.pk, 'phone_alert': True,
+        }, format='json')
+        self.assertEqual(r.status_code, 201, r.data)
+        alerts = self._alerts('task_assigned')
+        self.assertEqual([a.recipient_staff_id for a in alerts], [self.assignee.pk])
+
+    def test_task_status_change_fires_task_status(self):
+        t = OperationalTask.objects.create(title='x', created_by=self.admin, branch=self.branch,
+                                           assigned_to=self.assignee, phone_alert=True)
+        self.assertEqual(self._fired(lambda: self.admin_client.post(f'/api/tasks/{t.pk}/complete/')),
+                         ['task_status'])
+
+    # toggle rule
+    def test_toggle_ignored_when_policy_never(self):
+        self._mode('reservation_sourcing', 'never')
+        r = self._reservation(phone_alert=True)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertFalse(r.data['phone_alert'])
+        self.assertEqual(self._alerts().count(), 0)
+
+    def test_toggle_ignored_when_policy_absent(self):
+        PhoneAlertPolicy.objects.filter(event='task_assigned').delete()
+        r = self.admin_client.post('/api/tasks/', {
+            'title': 'م', 'assigned_to': self.assignee.pk, 'phone_alert': True}, format='json')
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertFalse(OperationalTask.objects.get(title='م').phone_alert)
+        self.assertEqual(self._alerts().count(), 0)
+
+    def test_always_sends_without_toggle(self):
+        self._mode('reservation_sourcing', 'always')
+        r = self._reservation()
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertTrue(r.data['phone_alert'])
+        self.assertEqual(self._alerts('reservation_sourcing').count(), 1)
+
+    def test_transfer_toggle_follows_supplier_event(self):
+        self._mode('transfer_hq_submitted', 'never')
+        self._mode('transfer_status', 'optional')
+        self.assertFalse(self._transfer(self.hq, phone_alert=True).phone_alert)
+        self.assertTrue(self._transfer(self.other, phone_alert=True).phone_alert)
+
+    # read-only status
+    def test_detail_exposes_phone_alert_status(self):
+        rid = self._reservation(phone_alert=True).data['id']
+        d = self.pharm_client.get(f'/api/reservations/{rid}/').data
+        self.assertEqual(d['phone_alert_status'], 'queued')
+        self.assertEqual(d['phone_alert_remark'], '')
+        a = self._alerts('reservation_sourcing').get()
+        PhoneAlert.objects.create(event='reservation_sourcing', source_ct=a.source_ct,
+                                  source_id=a.source_id, phone='201000000699')   # newer, still queued
+        PhoneAlert.objects.filter(pk=a.pk).update(status='acknowledged', remark='جاري')
+        d = self.pharm_client.get(f'/api/reservations/{rid}/').data
+        self.assertEqual(d['phone_alert_status'], 'acknowledged')   # acknowledged beats the newer one
+        self.assertEqual(d['phone_alert_remark'], 'جاري')
+
+    def test_list_status_does_not_query_per_row(self):
+        for _ in range(3):
+            self._reservation(phone_alert=True)
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        with CaptureQueriesContext(connection) as ctx:
+            r = self.pharm_client.get('/api/reservations/')
+        self.assertEqual(r.status_code, 200)
+        rows = r.data['results'] if isinstance(r.data, dict) and 'results' in r.data else r.data
+        self.assertEqual(len(rows), 3)
+        self.assertTrue(all(x['phone_alert_status'] == 'queued' for x in rows))
+        self.assertEqual(sum('notifications_phonealert' in q['sql'] for q in ctx.captured_queries), 1)

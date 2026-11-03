@@ -290,6 +290,9 @@ def reorder(request):
             notes=(data.get('notes') or '').strip(),
         )
 
+    from apps.notifications.phone_alerts import hooks as phone_alert_hooks
+    phone_alert_hooks.on_reservation_created(reservation)
+
     return Response({
         'id': reservation.id,
         'status': reservation.status,

@@ -3,6 +3,7 @@ apps/tasks/serializers.py
 """
 from rest_framework import serializers
 from django.utils import timezone
+from apps.notifications.phone_alerts.hooks import PhoneAlertStatusMixin, PhoneAlertWriteMixin
 from .models import (
     OperationalTask, TaskAssignment, TaskItem,
     TaskMessage, TaskAttachment, TaskSchedule, TaskAuditLog,
@@ -119,7 +120,10 @@ class TaskAuditLogSerializer(serializers.ModelSerializer):
 
 # ── OperationalTask (list) ─────────────────────────────────────────────────────
 
-class TaskListSerializer(serializers.ModelSerializer):
+class TaskListSerializer(PhoneAlertStatusMixin, serializers.ModelSerializer):
+    phone_alert_model = OperationalTask
+    phone_alert_status = serializers.SerializerMethodField()
+    phone_alert_remark = serializers.SerializerMethodField()
     assigned_to_name = serializers.SerializerMethodField()
     branch_name = serializers.SerializerMethodField()
     is_overdue = serializers.BooleanField(read_only=True)
@@ -136,7 +140,7 @@ class TaskListSerializer(serializers.ModelSerializer):
             'branch', 'branch_name',
             'due_date', 'created_at', 'updated_at',
             'is_overdue', 'subtask_count', 'item_count', 'unread_messages',
-            'tags',
+            'tags', 'phone_alert', 'phone_alert_status', 'phone_alert_remark',
         ]
 
     def get_assigned_to_name(self, obj):
@@ -148,7 +152,10 @@ class TaskListSerializer(serializers.ModelSerializer):
 
 # ── OperationalTask (detail) ───────────────────────────────────────────────────
 
-class TaskDetailSerializer(serializers.ModelSerializer):
+class TaskDetailSerializer(PhoneAlertStatusMixin, serializers.ModelSerializer):
+    phone_alert_model = OperationalTask
+    phone_alert_status = serializers.SerializerMethodField()
+    phone_alert_remark = serializers.SerializerMethodField()
     assigned_to_name = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
     completed_by_name = serializers.SerializerMethodField()
@@ -180,6 +187,7 @@ class TaskDetailSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at', 'is_overdue',
             'messages', 'assignments', 'items', 'attachments',
             'audit_logs', 'subtask_count',
+            'phone_alert', 'phone_alert_status', 'phone_alert_remark',
         ]
 
     def get_assigned_to_name(self, obj):
@@ -204,7 +212,10 @@ class TaskDetailSerializer(serializers.ModelSerializer):
 
 # ── Write serializer ───────────────────────────────────────────────────────────
 
-class TaskWriteSerializer(serializers.ModelSerializer):
+class TaskWriteSerializer(PhoneAlertWriteMixin, serializers.ModelSerializer):
+    def phone_alert_event(self, attrs):
+        return 'task_assigned'
+
     class Meta:
         model = OperationalTask
         fields = [
@@ -212,7 +223,7 @@ class TaskWriteSerializer(serializers.ModelSerializer):
             'branch', 'assigned_to', 'parent_task',
             'related_model', 'related_id',
             'due_date', 'start_date', 'estimated_hours', 'actual_hours',
-            'completion_notes', 'recurrence', 'tags',
+            'completion_notes', 'recurrence', 'tags', 'phone_alert',
         ]
 
     def validate_status(self, value):

@@ -270,6 +270,8 @@ def _create_reservation(rem, choice):
                + ' — يُرجى الاتصال لتأكيد الأصناف قبل التجهيز'))
     ReservationStatusLog.objects.create(reservation=res, old_status='', new_status='pending',
                                         changed_by=None, note='أُنشئ من رد العميل على تذكير الصرف (واتساب)')
+    from apps.notifications.phone_alerts import hooks as phone_alert_hooks
+    phone_alert_hooks.on_reservation_created(res)
     try:
         Notification.send_to_call_center(
             notification_type='reservation_created',

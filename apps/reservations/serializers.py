@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from apps.notifications.phone_alerts.hooks import PhoneAlertStatusMixin, PhoneAlertWriteMixin
 from .models import Reservation, ReservationStatusLog, ReservationActivity, ReservationDownpayment, ReservationImage, ReservationLine
 
 
@@ -195,8 +196,11 @@ class ReservationLineCreateSerializer(serializers.ModelSerializer):
 
 # ── Reservation List ──────────────────────────────────────────────────────────
 
-class ReservationListSerializer(RecordPhoneMask, serializers.ModelSerializer):
+class ReservationListSerializer(PhoneAlertStatusMixin, RecordPhoneMask, serializers.ModelSerializer):
     phone_mask_fields = ('customer_phone', 'contact_phone')
+    phone_alert_model = Reservation
+    phone_alert_status = serializers.SerializerMethodField()
+    phone_alert_remark = serializers.SerializerMethodField()
     customer_name = serializers.SerializerMethodField()
     customer_phone = serializers.SerializerMethodField()
     item_name = serializers.SerializerMethodField()
@@ -311,14 +315,18 @@ class ReservationListSerializer(RecordPhoneMask, serializers.ModelSerializer):
             'assigned_to_name', 'created_by_name',
             'status_color', 'priority_color',
             'image_url', 'activity_count', 'lines_count', 'lines',
+            'phone_alert', 'phone_alert_status', 'phone_alert_remark',
             'created_at', 'updated_at',
         ]
 
 
 # ── Reservation Detail ────────────────────────────────────────────────────────
 
-class ReservationDetailSerializer(RecordPhoneMask, serializers.ModelSerializer):
+class ReservationDetailSerializer(PhoneAlertStatusMixin, RecordPhoneMask, serializers.ModelSerializer):
     phone_mask_fields = ('customer_phone', 'contact_phone')
+    phone_alert_model = Reservation
+    phone_alert_status = serializers.SerializerMethodField()
+    phone_alert_remark = serializers.SerializerMethodField()
     customer_name = serializers.SerializerMethodField()
     customer_phone = serializers.SerializerMethodField()
     customer_id = serializers.SerializerMethodField()
@@ -481,13 +489,17 @@ class ReservationDetailSerializer(RecordPhoneMask, serializers.ModelSerializer):
             'erp_receipt_lines', 'erp_customer_info',
             'can_check_erp_match',
             'lines',
+            'phone_alert', 'phone_alert_status', 'phone_alert_remark',
         ]
-        read_only_fields = ['softech_reserve_id', 'created_at', 'updated_at']
+        read_only_fields = ['softech_reserve_id', 'created_at', 'updated_at', 'phone_alert']
 
 
 # ── Create / Update ───────────────────────────────────────────────────────────
 
-class ReservationCreateSerializer(serializers.ModelSerializer):
+class ReservationCreateSerializer(PhoneAlertWriteMixin, serializers.ModelSerializer):
+    def phone_alert_event(self, attrs):
+        return 'reservation_sourcing'
+
     class Meta:
         model = Reservation
         fields = [
@@ -496,7 +508,7 @@ class ReservationCreateSerializer(serializers.ModelSerializer):
             'quantity_requested', 'priority', 'channel', 'contract_subtype',
             'order_source', 'fulfillment_method',
             'contact_phone', 'contact_name',
-            'notes', 'expected_arrival_date', 'follow_up_date', 'image',
+            'notes', 'expected_arrival_date', 'follow_up_date', 'image', 'phone_alert',
         ]
         read_only_fields = ['id']
 
@@ -512,10 +524,13 @@ class ReservationCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {'item': 'يجب تحديد صنف من القائمة أو إدخال اسم الصنف يدوياً'}
             )
-        return data
+        return super().validate(data)
 
 
-class ReservationUpdateSerializer(serializers.ModelSerializer):
+class ReservationUpdateSerializer(PhoneAlertWriteMixin, serializers.ModelSerializer):
+    def phone_alert_event(self, attrs):
+        return 'reservation_sourcing'
+
     class Meta:
         model = Reservation
         fields = [
@@ -523,7 +538,7 @@ class ReservationUpdateSerializer(serializers.ModelSerializer):
             'assigned_to', 'quantity_requested', 'priority', 'channel', 'contract_subtype',
             'order_source', 'fulfillment_method',
             'contact_phone', 'contact_name', 'notes',
-            'expected_arrival_date', 'follow_up_date', 'image',
+            'expected_arrival_date', 'follow_up_date', 'image', 'phone_alert',
         ]
 
 
