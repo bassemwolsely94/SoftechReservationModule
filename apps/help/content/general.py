@@ -235,6 +235,8 @@ SCREENS = [
               'The small badge at the top of the screen tells you where you connect from and your device status: "Inside the network — approved device", "Inside the network — unapproved device", "Outside the network — approved device" or "Outside the network — unapproved device". Under the top bar a calm strip may appear: "Unapproved device — ask the admin to approve it" means your device is not approved yet; "Unapproved device — view-only" (amber) shows only when the policy is really enforced and your role is view-only on this device — you can look but not change anything until an admin approves it; "Outside the company network" is for information.'),
             T('سطر «⏳ الصلاحية» (لمن يرى الأصناف): المنتهي على الرف والمعرّض خلال 180 يوماً، وبعده مرشح المرتجع (105) والإتلاف (102) والتجميل المنتهي (103). الفرع المغلق لا يُحسب. اضغطه لفتح «الدفعات والصلاحية».',
               'The "⏳ Expiry" line (for users who see the catalog): expired on the shelf and at risk within 180 days, then return candidates (105), write-off (102) and expired cosmetics (103). The closed branch is not counted. Click it to open "Batches & expiry".'),
+            T('كل الجداول بتترتب بالضغط على عنوان العمود: مرة تصاعدي، مرة تنازلي، والتالتة ترجع للترتيب الأصلي. الفاضي و«—» دايماً في الآخر، والإجماليات بتفضل تحت. في القوائم اللي بتتقسم على صفحات الترتيب بيشمل كل السجلات مش الصفحة الظاهرة بس.',
+              'Every table sorts by clicking a column heading: once ascending, once descending, and the third click returns to the original order. Empty values and "—" always stay last, and totals stay at the bottom. In lists split into pages the sort covers all records, not just the visible page.'),
         ],
         'related': ['general.me', 'general.notifications', 'gamification.main'],
         'tour': [
@@ -430,8 +432,8 @@ SCREENS = [
              'when': T('بتأثر عليك إنت بس، مش على باقي الموظفين.', 'It affects only you, not other staff.'),
              'open_hint': T('الجرس ← «⚙️ الإعدادات».', 'Bell → "⚙️ Settings".')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('تلميحات الجرس والقائمة والخروج في كل الشاشات؛ الشارة العلوية تذكر حالة الجهاز؛ وشريط «جهاز غير معتمد» يقول «للعرض فقط» بس لما السياسة مطبّقة', 'Bell, menu and logout hints on every screen; the top badge states the device status; the "unapproved device" strip says "view-only" only when the policy is enforced'),
+        'updated': '2026-11-03',
+        'change_note': T('كل الجداول بتترتب بالضغط على عنوان العمود', 'Every table sorts by clicking a column heading'),
     },
     {
         'key': 'general.me',

@@ -8,6 +8,8 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { usersApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 const PLATFORM_MODULES = [
   'catalog', 'customers', 'vouchers', 'purchasing', 'invoices', 'transfers',
@@ -39,6 +41,10 @@ export default function ErpPermissionsPage() {
   const rebuild = useMutation({
     mutationFn: () => usersApi.erpRebuild(),
     onSuccess: () => { qc.invalidateQueries(['erp-groups']); qc.invalidateQueries(['erp-map']) },
+  })
+
+  const { sorted: sortedSystems, headerProps: sysHeader } = useSortableRows(systems || [], {
+    getValue: (s, k) => (k === 'mapped' ? (map || []).filter(m => m.system === s.system).length : s[k]),
   })
 
   // module → systems (for the map view)
@@ -157,11 +163,13 @@ export default function ErpPermissionsPage() {
           <div data-tour="admin-erp-permissions-systems" className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead><tr className="bg-gray-50 border-b text-right">
-                <th className="px-3 py-2">النظام</th><th className="px-3 py-2">عدد الشاشات</th><th className="px-3 py-2">مثال</th>
-                <th className="px-3 py-2">مربوط بـ</th>
+                <SortTh {...sysHeader('system')} className="px-3 py-2">النظام</SortTh>
+                <SortTh {...sysHeader('screens', 'number')} className="px-3 py-2">عدد الشاشات</SortTh>
+                <SortTh {...sysHeader('sample')} className="px-3 py-2">مثال</SortTh>
+                <SortTh {...sysHeader('mapped', 'number')} className="px-3 py-2">مربوط بـ</SortTh>
               </tr></thead>
               <tbody>
-                {(systems || []).map(s => {
+                {sortedSystems.map(s => {
                   const mods = (map || []).filter(m => m.system === s.system).map(m => m.module)
                   return (
                     <tr key={s.system} className="border-b border-gray-100">

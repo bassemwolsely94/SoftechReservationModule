@@ -5,6 +5,7 @@ All views require IsAuthenticated.
 Trigger endpoints (sync, discover) additionally require admin/pharmacist role.
 """
 
+from core.stable_ordering import StableOrderingMixin
 from decimal import Decimal
 
 from django.db.models import Count, Sum
@@ -172,12 +173,12 @@ class FinancialPeriodListView(generics.ListAPIView):
 # CHART OF ACCOUNTS
 # ══════════════════════════════════════════════════════════════════════════════
 
-class AccountListView(generics.ListAPIView):
+class AccountListView(StableOrderingMixin, generics.ListAPIView):
     permission_classes = [IsAuthenticated, FINANCE]
     serializer_class   = AccountSerializer
     filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['code', 'name', 'name_ar', 'softech_code']
-    ordering_fields    = ['code', 'level', 'account_type']
+    ordering_fields    = ['code', 'name_ar', 'account_type', 'nature', 'level', 'is_leaf']
     ordering           = ['code']
 
     def get_queryset(self):
@@ -452,12 +453,12 @@ def cash_flow_summary(request):
 # EXPENSES
 # ══════════════════════════════════════════════════════════════════════════════
 
-class ExpenseRecordListView(generics.ListAPIView):
+class ExpenseRecordListView(StableOrderingMixin, generics.ListAPIView):
     permission_classes = [IsAuthenticated, FINANCE]
     serializer_class   = ExpenseRecordSerializer
     filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['softech_ref', 'description', 'vendor', 'reference']
-    ordering_fields    = ['expense_date', 'amount']
+    ordering_fields    = ['expense_date', 'category', 'sub_category', 'description', 'cost_center', 'branch__name', 'amount']
     ordering           = ['-expense_date']
 
     def get_queryset(self):

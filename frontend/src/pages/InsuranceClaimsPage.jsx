@@ -9,6 +9,8 @@
  *   - Quick status badge + print button per row
  */
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 import { useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
 import DataFreshnessBar from '../components/DataFreshnessBar'
@@ -68,6 +70,7 @@ function DiscoverPanel({ clients, subclients, onImported, onClose }) {
   const [selected, setSelected]     = useState(new Set())
   const [importing, setImporting]   = useState(false)
   const [importLog, setImportLog]   = useState([])
+  const { sorted: sortedResults, headerProps: rHead } = useSortableRows(results)
 
   const filteredSubs = subclients.filter(sc =>
     !clientId || String(sc.client_id) === String(clientId)
@@ -263,17 +266,17 @@ function DiscoverPanel({ clients, subclients, onImported, onClose }) {
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="w-8 px-2 py-2"></th>
-                    <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500">رقم المطالبة</th>
-                    <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500">العميل / كود</th>
-                    <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500">الفئة</th>
-                    <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500">الفترة</th>
-                    <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500">الروشتات</th>
-                    <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">الإجمالى</th>
-                    <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500">الحالة</th>
+                    <SortTh {...rHead('motalbano', 'number')} className="text-right px-3 py-2 text-xs font-semibold text-gray-500">رقم المطالبة</SortTh>
+                    <SortTh {...rHead('client_name_short')} className="text-right px-3 py-2 text-xs font-semibold text-gray-500">العميل / كود</SortTh>
+                    <SortTh {...rHead('subclient_name')} className="text-right px-3 py-2 text-xs font-semibold text-gray-500">الفئة</SortTh>
+                    <SortTh {...rHead('motfromdate', 'date')} className="text-right px-3 py-2 text-xs font-semibold text-gray-500">الفترة</SortTh>
+                    <SortTh {...rHead('rxcount', 'number')} className="text-right px-3 py-2 text-xs font-semibold text-gray-500">الروشتات</SortTh>
+                    <SortTh {...rHead('docvaluetotal', 'number')} className="text-left px-3 py-2 text-xs font-semibold text-gray-500">الإجمالى</SortTh>
+                    <SortTh {...rHead('status')} className="text-right px-3 py-2 text-xs font-semibold text-gray-500">الحالة</SortTh>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {results.map(r => {
+                  {sortedResults.map(r => {
                     const key = `${r.subclient_id}__${r.motalbano}`
                     const isImported  = r.status === 'imported'
                     const isConfigured = r.configured
@@ -530,8 +533,6 @@ export default function InsuranceClaimsPage() {
   const [deleting, setDeleting]       = useState(false)
   const [syncing, setSyncing]         = useState(false)
   const [cacheStats, setCacheStats]   = useState(null)
-  const [sortKey, setSortKey]         = useState('claim_number')
-  const [sortDir, setSortDir]         = useState('desc')
 
   // ── Filters ──────────────────────────────────────────────────────────────────
   const [filters, setFilters] = useState({
@@ -611,45 +612,10 @@ export default function InsuranceClaimsPage() {
     return list
   }, [claims, filters.search, filters.date_from, filters.date_to])
 
-  // ── Sortable data grid ─────────────────────────────────────────────────────
-  // Column definition drives both the header row and the comparator.
-  const CLAIM_COLUMNS = [
-    { key: 'claim_number',        label: 'رقم المطالبة', type: 'text' },
-    { key: 'client_name',         label: 'العميل',       type: 'text' },
-    { key: 'subclient_name',      label: 'الفئة',        type: 'text' },
-    { key: 'period_from',         label: 'الفترة',       type: 'text' },
-    { key: 'final_rx_count',      label: 'الروشتات',     type: 'num', align: 'center' },
-    { key: 'final_gross_before',  label: 'الإجمالى',     type: 'num', align: 'left' },
-    { key: 'final_total_discount',label: 'الخصم',        type: 'num', align: 'left' },
-    { key: 'final_net_after',     label: 'الصافى',       type: 'num', align: 'left' },
-    { key: 'total_paid',          label: 'المُحصَّل',    type: 'num', align: 'left' },
-    { key: 'balance',             label: 'الرصيد',       type: 'num', align: 'left' },
-    { key: 'status',              label: 'الحالة',       type: 'text' },
-  ]
-
-  const sortBy = (key, type) => {
-    if (sortKey === key) {
-      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
-    } else {
-      setSortKey(key)
-      setSortDir(type === 'text' ? 'asc' : 'desc')
-    }
-  }
-
-  const sortedClaims = useMemo(() => {
-    const col = CLAIM_COLUMNS.find(c => c.key === sortKey)
-    if (!col) return filteredClaims
-    const list = [...filteredClaims].sort((a, b) => {
-      let cmp
-      if (col.type === 'text') {
-        cmp = String(a[col.key] ?? '').localeCompare(String(b[col.key] ?? ''), 'ar-EG')
-      } else {
-        cmp = (Number(a[col.key]) || 0) - (Number(b[col.key]) || 0)
-      }
-      return sortDir === 'asc' ? cmp : -cmp
-    })
-    return list
-  }, [filteredClaims, sortKey, sortDir])
+  // ── Sortable data grid (shared hook; newest claim number first until a header is clicked) ──
+  const { sorted: sortedClaims, headerProps } = useSortableRows(filteredClaims, {
+    defaultSort: { key: 'claim_number', dir: 'desc', type: 'text' },
+  })
 
   const filteredSubclients = useMemo(() =>
     subclients.filter(sc => !filters.client_id || String(sc.client_id) === String(filters.client_id)),
@@ -859,21 +825,18 @@ export default function InsuranceClaimsPage() {
                   <th className="w-8 px-3 py-3">
                     <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded" />
                   </th>
-                  {CLAIM_COLUMNS.map(col => {
-                    const active = sortKey === col.key
-                    return (
-                      <th key={col.key}
-                        onClick={() => sortBy(col.key, col.type)}
-                        className={`px-3 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 ${
-                          col.align === 'left' ? 'text-left' : col.align === 'center' ? 'text-center' : 'text-right'
-                        } ${active ? 'text-blue-700' : 'text-gray-500'}`}>
-                        {col.label}
-                        <span className={`ml-1 ${active ? 'text-blue-600' : 'text-gray-300'}`}>
-                          {active ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
-                        </span>
-                      </th>
-                    )
-                  })}
+                  {[
+                    ['claim_number', 'رقم المطالبة', 'text'], ['client_name', 'العميل', 'text'], ['subclient_name', 'الفئة', 'text'],
+                    ['period_from', 'الفترة', 'date'], ['final_rx_count', 'الروشتات', 'number', 'center'],
+                    ['final_gross_before', 'الإجمالى', 'number', 'left'], ['final_total_discount', 'الخصم', 'number', 'left'],
+                    ['final_net_after', 'الصافى', 'number', 'left'], ['total_paid', 'المُحصَّل', 'number', 'left'],
+                    ['balance', 'الرصيد', 'number', 'left'], ['status', 'الحالة', 'text'],
+                  ].map(([key, label, type, align]) => (
+                    <SortTh key={key} {...headerProps(key, type)}
+                      className={`px-3 py-3 text-xs font-semibold whitespace-nowrap ${
+                        align === 'left' ? 'text-left' : align === 'center' ? 'text-center' : 'text-right'
+                      } text-gray-500`}>{label}</SortTh>
+                  ))}
                   <th className="px-3 py-3"></th>
                 </tr>
               </thead>

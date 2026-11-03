@@ -80,7 +80,7 @@ class AgentExtension(models.Model):
 
     EXTENSION_TYPE_CHOICES = [
         (TYPE_AGENT,   'عامل مركز اتصال'),
-        (TYPE_BRANCH,  'تحويلة فرع'),
+        (TYPE_BRANCH,  'رقم داخلي لفرع'),
         (TYPE_HQ,      'موظف إداري (المقر الرئيسي)'),
         (TYPE_GATEWAY, 'بوابة خارجية (GoIP/Trunk)'),
         (TYPE_OTHER,   'أخرى'),
@@ -101,13 +101,13 @@ class AgentExtension(models.Model):
 
     extension   = models.CharField(
         max_length=20, unique=True, db_index=True,
-        verbose_name='رقم التحويلة',
-        help_text='رقم التحويلة في Asterisk (e.g. "201", "SIP/201")',
+        verbose_name='الرقم الداخلي',
+        help_text='الرقم الداخلي في Asterisk (e.g. "201", "SIP/201")',
     )
     extension_type = models.CharField(
         max_length=10, choices=EXTENSION_TYPE_CHOICES,
         default=TYPE_OTHER, db_index=True,
-        verbose_name='نوع التحويلة',
+        verbose_name='نوع الرقم الداخلي',
     )
     # Nullable — extensions not yet assigned to a user
     staff       = models.OneToOneField(
@@ -146,7 +146,7 @@ class AgentExtension(models.Model):
         choices=GATEWAY_TYPE_CHOICES,
         blank=True, default='',
         verbose_name='نوع البوابة',
-        help_text='موبايل (GoIP) أو أرضي (Grandstream) — فقط للتحويلات من نوع gateway',
+        help_text='موبايل (GoIP) أو أرضي (Grandstream) — فقط للأرقام الداخلية من نوع gateway',
     )
     # Prefix that the PBX *prepends* to caller numbers on this gateway.
     # We strip it before storing the clean phone number.
@@ -168,8 +168,8 @@ class AgentExtension(models.Model):
     updated_at  = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name        = 'تحويلة'
-        verbose_name_plural = 'التحويلات'
+        verbose_name        = 'رقم داخلي'
+        verbose_name_plural = 'الأرقام الداخلية'
         ordering            = ['extension']
 
     def __str__(self):
@@ -590,7 +590,11 @@ class CdrCall(models.Model):
 
     customer_number = models.CharField(max_length=30, blank=True, verbose_name='رقم العميل')
     phone_key       = models.CharField(max_length=15, blank=True, db_index=True)
-    agent_ext       = models.CharField(max_length=20, blank=True, db_index=True, verbose_name='التحويلة')
+    # db_default: older code still running against the same DB (e.g. the scheduler before a deploy)
+    # inserts rows without this column
+    line_prefix     = models.CharField(max_length=2, blank=True, default='', db_default='', verbose_name='بادئة الخط',
+                                       help_text='81-85 / 91-95: الخط المستخدم في المكالمة (يُحذف من الرقم)')
+    agent_ext       = models.CharField(max_length=20, blank=True, db_index=True, verbose_name='الرقم الداخلي')
     agent_name      = models.CharField(max_length=100, blank=True, help_text='الاسم كما في السنترال')
     queue           = models.CharField(max_length=50, blank=True)
     gateway         = models.CharField(max_length=30, blank=True)

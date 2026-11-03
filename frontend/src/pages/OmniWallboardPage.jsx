@@ -9,6 +9,12 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { omniApi, pbxApi } from '../api/client'
 import useAuthStore from '../store/authStore'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
+
+// «المتصل» sorts by what the row shows (customer name, else the caller number); «العامل» likewise
+const callValue = (c, key) => (key === 'who' ? (c.customer_name || c.caller)
+  : key === 'agent' ? (c.agent_name || c.agent_ext) : c[key])
 
 const STATE_META = {
   ringing:     { label: 'يرن',        cls: 'bg-yellow-100 text-yellow-700' },
@@ -43,6 +49,10 @@ export default function OmniWallboardPage() {
     queryFn: () => omniApi.wallboard().then(r => r.data),
     refetchInterval: 5_000,
   })
+
+  // all rows are in the browser; both hooks run before the early returns below
+  const callSort = useSortableRows(data?.live_calls || [], { getValue: callValue })
+  const queueSort = useSortableRows(data?.queues || [])
 
   const spy = async (targetExt, mode) => {
     setSpyMsg(null)
@@ -108,16 +118,16 @@ export default function OmniWallboardPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-xs text-gray-400 border-b border-gray-100">
-                <th className="text-right px-4 py-2">المتصل</th>
-                <th className="text-right px-2 py-2">الحالة</th>
-                <th className="text-right px-2 py-2">القائمة</th>
-                <th className="text-right px-2 py-2">العامل</th>
-                <th className="text-right px-2 py-2">المدة</th>
+                <SortTh {...callSort.headerProps('who', 'text')} className="text-right px-4 py-2">المتصل</SortTh>
+                <SortTh {...callSort.headerProps('state', 'text')} className="text-right px-2 py-2">الحالة</SortTh>
+                <SortTh {...callSort.headerProps('queue', 'text')} className="text-right px-2 py-2">القائمة</SortTh>
+                <SortTh {...callSort.headerProps('agent', 'text')} className="text-right px-2 py-2">العامل</SortTh>
+                <SortTh {...callSort.headerProps('seconds', 'number')} className="text-right px-2 py-2">المدة</SortTh>
                 <th className="text-left px-4 py-2">مراقبة</th>
               </tr>
             </thead>
             <tbody>
-              {live_calls.map(c => {
+              {callSort.sorted.map(c => {
                 const st = STATE_META[c.state] || {}
                 return (
                   <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50">
@@ -167,16 +177,16 @@ export default function OmniWallboardPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-xs text-gray-400 border-b border-gray-100">
-                  <th className="text-right px-4 py-2">القائمة</th>
-                  <th className="text-center px-2 py-2">الكل</th>
-                  <th className="text-center px-2 py-2">مُجابة</th>
-                  <th className="text-center px-2 py-2">مهجورة</th>
-                  <th className="text-center px-2 py-2">م. انتظار</th>
-                  <th className="text-center px-2 py-2">م. حديث</th>
+                  <SortTh {...queueSort.headerProps('queue__name', 'text')} className="text-right px-4 py-2">القائمة</SortTh>
+                  <SortTh {...queueSort.headerProps('total', 'number')} className="text-center px-2 py-2">الكل</SortTh>
+                  <SortTh {...queueSort.headerProps('answered', 'number')} className="text-center px-2 py-2">مُجابة</SortTh>
+                  <SortTh {...queueSort.headerProps('abandoned', 'number')} className="text-center px-2 py-2">مهجورة</SortTh>
+                  <SortTh {...queueSort.headerProps('avg_wait', 'number')} className="text-center px-2 py-2">م. انتظار</SortTh>
+                  <SortTh {...queueSort.headerProps('avg_talk', 'number')} className="text-center px-2 py-2">م. حديث</SortTh>
                 </tr>
               </thead>
               <tbody>
-                {queues.map(q => (
+                {queueSort.sorted.map(q => (
                   <tr key={q.queue__name} className="border-b border-gray-50">
                     <td className="px-4 py-2 text-gray-800">{q.queue__name}</td>
                     <td className="text-center px-2 py-2 tabular-nums">{q.total}</td>
@@ -198,7 +208,7 @@ export default function OmniWallboardPage() {
           </h2>
           {agents.length === 0 ? (
             <p className="text-center text-gray-400 py-8 text-sm">
-              لا توجد تحويلات من نوع عامل — شغّل sync_pbx_extensions
+              لا توجد أرقام داخلية من نوع عامل — شغّل sync_pbx_extensions
             </p>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-3">

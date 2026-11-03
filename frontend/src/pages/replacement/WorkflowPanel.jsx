@@ -11,6 +11,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { replacementApi } from '../../api/client'
 import ItemSearchInput from '../../components/ItemSearchInput'
 import { Chip, errText, money } from '../supply/supplyUi'
+import SortTh from '../../components/SortTh'
+import useSortableRows from '../../hooks/useSortableRows'
 
 const OP_TONE = { planned: 'gray', dry_run: 'amber', posting: 'blue', posted: 'indigo', posted_verified: 'emerald',
                   failed: 'rose', cancelled: 'gray' }
@@ -214,6 +216,39 @@ function CashPayouts({ c, wf, can, busy, run, v }) {
 
 const nativeStatus = (o) => (o.kind === 'purchase' ? 'بانتظار ظهورها في المرآة' : 'بانتظار سند الكاشير')
 
+const CALC_COLS = [
+  ['الصنف', 'name', 'text'], ['الكمية', 'qty', 'number'], ['سعر الجمهور', 'public_price', 'number'],
+  ['قيمة الجمهور', 'eligible', 'number'], ['الخصم', 'deduction_pct', 'number'],
+  ['صافي الوحدة', 'unit_net', 'number'], ['الرصيد', 'entitlement', 'number'],
+]
+
+/** The server-computed entitlement breakdown — every line is loaded, so the headers sort in the browser. */
+function CalcLinesTable({ lines }) {
+  const sorter = useSortableRows(lines, { getValue: (l, k) => (k === 'name' ? (l.name || l.itemcode) : l[k]) })
+  return (
+    <table className="w-full text-sm">
+      <thead className="text-[11px] text-gray-500 bg-gray-50"><tr>
+        {CALC_COLS.map(([h, key, type]) => (
+          <SortTh key={key} {...sorter.headerProps(key, type)} className="px-2 py-1 text-right">{h}</SortTh>
+        ))}
+      </tr></thead>
+      <tbody>
+        {sorter.sorted.map((l) => (
+          <tr key={l.itemcode} className="border-t border-gray-100">
+            <td className="px-2 py-1">{l.name || l.itemcode}</td>
+            <td className="px-2 py-1 tabular-nums">{Number(l.qty)}</td>
+            <td className="px-2 py-1 tabular-nums">{money(l.public_price)}</td>
+            <td className="px-2 py-1 tabular-nums">{money(l.eligible)}</td>
+            <td className="px-2 py-1 tabular-nums">{Number(l.deduction_pct)}%</td>
+            <td className="px-2 py-1 tabular-nums">{l.unit_net}</td>
+            <td className="px-2 py-1 tabular-nums font-semibold">{money(l.entitlement)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
 export default function WorkflowPanel({ c }) {
   const qc = useQueryClient()
   const [msg, setMsg] = useState('')
@@ -258,24 +293,7 @@ export default function WorkflowPanel({ c }) {
           <>
             <div className="text-xs text-gray-500">القاعدة: {calc.rule_label} · خصم القاعدة {calc.rule_deduction_pct}% · المطبق {calc.applied_deduction_pct}%
               {calc.override_reason && <> · سبب التعديل: «{calc.override_reason}»</>}</div>
-            <table className="w-full text-sm">
-              <thead className="text-[11px] text-gray-500 bg-gray-50"><tr>
-                {['الصنف', 'الكمية', 'سعر الجمهور', 'قيمة الجمهور', 'الخصم', 'صافي الوحدة', 'الرصيد'].map((h) => <th key={h} className="px-2 py-1 text-right">{h}</th>)}
-              </tr></thead>
-              <tbody>
-                {calc.lines.map((l) => (
-                  <tr key={l.itemcode} className="border-t border-gray-100">
-                    <td className="px-2 py-1">{l.name || l.itemcode}</td>
-                    <td className="px-2 py-1 tabular-nums">{Number(l.qty)}</td>
-                    <td className="px-2 py-1 tabular-nums">{money(l.public_price)}</td>
-                    <td className="px-2 py-1 tabular-nums">{money(l.eligible)}</td>
-                    <td className="px-2 py-1 tabular-nums">{Number(l.deduction_pct)}%</td>
-                    <td className="px-2 py-1 tabular-nums">{l.unit_net}</td>
-                    <td className="px-2 py-1 tabular-nums font-semibold">{money(l.entitlement)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <CalcLinesTable lines={calc.lines} />
             <div className="flex gap-2 flex-wrap text-xs">
               <Chip tone="gray">قيمة الجمهور {money(calc.public_value)}</Chip>
               {Number(calc.rounding_adj) !== 0 && <Chip tone="gray">تقريب {money(calc.rounding_adj)}</Chip>}

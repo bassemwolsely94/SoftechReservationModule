@@ -119,3 +119,107 @@ class BacktestSkipsRunningMonthTests(TestCase):
         months = BacktestService()._testable_months('cash_delivery')
         self.assertNotIn(cur, months)
         self.assertIn(_shift_month(*cur, -1), months)
+
+
+class SeasonalityMethodTests(TestCase):
+    """Batch 3: trend-free (centred moving average) index, per-branch blend, seasonal mode."""
+
+    def test_moving_average_index_ignores_steady_growth(self):
+        from apps.forecasting import references as R
+        s = {}
+        for i in range(48):                       # +3%/month growth, no season at all
+            y, m = _shift_month(2021, 1, i)
+            s[(y, m)] = 1000 * (1.03 ** i)
+        idx = R._seasonality(s)
+        self.assertTrue(all(abs(v - 1) < 0.01 for v in idx.values()), idx)
+
+    def test_moving_average_index_recovers_a_december_peak_under_growth(self):
+        from apps.forecasting import references as R
+        s = {}
+        for i in range(48):
+            y, m = _shift_month(2021, 1, i)
+            s[(y, m)] = 1000 * (1.02 ** i) * (1.3 if m == 12 else 1.0)
+        idx = R._seasonality(s)
+        self.assertGreater(idx[12], 1.2)
+        self.assertLess(abs(idx[6] - idx[7]), 0.02)
+
+    def test_short_history_is_neutral(self):
+        from apps.forecasting import references as R
+        s = {(2025, m): 100.0 * m for m in range(1, 13)}     # 12 months: no 13-month window
+        self.assertEqual(set(R._seasonality(s).values()), {1.0})
+
+    def test_branch_weight_grows_with_history(self):
+        from apps.forecasting import references as R
+        self.assertEqual(R.branch_weight(12), 0.0)            # new branch → chain pattern
+        self.assertAlmostEqual(R.branch_weight(18), 0.5)
+        self.assertEqual(R.branch_weight(36), 1.0)
+        self.assertEqual(R.branch_weight(60), 1.0)
+        blended = R.blend_branch_index({12: 1.4}, {12: 1.0}, 0.5)
+        self.assertEqual(blended[12], 1.2)
+        self.assertEqual(blended[1], 1.0)
+
+    def test_seasonal_blend_deseasonalises_recent_months(self):
+        from apps.forecasting.engine import project_blend
+        season = {mo: Decimal('1') for mo in range(1, 13)}
+        season[12] = Decimal('1.2'); season[11] = Decimal('0.8')
+        # January: LM = December (÷1.2), PM = November (÷0.8), target index 1
+        v = project_blend(Decimal('1200'), Decimal('800'), Decimal('1000'),
+                          w_lm=Decimal('0.5'), w_pm=Decimal('0.3'), w_yoy=Decimal('0.2'),
+                          bench=Decimal('0'), season=season, month=1)
+        self.assertEqual(v, Decimal('500') + Decimal('300') + Decimal('200'))
+        plain = project_blend(Decimal('1200'), Decimal('800'), Decimal('1000'),
+                              w_lm=Decimal('0.5'), w_pm=Decimal('0.3'), w_yoy=Decimal('0.2'), bench=Decimal('0'))
+        self.assertEqual(plain, Decimal('1040'))
+
+    def _refs(self, code):
+        idx = {str(mo): 1.0 for mo in range(1, 13)}
+        idx['8'] = 1.5
+        return {'seasonality': {'cash_delivery': {str(mo): 1.0 for mo in range(1, 13)}},
+                'branch_seasonality': {'cash_delivery': {code: {'months': 40, 'weight': 1.0, 'index': idx}}}}
+
+    def test_branch_mode_uses_the_branch_index(self):
+        from apps.config.models import SystemSetting
+        b = Branch.objects.create(softech_branch_id='985', code='985', name='SM', is_operational=True)
+        member = {'key': '985', 'label': 'SM', 'branch': b, 'kwargs': {'branch_ids': [b.id]}}
+        SystemSetting.objects.update_or_create(key='forecast_seasonality_mode', defaults={'value': 'branch', 'label': 'x'})
+        with mock.patch('apps.forecasting.references.get', return_value=self._refs('985')):
+            e = ForecastEngine()
+            self.assertEqual(e._season_index(member, 'cash_delivery')[8], Decimal('1.5'))
+        SystemSetting.objects.update_or_create(key='forecast_seasonality_mode', defaults={'value': 'none'})
+        self.assertIsNone(ForecastEngine()._season_index(member, 'cash_delivery'))
+
+    def test_apply_references_keeps_factor_index_neutral_in_seasonal_mode(self):
+        from apps.config.models import SystemSetting
+        from apps.forecasting import references as R
+        SystemSetting.objects.update_or_create(key='forecast_seasonality_mode', defaults={'value': 'chain', 'label': 'x'})
+        sc = ForecastScenario.objects.create(name='m', year=2026, month=12)
+        refs = {'seasonality': {'cash_delivery': {'12': 1.3}}, 'growth_goal': {}, 'benchmark': {}, 'inflation_monthly': 0}
+        with mock.patch.object(R, 'get', return_value=refs):
+            R.apply_to_scenario(sc)
+        self.assertEqual(sc.factors.get(metric='cash_delivery').seasonality_index, Decimal('1'))
+
+    def test_backtest_reports_branch_level_variants(self):
+        from apps.forecasting.backtest import BacktestService as B
+        flat = {(y, m): 100.0 for y in (2023, 2024, 2025) for m in range(1, 13)}
+        with mock.patch('apps.forecasting.references._series', return_value=flat), \
+             mock.patch('apps.forecasting.references._branch_series', return_value={'X': dict(flat)}):
+            res = B.horizon_accuracy(metrics=['cash_delivery'],
+                                     factors={'cash_delivery': B._default_factor('cash_delivery')}, bench=0)
+        for v in ('br_b', 'br_chain', 'br_branch'):
+            self.assertEqual(res['cash_delivery'][v]['1']['wape'], 0.0)
+
+
+class SeasonalityModeApiTests(TestCase):
+    def setUp(self):
+        from apps.tests.factories import make_user
+        _, _, self.client = make_user('sm_admin', role='admin', access_all=True)
+
+    def test_switch_is_audited_and_validated(self):
+        from apps.audit.models import AuditLog
+        r = self.client.post('/api/forecasting/references/', {'seasonality_mode': 'branch'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()['engine_seasonality_mode'], 'branch')
+        self.assertTrue(AuditLog.objects.filter(action='forecast_seasonality_mode').exists())
+        bad = self.client.post('/api/forecasting/references/', {'seasonality_mode': 'magic'}, format='json')
+        self.assertEqual(bad.status_code, 400)
+        self.assertEqual(self.client.get('/api/forecasting/references/').json()['engine_seasonality_mode'], 'branch')

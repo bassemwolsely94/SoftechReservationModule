@@ -17,6 +17,8 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import useServerSort from '../hooks/useServerSort'
+import SortTh from '../components/SortTh'
 import { pricingApprovalsApi } from '../api/client'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import ReplicationAuditPanel from './pricing/ReplicationAuditPanel'
@@ -435,6 +437,7 @@ export default function PricingApprovalsPage() {
   const [showImport, setShowImport]     = useState(false)
   const [reviewTarget, setReviewTarget] = useState(null)
   const [historyItem, setHistoryItem]   = useState(null)   // { softech_id, name }
+  const [ordering, setOrdering]         = useState('')
   const [tab, setTab]                   = useState('requests')  // requests | sla | replication | insights
   useHelpTab(tab)
   const qc = useQueryClient()
@@ -456,12 +459,14 @@ export default function PricingApprovalsPage() {
   })
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['pricing-approvals', statusFilter],
-    queryFn:  () => pricingApprovalsApi.list(statusFilter ? { status: statusFilter } : {}).then(r => r.data),
+    queryKey: ['pricing-approvals', statusFilter, ordering],
+    queryFn:  () => pricingApprovalsApi.list({ ...(statusFilter ? { status: statusFilter } : {}), ...(ordering ? { ordering } : {}) }).then(r => r.data),
     refetchInterval: 30000,
   })
 
   const requests = data?.results ?? data ?? []
+  const { headerProps } = useServerSort(ordering, setOrdering,
+    { allowed: ['item__name', 'requested_by__first_name', 'requested_at', 'status'] })
 
   return (
     <div className="min-h-screen bg-gray-50" dir="rtl">
@@ -568,11 +573,11 @@ export default function PricingApprovalsPage() {
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200 text-right">
                     <th className="px-4 py-3 text-xs font-semibold text-gray-500 w-8">#</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-gray-500">الصنف</th>
+                    <SortTh {...headerProps('item__name', 'text')} className="px-4 py-3 text-xs font-semibold text-gray-500">الصنف</SortTh>
                     <th className="px-4 py-3 text-xs font-semibold text-gray-500">التعديلات</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-gray-500">بواسطة</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-gray-500">التاريخ</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-gray-500">الحالة</th>
+                    <SortTh {...headerProps('requested_by__first_name', 'text')} className="px-4 py-3 text-xs font-semibold text-gray-500">بواسطة</SortTh>
+                    <SortTh {...headerProps('requested_at', 'date')} className="px-4 py-3 text-xs font-semibold text-gray-500">التاريخ</SortTh>
+                    <SortTh {...headerProps('status', 'text')} className="px-4 py-3 text-xs font-semibold text-gray-500">الحالة</SortTh>
                     {isAdmin && <th className="px-4 py-3 text-xs font-semibold text-gray-500">إجراء</th>}
                   </tr>
                 </thead>

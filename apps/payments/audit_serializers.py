@@ -62,7 +62,7 @@ class PaymentExceptionSerializer(serializers.ModelSerializer):
         read_only=True, default=None,
     )
     payment_ref = serializers.CharField(
-        source='payment.transaction_ref', read_only=True, default=''
+        source='payment.reference_number', read_only=True, default=''
     )
 
     class Meta:

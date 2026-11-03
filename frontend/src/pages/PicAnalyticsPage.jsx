@@ -22,6 +22,8 @@ import PicTable from '../components/pic-analytics/PicTable'
 import GroupTable from '../components/pic-analytics/GroupTable'
 import RetentionPanel from '../components/pic-analytics/RetentionPanel'
 import AccessPanel from '../components/pic-analytics/AccessPanel'
+import Explain from '../components/pic-analytics/Explain'
+import ExclusionsPanel from '../components/pic-analytics/ExclusionsPanel'
 import CallCenterTab from '../components/pic-analytics/CallCenterTab'
 import MissedTab from '../components/pic-analytics/MissedTab'
 import NumbersTab from '../components/pic-analytics/NumbersTab'
@@ -56,6 +58,7 @@ export default function PicAnalyticsPage() {
   const [order, setOrder] = useState('-net')
   const [picPage, setPicPage] = useState(1)
   const [overduePage, setOverduePage] = useState(1)
+  const [overdueOrdering, setOverdueOrdering] = useState('')
   const [exporting, setExporting] = useState(false)
   const [msg, setMsg] = useState('')
   const urlQ = sp.get('q') || ''
@@ -113,7 +116,7 @@ export default function PicAnalyticsPage() {
   const overview = useGroup('overview', () => picAnalyticsApi.overview(params).then(r => r.data), tab === 'overview')
   const pics = useQuery({
     queryKey: ['pic-analytics', 'pics', picParams, order, picPage],
-    queryFn: () => picAnalyticsApi.pics({ ...picParams, order, page: picPage, page_size: 50 }).then(r => r.data),
+    queryFn: () => picAnalyticsApi.pics({ ...picParams, ordering: order, page: picPage, page_size: 50 }).then(r => r.data),
     enabled: ready && tab === 'pics', staleTime: 2 * 60_000, placeholderData: keepPreviousData,
   })
   const branchG = useGroup('g-branch', () => picAnalyticsApi.groups('branch', params).then(r => r.data), tab === 'branches')
@@ -122,8 +125,8 @@ export default function PicAnalyticsPage() {
   const catG = useGroup('g-category', () => picAnalyticsApi.groups('category', params).then(r => r.data), tab === 'channels')
   const retention = useGroup('retention', () => picAnalyticsApi.retention(params).then(r => r.data), tab === 'retention')
   const overdue = useQuery({
-    queryKey: ['pic-analytics', 'overdue', params, overduePage],
-    queryFn: () => picAnalyticsApi.overdue({ ...params, page: overduePage, page_size: 50 }).then(r => r.data),
+    queryKey: ['pic-analytics', 'overdue', params, overduePage, overdueOrdering],
+    queryFn: () => picAnalyticsApi.overdue({ ...params, page: overduePage, page_size: 50, ...(overdueOrdering ? { ordering: overdueOrdering } : {}) }).then(r => r.data),
     enabled: ready && tab === 'retention', staleTime: 2 * 60_000, placeholderData: keepPreviousData,
   })
   const center = useGroup('calls-center', () => picAnalyticsApi.callCenter(params).then(r => r.data), tab === 'calls')
@@ -232,27 +235,52 @@ export default function PicAnalyticsPage() {
         </div>
       )}
       {tab === 'pics' && (
+        <>
+        <Explain id="pics" className="-mt-2"
+                 hint="كل صف = عميل (PIC) اشترى في الفترة. المبالغ والزيارات على فروعك، أما الشريحة وأ/ب/ج و«متأخر» فمحسوبة على كل الفروع."
+                 lines={['أ/ب/ج = شهور الشراء / أطول تتابع شهري / دورة الشراء (تفاصيلها في تبويب «الولاء والتكرار»).',
+                         'المكالمات (وارد، صادر، فائتة، آخر مكالمة، مدة الحديث، مكالمة ← شراء) للإدارة بس، والمكالمة على رقم مشترك بتتحسب مرة واحدة.',
+                         'مرّر على عنوان أي عمود تلاقي شرحه. «استبعاد» بيخرج العميل من كل الأرقام وتقدر ترجّعه من قسم المستبعدين.']} />
         <PicTable data={pics.data} order={order} onOrder={o => { setOrder(o); setPicPage(1) }}
-                  page={picPage} onPage={setPicPage} branchName={branchName} />
+                  page={picPage} onPage={setPicPage} branchName={branchName}
+                  onExclude={access?.can_manage_exclusions
+                    ? async (pic, reason) => { await picAnalyticsApi.exclude({ pic, reason }); refresh() } : undefined} />
+        </>
       )}
       {tab === 'branches' && (
         <div data-tour="pic-analytics-branches-grid">
-          <GroupTable data={branchG.data} firstLabel="الفرع" note="زيارة نفس اليوم في فرعين تُحسب لكل فرع" />
+          <GroupTable data={branchG.data} firstLabel="الفرع" note="زيارة نفس اليوم في فرعين تُحسب لكل فرع"
+                      explain={{ id: 'br', hint: 'كل سطر = عملاء الفرع ومبيعاته في الفترة؛ مجموع الفروع ممكن يزيد عن الإجمالي.',
+                                 lines: ['العميل الجديد بيتنسب لفرع أول فاتورة له في الفترة. العميل العائد بيتحسب لكل فرع اشترى منه (مرة واحدة جوه نفس الفرع).',
+                                         'الزيارة = فواتير العميل في نفس اليوم. زيارة نفس اليوم في فرعين = زيارة لكل فرع، وزيارة واحدة في الإجمالي.',
+                                         'تصنيف جديد/عائد/مُعاد تنشيطه محسوب على كل الفروع، أما الصافي والسلة فعلى الفرع.'],
+                                 example: 'عميل زار فرع أ وفرع ب في نفس اليوم ← زيارة في كل فرع، وزيارة واحدة في الإجمالي' }} />
         </div>
       )}
       {tab === 'salespeople' && (
         <div data-tour="pic-analytics-sales-grid">
-          <GroupTable data={salesG.data} firstLabel="البائع" note="العميل الجديد يُنسب لبائع أول فاتورة له في الفترة" />
+          <GroupTable data={salesG.data} firstLabel="البائع" note="العميل الجديد يُنسب لبائع أول فاتورة له في الفترة"
+                      explain={{ id: 'sp', hint: 'كل سطر = العملاء اللي خدمهم البائع ومبيعاته في الفترة.',
+                                 lines: ['العميل الجديد جديد للكل، ويتنسب لبائع أول فاتورة له بس. العائد = اشترى في الفترة وليس جديد، ويتحسب عند كل بائع باع له (مرة واحدة جوه نفس البائع).',
+                                         'استخدمه تعرف مين بيجيب عملاء جدد ومين بيحافظ على العائدين.'],
+                                 example: 'عميل جديد أول فاتورة له مع أحمد ← يتحسب جديد لأحمد بس؛ لو اشترى بعدها من منى يتحسب عميل عند منى (مش جديد ومش عائد). عميل قديم اشترى من أحمد ومنى ← عائد عند الاتنين' }} />
         </div>
       )}
       {tab === 'channels' && (
         <div className="grid lg:grid-cols-2 gap-4">
           <div data-tour="pic-analytics-channels-grid">
-            <GroupTable data={chanG.data} title="القنوات" firstLabel="القناة" />
+            <GroupTable data={chanG.data} title="القنوات" firstLabel="القناة"
+                        explain={{ id: 'ch', hint: 'نفس تقسيم القنوات في لوحة KPI، فالأرقام تطابقها.',
+                                   lines: ['القناة بتتحدد من قناة الفاتورة بنفس خريطة لوحة KPI؛ غير المربوط = أخرى، والقنوات المستبعدة من KPI بتظهر سطر لوحدها.',
+                                           'العميل الجديد بيتنسب لقناة أول فاتورة له.'] }} />
           </div>
           <div className="space-y-1">
             <div data-tour="pic-analytics-categories-grid">
-              <GroupTable data={catG.data} title="الأصناف" firstLabel="الفئة" />
+              <GroupTable data={catG.data} title="الأصناف" firstLabel="الفئة"
+                          explain={{ id: 'cat', hint: 'صافي كل فئة (دواء، مستحضرات، مكملات…) من مشتريات العملاء في الفترة.',
+                                     lines: ['العميل بيظهر في كل فئة اشترى منها. السلة كاملة، فلو فلترت بفئة ما بيتعرضش الربح ولا الأصناف.',
+                                             'نسبة الزيارات بأكتر من فئة = الزيارات اللي فيها فئتين أو أكتر ÷ كل الزيارات.'],
+                                     example: '40 زيارة من 100 فيها دواء ومستحضرات ← 40%' }} />
             </div>
             {catG.data?.cross_category_rate != null && (
               <p className="text-xs text-gray-500 px-1">نسبة الزيارات بأكثر من فئة: {(catG.data.cross_category_rate * 100).toFixed(1)}%</p>
@@ -262,13 +290,15 @@ export default function PicAnalyticsPage() {
       )}
       {tab === 'retention' && (
         <RetentionPanel data={retention.data} overdue={overdue.data}
-                        overduePage={overduePage} onOverduePage={setOverduePage} />
+                        overduePage={overduePage} onOverduePage={setOverduePage}
+                        overdueOrdering={overdueOrdering} onOverdueOrdering={o => { setOverdueOrdering(o); setOverduePage(1) }} />
       )}
 
       {tab === 'calls' && <CallCenterTab data={center.data} />}
       {tab === 'missed' && <MissedTab params={params} ready={ready} />}
       {tab === 'numbers' && <NumbersTab params={params} ready={ready} />}
 
+      {access?.can_manage_exclusions && <ExclusionsPanel params={params} ready={ready} />}
       {access?.can_manage_access && <AccessPanel />}
     </div>
   )

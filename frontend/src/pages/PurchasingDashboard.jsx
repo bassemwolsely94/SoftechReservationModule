@@ -22,6 +22,9 @@ import useAuthStore from '../store/authStore'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
 import { useToast } from '../components/ui'
+import { SortIcon } from '../components/DataTable'
+import useSortableRows from '../hooks/useSortableRows'
+import SharedSortTh from '../components/SortTh'
 
 // ── Column-resize hook ────────────────────────────────────────────────────────
 // useColWidths(defaults: number[]) → [widths, onResizeStart(e, colIndex)]
@@ -476,14 +479,14 @@ function AggregatedTab({ abcFilter, search, ordering, onSort, runId, itemFilters
           <tr className="text-gray-500 text-xs font-bold">
             <SortTh label="الصنف"           field="item__name"           current={ordering} onSort={onSort}              width={colW[0]}  onResizeStart={e => onResizeStart(e, 0)} />
             <SortTh label="كود"             field="item__softech_id"     current={ordering} onSort={onSort}              width={colW[1]}  onResizeStart={e => onResizeStart(e, 1)} />
-            <PlainTh align="center"                                                                                       width={colW[2]}  onResizeStart={e => onResizeStart(e, 2)}>ABC</PlainTh>
+            <SortTh label="ABC" field="abc_class" current={ordering} onSort={onSort} align="center" width={colW[2]}  onResizeStart={e => onResizeStart(e, 2)} />
             <SortTh label="معدل/شهر"        field="-total_monthly_avg"   current={ordering} onSort={onSort} align="center" width={colW[3]}  onResizeStart={e => onResizeStart(e, 3)} />
             <SortTh label="مخزون"           field="-total_current_stock" current={ordering} onSort={onSort} align="center" width={colW[4]}  onResizeStart={e => onResizeStart(e, 4)} />
             <SortTh label="فجوة"            field="-total_gap"           current={ordering} onSort={onSort} align="center" width={colW[5]}  onResizeStart={e => onResizeStart(e, 5)} />
             <SortTh label="قيمة/شهر (ج.م)" field="-total_monthly_value" current={ordering} onSort={onSort} align="center" width={colW[6]}  onResizeStart={e => onResizeStart(e, 6)} />
             <PlainTh align="center" titleProp="هامش الربح الإجمالي = (سعر البيع − سعر الشراء) / سعر البيع"              width={colW[7]}  onResizeStart={e => onResizeStart(e, 7)}>هامش م%</PlainTh>
             <PlainTh align="center" titleProp="هامش الربح الصافي = (متوسط سعر البيع الفعلي − سعر الشراء) / سعر البيع القياسي" width={colW[8]} onResizeStart={e => onResizeStart(e, 8)}>هامش ص%</PlainTh>
-            <PlainTh align="center"                                                                                       width={colW[9]}  onResizeStart={e => onResizeStart(e, 9)}>تراكمي%</PlainTh>
+            <SortTh label="تراكمي%" field="cumulative_pct" current={ordering} onSort={onSort} align="center" width={colW[9]}  onResizeStart={e => onResizeStart(e, 9)} />
             <PlainTh align="center"                                                                                       width={colW[10]} onResizeStart={e => onResizeStart(e, 10)}>فروع</PlainTh>
             <SortTh label={`موسمية ${monthName}`} field="-season_sort" current={ordering} onSort={onSort} align="center" width={colW[11]} onResizeStart={e => onResizeStart(e, 11)} title="مؤشر الموسمية للشهر الحالي: ×1.00 = شهر عادي، ×1.25 = أعلى من المتوسط 25% (⚠ = السنوات غير متسقة)" />
             <PlainTh titleProp="ملاحظات وتحفظات: عدد السنوات، اتساقها، المبيعات الكبيرة المستبعدة، والشهر التالي" width={colW[12]} onResizeStart={e => onResizeStart(e, 12)}>ملاحظات الموسمية</PlainTh>
@@ -606,8 +609,8 @@ function BranchTab({ abcFilter, search, ordering, onSort, branches, runId, itemF
             <thead>
               <tr className="text-gray-500 text-xs font-bold">
                 <SortTh label="الصنف"      field="item__name"      current={ordering} onSort={onSort}              width={colW[0]}  onResizeStart={e => onResizeStart(e, 0)} />
-                <PlainTh align="center"                                                                              width={colW[1]}  onResizeStart={e => onResizeStart(e, 1)}>ABC</PlainTh>
-                <PlainTh align="center"                                                                              width={colW[2]}  onResizeStart={e => onResizeStart(e, 2)}>الفرع</PlainTh>
+                <SortTh label="ABC" field="abc_class" current={ordering} onSort={onSort} align="center" width={colW[1]}  onResizeStart={e => onResizeStart(e, 1)} />
+                <SortTh label="الفرع" field="branch__name_ar" current={ordering} onSort={onSort} align="center" width={colW[2]}  onResizeStart={e => onResizeStart(e, 2)} />
                 <SortTh label="30يوم"      field="-rate_30d"       current={ordering} onSort={onSort} align="center" width={colW[3]}  onResizeStart={e => onResizeStart(e, 3)} />
                 <SortTh label="90يوم"      field="-rate_90d"       current={ordering} onSort={onSort} align="center" width={colW[4]}  onResizeStart={e => onResizeStart(e, 4)} />
                 <SortTh label="365يوم"     field="-rate_365d"      current={ordering} onSort={onSort} align="center" width={colW[5]}  onResizeStart={e => onResizeStart(e, 5)} />
@@ -891,10 +894,8 @@ function TransferRecsTab({ canReview }) {   // purchasing approve: admin / purch
               {/* Column header row — sticky row 2 (top: 28px to clear row 1) */}
               <tr className="text-gray-500 text-xs font-bold">
                 <SortTh label="الصنف"          field="item__name"           current={ordering} onSort={setOrdering} stickyTop={28} />
-                <th className="px-3 py-2 text-right border-b border-gray-200 whitespace-nowrap"
-                    style={{ position: 'sticky', top: 28, zIndex: 20, backgroundColor: '#f9fafb' }}>كود</th>
-                <th className="px-3 py-2 text-center border-b border-gray-200 whitespace-nowrap"
-                    style={{ position: 'sticky', top: 28, zIndex: 20, backgroundColor: '#f9fafb' }}>ABC</th>
+                <SortTh label="كود"            field="item__softech_id"     current={ordering} onSort={setOrdering} stickyTop={28} />
+                <SortTh label="ABC"            field="abc_class"            current={ordering} onSort={setOrdering} align="center" stickyTop={28} />
                 {/* Source branch columns */}
                 <SortTh label="من فرع"         field="from_branch__name_ar" current={ordering} onSort={setOrdering} align="center" stickyTop={28} />
                 <SortTh label="رصيد"           field="-from_stock"          current={ordering} onSort={setOrdering} align="center" stickyTop={28} />
@@ -910,8 +911,7 @@ function TransferRecsTab({ canReview }) {   // purchasing approve: admin / purch
                 <th className="px-3 py-2 text-center border-b border-gray-200 whitespace-nowrap"
                     style={{ position: 'sticky', top: 28, zIndex: 20, backgroundColor: '#f9fafb' }}
                     title="هامش الربح الإجمالي القياسي">هامش م%</th>
-                <th className="px-3 py-2 text-center border-b border-gray-200 whitespace-nowrap"
-                    style={{ position: 'sticky', top: 28, zIndex: 20, backgroundColor: '#f9fafb' }}>الحالة</th>
+                <SortTh label="الحالة"         field="status"               current={ordering} onSort={setOrdering} align="center" stickyTop={28} />
                 {canReview && (
                   <th className="px-3 py-2 text-center border-b border-gray-200 whitespace-nowrap"
                       style={{ position: 'sticky', top: 28, zIndex: 20, backgroundColor: '#f9fafb' }}>إجراء</th>
@@ -1006,18 +1006,26 @@ function TransferRecsTab({ canReview }) {   // purchasing approve: admin / purch
 //            pass the first-row height in px for a second row in a 2-row header)
 // width / onResizeStart: optional column-resize support
 function SortTh({ label, field, current, onSort, align = 'right', stickyTop = 0, width, onResizeStart, title: titleProp }) {
-  const next = current === `-${field}` ? field : `-${field}`
-  const icon = current === `-${field}` ? '↑' : current === field ? '↓' : '↕'
+  // `field` may carry a leading '-' = "first click sorts descending"; the ordering sent is always a valid DRF term
+  const base = field.replace(/^-/, '')
+  const firstDesc = field.startsWith('-')
+  const cur = String(current || '')
+  const active = cur.replace(/^-/, '') === base
+  const curDesc = cur.startsWith('-')
+  const next = !active ? (firstDesc ? `-${base}` : base) : (curDesc ? base : `-${base}`)
 
   return (
     <th
       title={titleProp}
-      className={`px-3 py-2 text-${align} cursor-pointer hover:bg-gray-100 select-none whitespace-nowrap border-b border-gray-200`}
+      aria-sort={active ? (curDesc ? 'descending' : 'ascending') : 'none'}
+      className={`px-3 py-2 text-${align} hover:bg-gray-100 select-none whitespace-nowrap border-b border-gray-200`}
       style={{ position: 'sticky', top: stickyTop, zIndex: 20, backgroundColor: '#f9fafb',
                width: width || undefined, minWidth: 60, userSelect: 'none' }}
-      onClick={() => onSort(next)}
     >
-      {label} <span className="text-gray-400 text-xs">{icon}</span>
+      <button type="button" onClick={() => onSort(next)}
+              className="bg-transparent p-0 cursor-pointer [font:inherit] [color:inherit]">
+        {label} <span className="text-xs"><SortIcon active={active} dir={curDesc ? 'desc' : 'asc'} /></span>
+      </button>
       {onResizeStart && (
         <span
           onMouseDown={e => onResizeStart(e)}
@@ -1321,6 +1329,8 @@ function LostSalesTab() {
     queryFn:  () => purchasingApi.lostSalesSummary().then(r => r.data),
     staleTime: 60_000,
   })
+  // the server's top-20 by lost revenue; the headers re-order those 20
+  const { sorted: topItems, headerProps: lsH } = useSortableRows(summary?.top_items || [], {})
 
   if (isLoading) return (
     <div className="flex items-center justify-center py-16 text-gray-400 text-sm animate-pulse">
@@ -1410,21 +1420,21 @@ function LostSalesTab() {
         <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
             <h3 className="text-sm font-bold text-gray-700">📋 أعلى الأصناف خسارةً (30 يوم)</h3>
-            <span className="text-xs text-gray-400">أول 20 صنف بترتيب الإيراد الضائع</span>
+            <span className="text-xs text-gray-400">أول 20 صنف بترتيب الإيراد الضائع — ترتيب العناوين على هذه الـ20 فقط</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-gray-500 text-xs">
-                  <th className="px-3 py-2 text-right font-semibold">الصنف</th>
-                  <th className="px-3 py-2 text-right font-semibold">كود</th>
-                  <th className="px-3 py-2 text-right font-semibold">الإيراد الضائع</th>
-                  <th className="px-3 py-2 text-right font-semibold">الفروع المتأثرة</th>
-                  <th className="px-3 py-2 text-right font-semibold">السبب</th>
+                  <SharedSortTh {...lsH('item_name', 'text')} className="px-3 py-2 text-right font-semibold">الصنف</SharedSortTh>
+                  <SharedSortTh {...lsH('item_code', 'text')} className="px-3 py-2 text-right font-semibold">كود</SharedSortTh>
+                  <SharedSortTh {...lsH('lost_revenue_30d', 'number')} className="px-3 py-2 text-right font-semibold">الإيراد الضائع</SharedSortTh>
+                  <SharedSortTh {...lsH('branches_affected', 'number')} className="px-3 py-2 text-right font-semibold">الفروع المتأثرة</SharedSortTh>
+                  <SharedSortTh {...lsH('root_cause', 'text')} className="px-3 py-2 text-right font-semibold">السبب</SharedSortTh>
                 </tr>
               </thead>
               <tbody>
-                {summary.top_items.map((item, i) => (
+                {topItems.map((item, i) => (
                   <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
                     <td className="px-3 py-2 font-medium text-gray-800 max-w-xs break-words">
                       {item.item_name}

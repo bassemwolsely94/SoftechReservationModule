@@ -27,6 +27,10 @@ from .service import ForecastService
 from .engine import ForecastEngine
 from .backtest import BacktestService
 from core.threads import start_thread
+from django.db.models import Value
+from django.db.models.functions import Coalesce, Concat, NullIf, Trim
+from core.sort_ordering import NullsLastOrderingFilter as NullsLastOrdering
+
 
 logger = logging.getLogger('elrezeiky')
 
@@ -62,6 +66,9 @@ class CanUseForecasting(BasePermission):
 class SeasonalityIndexViewSet(viewsets.ModelViewSet):
     serializer_class   = SeasonalityIndexSerializer
     permission_classes = [IsAuthenticated, CanUseForecasting]
+    # sortable grid: the page is cut at 50, so the headers sort on the server (explicit whitelist)
+    filter_backends    = [NullsLastOrdering]
+    ordering_fields    = ['item__name', 'category__name', 'month', 'index_value', 'computed_at']
 
     def get_queryset(self):
         qs    = SeasonalityIndex.objects.select_related('item', 'category')
@@ -99,7 +106,15 @@ class SeasonalityIndexViewSet(viewsets.ModelViewSet):
 class ForecastRunViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class   = ForecastRunSerializer
     permission_classes = [IsAuthenticated, CanUseForecasting]
-    queryset           = ForecastRun.objects.select_related('triggered_by').order_by('-started_at')
+    # «بواسطة» sorts by the name the grid shows (triggered_by_name = StaffProfile.full_name)
+    queryset           = (ForecastRun.objects.select_related('triggered_by__user').annotate(
+        triggered_by_sort=Coalesce(
+            NullIf(Trim(Concat('triggered_by__user__first_name', Value(' '), 'triggered_by__user__last_name')), Value('')),
+            NullIf(Trim('triggered_by__softech_username'), Value('')),
+            'triggered_by__user__username'))
+        .order_by('-started_at'))
+    filter_backends    = [NullsLastOrdering]
+    ordering_fields    = ['started_at', 'completed_at', 'items_processed', 'status', 'triggered_by_sort']
 
     @action(detail=False, methods=['post'], url_path='trigger')
     def trigger(self, request):
@@ -125,6 +140,9 @@ class ForecastRunViewSet(viewsets.ReadOnlyModelViewSet):
 class ForecastAccuracyViewSet(viewsets.ModelViewSet):
     serializer_class   = ForecastAccuracySerializer
     permission_classes = [IsAuthenticated, CanUseForecasting]
+    filter_backends    = [NullsLastOrdering]
+    ordering_fields    = ['item__name', 'branch__name', 'forecast_date', 'forecast_30d',
+                          'actual_30d', 'mape', 'mae']
 
     def get_queryset(self):
         qs     = ForecastAccuracy.objects.select_related('item', 'branch')
@@ -547,7 +565,8 @@ class ForecastReferenceView(APIView):
 
     def get(self, request):
         from apps.forecasting import references as R
-        return Response(R.get() or {})
+        from apps.forecasting.engine import seasonality_mode
+        return Response({**(R.get() or {}), 'engine_seasonality_mode': seasonality_mode()})
 
     def post(self, request):
         sp = getattr(request.user, 'staff_profile', None)
@@ -555,6 +574,8 @@ class ForecastReferenceView(APIView):
             return Response({'detail': 'غير مصرح'}, status=status.HTTP_403_FORBIDDEN)
         from apps.forecasting import references as R
         d = request.data or {}
+        if 'seasonality_mode' in d:
+            return _set_seasonality_mode(request, sp, d.get('seasonality_mode'))
         prev = R.get() or {}
         rg = d.get('real_growth')
         rg = float(rg) if rg not in (None, '') else float(prev.get('real_growth', 0.15))
@@ -587,6 +608,24 @@ class ForecastPlanView(APIView):
         except Exception:
             logger.exception('forecast plan failed')
             return Response({'detail': 'تعذّر حساب الخطة'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def _set_seasonality_mode(request, sp, mode):
+    """Switch how the engine applies seasonality (none | chain | branch) — audited."""
+    from apps.config.models import SystemSetting
+    from apps.audit.models import AuditLog
+    from apps.forecasting.engine import SEASONALITY_MODES, seasonality_mode
+    mode = str(mode or '').strip().lower()
+    if mode not in SEASONALITY_MODES:
+        return Response({'detail': 'وضع غير صالح'}, status=status.HTTP_400_BAD_REQUEST)
+    old = seasonality_mode()
+    SystemSetting.objects.update_or_create(key='forecast_seasonality_mode', defaults={
+        'value': mode, 'label': 'وضع الموسمية في محرك التنبؤ', 'category': 'general'})
+    if old != mode:
+        AuditLog.log('forecast_seasonality_mode', user=sp, changes={'mode': [old, mode]},
+                     note=f'وضع الموسمية في محرك التنبؤ: {old} → {mode}')
+    from apps.forecasting import references as R
+    return Response({**(R.get() or {}), 'engine_seasonality_mode': mode})
 
 
 class GrowthView(APIView):

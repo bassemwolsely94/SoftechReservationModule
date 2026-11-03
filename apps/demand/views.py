@@ -3,7 +3,7 @@ apps/demand/views.py
 
 Views are thin — all business logic lives in service.py.
 """
-from rest_framework import viewsets, filters, status
+from rest_framework import viewsets, status
 from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import action, api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -36,6 +36,8 @@ from .serializers import (
 )
 from . import service
 from core import branch_scope
+from core.sort_ordering import NullsLastOrderingFilter, explicit_order_by, staff_name_key
+from core.sort_rank import branch_label, choice_rank, text_or
 from core.errors import public_error
 from core.permissions import deny_unless
 
@@ -56,6 +58,16 @@ DEMAND           = matrix_permission('demand', post=('create', 'edit', 'approve'
 DEMAND_ANALYTICS = matrix_permission('analytics')
 DEMAND_PUSH      = matrix_permission('purchasing', post=('create', 'edit', 'approve'))
 SHELF_QR         = matrix_permission('catalog')
+
+
+def _sla_deadline_expr():
+    """SQL twin of DemandRecord.sla_deadline (assigned → assigned_at + SLA, others → created_at + SLA) so the
+    SLA column sorts by what it shows; statuses without an SLA are NULL (last)."""
+    from django.db.models import DateTimeField, ExpressionWrapper, Value, When, Case
+    whens = [When(status=st, then=ExpressionWrapper(
+        F('assigned_at' if st == 'assigned' else 'created_at') + timedelta(minutes=mins),
+        output_field=DateTimeField())) for st, mins in DemandRecord.SLA_MINUTES.items() if mins]
+    return Case(*whens, default=Value(None), output_field=DateTimeField())
 
 
 class DemandViewSet(viewsets.ModelViewSet):
@@ -91,19 +103,28 @@ class DemandViewSet(viewsets.ModelViewSet):
     """
 
     permission_classes = [IsAuthenticated, DEMAND]
-    filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
+    filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, NullsLastOrderingFilter]
     filterset_fields   = ['status', 'priority', 'branch', 'source', 'assigned_to']
     search_fields      = [
         'phone', 'customer_name', 'phcode', 'demand_number',
         'items__item__name', 'items__item__softech_id', 'items__item_name_free',
     ]
-    ordering_fields = ['created_at', 'updated_at', 'follow_up_date', 'priority']
+    # Sortable list grid: annotations = what the cell shows (status / priority by rank, SLA by deadline)
+    ordering_fields = ['created_at', 'updated_at', 'follow_up_date', 'priority', 'demand_number', 'customer_name',
+                       'branch_sort', 'items_count', 'status_rank', 'priority_rank', 'sla_sort', 'assignee_sort']
     ordering        = ['-created_at']
 
     def get_queryset(self):
         qs = DemandRecord.objects.select_related(
             'branch', 'customer', 'assigned_to__user', 'created_by__user',
-        ).prefetch_related('items__item')
+        ).prefetch_related('items__item').annotate(
+            branch_sort=branch_label('branch'),
+            items_count=Count('items', distinct=True),
+            status_rank=choice_rank('status', DemandRecord.STATUS_CHOICES),
+            priority_rank=choice_rank('priority', DemandRecord.PRIORITY_CHOICES),
+            sla_sort=_sla_deadline_expr(),
+            assignee_sort=staff_name_key('assigned_to'),
+        )
 
         # Batch 5: the one branch helper — all-branch roles (incl. supervisor / quality manager,
         # owner decision B-3) see every branch; branch staff home + allowed − restricted; fail-closed.
@@ -321,14 +342,30 @@ class DemandViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='recovery-queue')
     def recovery_queue(self, request):
         """Back-in-stock worklist: eligible lines flagged `available_again`,
-        branch-scoped, sorted by potential value (desc)."""
+        branch-scoped, sorted by potential value (desc) unless a header asks otherwise (whitelisted ?ordering=,
+        applied to the whole queue BEFORE paging)."""
+        from django.db.models import DateTimeField, DurationField, ExpressionWrapper, OuterRef, Subquery
+        from django.db.models.functions import Now
+        from apps.catalog.models import ItemStock
         visible = self.get_queryset()
+        order = explicit_order_by(request.query_params.get('ordering'), {
+            'customer_name': 'demand__customer_name', 'item': 'item_sort', 'branch': 'branch_sort',
+            'stock': 'stock_sort', 'value': '_val', 'waiting': 'waiting_sort',
+        }, default=(F('_val').desc(nulls_last=True), '-back_in_stock_at'))
         qs = (
             DemandItem.objects.awaiting_winback()
             .filter(demand__in=visible)
             .select_related('demand', 'demand__branch', 'item')
-            .annotate(_val=F('quantity') * F('unit_price_snapshot'))
-            .order_by(F('_val').desc(nulls_last=True), '-back_in_stock_at')
+            .annotate(
+                _val=F('quantity') * F('unit_price_snapshot'),
+                item_sort=text_or('item__name', 'item_name_free'),
+                branch_sort=branch_label('demand__branch'),
+                waiting_sort=ExpressionWrapper(Now() - F('demand__created_at'), output_field=DurationField()),
+                stock_sort=Subquery(ItemStock.objects.filter(
+                    item=OuterRef('item'), branch=OuterRef('demand__branch'),
+                ).values('quantity_on_hand')[:1]),
+            )
+            .order_by(*order)
         )
         page = self.paginate_queryset(qs)
         target = page if page is not None else qs

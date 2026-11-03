@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 
 from core.permissions import MatrixPermission
+from core.stable_ordering import StableOrderingMixin
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
@@ -28,7 +29,7 @@ def _can_review_staff(request):
     return bool(profile and profile.role in ('admin', 'purchasing', 'quality_manager'))
 
 
-class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
+class AuditLogViewSet(StableOrderingMixin, viewsets.ReadOnlyModelViewSet):
     """Read-only audit log API — admin only."""
     serializer_class   = AuditLogSerializer
     permission_classes = [IsAuthenticated, MatrixPermission]
@@ -37,7 +38,8 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends    = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields   = ['action', 'model_name', 'user']
     search_fields      = ['user_name', 'object_repr', 'note']
-    ordering_fields    = ['created_at']
+    # Grid headers (AuditPage): action code, who, entity type, when. Nothing from `changes` / `ip_address`.
+    ordering_fields    = ['created_at', 'action', 'user_name', 'model_name']
     ordering           = ['-created_at']
 
     def get_queryset(self):

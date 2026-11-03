@@ -14,6 +14,7 @@ from django.conf import settings
 from config.writers import writer_allowed
 from core.errors import public_error
 from core.permissions import matrix_permission
+from core.stable_ordering import StableOrderingFilter
 
 # Pricing approvals sit in the `approvals` matrix module (Batch 4, Z-6): reads need view; filing a
 # price-change request (single, spreadsheet import, rollback) needs create or approve — the
@@ -52,6 +53,9 @@ class IsAdminRole(permissions.BasePermission):
 class RequestListCreateView(generics.ListCreateAPIView):
     serializer_class   = ItemPriceChangeRequestSerializer
     permission_classes = [permissions.IsAuthenticated, APPROVALS_REQUEST]
+    # sortable grid: the list is paged, so the headers sort on the server (explicit whitelist)
+    filter_backends    = [StableOrderingFilter]
+    ordering_fields    = ['item__name', 'requested_by__first_name', 'requested_at', 'status']
 
     def get_queryset(self):
         qs = ItemPriceChangeRequest.objects.select_related(

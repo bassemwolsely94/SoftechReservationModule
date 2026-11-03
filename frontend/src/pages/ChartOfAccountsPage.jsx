@@ -9,6 +9,10 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { financeApi } from '../api/client'
+import useServerSort from '../hooks/useServerSort'
+import SortTh from '../components/SortTh'
+
+const SORT_KEYS = ['code', 'name_ar', 'account_type', 'nature', 'level', 'is_leaf']
 
 const TYPE_AR = {
   asset:     'أصول',
@@ -69,12 +73,15 @@ export default function ChartOfAccountsPage() {
   const [search,    setSearch]    = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [view, setView]           = useState('flat')  // 'flat' | 'tree'
+  const [ordering, setOrdering]   = useState('')      // server-side sort (the list is paged by the API)
+  const { headerProps } = useServerSort(ordering, setOrdering, { allowed: SORT_KEYS })
 
   const { data: flatData, isLoading: flatLoading } = useQuery({
-    queryKey: ['finance-accounts', typeFilter, search],
+    queryKey: ['finance-accounts', typeFilter, search, ordering],
     queryFn:  () => financeApi.accounts({
       account_type: typeFilter || undefined,
       search: search || undefined,
+      ordering: ordering || undefined,
     }).then(r => r.data),
     staleTime: 120_000,
     enabled: view === 'flat',
@@ -147,12 +154,12 @@ export default function ChartOfAccountsPage() {
               <table className="w-full">
                 <thead>
                   <tr className="bg-gray-50 text-xs text-gray-500">
-                    <th className="px-3 py-2 text-right">الكود</th>
-                    <th className="px-3 py-2 text-right">الاسم</th>
-                    <th className="px-3 py-2 text-center">النوع</th>
-                    <th className="px-3 py-2 text-center">الطبيعة</th>
-                    <th className="px-3 py-2 text-center">المستوى</th>
-                    <th className="px-3 py-2 text-center">ورقة</th>
+                    <SortTh {...headerProps('code')} className="px-3 py-2 text-right">الكود</SortTh>
+                    <SortTh {...headerProps('name_ar')} className="px-3 py-2 text-right">الاسم</SortTh>
+                    <SortTh {...headerProps('account_type')} className="px-3 py-2 text-center">النوع</SortTh>
+                    <SortTh {...headerProps('nature')} className="px-3 py-2 text-center">الطبيعة</SortTh>
+                    <SortTh {...headerProps('level', 'number')} className="px-3 py-2 text-center">المستوى</SortTh>
+                    <SortTh {...headerProps('is_leaf', 'number')} className="px-3 py-2 text-center">ورقة</SortTh>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">

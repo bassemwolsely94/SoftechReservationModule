@@ -6,6 +6,8 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { deliveryApi, branchesApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
+import SortTh from '../components/SortTh'
+import useSortableRows from '../hooks/useSortableRows'
 
 const fmt     = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const _today  = () => new Date().toISOString().slice(0, 10)
@@ -28,6 +30,9 @@ function DriverPerformanceTab({ dateFrom, dateTo, branchId }) {
     queryFn: () => deliveryApi.driverPerformance({ date_from: dateFrom, date_to: dateTo, branch: branchId || undefined }).then(r => r.data),
   })
 
+  // every driver is loaded → sort in the browser (hook before the early returns)
+  const drivers = useSortableRows(data?.drivers || [], { getValue: (d, k) => (k === 'name' ? d.driver_name : d[k]) })
+
   if (isLoading) return <div className="text-center py-12 text-gray-400 animate-pulse">جاري التحميل…</div>
   if (!data?.drivers?.length) return <div className="text-center py-12 text-gray-400">لا يوجد بيانات سائقين للفترة المحددة</div>
 
@@ -37,17 +42,17 @@ function DriverPerformanceTab({ dateFrom, dateTo, branchId }) {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-xs">
             <tr>
-              <th className="text-right px-4 py-3 font-semibold text-gray-600">السائق</th>
-              <th className="text-center px-3 py-3 font-semibold text-gray-600">إجمالي</th>
-              <th className="text-center px-3 py-3 font-semibold text-green-600">مُسلَّم</th>
-              <th className="text-center px-3 py-3 font-semibold text-red-500">فشل</th>
-              <th className="text-center px-3 py-3 font-semibold text-gray-600">معدل النجاح</th>
-              <th className="text-center px-3 py-3 font-semibold text-blue-600">متوسط الوقت</th>
-              <th className="text-left px-4 py-3 font-semibold text-gray-600">نقدي محصَّل</th>
+              <SortTh {...drivers.headerProps('name', 'text')} className="text-right px-4 py-3 font-semibold text-gray-600">السائق</SortTh>
+              <SortTh {...drivers.headerProps('total', 'number')} className="text-center px-3 py-3 font-semibold text-gray-600">إجمالي</SortTh>
+              <SortTh {...drivers.headerProps('delivered', 'number')} className="text-center px-3 py-3 font-semibold text-green-600">مُسلَّم</SortTh>
+              <SortTh {...drivers.headerProps('failed', 'number')} className="text-center px-3 py-3 font-semibold text-red-500">فشل</SortTh>
+              <SortTh {...drivers.headerProps('success_rate', 'number')} className="text-center px-3 py-3 font-semibold text-gray-600">معدل النجاح</SortTh>
+              <SortTh {...drivers.headerProps('avg_mins', 'number')} className="text-center px-3 py-3 font-semibold text-blue-600">متوسط الوقت</SortTh>
+              <SortTh {...drivers.headerProps('cash_collected', 'number')} className="text-left px-4 py-3 font-semibold text-gray-600">نقدي محصَّل</SortTh>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {data.drivers.map(d => (
+            {drivers.sorted.map(d => (
               <tr key={d.driver_id} className="hover:bg-gray-50/50">
                 <td className="px-4 py-3">
                   <div className="font-medium text-gray-800">{d.driver_name}</div>

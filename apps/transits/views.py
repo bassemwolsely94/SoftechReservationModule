@@ -930,8 +930,10 @@ class PickZoneViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='uncategorized')
     def uncategorized(self, request):
         """
-        GET ?q=&limit=  → active catalog items that currently land in the
+        GET ?q=&limit=&ordering=  → active catalog items that currently land in the
         fallback zone (excluding overridden items), for reclassification.
+        `ordering` (whitelist: name, item_code, price; `-` = desc) decides the scan order,
+        so it also decides which `limit` unclassified items come back.
         """
         from apps.catalog.models import Item
         from .export import build_ruleset
@@ -955,10 +957,26 @@ class PickZoneViewSet(viewsets.ModelViewSet):
                 db_models.Q(softech_id__icontains=q)
             )
 
+        order_map = {'name': 'name', 'item_code': 'softech_id', 'price': 'pack_price'}
+        raw_order = str(request.query_params.get('ordering') or '').strip()
+        order_field = order_map.get(raw_order.lstrip('-'))
+        if raw_order and order_field is None:
+            return Response({'detail': 'ordering غير مدعوم'}, status=status.HTTP_400_BAD_REQUEST)
+        desc = raw_order.startswith('-')
+        if order_field == 'pack_price':        # blank prices last in both directions
+            f = db_models.F(order_field)
+            order_by = [f.desc(nulls_last=True) if desc else f.asc(nulls_last=True)]
+        else:
+            order_by = [(('-' if desc else '') + order_field) if order_field else 'name']
+        if order_field and order_field != 'name':
+            order_by.append('name')
+        if order_field != 'softech_id':
+            order_by.append('softech_id')   # unique tiebreak (the scan stops at `limit`)
+
         results, scanned = [], 0
         for it in items.only('softech_id', 'name', 'pack_price',
                              'requires_fridge',
-                             *ATTR_COLUMNS).order_by('name').iterator():
+                             *ATTR_COLUMNS).order_by(*order_by).iterator():
             scanned += 1
             if it.softech_id in ruleset.overrides:
                 continue

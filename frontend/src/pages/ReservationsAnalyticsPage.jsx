@@ -12,6 +12,8 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { reservationsApi, branchesApi } from '../api/client'
+import SortTh from '../components/SortTh'
+import useSortableRows from '../hooks/useSortableRows'
 
 const fmt    = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const fmtPct = n => `${fmt(n, 1)}%`
@@ -93,6 +95,10 @@ export default function ReservationsAnalyticsPage() {
   const maxBranchTotal  = Math.max(...byBranch.map(b => b.total), 1)
   const maxItemCount    = Math.max(...topItems.map(i => i.count), 1)
   const maxChannelTotal = Math.max(...byChannel.map(c => c.total), 1)
+  // every channel is loaded → sort in the browser
+  const channels = useSortableRows(byChannel, {
+    getValue: (c, k) => (k === 'name' ? (c.channel_label || CHANNEL_LABELS[c.channel] || c.channel) : c[k]),
+  })
   const maxLostCount    = Math.max(...lostItems.map(i => i.count), 1)
 
   return (
@@ -213,14 +219,14 @@ export default function ReservationsAnalyticsPage() {
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-100">
-                        <th className="text-right px-3 py-2 text-gray-500 font-semibold">القناة</th>
-                        <th className="text-center px-2 py-2 text-gray-500 font-semibold">الإجمالي</th>
-                        <th className="text-center px-2 py-2 text-gray-500 font-semibold">مُسلَّم</th>
-                        <th className="text-center px-2 py-2 text-gray-500 font-semibold">النسبة</th>
+                        <SortTh {...channels.headerProps('name', 'text')} className="text-right px-3 py-2 text-gray-500 font-semibold">القناة</SortTh>
+                        <SortTh {...channels.headerProps('total', 'number')} className="text-center px-2 py-2 text-gray-500 font-semibold">الإجمالي</SortTh>
+                        <SortTh {...channels.headerProps('fulfilled', 'number')} className="text-center px-2 py-2 text-gray-500 font-semibold">مُسلَّم</SortTh>
+                        <SortTh {...channels.headerProps('rate', 'number')} className="text-center px-2 py-2 text-gray-500 font-semibold">النسبة</SortTh>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                      {byChannel.map(c => (
+                      {channels.sorted.map(c => (
                         <tr key={c.channel} className="hover:bg-gray-50">
                           <td className="px-3 py-2 font-medium text-gray-700">
                             {c.channel_label || CHANNEL_LABELS[c.channel] || c.channel || '—'}

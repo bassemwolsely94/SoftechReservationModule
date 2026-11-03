@@ -3,6 +3,8 @@
  * the new-PIC reliability warning and the monthly trend. The server decides every number and
  * which keys exist: GP only when the user may see cost, call cards only for management.
  */
+import Explain from './Explain'
+
 export const fmt = (n, d = 0) => (n === null || n === undefined || n === '' || Number.isNaN(Number(n)))
   ? '—' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 export const fmtPct = n => (n === null || n === undefined) ? '—' : `${fmt(n, 1)}%`
@@ -52,6 +54,7 @@ export default function KpiCards({ data, management = false }) {
   const hasGp = 'gp' in data
   const hasCalls = 'calls_in' in data
   const months = data.by_month || []
+  const th = data.thresholds || {}
   const maxNet = Math.max(...months.map(m => Number(m.net) || 0), 1)
   return (
     <div className="space-y-4">
@@ -65,7 +68,16 @@ export default function KpiCards({ data, management = false }) {
         <KpiCard label="جدد" value={fmt(data.new)} tone="green" />
         <KpiCard label="عائدون" value={fmt(data.returning)} tone="blue" sub={`منهم مُعاد تنشيطهم ${fmt(data.reactivated)}`} />
         <KpiCard label="زيارات" value={fmt(data.visits)} sub={`فواتير ${fmt(data.invoices)}`} />
-        <KpiCard label="صافي المبيعات" value={fmt(data.net)} tone="green" sub={data.no_pic_net != null ? `بدون PIC: ${fmt(data.no_pic_net)}` : undefined} />
+        <KpiCard label="صافي المبيعات" value={fmt(data.net)} tone="green" sub={data.no_pic_net != null ? (
+          <>
+            بدون PIC: {fmt(data.no_pic_net)}
+            {data.excluded_net != null && Number(data.excluded_pics) > 0 && (
+              <span className="block" data-tour="pic-analytics-excluded-line">
+                عملاء مستبعدون: {fmt(data.excluded_net)} ({fmt(data.excluded_pics)} عميل)
+              </span>
+            )}
+          </>
+        ) : undefined} />
         {hasGp && <KpiCard label="إجمالي الربح" value={fmt(data.gp)} tone="amber" sub={`هامش ${fmtPct(data.gp_pct)}`} />}
         <KpiCard label="متوسط السلة (صافي)" value={fmt(data.basket_net, 2)} sub={`أصناف ${fmt(data.basket_units, 1)} · فئات ${fmt(data.basket_categories, 1)}`} />
         {data.basket_lines != null && <KpiCard label="سطور لكل زيارة" value={fmt(data.basket_lines, 2)} />}
@@ -85,8 +97,22 @@ export default function KpiCards({ data, management = false }) {
         </div>
       )}
 
+      <Explain id="ov-cards" hint="الأرقام عن العملاء (PIC) اللي اشتروا في الفترة المختارة، والزيارة هي وحدة العد."
+               lines={[
+                 'جدد: أول شراء ليهم في الفترة، والكود اتسجل في SOFTECH قبل بداية الفترة بـ30 يوم أو أقل. عائدون: اشتروا في الفترة وليسوا جدد. مُعاد تنشيطهم: رجعوا بعد سنة أو أكتر من غير شراء.',
+                 'زيارات: كل فواتير العميل في نفس اليوم = زيارة واحدة (الفواتير بتتعد لوحدها). المرتجعات بتنقص صافي يومها وليست زيارة.',
+                 'بدون PIC: مبيعات فواتير بلا كود عميل أو على حساب عام، عشان الإجمالي يطابق لوحة المبيعات. عملاء مستبعدون: عملاء في قائمة الاستبعاد — مبيعاتهم في سطرهم بس ومش داخلين في أي رقم عملاء.',
+                 'متوسط السلة = صافي المبيعات ÷ الزيارات (مش الفواتير). زيارات لكل عميل = الزيارات ÷ العملاء المميّزين.',
+                 ...(hasGp ? ['إجمالي الربح = مجموع (إيراد السطر − تكلفته) على القنوات المحسوبة في الربح، بدون أصناف زي العبوات المجانية — نفس قواعد لوحة KPI. الهامش = الربح ÷ إيراد القنوات دي (مش ÷ صافي المبيعات) (للإدارة فقط).'] : []),
+                 'تبويبات المبيعات بتوصل لآخر تحديث ليلي (لحد امبارح)، وتبويبات المكالمات لحد النهارده. أرقام التليفونات بتظهر بالشكل المصري المحلي، ومخفية جزئياً لو مفيش صلاحية.',
+                 'الاحتفاظ بالعملاء: من اشترى في الفترة السابقة المساوية ورجع اشترى في الفترة دي.',
+                 ...(hasCalls ? [`المكالمات: بدون مكالمات التحويل. «فائتة لم يُردّ عليها» = واردة لم يرد عليها أحد، ولا مكالمة مُجابة بنفس الرقم خلال ${th.return_hours ?? '—'} ساعة.`] : []),
+               ]}
+               example="10 عملاء اشتروا 14 زيارة بصافي 7,000 ← زيارات لكل عميل 1.4، وسلة 500" />
+
       <div className="bg-white rounded-xl border border-gray-200 p-4" data-tour="pic-analytics-trend">
-        <h3 className="text-sm font-bold text-gray-700 mb-2">الاتجاه الشهري</h3>
+        <h3 className="text-sm font-bold text-gray-700">الاتجاه الشهري</h3>
+        <Explain className="mb-2" hint="لكل شهر: صافي المبيعات، وعدد العملاء المميّزين، وكام منهم جديد." />
         {months.length === 0 && <p className="text-xs text-gray-400">لا بيانات في الفترة</p>}
         {months.map(m => (
           <BarRow key={m.month} label={m.month} value={Number(m.net) || 0} max={maxNet}

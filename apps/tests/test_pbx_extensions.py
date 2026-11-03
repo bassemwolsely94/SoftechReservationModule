@@ -75,8 +75,8 @@ class MergeTests(TestCase):
         self.assertIsNone(rows['101']['problem'])
         self.assertIn('غير مسجّل', rows['102']['problem'])           # mapped but phone off
         self.assertIn('بطيئة', rows['103']['problem'])               # slow, unmapped
-        self.assertIn('غير مرتبطة', rows['200']['problem'])          # online, unmapped
-        self.assertIn('غير موجودة', rows['999']['problem'])          # not in PBX
+        self.assertIn('غير مرتبط', rows['200']['problem'])          # online, unmapped
+        self.assertIn('غير موجود', rows['999']['problem'])          # not in PBX
         self.assertEqual(data['summary']['unmapped'], 2)
         self.assertEqual(AgentExtension.objects.get(extension='101').last_ip, '10.0.0.5')
 

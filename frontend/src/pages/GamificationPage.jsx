@@ -18,6 +18,8 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 import { gamificationApi, usersApi } from '../api/client'
 import useLangStore from '../store/langStore'
 import useHelpTab from '../help/useHelpTab'
@@ -194,9 +196,38 @@ function MeTab({ me, t, lang }) {
   )
 }
 
+function ReportBranchesTable({ branches, t }) {
+  const { sorted, headerProps } = useSortableRows(branches || [])
+  return (
+    <table className="w-full text-sm">
+      <thead className="text-xs text-gray-500 border-b border-gray-100">
+        <tr>
+          <SortTh {...headerProps('rank', 'number')} className="py-2 text-start">{t('الفرع', 'Branch')}</SortTh>
+          <SortTh {...headerProps('avg_per_player', 'number')} className="py-2 text-end">{t('متوسط اللاعب', 'Avg / player')}</SortTh>
+          <SortTh {...headerProps('clean_day_rate', 'number')} className="py-2 text-end">{t('أيام نظيفة %', 'Clean %')}</SortTh>
+          <SortTh {...headerProps('left_behind', 'number')} className="py-2 text-end">{t('بنود متأخرة', 'Left behind')}</SortTh>
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.map(b => (
+          <tr key={b.branch_id} className="border-b border-gray-50">
+            <td className="py-1.5">{b.rank}. {b.branch}</td>
+            <td className="py-1.5 text-end font-bold">{fmt(b.avg_per_player)}</td>
+            <td className="py-1.5 text-end">{b.clean_day_rate ?? '—'}</td>
+            <td className="py-1.5 text-end">{b.left_behind || ''}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
 // ── الترتيب ──────────────────────────────────────────────────────────────────
 
 export function LeaderboardTable({ rows, meId, t, lang, compact = false }) {
+  const { sorted, headerProps } = useSortableRows(rows || [], {
+    getValue: (r, k) => (k === 'level' ? (r.level?.number ?? null) : r[k]),
+  })
   if (!rows?.length) {
     return <p className="text-sm text-gray-400 p-4">{t('لا توجد نقاط في هذه الفترة.', 'No points in this period.')}</p>
   }
@@ -206,17 +237,17 @@ export function LeaderboardTable({ rows, meId, t, lang, compact = false }) {
       <table className="w-full text-sm">
         <thead className="text-xs text-gray-500 border-b border-gray-100">
           <tr>
-            <th className="py-2 px-2 text-start">#</th>
-            <th className="py-2 px-2 text-start">{t('الموظف', 'Employee')}</th>
-            {!compact && <th className="py-2 px-2 text-start">{t('الفرع', 'Branch')}</th>}
-            <th className="py-2 px-2 text-start">{t('المستوى', 'Level')}</th>
-            <th className="py-2 px-2 text-end">{t('النقاط', 'Points')}</th>
-            {!compact && <th className="py-2 px-2 text-end">{t('الخصومات', 'Deductions')}</th>}
-            {!compact && <th className="py-2 px-2 text-end">🔥</th>}
+            <SortTh {...headerProps('rank', 'number')} className="py-2 px-2 text-start">#</SortTh>
+            <SortTh {...headerProps('name', 'text')} className="py-2 px-2 text-start">{t('الموظف', 'Employee')}</SortTh>
+            {!compact && <SortTh {...headerProps('branch', 'text')} className="py-2 px-2 text-start">{t('الفرع', 'Branch')}</SortTh>}
+            <SortTh {...headerProps('level', 'number')} className="py-2 px-2 text-start">{t('المستوى', 'Level')}</SortTh>
+            <SortTh {...headerProps('net', 'number')} className="py-2 px-2 text-end">{t('النقاط', 'Points')}</SortTh>
+            {!compact && <SortTh {...headerProps('lost', 'number')} className="py-2 px-2 text-end">{t('الخصومات', 'Deductions')}</SortTh>}
+            {!compact && <SortTh {...headerProps('streak', 'number')} className="py-2 px-2 text-end">🔥</SortTh>}
           </tr>
         </thead>
         <tbody>
-          {rows.map(r => (
+          {sorted.map(r => (
             <tr key={r.staff_id} className={`border-b border-gray-50 ${r.staff_id === meId ? 'bg-brand-50 font-bold' : ''}`}>
               <td className="py-1.5 px-2">{medal(r.rank)}</td>
               <td className="py-1.5 px-2">
@@ -273,6 +304,7 @@ function BranchesTab({ t }) {
     queryKey: ['gamificationBranches', period],
     queryFn: () => gamificationApi.branches({ period }).then(r => r.data),
   })
+  const { sorted: branchRows, headerProps } = useSortableRows(data?.rows || [])
   return (
     <div data-tour="gamification-main-branches" className="card space-y-3">
       <Segmented value={period} onChange={setPeriod} options={PERIODS} t={t} />
@@ -284,17 +316,17 @@ function BranchesTab({ t }) {
         <table className="w-full text-sm">
           <thead className="text-xs text-gray-500 border-b border-gray-100">
             <tr>
-              <th className="py-2 px-2 text-start">#</th>
-              <th className="py-2 px-2 text-start">{t('الفرع', 'Branch')}</th>
-              <th className="py-2 px-2 text-end">{t('متوسط اللاعب', 'Avg / player')}</th>
-              <th className="py-2 px-2 text-end">{t('إجمالي النقاط', 'Total')}</th>
-              <th className="py-2 px-2 text-end">{t('اللاعبون', 'Players')}</th>
-              <th className="py-2 px-2 text-end">{t('أيام نظيفة %', 'Clean days %')}</th>
-              <th className="py-2 px-2 text-end">{t('بنود متأخرة', 'Left behind')}</th>
+              <SortTh {...headerProps('rank', 'number')} className="py-2 px-2 text-start">#</SortTh>
+              <SortTh {...headerProps('branch', 'text')} className="py-2 px-2 text-start">{t('الفرع', 'Branch')}</SortTh>
+              <SortTh {...headerProps('avg_per_player', 'number')} className="py-2 px-2 text-end">{t('متوسط اللاعب', 'Avg / player')}</SortTh>
+              <SortTh {...headerProps('net', 'number')} className="py-2 px-2 text-end">{t('إجمالي النقاط', 'Total')}</SortTh>
+              <SortTh {...headerProps('players', 'number')} className="py-2 px-2 text-end">{t('اللاعبون', 'Players')}</SortTh>
+              <SortTh {...headerProps('clean_day_rate', 'number')} className="py-2 px-2 text-end">{t('أيام نظيفة %', 'Clean days %')}</SortTh>
+              <SortTh {...headerProps('left_behind', 'number')} className="py-2 px-2 text-end">{t('بنود متأخرة', 'Left behind')}</SortTh>
             </tr>
           </thead>
           <tbody>
-            {(data?.rows || []).map(r => (
+            {branchRows.map(r => (
               <tr key={r.branch_id} className="border-b border-gray-50">
                 <td className="py-1.5 px-2">{({ 1: '🥇', 2: '🥈', 3: '🥉' }[r.rank]) || r.rank}</td>
                 <td className="py-1.5 px-2">{r.branch}</td>
@@ -462,26 +494,7 @@ function ReportsTab({ t, lang }) {
       {data.branches?.length > 0 && (
         <div className="card">
           <div className="font-black mb-2">{t('الفروع', 'Branches')}</div>
-          <table className="w-full text-sm">
-            <thead className="text-xs text-gray-500 border-b border-gray-100">
-              <tr>
-                <th className="py-2 text-start">{t('الفرع', 'Branch')}</th>
-                <th className="py-2 text-end">{t('متوسط اللاعب', 'Avg / player')}</th>
-                <th className="py-2 text-end">{t('أيام نظيفة %', 'Clean %')}</th>
-                <th className="py-2 text-end">{t('بنود متأخرة', 'Left behind')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.branches.map(b => (
-                <tr key={b.branch_id} className="border-b border-gray-50">
-                  <td className="py-1.5">{b.rank}. {b.branch}</td>
-                  <td className="py-1.5 text-end font-bold">{fmt(b.avg_per_player)}</td>
-                  <td className="py-1.5 text-end">{b.clean_day_rate ?? '—'}</td>
-                  <td className="py-1.5 text-end">{b.left_behind || ''}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ReportBranchesTable branches={data.branches} t={t} />
         </div>
       )}
       {data.champions?.length > 0 && (

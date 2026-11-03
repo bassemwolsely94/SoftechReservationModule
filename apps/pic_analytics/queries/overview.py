@@ -129,6 +129,11 @@ def overview(f, access) -> dict:
     # retention against the previous period of equal length (None when it predates our history)
     retention_pct = retention_pct_for(f, access, {x['pic'] for x in visitors})
 
+    excluded_net = excluded_pics = None      # same rule as no-PIC: PIC filters describe real customers
+    if not f.has_pic_filters:
+        ex = f.facts(access, pic_filters=False, only_excluded=True).aggregate(
+            s=Sum('enet'), n=Count('pic', distinct=True))
+        excluded_net, excluded_pics = ex['s'] or ZERO, ex['n'] or 0
     no_pic_net = None           # segment / type / frequency filters describe PICs: no-PIC sales are not part of them
     if not f.has_pic_filters:
         no_pic_net = f.facts(access, pic_filters=False).filter(pic='').aggregate(s=Sum('enet'))['s'] or ZERO
@@ -145,7 +150,7 @@ def overview(f, access) -> dict:
         'visits_per_pic': round(visits / n_pics, 2) if n_pics else None,
         'retention_pct': retention_pct,
         **call_totals(f, {r['pic'] for r in visitors} if access.branch_manager else None),
-        'no_pic_net': no_pic_net,
+        'no_pic_net': no_pic_net, 'excluded_net': excluded_net, 'excluded_pics': excluded_pics,
         'new_reliable_from': None if Customer.objects.filter(softech_created_at__isnull=False).exists()
         else NEW_RELIABLE_FROM,
         'by_month': [months[k] for k in sorted(months)],

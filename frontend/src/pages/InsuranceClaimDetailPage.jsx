@@ -9,7 +9,7 @@
  *   - التحصيل     : Payments & deductions
  *   - المراجعة    : Audit — drill into items per prescription
  */
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
@@ -18,6 +18,9 @@ import { wildcardMatch } from '../utils/wildcard'
 import useGridKeyboard from '../hooks/useGridKeyboard'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
+import useSortableRows from '../hooks/useSortableRows'
+import { nextSort, sortRows, ariaSortOf } from '../hooks/sortCompare'
+import SortTh from '../components/SortTh'
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })
 const toLatinDigits = (s) => s ? String(s).replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -1349,8 +1352,6 @@ function BillingGroupSuggestions({ claimId, onAssigned }) {
   const [sel, setSel]     = useState(() => new Set())
   const [pick, setPick]   = useState({})          // rx id → chosen group id (conflicts / overrides)
   const [show, setShow]   = useState('full')      // full | conflict | none | all
-  const [sortKey, setSortKey] = useState('sequence')
-  const [sortDir, setSortDir] = useState('asc')
   const [msg, setMsg]     = useState(null)
 
   const load = () => {
@@ -1361,22 +1362,21 @@ function BillingGroupSuggestions({ claimId, onAssigned }) {
       .finally(() => setBusy(false))
   }
   useEffect(() => { load() }, [claimId])   // eslint-disable-line
+  const target = (r) => pick[r.prescription_id] ?? r.suggested_group_id
+  const groupName = (id) => data?.groups.find(g => g.id === Number(id))?.name || ''
+  const shown = useMemo(
+    () => (data?.rows || []).filter(r => r.status !== 'assigned' && (show === 'all' || r.status === show)),
+    [data, show])
+  // shared sortable header; the group column sorts by the chosen group's name (inline getValue: reads the live `pick`)
+  const { sorted: rows, headerProps } = useSortableRows(shown, {
+    defaultSort: { key: 'sequence', dir: 'asc', type: 'number' },
+    getValue: (r, k) => (k === 'group' ? groupName(target(r)) : r[k]),
+  })
   if (!data) return busy ? <div className="text-xs text-gray-400 mb-3">جارٍ مطابقة المرضى مع سجل فئات الفوترة…</div> : null
   if (!data.groups.length) return null
 
-  const target = (r) => pick[r.prescription_id] ?? r.suggested_group_id
-  const groupName = (id) => data.groups.find(g => g.id === Number(id))?.name || ''
-  const rows = data.rows
-    .filter(r => r.status !== 'assigned' && (show === 'all' || r.status === show))
-    .sort((a, b) => {
-      const va = sortKey === 'group' ? groupName(target(a)) : a[sortKey], vb = sortKey === 'group' ? groupName(target(b)) : b[sortKey]
-      const c = typeof va === 'number' ? va - vb : String(va ?? '').localeCompare(String(vb ?? ''), 'ar')
-      return sortDir === 'asc' ? c : -c
-    })
-  const sortBy = (k) => { if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); setSortDir('asc') } }
-  const Th = ({ k, children }) => (
-    <th onClick={() => sortBy(k)} className={`text-right px-2 py-1.5 cursor-pointer whitespace-nowrap ${sortKey === k ? 'text-blue-600' : ''}`}>
-      {children}{sortKey === k ? (sortDir === 'asc' ? ' ▲' : ' ▼') : <span className="opacity-25"> ↕</span>}</th>
+  const Th = (k, label, type = 'text') => (
+    <SortTh {...headerProps(k, type)} className="text-right px-2 py-1.5 whitespace-nowrap">{label}</SortTh>
   )
   const toggle = (id) => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   const ready = rows.filter(r => target(r))
@@ -1417,8 +1417,8 @@ function BillingGroupSuggestions({ claimId, onAssigned }) {
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-500 sticky top-0"><tr>
             <th className="px-2 py-1.5 w-6"></th>
-            <Th k="sequence">م</Th><Th k="patient_name">المريض</Th><Th k="docnumber">الإيصال</Th>
-            <Th k="group">فئة الفوترة</Th><th className="text-right px-2 py-1.5">الدليل</th><Th k="net_after">الصافى</Th>
+            {Th('sequence', 'م', 'number')}{Th('patient_name', 'المريض')}{Th('docnumber', 'الإيصال', 'number')}
+            {Th('group', 'فئة الفوترة')}<th className="text-right px-2 py-1.5">الدليل</th>{Th('net_after', 'الصافى', 'number')}
           </tr></thead>
           <tbody className="divide-y divide-gray-100">
             {rows.map(r => (
@@ -1450,6 +1450,51 @@ function BillingGroupSuggestions({ claimId, onAssigned }) {
         </table>
       </div>
     </div>
+  )
+}
+
+// ── unassigned rx / manual / supplements picker (sortable, selection grid) ─────
+function AssignPicker({ rows, selectedRx, setSelectedRx }) {
+  const { sorted, headerProps } = useSortableRows(rows)
+  const th = 'px-2 py-1 font-semibold'
+  return (
+    <table className="w-full text-xs">
+      <thead className="bg-gray-50 sticky top-0">
+        <tr className="text-gray-500">
+          <th className="px-2 py-1 w-6"></th>
+          <SortTh {...headerProps('doc')} className={`${th} text-right`}>رقم الفاتورة</SortTh>
+          <SortTh {...headerProps('date', 'date')} className={`${th} text-right`}>التاريخ</SortTh>
+          <SortTh {...headerProps('name')} className={`${th} text-right`}>اسم المريض</SortTh>
+          <SortTh {...headerProps('kind')} className={`${th} text-right`}></SortTh>
+          <SortTh {...headerProps('net', 'number')} className={`${th} text-left`}>الصافى</SortTh>
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.map(row => (
+          <tr key={row.key} className="border-b border-gray-50 hover:bg-gray-50">
+            <td className="px-2 py-1">
+              <input type="checkbox" checked={selectedRx.has(row.key)}
+                onChange={e => {
+                  const s = new Set(selectedRx)
+                  e.target.checked ? s.add(row.key) : s.delete(row.key)
+                  setSelectedRx(s)
+                }} />
+            </td>
+            <td className="px-2 py-1 text-gray-400">{row.doc}</td>
+            <td className="px-2 py-1 text-gray-500 whitespace-nowrap">{row.date || '—'}</td>
+            <td className="px-2 py-1">{row.name || '—'}</td>
+            <td className="px-2 py-1">
+              {row.kind === 'manual'
+                ? <span className="text-[10px] bg-blue-100 text-blue-700 rounded px-1 py-0.5">يدوي</span>
+                : row.kind === 'sup'
+                ? <span className="text-[10px] bg-green-100 text-green-700 rounded px-1 py-0.5">ملحق</span>
+                : <span className="text-gray-400">{row.extra}</span>}
+            </td>
+            <td className="px-2 py-1 font-mono">{fmt(row.net)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }
 
@@ -1650,47 +1695,11 @@ function BillingGroupsTab({ claim, claimId, onRefresh }) {
                     </div>
                   </div>
                   <div className="max-h-64 overflow-y-auto border border-gray-100 rounded">
-                    <table className="w-full text-xs">
-                      <thead className="bg-gray-50 sticky top-0">
-                        <tr className="text-gray-500">
-                          <th className="px-2 py-1 w-6"></th>
-                          <th className="px-2 py-1 text-right font-semibold">رقم الفاتورة</th>
-                          <th className="px-2 py-1 text-right font-semibold">التاريخ</th>
-                          <th className="px-2 py-1 text-right font-semibold">اسم المريض</th>
-                          <th className="px-2 py-1 text-right font-semibold"></th>
-                          <th className="px-2 py-1 text-left font-semibold">الصافى</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {[
+                    <AssignPicker selectedRx={selectedRx} setSelectedRx={setSelectedRx} rows={[
                           ...unassignedRx.map(rx => ({ key: 'p' + rx.id, doc: rx.softech_docnumber, date: rx.softech_docdate, name: rx.patient_name, extra: rx.relative_degree || '', net: rx.net_after, kind: 'rx' })),
                           ...unassignedManual.map(m => ({ key: 'm' + m.id, doc: m.softech_docnumber, date: m.softech_docdate, name: m.patient_name, net: m.net_after, kind: 'manual' })),
                           ...unassignedSup.map(s => ({ key: 's' + s.id, doc: s.supplement_number || '', date: s.print_date || null, name: s.label, net: s.net_after, kind: 'sup' })),
-                        ].map(row => (
-                          <tr key={row.key} className="border-b border-gray-50 hover:bg-gray-50">
-                            <td className="px-2 py-1">
-                              <input type="checkbox" checked={selectedRx.has(row.key)}
-                                onChange={e => {
-                                  const s = new Set(selectedRx)
-                                  e.target.checked ? s.add(row.key) : s.delete(row.key)
-                                  setSelectedRx(s)
-                                }} />
-                            </td>
-                            <td className="px-2 py-1 text-gray-400">{row.doc}</td>
-                            <td className="px-2 py-1 text-gray-500 whitespace-nowrap">{row.date || '—'}</td>
-                            <td className="px-2 py-1">{row.name || '—'}</td>
-                            <td className="px-2 py-1">
-                              {row.kind === 'manual'
-                                ? <span className="text-[10px] bg-blue-100 text-blue-700 rounded px-1 py-0.5">يدوي</span>
-                                : row.kind === 'sup'
-                                ? <span className="text-[10px] bg-green-100 text-green-700 rounded px-1 py-0.5">ملحق</span>
-                                : <span className="text-gray-400">{row.extra}</span>}
-                            </td>
-                            <td className="px-2 py-1 font-mono">{fmt(row.net)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        ]} />
                     {unassignedCount === 0 && <p className="text-gray-400 text-center py-4">كل الروشتات مخصصة</p>}
                   </div>
                 </div>
@@ -1715,8 +1724,7 @@ export default function InsuranceClaimDetailPage() {
   const [tab, setTab]       = useState('prescriptions')
   useHelpTab(tab)
   const [rxFilter, setRxFilter] = useState('')
-  const [rxSortKey, setRxSortKey] = useState('sequence')
-  const [rxSortDir, setRxSortDir] = useState('asc')
+  const [rxSort, setRxSort] = useState(null)   // shared sort state (null = sequence order)
   const [nameFilterMode, setNameFilterMode] = useState('')   // '' | 'complete' | 'spelling'
   const [selRx, setSelRx] = useState(new Set())              // bulk-select prescription ids
   const [bulkBusy, setBulkBusy] = useState(false)
@@ -1800,22 +1808,17 @@ export default function InsuranceClaimDetailPage() {
       m.softech_docnumber?.includes(rxFilter))
   )
 
-  // ── Sortable الروشتات grid (real + manual share these field names) ──────────
-  const RX_TEXT_KEYS = new Set(['softech_docdate', 'softech_docnumber', 'softech_branchcode', 'patient_name'])
-  const rxSortVal = (r, key) => {
-    if (key === 'net_after') return Number(r.effective_net_after ?? r.net_after) || 0
-    if (RX_TEXT_KEYS.has(key)) return (r[key] ?? '').toString()
-    return Number(r[key]) || 0
+  // ── Sortable الروشتات grid (real + manual share these field names; shared sortCompare helpers) ──
+  const RX_DEFAULT_SORT = { key: 'sequence', dir: 'asc', type: 'number' }
+  const rxEffSort = rxSort || RX_DEFAULT_SORT
+  const rxSortVal = (r, key) => (key === 'net_after' ? (r.effective_net_after ?? r.net_after) : r[key])
+  const sortedRx     = sortRows(filteredRx, rxEffSort, rxSortVal)
+  const sortedManual = sortRows(filteredManual, rxEffSort, rxSortVal)
+  const rxHead = (key, type = 'text') => {
+    const active = rxEffSort.key === key
+    return { active, dir: active ? rxEffSort.dir : undefined, ariaSort: ariaSortOf(active, rxEffSort.dir),
+             onSort: () => setRxSort(nextSort(rxSort, key, type, RX_DEFAULT_SORT)) }
   }
-  const rxCmp = (a, b) => {
-    const av = rxSortVal(a, rxSortKey), bv = rxSortVal(b, rxSortKey)
-    let c
-    if (RX_TEXT_KEYS.has(rxSortKey)) c = av.localeCompare(bv, 'ar-EG')
-    else c = av - bv
-    return rxSortDir === 'asc' ? c : -c
-  }
-  const sortedRx     = [...filteredRx].sort(rxCmp)
-  const sortedManual = [...filteredManual].sort(rxCmp)
 
   // ── bulk select + exclude (prescriptions only) ──────────────────────────────
   const visibleRxIds = sortedRx.map(r => r.id)
@@ -1840,11 +1843,6 @@ export default function InsuranceClaimDetailPage() {
       alert(e?.response?.data?.error || 'تعذّر الاستبعاد الجماعى')
     } finally { setBulkBusy(false) }
   }
-  const rxSortBy = (key, isText) => {
-    if (rxSortKey === key) setRxSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
-    else { setRxSortKey(key); setRxSortDir(isText ? 'asc' : 'desc') }
-  }
-
   const discPcts = {
     local:    claim.applied_local_disc_pct,
     imported: claim.applied_imported_disc_pct,
@@ -2008,31 +2006,22 @@ export default function InsuranceClaimDetailPage() {
                         title="تحديد كل الروشتات الظاهرة" />
                     </th>
                     {[
-                      ['م', 'sequence', false, 'center'],
-                      ['التاريخ', 'softech_docdate', true],
-                      ['رقم الفاتورة', 'softech_docnumber', true],
-                      ['الفرع', 'softech_branchcode', true, 'center'],
-                      ['اسم المريض', 'patient_name', true],
-                      ['محلى', 'local_before', false, 'left'],
-                      ['مستورد', 'imported_before', false, 'left'],
-                      ['ترسية', 'tarsia_before', false, 'left'],
-                      ['الإجمالى', 'gross_before', false, 'left'],
-                      ['الصافى', 'net_after', false, 'left'],
-                    ].map(([label, key, isText, align]) => {
-                      const active = rxSortKey === key
-                      return (
-                        <th key={key}
-                          onClick={() => rxSortBy(key, isText)}
-                          className={`px-3 py-2 text-xs font-semibold whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 ${
-                            align === 'left' ? 'text-left' : align === 'center' ? 'text-center' : 'text-right'
-                          } ${active ? 'text-blue-700' : 'text-gray-500'}`}>
-                          {label}
-                          <span className={`ml-0.5 ${active ? 'text-blue-600' : 'text-gray-300'}`}>
-                            {active ? (rxSortDir === 'asc' ? '▲' : '▼') : '↕'}
-                          </span>
-                        </th>
-                      )
-                    })}
+                      ['م', 'sequence', 'number', 'center'],
+                      ['التاريخ', 'softech_docdate', 'date'],
+                      ['رقم الفاتورة', 'softech_docnumber', 'text'],
+                      ['الفرع', 'softech_branchcode', 'text', 'center'],
+                      ['اسم المريض', 'patient_name', 'text'],
+                      ['محلى', 'local_before', 'number', 'left'],
+                      ['مستورد', 'imported_before', 'number', 'left'],
+                      ['ترسية', 'tarsia_before', 'number', 'left'],
+                      ['الإجمالى', 'gross_before', 'number', 'left'],
+                      ['الصافى', 'net_after', 'number', 'left'],
+                    ].map(([label, key, type, align]) => (
+                      <SortTh key={key} {...rxHead(key, type)}
+                        className={`px-3 py-2 text-xs font-semibold whitespace-nowrap ${
+                          align === 'left' ? 'text-left' : align === 'center' ? 'text-center' : 'text-right'
+                        } text-gray-500`}>{label}</SortTh>
+                    ))}
                     <th className="px-3 py-2"></th>
                     <th className="px-3 py-2"></th>
                   </tr>
@@ -2566,15 +2555,6 @@ const _rosterSortVal = (r, k) => {
   return r[k] || ''
 }
 
-function RosterTh({ k, align = 'right', sortKey, sortDir, sortBy, children }) {
-  return (
-    <th onClick={() => sortBy(k)}
-      className={`text-${align} px-2 py-2 font-semibold cursor-pointer select-none whitespace-nowrap hover:bg-gray-100 ${sortKey === k ? 'text-blue-600' : ''}`}>
-      {children}{sortKey === k ? (sortDir === 'asc' ? ' ▲' : ' ▼') : <span className="opacity-25"> ↕</span>}
-    </th>
-  )
-}
-
 // Wrong-allocation check: each receipt's patient vs the cumulative rosters built from
 // earlier motalbas (جهة → فئة → فئة فوترة). The backend classifies; we only display/act.
 // receipts and manual receipts share the grid — one key for both
@@ -2587,14 +2567,6 @@ function RosterCheckView({ claimId, onRefresh }) {
   const [sel, setSel]     = useState(new Set())
   const [busy, setBusy]   = useState(false)
   const [msg, setMsg]     = useState(null)
-  const [sortKey, setSortKey] = useState('category')
-  const [sortDir, setSortDir] = useState('asc')
-
-  const sortBy = (k) => {
-    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortKey(k); setSortDir(_ROSTER_NUMERIC.has(k) ? 'desc' : 'asc') }
-  }
-
   const load = () => {
     setLoad(true)
     insuranceApi.rosterCheck(claimId)
@@ -2609,11 +2581,14 @@ function RosterCheckView({ claimId, onRefresh }) {
   }
   useEffect(() => { load() }, [claimId])   // eslint-disable-line
 
-  const rows = (data?.rows || []).filter(r => cats.has(r.category)).sort((a, b) => {
-    const va = _rosterSortVal(a, sortKey), vb = _rosterSortVal(b, sortKey)
-    const c = typeof va === 'number' ? va - vb : String(va).localeCompare(String(vb), 'ar')
-    return sortDir === 'asc' ? c : -c
+  const shown = useMemo(() => (data?.rows || []).filter(r => cats.has(r.category)), [data, cats])
+  const { sorted: rows, headerProps } = useSortableRows(shown, {
+    defaultSort: { key: 'category', dir: 'asc', type: 'number' }, getValue: _rosterSortVal,
   })
+  const RTh = (k, label, align = 'right') => (
+    <SortTh {...headerProps(k, _ROSTER_NUMERIC.has(k) ? 'number' : k === 'docdate' ? 'date' : 'text')}
+      className={`text-${align} px-2 py-2 font-semibold whitespace-nowrap`}>{label}</SortTh>
+  )
   const toggle = (id) => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   const kb = useGridKeyboard({
     rows, getKey: _rosterKey,
@@ -2712,18 +2687,18 @@ function RosterCheckView({ claimId, onRefresh }) {
                   checked={rows.length > 0 && rows.every(r => sel.has(_rosterKey(r)))}
                   onChange={e => setSel(e.target.checked ? new Set(rows.map(_rosterKey)) : new Set())} />
               </th>
-              <RosterTh k="sequence" align="center" {...{ sortKey, sortDir, sortBy }}>م</RosterTh>
-              <RosterTh k="patient_name" {...{ sortKey, sortDir, sortBy }}>اسم المريض</RosterTh>
-              <RosterTh k="category" align="center" {...{ sortKey, sortDir, sortBy }}>الحالة</RosterTh>
-              <RosterTh k="where" {...{ sortKey, sortDir, sortBy }}>مُفوتر سابقاً على</RosterTh>
-              <RosterTh k="where_count" align="center" {...{ sortKey, sortDir, sortBy }}>مرات هناك</RosterTh>
-              <RosterTh k="here_count" align="center" {...{ sortKey, sortDir, sortBy }}>مرات هنا</RosterTh>
-              <RosterTh k="docnumber" {...{ sortKey, sortDir, sortBy }}>رقم الفاتورة</RosterTh>
-              <RosterTh k="docdate" {...{ sortKey, sortDir, sortBy }}>التاريخ</RosterTh>
-              <RosterTh k="branch" align="center" {...{ sortKey, sortDir, sortBy }}>الفرع</RosterTh>
-              <RosterTh k="group_label" {...{ sortKey, sortDir, sortBy }}>فئة الفوترة</RosterTh>
-              <RosterTh k="gross_before" align="left" {...{ sortKey, sortDir, sortBy }}>الإجمالى</RosterTh>
-              <RosterTh k="net_after" align="left" {...{ sortKey, sortDir, sortBy }}>الصافى</RosterTh>
+              {RTh('sequence', 'م', 'center')}
+              {RTh('patient_name', 'اسم المريض')}
+              {RTh('category', 'الحالة', 'center')}
+              {RTh('where', 'مُفوتر سابقاً على')}
+              {RTh('where_count', 'مرات هناك', 'center')}
+              {RTh('here_count', 'مرات هنا', 'center')}
+              {RTh('docnumber', 'رقم الفاتورة')}
+              {RTh('docdate', 'التاريخ')}
+              {RTh('branch', 'الفرع', 'center')}
+              {RTh('group_label', 'فئة الفوترة')}
+              {RTh('gross_before', 'الإجمالى', 'left')}
+              {RTh('net_after', 'الصافى', 'left')}
               <th className="px-2 py-2"></th>
             </tr>
           </thead>
@@ -2794,6 +2769,8 @@ function RosterCheckView({ claimId, onRefresh }) {
 }
 
 // ── Manual separation lists (قوائم الفصل) ─────────────────────────────────────
+const _sepMatchValue = (m, k) => (k === 'match_type' ? (m.match_type === 'full' ? 0 : 1)   // full first
+  : k === 'reviewed' ? (m.reviewed ? 1 : 0) : m[k])
 function SeparationListsView({ claimId, onRefresh }) {
   const [data, setData]   = useState(null)
   const [listId, setListId] = useState('')
@@ -2801,14 +2778,10 @@ function SeparationListsView({ claimId, onRefresh }) {
   const [sel, setSel]       = useState(new Set())
   const [busy, setBusy]     = useState(false)
   const [msg, setMsg]       = useState(null)
-  const [sortKey, setSortKey] = useState('match_type')
-  const [sortDir, setSortDir] = useState('asc')
   const navigate = useNavigate()
-
-  const sortBy = (k) => {
-    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortKey(k); setSortDir('asc') }
-  }
+  const { sorted: sortedMatches, headerProps } = useSortableRows(data?.matches, {
+    defaultSort: { key: 'match_type', dir: 'asc', type: 'number' }, getValue: _sepMatchValue,
+  })
 
   const load = (lid) => {
     setLoad(true)
@@ -2857,24 +2830,8 @@ function SeparationListsView({ claimId, onRefresh }) {
   if (loading) return <div className="px-6 py-6 text-sm text-gray-400">جارٍ فحص الأسماء…</div>
   if (!data)   return null
 
-  const NUMERIC = new Set(['sequence', 'gross_before', 'net_after', 'score'])
-  const sortVal = (m) => {
-    if (sortKey === 'match_type') return m.match_type === 'full' ? 0 : 1   // full first
-    if (sortKey === 'reviewed')   return m.reviewed ? 1 : 0
-    const v = m[sortKey]
-    return NUMERIC.has(sortKey) ? Number(v || 0) : (v || '').toString()
-  }
-  const sortedMatches = [...data.matches].sort((a, b) => {
-    const va = sortVal(a), vb = sortVal(b)
-    let c = typeof va === 'number' ? va - vb : va.localeCompare(vb, 'ar')
-    return sortDir === 'asc' ? c : -c
-  })
-
-  const SortTh = ({ k, children, align = 'right' }) => (
-    <th onClick={() => sortBy(k)}
-      className={`text-${align} px-2 py-2 font-semibold cursor-pointer select-none whitespace-nowrap ${sortKey === k ? 'text-blue-600' : ''}`}>
-      {children}{sortKey === k ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
-    </th>
+  const STh = (k, label, type = 'text', align = 'right') => (
+    <SortTh {...headerProps(k, type)} className={`text-${align} px-2 py-2 font-semibold whitespace-nowrap`}>{label}</SortTh>
   )
 
   return (
@@ -2926,18 +2883,18 @@ function SeparationListsView({ claimId, onRefresh }) {
           <thead className="bg-gray-50 border-b border-gray-200 text-gray-500">
             <tr>
               <th className="px-2 py-2 w-8"></th>
-              <SortTh k="sequence" align="center">م</SortTh>
-              <SortTh k="patient_name">اسم المريض (بالروشتة)</SortTh>
-              <SortTh k="matched_name">الاسم في القائمة</SortTh>
-              <SortTh k="match_type" align="center">المطابقة</SortTh>
-              <SortTh k="reviewed" align="center">روجعت</SortTh>
-              <SortTh k="docnumber">رقم الفاتورة</SortTh>
-              <SortTh k="docdate">التاريخ</SortTh>
-              <SortTh k="branch" align="center">الفرع</SortTh>
-              <SortTh k="national_id">الرقم القومي/المالي</SortTh>
-              <SortTh k="list_label">القائمة</SortTh>
-              <SortTh k="gross_before" align="left">الإجمالى</SortTh>
-              <SortTh k="net_after" align="left">الصافى</SortTh>
+              {STh('sequence', 'م', 'number', 'center')}
+              {STh('patient_name', 'اسم المريض (بالروشتة)')}
+              {STh('matched_name', 'الاسم في القائمة')}
+              {STh('match_type', 'المطابقة', 'number', 'center')}
+              {STh('reviewed', 'روجعت', 'number', 'center')}
+              {STh('docnumber', 'رقم الفاتورة')}
+              {STh('docdate', 'التاريخ', 'date')}
+              {STh('branch', 'الفرع', 'text', 'center')}
+              {STh('national_id', 'الرقم القومي/المالي')}
+              {STh('list_label', 'القائمة')}
+              {STh('gross_before', 'الإجمالى', 'number', 'left')}
+              {STh('net_after', 'الصافى', 'number', 'left')}
               <th className="text-center px-2 py-2 font-semibold">الحالة</th>
             </tr>
           </thead>
@@ -3017,8 +2974,6 @@ function NameReviewTab({ claimId, onRefresh }) {
   const [sel, setSel]       = useState({})     // rx_id → chosen name
   const [busy, setBusy]     = useState(false)
   const [msg, setMsg]       = useState(null)
-  const [sortKey, setSortKey] = useState('date')
-  const [sortDir, setSortDir] = useState('asc')
 
   const load = () => {
     setLoading(true)
@@ -3039,15 +2994,14 @@ function NameReviewTab({ claimId, onRefresh }) {
   })
   const setChoice = (rxId, name) => setSel(s => ({ ...s, [rxId]: name }))
 
-  const sortBy = (k) => {
-    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortKey(k); setSortDir(k === 'count' ? 'desc' : 'asc') }
-  }
-  const sorted = [...(rows || [])].sort((a, b) => {
-    const va = _nameSortVal(a, sortKey, sel), vb = _nameSortVal(b, sortKey, sel)
-    const c = typeof va === 'number' ? va - vb : String(va).localeCompare(String(vb), 'ar')
-    return sortDir === 'asc' ? c : -c
+  // inline getValue on purpose: the «الاقتراح» / selected keys read the live `sel`
+  const { sorted, headerProps } = useSortableRows(rows, {
+    defaultSort: { key: 'date', dir: 'asc', type: 'date' }, getValue: (r, k) => _nameSortVal(r, k, sel),
   })
+  const RTh = (k, label, align = 'right') => (
+    <SortTh {...headerProps(k, k === 'count' || k === 'sequence' || k === 'type' ? 'number' : k === 'date' ? 'date' : 'text')}
+      className={`text-${align} px-2 py-2 font-semibold whitespace-nowrap`}>{label}</SortTh>
+  )
   // «تحديد الكل» never guesses for a multi-option name: those need a manual pick first.
   const pickable = (row) => sel[row.rx_id] != null || (row.suggestion && row.type !== 'ambiguous')
   const selectAll = () => setSel(s => {
@@ -3139,13 +3093,13 @@ function NameReviewTab({ claimId, onRefresh }) {
                   checked={allSelected}
                   onChange={e => e.target.checked ? selectAll() : setSel({})} />
               </th>
-              <RosterTh k="sequence" align="center" {...{ sortKey, sortDir, sortBy }}>م</RosterTh>
-              <RosterTh k="date" {...{ sortKey, sortDir, sortBy }}>التاريخ</RosterTh>
-              <RosterTh k="docnumber" {...{ sortKey, sortDir, sortBy }}>الإيصال</RosterTh>
-              <RosterTh k="current_name" {...{ sortKey, sortDir, sortBy }}>الاسم الحالى</RosterTh>
-              <RosterTh k="type" align="center" {...{ sortKey, sortDir, sortBy }}>النوع</RosterTh>
-              <RosterTh k="suggestion" {...{ sortKey, sortDir, sortBy }}>الاقتراح</RosterTh>
-              <RosterTh k="count" align="center" {...{ sortKey, sortDir, sortBy }}>مرات فى السجل</RosterTh>
+              {RTh('sequence', 'م', 'center')}
+              {RTh('date', 'التاريخ')}
+              {RTh('docnumber', 'الإيصال')}
+              {RTh('current_name', 'الاسم الحالى')}
+              {RTh('type', 'النوع', 'center')}
+              {RTh('suggestion', 'الاقتراح')}
+              {RTh('count', 'مرات فى السجل', 'center')}
               <th className="px-2 py-2"></th>
             </tr>
           </thead>
@@ -3297,7 +3251,6 @@ function RevisionTab({ claimId }) {
   const [flagFilter, setFlagFilter] = useState('')     // '', 'value', 'drift', 'softech_class'
   const [statusFilter, setStatusFilter] = useState('') // '', 'pending', 'approved'
   const [q, setQ]             = useState('')
-  const [sort, setSort]       = useState({ key: 'net_amount', dir: 'desc' })
   const [noteDraft, setNoteDraft] = useState({})
 
   const load = () => {
@@ -3324,12 +3277,7 @@ function RevisionTab({ claimId }) {
       || (statusFilter === 'approved' && r.review_approved))
     .filter(r => !q || wildcardMatch(r.item_name, q) || (r.itemcode || '').includes(q)
       || wildcardMatch(r.patient_name, q) || String(r.docnumber || '').includes(q))
-  const sorted = [...rows].sort((a, b) => {
-    const av = a[sort.key], bv = b[sort.key]
-    const cmp = (typeof av === 'number' && typeof bv === 'number')
-      ? av - bv : String(av ?? '').localeCompare(String(bv ?? ''), 'ar')
-    return sort.dir === 'asc' ? cmp : -cmp
-  })
+  const { sorted, headerProps } = useSortableRows(rows, { defaultSort: { key: 'net_amount', dir: 'desc', type: 'number' } })
   // keyboard flow (shared review-grid keys): Enter approves the line and moves on, Space
   // toggles approve / un-approve
   const kb = useGridKeyboard({
@@ -3338,10 +3286,8 @@ function RevisionTab({ claimId }) {
     onToggle: r => { if (saving == null) review(r, !r.review_approved) },
   })
   const th = (key, label, extra = '') => (
-    <th onClick={() => setSort(s => ({ key, dir: s.key === key && s.dir === 'desc' ? 'asc' : 'desc' }))}
-      className={`pb-1 cursor-pointer select-none hover:text-gray-700 ${extra}`}>
-      {label}{sort.key === key ? (sort.dir === 'desc' ? ' ↓' : ' ↑') : ''}
-    </th>
+    <SortTh {...headerProps(key, ['quantity', 'line_total', 'net_amount', 'sequence', 'docnumber'].includes(key) ? 'number' : key === 'docdate' ? 'date' : 'text')}
+      className={`pb-1 ${extra}`}>{label}</SortTh>
   )
 
   if (loading && !data) return <div className="px-6 py-6 text-sm text-gray-400">جارٍ تحميل البنود المُعلَّمة…</div>
@@ -3854,6 +3800,7 @@ function SoftechRepriceTab({ claimId, claim }) {
   const [busy, setBusy]     = useState(false)
   const [msg, setMsg]       = useState(null)
   const [runs, setRuns]     = useState([])
+  const { sorted: sortedRuns, headerProps: runHead } = useSortableRows(runs)
   // ② item-code → multi-receipt batch
   const [bCode, setBCode]   = useState('')
   const [bList, setBList]   = useState(null)        // {receipts:[...]}
@@ -4110,9 +4057,13 @@ function SoftechRepriceTab({ claimId, claim }) {
         </div>
         {runs.length === 0 ? <div className="text-xs text-gray-400">لا توجد عمليات.</div> : (
           <table className="w-full text-xs">
-            <thead className="text-gray-500"><tr><th className="text-right py-1">التاريخ</th><th>الإيصال</th><th>الفرع</th><th>الحالة</th><th>صافى Δ</th><th>عميل التعاقد</th><th>الخطة</th><th></th></tr></thead>
+            <thead className="text-gray-500"><tr>
+              <SortTh {...runHead('applied_at', 'date')} className="text-right py-1">التاريخ</SortTh>
+              <SortTh {...runHead('docnumber', 'number')}>الإيصال</SortTh><SortTh {...runHead('branch')}>الفرع</SortTh>
+              <SortTh {...runHead('status')}>الحالة</SortTh><SortTh {...runHead('net_delta', 'number')}>صافى Δ</SortTh>
+              <SortTh {...runHead('cust_branch_code')}>عميل التعاقد</SortTh><SortTh {...runHead('plan_id', 'number')}>الخطة</SortTh><th></th></tr></thead>
             <tbody>
-              {runs.map(r => {
+              {sortedRuns.map(r => {
                 const statusLabel = { preview: 'معاينة', applied: 'مُطبَّق', reverted: 'مُتراجَع', failed: 'فشل' }[r.status] || r.status
                 const statusCls = r.status === 'failed' ? 'text-red-600 font-semibold'
                   : r.status === 'applied' ? 'text-green-600' : 'text-gray-500'
@@ -4152,6 +4103,39 @@ function SoftechRepriceTab({ claimId, claim }) {
         )}
       </div>
     </div>
+  )
+}
+
+// per-branch breakdown of the short-patient-name check (sortable)
+function ShortNameBranches({ branches }) {
+  const { sorted, headerProps } = useSortableRows(branches, {
+    getValue: (b, k) => (k === 'single' ? b['فردى'] : k === 'double' ? b['ثنائى'] : k === 'triple' ? b['ثلاثى'] : b[k]),
+  })
+  return (
+    <table className="text-[11px] border border-gray-200 rounded">
+      <thead className="bg-gray-50 text-gray-500">
+        <tr>
+          <SortTh {...headerProps('branch')} className="text-right px-2 py-1">الفرع</SortTh>
+          <SortTh {...headerProps('failed', 'number')} className="text-left px-2 py-1">غير رباعية</SortTh>
+          <SortTh {...headerProps('total', 'number')} className="text-left px-2 py-1">من إجمالى</SortTh>
+          <SortTh {...headerProps('single', 'number')} className="text-left px-2 py-1 text-red-600">فردى</SortTh>
+          <SortTh {...headerProps('double', 'number')} className="text-left px-2 py-1 text-orange-600">ثنائى</SortTh>
+          <SortTh {...headerProps('triple', 'number')} className="text-left px-2 py-1 text-amber-600">ثلاثى</SortTh>
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.map(b => (
+          <tr key={b.branch} className="border-t border-gray-100">
+            <td className="px-2 py-1 font-mono">{b.branch}</td>
+            <td className="px-2 py-1 text-left font-semibold">{b.failed}</td>
+            <td className="px-2 py-1 text-left text-gray-500">{b.total}</td>
+            <td className="px-2 py-1 text-left">{b['فردى'] || 0}</td>
+            <td className="px-2 py-1 text-left">{b['ثنائى'] || 0}</td>
+            <td className="px-2 py-1 text-left">{b['ثلاثى'] || 0}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }
 
@@ -4237,30 +4221,7 @@ function ReadinessTab({ claimId }) {
                       التوزيع حسب الفرع ({c.branches.length} فرع)
                     </summary>
                     <div className="overflow-x-auto mt-1">
-                      <table className="text-[11px] border border-gray-200 rounded">
-                        <thead className="bg-gray-50 text-gray-500">
-                          <tr>
-                            <th className="text-right px-2 py-1">الفرع</th>
-                            <th className="text-left px-2 py-1">غير رباعية</th>
-                            <th className="text-left px-2 py-1">من إجمالى</th>
-                            <th className="text-left px-2 py-1 text-red-600">فردى</th>
-                            <th className="text-left px-2 py-1 text-orange-600">ثنائى</th>
-                            <th className="text-left px-2 py-1 text-amber-600">ثلاثى</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {c.branches.map(b => (
-                            <tr key={b.branch} className="border-t border-gray-100">
-                              <td className="px-2 py-1 font-mono">{b.branch}</td>
-                              <td className="px-2 py-1 text-left font-semibold">{b.failed}</td>
-                              <td className="px-2 py-1 text-left text-gray-500">{b.total}</td>
-                              <td className="px-2 py-1 text-left">{b['فردى'] || 0}</td>
-                              <td className="px-2 py-1 text-left">{b['ثنائى'] || 0}</td>
-                              <td className="px-2 py-1 text-left">{b['ثلاثى'] || 0}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                      <ShortNameBranches branches={c.branches} />
                     </div>
                   </details>
                   <details>
@@ -4340,12 +4301,7 @@ function ClaimItemsTab({ claimId, claim, onRefresh }) {
   const [matchMode, setMatchMode] = useState('contains')  // contains | begins | ends
   const [searchIn, setSearchIn]   = useState('both')      // both | code | name
   const [catFilter, setCat] = useState('')     // '', local, imported, tarsia, mixed
-  const [sort, setSort]     = useState('gross')
-  const [sortDir, setSortDir] = useState('desc')
-  const sortByCol = (k) => {
-    if (sort === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSort(k); setSortDir(k === 'item_code' || k === 'item_name' || k === 'origin' || k === 'contract_classif' || k === 'category' ? 'asc' : 'desc') }
-  }
+  const [itemSort, setItemSort] = useState(null)   // shared sort state (null = largest gross first)
   const [sel, setSel]       = useState({})     // item_code -> chosen category
   const [busy, setBusy]     = useState(null)
   const [msg, setMsg]       = useState(null)
@@ -4392,20 +4348,17 @@ function ClaimItemsTab({ claimId, claim, onRefresh }) {
   }
   if (catFilter === 'mixed') items = items.filter(it => it.is_mixed)
   else if (catFilter)        items = items.filter(it => it.category === catFilter)
-  const TEXT_COLS = new Set(['item_code', 'item_name', 'origin', 'contract_classif', 'category'])
-  items = [...items].sort((a, b) => {
-    let c
-    if (TEXT_COLS.has(sort)) c = (a[sort] || '').toString().localeCompare((b[sort] || '').toString(), 'ar')
-    else c = (Number(a[sort]) || 0) - (Number(b[sort]) || 0)
-    return sortDir === 'asc' ? c : -c
-  })
-
-  const SortTh = ({ k, children, align = 'right' }) => (
-    <th onClick={() => sortByCol(k)}
-      className={`text-${align} px-2 py-2 font-semibold cursor-pointer select-none whitespace-nowrap ${sort === k ? 'text-blue-600' : 'text-gray-500'}`}>
-      {children}{sort === k ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
-    </th>
-  )
+  const ITEM_DEFAULT_SORT = { key: 'gross', dir: 'desc', type: 'number' }
+  const itemEff = itemSort || ITEM_DEFAULT_SORT
+  items = sortRows(items, itemEff, (it, k) => it[k])
+  const SortTh2 = (k, label, type = 'text', align = 'right') => {
+    const active = itemEff.key === k
+    return (
+      <SortTh active={active} dir={active ? itemEff.dir : undefined} ariaSort={ariaSortOf(active, itemEff.dir)}
+        onSort={() => setItemSort(nextSort(itemSort, k, type, ITEM_DEFAULT_SORT))}
+        className={`text-${align} px-2 py-2 font-semibold whitespace-nowrap text-gray-500`}>{label}</SortTh>
+    )
+  }
 
   return (
     <div className="px-6 py-4">
@@ -4449,17 +4402,17 @@ function ClaimItemsTab({ claimId, claim, onRefresh }) {
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="text-right px-2 py-2 text-gray-500 font-semibold">م</th>
-              <SortTh k="item_code">الكود</SortTh>
-              <SortTh k="item_name">الصنف</SortTh>
-              <SortTh k="origin">المنشأ</SortTh>
-              <SortTh k="contract_classif">تصنيف التعاقدات</SortTh>
-              <SortTh k="basic_discount" align="left">خصم أساسى</SortTh>
-              <SortTh k="line_count" align="center">عدد بنود الصرف</SortTh>
-              <SortTh k="gross" align="left">الإجمالى</SortTh>
-              <SortTh k="discount_pct" align="left">نسبة الخصم</SortTh>
-              <SortTh k="discount" align="left">قيمة الخصم</SortTh>
-              <SortTh k="net" align="left">الصافى</SortTh>
-              <SortTh k="category">التصنيف</SortTh>
+              {SortTh2('item_code', 'الكود')}
+              {SortTh2('item_name', 'الصنف')}
+              {SortTh2('origin', 'المنشأ')}
+              {SortTh2('contract_classif', 'تصنيف التعاقدات')}
+              {SortTh2('basic_discount', 'خصم أساسى', 'number', 'left')}
+              {SortTh2('line_count', 'عدد بنود الصرف', 'number', 'center')}
+              {SortTh2('gross', 'الإجمالى', 'number', 'left')}
+              {SortTh2('discount_pct', 'نسبة الخصم', 'number', 'left')}
+              {SortTh2('discount', 'قيمة الخصم', 'number', 'left')}
+              {SortTh2('net', 'الصافى', 'number', 'left')}
+              {SortTh2('category', 'التصنيف')}
               <th className="text-right px-2 py-2 text-gray-500 font-semibold">تعديل التصنيف لهذه المطالبة</th>
             </tr>
           </thead>
@@ -4532,6 +4485,112 @@ function ClaimItemsTab({ claimId, claim, onRefresh }) {
 // Compares the frozen snapshot classification against current item master data
 // and shows where category / discount / net drifted. Reuses <DataTable>.
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// per-prescription net differences vs SOFTECH (sortable)
+function SoftechMismatchTable({ rows }) {
+  const { sorted, headerProps } = useSortableRows(rows)
+  const th = (k, label, type, cls) => <SortTh {...headerProps(k, type)} className={`${cls} py-2`}>{label}</SortTh>
+  return (
+    <table className="w-full text-xs">
+      <thead className="bg-amber-100/60 text-amber-900">
+        <tr>
+          {th('sequence', 'م', 'number', 'text-center px-2')}
+          {th('docnumber', 'الفاتورة', 'number', 'text-right px-3')}
+          {th('patient_name', 'المريض', 'text', 'text-right px-3')}
+          {th('docdate', 'التاريخ', 'date', 'text-right px-3')}
+          {th('our_gross', 'صافينا', 'number', 'text-left px-3')}
+          {th('softech_gross', 'صافى سوفتك', 'number', 'text-left px-3')}
+          {th('diff', 'الفرق', 'number', 'text-left px-3')}
+          {th('softech_status', 'سوفتك', 'text', 'text-center px-3')}
+          {th('hint', 'ملاحظة', 'text', 'text-right px-3')}
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-amber-100">
+        {sorted.map((r) => (
+          <tr key={r.prescription_id} className={`hover:bg-amber-50/50 ${r.softech_status === 'pending' ? 'bg-blue-50/60' : ''}`}>
+            <td className="px-2 py-2 text-center font-mono text-gray-500">{r.sequence || '—'}</td>
+            <td className="px-3 py-2 font-mono">#{r.docnumber}</td>
+            <td className="px-3 py-2">{r.patient_name || '—'}</td>
+            <td className="px-3 py-2 text-gray-500">{r.docdate || '—'}</td>
+            <td className="px-3 py-2 text-left font-mono">{fmt(r.our_gross)}</td>
+            <td className="px-3 py-2 text-left font-mono"
+              title={r.softech_gross !== r.softech_at_import ? `عند الاستيراد ${fmt(r.softech_at_import)}` : ''}>
+              {fmt(r.softech_gross)}</td>
+            <td className="px-3 py-2 text-left font-mono font-bold text-amber-700">
+              {r.diff > 0 ? '+' : ''}{fmt(r.diff)}
+            </td>
+            <td className="px-3 py-2 text-center whitespace-nowrap">
+              {r.softech_status === 'pending'
+                ? <span className="text-blue-700" title={`أصناف: ${(r.pending_items || []).join('، ')}`}>⇢ بانتظار المزامنة</span>
+                : r.softech_status === 'edited'
+                ? <span className="text-green-700" title={`عمليات #${(r.softech_runs || []).join('، #')}`}>✓ عُدِّل</span>
+                : <span className="text-gray-400">—</span>}
+            </td>
+            <td className="px-3 py-2 text-gray-600">{r.hint}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+// dual-origin items: pick the classification for this motalba (sortable; the picker itself stays an editor)
+function DualOriginTable({ items, reviewSel, setReviewSel, reviewBusy, applyReview }) {
+  const { sorted, headerProps } = useSortableRows(items, {
+    getValue: (it, k) => (k === 'current' ? it.current_categories.map(c => c.label).join(' ') : it[k]),
+  })
+  const th = (k, label, type = 'text') => <SortTh {...headerProps(k, type)} className="text-right px-2 py-1 font-semibold">{label}</SortTh>
+  return (
+    <table className="w-full text-xs">
+      <thead className="text-purple-700">
+        <tr>
+          {th('item_code', 'كود')}{th('item_name', 'الصنف')}{th('line_count', 'عدد البنود', 'number')}
+          {th('total_value', 'الإجمالى', 'number')}{th('current', 'التصنيف الحالى')}
+          <th className="text-right px-2 py-1 font-semibold">التصنيف لهذه المطالبة</th><th className="text-right px-2 py-1 font-semibold" />
+        </tr>
+      </thead>
+      <tbody>
+                {sorted.map(it => {
+                  const sel = reviewSel[it.item_code]
+                    || (it.current_categories.length === 1 ? it.current_categories[0].category : it.suggested) || 'local'
+                  return (
+                    <tr key={it.item_code} className="border-t border-purple-100">
+                      <td className="px-2 py-1 font-mono">{it.item_code}</td>
+                      <td className="px-2 py-1">{it.item_name}</td>
+                      <td className="px-2 py-1 text-center">{it.line_count}</td>
+                      <td className="px-2 py-1 text-left">{fmt(it.total_value)}</td>
+                      <td className="px-2 py-1">
+                        {it.current_categories.map(c => (
+                          <span key={c.category} className={`inline-block rounded px-1.5 py-0.5 ml-1 ${
+                            c.category === 'imported' ? 'bg-amber-100 text-amber-700'
+                            : c.category === 'tarsia' ? 'bg-purple-100 text-purple-700'
+                            : 'bg-green-100 text-green-700'}`}>
+                            {c.label}{it.is_mixed ? ` ×${c.count}` : ''}
+                          </span>
+                        ))}
+                      </td>
+                      <td className="px-2 py-1">
+                        <select value={sel}
+                          onChange={e => setReviewSel(s => ({ ...s, [it.item_code]: e.target.value }))}
+                          className="border border-gray-300 rounded px-2 py-1 text-xs">
+                          <option value="local">محلى</option>
+                          <option value="imported">مستورد</option>
+                          <option value="tarsia">ترسية</option>
+                        </select>
+                      </td>
+                      <td className="px-2 py-1">
+                        <button data-tour="insurance-claim-discrepancy-review-apply" onClick={() => applyReview(it.item_code, sel)} disabled={reviewBusy === it.item_code}
+                          className="px-2.5 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50">
+                          {reviewBusy === it.item_code ? '…' : 'تطبيق'}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+      </tbody>
+    </table>
+  )
+}
 
 function DiscrepancyTab({ claimId, claim, onRefresh }) {
   const [data, setData]       = useState(null)
@@ -4788,54 +4847,7 @@ function DiscrepancyTab({ claimId, claim, onRefresh }) {
           </div>
           {reviewMsg && <div className="mb-2 text-xs text-purple-800">{reviewMsg}</div>}
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="text-purple-700">
-                <tr>
-                  {['كود', 'الصنف', 'عدد البنود', 'الإجمالى', 'التصنيف الحالى', 'التصنيف لهذه المطالبة', ''].map((h, i) => (
-                    <th key={i} className="text-right px-2 py-1 font-semibold">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {reviewItems.map(it => {
-                  const sel = reviewSel[it.item_code]
-                    || (it.current_categories.length === 1 ? it.current_categories[0].category : it.suggested) || 'local'
-                  return (
-                    <tr key={it.item_code} className="border-t border-purple-100">
-                      <td className="px-2 py-1 font-mono">{it.item_code}</td>
-                      <td className="px-2 py-1">{it.item_name}</td>
-                      <td className="px-2 py-1 text-center">{it.line_count}</td>
-                      <td className="px-2 py-1 text-left">{fmt(it.total_value)}</td>
-                      <td className="px-2 py-1">
-                        {it.current_categories.map(c => (
-                          <span key={c.category} className={`inline-block rounded px-1.5 py-0.5 ml-1 ${
-                            c.category === 'imported' ? 'bg-amber-100 text-amber-700'
-                            : c.category === 'tarsia' ? 'bg-purple-100 text-purple-700'
-                            : 'bg-green-100 text-green-700'}`}>
-                            {c.label}{it.is_mixed ? ` ×${c.count}` : ''}
-                          </span>
-                        ))}
-                      </td>
-                      <td className="px-2 py-1">
-                        <select value={sel}
-                          onChange={e => setReviewSel(s => ({ ...s, [it.item_code]: e.target.value }))}
-                          className="border border-gray-300 rounded px-2 py-1 text-xs">
-                          <option value="local">محلى</option>
-                          <option value="imported">مستورد</option>
-                          <option value="tarsia">ترسية</option>
-                        </select>
-                      </td>
-                      <td className="px-2 py-1">
-                        <button data-tour="insurance-claim-discrepancy-review-apply" onClick={() => applyReview(it.item_code, sel)} disabled={reviewBusy === it.item_code}
-                          className="px-2.5 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50">
-                          {reviewBusy === it.item_code ? '…' : 'تطبيق'}
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <DualOriginTable items={reviewItems} reviewSel={reviewSel} setReviewSel={setReviewSel} reviewBusy={reviewBusy} applyReview={applyReview} />
           </div>
         </div>
       )}
@@ -4962,46 +4974,7 @@ function DiscrepancyTab({ claimId, claim, onRefresh }) {
                   {data.softech_reconciliation.prescriptions.filter(r => r.softech_status !== 'pending').length} خصم — لا يُصلحه تعديل السعر</span>
               </div>
               <div className="overflow-x-auto rounded-lg border border-amber-200 bg-white">
-                <table className="w-full text-xs">
-                  <thead className="bg-amber-100/60 text-amber-900">
-                    <tr>
-                      <th className="text-center px-2 py-2">م</th>
-                      <th className="text-right px-3 py-2">الفاتورة</th>
-                      <th className="text-right px-3 py-2">المريض</th>
-                      <th className="text-right px-3 py-2">التاريخ</th>
-                      <th className="text-left px-3 py-2">صافينا</th>
-                      <th className="text-left px-3 py-2">صافى سوفتك</th>
-                      <th className="text-left px-3 py-2">الفرق</th>
-                      <th className="text-center px-3 py-2">سوفتك</th>
-                      <th className="text-right px-3 py-2">ملاحظة</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-amber-100">
-                    {data.softech_reconciliation.prescriptions.map((r) => (
-                      <tr key={r.prescription_id} className={`hover:bg-amber-50/50 ${r.softech_status === 'pending' ? 'bg-blue-50/60' : ''}`}>
-                        <td className="px-2 py-2 text-center font-mono text-gray-500">{r.sequence || '—'}</td>
-                        <td className="px-3 py-2 font-mono">#{r.docnumber}</td>
-                        <td className="px-3 py-2">{r.patient_name || '—'}</td>
-                        <td className="px-3 py-2 text-gray-500">{r.docdate || '—'}</td>
-                        <td className="px-3 py-2 text-left font-mono">{fmt(r.our_gross)}</td>
-                        <td className="px-3 py-2 text-left font-mono"
-                          title={r.softech_gross !== r.softech_at_import ? `عند الاستيراد ${fmt(r.softech_at_import)}` : ''}>
-                          {fmt(r.softech_gross)}</td>
-                        <td className="px-3 py-2 text-left font-mono font-bold text-amber-700">
-                          {r.diff > 0 ? '+' : ''}{fmt(r.diff)}
-                        </td>
-                        <td className="px-3 py-2 text-center whitespace-nowrap">
-                          {r.softech_status === 'pending'
-                            ? <span className="text-blue-700" title={`أصناف: ${(r.pending_items || []).join('، ')}`}>⇢ بانتظار المزامنة</span>
-                            : r.softech_status === 'edited'
-                            ? <span className="text-green-700" title={`عمليات #${(r.softech_runs || []).join('، #')}`}>✓ عُدِّل</span>
-                            : <span className="text-gray-400">—</span>}
-                        </td>
-                        <td className="px-3 py-2 text-gray-600">{r.hint}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <SoftechMismatchTable rows={data.softech_reconciliation.prescriptions} />
               </div>
             </div>
           )}

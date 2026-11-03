@@ -8,6 +8,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { forecastApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import DataFreshnessBar from '../components/DataFreshnessBar'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 const MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر']
 const MODELS = { a: 'Model A — نمو الهدف', b: 'Model B — مزيج مرجّح', avg: 'المتوسط (A+B)/2' }
@@ -122,6 +124,12 @@ function BacktestPanel({ canEdit }) {
     byMetric[r.metric] = byMetric[r.metric] || { label: r.metric_label }
     byMetric[r.metric][r.model] = r
   }
+  const metricRows = Object.entries(byMetric).map(([m, row]) => ({
+    m, row, label: row.label, a_wape: row.a?.wape, b_wape: row.b?.wape,
+    winner: row.a?.is_winner ? 'A' : (row.b?.is_winner ? 'B' : null),
+    bias: row.a?.is_winner ? row.a?.bias : (row.b?.is_winner ? row.b?.bias : null),
+  }))
+  const { sorted: sortedMetrics, headerProps: btHp } = useSortableRows(metricRows)
 
   return (
     <div data-tour="analytics-scenarios-backtest" className="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
@@ -144,15 +152,15 @@ function BacktestPanel({ canEdit }) {
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-gray-400 border-b border-gray-100">
-                  <th className="text-right py-1">المؤشر</th>
-                  <th className="text-center">A — WAPE%</th>
-                  <th className="text-center">B — WAPE%</th>
-                  <th className="text-center">الأفضل</th>
-                  <th className="text-center">الانحياز (الفائز)</th>
+                  <SortTh {...btHp('label', 'text')} className="text-right py-1">المؤشر</SortTh>
+                  <SortTh {...btHp('a_wape', 'number')} className="text-center">A — WAPE%</SortTh>
+                  <SortTh {...btHp('b_wape', 'number')} className="text-center">B — WAPE%</SortTh>
+                  <SortTh {...btHp('winner', 'text')} className="text-center">الأفضل</SortTh>
+                  <SortTh {...btHp('bias', 'number')} className="text-center">الانحياز (الفائز)</SortTh>
                 </tr>
               </thead>
               <tbody>
-                {Object.entries(byMetric).map(([m, row]) => {
+                {sortedMetrics.map(({ m, row }) => {
                   const win = row.a?.is_winner ? 'a' : (row.b?.is_winner ? 'b' : null)
                   const winner = win ? row[win] : null
                   return (
@@ -204,12 +212,23 @@ function ReferencesPanel({ canEdit }) {
     }),
     onSuccess: () => { setInfl(''); setRg(''); qc.invalidateQueries({ queryKey: ['forecast-references'] }) },
   })
+  const setMode = useMutation({
+    mutationFn: (mode) => forecastApi.computeReferences({ seasonality_mode: mode }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['forecast-references'] }); qc.invalidateQueries({ queryKey: ['forecast-plan'] }) },
+  })
+  const branchSeas = refs.branch_seasonality?.cash_delivery || {}
   const metrics = Object.keys(refs.growth_goal || {})
   const pct = v => v == null ? '—' : `${(Number(v) * 100).toFixed(1)}%`
   // seasonality for the running month + the next 5 (rolls forward with the calendar)
   const now = new Date()
   const ahead = Array.from({ length: 6 }, (_, k) => (now.getMonth() + k) % 12 + 1)
   const hist = refs.history
+  const refRows = metrics.map(m => ({
+    m, label: REF_LABELS[m] || m, yoy: refs.historical_yoy?.[m], bench: refs.benchmark?.[m],
+    goal: refs.growth_goal?.[m],
+    ...Object.fromEntries(ahead.map(mo => [`season_${mo}`, refs.seasonality?.[m]?.[String(mo)]])),
+  }))
+  const { sorted: sortedRefs, headerProps: refHp } = useSortableRows(refRows)
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
       <button data-tour="analytics-scenarios-references" onClick={() => setOpen(o => !o)} className="text-sm font-bold text-gray-800 flex items-center gap-2">
@@ -224,17 +243,17 @@ function ReferencesPanel({ canEdit }) {
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-gray-400 border-b border-gray-100">
-                  <th className="text-right py-1">المؤشر</th>
-                  <th className="text-center">النمو التاريخى YoY</th>
-                  <th className="text-center">النمو المرجعى (B)</th>
-                  <th className="text-center">هدف النمو (الخطة)</th>
+                  <SortTh {...refHp('label', 'text')} className="text-right py-1">المؤشر</SortTh>
+                  <SortTh {...refHp('yoy', 'number')} className="text-center">النمو التاريخى YoY</SortTh>
+                  <SortTh {...refHp('bench', 'number')} className="text-center">النمو المرجعى (B)</SortTh>
+                  <SortTh {...refHp('goal', 'number')} className="text-center">هدف النمو (الخطة)</SortTh>
                   {ahead.map((mo, k) => (
-                    <th key={mo} className={`text-center ${k === 1 ? 'text-gray-600' : ''}`}>موسمية {MONTHS[mo - 1]}</th>
+                    <SortTh key={mo} {...refHp(`season_${mo}`, 'number')} className={`text-center ${k === 1 ? 'text-gray-600' : ''}`}>موسمية {MONTHS[mo - 1]}</SortTh>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {metrics.map(m => (
+                {sortedRefs.map(({ m }) => (
                   <tr key={m} className="border-b border-gray-50">
                     <td className="py-1.5 font-medium text-gray-700">{REF_LABELS[m] || m}</td>
                     <td className="text-center tabular-nums text-gray-500">{pct(refs.historical_yoy?.[m])}</td>
@@ -249,6 +268,22 @@ function ReferencesPanel({ canEdit }) {
                 ))}
               </tbody>
             </table>
+          )}
+          <div data-tour="analytics-scenarios-seasonality-mode" className="flex flex-wrap items-center gap-2 mt-3 text-[11px] text-gray-600">
+            <span className="font-bold">الموسمية في المحرك:</span>
+            {canEdit ? (
+              <select className="input-field !w-auto !py-1 text-[11px]" value={refs.engine_seasonality_mode || 'none'}
+                      disabled={setMode.isPending}
+                      onChange={e => { if (confirm('تغيير طريقة تطبيق الموسمية على كل التوقعات الجديدة؟')) setMode.mutate(e.target.value) }}>
+                {Object.entries(SEASON_MODES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            ) : <span>{SEASON_MODES[refs.engine_seasonality_mode || 'none']}</span>}
+            <span className="text-gray-400">اختر ما يفوز في «الدقة حسب المدى». موسمية كل فرع = نمطه الخاص بوزن تاريخه (كامل عند 36 شهراً) والباقى من نمط السلسلة — الفرع الجديد يبدأ بنمط السلسلة.</span>
+          </div>
+          {Object.keys(branchSeas).length > 0 && (
+            <div className="text-[10px] text-gray-400 mt-1">
+              وزن النمط الخاص (نقدى+توصيل): {Object.entries(branchSeas).map(([c, v]) => `${c}: ${Math.round(v.weight * 100)}% (${v.months} شهر)`).join(' · ')}
+            </div>
           )}
           <p className="text-[10px] text-gray-400 mt-2">
             الموسمية والنمو التاريخى محسوبان من {hist ? <>بيانات {hist.months} شهراً ({hist.from} → {hist.to})</> : 'البيانات التاريخية'}
@@ -285,6 +320,7 @@ function ProfitExclusionPanel({ canEdit }) {
     queryKey: ['profit-exclusions'],
     queryFn: () => forecastApi.profitExclusions().then(r => Array.isArray(r.data) ? r.data : (r.data.results || [])),
   })
+  const { sorted: sortedEx, headerProps: exHp } = useSortableRows(rows)
   const inval = () => qc.invalidateQueries({ queryKey: ['profit-exclusions'] })
   const add = useMutation({
     mutationFn: () => forecastApi.profitExclusionAdd({ code: code.trim(), note: note.trim() }),
@@ -305,17 +341,17 @@ function ProfitExclusionPanel({ canEdit }) {
           <table className="w-full text-xs">
             <thead>
               <tr className="text-gray-400 border-b border-gray-100">
-                <th className="text-right py-1">الكود</th>
-                <th className="text-right">الصنف</th>
-                <th className="text-center">النوع</th>
-                <th className="text-right">السبب</th>
-                <th className="text-center">نشط</th>
+                <SortTh {...exHp('item_code', 'text')} className="text-right py-1">الكود</SortTh>
+                <SortTh {...exHp('item_name', 'text')} className="text-right">الصنف</SortTh>
+                <SortTh {...exHp('medicine_type', 'text')} className="text-center">النوع</SortTh>
+                <SortTh {...exHp('note', 'text')} className="text-right">السبب</SortTh>
+                <SortTh {...exHp('active', 'number')} className="text-center">نشط</SortTh>
                 {canEdit && <th className="text-center">حذف</th>}
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && <tr><td colSpan={6} className="text-center text-gray-400 py-3">لا توجد استثناءات</td></tr>}
-              {rows.map(x => (
+              {sortedEx.map(x => (
                 <tr key={x.id} className="border-b border-gray-50">
                   <td className="py-1.5 font-mono text-gray-600">{x.item_code}</td>
                   <td className="font-medium text-gray-700">{x.item_name}</td>
@@ -652,6 +688,14 @@ function EstChip() {
   return <span className="mr-1 text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 align-middle" title="شهر لم يكتمل بعد — القيمة تقدير">متوقع</span>
 }
 
+const SEASON_MODES = { none: 'بدون موسمية', chain: 'موسمية السلسلة', branch: 'موسمية كل فرع' }
+
+const H_BRANCH_VARIANTS = [
+  ['br_b', 'بدون موسمية'],
+  ['br_chain', 'موسمية السلسلة'],
+  ['br_branch', 'موسمية كل فرع'],
+]
+
 const H_VARIANTS = [
   ['b', 'B بدون موسمية'],
   ['b_season', 'B × الموسمية (عند تطبيق المرجعية)'],
@@ -661,9 +705,26 @@ const H_VARIANTS = [
 function HorizonAccuracy({ data, labels }) {
   const metrics = Object.keys(data || {})
   if (!metrics.length) return null
+  const hasBranch = metrics.some(m => data[m]?.br_b)
   return (
     <div className="mt-4" data-tour="analytics-scenarios-horizon">
-      <div className="text-xs font-bold text-gray-700 mb-1">الدقة حسب المدى — WAPE% للتنبؤ قبل الشهر بـ 1 / 2 / 3 أشهر</div>
+      <div className="text-xs font-bold text-gray-700 mb-1">الدقة حسب المدى — WAPE% للتنبؤ قبل الشهر بـ 1 / 2 / 3 أشهر (الإجمالى)</div>
+      <HorizonTable data={data} metrics={metrics} labels={labels} variants={H_VARIANTS} />
+      {hasBranch && <>
+        <div className="text-xs font-bold text-gray-700 mt-3 mb-1">على مستوى الفروع (مجموع أخطاء الفروع — مستوى الأهداف)</div>
+        <HorizonTable data={data} metrics={metrics.filter(m => data[m]?.br_b)} labels={labels} variants={H_BRANCH_VARIANTS} />
+      </>}
+      <p className="text-[10px] text-gray-400 mt-1">
+        كل تنبؤ يستخدم فقط البيانات المتاحة وقتها (الأشهر بين آخر شهر مكتمل والشهر المستهدف تُتوقَّع بنفس النموذج).
+        اختر وضع الموسمية الذى يفوز هنا من «📐 القيم المرجعية» — ومع تاريخ قصير «بدون موسمية» هو الأدق غالباً.
+      </p>
+    </div>
+  )
+}
+
+function HorizonTable({ data, metrics, labels, variants }) {
+  const H_VARIANTS = variants
+  return (
       <table className="w-full text-xs">
         <thead>
           <tr className="text-gray-400 border-b border-gray-100">
@@ -693,11 +754,6 @@ function HorizonAccuracy({ data, labels }) {
           })}
         </tbody>
       </table>
-      <p className="text-[10px] text-gray-400 mt-1">
-        كل تنبؤ يستخدم فقط البيانات المتاحة وقتها (الأشهر بين آخر شهر مكتمل والشهر المستهدف تُتوقَّع بنفس النموذج).
-        مع سنتين فقط من التاريخ الموسمية تزيد الخطأ — لذلك المحرك يتوقع الأشهر القادمة بدونها؛ أعد الاختبار بعد تحميل سنوات أكثر.
-      </p>
-    </div>
   )
 }
 
@@ -761,7 +817,7 @@ function PlanPanel({ canEdit, onCreate }) {
               </tbody>
             </table>
             <p className="text-[10px] text-gray-400 mt-2">
-              الشهر الجارى = المحقق حتى الآن محسوباً لشهر كامل، ممزوجاً بالتوقع بنسبة الأيام الباقية. الأشهر القادمة = Model B (الشهر السابق وقبل السابق ونفس الشهر العام الماضى × النمو المرجعى)، وكل شهر يُبنى على توقع الشهر الذى قبله.
+              الشهر الجارى = المحقق حتى الآن محسوباً لشهر كامل، ممزوجاً بالتوقع بنسبة الأيام الباقية. الأشهر القادمة = Model B (الشهر السابق وقبل السابق ونفس الشهر العام الماضى × النمو المرجعى)، وكل شهر يُبنى على توقع الشهر الذى قبله — والموسمية حسب الوضع المختار فى «📐 القيم المرجعية».
               النسبة تحت الرقم = مقارنة بنفس الشهر العام الماضى. للأهداف: «+ سيناريو» للشهر المطلوب.
             </p>
           </div>

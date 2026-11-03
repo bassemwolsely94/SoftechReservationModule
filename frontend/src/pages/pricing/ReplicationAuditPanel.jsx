@@ -6,6 +6,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pricingApprovalsApi } from '../../api/client'
+import useSortableRows from '../../hooks/useSortableRows'
+import SortTh from '../../components/SortTh'
 
 function fmtDate(s) {
   if (!s) return '—'
@@ -70,7 +72,12 @@ export default function ReplicationAuditPanel() {
     onError: () => showToast('error', 'تعذّر تنفيذ إعادة المزامنة — حاول مرة أخرى'),
   })
 
-  const gaps = detail?.gaps || []
+  const { sorted: sortedScans, headerProps: scanHp } = useSortableRows(scans || [], {
+    getValue: (s, k) => (k === 'branches_down' ? (s.branches_down || []).length : s[k]),
+  })
+  const { sorted: gaps, headerProps: gapHp } = useSortableRows(detail?.gaps || [], {
+    getValue: (g, k) => (k === 'diff' ? Object.keys(g.diff_summary || {}).filter(x => x !== '_missing').join('، ') : g[k]),
+  })
 
   function toggle(id) {
     setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -110,16 +117,16 @@ export default function ReplicationAuditPanel() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead><tr className="bg-gray-50 text-right border-b">
-            <th className="px-3 py-2 text-xs text-gray-500">الفحص</th>
-            <th className="px-3 py-2 text-xs text-gray-500">النافذة</th>
-            <th className="px-3 py-2 text-xs text-gray-500">مفحوصة</th>
-            <th className="px-3 py-2 text-xs text-gray-500">متطابقة</th>
-            <th className="px-3 py-2 text-xs text-gray-500">بها فجوات</th>
-            <th className="px-3 py-2 text-xs text-gray-500">فروع متوقفة</th>
-            <th className="px-3 py-2 text-xs text-gray-500">الوقت</th>
+            <SortTh {...scanHp('id', 'number')} className="px-3 py-2 text-xs text-gray-500">الفحص</SortTh>
+            <SortTh {...scanHp('days_window', 'number')} className="px-3 py-2 text-xs text-gray-500">النافذة</SortTh>
+            <SortTh {...scanHp('items_checked', 'number')} className="px-3 py-2 text-xs text-gray-500">مفحوصة</SortTh>
+            <SortTh {...scanHp('items_ok', 'number')} className="px-3 py-2 text-xs text-gray-500">متطابقة</SortTh>
+            <SortTh {...scanHp('items_with_gaps', 'number')} className="px-3 py-2 text-xs text-gray-500">بها فجوات</SortTh>
+            <SortTh {...scanHp('branches_down', 'number')} className="px-3 py-2 text-xs text-gray-500">فروع متوقفة</SortTh>
+            <SortTh {...scanHp('started_at', 'date')} className="px-3 py-2 text-xs text-gray-500">الوقت</SortTh>
           </tr></thead>
           <tbody>
-            {(scans || []).map(s => (
+            {sortedScans.map(s => (
               <tr key={s.id} onClick={() => setActiveScan(s.id)}
                 className={`border-b border-gray-100 cursor-pointer hover:bg-blue-50 ${activeScan === s.id ? 'bg-blue-50' : ''}`}>
                 <td className="px-3 py-2">#{s.id} {s.is_scheduled && <span className="text-xs text-gray-400">(مجدول)</span>}</td>
@@ -180,12 +187,12 @@ export default function ReplicationAuditPanel() {
             <table className="w-full text-sm">
               <thead><tr className="bg-gray-50 text-right border-b">
                 <th className="px-3 py-2 w-8"></th>
-                <th className="px-3 py-2 text-xs text-gray-500">الصنف</th>
-                <th className="px-3 py-2 text-xs text-gray-500">الفرع</th>
-                <th className="px-3 py-2 text-xs text-gray-500">مصدر التعديل</th>
-                <th className="px-3 py-2 text-xs text-gray-500">الفروق</th>
-                <th className="px-3 py-2 text-xs text-gray-500">HQ / الفرع</th>
-                <th className="px-3 py-2 text-xs text-gray-500">الحالة</th>
+                <SortTh {...gapHp('item_name', 'text')} className="px-3 py-2 text-xs text-gray-500">الصنف</SortTh>
+                <SortTh {...gapHp('branch_code', 'text')} className="px-3 py-2 text-xs text-gray-500">الفرع</SortTh>
+                <SortTh {...gapHp('source_display', 'text')} className="px-3 py-2 text-xs text-gray-500">مصدر التعديل</SortTh>
+                <SortTh {...gapHp('diff', 'text')} className="px-3 py-2 text-xs text-gray-500">الفروق</SortTh>
+                <SortTh {...gapHp('hq_itemlastupdate', 'date')} className="px-3 py-2 text-xs text-gray-500">HQ / الفرع</SortTh>
+                <SortTh {...gapHp('status', 'text')} className="px-3 py-2 text-xs text-gray-500">الحالة</SortTh>
               </tr></thead>
               <tbody>
                 {isFetching && <tr><td colSpan={7} className="text-center py-6 text-gray-400 text-sm">جاري التحميل…</td></tr>}

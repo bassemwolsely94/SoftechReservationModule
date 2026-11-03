@@ -84,7 +84,7 @@ def _followed_by_purchase(pic, call_day, days_by_pic, window):
 def calls_by_pic(f, pics=None) -> dict:
     """{pic: {in, out, answered, missed, last_call, avg_days_between, talk_seconds,
     call_to_purchase, call_to_purchase_same_day}} counted on CdrCall.pic only; `pics` limits the PICs (None = all)."""
-    qs = calls_qs(f).exclude(pic='')
+    qs = calls_qs(f).exclude(pic='').exclude(pic__in=f.excluded())     # excluded PICs: no per-PIC call stats
     if pics is not None:
         qs = qs.filter(pic__in=pics)
     rows = list(qs.values_list('pic', 'call_at', 'direction', 'status', 'billable_seconds'))
@@ -193,13 +193,16 @@ def call_center(f, access) -> dict:
         'agent_ext', 'agent_name', 'call_at', 'direction', 'status', 'billable_seconds',
         'pic', 'phone_key'))
     window = int(setting('pic_call_purchase_days'))
-    days_by_pic = _purchase_days({r[6] for r in rows if r[6]})
+    days_by_pic = _purchase_days({r[6] for r in rows if r[6]} - f.excluded())
     exts = {e.extension: e for e in AgentExtension.objects.filter(
         extension__in={r[0] for r in rows}).select_related('staff__user')}
 
     agg = {}
     attempts = []                      # outbound (ext, phone_key, day, answered) in time order
+    excluded = f.excluded()
     for ext, name, at, direction, status, billable, pic, key in rows:
+        if pic in excluded:
+            pic = ''             # still a call for the agent, but not a PIC reached / call -> purchase
         a = agg.setdefault(ext, {'pbx_name': '', 'calls_in': 0, 'calls_out': 0, 'answered': 0,
                                  'answered_pic': 0, 'talk_seconds': 0, 'pics': set(), 'ctp': 0, 'ctp0': 0,
                                  'unanswered_out': 0})

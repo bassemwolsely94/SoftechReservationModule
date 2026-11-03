@@ -12,9 +12,10 @@ from django.utils import timezone
 MATCH_WINDOW = timedelta(hours=2)
 
 
-def _tail(number: str) -> str:
-    digits = ''.join(ch for ch in (number or '') if ch.isdigit())
-    return digits[-9:]
+def _key(number: str) -> str:
+    """phone_key of a number; for a dial string ('SIP/goip4/8201...') of its last segment."""
+    from apps.pbx.cdr import phone_key
+    return phone_key((number or '').split('/')[-1])
 
 
 def find_session_for_agent_call(profile, phone: str, session_id=None):
@@ -35,8 +36,8 @@ def find_session_for_agent_call(profile, phone: str, session_id=None):
     unclaimed = [s for s in (qs.filter(pk=session_id) if session_id else qs.order_by('-started_at')[:20])
                  if s.call_log is None or s.call_log.source == 'pbx']
 
-    tail = _tail(phone)
+    tail = _key(phone)
     for s in unclaimed:
-        if session_id or (tail and tail in (_tail(s.caller_number), _tail(s.destination_ext))):
+        if session_id or (tail and tail in (_key(s.caller_number), _key(s.destination_ext))):
             return s
     return None

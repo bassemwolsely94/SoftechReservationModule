@@ -21,18 +21,18 @@ class AgentExtensionAdmin(admin.ModelAdmin):
     readonly_fields = ['last_status', 'last_ip', 'created_at', 'updated_at']
 
     fieldsets = (
-        ('التحويلة', {
+        ('الرقم الداخلي', {
             'fields': ('extension', 'extension_type', 'sip_peer', 'is_active'),
         }),
         ('المستخدم', {
             'fields': ('staff', 'queue_name'),
-            'description': 'اربط هذه التحويلة بموظف من قائمة المستخدمين.',
+            'description': 'اربط هذا الرقم الداخلي بموظف من قائمة المستخدمين.',
         }),
         ('إعدادات البوابة الخارجية', {
             'fields': ('gateway_type', 'call_prefix', 'call_suffix'),
             'classes': ('collapse',),
             'description': (
-                'هذه الحقول خاصة بالتحويلات من نوع "بوابة خارجية". '
+                'هذه الحقول خاصة بالأرقام الداخلية من نوع "بوابة خارجية". '
                 'حدّد نوع الخط (موبايل/أرضي) والبادئة/اللاحقة التي يضيفها الـ PBX '
                 'للأرقام الواردة حتى يُزيلها الـ bridge تلقائياً.'
             ),
@@ -80,7 +80,7 @@ class AgentExtensionAdmin(admin.ModelAdmin):
         groups = [
             {'label': 'عمال مركز الاتصال', 'css': 'agents',  'extensions': _exts('agent')},
             {'label': 'موظفون إداريون (المقر الرئيسي)', 'css': 'hq', 'extensions': _exts('hq')},
-            {'label': 'تحويلات الفروع',    'css': 'branch', 'extensions': _exts('branch')},
+            {'label': 'أرقام داخلية للفروع',    'css': 'branch', 'extensions': _exts('branch')},
             {'label': 'أخرى',              'css': 'other',  'extensions': _exts('other')},
         ]
         # Drop empty groups
@@ -106,7 +106,7 @@ class AgentExtensionAdmin(admin.ModelAdmin):
 
         context = {
             **self.admin_site.each_context(request),
-            'title':                 'ربط التحويلات بالموظفين',
+            'title':                 'ربط الأرقام الداخلية بالموظفين',
             'groups':                groups,
             'gateways':              gateways,
             'staff_list':            staff_list,

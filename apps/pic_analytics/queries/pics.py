@@ -6,7 +6,8 @@ Amounts come from the user's branches; frequency / overdue labels are chain-wide
 """
 from decimal import Decimal
 
-from django.db.models import Count, Max, Min, OuterRef, Q, Subquery, Sum
+from django.db.models import Count, DecimalField, ExpressionWrapper, F, Max, Min, OuterRef, Q, Subquery, Sum
+from django.db.models.functions import NullIf
 
 from apps.customers import access as cust_access
 from apps.customers.models import Customer
@@ -20,7 +21,8 @@ from apps.pic_analytics.settings import setting
 ZERO = Decimal('0')
 DETAIL_SLICE = 15000
 ORDERS = {'net': 's_net', 'visits': 'visits', 'last_purchase': 'last_day',
-          'days_since_last': 'last_day', 'name': 'name_sub'}
+          'days_since_last': 'last_day', 'name': 'name_sub',
+          'invoices': 's_inv', 'units': 's_units', 'basket_net': 'basket_sub', 'gp': 's_gp'}
 
 
 def _order_by(order):
@@ -31,7 +33,9 @@ def _order_by(order):
     field = ORDERS[key]
     if key == 'days_since_last':          # most days since last = oldest last purchase
         desc = not desc
-    return [('-' if desc else '') + field, 'pic']
+    expr = F(field)
+    # Postgres puts NULLs first on DESC: a PIC without a name / profit must sort last in both directions
+    return [expr.desc(nulls_last=True) if desc else expr.asc(nulls_last=True), 'pic']
 
 
 def _search(qs, q):
@@ -44,7 +48,8 @@ def _search(qs, q):
     cond = Q(name__icontains=q) | Q(softech_pic=q)
     key = phone_key(q)
     if key:
-        pcond = Q(phone__endswith=key) | Q(phone_alt__endswith=key) | Q(whatsapp_phone__endswith=key)
+        t = key[-8:]       # prefilter on the last 8 digits (stored forms differ); exact phone_key compare below
+        pcond = Q(phone__endswith=t) | Q(phone_alt__endswith=t) | Q(whatsapp_phone__endswith=t)
         matched = {pic for pic, *phones in Customer.objects.filter(pcond).exclude(softech_pic__isnull=True)
                    .values_list('softech_pic', 'phone', 'phone_alt', 'whatsapp_phone')
                    if any(phone_key(ph) == key for ph in phones)}
@@ -60,8 +65,11 @@ def pic_rows(f, access, order='-net', page=1, page_size=50) -> dict:
         s_net=Sum('enet'), s_gp=Sum('gp'), s_units=Sum('units'), s_inv=Sum('invoices'),
         visits=Count('day', distinct=True, filter=Q(invoices__gt=0)),
         last_day=Max('day', filter=Q(invoices__gt=0)), name_sub=Subquery(name))
-        .filter(visits__gt=0))
+        .filter(visits__gt=0)
+        .annotate(basket_sub=ExpressionWrapper(F('s_net') / NullIf(F('visits'), 0), output_field=DecimalField())))
     count = agg.count()
+    if (order or '').lstrip('-') == 'gp' and not access.sees_cost:
+        order = '-net'                  # a branch manager never sees cost: no sorting by profit either
     ordered = agg.order_by(*_order_by(order))
     if page_size is None:
         # internal "everything" (the Excel export; never reachable from the HTTP params): one

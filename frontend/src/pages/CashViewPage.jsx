@@ -14,6 +14,8 @@ import { financeApi } from '../api/client'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import useBranchLabels from '../hooks/useBranchLabels'
 import useHelpTab from '../help/useHelpTab'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 const fmt = (n) => (n == null ? '—' : Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 }))
 const errOf = (e, d) => e?.response?.data?.detail || d
@@ -203,6 +205,8 @@ function InputsTab() {
     onError: (e) => setMsg(errOf(e, 'تعذّر الحفظ')),
   })
   const set = (setter, k) => (e) => setter(x => ({ ...x, [k]: e.target.value }))
+  const { sorted: openingRows, headerProps: obSort } = useSortableRows(opening.data?.rows)
+  const { sorted: fixedRows, headerProps: fxSort } = useSortableRows(fixed.data?.rows)
   const cats = fixed.data?.categories || []
   const freqs = fixed.data?.frequencies || []
   return (
@@ -216,8 +220,8 @@ function InputsTab() {
           <button data-tour="finance-cash-opening-save" disabled={!ob.amount} onClick={() => addOb.mutate()} className="px-3 py-1.5 rounded-lg bg-brand-600 text-white disabled:opacity-40">حفظ</button>
         </div>
         <table className="w-full text-xs">
-          <thead className="text-gray-500"><tr><th className="text-right p-1">التاريخ</th><th className="text-right p-1">الرصيد</th><th className="text-right p-1">بيان</th><th className="text-right p-1">أدخله</th></tr></thead>
-          <tbody>{(opening.data?.rows || []).map(r => (
+          <thead className="text-gray-500"><tr><SortTh {...obSort('as_of', 'date')} className="text-right p-1">التاريخ</SortTh><SortTh {...obSort('amount', 'number')} className="text-right p-1">الرصيد</SortTh><SortTh {...obSort('note')} className="text-right p-1">بيان</SortTh><SortTh {...obSort('entered_by')} className="text-right p-1">أدخله</SortTh></tr></thead>
+          <tbody>{openingRows.map(r => (
             <tr key={r.id} className="border-t"><td className="p-1">{r.as_of}</td><td className="p-1">{fmt(r.amount)}</td><td className="p-1 text-gray-500">{r.note}</td><td className="p-1 text-gray-400">{r.entered_by}</td></tr>
           ))}</tbody>
         </table>
@@ -234,8 +238,8 @@ function InputsTab() {
           <button data-tour="finance-cash-fixed-add" disabled={!nf.label || !nf.amount} onClick={() => addF.mutate()} className="px-3 py-1.5 rounded-lg bg-brand-600 text-white disabled:opacity-40">إضافة</button>
         </div>
         <table className="w-full text-xs">
-          <thead className="text-gray-500"><tr><th className="text-right p-1">البيان</th><th className="text-right p-1">الفئة</th><th className="text-right p-1">المبلغ</th><th className="text-right p-1">التكرار</th><th className="text-right p-1">فعّال</th></tr></thead>
-          <tbody>{(fixed.data?.rows || []).map(f => (
+          <thead className="text-gray-500"><tr><SortTh {...fxSort('label')} className="text-right p-1">البيان</SortTh><SortTh {...fxSort('category_label')} className="text-right p-1">الفئة</SortTh><SortTh {...fxSort('amount', 'number')} className="text-right p-1">المبلغ</SortTh><SortTh {...fxSort('frequency_label')} className="text-right p-1">التكرار</SortTh><SortTh {...fxSort('is_active', 'number')} className="text-right p-1">فعّال</SortTh></tr></thead>
+          <tbody>{fixedRows.map(f => (
             <tr key={f.id} className={`border-t ${f.is_active ? '' : 'text-gray-400'}`}>
               <td className="p-1">{f.label}</td><td className="p-1">{f.category_label}</td>
               <td className="p-1">

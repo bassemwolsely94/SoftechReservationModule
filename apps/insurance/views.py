@@ -2987,8 +2987,12 @@ class InsuranceRosterView(APIView):
         except (TypeError, ValueError):
             return Response({'error': 'اختر الجهة'}, status=status.HTTP_400_BAD_REQUEST)
         sub = request.query_params.get('subclient_id')
-        return Response(roster_for_unit(client_id, int(sub) if sub else None,
-                                        q=(request.query_params.get('q') or '').strip()))
+        try:
+            return Response(roster_for_unit(client_id, int(sub) if sub else None,
+                                            q=(request.query_params.get('q') or '').strip(),
+                                            ordering=request.query_params.get('ordering', '')))
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class InsuranceParentClientViewSet(viewsets.ModelViewSet):

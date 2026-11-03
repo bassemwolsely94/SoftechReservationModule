@@ -9,6 +9,8 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { compositionApi } from '../api/client'
+import useServerSort from '../hooks/useServerSort'
+import SortTh from '../components/SortTh'
 
 export default function IngredientSearchPage() {
   const [molecule, setMolecule] = useState('')
@@ -18,6 +20,9 @@ export default function IngredientSearchPage() {
   const [classKey, setClassKey] = useState('')
   const [source, setSource] = useState('')
   const [page, setPage] = useState(1)
+  const [ordering, setOrdering] = useState('')
+  const { headerProps } = useServerSort(ordering, o => { setOrdering(o); setPage(1) },
+    { allowed: ['item_name', 'molecule', 'strength_value', 'dosage_form', 'ingredient_class__name', 'source'] })
 
   const { data: facets } = useQuery({
     queryKey: ['ai-facets'],
@@ -36,6 +41,7 @@ export default function IngredientSearchPage() {
   if (dosageForm) params.dosage_form = dosageForm
   if (classKey) params.class_key = classKey
   if (source) params.source = source
+  if (ordering) params.ordering = ordering
   const hasQuery = molecule || dosageForm || classKey
 
   const { data: results, isFetching } = useQuery({
@@ -112,12 +118,12 @@ export default function IngredientSearchPage() {
             <table className="w-full text-sm">
               <thead className="bg-bg text-muted text-xs">
                 <tr>
-                  <th className="px-3 py-2 text-right">الصنف</th>
-                  <th className="px-3 py-2 text-right">المادة الفعّالة</th>
-                  <th className="px-3 py-2 text-right">التركيز</th>
-                  <th className="px-3 py-2 text-right">الشكل</th>
-                  <th className="px-3 py-2 text-right">التصنيف</th>
-                  <th className="px-3 py-2 text-right">المصدر</th>
+                  <SortTh {...headerProps('item_name', 'text')} className="px-3 py-2 text-right">الصنف</SortTh>
+                  <SortTh {...headerProps('molecule', 'text')} className="px-3 py-2 text-right">المادة الفعّالة</SortTh>
+                  <SortTh {...headerProps('strength_value', 'number')} className="px-3 py-2 text-right">التركيز</SortTh>
+                  <SortTh {...headerProps('dosage_form', 'text')} className="px-3 py-2 text-right">الشكل</SortTh>
+                  <SortTh {...headerProps('ingredient_class__name', 'text')} className="px-3 py-2 text-right">التصنيف</SortTh>
+                  <SortTh {...headerProps('source', 'text')} className="px-3 py-2 text-right">المصدر</SortTh>
                 </tr>
               </thead>
               <tbody>

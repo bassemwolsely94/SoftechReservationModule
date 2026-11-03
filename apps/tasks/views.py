@@ -14,11 +14,13 @@ from rest_framework.response import Response
 from apps.notifications.models import Notification
 from core import branch_scope
 from core.permissions import matrix_permission
+from core.sort_ordering import explicit_order_by, staff_name_key
+from core.sort_rank import branch_label, choice_rank, label_sort
 
 from .models import (
     OperationalTask, TaskAssignment, TaskItem,
     TaskMessage, TaskAttachment, TaskSchedule, TaskAuditLog,
-    STATUS_CHOICES, PRIORITY_CHOICES, TASK_TYPE_CHOICES, CATEGORY_CHOICES,
+    STATUS_CHOICES, PRIORITY_CHOICES, TASK_TYPE_CHOICES, CATEGORY_CHOICES, RECURRENCE_CHOICES,
 )
 from .serializers import (
     TaskListSerializer, TaskDetailSerializer, TaskWriteSerializer,
@@ -126,6 +128,13 @@ def _notify_watchers(task, message, exclude_staff=None):
 
 class TaskListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated, TASKS]
+    filter_backends = []   # filters + ordering are applied in get_queryset (the default OrderingFilter would re-sort by raw column)
+    # public ordering key -> model field / annotation (status & priority sort by lifecycle rank, not by code)
+    ORDERING_KEYS = {
+        'task_number': 'task_number', 'title': 'title', 'status': 'status_rank', 'priority': 'priority_rank',
+        'task_type': 'type_sort', 'branch': 'branch_sort', 'assigned_to': 'assignee_sort',
+        'due_date': 'due_date', 'created_at': 'created_at', 'updated_at': 'updated_at',
+    }
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -138,6 +147,11 @@ class TaskListCreateView(generics.ListCreateAPIView):
         ).annotate(
             subtask_count=Count('subtasks', distinct=True),
             item_count=Count('items', distinct=True),
+            status_rank=choice_rank('status', STATUS_CHOICES),
+            priority_rank=choice_rank('priority', PRIORITY_CHOICES),
+            type_sort=label_sort('task_type', TASK_TYPE_CHOICES),
+            branch_sort=branch_label('branch'),
+            assignee_sort=staff_name_key('assigned_to'),
         )
 
         p = self.request.query_params
@@ -188,12 +202,12 @@ class TaskListCreateView(generics.ListCreateAPIView):
         if due_to := p.get('due_to'):
             qs = qs.filter(due_date__date__lte=due_to)
 
-        # Ordering
-        ordering = p.get('ordering', '-created_at')
-        allowed = {'created_at', '-created_at', 'due_date', '-due_date',
-                   'priority', '-priority', 'updated_at', '-updated_at'}
-        if ordering in allowed:
-            qs = qs.order_by(ordering)
+        # Ordering — sortable list grid: whitelisted keys (unknown value = default), NULLs last, unique pk tiebreak
+        ordering = p.get('ordering', '')
+        if ordering.lstrip('-') in self.ORDERING_KEYS:
+            qs = qs.order_by(*explicit_order_by(ordering, self.ORDERING_KEYS, ()))
+        else:
+            qs = qs.order_by('-created_at', '-pk')
 
         return qs
 
@@ -724,9 +738,23 @@ def _schedules(request, writing=False):
 class TaskScheduleListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated, TASKS]
     serializer_class = TaskScheduleSerializer
+    filter_backends = []   # ordering is applied in get_queryset (the default OrderingFilter would re-sort by raw column)
+    # sortable grid: public key -> field / annotation (frequency sorts by its natural order)
+    ORDERING_KEYS = {
+        'name': 'name', 'frequency': 'frequency_rank', 'branch': 'branch_sort', 'assign_to': 'assignee_sort',
+        'generated_count': 'generated_sort', 'last_run_at': 'last_run_at', 'is_active': 'is_active',
+    }
 
     def get_queryset(self):
-        qs = _schedules(self.request)
+        qs = _schedules(self.request).annotate(
+            frequency_rank=choice_rank('frequency', RECURRENCE_CHOICES),
+            generated_sort=Count('generated_tasks', distinct=True),
+            branch_sort=branch_label('branch'),
+            assignee_sort=staff_name_key('assign_to'),
+        )
+        ordering = self.request.query_params.get('ordering', '')
+        if ordering.lstrip('-') in self.ORDERING_KEYS:
+            qs = qs.order_by(*explicit_order_by(ordering, self.ORDERING_KEYS, ()))
         if branch := self.request.query_params.get('branch'):
             qs = qs.filter(Q(branch_id=branch) | Q(branch__isnull=True))
         if active := self.request.query_params.get('active'):

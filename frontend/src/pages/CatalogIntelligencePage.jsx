@@ -12,6 +12,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { catalogIntelApi, recommendationsApi, enrichmentApi } from '../api/client'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import useHelpTab from '../help/useHelpTab'
+import useServerSort from '../hooks/useServerSort'
+import SortTh from '../components/SortTh'
 import { fa } from '../utils/flowArrow'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -416,6 +418,9 @@ function BundlesTab() {
 // ── FBT Pairs Tab ─────────────────────────────────────────────────────────────
 function FBTPairsTab() {
   const [filterItem, setFilterItem] = useState(null)
+  const [ordering, setOrdering] = useState('')   // server sorts the whole result (page of 50), '' = by score
+  const { headerProps } = useServerSort(ordering, setOrdering,
+    { allowed: ['item_a__name', 'item_b__name', 'co_occurrences', 'confidence', 'lift', 'score'] })
 
   const { data: runData } = useQuery({
     queryKey: ['rec-run'],
@@ -424,8 +429,8 @@ function FBTPairsTab() {
   })
 
   const { data, isLoading } = useQuery({
-    queryKey: ['fbt-pairs', filterItem?.id],
-    queryFn: () => recommendationsApi.fbtList({ item_a: filterItem?.id, limit: 50 }).then(r => r.data),
+    queryKey: ['fbt-pairs', filterItem?.id, ordering],
+    queryFn: () => recommendationsApi.fbtList({ item_a: filterItem?.id, limit: 50, ...(ordering ? { ordering } : {}) }).then(r => r.data),
   })
 
   const pairs = Array.isArray(data) ? data : (data?.results ?? [])
@@ -476,12 +481,12 @@ function FBTPairsTab() {
           <table className="w-full text-sm" dir="rtl">
             <thead className="bg-gray-50 text-xs text-gray-500">
               <tr>
-                <th className="px-4 py-2.5 text-right">الصنف A</th>
-                <th className="px-4 py-2.5 text-right">الصنف B</th>
-                <th className="px-4 py-2.5 text-center">تكرار معاً</th>
-                <th className="px-4 py-2.5 text-center">الثقة</th>
-                <th className="px-4 py-2.5 text-center">Lift</th>
-                <th className="px-4 py-2.5 text-center">النقاط</th>
+                <SortTh {...headerProps('item_a__name', 'text')} className="px-4 py-2.5 text-right">الصنف A</SortTh>
+                <SortTh {...headerProps('item_b__name', 'text')} className="px-4 py-2.5 text-right">الصنف B</SortTh>
+                <SortTh {...headerProps('co_occurrences', 'number')} className="px-4 py-2.5 text-center">تكرار معاً</SortTh>
+                <SortTh {...headerProps('confidence', 'number')} className="px-4 py-2.5 text-center">الثقة</SortTh>
+                <SortTh {...headerProps('lift', 'number')} className="px-4 py-2.5 text-center">Lift</SortTh>
+                <SortTh {...headerProps('score', 'number')} className="px-4 py-2.5 text-center">النقاط</SortTh>
               </tr>
             </thead>
             <tbody>
@@ -594,6 +599,9 @@ function EnrichmentManagementTab() {
   const [qScore, setQScore]         = useState('')  // empty | partial | complete
   const [qHasPending, setQHasPending] = useState(true)
   const [qPage, setQPage]           = useState(1)
+  const [qOrdering, setQOrdering]   = useState('')   // '' = lowest completeness first (server default)
+  const qSort = useServerSort(qOrdering, o => { setQOrdering(o); setQPage(1) },
+    { allowed: ['item__name', 'completeness_score', 'pending_count_ann', 'is_published'] })
 
   const handleQSearch = (v) => {
     setQSearch(v)
@@ -625,7 +633,7 @@ function EnrichmentManagementTab() {
   const batches = batchData?.results || batchData || []
 
   const queueParams = {
-    ordering: 'completeness_score',
+    ordering: qOrdering || 'completeness_score',
     page_size: 25,
     page: qPage,
     ...(qDebounced  && { search: qDebounced }),
@@ -941,10 +949,10 @@ function EnrichmentManagementTab() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 sticky top-0 z-10">
                 <tr className="text-right">
-                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 border-b border-gray-100">الصنف</th>
-                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 border-b border-gray-100 w-36">الاكتمال</th>
-                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 border-b border-gray-100 text-center w-20">معلّق</th>
-                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 border-b border-gray-100 text-center w-20">منشور</th>
+                  <SortTh {...qSort.headerProps('item__name', 'text')} className="px-4 py-2.5 text-xs font-semibold text-gray-500 border-b border-gray-100">الصنف</SortTh>
+                  <SortTh {...qSort.headerProps('completeness_score', 'number')} className="px-4 py-2.5 text-xs font-semibold text-gray-500 border-b border-gray-100 w-36">الاكتمال</SortTh>
+                  <SortTh {...qSort.headerProps('pending_count_ann', 'number')} className="px-4 py-2.5 text-xs font-semibold text-gray-500 border-b border-gray-100 text-center w-20">معلّق</SortTh>
+                  <SortTh {...qSort.headerProps('is_published', 'number')} className="px-4 py-2.5 text-xs font-semibold text-gray-500 border-b border-gray-100 text-center w-20">منشور</SortTh>
                   <th className="px-4 py-2.5 text-xs font-semibold text-gray-500 border-b border-gray-100 w-56 text-center">إجراءات</th>
                 </tr>
               </thead>

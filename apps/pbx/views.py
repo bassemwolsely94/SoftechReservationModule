@@ -107,7 +107,7 @@ class MyExtensionView(APIView):
         profile = getattr(request.user, 'staff_profile', None)
         ext = AgentExtension.objects.filter(staff=profile).first() if profile else None
         if ext is None:
-            return Response({'detail': 'لا توجد تحويلة مرتبطة بهذا الحساب'}, status=404)
+            return Response({'detail': 'لا يوجد رقم داخلي مرتبط بهذا الحساب'}, status=404)
         return Response(AgentExtensionSerializer(ext).data)
 
 
@@ -174,10 +174,10 @@ class ExtensionMapView(APIView):
 
         extension = str(request.data.get('extension', '')).strip()
         if not extension or len(extension) > 20:
-            return Response({'detail': 'رقم التحويلة مطلوب'}, status=400)
+            return Response({'detail': 'الرقم الداخلي مطلوب'}, status=400)
         ext_type = request.data.get('extension_type')
         if ext_type and ext_type not in dict(AgentExtension.EXTENSION_TYPE_CHOICES):
-            return Response({'detail': 'نوع تحويلة غير صحيح'}, status=400)
+            return Response({'detail': 'نوع رقم داخلي غير صحيح'}, status=400)
 
         staff = None
         staff_id = request.data.get('staff_id')
@@ -271,7 +271,7 @@ class SpyView(APIView):
         target_ext = str(request.data.get('target_ext', '')).strip()
         mode = request.data.get('mode', 'listen')
         if not target_ext:
-            return Response({'detail': 'حدد تحويلة الموظف المستهدف'}, status=400)
+            return Response({'detail': 'حدد الرقم الداخلي للموظف المستهدف'}, status=400)
         if mode not in ('listen', 'whisper'):
             return Response({'detail': 'الوضع يجب أن يكون listen أو whisper'}, status=400)
 
@@ -279,7 +279,7 @@ class SpyView(APIView):
         supervisor_ext = AgentExtension.objects.filter(staff=profile).first()
         if supervisor_ext is None:
             return Response(
-                {'detail': 'لا توجد تحويلة مرتبطة بحسابك — اربط تحويلتك أولاً من إدارة التحويلات'},
+                {'detail': 'لا يوجد رقم داخلي مرتبط بحسابك — اربط رقمك الداخلي أولاً من إدارة الأرقام الداخلية'},
                 status=400,
             )
 

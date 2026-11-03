@@ -7,6 +7,11 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { usersApi, branchesApi } from '../api/client'
 import BranchSelect from '../components/BranchSelect'
+import SortTh from '../components/SortTh'
+import useServerSort from '../hooks/useServerSort'
+
+// Server-side ordering: DRF `ordering` whitelist on /users/staff/ (the list is paged).
+const USER_SORT_KEYS = ['user__first_name', 'softech_username', 'role', 'branch__name', 'is_active']
 
 const ROLE_COLORS = {
   admin:       { bg: '#fef2f2', color: '#b91c1c' },
@@ -265,6 +270,8 @@ export default function UsersPage() {
   const qc = useQueryClient()
   const [editId, setEditId]   = useState(null)
   const [filters, setFilters] = useState({ search: '', role: '' })
+  const [ordering, setOrdering] = useState('')
+  const { headerProps } = useServerSort(ordering, setOrdering, { allowed: USER_SORT_KEYS })
 
   const { data: rolesData } = useQuery({
     queryKey: ['roles'],
@@ -273,10 +280,11 @@ export default function UsersPage() {
   })
 
   const { data, isLoading } = useQuery({
-    queryKey: ['staff-list', filters],
+    queryKey: ['staff-list', filters, ordering],
     queryFn:  () => usersApi.list({
       search: filters.search || undefined,
       role:   filters.role   || undefined,
+      ordering: ordering || undefined,
     }).then(r => r.data),
   })
 
@@ -341,11 +349,11 @@ export default function UsersPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>المستخدم</th>
-                <th>كود ERP</th>
-                <th>الدور</th>
-                <th>الفرع</th>
-                <th>الحالة</th>
+                <SortTh {...headerProps('user__first_name')}>المستخدم</SortTh>
+                <SortTh {...headerProps('softech_username')}>كود ERP</SortTh>
+                <SortTh {...headerProps('role')}>الدور</SortTh>
+                <SortTh {...headerProps('branch__name')}>الفرع</SortTh>
+                <SortTh {...headerProps('is_active')}>الحالة</SortTh>
                 <th>الصفحات المتاحة</th>
                 <th style={{ width: 80 }} />
               </tr>

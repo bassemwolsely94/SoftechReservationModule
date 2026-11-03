@@ -12,7 +12,7 @@ import { supplyApi } from '../../api/client'
 import useBranchLabels from '../../hooks/useBranchLabels'
 import useGridKeyboard, { GRID_KEYS_HINT } from '../../hooks/useGridKeyboard'
 import ProgressBar from '../../components/ProgressBar'
-import { Chip, q, money, errText, inputCls, btnPrimary, btnGhost, SortTh, useSort } from './supplyUi'
+import { Chip, q, money, errText, inputCls, btnPrimary, btnGhost, SortTh, useSort, txt } from './supplyUi'
 
 const STATUS = [['open', 'مفتوح'], ['return_requested', 'مرتجع مطلوب'], ['accepted', 'مقبول'], ['returned', 'تم الإرجاع'], ['all', 'الكل']]
 const FLAG_TONE = { overstocked: 'amber', unordered: 'rose', over: 'amber' }
@@ -46,6 +46,7 @@ export default function ReceiptCheckTab() {
   const grid = useSort(rows, {
     date: r => r.doc_date, supplier: r => r.supplier_name, item: r => r.item_name, qty: r => r.qty,
     value: r => r.value, flag: r => r.flag, age: r => r.age_days,
+    doc: txt(r => `${r.branch_code} ${r.doc_number}`), cover: r => r.sheet_cover,
   })
   const accept = (r) => {
     const reason = reasons[r.id] || data?.accept_reasons?.[0] || ''
@@ -87,12 +88,12 @@ export default function ReceiptCheckTab() {
               <tr>
                 <SortTh k="date" {...grid} className="px-2 py-2 text-right">التاريخ</SortTh>
                 <SortTh k="supplier" {...grid} className="px-2 py-2 text-right">المورد</SortTh>
-                <th className="px-2 py-2 text-right">الفرع / المستند</th>
+                <SortTh k="doc" {...grid} className="px-2 py-2 text-right">الفرع / المستند</SortTh>
                 <SortTh k="item" {...grid} className="px-2 py-2 text-right">الصنف</SortTh>
                 <SortTh k="qty" {...grid} className="px-2 py-2 text-right">الكمية</SortTh>
                 <SortTh k="value" {...grid} className="px-2 py-2 text-right">القيمة</SortTh>
                 <SortTh k="flag" {...grid} className="px-2 py-2 text-right">الملاحظة</SortTh>
-                <th className="px-2 py-2 text-right">التغطية في الشيت</th>
+                <SortTh k="cover" {...grid} className="px-2 py-2 text-right">التغطية في الشيت</SortTh>
                 <SortTh k="age" {...grid} className="px-2 py-2 text-right">منذ</SortTh>
                 <th className="px-2 py-2 text-right">القرار</th>
               </tr>

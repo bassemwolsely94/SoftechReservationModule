@@ -7,6 +7,8 @@ import { ar } from 'date-fns/locale'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 import { SkeletonCard, EmptyState, PageHeader, SectionTitle, Spinner } from '../components/ui'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 const STATUS_CFG = {
   success: { cls: 'bg-green-100 text-green-700', dot: 'bg-green-500', label: 'نجح' },
@@ -167,6 +169,9 @@ function WriterSwitchesPanel() {
     queryFn: () => syncApi.writerSwitches().then(r => r.data),
     retry: false,
   })
+  const { sorted: flags, headerProps } = useSortableRows(data?.flags || [], {
+    getValue: (f, k) => (k === 'value' ? (f.value ? 1 : 0) : k === 'effective' ? (f.effective ? 1 : 0) : f[k]),
+  })
   if (error || !data) return null
   const role = data.writer_instance
     ? { cls: 'bg-emerald-50 border-emerald-200 text-emerald-800', text: 'السيرفر ده هو اللي بيكتب في SOFTECH' }
@@ -180,11 +185,13 @@ function WriterSwitchesPanel() {
       </div>
       <table className="w-full text-sm">
         <thead className="text-xs text-gray-500"><tr>
-          <th className="text-right p-1.5">المفتاح</th><th className="text-right p-1.5">بيحمي</th>
-          <th className="p-1.5">في الإعدادات</th><th className="p-1.5">فعلياً</th>
+          <SortTh {...headerProps('flag')} className="text-right p-1.5">المفتاح</SortTh>
+          <SortTh {...headerProps('protects')} className="text-right p-1.5">بيحمي</SortTh>
+          <SortTh {...headerProps('value', 'number')} className="p-1.5">في الإعدادات</SortTh>
+          <SortTh {...headerProps('effective', 'number')} className="p-1.5">فعلياً</SortTh>
         </tr></thead>
         <tbody>
-          {data.flags.map(f => (
+          {flags.map(f => (
             <tr key={f.flag} className="border-t border-gray-100">
               <td className="p-1.5 font-mono text-[11px]" dir="ltr">{f.flag}</td>
               <td className="p-1.5 text-xs text-gray-600">{f.protects}</td>
@@ -208,23 +215,28 @@ function SlowRequestsPanel() {
     queryFn: () => syncApi.slowRequests(14).then(r => r.data),
     retry: false,
   })
+  const { sorted: endpoints, headerProps } = useSortableRows(data?.endpoints || [], {
+    getValue: (r, k) => (k === 'path' ? `${r.path} ${r.method}` : r[k]),
+  })
   if (error || !data) return null
   return (
     <div data-tour="admin-sync-slow-requests" className="bg-white rounded-2xl border border-gray-200 p-4">
       <SectionTitle icon="🐢">أبطأ الطلبات (آخر {data.days} يوم)</SectionTitle>
       <p className="text-xs text-gray-500 mb-2">
-        بيتسجّل بس أي طلب أبطأ من {data.threshold_ms} مللي ثانية. الترتيب بزمن ٩٥٪ من المرات (p95).
+        بيتسجّل بس أي طلب أبطأ من {data.threshold_ms} مللي ثانية. الترتيب بزمن ٩٥٪ من المرات (p95). الترتيب بالعناوين على أبطأ ١٠ مسارات المعروضة فقط.
       </p>
       {data.endpoints.length === 0 ? (
         <div className="text-sm text-gray-400">مفيش طلبات بطيئة متسجّلة.</div>
       ) : (
         <table className="w-full text-sm">
           <thead className="text-xs text-gray-500"><tr>
-            <th className="text-right p-1.5">المسار</th><th className="p-1.5">مرات بطيئة</th>
-            <th className="p-1.5">p95 (مللي)</th><th className="p-1.5">أقصى (مللي)</th>
+            <SortTh {...headerProps('path')} className="text-right p-1.5">المسار</SortTh>
+            <SortTh {...headerProps('count', 'number')} className="p-1.5">مرات بطيئة</SortTh>
+            <SortTh {...headerProps('p95_ms', 'number')} className="p-1.5">p95 (مللي)</SortTh>
+            <SortTh {...headerProps('max_ms', 'number')} className="p-1.5">أقصى (مللي)</SortTh>
           </tr></thead>
           <tbody>
-            {data.endpoints.map(r => (
+            {endpoints.map(r => (
               <tr key={r.method + r.path} className="border-t border-gray-100">
                 <td className="p-1.5 font-mono text-xs" dir="ltr">{r.method} /{r.path}</td>
                 <td className="p-1.5 text-center tabnum">{r.count}</td>
@@ -249,7 +261,11 @@ function SoftechLoadPanel() {
   })
   const t = data?.totals || {}
   const [, , key] = LOAD_GROUPS.find(g => g[0] === group)
-  const rows = (data?.[group] || []).slice(0, 15)
+  // sort every loaded row first, then show the top 15 (the server returns the whole group list)
+  const { sorted: sortedRows, headerProps } = useSortableRows(data?.[group] || [], {
+    getValue: (r, k) => (k === 'label' ? (group === 'by_scope' ? scopeLabel(r.scope) : r[key]) : r[k]),
+  })
+  const rows = sortedRows.slice(0, 15)
   const tile = (label, value, sub) => (
     <div className="bg-gray-50 rounded-xl px-3 py-2">
       <div className="text-xs text-gray-500">{label}</div>
@@ -291,11 +307,11 @@ function SoftechLoadPanel() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="text-gray-400 border-b border-gray-100">
-                    <th className="text-right py-1.5">{LOAD_GROUPS.find(g => g[0] === group)[1].replace('حسب ', '')}</th>
-                    <th className="text-center">اتصالات</th>
-                    <th className="text-center">استعلامات</th>
-                    <th className="text-center">صفوف</th>
-                    <th className="text-center">الزمن</th>
+                    <SortTh {...headerProps('label')} className="text-right py-1.5">{LOAD_GROUPS.find(g => g[0] === group)[1].replace('حسب ', '')}</SortTh>
+                    <SortTh {...headerProps('connects', 'number')} className="text-center">اتصالات</SortTh>
+                    <SortTh {...headerProps('queries', 'number')} className="text-center">استعلامات</SortTh>
+                    <SortTh {...headerProps('rows', 'number')} className="text-center">صفوف</SortTh>
+                    <SortTh {...headerProps('query_ms', 'number')} className="text-center">الزمن</SortTh>
                   </tr>
                 </thead>
                 <tbody>

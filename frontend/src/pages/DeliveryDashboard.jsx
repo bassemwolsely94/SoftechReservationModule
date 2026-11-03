@@ -8,6 +8,8 @@ import { deliveryApi, branchesApi } from '../api/client'
 import DeliveryBackfillModal from '../components/DeliveryBackfillModal'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
+import SortTh from '../components/SortTh'
+import useSortableRows from '../hooks/useSortableRows'
 
 const fmt     = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const _today  = () => new Date().toISOString().slice(0, 10)
@@ -112,6 +114,9 @@ function OrderItems({ orderId }) {
     staleTime: 60_000,
   })
 
+  // the whole order is loaded → sort in the browser (hook before the early returns); the footer stays last
+  const lines = useSortableRows(items)
+
   if (isLoading) return <div className="text-center py-6 text-gray-400 animate-pulse text-sm">جاري تحميل الأصناف…</div>
   if (isError)   return <div className="text-center py-6 text-red-400 text-sm">تعذر تحميل الأصناف</div>
   if (!items.length) return <div className="text-center py-6 text-gray-400 text-sm">لا توجد بيانات أصناف متاحة</div>
@@ -124,17 +129,17 @@ function OrderItems({ orderId }) {
         <table className="w-full text-xs">
           <thead className="bg-gray-50">
             <tr>
-              <th className="text-right px-3 py-2 font-semibold text-gray-600">كود</th>
-              <th className="text-right px-3 py-2 font-semibold text-gray-600">اسم الصنف</th>
-              <th className="text-center px-3 py-2 font-semibold text-gray-600">الكمية</th>
-              <th className="text-center px-3 py-2 font-semibold text-gray-600">سعر الوحدة</th>
-              <th className="text-center px-3 py-2 font-semibold text-red-500">خصم %</th>
-              <th className="text-center px-3 py-2 font-semibold text-gray-600">السعر الفعلي</th>
-              <th className="text-left px-3 py-2 font-semibold text-gray-700">الإجمالي</th>
+              <SortTh {...lines.headerProps('item_code', 'text')} className="text-right px-3 py-2 font-semibold text-gray-600">كود</SortTh>
+              <SortTh {...lines.headerProps('item_name', 'text')} className="text-right px-3 py-2 font-semibold text-gray-600">اسم الصنف</SortTh>
+              <SortTh {...lines.headerProps('quantity', 'number')} className="text-center px-3 py-2 font-semibold text-gray-600">الكمية</SortTh>
+              <SortTh {...lines.headerProps('sale_price', 'number')} className="text-center px-3 py-2 font-semibold text-gray-600">سعر الوحدة</SortTh>
+              <SortTh {...lines.headerProps('discount_pct', 'number')} className="text-center px-3 py-2 font-semibold text-red-500">خصم %</SortTh>
+              <SortTh {...lines.headerProps('trans_price', 'number')} className="text-center px-3 py-2 font-semibold text-gray-600">السعر الفعلي</SortTh>
+              <SortTh {...lines.headerProps('line_total', 'number')} className="text-left px-3 py-2 font-semibold text-gray-700">الإجمالي</SortTh>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {items.map((item, i) => (
+            {lines.sorted.map((item, i) => (
               <tr key={i} className="hover:bg-gray-50/50">
                 <td className="px-3 py-2 font-mono text-gray-500 text-[11px]">{item.item_code}</td>
                 <td className="px-3 py-2 text-gray-800 max-w-[280px]">

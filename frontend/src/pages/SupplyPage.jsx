@@ -28,7 +28,7 @@ import ReceiptCheckTab from './supply/ReceiptCheckTab'
 import { wildcardMatch } from '../utils/wildcard'
 import useBranchLabels from '../hooks/useBranchLabels'
 import useHelpTab from '../help/useHelpTab'
-import { SortTh, useSort, downloadBlob } from './supply/supplyUi'
+import { SortTh, useSort, downloadBlob, txt } from './supply/supplyUi'
 import { IsrRulePanel, IsrParamsSummary, useIsrRuleSettings } from './supply/IsrRuleControls'
 import { fa } from '../utils/flowArrow'
 
@@ -362,7 +362,7 @@ function PushDetail({ push, gated, canWrite, onApprove, onExecute, approving, ex
     () => lines.filter(l => !l.eligible && matchesText(l, search)),
     [lines, search])
   const grid = useSort(eligible, {
-    itemcode: l => l.itemcode, item_name: l => l.item_name, branch: l => `${l.branchcode}/${l.storecode}`,
+    itemcode: txt(l => l.itemcode), item_name: l => l.item_name, branch: txt(l => `${l.branchcode}/${l.storecode}`),
     old: l => Number(l.old ?? NaN), old_hq: l => Number(l.old_hq ?? NaN), new: l => Number(l.new ?? NaN),
     verified: l => (l.verified ? 2 : l.error ? 1 : 0),
   })
@@ -747,8 +747,8 @@ function IsrDetail({ push, gated, canWrite, onApprove, onPush, onCancel, approvi
     return [...r].sort(cmp)
   }, [allLines, search, supp, neededOnly, sort])
   const grid = useSort(lines, {
-    itemcode: l => l.itemcode, item_name: l => l.item_name, itemqty: l => Number(l.itemqty ?? NaN),
-    nowqty: l => Number(l.nowqty ?? NaN), suppcode: l => l.suppcode,
+    itemcode: txt(l => l.itemcode), item_name: l => l.item_name, itemqty: l => Number(l.itemqty ?? NaN),
+    nowqty: l => Number(l.nowqty ?? NaN), suppcode: txt(l => l.suppcode),
     rate: l => Number(l.rate ?? NaN), target: l => Number(l.target ?? NaN), transit: l => Number(l.transit ?? NaN),
     hq: l => Number(l.hq_stock ?? NaN), need: l => Number(l.need ?? NaN),
   })
@@ -991,7 +991,7 @@ function DistributionTab() {
   const rows = useMemo(() => (q.data?.suggestions || []).filter(s => cats.includes(s.category)
     && (!search.trim() || wildcardMatch(`${s.itemcode} ${s.item_name}`, search))), [q.data, cats, search])
   const { sorted, sort, onSort } = useSort(rows, {
-    category: s => catLabel(s.category), itemcode: s => s.itemcode, item_name: s => s.item_name,
+    category: s => catLabel(s.category), itemcode: txt(s => s.itemcode), item_name: s => s.item_name,
     sells: s => s.sells_at, age: s => s.age_days, route: s => bl(s.from_branch),
     qty: s => (s.category === 'over_piled' ? s.total_qty : s.qty_each), rate: s => s.network_avg,
     to_stock: s => Math.min(...s.to_branches.map(t => t.stock ?? Infinity)),
