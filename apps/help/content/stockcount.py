@@ -152,6 +152,17 @@ MODULE = {
             {'key': 'variance_ready', 'label': T('الفروق جاهزة', 'Variance ready'), 'desc': T('تقرير الفروق جاهز للمراجعة والتصدير للتسوية.', 'The variance report is ready to review and export for adjustment.'), 'next': ['closed']},
             {'key': 'closed', 'label': T('مغلق', 'Closed'), 'desc': T('أُغلقت نهائياً — لا تعديل بعد ذلك.', 'Closed for good — no more changes.')},
         ],
+    }, {
+        'title': T('حالات صنف الجرد اليومي', 'Daily count item statuses'),
+        'model': 'stockcount.DailyCountPick', 'field': 'status',
+        'states': [
+            {'key': 'pending', 'label': T('لم يُجرد', 'Not counted'), 'desc': T('الصنف في قائمة الموظف النهارده ولسه ما اتعدّش.', "The item is on the salesperson's list today and not counted yet."), 'next': ['counted', 'escalated', 'missed']},
+            {'key': 'counted', 'label': T('تم الجرد', 'Counted'), 'desc': T('اتعدّ. لو فيه فرق، مدير الفرع يراجعه.', 'Counted. If there is a difference, the branch manager reviews it.'), 'next': ['recount', 'accepted', 'escalated']},
+            {'key': 'recount', 'label': T('مطلوب إعادة جرد', 'Recount requested'), 'desc': T('المراجع طلب يتعدّ تاني (نفس الشخص أو زميل) من غير ما يشوف المتوقع.', 'The reviewer asked for another blind count (same person or a colleague).'), 'next': ['counted', 'escalated', 'missed']},
+            {'key': 'accepted', 'label': T('تم الاعتماد', 'Accepted'), 'desc': T('الفرق اتقبل بسبب مكتوب. أي تسوية بتتعمل يدوياً في SOFTECH.', 'The difference was accepted with a written reason. Any adjustment is done by hand in SOFTECH.'), 'next': ['recount']},
+            {'key': 'escalated', 'label': T('مُحال للمراجع', 'Escalated'), 'desc': T('فرق كبير أو متكرر، أو جرد مدير الفرع نفسه — المراجع المركزي هو اللي يقرر.', "A big or repeated difference, or the branch manager's own count — the central auditor decides."), 'next': ['recount', 'accepted']},
+            {'key': 'missed', 'label': T('لم يُنجز', 'Missed'), 'desc': T('الفرع قفل والصنف ما اتعدّش. القائمة مش بترحّل لبكره.', 'The branch closed and the item was not counted. Lists do not roll over.')},
+        ],
     }],
     'flows': [
         {
@@ -391,6 +402,13 @@ SCREENS = [
                        'بديل أسرع: الجرد المباشر من الموبايل (شاشة الجرد على /m) بالمسح.',
                        '"Download blank count sheet" (Excel/CSV) in shelf order, write the counted quantity in the yellow column, then "Upload results". Items not in the snapshot are ignored with a warning. '
                        'Faster alternative: count directly on the phone (the /m count screen) by scanning.')},
+            {'key': 'daily', 'title': T('🧮 الجرد اليومي', '🧮 Daily counts'),
+             'body': T('كل موظف مبيعات بيجرد كل يوم حوالي 20 صنف بيختارهم النظام عشوائي مع ميل للأصناف الأخطر (قيمة عالية، سريعة الحركة، تسويات حديثة، ملاحظات تدقيق، فروق سابقة، رصيد سالب، قرب انتهاء، أو ما اتجردتش من زمان). '
+                       'الموظف بيجرد من غير ما يشوف الكمية المتوقعة، والمتوقع بيتقرأ من SOFTECH لحظة الحفظ. هنا: مين خلّص قائمته، والفروق المفتوحة، ولكل فرق: إعادة جرد، اعتماد بسبب، أو إحالة للمراجع. '
+                       'الفروق الكبيرة (200 ج.م فأكتر) أو المتكررة أو جرد مدير الفرع نفسه بتروح للمراجع المركزي على طول. مفيش أي كتابة في SOFTECH.',
+                       'Every salesperson counts about 20 items a day, picked at random by the system with a lean towards the riskiest (high value, fast movers, recent adjustments, audit findings, past differences, negative balance, near expiry, or not counted for a long time). '
+                       'They count without seeing the expected quantity, which is read from SOFTECH the moment they save. Here: who finished their list, the open differences, and for each: recount, accept with a reason, or escalate to the auditor. '
+                       "Big (200 EGP or more) or repeated differences, and the branch manager's own counts, go straight to the central auditor. Nothing is written to SOFTECH.")},
             {'key': 'variance', 'title': T('📉 الفروق', '📉 Variance'),
              'body': T('لكل صنف: المتوقع، المعدود، الفارق. صفِّ (الكل / زيادة فقط / نقص فقط / مطابق) وبحد أدنى للفارق. «تصدير للتسوية» يعطي ملف أصناف الزيادة والنقص لإدخال التسوية في SOFTECH. «إغلاق الجلسة» نهائي.',
                        'Per item: expected, counted, difference. Filter (all / surplus / deficit / match) with a minimum difference. "Export for adjustment" gives the surplus and deficit file to enter the adjustment in SOFTECH. "Close session" is final.')},
@@ -477,6 +495,19 @@ SCREENS = [
              'text': T('يقفل الجلسة نهائياً بعد ما تخلص المراجعة والتسوية.', 'Closes the session for good after review and adjustment are done.'),
              'warn': T('الإغلاق نهائي — مفيش تعديل أو رفع بعده.', 'Closing is final — no edits or uploads after it.'),
              'open_hint': T('تبويب «📉 الفروق» لما الحالة «الفروق جاهزة» (بعد رفع ملف النتائج).', '"📉 Variance" tab when the status is "Variance ready" (after uploading the results file).')},
+            {'target': 'dailycount-people', 'label': T('مين خلّص جرده', 'Who finished their count'),
+             'text': T('لكل موظف: خلّص كام من قائمته النهارده، وحالته (خلّص / جزئي / لم يبدأ / لم يُنجز).',
+                       "For each salesperson: how much of today's list is done, and their state (done / partial / not started / missed)."),
+             'open_hint': T('تبويب «🧮 الجرد اليومي» — لمدير الفرع والمراجع لما الجرد اليومي يتفعّل.', '"🧮 Daily counts" tab — for branch managers and the auditor once daily counts are on.')},
+            {'target': 'dailycount-differences', 'label': T('الفروق المفتوحة', 'Open differences'),
+             'text': T('المتوقع والمعدود والفرق وقيمته، وليه الصنف اتختار. اضغط الصف: إعادة جرد، اعتماد بسبب، أو إحالة.',
+                       'Expected, counted, the difference and its value, and why the item was picked. Click the row: recount, accept with a reason, or escalate.'),
+             'when': T('كل يوم بعد ما الموظفين يجردوا. ابدأ بالأعلى قيمة.', 'Every day after the counts are in. Start with the highest value.'),
+             'open_hint': T('تبويب «🧮 الجرد اليومي».', '"🧮 Daily counts" tab.')},
+            {'target': 'dailycount-report', 'label': T('الإنجاز والفروق', 'Completion and differences'),
+             'text': T('نسبة الإنجاز والفروق وقيمتها لكل موظف في آخر 7 أو 30 يوم، وتصدير Excel.',
+                       'Completion rate, differences and their value per salesperson over the last 7 or 30 days, with an Excel export.'),
+             'open_hint': T('تبويب «🧮 الجرد اليومي».', '"🧮 Daily counts" tab.')},
             {'target': 'stockcount-sessions-status', 'label': T('كل الحالات', 'All statuses'), 'when': T('لما تحب تشوف جلسات حالة معيّنة بس.', 'When you want to see sessions of one status only.'),  # from the GitHub-side tour
              'text': T('فلتر حسب حالة الجلسة.',
                        'Filter by session status.'),
@@ -493,8 +524,8 @@ SCREENS = [
              'text': T('يفتح الجلسة على تبويباتها: 📸 اللقطة، 📊 العد، 📉 الفروق.', 'Opens the session on its tabs: 📸 Snapshot, 📊 Count, 📉 Variances.'),
              'when': T('لما تكمّل جرد شغّال أو تراجع فروقات جلسة.', 'To continue a running count or review a session\'s variances.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-03',
+        'change_note': T('تبويب جديد «🧮 الجرد اليومي»: متابعة ومراجعة الجرد اليومي الصغير', 'New "🧮 Daily counts" tab: follow up and review the small daily counts'),
     },
     {
         'key': 'stockcount.mobile',
@@ -568,5 +599,46 @@ SCREENS = [
         ],
         'updated': '2026-11-01',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+    },
+    {
+        'key': 'stockcount.daily_mobile',
+        'routes': ['/m/daily-count'],
+        'title': T('جردي اليوم', 'My count today'),
+        'summary': T('قائمتك النهارده: حوالي 20 صنف النظام اختارهم ليك. امسح الصنف بالكاميرا أو اضغطه، واكتب الموجود فعلاً (علب + شرائط). '
+                     'مش هتشوف الكمية المتوقعة — ده مقصود عشان العد يبقى حقيقي. لو المدير طلب إعادة جرد، الصنف بيظهر فوق بلون مميز.',
+                     'Your list for today: about 20 items the system picked for you. Scan the item with the camera or tap it, and type what is really there (packs + strips). '
+                     'You will not see the expected quantity — on purpose, so the count is honest. If the manager asks for a recount, the item shows at the top, highlighted.'),
+        'audience': T('موظفين المبيعات في الفروع اللي الجرد اليومي متفعّل فيها.', 'Salespeople at branches where daily counts are on.'),
+        'steps': [
+            T('افتح «جردي اليوم» من الموبايل.', 'Open "My count today" on the phone.'),
+            T('امسح الصنف أو اضغطه في القائمة.', 'Scan the item or tap it in the list.'),
+            T('عدّ كل الكمية في الفرع: الرف + المخزن + المحجوز، واكتب العلب والشرائط، ثم «حفظ».', 'Count everything in the branch: shelf + back room + reserved, type packs and strips, then "Save".'),
+        ],
+        'tips': [
+            T('القائمة بتتقفل لما الفرع يقفل — اللي ما اتعدّش بيتسجّل «لم يُنجز».', 'The list closes when the branch closes — anything not counted is marked "Missed".'),
+            T('من غير إنترنت العد بيتحفظ ويتبعت لما النت يرجع، ومش بيتحسب مرتين.', 'Offline, the count is kept and sent when the connection returns, and never counted twice.'),
+        ],
+        'related': ['stockcount.mobile', 'stockcount.sessions'],
+        'tour': [
+            {'target': 'dailycount-mobile-title', 'label': T('جردي اليوم', 'My count today'),
+             'text': T('قائمة الأصناف اللي عليك تجردها النهارده.', 'The items you are to count today.')},
+            {'target': 'dailycount-mobile-progress', 'label': T('خلّصت كام', 'How many done'),
+             'text': T('عدد الأصناف اللي جردتها من إجمالي قائمتك.', 'How many items you counted out of your list.'),
+             'open_hint': T('يظهر لما يكون عندك قائمة النهارده.', 'Shows when you have a list today.')},
+            {'target': 'dailycount-mobile-reminder', 'label': T('تذكير', 'Reminder'),
+             'text': T('عدّ كل الكمية بالفرع: الرف والمخزن والمحجوز — مش الرف بس.', 'Count all of it in the branch: shelf, back room and reserved — not just the shelf.'),
+             'open_hint': T('يظهر لما يكون عندك قائمة النهارده.', 'Shows when you have a list today.')},
+            {'target': 'dailycount-mobile-scan', 'label': T('📷 امسح الصنف', '📷 Scan the item'),
+             'text': T('الكاميرا بتفضل مفتوحة: امسح الصنف، اكتب الكمية، وبعدها على طول الصنف اللي بعده.', 'The camera stays open: scan the item, type the quantity, then straight on to the next.'),
+             'open_hint': T('يظهر لما المسح بالكاميرا يكون متفعّل.', 'Shows when camera scanning is on.')},
+            {'target': 'dailycount-mobile-list', 'label': T('القائمة', 'The list'),
+             'text': T('اضغط أي صنف عشان تجرده. ✓ يعني اتجرد.', 'Tap any item to count it. ✓ means counted.'),
+             'open_hint': T('يظهر لما يكون عندك قائمة النهارده.', 'Shows when you have a list today.')},
+            {'target': 'dailycount-mobile-entry', 'label': T('الكمية', 'Quantity'),
+             'text': T('اكتب العلب والشرائط الموجودة فعلاً (ولو صفر)، وتاريخ الصلاحية لو مطلوب، ثم «حفظ».', 'Type the packs and strips really there (even zero), and the expiry when asked, then "Save".'),
+             'open_hint': T('اختار صنف الأول.', 'Pick an item first.')},
+        ],
+        'updated': '2026-11-03',
+        'change_note': T('شاشة جديدة: الجرد اليومي الصغير على الموبايل', 'New screen: the small daily count on the phone'),
     },
 ]

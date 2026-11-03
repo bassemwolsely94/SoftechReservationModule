@@ -161,7 +161,7 @@
 | Customer profile | `/customers/:id` |
 | Vouchers | `/vouchers` |
 | Incentives | `/incentives` |
-| Stock count | `/stock-count` |
+| Stock count | `/stock-count` (tab «🧮 الجرد اليومي» = daily-count review), mobile `/m/stock-count`, `/m/daily-count` |
 | Shortage | `/shortage` |
 | Procurement | `/procurement` |
 | Analytics | `/analytics` |
