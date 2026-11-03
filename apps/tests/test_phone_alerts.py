@@ -1005,6 +1005,24 @@ class TickTests(TestCase):
         self.assertEqual(a.status, 'escalated')
         self.assertEqual(PhoneAlert.objects.filter(event='escalation').count(), 1)
 
+    def test_real_fire_internal_failure_keeps_alert_open_then_retries(self):
+        a = self._alert()
+        with mock.patch.object(dispatch, 'resolve', side_effect=RuntimeError('boom')):
+            counts = jobs.tick(now=self._min(30))
+        self.assertEqual(counts['escalated'], 0)
+        a.refresh_from_db()
+        self.assertEqual((a.status, a.escalated_at), ('sent', None))
+        self.assertEqual(jobs.tick(now=self._min(31))['escalated'], 1)
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'escalated')
+
+    def test_fire_without_flag_still_swallows_same_failure(self):
+        a = self._alert()
+        with mock.patch.object(dispatch, 'resolve', side_effect=RuntimeError('boom')):
+            self.assertEqual(dispatch.fire('escalation', a, requested=True), [])
+            with self.assertRaises(RuntimeError):
+                dispatch.fire('escalation', a, requested=True, raise_errors=True)
+
     def test_fire_returning_nothing_marks_escalated_but_not_counted(self):
         PhoneAlertPolicy.objects.filter(event='escalation').update(mode='never')
         a = self._alert()

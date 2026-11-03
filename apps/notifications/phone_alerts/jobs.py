@@ -54,7 +54,8 @@ def _process(alert_id, now):
 
         if (alert.event != 'escalation' and alert.escalation_of_id is None
                 and now - alert.created_at >= timedelta(minutes=policy.escalate_after_min)):
-            created = dispatch.fire('escalation', alert, notification=None, requested=True)
+            created = dispatch.fire('escalation', alert, notification=None, requested=True,
+                                    raise_errors=True)
             PhoneAlert.objects.filter(pk=alert.pk).update(status='escalated', escalated_at=now)
             return 'escalated' if created else 'escalated_empty'
 

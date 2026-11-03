@@ -31,13 +31,19 @@ def _wanted(policy, source, requested):
     return bool(requested)
 
 
-def fire(event_key, source, *, actor=None, notification=None, requested=None):
-    """Create (and schedule delivery of) the alerts for ``event_key`` on ``source``."""
+def fire(event_key, source, *, actor=None, notification=None, requested=None, raise_errors=False):
+    """Create (and schedule delivery of) the alerts for ``event_key`` on ``source``.
+
+    Never raises by default (workflows must not break); ``raise_errors=True`` lets the exception
+    propagate after the savepoint has rolled back, for callers (the tick) that must retry.
+    """
     try:
         with transaction.atomic():   # savepoint: a failure leaves no half-created alerts
             return _fire(event_key, source, actor, notification, requested)
     except Exception:
         logger.exception('phone alert fire(%s) failed', event_key)
+        if raise_errors:
+            raise
         return []
 
 
