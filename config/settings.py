@@ -117,7 +117,10 @@ BULK_READ_ENFORCEMENT = config('BULK_READ_ENFORCEMENT', default='off' if _RUNNIN
 BULK_READ_ROWS_PER_HOUR = config('BULK_READ_ROWS_PER_HOUR', default=3000, cast=int)
 BULK_EXPORTS_PER_HOUR = config('BULK_EXPORTS_PER_HOUR', default=30, cast=int)
 BULK_READ_BLOCK_MINUTES = config('BULK_READ_BLOCK_MINUTES', default=30, cast=int)
-BULK_READ_PATHS = ('/api/customers/',)
+# Comma-separated path prefixes; the POS sale lookups under /api/customers/ are never counted
+# (apps/access/bulk_read.POS_FLOW_SEGMENTS).
+BULK_READ_PATHS = tuple(p.strip() for p in config(
+    'BULK_READ_PATHS', default='/api/customers/,/api/pic-analytics/').split(',') if p.strip())
 # enforce on an unsafe setup (access.E003 / E004) runs as log with an ERROR line instead (N3, I5).
 # Not an .env setting: only the test suite turns it off, to exercise enforce without nginx.
 NETWORK_ENFORCE_GUARD = not _RUNNING_TESTS
@@ -964,7 +967,7 @@ MIDDLEWARE += [
 ]
 SLOW_REQUEST_MS = config('SLOW_REQUEST_MS', default=1000, cast=int)
 # N5: Excel / Word exports up to this size get the who/when/where stamp (larger: audit only)
-EXPORT_STAMP_MAX_BYTES = 50 * 1024 * 1024
+EXPORT_STAMP_MAX_BYTES = 20 * 1024 * 1024
 # P-58: capture GS1 DataMatrix pack codes on receive / sale (apps/trace). OFF until EDA
 # guideline 804/2025 is read and branches have 2D scanners. Reports nothing to EDA.
 TRACK_TRACE_ENABLED = config('TRACK_TRACE_ENABLED', default=False, cast=bool)

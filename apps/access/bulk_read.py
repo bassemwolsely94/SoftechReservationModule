@@ -2,12 +2,16 @@
 Bulk-read anomaly alert and temporary block (N5).
 
 Per user and clock hour we count the rows read from the customer endpoints (BULK_READ_PATHS) and
-the exports taken. The first crossing of a limit in an hour writes one `bulk_read_alert` AuditLog
+the exports taken. Only list bodies count (a page of `results` / `rows`, or a bare list), plus the
+plain customer detail `/api/customers/<id>/` as one row; other dict bodies (Customer-360 parts,
+stats) count nothing. The POS sale lookups (POS_FLOW_SEGMENTS) are never counted and never
+blocked: refusing customer recognition in the middle of a sale is a POS-flow change. The first crossing of a limit in an hour writes one `bulk_read_alert` AuditLog
 row and one admin digest; in `enforce` a non-admin is also blocked from those endpoints and from
 exports for BULK_READ_BLOCK_MINUTES. Counters live in the cache (a lost cache only forgets a
 count). Nothing here raises out to the caller's request.
 """
 import json
+import re
 from datetime import timedelta
 import logging
 
@@ -32,16 +36,44 @@ def mode():
     return value if value in MODES else 'log'
 
 
+DEFAULT_PATHS = ('/api/customers/', '/api/pic-analytics/')
+
+# Customer GETs the POS sale itself makes (apps/customers/views.py CustomerViewSet actions used by
+# the cashier screen, POSCustomerModal and the call pop-up): recognise-on-type, the new-customer
+# address autocomplete, the POS side-drawer summary, the repeat-order proposal and the digital
+# receipt. Last path segment; never counted, never blocked (final review I3).
+POS_FLOW_SEGMENTS = frozenset({'recognize', 'address-suggest', 'pos-summary', 'repeat-order',
+                               'receipt'})
+
+# the plain customer detail: one record (enumerating ids one by one still adds up)
+_CUSTOMER_DETAIL = re.compile(r'^/api/customers/\d+/?$')
+
+# the list keys of a dict body: DRF pagination (`results`) and the PIC Analytics lists (`rows`)
+_LIST_KEYS = ('results', 'rows')
+
+
 def paths():
-    return tuple(getattr(settings, 'BULK_READ_PATHS', ('/api/customers/',)))
+    return tuple(getattr(settings, 'BULK_READ_PATHS', DEFAULT_PATHS))
+
+
+def is_pos_flow(path):
+    """True for a POS sale lookup under /api/customers/ (POS_FLOW_SEGMENTS)."""
+    path = path or ''
+    if not path.startswith('/api/customers/'):
+        return False
+    segments = [s for s in path.split('/') if s]
+    return bool(segments) and segments[-1] in POS_FLOW_SEGMENTS
 
 
 def is_bulk_path(path):
-    return any((path or '').startswith(p) for p in paths())
+    """A counted (and, in enforce, blockable) read path: under BULK_READ_PATHS, not a POS lookup."""
+    return any((path or '').startswith(p) for p in paths()) and not is_pos_flow(path)
 
 
-def rows_in(response):
-    """len(results) of a paginated DRF body, len() of a list body, 1 for a detail dict, else 0."""
+def rows_in(response, path=None):
+    """len() of a list body (a paginated `results`, a `rows` list, a bare list); 1 for the plain
+    customer detail `/api/customers/<id>/`; 0 for any other body. Without `path` a non-list
+    dict body counts 0."""
     try:
         data = getattr(response, 'data', None)
         if data is None:
@@ -51,10 +83,10 @@ def rows_in(response):
                 return 0
             data = json.loads(response.content)
         if isinstance(data, dict):
-            results = data.get('results')
-            if isinstance(results, (list, tuple)):
-                return len(results)
-            return 1 if data else 0     # a detail body: one record (enumeration adds up)
+            for key in _LIST_KEYS:
+                if isinstance(data.get(key), (list, tuple)):
+                    return len(data[key])
+            return 1 if data and _CUSTOMER_DETAIL.match(path or '') else 0
         if isinstance(data, (list, tuple)):
             return len(data)
     except Exception:
@@ -132,9 +164,17 @@ def blocked(user):
         if until > timezone.now():
             return True
         # the user object may be stale (loaded before a clear / re-block): ask the database once
-        fresh = type(profile).objects.filter(pk=profile.pk).values_list(
+        model = type(profile)
+        fresh = model.objects.filter(pk=profile.pk).values_list(
             'bulk_read_blocked_until', flat=True).first()
-        return bool(fresh and fresh > timezone.now())
+        if fresh and fresh > timezone.now():
+            return True
+        if fresh is not None:
+            # expired: clear it (only if nobody re-blocked meanwhile) so later requests cost nothing
+            model.objects.filter(pk=profile.pk, bulk_read_blocked_until=fresh).update(
+                bulk_read_blocked_until=None)
+        profile.bulk_read_blocked_until = None
+        return False
     except Exception:
         return False
 

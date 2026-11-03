@@ -56,7 +56,9 @@ class BulkReadTests(TestCase):
     def test_rows_counted_from_paginated_and_list_bodies(self):
         self.assertEqual(bulk_read.rows_in(Response({'count': 9, 'results': [1, 2, 3]})), 3)
         self.assertEqual(bulk_read.rows_in(Response([1, 2])), 2)
-        self.assertEqual(bulk_read.rows_in(Response({'id': 3})), 1)
+        self.assertEqual(bulk_read.rows_in(Response({'id': 3}), '/api/customers/3/'), 1)
+        self.assertEqual(bulk_read.rows_in(Response({'id': 3})), 0)
+        self.assertEqual(bulk_read.rows_in(Response({'rows': [1, 2]})), 2)
         self.assertEqual(bulk_read.rows_in(Response({})), 0)
         self.assertEqual(bulk_read.rows_in(JsonResponse({'results': [1, 2, 3, 4]})), 4)
         self.assertEqual(bulk_read.rows_in(JsonResponse([1], safe=False)), 1)
@@ -182,7 +184,7 @@ class BulkReadTests(TestCase):
                 self.assertFalse(bulk_read.blocked(u))
 
     def test_detail_get_counts_one_row(self):
-        self.assertEqual(bulk_read.rows_in(JsonResponse({'id': 5, 'name': 'x'})), 1)
+        self.assertEqual(bulk_read.rows_in(JsonResponse({'id': 5, 'name': 'x'}), '/api/customers/5/'), 1)
         for _ in range(11):
             self._call(lambda req: JsonResponse({'id': 5}), path='/api/customers/5/')
         self.assertEqual(len(self._alerts()), 1)
@@ -192,3 +194,74 @@ class BulkReadTests(TestCase):
         call_command('clear_bulk_block', 'bulk_user', stdout=out)
         self.assertIn('no bulk-read block', out.getvalue())
         self.assertEqual(self._alerts(), [])
+
+
+@override_settings(BULK_READ_ENFORCEMENT='enforce', **LIMITS)
+class BulkReadScopeTests(BulkReadTests.__base__):
+    """Final review I3: what is counted, and the POS sale lookups never touched."""
+
+    setUp = BulkReadTests.setUp
+    _call = BulkReadTests._call
+    _block = BulkReadTests._block
+    _alerts = BulkReadTests._alerts
+
+    POS_PATHS = ('/api/customers/recognize/', '/api/customers/address-suggest/',
+                 '/api/customers/7/pos-summary/', '/api/customers/7/repeat-order/',
+                 '/api/customers/7/receipt/')
+
+    def test_pos_flow_gets_never_counted(self):
+        for path in self.POS_PATHS:
+            for _ in range(3):
+                r = self._call(_rows_view(6), path=path)
+                self.assertEqual(r.status_code, 200, path)
+        self.assertEqual(self._alerts(), [])
+        self.assertIsNone(cache.get(bulk_read._key(self.user, 'rows')))
+        self.assertFalse(bulk_read.blocked(self.user))
+
+    def test_pos_flow_gets_never_blocked_in_enforce(self):
+        self._block(self.profile)
+        fresh = lambda: User.objects.get(pk=self.user.pk)      # noqa: E731 (a request's own user)
+        for path in self.POS_PATHS:
+            self.assertEqual(self._call(_rows_view(1), path=path, user=fresh()).status_code, 200, path)
+        # the customer list and PIC Analytics are refused
+        self.assertEqual(self._call(_rows_view(1), user=fresh()).status_code, 403)
+        self.assertEqual(self._call(_rows_view(1), path='/api/pic-analytics/pics/',
+                                    user=fresh()).status_code, 403)
+
+    def test_detail_counts_one_row(self):
+        self._call(lambda req: JsonResponse({'id': 5, 'name': 'x'}), path='/api/customers/5/')
+        self.assertEqual(cache.get(bulk_read._key(self.user, 'rows')), 1)
+
+    def test_stats_like_dict_counts_zero(self):
+        for path in ('/api/customers/5/timeline/', '/api/customers/churn-at-risk/',
+                     '/api/pic-analytics/overview/'):
+            self._call(lambda req: JsonResponse({'total': 900, 'new': 30, 'by_branch': {'a': 1}}),
+                       path=path)
+        self.assertIsNone(cache.get(bulk_read._key(self.user, 'rows')))
+
+    def test_pic_analytics_list_counted(self):
+        self.assertTrue(bulk_read.is_bulk_path('/api/pic-analytics/pics/'))
+        self._call(lambda req: JsonResponse({'count': 40, 'rows': [{'pic': i} for i in range(6)]}),
+                   path='/api/pic-analytics/pics/')
+        self._call(_rows_view(6), path='/api/pic-analytics/numbers/')
+        self.assertEqual(len(self._alerts()), 1)
+        self.assertTrue(bulk_read.blocked(self.user))
+
+    def test_bulk_paths_env_override(self):
+        import os
+        import subprocess
+        import sys
+        from django.conf import settings as dj
+        env = dict(os.environ, BULK_READ_PATHS=' /api/a/ , /api/b/ ,')
+        code = ('import django,os;os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings");'
+                'django.setup();from django.conf import settings as s;print(repr(s.BULK_READ_PATHS))')
+        out = subprocess.run([sys.executable, '-c', code], env=env, cwd=str(dj.BASE_DIR),
+                             capture_output=True, text=True, timeout=120)
+        self.assertEqual(out.stdout.strip().splitlines()[-1], "('/api/a/', '/api/b/')", out.stderr)
+        self.assertEqual(dj.BULK_READ_PATHS, ('/api/customers/', '/api/pic-analytics/'))
+
+    def test_expired_block_is_cleared(self):
+        self._block(self.profile, minutes=-1)
+        self.assertFalse(bulk_read.blocked(User.objects.get(pk=self.user.pk)))
+        self.profile.refresh_from_db()
+        self.assertIsNone(self.profile.bulk_read_blocked_until)

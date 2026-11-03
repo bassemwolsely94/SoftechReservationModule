@@ -32,6 +32,7 @@
   - `4002` access token expired (new; the client reconnects normally);
   - `4403` refused by the zone policy (new; the client falls back to polling like 4001).
 - Re-check interval `WS_RECHECK_SECONDS = 300`.
+- Known behaviour (final review): at the default token lifetime a socket also closes with `4002` about once an hour and reconnects quietly; without `REDIS_URL` a re-check pushed from the scheduler or a `manage.py` command reaches nobody (the 5-minute loop covers it); an export recognised only by its attachment header is counted and audited but not pre-blocked.
 - Every refusal, export and alert is auditable (CLAUDE.md rule 8). New AuditLog actions:
   - `ws_zone_denied` 'اتصال مباشر — رفض حسب المنطقة';
   - `export_taken` 'تصدير ملف';
@@ -197,17 +198,17 @@ Behaviour:
 - Create:
   - `core/export_stamp.py`;
   - `apps/access/export_middleware.py`.
-- Modify: `config/settings.py` (MIDDLEWARE: put `apps.access.export_middleware.ExportAuditMiddleware` right after `ZonePolicyMiddleware`; add `EXPORT_STAMP_MAX_BYTES = 50 * 1024 * 1024`).
+- Modify: `config/settings.py` (MIDDLEWARE: put `apps.access.export_middleware.ExportAuditMiddleware` right after `ZonePolicyMiddleware`; add `EXPORT_STAMP_MAX_BYTES = 20 * 1024 * 1024`; 20 MB after the final review).
 - Test: `apps/tests/security/test_access_export_stamp.py`
 
 **Interfaces:**
 - Produces:
-  - `@dataclass(frozen=True) ExportMark: export_id: str; username: str; at: str (ISO, Africa/Cairo); device: str; zone: str; ip: str`.
+  - `@dataclass(frozen=True) ExportMark: export_id: str; username: str; at: str (ISO, Africa/Cairo); device: str (public_id only); zone: str` (final review I2: no IP, no device name in the file; both stay in the audit row).
   - `stamp_ooxml(content: bytes, mark: ExportMark) -> bytes`. It rewrites `docProps/core.xml`:
     - `dc:creator` / `cp:lastModifiedBy` = username;
     - `dc:description` = the one-line Arabic + English text `'تصدير {export_id} — {username} — {at} — {device} — {zone}'`;
     - `cp:keywords` = `export_id`.
-    It also adds or replaces `docProps/custom.xml` with properties `ElR-ExportId`, `ElR-User`, `ElR-At`, `ElR-Device`, `ElR-Zone`, `ElR-IP`, and adds the custom-properties relationship and content-type override when they are missing.
+    It also adds or replaces `docProps/custom.xml` with properties `ElR-ExportId`, `ElR-User`, `ElR-At`, `ElR-Device`, `ElR-Zone` (no `ElR-IP` after the final review), and adds the custom-properties relationship and content-type override when they are missing.
     All other zip members are copied byte for byte. A non-zip or malformed package raises `ValueError`.
   - `ExportAuditMiddleware`: a response counts as an export when either is true:
     - `policy.is_export(path, method, query)` and status 200;

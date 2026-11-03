@@ -1319,13 +1319,22 @@ N5 keeps live connections honest and watches data leaving. (1) Sockets (notifica
 PBX call pop-up) are checked at connect, every 5 minutes, and at once when an account is disabled, a
 device's status changes, or the zone policy / trusted networks change. Close codes: 4001 signed
 out / disabled / device blocked (screen falls back to polling), 4002 token expired (screen renews the
-session and reconnects), 4403 zone refusal (polling). The call pop-up works only inside the company
+session and reconnects quietly; at the default token lifetime this happens about once an hour, which is
+normal), 4403 zone refusal (polling). Without `REDIS_URL` the channel layer lives inside the web
+process, so a re-check pushed from the scheduler or a `manage.py` command reaches nobody; the
+5-minute loop still catches it. The call pop-up works only inside the company
 network (Z1/Z2). It follows `NETWORK_POLICY_ENFORCEMENT`: in `log` a `ws would-deny` line and an
 audit row `ws_zone_denied` are written and nothing is closed; in `enforce` the socket is refused.
 (2) Every export writes an audit row `export_taken` with an export id (response header
-`X-ElR-Export-Id`); .xlsx and .docx files up to 50 MB (`EXPORT_STAMP_MAX_BYTES`) also carry the id,
-user, time, device and zone in their document properties. (3) Bulk-read counters per user per hour
-(`BULK_READ_ROWS_PER_HOUR=3000`, `BULK_EXPORTS_PER_HOUR=30`) write `bulk_read_alert` and notify admins;
+`X-ElR-Export-Id`); .xlsx and .docx files up to 20 MB (`EXPORT_STAMP_MAX_BYTES`) also carry the id,
+user, time, device id (not the device name) and zone in their document properties. The IP address and
+the device name stay in the audit row only (files go to suppliers and insurers). A download recognised
+only by its `Content-Disposition: attachment` header is counted and audited, but a bulk-read block
+cannot refuse it in advance.  (3) Bulk-read counters per user per hour
+(`BULK_READ_ROWS_PER_HOUR=3000`, `BULK_EXPORTS_PER_HOUR=30`) write `bulk_read_alert` and notify admins.
+Counted: list pages under `BULK_READ_PATHS` (default `/api/customers/,/api/pic-analytics/`, comma-separated
+in `.env`) and the plain customer page `/api/customers/<id>/` as one row. The POS sale lookups
+(recognize, address-suggest, pos-summary, repeat-order, receipt) are never counted or blocked;
 under `BULK_READ_ENFORCEMENT=enforce` a non-admin is blocked from reading customers and exporting for
 `BULK_READ_BLOCK_MINUTES=30`. Admins are never blocked. Default `log`.
 
@@ -1346,7 +1355,10 @@ call pop-up are expected.
 and `ws_zone_denied`. Open one exported Excel file: File → Info → Properties shows the export id;
 the same id is in the audit row.
 
-**Step 4 - tune before enforcing.** After a week of data compare the heaviest honest users against
+**Step 4 - tune before enforcing.** First read the week's `bulk_read_alert` rows (سجل المراجعة, action
+`bulk_read_alert`) and check each one: an alert for a cashier, call-centre agent or branch manager doing
+normal work is a false positive and must be fixed (raise the limit or narrow `BULK_READ_PATHS`) before
+enforce. After a week of data compare the heaviest honest users against
 `BULK_READ_ROWS_PER_HOUR` and `BULK_EXPORTS_PER_HOUR` (set them in `.env` if the defaults raise false
 alerts), then switch the block on (owner's action; `.env` changes only after `manage.py check`
 passes, as in N3/N4). An unknown value runs as `log` and `manage.py check` warns `access.W004`.
