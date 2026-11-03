@@ -9,11 +9,12 @@
  * Call tabs (calls · missed · numbers): management only — shown when access.sees_calls_tabs, and the
  * server refuses them (403) to anyone else. The tab key equals the help tab key.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { branchesApi, picAnalyticsApi } from '../api/client'
 import DataFreshnessBar from '../components/DataFreshnessBar'
+import ProgressBar from '../components/ProgressBar'
 import useBranchLabels from '../hooks/useBranchLabels'
 import useHelpTab from '../help/useHelpTab'
 import Filters from '../components/pic-analytics/Filters'
@@ -51,6 +52,22 @@ function defaultRange() {                     // first day of the month → yest
   return { from: iso(new Date(y.getFullYear(), y.getMonth(), 1)), to: iso(y) }
 }
 
+// the running export survives a page reload (sessionStorage may be blocked: never fatal)
+const JOB_KEY = 'pic-analytics-export-job'
+const readJob = () => { try { return Number(sessionStorage.getItem(JOB_KEY)) || null } catch { return null } }
+const saveJob = id => {
+  try { if (id) sessionStorage.setItem(JOB_KEY, String(id)); else sessionStorage.removeItem(JOB_KEY) } catch { /* ignore */ }
+}
+const RUNNING = ['queued', 'running']
+
+// the server names the file (it knows the effective, clamped period)
+function fileNameOf(r, fallback) {
+  const cd = r.headers?.['content-disposition'] || ''
+  const star = cd.match(/filename\*=UTF-8''([^;]+)/i)
+  const plain = cd.match(/filename="?([^";]+)"?/i)
+  try { return (star ? decodeURIComponent(star[1]) : (plain ? plain[1] : '')) || fallback } catch { return (plain ? plain[1] : '') || fallback }
+}
+
 export default function PicAnalyticsPage() {
   const qc = useQueryClient()
   const bl = useBranchLabels()
@@ -59,8 +76,10 @@ export default function PicAnalyticsPage() {
   const [picPage, setPicPage] = useState(1)
   const [overduePage, setOverduePage] = useState(1)
   const [overdueOrdering, setOverdueOrdering] = useState('')
-  const [exporting, setExporting] = useState(false)
-  const [msg, setMsg] = useState('')
+  const [jobId, setJobId] = useState(readJob)
+  const [starting, setStarting] = useState(false)
+  const [exportErr, setExportErr] = useState('')
+  const downloaded = useRef(null)
   const urlQ = sp.get('q') || ''
   const [qText, setQText] = useState(urlQ)            // typed text; the URL param follows after a pause
 
@@ -145,20 +164,44 @@ export default function PicAnalyticsPage() {
   }, [qText]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const refresh = () => { qc.invalidateQueries({ queryKey: ['pic-analytics'] }) }
+  // Excel: the server builds the file in the background; we poll it, then download it once
+  const attachJob = id => { saveJob(id); setJobId(id) }
+  const dropJob = () => { saveJob(null); setJobId(null) }
+  const job = useQuery({
+    queryKey: ['pic-analytics-export-job', jobId],
+    queryFn: () => picAnalyticsApi.exportJob(jobId).then(r => r.data),
+    enabled: !!jobId, retry: (n, e) => n < 2 && ![403, 404].includes(e?.response?.status), gcTime: 0,  // retry rides out a deploy blip, not a gone job
+    refetchInterval: q => (!q.state.data || RUNNING.includes(q.state.data.status) ? 1500 : false),
+  })
+  const jobData = job.data
+  useEffect(() => {
+    if (!jobId) return
+    if (job.isError) {                       // gone (older than 48 h) or not ours: forget it quietly
+      dropJob()
+      if (job.error?.response?.status !== 404) setExportErr(errText(job.error, 'تعذّر متابعة التصدير'))
+      return
+    }
+    if (jobData?.status === 'failed') { dropJob(); setExportErr(jobData.error || 'تعذّر إنشاء الملف — حاول مرة أخرى'); return }
+    if (jobData?.status === 'done' && downloaded.current !== jobId) {
+      downloaded.current = jobId
+      picAnalyticsApi.exportJobFile(jobId)
+        .then(r => downloadBlob(r.data, fileNameOf(r, jobData.file_name || 'pic-analytics.xlsx')))
+        .catch(e => setExportErr(errText(e, 'تعذّر تنزيل الملف')))
+        .finally(dropJob)
+    }
+  }, [jobId, jobData, job.isError]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const exportBusy = starting || (!!jobId && (!jobData || RUNNING.includes(jobData.status) || jobData.status === 'done'))
   const doExport = async () => {
-    setExporting(true); setMsg('')
+    if (exportBusy) return
+    setStarting(true); setExportErr('')
     try {
-      const r = await picAnalyticsApi.exportXlsx(tab === 'pics' ? picParams : params)
-      // the server names the file (it knows the effective, clamped period)
-      const cd = r.headers?.['content-disposition'] || ''
-      const star = cd.match(/filename\*=UTF-8''([^;]+)/i)
-      const plain = cd.match(/filename="?([^";]+)"?/i)
-      let name = ''
-      try { name = star ? decodeURIComponent(star[1]) : (plain ? plain[1] : '') } catch { name = plain ? plain[1] : '' }
-      downloadBlob(r.data, name || 'pic-analytics.xlsx')
+      const r = await picAnalyticsApi.startExport(tab === 'pics' ? picParams : params)
+      attachJob(r.data.id)
     } catch (e) {
-      setMsg(errText(e, 'تعذّر تصدير الملف'))
-    } finally { setExporting(false) }
+      if (e?.response?.status === 409 && e.response.data?.id) attachJob(e.response.data.id)   // one already running
+      else setExportErr(errText(e, 'تعذّر تصدير الملف'))
+    } finally { setStarting(false) }
   }
 
   const error = active?.isError ? errText(active.error, 'تعذّر تحميل البيانات') : ''
@@ -186,12 +229,25 @@ export default function PicAnalyticsPage() {
             {access?.branch_manager && ' · فروعك فقط'}
           </p>
         </div>
-        <div className="flex gap-2 items-center">
-          <button onClick={refresh} className="btn-secondary text-xs py-1.5" data-tour="pic-analytics-refresh">🔄 تحديث</button>
-          {access?.can_export && (
-            <button onClick={doExport} disabled={exporting} className="btn-secondary text-xs py-1.5" data-tour="pic-analytics-export">
-              {exporting ? '… جارٍ التصدير' : '⬇ تصدير Excel'}
-            </button>
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex gap-2 items-center">
+            <button onClick={refresh} className="btn-secondary text-xs py-1.5" data-tour="pic-analytics-refresh">🔄 تحديث</button>
+            {access?.can_export && (
+              <button onClick={doExport} disabled={exportBusy} className="btn-secondary text-xs py-1.5" data-tour="pic-analytics-export">
+                {exportBusy ? '… جارٍ تجهيز الملف' : '⬇ تصدير Excel'}
+              </button>
+            )}
+          </div>
+          {jobId && (!jobData || RUNNING.includes(jobData.status)) && (
+            <ProgressBar className="w-72" pct={jobData?.progress_pct ?? null} label="تجهيز ملف Excel"
+              message={jobData?.progress_msg || 'في الانتظار…'}
+              since={jobData?.created_at ? Date.parse(jobData.created_at) : undefined} />
+          )}
+          {exportErr && (
+            <p className="text-xs text-red-700" role="alert">
+              {exportErr}{' '}
+              <button type="button" onClick={doExport} className="underline font-medium">إعادة المحاولة</button>
+            </p>
           )}
         </div>
       </div>
@@ -221,7 +277,6 @@ export default function PicAnalyticsPage() {
         ))}
       </div>
 
-      {msg && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{msg}</div>}
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>}
       {pending && <p className="text-xs text-gray-400">… جارٍ التحميل</p>}
 

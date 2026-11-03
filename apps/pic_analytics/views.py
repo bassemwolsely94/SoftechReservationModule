@@ -4,7 +4,10 @@ apps/pic_analytics/views.py — mounted at /api/pic-analytics/ (doc 33)
   GET   access/ options/ overview/ pics/ groups/<kind>/ retention/ retention/overdue/
   GET   calls/center/ calls/missed/ calls/missed/rows/ calls/unanswered/   (management only)
   GET   numbers/ numbers/conversions/ numbers/labels/   POST numbers/label/ numbers/labels/<id>/delete/ numbers/<number_id>/dial/ calls/missed/<id>/dial/
-  GET   export/                    audited .xlsx
+  GET   export/                    audited .xlsx, built in the request (DEPRECATED: the page uses export/jobs/)
+  POST  export/jobs/               start a background export -> 202 {id, status}; 409 {id} when one is running
+  GET   export/jobs/<id>/          status / progress (owner only, else 404)
+  GET   export/jobs/<id>/download/ the audited .xlsx (owner only, export permission re-checked)
   GET|POST exclusions/  GET exclusions/suggestions/  POST exclusions/<id>/remove/   PIC exclusion list (management only)
   GET|POST grants/                 named branch managers (admin only)
   POST     grants/<id>/revoke/
@@ -514,6 +517,8 @@ def number_dial(request, number_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def export(request):
+    # DEPRECATED (2026-11-03): builds the workbook inside the request, which a 12-month range cannot do
+    # within nginx's 60 s. The page now uses export/jobs/; keep this for one release, then remove it.
     from django.http import HttpResponse
 
     from .export import build_workbook, filters_dict
@@ -533,4 +538,102 @@ def export(request):
                  extra={'filters': filters_dict(f), 'rows': counts})
     resp = HttpResponse(data, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     resp['Content-Disposition'] = f'attachment; filename="{name}"'
+    return resp
+
+
+# ── Excel in the background (doc 33 §15) ─────────────────────────────────────────────────────────
+
+def _job_json(job):
+    return {'id': job.pk, 'status': job.status, 'status_label': job.get_status_display(),
+            'progress_pct': job.progress_pct, 'progress_msg': job.progress_msg, 'file_name': job.file_name,
+            'error': job.error, 'rows': job.rows, 'created_at': job.created_at,
+            'started_at': job.started_at, 'finished_at': job.finished_at}
+
+
+def _own_job(request, acc, pk):
+    """The requester's own job, or None (another user's id answers 404 like a missing one)."""
+    from . import jobs
+    from .models import PicExportJob
+    if acc.profile is None:
+        return None
+    job = PicExportJob.objects.defer('data').filter(pk=pk, requested_by=acc.profile).first()
+    return jobs.refresh_if_stale(job) if job else None
+
+
+def _not_found():
+    return Response({'detail': 'غير موجود — Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def export_jobs(request):
+    from django.db import IntegrityError
+
+    from core.threads import start_thread
+
+    from . import jobs
+    from .models import PicExportJob
+    acc = Access(request)
+    if not acc.can_view or not acc.can_export or acc.profile is None:
+        return _deny()
+    try:                                    # a bad filter is answered now, not as a failed job
+        Filters.from_request(request, acc)
+        if acc.sees_calls_tabs:
+            Filters.from_request(request, acc, live=True)
+    except ValueError as exc:
+        return _bad(str(exc))
+    try:
+        jobs.cleanup()                      # opportunistic: stale -> failed, > 48 h -> deleted
+    except Exception:                       # noqa: BLE001 — housekeeping never blocks an export
+        import logging
+        logging.getLogger(__name__).exception('pic export cleanup failed')
+    running = PicExportJob.objects.filter(requested_by=acc.profile, status__in=PicExportJob.ACTIVE).first()
+    if running is None:
+        try:
+            with transaction.atomic():
+                job = PicExportJob.objects.create(requested_by=acc.profile,
+                                                  params=jobs.params_of(request.query_params))
+        except IntegrityError:              # two clicks at once: the constraint lets one through
+            running = PicExportJob.objects.filter(requested_by=acc.profile, status__in=PicExportJob.ACTIVE).first()
+            if running is None:
+                raise
+    if running is not None:
+        return Response({'detail': 'يوجد تصدير جارٍ بالفعل', 'id': running.pk, 'status': running.status},
+                        status=status.HTTP_409_CONFLICT)
+    start_thread(jobs.run_job, args=(job.pk,), name=f'pic-export-{job.pk}')
+    return Response({'id': job.pk, 'status': job.status}, status=status.HTTP_202_ACCEPTED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def export_job(request, pk):
+    acc = Access(request)
+    job = _own_job(request, acc, pk)
+    if job is None:
+        return _not_found()
+    return Response(_job_json(job))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def export_job_download(request, pk):
+    from django.http import HttpResponse
+
+    from .models import PicExportJob
+    acc = Access(request)
+    job = _own_job(request, acc, pk)
+    if job is None:
+        return _not_found()
+    if not acc.can_view or not acc.can_export:  # access can be revoked after the job was started
+        return _deny()
+    if job.status != PicExportJob.DONE:
+        return Response({'detail': 'الملف غير جاهز', 'status': job.status}, status=status.HTTP_409_CONFLICT)
+    data = PicExportJob.objects.filter(pk=job.pk).values_list('data', flat=True).first()
+    if not data:
+        return _not_found()
+    from apps.audit.models import AuditLog
+    AuditLog.log('pic_analytics_exported', user=acc.profile, request=request, note=job.file_name,
+                 extra={'filters': job.filters, 'rows': job.rows, 'job_id': job.pk})
+    resp = HttpResponse(bytes(data), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resp['Content-Disposition'] = f'attachment; filename="{job.file_name}"'
     return resp

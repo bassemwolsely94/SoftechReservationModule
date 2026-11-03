@@ -2906,7 +2906,10 @@ export const picAnalyticsApi = {
   groups:     (kind, params = {}) => api.get(`/pic-analytics/groups/${kind}/`, { params }),
   retention:  (params = {})     => api.get('/pic-analytics/retention/', { params }),
   overdue:    (params = {})     => api.get('/pic-analytics/retention/overdue/', { params }),
-  exportXlsx: (params = {})     => api.get('/pic-analytics/export/', { params, responseType: 'blob' }),
+  // background export (a 12-month file outlives nginx's 60 s): start → poll → download
+  startExport: (params = {})    => api.post('/pic-analytics/export/jobs/', null, { params }),
+  exportJob:   (id)             => api.get(`/pic-analytics/export/jobs/${id}/`),
+  exportJobFile: (id)           => api.get(`/pic-analytics/export/jobs/${id}/download/`, { responseType: 'blob' }),
   callCenter: (params = {})     => api.get('/pic-analytics/calls/center/', { params }),
   missed:     (params = {})     => api.get('/pic-analytics/calls/missed/', { params }),
   missedRows: (params = {})     => api.get('/pic-analytics/calls/missed/rows/', { params }),
