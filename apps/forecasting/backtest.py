@@ -22,6 +22,11 @@ data available at the forecast date (point-in-time seasonality index):
     b          — no seasonality (what the engine projects with)
     b_season   — blend × S[target]  (Model B when reference seasonality is applied)
     b_deseason — (w_lm·LM/S[LM] + w_pm·PM/S[PM])·S[target] + w_yoy·base·(1+bench)
+and the same at BRANCH level (errors summed over branches — the grain targets are set at):
+    br_b       — no seasonality
+    br_chain   — deseasonalised with the chain index
+    br_branch  — deseasonalised with the branch's own index blended toward the chain
+                 by its history (references.branch_weight)
 """
 from decimal import Decimal
 from math import sqrt
@@ -195,7 +200,45 @@ class BacktestService:
                     if n and act:
                         res[var][str(h)] = {'wape': round(100 * err / act, 2), 'n': n}
             out[metric] = res
+            if metric != 'call_count':
+                res.update(cls._branch_level(metric, s, w_lm, w_pm, w_yoy, b, window))
         return out
+
+    BRANCH_VARIANTS = ('br_b', 'br_chain', 'br_branch')
+
+    @classmethod
+    def _branch_level(cls, metric, chain, w_lm, w_pm, w_yoy, bench, window):
+        from apps.forecasting import references as R
+        series = {c: R._complete(bs) for c, bs in R._branch_series(metric).items()}
+        res = {v: {} for v in cls.BRANCH_VARIANTS}
+        for h in cls.HORIZONS:
+            acc = {v: [0.0, 0.0, 0] for v in cls.BRANCH_VARIANTS}
+            chain_idx = {}
+            for code, s in series.items():
+                for (y, m) in sorted(s):
+                    if window is not None and (y, m) not in window:
+                        continue
+                    if _shift_month(y, m, -12) not in s:
+                        continue
+                    origin = _shift_month(y, m, -h)
+                    if origin not in chain_idx:
+                        chain_idx[origin] = R._seasonality({k: v for k, v in chain.items() if k <= origin})
+                    own_hist = {k: v for k, v in s.items() if k <= origin}
+                    w = R.branch_weight(len(own_hist))
+                    own = R._seasonality(own_hist) if w else {}
+                    idx = {'br_b': None, 'br_chain': chain_idx[origin],
+                           'br_branch': R.blend_branch_index(own, chain_idx[origin], w)}
+                    for var, S in idx.items():
+                        fc = cls._recursive(s, origin, (y, m), 'b' if S is None else 'b_deseason',
+                                            S or {mo: 1.0 for mo in range(1, 13)}, w_lm, w_pm, w_yoy, bench)
+                        if fc is None:
+                            continue
+                        a = acc[var]
+                        a[0] += abs(fc - s[(y, m)]); a[1] += s[(y, m)]; a[2] += 1
+            for var, (err, act, n) in acc.items():
+                if n and act:
+                    res[var][str(h)] = {'wape': round(100 * err / act, 2), 'n': n}
+        return res
 
     @staticmethod
     def _recursive(s, origin, target, var, S, w_lm, w_pm, w_yoy, bench):

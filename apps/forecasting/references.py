@@ -3,6 +3,10 @@ Forecast reference values  (doc 16, Phase 8)
 ============================================
 Grounded, refreshable engine inputs instead of hardcoded guesses:
   • seasonality   — per metric × month, CALCULATED from KpiActualRollup history
+                    (ratio to a centred 12-month moving average, so growth is not read
+                    as seasonality); per BRANCH too — a branch's own index weighted by its
+                    history (full at 36 months), the chain index filling the rest, so a new
+                    branch starts from the chain pattern until it has data of its own
   • benchmark     — per-metric YoY anchor for Model B, grounded in historical YoY
                     (clamped to [FLOOR, CAP] so credit's +108% / customers' −18% are sane)
   • growth_goal   — the growth PLAN (Model A): (1+inflation)·(1+real_growth) for money
@@ -51,6 +55,46 @@ def _series(metric):
     return _cc_series(metric) if metric == 'call_count' else _chain_series(metric)
 
 
+def _branch_series(metric):
+    """{branch code: {(y, m): value}} for operational retail branches (closed branches
+    are not analytics branches, so they never shape the pattern). Zero months — before a
+    branch opened — are dropped."""
+    from apps.forecasting.models import KpiActualRollup as K
+    from apps.forecasting.kpi import analytics_branches
+    code = {b.id: (b.code or b.softech_branch_id) for b in analytics_branches()}
+    out = defaultdict(dict)
+    for r in K.objects.filter(branch_id__in=list(code), metric=metric).values('branch_id', 'year', 'month', 'value'):
+        if r['value']:
+            out[code[r['branch_id']]][(r['year'], r['month'])] = float(r['value'])
+    return out
+
+
+BRANCH_FULL_MONTHS = 36     # own index at full weight from 3 years of a branch's history
+BRANCH_MIN_MONTHS = 13      # below one 13-month window the branch uses the chain index
+
+
+def branch_weight(n_months):
+    if n_months < BRANCH_MIN_MONTHS:
+        return 0.0
+    return round(min(n_months / BRANCH_FULL_MONTHS, 1.0), 4)
+
+
+def blend_branch_index(own, chain, w):
+    """w × own + (1−w) × chain per calendar month."""
+    return {mo: round(w * own.get(mo, 1.0) + (1 - w) * chain.get(mo, 1.0), 4) for mo in range(1, 13)}
+
+
+def _branch_seasonality(metric, chain_idx):
+    out = {}
+    for code, s in _branch_series(metric).items():
+        s = _complete(s)
+        w = branch_weight(len(s))
+        own = _seasonality(s) if w else {}
+        out[code] = {'months': len(s), 'weight': w,
+                     'index': {str(mo): v for mo, v in blend_branch_index(own, chain_idx, w).items()}}
+    return out
+
+
 def _complete(s):
     """Exclude the current, still-partial month."""
     today = date.today()
@@ -59,18 +103,24 @@ def _complete(s):
 
 
 def _seasonality(s):
-    """Index per calendar month (1.00 = average), each year normalised to its own mean."""
-    years = defaultdict(dict)
-    for (y, mo), v in s.items():
-        years[y][mo] = v
+    """Index per calendar month (1.00 = average). Ratio of each month to its centred
+    12-month moving average (classical decomposition — the trend is divided out, so a
+    growing metric does not show a fake "December high / January low"); averaged per
+    calendar month and normalised to mean 1. A month never covered by a full 13-month
+    window stays neutral (1.0) — mixing in the year-mean ratio back-tested worse.
+    Back-tested 2026-11-03: credit 1-month-ahead WAPE 20.6% → 13.4% vs year-mean."""
+    from apps.forecasting.engine import _shift_month
     ratios = defaultdict(list)
-    for y, md in years.items():
-        if len(md) >= 6:
-            ya = mean(md.values())
-            if ya:
-                for mo, v in md.items():
-                    ratios[mo].append(v / ya)
-    return {mo: (round(mean(ratios[mo]), 4) if ratios[mo] else 1.0) for mo in range(1, 13)}
+    for (y, mo), v in s.items():
+        win = [_shift_month(y, mo, k) for k in range(-6, 7)]
+        if not all(w in s for w in win):
+            continue
+        cma = (0.5 * s[win[0]] + sum(s[w] for w in win[1:-1]) + 0.5 * s[win[-1]]) / 12
+        if cma:
+            ratios[mo].append(v / cma)
+    idx = {mo: (mean(ratios[mo]) if ratios[mo] else 1.0) for mo in range(1, 13)}
+    k = mean(idx.values()) or 1.0
+    return {mo: round(v / k, 4) for mo, v in idx.items()}
 
 
 def _recent_yoy(s):
@@ -100,6 +150,7 @@ def compute(real_growth=0.15, inflation_annual=None, inflation_source='', store=
 
     metrics = CORE_METRICS + ['call_count']
     seasonality, benchmark, growth_goal, hist_yoy = {}, {}, {}, {}
+    branch_seasonality = {}
     history = {}
     for m in metrics:
         s = _complete(_series(m))
@@ -109,7 +160,10 @@ def compute(real_growth=0.15, inflation_annual=None, inflation_source='', store=
             ks = sorted(s)
             history = {'from': f'{ks[0][0]}-{ks[0][1]:02d}', 'to': f'{ks[-1][0]}-{ks[-1][1]:02d}',
                        'months': len(ks)}
-        seasonality[m] = {str(mo): v for mo, v in _seasonality(s).items()}
+        chain_idx = _seasonality(s)
+        seasonality[m] = {str(mo): v for mo, v in chain_idx.items()}
+        if m != 'call_count':
+            branch_seasonality[m] = _branch_seasonality(m, chain_idx)
         yoy = round(_recent_yoy(s), 4)
         hist_yoy[m] = yoy
         benchmark[m] = round(min(max(yoy, BENCH_FLOOR), BENCH_CAP), 4)           # grounded + clamped
@@ -125,6 +179,7 @@ def compute(real_growth=0.15, inflation_annual=None, inflation_source='', store=
         'bench_floor': BENCH_FLOOR, 'bench_cap': BENCH_CAP,
         'historical_yoy': hist_yoy, 'benchmark': benchmark,
         'growth_goal': growth_goal, 'seasonality': seasonality, 'history': history,
+        'branch_seasonality': branch_seasonality,
     }
     if store:
         import json
@@ -171,7 +226,9 @@ def apply_to_scenario(scenario):
     refs = get()
     if not refs:
         raise ValueError('لا توجد قيم مرجعية محسوبة بعد — شغّل compute_forecast_references')
+    from apps.forecasting.engine import seasonality_mode
     ForecastEngine.ensure_factors(scenario)
+    seasonal_engine = seasonality_mode() != 'none'
     mo = str(scenario.month)
     applied = 0
     for f in scenario.factors.all():
@@ -181,7 +238,11 @@ def apply_to_scenario(scenario):
         if f.metric in refs.get('benchmark', {}):
             f.benchmark = Decimal(str(refs['benchmark'][f.metric])); changed = True
         seas = refs.get('seasonality', {}).get(f.metric, {})
-        if mo in seas:
+        if seasonal_engine:
+            # the engine applies (branch/chain) seasonality itself — a factor index on
+            # top would count the season twice
+            f.seasonality_index = Decimal('1'); changed = True
+        elif mo in seas:
             f.seasonality_index = Decimal(str(seas[mo])); changed = True
         if changed:
             f.save(); applied += 1

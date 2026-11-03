@@ -95,9 +95,29 @@ def current_ym():
     return t.year, t.month
 
 
-def project_blend(lm, pm, base, *, w_lm, w_pm, w_yoy, bench):
-    """Seasonality-free Model B blend used to project a not-yet-happened signal month."""
-    return w_lm * lm + w_pm * pm + w_yoy * base * (Decimal('1') + bench)
+def project_blend(lm, pm, base, *, w_lm, w_pm, w_yoy, bench, season=None, month=None):
+    """Model B blend for a month. season=None → seasonality-free (the default mode);
+    with a {calendar month: index} the recent months are deseasonalised and the target
+    month's index re-applied: (w_lm·LM/S[m-1] + w_pm·PM/S[m-2])·S[m] + w_yoy·base·(1+bench)
+    (the same-month-last-year term already carries the target month's season)."""
+    yoy = w_yoy * base * (Decimal('1') + bench)
+    if not season:
+        return w_lm * lm + w_pm * pm + yoy
+    s_t = season[month]
+    s_l = season[(month - 2) % 12 + 1]
+    s_p = season[(month - 3) % 12 + 1]
+    return (w_lm * lm / s_l + w_pm * pm / s_p) * s_t + yoy
+
+
+SEASONALITY_MODES = ('none', 'chain', 'branch')
+
+
+def seasonality_mode():
+    """SystemSetting 'forecast_seasonality_mode': none (default) | chain | branch. Switched
+    only when BacktestRun.horizon_accuracy shows the seasonal variant beating 'none'."""
+    from apps.config.models import SystemSetting
+    v = str(SystemSetting.get('forecast_seasonality_mode', 'none') or 'none').strip().lower()
+    return v if v in SEASONALITY_MODES else 'none'
 
 
 class ForecastEngine:
@@ -127,6 +147,9 @@ class ForecastEngine:
         self._cache = {}   # (branch_id, year, month, metric) -> Decimal
         self._proj = {}    # (member key, year, month, metric) -> projected Decimal
         self._lcd = {}     # (year, month) -> latest complete date (MTD projection)
+        self._season = {}  # (member key, metric) -> {month: Decimal} | None
+        self._mode = seasonality_mode()
+        self._refs = None
 
     # ── shared model math (used by generate + backtest) ────────────────────────
     @staticmethod
@@ -268,8 +291,29 @@ class ForecastEngine:
             lm, _ = self._signal(member, *_shift_month(year, month, -1), metric, pf)
             pm, _ = self._signal(member, *_shift_month(year, month, -2), metric, pf)
             base, _ = self._signal(member, *_shift_month(year, month, -12), metric, pf)
-            self._proj[key] = project_blend(lm, pm, base, **pf)
+            self._proj[key] = project_blend(lm, pm, base, **pf,
+                                            season=self._season_index(member, metric), month=month)
         return self._proj[key]
+
+    def _season_index(self, member, metric):
+        """{calendar month: Decimal} for this member × metric in the active mode, or None.
+        branch mode: the branch's own index (already blended toward the chain by its
+        history); others (call center, salespeople, categories) use the chain index."""
+        if self._mode == 'none':
+            return None
+        k = (member['key'], metric)
+        if k not in self._season:
+            if self._refs is None:
+                from apps.forecasting import references as R
+                self._refs = R.get() or {}
+            idx = None
+            if self._mode == 'branch' and member.get('branch') is not None:
+                idx = (self._refs.get('branch_seasonality', {}).get(metric, {})
+                       .get(str(member['key']), {}).get('index'))
+            idx = idx or self._refs.get('seasonality', {}).get(metric)
+            self._season[k] = ({int(mo): Decimal(str(v)) for mo, v in idx.items()}
+                               if idx and len(idx) == 12 and all(float(v) > 0 for v in idx.values()) else None)
+        return self._season[k]
 
     def _latest_complete_date(self, year, month):
         if (year, month) not in self._lcd:
@@ -359,6 +403,12 @@ class ForecastEngine:
                     base, lmv, pmv,
                     growth=f.growth_goal, w_lm=f.w_lm, w_pm=f.w_pm, w_yoy=f.w_yoy,
                     seasonality=f.seasonality_index, bench=fbench, infl=infl, promo=promo)
+                season = self._season_index(mem, metric)
+                if season:
+                    # seasonal mode: deseasonalised blend; the factor's index stays an
+                    # owner multiplier on top (apply-references sets it to 1 in this mode)
+                    model_b = (project_blend(lmv, pmv, base, **pf, season=season, month=m)
+                               * f.seasonality_index * (Decimal('1') + infl + promo))
 
                 forecast = self._pick(scenario.model, model_a, model_b)
                 raw_target = (forecast / thr) if thr else forecast
