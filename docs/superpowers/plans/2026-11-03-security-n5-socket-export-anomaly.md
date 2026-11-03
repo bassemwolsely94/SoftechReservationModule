@@ -119,7 +119,7 @@
   - `apps/notifications/middleware.py` (keep the token's `exp` and `dev` in the scope);
   - `apps/notifications/consumers.py` (NotificationConsumer, ChatterConsumer);
   - `apps/pbx/consumers.py` (AgentCallConsumer);
-  - `apps/audit/models.py` and a new migration `apps/audit/migrations/0023_n5_actions.py` (all three N5 actions);
+  - `apps/audit/models.py` and a new migration `apps/audit/migrations/0030_n5_actions.py` (all three N5 actions);
   - `frontend/src/hooks/useNotificationSocket.js`, `frontend/src/hooks/useChatterSocket.js`, and the PBX agent socket hook if one exists (find it with `grep -rn "ws/pbx" frontend/src`).
 - Test: `apps/tests/security/test_access_ws_consumers.py` (WebsocketCommunicator, same style as `test_auth_websocket.py`)
 

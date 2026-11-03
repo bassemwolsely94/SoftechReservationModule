@@ -1329,7 +1329,7 @@ user, time, device and zone in their document properties. (3) Bulk-read counters
 under `BULK_READ_ENFORCEMENT=enforce` a non-admin is blocked from reading customers and exporting for
 `BULK_READ_BLOCK_MINUTES=30`. Admins are never blocked. Default `log`.
 
-**Step 1 - release the code with `release.sh`** (it runs migrate: `audit 0023`, `users 0041`).
+**Step 1 - release the code with `release.sh`** (it runs migrate: `audit 0030`, `users 0042`).
 ```bash
 sudo /opt/elrezeiky/release.sh
 ```
