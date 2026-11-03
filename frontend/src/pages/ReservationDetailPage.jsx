@@ -14,6 +14,8 @@ import VoiceNoteRecorder from '../components/VoiceNoteRecorder'
 import CanDo from '../components/CanDo'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import CancelReasonPicker, { cancelNote, EMPTY_CANCEL } from '../components/CancelReasonPicker'
+import SortTh from '../components/SortTh'
+import useSortableRows from '../hooks/useSortableRows'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -813,6 +815,9 @@ function ReservationERPMatchPanel({ r, onRefresh }) {
   const [cooldown, setCooldown]  = useState(0)
   const cooldownRef              = useRef(null)
   const matchStatus = r.erp_match_status
+  const receiptLines = r.erp_receipt_lines  || []
+  // the SOFTECH receipt lines are all loaded → sort in the browser
+  const receipt = useSortableRows(receiptLines, { getValue: (l, k) => (k === 'name' ? l.itemname : l[k]) })
 
   useEffect(() => () => { if (cooldownRef.current) clearInterval(cooldownRef.current) }, [])
 
@@ -824,7 +829,6 @@ function ReservationERPMatchPanel({ r, onRefresh }) {
 
   const cfg          = RES_ERP_CFG[matchStatus] || RES_ERP_CFG.pending
   const matchedItems = r.erp_matched_items  || []
-  const receiptLines = r.erp_receipt_lines  || []
   const customer     = r.erp_customer_info  || null
   const hasDocs      = matchStatus && matchStatus !== 'not_found'
 
@@ -1031,14 +1035,14 @@ function ReservationERPMatchPanel({ r, onRefresh }) {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="text-right px-3 py-2 font-semibold text-gray-500">الصنف</th>
-                      <th className="text-center px-2 py-2 font-semibold text-gray-500 whitespace-nowrap">الكمية</th>
-                      <th className="text-center px-2 py-2 font-semibold text-gray-500 whitespace-nowrap">الإجمالي</th>
-                      <th className="text-center px-2 py-2 font-semibold text-gray-500">المخزن</th>
+                      <SortTh {...receipt.headerProps('name', 'text')} className="text-right px-3 py-2 font-semibold text-gray-500">الصنف</SortTh>
+                      <SortTh {...receipt.headerProps('qty', 'number')} className="text-center px-2 py-2 font-semibold text-gray-500 whitespace-nowrap">الكمية</SortTh>
+                      <SortTh {...receipt.headerProps('price', 'number')} className="text-center px-2 py-2 font-semibold text-gray-500 whitespace-nowrap">الإجمالي</SortTh>
+                      <SortTh {...receipt.headerProps('storecode', 'text')} className="text-center px-2 py-2 font-semibold text-gray-500">المخزن</SortTh>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {receiptLines.map((line, i) => {
+                    {receipt.sorted.map((line, i) => {
                       // Highlight the reservation's item
                       const isReservationItem = matchedItems.some(m => m.itemcode === line.itemcode)
                       return (
