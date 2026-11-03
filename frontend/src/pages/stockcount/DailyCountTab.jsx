@@ -166,6 +166,36 @@ function Report() {
   )
 }
 
+// «توزيع الآن» — management hands out today's lists for one pilot branch on demand (normally the
+// hourly job does it after 07:00). The server is idempotent: people who already have a list keep it.
+function DistributeNow({ branches, onDone }) {
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg]   = useState('')
+  async function go() {
+    setBusy(true); setMsg('')
+    try {
+      const r = await dailyCountApi.generate({ branch_code: code })
+      setMsg(r.data.created ? `تم توزيع ${r.data.created} صنف على موظفي الفرع.` : 'كل موظفي الفرع عندهم قوائم النهارده بالفعل.')
+      onDone()
+    } catch (e) {
+      setMsg(e.response?.data?.detail || 'تعذّر التوزيع')
+    } finally { setBusy(false) }
+  }
+  return (
+    <div data-tour="dailycount-distribute" className="flex items-center gap-2 flex-wrap">
+      <select className="input-field" value={code} onChange={e => { setCode(e.target.value); setMsg('') }}>
+        <option value="">اختر فرعاً...</option>
+        {branches.map(b => <option key={b.code} value={b.code}>{b.name}</option>)}
+      </select>
+      <button type="button" className="btn-primary" disabled={!code || busy} onClick={go}>
+        {busy ? 'جارٍ التوزيع...' : '📋 توزيع قوائم اليوم الآن'}
+      </button>
+      {msg && <span className="text-xs text-gray-600">{msg}</span>}
+    </div>
+  )
+}
+
 export default function DailyCountTab() {
   const qc = useQueryClient()
   const [date, setDate] = useState(todayCairo())
@@ -199,6 +229,9 @@ export default function DailyCountTab() {
           <input type="date" className="input-field" value={date} onChange={e => setDate(e.target.value)} />
         </label>
         <span className="text-xs text-gray-400">الموظف بيجرد من غير ما يشوف الكمية المتوقعة. أي تسوية بتتعمل يدوياً في SOFTECH.</span>
+        {(q.data?.pilot_branches || []).length > 0 && (
+          <div className="ms-auto"><DistributeNow branches={q.data.pilot_branches} onDone={refresh} /></div>
+        )}
       </div>
 
       <section data-tour="dailycount-people" className="bg-white rounded-xl border border-gray-200 p-4">
