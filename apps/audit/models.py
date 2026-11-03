@@ -152,6 +152,7 @@ class AuditLog(models.Model):
         ('phone_alert_owner_changed',    'تنبيهات الموبايل — تعديل مسؤول عمل'),
         ('phone_alert_mobile_changed',   'تنبيهات الموبايل — تعديل موبايل الفرع'),
         ('phone_alert_channel_changed',  'تنبيهات الموبايل — تغيير حساب واتساب'),
+        ('user_alerts_only_changed',    'مستخدم — تغيير «تنبيهات فقط»'),
         ('phone_alert_test_sent',        'تنبيهات الموبايل — تنبيه تجريبي'),
 
         # Return-window calendar (P-29)

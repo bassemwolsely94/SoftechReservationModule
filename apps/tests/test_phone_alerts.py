@@ -1566,3 +1566,93 @@ class AlertsOnlyStaffTests(TestCase):
         req = RequestFactory().post('/', HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(devices.enroll(req, u.staff_profile), (None, None, False))
         self.assertFalse(Device.objects.filter(owner=u.staff_profile).exists())
+
+
+# ── Task 7 fix round 1 ───────────────────────────────────────────────────────
+
+class AdminApiFixTests(TestCase):
+    BASE = '/api/notifications/phone-alerts/'
+
+    @classmethod
+    def setUpTestData(cls):
+        from .factories import make_admin, make_pharmacist
+        cls.branch = Branch.objects.create(softech_branch_id='972', name='Fix Br')
+        _, cls.admin, cls.admin_client = make_admin('pa7f_admin')
+        _, cls.pharm, cls.pharm_client = make_pharmacist('pa7f_pharm', branch=cls.branch)
+
+    def test_log_bad_filters_return_400(self):
+        for q in ('staff=abc', 'branch=x1', 'date=not-a-date', 'date=2026-13-45'):
+            r = self.admin_client.get(self.BASE + 'log/?' + q)
+            self.assertEqual(r.status_code, 400, q)
+            self.assertTrue(r.data, q)
+
+    def test_non_admin_forbidden_on_remaining_writes(self):
+        a = PhoneAlert.objects.create(event='task_status', phone='201012345678')
+        self.assertEqual(self.pharm_client.post(self.BASE + 'owners/', {
+            'kind': 'reservation_sourcing', 'staff': self.pharm.pk}, format='json').status_code, 403)
+        self.assertEqual(self.pharm_client.put(self.BASE + 'channel/', {'channel_account_id': None},
+                                               format='json').status_code, 403)
+        self.assertEqual(self.pharm_client.get(f'{self.BASE}log/{a.pk}/').status_code, 403)
+        self.assertEqual(WorkOwner.objects.count(), 0)
+
+
+class AlertsOnlyGuardTests(TestCase):
+    URL = '/api/users/staff/'
+
+    @classmethod
+    def setUpTestData(cls):
+        from .factories import make_admin, make_pharmacist
+        cls.branch = Branch.objects.create(softech_branch_id='982', name='Guard Br')
+        _, cls.admin, cls.admin_client = make_admin('pa7g_admin')
+        _, cls.admin2, cls.admin2_client = make_admin('pa7g_admin2')
+        _, cls.pharm, _ = make_pharmacist('pa7g_pharm', branch=cls.branch)
+
+    def _audit(self):
+        from apps.audit.models import AuditLog
+        return AuditLog.objects.filter(action='user_alerts_only_changed')
+
+    def test_alerts_only_change_is_audited(self):
+        r = self.admin_client.patch(f'{self.URL}{self.pharm.pk}/',
+                                    {'alerts_only': True, 'phone': '01022223333'}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        a = self._audit().get()
+        self.assertEqual(a.user_id, self.admin.pk)
+        self.assertEqual(a.object_id, str(self.pharm.pk))
+        self.assertEqual(a.old_data, {'alerts_only': False, 'user_is_active': True})
+        self.assertEqual(a.new_data, {'alerts_only': True, 'user_is_active': False})
+        # an unrelated edit writes nothing more
+        self.admin_client.patch(f'{self.URL}{self.pharm.pk}/', {'phone': '01022224444'}, format='json')
+        self.assertEqual(self._audit().count(), 1)
+        # turning it off is audited too
+        r = self.admin_client.patch(f'{self.URL}{self.pharm.pk}/', {'alerts_only': False}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(self._audit().count(), 2)
+
+    def test_create_alerts_only_is_audited(self):
+        r = self.admin_client.post(self.URL, {'username': 'pa7g_new', 'alerts_only': True,
+                                              'phone': '01012345678'}, format='json')
+        self.assertEqual(r.status_code, 201, r.data)
+        a = self._audit().get()
+        self.assertEqual(a.new_data['alerts_only'], True)
+
+    def test_cannot_make_self_alerts_only(self):
+        r = self.admin_client.patch(f'{self.URL}{self.admin.pk}/',
+                                    {'alerts_only': True, 'phone': '01011112222'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('alerts_only', r.data)
+        self.admin.refresh_from_db()
+        self.assertFalse(self.admin.alerts_only)
+        self.assertTrue(self.admin.user.is_active)
+        self.assertFalse(self._audit().exists())
+
+    def test_cannot_make_last_active_admin_alerts_only(self):
+        from apps.users.serializers import StaffProfileUpdateSerializer
+        # admin2 is another active admin: allowed for the other one
+        r = self.admin_client.patch(f'{self.URL}{self.admin2.pk}/',
+                                    {'alerts_only': True, 'phone': '01011112222'}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        # now self.admin is the last active admin: refused even without a request context
+        ser = StaffProfileUpdateSerializer(self.admin, data={'alerts_only': True, 'phone': '01011113333'},
+                                           partial=True)
+        self.assertFalse(ser.is_valid())
+        self.assertIn('alerts_only', ser.errors)

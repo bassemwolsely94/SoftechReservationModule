@@ -126,6 +126,8 @@ class StaffProfileUpdateSerializer(serializers.ModelSerializer):
         if alerts_only:
             phone = _alert_phone(attrs.get('phone', getattr(self.instance, 'phone', '')))
             attrs['phone'] = phone
+            if self.instance is not None and not self.instance.alerts_only:
+                self._refuse_lockout()
         # the per-user "outside the network" flags exist for the admin role only (N3)
         role = attrs.get('role', getattr(self.instance, 'role', None))
         if role != 'admin':
@@ -139,7 +141,21 @@ class StaffProfileUpdateSerializer(serializers.ModelSerializer):
                         attrs[f] = False
         return attrs
 
+    def _refuse_lockout(self):
+        inst = self.instance
+        req = self.context.get('request')
+        me = getattr(getattr(req, 'user', None), 'staff_profile', None)
+        if me is not None and me.pk == inst.pk:
+            raise serializers.ValidationError({'alerts_only': 'لا يمكنك تحويل حسابك أنت إلى «تنبيهات فقط»'})
+        if inst.role == 'admin':
+            others = StaffProfile.objects.filter(role='admin', is_active=True, alerts_only=False,
+                                                 user__is_active=True).exclude(pk=inst.pk)
+            if not others.exists():
+                raise serializers.ValidationError(
+                    {'alerts_only': 'هذا آخر مدير نشط — لا يمكن تحويله إلى «تنبيهات فقط»'})
+
     def update(self, instance, validated_data):
+        before_alerts = _alerts_state(instance)
         # Pop nested user fields
         user_data = validated_data.pop('user', {})
         if user_data:
@@ -160,6 +176,11 @@ class StaffProfileUpdateSerializer(serializers.ModelSerializer):
         instance.save()
         if instance.alerts_only:
             _lock_alerts_only_user(instance.user)
+        after_alerts = _alerts_state(instance)
+        if before_alerts != after_alerts:
+            req = self.context.get('request')
+            _audit_alerts_only(instance, before_alerts, after_alerts,
+                               getattr(getattr(req, 'user', None), 'staff_profile', None))
 
         if allowed is not None:
             instance.allowed_branches.set(allowed)
@@ -259,9 +280,13 @@ class UserCreateSerializer(serializers.Serializer):
             last_name=validated_data.get('last_name', ''),
             email=validated_data.get('email', ''))
         _lock_alerts_only_user(user)
-        return StaffProfile.objects.create(
+        profile = StaffProfile.objects.create(
             user=user, role=validated_data.get('role', 'salesperson'),
             branch=validated_data.get('branch'), phone=validated_data['phone'], alerts_only=True)
+        req = self.context.get('request')
+        _audit_alerts_only(profile, None, _alerts_state(profile),
+                           getattr(getattr(req, 'user', None), 'staff_profile', None))
+        return profile
 
 
 class UserActivityLogSerializer(serializers.ModelSerializer):
@@ -299,6 +324,16 @@ def _alert_phone(raw):
     if not is_plausible_phone(phone):
         raise serializers.ValidationError({'phone': BAD_PHONE if phone else 'الموبايل مطلوب للموظف الذي يستقبل التنبيهات فقط'})
     return phone
+
+
+def _alerts_state(profile):
+    return {'alerts_only': profile.alerts_only, 'user_is_active': profile.user.is_active}
+
+
+def _audit_alerts_only(profile, before, after, actor):
+    from apps.audit.models import AuditLog
+    AuditLog.log('user_alerts_only_changed', user=actor, obj=profile, old_data=before,
+                 new_data=after, note=profile.user.username)
 
 
 def _lock_alerts_only_user(user):

@@ -262,19 +262,36 @@ def log(request):
     from apps.branches.models import BranchSettings
     qs = PhoneAlert.objects.select_related('recipient_staff__user').prefetch_related('source')
     p = request.query_params
+    ints = {}
+    for key in ('staff', 'branch'):
+        if p.get(key):
+            try:
+                ints[key] = int(p[key])
+            except ValueError:
+                return Response({key: 'قيمة الفلتر غير صحيحة'}, status=http.HTTP_400_BAD_REQUEST)
+    day = None
+    if p.get('date'):
+        from django.utils.dateparse import parse_date
+        try:
+            day = parse_date(p['date'])
+        except ValueError:
+            day = None
+        if day is None:
+            return Response({'date': 'التاريخ غير صحيح — اكتبه بالشكل 2026-11-03'},
+                            status=http.HTTP_400_BAD_REQUEST)
     if p.get('status'):
         qs = qs.filter(status=p['status'])
     if p.get('event'):
         qs = qs.filter(event=p['event'])
-    if p.get('staff'):
-        qs = qs.filter(recipient_staff_id=p['staff'])
-    if p.get('branch'):
+    if 'staff' in ints:
+        qs = qs.filter(recipient_staff_id=ints['staff'])
+    if 'branch' in ints:
         # a branch's alerts: its staff, plus whatever went to the branch's shared mobile
-        mobiles = list(BranchSettings.objects.filter(branch_id=p['branch'])
+        mobiles = list(BranchSettings.objects.filter(branch_id=ints['branch'])
                        .exclude(alert_mobile='').values_list('alert_mobile', flat=True))
-        qs = qs.filter(Q(recipient_staff__branch_id=p['branch']) | Q(phone__in=mobiles))
-    if p.get('date'):
-        qs = qs.filter(created_at__date=p['date'])
+        qs = qs.filter(Q(recipient_staff__branch_id=ints['branch']) | Q(phone__in=mobiles))
+    if day is not None:
+        qs = qs.filter(created_at__date=day)
     paginator = LogPagination()
     page = paginator.paginate_queryset(qs, request)
     data = AlertLogSerializer(page, many=True, context={'mask_phone': not _is_admin(request)}).data
