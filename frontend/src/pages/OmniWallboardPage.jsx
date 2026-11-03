@@ -208,7 +208,7 @@ export default function OmniWallboardPage() {
           </h2>
           {agents.length === 0 ? (
             <p className="text-center text-gray-400 py-8 text-sm">
-              لا توجد تحويلات من نوع عامل — شغّل sync_pbx_extensions
+              لا توجد أرقام داخلية من نوع عامل — شغّل sync_pbx_extensions
             </p>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-3">

@@ -79,7 +79,7 @@ GROUP_COLS = [
     ('basket_net', 'صافي السلة'), ('units_per_visit', 'وحدات لكل زيارة'), ('lines_per_visit', 'بنود لكل زيارة'),
 ]
 CENTER_COLS = [
-    ('agent_ext', 'التحويلة'), ('staff_name', 'الموظف'), ('pbx_name', 'اسم السنترال'), ('calls_in', 'واردة'),
+    ('agent_ext', 'الداخلي'), ('staff_name', 'الموظف'), ('pbx_name', 'اسم السنترال'), ('calls_in', 'واردة'),
     ('calls_out', 'صادرة'), ('answered', 'مجابة'), ('talk_seconds', 'مدة الحديث (ث)'),
     ('pics_reached', 'عملاء تم الوصول لهم'), ('call_to_purchase_pct', 'مكالمة ثم شراء %'),
     ('call_to_purchase_same_day_pct', 'مكالمة ثم شراء نفس اليوم %'), ('new_pics_sold', 'عملاء جدد باعهم'),
@@ -101,7 +101,7 @@ OVERDUE_COLS = [
     ('cycle_days', 'دورة الشراء (يوم)'), ('days_overdue', 'أيام التأخر'), ('lifetime_net', 'صافي المبيعات الكلي'),
 ]
 UNANSWERED_COLS = [
-    ('agent_ext', 'التحويلة'), ('staff_name', 'الموظف'), ('pbx_name', 'اسم السنترال'), ('attempts', 'المحاولات'),
+    ('agent_ext', 'الداخلي'), ('staff_name', 'الموظف'), ('pbx_name', 'اسم السنترال'), ('attempts', 'المحاولات'),
     ('unanswered', 'بلا رد'), ('reached_numbers', 'أرقام تم الوصول لها'), ('not_reached', 'لم يتم الوصول'),
     ('avg_attempts_to_reach', 'متوسط المحاولات'),
 ]
@@ -210,7 +210,7 @@ def build_workbook(f, access, exported_by='', calls_f=None):
         ('القناة', CHANNEL_LABELS.get(f.channel_bucket, f.channel_bucket) or 'الكل'),
         ('الصنف', f.category or 'الكل'), ('الشريحة', f.segment or 'الكل'),
         ('نوع العميل', f.customer_type or 'الكل'), ('فئة التكرار', f.frequency or 'الكل'),
-        ('تحويلة الموظف', f.agent_ext or 'الكل'), ('بحث (ورقة العملاء فقط)', _q_shown(f.q) or 'بدون'),
+        ('الرقم الداخلي للموظف', f.agent_ext or 'الكل'), ('بحث (ورقة العملاء فقط)', _q_shown(f.q) or 'بدون'),
         ('بيانات متاحة من', f.data_from.isoformat()), ('بيانات متاحة حتى', f.data_to.isoformat()),
         ('الفترة قُصّت على نطاق البيانات', 'نعم' if f.clamped else 'لا'),
         ('تاريخ التصدير', timezone.localtime().strftime('%Y-%m-%d %H:%M')), ('المصدّر', exported_by),

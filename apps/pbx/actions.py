@@ -141,7 +141,7 @@ def dial_for(profile, destination, caller_id_name='', request=None) -> dict:
         raise DialError('رقم هاتف غير صحيح', 400)
     ext = AgentExtension.objects.filter(staff=profile).first() if profile else None
     if ext is None:
-        raise DialError('لا توجد تحويلة مرتبطة بحسابك — اربطها من إدارة التحويلات', 400)
+        raise DialError('لا يوجد رقم داخلي مرتبط بحسابك — اربطه من إدارة الأرقام الداخلية', 400)
     name = caller_id_name or (profile.full_name if profile else 'ElRezeiky')
     try:
         originate_call(ext.extension, clean, name)

@@ -73,9 +73,9 @@ export default function ExtensionsPanel() {
     <section className="card space-y-3">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-sm font-semibold text-gray-600 dark:text-gray-300">التحويلات والهواتف</h2>
+          <h2 className="text-sm font-semibold text-gray-600 dark:text-gray-300">الأرقام الداخلية والهواتف</h2>
           <p className="text-xs text-gray-400 mt-0.5">
-            حالة تسجيل كل تحويلة في السنترال لحظياً ({data?.tech || '—'}) وربطها بالموظفين. القراءة فقط من Issabel — الربط يُحفظ عندنا.
+            حالة تسجيل كل رقم داخلي في السنترال لحظياً ({data?.tech || '—'}) وربطها بالموظفين. القراءة فقط من Issabel — الربط يُحفظ عندنا.
           </p>
         </div>
         <button onClick={() => refetch()} disabled={isFetching} className="btn-secondary text-xs px-3 py-1">
@@ -96,7 +96,7 @@ export default function ExtensionsPanel() {
             ['all', `الكل ${data.summary.total}`],
             ['problems', `مشاكل ${data.rows.filter(r => r.problem).length}`],
             ['offline', `غير متصل ${data.summary.offline}`],
-            ['unmapped', `غير مرتبطة ${data.summary.unmapped}`],
+            ['unmapped', `غير مرتبط ${data.summary.unmapped}`],
           ].map(([k, l]) => (
             <button key={k} onClick={() => setFilter(k)}
               className={`px-3 py-1 rounded-full border ${filter === k
@@ -117,7 +117,7 @@ export default function ExtensionsPanel() {
               <span className="flex-1 min-w-0 truncate">
                 {r.mapping?.staff_name
                   ? <>{r.mapping.staff_name} <span className="text-xs text-gray-400">· {r.mapping.type_label}{r.mapping.branch ? ` · ${r.mapping.branch}` : ''}</span></>
-                  : <span className="text-gray-400">{r.mapping ? `${r.mapping.type_label} — بدون موظف` : 'غير مرتبطة'}</span>}
+                  : <span className="text-gray-400">{r.mapping ? `${r.mapping.type_label} — بدون موظف` : 'غير مرتبط'}</span>}
                 {r.mapping?.pbx_name && !r.mapping?.staff_id && (
                   <span className="text-xs text-amber-700 dark:text-amber-400"> · في السنترال: <span dir="ltr">{r.mapping.pbx_name}</span></span>
                 )}
@@ -132,7 +132,7 @@ export default function ExtensionsPanel() {
             {editing === r.extension && <MapEditor row={r} onDone={() => setEditing(null)} />}
           </div>
         ))}
-        {data && rows.length === 0 && <div className="text-xs text-gray-400 py-4 text-center">لا توجد تحويلات</div>}
+        {data && rows.length === 0 && <div className="text-xs text-gray-400 py-4 text-center">لا توجد أرقام داخلية</div>}
       </div>
     </section>
   )

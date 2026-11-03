@@ -357,7 +357,7 @@ class ExportTests(ApiBase):
         wb = self.wb(self.get(self.admin_c))
         heads = sheet_headers(wb)
         self.assertEqual(heads['متأخرون عن الشراء'][0], 'PIC')
-        self.assertEqual(heads['صادرة لم يُرد عليها'][0], 'التحويلة')
+        self.assertEqual(heads['صادرة لم يُرد عليها'][0], 'الداخلي')
         pic_heads = heads['العملاء']
         rows = list(wb['العملاء'].iter_rows(min_row=2, values_only=True))
         for col in ('الأصناف', 'القنوات', 'دورة الشراء (ج)', 'الشريحة'):
