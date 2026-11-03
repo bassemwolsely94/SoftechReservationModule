@@ -173,7 +173,9 @@ export default function MissedTab({ params, ready }) {
                       <div className="flex gap-1.5 flex-wrap">
                         <button className="btn-secondary text-xs py-1" disabled={dial.isPending && dial.variables === r.call_id}
                                 onClick={() => dial.mutate(r.call_id)}>📞 اتصل</button>
-                        <button className="btn-secondary text-xs py-1" onClick={() => setCb(cb === r.call_id ? null : r.call_id)}>🔔 جدولة معاودة</button>
+                        {r.callback_pending
+                          ? <span className="text-xs text-amber-700 py-1">🔔 معاودة مجدولة {fmtDateTime(r.callback_pending.due)}</span>
+                          : <button className="btn-secondary text-xs py-1" onClick={() => setCb(cb === r.call_id ? null : r.call_id)}>🔔 جدولة معاودة</button>}
                       </div>
                       {cb === r.call_id && (
                         <div className="mt-2 flex gap-1.5 flex-wrap items-center">

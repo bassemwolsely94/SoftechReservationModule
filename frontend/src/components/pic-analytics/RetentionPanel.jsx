@@ -109,7 +109,7 @@ export default function RetentionPanel({ data, overdue, overduePage, onOverduePa
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-tour="pic-analytics-retention-kpis">
         <KpiCard label="الاحتفاظ بالعملاء" value={fmtPct(data?.retention?.retention_pct)} tone="blue"
                  sub={data?.retention?.prev_period ? `مقابل ${data.retention.prev_period[0]} → ${data.retention.prev_period[1]}` : undefined} />
-        <KpiCard label="عملاء مخلصون" value={fmt(fr?.loyal)} tone="green" sub="اشتروا 10 شهور أو أكثر من 12" />
+        <KpiCard label="عملاء مخلصون" value={fmt(fr?.loyal)} tone="green" sub={`اشتروا ${fr?.loyal_months ?? 10} شهور أو أكثر من 12`} />
         <KpiCard label="متأخرون عن دورتهم" value={fmt(fr?.overdue)} tone="red" />
       </div>
       <div className="grid md:grid-cols-3 gap-4">

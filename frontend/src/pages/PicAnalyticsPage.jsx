@@ -65,7 +65,7 @@ export default function PicAnalyticsPage() {
     ...Object.fromEntries(FILTER_KEYS.slice(2).map(k => [k, sp.get(k) || ''])),
   }
 
-  const { data: access } = useQuery({
+  const { data: access, error: accessError } = useQuery({
     queryKey: ['pic-analytics', 'access'],
     queryFn: () => picAnalyticsApi.access().then(r => r.data),
     staleTime: 5 * 60_000,
@@ -143,6 +143,18 @@ export default function PicAnalyticsPage() {
   const error = active?.isError ? errText(active.error, 'تعذّر تحميل البيانات') : ''
   const pending = ready && active?.isLoading
 
+  const noAccess = (access && !access.can_view) || accessError?.response?.status === 403
+  if (noAccess) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto" dir="rtl">
+        <p className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-6 text-center text-sm text-gray-600">
+          ليس لديك صلاحية على هذه الشاشة
+        </p>
+      </div>
+    )
+  }
+  const period = active?.data?.period || options?.period
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-4" dir="rtl">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -167,6 +179,13 @@ export default function PicAnalyticsPage() {
 
       <Filters values={shown} onChange={setParam} onClear={clear} branches={branches} access={access} options={options} />
 
+      {period?.data_to && (
+        <p className="text-xs text-gray-500 -mt-2" data-tour="pic-analytics-data-to">
+          البيانات حتى {String(period.data_to).slice(0, 10)}
+          {period.clamped && ' · تم ضبط الفترة على البيانات المتاحة'}
+        </p>
+      )}
+
       <div className="flex gap-1 border-b border-gray-200 overflow-x-auto" data-tour="pic-analytics-tabs">
         {tabs.map(t => (
           <button key={t.key} onClick={() => setParam('tab', t.key === 'overview' ? '' : t.key)}
@@ -180,7 +199,7 @@ export default function PicAnalyticsPage() {
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>}
       {pending && <p className="text-xs text-gray-400">… جارٍ التحميل</p>}
 
-      {tab === 'overview' && <KpiCards data={overview.data} />}
+      {tab === 'overview' && <KpiCards data={overview.data} management={!!access?.management} />}
       {tab === 'pics' && (
         <PicTable data={pics.data} order={order} onOrder={o => { setOrder(o); setPicPage(1) }}
                   page={picPage} onPage={setPicPage} branchName={branchName} />

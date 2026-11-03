@@ -47,7 +47,7 @@ export function BarRow({ label, value, max, sub, color = 'bg-brand-500' }) {
   )
 }
 
-export default function KpiCards({ data }) {
+export default function KpiCards({ data, management = false }) {
   if (!data) return null
   const hasGp = 'gp' in data
   const hasCalls = 'calls_in' in data
@@ -65,7 +65,7 @@ export default function KpiCards({ data }) {
         <KpiCard label="جدد" value={fmt(data.new)} tone="green" />
         <KpiCard label="عائدون" value={fmt(data.returning)} tone="blue" sub={`منهم مُعاد تنشيطهم ${fmt(data.reactivated)}`} />
         <KpiCard label="زيارات" value={fmt(data.visits)} sub={`فواتير ${fmt(data.invoices)}`} />
-        <KpiCard label="صافي المبيعات" value={fmt(data.net)} tone="green" sub={`بدون PIC: ${fmt(data.no_pic_net)}`} />
+        <KpiCard label="صافي المبيعات" value={fmt(data.net)} tone="green" sub={data.no_pic_net != null ? `بدون PIC: ${fmt(data.no_pic_net)}` : undefined} />
         {hasGp && <KpiCard label="إجمالي الربح" value={fmt(data.gp)} tone="amber" sub={`هامش ${fmtPct(data.gp_pct)}`} />}
         <KpiCard label="متوسط السلة (صافي)" value={fmt(data.basket_net, 2)} sub={`أصناف ${fmt(data.basket_units, 1)} · فئات ${fmt(data.basket_categories, 1)}`} />
         <KpiCard label="زيارات لكل عميل" value={fmt(data.visits_per_pic, 2)} />
@@ -80,7 +80,7 @@ export default function KpiCards({ data }) {
             <KpiCard label="مكالمات صادرة" value={fmt(data.calls_out)} tone="gray" />
             <KpiCard label="فائتة لم يُردّ عليها" value={fmt(data.missed_not_returned)} tone="red" />
           </div>
-          <p className="text-xs text-gray-400 mt-1">كل مكالمات العملاء</p>
+          <p className="text-xs text-gray-400 mt-1">{management ? 'كل مكالمات العملاء' : 'مكالمات عملاء فرعك'}</p>
         </div>
       )}
 
