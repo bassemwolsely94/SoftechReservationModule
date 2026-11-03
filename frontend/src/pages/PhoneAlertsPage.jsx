@@ -394,8 +394,7 @@ const EXTRA_EVENTS = [['escalation', 'تصعيد تنبيه لم يُستلم'],
   ['expiry_worklist', 'قائمة الصلاحيات'], ['test', 'تنبيه تجريبي']]
 
 const cursorOf = url => { try { return new URL(url).searchParams.get('cursor') } catch { return null } }
-const toLatinDigits = s => (s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s)
-const fmt = iso => (iso ? toLatinDigits(new Date(iso).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' })) : '—')
+const fmt = iso => (iso ? new Date(iso).toLocaleString('ar-EG-u-nu-latn', { dateStyle: 'short', timeStyle: 'short' }) : '—')
 
 function LogDetail({ id }) {
   const { data } = useQuery({
