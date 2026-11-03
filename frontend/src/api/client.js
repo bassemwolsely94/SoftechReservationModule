@@ -148,6 +148,13 @@ export const reservationsApi = {
   createForce:  (data) => api.post('/reservations/?force=true', data),
 }
 
+// Project 3 — «مبيعات فائتة»: suggestions only; confirm = POST /reservations/ with missed_sale
+export const missedSalesApi = {
+  list:   (params)               => api.get('/pos-orders/missed-sales/', { params }),
+  get:    (id)                   => api.get(`/pos-orders/missed-sales/${id}/`),
+  reject: (id, reason, note = '') => api.post(`/pos-orders/missed-sales/${id}/reject/`, { reason, note }),
+}
+
 // ── Customers ─────────────────────────────────────────────────────────────────
 
 export const customersApi = {
@@ -1770,8 +1777,8 @@ export const callCenterApi = {
     }),
 
   // Pending callbacks — mode='overdue'|'all'
-  pendingCallbacks: (mode = 'overdue') =>
-    api.get('/callcenter/calls/pending-callbacks/', { params: { mode } }),
+  pendingCallbacks: (mode = 'overdue', auto = false) =>
+    api.get('/callcenter/calls/pending-callbacks/', { params: { mode, ...(auto ? { auto: 1 } : {}) } }),
   markCallbackDone: (id) => api.patch(`/callcenter/calls/${id}/`, { status: 'answered' }),
 
   // Dashboard KPIs

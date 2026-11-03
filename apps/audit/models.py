@@ -128,6 +128,11 @@ class AuditLog(models.Model):
         ('pic_analytics_callback_scheduled', 'تحليلات العملاء — جدولة معاودة اتصال'),
         ('pic_analytics_pic_excluded',    'تحليلات العملاء — استبعاد عميل من التحليل'),
         ('pic_analytics_pic_included',    'تحليلات العملاء — إرجاع عميل للتحليل'),
+        # Project 3 — missed sales / missed calls
+        ('missed_sale_confirmed',            'مبيعات فائتة — تأكيد كحجز'),
+        ('missed_sale_rejected',             'مبيعات فائتة — رفض'),
+        ('missed_call_callback_created',     'مكالمة فائتة — معاودة اتصال تلقائية'),
+        ('missed_call_callback_auto_closed', 'مكالمة فائتة — إغلاق تلقائي بعد الرد'),
 
         # Personal dashboard live person search (N0/H1)
         ('personal_person_search',       'لوحة شخصية — بحث عن شخص في SOFTECH'),

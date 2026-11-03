@@ -115,6 +115,7 @@ export const NAV_GROUPS = [
       { to: '/pos',           icon: '🧾', label: 'نقطة البيع',        roles: ['admin','call_center','pharmacist','salesperson','supervisor'] },
       { to: '/pos/exceptions', icon: '🛠️', label: 'مركز الاستثناءات', roles: ['admin','supervisor','pharmacist'] },
       { to: '/reservations',  icon: '📋', label: 'الحجوزات',         roles: ['admin','call_center','pharmacist','salesperson','supervisor','viewer','quality_manager'] },
+      { to: '/missed-sales',  icon: '🛒', label: 'مبيعات فائتة',     roles: ['admin','call_center','pharmacist','salesperson','supervisor','quality_manager'] },
       { to: '/transfers',     icon: '🔀', label: 'طلبات التحويل',    roles: ['admin','call_center','pharmacist','salesperson','purchasing','supervisor','viewer','quality_manager'] },
       { to: '/transits',      icon: '🚛', label: 'التحويلات قيد النقل', roles: ['admin','call_center','pharmacist','salesperson','purchasing','supervisor','viewer','quality_manager'] },
       { to: '/demand',        icon: '🔍', label: 'الطلب الضائع',     roles: ['admin','call_center','pharmacist','salesperson','supervisor','viewer','quality_manager'] },
