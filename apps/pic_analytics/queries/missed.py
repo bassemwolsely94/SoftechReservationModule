@@ -6,7 +6,7 @@ in the queue has no agent). Returned = calls.returned_map (answered call, either
 number, within pic_call_return_hours). Management only. All times are Cairo-local.
 Heatmap weekday: 0 = Saturday ... 6 = Friday (the Egyptian week).
 """
-from collections import Counter
+from collections import Counter, defaultdict
 from decimal import Decimal
 from statistics import median
 
@@ -32,11 +32,30 @@ def _require(access):
 
 def _missed(f):
     return list(calls_qs(f, use_agent=False).filter(direction='inbound').exclude(status='answered')
-                .order_by('call_at'))
+                .select_related('customer').order_by('call_at'))
 
 
 def _minutes(call, returned_at):
     return round((returned_at - call.call_at).total_seconds() / 60, 1)
+
+
+def _pending_callbacks(calls) -> dict:
+    """{call id: {'due': iso}} for missed calls whose number already has a scheduled call-back
+    (CallLog status='callback' on that number, due at/after the missed call)."""
+    from apps.callcenter.models import CallLog
+    numbers = {c.customer_number for c in calls if c.customer_number}
+    if not numbers:
+        return {}
+    logs = defaultdict(list)
+    for num, due in (CallLog.objects.filter(status='callback', phone_number__in=numbers, callback_due__isnull=False)
+                     .values_list('phone_number', 'callback_due')):
+        logs[num].append(due)
+    out = {}
+    for c in calls:
+        dues = [d for d in logs.get(c.customer_number, ()) if d >= c.call_at]
+        if dues:
+            out[c.id] = {'due': timezone.localtime(min(dues)).isoformat()}
+    return out
 
 
 def missed_summary(f, access) -> dict:
@@ -63,11 +82,14 @@ def missed_rows(f, access, only_not_returned, page, page_size=50) -> dict:
     """Missed calls joined to their PIC, biggest lifetime net first, newest call first."""
     _require(access)
     page = _int_param(page, 'الصفحة', 1)
-    page_size = _int_param(page_size, 'حجم الصفحة', 1, MAX_PAGE_SIZE)
+    # page_size=None = everything (internal, Excel export only; the HTTP layer always passes a capped int)
+    page_size = None if page_size is None else _int_param(page_size, 'حجم الصفحة', 1, MAX_PAGE_SIZE)
     calls = _missed(f)
     rm = returned_map(calls)
     if only_not_returned:
-        calls = [c for c in calls if rm[c.id] is None]
+        # the action list: a row leaves as soon as ANY answered call on its number follows it (no 24 h cut-off)
+        followed = returned_map(calls, any_time=True)
+        calls = [c for c in calls if followed[c.id] is None]
 
     pics = {c.pic for c in calls if c.pic}
     life = {r['pic']: r['s'] or Decimal('0') for r in PicDayFact.objects.filter(pic__in=pics, day__lte=f.end)
@@ -77,14 +99,15 @@ def missed_rows(f, access, only_not_returned, page, page_size=50) -> dict:
     calls.sort(key=lambda c: c.call_at, reverse=True)
     calls.sort(key=lambda c: (0, 0) if c.pic not in life else (1, life[c.pic]), reverse=True)
 
-    chunk = calls[(page - 1) * page_size: page * page_size]
+    chunk = calls if page_size is None else calls[(page - 1) * page_size: page * page_size]
     cpics = {c.pic for c in chunk if c.pic}
     customers = {}
     for cu in Customer.objects.filter(softech_pic__in=cpics).order_by('-pk'):
         customers[cu.softech_pic] = cu              # lowest pk wins (iterated last)
     days = _purchase_days(cpics)
     window = int(setting('pic_call_purchase_days'))
-    user = getattr(access.profile, 'user', None)
+    can_see = cust_access.phones_checker(getattr(access.profile, 'user', None))
+    pending = _pending_callbacks(chunk)
     rows = []
     for c in chunk:
         cust = c.customer if c.customer_id else customers.get(c.pic)
@@ -98,8 +121,9 @@ def missed_rows(f, access, only_not_returned, page, page_size=50) -> dict:
             'bought_within_7d': bool(c.pic) and _followed_by_purchase(c.pic, _day(c.call_at), days, window),
             'returned_at': rm[c.id].astimezone(timezone.get_current_timezone()).isoformat() if rm[c.id] else None,
             'minutes_to_return': _minutes(c, rm[c.id]) if rm[c.id] else None,
+            'callback_pending': pending.get(c.id),
         }
-        visible = bool(cust and user is not None and cust_access.phones_visible(user, cust))
+        visible = bool(cust and can_see(cust))
         cust_access.mask_fields(row, ['customer_number'], visible)
         rows.append(row)
     return {'count': len(calls), 'rows': rows}

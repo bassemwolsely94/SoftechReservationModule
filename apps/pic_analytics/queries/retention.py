@@ -29,8 +29,12 @@ MAX_PAGE_SIZE = 200
 
 
 def _overdue_map(f, access):
-    """({pic: freq}, [overdue pic]) for the PICs visiting in the period; measured at f.end."""
-    freq = pic_frequency(visitor_set(f, access), f.end)
+    """({pic: freq}, [overdue pic]) for the PICs visiting in the period; measured at f.end.
+    The frequency map is shared within one request (f.memo); the overdue factor is read every time."""
+    key = ('freq', id(access))
+    if key not in f.memo:
+        f.memo[key] = pic_frequency(visitor_set(f, access), f.end)
+    freq = f.memo[key]
     factor = float(setting('pic_overdue_factor'))
     overdue = [p for p, v in freq.items()
                if v['last_visit'] and rules.is_overdue(v['last_visit'], v['cycle_days'], f.end, factor)]
@@ -51,7 +55,7 @@ def frequency(f, access) -> dict:
         c[v['cycle_bucket'] if v['cycle_bucket'] in c else ''] += 1
         if v['months_a'] >= loyal_from:
             loyal += 1
-    return {'a': a, 'b': b, 'c': c, 'loyal': loyal, 'overdue': len(overdue)}
+    return {'a': a, 'b': b, 'c': c, 'loyal': loyal, 'loyal_months': loyal_from, 'overdue': len(overdue)}
 
 
 def _int_param(value, label, lo, hi=None):
@@ -67,16 +71,17 @@ def _int_param(value, label, lo, hi=None):
 def overdue_list(f, access, page=1, page_size=50) -> dict:
     """PICs that visited in the period but are overdue at f.end, biggest lifetime net first."""
     page = _int_param(page, 'الصفحة', 1)
-    page_size = _int_param(page_size, 'حجم الصفحة', 1, MAX_PAGE_SIZE)
+    # page_size=None = everything (internal, Excel export only; the HTTP layer always passes a capped int)
+    page_size = None if page_size is None else _int_param(page_size, 'حجم الصفحة', 1, MAX_PAGE_SIZE)
     freq, overdue = _overdue_map(f, access)
     net = {r['pic']: r['s'] or ZERO for r in access.scope_facts(
         PicDayFact.objects.filter(pic__in=overdue, day__lte=f.end)).values('pic').annotate(s=Sum('net'))}
     overdue.sort(key=lambda p: (-net.get(p, ZERO), p))
-    chunk = overdue[(page - 1) * page_size: page * page_size]
+    chunk = overdue if page_size is None else overdue[(page - 1) * page_size: page * page_size]
     customers = {}
     for c in Customer.objects.filter(softech_pic__in=chunk).order_by('-pk'):
         customers[c.softech_pic] = c            # lowest pk wins (iterated last)
-    user = getattr(access.profile, 'user', None)
+    can_see = cust_access.phones_checker(getattr(access.profile, 'user', None))
     factor = float(setting('pic_overdue_factor'))
     rows = []
     for pic in chunk:
@@ -85,7 +90,7 @@ def overdue_list(f, access, page=1, page_size=50) -> dict:
         row = {'pic': pic, 'name': cust.name if cust else '', 'phone': cust.phone if cust else '',
                'last_visit': v['last_visit'], 'cycle_days': round(v['cycle_days'], 2),
                'days_overdue': round(since - factor * v['cycle_days']), 'lifetime_net': net.get(pic, ZERO)}
-        visible = bool(cust and user is not None and cust_access.phones_visible(user, cust))
+        visible = bool(cust and can_see(cust))
         cust_access.mask_fields(row, ['phone'], visible)
         rows.append(row)
     return {'count': len(overdue), 'rows': rows}

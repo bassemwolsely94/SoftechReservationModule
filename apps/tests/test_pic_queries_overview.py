@@ -2,6 +2,7 @@
 from datetime import date as D, datetime
 from decimal import Decimal
 
+from django.db.models import Max
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
@@ -140,10 +141,11 @@ class OverviewTests(Base):
         req = RequestFactory().get('/x', {'from': '2020-01-01', 'to': '2099-01-01'})
         f = Filters.from_request(req, self.mgmt)
         self.assertEqual(f.start, D(2024, 8, 1))
-        self.assertEqual(f.end, timezone.localdate())
+        latest = PicDayFact.objects.aggregate(m=Max('day'))['m']
+        self.assertEqual(f.end, latest)                     # facts exist only through the latest built day
         self.assertTrue(f.clamped)
-        self.assertEqual((f.data_from, f.data_to), (D(2024, 8, 1), timezone.localdate()))
-        ok = Filters.from_request(RequestFactory().get('/x', {'from': '2026-10-01', 'to': '2026-10-31',
+        self.assertEqual((f.data_from, f.data_to), (D(2024, 8, 1), latest))
+        ok = Filters.from_request(RequestFactory().get('/x', {'from': '2026-10-01', 'to': '2026-10-20',
                                                               'branch': '1,2', 'category': '10'}), self.mgmt)
         self.assertFalse(ok.clamped)
         self.assertEqual((ok.branch_ids, ok.category), ({1, 2}, '10'))
@@ -152,6 +154,27 @@ class OverviewTests(Base):
             with self.assertRaises(FilterError):
                 Filters.from_request(RequestFactory().get('/x', bad), self.mgmt)
         self.assertTrue(issubclass(FilterError, ValueError))
+
+    def test_no_pic_net_none_under_pic_filters(self):
+        self.assertEqual(overview(self.flt(), self.mgmt)['no_pic_net'], D_('30'))
+        for kw in ({'segment': 'vip'}, {'customer_type': 'X'}, {'frequency': 'm1'}):
+            self.assertIsNone(overview(self.flt(**kw), self.mgmt)['no_pic_net'], kw)
+
+    def test_stale_rollup_not_used_for_yesterday(self):
+        from datetime import timedelta
+        from apps.pic_analytics.queries.frequency import pic_frequency
+        y = timezone.localdate() - timedelta(days=1)
+        PicRollup.objects.update(as_of=y, months_a=99)
+        self.assertEqual(pic_frequency({'R1'}, y)['R1']['months_a'], 99)       # fresh rollup is used
+        PicRollup.objects.update(as_of=y - timedelta(days=1))
+        self.assertNotEqual(pic_frequency({'R1'}, y).get('R1', {}).get('months_a'), 99)   # stale -> computed
+
+    def test_pic_rows_page_size_none_is_all(self):
+        paged = pic_rows(self.flt(), self.mgmt, '-net', 1, 2)
+        full = pic_rows(self.flt(), self.mgmt, '-net', 1, None)
+        self.assertEqual(full['count'], len(full['rows']))
+        self.assertGreater(len(full['rows']), 2)
+        self.assertEqual([r['pic'] for r in full['rows'][:2]], [r['pic'] for r in paged['rows']])
 
     def test_new_reliable_fallback_and_filters(self):
         o = overview(self.flt(category='50'), self.mgmt)     # category net only
@@ -208,6 +231,7 @@ class FrequencyToDateTests(Base):
         from datetime import timedelta
         from apps.pic_analytics.queries.frequency import pic_frequency
         yesterday = timezone.localdate() - timedelta(days=1)
+        PicRollup.objects.update(as_of=yesterday)                                       # a build as of yesterday
         self.assertEqual(pic_frequency({'R1'}, yesterday)['R1']['months_a'], 9)          # rollup
         fr = pic_frequency({'R1'}, D(2026, 10, 31))['R1']                                # computed
         self.assertEqual((fr['months_a'], fr['streak_b'], fr['cycle_bucket'], fr['last_visit']),

@@ -18,14 +18,15 @@ from core.export_safety import neutralise_formulas, safe_sheet
 from .queries import groups, missed, numbers, overview as ov, pics, retention
 from .queries.calls import call_center
 from .queries.groups import CHANNEL_LABELS
+from .queries.options import FREQUENCY_LABELS
 
-PAGE = 200
 S_FILTERS = 'الفلاتر والتعريفات'
 S_OVERVIEW = 'نظرة عامة'
 S_PICS = 'العملاء'
 S_BRANCH, S_SALES, S_CHANNEL, S_CATEGORY = 'الفروع', 'البائعون', 'القنوات', 'الأصناف'
 S_LOYALTY = 'الولاء والتكرار'
 S_CENTER, S_MISSED, S_NUMBERS = 'مركز الاتصال', 'المكالمات الفائتة', 'أرقام جديدة'
+S_OVERDUE, S_UNANSWERED = 'متأخرون عن الشراء', 'صادرة لم يُرد عليها'
 
 DEFINITIONS = [
     'الفترة: من/إلى شاملة، بتوقيت القاهرة. البيانات تبدأ من 2024-08-01.',
@@ -92,8 +93,23 @@ NUMBER_COLS = [
     ('missed', 'فائتة'), ('first_call', 'أول مكالمة'), ('last_call', 'آخر مكالمة'), ('talk_seconds', 'مدة الحديث (ث)'),
     ('last_agent', 'آخر موظف'),
 ]
+OVERDUE_COLS = [
+    ('pic', 'PIC'), ('name', 'الاسم'), ('phone', 'الهاتف'), ('last_visit', 'آخر زيارة'),
+    ('cycle_days', 'دورة الشراء (يوم)'), ('days_overdue', 'أيام التأخر'), ('lifetime_net', 'صافي المبيعات الكلي'),
+]
+UNANSWERED_COLS = [
+    ('agent_ext', 'التحويلة'), ('staff_name', 'الموظف'), ('pbx_name', 'اسم السنترال'), ('attempts', 'المحاولات'),
+    ('unanswered', 'بلا رد'), ('reached_numbers', 'أرقام تم الوصول لها'), ('not_reached', 'لم يتم الوصول'),
+    ('avg_attempts_to_reach', 'متوسط المحاولات'),
+]
 KIND_LABELS = {'mobile': 'موبايل', 'landline': 'أرضي'}
 GP_KEYS = {'gp', 'gp_pct'}
+CYCLE_LABELS = dict(FREQUENCY_LABELS)
+
+
+def _segment_labels():
+    from apps.customers.models import Customer
+    return dict(Customer.SEGMENT_CHOICES)
 
 
 def filters_dict(f):
@@ -105,7 +121,12 @@ def filters_dict(f):
             'data_from': f.data_from.isoformat(), 'data_to': f.data_to.isoformat(), 'clamped': f.clamped}
 
 
+_PLAIN = (str, int, float)
+
+
 def _cell(v):
+    if type(v) in _PLAIN:               # the common case, skipped fast (a year of PICs is >1M cells)
+        return v
     if v is None:
         return ''
     if isinstance(v, bool):
@@ -158,17 +179,6 @@ class _Book:
         return ws
 
 
-def _all_pages(fn):
-    """Rows of every page of a {'count','rows'} query; fn(page) -> that dict."""
-    page, out = 1, []
-    while True:
-        res = fn(page)
-        out.extend(res['rows'])
-        if not res['rows'] or len(out) >= res['count']:
-            return out
-        page += 1
-
-
 def _cols(cols, access):
     return [(k, h) for k, h in cols
             if (access.sees_cost or k not in GP_KEYS)]
@@ -214,11 +224,18 @@ def build_workbook(f, access, exported_by=''):
     for m in o['by_month']:
         book.row(ws, S_OVERVIEW, [m.get(k) for k, _h in MONTH_COLS])
 
-    # 3. customers (every page)
+    # 3. customers (one pass: page_size=None = all rows)
+    all_pics = pics.pic_rows(f, access, '-net', 1, None)['rows']
     cols = _cols(PIC_COLS, access)
     ws = book.sheet(S_PICS, [h for _k, h in cols], [16, 28] + [16] * (len(cols) - 2))
-    for r in _all_pages(lambda p: pics.pic_rows(f, access, '-net', p, PAGE)):
-        r = dict(r, last_branch=branch_names.get(r.get('last_branch'), r.get('last_branch')))
+    cat_names = groups.category_names({c for r in all_pics for c in r.get('categories') or ()})
+    seg_labels = _segment_labels()
+    for r in all_pics:
+        r = dict(r, last_branch=branch_names.get(r.get('last_branch'), r.get('last_branch')),
+                 categories=[groups.category_label(c, cat_names) for c in r.get('categories') or ()],
+                 channels=[CHANNEL_LABELS.get(c, c) for c in r.get('channels') or ()],
+                 cycle_bucket=CYCLE_LABELS.get(r.get('cycle_bucket'), ''),
+                 segment=seg_labels.get(r.get('segment'), r.get('segment') or ''))
         book.row(ws, S_PICS, [r.get(k) for k, _h in cols])
 
     # 4. groups
@@ -239,7 +256,7 @@ def build_workbook(f, access, exported_by=''):
     for k, n in fr['b'].items():
         book.row(ws, S_LOYALTY, [f'(ب) سلسلة {k} شهر', n])
     for k, n in fr['c'].items():
-        book.row(ws, S_LOYALTY, [f'(ج) {k or "غير محدد"}', n])
+        book.row(ws, S_LOYALTY, [f'(ج) {CYCLE_LABELS.get(k) or "غير محدد"}', n])
     book.row(ws, S_LOYALTY, ['وفيّ', fr['loyal']])
     book.row(ws, S_LOYALTY, ['متأخر', fr['overdue']])
     book.row(ws, S_LOYALTY, ['الاستبقاء %', retention.retention_summary(f, access)['retention_pct']])
@@ -248,16 +265,19 @@ def build_workbook(f, access, exported_by=''):
     for c in retention.cohorts(f, access):
         book.row(ws, S_LOYALTY, [c['cohort'], c['size']] + list(c['months']))
 
+    # 5b. overdue PICs (every row, phones masked like the screen)
+    book.table(S_OVERDUE, OVERDUE_COLS, retention.overdue_list(f, access, 1, None)['rows'], [16, 28, 16, 14, 14, 14, 18])
+
     # 6. management only: calls
     if access.sees_calls_tabs:
         cc = call_center(f, access)
         ws = book.table(S_CENTER, CENTER_COLS, cc['rows'], [10, 24, 24] + [16] * 9)
         book.row(ws, S_CENTER, ['', 'عملاء جدد باعتهم الفريق', '', cc['team_new_pics_sold']])
-        book.table(S_MISSED, MISSED_COLS,
-                   _all_pages(lambda p: missed.missed_rows(f, access, False, p, PAGE)),
+        book.table(S_UNANSWERED, UNANSWERED_COLS, missed.unanswered_summary(f, access), [10, 24, 24] + [14] * 5)
+        book.table(S_MISSED, MISSED_COLS, missed.missed_rows(f, access, False, 1, None)['rows'],
                    [20, 18, 14, 14, 26] + [16] * 6)
         rows = []
-        for r in _all_pages(lambda p: numbers.new_numbers(f, access, p, PAGE)):
+        for r in numbers.new_numbers(f, access, 1, None)['rows']:
             agent = r.get('last_agent') or {}
             rows.append(dict(r, kind=KIND_LABELS.get(r['kind'], r['kind']),
                              last_agent=agent.get('staff_name') or agent.get('pbx_name') or agent.get('agent_ext', '')))

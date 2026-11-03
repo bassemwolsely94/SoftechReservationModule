@@ -38,7 +38,8 @@ def _kind(key):
 def new_numbers(f, access, page, page_size=50) -> dict:
     _require(access)
     page = _int_param(page, 'الصفحة', 1)
-    page_size = _int_param(page_size, 'حجم الصفحة', 1, MAX_PAGE_SIZE)
+    # page_size=None = everything (internal, Excel export only; the HTTP layer always passes a capped int)
+    page_size = None if page_size is None else _int_param(page_size, 'حجم الصفحة', 1, MAX_PAGE_SIZE)
     labelled = PhoneLabel.objects.values('phone_key')
     rows = (calls_qs(f, use_agent=False).filter(pic_match='none').exclude(phone_key='')
             .exclude(phone_key__in=labelled).order_by('call_at')
@@ -58,7 +59,7 @@ def new_numbers(f, access, page, page_size=50) -> dict:
         if ext:
             a['agent'] = (ext, name)
     keys = sorted(agg, key=lambda k: agg[k]['last_call'], reverse=True)
-    chunk = keys[(page - 1) * page_size: page * page_size]
+    chunk = keys if page_size is None else keys[(page - 1) * page_size: page * page_size]
     exts = {e.extension: e for e in AgentExtension.objects.filter(
         extension__in={agg[k]['agent'][0] for k in chunk if agg[k]['agent']}).select_related('staff')}
     out = []

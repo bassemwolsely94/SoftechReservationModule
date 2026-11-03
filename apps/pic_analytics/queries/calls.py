@@ -37,12 +37,16 @@ def _day(dt):
     return timezone.localtime(dt).date()
 
 
-def returned_map(calls) -> dict:
+def returned_map(calls, any_time=False) -> dict:
     """{call id: datetime of the first ANSWERED call (either direction) on the same number within
     pic_call_return_hours after it, or None}. `calls` = iterable of CdrCall-like rows with
-    id, call_at, phone_key. Shared by the overview and the missed-calls tab (Task 10)."""
+    id, call_at, phone_key. Shared by the overview and the missed-calls tab (Task 10).
+    `any_time=True` drops the window: ANY later answered call counts (the action list, doc 33 §7 -
+    a row leaves «not returned» as soon as someone has called the number back)."""
     calls = list(calls)
     window = timedelta(hours=int(setting('pic_call_return_hours')))
+    if any_time:
+        window = timedelta(days=36500)
     keys = {c.phone_key for c in calls if c.phone_key}
     out = {c.id: None for c in calls}
     if not keys:
@@ -176,7 +180,8 @@ def call_center(f, access) -> dict:
     attempts = []                      # outbound (ext, phone_key, day, answered) in time order
     for ext, name, at, direction, status, billable, pic, key in rows:
         a = agg.setdefault(ext, {'pbx_name': '', 'calls_in': 0, 'calls_out': 0, 'answered': 0,
-                                 'talk_seconds': 0, 'pics': set(), 'ctp': 0, 'unanswered_out': 0})
+                                 'answered_pic': 0, 'talk_seconds': 0, 'pics': set(), 'ctp': 0,
+                                 'unanswered_out': 0})
         a['pbx_name'] = a['pbx_name'] or name
         answered = status == 'answered'
         if direction == 'inbound':
@@ -191,6 +196,7 @@ def call_center(f, access) -> dict:
             a['answered'] += 1
             a['talk_seconds'] += billable or 0
             if pic:
+                a['answered_pic'] += 1          # denominator: answered calls that reach a PIC
                 a['pics'].add(pic)
                 if _followed_by_purchase(pic, _day(at), days_by_pic, window):
                     a['ctp'] += 1
@@ -205,7 +211,7 @@ def call_center(f, access) -> dict:
             'pbx_name': e.pbx_name if e and e.pbx_name else a['pbx_name'],
             'calls_in': a['calls_in'], 'calls_out': a['calls_out'], 'answered': a['answered'],
             'talk_seconds': a['talk_seconds'], 'pics_reached': len(a['pics']),
-            'call_to_purchase_pct': round(a['ctp'] / a['answered'] * 100, 1) if a['answered'] else None,
+            'call_to_purchase_pct': round(a['ctp'] / a['answered_pic'] * 100, 1) if a['answered_pic'] else None,
             'unanswered_out': a['unanswered_out'],
             'avg_attempts_to_reach': round(sum(tries[ext]) / len(tries[ext]), 2) if tries.get(ext) else None,
             'not_reached': not_reached.get(ext, 0),

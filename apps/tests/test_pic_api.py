@@ -37,7 +37,7 @@ class ApiBase(CallBase):
         super().setUpTestData()
         cls.admin_c = make_user('q_admin', role='admin', branch=cls.ba)[2]
         cls.mgr_c = make_user('q_mgr', role='pharmacist', branch=cls.ba)[2]
-        cls.ph_c = make_user('q_plain', role='pharmacist', branch=cls.ba)[2]
+        cls.ph_p, cls.ph_c = make_user('q_plain', role='pharmacist', branch=cls.ba)[1:]
         cls.miss = cls.call(D(2026, 10, 5), '', 'inbound', 'abandoned', key='1000000010', ext='')
         cls.lead = cls.call(D(2026, 10, 6), '', 'inbound', 'answered', key='1000000020')
 
@@ -80,6 +80,28 @@ class AccessTests(ApiBase):
         self.assertTrue(d['management'] and d['can_export'] and 'new_reliable_from' in d)
         self.assertFalse(self.mgr_c.get('/api/pic-analytics/access/').json()['management'])
 
+    def test_period_block_and_clamp(self):
+        from apps.pic_analytics.models import PicDayFact
+        latest = PicDayFact.objects.order_by('-day').values_list('day', flat=True).first()
+        self.assertEqual(latest.isoformat(), '2026-10-20')
+        p = self.admin_c.get('/api/pic-analytics/overview/?from=2026-10-01&to=2026-10-15').json()['period']
+        self.assertEqual((p['from'], p['to'], p['data_from'], p['data_to'], p['clamped']),
+                         ('2026-10-01', '2026-10-15', '2024-08-01', '2026-10-15', False))
+        # facts exist only through the latest built day: asking for more is clamped to it
+        p = self.admin_c.get(url('overview/')).json()['period']
+        self.assertEqual((p['to'], p['data_to'], p['clamped']), ('2026-10-20', '2026-10-20', True))
+        p = self.admin_c.get('/api/pic-analytics/overview/?from=2026-10-01&to=2099-01-01').json()['period']
+        self.assertEqual((p['to'], p['data_to'], p['clamped']), (latest.isoformat(), latest.isoformat(), True))
+        self.assertIn('period', self.admin_c.get(url('options/')).json())
+
+    def test_grant_bad_staff_id_and_duplicate(self):
+        base = '/api/pic-analytics/grants/'
+        self.assertEqual(self.admin_c.post(base, {'staff_id': 'abc'}, format='json').status_code, 400)
+        self.assertEqual(self.admin_c.post(base, {}, format='json').status_code, 400)
+        ok = self.admin_c.post(base, {'staff_id': self.ph_p.pk}, format='json')
+        self.assertEqual(ok.status_code, 201, ok.content)
+        self.assertEqual(self.admin_c.post(base, {'staff_id': self.ph_p.pk}, format='json').status_code, 400)
+
     def test_bad_params(self):
         self.assertEqual(self.admin_c.get('/api/pic-analytics/overview/?from=nope&to=2026-10-31').status_code, 400)
         self.assertEqual(self.admin_c.get('/api/pic-analytics/overview/').status_code, 400)
@@ -93,12 +115,13 @@ class AccessTests(ApiBase):
 
     def test_shapes(self):
         r = self.admin_c.get(url('retention/')).json()
-        self.assertEqual(set(r), {'frequency', 'retention', 'cohorts'})
+        self.assertEqual(set(r), {'frequency', 'retention', 'cohorts', 'period'})
+        self.assertEqual(r['frequency']['loyal_months'], 10)
         self.assertEqual(self.admin_c.get(url('pics/')).json()['count'], 3)
         self.assertEqual(self.admin_c.get(url('groups/branch/')).json()['total']['key'], 'all')
         rows = self.admin_c.get(url('calls/missed/rows/')).json()['rows']
         self.assertEqual(rows[0]['call_id'], self.miss.pk)
-        self.assertEqual(self.admin_c.get(url('calls/unanswered/')).json(), {'rows': []})
+        self.assertEqual(self.admin_c.get(url('calls/unanswered/')).json()['rows'], [])
 
     def test_no_phone_key_or_raw_number_in_numbers_bodies(self):
         for p in ('numbers/', 'numbers/conversions/'):
@@ -229,6 +252,14 @@ class CallbackTests(ApiBase):
         from datetime import timedelta
         return (timezone.now() + timedelta(days=days)).isoformat()
 
+    def test_second_callback_for_same_number_is_409(self):
+        from apps.callcenter.models import CallLog
+        path = f'{self.P}calls/missed/{self.miss.pk}/callback/'
+        self.assertEqual(self.admin_c.post(path, {'due': self.due()}, format='json').status_code, 200)
+        r = self.admin_c.post(path, {'due': self.due(2)}, format='json')
+        self.assertEqual(r.status_code, 409, r.content)
+        self.assertEqual(CallLog.objects.filter(status='callback').count(), 1)
+
     def test_creates_pending_callback(self):
         from apps.callcenter.models import CallLog
         r = self.admin_c.post(f'{self.P}calls/missed/{self.miss.pk}/callback/',
@@ -270,11 +301,12 @@ class ExportTests(ApiBase):
 
     def test_management_workbook(self):
         r = self.get(self.admin_c)
-        self.assertIn('pic-analytics_2026-10-01_2026-10-31.xlsx', r['Content-Disposition'])
+        self.assertIn('pic-analytics_2026-10-01_2026-10-20.xlsx', r['Content-Disposition'])   # clamped to the latest fact day
         wb = self.wb(r)
         self.assertEqual(wb.sheetnames, ['الفلاتر والتعريفات', 'نظرة عامة', 'العملاء', 'الفروع', 'البائعون',
-                                         'القنوات', 'الأصناف', 'الولاء والتكرار', 'مركز الاتصال',
-                                         'المكالمات الفائتة', 'أرقام جديدة'])
+                                         'القنوات', 'الأصناف', 'الولاء والتكرار', 'متأخرون عن الشراء',
+                                         'مركز الاتصال', 'صادرة لم يُرد عليها', 'المكالمات الفائتة',
+                                         'أرقام جديدة'])
         for ws in wb.worksheets:
             self.assertTrue(ws.sheet_view.rightToLeft, ws.title)
             self.assertEqual(ws.freeze_panes, 'A2', ws.title)
@@ -288,10 +320,35 @@ class ExportTests(ApiBase):
         self.assertEqual(wb['المكالمات الفائتة'].max_row, 2)
         self.assertEqual(wb['أرقام جديدة'].max_row, 3)                   # two unlinked numbers
 
+    def test_export_labels_not_codes_and_new_sheets(self):
+        wb = self.wb(self.get(self.admin_c))
+        heads = sheet_headers(wb)
+        self.assertEqual(heads['متأخرون عن الشراء'][0], 'PIC')
+        self.assertEqual(heads['صادرة لم يُرد عليها'][0], 'التحويلة')
+        pic_heads = heads['العملاء']
+        rows = list(wb['العملاء'].iter_rows(min_row=2, values_only=True))
+        for col in ('الأصناف', 'القنوات', 'دورة الشراء (ج)', 'الشريحة'):
+            i = pic_heads.index(col)
+            for r in rows:
+                for code in ('m1', 'm2', 'm3', 'm4_6', 'm7_12', 'y1plus', 'regular', 'vip'):
+                    self.assertNotIn(code, str(r[i] or '').split('، '), (col, r[i]))
+        loyalty = [c.value for c in wb['الولاء والتكرار']['A']]
+        self.assertFalse([v for v in loyalty if v and any(c in str(v) for c in ('m1', 'm4_6', 'y1plus'))])
+
+    def test_export_computes_each_list_once(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        with CaptureQueriesContext(connection) as ctx:
+            self.get(self.admin_c)
+        first = len(ctx)
+        from apps.pic_analytics import export
+        self.assertFalse(hasattr(export, '_all_pages'))
+        self.assertLess(first, 400)
+
     def test_export_has_no_cost_columns_for_branch_manager(self):
         wb = self.wb(self.get(self.mgr_c))
         self.assertEqual(wb.sheetnames, ['الفلاتر والتعريفات', 'نظرة عامة', 'العملاء', 'الفروع', 'البائعون',
-                                         'القنوات', 'الأصناف', 'الولاء والتكرار'])
+                                         'القنوات', 'الأصناف', 'الولاء والتكرار', 'متأخرون عن الشراء'])
         for title, headers in sheet_headers(wb).items():
             for h in headers:
                 for bad in ('تكلفة', 'ربح', 'هامش'):

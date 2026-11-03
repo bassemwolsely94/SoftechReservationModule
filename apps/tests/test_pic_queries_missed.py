@@ -30,6 +30,37 @@ class MissedTests(CallBase):
         self.assertEqual((s['missed'], s['returned'], s['not_returned']), (2, 1, 1))
         self.assertEqual(s['median_minutes_to_return'], 23 * 60)
 
+    def test_action_list_drops_rows_called_back_after_the_window(self):
+        self.miss(key='1000000010', hh=9)                                    # called back 25 h later
+        self.call(D(2026, 10, 6), '', 'outbound', 'answered', key='1000000010', hh=10)
+        self.miss(key='1000000011', hh=9)                                    # never called back
+        s = missed_summary(self.flt(), self.mgmt)
+        self.assertEqual((s['returned'], s['not_returned']), (0, 2))        # KPI keeps the 24 h rule
+        self.assertEqual(overview(self.flt(), self.mgmt)['missed_not_returned'], 2)
+        rows = missed_rows(self.flt(), self.mgmt, True, 1)
+        self.assertEqual(rows['count'], 1)
+        self.assertEqual(rows['rows'][0]['customer_number'][-2:], '11')
+        self.assertEqual(missed_rows(self.flt(), self.mgmt, False, 1)['count'], 2)
+
+    def test_callback_pending_marker(self):
+        from datetime import timedelta
+        from apps.callcenter.models import CallLog
+        c = self.miss(key='1000000010', hh=9)
+        other = self.miss(key='1000000011', hh=9)
+        due = timezone.now() + timedelta(days=1)
+        CallLog.objects.create(phone_number=c.customer_number, direction='inbound', status='callback',
+                               callback_due=due, source='manual')
+        rows = {r['call_id']: r for r in missed_rows(self.flt(), self.mgmt, True, 1)['rows']}
+        self.assertEqual(rows[c.id]['callback_pending'], {'due': iso(due)})
+        self.assertIsNone(rows[other.id]['callback_pending'])
+
+    def test_page_size_none_returns_everything(self):
+        for i in range(3):
+            self.miss(key=f'10000001{i}0', hh=9 + i)
+        self.assertEqual(len(missed_rows(self.flt(), self.mgmt, False, 1, None)['rows']), 3)
+        with self.assertRaises(FilterError):
+            missed_rows(self.flt(), self.mgmt, False, 1, 0)
+
     def test_returned_by_inbound_answer_too(self):
         self.miss(hh=9)
         self.call(D(2026, 10, 5), '', 'inbound', 'answered', key='1000000010', hh=12)

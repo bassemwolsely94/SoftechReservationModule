@@ -123,6 +123,13 @@ class CallCenterTests(CallBase):
         self.assertEqual((row['calls_out'], row['unanswered_out'], row['answered']), (6, 5, 1))
         self.assertEqual(row['pics_reached'], 1)
 
+    def test_call_to_purchase_denominator_is_answered_pic_calls(self):
+        self.call(D(2026, 10, 3), 'R1', ext='16')                    # bought 10-10 -> within 7 d
+        self.call(D(2026, 10, 4), '', ext='16', key='1000000050')    # answered but no PIC: not in the denominator
+        self.call(D(2026, 10, 4), '', ext='16', key='1000000051')
+        row = next(r for r in call_center(self.flt(), self.mgmt)['rows'] if r['agent_ext'] == '16')
+        self.assertEqual((row['answered'], row['call_to_purchase_pct']), (3, 100.0))
+
     def test_rows_names_and_call_to_purchase(self):
         AgentExtension.objects.create(extension='15', pbx_name='Eman -CC15', staff=self.mgr_p)
         self.call(D(2026, 10, 3), 'R1', ext='15', billable=100)      # bought 10-10 -> within 7 d

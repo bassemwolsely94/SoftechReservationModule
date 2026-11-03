@@ -9,7 +9,7 @@ branch manager's figures can only ever be their own branches'.
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
-from django.db.models import DecimalField, F, Func, TextField, Value
+from django.db.models import DecimalField, F, Func, Max, TextField, Value
 from django.db.models.functions import Cast
 from django.utils import timezone
 
@@ -49,6 +49,8 @@ class Filters:
     data_from: date = HISTORY_START
     data_to: date = field(default_factory=timezone.localdate)
     clamped: bool = False
+    # per-request memo for results several tabs share (the export asks for them 5+ times); never compared/shown
+    memo: dict = field(default_factory=dict, repr=False, compare=False)
 
     @classmethod
     def from_request(cls, request, access):
@@ -57,9 +59,11 @@ class Filters:
         end = _date(params, 'to', 'إلى')
         if start > end:
             raise FilterError('تاريخ البداية بعد تاريخ النهاية')
-        data_from, data_to = HISTORY_START, timezone.localdate()
+        # facts exist only through the latest built day: never promise more than that
+        latest = PicDayFact.objects.aggregate(m=Max('day'))['m'] or timezone.localdate()
+        data_from, data_to = HISTORY_START, min(end, latest, timezone.localdate())
         clamped = start < data_from or end > data_to
-        start, end = max(start, data_from), min(end, data_to)
+        start, end = max(start, data_from), data_to
         if start > end:
             raise FilterError('الفترة خارج نطاق البيانات المتاحة')
         branch_ids = None

@@ -57,17 +57,27 @@ def grants(request):
         qs = PicAnalyticsAccess.objects.select_related('staff__user', 'staff__branch', 'granted_by__user',
                                                        'revoked_by__user')[:200]
         return Response({'rows': [_grant_json(g) for g in qs]})
+    from django.db import IntegrityError, transaction
+
     from apps.users.models import StaffProfile
-    staff = StaffProfile.objects.filter(pk=request.data.get('staff_id'), is_active=True).first()
+    try:
+        staff_id = int(request.data.get('staff_id'))
+    except (TypeError, ValueError):
+        return _bad('معرّف الموظف غير صالح — invalid staff_id')
+    staff = StaffProfile.objects.filter(pk=staff_id, is_active=True).first()
     if staff is None:
         return _bad('موظف غير موجود — unknown staff')
-    if PicAnalyticsAccess.objects.filter(staff=staff, revoked_at__isnull=True).exists():
-        return _bad('لديه الصلاحية بالفعل — already granted')
-    g = PicAnalyticsAccess.objects.create(staff=staff, granted_by=acc.profile,
-                                          note=str(request.data.get('note') or '')[:255])
-    from apps.audit.models import AuditLog
-    AuditLog.log('pic_analytics_access_granted', user=acc.profile, obj=g, note=g.note, request=request,
-                 extra={'staff_id': staff.pk, 'staff': staff.full_name})
+    try:
+        with transaction.atomic():
+            if PicAnalyticsAccess.objects.filter(staff=staff, revoked_at__isnull=True).exists():
+                return _bad('لديه الصلاحية بالفعل — already granted')
+            g = PicAnalyticsAccess.objects.create(staff=staff, granted_by=acc.profile,
+                                                  note=str(request.data.get('note') or '')[:255])
+            from apps.audit.models import AuditLog
+            AuditLog.log('pic_analytics_access_granted', user=acc.profile, obj=g, note=g.note, request=request,
+                         extra={'staff_id': staff.pk, 'staff': staff.full_name})
+    except IntegrityError:                     # a concurrent grant won the unique constraint
+        return _bad('لديه الصلاحية بالفعل — تم منحها للتو')
     return Response(_grant_json(g), status=201)
 
 
@@ -117,7 +127,11 @@ def _run(request, fn, calls=False):
         return _deny()
     try:
         f = Filters.from_request(request, acc)
-        return Response(fn(f, acc))
+        data = fn(f, acc)
+        if isinstance(data, dict):
+            data['period'] = {'from': f.start, 'to': f.end, 'data_from': f.data_from,
+                              'data_to': f.data_to, 'clamped': f.clamped}
+        return Response(data)
     except FilterError as exc:
         return _bad(str(exc))
     except PermissionError as exc:
@@ -348,6 +362,9 @@ def missed_callback(request, call_id):
     note = str(request.data.get('note') or '').strip()
     if len(note) > 500:
         return _bad('الملاحظة أطول من 500 حرف')
+    if CallLog.objects.filter(status='callback', phone_number=call.customer_number,
+                              callback_due__gte=call.call_at).exists():
+        return Response({'detail': 'يوجد موعد معاودة مجدول لهذا الرقم بالفعل'}, status=status.HTTP_409_CONFLICT)
     log = CallLog.objects.create(
         phone_number=call.customer_number, customer=call.customer, direction='inbound',
         status='callback', callback_due=due, handled_by=acc.profile, notes=note, source='manual')

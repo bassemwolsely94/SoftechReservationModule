@@ -2448,7 +2448,7 @@ def _run_pic_facts():
         from django.core.management import call_command
         call_command('build_pic_facts')
     except Exception as exc:
-        logger.warning('pic facts build failed: %s', exc)
+        logger.exception('pic facts build failed: %s', exc)
 
 
 def _run_stock_ledger_sync(days=3):

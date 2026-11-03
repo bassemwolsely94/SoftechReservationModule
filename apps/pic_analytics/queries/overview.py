@@ -23,6 +23,13 @@ ZERO = Decimal('0')
 
 def visitor_set(f, access, start=None, end=None):
     """Distinct PICs with a visit (invoices > 0) in the range, scoped like every other amount."""
+    key = ('visitors', id(access), start, end)
+    if key not in f.memo:
+        f.memo[key] = _visitor_set(f, access, start, end)
+    return set(f.memo[key])
+
+
+def _visitor_set(f, access, start, end):
     return set(f.facts(access, start=start, end=end).exclude(pic='').filter(invoices__gt=0)
                .values_list('pic', flat=True).distinct())
 
@@ -30,6 +37,15 @@ def visitor_set(f, access, start=None, end=None):
 def classify_visitors(f, access, pics=None):
     """{pic: 'new'|'returning'|'reactivated'} for the PICs visiting in the period (or just `pics`),
     computed CHAIN-WIDE: first purchase / previous visit over all branches (doc 33 §5)."""
+    if pics is None:
+        key = ('classified', id(access))
+        if key not in f.memo:
+            f.memo[key] = _classify_visitors(f, access, None)
+        return dict(f.memo[key])
+    return _classify_visitors(f, access, pics)
+
+
+def _classify_visitors(f, access, pics):
     visitors = f.facts(access).exclude(pic='').filter(invoices__gt=0)
     if pics is not None:
         visitors = visitors.filter(pic__in=pics)
@@ -112,7 +128,7 @@ def overview(f, access) -> dict:
     # retention against the previous period of equal length (None when it predates our history)
     retention_pct = retention_pct_for(f, access, {x['pic'] for x in visitors})
 
-    no_pic_net = ZERO
+    no_pic_net = None           # segment / type / frequency filters describe PICs: no-PIC sales are not part of them
     if not f.has_pic_filters:
         no_pic_net = f.facts(access, pic_filters=False).filter(pic='').aggregate(s=Sum('enet'))['s'] or ZERO
 

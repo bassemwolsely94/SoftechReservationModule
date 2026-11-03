@@ -9,7 +9,7 @@ from collections import defaultdict
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db.models import Max
+from django.db.models import Max, Min
 from django.utils import timezone
 
 from apps.pic_analytics import rules
@@ -18,7 +18,12 @@ from apps.pic_analytics.models import PicDayFact, PicRollup
 
 
 def _is_yesterday(end):
-    return end == timezone.localdate() - timedelta(days=1)
+    """True only when `end` is yesterday AND the rollups were really built as of `end` (a stale or
+    mixed build must not be served as if it were this report's figures)."""
+    if end != timezone.localdate() - timedelta(days=1):
+        return False
+    r = PicRollup.objects.aggregate(lo=Min('as_of'), hi=Max('as_of'))
+    return r['lo'] == r['hi'] == end
 
 
 def _computed(pics, end):

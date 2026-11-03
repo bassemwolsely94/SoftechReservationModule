@@ -17,6 +17,7 @@ from apps.pic_analytics.queries.frequency import pic_frequency
 from apps.pic_analytics.settings import setting
 
 ZERO = Decimal('0')
+DETAIL_SLICE = 15000
 ORDERS = {'net': 's_net', 'visits': 'visits', 'last_purchase': 'last_day',
           'days_since_last': 'last_day', 'name': 'name_sub'}
 
@@ -41,9 +42,22 @@ def pic_rows(f, access, order='-net', page=1, page_size=50) -> dict:
         last_day=Max('day', filter=Q(invoices__gt=0)), name_sub=Subquery(name))
         .filter(visits__gt=0))
     count = agg.count()
+    ordered = agg.order_by(*_order_by(order))
+    if page_size is None:
+        # internal "everything" (the Excel export; never reachable from the HTTP params): one
+        # aggregate pass, row detail read in slices so no IN list grows unbounded
+        allrows = list(ordered)
+        rows = []
+        for i in range(0, len(allrows), DETAIL_SLICE):
+            rows.extend(_detail_rows(f, access, qs, allrows[i:i + DETAIL_SLICE]))
+        return {'count': count, 'rows': rows}
     page = max(int(page or 1), 1)
     page_size = max(int(page_size or 50), 1)
-    chunk = list(agg.order_by(*_order_by(order))[(page - 1) * page_size: page * page_size])
+    chunk = list(ordered[(page - 1) * page_size: page * page_size])
+    return {'count': count, 'rows': _detail_rows(f, access, qs, chunk)}
+
+
+def _detail_rows(f, access, qs, chunk) -> list:
     pics = [r['pic'] for r in chunk]
 
     # per-row detail for the page's PICs only
@@ -69,7 +83,7 @@ def pic_rows(f, access, order='-net', page=1, page_size=50) -> dict:
     for c in Customer.objects.filter(softech_pic__in=pics).order_by('-pk'):
         customers[c.softech_pic] = c            # lowest pk wins (iterated last)
 
-    user = getattr(access.profile, 'user', None)
+    can_see = cust_access.phones_checker(getattr(access.profile, 'user', None))
     factor = float(setting('pic_overdue_factor'))
     today = f.end
     rows = []
@@ -100,13 +114,10 @@ def pic_rows(f, access, order='-net', page=1, page_size=50) -> dict:
             'talk_time': cl['talk_seconds'] if cl else 0,
             'call_to_purchase': cl['call_to_purchase'] if cl else 0,
         }
-        if cust and user is not None:
-            visible = cust_access.phones_visible(user, cust)
-        else:
-            visible = False
+        visible = bool(cust and can_see(cust))
         cust_access.mask_fields(row, ['phone'], visible)
         if access.sees_cost:
             gp = None if f.category else (r['s_gp'] or ZERO)
             row['gp'] = gp
         rows.append(row)
-    return {'count': count, 'rows': rows}
+    return rows
