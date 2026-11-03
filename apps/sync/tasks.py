@@ -2239,6 +2239,17 @@ def _run_kpi_refresh():
         logger.error('[APScheduler] KPI refresh failed: %s', exc)
 
 
+def _run_daily_count_job():
+    """Small daily counts (Project 2): hand out each pilot branch's lists after the configured hour
+    and close yesterday's/today's lists once the branch has closed. No-op unless
+    DAILY_COUNT_ENABLED. Reads only; never writes to SOFTECH."""
+    try:
+        from apps.stockcount.daily.service import run_job
+        run_job()
+    except Exception as exc:
+        logger.error('[APScheduler] daily count job failed: %s', exc)
+
+
 def _run_purchase_expiry_sync():
     """Incrementally mirror NEW purchase-invoice expiry entries from main suppliers
     into apps.batches.PurchaseExpiryEntry (near-expiry physical audit engine).
@@ -3573,6 +3584,12 @@ def start_scheduler():
     # the procurement refresh — keeps the near-expiry physical audit report current.
     _scheduler.add_job(
         _run_purchase_expiry_sync, 'cron', hour=7, minute=0, id='purchase_expiry_sync',
+        replace_existing=True, max_instances=1, misfire_grace_time=1800,
+    )
+    # Small daily counts (Project 2) — hourly: lists appear after DailyCountSettings.job_hour, close
+    # after the branch's closing time. Gated by DAILY_COUNT_ENABLED inside the job.
+    _scheduler.add_job(
+        _run_daily_count_job, 'cron', minute=5, id='daily_count_job',
         replace_existing=True, max_instances=1, misfire_grace_time=1800,
     )
     # Morning chain (P-56) — 07:30, after the procurement/purchase-expiry syncs:
