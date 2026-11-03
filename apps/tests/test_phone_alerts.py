@@ -991,3 +991,45 @@ class TickTests(TestCase):
         with mock.patch.object(jobs, 'tick') as t:
             tasks._run_phone_alerts_tick()
         t.assert_called_once_with()
+
+    # fix round 1
+    def test_fire_raising_rolls_back_and_next_tick_escalates(self):
+        a = self._alert()
+        with mock.patch.object(jobs.dispatch, 'fire', side_effect=RuntimeError('boom')):
+            counts = jobs.tick(now=self._min(30))
+        self.assertEqual(counts['escalated'], 0)
+        a.refresh_from_db()
+        self.assertEqual((a.status, a.escalated_at), ('sent', None))
+        self.assertEqual(jobs.tick(now=self._min(31))['escalated'], 1)
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'escalated')
+        self.assertEqual(PhoneAlert.objects.filter(event='escalation').count(), 1)
+
+    def test_fire_returning_nothing_marks_escalated_but_not_counted(self):
+        PhoneAlertPolicy.objects.filter(event='escalation').update(mode='never')
+        a = self._alert()
+        self.assertEqual(jobs.tick(now=self._min(30))['escalated'], 0)
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'escalated')
+        self.assertFalse(PhoneAlert.objects.filter(event='escalation').exists())
+
+    def test_escalating_tick_sends_no_reminder(self):
+        a = self._alert()
+        counts = jobs.tick(now=self._min(30))
+        self.assertEqual(counts, {'reminded': 0, 'escalated': 1, 'expired': 0})
+        a.refresh_from_db()
+        self.assertEqual(a.reminders_sent, 0)
+        self.assertFalse(a.attempts.exists())
+
+    def test_failed_reminder_delivery_consumes_the_reminder(self):
+        self._no_escalation()
+        a = self._alert()
+        with mock.patch.object(jobs.sender, 'deliver', side_effect=RuntimeError('boom')):
+            jobs.tick(now=self._min(15))
+        a.refresh_from_db()
+        self.assertEqual(a.reminders_sent, 1)
+        self.assertEqual(a.last_sent_at, self._min(15))
+        # at-most-once: no immediate retry on the next tick
+        self.assertEqual(jobs.tick(now=self._min(16))['reminded'], 0)
+        a.refresh_from_db()
+        self.assertEqual(a.reminders_sent, 1)

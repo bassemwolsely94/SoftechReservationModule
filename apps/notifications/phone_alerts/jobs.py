@@ -26,7 +26,18 @@ TICK_STATUSES = ('sent', 'delivered', 'read')
 
 
 def _process(alert_id, now):
-    """Decide and apply the action for one alert: None, or (expired, remind, escalate)."""
+    """Decide and apply the action for one alert under its row lock.
+
+    Returns None (nothing to do) or one of 'expired', 'reminded', 'escalated', 'escalated_empty'.
+
+    Escalation runs INSIDE the lock: ``fire`` only schedules delivery on commit, and if it raises the
+    whole transaction rolls back so the next tick retries. When fire creates nothing (policy never /
+    no recipients) the alert is still marked escalated (nothing more can be done) but not counted.
+
+    Reminders are AT-MOST-ONCE by ruling: the claim (``reminders_sent`` + ``last_sent_at``) commits
+    before the send, so a failed delivery consumes that reminder and is not retried immediately.
+    A tick that escalates an alert sends no reminder for it.
+    """
     with transaction.atomic():
         alert = (PhoneAlert.objects.select_for_update(skip_locked=True)
                  .filter(pk=alert_id, status__in=TICK_STATUSES, kind='alert').first())
@@ -39,20 +50,21 @@ def _process(alert_id, now):
 
         if not event.is_open(alert.source):
             PhoneAlert.objects.filter(pk=alert.pk).update(status='expired')
-            return True, False, False
+            return 'expired'
 
-        remind = escalate = False
+        if (alert.event != 'escalation' and alert.escalation_of_id is None
+                and now - alert.created_at >= timedelta(minutes=policy.escalate_after_min)):
+            created = dispatch.fire('escalation', alert, notification=None, requested=True)
+            PhoneAlert.objects.filter(pk=alert.pk).update(status='escalated', escalated_at=now)
+            return 'escalated' if created else 'escalated_empty'
+
         last = alert.last_sent_at or alert.created_at
         if (alert.reminders_sent < policy.max_reminders
                 and now - last >= timedelta(minutes=policy.remind_after_min)):
             PhoneAlert.objects.filter(pk=alert.pk).update(
                 reminders_sent=F('reminders_sent') + 1, last_sent_at=now)
-            remind = True
-        if (alert.event != 'escalation' and alert.escalation_of_id is None
-                and now - alert.created_at >= timedelta(minutes=policy.escalate_after_min)):
-            PhoneAlert.objects.filter(pk=alert.pk).update(status='escalated', escalated_at=now)
-            escalate = True
-        return False, remind, escalate
+            return 'reminded'
+        return None
 
 
 def tick(now=None):
@@ -64,20 +76,10 @@ def tick(now=None):
     for pk in ids:
         try:
             outcome = _process(pk, now)
-            if outcome is None:
-                continue
-            expired, remind, escalate = outcome
-            if expired:
-                counts['expired'] += 1
-                continue
-            alert = PhoneAlert.objects.get(pk=pk)
-            if remind:
-                sender.deliver(alert, reminder=True)
-                counts['reminded'] += 1
-            if escalate:
-                alert.refresh_from_db()
-                dispatch.fire('escalation', alert, notification=None, requested=True)
-                counts['escalated'] += 1
+            if outcome == 'reminded':
+                sender.deliver(PhoneAlert.objects.get(pk=pk), reminder=True)
+            if outcome in counts:
+                counts[outcome] += 1
         except Exception:
             logger.exception('phone alerts tick failed for alert %s', pk)
     return counts
