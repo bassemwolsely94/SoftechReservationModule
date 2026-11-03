@@ -14,7 +14,7 @@ import { queuedPost } from '../../api/offlineQueue'
 import useAuthStore from '../../store/authStore'
 import CustomerSearchWidget from '../../components/CustomerSearchWidget'
 import ItemSearchWidget from '../../components/ItemSearchWidget'
-import PhoneAlertToggle, { PHONE_ALERT_EVENTS } from '../../components/PhoneAlertToggle'
+import PhoneAlertToggle from '../../components/PhoneAlertToggle'
 
 const CHANNELS = [
   { value: 'cash_sales',     icon: '💵', label: 'بيع نقدي' },
@@ -295,7 +295,7 @@ export default function MobileNewReservationPage() {
             onChange={e => upd('notes', e.target.value)} placeholder="أي تفاصيل إضافية..." />
         </div>
 
-        <PhoneAlertToggle event={PHONE_ALERT_EVENTS.reservation} value={form.phone_alert}
+        <PhoneAlertToggle kind="reservation" value={form.phone_alert}
           onChange={v => upd('phone_alert', v)} />
       </div>
 

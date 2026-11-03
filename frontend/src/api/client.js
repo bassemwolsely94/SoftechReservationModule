@@ -545,6 +545,7 @@ export const insightsApi = {
 
 // Phone alerts (WhatsApp) admin API — admin + supervisor only (enforced server-side)
 export const phoneAlertsApi = {
+  modes:         ()           => api.get('/notifications/phone-alerts/modes/'),
   policies:      ()           => api.get('/notifications/phone-alerts/policies/'),
   savePolicies:  (rows)       => api.patch('/notifications/phone-alerts/policies/', rows),
   owners:        ()           => api.get('/notifications/phone-alerts/owners/'),

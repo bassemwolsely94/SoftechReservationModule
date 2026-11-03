@@ -1656,3 +1656,34 @@ class AlertsOnlyGuardTests(TestCase):
                                            partial=True)
         self.assertFalse(ser.is_valid())
         self.assertIn('alerts_only', ser.errors)
+
+
+class ModesEndpointTests(TestCase):
+    URL = '/api/notifications/phone-alerts/modes/'
+
+    @classmethod
+    def setUpTestData(cls):
+        from .factories import make_pharmacist
+        cls.branch = Branch.objects.create(softech_branch_id='973', name='Modes Br')
+        _, cls.pharm, cls.pharm_client = make_pharmacist('pa8_pharm', branch=cls.branch)
+
+    def _set(self, event, mode):
+        PhoneAlertPolicy.objects.filter(event=event).update(mode=mode)
+
+    def test_non_admin_gets_resolved_modes(self):
+        r = self.pharm_client.get(self.URL)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data, {'reservation': 'optional', 'transfer': 'optional', 'task': 'optional'})
+
+    def test_anonymous_rejected(self):
+        from rest_framework.test import APIClient
+        self.assertIn(APIClient().get(self.URL).status_code, (401, 403))
+
+    def test_values_follow_policy(self):
+        for e in ('reservation_sourcing', 'reservation_status_urgent',
+                  'transfer_hq_submitted', 'transfer_status', 'task_assigned'):
+            self._set(e, 'never')
+        self._set('transfer_status', 'always')
+        self._set('task_status', 'optional')
+        self.assertEqual(self.pharm_client.get(self.URL).data,
+                         {'reservation': 'hidden', 'transfer': 'always', 'task': 'optional'})

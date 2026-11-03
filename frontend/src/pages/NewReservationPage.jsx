@@ -21,7 +21,7 @@ import BranchSelect from '../components/BranchSelect'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import CustomerSearchWidget from '../components/CustomerSearchWidget'
 import ChannelContactField from '../components/ChannelContactField'
-import PhoneAlertToggle, { PHONE_ALERT_EVENTS } from '../components/PhoneAlertToggle'
+import PhoneAlertToggle from '../components/PhoneAlertToggle'
 import api from '../api/client'
 
 // ── Stock panel ────────────────────────────────────────────────────────────────
@@ -792,7 +792,7 @@ export default function NewReservationPage() {
               placeholder="أي تفاصيل إضافية..." />
           </div>
 
-          <PhoneAlertToggle event={PHONE_ALERT_EVENTS.reservation} value={form.phone_alert}
+          <PhoneAlertToggle kind="reservation" value={form.phone_alert}
             onChange={v => upd('phone_alert', v)} />
 
           {/* Image upload */}

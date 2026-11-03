@@ -8,7 +8,7 @@ import { tasksApi, branchesApi, usersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import useHelpTab from '../help/useHelpTab'
 import SortTh from '../components/SortTh'
-import PhoneAlertToggle, { PHONE_ALERT_EVENTS } from '../components/PhoneAlertToggle'
+import PhoneAlertToggle from '../components/PhoneAlertToggle'
 import useServerSort from '../hooks/useServerSort'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -267,7 +267,7 @@ function NewTaskModal({ onClose, onCreated, branches, staff }) {
             />
           </div>
 
-          <PhoneAlertToggle event={PHONE_ALERT_EVENTS.task} value={form.phone_alert}
+          <PhoneAlertToggle kind="task" value={form.phone_alert}
             onChange={v => set('phone_alert', v)} />
         </div>
         <div className="flex gap-2 p-4 border-t justify-end">

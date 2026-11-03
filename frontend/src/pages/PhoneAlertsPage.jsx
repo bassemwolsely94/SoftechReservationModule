@@ -45,7 +45,7 @@ function errText(e, field) {
   const d = e?.response?.data
   if (!d) return 'تعذّر الاتصال بالسيرفر'
   const pick = v => (Array.isArray(v) ? v[0] : v)
-  if (typeof d === 'string') return d
+  if (typeof d === 'string') return /<[a-z!][^>]*>/i.test(d) ? 'حدث خطأ في السيرفر — حاول مرة أخرى' : d
   if (field && d[field]) return pick(d[field])
   const first = Object.values(d)[0]
   return pick(first) || 'حدث خطأ'
@@ -56,8 +56,17 @@ function useStaff() {
   return useQuery({
     queryKey: ['phone-alert-staff'],
     queryFn: async () => {
-      const get = p => usersApi.list({ page_size: 500, is_active: true, ...p })
-        .then(r => r.data?.results || r.data || [])
+      // follow `next` so a long staff list is never silently cut off
+      const get = async p => {
+        let out = []
+        for (let page = 1; page <= 50; page++) {
+          const data = (await usersApi.list({ page_size: 200, page, is_active: true, ...p })).data
+          if (Array.isArray(data)) return data
+          out = out.concat(data?.results || [])
+          if (!data?.next) break
+        }
+        return out
+      }
       const [a, b] = await Promise.all([get({}), get({ alerts_only: 1 })])
       return [...a, ...b]
     },
@@ -74,7 +83,8 @@ function PolicyRow({ policy, staff }) {
   const [draft, setDraft] = useState(policy)
   const [err, setErr] = useState({})
   const [saved, setSaved] = useState(false)
-  const dirty = ['mode', 'remind_after_min', 'escalate_after_min', 'max_reminders'].some(k => draft[k] !== policy[k])
+  const dirty = draft.mode !== policy.mode
+    || ['remind_after_min', 'escalate_after_min', 'max_reminders'].some(k => Number(draft[k]) !== Number(policy[k]))
     || JSON.stringify([...(draft.escalate_to || [])].sort()) !== JSON.stringify([...(policy.escalate_to || [])].sort())
 
   const save = useMutation({
@@ -88,6 +98,7 @@ function PolicyRow({ policy, staff }) {
     onSuccess: () => {
       setErr({}); setSaved(true); setTimeout(() => setSaved(false), 2500)
       qc.invalidateQueries({ queryKey: ['phone-alert-policies'] })
+      qc.invalidateQueries({ queryKey: ['phone-alert-modes'] })
     },
     onError: e => setErr(e?.response?.data && typeof e.response.data === 'object' ? e.response.data : { _: errText(e) }),
   })
@@ -189,6 +200,7 @@ function OwnersTab() {
     onSuccess: () => { setErr(''); refresh() },
     onError: e => setErr(errText(e)),
   })
+  const [confirmDel, setConfirmDel] = useState(null)
   const del = useMutation({
     mutationFn: id => phoneAlertsApi.deleteOwner(id),
     onSuccess: refresh,
@@ -246,8 +258,15 @@ function OwnersTab() {
                       onChange={e => patch.mutate({ id: o.id, data: { active: e.target.checked } })} />
                   </td>
                   <td className="px-4 py-2 text-left">
-                    <button className="text-xs text-red-600 hover:underline"
-                      onClick={() => { if (window.confirm('حذف هذا المسؤول؟')) del.mutate(o.id) }}>حذف</button>
+                    {confirmDel === o.id ? (
+                      <span className="text-xs space-x-2 space-x-reverse">
+                        <button className="text-red-700 font-semibold hover:underline"
+                          onClick={() => { del.mutate(o.id); setConfirmDel(null) }}>تأكيد الحذف</button>
+                        <button className="text-gray-500 hover:underline" onClick={() => setConfirmDel(null)}>إلغاء</button>
+                      </span>
+                    ) : (
+                      <button className="text-xs text-red-600 hover:underline" onClick={() => setConfirmDel(o.id)}>حذف</button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -370,8 +389,13 @@ function BranchesTab() {
 
 // ── Log ───────────────────────────────────────────────────────────────────────
 
+// events that have no policy row but still appear in the log
+const EXTRA_EVENTS = [['escalation', 'تصعيد تنبيه لم يُستلم'], ['morning_brief', 'ملخص الصباح'],
+  ['expiry_worklist', 'قائمة الصلاحيات'], ['test', 'تنبيه تجريبي']]
+
 const cursorOf = url => { try { return new URL(url).searchParams.get('cursor') } catch { return null } }
-const fmt = iso => (iso ? new Date(iso).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }) : '—')
+const toLatinDigits = s => (s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s)
+const fmt = iso => (iso ? toLatinDigits(new Date(iso).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' })) : '—')
 
 function LogDetail({ id }) {
   const { data } = useQuery({
@@ -419,8 +443,9 @@ function LogTab({ events }) {
         </select>
         <select className={INPUT} value={f.event} onChange={e => set('event', e.target.value)}>
           <option value="">كل الأحداث</option>
-          {events.map(p => <option key={p.event} value={p.event}>{p.label}</option>)}
-          <option value="test">تنبيه تجريبي</option>
+          {events.filter(p => !EXTRA_EVENTS.some(([k]) => k === p.event))
+            .map(p => <option key={p.event} value={p.event}>{p.label}</option>)}
+          {EXTRA_EVENTS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
         </select>
         <input type="date" className={INPUT} value={f.date} onChange={e => set('date', e.target.value)} />
         {error && <span className="text-sm text-red-600">{errText(error, 'date')}</span>}

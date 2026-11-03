@@ -51,6 +51,16 @@ def _audit(request, action, obj, before, after, note=''):
                  new_data=after or None, note=note, request=request)
 
 
+# -- toggle modes (any signed-in staff) ----------------------------------------
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def modes(request):
+    """The resolved per-record toggle mode for each record type: always / optional / hidden."""
+    from .hooks import RECORD_EVENTS, toggle_mode
+    return Response({kind: toggle_mode(events) for kind, events in RECORD_EVENTS.items()})
+
+
 # ── policies ─────────────────────────────────────────────────────────────────
 
 def _policy_state(p):

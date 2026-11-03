@@ -46,9 +46,17 @@ def on_task_status(task, actor=None):
 
 # ── toggle rule ──────────────────────────────────────────────────────────────
 
-def apply_policy(event_keys, requested):
-    """Stored value of the one per-record toggle, coerced across ALL the model's events:
-    True if any policy is 'always'; False only if every event is never/absent; else as ticked."""
+# Every event a record type can raise (the single source for serializers and the modes endpoint).
+RECORD_EVENTS = {
+    'reservation': ('reservation_sourcing', 'reservation_status_urgent'),
+    'transfer': ('transfer_hq_submitted', 'transfer_status'),
+    'task': ('task_assigned', 'task_status'),
+}
+
+
+def toggle_mode(event_keys):
+    """Resolved mode of the per-record toggle across ALL the model's events:
+    'always' if any policy is always; 'hidden' if every event is never/absent; else 'optional'."""
     if isinstance(event_keys, str):
         event_keys = (event_keys,)
     modes = []
@@ -56,8 +64,18 @@ def apply_policy(event_keys, requested):
         policy = PhoneAlertPolicy.for_event(key)
         modes.append(policy.mode if policy is not None else 'never')
     if 'always' in modes:
-        return True
+        return 'always'
     if all(m == 'never' for m in modes):
+        return 'hidden'
+    return 'optional'
+
+
+def apply_policy(event_keys, requested):
+    """Stored value of the one per-record toggle, coerced by toggle_mode."""
+    mode = toggle_mode(event_keys)
+    if mode == 'always':
+        return True
+    if mode == 'hidden':
         return False
     return bool(requested)
 

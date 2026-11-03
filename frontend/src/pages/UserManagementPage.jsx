@@ -53,6 +53,8 @@ function StatusBadge({ isActive }) {
 
 // ── User Drawer (Create / Edit) ────────────────────────────────────────────────
 
+const FIELD_LABELS = { alerts_only: 'تنبيهات فقط', phone_alerts_enabled: 'تنبيهات الموبايل' }
+
 function UserDrawer({ user, branches, onClose, onSaved }) {
   const isEdit = Boolean(user)
   const qc = useQueryClient()
@@ -162,10 +164,10 @@ function UserDrawer({ user, branches, onClose, onSaved }) {
 
           {/* Field-level errors (role, branch, email, etc.) */}
           {Object.entries(errors)
-            .filter(([k]) => !['non_field_errors', 'username', 'password'].includes(k))
+            .filter(([k]) => !['non_field_errors', 'username', 'password', 'phone'].includes(k))
             .map(([k, v]) => (
               <div key={k} className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
-                <span className="font-medium capitalize">{k.replace(/_/g, ' ')}: </span>
+                <span className="font-medium capitalize">{FIELD_LABELS[k] || k.replace(/_/g, ' ')}: </span>
                 {Array.isArray(v) ? v.join(' ') : String(v)}
               </div>
             ))
@@ -205,28 +207,26 @@ function UserDrawer({ user, branches, onClose, onSaved }) {
           )}
 
           {/* Alerts-only member (WhatsApp alerts, no login) */}
-          {(
-            <div data-tour="admin-users-alerts-only">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={form.alerts_only}
-                  onChange={e => set('alerts_only', e.target.checked)}
-                  className="w-4 h-4 text-brand-600 rounded" />
-                <span className="text-sm text-gray-700">📲 تنبيهات الموبايل فقط (بدون دخول للنظام)</span>
-              </label>
-              {form.alerts_only && !isEdit && (
-                <p className="mt-1 text-xs text-gray-500">لا يحتاج كلمة مرور ولا مستخدم SOFTECH — رقم الموبايل مطلوب.</p>
-              )}
-              {isEdit && user.alerts_only && !form.alerts_only && (
+          <div data-tour="admin-users-alerts-only">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" checked={form.alerts_only}
+                onChange={e => set('alerts_only', e.target.checked)}
+                className="w-4 h-4 text-brand-600 rounded" />
+              <span className="text-sm text-gray-700">📲 تنبيهات الموبايل فقط (بدون دخول للنظام)</span>
+            </label>
+            {form.alerts_only && !isEdit && (
+              <p className="mt-1 text-xs text-gray-500">لا يحتاج كلمة مرور ولا مستخدم SOFTECH — رقم الموبايل مطلوب.</p>
+            )}
+            {isEdit && user.alerts_only && !form.alerts_only && (
                 <p className="mt-1 text-xs text-amber-700">
                   إلغاء «تنبيهات فقط» لا يعيد الدخول للنظام: يجب أن يعيّن المدير كلمة مرور جديدة ثم يفعّل الحساب.
                 </p>
-              )}
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Username */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">اسم المستخدم (SOFTECH) *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{form.alerts_only ? 'اسم المستخدم *' : 'اسم المستخدم (SOFTECH) *'}</label>
             <input
               type="text"
               value={form.username}
@@ -285,12 +285,13 @@ function UserDrawer({ user, branches, onClose, onSaved }) {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">رقم الهاتف</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">رقم الهاتف{form.alerts_only ? ' *' : ''}</label>
               <input
                 type="tel" value={form.phone}
                 onChange={e => set('phone', e.target.value)}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
               />
+              {errors.phone && <p className="mt-1 text-xs text-red-600">{[].concat(errors.phone).join(' ')}</p>}
             </div>
             <label className="col-span-2 flex items-center gap-3 cursor-pointer" data-tour="admin-users-phone-alerts">
               <input type="checkbox" checked={form.phone_alerts_enabled}

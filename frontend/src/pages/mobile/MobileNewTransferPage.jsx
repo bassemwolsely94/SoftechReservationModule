@@ -11,7 +11,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { transfersApi, branchesApi } from '../../api/client'
 import useAuthStore from '../../store/authStore'
 import ItemSearchWidget from '../../components/ItemSearchWidget'
-import PhoneAlertToggle, { PHONE_ALERT_EVENTS } from '../../components/PhoneAlertToggle'
+import PhoneAlertToggle from '../../components/PhoneAlertToggle'
 import useTransferPrefill from '../../hooks/useTransferPrefill'
 
 export default function MobileNewTransferPage() {
@@ -126,7 +126,7 @@ export default function MobileNewTransferPage() {
         <label className="label">ملاحظات</label>
         <textarea rows={2} className="input-field w-full resize-none" value={notes}
           onChange={e => setNotes(e.target.value)} placeholder="سبب الطلب أو أي تفاصيل..." />
-        <PhoneAlertToggle className="mt-3" event={PHONE_ALERT_EVENTS.transfer} value={phoneAlert} onChange={setPhoneAlert} />
+        <PhoneAlertToggle className="mt-3" kind="transfer" value={phoneAlert} onChange={setPhoneAlert} />
       </div>
 
       {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-2xl px-4 py-3">{error}</div>}

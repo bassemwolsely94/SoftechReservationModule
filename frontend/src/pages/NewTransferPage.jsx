@@ -12,7 +12,7 @@ import { transfersApi, branchesApi, itemsApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import BranchSelect from '../components/BranchSelect'
 import ItemSearchWidget from '../components/ItemSearchWidget'
-import PhoneAlertToggle, { PHONE_ALERT_EVENTS } from '../components/PhoneAlertToggle'
+import PhoneAlertToggle from '../components/PhoneAlertToggle'
 import useTransferPrefill from '../hooks/useTransferPrefill'
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -259,7 +259,7 @@ export default function NewTransferPage() {
           <textarea rows={3} className="input-field resize-none text-sm"
             placeholder="سبب الطلب، أولوية، تفاصيل إضافية..."
             value={notes} onChange={e => setNotes(e.target.value)} />
-          <PhoneAlertToggle className="mt-3" event={PHONE_ALERT_EVENTS.transfer} value={phoneAlert} onChange={setPhoneAlert} />
+          <PhoneAlertToggle className="mt-3" kind="transfer" value={phoneAlert} onChange={setPhoneAlert} />
         </div>
 
         {/* Error */}
