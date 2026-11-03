@@ -170,7 +170,7 @@ export default function PicAnalyticsPage() {
   const job = useQuery({
     queryKey: ['pic-analytics-export-job', jobId],
     queryFn: () => picAnalyticsApi.exportJob(jobId).then(r => r.data),
-    enabled: !!jobId, retry: false, gcTime: 0,
+    enabled: !!jobId, retry: (n, e) => n < 2 && ![403, 404].includes(e?.response?.status), gcTime: 0,  // retry rides out a deploy blip, not a gone job
     refetchInterval: q => (!q.state.data || RUNNING.includes(q.state.data.status) ? 1500 : false),
   })
   const jobData = job.data
