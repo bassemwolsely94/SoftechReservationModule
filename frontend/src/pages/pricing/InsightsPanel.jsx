@@ -149,7 +149,7 @@ export default function InsightsPanel() {
         <div className="px-4 py-3 border-b">
           <h3 className="font-bold text-gray-800 text-sm">أثر الخصومات على المبيعات</h3>
           <p className="text-xs text-gray-400 mt-0.5">
-            مقارنة مبيعات الصنف قبل/بعد تغيير الخصم ({days} يوم لكل جانب) — متوسط يومي
+            مقارنة مبيعات الصنف قبل/بعد تغيير الخصم ({days} يوم لكل جانب) — متوسط يومي · الترتيب يشمل آخر 12 تغيير المعروضة فقط
           </p>
         </div>
         <div className="p-4">

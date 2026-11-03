@@ -28,6 +28,19 @@ from .engine import ForecastEngine
 from .backtest import BacktestService
 from core.threads import start_thread
 from core.stable_ordering import StableOrderingFilter
+from django.db.models import F, Value
+from django.db.models.functions import Coalesce, Concat, NullIf, Trim
+
+
+class NullsLastOrdering(StableOrderingFilter):
+    """Sortable-grid ordering with empty values (e.g. category-only seasonality rows with no item) last in
+    BOTH directions, then the unique pk tiebreak."""
+    def get_ordering(self, request, queryset, view):
+        ordering = super().get_ordering(request, queryset, view)
+        if not ordering:
+            return ordering
+        return [(F(f[1:]).desc(nulls_last=True) if f.startswith('-') else F(f).asc(nulls_last=True))
+                if isinstance(f, str) else f for f in ordering]
 
 logger = logging.getLogger('elrezeiky')
 
@@ -64,7 +77,7 @@ class SeasonalityIndexViewSet(viewsets.ModelViewSet):
     serializer_class   = SeasonalityIndexSerializer
     permission_classes = [IsAuthenticated, CanUseForecasting]
     # sortable grid: the page is cut at 50, so the headers sort on the server (explicit whitelist)
-    filter_backends    = [StableOrderingFilter]
+    filter_backends    = [NullsLastOrdering]
     ordering_fields    = ['item__name', 'category__name', 'month', 'index_value', 'computed_at']
 
     def get_queryset(self):
@@ -103,10 +116,15 @@ class SeasonalityIndexViewSet(viewsets.ModelViewSet):
 class ForecastRunViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class   = ForecastRunSerializer
     permission_classes = [IsAuthenticated, CanUseForecasting]
-    queryset           = ForecastRun.objects.select_related('triggered_by').order_by('-started_at')
-    filter_backends    = [StableOrderingFilter]
-    ordering_fields    = ['started_at', 'completed_at', 'items_processed', 'status',
-                          'triggered_by__user__first_name']
+    # «بواسطة» sorts by the name the grid shows (triggered_by_name = StaffProfile.full_name)
+    queryset           = (ForecastRun.objects.select_related('triggered_by__user').annotate(
+        triggered_by_sort=Coalesce(
+            NullIf(Trim(Concat('triggered_by__user__first_name', Value(' '), 'triggered_by__user__last_name')), Value('')),
+            NullIf(Trim('triggered_by__softech_username'), Value('')),
+            'triggered_by__user__username'))
+        .order_by('-started_at'))
+    filter_backends    = [NullsLastOrdering]
+    ordering_fields    = ['started_at', 'completed_at', 'items_processed', 'status', 'triggered_by_sort']
 
     @action(detail=False, methods=['post'], url_path='trigger')
     def trigger(self, request):
@@ -132,7 +150,7 @@ class ForecastRunViewSet(viewsets.ReadOnlyModelViewSet):
 class ForecastAccuracyViewSet(viewsets.ModelViewSet):
     serializer_class   = ForecastAccuracySerializer
     permission_classes = [IsAuthenticated, CanUseForecasting]
-    filter_backends    = [StableOrderingFilter]
+    filter_backends    = [NullsLastOrdering]
     ordering_fields    = ['item__name', 'branch__name', 'forecast_date', 'forecast_30d',
                           'actual_30d', 'mape', 'mae']
 

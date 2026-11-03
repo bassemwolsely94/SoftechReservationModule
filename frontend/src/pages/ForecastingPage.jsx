@@ -33,7 +33,7 @@ export default function ForecastingPage() {
   const [runsOrd, setRunsOrd] = useState('')
   const [accOrd, setAccOrd] = useState('')
   const [seasOrd, setSeasOrd] = useState('')
-  const runsSort = useServerSort(runsOrd, setRunsOrd, { allowed: ['started_at', 'completed_at', 'items_processed', 'status', 'triggered_by__user__first_name'] })
+  const runsSort = useServerSort(runsOrd, setRunsOrd, { allowed: ['started_at', 'completed_at', 'items_processed', 'status', 'triggered_by_sort'] })
   const accSort = useServerSort(accOrd, setAccOrd, { allowed: ['item__name', 'forecast_date', 'forecast_30d', 'actual_30d', 'mape', 'mae'] })
   const seasSort = useServerSort(seasOrd, setSeasOrd, { allowed: ['item__name', 'month', 'index_value', 'computed_at'] })
   useHelpTab(tab)
@@ -158,7 +158,7 @@ export default function ForecastingPage() {
                   <SortTh {...runsSort.headerProps('completed_at', 'date')} className="px-4 py-3 text-right font-semibold text-gray-600">انتهى في</SortTh>
                   <SortTh {...runsSort.headerProps('items_processed', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">الأصناف المعالجة</SortTh>
                   <SortTh {...runsSort.headerProps('status', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">الحالة</SortTh>
-                  <SortTh {...runsSort.headerProps('triggered_by__user__first_name', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">بواسطة</SortTh>
+                  <SortTh {...runsSort.headerProps('triggered_by_sort', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">بواسطة</SortTh>
                   <th className="px-4 py-3 text-right font-semibold text-gray-600">ملاحظات</th>
                 </tr>
               </thead>
@@ -265,7 +265,7 @@ export default function ForecastingPage() {
                 <tbody>
                   {seasonality.map(s => (
                     <tr key={s.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium">{s.item_name || s.category || '—'}</td>
+                      <td className="px-4 py-3 font-medium">{s.item_name || s.category_name || '—'}</td>
                       <td className="px-4 py-3 text-gray-500">{s.month}</td>
                       <td className="px-4 py-3">
                         <span className={`font-semibold ${
