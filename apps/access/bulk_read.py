@@ -8,6 +8,7 @@ exports for BULK_READ_BLOCK_MINUTES. Counters live in the cache (a lost cache on
 count). Nothing here raises out to the caller's request.
 """
 import json
+from datetime import timedelta
 import logging
 
 from django.conf import settings
@@ -40,7 +41,7 @@ def is_bulk_path(path):
 
 
 def rows_in(response):
-    """len(results) of a paginated DRF body, len() of a list body, else 0."""
+    """len(results) of a paginated DRF body, len() of a list body, 1 for a detail dict, else 0."""
     try:
         data = getattr(response, 'data', None)
         if data is None:
@@ -51,7 +52,9 @@ def rows_in(response):
             data = json.loads(response.content)
         if isinstance(data, dict):
             results = data.get('results')
-            return len(results) if isinstance(results, (list, tuple)) else 0
+            if isinstance(results, (list, tuple)):
+                return len(results)
+            return 1 if data else 0     # a detail body: one record (enumeration adds up)
         if isinstance(data, (list, tuple)):
             return len(data)
     except Exception:
@@ -85,26 +88,53 @@ def _add(user, kind, amount):
     return after - amount, after
 
 
-def record(user, *, rows=0, export=False):
-    """Add to this hour's counters. 'rows' / 'exports' when a limit is first crossed, else None."""
-    crossed = None
+def record_counted(user, *, rows=0, export=False):
+    """(kind, count): kind is 'rows' / 'exports' when a limit is first crossed this hour, else
+    None; count is the counter value seen at the crossing."""
+    crossed, count = None, 0
     try:
         if rows > 0:
             before, after = _add(user, 'rows', rows)
             if before < _limit('rows') <= after:
-                crossed = 'rows'
+                crossed, count = 'rows', after
         if export:
             before, after = _add(user, 'exports', 1)
             if before < _limit('exports') <= after and crossed is None:
-                crossed = 'exports'
+                crossed, count = 'exports', after
     except Exception:
         log.warning('bulk read counter failed', exc_info=True)
-    return crossed
+    return crossed, count
+
+
+def record(user, *, rows=0, export=False):
+    """Add to this hour's counters. 'rows' / 'exports' when a limit is first crossed, else None."""
+    return record_counted(user, rows=rows, export=export)[0]
+
+
+def _profile(user):
+    """The StaffProfile, or None for a superuser / an account without one (never blocked)."""
+    if getattr(user, 'is_superuser', False):
+        return None
+    try:
+        return getattr(user, 'staff_profile', None)
+    except Exception:
+        return None
 
 
 def blocked(user):
+    """True while the profile's bulk_read_blocked_until is in the future (stored in the database,
+    so `clear_bulk_block` in another process lifts it)."""
     try:
-        return bool(cache.get(f'access:bulkblock:{user.pk}'))
+        profile = _profile(user)
+        until = getattr(profile, 'bulk_read_blocked_until', None)
+        if until is None:
+            return False
+        if until > timezone.now():
+            return True
+        # the user object may be stale (loaded before a clear / re-block): ask the database once
+        fresh = type(profile).objects.filter(pk=profile.pk).values_list(
+            'bulk_read_blocked_until', flat=True).first()
+        return bool(fresh and fresh > timezone.now())
     except Exception:
         return False
 
@@ -114,7 +144,7 @@ def _role(user):
     return getattr(session_policy.subject(user), 'role', None) or 'viewer'
 
 
-def alert(user, kind, request):
+def alert(user, kind, request, count=None):
     """Audit row + admin digest for a crossing; in enforce, block a non-admin."""
     try:
         access = getattr(request, 'access', None)
@@ -123,7 +153,8 @@ def alert(user, kind, request):
         label_en = ('Outside the network' if getattr(network, 'zone', None) == 'external'
                     else 'Inside the network' if network is not None else '')
         role = _role(user)
-        count = cache.get(_key(user, kind)) or 0
+        if count is None:
+            count = cache.get(_key(user, kind)) or 0
         limit = _limit(kind)
         current = mode()
         username = user.get_username()
@@ -141,8 +172,11 @@ def alert(user, kind, request):
                 f'(limit {limit}) — {label_en}.')
         from .devices import admin_digest
         admin_digest(TITLE, body, f'bulk-read:{user.pk}:{_hour()}:{kind}')
-        if current == 'enforce' and role != 'admin':
+        profile = _profile(user)
+        if current == 'enforce' and role != 'admin' and profile is not None:
             minutes = int(getattr(settings, 'BULK_READ_BLOCK_MINUTES', 30))
-            cache.set(f'access:bulkblock:{user.pk}', 1, minutes * 60)
+            until = timezone.now() + timedelta(minutes=minutes)
+            type(profile).objects.filter(pk=profile.pk).update(bulk_read_blocked_until=until)
+            profile.bulk_read_blocked_until = until
     except Exception:
         log.error('bulk read alert failed', exc_info=True)

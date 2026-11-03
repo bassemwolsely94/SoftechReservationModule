@@ -2,10 +2,13 @@
 from io import StringIO
 from types import SimpleNamespace
 
-from django.core import checks
+from datetime import timedelta
+
+from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.management import call_command
 from django.http import HttpResponse, JsonResponse
+from django.utils import timezone
 from django.test import RequestFactory, TestCase, override_settings
 from rest_framework.response import Response
 
@@ -43,13 +46,18 @@ class BulkReadTests(TestCase):
             network=NetworkInfo(zone='external', ip='41.1.1.1', site=None))
         return ExportAuditMiddleware(view)(req)
 
+    def _block(self, profile, minutes=30):
+        type(profile).objects.filter(pk=profile.pk).update(
+            bulk_read_blocked_until=timezone.now() + timedelta(minutes=minutes))
+
     def _alerts(self):
         return list(AuditLog.objects.filter(action='bulk_read_alert'))
 
     def test_rows_counted_from_paginated_and_list_bodies(self):
         self.assertEqual(bulk_read.rows_in(Response({'count': 9, 'results': [1, 2, 3]})), 3)
         self.assertEqual(bulk_read.rows_in(Response([1, 2])), 2)
-        self.assertEqual(bulk_read.rows_in(Response({'detail': 'x'})), 0)
+        self.assertEqual(bulk_read.rows_in(Response({'id': 3})), 1)
+        self.assertEqual(bulk_read.rows_in(Response({})), 0)
         self.assertEqual(bulk_read.rows_in(JsonResponse({'results': [1, 2, 3, 4]})), 4)
         self.assertEqual(bulk_read.rows_in(JsonResponse([1], safe=False)), 1)
         self.assertEqual(bulk_read.rows_in(HttpResponse(b'x', content_type='text/plain')), 0)
@@ -98,8 +106,10 @@ class BulkReadTests(TestCase):
         # an export is refused too
         self.assertEqual(self._call(lambda req: HttpResponse(b'x'),
                                     path='/api/orders/export/').status_code, 403)
-        ttl_key = f'access:bulkblock:{self.user.pk}'
-        self.assertEqual(cache.get(ttl_key), 1)
+        self.profile.refresh_from_db()
+        self.assertGreater(self.profile.bulk_read_blocked_until, timezone.now() + timedelta(minutes=29))
+        # writes at the counter keep working while blocked
+        self.assertEqual(self._call(_rows_view(1), method='post').status_code, 200)
 
     @override_settings(BULK_READ_ENFORCEMENT='enforce')
     def test_admin_alerted_never_blocked(self):
@@ -129,13 +139,12 @@ class BulkReadTests(TestCase):
         self.assertEqual(self._alerts(), [])
 
     def test_clear_bulk_block_command(self):
-        cache.set(f'access:bulkblock:{self.user.pk}', 1, 600)
+        self._block(self.profile)
         out = StringIO()
         call_command('clear_bulk_block', 'bulk_user', stdout=out)
-        self.assertFalse(bulk_read.blocked(self.user))
+        self.assertFalse(bulk_read.blocked(User.objects.get(pk=self.user.pk)))
         row = self._alerts()[0]
         self.assertTrue(row.extra['cleared'])
-        self.assertTrue(row.extra['was_blocked'])
         from django.core.management.base import CommandError
         with self.assertRaises(CommandError):
             call_command('clear_bulk_block', 'nobody', stdout=out)
@@ -150,9 +159,36 @@ class BulkReadTests(TestCase):
             self.assertFalse(bulk_read.blocked(self.user))
         with override_settings(BULK_READ_ENFORCEMENT='enforce'):
             self.assertEqual(bulk_read_settings_check(None), [])
-        self.assertIsInstance(checks, object)
 
     def test_preflight_item(self):
         from apps.access import preflight
         items = preflight.check_bulk_read()
         self.assertEqual([i.code for i in items], ['bulk_read_mode'])
+
+    def test_block_expiry(self):
+        self._block(self.profile, minutes=-1)
+        self.assertFalse(bulk_read.blocked(User.objects.get(pk=self.user.pk)))
+        self._block(self.profile, minutes=5)
+        self.assertTrue(bulk_read.blocked(User.objects.get(pk=self.user.pk)))
+
+    def test_superuser_and_profileless_never_blocked(self):
+        su = User.objects.create_superuser('bulk_su', password='x')
+        plain = User.objects.create_user('bulk_plain', password='x')
+        self.assertFalse(bulk_read.blocked(su))
+        self.assertFalse(bulk_read.blocked(plain))
+        with override_settings(BULK_READ_ENFORCEMENT='enforce'):
+            for u in (su, plain):
+                bulk_read.alert(u, 'rows', SimpleNamespace(path='/api/customers/'), 11)
+                self.assertFalse(bulk_read.blocked(u))
+
+    def test_detail_get_counts_one_row(self):
+        self.assertEqual(bulk_read.rows_in(JsonResponse({'id': 5, 'name': 'x'})), 1)
+        for _ in range(11):
+            self._call(lambda req: JsonResponse({'id': 5}), path='/api/customers/5/')
+        self.assertEqual(len(self._alerts()), 1)
+
+    def test_clear_when_no_block_writes_no_audit(self):
+        out = StringIO()
+        call_command('clear_bulk_block', 'bulk_user', stdout=out)
+        self.assertIn('no bulk-read block', out.getvalue())
+        self.assertEqual(self._alerts(), [])

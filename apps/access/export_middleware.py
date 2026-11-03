@@ -84,8 +84,8 @@ class ExportAuditMiddleware:
         """A user blocked for bulk reading (enforce only) gets no customer reads and no exports."""
         if bulk_read.mode() != 'enforce':
             return None
-        if not (bulk_read.is_bulk_path(request.path)
-                or policy.is_export(request.path, request.method, request.GET, body)):
+        reads = request.method in ('GET', 'HEAD', 'OPTIONS') and bulk_read.is_bulk_path(request.path)
+        if not (reads or policy.is_export(request.path, request.method, request.GET, body)):
             return None
         from .policy_middleware import _user
         user = _user(request)
@@ -100,9 +100,11 @@ class ExportAuditMiddleware:
         if (request.method == 'GET' and bulk_read.is_bulk_path(request.path)
                 and 200 <= response.status_code < 300):
             rows = bulk_read.rows_in(response)
-        kind = bulk_read.record(user, rows=rows, export=export) if (rows or export) else None
+        if not (rows or export):
+            return
+        kind, count = bulk_read.record_counted(user, rows=rows, export=export)
         if kind:
-            bulk_read.alert(user, kind, request)
+            bulk_read.alert(user, kind, request, count)
 
     def _after(self, request, response, state):
         export = _is_export(request, response, state.get('body'))

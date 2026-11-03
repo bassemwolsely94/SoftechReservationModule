@@ -129,6 +129,9 @@ class StaffProfile(models.Model):
     user = models.OneToOneField(
         'auth.User', on_delete=models.CASCADE, related_name='staff_profile'
     )
+    # Temporary bulk-read block (N5): set by the bulk-read guard in enforce mode, cleared by
+    # `manage.py clear_bulk_block`; expiry is the time itself.
+    bulk_read_blocked_until = models.DateTimeField(null=True, blank=True)
     # Primary branch (kept for backward-compat + default scoping)
     branch = models.ForeignKey(
         'branches.Branch', null=True, blank=True, on_delete=models.SET_NULL,
