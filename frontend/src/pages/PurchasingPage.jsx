@@ -17,6 +17,8 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 import { useNavigate } from 'react-router-dom'
 import { purchasingApi } from '../api/client'
 import { tint } from '../theme/theme'
@@ -411,6 +413,7 @@ function BranchRankTable({ branches, rateLabel, rateKey, rateColorFn }) {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function FlaggedTable({ flagged, onRowClick }) {
+  const { sorted: flaggedRows, headerProps: fH } = useSortableRows(flagged || [], {})
   if (!flagged || flagged.length === 0) return (
     <div className="flex flex-col items-center justify-center py-10 text-center">
       <div className="text-4xl mb-2">✅</div>
@@ -423,18 +426,19 @@ function FlaggedTable({ flagged, onRowClick }) {
 
   return (
     <div className="overflow-x-auto">
+      <p className="text-[11px] text-gray-400 mb-1">الترتيب بالعناوين على القائمة المعروضة فقط.</p>
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-100">
-            <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">#</th>
-            <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">الصنف</th>
-            <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">الفرع الطالب</th>
-            <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">الكمية</th>
-            <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">أيام بلا مبيعات</th>
+            <SortTh {...fH('id', 'number')} className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">#</SortTh>
+            <SortTh {...fH('item_name', 'text')} className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">الصنف</SortTh>
+            <SortTh {...fH('branch_name', 'text')} className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">الفرع الطالب</SortTh>
+            <SortTh {...fH('qty', 'number')} className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">الكمية</SortTh>
+            <SortTh {...fH('days_since', 'number')} className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">أيام بلا مبيعات</SortTh>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
-          {flagged.map(f => (
+          {flaggedRows.map(f => (
             <tr
               key={f.id}
               onClick={() => onRowClick(f.id)}
@@ -473,6 +477,7 @@ function FlaggedTable({ flagged, onRowClick }) {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function RecommendedTable({ items }) {
+  const { sorted: recRows, headerProps: rH } = useSortableRows(items || [], {})
   if (!items || items.length === 0) return (
     <div className="flex flex-col items-center justify-center py-8 text-center">
       <div className="text-3xl mb-2">📦</div>
@@ -485,18 +490,19 @@ function RecommendedTable({ items }) {
 
   return (
     <div className="overflow-x-auto">
+      <p className="text-[11px] text-gray-400 mb-1">الترتيب بالعناوين على القائمة المعروضة فقط.</p>
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b-2 border-brand-100">
-            <th className="text-right pb-3 px-3 text-xs font-bold text-brand-700">الصنف</th>
-            <th className="text-right pb-3 px-3 text-xs font-bold text-brand-700">كود سوفتك</th>
-            <th className="text-right pb-3 px-3 text-xs font-bold text-brand-700">عدد الطلبات</th>
-            <th className="text-right pb-3 px-3 text-xs font-bold text-brand-700">إجمالي الكميات</th>
-            <th className="text-right pb-3 px-3 text-xs font-bold text-brand-700">نسبة القبول</th>
+            <SortTh {...rH('item_name', 'text')} className="text-right pb-3 px-3 text-xs font-bold text-brand-700">الصنف</SortTh>
+            <SortTh {...rH('softech_id', 'text')} className="text-right pb-3 px-3 text-xs font-bold text-brand-700">كود سوفتك</SortTh>
+            <SortTh {...rH('request_count', 'number')} className="text-right pb-3 px-3 text-xs font-bold text-brand-700">عدد الطلبات</SortTh>
+            <SortTh {...rH('total_qty', 'number')} className="text-right pb-3 px-3 text-xs font-bold text-brand-700">إجمالي الكميات</SortTh>
+            <SortTh {...rH('accept_rate', 'number')} className="text-right pb-3 px-3 text-xs font-bold text-brand-700">نسبة القبول</SortTh>
           </tr>
         </thead>
         <tbody className="divide-y divide-brand-50">
-          {items.map((item, i) => (
+          {recRows.map((item, i) => (
             <tr key={item.item_id || i} className="hover:bg-brand-50 transition-colors">
               <td className="py-3 px-3">
                 <div className="font-bold text-gray-900 text-xs">{item.item_name}</div>
