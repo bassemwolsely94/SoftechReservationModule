@@ -235,6 +235,8 @@ _STEPS = [
 ]
 
 _TIPS = [
+    T('لو «معلومات وبدائل» مفعّلة، F7 يعرض: تحذيرات الصنف أولاً، البدائل المؤكدة، ثم «اقتراحات غير موثّقة» بدون زر إضافة (راجع العبوة والتركيز)، وطريقة الاستخدام المعتمدة. زر «📘 إرشادات» يرسل للعميل إرشادات أصناف الطلب على واتساب.',
+      "With \"Info & alternatives\" on, F7 shows: the item's warnings first, verified alternatives, then \"unverified suggestions\" with no add button (check the pack and strength), and the approved usage. The \"📘 guidance\" button sends the customer the guidance for the order's items on WhatsApp."),
     T('التنبيه الصحي للعميل (حساسية، حمل، طفل) يظهر قبل أي اقتراح بيع — لا تتجاهله.', 'The customer\'s health alert (allergy, pregnancy, child) shows before any sales suggestion — never ignore it.'),
     T('المرتجع يتطلب رقم الفاتورة الأصلية، وخلال 90 يوماً كحد أقصى.', 'A return needs the original invoice number and must be within 90 days.'),
     T('قنوات النقدى والتوصيل فقط تكتسب نقاط ولاء؛ التعاقد والتأمين لا.', 'Only cash and delivery channels earn loyalty points; contract and insurance do not.'),
@@ -770,7 +772,7 @@ SCREENS = [
              'text': T('يضيف الصنف المعلَّم في نتائج البحث للأمر — زي ما تضغط عليه.', 'Adds the highlighted search result to the order — same as tapping it.'),
              'open_hint': T('يظهر بعد ما تختار نتيجة في بحث الأصناف على الموبايل.', 'Appears after you highlight a result in the mobile item search.')},
         ],
-        'updated': '2026-11-02',
+        'updated': '2026-11-03',
         'change_note': T('«تفريغ الطابور الآن» من مكان لا يسمح بالكتابة في SOFTECH يُرفض ولا يغيّر حالة أي أمر', '"Flush the queue now" from a place that may not write to SOFTECH is refused and changes no order'),
     },
     {

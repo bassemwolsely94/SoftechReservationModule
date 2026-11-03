@@ -378,6 +378,7 @@ SCREENS = [
             {'key': 'attributes', 'title': T('الخصائص', 'Attributes'), 'body': T('التصنيف، المورد، البلد، التركيز، النكهة، اللون، الحجم، الباركود، كود SOFTECH، والوصفة الطبية.', 'Class, supplier, country, strength, flavour, colour, size, barcode, SOFTECH code and prescription status.')},
             {'key': 'availability', 'title': T('التوافر بالفروع', 'Branch availability'), 'body': T('حالة التوافر في كل فرع، تُحدَّث تلقائياً من SOFTECH.', 'Availability at each branch, updated automatically from SOFTECH.')},
             {'key': 'similar', 'title': T('منتجات مشابهة', 'Similar products'), 'body': T('أصناف من نفس التصنيف.', 'Items in the same class.')},
+            {'key': 'assistant', 'title': T('💊 للصيدلي', '💊 For the pharmacist'), 'body': T('يظهر عند تفعيل «معلومات الصنف»: التحذيرات أولاً، المادة الفعّالة (موثّقة أو لا)، البدائل المؤكدة بالرصيد، اقتراحات غير موثّقة، وطريقة الاستخدام المعتمدة.', 'Shown when "item info" is on: warnings first, the active ingredient (verified or not), verified alternatives with stock, unverified suggestions, and the approved usage.')},
             {'key': 'related', 'title': T('منتجات مرتبطة', 'Related products'), 'body': T('موصى به، يُشترى معاً، بديل، مكمل، حزمة البداية.', 'Recommended, bought together, alternative, complementary, starter pack.')},
             {'key': 'demand', 'title': T('الطلب المفتوح', 'Open demand'), 'body': T('طلبات العملاء المفتوحة والنواقص المسجّلة على هذا الصنف.', 'Open customer requests and recorded shortages for this item.')},
         ],
@@ -464,7 +465,7 @@ SCREENS = [
              'when': T('لما الصنف وصل وعايز تتابع مع العميل اللي طالبه.', 'When the item has arrived and you want to follow up with the customer who asked for it.'),
              'open_hint': T('في تبويب «الطلب المفتوح» لو فيه طلبات على الصنف.', 'On the "Open demand" tab when the item has requests.')},
         ],
-        'updated': '2026-11-01',
+        'updated': '2026-11-03',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
@@ -1183,7 +1184,7 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-01',
+        'updated': '2026-11-03',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]
