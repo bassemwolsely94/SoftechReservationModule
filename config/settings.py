@@ -956,6 +956,8 @@ MIDDLEWARE += [
     'apps.users.middleware.CurrentUserMiddleware',
     # N1: request.access (network zone/site + role); files SOFTECH load by network (log only)
     'apps.access.middleware.AccessContextMiddleware',
+    # N6: anonymous allow-list for /api/ (apps/access/public_paths.py); mode PUBLIC_API_ENFORCEMENT
+    'apps.access.public_middleware.PublicApiMiddleware',
     # Server-side RoleModuleAccess check for /api/<module>/ (see core/middleware/module_access.py)
     'core.middleware.module_access.ModuleAccessMiddleware',
     # Zone policy (N3): narrows by access zone; mode NETWORK_POLICY_ENFORCEMENT off/log/enforce
@@ -965,6 +967,8 @@ MIDDLEWARE += [
     # P-56: log API requests slower than SLOW_REQUEST_MS (route pattern only) for /sync
     'apps.sync.middleware.SlowRequestMiddleware',
 ]
+# N6: off / log / enforce - anonymous requests to /api/ paths not in apps/access/public_paths.py
+PUBLIC_API_ENFORCEMENT = config('PUBLIC_API_ENFORCEMENT', default='log')
 SLOW_REQUEST_MS = config('SLOW_REQUEST_MS', default=1000, cast=int)
 # N5: Excel / Word exports up to this size get the who/when/where stamp (larger: audit only)
 EXPORT_STAMP_MAX_BYTES = 20 * 1024 * 1024

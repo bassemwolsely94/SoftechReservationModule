@@ -83,6 +83,7 @@ class AccessContextTests(TestCase):
         self.assertTrue(any('203.0.113.9' in m and '/api/probe/' in m for m in cm.output))
 
     @override_settings(NETWORK_POLICY_ENFORCEMENT='log')
+    @override_settings(PUBLIC_API_ENFORCEMENT='off')   # N6: this test is about the context logger
     def test_repeated_identical_request_logged_once(self):
         cache.clear()
         with self.assertLogs('elrezeiky.access', 'INFO') as cm:
@@ -101,6 +102,7 @@ class AccessContextTests(TestCase):
         self.assertEqual(r.status_code, 200)
 
     @override_settings(NETWORK_POLICY_ENFORCEMENT='off')
+    @override_settings(PUBLIC_API_ENFORCEMENT='off')   # N6: this test is about the context logger
     def test_nothing_logged_when_off(self):
         with self.assertNoLogs('elrezeiky.access', 'INFO'):
             self.client.get('/api/probe/', REMOTE_ADDR='203.0.113.9')

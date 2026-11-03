@@ -244,11 +244,22 @@ def check_bulk_read():
     return out
 
 
+def check_public_api():
+    from .public_middleware import mode
+    current = mode()
+    if current == 'enforce':
+        return [Item(OK, 'public_api_mode', 'بوابة المسارات العامة: التطبيق الفعلي (enforce)',
+                     'Public-API gate: enforce')]
+    return [Item(WARN, 'public_api_mode', f'بوابة المسارات العامة في وضع {current} — لا ترفض أحداً بعد',
+                 f'Public-API gate mode is {current} — nobody is refused yet')]
+
+
 def run(now=None):
     now = now or timezone.now()
     items = []
     items += check_settings()
     items += check_bulk_read()
+    items += check_public_api()
     items += check_internal_traffic(now)
     items += check_rows()
     items += check_mfa()
