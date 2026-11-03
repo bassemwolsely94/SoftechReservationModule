@@ -104,10 +104,10 @@ def _normalize_caller_num(caller_num: str, gateway_ext: str) -> str:
     leading 0 is never lost; line prefixes 81-85 / 91-95 are removed.
     """
     from apps.pbx.cdr import inbound_number
-    from apps.pbx.cdr import _digits, split_line_prefix
+    from apps.pbx.cdr import digits_only, split_line_prefix
     out = inbound_number(caller_num, _gateway_meta.get(gateway_ext))
     # a short code that normalised to '' is stored without its line prefix, never raw
-    return out or split_line_prefix(_digits(caller_num))[1] or caller_num
+    return out or split_line_prefix(digits_only(caller_num))[1] or caller_num
 
 
 class AMILoginError(ConnectionError):

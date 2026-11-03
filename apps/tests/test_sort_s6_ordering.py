@@ -66,3 +66,15 @@ class StaffOrderingTests(TestCase):
         # an admin does get it
         v.request.user = self.admin_profile.user
         self.assertIn('softech_username', v.ordering_fields)
+
+    def test_picker_http_ignores_softech_ordering_and_allows_whitelist(self):
+        from apps.users.models import RoleModuleAccess
+        RoleModuleAccess.objects.get_or_create(role='admin', module='users', action='view')
+        user, profile, client = make_pharmacist('sort_s6_picker_http')
+        default = [x['id'] for x in client.get('/api/users/staff/').data['results']]
+        r = client.get('/api/users/staff/', {'ordering': 'softech_username'})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual([x['id'] for x in r.data['results']], default)
+        for f in ('user__first_name', 'user__last_name', 'is_active'):
+            for o in (f, '-' + f):
+                self.assertEqual(client.get('/api/users/staff/', {'ordering': o}).status_code, 200, o)

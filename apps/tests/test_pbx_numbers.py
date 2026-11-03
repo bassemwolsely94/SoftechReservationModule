@@ -342,3 +342,48 @@ class RenormaliseCommandTests(TestCase):
         PhoneLabel.objects.create(phone_key='1000000010', label='spam')
         self.run_cmd('--commit')
         self.assertTrue(PhoneLabel.objects.filter(phone_key='01000000010').exists())
+
+
+class RenormaliseLabelKeyTests(TestCase):
+    """Labels follow their calls' recomputed key, including non-Cairo landlines whose stored key lost the 0."""
+
+    def setUp(self):
+        at = timezone.make_aware(dt.datetime(2026, 10, 28, 9, 0))
+        AgentExtension.objects.create(extension='goip4', extension_type=AgentExtension.TYPE_GATEWAY, call_prefix='0')
+        for i, (raw, oldkey) in enumerate([('034812345', '34812345'), ('0402345678', '402345678'),
+                                           ('01000000010', '1000000010'), ('0224842067', '24842067')]):
+            CdrCall.objects.create(
+                cdr_key=f'lk{i}', unique_id=str(i), call_at=at, direction='inbound', status='answered',
+                customer_number=oldkey, phone_key=oldkey, src=raw, dst='101',
+                channel='SIP/goip4-0001', dstchannel='SIP/15-0002', pic_match='none')
+        from apps.pic_analytics.models import PhoneLabel
+        for k in ('34812345', '402345678', '1000000010', '24842067'):
+            PhoneLabel.objects.create(phone_key=k, label='staff')
+
+    def test_labels_stay_linked_to_their_calls(self):
+        from apps.pic_analytics.models import PhoneLabel
+        call_command('renormalise_pbx_numbers', '--commit', stdout=StringIO())
+        call_keys = set(CdrCall.objects.values_list('phone_key', flat=True))
+        label_keys = set(PhoneLabel.objects.values_list('phone_key', flat=True))
+        self.assertEqual(call_keys, label_keys)
+        self.assertEqual(len(label_keys), 4)
+
+    def test_collision_drop_is_audited(self):
+        from apps.audit.models import AuditLog
+        from apps.pic_analytics.models import PhoneLabel
+        PhoneLabel.objects.create(phone_key='01000000010', label='spam', note='n1')
+        call_command('renormalise_pbx_numbers', '--commit', stdout=StringIO())
+        keep = PhoneLabel.objects.get(phone_key='01000000010')
+        e = AuditLog.objects.get(action='pbx_phone_label_merged')
+        self.assertEqual(e.extra['old_key'], '1000000010')
+        self.assertEqual(e.extra['new_key'], '01000000010')
+        self.assertEqual(e.extra['label'], 'staff')
+        self.assertEqual(e.extra['merged_into'], keep.pk)
+        self.assertEqual(e.extra['actor'], 'system:renormalise_pbx_numbers')
+
+    def test_arabic_indic_digits_normalise(self):
+        from apps.pbx.cdr import phone_key
+        ar = '01000000010'.translate(str.maketrans('0123456789', '٠١٢٣٤٥٦٧٨٩'))
+        ext = '01000000010'.translate(str.maketrans('0123456789', '۰۱۲۳۴۵۶۷۸۹'))
+        self.assertEqual(phone_key(ar), '01000000010')
+        self.assertEqual(phone_key(ext), '01000000010')

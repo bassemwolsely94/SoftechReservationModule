@@ -66,8 +66,15 @@ _CAIRO_RE = re.compile(r'^02\d{8}$')            # national Cairo landline, 10 di
 _NATIONAL0_RE = re.compile(r'^0\d{8,10}$')       # any national 0-leading number, 9-11 digits
 
 
-def _digits(number) -> str:
-    return re.sub(r'\D', '', number or '')
+_ASCII_DIGITS = str.maketrans('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹', '01234567890123456789')
+
+
+def digits_only(number) -> str:
+    """ASCII digits of a number; Arabic-Indic / Extended Arabic-Indic digits are converted first."""
+    return re.sub(r'[^0-9]', '', str(number or '').translate(_ASCII_DIGITS))
+
+
+_digits = digits_only          # legacy private name
 
 
 def _plausible_remainder(rest: str) -> bool:

@@ -29,6 +29,7 @@ class Command(BaseCommand):
         resolver = cdr.PicResolver()
         before, after = Counter(), Counter()
         changed = total = 0
+        keymap = {}                            # old stored phone_key -> recomputed phone_key
         batch = []
         fields = ('id', 'src', 'dst', 'channel', 'dstchannel', 'dcontext', 'customer_number', 'phone_key',
                   'line_prefix', 'call_at', 'pic', 'pic_match', 'shared_pics', 'customer_id')
@@ -42,6 +43,8 @@ class Command(BaseCommand):
                 after[match] += 1
                 continue
             nnum, nkey, nlp = f['customer_number'], f['phone_key'], f['line_prefix']
+            if key and nkey and key not in keymap:
+                keymap[key] = nkey
             npic, ncust, nmatch, nshared = resolver.resolve(nkey, timezone.localtime(call_at).date())
             after[nmatch] += 1
             if (nnum, nkey, nlp, npic, nmatch, nshared, ncust) != (num, key, lp, pic, match, shared, cust):
@@ -54,7 +57,7 @@ class Command(BaseCommand):
                 batch = []
         if commit and batch:
             self._save(batch)
-        labels = self._relabel(commit)
+        labels = self._relabel(commit, keymap)
 
         verb = 'changed' if commit else 'would change'
         self.stdout.write(f'{total} calls; {verb} {changed}; phone labels re-keyed {labels}')
@@ -69,15 +72,18 @@ class Command(BaseCommand):
         CdrCall.objects.bulk_update(
             batch, ['customer_number', 'phone_key', 'line_prefix', 'pic', 'pic_match', 'shared_pics', 'customer'])
 
-    def _relabel(self, commit):
+    def _relabel(self, commit, keymap=None):
         """PhoneLabel keys follow the new phone_key (a label on '1000000010' -> '01000000010').
-        When several labels collapse to one key the newest wins; the dropped ones are reported."""
+        The old->new map comes from the calls themselves (an old key lost its leading 0, so phone_key()
+        alone mis-keys non-Cairo landlines); phone_key() is only the fallback for keys with no calls.
+        When several labels collapse to one key the newest wins; each dropped one is reported + audited."""
         from collections import defaultdict
         from apps.pbx.cdr import phone_key
         from apps.pic_analytics.models import PhoneLabel
+        keymap = keymap or {}
         groups = defaultdict(list)
         for pl in PhoneLabel.objects.order_by('created_at', 'pk'):
-            groups[phone_key(pl.phone_key) or pl.phone_key].append(pl)
+            groups[keymap.get(pl.phone_key) or phone_key(pl.phone_key) or pl.phone_key].append(pl)
         moved = 0
         with transaction.atomic():
             for nk, pls in groups.items():
@@ -88,7 +94,13 @@ class Command(BaseCommand):
                 if keep.phone_key != nk:
                     moved += 1
                 if commit:
+                    from apps.audit.models import AuditLog
                     for d in drop:
+                        AuditLog.log('pbx_phone_label_merged', obj=d,
+                                     note='renormalise_pbx_numbers (system): older label dropped on key collision',
+                                     extra={'actor': 'system:renormalise_pbx_numbers', 'old_key': d.phone_key,
+                                            'new_key': nk, 'label': d.label, 'note': d.note,
+                                            'merged_into': keep.pk, 'merged_into_label': keep.label})
                         d.delete()
                     if keep.phone_key != nk:
                         keep.phone_key = nk
