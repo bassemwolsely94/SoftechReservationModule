@@ -200,4 +200,26 @@ class RecipientTests(TestCase):
 
     def test_person_assigned_to(self):
         p = _staff('p', '01000000011')
-        self.assertEqual([x.staff for x in resolve(EVENTS['transfer_status'], _Src(self.b1, p))], [p])
+        task = OperationalTask.objects.create(title='y', assigned_to=p)
+        self.assertEqual([x.staff for x in resolve(EVENTS['task_assigned'], task)], [p])
+
+    def test_transfer_status_goes_to_requesting_branch_group(self):
+        on = _staff('on', '01000000030', self.b1)
+        self._device_user(on, self.b1, 0)
+        BranchSettings.objects.create(branch=self.b1, alert_mobile='01099999998')
+        tr = TransferRequest.objects.create(requesting_branch=self.b1, supplying_branch=self.b2)
+        r = resolve(EVENTS['transfer_status'], tr)
+        self.assertEqual([(x.staff, x.phone) for x in r], [(on, '201000000030'), (None, '201099999998')])
+
+    def test_task_status_goes_to_task_branch_group_with_creator_fallback(self):
+        creator = _staff('tcr', '01000000031', self.b1)
+        on1 = _staff('on1', '01000000032', self.b1)
+        on2 = _staff('on2', '01000000033', self.b2)
+        self._device_user(on1, self.b1, 0)
+        self._device_user(on2, self.b2, 0)
+        BranchSettings.objects.create(branch=self.b1, alert_mobile='01099999997')
+        task = OperationalTask.objects.create(title='x', created_by=creator)   # no task.branch
+        r = resolve(EVENTS['task_status'], task)
+        self.assertEqual([(x.staff, x.phone) for x in r], [(on1, '201000000032'), (None, '201099999997')])
+        task.branch = self.b2
+        self.assertEqual([x.staff for x in resolve(EVENTS['task_status'], task)], [on2])

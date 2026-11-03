@@ -52,7 +52,7 @@ EVENTS = {
         'owner', 'hq_transfer_dispatch', _safe(lambda o: o.status not in TRANSFER_CLOSED)),
     'transfer_status': Event(
         'transfer_status', 'تغيّر حالة تحويل', 'transfers.transferrequest',
-        'person', None, _safe(lambda o: o.status not in TRANSFER_CLOSED)),
+        'branch', None, _safe(lambda o: o.status not in TRANSFER_CLOSED)),
     'reservation_status_urgent': Event(
         'reservation_status_urgent', 'تغيّر حالة حجز عاجل', 'reservations.reservation',
         'branch', None, _safe(lambda o: o.is_active)),
@@ -61,7 +61,7 @@ EVENTS = {
         'person', None, _safe(lambda o: o.status not in TASK_CLOSED)),
     'task_status': Event(
         'task_status', 'تغيّر حالة مهمة', 'tasks.operationaltask',
-        'person', None, _safe(lambda o: o.status not in TASK_CLOSED)),
+        'branch', None, _safe(lambda o: o.status not in TASK_CLOSED)),
     'escalation': Event(
         'escalation', 'تصعيد تنبيه لم يُستلم', 'notifications.phonealert',
         'escalation', None, _safe(_escalation_open)),
