@@ -15,6 +15,10 @@ import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { financeApi } from '../api/client'
 import { fa } from '../utils/flowArrow'
+import useServerSort from '../hooks/useServerSort'
+import SortTh from '../components/SortTh'
+
+const SORT_KEYS = ['expense_date', 'category', 'sub_category', 'description', 'cost_center', 'branch__name', 'amount']
 
 // ── Number formatter: English digits + comma separators ──────────────────────
 const fmt = (n, d = 0) =>
@@ -159,6 +163,8 @@ export default function ExpenseAnalyticsPage() {
   const [subCategory,  setSubCategory]  = useState('')
   const [branchId,     setBranchId]     = useState('')
   const [page,         setPage]         = useState(1)
+  const [ordering,     setOrdering]     = useState('')   // server-side sort of the paged detail list
+  const { headerProps } = useServerSort(ordering, o => { setOrdering(o); setPage(1) }, { allowed: SORT_KEYS })
 
   const YEARS = Array.from({ length: 5 }, (_, i) => today.getFullYear() - i)
 
@@ -214,8 +220,8 @@ export default function ExpenseAnalyticsPage() {
 
   // Detail list query
   const { data: listData, isLoading: lLoading } = useQuery({
-    queryKey: ['finance-expenses-list', baseParams, page],
-    queryFn:  () => financeApi.expenses({ ...baseParams, page, page_size: 40 }).then(r => r.data),
+    queryKey: ['finance-expenses-list', baseParams, page, ordering],
+    queryFn:  () => financeApi.expenses({ ...baseParams, ...(ordering ? { ordering } : {}), page, page_size: 40 }).then(r => r.data),
     staleTime: 60_000,
   })
 
@@ -486,13 +492,13 @@ export default function ExpenseAnalyticsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-500">
-                  <th className="px-4 py-2.5 text-right font-medium">التاريخ</th>
-                  <th className="px-4 py-2.5 text-right font-medium">الفئة</th>
-                  <th className="px-4 py-2.5 text-right font-medium">التصنيف الفرعي</th>
-                  <th className="px-4 py-2.5 text-right font-medium">البيان</th>
-                  <th className="px-4 py-2.5 text-right font-medium">مركز التكلفة</th>
-                  <th className="px-4 py-2.5 text-right font-medium">الفرع</th>
-                  <th className="px-4 py-2.5 text-right font-medium" dir="ltr">المبلغ</th>
+                  <SortTh {...headerProps('expense_date', 'date')} className="px-4 py-2.5 text-right font-medium">التاريخ</SortTh>
+                  <SortTh {...headerProps('category')} className="px-4 py-2.5 text-right font-medium">الفئة</SortTh>
+                  <SortTh {...headerProps('sub_category')} className="px-4 py-2.5 text-right font-medium">التصنيف الفرعي</SortTh>
+                  <SortTh {...headerProps('description')} className="px-4 py-2.5 text-right font-medium">البيان</SortTh>
+                  <SortTh {...headerProps('cost_center')} className="px-4 py-2.5 text-right font-medium">مركز التكلفة</SortTh>
+                  <SortTh {...headerProps('branch__name')} className="px-4 py-2.5 text-right font-medium">الفرع</SortTh>
+                  <SortTh {...headerProps('amount', 'number')} className="px-4 py-2.5 text-right font-medium" dir="ltr">المبلغ</SortTh>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">

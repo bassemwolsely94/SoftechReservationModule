@@ -177,7 +177,7 @@ class AccountListView(generics.ListAPIView):
     serializer_class   = AccountSerializer
     filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['code', 'name', 'name_ar', 'softech_code']
-    ordering_fields    = ['code', 'level', 'account_type']
+    ordering_fields    = ['code', 'name_ar', 'account_type', 'nature', 'level', 'is_leaf']
     ordering           = ['code']
 
     def get_queryset(self):
@@ -457,7 +457,7 @@ class ExpenseRecordListView(generics.ListAPIView):
     serializer_class   = ExpenseRecordSerializer
     filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['softech_ref', 'description', 'vendor', 'reference']
-    ordering_fields    = ['expense_date', 'amount']
+    ordering_fields    = ['expense_date', 'category', 'sub_category', 'description', 'cost_center', 'branch__name', 'amount']
     ordering           = ['-expense_date']
 
     def get_queryset(self):

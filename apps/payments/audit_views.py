@@ -52,6 +52,8 @@ class BankStatementImportViewSet(viewsets.ModelViewSet):
     rbac_module         = 'finance'
     rbac_actions        = {'run_matching': ('edit',)}
     rbac_delete         = ('delete', 'approve')
+    # sortable headers of the statements grid (ordering=<field> / -<field>; the list is paged, so the server sorts)
+    ordering_fields     = ['id', 'bank_name', 'total_lines', 'matched_lines', 'status', 'imported_at']
 
     def get_queryset(self):
         qs  = branch_scope.scope(
@@ -134,6 +136,8 @@ class PaymentExceptionViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated, MatrixPermission]
     rbac_module        = 'finance'
     rbac_actions       = {'resolve': ('approve',), 'dismiss': ('approve',), 'assign': ('assign', 'approve')}
+    # sortable headers of the exceptions grid (paged list: the server sorts all rows)
+    ordering_fields    = ['exception_type', 'payment__amount', 'payment__transaction_ref', 'status', 'created_at']
 
     def get_queryset(self):
         qs = PaymentException.objects.select_related(
