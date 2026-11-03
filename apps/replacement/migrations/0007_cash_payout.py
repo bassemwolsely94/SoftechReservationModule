@@ -46,7 +46,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='cashpayout',
-            constraint=models.CheckConstraint(check=models.Q(('amount__gt', 0)), name='ck_replacement_payout_positive'),
+            constraint=models.CheckConstraint(condition=models.Q(('amount__gt', 0)), name='ck_replacement_payout_positive'),
         ),
         migrations.AddConstraint(
             model_name='cashpayout',

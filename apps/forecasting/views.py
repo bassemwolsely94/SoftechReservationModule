@@ -343,30 +343,31 @@ class KpiBoardView(APIView):
 
 
 class KpiRefreshView(APIView):
-    """POST — rebuild the CURRENT month's branch + call-center rollups in the background
-    so the KPI board reflects the latest synced SOFTECH data on demand."""
+    """GET — rollup freshness for the current + previous months (computed_at vs last sales
+    sync, stale flag). POST — rebuild in the background every stale month plus the current
+    month, so a just-closed month picks up its late sales too (rollup_refresh)."""
     permission_classes = [IsAuthenticated, CanUseForecasting]
+
+    def get(self, request):
+        from apps.forecasting import rollup_refresh
+        return Response(rollup_refresh.status())
 
     def post(self, request):
         from core.permissions import deny_unless
         denied = deny_unless(request, 'purchasing', 'edit', 'create')   # /api/forecasting/ = purchasing (Z-2)
         if denied:
             return denied
-        from datetime import date
+        from apps.forecasting import rollup_refresh
+        if rollup_refresh.status()['running']:
+            return Response({'started': False, 'running': True})
 
         def _job():
             from django.db import connections
             connections.close_all()
             try:
-                from django.core.management import call_command
-                today = date.today()
-                call_command('build_kpi_rollups', year=today.year, month=today.month, verbosity=0)
-                try:
-                    call_command('build_call_center_rollups', year=today.year, month=today.month, verbosity=0)
-                except Exception:
-                    logger.exception('CC rollup refresh skipped')
+                rollup_refresh.refresh(force_current=True)
             except Exception:
-                logger.exception('KPI board refresh job failed')
+                logger.exception('KPI rollup refresh job failed')
             finally:
                 connections.close_all()
 
@@ -564,7 +565,8 @@ class ForecastReferenceView(APIView):
 
     def get(self, request):
         from apps.forecasting import references as R
-        return Response(R.get() or {})
+        from apps.forecasting.engine import seasonality_mode
+        return Response({**(R.get() or {}), 'engine_seasonality_mode': seasonality_mode()})
 
     def post(self, request):
         sp = getattr(request.user, 'staff_profile', None)
@@ -572,6 +574,8 @@ class ForecastReferenceView(APIView):
             return Response({'detail': 'غير مصرح'}, status=status.HTTP_403_FORBIDDEN)
         from apps.forecasting import references as R
         d = request.data or {}
+        if 'seasonality_mode' in d:
+            return _set_seasonality_mode(request, sp, d.get('seasonality_mode'))
         prev = R.get() or {}
         rg = d.get('real_growth')
         rg = float(rg) if rg not in (None, '') else float(prev.get('real_growth', 0.15))
@@ -584,6 +588,44 @@ class ForecastReferenceView(APIView):
             logger.exception('reference compute failed')
             return Response({'detail': 'فشل حساب القيم المرجعية'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         return Response(refs)
+
+
+class ForecastPlanView(APIView):
+    """GET /api/forecasting/plan/?horizon=6 — rolling outlook: the running month (estimate)
+    + the next N months, per branch + chain, with same-month-last-year YoY. Read-only:
+    computed on the fly from the rollups, nothing stored; targets still need a scenario."""
+    permission_classes = [IsAuthenticated, CanUseForecasting]
+
+    def get(self, request):
+        from apps.forecasting.engine import ForecastEngine, PLAN_HORIZON
+        try:
+            horizon = int(request.query_params.get('horizon', PLAN_HORIZON))
+        except (TypeError, ValueError):
+            horizon = PLAN_HORIZON
+        horizon = max(1, min(horizon, PLAN_HORIZON))
+        try:
+            return Response(ForecastEngine().plan(horizon=horizon))
+        except Exception:
+            logger.exception('forecast plan failed')
+            return Response({'detail': 'تعذّر حساب الخطة'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def _set_seasonality_mode(request, sp, mode):
+    """Switch how the engine applies seasonality (none | chain | branch) — audited."""
+    from apps.config.models import SystemSetting
+    from apps.audit.models import AuditLog
+    from apps.forecasting.engine import SEASONALITY_MODES, seasonality_mode
+    mode = str(mode or '').strip().lower()
+    if mode not in SEASONALITY_MODES:
+        return Response({'detail': 'وضع غير صالح'}, status=status.HTTP_400_BAD_REQUEST)
+    old = seasonality_mode()
+    SystemSetting.objects.update_or_create(key='forecast_seasonality_mode', defaults={
+        'value': mode, 'label': 'وضع الموسمية في محرك التنبؤ', 'category': 'general'})
+    if old != mode:
+        AuditLog.log('forecast_seasonality_mode', user=sp, changes={'mode': [old, mode]},
+                     note=f'وضع الموسمية في محرك التنبؤ: {old} → {mode}')
+    from apps.forecasting import references as R
+    return Response({**(R.get() or {}), 'engine_seasonality_mode': mode})
 
 
 class GrowthView(APIView):

@@ -2227,19 +2227,14 @@ def _run_procurement_refresh():
 
 
 def _run_kpi_refresh():
-    """Rebuild the CURRENT month's branch + call-center KPI rollups so the KPI board,
-    forecast scenarios and sales targets stay fresh. The call-center step also pulls the
-    live Issabel CDR call-count automatically (once DB access is granted). Idempotent."""
+    """Catch-up rebuild of the branch + call-center KPI rollups so the KPI board, forecast
+    scenarios and sales targets stay fresh. Every 30 min; rebuilds only months whose sales
+    changed since their rollup (current month throttled to 2 h) — a closed month picks up
+    its last days' late sales, and a sleeping machine catches up on wake
+    (apps/forecasting/rollup_refresh.py). Idempotent."""
     try:
-        from django.core.management import call_command
-        from datetime import date
-        today = date.today()
-        call_command('build_kpi_rollups', year=today.year, month=today.month, verbosity=0)
-        try:
-            call_command('build_call_center_rollups', year=today.year, month=today.month, verbosity=0)
-        except Exception as cc:
-            logger.warning('[APScheduler] CC rollup step skipped: %s', cc)
-        logger.info('[APScheduler] KPI rollups refreshed for %s-%02d', today.year, today.month)
+        from apps.forecasting import rollup_refresh
+        rollup_refresh.scheduled_tick()
     except Exception as exc:
         logger.error('[APScheduler] KPI refresh failed: %s', exc)
 
@@ -3546,12 +3541,12 @@ def start_scheduler():
     # (POS flush + reconcile are registered ONCE, above, as pos_orders_flush /
     # pos_orders_reconcile — a second copy here made two jobs push the same queue.
     # Security Batch 2 P-11 = doc 30 F7.)
-    # Rebuild the current month's branch + call-center KPI rollups (06:30) so the KPI
-    # board, forecast scenarios and targets stay fresh — and the CC call-count pulls
-    # from the live Issabel CDR automatically once DB access is granted.
+    # Catch-up rebuild of the KPI rollups (every 30 min, only stale months) so the KPI
+    # board, forecast scenarios and targets stay fresh — a closed month still picks up its
+    # late sales, and the CC call-count pulls from the live Issabel CDR.
     _scheduler.add_job(
-        _run_kpi_refresh, 'cron', hour=6, minute=30, id='kpi_refresh',
-        replace_existing=True, max_instances=1, misfire_grace_time=1800,
+        _run_kpi_refresh, 'interval', minutes=30, id='kpi_refresh',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=1800,
     )
     # Monthly reminder (~11th) to refresh the external Egypt inflation figure that
     # grounds the forecast references (CAPMAS publishes around the 10th).

@@ -126,18 +126,30 @@ export default function DataFreshnessBar({ domains, compact, dataThrough, daysEl
     queryFn: () => syncApi.status().then(r => r.data),
     refetchInterval: refreshing ? 5000 : false,
   })
+  // monthly rollups (the board/forecast source): which recent months need a rebuild
+  const { data: roll } = useQuery({
+    queryKey: ['kpi-rollup-status'],
+    queryFn: () => kpiApi.refreshStatus().then(r => r.data),
+    refetchInterval: refreshing ? 5000 : 300000,
+  })
+  const staleMonths = (roll?.months || []).filter(m => m.stale)
   const lastSync = sync?.completed_at || sync?.started_at
   const behind = daysBehind(dataThrough)
-  const stale = behind != null && behind >= 1
+  const stale = (behind != null && behind >= 1) || staleMonths.length > 0
 
   async function refresh() {
     setRefreshing(true)
     try { await kpiApi.refresh() } catch { /* surfaced below */ }
-    // rollups rebuild in the background — refetch a few times, then stop
+    // rollups rebuild in the background — refetch until the job reports done (max ~3 min)
     let n = 0
-    const t = setInterval(() => {
-      invalidateKeys.forEach(k => qc.invalidateQueries({ queryKey: k }))
-      if (++n >= 6) { clearInterval(t); setRefreshing(false) }
+    const t = setInterval(async () => {
+      let running = false
+      try { running = (await kpiApi.refreshStatus()).data?.running } catch { /* keep polling */ }
+      if ((n++ > 0 && !running) || n >= 36) {
+        clearInterval(t); setRefreshing(false)
+        qc.invalidateQueries({ queryKey: ['kpi-rollup-status'] })
+        invalidateKeys.forEach(k => qc.invalidateQueries({ queryKey: k }))
+      }
     }, 5000)
   }
 
@@ -152,7 +164,12 @@ export default function DataFreshnessBar({ domains, compact, dataThrough, daysEl
           : <>🕒 بيانات التنبؤ مبنية على المجاميع الشهرية (KpiActualRollup)</>}
       </span>
       {lastSync && <span className="opacity-80">· آخر مزامنة {new Date(lastSync).toLocaleString('ar-EG')}</span>}
-      {stale && <span className="font-bold">· متأخّرة ~{behind} يوم عن أمس</span>}
+      {behind != null && behind >= 1 && <span className="font-bold">· متأخّرة ~{behind} يوم عن أمس</span>}
+      {staleMonths.length > 0 && (
+        <span className="font-bold" title="مبيعات هذه الأشهر تغيّرت بعد آخر حساب للمجاميع — تُحدَّث تلقائياً كل 30 دقيقة">
+          · مجاميع تحتاج تحديث: {staleMonths.map(m => `${m.year}-${String(m.month).padStart(2, '0')}`).join('، ')}
+        </span>
+      )}
       {canEdit && (
         <button data-tour="freshness-kpi-rebuild" onClick={refresh} disabled={refreshing}
           className={`ml-auto px-2.5 py-1 rounded-md text-white text-[11px] font-bold disabled:opacity-50 ${stale ? 'bg-amber-600' : 'bg-emerald-600'}`}>
