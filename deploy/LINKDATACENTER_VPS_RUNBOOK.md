@@ -1390,8 +1390,9 @@ links) is logged as `public gate would-deny ...` in `log` mode and refused 401 i
 `PUBLIC_API_ENFORCEMENT` off / log / enforce, default `log`; an unknown value runs as `log` and
 `manage.py check` warns `access.W005`. (2) **Self-hosted bot check** (no third-party service): a small
 puzzle solved in the visitor's browser (about 1-2 seconds, single use, 10 minutes of life), a minimum
-fill time of 3 seconds, a hidden honeypot field, and at most 3 submissions per phone per form per
-Cairo day (the phone is normalised, so +20 or spaces do not dodge it). It guards «أبلغني عند التوفر»
+fill time of 3 seconds, a hidden honeypot field, and a daily cap per phone per Cairo day: 10 for
+`/notify` (`PUBLIC_NOTIFY_DAILY_MAX`, a shelf-QR customer scans several items) and 3 for the portal
+sign-in link (`PUBLIC_PHONE_DAILY_MAX`); the phone is normalised, so +20 or spaces do not dodge it. It guards «أبلغني عند التوفر»
 (`/notify`) and the portal sign-in link. A refused visitor gets the usual generic answer and nothing
 is stored or sent. (3) `/notify` always answers the same `{ok:true}`, does no SOFTECH lookup and links
 no customer: staff match it with «بحث في ERP» on the demand. (4) Delivery tracking is
@@ -1399,6 +1400,10 @@ no customer: staff match it with «بحث في ERP» on the demand. (4) Delivery
 to 600 requests an hour per IP; the page refreshes every 60 seconds and slows down on a 429.
 Challenges and per-phone counters live in the process memory: fine for the single `elrezeiky-web`
 process; a restart only forgets today's counts.
+**Cache.** All rate counters (sign-in throttles, per-phone caps, single-use puzzle keys, log dedupe)
+sit in one per-process memory cache of 50,000 entries (`CACHE_MAX_ENTRIES`); a restart forgets the
+counts. **Shelf QR codes** printed for `/notify` must point at `https://` addresses: the puzzle
+needs HTTPS and fails on a plain `http://` page.
 
 **Step 1 - release the code with `release.sh`** (no migrations).
 ```bash
@@ -1412,14 +1417,19 @@ sudo journalctl -u elrezeiky-web --since -7d | grep 'elrezeiky.public_guard'
 ```
 A `would-deny` line for a path a real visitor or a partner system uses (a webhook, a link in an SMS)
 means that path is missing from the allow-list: add it in `apps/access/public_paths.py` before
-enforcing. The `public_guard` lines carry the refusal code (bad or reused challenge, too fast,
+enforcing. Ignore scanner noise: random probes of made-up `/api/` paths (`/api/.env`, `/api/v1/...`)
+from unknown IPs are bots, not missing paths. The `public_guard` lines carry the refusal code (bad or reused challenge, too fast,
 honeypot filled, phone limit); a steady stream of `phone_limit` from real customers means the limit
-of 3 a day is too tight.
+of 10 (`/notify`) or 3 (sign-in link) a day is too tight.
 
-**Step 3 - try it from a phone.** On mobile data (outside the company network, over HTTPS - the
+**Step 3 - try it from a phone.** Use a staff or test phone number (each try uses one of that
+phone's daily slots), not a customer's. On mobile data (outside the company network, over HTTPS - the
 puzzle needs it) open `/notify`, pick an item and a branch, and submit once; then open the portal and
-ask for a sign-in link once. Both must answer normally within a few seconds. Check the request
-appears on the demand screen (staff side).
+ask for a sign-in link once. Both must answer normally within a few seconds. Expect exactly one new
+demand row on the demand screen (staff side) for the test phone; close or delete it afterwards so it
+does not reach follow-up. Repeat on a low-end Android phone: if the «جارٍ التحقق» wait is longer
+than about 5 seconds, lower `PUBLIC_POW_DIFFICULTY` in `.env` (e.g. 16 → 14; each step down halves
+the work) and restart.
 
 **Step 4 - enforce after a clean week** (owner's action; `.env` changes only after `manage.py check`
 passes, as in N3/N4/N5).
