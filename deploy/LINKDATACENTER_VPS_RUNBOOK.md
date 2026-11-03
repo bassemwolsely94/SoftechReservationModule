@@ -1313,6 +1313,62 @@ sudo sed -i '/^SOFTECH_GATE_ENFORCEMENT=/d' $APP/.env \
 ```
 The global kill switch `SOFTECH_READ_ONLY` and the writer switches stay in force on top of the gate.
 
+#### Batch N5 on the live server
+
+N5 keeps live connections honest and watches data leaving. (1) Sockets (notifications, chatter, the
+PBX call pop-up) are checked at connect, every 5 minutes, and at once when an account is disabled, a
+device's status changes, or the zone policy / trusted networks change. Close codes: 4001 signed
+out / disabled / device blocked (screen falls back to polling), 4002 token expired (screen renews the
+session and reconnects), 4403 zone refusal (polling). The call pop-up works only inside the company
+network (Z1/Z2). It follows `NETWORK_POLICY_ENFORCEMENT`: in `log` a `ws would-deny` line and an
+audit row `ws_zone_denied` are written and nothing is closed; in `enforce` the socket is refused.
+(2) Every export writes an audit row `export_taken` with an export id (response header
+`X-ElR-Export-Id`); .xlsx and .docx files up to 50 MB (`EXPORT_STAMP_MAX_BYTES`) also carry the id,
+user, time, device and zone in their document properties. (3) Bulk-read counters per user per hour
+(`BULK_READ_ROWS_PER_HOUR=3000`, `BULK_EXPORTS_PER_HOUR=30`) write `bulk_read_alert` and notify admins;
+under `BULK_READ_ENFORCEMENT=enforce` a non-admin is blocked from reading customers and exporting for
+`BULK_READ_BLOCK_MINUTES=30`. Admins are never blocked. Default `log`.
+
+**Step 1 - release the code with `release.sh`** (it runs migrate: `audit 0023`, `users 0041`).
+```bash
+sudo /opt/elrezeiky/release.sh
+```
+
+**Step 2 - read the socket lines during the log week.**
+```bash
+sudo journalctl -u elrezeiky-web --since -7d | grep 'ws would-deny'
+```
+A line for staff inside an approved PC means a branch is not labelled internal or a PC is unapproved:
+fix that (N3 Step 3 / 5) before relying on socket refusal. Lines from outside the network for the
+call pop-up are expected.
+
+**Step 3 - read the audit rows.** «الأمان» → سجل المراجعة, actions `export_taken`, `bulk_read_alert`
+and `ws_zone_denied`. Open one exported Excel file: File → Info → Properties shows the export id;
+the same id is in the audit row.
+
+**Step 4 - tune before enforcing.** After a week of data compare the heaviest honest users against
+`BULK_READ_ROWS_PER_HOUR` and `BULK_EXPORTS_PER_HOUR` (set them in `.env` if the defaults raise false
+alerts), then switch the block on (owner's action; `.env` changes only after `manage.py check`
+passes, as in N3/N4). An unknown value runs as `log` and `manage.py check` warns `access.W004`.
+```bash
+APP=/opt/elrezeiky/app; PY=/opt/elrezeiky/venv/bin/python
+sudo -u elrezeiky $PY $APP/manage.py access_preflight \
+  && sudo -u elrezeiky env BULK_READ_ENFORCEMENT=enforce $PY $APP/manage.py check \
+  && sudo sed -i '/^BULK_READ_ENFORCEMENT=/d' $APP/.env \
+  && echo 'BULK_READ_ENFORCEMENT=enforce' | sudo tee -a $APP/.env >/dev/null \
+  && sudo systemctl restart elrezeiky-web elrezeiky-scheduler
+```
+`access_preflight` shows an informational `bulk_read_mode` item with the current mode.
+
+**Step 5 - lift a block early.** A blocked non-admin sees a plain refusal for 30 minutes; to lift it
+now (audited):
+```bash
+sudo -u elrezeiky /opt/elrezeiky/venv/bin/python /opt/elrezeiky/app/manage.py clear_bulk_block <username>
+```
+
+**The way back.** Set `BULK_READ_ENFORCEMENT=log` (or `off`) the same way and restart; blocks stop
+at once. Socket refusal goes back with `NETWORK_POLICY_ENFORCEMENT=log` (N3).
+
 #### Company network through the tunnel (split DNS)
 
 Goal: a company device resolves `elrezeikyapp.dawalvry.com` to `10.50.50.77` and reaches the VPS
