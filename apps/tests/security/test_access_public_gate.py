@@ -264,8 +264,6 @@ class EveryAnonymousViewIsListedTests(SimpleTestCase):
     def test_every_listed_entry_is_a_real_route(self):
         paths = [_sample(r) for r, _ in self.routes]
         for prefix in PUBLIC_PREFIXES:
-            if prefix == '/api/public/':   # apps.public arrives with N6 Task 2
-                continue
             self.assertTrue(any(p.startswith(prefix) for p in paths), f'{prefix} matches no route')
         for prefix in PUBLIC_GET_ONLY:
             self.assertIn(prefix, PUBLIC_PREFIXES)

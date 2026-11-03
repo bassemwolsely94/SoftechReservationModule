@@ -24,7 +24,7 @@ PUBLIC_PREFIXES = (
     '/api/demand/public/',
     # apps.delivery.views.delivery_public_track (signed token in the path)
     '/api/delivery/track/',
-    # apps.public (Task 2) - the deliberately public read-only surface
+    # apps.access.public_views.challenge (N6 public-form proof-of-work challenge, throttled)
     '/api/public/',
     # apps.pbx.views.RecordingView (permission_classes=[]; signed ?t= token, <audio> cannot send JWT)
     '/api/pbx/recordings/',

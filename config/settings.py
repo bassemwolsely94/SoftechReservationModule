@@ -969,6 +969,11 @@ MIDDLEWARE += [
 ]
 # N6: off / log / enforce - anonymous requests to /api/ paths not in apps/access/public_paths.py
 PUBLIC_API_ENFORCEMENT = config('PUBLIC_API_ENFORCEMENT', default='log')
+# N6: self-hosted public-form guard (core/public_guard.py) - proof of work, fill time, per-phone cap
+PUBLIC_POW_TTL_SECONDS  = config('PUBLIC_POW_TTL_SECONDS', default=600, cast=int)
+PUBLIC_POW_DIFFICULTY   = config('PUBLIC_POW_DIFFICULTY', default=16, cast=int)   # leading zero bits
+PUBLIC_MIN_FILL_SECONDS = config('PUBLIC_MIN_FILL_SECONDS', default=3, cast=int)
+PUBLIC_PHONE_DAILY_MAX  = config('PUBLIC_PHONE_DAILY_MAX', default=3, cast=int)   # per form, phone, Cairo day
 SLOW_REQUEST_MS = config('SLOW_REQUEST_MS', default=1000, cast=int)
 # N5: Excel / Word exports up to this size get the who/when/where stamp (larger: audit only)
 EXPORT_STAMP_MAX_BYTES = 20 * 1024 * 1024

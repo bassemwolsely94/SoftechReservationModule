@@ -105,6 +105,7 @@ EXEMPT_PREFIXES = {'auth', 'notifications', 'personal', 'search', 'help', 'porta
                    'gamification',   # own points open to all; its views check gamification/*
                    'stock-audit',    # own gate apps/stock_audit/access.py: RBAC stock_audit
                    'pic-analytics',  # own gate apps/pic_analytics/access.py: RBAC pic_analytics + named grants
+                   'public',         # N6 anonymous surface (apps/access/public_urls.py), no business data
                    'csp-report',     # browsers' CSP reports — public, log only (core/csp.py, W-9)
                    'trace'}          # P-58 own gates apps/trace/views.py: parse = admin,
                                      # scan = pos create (sale) / invoices create (receive)

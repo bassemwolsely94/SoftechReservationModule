@@ -73,6 +73,8 @@ urlpatterns = [
     path('api/trace/', include('apps.trace.urls')),          # P-58 — dormant; parse/ is admin-only     # doc 32 — gated in apps/stock_audit/access.py
     # Customer-facing self-service portal (external; magic-link auth, customer-scoped)
     path('api/portal/',     include('apps.portal.urls')),
+    # N6: deliberately anonymous surface (public-form challenge); listed in apps/access/public_paths.py
+    path('api/public/',     include('apps.access.public_urls')),
     # Uploads: signature-checked (core/storage.py, core/media.py) in every mode,
     # not just DEBUG — protected files need a signed, unexpired URL.
     path('media/<path:path>', serve_media, name='media'),
