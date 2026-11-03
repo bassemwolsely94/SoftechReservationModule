@@ -297,7 +297,7 @@ export default function App() {
           </Route>
           {/* Standalone mobile rider screen (no desktop sidebar) */}
           <Route path="/rider" element={<RequireAuth><RequireRole roles={['delivery','admin','supervisor']}><RiderLayout><DriverDeliveryApp /></RiderLayout></RequireRole></RequireAuth>} />
-          <Route path="/rider/security" element={<RequireAuth><RiderLayout><SecurityPage /></RiderLayout></RequireAuth>} />
+          <Route path="/rider/security" element={<RequireAuth><RequireRole roles={['delivery','admin','supervisor']}><RiderLayout><SecurityPage /></RiderLayout></RequireRole></RequireAuth>} />
 
           {/* ── Standalone mobile web surfaces (no desktop sidebar) ─────────
               Phone-friendly, thin views over the existing APIs. Pilot: reservations.
