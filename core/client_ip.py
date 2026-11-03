@@ -18,3 +18,10 @@ def client_ip(request):
     if not chain:
         return remote
     return chain[-min(hops, len(chain))]
+
+
+def peer_meta(scope):
+    """The request.META entry for the socket peer of a Channels scope (the only other place that
+    spells the REMOTE_ADDR key, so client_ip() above reads sockets and requests alike)."""
+    client = scope.get('client')
+    return {'REMOTE_ADDR': client[0]} if client else {}
