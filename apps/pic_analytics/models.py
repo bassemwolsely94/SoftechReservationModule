@@ -119,3 +119,38 @@ class PicExclusion(models.Model):
 
     def __str__(self):
         return f'{self.pic} {"removed" if self.removed_at else "excluded"}'
+
+
+class PicExportJob(models.Model):
+    """One background Excel export (a 12-month workbook takes longer than nginx's 60 s, doc 33 §15).
+    The xlsx bytes live in `data` (never under /media) and only the requester may read or download
+    them. Jobs are deleted after 48 h; a queued/running job older than 15 min is reported failed
+    (the process that ran it restarted). See apps/pic_analytics/jobs.py."""
+    QUEUED, RUNNING, DONE, FAILED = 'queued', 'running', 'done', 'failed'
+    STATUS_CHOICES = [(QUEUED, 'في الانتظار'), (RUNNING, 'جارٍ الإنشاء'), (DONE, 'جاهز'), (FAILED, 'فشل')]
+    ACTIVE = (QUEUED, RUNNING)
+
+    requested_by = models.ForeignKey('users.StaffProfile', on_delete=models.PROTECT, related_name='+')
+    params = models.JSONField(default=dict, blank=True)          # raw query params {key: [values]}
+    filters = models.JSONField(default=dict, blank=True)         # effective filters (for the audit entry)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=QUEUED)
+    progress_pct = models.PositiveSmallIntegerField(default=0)
+    progress_msg = models.CharField(max_length=120, blank=True, default='')
+    file_name = models.CharField(max_length=200, blank=True, default='')
+    data = models.BinaryField(null=True, blank=True, editable=False)
+    rows = models.JSONField(default=dict, blank=True)            # {sheet: rows written}
+    error = models.CharField(max_length=255, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['requested_by', '-created_at'], name='picexport_user_created')]
+        constraints = [models.UniqueConstraint(fields=['requested_by'], condition=models.Q(status__in=['queued', 'running']),
+                                               name='uniq_active_pic_export_job')]
+        verbose_name = 'تصدير تحليلات العملاء'
+        verbose_name_plural = 'تصديرات تحليلات العملاء'
+
+    def __str__(self):
+        return f'{self.pk} {self.status} {self.file_name}'

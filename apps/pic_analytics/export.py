@@ -194,9 +194,14 @@ def _cols(cols, access):
             if (access.sees_cost or k not in GP_KEYS)]
 
 
-def build_workbook(f, access, exported_by='', calls_f=None):
+def build_workbook(f, access, exported_by='', calls_f=None, progress=None):
     """-> (bytes, {sheet: rows written}). Only called for a user who may export.
-    calls_f: the same filters run to today (calls are live) for the calls sheets; defaults to f."""
+    calls_f: the same filters run to today (calls are live) for the calls sheets; defaults to f.
+    progress(pct, msg): optional, called between sheets with rough weights (the background job's
+    progress bar); it never changes what is written."""
+    step = progress or (lambda _pct, _msg: None)
+    calls = access.sees_calls_tabs
+    step(2, 'ورقة الفلاتر…')
     book = _Book()
     branch_names = groups.branch_labels()
 
@@ -231,6 +236,7 @@ def build_workbook(f, access, exported_by='', calls_f=None):
         book.row(ws, S_FILTERS, ['', line])
 
     # 2. overview
+    step(5, 'نظرة عامة…')
     o = ov.overview(f, access)
     ws = book.sheet(S_OVERVIEW, ['المؤشر', 'القيمة'], [34, 20])
     for key, label in OVERVIEW_ITEMS:
@@ -242,6 +248,7 @@ def build_workbook(f, access, exported_by='', calls_f=None):
     for m in o['by_month']:
         book.row(ws, S_OVERVIEW, [m.get(k) for k, _h in MONTH_COLS])
 
+    step(12, 'ورقة العملاء…')
     # 3. customers (one pass: page_size=None = all rows)
     all_pics = pics.pic_rows(f, access, '-net', 1, None)['rows']
     cols = _cols(PIC_COLS, access)
@@ -257,6 +264,7 @@ def build_workbook(f, access, exported_by='', calls_f=None):
         book.row(ws, S_PICS, [r.get(k) for k, _h in cols])
 
     # 4. groups
+    step(45 if calls else 50, 'الفروع والبائعون والقنوات والأصناف…')
     for title, fn in ((S_BRANCH, groups.by_branch), (S_SALES, groups.by_salesperson),
                       (S_CHANNEL, groups.by_channel), (S_CATEGORY, groups.by_category)):
         g = fn(f, access)
@@ -267,6 +275,7 @@ def build_workbook(f, access, exported_by='', calls_f=None):
             book.row(ws, title, ['نسبة الزيارات من أكثر من صنف', g['cross_category_rate']])
 
     # 5. loyalty and frequency
+    step(60 if calls else 68, 'الولاء والتكرار…')
     fr = retention.frequency(f, access)
     ws = book.sheet(S_LOYALTY, ['الفئة', 'العملاء'], [34, 16])
     for k, n in fr['a'].items():
@@ -283,11 +292,13 @@ def build_workbook(f, access, exported_by='', calls_f=None):
     for c in retention.cohorts(f, access):
         book.row(ws, S_LOYALTY, [c['cohort'], c['size']] + list(c['months']))
 
+    step(70 if calls else 82, 'المتأخرون عن الشراء…')
     # 5b. overdue PICs (every row, phones masked like the screen)
     book.table(S_OVERDUE, OVERDUE_COLS, retention.overdue_list(f, access, 1, None)['rows'], [16, 28, 16, 14, 14, 14, 18])
 
     # 6. management only: calls
-    if access.sees_calls_tabs:
+    if calls:
+        step(78, 'المكالمات…')
         cf = calls_f or f
         cc = call_center(cf, access)
         ws = book.table(S_CENTER, CENTER_COLS, cc['rows'], [10, 24, 24] + [16] * 9)
@@ -302,6 +313,7 @@ def build_workbook(f, access, exported_by='', calls_f=None):
                              last_agent=agent.get('staff_name') or agent.get('pbx_name') or agent.get('agent_ext', '')))
         book.table(S_NUMBERS, NUMBER_COLS, rows, [18] + [16] * 9)
 
+    step(95, 'حفظ الملف…')
     buf = BytesIO()
     neutralise_formulas(book.wb).save(buf)
     return buf.getvalue(), book.counts

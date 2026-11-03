@@ -2447,6 +2447,11 @@ def _run_pic_facts():
         call_command('build_pic_facts')
     except Exception as exc:
         logger.exception('pic facts build failed: %s', exc)
+    try:                                   # background Excel exports: stale -> failed, > 48 h -> deleted
+        from apps.pic_analytics.jobs import cleanup
+        cleanup()
+    except Exception as exc:               # never breaks the facts build above
+        logger.exception('pic export job cleanup failed: %s', exc)
 
 
 def _run_stock_ledger_sync(days=3):
