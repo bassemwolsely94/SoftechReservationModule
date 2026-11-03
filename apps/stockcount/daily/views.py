@@ -338,6 +338,7 @@ def _report_xlsx(rows, days):
     from io import BytesIO
     from django.http import HttpResponse
     from openpyxl import Workbook
+    from core.export_safety import neutralise_formulas
     wb = Workbook()
     ws = wb.active
     ws.title = 'الجرد اليومي'
@@ -347,7 +348,7 @@ def _report_xlsx(rows, days):
         ws.append([r['branch_name'], r['staff_name'], r['assigned'], r['counted'], r['missed'],
                    r['completion_pct'], r['differences'], r['value_egp']])
     buf = BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)        # names typed by staff must never run as formulas (W-4)
     resp = HttpResponse(buf.getvalue(),
                         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     resp['Content-Disposition'] = f'attachment; filename="daily-counts-{days}d.xlsx"'
