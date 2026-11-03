@@ -36,7 +36,11 @@ export function errOf(e, fallback = 'تعذّر تنفيذ الطلب') {
 
 export const listOf = (data) => (Array.isArray(data) ? data : (data?.results || []))
 
-export const todayIso = () => new Date().toISOString().slice(0, 10)
+/** Today in local time (toISOString would give yesterday before 02:00 in Cairo). */
+export const todayIso = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 export async function saveBlob(promise, filename) {
   const res = await promise

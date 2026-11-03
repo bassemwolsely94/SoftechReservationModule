@@ -254,7 +254,7 @@ export default function GLAccountsPage() {
       {tbQ.isError && <div className="text-xs text-amber-700">تعذّر حساب الأرصدة: {errOf(tbQ.error)}</div>}
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto" data-tour="finance-gl-accounts-tree">
-        {accountsQ.isLoading ? <SkeletonTable rows={8} cols={7} /> : !sorted.length ? (
+        {accountsQ.isLoading ? <SkeletonTable rows={8} cols={7} /> : accountsQ.isError ? null : !sorted.length ? (
           <EmptyState title="لا توجد حسابات" sub={perms.edit ? 'استورد دليل الحسابات من ميزان المراجعة' : 'لم يُستورد دليل الحسابات بعد'} />
         ) : (
           <table className="w-full text-sm">

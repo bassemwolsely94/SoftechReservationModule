@@ -127,7 +127,7 @@ export default function JournalPage() {
         <input type="date" className={inputCls} value={filters.date_from} onChange={e => setF({ date_from: e.target.value })} />
         <label className="text-xs text-gray-500">إلى</label>
         <input type="date" className={inputCls} value={filters.date_to} onChange={e => setF({ date_to: e.target.value })} />
-        <BranchSelect size="sm" className="w-48" branches={branches} value={filters.branch} allLabel="كل الفروع"
+        <BranchSelect size="sm" className="w-48" branches={branches} value={filters.branch} allLabel="كل الفروع" placeholder="كل الفروع"
                       onChange={v => setF({ branch: v })} />
         <input className={`${inputCls} w-28`} placeholder="كود الحساب" value={filters.account}
                onChange={e => setF({ account: e.target.value.trim() })} />
@@ -150,7 +150,7 @@ export default function JournalPage() {
       <ErrorBox>{err || (listQ.isError ? errOf(listQ.error, 'تعذّر تحميل القيود') : '')}</ErrorBox>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto" {...kb.containerProps}>
-        {listQ.isLoading ? <SkeletonTable rows={8} cols={7} /> : !sorted.length ? (
+        {listQ.isLoading ? <SkeletonTable rows={8} cols={7} /> : listQ.isError ? null : !sorted.length ? (
           <EmptyState title="لا توجد قيود" sub={filters.status === 'draft' ? 'لا مسودات تنتظر المراجعة' : 'غيّر عوامل التصفية'} />
         ) : (
           <table className="w-full text-sm">

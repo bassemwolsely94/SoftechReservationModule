@@ -5,6 +5,9 @@
  * Tabs:
  *   Dashboard   /finance/dashboard
  *   Journal     /finance/journal    (GL)
+ *   Trial bal.  /finance/trial-balance (GL)
+ *   Statements  /finance/statements (GL; ?tab=trading|position|branches|comparison)
+ *   Statement   /finance/ledger     (GL account statement)
  *   P&L         /finance/pnl
  *   Cash view   /finance/cash       (P-40; /finance/cashflow redirects here)
  *   Expenses    /finance/expenses
@@ -28,6 +31,9 @@ const GL_PATHS = ['/finance/coa', '/finance/journal', '/finance/trial-balance', 
 const TABS = [
   { to: '/finance/dashboard', label: 'لوحة القيادة',     icon: '💹' },
   { to: '/finance/journal',   label: 'القيود',           icon: '📒', module: 'ledger' },
+  { to: '/finance/trial-balance', label: 'ميزان المراجعة', icon: '⚖️', module: 'ledger' },
+  { to: '/finance/statements', label: 'القوائم المالية', icon: '📑', module: 'ledger' },
+  { to: '/finance/ledger',    label: 'كشف حساب',         icon: '📄', module: 'ledger' },
   { to: '/finance/pnl',       label: 'الأرباح والخسائر', icon: '📊' },
   { to: '/finance/expenses',  label: 'المصروفات',        icon: '💸' },
   { to: '/finance/cash',      label: 'النقدية ١٣ أسبوع', icon: '💵' },
@@ -64,7 +70,7 @@ export default function FinanceHubPage() {
         </div>
 
         {/* ── Tab bar ───────────────────────────────────────────────────────── */}
-        <nav className="flex gap-1 overflow-x-auto" data-tour="finance-dashboard-tabs">
+        <nav className="flex gap-1 overflow-x-auto no-print" data-tour="finance-dashboard-tabs">
           {visibleTabs.map(tab => (
             <NavLink
               key={tab.to}

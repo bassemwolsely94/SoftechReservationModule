@@ -41,7 +41,7 @@ function lineFrom(l) {
 const cents = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100) : 0 }
 
 // ── Account picker: code / name search over the active posting accounts ──────
-function AccountPicker({ value, name, accounts, onPick, disabled }) {
+export function AccountPicker({ value, name, accounts, onPick, disabled }) {
   const [q, setQ] = useState(null)        // null = not typing → show the chosen account
   const [open, setOpen] = useState(false)
   const hits = useMemo(() => {
