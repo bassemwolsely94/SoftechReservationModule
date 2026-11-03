@@ -949,10 +949,14 @@ MIDDLEWARE += [
     'core.middleware.module_access.ModuleAccessMiddleware',
     # Zone policy (N3): narrows by access zone; mode NETWORK_POLICY_ENFORCEMENT off/log/enforce
     'apps.access.policy_middleware.ZonePolicyMiddleware',
+    # N5: every export gets an export_taken audit row + X-ElR-Export-Id; xlsx/docx stamped
+    'apps.access.export_middleware.ExportAuditMiddleware',
     # P-56: log API requests slower than SLOW_REQUEST_MS (route pattern only) for /sync
     'apps.sync.middleware.SlowRequestMiddleware',
 ]
 SLOW_REQUEST_MS = config('SLOW_REQUEST_MS', default=1000, cast=int)
+# N5: Excel / Word exports up to this size get the who/when/where stamp (larger: audit only)
+EXPORT_STAMP_MAX_BYTES = 50 * 1024 * 1024
 # P-58: capture GS1 DataMatrix pack codes on receive / sale (apps/trace). OFF until EDA
 # guideline 804/2025 is read and branches have 2D scanners. Reports nothing to EDA.
 TRACK_TRACE_ENABLED = config('TRACK_TRACE_ENABLED', default=False, cast=bool)
