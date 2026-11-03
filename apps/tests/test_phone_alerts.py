@@ -468,3 +468,217 @@ class DispatchFixRound1Tests(DispatchSenderTests):
             att = sender.deliver(a)
         send.assert_not_called()
         self.assertEqual(att.result, 'dry_run')
+
+
+# ── Task 4: inbound taps, remarks, staff inbox separation ────────────────────
+from django.contrib.contenttypes.models import ContentType
+
+from apps.notifications.models import Notification
+from apps.notifications.phone_alerts import inbound
+from apps.reservations.models import Reservation, ReservationActivity
+from apps.tasks.models import TaskMessage
+from apps.transfers.models import TransferRequestMessage
+from apps.whatsapp import button_registry, webhook
+from apps.whatsapp.models import WAConversation, WAMessage
+
+from .factories import make_item
+
+
+def _wh(value):
+    return {'object': 'whatsapp_business_account',
+            'entry': [{'id': '1', 'changes': [{'value': value}]}]}
+
+
+class InboundTests(TestCase):
+    PHONE = '01000000051'
+    WA = '201000000051'
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.b1 = Branch.objects.create(softech_branch_id='921', name='فرع ١')
+        cls.b2 = Branch.objects.create(softech_branch_id='922', name='فرع ٢')
+        cls.person = _staff('pers', cls.PHONE, cls.b2)
+
+    def setUp(self):
+        self.acc = _account()
+        _use_account(self.acc)
+        self.tr = TransferRequest.objects.create(requesting_branch=self.b1, supplying_branch=self.b2)
+
+    def _alert(self, source=None, phone=None, **kw):
+        source = source or self.tr
+        return PhoneAlert.objects.create(
+            event='transfer_status', source_ct=ContentType.objects.get_for_model(source),
+            source_id=source.pk, recipient_staff=self.person, phone=phone or self.WA, **kw)
+
+    def _tap(self, alert, wa=None):
+        return inbound.handle_alert_tap(wa_id=wa or self.WA, payload=f'alert:{alert.token}:ack',
+                                        account=self.acc)
+
+    def _post_webhook(self, messages=None, statuses=None, pid='555'):
+        value = {'metadata': {'phone_number_id': pid, 'display_phone_number': '1'}}
+        if messages:
+            value['messages'] = messages
+        if statuses:
+            value['statuses'] = statuses
+        webhook.process_webhook(_wh(value))
+
+    # status callbacks
+    def test_status_callback_updates_alert_not_downgrade(self):
+        a = self._alert(status='sent', wa_message_id='wamid.A')
+        self._post_webhook(statuses=[{'id': 'wamid.A', 'status': 'delivered'}])
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'delivered')
+        self._post_webhook(statuses=[{'id': 'wamid.A', 'status': 'read'}])
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'read')
+        self._post_webhook(statuses=[{'id': 'wamid.A', 'status': 'delivered'}])
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'read')                      # no downgrade
+        self.assertEqual(list(a.attempts.values_list('result', flat=True)), ['delivered', 'read', 'delivered'])
+        for st in ('acknowledged', 'escalated', 'expired'):
+            PhoneAlert.objects.filter(pk=a.pk).update(status=st)
+            self._post_webhook(statuses=[{'id': 'wamid.A', 'status': 'read'},
+                                         {'id': 'wamid.A', 'status': 'failed',
+                                          'errors': [{'code': 131, 'title': 'x'}]}])
+            a.refresh_from_db()
+            self.assertEqual(a.status, st)
+        self.assertEqual(a.attempts.filter(result='failed').first().error, '131 x')
+
+    # tap
+    def test_tap_acknowledges_and_posts_chatter(self):
+        a = self._alert(status='sent')
+        self.assertEqual(self._tap(a), 'acknowledged')
+        a.refresh_from_db()
+        self.assertEqual((a.status, a.ack_at is not None), ('acknowledged', True))
+        msg = TransferRequestMessage.objects.get(request=self.tr)
+        self.assertIn(self.person.full_name, msg.message)
+        self.assertIn('استلم', msg.message)
+        self.assertEqual(msg.created_by, self.person)
+
+    def test_tap_from_other_phone_ignored(self):
+        a = self._alert(status='sent')
+        self.assertEqual(self._tap(a, wa='201099999999'), 'wrong_sender')
+        a.refresh_from_db()
+        self.assertEqual((a.status, a.ack_at), ('sent', None))
+        self.assertFalse(TransferRequestMessage.objects.exists())
+
+    def test_second_tap_noop(self):
+        a = self._alert(status='sent')
+        self._tap(a)
+        first = PhoneAlert.objects.get(pk=a.pk).ack_at
+        self.assertEqual(self._tap(a), 'duplicate')
+        self.assertEqual(PhoneAlert.objects.get(pk=a.pk).ack_at, first)
+        self.assertEqual(TransferRequestMessage.objects.count(), 1)
+
+    def test_tap_unknown_token_and_foreign_payload(self):
+        self.assertEqual(inbound.handle_alert_tap(wa_id=self.WA, payload='alert:nope:ack'), 'unknown')
+        self.assertEqual(inbound.handle_alert_tap(wa_id=self.WA, payload='refill:1:stop'), 'not_ours')
+
+    @override_settings(PHONE_ALERTS_SEND_ENABLED=True)
+    def test_tap_replies_with_confirmation(self):
+        a = self._alert(status='sent')
+        with _conf(), mock.patch('apps.whatsapp.sender.WhatsAppSender.send_text') as send:
+            self._tap(a)
+        send.assert_called_once()
+        self.assertEqual(send.call_args.kwargs['body'], inbound.REPLY_TEXT)
+
+    def test_chatter_for_reservation_and_task(self):
+        res = Reservation.objects.create(item=make_item(), branch=self.b1, quantity_requested=1,
+                                         contact_name='ع', contact_phone='01033333333')
+        other = _staff('r1', '01000000052', self.b1)
+        a = self._alert(source=res)
+        self._tap(a)
+        act = ReservationActivity.objects.get(reservation=res)
+        self.assertEqual((act.activity_type, act.created_by), ('note', self.person))
+        self.assertTrue(Notification.objects.filter(recipient=other, reservation=res).exists())
+        task = OperationalTask.objects.create(title='t', created_by=other)
+        a2 = self._alert(source=task)
+        self._tap(a2)
+        self.assertEqual(TaskMessage.objects.get(task=task).message_type, 'comment')
+
+    def test_escalation_tap_posts_to_original_source(self):
+        orig = self._alert(status='sent')
+        esc = PhoneAlert.objects.create(
+            event='escalation', source_ct=ContentType.objects.get_for_model(PhoneAlert), source_id=orig.pk,
+            escalation_of=orig, recipient_staff=self.person, phone=self.WA, status='sent')
+        self._tap(esc)
+        self.assertEqual(TransferRequestMessage.objects.filter(request=self.tr).count(), 1)
+
+    # remarks
+    def _text(self, text, context='', wa=None):
+        return inbound.handle_free_text(wa_id=wa or self.WA, text=text, context_wamid=context,
+                                        account=self.acc)
+
+    def test_remark_attached_by_quote(self):
+        a = self._alert(status='sent', wa_message_id='wamid.Q')
+        b = self._alert(status='acknowledged', ack_at=timezone.now())
+        self.assertEqual(self._text('هنوصل بعد ساعة', context='wamid.Q'), 'remark')
+        a.refresh_from_db()
+        b.refresh_from_db()
+        self.assertEqual((a.remark, b.remark), ('هنوصل بعد ساعة', ''))
+        self.assertIn('هنوصل بعد ساعة', TransferRequestMessage.objects.get().message)
+
+    def test_quote_from_other_phone_not_attached(self):
+        a = self._alert(status='sent', wa_message_id='wamid.Q')
+        self.assertEqual(self._text('x', context='wamid.Q', wa='201099999999'), 'unmatched')
+        a.refresh_from_db()
+        self.assertEqual(a.remark, '')
+
+    def test_remark_attached_single_recent_ack(self):
+        a = self._alert(status='acknowledged', ack_at=timezone.now() - timedelta(minutes=5))
+        self.assertEqual(self._text('ملاحظة'), 'remark')
+        a.refresh_from_db()
+        self.assertEqual(a.remark, 'ملاحظة')
+        self.assertEqual(self._text('تانية'), 'unmatched')       # now has a remark: nothing open
+
+    def test_remark_old_ack_not_attached(self):
+        self._alert(status='acknowledged', ack_at=timezone.now() - timedelta(minutes=45))
+        self.assertEqual(self._text('متأخر'), 'unmatched')
+
+    def test_remark_ambiguous_not_attached(self):
+        a = self._alert(status='acknowledged', ack_at=timezone.now())
+        b = self._alert(status='acknowledged', ack_at=timezone.now())
+        self.assertEqual(self._text('أي واحد؟'), 'unmatched')
+        for x in (a, b):
+            x.refresh_from_db()
+            self.assertEqual(x.remark, '')
+        self.assertFalse(TransferRequestMessage.objects.exists())
+
+    # webhook routing
+    def _inbound(self, kind, pid):
+        base = {'from': self.WA, 'timestamp': '1'}
+        if kind == 'button':
+            return {**base, 'id': 'wamid.in1', 'type': 'button',
+                    'button': {'text': 'استلمت', 'payload': pid}}
+        return {**base, 'id': 'wamid.in2', 'type': 'text', 'text': {'body': pid}}
+
+    def test_staff_account_message_not_in_customer_inbox(self):
+        self.acc.provider_ref = '555'
+        self.acc.save()
+        a = self._alert(status='sent')
+        self._post_webhook([self._inbound('button', f'alert:{a.token}:ack')])
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'acknowledged')
+        self._post_webhook([self._inbound('text', 'ملاحظة من الموبايل')])
+        a.refresh_from_db()
+        self.assertEqual(a.remark, 'ملاحظة من الموبايل')
+        self.assertFalse(WAConversation.objects.filter(wa_id=self.WA).exists())
+        self.assertFalse(WAMessage.objects.filter(direction='inbound').exists())
+
+    def test_customer_account_still_in_inbox_and_routes_button(self):
+        other = ChannelAccount.objects.create(channel='whatsapp', name='Cust', phone_or_handle='1',
+                                              provider='meta_cloud', provider_ref='777')
+        a = self._alert(status='sent')
+        self._post_webhook([self._inbound('button', f'alert:{a.token}:ack')], pid='777')
+        self.assertEqual(WAConversation.objects.get(wa_id=self.WA).account, other)
+        self.assertEqual(WAMessage.objects.filter(direction='inbound').count(), 1)
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'acknowledged')
+
+    def test_refill_payload_still_routed(self):
+        with mock.patch('apps.followups.refill_reminders.handle_button_reply', return_value='branch') as h:
+            out = button_registry.dispatch(wa_id=self.WA, payload='refill:1:branch', account=None)
+        self.assertEqual(out, 'branch')
+        h.assert_called_once()
+        self.assertEqual(button_registry.dispatch(wa_id=self.WA, payload='refill:999999:branch'), 'unknown')
+        self.assertEqual(button_registry.dispatch(wa_id=self.WA, payload='zzz'), 'not_ours')

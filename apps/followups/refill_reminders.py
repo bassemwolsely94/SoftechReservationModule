@@ -337,3 +337,13 @@ def summary(days=30):
             'reply_rate': round(100 * by_status.get('replied', 0) / sent, 1) if sent else 0,
             'reservations': qs.exclude(reservation=None).count(),
             'opt_outs': RefillReminderOptOut.objects.count()}
+
+
+# ── WhatsApp button routing ───────────────────────────────────────────────────
+# Looked up by name at call time (not bound) so the webhook always reaches the current handler.
+def _register_buttons():
+    from apps.whatsapp import button_registry
+    button_registry.register("refill:", lambda **kw: handle_button_reply(**kw))
+
+
+_register_buttons()
