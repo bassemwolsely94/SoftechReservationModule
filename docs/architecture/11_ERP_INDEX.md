@@ -41,7 +41,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | Demand Records | `apps/demand` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#demand) |
 | Transfer Requests | `apps/transfers` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#transfers) |
 | Users / Roles | `apps/users` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#users) |
-| Notifications | `apps/notifications` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#notifications) |
+| Notifications (+ phone alerts) | `apps/notifications` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#notifications) |
 | Purchasing / Demand Engine | `apps/purchasing` | PARTIAL | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#purchasing) |
 | Supplier Invoices | `apps/invoices` | PARTIAL | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#invoices) |
 | Vouchers | `apps/vouchers` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#vouchers) — incl. **gift-coupon stock archive + serial generator** ([SOFTECH_GIFT_VOUCHER_STOCKING.md](SOFTECH_GIFT_VOUCHER_STOCKING.md)) |
@@ -110,6 +110,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | Demand | `/api/demand/` | demand |
 | Transfers | `/api/transfers/` | transfers |
 | Notifications | `/api/notifications/` | notifications |
+| Phone alerts | `/api/notifications/phone-alerts/` (incl. `modes/`) | notifications |
 | Vouchers | `/api/vouchers/` | vouchers |
 | Incentives | `/api/incentives/` | incentives |
 | Stock Count | `/api/stockcount/` | stockcount |
@@ -307,6 +308,7 @@ Full schema: [03_DATABASE_DICTIONARY.md](03_DATABASE_DICTIONARY.md)
 | PIC Analytics (تحليلات الـ PIC) | `/customers/pic-analytics` | PIC Analytics (doc 33) | COMPLETE — tabs: overview · PICs · groups · retention · call center · missed · new numbers; Excel export |
 | Forecast Scenarios (factor-driven targets) | `/forecast-scenarios` | Forecasting (doc 16) | COMPLETE |
 | Announcements | `/announcements` | Notifications | COMPLETE |
+| Phone Alerts (تنبيهات الموبايل) | `/phone-alerts` | Notifications (phone alerts) | COMPLETE — policies · owners · branch mobiles · channel · log · switches |
 | بدل الروشتة — cases | `/replacement` | Replacement (doc 25) | PHASE 0 — KPI strip, outstanding split, exception chips, universal search |
 | بدل الروشتة — case workspace | `/replacement/:id` | Replacement (doc 25) | PHASE 0 — progress rail, lineage tree (confirm/reject proposed receipts), items, append-only ledger, exceptions, reconciliation |
 | Unified Inbox (Omni) | `/omni/inbox` | Omni / CEP | PARTIAL (Phase 0 — WA + calls, one timeline) |
@@ -415,6 +417,8 @@ Full report: [09_TECHNICAL_DEBT_REPORT.md](09_TECHNICAL_DEBT_REPORT.md)
 | `generate_demand_records` | demand | Update ItemDemandStat | Daily |
 | `generate_followup_tasks` | followups | Create scheduled follow-up tasks | Daily |
 | `send_followup_reminders` | notifications | Send overdue follow-up reminders | Hourly |
+| `phone_alerts_tick` | notifications | Remind / escalate / expire open phone alerts | Every minute |
+| `morning_brief` | insights | 09:00 branch morning brief over WhatsApp (`MORNING_BRIEF_SEND_ENABLED`, default OFF) | Daily 09:00 Cairo |
 | `check_demand_sla` | demand | Escalate demand-intake SLA breaches (new>10m, assigned>20m) | Hourly |
 | `seed_trusted_networks` | access | Seed trusted networks from branch `db_host` values + ZeroTier staff VPN; dry run unless `--apply`, idempotent | One-time setup |
 | `seed_config` | config | Seed default settings + dropdown options (incl. `replenishment_pick_zones` rules) | One-time setup |

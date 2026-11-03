@@ -1,6 +1,6 @@
 # Phone alerts («تنبيه على الموبايل») + branch morning brief — design
 
-Status: DRAFT for owner approval (2026-11-03). Project 1 of the "before go-live" set
+Status: BUILT (2026-11-03). Sending stays OFF until the owner flips PHONE_ALERTS_SEND_ENABLED / MORNING_BRIEF_SEND_ENABLED. Project 1 of the "before go-live" set
 (order: 1 phone alerts + brief → 2 scanning/counting → 3 usage labels → 4 customer follow-up → 5 drug assistant).
 
 ## 1. Why

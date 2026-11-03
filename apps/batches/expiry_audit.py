@@ -1180,28 +1180,36 @@ def _notify_branch_worklist(branch, rows, top_n, today, send_lines=None):
 
 
 def _maybe_whatsapp_worklist(recipients, bname, count, body):
-    """Best-effort WhatsApp delivery of the worklist — ONLY when the feature flag
-    is on, and only to managers who opted in and have a phone. WhatsApp rides on
-    top of the (already-sent) in-app notification, so a send failure is non-fatal.
-    NOTE: proactive WhatsApp business messages generally require an approved
-    template / an open 24h session window; send_text is attempted best-effort."""
+    """Best-effort WhatsApp heads-up for the worklist, sent through the phone-alerts sender
+    (approved ``staff_alert`` template, so it also reaches people outside the 24h window).
+
+    Runs ONLY when both SystemSetting ``expiry_worklist_whatsapp_enabled`` and the
+    ``PHONE_ALERTS_SEND_ENABLED`` kill switch are on, and only for opted-in managers with a
+    plausible phone. The full list stays in the in-app notification already sent; a failure
+    here is non-fatal. The alert is kind='brief' so it is never reminded or escalated."""
     try:
+        from django.conf import settings
         from apps.config.models import SystemSetting
-        if not SystemSetting.get('expiry_worklist_whatsapp_enabled', False):
+        if not (SystemSetting.get('expiry_worklist_whatsapp_enabled', False)
+                and getattr(settings, 'PHONE_ALERTS_SEND_ENABLED', False)):
             return
-        optins = [r for r in recipients
-                  if getattr(r, 'notify_expiry_worklist_wa', False) and (r.phone or '').strip()]
-        if not optins:
-            return
-        from apps.whatsapp.sender import WhatsAppSender
-        sender = WhatsAppSender()
-        if not sender.is_configured():
-            logger.warning('[PurchaseExpiry] WhatsApp not configured — worklist WA skipped')
-            return
-        text = f"🗓️ قائمة صلاحيات الأسبوع — {bname} ({count} صنف)\n\n{body}"
-        for r in optins:
+        from core.sms import sms_number
+        from apps.notifications.phone_alerts import sender
+        from apps.notifications.phone_alerts.models import PhoneAlert
+        from apps.notifications.phone_alerts.recipients import is_plausible_phone
+        variables = [{'type': 'text', 'text': t}
+                     for t in ('قائمة صلاحيات الأسبوع', str(bname or '—'), f'{count} صنف', '—')]
+        for r in recipients:
+            if not getattr(r, 'notify_expiry_worklist_wa', False):
+                continue
+            phone = sms_number((r.phone or '').strip())
+            if not is_plausible_phone(phone):
+                continue
             try:
-                sender.send_text(wa_id=r.phone.strip(), body=text)
+                alert = PhoneAlert.objects.create(kind='brief', event='expiry_worklist',
+                                                  recipient_staff=r, phone=phone)
+                sender.deliver(alert, template='staff_alert', variables=variables,
+                               payloads=[f'alert:{alert.token}:ack'])
             except Exception:
                 logger.exception('[PurchaseExpiry] worklist WhatsApp send failed for %s',
                                  getattr(r, 'pk', '?'))

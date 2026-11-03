@@ -70,7 +70,8 @@ def build_staff_alert(alert, reminder=False):
 
 
 def _sending_enabled(alert):
-    if alert.kind == 'brief':
+    # the morning brief has its own switch; the weekly expiry worklist rides the phone-alerts one
+    if alert.kind == 'brief' and alert.event != 'expiry_worklist':
         return bool(getattr(settings, 'MORNING_BRIEF_SEND_ENABLED', False))
     return bool(getattr(settings, 'PHONE_ALERTS_SEND_ENABLED', False))
 
