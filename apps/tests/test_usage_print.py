@@ -186,8 +186,8 @@ class SheetTests(_Base):
         executed = []
 
         class Cur:
-            def execute(self, sql, timeout=None):
-                executed.append(sql)
+            def execute(self, sql, params=None, timeout=None):
+                executed.append((sql, params))
 
             def fetchall(self):
                 return []
@@ -204,10 +204,11 @@ class SheetTests(_Base):
         with patch('config.sybase.get_branch_connection', side_effect=RuntimeError('node down')), \
                 patch('config.sybase.get_sybase_connection', return_value=Conn()):
             self.assertIsNone(lookup.from_live(self.b1, 900, self.today))
-        sql = executed[0]
-        self.assertIn(f"st.branchcode = '{self.b1.softech_branch_id}'", sql)
+        sql, params = executed[0]
+        self.assertIn('st.branchcode = ?', sql)
         self.assertIn("st.doccode = '115'", sql)
-        self.assertIn(f"st.docdate = '{self.today.strftime('%Y%m%d')}'", sql)
+        self.assertIn('st.docdate = ?', sql)
+        self.assertEqual(params, [self.b1.softech_branch_id, 900, self.today.strftime('%Y%m%d')])
 
     def test_prescription_attach_and_rules(self):
         _sale(self.b1, 508, self.today, self.cust, [(self.brilique, 1)])
