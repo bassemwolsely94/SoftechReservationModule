@@ -201,6 +201,10 @@ function ReferencesPanel({ canEdit }) {
   })
   const metrics = Object.keys(refs.growth_goal || {})
   const pct = v => v == null ? '—' : `${(Number(v) * 100).toFixed(1)}%`
+  // seasonality for the running month + the next 5 (rolls forward with the calendar)
+  const now = new Date()
+  const ahead = Array.from({ length: 6 }, (_, k) => (now.getMonth() + k) % 12 + 1)
+  const hist = refs.history
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
       <button data-tour="analytics-scenarios-references" onClick={() => setOpen(o => !o)} className="text-sm font-bold text-gray-800 flex items-center gap-2">
@@ -219,7 +223,9 @@ function ReferencesPanel({ canEdit }) {
                   <th className="text-center">النمو التاريخى YoY</th>
                   <th className="text-center">النمو المرجعى (B)</th>
                   <th className="text-center">هدف النمو (الخطة)</th>
-                  <th className="text-center">موسمية أكتوبر</th>
+                  {ahead.map((mo, k) => (
+                    <th key={mo} className={`text-center ${k === 1 ? 'text-gray-600' : ''}`}>موسمية {MONTHS[mo - 1]}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -229,14 +235,19 @@ function ReferencesPanel({ canEdit }) {
                     <td className="text-center tabular-nums text-gray-500">{pct(refs.historical_yoy?.[m])}</td>
                     <td className="text-center tabular-nums text-blue-700">{pct(refs.benchmark?.[m])}</td>
                     <td className="text-center tabular-nums font-semibold text-emerald-700">{pct(refs.growth_goal?.[m])}</td>
-                    <td className="text-center tabular-nums text-gray-500">{refs.seasonality?.[m]?.['10'] ?? '—'}</td>
+                    {ahead.map((mo, k) => (
+                      <td key={mo} className={`text-center tabular-nums ${k === 1 ? 'font-semibold text-gray-700' : 'text-gray-500'}`}>
+                        {refs.seasonality?.[m]?.[String(mo)] ?? '—'}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
           <p className="text-[10px] text-gray-400 mt-2">
-            الموسمية والنمو التاريخى محسوبان من بيانات 24 شهراً. التضخم خارجى (CAPMAS) — حدّثه شهرياً.
+            الموسمية والنمو التاريخى محسوبان من {hist ? <>بيانات {hist.months} شهراً ({hist.from} → {hist.to})</> : 'البيانات التاريخية'}
+            ، وتُحدَّث تلقائياً عند اكتمال كل شهر. التضخم خارجى (CAPMAS) — حدّثه شهرياً.
             طبّق هذه القيم على سيناريو بزر «📐 تطبيق المرجعية».
           </p>
           {canEdit && (
@@ -434,6 +445,17 @@ function ScenarioDetail({ id, canEdit, onDeleted }) {
           <div className="font-bold text-gray-900">{sc.name}</div>
           {canEdit && <button data-tour="analytics-scenarios-delete" onClick={() => { if (confirm('حذف السيناريو؟')) del.mutate() }} className="text-gray-300 hover:text-red-500 text-sm">حذف</button>}
         </div>
+
+        {sc.signals_changed_at && (
+          <div data-tour="analytics-scenarios-stale" className="mb-3 text-xs rounded-lg px-3 py-2 border bg-amber-50 text-amber-800 border-amber-200 flex flex-wrap items-center gap-2">
+            <span>⚠ بيانات الأشهر المرجعية لهذا السيناريو تحدّثت بعد حسابه ({new Date(sc.signals_changed_at).toLocaleString('ar-EG')}) — الأرقام المعروضة قديمة.</span>
+            {canEdit && (
+              <button onClick={recalc} disabled={recalcBusy} className="mr-auto px-2.5 py-1 rounded-md bg-amber-600 text-white text-[11px] font-bold disabled:opacity-50">
+                {recalcBusy ? 'جارٍ الحساب…' : '⚙️ أعد الحساب الآن'}
+              </button>
+            )}
+          </div>
+        )}
 
         {/* global knobs */}
         <GlobalKnobs value={knobs} onChange={setKnobs} canEdit={canEdit} />

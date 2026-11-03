@@ -325,30 +325,31 @@ class KpiBoardView(APIView):
 
 
 class KpiRefreshView(APIView):
-    """POST — rebuild the CURRENT month's branch + call-center rollups in the background
-    so the KPI board reflects the latest synced SOFTECH data on demand."""
+    """GET — rollup freshness for the current + previous months (computed_at vs last sales
+    sync, stale flag). POST — rebuild in the background every stale month plus the current
+    month, so a just-closed month picks up its late sales too (rollup_refresh)."""
     permission_classes = [IsAuthenticated, CanUseForecasting]
+
+    def get(self, request):
+        from apps.forecasting import rollup_refresh
+        return Response(rollup_refresh.status())
 
     def post(self, request):
         from core.permissions import deny_unless
         denied = deny_unless(request, 'purchasing', 'edit', 'create')   # /api/forecasting/ = purchasing (Z-2)
         if denied:
             return denied
-        from datetime import date
+        from apps.forecasting import rollup_refresh
+        if rollup_refresh.status()['running']:
+            return Response({'started': False, 'running': True})
 
         def _job():
             from django.db import connections
             connections.close_all()
             try:
-                from django.core.management import call_command
-                today = date.today()
-                call_command('build_kpi_rollups', year=today.year, month=today.month, verbosity=0)
-                try:
-                    call_command('build_call_center_rollups', year=today.year, month=today.month, verbosity=0)
-                except Exception:
-                    logger.exception('CC rollup refresh skipped')
+                rollup_refresh.refresh(force_current=True)
             except Exception:
-                logger.exception('KPI board refresh job failed')
+                logger.exception('KPI rollup refresh job failed')
             finally:
                 connections.close_all()
 

@@ -118,6 +118,27 @@ class ForecastScenarioSerializer(serializers.ModelSerializer):
     scope_label  = serializers.CharField(source='get_scope_type_display', read_only=True)
     status_label = serializers.CharField(source='get_status_display', read_only=True)
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, default='')
+    signals_changed_at = serializers.SerializerMethodField()
+
+    def get_signals_changed_at(self, obj):
+        """When a CLOSED signal month (base M-12 / LM / PM) was re-rolled-up after this
+        scenario was generated → its numbers are outdated; the screen offers a recalc.
+        The still-running month is ignored (it changes every refresh by design)."""
+        if obj.status != ForecastScenario.STATUS_GENERATED or not obj.generated_at:
+            return None
+        from datetime import date
+        from django.db.models import Max, Q
+        from apps.forecasting.engine import _shift_month
+        today = date.today()
+        q = Q()
+        for d in (-12, -1, -2):
+            y, m = _shift_month(obj.year, obj.month, d)
+            if (y, m) < (today.year, today.month):
+                q |= Q(year=y, month=m)
+        if not q:
+            return None
+        last = KpiActualRollup.objects.filter(q).aggregate(t=Max('computed_at'))['t']
+        return last if last and last > obj.generated_at else None
 
     class Meta:
         model  = ForecastScenario
@@ -126,6 +147,7 @@ class ForecastScenarioSerializer(serializers.ModelSerializer):
             'incentive_threshold', 'benchmark_growth', 'inflation', 'promotion_lift',
             'status', 'status_label', 'notes', 'factors',
             'created_by', 'created_by_name', 'created_at', 'generated_at', 'committed_at',
+            'signals_changed_at',
         ]
         read_only_fields = ['status', 'created_by', 'created_at', 'generated_at', 'committed_at']
 

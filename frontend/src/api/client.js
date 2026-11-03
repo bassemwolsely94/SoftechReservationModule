@@ -493,8 +493,10 @@ export const kpiApi = {
   board: (params = {}) => api.get('/forecasting/kpi-board/', { params }),
   // Legacy-format target workbook (one sheet per model: a,b,avg) — forecast targets + achieved.
   exportSheet: (params = {}) => api.get('/forecasting/kpi-board/export/', { params, responseType: 'blob' }),
-  // On-demand rebuild of the current month's branch + CC rollups (background).
+  // On-demand rebuild of the current month + any stale recent month's rollups (background).
   refresh: () => api.post('/forecasting/kpi-board/refresh/'),
+  // Rollup freshness for the current + previous months ({running, months:[{year,month,computed_at,stale}]}).
+  refreshStatus: () => api.get('/forecasting/kpi-board/refresh/'),
 }
 
 // Forecast scenarios (doc 16, Phase 3)

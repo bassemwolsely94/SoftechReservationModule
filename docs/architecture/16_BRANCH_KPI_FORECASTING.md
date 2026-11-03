@@ -1,6 +1,16 @@
 # 16 — Branch KPI Forecasting & Target Engine
 
 **Status:** ✅ PHASES 1–6 BUILT (2026-07-29) — actuals, targets, board, engine, backtest, call-center & salesperson/category scopes live
+- **Rollup freshness (2026-11-03):** `apps/forecasting/rollup_refresh.py` replaces the
+  06:30 current-month-only rebuild (it froze a month on its last day — Oct-2026 stayed 5.9%
+  short). Every 30 min it rebuilds any of current + 2 previous months whose
+  `PurchaseHistory.last_synced` is newer than the month's oldest rollup `computed_at`
+  (current month throttled to 2 h); a rebuilt closed month also refreshes the stored
+  references (`references.refresh_history`, never auto-applied to scenarios).
+  `GET/POST /api/forecasting/kpi-board/refresh/` = status / forced rebuild. A generated
+  scenario exposes `signals_changed_at` when a CLOSED signal month (M-12/M-1/M-2) was
+  re-rolled-up after generation → «⚠ الأرقام قديمة · أعد الحساب الآن». Reference panel shows
+  seasonality for the running month + next 5 and the real history window.
 - **Phase 6 (salesperson & category scopes):** `KpiResolver.resolve` gained `category_id`
   (line-based, a category's own sales) alongside `softech_user` (salesperson, header-based);
   `SalesTarget.actual_value()` routes all three scopes. `ForecastScenario.scope_type`
