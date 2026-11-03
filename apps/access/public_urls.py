@@ -8,6 +8,7 @@ from . import public_views
 
 urlpatterns = [
     path('challenge/', public_views.challenge),
+    path('health/', public_views.health),     # liveness: DB reachable → 200, else 503
     path('track/<str:token>/', delivery_views.delivery_public_track),
     # /notify (same views as the older /api/demand/public/*, which stay)
     path('notify/item/', demand_views.public_item_lookup),
