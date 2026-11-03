@@ -185,7 +185,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='entitlementledgerentry',
-            constraint=models.CheckConstraint(check=models.Q(('amount', 0), _negated=True), name='ck_replacement_ledger_nonzero'),
+            constraint=models.CheckConstraint(condition=models.Q(('amount', 0), _negated=True), name='ck_replacement_ledger_nonzero'),
         ),
         migrations.AddConstraint(
             model_name='entitlementledgerentry',

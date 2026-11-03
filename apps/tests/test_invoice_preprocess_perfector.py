@@ -26,7 +26,7 @@ class PerfectorTests(SimpleTestCase):
         d.text((5, 12), 'ABC', fill=90)           # darker 'ink'
         out = pp.binarize_sauvola(im)
         self.assertEqual(out.size, im.size)
-        vals = set(out.convert('L').getdata())
+        vals = set(out.convert('L').get_flattened_data())
         self.assertTrue(vals.issubset({0, 255}))  # strictly 0/255
 
     def test_sauvola_degrades_safely_on_tiny_image(self):
@@ -45,7 +45,7 @@ class PerfectorTests(SimpleTestCase):
         im = Image.new('L', (200, 80), 205)
         ImageDraw.Draw(im).text((8, 30), 'TEST 123', fill=70)
         out = pp.enhance_for_ocr(im, enable_deskew=False)
-        vals = set(out.convert('L').getdata())
+        vals = set(out.convert('L').get_flattened_data())
         self.assertTrue(vals.issubset({0, 255}))
 
     @override_settings(INVOICE_OCR_SHARPEN=True, INVOICE_OCR_BINARIZE=False,
