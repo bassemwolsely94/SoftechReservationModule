@@ -86,6 +86,6 @@ class TrackTests(TestCase):
         self.assertEqual(self.c.get(f'/api/delivery/track/{self.token}/').status_code, 200)
 
     def test_track_throttled(self):
-        codes = [self.c.get(f'/api/public/track/{self.token}/').status_code for _ in range(121)]
-        self.assertEqual(codes[:120], [200] * 120)
-        self.assertEqual(codes[120], 429)
+        codes = [self.c.get(f'/api/public/track/{self.token}/').status_code for _ in range(601)]
+        self.assertEqual(codes[:600], [200] * 600)
+        self.assertEqual(codes[600], 429)

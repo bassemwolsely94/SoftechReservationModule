@@ -1405,7 +1405,7 @@ def delivery_tracking_link(request, pk):
 class PublicTrackThrottle(AnonRateThrottle):
     """Per-IP cap on the anonymous tracking link (N6); tokens are signed, this stops enumeration."""
     scope = 'public_track'
-    rate = '120/hour'
+    rate = '600/hour'
 
 
 @api_view(['GET'])

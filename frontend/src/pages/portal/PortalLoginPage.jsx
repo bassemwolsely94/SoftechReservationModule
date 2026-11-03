@@ -40,8 +40,10 @@ export default function PortalLoginPage() {
     } catch (e3) {
       // A refused form (400: stale page, bad number) is said plainly; anything else still shows
       // the generic confirmation (no existence leak).
-      const d = e3?.response?.status === 400 && e3.response.data?.detail
-      if (typeof d === 'string') setErr(d)
+      const st = e3?.response?.status
+      const d = e3?.response?.data?.detail
+      if (st === 429) setErr('طلبات كثيرة — حاول بعد قليل')
+      else if (st === 400) setErr(typeof d === 'string' ? d : 'رقم الهاتف غير صحيح')
       else setSent(true)
     } finally {
       setLoading(false)

@@ -6,6 +6,7 @@
  * shows order status, driver, a "view on map" link (live driver location while
  * out for delivery), and milestone times. No customer PII beyond the order.
  */
+import { useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 
@@ -24,13 +25,27 @@ function fmt(d) {
   try { return new Date(d).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }) } catch { return '' }
 }
 
+const POLL_MS = 60_000
+const MAX_POLL_MS = 5 * 60_000
+
 export default function DeliveryTrackPage() {
   const { token } = useParams()
 
-  const { data, isLoading, isError } = useQuery({
+  // Poll every 60 s; a 429 doubles the wait (max 5 min) and the last good data stays on screen.
+  const delay = useRef(POLL_MS)
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['public-track', token],
-    queryFn: () => fetch(`/api/public/track/${token}/`).then(r => { if (!r.ok) throw new Error(); return r.json() }),
-    refetchInterval: 30_000,
+    queryFn: async () => {
+      const r = await fetch(`/api/public/track/${token}/`)
+      if (!r.ok) {
+        if (r.status === 429) delay.current = Math.min(delay.current * 2, MAX_POLL_MS)
+        throw Object.assign(new Error('track'), { status: r.status })
+      }
+      delay.current = POLL_MS
+      return r.json()
+    },
+    refetchInterval: () => delay.current,
+    refetchOnWindowFocus: false,
     retry: false,
   })
 
@@ -45,7 +60,8 @@ export default function DeliveryTrackPage() {
   )
 
   if (isLoading) return <Shell><div className="text-center text-sm text-gray-400 py-12">جارٍ التحميل...</div></Shell>
-  if (isError || !data) return <Shell><div className="text-center py-12"><div className="text-3xl mb-2">⚠️</div><div className="text-sm text-gray-500">الرابط غير صالح أو منتهي الصلاحية</div></div></Shell>
+  if (isError && error?.status === 404) return <Shell><div className="text-center py-12"><div className="text-3xl mb-2">⚠️</div><div className="text-sm text-gray-500">الرابط غير صالح أو منتهي الصلاحية</div></div></Shell>
+  if (!data) return <Shell><div className="text-center py-12"><div className="text-3xl mb-2">⚠️</div><div className="text-sm text-gray-500">تعذّر التحديث — سنحاول مرة أخرى</div></div></Shell>
 
   const bad = BAD[data.status]
   const idx = STEP_INDEX[data.status] ?? 0
@@ -53,6 +69,7 @@ export default function DeliveryTrackPage() {
   return (
     <Shell>
       <div className="max-w-md mx-auto space-y-4">
+        {isError && <div className="text-xs text-center text-amber-700 bg-amber-50 rounded-xl px-3 py-2">تعذّر التحديث — سنحاول مرة أخرى</div>}
         <div className="bg-white rounded-2xl border border-gray-200 p-5 text-center">
           <div className="text-xs text-gray-400">رقم الطلب</div>
           <div className="font-bold text-lg text-gray-900">{data.order_number}</div>
