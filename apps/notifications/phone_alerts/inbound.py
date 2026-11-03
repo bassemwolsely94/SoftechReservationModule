@@ -187,3 +187,41 @@ def apply_status(wamid, new_status, errors=None) -> bool:
             alert.status = new_status
             alert.save(update_fields=['status'])
     return True
+
+
+# ── morning brief ────────────────────────────────────────────────────────────
+_BRIEF_RE = re.compile(r'^brief:([\w-]+)$')
+
+
+def handle_brief_tap(*, wa_id, payload, context_wamid='', account=None) -> str:
+    """Quick-reply «التفاصيل» on the morning brief: send the full text as free text.
+
+    Only the phone the brief went to may ask for it; every tap (re)sends. Inside the 24 h window the
+    tap just opened, free text is allowed. With ``MORNING_BRIEF_SEND_ENABLED`` off nothing is sent."""
+    m = _BRIEF_RE.match(payload or '')
+    if not m:
+        return 'not_ours'
+    alert = PhoneAlert.objects.filter(token=m.group(1), kind='brief').first()
+    if alert is None:
+        return 'unknown'
+    if sms_number(wa_id) != alert.phone:
+        logger.warning('morning brief %s: tap from another number ignored', alert.pk)
+        return 'wrong_sender'
+    if alert.ack_at is None:
+        PhoneAlert.objects.filter(pk=alert.pk, ack_at__isnull=True).update(
+            status='acknowledged', ack_at=timezone.now())
+    if not getattr(settings, 'MORNING_BRIEF_SEND_ENABLED', False):
+        return 'dry_run'
+    try:
+        from apps.insights import brief
+        from apps.whatsapp.sender import WhatsAppSender
+        from .sender import staff_account
+        text = brief.compose(alert.source, timezone.localdate(alert.created_at)).text
+        wa = WhatsAppSender(account=account or staff_account())
+        if not wa.is_configured:
+            return 'failed'
+        wa.send_text(wa_id=wa_id, body=text[:4000])
+    except Exception as exc:
+        logger.warning('morning brief %s: full text failed: %s', alert.pk, type(exc).__name__)
+        return 'failed'
+    return 'sent'

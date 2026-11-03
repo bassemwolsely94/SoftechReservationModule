@@ -10,3 +10,4 @@ class NotificationsConfig(AppConfig):
         from apps.whatsapp import button_registry
         from .phone_alerts import inbound
         button_registry.register('alert:', inbound.handle_alert_tap)
+        button_registry.register('brief:', inbound.handle_brief_tap)

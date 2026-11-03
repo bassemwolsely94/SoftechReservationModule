@@ -61,6 +61,9 @@ class Command(BaseCommand):
             return 0
 
         recipients = InsightRecipient.objects.filter(active=True)
+        if run.period_type == 'day':
+            # Branch managers who opted into the 09:00 morning brief get that instead of the daily text.
+            recipients = recipients.exclude(morning_brief=True)
         sent = 0
         for rc in recipients:
             if run.period_type not in (rc.period_types or '').split(','):

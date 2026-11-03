@@ -2670,6 +2670,16 @@ def _run_phone_alerts_tick():
         logger.exception('phone_alerts_tick failed')
 
 
+def _run_morning_brief():
+    """09:00 Cairo: WhatsApp morning brief to each branch's managers + shared mobile (read-only)."""
+    try:
+        from apps.insights import brief
+        n = brief.send_all()
+        logger.info('[APScheduler] morning brief sent to %s phone(s)', n)
+    except Exception:
+        logger.exception('morning_brief failed')
+
+
 def _run_coverage_topup():
     """Every 30 min: if a new engine run finished and hasn't been topped up yet, give
     items with no coverage the default and refresh stale maxes on the branch servers.
@@ -3387,6 +3397,16 @@ def start_scheduler():
         replace_existing=True,
         max_instances=1,
         misfire_grace_time=55,
+    )
+    # Branch morning brief (WhatsApp) — 09:00 Cairo daily
+    _scheduler.add_job(
+        _run_morning_brief,
+        'cron',
+        hour=9, minute=0,
+        id='morning_brief',
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=600,
     )
     # CRM delivery order sync — piccrmorders every 5 minutes (incremental, last 10 min)
     _scheduler.add_job(

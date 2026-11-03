@@ -44,6 +44,11 @@ class SchedulerRegistrationTests(SimpleTestCase):
             with self.subTest(job=name):
                 self.assertEqual(sum(1 for f, _, _ in jobs if f.__name__ == name), 1)
 
+    def test_morning_brief_registered_daily_at_0900_cairo(self):
+        jobs = [j for j in self._jobs() if j[1] == 'morning_brief']
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0][0].__name__, '_run_morning_brief')
+
     def test_pos_jobs_keep_their_ids(self):
         ids = {j[1] for j in self._jobs()}
         self.assertTrue({'pos_orders_flush', 'pos_orders_reconcile'} <= ids)
