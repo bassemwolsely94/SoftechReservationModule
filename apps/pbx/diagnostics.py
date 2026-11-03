@@ -165,7 +165,7 @@ def run_diagnostics(timeout: float = 5.0) -> dict:
                     add(key, label, OK, f'{module} محمّل')
                 else:
                     add(key, label, WARN, f'{module} غير محمّل',
-                        'AMI_CHANNEL_TECH لا يطابق نوع التحويلات في Issabel — '
+                        'AMI_CHANNEL_TECH لا يطابق نوع الأرقام الداخلية في Issabel — '
                         'غيّره إلى SIP أو PJSIP حسب السنترال وإلا سيفشل الاتصال من الشاشة.')
         except (OSError, ConnectionError) as exc:
             add(key, label, FAIL, str(exc) or type(exc).__name__,

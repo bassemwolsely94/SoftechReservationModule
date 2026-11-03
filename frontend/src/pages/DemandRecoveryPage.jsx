@@ -5,12 +5,14 @@
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { demandApi } from '../api/client'
 import { tint } from '../theme/theme'
 import CanDo from '../components/CanDo'
 import { formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import SortTh from '../components/SortTh'
+import useServerSort from '../hooks/useServerSort'
 
 const BRAND = 'rgb(var(--c-brand-600))'
 const GREEN = '#10b981'
@@ -193,10 +195,16 @@ export default function DemandRecoveryPage() {
     refetchInterval: 120_000,
   })
 
+  // the queue is paged by the server → the server sorts the whole queue (default: potential value, desc)
+  const [ordering, setOrdering] = useState('')
+  const { headerProps } = useServerSort(ordering, setOrdering, {
+    allowed: ['customer_name', 'item', 'branch', 'stock', 'value', 'waiting'],
+  })
   const { data: queue = [], isLoading } = useQuery({
-    queryKey: ['demand-recovery-queue'],
-    queryFn: () => demandApi.recoveryQueue().then(r => r.data.results || r.data),
+    queryKey: ['demand-recovery-queue', ordering],
+    queryFn: () => demandApi.recoveryQueue({ ordering: ordering || undefined }).then(r => r.data.results || r.data),
     refetchInterval: 60_000,
+    placeholderData: keepPreviousData,
   })
 
   const invalidate = () => {
@@ -302,12 +310,12 @@ export default function DemandRecoveryPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">العميل</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">الصنف</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">الفرع</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">المخزون</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">القيمة</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">الانتظار</th>
+                    <SortTh {...headerProps('customer_name', 'text')} className="text-right px-4 py-3 text-xs font-semibold text-gray-500">العميل</SortTh>
+                    <SortTh {...headerProps('item', 'text')} className="text-right px-4 py-3 text-xs font-semibold text-gray-500">الصنف</SortTh>
+                    <SortTh {...headerProps('branch', 'text')} className="text-right px-4 py-3 text-xs font-semibold text-gray-500">الفرع</SortTh>
+                    <SortTh {...headerProps('stock', 'number')} className="text-right px-4 py-3 text-xs font-semibold text-gray-500">المخزون</SortTh>
+                    <SortTh {...headerProps('value', 'number')} className="text-right px-4 py-3 text-xs font-semibold text-gray-500">القيمة</SortTh>
+                    <SortTh {...headerProps('waiting', 'number')} className="text-right px-4 py-3 text-xs font-semibold text-gray-500">الانتظار</SortTh>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">إجراءات</th>
                   </tr>
                 </thead>

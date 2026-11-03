@@ -53,6 +53,8 @@ from core.permissions import matrix_permission                     # noqa: E402
 COMPOSITION = matrix_permission('chronic', post=('view',), edit=('view',), delete=('view',))
 
 
+from core.stable_ordering import StableOrderingFilter
+
 class StandardPagination(PageNumberPagination):
     page_size             = 50
     page_size_query_param = 'page_size'
@@ -357,6 +359,10 @@ class IngredientSearchViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated, COMPOSITION]
     serializer_class   = ItemMoleculeIndexSerializer
     pagination_class   = StandardPagination
+    # sortable grid: the results are paged, so the headers sort on the server (explicit whitelist)
+    filter_backends    = [StableOrderingFilter]
+    ordering_fields    = ['item_name', 'molecule', 'strength_value', 'dosage_form',
+                          'ingredient_class__name', 'source']
 
     def get_queryset(self):
         qs = ItemMoleculeIndex.objects.select_related('ingredient_class', 'active_ingredient')

@@ -1248,6 +1248,8 @@ def sync_customers(conn, sync_run):
                 customer.softech_locked = bool(row[16])
                 customer.softech_deceased = bool(row[17])
                 customer.points_enrolled = bool(row[18])
+            if len(row) > 19:            # PIC analytics: SOFTECH creation date
+                customer.softech_created_at = _to_date(row[19])
 
             objs.append(customer)
             for p in (phone, phone2):
@@ -1280,6 +1282,7 @@ def sync_customers(conn, sync_run):
         'softech_global_code', 'order_branch_code',
         'is_guest',
         'softech_status', 'softech_locked', 'softech_deceased', 'points_enrolled',
+        'softech_created_at',
     ]
     if hasattr(Customer, 'is_chronic_softech'):
         update_fields.append('is_chronic_softech')
@@ -2224,19 +2227,14 @@ def _run_procurement_refresh():
 
 
 def _run_kpi_refresh():
-    """Rebuild the CURRENT month's branch + call-center KPI rollups so the KPI board,
-    forecast scenarios and sales targets stay fresh. The call-center step also pulls the
-    live Issabel CDR call-count automatically (once DB access is granted). Idempotent."""
+    """Catch-up rebuild of the branch + call-center KPI rollups so the KPI board, forecast
+    scenarios and sales targets stay fresh. Every 30 min; rebuilds only months whose sales
+    changed since their rollup (current month throttled to 2 h) — a closed month picks up
+    its last days' late sales, and a sleeping machine catches up on wake
+    (apps/forecasting/rollup_refresh.py). Idempotent."""
     try:
-        from django.core.management import call_command
-        from datetime import date
-        today = date.today()
-        call_command('build_kpi_rollups', year=today.year, month=today.month, verbosity=0)
-        try:
-            call_command('build_call_center_rollups', year=today.year, month=today.month, verbosity=0)
-        except Exception as cc:
-            logger.warning('[APScheduler] CC rollup step skipped: %s', cc)
-        logger.info('[APScheduler] KPI rollups refreshed for %s-%02d', today.year, today.month)
+        from apps.forecasting import rollup_refresh
+        rollup_refresh.scheduled_tick()
     except Exception as exc:
         logger.error('[APScheduler] KPI refresh failed: %s', exc)
 
@@ -2416,6 +2414,39 @@ def _run_stock_expiry_sync():
         logger.info('[APScheduler] stock-expiry sync done')
     except Exception as exc:
         logger.error('[APScheduler] stock-expiry sync failed: %s', exc)
+
+
+def _run_pbx_cdr_sync():
+    """Calls: copy new rows of the PBX's own CDR (read-only) → pbx.CdrCall linked to PICs,
+    then alert if the PBX is taking calls the AMI bridge is not hearing."""
+    try:
+        from config.issabel import cdr_configured
+        if not cdr_configured():
+            return
+        from apps.pbx import cdr
+        run = cdr.sync_cdr()
+        logger.info('[APScheduler] CDR sync %s: %s rows, %s calls', run.status, run.fetched, run.stored)
+        cdr.notify_bridge_silence()
+    except Exception as exc:
+        logger.warning('pbx cdr sync failed: %s', exc)
+
+
+def _run_pbx_cdr_relink():
+    """Calls: nightly re-link of every stored call to its PIC (new customers / purchases)."""
+    try:
+        from apps.pbx import cdr
+        logger.info('[APScheduler] CDR relink: %s calls changed', cdr.relink_all())
+    except Exception as exc:
+        logger.warning('pbx cdr relink failed: %s', exc)
+
+
+def _run_pic_facts():
+    """PIC Analytics: nightly rebuild of PicDayFact (last 7 days) + PicRollup (as of yesterday)."""
+    try:
+        from django.core.management import call_command
+        call_command('build_pic_facts')
+    except Exception as exc:
+        logger.exception('pic facts build failed: %s', exc)
 
 
 def _run_stock_ledger_sync(days=3):
@@ -3510,12 +3541,12 @@ def start_scheduler():
     # (POS flush + reconcile are registered ONCE, above, as pos_orders_flush /
     # pos_orders_reconcile — a second copy here made two jobs push the same queue.
     # Security Batch 2 P-11 = doc 30 F7.)
-    # Rebuild the current month's branch + call-center KPI rollups (06:30) so the KPI
-    # board, forecast scenarios and targets stay fresh — and the CC call-count pulls
-    # from the live Issabel CDR automatically once DB access is granted.
+    # Catch-up rebuild of the KPI rollups (every 30 min, only stale months) so the KPI
+    # board, forecast scenarios and targets stay fresh — a closed month still picks up its
+    # late sales, and the CC call-count pulls from the live Issabel CDR.
     _scheduler.add_job(
-        _run_kpi_refresh, 'cron', hour=6, minute=30, id='kpi_refresh',
-        replace_existing=True, max_instances=1, misfire_grace_time=1800,
+        _run_kpi_refresh, 'interval', minutes=30, id='kpi_refresh',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=1800,
     )
     # Monthly reminder (~11th) to refresh the external Egypt inflation figure that
     # grounds the forecast references (CAPMAS publishes around the 10th).
@@ -3603,6 +3634,19 @@ def start_scheduler():
     # Daily multi-node stkbalexpiry mirror sweep (FEFO near-expiry / expired tabs).
     _scheduler.add_job(
         _run_stock_expiry_sync, 'cron', hour=5, minute=30, id='stock_expiry_sync',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Calls (PBX CDR mirror): every 10 min + 03:55 nightly PIC re-link.
+    _scheduler.add_job(
+        _run_pbx_cdr_sync, 'interval', minutes=10, id='pbx_cdr_sync',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=600,
+    )
+    _scheduler.add_job(
+        _run_pbx_cdr_relink, 'cron', hour=3, minute=55, id='pbx_cdr_relink',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    _scheduler.add_job(
+        _run_pic_facts, 'cron', hour=4, minute=15, id='pic_facts',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # Stock Transactions Audit ledger (doc 32): every 2 h from 08:00 replaces the last 3 days;

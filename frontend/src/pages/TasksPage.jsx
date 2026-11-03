@@ -7,6 +7,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { tasksApi, branchesApi, usersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import useHelpTab from '../help/useHelpTab'
+import SortTh from '../components/SortTh'
+import useServerSort from '../hooks/useServerSort'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -304,6 +306,12 @@ export default function TasksPage() {
     overdue: '',
   })
 
+  // list grid headers: the server sorts all tasks (paged list)
+  const [ordering, setOrdering] = useState('')
+  const { headerProps } = useServerSort(ordering, setOrdering, {
+    allowed: ['task_number', 'title', 'status', 'priority', 'task_type', 'branch', 'assigned_to', 'due_date'],
+  })
+
   const setFilter = (k, v) => setFilters(f => ({ ...f, [k]: v }))
 
   // Load reference data
@@ -319,6 +327,7 @@ export default function TasksPage() {
       const params = {}
       Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v })
       if (view === 'mine') params.mine = '1'
+      if (ordering) params.ordering = ordering
 
       const { data } = await tasksApi.list(params)
       setTasks(data.results || data || [])
@@ -327,7 +336,7 @@ export default function TasksPage() {
     } finally {
       setLoading(false)
     }
-  }, [filters, view])
+  }, [filters, view, ordering])
 
   useEffect(() => { loadTasks() }, [loadTasks])
 
@@ -454,7 +463,7 @@ export default function TasksPage() {
 
       {/* ── Content ── */}
       <div data-tour="tasks-list-content" className="flex-1 overflow-auto">
-        {loading ? (
+        {loading && tasks.length === 0 ? (
           <div className="flex items-center justify-center h-48 text-gray-400">
             <div className="text-center">
               <div className="text-2xl mb-2 animate-spin">⟳</div>
@@ -499,14 +508,14 @@ export default function TasksPage() {
                 <table className="w-full text-right">
                   <thead>
                     <tr className="bg-gray-50 border-b text-xs text-gray-500 font-semibold">
-                      <th className="px-3 py-2.5">الرقم</th>
-                      <th className="px-3 py-2.5">العنوان</th>
-                      <th className="px-3 py-2.5">الحالة</th>
-                      <th className="px-3 py-2.5">الأولوية</th>
-                      <th className="px-3 py-2.5">النوع</th>
-                      <th className="px-3 py-2.5">الفرع</th>
-                      <th className="px-3 py-2.5">المُعيَّن إليه</th>
-                      <th className="px-3 py-2.5">الموعد</th>
+                      <SortTh {...headerProps('task_number', 'text')} className="px-3 py-2.5">الرقم</SortTh>
+                      <SortTh {...headerProps('title', 'text')} className="px-3 py-2.5">العنوان</SortTh>
+                      <SortTh {...headerProps('status', 'number')} className="px-3 py-2.5">الحالة</SortTh>
+                      <SortTh {...headerProps('priority', 'number')} className="px-3 py-2.5">الأولوية</SortTh>
+                      <SortTh {...headerProps('task_type', 'text')} className="px-3 py-2.5">النوع</SortTh>
+                      <SortTh {...headerProps('branch', 'text')} className="px-3 py-2.5">الفرع</SortTh>
+                      <SortTh {...headerProps('assigned_to', 'text')} className="px-3 py-2.5">المُعيَّن إليه</SortTh>
+                      <SortTh {...headerProps('due_date', 'date')} className="px-3 py-2.5">الموعد</SortTh>
                     </tr>
                   </thead>
                   <tbody>

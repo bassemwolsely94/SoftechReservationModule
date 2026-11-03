@@ -3,12 +3,14 @@
  * Tabs: Leave · Permits · Overtime · Salary Advances · Expense Claims
  */
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import { printHRRequest } from '../components/HRPrint'
 import { DateField, IdentityFields, weekdayAr } from '../components/HRForm'
 import useHelpTab from '../help/useHelpTab'
+import SortTh from '../components/SortTh'
+import useServerSort from '../hooks/useServerSort'
 
 // Small inline print action used across all request tables
 function PrintLink({ kind, row }) {
@@ -48,6 +50,9 @@ function Badge({ status }) {
 // ── Leave Requests ────────────────────────────────────────────────────────────
 function LeaveTab() {
   const qc = useQueryClient()
+  // paged list → the server sorts every request, not just this page
+  const [ordering, setOrdering] = useState('')
+  const { headerProps } = useServerSort(ordering, setOrdering, { allowed: ['staff_sort', 'code_sort', 'leave_type__name_ar', 'start_date', 'end_date', 'days_requested', 'status_rank'] })
   const { user } = useAuthStore()
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ leave_type_code: '', start_date: '', end_date: '', return_to_work_date: '', days_requested: '', reason: '' })
@@ -61,8 +66,9 @@ function LeaveTab() {
   const typeList = types?.results || types || []
 
   const { data, isLoading } = useQuery({
-    queryKey: ['hr', 'leave-requests'],
-    queryFn:  () => hrApi.leaveRequests({}).then(r => r.data),
+    queryKey: ['hr', 'leave-requests', ordering],
+    queryFn:  () => hrApi.leaveRequests({ ordering: ordering || undefined }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
   const requests = data?.results || data || []
 
@@ -150,13 +156,13 @@ function LeaveTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">الموظف</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">كود</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">النوع</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">من</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">إلى</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">الأيام</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">الحالة</th>
+                <SortTh {...headerProps('staff_sort', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">الموظف</SortTh>
+                <SortTh {...headerProps('code_sort', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">كود</SortTh>
+                <SortTh {...headerProps('leave_type__name_ar', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">النوع</SortTh>
+                <SortTh {...headerProps('start_date', 'date')} className="px-4 py-3 text-right font-semibold text-gray-600">من</SortTh>
+                <SortTh {...headerProps('end_date', 'date')} className="px-4 py-3 text-right font-semibold text-gray-600">إلى</SortTh>
+                <SortTh {...headerProps('days_requested', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">الأيام</SortTh>
+                <SortTh {...headerProps('status_rank', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">الحالة</SortTh>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -191,14 +197,18 @@ function LeaveTab() {
 // ── Overtime Requests ─────────────────────────────────────────────────────────
 function OvertimeTab() {
   const qc = useQueryClient()
+  // paged list → the server sorts every request, not just this page
+  const [ordering, setOrdering] = useState('')
+  const { headerProps } = useServerSort(ordering, setOrdering, { allowed: ['staff_sort', 'code_sort', 'date', 'hours', 'status_rank'] })
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ date: '', hours: '', reason: '' })
   const [identity, setIdentity] = useState({})
   const [err, setErr] = useState(null)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['hr', 'overtime'],
-    queryFn:  () => hrApi.overtimeList({}).then(r => r.data),
+    queryKey: ['hr', 'overtime', ordering],
+    queryFn:  () => hrApi.overtimeList({ ordering: ordering || undefined }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
   const requests = data?.results || data || []
 
@@ -258,11 +268,11 @@ function OvertimeTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b">
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">الموظف</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">كود</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">التاريخ</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">الساعات</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">الحالة</th>
+                <SortTh {...headerProps('staff_sort', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">الموظف</SortTh>
+                <SortTh {...headerProps('code_sort', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">كود</SortTh>
+                <SortTh {...headerProps('date', 'date')} className="px-4 py-3 text-right font-semibold text-gray-600">التاريخ</SortTh>
+                <SortTh {...headerProps('hours', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">الساعات</SortTh>
+                <SortTh {...headerProps('status_rank', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">الحالة</SortTh>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -295,14 +305,18 @@ function OvertimeTab() {
 // ── Salary Advances ───────────────────────────────────────────────────────────
 function AdvancesTab() {
   const qc = useQueryClient()
+  // paged list → the server sorts every request, not just this page
+  const [ordering, setOrdering] = useState('')
+  const { headerProps } = useServerSort(ordering, setOrdering, { allowed: ['staff_sort', 'amount', 'repayment_date', 'reason', 'status_rank'] })
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ amount: '', repayment_date: '', reason: '' })
   const [identity, setIdentity] = useState({})
   const [err, setErr] = useState(null)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['hr', 'salary-advances'],
-    queryFn:  () => hrApi.advanceList({}).then(r => r.data),
+    queryKey: ['hr', 'salary-advances', ordering],
+    queryFn:  () => hrApi.advanceList({ ordering: ordering || undefined }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
   const advances = data?.results || data || []
 
@@ -362,11 +376,11 @@ function AdvancesTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b">
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">الموظف</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">المبلغ</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">تاريخ السداد</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">السبب</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">الحالة</th>
+                <SortTh {...headerProps('staff_sort', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">الموظف</SortTh>
+                <SortTh {...headerProps('amount', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">المبلغ</SortTh>
+                <SortTh {...headerProps('repayment_date', 'date')} className="px-4 py-3 text-right font-semibold text-gray-600">تاريخ السداد</SortTh>
+                <SortTh {...headerProps('reason', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">السبب</SortTh>
+                <SortTh {...headerProps('status_rank', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">الحالة</SortTh>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -415,6 +429,9 @@ const EMPTY_EXPENSE = {
 
 function ExpensesTab() {
   const qc = useQueryClient()
+  // paged list → the server sorts every request, not just this page
+  const [ordering, setOrdering] = useState('')
+  const { headerProps } = useServerSort(ordering, setOrdering, { allowed: ['staff_sort', 'amount', 'category_sort', 'description', 'status_rank'] })
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_EXPENSE)
   const [identity, setIdentity] = useState({})
@@ -422,8 +439,9 @@ function ExpensesTab() {
   const isMamoriya = form.category === 'mamoriya'
 
   const { data, isLoading } = useQuery({
-    queryKey: ['hr', 'expense-claims'],
-    queryFn:  () => hrApi.expenseList({}).then(r => r.data),
+    queryKey: ['hr', 'expense-claims', ordering],
+    queryFn:  () => hrApi.expenseList({ ordering: ordering || undefined }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
   const claims = data?.results || data || []
 
@@ -531,11 +549,11 @@ function ExpensesTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b">
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">الموظف</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">المبلغ</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">الفئة</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">الوصف</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">الحالة</th>
+                <SortTh {...headerProps('staff_sort', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">الموظف</SortTh>
+                <SortTh {...headerProps('amount', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">المبلغ</SortTh>
+                <SortTh {...headerProps('category_sort', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">الفئة</SortTh>
+                <SortTh {...headerProps('description', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">الوصف</SortTh>
+                <SortTh {...headerProps('status_rank', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">الحالة</SortTh>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -574,6 +592,9 @@ const EMPTY_PERMIT = { permit_type: 'mamoriya', date: '', time_from: '', time_to
 
 function PermitsTab() {
   const qc = useQueryClient()
+  // paged list → the server sorts every request, not just this page
+  const [ordering, setOrdering] = useState('')
+  const { headerProps } = useServerSort(ordering, setOrdering, { allowed: ['staff_sort', 'code_sort', 'type_sort', 'date', 'time_from', 'destination', 'status_rank'] })
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_PERMIT)
   const [identity, setIdentity] = useState({})
@@ -581,8 +602,9 @@ function PermitsTab() {
   const isMamoriya = form.permit_type === 'mamoriya'
 
   const { data, isLoading } = useQuery({
-    queryKey: ['hr', 'permits'],
-    queryFn:  () => hrApi.permitList({}).then(r => r.data),
+    queryKey: ['hr', 'permits', ordering],
+    queryFn:  () => hrApi.permitList({ ordering: ordering || undefined }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
   const permits = data?.results || data || []
 
@@ -670,13 +692,13 @@ function PermitsTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b">
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">الموظف</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">كود</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">النوع</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">التاريخ</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">من - حتى</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">الجهة</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">الحالة</th>
+                <SortTh {...headerProps('staff_sort', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">الموظف</SortTh>
+                <SortTh {...headerProps('code_sort', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">كود</SortTh>
+                <SortTh {...headerProps('type_sort', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">النوع</SortTh>
+                <SortTh {...headerProps('date', 'date')} className="px-4 py-3 text-right font-semibold text-gray-600">التاريخ</SortTh>
+                <SortTh {...headerProps('time_from', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">من - حتى</SortTh>
+                <SortTh {...headerProps('destination', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">الجهة</SortTh>
+                <SortTh {...headerProps('status_rank', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">الحالة</SortTh>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>

@@ -36,6 +36,7 @@ from .serializers import (
     ERPUserSerializer,
 )
 from core.client_ip import client_ip
+from core.stable_ordering import StableOrderingMixin
 from .passwords import password_problem
 from core.permissions import IsAdminRole, MatrixPermission, matrix_allows, matrix_permission
 
@@ -56,6 +57,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
     can_supply_write = drf_serializers.SerializerMethodField()
     can_run_engine   = drf_serializers.SerializerMethodField()
     can_stock_audit  = drf_serializers.SerializerMethodField()   # doc 32: management or a named branch manager
+    can_pic_analytics = drf_serializers.SerializerMethodField()  # doc 33: management or a named branch manager
 
     def get_branch_id(self, obj):
         return obj.branch_id  # Django auto-attribute (FK integer)
@@ -72,6 +74,10 @@ class _MeSerializer(drf_serializers.ModelSerializer):
         from apps.stock_audit.access import can_open
         return can_open(obj.user)
 
+    def get_can_pic_analytics(self, obj):
+        from apps.pic_analytics.access import can_open
+        return can_open(obj.user)
+
     class Meta:
         model  = StaffProfile
         fields = [
@@ -81,7 +87,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
             'access_all_branches', 'softech_username',
             'phone', 'is_active',
             'can_see_all_customers', 'can_see_customer_phone',
-            'mfa_enabled', 'can_supply_write', 'can_run_engine', 'can_stock_audit',
+            'mfa_enabled', 'can_supply_write', 'can_run_engine', 'can_stock_audit', 'can_pic_analytics',
         ]
 
 
@@ -502,7 +508,7 @@ class StandardPagination(PageNumberPagination):
 
 # ── StaffProfile ViewSet ───────────────────────────────────────────────────────
 
-class StaffProfileViewSet(viewsets.ModelViewSet):
+class StaffProfileViewSet(StableOrderingMixin, viewsets.ModelViewSet):
     """
     CRUD for staff users.
     Admin-only for create/update/delete; authenticated users can see the list.
@@ -511,7 +517,24 @@ class StaffProfileViewSet(viewsets.ModelViewSet):
     pagination_class = StandardPagination
     filter_backends  = [filters.SearchFilter, filters.OrderingFilter]
     search_fields    = ['user__username', 'user__first_name', 'user__last_name', 'softech_username']
-    ordering_fields  = ['user__username', 'role', 'branch__name']
+
+    # Header sorting (UserManagementPage / UsersPage). Only columns the viewer can already see may order the
+    # list: the slim picker (roles without `users` view) shows names/role/branch/active only, so it cannot
+    # order by the SOFTECH user. Never password, e-mail, phone or any secret.
+    PICKER_ORDERING_FIELDS = ['user__username', 'user__first_name', 'user__last_name', 'role', 'branch__name', 'is_active']
+    FULL_ORDERING_FIELDS = PICKER_ORDERING_FIELDS + ['softech_username']
+
+    def _sees_full_list(self):
+        request = getattr(self, 'request', None)
+        user = getattr(request, 'user', None)
+        if user is None or not user.is_authenticated:
+            return False
+        profile = getattr(user, 'staff_profile', None)
+        return bool(user.is_superuser or matrix_allows(profile, 'users', 'view'))
+
+    @property
+    def ordering_fields(self):
+        return self.FULL_ORDERING_FIELDS if self._sees_full_list() else self.PICKER_ORDERING_FIELDS
 
     def get_permissions(self):
         if self.action == 'list':
@@ -522,8 +545,7 @@ class StaffProfileViewSet(viewsets.ModelViewSet):
 
     def get_serializer_class(self):
         if self.action == 'list':
-            profile = getattr(self.request.user, 'staff_profile', None)
-            if self.request.user.is_superuser or matrix_allows(profile, 'users', 'view'):
+            if self._sees_full_list():
                 return StaffProfileListSerializer
             return StaffPickerSerializer
         if self.action in ('update', 'partial_update'):

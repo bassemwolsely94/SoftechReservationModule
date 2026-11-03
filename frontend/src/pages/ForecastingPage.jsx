@@ -6,6 +6,8 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { forecastingApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
+import useServerSort from '../hooks/useServerSort'
+import SortTh from '../components/SortTh'
 
 function KpiCard({ label, value, sub, color = 'text-gray-900' }) {
   return (
@@ -27,25 +29,32 @@ const STATUS_COLORS = {
 export default function ForecastingPage() {
   const qc   = useQueryClient()
   const [tab, setTab] = useState('runs')
+  // paged lists (DRF page of 50): header clicks send `ordering` so the server sorts every record
+  const [runsOrd, setRunsOrd] = useState('')
+  const [accOrd, setAccOrd] = useState('')
+  const [seasOrd, setSeasOrd] = useState('')
+  const runsSort = useServerSort(runsOrd, setRunsOrd, { allowed: ['started_at', 'completed_at', 'items_processed', 'status', 'triggered_by_sort'] })
+  const accSort = useServerSort(accOrd, setAccOrd, { allowed: ['item__name', 'forecast_date', 'forecast_30d', 'actual_30d', 'mape', 'mae'] })
+  const seasSort = useServerSort(seasOrd, setSeasOrd, { allowed: ['item__name', 'month', 'index_value', 'computed_at'] })
   useHelpTab(tab)
   const [triggerMsg, setTriggerMsg] = useState(null)
 
   const { data: runsData, isLoading: runsLoading } = useQuery({
-    queryKey: ['forecasting', 'runs'],
-    queryFn:  () => forecastingApi.runs({}).then(r => r.data),
+    queryKey: ['forecasting', 'runs', runsOrd],
+    queryFn:  () => forecastingApi.runs(runsOrd ? { ordering: runsOrd } : {}).then(r => r.data),
     enabled:  tab === 'runs',
     refetchInterval: tab === 'runs' ? 15_000 : false,
   })
 
   const { data: accuracyData, isLoading: accLoading } = useQuery({
-    queryKey: ['forecasting', 'accuracy'],
-    queryFn:  () => forecastingApi.accuracy({}).then(r => r.data),
+    queryKey: ['forecasting', 'accuracy', accOrd],
+    queryFn:  () => forecastingApi.accuracy(accOrd ? { ordering: accOrd } : {}).then(r => r.data),
     enabled:  tab === 'accuracy',
   })
 
   const { data: seasonalityData, isLoading: seasonalityLoading } = useQuery({
-    queryKey: ['forecasting', 'seasonality'],
-    queryFn:  () => forecastingApi.seasonality({}).then(r => r.data),
+    queryKey: ['forecasting', 'seasonality', seasOrd],
+    queryFn:  () => forecastingApi.seasonality(seasOrd ? { ordering: seasOrd } : {}).then(r => r.data),
     enabled:  tab === 'seasonality',
   })
 
@@ -106,7 +115,7 @@ export default function ForecastingPage() {
         <KpiCard label="التشغيلات المكتملة" value={completedRuns} />
         <KpiCard
           label="متوسط دقة التنبؤ (MAPE)"
-          value={accuracies.length ? `${Math.round(accuracies.reduce((s, a) => s + (a.mape || 0), 0) / accuracies.length)}%` : '—'}
+          value={accuracies.length ? `${Math.round(accuracies.reduce((s, a) => s + (Number(a.mape) || 0), 0) / accuracies.length)}%` : '—'}
           color="text-brand-600"
         />
       </div>
@@ -145,11 +154,11 @@ export default function ForecastingPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">بدأ في</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">انتهى في</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">الأصناف المعالجة</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">الحالة</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">بواسطة</th>
+                  <SortTh {...runsSort.headerProps('started_at', 'date')} className="px-4 py-3 text-right font-semibold text-gray-600">بدأ في</SortTh>
+                  <SortTh {...runsSort.headerProps('completed_at', 'date')} className="px-4 py-3 text-right font-semibold text-gray-600">انتهى في</SortTh>
+                  <SortTh {...runsSort.headerProps('items_processed', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">الأصناف المعالجة</SortTh>
+                  <SortTh {...runsSort.headerProps('status', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">الحالة</SortTh>
+                  <SortTh {...runsSort.headerProps('triggered_by_sort', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">بواسطة</SortTh>
                   <th className="px-4 py-3 text-right font-semibold text-gray-600">ملاحظات</th>
                 </tr>
               </thead>
@@ -160,7 +169,7 @@ export default function ForecastingPage() {
                       {r.started_at ? new Date(r.started_at).toLocaleString('ar-EG') : '—'}
                     </td>
                     <td className="px-4 py-3 text-gray-500">
-                      {r.finished_at ? new Date(r.finished_at).toLocaleString('ar-EG') : r.status === 'running' ? '⏳ جاري...' : '—'}
+                      {r.completed_at ? new Date(r.completed_at).toLocaleString('ar-EG') : r.status === 'running' ? '⏳ جاري...' : '—'}
                     </td>
                     <td className="px-4 py-3">{r.items_processed ?? '—'}</td>
                     <td className="px-4 py-3">
@@ -169,7 +178,7 @@ export default function ForecastingPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-500">{r.triggered_by_name || r.triggered_by || 'scheduler'}</td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">{r.notes || '—'}</td>
+                    <td className="px-4 py-3 text-gray-400 text-xs">{r.error || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -189,29 +198,29 @@ export default function ForecastingPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">الصنف</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">الفترة</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">التنبؤ</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">الفعلي</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">MAPE</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">MAE</th>
+                  <SortTh {...accSort.headerProps('item__name', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">الصنف</SortTh>
+                  <SortTh {...accSort.headerProps('forecast_date', 'date')} className="px-4 py-3 text-right font-semibold text-gray-600">الفترة</SortTh>
+                  <SortTh {...accSort.headerProps('forecast_30d', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">التنبؤ</SortTh>
+                  <SortTh {...accSort.headerProps('actual_30d', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">الفعلي</SortTh>
+                  <SortTh {...accSort.headerProps('mape', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">MAPE</SortTh>
+                  <SortTh {...accSort.headerProps('mae', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">MAE</SortTh>
                 </tr>
               </thead>
               <tbody>
                 {accuracies.map(a => (
                   <tr key={a.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium">{a.item_name || a.item || '—'}</td>
-                    <td className="px-4 py-3 text-gray-500">{a.period_label || a.period || '—'}</td>
-                    <td className="px-4 py-3">{a.forecast_qty ?? '—'}</td>
-                    <td className="px-4 py-3">{a.actual_qty ?? <span className="text-gray-300">غير مدخل</span>}</td>
+                    <td className="px-4 py-3 text-gray-500">{a.forecast_date || '—'}</td>
+                    <td className="px-4 py-3">{a.forecast_30d ?? '—'}</td>
+                    <td className="px-4 py-3">{a.actual_30d ?? <span className="text-gray-300">غير مدخل</span>}</td>
                     <td className="px-4 py-3">
                       {a.mape != null ? (
-                        <span className={`font-medium ${a.mape < 15 ? 'text-green-600' : a.mape < 30 ? 'text-amber-600' : 'text-red-600'}`}>
-                          {a.mape.toFixed(1)}%
+                        <span className={`font-medium ${Number(a.mape) < 15 ? 'text-green-600' : Number(a.mape) < 30 ? 'text-amber-600' : 'text-red-600'}`}>
+                          {Number(a.mape).toFixed(1)}%
                         </span>
                       ) : '—'}
                     </td>
-                    <td className="px-4 py-3">{a.mae != null ? a.mae.toFixed(1) : '—'}</td>
+                    <td className="px-4 py-3">{a.mae != null ? Number(a.mae).toFixed(1) : '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -247,16 +256,16 @@ export default function ForecastingPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-right font-semibold text-gray-600">الصنف / التصنيف</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-600">الشهر</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-600">مؤشر الموسمية</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-600">آخر تحديث</th>
+                    <SortTh {...seasSort.headerProps('item__name', 'text')} className="px-4 py-3 text-right font-semibold text-gray-600">الصنف / التصنيف</SortTh>
+                    <SortTh {...seasSort.headerProps('month', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">الشهر</SortTh>
+                    <SortTh {...seasSort.headerProps('index_value', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">مؤشر الموسمية</SortTh>
+                    <SortTh {...seasSort.headerProps('computed_at', 'date')} className="px-4 py-3 text-right font-semibold text-gray-600">آخر تحديث</SortTh>
                   </tr>
                 </thead>
                 <tbody>
                   {seasonality.map(s => (
                     <tr key={s.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium">{s.item_name || s.category || '—'}</td>
+                      <td className="px-4 py-3 font-medium">{s.item_name || s.category_name || '—'}</td>
                       <td className="px-4 py-3 text-gray-500">{s.month}</td>
                       <td className="px-4 py-3">
                         <span className={`font-semibold ${
@@ -264,13 +273,13 @@ export default function ForecastingPage() {
                           s.index_value < 0.8 ? 'text-red-600' :
                           'text-gray-700'
                         }`}>
-                          {s.index_value != null ? s.index_value.toFixed(2) : '—'}
+                          {s.index_value != null ? Number(s.index_value).toFixed(2) : '—'}
                         </span>
                         {s.index_value > 1 && <span className="text-xs text-gray-400 mr-1">▲ موسم مرتفع</span>}
                         {s.index_value < 1 && <span className="text-xs text-gray-400 mr-1">▼ موسم منخفض</span>}
                       </td>
                       <td className="px-4 py-3 text-gray-400 text-xs">
-                        {s.updated_at ? new Date(s.updated_at).toLocaleDateString('ar-EG') : '—'}
+                        {s.computed_at ? new Date(s.computed_at).toLocaleDateString('ar-EG') : '—'}
                       </td>
                     </tr>
                   ))}

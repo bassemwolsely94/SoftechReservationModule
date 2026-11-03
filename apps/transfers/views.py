@@ -4,7 +4,7 @@ apps/transfers/views.py
 Transfer Request ViewSet — full state machine + item management + chatter.
 NO stock mutations. NO ERP calls. Communication + approval only.
 """
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
@@ -15,6 +15,8 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import TransferRequest, TransferRequestItem, TransferRequestMessage
 from core import branch_scope
+from core.sort_ordering import NullsLastOrderingFilter, explicit_order_by, staff_name_key
+from core.sort_rank import branch_label, choice_rank
 from core.errors import public_error
 from .serializers import (
     TransferRequestListSerializer,
@@ -144,13 +146,15 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
     """
 
     permission_classes  = [IsAuthenticated, TRANSFERS]
-    filter_backends     = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filter_backends     = [DjangoFilterBackend, filters.SearchFilter, NullsLastOrderingFilter]
     filterset_fields    = ['status', 'requesting_branch', 'supplying_branch']
     search_fields       = [
         'request_number', 'notes',
         'items__item__name', 'items__item__softech_id',
     ]
-    ordering_fields     = ['created_at', 'updated_at', 'status']
+    # Sortable list grid: *_sort annotations = the text the cell shows; status = lifecycle rank.
+    ordering_fields     = ['created_at', 'updated_at', 'status', 'request_number', 'requesting_sort',
+                           'supplying_sort', 'items_count', 'status_rank', 'created_by_sort', 'notes']
     ordering            = ['-created_at']
 
     def get_queryset(self):
@@ -162,7 +166,13 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
             'messages__created_by__user',
         )
 
-        qs = _visible_transfers(qs, self.request.user)
+        qs = _visible_transfers(qs, self.request.user).annotate(
+            requesting_sort=branch_label('requesting_branch'),
+            supplying_sort=branch_label('supplying_branch'),
+            items_count=Count('items', distinct=True),
+            status_rank=choice_rank('status', TransferRequest.STATUS_CHOICES),
+            created_by_sort=staff_name_key('created_by'),
+        )
 
         # Date range filters — wrap in try/except so malformed input returns
         # an empty queryset rather than a 500 from the DB driver
@@ -1056,6 +1066,14 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # Sortable grid: the server sorts ALL discrepancies and THEN keeps the first 200 (whitelisted ?ordering=).
+        from django.db.models.functions import Abs
+        order = explicit_order_by(request.query_params.get('ordering'), {
+            'request_number': 'request__request_number', 'item_name': 'item__name',
+            'supplying_branch': 'supplying_sort', 'approved_quantity': 'approved_quantity',
+            'received_quantity': 'received_quantity', 'discrepancy': 'delta_abs',
+            'completed_at': 'request__completed_at',
+        }, default=('-request__completed_at',))
         lines = (
             TransferRequestItem.objects
             .filter(
@@ -1069,7 +1087,9 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
                 'request__supplying_branch',
                 'item',
             )
-            .order_by('-request__completed_at')[:200]
+            .annotate(supplying_sort=branch_label('request__supplying_branch'),
+                      delta_abs=Abs(F('approved_quantity') - F('received_quantity')))
+            .order_by(*order)[:200]
         )
 
         data = []

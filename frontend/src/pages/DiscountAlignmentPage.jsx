@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pricingApprovalsApi } from '../api/client'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 const FLAG_META = {
   origin_vs_discount: { label: 'الخصم ≠ نسبة المنشأ',       cls: 'bg-red-100 text-red-700' },
@@ -150,6 +152,9 @@ export default function DiscountAlignmentPage() {
   })
 
   const rows  = data?.rows  || []
+  const { sorted: sortedRows, headerProps } = useSortableRows(rows, {
+    getValue: (r, k) => (k === 'target' ? targetPct(r) : k === 'flags' ? (r.flags || []).length : r[k]),
+  })
   const stats = data?.stats || {}
   const origins = tiers?.origins || []
   const stores  = tiers?.store_classifs || []
@@ -313,14 +318,14 @@ export default function DiscountAlignmentPage() {
                 <th className="px-2 py-2 w-8 text-center">
                   <input data-tour="pricing-alignment-select-all" type="checkbox" checked={allVisible} onChange={toggleAll} className="rounded" />
                 </th>
-                <th className="px-3 py-2 text-right">الصنف</th>
-                <th className="px-3 py-2 text-right">المورد</th>
-                <th className="px-3 py-2 text-right">المنشأ (الحالى)</th>
-                <th className="px-3 py-2 text-center">خصم أساسى</th>
-                <th className="px-3 py-2 text-center">منشأ %</th>
-                <th className="px-3 py-2 text-center">تعاقد %</th>
-                <th className="px-3 py-2 text-center">الهدف</th>
-                <th className="px-3 py-2 text-right">التنبيهات</th>
+                <SortTh {...headerProps('name', 'text')} className="px-3 py-2 text-right">الصنف</SortTh>
+                <SortTh {...headerProps('supplier_name', 'text')} className="px-3 py-2 text-right">المورد</SortTh>
+                <SortTh {...headerProps('origin_name', 'text')} className="px-3 py-2 text-right">المنشأ (الحالى)</SortTh>
+                <SortTh {...headerProps('pharmacy_discp', 'number')} className="px-3 py-2 text-center">خصم أساسى</SortTh>
+                <SortTh {...headerProps('origin_pct', 'number')} className="px-3 py-2 text-center">منشأ %</SortTh>
+                <SortTh {...headerProps('store_pct', 'number')} className="px-3 py-2 text-center">تعاقد %</SortTh>
+                <SortTh {...headerProps('target', 'number')} className="px-3 py-2 text-center">الهدف</SortTh>
+                <SortTh {...headerProps('flags', 'number')} className="px-3 py-2 text-right">التنبيهات</SortTh>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -328,7 +333,7 @@ export default function DiscountAlignmentPage() {
               {!isLoading && rows.length === 0 && (
                 <tr><td colSpan={9} className="text-center py-12 text-green-600 font-semibold">✓ لا توجد أصناف غير متوافقة</td></tr>
               )}
-              {rows.map(r => {
+              {sortedRows.map(r => {
                 const tp = targetPct(r)
                 return (
                   <tr key={r.item_id} data-tour="pricing-alignment-row" className={`hover:bg-gray-50 ${sel.has(r.item_id) ? 'bg-emerald-50/60' : r.misaligned ? 'bg-red-50/40' : ''}`}>

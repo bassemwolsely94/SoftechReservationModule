@@ -10,6 +10,8 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { offersApi } from '../api/client'
+import useServerSort from '../hooks/useServerSort'
+import SortTh from '../components/SortTh'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import { useToast } from '../components/ui'
 import { fa, ba } from '../utils/flowArrow'
@@ -87,9 +89,13 @@ export default function OffersPage() {
   const [fields, setFields] = useState([])
   const [editing, setEditing] = useState(null)   // null = list view
   const [loading, setLoading] = useState(false)
+  const [ordering, setOrdering] = useState('')   // paged list → the server sorts every offer
+  const { headerProps } = useServerSort(ordering, setOrdering,
+    { allowed: ['name', 'offer_type', 'status', 'priority', 'authorization_source'] })
 
-  const load = () => { setLoading(true); offersApi.list().then(r => setRows(r.data.results || r.data || [])).finally(() => setLoading(false)) }
-  useEffect(() => { load(); offersApi.targetFields().then(r => setFields(r.data)).catch(() => {}) }, [])
+  const load = () => { setLoading(true); offersApi.list(ordering ? { ordering } : {}).then(r => setRows(r.data.results || r.data || [])).finally(() => setLoading(false)) }
+  useEffect(() => { load() }, [ordering])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { offersApi.targetFields().then(r => setFields(r.data)).catch(() => {}) }, [])
 
   if (editing) {
     return <OfferEditor draft={editing} fields={fields} toast={toast}
@@ -109,7 +115,7 @@ export default function OffersPage() {
       <div className="card p-0 overflow-x-auto" data-tour="pos-offers-table">
         <table className="data-table">
           <thead><tr>
-            <th>الاسم</th><th>النوع</th><th>الحالة</th><th>الأولوية</th><th>مصدر القيمة</th><th>أصناف</th><th></th>
+            <SortTh {...headerProps('name', 'text')}>الاسم</SortTh><SortTh {...headerProps('offer_type', 'text')}>النوع</SortTh><SortTh {...headerProps('status', 'text')}>الحالة</SortTh><SortTh {...headerProps('priority', 'number')}>الأولوية</SortTh><SortTh {...headerProps('authorization_source', 'text')}>مصدر القيمة</SortTh><th>أصناف</th><th></th>
           </tr></thead>
           <tbody>
             {rows.map(o => (

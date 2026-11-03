@@ -12,6 +12,8 @@
  */
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import useServerSort from '../hooks/useServerSort'
+import SortTh from '../components/SortTh'
 import { chronicApi, enrichmentApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
 
@@ -92,6 +94,9 @@ function TagBadge({ tag }) {
 function ItemClassifier() {
   const qc = useQueryClient()
   const [page, setPage]           = useState(1)
+  const [ordering, setOrdering]   = useState('')   // '' = by name
+  const { headerProps } = useServerSort(ordering, o => { setOrdering(o); setPage(1) },
+    { allowed: ['name', 'softech_id', 'ingredient', 'classification'] })
   const [search, setSearch]       = useState('')
   const [statusFilter, setStatus] = useState('all')
   const [selected, setSelected]   = useState(null)
@@ -113,6 +118,7 @@ function ItemClassifier() {
     page_size: 30,
     ...(search && { q: search }),
     ...(statusFilter !== 'all' && { status: statusFilter }),
+    ...(ordering && { ordering }),
   }
 
   const { data: summary } = useQuery({
@@ -260,10 +266,10 @@ function ItemClassifier() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
               <tr>
-                <th className="text-right px-4 py-3 font-semibold text-gray-600">اسم الصنف</th>
-                <th className="text-right px-3 py-3 font-semibold text-gray-600 w-24">كود</th>
-                <th className="text-right px-3 py-3 font-semibold text-gray-600">المادة الفعّالة</th>
-                <th className="text-right px-3 py-3 font-semibold text-gray-600 w-36">التصنيف</th>
+                <SortTh {...headerProps('name', 'text')} className="text-right px-4 py-3 font-semibold text-gray-600">اسم الصنف</SortTh>
+                <SortTh {...headerProps('softech_id', 'text')} className="text-right px-3 py-3 font-semibold text-gray-600 w-24">كود</SortTh>
+                <SortTh {...headerProps('ingredient', 'text')} className="text-right px-3 py-3 font-semibold text-gray-600">المادة الفعّالة</SortTh>
+                <SortTh {...headerProps('classification', 'number')} className="text-right px-3 py-3 font-semibold text-gray-600 w-36">التصنيف</SortTh>
                 <th className="w-28 px-3 py-3"></th>
               </tr>
             </thead>

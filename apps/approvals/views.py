@@ -3,6 +3,8 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from core.sort_ordering import NullsLastOrderingFilter, staff_name_key
+from core.sort_rank import choice_rank
 from .models import ApprovalWorkflowDefinition, ApprovalRequest
 from .permissions import CanViewApprovals
 from .serializers import (
@@ -44,12 +46,19 @@ class ApprovalRequestViewSet(
     POST /api/approvals/requests/{id}/cancel/  — cancel
     """
     permission_classes = [CanViewApprovals]
+    # Sortable history grid: whitelisted `?ordering=` (status = lifecycle rank, requester = shown name),
+    # NULLs last + unique pk tiebreak (NullsLastOrderingFilter); no ?ordering = newest first, as before.
+    filter_backends = [NullsLastOrderingFilter]
+    ordering_fields = ['title', 'workflow__name_ar', 'requested_by_sort', 'status_rank', 'requested_at']
 
     def get_queryset(self):
         profile = self.request.user.staff_profile
         qs = ApprovalRequest.objects.select_related(
             'workflow', 'requested_by', 'requested_by__branch',
-        ).prefetch_related('decisions', 'escalations')
+        ).prefetch_related('decisions', 'escalations').annotate(
+            requested_by_sort=staff_name_key('requested_by'),
+            status_rank=choice_rank('status', ApprovalRequest.STATUS_CHOICES),
+        )
 
         if profile.role in ('admin', 'supervisor'):
             qs = qs.all()

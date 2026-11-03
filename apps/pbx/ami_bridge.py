@@ -19,10 +19,14 @@ The bridge runs inside a Django Channels worker (async).
 
 AMI event flow:
   Newchannel          → create CallSession (state=ringing)
-  AgentCalled         → link agent extension
-  AgentConnect        → update answered_at
-  Hangup              → call CallSession.complete()
+  Dial (Begin)        → outbound: the dialled customer number (or mark ext↔ext internal)
+  Join / AgentCalled  → link the queue
+  AgentConnect        → answered_at + the agent who answered (Member)
+  Bridge (Link)       → answered_at (outbound calls have no AgentConnect)
+  Hangup              → CallSession.complete() — completed only if answered
   QueueCallerAbandon  → CallSession.complete(state='abandoned')
+Every event is matched on its own Uniqueid (AMI 1.3 has no Linkedid) — see _sessions_for.
+Reports do NOT read these sessions: call history comes from the PBX CDR (apps/pbx/cdr.py).
   Cdr                 → store CDR fields on CallSession
 """
 import asyncio
@@ -32,6 +36,16 @@ from django.conf import settings
 from django.utils import timezone
 
 logger = logging.getLogger('elrezeiky.pbx.ami')
+
+# A session in one of these states is finished — later events must not touch it.
+TERMINAL_STATES = ('completed', 'abandoned', 'no_answer', 'busy', 'failed')
+
+# Raw events worth keeping. Issabel emits ~50 VarSet/Newexten/RTCP/PeerStatus lines per
+# call (98% of PBXEvent rows); they carry nothing the CRM or a call replay needs.
+PERSISTED_EVENTS = frozenset({
+    'Newchannel', 'Hangup', 'Dial', 'Bridge', 'AgentCalled', 'AgentConnect', 'AgentComplete',
+    'Join', 'Leave', 'QueueCallerJoin', 'QueueCallerLeave', 'QueueCallerAbandon', 'Cdr',
+})
 
 # Sessions in-flight: unique_id → CallSession PK
 _active_sessions: dict[str, int] = {}
@@ -85,20 +99,15 @@ def _normalize_caller_num(caller_num: str, gateway_ext: str) -> str:
     Strip any PBX-added prefix/suffix from the caller number based on
     which gateway the call arrived on.
 
-    goip4 (mobile) might add '0' prefix → strip it to get the clean number.
-    grandstream (landline) might add '9' access prefix → strip it.
+    Returns the Egyptian national number (apps/pbx/cdr.py national_number): the gateway's
+    prefix/suffix is only stripped when the raw number is not already national, so a real
+    leading 0 is never lost; line prefixes 81-85 / 91-95 are removed.
     """
-    meta = _gateway_meta.get(gateway_ext)
-    if not meta:
-        return caller_num
-    num = (caller_num or '').strip()
-    prefix = meta['prefix']
-    suffix = meta['suffix']
-    if prefix and num.startswith(prefix):
-        num = num[len(prefix):]
-    if suffix and num.endswith(suffix):
-        num = num[:-len(suffix)]
-    return num or caller_num
+    from apps.pbx.cdr import inbound_number
+    from apps.pbx.cdr import digits_only, split_line_prefix
+    out = inbound_number(caller_num, _gateway_meta.get(gateway_ext))
+    # a short code that normalised to '' is stored without its line prefix, never raw
+    return out or split_line_prefix(digits_only(caller_num))[1] or caller_num
 
 
 class AMILoginError(ConnectionError):
@@ -222,8 +231,8 @@ async def handle_event(event: dict):
     event_type = event.get('Event', 'Other')
     await _touch_last_event()
 
-    # Persist raw event
-    await _save_raw_event(event, event_type)
+    if event_type in PERSISTED_EVENTS:
+        await _save_raw_event(event, event_type)
 
     dispatch = {
         'Newchannel':           _on_newchannel,
@@ -231,6 +240,9 @@ async def handle_event(event: dict):
         'AgentConnect':         _on_agent_connect,
         'AgentComplete':        _on_agent_complete,
         'Hangup':               _on_hangup,
+        'Dial':                 _on_dial,
+        'Bridge':               _on_bridge,
+        'Join':                 _on_queue_join,          # AMI 1.3 name
         'QueueCallerJoin':      _on_queue_join,
         'QueueCallerAbandon':   _on_queue_abandon,
         'Cdr':                  _on_cdr,
@@ -297,6 +309,10 @@ async def _on_newchannel(event: dict):
 
     @sync_to_async
     def _create():
+        # Outbound: the channel is the agent's own phone — that's the agent. The customer
+        # number arrives with the Dial event (_on_dial); until then caller_number holds
+        # the extension, which is never used to match a customer.
+        agent = _agent_for(channel) if direction == 'outbound' else None
         session = CallSession.objects.create(
             unique_id=unique_id,
             linked_id=linked_id,
@@ -305,6 +321,7 @@ async def _on_newchannel(event: dict):
             caller_number=caller_num,
             caller_name=caller_name or '',
             destination_ext=exten,
+            agent=agent,
             started_at=timezone.now(),
         )
         _active_sessions[unique_id] = session.pk
@@ -323,49 +340,60 @@ async def _on_newchannel(event: dict):
             logger.debug('WebSocket push_incoming_call failed (non-fatal): %s', ws_exc)
 
 
-async def _on_agent_called(event: dict):
-    from asgiref.sync import sync_to_async
-    from apps.pbx.models import CallSession, AgentExtension
+def _sessions_for(event: dict, *uid_keys):
+    """Open CallSessions this event belongs to.
 
-    linked_id   = event.get('Linkedid', '')
-    agent_ext   = _extract_extension(event.get('AgentCalled', '') or event.get('Extension', ''))
-    queue_name  = event.get('Queue', '')
+    Issabel's AMI 1.3 sends NO Linkedid, so matching on linked_id='' used to hit EVERY
+    open session at once (one AgentConnect "answered" them all, one QueueCallerAbandon
+    "abandoned" them all). Match on the event's own Uniqueid (= the caller channel's id
+    for queue events); Linkedid is used only when the PBX actually sends one."""
+    from django.db.models import Q
+    from apps.pbx.models import CallSession
+    uids = {event.get(k, '') for k in (uid_keys or ('Uniqueid',))} - {''}
+    linked = event.get('Linkedid', '')
+    if not uids and not linked:
+        return CallSession.objects.none()
+    cond = Q(unique_id__in=uids) if uids else Q()
+    if linked:
+        cond |= Q(linked_id=linked)
+    return CallSession.objects.filter(cond).exclude(state__in=TERMINAL_STATES)
+
+
+def _agent_for(member: str):
+    """'SIP/15' / 'Local/18@from-queue/n' / '15' → AgentExtension or None."""
+    from apps.pbx.models import AgentExtension
+    from apps.pbx.cdr import peer_of
+    ext = peer_of(member) or _extract_extension(member or '')
+    return AgentExtension.objects.filter(extension=ext).first() if ext else None
+
+
+async def _on_agent_called(event: dict):
+    # Ring-all queues ring several agents per call, so the agent is NOT taken from here
+    # (AgentConnect names the one who actually answered). Only the queue is linked.
+    from asgiref.sync import sync_to_async
+    from apps.pbx.models import PBXQueue
+
+    queue_name = event.get('Queue', '')
 
     @sync_to_async
     def _update():
-        sessions = CallSession.objects.filter(linked_id=linked_id).exclude(state='completed')
-        for session in sessions:
-            changed = []
-            if agent_ext:
-                try:
-                    ae = AgentExtension.objects.get(extension=agent_ext)
-                    session.agent = ae
-                    changed.append('agent')
-                except AgentExtension.DoesNotExist:
-                    pass
-            if queue_name and not session.queue_id:
-                from apps.pbx.models import PBXQueue
-                q = PBXQueue.objects.filter(name=queue_name).first()
-                if q:
-                    session.queue = q
-                    changed.append('queue')
-            if changed:
-                session.save(update_fields=changed + ['updated_at'])
+        q = PBXQueue.objects.filter(name=queue_name).first() if queue_name else None
+        if q:
+            _sessions_for(event).filter(queue__isnull=True).update(queue=q)
 
     await _update()
 
 
 async def _on_agent_connect(event: dict):
     from asgiref.sync import sync_to_async
-    from apps.pbx.models import CallSession
-
-    linked_id = event.get('Linkedid', '')
 
     @sync_to_async
     def _update():
-        CallSession.objects.filter(
-            linked_id=linked_id, answered_at__isnull=True
-        ).update(answered_at=timezone.now(), state='answered')
+        agent = _agent_for(event.get('Member', '') or event.get('Interface', ''))
+        fields = {'answered_at': timezone.now(), 'state': 'answered'}
+        if agent:
+            fields['agent'] = agent
+        _sessions_for(event).filter(answered_at__isnull=True).update(**fields)
 
     await _update()
 
@@ -375,41 +403,83 @@ async def _on_agent_complete(event: dict):
     await _on_hangup(event)
 
 
+async def _on_dial(event: dict):
+    """Dial Begin on an outbound session: learn WHO was dialled (Newchannel only knows the
+    agent's extension). A gateway destination → the customer number; an internal one →
+    the session is an ext↔ext call and is dropped from the CRM flow."""
+    if event.get('SubEvent', 'Begin') != 'Begin':
+        return
+    from asgiref.sync import sync_to_async
+    from apps.pbx.cdr import outbound_number
+
+    dest = event.get('Destination', '')
+    dialstring = event.get('Dialstring', '') or event.get('DialString', '')
+
+    @sync_to_async
+    def _update():
+        qs = _sessions_for(event, 'UniqueID', 'Uniqueid').filter(direction='outbound')
+        if _is_gateway_channel(dest) or (not dest and '/' in dialstring):
+            number = outbound_number(dialstring.split('/')[-1])
+            if number:
+                qs.update(caller_number=number[:50], destination_ext=dialstring[:50])
+        elif _is_extension_internal(_extract_extension(dest) or dialstring):
+            qs.update(direction='internal', destination_ext=dialstring[:50])
+
+    await _update()
+
+
+async def _on_bridge(event: dict):
+    """Bridge Link = both sides are talking → the call was answered (outbound calls get no
+    AgentConnect, so this is their only answer signal)."""
+    if event.get('Bridgestate', 'Link') != 'Link':
+        return
+    from asgiref.sync import sync_to_async
+
+    @sync_to_async
+    def _update():
+        _sessions_for(event, 'Uniqueid1', 'Uniqueid2').filter(answered_at__isnull=True).update(
+            answered_at=timezone.now(), state='answered')
+
+    await _update()
+
+
+def _final_state(session, cause_txt: str) -> str:
+    cause = (cause_txt or '').lower()
+    if session.answered_at:
+        return 'completed'
+    if 'busy' in cause:
+        return 'busy'
+    if session.direction == 'inbound' and 'no answer' not in cause:
+        return 'abandoned'      # caller hung up before any agent picked up
+    return 'no_answer'
+
+
 async def _on_hangup(event: dict):
     from asgiref.sync import sync_to_async
     from apps.pbx.models import CallSession
 
     unique_id = event.get('Uniqueid', '')
     cause_txt = event.get('Cause-txt', '')
-
-    state = 'completed'
-    if 'no answer' in cause_txt.lower():
-        state = 'no_answer'
-    elif 'busy' in cause_txt.lower():
-        state = 'busy'
-
     pk = _active_sessions.pop(unique_id, None)
 
     @sync_to_async
     def _complete():
-        qs = CallSession.objects.filter(unique_id=unique_id).exclude(state='completed')
+        qs = CallSession.objects.filter(unique_id=unique_id).exclude(state__in=TERMINAL_STATES)
         if pk:
-            qs = qs | CallSession.objects.filter(pk=pk)
+            qs = qs | CallSession.objects.filter(pk=pk).exclude(state__in=TERMINAL_STATES)
         session = qs.first()
         if session:
+            state = _final_state(session, cause_txt)
             session.complete(state=state)
-            return session.pk
-        return None
+            return session.pk, state
+        return None, None
 
-    completed_pk = await _complete()
+    completed_pk, state = await _complete()
 
     # Notify agent browsers that the call ended
     if completed_pk:
         try:
-            from apps.pbx.consumers import push_incoming_call
-            from asgiref.sync import sync_to_async
             from channels.layers import get_channel_layer
-            from asgiref.sync import async_to_sync
 
             channel_layer = get_channel_layer()
             if channel_layer:
@@ -428,31 +498,27 @@ async def _on_hangup(event: dict):
 
 async def _on_queue_join(event: dict):
     from asgiref.sync import sync_to_async
-    from apps.pbx.models import CallSession, PBXQueue
+    from apps.pbx.models import PBXQueue
 
-    linked_id  = event.get('Linkedid', '')
     queue_name = event.get('Queue', '')
 
     @sync_to_async
     def _update():
         q = PBXQueue.objects.filter(name=queue_name).first()
+        fields = {'state': 'queued'}
         if q:
-            CallSession.objects.filter(
-                linked_id=linked_id
-            ).update(queue=q, state='queued')
+            fields['queue'] = q
+        _sessions_for(event).filter(answered_at__isnull=True).update(**fields)
 
     await _update()
 
 
 async def _on_queue_abandon(event: dict):
     from asgiref.sync import sync_to_async
-    from apps.pbx.models import CallSession
-
-    linked_id = event.get('Linkedid', '')
 
     @sync_to_async
     def _complete():
-        for session in CallSession.objects.filter(linked_id=linked_id).exclude(state='completed'):
+        for session in _sessions_for(event):
             session.complete(state='abandoned')
 
     await _complete()

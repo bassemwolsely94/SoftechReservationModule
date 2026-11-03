@@ -12,6 +12,8 @@ import { wildcardMatch } from '../utils/wildcard'
 import useHelpTab from '../help/useHelpTab'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import { fa } from '../utils/flowArrow'
+import useSortableRows from '../hooks/useSortableRows'
+import SortHeader from '../components/SortTh'   // shared client-sort header (this file's own SortTh is the server-ordering one)
 
 const money = (v) => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -173,6 +175,7 @@ function InvoiceLines({ invoiceId, compact = false }) {
     enabled: open && !!invoiceId,
     staleTime: 10 * 60 * 1000,
   })
+  const { sorted: sortedLines, headerProps: lineHead } = useSortableRows(data?.lines)
   if (!invoiceId) return null
   return (
     <div className={compact ? '' : 'mt-1'}>
@@ -187,10 +190,11 @@ function InvoiceLines({ invoiceId, compact = false }) {
           {data && (
             <table className="w-full text-[11px]">
               <thead className="bg-gray-50 text-gray-500">
-                <tr>{['الكود', 'الصنف', 'الكمية', 'السعر', 'خصم %', 'الإجمالي', 'الصلاحية', ''].map(h => <th key={h} className="p-1 text-right font-medium">{h}</th>)}</tr>
+                <tr>{[['الكود', 'itemcode'], ['الصنف', 'name'], ['الكمية', 'qty', 'number'], ['السعر', 'price', 'number'], ['خصم %', 'discount_pct', 'number'],
+                      ['الإجمالي', 'total', 'number'], ['الصلاحية', 'expiry', 'date']].map(([h, k, t]) => <SortHeader key={h} {...lineHead(k, t)} className="p-1 text-right font-medium">{h}</SortHeader>)}<th className="p-1" /></tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {data.lines.map((l, i) => (
+                {sortedLines.map((l, i) => (
                   <tr key={i} className={l.is_free ? 'bg-green-50' : ''}>
                     <td className="p-1 text-gray-400">{l.itemcode}</td>
                     <td className="p-1">{l.name || '—'}</td>
@@ -1187,6 +1191,7 @@ function UnpaidTab({ scope }) {
     queryFn: () => reconciliationApi.unpaid(params).then(r => r.data),
     enabled: status !== 'partial',
   })
+  const { sorted: sortedSuppliers, headerProps: supHead } = useSortableRows(data?.suppliers)   // the server returns the top 200 suppliers; sorting covers those 200, the top 40 are cut AFTER sorting
   const t = data?.totals
   const [exportError, setExportError] = useState(null)
   const exportXlsx = async () => {
@@ -1252,13 +1257,16 @@ function UnpaidTab({ scope }) {
       {isError && <div className="text-red-600 text-sm">تعذّر تحميل التقرير</div>}
       {data && (
         <>
+          <div className="text-[11px] text-gray-400">الترتيب هنا يشمل أكبر 200 مورد (يُعرض أول 40).</div>
           <div className="border border-gray-200 rounded-lg overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-gray-50 text-gray-500">
-                <tr>{['المورد', 'رصيد SOFTECH', 'فواتير مفتوحة', 'مغطى', 'تحت المراجعة', 'غير مسدد فعلياً', 'مرتجعات مستحقة', 'صافي المستحق'].map(h => <th key={h} className="p-2 text-right font-medium">{h}</th>)}</tr>
+                <tr>{[['المورد', 'supplier'], ['رصيد SOFTECH', 'softech_balance', 'number'], ['فواتير مفتوحة', 'invoices', 'number'], ['مغطى', 'matched', 'number'],
+                      ['تحت المراجعة', 'under_review', 'number'], ['غير مسدد فعلياً', 'unpaid_uncovered', 'number'], ['مرتجعات مستحقة', 'open_returns', 'number'],
+                      ['صافي المستحق', 'net_payable', 'number']].map(([h, k, t]) => <SortHeader key={h} {...supHead(k, t)} className="p-2 text-right font-medium">{h}</SortHeader>)}</tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {data.suppliers.slice(0, 40).map(s => (
+                {sortedSuppliers.slice(0, 40).map(s => (
                   <tr key={s.personcode}>
                     <td className="p-2">{s.personcode} · {s.supplier}</td>
                     <td className="p-2">{money(s.softech_balance)}</td>

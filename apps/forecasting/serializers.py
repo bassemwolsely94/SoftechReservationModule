@@ -109,7 +109,7 @@ class ForecastResultSerializer(serializers.ModelSerializer):
         model  = ForecastResult
         fields = ['id', 'branch', 'scope_key', 'scope_label', 'branch_name', 'metric', 'metric_label',
                   'base_value', 'lm_value', 'pm_value', 'model_a', 'model_b',
-                  'forecast_value', 'target_value', 'branch_share']
+                  'forecast_value', 'target_value', 'branch_share', 'lm_projected', 'pm_projected']
 
 
 class ForecastScenarioSerializer(serializers.ModelSerializer):
@@ -118,6 +118,41 @@ class ForecastScenarioSerializer(serializers.ModelSerializer):
     scope_label  = serializers.CharField(source='get_scope_type_display', read_only=True)
     status_label = serializers.CharField(source='get_status_display', read_only=True)
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, default='')
+    signals_changed_at = serializers.SerializerMethodField()
+
+    def get_signals_changed_at(self, obj):
+        """When a CLOSED signal month (base M-12 / LM / PM) was re-rolled-up after this
+        scenario was generated → its numbers are outdated; the screen offers a recalc.
+        The still-running month is ignored (it changes every refresh by design)."""
+        if obj.status != ForecastScenario.STATUS_GENERATED or not obj.generated_at:
+            return None
+        from datetime import date
+        from django.db.models import Max, Q
+        from apps.forecasting.engine import _shift_month
+        today = date.today()
+        q = Q()
+        for d in (-12, -1, -2):
+            y, m = _shift_month(obj.year, obj.month, d)
+            if (y, m) < (today.year, today.month):
+                q |= Q(year=y, month=m)
+        if not q:
+            return None
+        last = KpiActualRollup.objects.filter(q).aggregate(t=Max('computed_at'))['t']
+        return last if last and last > obj.generated_at else None
+
+    def validate(self, data):
+        """Target month at most PLAN_HORIZON months after the running one (the signals of a
+        further month would be projections of projections)."""
+        from apps.forecasting.engine import PLAN_HORIZON, _shift_month, current_ym
+        y = data.get('year', getattr(self.instance, 'year', None))
+        m = data.get('month', getattr(self.instance, 'month', None))
+        if y and m:
+            if not 1 <= int(m) <= 12:
+                raise serializers.ValidationError({'month': 'شهر غير صالح'})
+            if (int(y), int(m)) > _shift_month(*current_ym(), PLAN_HORIZON):
+                raise serializers.ValidationError(
+                    {'month': f'أقصى مدى للتنبؤ {PLAN_HORIZON} أشهر بعد الشهر الجاري'})
+        return data
 
     class Meta:
         model  = ForecastScenario
@@ -126,6 +161,7 @@ class ForecastScenarioSerializer(serializers.ModelSerializer):
             'incentive_threshold', 'benchmark_growth', 'inflation', 'promotion_lift',
             'status', 'status_label', 'notes', 'factors',
             'created_by', 'created_by_name', 'created_at', 'generated_at', 'committed_at',
+            'signals_changed_at',
         ]
         read_only_fields = ['status', 'created_by', 'created_at', 'generated_at', 'committed_at']
 
@@ -156,5 +192,5 @@ class BacktestRunSerializer(serializers.ModelSerializer):
             'id', 'created_at', 'window_start_year', 'window_start_month',
             'window_end_year', 'window_end_month', 'n_months',
             'benchmark_growth', 'incentive_threshold', 'inflation', 'promotion_lift',
-            'scenario', 'results', 'winners',
+            'scenario', 'results', 'winners', 'horizon_accuracy',
         ]

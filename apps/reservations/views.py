@@ -1,4 +1,4 @@
-from rest_framework import viewsets, filters, status
+from rest_framework import viewsets, status
 from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
@@ -14,6 +14,8 @@ from datetime import date, timedelta
 
 from core import branch_scope
 from core.export_safety import neutralise_formulas
+from core.sort_ordering import NullsLastOrderingFilter
+from core.sort_rank import choice_rank, text_or
 
 from .models import Reservation, ReservationStatusLog, ReservationActivity, ReservationDownpayment, ReservationImage, ReservationLine
 from .serializers import (
@@ -98,7 +100,7 @@ class ReservationsPermission(BasePermission):
 
 class ReservationViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, ReservationsPermission]
-    filter_backends = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
+    filter_backends = [DjangoFilterBackend, WildcardSearchFilter, NullsLastOrderingFilter]
     filterset_class = ReservationFilter
     search_fields = [
         'contact_name', 'contact_phone',
@@ -106,7 +108,9 @@ class ReservationViewSet(viewsets.ModelViewSet):
         'item__name', 'item__softech_id',
         'manual_item_name',
     ]
-    ordering_fields = ['created_at', 'updated_at', 'follow_up_date', 'priority']
+    # Sortable list grid: customer_sort / item_sort = the text the cell shows; status/priority = lifecycle rank.
+    ordering_fields = ['created_at', 'updated_at', 'follow_up_date', 'priority', 'id', 'customer_sort',
+                       'item_sort', 'branch__name', 'status_rank', 'priority_rank']
     ordering = ['-created_at']
 
     def get_queryset(self):
@@ -116,6 +120,10 @@ class ReservationViewSet(viewsets.ModelViewSet):
         ).annotate(
             activity_count=Count('activities', distinct=True),
             lines_count=Count('lines', distinct=True),
+            customer_sort=text_or('customer__name', 'contact_name'),
+            item_sort=text_or('item__name', 'manual_item_name'),
+            status_rank=choice_rank('status', Reservation.STATUS_CHOICES),
+            priority_rank=choice_rank('priority', Reservation.PRIORITY_CHOICES),
         )
 
         # Always prefetch lines — needed for list cards (item names) and detail views.

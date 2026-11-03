@@ -12,6 +12,8 @@ import AnalyticsFilterPanel, { filtersToParams, defaultFilters } from '../compon
 import ItemOperationalFiltersBar, { emptyItemFilters, buildItemParams } from '../components/ItemOperationalFiltersBar'
 import DataTable from '../components/DataTable'
 import RefreshButton from '../components/RefreshButton'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 import useHelpTab from '../help/useHelpTab'
 
 const fmt    = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
@@ -206,6 +208,8 @@ export default function SalesDashboard() {
     staleTime: 60_000,
     retry: 1,
   })
+
+  const { sorted: hourRows, headerProps: hourHp } = useSortableRows(data?.by_hour || [])
 
   // Customer Churn — lazy-loaded; no date param (recency is relative to today)
   const { data: churnData, isLoading: churnLoading } = useQuery({
@@ -551,13 +555,13 @@ export default function SalesDashboard() {
                         <table className="w-full text-xs">
                           <thead className="bg-gray-50 sticky top-0">
                             <tr>
-                              <th className="px-2 py-1.5 text-right text-gray-500">الساعة</th>
-                              <th className="px-2 py-1.5 text-right text-gray-500">الإيراد</th>
-                              <th className="px-2 py-1.5 text-right text-gray-500">الفواتير</th>
+                              <SortTh {...hourHp('hour', 'number')} className="px-2 py-1.5 text-right text-gray-500">الساعة</SortTh>
+                              <SortTh {...hourHp('revenue', 'number')} className="px-2 py-1.5 text-right text-gray-500">الإيراد</SortTh>
+                              <SortTh {...hourHp('transactions', 'number')} className="px-2 py-1.5 text-right text-gray-500">الفواتير</SortTh>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-50">
-                            {(data.by_hour || []).map((row, i) => (
+                            {hourRows.map((row, i) => (
                               <tr key={i} className="hover:bg-gray-50">
                                 <td className="px-2 py-1 font-mono text-gray-600">{row.hour}:00</td>
                                 <td className="px-2 py-1 font-mono text-brand-700">{fmt(row.revenue)} جم</td>

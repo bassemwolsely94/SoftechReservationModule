@@ -9,6 +9,20 @@ from apps.config.models import SystemSetting, DropdownOption
 
 
 DEFAULT_SETTINGS = [
+    # ━━ PIC Analytics (doc 33) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    dict(key='pic_loyal_months', label='تحليلات العملاء — أشهر العميل الوفي',
+         description='عدد الأشهر (من آخر 12) التي اشترى فيها العميل ليُعد وفياً',
+         value='10', value_type='integer', category='general', is_public=False),
+    dict(key='pic_overdue_factor', label='تحليلات العملاء — معامل التأخر',
+         description='يُعد العميل متأخراً إذا تجاوزت أيام غيابه هذا المعامل × دورته الشخصية',
+         value='1.5', value_type='decimal', category='general', is_public=False),
+    dict(key='pic_call_return_hours', label='تحليلات العملاء — ساعات الرد على المكالمة الفائتة',
+         description='تُعد المكالمة الفائتة مردوداً عليها إذا تم الاتصال خلال هذه الساعات',
+         value='24', value_type='integer', category='general', is_public=False),
+    dict(key='pic_call_purchase_days', label='تحليلات العملاء — أيام الشراء بعد المكالمة',
+         description='تُعد المكالمة محوّلة لبيع إذا تلاها شراء خلال هذه الأيام',
+         value='7', value_type='integer', category='general', is_public=False),
+
     # ━━ Delivery geofencing ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     dict(key='delivery_geofence_enabled', label='تفعيل التحقق الجغرافي للتوصيل',
          description='يلزم السائق بأن يكون داخل نطاق الفرع عند الاستلام وعند عنوان العميل عند التسليم',

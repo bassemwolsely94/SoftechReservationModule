@@ -110,20 +110,21 @@ def _row(extension, reg, ext, on_call, live):
             'staff_role': staff.role if staff else None,
             'branch': (staff.branch.name_ar if staff and staff.branch_id else None),
             'is_active': ext.is_active, 'sip_peer': ext.sip_peer,
+            'pbx_name': ext.pbx_name,      # the PBX's own caller name (CDR) — mapping hint
         }
 
     online = bool(reg and reg['online'])
     problem = None
     if live and reg is None:
-        problem = 'غير موجودة في السنترال — رقم التحويلة أو SIP Peer خطأ، أو حُذفت من Issabel'
+        problem = 'غير موجود في السنترال — الرقم الداخلي أو SIP Peer خطأ، أو حُذف من Issabel'
     elif live and not online and mapping and mapping['staff_id']:
         problem = 'الموظف مرتبط لكن الهاتف غير مسجّل — الجهاز/السوفت فون مطفأ أو غير متصل بالشبكة أو كلمة سر SIP خاطئة'
     elif reg and reg['rtt_ms'] and reg['rtt_ms'] > 300:
         problem = f'استجابة بطيئة ({reg["rtt_ms"]} ms) — جودة الصوت قد تتأثر'
     elif mapping is None and online:
-        problem = 'متصلة لكن غير مرتبطة بموظف — لن تظهر مكالماتها لأحد'
+        problem = 'متصل لكن غير مرتبط بموظف — لن تظهر مكالماته لأحد'
     elif mapping and mapping['type'] == 'agent' and not mapping['staff_id']:
-        problem = 'تحويلة مركز اتصال بدون موظف'
+        problem = 'رقم داخلي لمركز اتصال بدون موظف'
 
     return {
         'extension': extension, 'online': online, 'on_call': on_call,

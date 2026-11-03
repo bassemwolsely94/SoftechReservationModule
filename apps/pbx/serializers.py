@@ -17,7 +17,7 @@ class AgentExtensionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AgentExtension
-        fields = ['id', 'staff', 'staff_name', 'extension', 'sip_peer', 'queue_name', 'is_active']
+        fields = ['id', 'staff', 'staff_name', 'extension', 'sip_peer', 'queue_name', 'pbx_name', 'is_active']
 
     def get_staff_name(self, obj):
         return _staff_display_name(obj.staff) if obj.staff_id else None

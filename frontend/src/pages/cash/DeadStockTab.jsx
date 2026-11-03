@@ -12,11 +12,14 @@ import { purchasingApi } from '../../api/client'
 import DataFreshnessBar from '../../components/DataFreshnessBar'
 import ProgressBar from '../../components/ProgressBar'
 import useGridKeyboard, { ACTIVE_ROW } from '../../hooks/useGridKeyboard'
+import useServerSort from '../../hooks/useServerSort'
+import SortTh from '../../components/SortTh'
 
 const egp = (n) => (n ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
 const errOf = (e, d) => e?.response?.data?.detail || d
 const LANES = [['', 'الكل'], ['move', 'يُباع بفرع آخر'], ['return', 'مرتجع للمورد'], ['stop', 'إيقاف (موقوف)']]
 const LOCS = [['', 'كل المواقع'], ['hq_only', 'الرئيسي فقط'], ['branches_only', 'فروع فقط'], ['both', 'الرئيسي والفروع']]
+const SORT_KEYS = ['name', 'branch_name', 'qty', 'value', 'last_sale_date', 'oldest_arrival_date', 'network_rate', 'lane_label', 'cause_label']
 const LANE_TONE = { move: 'bg-emerald-50 text-emerald-700', return: 'bg-indigo-50 text-indigo-700', stop: 'bg-gray-100 text-gray-700' }
 
 export default function DeadStockTab() {
@@ -32,9 +35,10 @@ export default function DeadStockTab() {
   const [msg, setMsg] = useState('')
   const [since, setSince] = useState(null)
   const [page, setPage] = useState(1)
+  const [ordering, setOrdering] = useState('')   // server-side sort of ALL lines (rank order until a header is clicked)
   const filters = { lane: lane || undefined, location: location || undefined, branch: branch || undefined,
                     q: q || undefined, show_decided: showDecided ? 1 : undefined }
-  const params = { ...filters, page }
+  const params = { ...filters, ...(ordering ? { ordering } : {}), page }
   useEffect(() => { setPage(1); setTicked(new Set()) }, [lane, location, branch, q, showDecided])
   const reload = () => qc.invalidateQueries({ queryKey: ['dead-stock'] })
   const summary = useQuery({ queryKey: ['dead-stock', 'summary'], queryFn: () => purchasingApi.deadStockSummary().then(r => r.data) })
@@ -48,6 +52,7 @@ export default function DeadStockTab() {
     if (since != null && status.data && !status.data.running) { setSince(null); setMsg('اكتملت إعادة الحساب.'); reload() }
   }, [status.data]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const { headerProps } = useServerSort(ordering, o => { setOrdering(o); setPage(1) }, { allowed: SORT_KEYS })
   const rows = lines.data?.lines || []
   const toggle = (id) => setTicked(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   const kb = useGridKeyboard({
@@ -140,8 +145,16 @@ export default function DeadStockTab() {
           <table className="w-full text-xs whitespace-nowrap">
             <thead className="bg-gray-50 text-gray-600"><tr>
               <th className="px-2 py-2" />
-              {['الصنف', 'الفرع', 'الكمية', 'القيمة', 'آخر بيع', 'أقدم وارد', 'معدل الشبكة', 'المسار', 'السبب', 'التفاصيل'].map(h =>
-                <th key={h} className="text-right px-2 py-2">{h}</th>)}
+              <SortTh {...headerProps('name')} className="text-right px-2 py-2">الصنف</SortTh>
+              <SortTh {...headerProps('branch_name')} className="text-right px-2 py-2">الفرع</SortTh>
+              <SortTh {...headerProps('qty', 'number')} className="text-right px-2 py-2">الكمية</SortTh>
+              <SortTh {...headerProps('value', 'number')} className="text-right px-2 py-2">القيمة</SortTh>
+              <SortTh {...headerProps('last_sale_date', 'date')} className="text-right px-2 py-2">آخر بيع</SortTh>
+              <SortTh {...headerProps('oldest_arrival_date', 'date')} className="text-right px-2 py-2">أقدم وارد</SortTh>
+              <SortTh {...headerProps('network_rate', 'number')} className="text-right px-2 py-2">معدل الشبكة</SortTh>
+              <SortTh {...headerProps('lane_label')} className="text-right px-2 py-2">المسار</SortTh>
+              <SortTh {...headerProps('cause_label')} className="text-right px-2 py-2">السبب</SortTh>
+              <th className="text-right px-2 py-2">التفاصيل</th>
             </tr></thead>
             <tbody>
               {rows.map(r => {

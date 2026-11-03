@@ -9,6 +9,10 @@ import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import useHelpTab from '../help/useHelpTab'
 import ScreenUsageTab from '../components/ScreenUsageTab'
+import SortTh from '../components/SortTh'
+import useServerSort from '../hooks/useServerSort'
+
+const LOG_SORT_KEYS = ['action', 'user_name', 'model_name', 'created_at']
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -121,12 +125,15 @@ function AuditLogRow({ log, onExpand, expanded }) {
 function AuditLogsTab() {
   const [filters, setFilters]   = useState({ action: '', search: '' })
   const [expanded, setExpanded] = useState(null)
+  const [ordering, setOrdering] = useState('')      // server-side: the list is a paged top-100
+  const { headerProps } = useServerSort(ordering, setOrdering, { allowed: LOG_SORT_KEYS })
 
   const { data: logs = [], isLoading } = useQuery({
-    queryKey: ['audit-logs', filters],
+    queryKey: ['audit-logs', filters, ordering],
     queryFn:  () => auditApi.logs({
       action: filters.action || undefined,
       search: filters.search || undefined,
+      ordering: ordering || undefined,
       page_size: 100,
     }).then(r => r.data.results || r.data),
     refetchInterval: 60_000,
@@ -181,10 +188,10 @@ function AuditLogsTab() {
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th className="px-4 py-2 text-right text-xs text-gray-400 w-8" />
-                <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500">الإجراء</th>
-                <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500">المستخدم</th>
-                <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500">الكيان</th>
-                <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500">التوقيت</th>
+                <SortTh {...headerProps('action')} className="px-4 py-2 text-right text-xs font-semibold text-gray-500">الإجراء</SortTh>
+                <SortTh {...headerProps('user_name')} className="px-4 py-2 text-right text-xs font-semibold text-gray-500">المستخدم</SortTh>
+                <SortTh {...headerProps('model_name')} className="px-4 py-2 text-right text-xs font-semibold text-gray-500">الكيان</SortTh>
+                <SortTh {...headerProps('created_at', 'date')} className="px-4 py-2 text-right text-xs font-semibold text-gray-500">التوقيت</SortTh>
                 <th className="px-4 py-2 w-6" />
               </tr>
             </thead>

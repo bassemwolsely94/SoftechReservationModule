@@ -10,7 +10,7 @@ import { supplyApi } from '../../api/client'
 import { wildcardMatch } from '../../utils/wildcard'
 import { fa } from '../../utils/flowArrow'
 import { FreshnessBar } from './AvailabilityControls'
-import { Chip, btnGhost, downloadBlob, errText, inputCls, money, q, SortTh, useSort } from './supplyUi'
+import { Chip, btnGhost, downloadBlob, errText, inputCls, money, q, SortTh, useSort, txt } from './supplyUi'
 
 const STATE_TONE = { cheaper: 'amber', best: 'emerald', single: 'gray', warehouse_only: 'gray' }
 const PAGE = 300
@@ -31,7 +31,7 @@ function ItemHistory({ code }) {
   const hq = useQuery({ queryKey: ['purchase-price-item', code], queryFn: () => supplyApi.purchasePriceItem(code).then(r => r.data) })
   const lines = hq.data?.lines || []
   const grid = useSort(lines, {
-    date: l => l.date, company: l => l.company, tier: l => l.tier_label, branch: l => l.branch, doc: l => l.doc_number,
+    date: l => l.date, company: l => l.company, tier: l => l.tier_label, branch: txt(l => l.branch), doc: txt(l => l.doc_number),
     qty: l => l.qty, bonus: l => l.bonus_qty, cost: l => l.unit_cost, disc: l => l.discount_pct, pp: l => l.public_price,
   })
   if (hq.isLoading) return <div className="text-xs text-content/50 p-2">جارٍ تحميل المشتريات…</div>
@@ -155,7 +155,7 @@ export default function PurchasePricesTab() {
     && (!producer || r.producer === producer)
     && (!search.trim() || wildcardMatch(`${r.code} ${r.name}`, search))), [d, state, supplier, producer, search])
   const grid = useSort(rows, {
-    code: r => r.code, name: r => r.name, producer: r => r.producer, price: r => r.public_price, rate: r => r.monthly_rate,
+    code: txt(r => r.code), name: r => r.name, producer: r => r.producer, price: r => r.public_price, rate: r => r.monthly_rate,
     n: r => r.n_suppliers, paid: r => r.paid_pct, last: r => r.last?.discount_pct, best: r => r.best?.discount_pct,
     gap: r => r.gap_pct, saving: r => r.saving_month, state: r => r.state_label,
   })

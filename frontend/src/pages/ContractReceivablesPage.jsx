@@ -12,10 +12,21 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { financeApi } from '../api/client'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import useBranchLabels from '../hooks/useBranchLabels'
+import useSortableRows from '../hooks/useSortableRows'
+import { sortRows } from '../hooks/sortCompare'
+import SortTh from '../components/SortTh'
 
 const fmt = (n) => (n == null ? '—' : Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 }))
 const BUCKETS = ['0-30', '31-60', '61-90', '91-180', '>180']
 const errOf = (e, d) => e?.response?.data?.detail || d
+// a group row sorts by its own totals (sums of its contracts for the buckets); contracts sort inside their group
+const groupOrContract = (r, key) => {
+  const isGroup = Array.isArray(r.contracts)
+  if (key === 'name') return isGroup ? r.group_name : r.name
+  if (BUCKETS.includes(key)) return isGroup ? r.contracts.reduce((s, c) => s + (c.buckets?.[key] || 0), 0) : r.buckets?.[key]
+  if (isGroup && ['agreed_days', 'softech_receivable', 'difference'].includes(key)) return null
+  return r[key]
+}
 
 function Kpi({ label, value, sub, tone = 'text-gray-900' }) {
   return (
@@ -55,18 +66,19 @@ function Invoices({ personcode }) {
     queryKey: ['receivables', 'invoices', personcode],
     queryFn: () => financeApi.receivablesInvoices(personcode).then(r => r.data),
   })
+  const { sorted: invoices, headerProps } = useSortableRows(data?.invoices)
   if (isLoading) return <div className="p-3 text-xs text-gray-400">جارٍ التحميل…</div>
   return (
     <div className="grid md:grid-cols-3 gap-3 p-3 bg-gray-50">
       <div className="md:col-span-2 overflow-x-auto">
         <table className="w-full text-xs">
           <thead className="text-gray-500"><tr>
-            <th className="text-right p-1">الفاتورة</th><th className="text-right p-1">التاريخ</th>
-            <th className="text-right p-1">المفتوح</th><th className="text-right p-1">العمر</th>
-            <th className="text-right p-1">الاستحقاق المتوقع</th><th className="text-right p-1">الأساس</th>
+            <SortTh {...headerProps('docnumber', 'number')} className="text-right p-1">الفاتورة</SortTh><SortTh {...headerProps('docdate', 'date')} className="text-right p-1">التاريخ</SortTh>
+            <SortTh {...headerProps('open', 'number')} className="text-right p-1">المفتوح</SortTh><SortTh {...headerProps('age', 'number')} className="text-right p-1">العمر</SortTh>
+            <SortTh {...headerProps('expected_date', 'date')} className="text-right p-1">الاستحقاق المتوقع</SortTh><SortTh {...headerProps('expected_basis_label')} className="text-right p-1">الأساس</SortTh>
           </tr></thead>
           <tbody>
-            {(data?.invoices || []).map(i => (
+            {invoices.map(i => (
               <tr key={i.id} className={`border-t ${i.overdue ? 'text-red-700' : ''}`}>
                 <td className="p-1">{bl(i.branchcode)} · #{i.docnumber}</td><td className="p-1">{i.docdate}</td>
                 <td className="p-1">{fmt(i.open)}</td><td className="p-1">{i.age} يوم</td>
@@ -108,6 +120,7 @@ export default function ContractReceivablesPage() {
     document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url)
   })
 
+  const { sorted: groups, sort, headerProps } = useSortableRows(data?.groups, { getValue: groupOrContract })
   if (error) return <div className="p-6 text-sm text-red-600">{errOf(error, 'تعذّر تحميل المستحقات')}</div>
   const t = data?.totals || {}
   const toggle = (k) => setOpen(o => ({ ...o, [k]: !o[k] }))
@@ -135,18 +148,18 @@ export default function ContractReceivablesPage() {
           <table className="w-full text-sm whitespace-nowrap">
             <thead className="bg-gray-50 text-gray-600 text-xs">
               <tr>
-                <th className="text-right px-2 py-2">الجهة / الحساب</th>
-                <th className="text-right px-2 py-2">صافي المستحق</th>
-                {BUCKETS.map(b => <th key={b} className="text-right px-2 py-2">{b}</th>)}
-                <th className="text-right px-2 py-2">المتأخر</th>
-                <th className="text-right px-2 py-2">أيام متفق عليها</th>
-                <th className="text-right px-2 py-2">أيام مقاسة</th>
-                <th className="text-right px-2 py-2">رصيد SOFTECH</th>
-                <th className="text-right px-2 py-2">الفرق</th>
+                <SortTh {...headerProps('name')} className="text-right px-2 py-2">الجهة / الحساب</SortTh>
+                <SortTh {...headerProps('net_receivable', 'number')} className="text-right px-2 py-2">صافي المستحق</SortTh>
+                {BUCKETS.map(b => <SortTh key={b} {...headerProps(b, 'number')} className="text-right px-2 py-2">{b}</SortTh>)}
+                <SortTh {...headerProps('overdue', 'number')} className="text-right px-2 py-2">المتأخر</SortTh>
+                <SortTh {...headerProps('agreed_days', 'number')} className="text-right px-2 py-2">أيام متفق عليها</SortTh>
+                <SortTh {...headerProps('measured_days', 'number')} className="text-right px-2 py-2">أيام مقاسة</SortTh>
+                <SortTh {...headerProps('softech_receivable', 'number')} className="text-right px-2 py-2">رصيد SOFTECH</SortTh>
+                <SortTh {...headerProps('difference', 'number')} className="text-right px-2 py-2">الفرق</SortTh>
               </tr>
             </thead>
             <tbody>
-              {(data?.groups || []).map(g => (
+              {groups.map(g => (
                 <Fragment key={g.group_name}>
                   <tr className="border-t bg-gray-50/60 cursor-pointer" onClick={() => toggle(`g:${g.group_name}`)}>
                     <td className="px-2 py-2 font-semibold">{open[`g:${g.group_name}`] ? '▾' : '▸'} {g.group_name} <span className="text-xs text-gray-400">({g.contracts.length})</span></td>
@@ -156,7 +169,7 @@ export default function ContractReceivablesPage() {
                     <td className="px-2 py-2" /><td className="px-2 py-2">{g.measured_days ?? '—'}</td>
                     <td className="px-2 py-2" /><td className="px-2 py-2" />
                   </tr>
-                  {open[`g:${g.group_name}`] && g.contracts.map(c => (
+                  {open[`g:${g.group_name}`] && sortRows(g.contracts, sort, groupOrContract).map(c => (
                     <Fragment key={c.personcode}>
                       <tr className="border-t">
                         <td className="px-2 py-1.5 pr-6 cursor-pointer" onClick={() => toggle(c.personcode)}>

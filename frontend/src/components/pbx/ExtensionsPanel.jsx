@@ -6,9 +6,13 @@ const TYPES = [
   ['agent', 'مركز اتصال'], ['branch', 'فرع'], ['hq', 'إداري'], ['gateway', 'بوابة خارجية'], ['other', 'أخرى'],
 ]
 
+// "Eman AbdelGhany -CC15" → "Eman": the PBX's caller name pre-fills the staff search so the
+// likely person is on top — the supervisor still picks (nothing is mapped automatically).
+const suggestQuery = (pbxName) => (pbxName || '').replace(/\s*-?\s*CC\d+\s*$/i, '').trim().split(/\s+/)[0] || ''
+
 function MapEditor({ row, onDone }) {
   const qc = useQueryClient()
-  const [q, setQ] = useState('')
+  const [q, setQ] = useState(row.mapping?.staff_id ? '' : suggestQuery(row.mapping?.pbx_name))
   const [type, setType] = useState(row.mapping?.type || 'agent')
   const { data: staff = [] } = useQuery({
     queryKey: ['pbx-staff-choices', q],
@@ -32,6 +36,9 @@ function MapEditor({ row, onDone }) {
         )}
         <button onClick={onDone} className="btn-secondary text-xs px-2 py-1">إلغاء</button>
       </div>
+      {row.mapping?.pbx_name && (
+        <div className="text-gray-500">الاسم في السنترال: <span className="font-medium" dir="ltr">{row.mapping.pbx_name}</span></div>
+      )}
       <div className="max-h-48 overflow-auto divide-y divide-gray-100 dark:divide-gray-700">
         {staff.map(s => (
           <button key={s.id} onClick={() => save.mutate(s.id)} disabled={save.isPending}
@@ -66,9 +73,9 @@ export default function ExtensionsPanel() {
     <section className="card space-y-3">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-sm font-semibold text-gray-600 dark:text-gray-300">التحويلات والهواتف</h2>
+          <h2 className="text-sm font-semibold text-gray-600 dark:text-gray-300">الأرقام الداخلية والهواتف</h2>
           <p className="text-xs text-gray-400 mt-0.5">
-            حالة تسجيل كل تحويلة في السنترال لحظياً ({data?.tech || '—'}) وربطها بالموظفين. القراءة فقط من Issabel — الربط يُحفظ عندنا.
+            حالة تسجيل كل رقم داخلي في السنترال لحظياً ({data?.tech || '—'}) وربطها بالموظفين. القراءة فقط من Issabel — الربط يُحفظ عندنا.
           </p>
         </div>
         <button onClick={() => refetch()} disabled={isFetching} className="btn-secondary text-xs px-3 py-1">
@@ -89,7 +96,7 @@ export default function ExtensionsPanel() {
             ['all', `الكل ${data.summary.total}`],
             ['problems', `مشاكل ${data.rows.filter(r => r.problem).length}`],
             ['offline', `غير متصل ${data.summary.offline}`],
-            ['unmapped', `غير مرتبطة ${data.summary.unmapped}`],
+            ['unmapped', `غير مرتبط ${data.summary.unmapped}`],
           ].map(([k, l]) => (
             <button key={k} onClick={() => setFilter(k)}
               className={`px-3 py-1 rounded-full border ${filter === k
@@ -110,7 +117,10 @@ export default function ExtensionsPanel() {
               <span className="flex-1 min-w-0 truncate">
                 {r.mapping?.staff_name
                   ? <>{r.mapping.staff_name} <span className="text-xs text-gray-400">· {r.mapping.type_label}{r.mapping.branch ? ` · ${r.mapping.branch}` : ''}</span></>
-                  : <span className="text-gray-400">{r.mapping ? `${r.mapping.type_label} — بدون موظف` : 'غير مرتبطة'}</span>}
+                  : <span className="text-gray-400">{r.mapping ? `${r.mapping.type_label} — بدون موظف` : 'غير مرتبط'}</span>}
+                {r.mapping?.pbx_name && !r.mapping?.staff_id && (
+                  <span className="text-xs text-amber-700 dark:text-amber-400"> · في السنترال: <span dir="ltr">{r.mapping.pbx_name}</span></span>
+                )}
               </span>
               <span className="text-xs text-gray-500 font-mono hidden md:inline" dir="ltr">{r.ip || '—'}</span>
               <span className="text-xs tabular-nums w-16 text-left" dir="ltr">{r.rtt_ms != null ? `${r.rtt_ms} ms` : ''}</span>
@@ -122,7 +132,7 @@ export default function ExtensionsPanel() {
             {editing === r.extension && <MapEditor row={r} onDone={() => setEditing(null)} />}
           </div>
         ))}
-        {data && rows.length === 0 && <div className="text-xs text-gray-400 py-4 text-center">لا توجد تحويلات</div>}
+        {data && rows.length === 0 && <div className="text-xs text-gray-400 py-4 text-center">لا توجد أرقام داخلية</div>}
       </div>
     </section>
   )

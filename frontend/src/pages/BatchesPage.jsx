@@ -12,6 +12,8 @@ import { wildcardMatch } from '../utils/wildcard'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
 import ReturnWindowTab from '../components/ReturnWindowTab'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 // ── date helpers ──────────────────────────────────────────────────────────────
 const _iso = (d) => d.toISOString().slice(0, 10)
@@ -62,6 +64,7 @@ function RebalanceModal({ row, fromBranch, onClose }) {
       days_to_expiry: row.days_to_expiry ?? 0,
     }).then(r => r.data),
   })
+  const { sorted: planRows, headerProps: planHp } = useSortableRows(data?.plan || [])
 
   const createTransfer = useMutation({
     mutationFn: (p) => transfersApi.create({
@@ -109,15 +112,15 @@ function RebalanceModal({ row, fromBranch, onClose }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b">
-                    <th className="px-2 py-2 text-right">إلى فرع</th>
-                    <th className="px-2 py-2 text-right">الكمية المقترحة</th>
-                    <th className="px-2 py-2 text-right">رصيده الآن</th>
-                    <th className="px-2 py-2 text-right">معدل بيعه/يوم</th>
+                    <SortTh {...planHp('to_branch_name', 'text')} className="px-2 py-2 text-right">إلى فرع</SortTh>
+                    <SortTh {...planHp('qty', 'number')} className="px-2 py-2 text-right">الكمية المقترحة</SortTh>
+                    <SortTh {...planHp('target_qty', 'number')} className="px-2 py-2 text-right">رصيده الآن</SortTh>
+                    <SortTh {...planHp('velocity_per_day', 'number')} className="px-2 py-2 text-right">معدل بيعه/يوم</SortTh>
                     <th className="px-2 py-2"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.plan.map(p => (
+                  {planRows.map(p => (
                     <tr key={p.to_branch} className="border-b border-gray-100">
                       <td className="px-2 py-2 font-medium">{p.to_branch_name}</td>
                       <td className="px-2 py-2 font-semibold text-green-700">{p.qty}</td>
@@ -161,6 +164,7 @@ function RebalanceWorklistTab() {
     queryKey: ['stock-expiry-rebalance', branch],
     queryFn: () => batchesApi.stockExpiryRebalance(branch ? { branch } : {}).then(r => r.data),
   })
+  const { sorted: sortedRescue, headerProps: rescueHp } = useSortableRows(data?.rows || [])
   const key = r => `${r.item_code}|${r.from_branch}|${r.to_branch}|${r.batch_no}`
   const create = useMutation({
     mutationFn: (r) => transfersApi.create({
@@ -207,11 +211,17 @@ function RebalanceWorklistTab() {
       <div className="bg-white rounded-xl border overflow-x-auto">
         <table className="w-full text-sm text-right">
           <thead className="text-xs text-gray-500 bg-gray-50 border-b">
-            <tr><th className="px-2 py-2">الصنف</th><th>التشغيلة</th><th>الصلاحية</th><th>من فرع</th><th>إلى فرع</th>
-              <th>الكمية</th><th>القيمة (تكلفة)</th><th>البيع/شهر (من {fa()} إلى)</th><th></th></tr>
+            <tr><SortTh {...rescueHp('item_name', 'text')} className="px-2 py-2">الصنف</SortTh>
+              <SortTh {...rescueHp('batch_no', 'text')}>التشغيلة</SortTh>
+              <SortTh {...rescueHp('expiry', 'date')}>الصلاحية</SortTh>
+              <SortTh {...rescueHp('from_branch_name', 'text')}>من فرع</SortTh>
+              <SortTh {...rescueHp('to_branch_name', 'text')}>إلى فرع</SortTh>
+              <SortTh {...rescueHp('qty', 'number')}>الكمية</SortTh>
+              <SortTh {...rescueHp('value', 'number')}>القيمة (تكلفة)</SortTh>
+              <SortTh {...rescueHp('target_rate_month', 'number')}>البيع/شهر (من {fa()} إلى)</SortTh><th></th></tr>
           </thead>
           <tbody>
-            {data.rows.map(r => {
+            {sortedRescue.map(r => {
               const done = created[key(r)] || r.open_transfer
               return (
                 <tr key={key(r)} className="border-b border-gray-50">
@@ -728,6 +738,9 @@ function SupplierScorecardTab() {
     }).then(r => r.data),
   })
   const rows = data?.suppliers || []
+  const { sorted: sortedSup, headerProps: supHp } = useSortableRows(rows, {
+    getValue: (r, k) => (k === 'name' ? (r.supplier_name || r.supplier_code) : r[k]),
+  })
 
   return (
     <div>
@@ -766,18 +779,18 @@ function SupplierScorecardTab() {
           <table className="w-full text-sm whitespace-nowrap">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">المورد</th>
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">التصنيف</th>
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">% قصير الأجل</th>
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">أسطر قصيرة</th>
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">متوسط الصلاحية عند الاستلام</th>
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">أقل صلاحية</th>
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">عدد الأسطر</th>
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">أصناف</th>
+                <SortTh {...supHp('name', 'text')} className="px-3 py-3 text-right font-semibold text-gray-600">المورد</SortTh>
+                <SortTh {...supHp('category', 'text')} className="px-3 py-3 text-right font-semibold text-gray-600">التصنيف</SortTh>
+                <SortTh {...supHp('pct_short_dated', 'number')} className="px-3 py-3 text-right font-semibold text-gray-600">% قصير الأجل</SortTh>
+                <SortTh {...supHp('short_dated_lines', 'number')} className="px-3 py-3 text-right font-semibold text-gray-600">أسطر قصيرة</SortTh>
+                <SortTh {...supHp('avg_shelf_months', 'number')} className="px-3 py-3 text-right font-semibold text-gray-600">متوسط الصلاحية عند الاستلام</SortTh>
+                <SortTh {...supHp('min_shelf_months', 'number')} className="px-3 py-3 text-right font-semibold text-gray-600">أقل صلاحية</SortTh>
+                <SortTh {...supHp('lines', 'number')} className="px-3 py-3 text-right font-semibold text-gray-600">عدد الأسطر</SortTh>
+                <SortTh {...supHp('items', 'number')} className="px-3 py-3 text-right font-semibold text-gray-600">أصناف</SortTh>
               </tr>
             </thead>
             <tbody>
-              {rows.map(s => (
+              {sortedSup.map(s => (
                 <tr key={s.supplier_code} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="px-3 py-3 font-medium">{s.supplier_name || s.supplier_code}</td>
                   <td className="px-3 py-3 text-gray-500 text-xs">{s.category}</td>
@@ -819,6 +832,9 @@ function ProcurementReviewTab() {
     }).then(r => r.data),
   })
   const rows = (data?.items || []).filter(r => !reviewOnly || r.reorder_review)
+  const { sorted: sortedPr, headerProps: prHp } = useSortableRows(rows, {
+    getValue: (r, k) => (k === 'short_ratio' ? (r.lines ? r.short_dated_lines / r.lines : null) : r[k]),
+  })
 
   return (
     <div>
@@ -856,17 +872,17 @@ function ProcurementReviewTab() {
           <table className="w-full text-sm whitespace-nowrap">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">كود</th>
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">الصنف</th>
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">% قصير الأجل</th>
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">أسطر قصيرة / إجمالي</th>
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">معدل البيع الشهري</th>
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">موردون</th>
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">توصية</th>
+                <SortTh {...prHp('item_code', 'text')} className="px-3 py-3 text-right font-semibold text-gray-600">كود</SortTh>
+                <SortTh {...prHp('item_name', 'text')} className="px-3 py-3 text-right font-semibold text-gray-600">الصنف</SortTh>
+                <SortTh {...prHp('pct_short_dated', 'number')} className="px-3 py-3 text-right font-semibold text-gray-600">% قصير الأجل</SortTh>
+                <SortTh {...prHp('short_ratio', 'number')} className="px-3 py-3 text-right font-semibold text-gray-600">أسطر قصيرة / إجمالي</SortTh>
+                <SortTh {...prHp('monthly_velocity', 'number')} className="px-3 py-3 text-right font-semibold text-gray-600">معدل البيع الشهري</SortTh>
+                <SortTh {...prHp('suppliers', 'number')} className="px-3 py-3 text-right font-semibold text-gray-600">موردون</SortTh>
+                <SortTh {...prHp('reorder_review', 'number')} className="px-3 py-3 text-right font-semibold text-gray-600">توصية</SortTh>
               </tr>
             </thead>
             <tbody>
-              {rows.map(r => (
+              {sortedPr.map(r => (
                 <tr key={r.item_code} className={`border-b border-gray-100 hover:bg-gray-50 ${r.reorder_review ? 'bg-amber-50' : ''}`}>
                   <td className="px-3 py-3 font-mono text-xs text-gray-500">{r.item_code}</td>
                   <td className="px-3 py-3 font-medium">{r.item_name || '—'}</td>
@@ -1263,6 +1279,9 @@ function DisposalTab() {
     queryFn:  () => batchesApi.expiryDisposalList({ status: statusF || undefined }).then(r => r.data),
   })
   const rows = data?.items || []
+  const { sorted: sortedDisp, headerProps: dispHp } = useSortableRows(rows, {
+    getValue: (r, k) => (k === 'item' ? (r.item_name || r.item_code) : k === 'decision' ? (_DISP[r.decision]?.l || r.decision) : r[k]),
+  })
   const totalVal = useMemo(() => rows.reduce((s, r) => s + (r.value || 0), 0), [rows])
 
   const setStatus = useMutation({
@@ -1311,18 +1330,18 @@ function DisposalTab() {
           <table className="w-full text-sm whitespace-nowrap">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">الصنف</th>
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">الفرع</th>
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">الكمية</th>
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">القيمة</th>
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">القرار</th>
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">المورد</th>
-                <th className="px-3 py-3 text-right font-semibold text-gray-600">الحالة</th>
+                <SortTh {...dispHp('item', 'text')} className="px-3 py-3 text-right font-semibold text-gray-600">الصنف</SortTh>
+                <SortTh {...dispHp('branch_code', 'text')} className="px-3 py-3 text-right font-semibold text-gray-600">الفرع</SortTh>
+                <SortTh {...dispHp('qty', 'number')} className="px-3 py-3 text-right font-semibold text-gray-600">الكمية</SortTh>
+                <SortTh {...dispHp('value', 'number')} className="px-3 py-3 text-right font-semibold text-gray-600">القيمة</SortTh>
+                <SortTh {...dispHp('decision', 'text')} className="px-3 py-3 text-right font-semibold text-gray-600">القرار</SortTh>
+                <SortTh {...dispHp('supplier_name', 'text')} className="px-3 py-3 text-right font-semibold text-gray-600">المورد</SortTh>
+                <SortTh {...dispHp('status_display', 'text')} className="px-3 py-3 text-right font-semibold text-gray-600">الحالة</SortTh>
                 <th className="px-3 py-3 text-right font-semibold text-gray-600">إجراء</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map(r => (
+              {sortedDisp.map(r => (
                 <tr key={r.id} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="px-3 py-3 font-medium">{r.item_name || r.item_code}</td>
                   <td className="px-3 py-3 text-gray-500">{r.branch_code}</td>

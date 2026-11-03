@@ -7,6 +7,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { procurementIntelApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 const fmt = (n, d = 0) => n == null ? '—' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const pct = (n, d = 1) => n == null ? '—' : `${Number(n).toFixed(d)}%`
@@ -70,6 +72,9 @@ function MarginTab({ days, setDays }) {
 
   useEffect(() => { load() }, [load])
 
+  const { sorted: byItem, headerProps: biH } = useSortableRows(data?.by_item || [], {})
+  const { sorted: bySupplier, headerProps: bsH } = useSortableRows(data?.by_supplier || [], {})
+
   if (loading) return <div className="py-12 text-center text-brand-600 animate-pulse">جارٍ التحميل…</div>
   if (!data) return null
 
@@ -107,16 +112,17 @@ function MarginTab({ days, setDays }) {
         {/* Low margin items */}
         <div data-tour="purchasing-margins-low-items" className="bg-white border border-gray-200 rounded-xl p-5 overflow-y-auto max-h-80">
           <h3 className="font-semibold text-gray-700 mb-3">أدنى هوامش (أصناف)</h3>
+          <p className="text-[11px] text-gray-400 mb-2">الترتيب بالعناوين على القائمة المعروضة فقط.</p>
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-gray-200 text-gray-500">
-                <th className="text-right pb-2">كود</th>
-                <th className="text-right pb-2">هامش%</th>
-                <th className="text-right pb-2">قيمة</th>
+                <SortTh {...biH('item_code', 'text')} className="text-right pb-2">كود</SortTh>
+                <SortTh {...biH('avg_margin', 'number')} className="text-right pb-2">هامش%</SortTh>
+                <SortTh {...biH('net_value', 'number')} className="text-right pb-2">قيمة</SortTh>
               </tr>
             </thead>
             <tbody>
-              {(data.by_item || []).map(r => (
+              {byItem.map(r => (
                 <tr key={r.item_code} className="border-b border-gray-100">
                   <td className="py-1 font-mono text-gray-700">{r.item_code}</td>
                   <td className="py-1">
@@ -138,14 +144,14 @@ function MarginTab({ days, setDays }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 text-xs text-gray-500">
-              <th className="text-right pb-2 font-medium">كود المورد</th>
-              <th className="text-right pb-2 font-medium">متوسط الهامش</th>
-              <th className="text-right pb-2 font-medium">صافي القيمة</th>
-              <th className="text-right pb-2 font-medium">الأصناف</th>
+              <SortTh {...bsH('supplier_code', 'text')} className="text-right pb-2 font-medium">كود المورد</SortTh>
+              <SortTh {...bsH('avg_margin', 'number')} className="text-right pb-2 font-medium">متوسط الهامش</SortTh>
+              <SortTh {...bsH('net_value', 'number')} className="text-right pb-2 font-medium">صافي القيمة</SortTh>
+              <SortTh {...bsH('item_count', 'number')} className="text-right pb-2 font-medium">الأصناف</SortTh>
             </tr>
           </thead>
           <tbody>
-            {(data.by_supplier || []).map(r => (
+            {bySupplier.map(r => (
               <tr key={r.supplier_code} className="border-b border-gray-100 hover:bg-gray-50">
                 <td className="py-2 font-mono text-gray-700">{r.supplier_code}</td>
                 <td className="py-2">
@@ -183,6 +189,10 @@ function PriceControlTab() {
   }, [minDrift, minPurchases])
 
   useEffect(() => { load() }, [load])
+
+  const { sorted: driftItems, headerProps: dH } = useSortableRows(data?.items || [], {
+    getValue: (it, k) => (k === 'item' ? (it.item_name || it.item_code) : k === 'supplier' ? (it.supplier_name || it.supplier_code) : it[k]),
+  })
 
   return (
     <div className="space-y-4">
@@ -222,20 +232,20 @@ function PriceControlTab() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50">
               <tr className="border-b border-gray-200 text-xs text-gray-500">
-                <th className="text-right px-4 py-3 font-medium">الصنف</th>
-                <th className="text-right px-3 py-3 font-medium">المورد</th>
-                <th className="text-right px-3 py-3 font-medium">سعر أدنى</th>
-                <th className="text-right px-3 py-3 font-medium">سعر أعلى</th>
-                <th className="text-right px-3 py-3 font-medium">متوسط</th>
-                <th className="text-right px-3 py-3 font-medium">آخر سعر</th>
-                <th className="text-right px-3 py-3 font-medium">تذبذب%</th>
-                <th className="text-right px-3 py-3 font-medium">عدد الشراء</th>
+                <SortTh {...dH('item', 'text')} className="text-right px-4 py-3 font-medium">الصنف</SortTh>
+                <SortTh {...dH('supplier', 'text')} className="text-right px-3 py-3 font-medium">المورد</SortTh>
+                <SortTh {...dH('min_price', 'number')} className="text-right px-3 py-3 font-medium">سعر أدنى</SortTh>
+                <SortTh {...dH('max_price', 'number')} className="text-right px-3 py-3 font-medium">سعر أعلى</SortTh>
+                <SortTh {...dH('avg_price', 'number')} className="text-right px-3 py-3 font-medium">متوسط</SortTh>
+                <SortTh {...dH('last_price', 'number')} className="text-right px-3 py-3 font-medium">آخر سعر</SortTh>
+                <SortTh {...dH('price_drift_pct', 'number')} className="text-right px-3 py-3 font-medium">تذبذب%</SortTh>
+                <SortTh {...dH('purchase_count', 'number')} className="text-right px-3 py-3 font-medium">عدد الشراء</SortTh>
               </tr>
             </thead>
             <tbody>
               {(data?.items || []).length === 0 ? (
                 <tr><td colSpan={8} className="py-8 text-center text-gray-400">لا توجد نتائج</td></tr>
-              ) : (data?.items || []).map(item => (
+              ) : driftItems.map(item => (
                 <tr key={`${item.supplier_code}-${item.item_code}`} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="px-4 py-2.5">
                     <p className="font-medium text-gray-800 break-words max-w-xs">{item.item_name || item.item_code}</p>

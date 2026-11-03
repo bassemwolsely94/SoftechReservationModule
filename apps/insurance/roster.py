@@ -397,7 +397,10 @@ def record_decision(claim, rx, verdict, *, target=None, note='', actor=None):
 
 # ── Per-insurer roster (read-only page) ──────────────────────────────────────
 
-def roster_for_unit(client_id, subclient_id=None, q=''):
+ROSTER_ORDERS = ('name', 'subclient', 'group_label', 'count', 'last', 'elsewhere')
+
+
+def roster_for_unit(client_id, subclient_id=None, q='', ordering=''):
     """The cumulative roster of one جهة (optionally one فئة): every name billed there
     (non-excluded receipts of live claims), listed, or confirmed by a reviewer — with
     where else it is billed — plus the names ruled out (decisions + deductions)."""
@@ -437,6 +440,12 @@ def roster_for_unit(client_id, subclient_id=None, q=''):
                 'other_companies': other_co[:3],
             })
     members.sort(key=lambda m: (m['last'] or '', m['count']), reverse=True)
+    # optional column sort of ALL members (before the 3000 cut); ties keep the last-billed order (stable)
+    from apps.pic_analytics.queries.ordering import parse_ordering, sort_items
+    okey, odesc = parse_ordering(ordering, ROSTER_ORDERS)          # ValueError on an unknown field
+    if okey:
+        val = (lambda m: len(m['other_companies'])) if okey == 'elsewhere' else (lambda m: m[okey])
+        members = sort_items(members, val, odesc)
 
     ruled_out = [{'name': k[3], 'subclient': subs.get(k[1], '') if k[1] else '', 'group_key': k[2]}
                  for k, v in decisions.items()

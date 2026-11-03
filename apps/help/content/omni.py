@@ -507,8 +507,8 @@ SCREENS = [
             {'target': 'omni-wallboard-calls', 'label': T('☎️ المكالمات الحية', '☎️ Live calls'),
              'text': T('كل مكالمة دلوقتي: المتصل، الحالة، القائمة، العامل، والمدة.', 'Every call now: caller, state, queue, agent and duration.')},
             {'target': 'omni-wallboard-listen', 'label': T('🎧 استماع', '🎧 Listen'),
-             'text': T('تليفون تحويلتك بيرن؛ لما ترد بتسمع المكالمة من غير ما حد يسمعك.', 'Your own extension rings; when you answer you hear the call without anyone hearing you.'),
-             'open_hint': T('على مكالمة «جارية» ليها عامل. للمدير والمشرف، ولازم تحويلتك تكون مربوطة بحسابك.',
+             'text': T('تليفون رقمك الداخلي بيرن؛ لما ترد بتسمع المكالمة من غير ما حد يسمعك.', 'Your own extension rings; when you answer you hear the call without anyone hearing you.'),
+             'open_hint': T('على مكالمة «جارية» ليها عامل. للمدير والمشرف، ولازم رقمك الداخلي يكون مربوط بحسابك.',
                             'On an answered call with an agent. Admins and supervisors, with your extension linked to your account.')},
             {'target': 'omni-wallboard-whisper', 'label': T('🗣️ همس', '🗣️ Whisper'),
              'text': T('زي الاستماع، بس العامل بيسمعك والعميل لأ. تساعده وهو في المكالمة.', 'Like listen, but the agent hears you and the customer does not. Coach them mid-call.'),
@@ -523,9 +523,9 @@ SCREENS = [
                  'كل قائمة انتظار في السنترال ليها سطر: الإجمالي، المُجابة (أخضر)، المهجورة (أحمر)، متوسط الانتظار ومتوسط الحديث.\n• قارن القوائم ببعض: قائمة انتظارها طويل ومهجورها عالي محتاجة دعم.\n• الأرقام من أول النهارده بس.',
                  'Each PBX queue has a row: total, answered (green), abandoned (red), average wait and average talk time.\n• Compare queues: one with long waits and many abandoned calls needs support.\n• Numbers cover today only.')},
             {'target': 'omni-wallboard-agents', 'label': T('👥 العمال', '👥 Agents'),
-             'text': T('كل تحويلة عامل: في مكالمة، متاح، أو غير مسجل.', 'Each agent extension: on a call, available or not registered.'),
+             'text': T('كل رقم داخلي لعامل: في مكالمة، متاح، أو غير مسجل.', 'Each agent extension: on a call, available or not registered.'),
              'more': T(
-                 'بطاقة لكل تحويلة: الاسم ورقم التحويلة والحالة.\n• 📞 «في مكالمة» بالأخضر، 🟢 «متاح» جاهز يرد، ⚪ «غير مسجل» تليفونه مش متصل بالسنترال.\n• لو موظف في الشيفت وظاهر «غير مسجل»، اطلب منه يتأكد إن التليفون أو التطبيق شغال.',
+                 'بطاقة لكل رقم داخلي: الاسم والرقم الداخلي والحالة.\n• 📞 «في مكالمة» بالأخضر، 🟢 «متاح» جاهز يرد، ⚪ «غير مسجل» تليفونه مش متصل بالسنترال.\n• لو موظف في الشيفت وظاهر «غير مسجل»، اطلب منه يتأكد إن التليفون أو التطبيق شغال.',
                  'A card per extension: name, extension number and state.\n• 📞 "On a call" in green, 🟢 "Available" ready to answer, ⚪ "Not registered" means the phone is not connected to the PBX.\n• If someone on shift shows "Not registered", ask them to check their phone or app is running.')},
             {'target': 'omni-wallboard-header',  # from the GitHub-side tour
              'label': T('📊 لوحة المشرف الحية', '📊 Live supervisor wallboard'),
@@ -536,7 +536,7 @@ SCREENS = [
                  'سيبها مفتوحة على شاشة جنبك وقت الشغل — مش محتاج تعمل تحديث، الأرقام بتتجدد كل 5 ثواني.\n• اللوحة للمشرفين والمدير والجودة بس؛ غيرهم بيشوف رسالة «لوحة المشرفين فقط».\n• نتيجة الاستماع أو الهمس بتظهر في شريط تحت العنوان.',
                  'Keep it open on a screen beside you during the shift — no need to refresh, numbers update every 5 seconds.\n• The board is for supervisors, admins and quality only; others see "Supervisors only".\n• The result of a listen or whisper request appears in a bar under the title.')},
         ],
-        'updated': '2026-10-29',
+        'updated': '2026-11-03',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
@@ -657,8 +657,12 @@ SCREENS = [
                  '• «الحجم حسب القناة»: عدد الرسائل والمكالمات لكل قناة، وجنبها الوارد منها — يوضح العملاء بيفضّلوا يكلمونا منين.\n• «حالات المحادثات»: كام مفتوحة ومنتظرة ومحلولة ومغلقة؛ لو المفتوحة كتير فيه تراكم.\n• تحتهم رسم «الحجم اليومي (وارد)» لكل يوم في الفترة.',
                  '• "Volume by channel": messages and calls per channel, with the inbound count beside it — shows where customers prefer to reach us.\n• "Conversation statuses": how many are open, pending, resolved and closed; many open ones means a backlog.\n• Below them is the "Daily volume (inbound)" chart for each day of the period.')},
         ],
-        'updated': '2026-10-26',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'tips': [
+            T('المكالمات الفائتة وأرقام الاتصال الجديدة وأداء موظفي مركز الاتصال في «تحليلات العملاء» ← تبويب «المكالمات الفائتة»: /customers/pic-analytics?tab=missed',
+              'Missed calls, new phone numbers and call-center agent performance are in Customer analytics → the "Missed calls" tab: /customers/pic-analytics?tab=missed'),
+        ],
+        'updated': '2026-11-03',
+        'change_note': T('إشارة إلى تبويب المكالمات الفائتة في تحليلات العملاء', 'Pointer to the missed-calls tab in customer analytics'),
     },
     {
         'key': 'omni.whatsapp_inbox',

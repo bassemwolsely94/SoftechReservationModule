@@ -4,10 +4,12 @@
  *   #11 Who-changed-what (module vs direct SOFTECH edits)
  *   #5 Auto-repair policy toggle
  */
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pricingApprovalsApi } from '../../api/client'
 import { fa } from '../../utils/flowArrow'
+import useSortableRows from '../../hooks/useSortableRows'
+import SortTh from '../../components/SortTh'
 
 function fmtDate(s) {
   if (!s) return '—'
@@ -36,6 +38,16 @@ export default function InsightsPanel() {
   const { data: impact } = useQuery({
     queryKey: ['discount-impact', days],
     queryFn: () => pricingApprovalsApi.discountImpact(days).then(r => r.data),
+  })
+  // the 12 latest changes the table shows; header clicks re-order those rows
+  const topChanges = useMemo(() => (impact?.changes || []).slice(0, 12), [impact])
+  const { sorted: changeRows, headerProps } = useSortableRows(topChanges, {
+    getValue: (c, k) => {
+      if (k === 'per_before') return c.before?.days ? c.before.qty / c.before.days : null
+      if (k === 'per_after') return c.after?.days ? c.after.qty / c.after.days : null
+      if (k === 'changed') return Object.keys(c.changed || {}).join(',')
+      return c[k]
+    },
   })
   const { data: policy } = useQuery({
     queryKey: ['repl-policy'],
@@ -137,7 +149,7 @@ export default function InsightsPanel() {
         <div className="px-4 py-3 border-b">
           <h3 className="font-bold text-gray-800 text-sm">أثر الخصومات على المبيعات</h3>
           <p className="text-xs text-gray-400 mt-0.5">
-            مقارنة مبيعات الصنف قبل/بعد تغيير الخصم ({days} يوم لكل جانب) — متوسط يومي
+            مقارنة مبيعات الصنف قبل/بعد تغيير الخصم ({days} يوم لكل جانب) — متوسط يومي · الترتيب يشمل آخر 12 تغيير المعروضة فقط
           </p>
         </div>
         <div className="p-4">
@@ -161,12 +173,14 @@ export default function InsightsPanel() {
           </div>
           <table className="w-full text-sm">
             <thead><tr className="text-right text-xs text-gray-500 border-b">
-              <th className="py-1.5">الصنف</th><th className="py-1.5">التغيير</th>
-              <th className="py-1.5 text-center">قبل/يوم</th><th className="py-1.5 text-center">بعد/يوم</th>
-              <th className="py-1.5 text-center">التغير</th><th className="py-1.5"></th>
+              <SortTh {...headerProps('item_name', 'text')} className="py-1.5">الصنف</SortTh>
+              <SortTh {...headerProps('changed', 'text')} className="py-1.5">التغيير</SortTh>
+              <SortTh {...headerProps('per_before', 'number')} className="py-1.5 text-center">قبل/يوم</SortTh>
+              <SortTh {...headerProps('per_after', 'number')} className="py-1.5 text-center">بعد/يوم</SortTh>
+              <SortTh {...headerProps('qty_lift_pct', 'number')} className="py-1.5 text-center">التغير</SortTh><th className="py-1.5"></th>
             </tr></thead>
             <tbody>
-              {(impact?.changes || []).slice(0, 12).map(c => {
+              {changeRows.map(c => {
                 const lift = c.qty_lift_pct
                 const disc = Object.entries(c.changed).filter(([, v]) => v.is_discount)
                   .map(([k, v]) => `${k.replace('_discp','')}: ${v.old ?? '—'}${fa()}${v.new}`).join('، ')

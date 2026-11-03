@@ -1053,6 +1053,21 @@ class PickZoneApiTests(TestCase):
         self.assertEqual(r.data['IT073']['zone_name'], 'أقراص')
         self.assertIn('TAB', r.data['IT073']['reason'])
 
+    def test_uncategorized_ordering(self):
+        make_item('AAA STRANGE GADGET', 'IT070')
+        make_item('ZZZ STRANGE GADGET', 'IT071')
+        url = '/api/transits/pick-zones/uncategorized/'
+        asc = [x['item_code'] for x in self.admin.get(url, {'ordering': 'item_code'}).data['results']]
+        desc = [x['item_code'] for x in self.admin.get(url, {'ordering': '-item_code'}).data['results']]
+        self.assertLess(asc.index('IT070'), asc.index('IT071'))
+        self.assertLess(desc.index('IT071'), desc.index('IT070'))
+        by_name = [x['item_code'] for x in self.admin.get(url, {'ordering': '-name'}).data['results']]
+        self.assertLess(by_name.index('IT071'), by_name.index('IT070'))
+        self.assertEqual(self.admin.get(url, {'ordering': 'item_id; drop'}).status_code, 400)
+        for f in ('name', 'item_code', 'price'):
+            for q_ in (f, '-' + f):
+                self.assertEqual(self.admin.get(url, {'ordering': q_}).status_code, 200, q_)
+
     def test_uncategorized_scan(self):
         make_item('STRANGE GADGET X', 'IT060')        # matches no rule
         make_item('NORMAL 20TAB', 'IT061')            # TAB rule

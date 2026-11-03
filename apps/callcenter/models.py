@@ -202,7 +202,8 @@ class CallLog(models.Model):
     )
 
     # ── Timestamps ────────────────────────────────────────────────────────────
-    called_at  = models.DateTimeField(auto_now_add=True, db_index=True)
+    # default (not auto_now_add) so a PBX-built log keeps the call's real start time
+    called_at  = models.DateTimeField(default=timezone.now, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     # Callback scheduling
@@ -248,15 +249,21 @@ class CallLog(models.Model):
         """Non-blocking phone → Customer + LocalCustomer match."""
         try:
             from apps.customers.models import Customer
-            tail = self.phone_number.strip().replace(' ', '')[-9:]
-
-            customer = Customer.objects.filter(
-                phone__endswith=tail
-            ).first()
-            if not customer:
-                customer = Customer.objects.filter(
-                    phone_alt__endswith=tail
-                ).first()
+            from apps.pbx.cdr import lookup_tail
+            from apps.pbx.cdr import phone_key
+            tail = lookup_tail(self.phone_number)
+            key = phone_key(self.phone_number)
+            customer = None
+            if tail and key:
+                # prefilter on the tail, then confirm with the exact key (a Cairo landline's 8-digit
+                # tail also ends some mobiles); lowest pk first so the result is deterministic
+                for field in ('phone', 'phone_alt'):
+                    for c in Customer.objects.filter(**{field + '__endswith': tail}).order_by('pk')[:50]:
+                        if phone_key(getattr(c, field)) == key:
+                            customer = c
+                            break
+                    if customer:
+                        break
 
             if customer:
                 self.customer = customer

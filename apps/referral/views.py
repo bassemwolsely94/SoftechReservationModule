@@ -13,6 +13,7 @@ from apps.referral.serializers import (
     ReferralEventSerializer, SubmitLeadSerializer,
 )
 from apps.referral.fraud import FraudEngine, AUTO_REJECT_THRESHOLD
+from core.sort_ordering import NullsLastOrderingFilter
 
 logger = logging.getLogger('elrezeiky.referral')
 
@@ -93,6 +94,10 @@ class SubmitLeadView(APIView):
 class LeadListView(generics.ListAPIView):
     serializer_class   = ReferralLeadSerializer
     permission_classes = [IsAuthenticated]
+    # sortable grid headers (lead_phone is masked — never an ordering field); default stays -created_at
+    filter_backends    = [NullsLastOrderingFilter]
+    ordering_fields    = ['lead_name', 'referrer__name', 'status', 'fraud_score', 'created_at']
+    ordering           = ['-created_at']
 
     def get_queryset(self):
         qs = ReferralLead.objects.select_related('referrer', 'referral_code')

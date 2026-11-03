@@ -27,6 +27,9 @@ import { pickZonesApi, branchesApi } from '../api/client'
 import ItemSearchInput from '../components/ItemSearchInput'
 import useAuthStore from '../store/authStore'
 import useHelpTab from '../help/useHelpTab'
+import useSortableRows from '../hooks/useSortableRows'
+import useServerSort from '../hooks/useServerSort'
+import SortTh from '../components/SortTh'
 import { fa } from '../utils/flowArrow'
 
 const toLatin = s =>
@@ -668,14 +671,18 @@ function UncategorizedRow({ item, zones, branchParam, purpose, canEdit, showToas
   )
 }
 
+const UNCAT_SORT_KEYS = ['item_code', 'name', 'price']   // = the view's ordering whitelist
+
 function UncategorizedTab({ zones, branchParam, purpose, canEdit, showToast }) {
   const [q, setQ] = useState('')
   const [search, setSearch] = useState('')
+  const [ordering, setOrdering] = useState('')   // server-side: decides which 150 unclassified items come back
+  const { headerProps: uh } = useServerSort(ordering, setOrdering, { allowed: UNCAT_SORT_KEYS })
 
   const { data, isFetching, refetch } = useQuery({
-    queryKey: ['pick-uncategorized', branchParam, purpose, search],
+    queryKey: ['pick-uncategorized', branchParam, purpose, search, ordering],
     queryFn: () => pickZonesApi.uncategorized({
-      q: search, limit: 150, branch: branchParam, purpose,
+      q: search, limit: 150, branch: branchParam, purpose, ...(ordering ? { ordering } : {}),
     }).then(r => r.data),
     staleTime: 60_000,
   })
@@ -704,9 +711,9 @@ function UncategorizedTab({ zones, branchParam, purpose, canEdit, showToast }) {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 w-24">الكود</th>
-              <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500">اسم الصنف</th>
-              <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 w-28">سعر الجمهور</th>
+              <SortTh {...uh('item_code', 'text')} className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 w-24">الكود</SortTh>
+              <SortTh {...uh('name', 'text')} className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500">اسم الصنف</SortTh>
+              <SortTh {...uh('price', 'number')} className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 w-28">سعر الجمهور</SortTh>
               {canEdit && (
                 <>
                   <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 w-44">المنطقة</th>
@@ -807,6 +814,10 @@ function OverridesTab({ zones, branchParam, purpose, canEdit, showToast }) {
       .then(r => r.data.results || r.data),
   })
 
+  const { sorted: sortedOverrides, headerProps: oh } = useSortableRows(overrides, {
+    getValue: (ov, k) => (k === 'zone' ? (zones.find(z => z.id === ov.zone)?.name || '') : ov[k]),
+  })
+
   const create = useMutation({
     mutationFn: () => pickZonesApi.createOverride({
       item_code: newItem.softech_id, zone: Number(newZone), tag: newTag.trim(),
@@ -868,11 +879,11 @@ function OverridesTab({ zones, branchParam, purpose, canEdit, showToast }) {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 w-24">الكود</th>
-              <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500">اسم الصنف</th>
-              <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 w-44">المنطقة</th>
-              <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 w-40">وسم/رف</th>
-              <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 w-28">بواسطة</th>
+              <SortTh {...oh('item_softech_id', 'text')} className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 w-24">الكود</SortTh>
+              <SortTh {...oh('item_name', 'text')} className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500">اسم الصنف</SortTh>
+              <SortTh {...oh('zone', 'text')} className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 w-44">المنطقة</SortTh>
+              <SortTh {...oh('tag', 'text')} className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 w-40">وسم/رف</SortTh>
+              <SortTh {...oh('created_by_name', 'text')} className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 w-28">بواسطة</SortTh>
               {canEdit && <th className="px-3 py-2.5 w-16" />}
             </tr>
           </thead>
@@ -881,7 +892,7 @@ function OverridesTab({ zones, branchParam, purpose, canEdit, showToast }) {
               <tr><td colSpan={6} className="px-4 py-10 text-center text-gray-400 text-sm">
                 لا توجد تخصيصات{search && ' مطابقة للبحث'} في هذا الإعداد
               </td></tr>
-            ) : overrides.map(ov => (
+            ) : sortedOverrides.map(ov => (
               <OverrideRow key={ov.id} ov={ov} zones={zones}
                 canEdit={canEdit} showToast={showToast} />
             ))}

@@ -1,13 +1,13 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
 
-{% block title %}ربط التحويلات بالموظفين — {{ site_header }}{% endblock %}
+{% block title %}ربط الأرقام الداخلية بالموظفين — {{ site_header }}{% endblock %}
 
 {% block breadcrumbs %}
 <div class="breadcrumbs">
   <a href="{% url 'admin:index' %}">الرئيسية</a>
-  &rsaquo; <a href="{% url 'admin:pbx_agentextension_changelist' %}">التحويلات</a>
-  &rsaquo; ربط التحويلات بالموظفين
+  &rsaquo; <a href="{% url 'admin:pbx_agentextension_changelist' %}">الأرقام الداخلية</a>
+  &rsaquo; ربط الأرقام الداخلية بالموظفين
 </div>
 {% endblock %}
 
@@ -73,8 +73,8 @@
 </style>
 
 <div class="map-header">
-  <h1>ربط التحويلات بالموظفين</h1>
-  <a href="{% url 'admin:pbx_agentextension_changelist' %}" class="button">عرض قائمة التحويلات</a>
+  <h1>ربط الأرقام الداخلية بالموظفين</h1>
+  <a href="{% url 'admin:pbx_agentextension_changelist' %}" class="button">عرض قائمة الأرقام الداخلية</a>
 </div>
 
 <form method="post" id="map-form">
@@ -85,12 +85,12 @@
   <div class="group-card {{ group.css }}">
     <div class="group-title">
       <span>{{ group.label }}</span>
-      <span style="font-weight:normal;font-size:.83rem;color:inherit;opacity:.7">({{ group.extensions|length }} تحويلة)</span>
+      <span style="font-weight:normal;font-size:.83rem;color:inherit;opacity:.7">({{ group.extensions|length }} رقم داخلي)</span>
     </div>
     <table class="map-table">
       <thead>
         <tr>
-          <th style="width:80px">التحويلة</th>
+          <th style="width:80px">الرقم الداخلي</th>
           <th style="width:90px">الحالة</th>
           <th style="width:130px">آخر IP</th>
           <th>الموظف المرتبط</th>
@@ -138,7 +138,7 @@
     <table class="gw-table">
       <thead>
         <tr>
-          <th style="width:130px">التحويلة</th>
+          <th style="width:130px">الرقم الداخلي</th>
           <th style="width:140px">نوع البوابة</th>
           <th style="width:160px">بادئة الرقم (call_prefix)</th>
           <th style="width:160px">لاحقة الرقم (call_suffix)</th>
@@ -188,7 +188,7 @@
   {# ── Sticky save bar ─────────────────────────────────────────────────── #}
   <div class="save-bar">
     <button type="submit" class="btn-save">حفظ التعيينات</button>
-    <span class="save-note">تم تغيير <span class="changed-count" id="change-count">0</span> تحويلة</span>
+    <span class="save-note">تم تغيير <span class="changed-count" id="change-count">0</span> رقم داخلي</span>
   </div>
 
 </form>

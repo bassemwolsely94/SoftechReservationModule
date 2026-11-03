@@ -1,6 +1,42 @@
 # 16 — Branch KPI Forecasting & Target Engine
 
 **Status:** ✅ PHASES 1–6 BUILT (2026-07-29) — actuals, targets, board, engine, backtest, call-center & salesperson/category scopes live
+- **Rollup freshness (2026-11-03):** `apps/forecasting/rollup_refresh.py` replaces the
+  06:30 current-month-only rebuild (it froze a month on its last day — Oct-2026 stayed 5.9%
+  short). Every 30 min it rebuilds any of current + 2 previous months whose
+  `PurchaseHistory.last_synced` is newer than the month's oldest rollup `computed_at`
+  (current month throttled to 2 h); a rebuilt closed month also refreshes the stored
+  references (`references.refresh_history`, never auto-applied to scenarios).
+  `GET/POST /api/forecasting/kpi-board/refresh/` = status / forced rebuild. A generated
+  scenario exposes `signals_changed_at` when a CLOSED signal month (M-12/M-1/M-2) was
+  re-rolled-up after generation → «⚠ الأرقام قديمة · أعد الحساب الآن». Reference panel shows
+  seasonality for the running month + next 5 and the real history window.
+- **Forecast horizon (2026-11-03):** a scenario may target up to `PLAN_HORIZON` (6) months
+  after the running one (serializer-enforced). Signal months not complete yet are estimates,
+  flagged `ForecastResult.lm_projected/pm_projected` (migration forecasting/0012): the running
+  month = elapsed-share × MTD-scaled + rest × projection; a future month = the seasonality-free
+  Model B blend `w_lm·LM + w_pm·PM + w_yoy·base·(1+bench)`, recursively (`engine._signal/_project`).
+  `GET /api/forecasting/plan/?horizon=` = read-only rolling outlook (running + next N months,
+  branch + chain, YoY) → «📅 الخطة المتجددة» panel with «+ سيناريو» per month.
+  **Seasonality decision (owner rule: adopt only if the backtest wins):** point-in-time
+  backtest, chain, 1/2/3 months ahead, WAPE% — no seasonality beat both «blend × S[target]»
+  (current apply-references behaviour) and a deseasonalised `(LM/S_lm, PM/S_pm)·S_t` variant on
+  every metric but beauty (e.g. cash 5.3/7.0/8.1 vs 7.9/9.8/12.3 vs 9.6/10.6/11.3; credit 10.1 vs
+  20.6 vs 20.4 at h1). With ~2 years of history the index is noise → projections use no
+  seasonality; the Model B formula is unchanged. `BacktestRun.horizon_accuracy` stores all three
+  variants per run so this is re-checked after the 3–5-year backfill (batch 3).
+- **Seasonality v2 + 5-year history (2026-11-03, batch 3):** owner — load 5 years; closed
+  branches don't count; seasonality is per branch, a new branch takes suggested (chain) values
+  until it has its own. `references._seasonality` = ratio to a centred 12-month moving average
+  (trend divided out; a month with no 13-month window stays 1.0) — back-tested better than the
+  calendar-year-mean index (credit h1 20.6% → 13.4%). `branch_seasonality[metric][code]` =
+  `w·own + (1−w)·chain`, `w = branch_weight(months)` (0 below 13 months, full at 36), operational
+  retail branches only. Engine mode `SystemSetting forecast_seasonality_mode` none|chain|branch
+  (default none; audited switch from the references panel): in a seasonal mode Model B and the
+  projections use `(w_lm·LM/S[m-1] + w_pm·PM/S[m-2])·S[m] + w_yoy·base·(1+bench)` and
+  apply-references leaves the factor index at 1. Backtest adds branch-level variants
+  `br_b / br_chain / br_branch`. On 27 months "none" still wins everywhere → mode stays none until
+  the backfill (2021-11 → 2024-07, off-hours runner) lands and the backtest is re-run.
 - **Phase 6 (salesperson & category scopes):** `KpiResolver.resolve` gained `category_id`
   (line-based, a category's own sales) alongside `softech_user` (salesperson, header-based);
   `SalesTarget.actual_value()` routes all three scopes. `ForecastScenario.scope_type`

@@ -1,0 +1,76 @@
+/**
+ * GroupTable — one table for branches / salespeople / channels / categories (doc 33 §6).
+ * Rows come from the server as {rows, total}; GP is shown only when the rows carry it.
+ */
+import useGridKeyboard from '../../hooks/useGridKeyboard'
+import useSortableRows from '../../hooks/useSortableRows'
+import SortTh from '../SortTh'
+import { fmt } from './KpiCards'
+import Explain from './Explain'
+
+const getKey = r => r.key
+
+export default function GroupTable({ data, title, note, firstLabel = 'الاسم', explain }) {
+  const allRows = data?.rows || []
+  const { sorted: rows, headerProps } = useSortableRows(allRows, { persistKey: `pic-group-${title || firstLabel}` })
+  const total = data?.total
+  const hasGp = allRows.some(r => 'gp' in r) || (total && 'gp' in total)
+  const kb = useGridKeyboard({ rows, getKey })
+  const cell = 'px-3 py-2 tabular-nums'
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {title && <h3 className="text-sm font-bold text-gray-700 px-4 pt-3">{title}</h3>}
+      {explain && <Explain className="px-4 pt-1 pb-1" {...explain} />}
+      <div {...kb.containerProps} className={`overflow-x-auto ${kb.containerProps.className}`}>
+        <table className="w-full text-xs">
+          <thead className="bg-gray-50 text-gray-500">
+            <tr>
+              <SortTh {...headerProps('label', 'text')} className="px-3 py-2 text-right">{firstLabel}</SortTh>
+              <SortTh {...headerProps('distinct_pics', 'number')} className={cell} title="عدد العملاء (PIC) المميّزين اللي اشتروا من هنا في الفترة">عملاء</SortTh>
+              <SortTh {...headerProps('new', 'number')} className={cell} title="أول شراء ليهم في الفترة، والكود اتسجل في SOFTECH قبل بداية الفترة بـ30 يوم أو أقل">جدد</SortTh>
+              <SortTh {...headerProps('returning', 'number')} className={cell} title="اشتروا في الفترة وليسوا جدد">عائدون</SortTh>
+              <SortTh {...headerProps('reactivated', 'number')} className={cell} title="عائدون ورجعوا بعد سنة أو أكتر من غير شراء">مُعاد تنشيطهم</SortTh>
+              <SortTh {...headerProps('visits', 'number')} className={cell} title="فواتير العميل في نفس اليوم = زيارة واحدة">زيارات</SortTh>
+              <SortTh {...headerProps('net', 'number')} className={cell} title="صافي المبيعات بعد المرتجعات">صافي</SortTh>
+              {hasGp && <SortTh {...headerProps('gp', 'number')} className={cell} title="إجمالي الربح = مجموع (إيراد السطر − تكلفته) على القنوات المحسوبة في الربح، بدون أصناف زي العبوات المجانية — نفس قواعد لوحة KPI. الهامش = الربح ÷ إيراد القنوات دي (مش ÷ صافي المبيعات)">الربح</SortTh>}
+              <SortTh {...headerProps('basket_net', 'number')} className={cell} title="صافي المبيعات ÷ الزيارات">سلة (صافي)</SortTh>
+              <SortTh {...headerProps('units_per_visit', 'number')} className={cell} title="متوسط عدد الوحدات في الزيارة">أصناف/زيارة</SortTh>
+              <SortTh {...headerProps('lines_per_visit', 'number')} className={cell} title="متوسط عدد سطور الفاتورة في الزيارة">سطور لكل زيارة</SortTh>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => {
+              const rp = kb.rowProps(r)
+              return (
+                <tr key={r.key} {...rp} className={`border-t border-gray-100 hover:bg-gray-50 ${rp.className}`}>
+                  <td className="px-3 py-2 font-medium text-gray-800">{r.label}</td>
+                  <td className={cell}>{fmt(r.distinct_pics)}</td><td className={cell}>{fmt(r.new)}</td>
+                  <td className={cell}>{fmt(r.returning)}</td><td className={cell}>{fmt(r.reactivated)}</td>
+                  <td className={cell}>{fmt(r.visits)}</td><td className={cell}>{fmt(r.net)}</td>
+                  {hasGp && <td className={cell}>{fmt(r.gp)}</td>}
+                  <td className={cell}>{fmt(r.basket_net, 2)}</td><td className={cell}>{fmt(r.units_per_visit, 2)}</td>
+                  <td className={cell}>{fmt(r.lines_per_visit, 2)}</td>
+                </tr>
+              )
+            })}
+            {total && (
+              <tr className="border-t-2 border-gray-300 bg-gray-50 font-bold">
+                <td className="px-3 py-2">{total.label}</td>
+                <td className={cell}>{fmt(total.distinct_pics)}</td><td className={cell}>{fmt(total.new)}</td>
+                <td className={cell}>{fmt(total.returning)}</td><td className={cell}>{fmt(total.reactivated)}</td>
+                <td className={cell}>{fmt(total.visits)}</td><td className={cell}>{fmt(total.net)}</td>
+                {hasGp && <td className={cell}>{fmt(total.gp)}</td>}
+                <td className={cell}>{fmt(total.basket_net, 2)}</td><td className={cell}>{fmt(total.units_per_visit, 2)}</td>
+                <td className={cell}>{fmt(total.lines_per_visit, 2)}</td>
+              </tr>
+            )}
+            {rows.length === 0 && (
+              <tr><td colSpan={11} className="px-3 py-6 text-center text-gray-400">لا بيانات</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {note && <p className="text-xs text-gray-400 px-4 py-2">{note}</p>}
+    </div>
+  )
+}

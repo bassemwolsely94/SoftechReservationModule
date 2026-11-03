@@ -14,6 +14,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { branchesApi } from '../api/client'
 import { Badge, MetricChip, ErrorState, Icon } from '../pos/design'
 import WhatsAppShareButton from '../components/WhatsAppShareButton'
+import SortTh from '../components/SortTh'
+import useSortableRows from '../hooks/useSortableRows'
 
 const money = (v) => `${Number(v || 0).toLocaleString('en-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م`
 const fmtAge = (min) => {
@@ -25,6 +27,91 @@ const fmtAge = (min) => {
 const BUCKET_TONE = { leakage: 'blocked', push_failed: 'blocked', stuck_pushing: 'blocked', stuck_queued: 'warn', awaiting_cashier: 'warn' }
 const BUCKET_ICON = { leakage: 'alert', push_failed: 'alert', stuck_pushing: 'clock', stuck_queued: 'clock', awaiting_cashier: 'store' }
 const REVIEW_REASON = { pending_gone_no_final: 'اختفت الصفوف المعلّقة دون فاتورة نهائية — قد يكون حذفًا من الكاشير أو خطأ قراءة.' }
+
+const orderValue = (o, k) => (
+  k === 'branch' ? (o.branch_name || o.branch) : k === 'customer' ? o.customer
+  : k === 'detail' ? (o.error || (o.review_reason ? REVIEW_REASON[o.review_reason] || o.review_reason : o.status_display)) : o[k])
+
+/** One bucket's orders (the server sends at most 200 per bucket → headers sort those rows). */
+function BucketOrdersTable({ orders, onDetail, cancel }) {
+  const sorter = useSortableRows(orders, { getValue: orderValue })
+  return (
+    <>
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="text-gray-500 text-xs border-b">
+          <tr>
+            <SortTh {...sorter.headerProps('id', 'number')} className="text-right px-3 py-1.5">أمر</SortTh>
+            <SortTh {...sorter.headerProps('branch', 'text')} className="text-right px-3 py-1.5">الفرع</SortTh>
+            <SortTh {...sorter.headerProps('customer', 'text')} className="text-right px-3 py-1.5">العميل</SortTh>
+            <SortTh {...sorter.headerProps('doc_value', 'number')} className="text-right px-3 py-1.5">القيمة</SortTh>
+            <SortTh {...sorter.headerProps('age_min', 'number')} className="text-right px-3 py-1.5">العمر</SortTh>
+            <SortTh {...sorter.headerProps('detail', 'text')} className="text-right px-3 py-1.5">التفاصيل</SortTh>
+            <th className="text-right px-3 py-1.5">إجراء</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorter.sorted.map(o => (
+            <tr key={o.id} className="border-b last:border-0 hover:bg-gray-50">
+              <td className="px-3 py-1.5 font-mono">
+                POS-{o.id}
+                {o.doc_kind === 'return' && <Badge tone="info" label="مرتجع" size="xs" className="mr-1" />}
+                {o.softech_docnumber && <div className="text-xs text-gray-400">#{o.softech_docnumber}</div>}
+              </td>
+              <td className="px-3 py-1.5">{o.branch_name || o.branch}</td>
+              <td className="px-3 py-1.5">{o.customer || '—'}</td>
+              <td className="px-3 py-1.5 tabular-nums">{money(o.doc_value)}</td>
+              <td className="px-3 py-1.5 tabular-nums">{fmtAge(o.age_min)}</td>
+              <td className="px-3 py-1.5 max-w-[22rem]">
+                {o.error
+                  ? <span className="text-xs text-red-600" title={o.error}>{o.error}</span>
+                  : o.review_reason
+                    ? <span className="text-xs text-red-600" title={REVIEW_REASON[o.review_reason] || o.review_reason}>{REVIEW_REASON[o.review_reason] || o.review_reason}</span>
+                    : <span className="text-xs text-gray-500">{o.status_display}</span>}
+              </td>
+              <td className="px-3 py-1.5 whitespace-nowrap">
+                <button onClick={() => onDetail(o.id)} data-tour="pos-exceptions-details"
+                        className="text-xs px-2 py-1 rounded border hover:bg-gray-100 ml-1">تفاصيل</button>
+                <button onClick={() => { if (confirm(`إلغاء الأمر POS-${o.id}؟`)) cancel.mutate(o.id) }} data-tour="pos-exceptions-cancel"
+                        disabled={cancel.isPending}
+                        className="text-xs px-2 py-1 rounded border text-red-600 hover:bg-red-50 disabled:opacity-50">
+                  إلغاء
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    </>
+  )
+}
+
+/** Small ranking table (top-N lists the server already cut) — the headers re-order the rows shown. */
+function RankTable({ rows, cols, rowKey, empty }) {
+  const sorter = useSortableRows(rows, { getValue: (r, k) => (k === 'name' ? (r.item_name || r.name || r.itemcode) : r[k]) })
+  return (
+    <table className="w-full text-xs">
+      <thead className="bg-gray-50 text-gray-500 sticky top-0"><tr>
+        {cols.map(c => (
+          <SortTh key={c.key} {...sorter.headerProps(c.key, c.type)} className="text-right px-2 py-1">{c.label}</SortTh>
+        ))}
+      </tr></thead>
+      <tbody>
+        {sorter.sorted.map(r => (
+          <tr key={rowKey(r)} className="border-t">
+            {cols.map(c => (
+              <td key={c.key} className={`px-2 py-1 ${c.type === 'number' ? 'tabular-nums' : ''} ${c.tdCls || ''}`}>
+                {c.cell ? c.cell(r) : r[c.key]}
+              </td>
+            ))}
+          </tr>
+        ))}
+        {!rows.length && <tr>{empty}</tr>}
+      </tbody>
+    </table>
+  )
+}
 
 export default function ExceptionCenterPage() {
   const qc = useQueryClient()
@@ -125,52 +212,7 @@ export default function ExceptionCenterPage() {
             </div>
             <span className="text-xs text-gray-600">قيمة معرّضة: {money(b.value_at_risk)}</span>
           </header>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-gray-500 text-xs border-b">
-                <tr>
-                  <th className="text-right px-3 py-1.5">أمر</th>
-                  <th className="text-right px-3 py-1.5">الفرع</th>
-                  <th className="text-right px-3 py-1.5">العميل</th>
-                  <th className="text-right px-3 py-1.5">القيمة</th>
-                  <th className="text-right px-3 py-1.5">العمر</th>
-                  <th className="text-right px-3 py-1.5">التفاصيل</th>
-                  <th className="text-right px-3 py-1.5">إجراء</th>
-                </tr>
-              </thead>
-              <tbody>
-                {b.orders.map(o => (
-                  <tr key={o.id} className="border-b last:border-0 hover:bg-gray-50">
-                    <td className="px-3 py-1.5 font-mono">
-                      POS-{o.id}
-                      {o.doc_kind === 'return' && <Badge tone="info" label="مرتجع" size="xs" className="mr-1" />}
-                      {o.softech_docnumber && <div className="text-xs text-gray-400">#{o.softech_docnumber}</div>}
-                    </td>
-                    <td className="px-3 py-1.5">{o.branch_name || o.branch}</td>
-                    <td className="px-3 py-1.5">{o.customer || '—'}</td>
-                    <td className="px-3 py-1.5 tabular-nums">{money(o.doc_value)}</td>
-                    <td className="px-3 py-1.5 tabular-nums">{fmtAge(o.age_min)}</td>
-                    <td className="px-3 py-1.5 max-w-[22rem]">
-                      {o.error
-                        ? <span className="text-xs text-red-600" title={o.error}>{o.error}</span>
-                        : o.review_reason
-                          ? <span className="text-xs text-red-600" title={REVIEW_REASON[o.review_reason] || o.review_reason}>{REVIEW_REASON[o.review_reason] || o.review_reason}</span>
-                          : <span className="text-xs text-gray-500">{o.status_display}</span>}
-                    </td>
-                    <td className="px-3 py-1.5 whitespace-nowrap">
-                      <button onClick={() => setDetailId(o.id)} data-tour="pos-exceptions-details"
-                              className="text-xs px-2 py-1 rounded border hover:bg-gray-100 ml-1">تفاصيل</button>
-                      <button onClick={() => { if (confirm(`إلغاء الأمر POS-${o.id}؟`)) cancel.mutate(o.id) }} data-tour="pos-exceptions-cancel"
-                              disabled={cancel.isPending}
-                              className="text-xs px-2 py-1 rounded border text-red-600 hover:bg-red-50 disabled:opacity-50">
-                        إلغاء
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <BucketOrdersTable orders={b.orders} onDetail={setDetailId} cancel={cancel} />
         </section>
       ))}
 
@@ -251,51 +293,26 @@ function LostSalesTrendsPanel({ branch }) {
             <div>
               <div className="text-xs font-semibold text-gray-600 mb-1">أكثر الأصناف ضياعًا (المدة كاملة)</div>
               <div className="overflow-x-auto border rounded max-h-72 overflow-y-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-50 text-gray-500 sticky top-0"><tr>
-                    <th className="text-right px-2 py-1">الصنف</th>
-                    <th className="text-right px-2 py-1">مرات</th>
-                    <th className="text-right px-2 py-1">مُسعّر</th>
-                    <th className="text-right px-2 py-1">قيمة ضائعة</th>
-                  </tr></thead>
-                  <tbody>
-                    {(data.top_items || []).map(it => (
-                      <tr key={it.item_code} className="border-t">
-                        <td className="px-2 py-1">{it.item_name || it.item_code}</td>
-                        <td className="px-2 py-1 tabular-nums">{it.events}</td>
-                        <td className="px-2 py-1 tabular-nums">{it.priced_events}</td>
-                        <td className="px-2 py-1 tabular-nums font-medium">{money(it.lost_value)}</td>
-                      </tr>
-                    ))}
-                    {!(data.top_items || []).length && (
-                      <tr><td colSpan={4} className="px-2 py-3 text-center text-gray-400">لا توجد بيانات — شغِّل sync_pos_cancel أولاً.</td></tr>
-                    )}
-                  </tbody>
-                </table>
+                <RankTable rows={data.top_items || []} rowKey={it => it.item_code}
+                  cols={[
+                    { key: 'name', label: 'الصنف', type: 'text', cell: it => it.item_name || it.item_code },
+                    { key: 'events', label: 'مرات', type: 'number' },
+                    { key: 'priced_events', label: 'مُسعّر', type: 'number' },
+                    { key: 'lost_value', label: 'قيمة ضائعة', type: 'number', cell: it => money(it.lost_value), tdCls: 'font-medium' },
+                  ]}
+                  empty={<td colSpan={4} className="px-2 py-3 text-center text-gray-400">لا توجد بيانات — شغِّل sync_pos_cancel أولاً.</td>} />
               </div>
             </div>
             <div>
               <div className="text-xs font-semibold text-gray-600 mb-1">حسب الفرع</div>
               <div className="overflow-x-auto border rounded max-h-72 overflow-y-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-50 text-gray-500 sticky top-0"><tr>
-                    <th className="text-right px-2 py-1">الفرع</th>
-                    <th className="text-right px-2 py-1">أسطر مُسعّرة</th>
-                    <th className="text-right px-2 py-1">قيمة ضائعة</th>
-                  </tr></thead>
-                  <tbody>
-                    {(data.by_branch || []).map(b => (
-                      <tr key={b.branch_code} className="border-t">
-                        <td className="px-2 py-1">{b.branch_code}</td>
-                        <td className="px-2 py-1 tabular-nums">{b.priced_events}</td>
-                        <td className="px-2 py-1 tabular-nums font-medium">{money(b.lost_value)}</td>
-                      </tr>
-                    ))}
-                    {!(data.by_branch || []).length && (
-                      <tr><td colSpan={3} className="px-2 py-3 text-center text-gray-400">—</td></tr>
-                    )}
-                  </tbody>
-                </table>
+                <RankTable rows={data.by_branch || []} rowKey={b => b.branch_code}
+                  cols={[
+                    { key: 'branch_code', label: 'الفرع', type: 'text' },
+                    { key: 'priced_events', label: 'أسطر مُسعّرة', type: 'number' },
+                    { key: 'lost_value', label: 'قيمة ضائعة', type: 'number', cell: b => money(b.lost_value), tdCls: 'font-medium' },
+                  ]}
+                  empty={<td colSpan={3} className="px-2 py-3 text-center text-gray-400">—</td>} />
               </div>
             </div>
           </div>
@@ -354,49 +371,27 @@ function LostSalesPanel({ branch }) {
             <div>
               <div className="text-xs font-semibold text-gray-600 mb-1">أكثر الأصناف ضياعًا</div>
               <div className="overflow-x-auto border rounded max-h-72 overflow-y-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-50 text-gray-500 sticky top-0"><tr>
-                    <th className="text-right px-2 py-1">الصنف</th>
-                    <th className="text-right px-2 py-1">مرات</th>
-                    <th className="text-right px-2 py-1">مُسعّر</th>
-                    <th className="text-right px-2 py-1">قيمة ضائعة</th>
-                  </tr></thead>
-                  <tbody>
-                    {(data.top_items || []).map(it => (
-                      <tr key={it.itemcode} className="border-t">
-                        <td className="px-2 py-1">{it.name} <span className="text-gray-400">#{it.itemcode}</span></td>
-                        <td className="px-2 py-1 tabular-nums">{it.events}</td>
-                        <td className="px-2 py-1 tabular-nums">{it.priced_events}</td>
-                        <td className="px-2 py-1 tabular-nums">{money(it.lost_value)}</td>
-                      </tr>
-                    ))}
-                    {!data.top_items?.length && <tr><td colSpan={4} className="text-center text-gray-400 py-3">لا يوجد</td></tr>}
-                  </tbody>
-                </table>
+                <RankTable rows={data.top_items || []} rowKey={it => it.itemcode}
+                  cols={[
+                    { key: 'name', label: 'الصنف', type: 'text', cell: it => <>{it.name} <span className="text-gray-400">#{it.itemcode}</span></> },
+                    { key: 'events', label: 'مرات', type: 'number' },
+                    { key: 'priced_events', label: 'مُسعّر', type: 'number' },
+                    { key: 'lost_value', label: 'قيمة ضائعة', type: 'number', cell: it => money(it.lost_value) },
+                  ]}
+                  empty={<td colSpan={4} className="text-center text-gray-400 py-3">لا يوجد</td>} />
               </div>
             </div>
             <div>
               <div className="text-xs font-semibold text-gray-600 mb-1">الإلغاءات حسب الكاشير</div>
               <div className="overflow-x-auto border rounded max-h-72 overflow-y-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-50 text-gray-500 sticky top-0"><tr>
-                    <th className="text-right px-2 py-1">الكاشير</th>
-                    <th className="text-right px-2 py-1">أحداث</th>
-                    <th className="text-right px-2 py-1">مُسعّر</th>
-                    <th className="text-right px-2 py-1">قيمة</th>
-                  </tr></thead>
-                  <tbody>
-                    {(data.by_cashier || []).map(c => (
-                      <tr key={c.usercode} className="border-t">
-                        <td className="px-2 py-1">{c.name}</td>
-                        <td className="px-2 py-1 tabular-nums">{c.events}</td>
-                        <td className="px-2 py-1 tabular-nums">{c.priced_events}</td>
-                        <td className="px-2 py-1 tabular-nums">{money(c.lost_value)}</td>
-                      </tr>
-                    ))}
-                    {!data.by_cashier?.length && <tr><td colSpan={4} className="text-center text-gray-400 py-3">لا يوجد</td></tr>}
-                  </tbody>
-                </table>
+                <RankTable rows={data.by_cashier || []} rowKey={c => c.usercode}
+                  cols={[
+                    { key: 'name', label: 'الكاشير', type: 'text' },
+                    { key: 'events', label: 'أحداث', type: 'number' },
+                    { key: 'priced_events', label: 'مُسعّر', type: 'number' },
+                    { key: 'lost_value', label: 'قيمة', type: 'number', cell: c => money(c.lost_value) },
+                  ]}
+                  empty={<td colSpan={4} className="text-center text-gray-400 py-3">لا يوجد</td>} />
               </div>
             </div>
           </div>

@@ -17,6 +17,14 @@ Signals per branch × metric, for target period (Y, M):
 
 Actuals come from KpiActualRollup (fast) with a KpiResolver fallback when a month
 has not been rolled up yet. Chain (branch=None) result = sum of branch forecasts.
+
+Horizon (2026-11-03): a target up to PLAN_HORIZON months ahead. A signal month that is
+not complete yet is an ESTIMATE (flagged lm_projected/pm_projected): the running month is
+its MTD scaled to a full month; a future month is projected recursively with the
+seasonality-free Model B blend  w_lm·LM + w_pm·PM + w_yoy·base·(1+benchmark)  — the
+variant that back-tested best on our ~2 years of history (point-in-time seasonality
+made 1–3-month-ahead WAPE worse for every metric but beauty; re-check after more
+history is loaded — BacktestRun.horizon_accuracy reports both).
 """
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -76,6 +84,42 @@ def _shift_month(year, month, delta):
     return idx // 12, idx % 12 + 1
 
 
+# Furthest target month a scenario / the rolling plan may forecast (months after the
+# running one). Beyond ~6 the recursive projection is mostly its own echo.
+PLAN_HORIZON = 6
+
+
+def current_ym():
+    from datetime import date
+    t = date.today()
+    return t.year, t.month
+
+
+def project_blend(lm, pm, base, *, w_lm, w_pm, w_yoy, bench, season=None, month=None):
+    """Model B blend for a month. season=None → seasonality-free (the default mode);
+    with a {calendar month: index} the recent months are deseasonalised and the target
+    month's index re-applied: (w_lm·LM/S[m-1] + w_pm·PM/S[m-2])·S[m] + w_yoy·base·(1+bench)
+    (the same-month-last-year term already carries the target month's season)."""
+    yoy = w_yoy * base * (Decimal('1') + bench)
+    if not season:
+        return w_lm * lm + w_pm * pm + yoy
+    s_t = season[month]
+    s_l = season[(month - 2) % 12 + 1]
+    s_p = season[(month - 3) % 12 + 1]
+    return (w_lm * lm / s_l + w_pm * pm / s_p) * s_t + yoy
+
+
+SEASONALITY_MODES = ('none', 'chain', 'branch')
+
+
+def seasonality_mode():
+    """SystemSetting 'forecast_seasonality_mode': none (default) | chain | branch. Switched
+    only when BacktestRun.horizon_accuracy shows the seasonal variant beating 'none'."""
+    from apps.config.models import SystemSetting
+    v = str(SystemSetting.get('forecast_seasonality_mode', 'none') or 'none').strip().lower()
+    return v if v in SEASONALITY_MODES else 'none'
+
+
 class ForecastEngine:
     # Metrics generated (mirror the KPI board set). call_count = Call-Center only;
     # branches have no call history so those rows are skipped (see generate()).
@@ -101,6 +145,11 @@ class ForecastEngine:
         from apps.forecasting.kpi import KpiResolver
         self.resolver = KpiResolver()
         self._cache = {}   # (branch_id, year, month, metric) -> Decimal
+        self._proj = {}    # (member key, year, month, metric) -> projected Decimal
+        self._lcd = {}     # (year, month) -> latest complete date (MTD projection)
+        self._season = {}  # (member key, metric) -> {month: Decimal} | None
+        self._mode = seasonality_mode()
+        self._refs = None
 
     # ── shared model math (used by generate + backtest) ────────────────────────
     @staticmethod
@@ -210,8 +259,69 @@ class ForecastEngine:
         start, end = self.resolver.month_bounds(year, month)
         return self.resolver.resolve(metric, start=start, end=end, **kw)
 
+    # ── signals: actual, running-month estimate, or projected future month ─────
+    def _signal(self, member, year, month, metric, pf):
+        """(value, is_estimate) for a signal month. pf = projection factors
+        {'w_lm','w_pm','w_yoy','bench'} of the metric."""
+        cur = current_ym()
+        if (year, month) < cur:
+            return self._member_actual(member, year, month, metric), False
+        if (year, month) == cur:
+            return self._running_estimate(member, year, month, metric, pf), True
+        return self._project(member, year, month, metric, pf), True
+
+    def _running_estimate(self, member, year, month, metric, pf):
+        """Running month = elapsed-share × (MTD scaled to a full month) + rest × projected
+        blend. Two days scaled ×15 is noise (and distinct-customer counts don't scale
+        linearly), so the MTD only takes over as the month fills in."""
+        from datetime import date
+        from calendar import monthrange
+        scaled = self._member_actual(member, year, month, metric)
+        last = self._latest_complete_date(year, month)
+        total = monthrange(year, month)[1]
+        elapsed = (last - date(year, month, 1)).days + 1 if last else 0
+        frac = Decimal(min(max(elapsed, 0), total)) / Decimal(total)
+        if frac >= 1:
+            return scaled
+        return frac * scaled + (Decimal('1') - frac) * self._project(member, year, month, metric, pf)
+
+    def _project(self, member, year, month, metric, pf):
+        key = (member['key'], year, month, metric)
+        if key not in self._proj:
+            lm, _ = self._signal(member, *_shift_month(year, month, -1), metric, pf)
+            pm, _ = self._signal(member, *_shift_month(year, month, -2), metric, pf)
+            base, _ = self._signal(member, *_shift_month(year, month, -12), metric, pf)
+            self._proj[key] = project_blend(lm, pm, base, **pf,
+                                            season=self._season_index(member, metric), month=month)
+        return self._proj[key]
+
+    def _season_index(self, member, metric):
+        """{calendar month: Decimal} for this member × metric in the active mode, or None.
+        branch mode: the branch's own index (already blended toward the chain by its
+        history); others (call center, salespeople, categories) use the chain index."""
+        if self._mode == 'none':
+            return None
+        k = (member['key'], metric)
+        if k not in self._season:
+            if self._refs is None:
+                from apps.forecasting import references as R
+                self._refs = R.get() or {}
+            idx = None
+            if self._mode == 'branch' and member.get('branch') is not None:
+                idx = (self._refs.get('branch_seasonality', {}).get(metric, {})
+                       .get(str(member['key']), {}).get('index'))
+            idx = idx or self._refs.get('seasonality', {}).get(metric)
+            self._season[k] = ({int(mo): Decimal(str(v)) for mo, v in idx.items()}
+                               if idx and len(idx) == 12 and all(float(v) > 0 for v in idx.values()) else None)
+        return self._season[k]
+
+    def _latest_complete_date(self, year, month):
+        if (year, month) not in self._lcd:
+            self._lcd[(year, month)] = self._latest_complete_date_q(year, month)
+        return self._lcd[(year, month)]
+
     @staticmethod
-    def _latest_complete_date(year, month):
+    def _latest_complete_date_q(year, month):
         """Last day of the month with COMPLETE sales data (today excluded as partial)."""
         from datetime import date
         from calendar import monthrange
@@ -276,12 +386,13 @@ class ForecastEngine:
         for metric in self.METRICS:
             f = factors[metric]
             fbench = f.benchmark if f.benchmark is not None else bench   # per-metric YoY, else global
+            pf = {'w_lm': f.w_lm, 'w_pm': f.w_pm, 'w_yoy': f.w_yoy, 'bench': fbench}
             for mem in members:
                 if metric in self.CC_ONLY_METRICS and mem['key'] != 'CC':
                     continue
-                base = self._member_actual(mem, by, bm, metric)
-                lmv  = self._member_actual(mem, ly, lm, metric)
-                pmv  = self._member_actual(mem, py, pm, metric)
+                base, _ = self._signal(mem, by, bm, metric, pf)
+                lmv, lm_est = self._signal(mem, ly, lm, metric, pf)
+                pmv, pm_est = self._signal(mem, py, pm, metric, pf)
 
                 # Skip metrics a member has no history for (e.g. CC has no credit;
                 # branches have no call_count) so there are no spurious zero targets.
@@ -292,6 +403,12 @@ class ForecastEngine:
                     base, lmv, pmv,
                     growth=f.growth_goal, w_lm=f.w_lm, w_pm=f.w_pm, w_yoy=f.w_yoy,
                     seasonality=f.seasonality_index, bench=fbench, infl=infl, promo=promo)
+                season = self._season_index(mem, metric)
+                if season:
+                    # seasonal mode: deseasonalised blend; the factor's index stays an
+                    # owner multiplier on top (apply-references sets it to 1 in this mode)
+                    model_b = (project_blend(lmv, pmv, base, **pf, season=season, month=m)
+                               * f.seasonality_index * (Decimal('1') + infl + promo))
 
                 forecast = self._pick(scenario.model, model_a, model_b)
                 raw_target = (forecast / thr) if thr else forecast
@@ -308,6 +425,7 @@ class ForecastEngine:
                     model_b=model_b.quantize(Q2, ROUND_HALF_UP),
                     forecast_value=forecast.quantize(Q2, ROUND_HALF_UP),
                     target_value=target.quantize(Q2, ROUND_HALF_UP),
+                    lm_projected=lm_est, pm_projected=pm_est,
                 )
                 n += 1
                 # Chain aggregate: only members that are part of the chain (CC is an
@@ -317,6 +435,8 @@ class ForecastEngine:
                     c['base'] += base; c['lm'] += lmv; c['pm'] += pmv
                     c['a'] += model_a; c['b'] += model_b
                     c['forecast'] += forecast; c['target'] += target
+                    c['lm_est'] = c.get('lm_est', False) or lm_est
+                    c['pm_est'] = c.get('pm_est', False) or pm_est
 
             # member shares (of the chain forecast) — only for chain members; CC is an
             # overlay (not part of the chain) so it has no chain share.
@@ -342,6 +462,7 @@ class ForecastEngine:
                 forecast_value=c['forecast'].quantize(Q2, ROUND_HALF_UP),
                 target_value=c['target'].quantize(Q2, ROUND_HALF_UP),
                 branch_share=Decimal('1'),
+                lm_projected=c.get('lm_est', False), pm_projected=c.get('pm_est', False),
             )
 
         # Owner rule: derive the معامل الربحية TARGET as a fixed margin of the
@@ -362,6 +483,57 @@ class ForecastEngine:
         scenario.generated_at = timezone.now()
         scenario.save(update_fields=['status', 'generated_at'])
         return {'results': n, 'members': len(members), 'metrics': len(self.METRICS)}
+
+    # ── rolling plan (read-only outlook, nothing stored) ───────────────────────
+    PLAN_METRICS = ['cash_delivery', 'credit', 'gross_profit', 'customer_count', 'beauty']
+
+    def plan(self, horizon=PLAN_HORIZON):
+        """Outlook for the running month + the next `horizon` months, per branch + chain:
+        the running month = MTD scaled to a full month, later months = the projected
+        seasonality-free Model B (default weights, reference benchmark). Same-month-last-
+        year actuals alongside for YoY. Targets still come only from a committed scenario."""
+        from apps.forecasting import references as R
+        refs = R.get() or {}
+        bench_ref = refs.get('benchmark', {})
+        cy, cm = current_ym()
+        months = [_shift_month(cy, cm, k) for k in range(0, horizon + 1)]
+        members = [mm for mm in self._members_branch() if mm.get('in_chain', True)]
+        out = {'months': [{'year': y, 'month': m, 'running': (y, m) == (cy, cm)} for y, m in months],
+               'metrics': []}
+        from apps.forecasting.models import KpiActualRollup
+        for metric in self.PLAN_METRICS:
+            _, wl, wp, wy = self.DEFAULT_FACTORS[metric]
+            pf = {'w_lm': wl, 'w_pm': wp, 'w_yoy': wy,
+                  'bench': Decimal(str(bench_ref.get(metric, 0)))}
+            chain = [Decimal('0')] * len(months)
+            last_year = [Decimal('0')] * len(months)
+            rows = []
+            for mem in members:
+                vals = [self._signal(mem, y, m, metric, pf)[0] for (y, m) in months]
+                ly = [self._member_actual(mem, *_shift_month(y, m, -12), metric) for (y, m) in months]
+                if not any(vals):
+                    continue
+                for i, v in enumerate(vals):
+                    chain[i] += v
+                    last_year[i] += ly[i]
+                rows.append({'key': mem['key'], 'label': mem['label'],
+                             'values': [float(round(v)) for v in vals]})
+            out['metrics'].append({
+                'metric': metric, 'label': KpiActualRollup.METRIC_LABELS.get(metric, metric),
+                'chain': [float(round(v)) for v in chain],
+                'last_year': [float(round(v)) for v in last_year],
+                'yoy': [(float(round((c / l - 1) * 100, 1)) if l else None) for c, l in zip(chain, last_year)],
+                'benchmark': float(pf['bench']),
+                'branches': rows,
+            })
+        return out
+
+    def _members_branch(self):
+        from apps.forecasting.models import ForecastScenario as S
+
+        class _Branch:
+            scope_type = S.SCOPE_BRANCH
+        return self._members(_Branch)
 
     def _pick(self, model, a, b):
         from apps.forecasting.models import ForecastScenario as S

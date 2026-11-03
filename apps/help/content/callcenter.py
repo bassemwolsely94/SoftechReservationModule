@@ -321,7 +321,7 @@ SCREENS = [
             {'target': 'callcenter-operator-dial', 'label': T('📞 اتصل', '📞 Call'),
              'text': T('تليفونك بيرن الأول، ولما ترد السنترال بيتصل بالرقم. اتجاه المكالمة بيتغير لـ«صادرة».',
                        'Your desk phone rings first; when you answer, the PBX dials the number. The call direction switches to "Outbound".'),
-             'warn': T('لازم تحويلتك تكون مربوطة بحسابك، وإلا هيظهر خطأ ومحدش هيتصل.', 'Your extension must be mapped to your account, otherwise you get an error and nothing is dialled.')},
+             'warn': T('لازم رقمك الداخلي يكون مربوط بحسابك، وإلا هيظهر خطأ ومحدش هيتصل.', 'Your extension must be mapped to your account, otherwise you get an error and nothing is dialled.')},
             {'target': 'callcenter-operator-profile', 'label': T('ملف العميل', 'Customer profile'),
              'text': T('بيانات العميل والفرع والقيمة، الحالات المفتوحة، مشتريات 365 يوم، الحجوزات والمتابعات والطلبات وآخر المكالمات.',
                        'Customer details, branch and value, open cases, 365-day purchases, reservations, follow-ups, requests and recent calls.'),
@@ -504,7 +504,7 @@ SCREENS = [
              'text': T('يستخدم الرقم ده كـ «عميل غير مسجل» في الشاشة دي — مش بيضيف عميل جديد لقائمة العملاء.', 'Uses this number as an "unregistered customer" on this screen — it does not add a customer to the list.'),
              'warn': T('راجع الرقم كويس: التواصل والرسايل بتروح على الرقم ده.', 'Check the number carefully: calls and messages go to it.')},
         ],
-        'updated': '2026-11-01',
+        'updated': '2026-11-03',
         'change_note': T('شرح لكل أزرار الشاشة في «💡 تلميحات الأزرار»', 'Every button on the screen explained in "💡 Button hints"'),
     },
     {
@@ -702,7 +702,7 @@ SCREENS = [
         'title': T('طابور المعاودة', 'Callback queue'),
         'summary': T(
             'قائمة المكالمات التي طلب أصحابها معاودة الاتصال، مرتبة بالأقدم أولاً. '
-            'المتأخرة تظهر باللون الأحمر. اضغط «📞 اتصال» لتبدأ المكالمة من التحويلة مباشرة، '
+            'المتأخرة تظهر باللون الأحمر. اضغط «📞 اتصال» لتبدأ المكالمة من الرقم الداخلي مباشرة، '
             'أو «عرض» لفتح سجل المكالمة في شاشة مركز الاتصال، أو «✓ تم» بعد الانتهاء.',
             'List of calls whose customers requested a callback, sorted oldest first. '
             'Overdue entries show in red. Click "📞 Dial" to start the call from your extension, '
@@ -731,7 +731,7 @@ SCREENS = [
              'open_hint': T('بيظهر لما يكون فيه مكالمات حالتها «معاودة».', 'Shows when there are calls with status "Callback".')},
             {'target': 'callcenter-callbacks-dial', 'label': T('📞 اتصال', '📞 Dial'),
              'text': T('تليفونك بيرن الأول، ولما ترد السنترال بيتصل بالعميل.', 'Your desk phone rings first; when you answer, the PBX calls the customer.'),
-             'warn': T('محتاج تحويلة مربوطة بحسابك. لو مافيش رقم الزرار بيبقى مقفول.', 'Needs an extension mapped to your account. With no phone number the button is disabled.'),
+             'warn': T('محتاج رقم داخلي مربوط بحسابك. لو مافيش رقم الزرار بيبقى مقفول.', 'Needs an extension mapped to your account. With no phone number the button is disabled.'),
              'open_hint': T('على أي كارت في الطابور.', 'On any card in the queue.')},
             {'target': 'callcenter-callbacks-view', 'label': T('📋 عرض', '📋 View'),
              'text': T('يفتح شاشة الموظف عشان تدوّر بالرقم وتسجّل نتيجة المكالمة الجديدة.', 'Opens the operator screen so you can search the number and log the new call.'),
@@ -746,7 +746,7 @@ SCREENS = [
              'text': T('يعيد تحميل الطابور من السيرفر.', 'Reloads the queue from the server.'),
              'open_hint': T('يظهر بس لو التحميل فشل.', 'Shown only when loading failed.')},
         ],
-        'updated': '2026-11-01',
+        'updated': '2026-11-03',
     },
     {
         'key': 'callcenter.pbx',
@@ -762,9 +762,14 @@ SCREENS = [
              'body': T('للمدير والمشرف: حالة الربط مع السنترال (متصل منذ، آخر نبضة، آخر خطأ، مرات إعادة الاتصال) وزر «🩺 فحص الاتصال» '
                        'الذي يفحص الإعدادات ← الوصول للسيرفر ← AMI ← تسجيل الدخول ← زمن الاستجابة ← تعريف القنوات ← عملية استقبال الأحداث ← التسجيلات، '
                        'ويشرح سبب أي عطل وطريقة إصلاحه. أول خطوة حمراء هي سبب المشكلة.\n\n'
-                       '«التحويلات والهواتف»: كل تحويلة وحالة تسجيل هاتفها لحظياً (متصل / غير متصل / في مكالمة، عنوان IP، زمن الاستجابة)، '
-                       'والموظف المرتبط بها، مع شرح أي مشكلة (هاتف مطفأ، تحويلة غير موجودة في السنترال، تحويلة غير مرتبطة بموظف). '
-                       '«ربط» يربط التحويلة بموظف عندنا فقط ولا يغيّر شيئاً في Issabel؛ الموظف له تحويلة واحدة فيُنقل من تحويلته السابقة تلقائياً.\n\n'
+                       '«الأرقام الداخلية والهواتف»: كل رقم داخلي وحالة تسجيل هاتفه لحظياً (متصل / غير متصل / في مكالمة، عنوان IP، زمن الاستجابة)، '
+                       'والموظف المرتبط به، مع شرح أي مشكلة (هاتف مطفأ، رقم داخلي غير موجود في السنترال، رقم داخلي غير مرتبط بموظف). '
+                       '«ربط» يربط الرقم الداخلي بموظف عندنا فقط ولا يغيّر شيئاً في Issabel؛ الموظف له رقم داخلي واحد فيُنقل من رقمه الداخلي السابق تلقائياً. '
+                       'بجانب الرقم الداخلي غير المرتبط يظهر «في السنترال: …» — الاسم الذي يستخدمه السنترال نفسه له (مثل Agent -CC15)؛ '
+                       'عند «ربط» يُكتب أول اسم في البحث فيظهر الموظف المرجّح أولاً، والاختيار يبقى لك.\n\n'
+                       'سجل المكالمات للتقارير يُنسخ كل 10 دقائق من سجل السنترال نفسه (CDR) — قراءة فقط — فلا يضيع شيء حتى لو انقطع الربط اللحظي. '
+                       'كل مكالمة عميل تُربط بكود PIC من رقم الهاتف؛ الرقم المشترك بين أكثر من عميل يُحسب مرة واحدة لآخر من اشترى قبل المكالمة، '
+                       'وتُحفظ معه كل الأكواد المشتركة. لو السنترال سجّل مكالمات ولم يصل الربط اللحظي أي حدث خلال 30 دقيقة يصل تنبيه للمدير والمشرف.\n\n'
                        'التفريغ المحلي للمكالمات (Whisper): يعمل ليلاً في نافذته (افتراضياً 2–6 صباحاً) بأولوية منخفضة، وما لا يكتمل يُستكمل الليلة التالية. '
                        'يمكن الإيقاف المؤقت / الاستئناف / إيقاف التشغيل الحالي، وتغيير النافذة والنموذج وعدد أنوية المعالج. '
                        '«مقارنة وتصحيح» يعرض نص Whisper ونص Gemini جنباً إلى جنب؛ حفظ النص الصحيح يعلّم Whisper أسماء الأدوية والكلمات التي يخطئ فيها.',
@@ -773,13 +778,18 @@ SCREENS = [
                        'and explains the cause and fix of any fault. The first red step is the cause.\n\n'
                        '"Extensions and phones": every extension and its phone\'s live registration (online / offline / on a call, IP address, response time), '
                        'the staff member mapped to it, and an explanation of any problem (phone off, extension missing from the PBX, extension not mapped to anyone). '
-                       '"Map" links an extension to a staff member in our system only and changes nothing in Issabel; a staff member has one extension, so they are moved off their previous one automatically.\n\n'
+                       '"Map" links an extension to a staff member in our system only and changes nothing in Issabel; a staff member has one extension, so they are moved off their previous one automatically. '
+                       'An unmapped extension shows "In PBX: …" — the name the PBX itself uses for it (e.g. Agent -CC15); '
+                       '"Map" pre-fills the search with its first name so the likely person is on top, and you still choose.\n\n'
+                       'The call history used by reports is copied every 10 minutes from the PBX\'s own call record (CDR), read-only, so nothing is lost even when the live link drops. '
+                       'Each customer call is linked to a PIC by phone number; a number shared by several customers counts once, for whoever bought most recently before the call, '
+                       'and all the sharing codes are kept with it. If the PBX logs calls but the live link received no event for 30 minutes, admin and supervisors get an alert.\n\n'
                        'Local call transcription (Whisper): runs nightly in its window (default 2–6 AM) at low priority; whatever doesn\'t finish '
                        'continues the next night. Pause / resume / stop the current run, change the window, model and CPU cores. '
                        '"Compare and correct" shows Whisper and Gemini side by side; saving the correct text teaches Whisper drug names and words '
                        'it keeps getting wrong.')},
         ],
-        'tips': [T('نافذة المكالمة الواردة بتوصل لموظفي الكول سنتر والتحويلات المسجلة بس — مش لكل المستخدمين.', 'The incoming-call pop-up reaches call-center staff and registered extensions only — not every user.'),
+        'tips': [T('نافذة المكالمة الواردة بتوصل لموظفي الكول سنتر والأرقام الداخلية المسجلة بس — مش لكل المستخدمين.', 'The incoming-call pop-up reaches call-center staff and registered extensions only — not every user.'),
                  
             T('«السنترال: متصل» يعني أن السيرفر يستقبل أحداث المكالمات من Issabel. «التحديث اللحظي» يعني اتصال متصفحك بالسيرفر فقط.',
               '"PBX: connected" means the server is receiving call events from Issabel. "Live updates" is only your browser\'s link to the server.'),
@@ -819,10 +829,10 @@ SCREENS = [
              'text': T('بيفحص الإعدادات والشبكة وAMI والدخول والأحداث والتسجيلات ويشرح سبب أي عطل. أول خطوة حمرا هي السبب.',
                        'Checks settings, network, AMI, login, events and recordings and explains any fault. The first red step is the cause.'),
              'open_hint': T('تبويب «⚙️ إعدادات السنترال» (مدير أو مشرف).', 'The "⚙️ PBX settings" tab (admin or supervisor).')},
-            {'target': 'callcenter-pbx-extensions', 'label': T('التحويلات والهواتف · ربط', 'Extensions and phones · Map'),
-             'text': T('حالة كل تحويلة وهاتفها لحظياً والموظف المربوط بيها. «ربط» بيربط التحويلة بموظف عندنا بس، مش في Issabel.',
+            {'target': 'callcenter-pbx-extensions', 'label': T('الأرقام الداخلية والهواتف · ربط', 'Extensions and phones · Map'),
+             'text': T('حالة كل رقم داخلي وهاتفه لحظياً والموظف المربوط بيه. «ربط» بيربط الرقم الداخلي بموظف عندنا بس، مش في Issabel.',
                        'Each extension and its phone status live, and its staff member. "Map" links it to a staff member here only, not in Issabel.'),
-             'warn': T('الربط الغلط بيبعت المكالمات والاتصال لموظف تاني. الموظف بيتنقل من تحويلته القديمة.',
+             'warn': T('الربط الغلط بيبعت المكالمات والاتصال لموظف تاني. الموظف بيتنقل من رقمه الداخلي القديم.',
                        'A wrong mapping sends screen pops and dial-outs to the wrong person. The staff member leaves their old extension.'),
              'open_hint': T('تبويب «⚙️ إعدادات السنترال» (مدير أو مشرف).', 'The "⚙️ PBX settings" tab (admin or supervisor).')},
             {'target': 'callcenter-pbx-whisper', 'label': T('تفريغ المكالمات المحلي (Whisper)', 'Local call transcription (Whisper)'),
@@ -843,7 +853,7 @@ SCREENS = [
                        'A call in progress and its duration. If the caller is a known customer, clicking opens the customer card.'),
              'open_hint': T('في «مكالمات نشطة» أثناء وجود مكالمة.', 'Under "Active calls" while a call is in progress.')},
         ],
-        'updated': '2026-11-01',
+        'updated': '2026-11-03',
         'change_note': T('شرح لكل أزرار الشاشة في «💡 تلميحات الأزرار»', 'Every button on the screen explained in "💡 Button hints"'),
     },
 ]

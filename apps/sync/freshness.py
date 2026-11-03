@@ -49,6 +49,7 @@ DOMAINS = {
     'finance_expenses': {'label_ar': 'المصروفات',        'source': 'finance_expenses', 'cadence_min': 1440, 'kind': 'snapshot'},
     'finance_journal':  {'label_ar': 'القيود والخزينة',   'source': 'finance_journal',  'cadence_min': 1440, 'kind': 'snapshot'},
     'ap_reconciliation': {'label_ar': 'سداد الموردين',  'source': 'ap_reconciliation', 'cadence_min': 1440, 'kind': 'snapshot'},
+    'calls':             {'label_ar': 'المكالمات (سجل السنترال)', 'source': 'calls', 'cadence_min': 10, 'kind': 'snapshot'},
     'ar_contracts':      {'label_ar': 'مستحقات التعاقدات', 'source': 'ar_contracts',    'cadence_min': 1440, 'kind': 'snapshot'},
 }
 
@@ -132,6 +133,18 @@ def _source_ar_contracts():
     }
 
 
+def _source_calls():
+    """Calls — the PBX CDR mirror (pbx.CdrSyncRun, every 10 min)."""
+    from apps.pbx.models import CdrSyncRun
+    ok = CdrSyncRun.objects.filter(status='success').order_by('-started_at').first()
+    last = CdrSyncRun.objects.order_by('-started_at').first()
+    return {
+        'last_success_at': (ok.finished_at or ok.started_at) if ok else None,
+        'last_attempt_at': (last.finished_at or last.started_at) if last else None,
+        'last_run_failed': bool(last and last.status == 'failed'),
+    }
+
+
 def _source_finance_pl():
     """P&L snapshots — FinancialSnapshot.computed_at (auto_now on every refresh)."""
     from apps.finance.models import FinancialSnapshot
@@ -168,7 +181,7 @@ def _source_ap_reconciliation():
 
 
 _SOURCES = {'expiry': _source_expiry, 'ap_reconciliation': _source_ap_reconciliation, 'purchases': _source_purchases,
-            'ar_contracts': _source_ar_contracts,
+            'ar_contracts': _source_ar_contracts, 'calls': _source_calls,
             'stock_audit': _source_stock_audit, 'purchase_expiry': _source_purchase_expiry,
             'finance_pl': _source_finance_pl,
             'finance_expenses': lambda: _finance_run_source('expense_records'),

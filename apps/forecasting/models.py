@@ -506,6 +506,10 @@ class ForecastResult(models.Model):
                                        verbose_name='الهدف (تنبؤ ÷ حد الحافز)')
     branch_share = models.DecimalField(max_digits=6, decimal_places=4, default=0,
                                        verbose_name='حصة الفرع')
+    # LM / PM not yet complete when generated → an estimate (running month scaled to a
+    # full month, or a future month projected by the engine) — shown as «متوقع».
+    lm_projected = models.BooleanField(default=False, verbose_name='الشهر السابق متوقع')
+    pm_projected = models.BooleanField(default=False, verbose_name='قبل السابق متوقع')
     computed_at  = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -542,6 +546,9 @@ class BacktestRun(models.Model):
     scenario = models.ForeignKey(ForecastScenario, null=True, blank=True,
                                  on_delete=models.SET_NULL, related_name='backtests',
                                  verbose_name='مصدر العوامل')
+    # {metric: {variant: {horizon: {'wape': %, 'n': points}}}} — Model B forecast 1..3 months
+    # ahead (intermediate months projected), with/without point-in-time seasonality.
+    horizon_accuracy = models.JSONField(default=dict, blank=True, verbose_name='الدقة حسب المدى')
 
     class Meta:
         ordering = ['-created_at']

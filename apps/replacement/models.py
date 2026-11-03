@@ -306,7 +306,7 @@ class EntitlementLedgerEntry(models.Model):
         verbose_name = 'قيد رصيد بدل'
         verbose_name_plural = 'قيود رصيد البدل'
         constraints = [
-            models.CheckConstraint(check=~models.Q(amount=0), name='ck_replacement_ledger_nonzero'),
+            models.CheckConstraint(condition=~models.Q(amount=0), name='ck_replacement_ledger_nonzero'),
             # one entry of a given type per (case, native document) → reconstruction is idempotent
             models.UniqueConstraint(fields=['case', 'entry_type', 'document'],
                                     condition=models.Q(document__isnull=False, reverses__isnull=True),
@@ -579,7 +579,7 @@ class CashPayout(models.Model):
         verbose_name = 'صرف نقدي للبدل'
         verbose_name_plural = 'صرف نقدي للبدل'
         constraints = [
-            models.CheckConstraint(check=models.Q(amount__gt=0), name='ck_replacement_payout_positive'),
+            models.CheckConstraint(condition=models.Q(amount__gt=0), name='ck_replacement_payout_positive'),
             models.UniqueConstraint(fields=['voucher'], condition=models.Q(voucher__isnull=False),
                                     name='uq_replacement_payout_voucher'),
         ]
@@ -623,7 +623,7 @@ class ReversalRequest(models.Model):
         verbose_name = 'طلب عكس حالة بدل'
         verbose_name_plural = 'طلبات عكس حالات البدل'
         constraints = [
-            models.CheckConstraint(check=models.Q(amount__gt=0), name='ck_replacement_reversal_positive'),
+            models.CheckConstraint(condition=models.Q(amount__gt=0), name='ck_replacement_reversal_positive'),
             models.UniqueConstraint(fields=['case'], condition=models.Q(status__in=['awaiting_approval', 'approved']),
                                     name='uq_replacement_one_open_reversal'),
         ]

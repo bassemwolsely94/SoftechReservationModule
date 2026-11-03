@@ -8,6 +8,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { procurementIntelApi } from '../api/client'
 import RefreshButton from '../components/RefreshButton'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 const fmt  = (n, d = 0) => n == null ? '—' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const pct  = (n, d = 1) => n == null ? '—' : `${Number(n).toFixed(d)}%`
@@ -75,6 +77,8 @@ function SupplierDetail({ supplierCode, onBack }) {
       setData({ supplier: sp.data, history: hist.data.history || [] })
     }).finally(() => setLoading(false))
   }, [supplierCode])
+
+  const { sorted: historyRows, headerProps: hH } = useSortableRows(data?.history || [], {})
 
   if (loading) return <div className="p-8 text-center text-brand-600 animate-pulse">جارٍ التحميل…</div>
   if (!data) return null
@@ -146,16 +150,16 @@ function SupplierDetail({ supplierCode, onBack }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 text-xs text-gray-500">
-                <th className="text-right pb-2 font-medium">الشهر</th>
-                <th className="text-right pb-2 font-medium">مشتريات</th>
-                <th className="text-right pb-2 font-medium">مرتجعات</th>
-                <th className="text-right pb-2 font-medium">صافي</th>
-                <th className="text-right pb-2 font-medium">فواتير</th>
-                <th className="text-right pb-2 font-medium">أصناف</th>
+                <SortTh {...hH('month', 'date')} className="text-right pb-2 font-medium">الشهر</SortTh>
+                <SortTh {...hH('purchase_value', 'number')} className="text-right pb-2 font-medium">مشتريات</SortTh>
+                <SortTh {...hH('return_value', 'number')} className="text-right pb-2 font-medium">مرتجعات</SortTh>
+                <SortTh {...hH('net_value', 'number')} className="text-right pb-2 font-medium">صافي</SortTh>
+                <SortTh {...hH('invoice_count', 'number')} className="text-right pb-2 font-medium">فواتير</SortTh>
+                <SortTh {...hH('item_count', 'number')} className="text-right pb-2 font-medium">أصناف</SortTh>
               </tr>
             </thead>
             <tbody>
-              {history.map((row, i) => (
+              {historyRows.map((row, i) => (
                 <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="py-1.5 font-mono text-gray-700">{row.month}</td>
                   <td className="py-1.5 font-mono text-emerald-700">{fmt(row.purchase_value, 0)}</td>
@@ -202,6 +206,19 @@ export default function SupplierPerformancePage() {
 
   useEffect(() => { load() }, [load])
 
+  // every supplier is loaded: sort them ALL, then page (a new sort goes back to page 1)
+  const { sorted: headerSorted, sort: supSort, headerProps: rawSH } = useSortableRows(suppliers, {
+    getValue: (s, k) => (k === 'supplier' ? s.supplier_name : s[k]),
+  })
+  // choosing a server-ordering pill hands the order back to the server (the header sort is ignored until a header is clicked again)
+  const [headerOn, setHeaderOn] = useState(true)
+  const sortedSuppliers = headerOn ? headerSorted : suppliers
+  const sH = (k, t) => {
+    const p = rawSH(k, t)
+    return { ...p, active: headerOn && p.active, ariaSort: headerOn ? p.ariaSort : 'none', onSort: () => { setHeaderOn(true); p.onSort() } }
+  }
+  useEffect(() => { setPage(0) }, [supSort])
+
   if (supplierCode) {
     return (
       <div className="p-6 font-cairo" dir="rtl">
@@ -210,7 +227,7 @@ export default function SupplierPerformancePage() {
     )
   }
 
-  const paged = suppliers.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  const paged = sortedSuppliers.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
   const totalPages = Math.ceil(suppliers.length / PAGE_SIZE)
 
   const cols = [
@@ -239,7 +256,7 @@ export default function SupplierPerformancePage() {
         />
         <select data-tour="purchasing-suppliers-sort"
           value={ordering}
-          onChange={e => setOrdering(e.target.value)}
+          onChange={e => { setOrdering(e.target.value); setHeaderOn(false) }}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
         >
           {cols.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
@@ -254,15 +271,15 @@ export default function SupplierPerformancePage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr className="border-b border-gray-200 text-xs text-gray-500">
-              <th className="text-right px-4 py-3 font-medium">المورد</th>
-              <th className="text-right px-3 py-3 font-medium">الدرجة</th>
-              <th className="text-right px-3 py-3 font-medium">شراء 30ي</th>
-              <th className="text-right px-3 py-3 font-medium">شراء 365ي</th>
-              <th className="text-right px-3 py-3 font-medium">هامش%</th>
-              <th className="text-right px-3 py-3 font-medium">مرتجع%</th>
-              <th className="text-right px-3 py-3 font-medium">فواتير</th>
-              <th className="text-right px-3 py-3 font-medium">أصناف</th>
-              <th className="text-right px-3 py-3 font-medium">آخر شراء</th>
+              <SortTh {...sH('supplier', 'text')} className="text-right px-4 py-3 font-medium">المورد</SortTh>
+              <SortTh {...sH('total_score', 'number')} className="text-right px-3 py-3 font-medium">الدرجة</SortTh>
+              <SortTh {...sH('value_30d', 'number')} className="text-right px-3 py-3 font-medium">شراء 30ي</SortTh>
+              <SortTh {...sH('net_purchase_value', 'number')} className="text-right px-3 py-3 font-medium">شراء 365ي</SortTh>
+              <SortTh {...sH('avg_margin_pct', 'number')} className="text-right px-3 py-3 font-medium">هامش%</SortTh>
+              <SortTh {...sH('return_pct', 'number')} className="text-right px-3 py-3 font-medium">مرتجع%</SortTh>
+              <SortTh {...sH('invoice_count', 'number')} className="text-right px-3 py-3 font-medium">فواتير</SortTh>
+              <SortTh {...sH('distinct_items', 'number')} className="text-right px-3 py-3 font-medium">أصناف</SortTh>
+              <SortTh {...sH('last_purchase_date', 'date')} className="text-right px-3 py-3 font-medium">آخر شراء</SortTh>
             </tr>
           </thead>
           <tbody>

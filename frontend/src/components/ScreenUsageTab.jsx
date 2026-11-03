@@ -10,9 +10,40 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { auditApi } from '../api/client'
 import { NAV_GROUPS } from './Layout'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from './SortTh'
 
 const KNOWN_ROUTES = [...new Set(NAV_GROUPS.flatMap(g => (g.items || []).map(i => i.to)))]
 const VIEWS = [['screens', 'الشاشات'], ['modules', 'الأقسام'], ['staff', 'الموظفين']]
+
+// One component per view (keyed) so the chosen sort never leaks to a view with other columns.
+function UsageTable({ view, rows }) {
+  const { sorted, headerProps } = useSortableRows(rows, {
+    getValue: (r, k) => (k === 'last_at' ? r.last_at : r[k]),
+  })
+  const th = (key, label, type = 'number', cls = 'p-2') => (
+    <SortTh {...headerProps(key, type)} className={cls}>{label}</SortTh>
+  )
+  return (
+    <table className="w-full text-sm">
+      <thead className="bg-gray-50 text-gray-500 text-xs">
+        {view === 'screens' && <tr>{th('route', 'الشاشة', 'text', 'p-2 text-right')}{th('visits', 'مرات الفتح')}{th('users', 'عدد المستخدمين')}</tr>}
+        {view === 'modules' && <tr>{th('module', 'القسم', 'text', 'p-2 text-right')}{th('weekly_active_users', 'مستخدمون هذا الأسبوع')}{th('visits', 'مرات الفتح')}</tr>}
+        {view === 'staff' && <tr>{th('name', 'الموظف', 'text', 'p-2 text-right')}{th('role', 'الدور', 'text')}{th('branch', 'الفرع', 'text')}{th('visits', 'مرات الفتح')}{th('screens', 'شاشات مختلفة')}{th('last_at', 'آخر استخدام', 'date')}</tr>}
+      </thead>
+      <tbody>
+        {sorted.map((r, i) => (
+          <tr key={i} className="border-t border-gray-100">
+            {view === 'screens' && <><td className="p-2 font-mono text-xs" dir="ltr">{r.route}</td><td className="p-2 text-center">{r.visits}</td><td className="p-2 text-center">{r.users}</td></>}
+            {view === 'modules' && <><td className="p-2 font-mono text-xs" dir="ltr">/{r.module}</td><td className="p-2 text-center">{r.weekly_active_users}</td><td className="p-2 text-center">{r.visits}</td></>}
+            {view === 'staff' && <><td className="p-2">{r.name}</td><td className="p-2 text-center">{r.role}</td><td className="p-2 text-center">{r.branch}</td><td className="p-2 text-center">{r.visits}</td><td className="p-2 text-center">{r.screens}</td><td className="p-2 text-center text-xs">{r.last_at ? new Date(r.last_at).toLocaleDateString('en-GB') : '—'}</td></>}
+          </tr>
+        ))}
+        {!rows.length && <tr><td colSpan={6} className="p-4 text-center text-gray-400">لا يوجد استخدام مسجّل في الفترة دي</td></tr>}
+      </tbody>
+    </table>
+  )
+}
 
 export default function ScreenUsageTab() {
   const [view, setView] = useState('screens')
@@ -52,23 +83,7 @@ export default function ScreenUsageTab() {
 
       {!denied && !isLoading && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-500 text-xs">
-              {view === 'screens' && <tr><th className="p-2 text-right">الشاشة</th><th className="p-2">مرات الفتح</th><th className="p-2">عدد المستخدمين</th></tr>}
-              {view === 'modules' && <tr><th className="p-2 text-right">القسم</th><th className="p-2">مستخدمون هذا الأسبوع</th><th className="p-2">مرات الفتح</th></tr>}
-              {view === 'staff' && <tr><th className="p-2 text-right">الموظف</th><th className="p-2">الدور</th><th className="p-2">الفرع</th><th className="p-2">مرات الفتح</th><th className="p-2">شاشات مختلفة</th><th className="p-2">آخر استخدام</th></tr>}
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr key={i} className="border-t border-gray-100">
-                  {view === 'screens' && <><td className="p-2 font-mono text-xs" dir="ltr">{r.route}</td><td className="p-2 text-center">{r.visits}</td><td className="p-2 text-center">{r.users}</td></>}
-                  {view === 'modules' && <><td className="p-2 font-mono text-xs" dir="ltr">/{r.module}</td><td className="p-2 text-center">{r.weekly_active_users}</td><td className="p-2 text-center">{r.visits}</td></>}
-                  {view === 'staff' && <><td className="p-2">{r.name}</td><td className="p-2 text-center">{r.role}</td><td className="p-2 text-center">{r.branch}</td><td className="p-2 text-center">{r.visits}</td><td className="p-2 text-center">{r.screens}</td><td className="p-2 text-center text-xs">{r.last_at ? new Date(r.last_at).toLocaleDateString('en-GB') : '—'}</td></>}
-                </tr>
-              ))}
-              {!rows.length && <tr><td colSpan={6} className="p-4 text-center text-gray-400">لا يوجد استخدام مسجّل في الفترة دي</td></tr>}
-            </tbody>
-          </table>
+          <UsageTable key={view} view={view} rows={rows} />
         </div>
       )}
 

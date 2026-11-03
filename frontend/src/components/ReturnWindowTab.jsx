@@ -14,6 +14,8 @@ import DataFreshnessBar from './DataFreshnessBar'
 import ProgressBar from './ProgressBar'
 import useBranchLabels from '../hooks/useBranchLabels'
 import useGridKeyboard, { GRID_KEYS_HINT } from '../hooks/useGridKeyboard'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from './SortTh'
 
 const fmtNum = (n, d = 0) => Number(n ?? 0).toLocaleString('en-US', { maximumFractionDigits: d })
 const STATES = [
@@ -71,6 +73,11 @@ function AnswerCell({ line, onSaved }) {
   )
 }
 
+// derived sort keys for the lines grid (item name, branch + location label, supplier name)
+const lineVal = (l, k) => (k === 'item' ? (l.item_name || l.item_code)
+  : k === 'loc' ? `${l.branch_code} ${LOC_LABEL[l.location] || ''}`
+  : k === 'supplier' ? (l.supplier_name || l.supplier_code) : l[k])
+
 function PolicyTable({ canEdit }) {
   const qc = useQueryClient()
   const { data } = useQuery({ queryKey: ['batches', 'return-policies'],
@@ -82,7 +89,7 @@ function PolicyTable({ canEdit }) {
     onSuccess: () => { setEdit(null); setErr(null); qc.invalidateQueries({ queryKey: ['batches'] }) },
     onError: e => setErr(e.response?.data?.detail || 'تعذّر الحفظ'),
   })
-  const rows = data?.policies || []
+  const { sorted: rows, headerProps: ph } = useSortableRows(data?.policies || [], { getValue: (p, k) => (k === 'supplier' ? (p.supplier_name || p.supplier_code) : p[k]) })
   const field = (k, v) => setEdit(e => ({ ...e, [k]: v }))
   return (
     <div data-tour="batches-main-return-policies" className="bg-white rounded-xl border border-gray-200 p-4 mt-6">
@@ -96,9 +103,9 @@ function PolicyTable({ canEdit }) {
       </div>
       <table className="w-full text-sm">
         <thead><tr className="text-gray-500 text-xs border-b">
-          <th className="text-right py-2">المورد</th><th className="text-right">يقبل مرتجع الصلاحية</th>
-          <th className="text-right">تفتح (شهور)</th><th className="text-right">تُغلق (شهور)</th>
-          <th className="text-right">إدخال في نظام المورد</th><th className="text-right">ملاحظات</th><th />
+          <SortTh {...ph('supplier', 'text')} className="text-right py-2">المورد</SortTh><SortTh {...ph('accepts_expiry_returns', 'number')} className="text-right">يقبل مرتجع الصلاحية</SortTh>
+          <SortTh {...ph('open_offset', 'number')} className="text-right">تفتح (شهور)</SortTh><SortTh {...ph('close_offset', 'number')} className="text-right">تُغلق (شهور)</SortTh>
+          <SortTh {...ph('self_entry', 'number')} className="text-right">إدخال في نظام المورد</SortTh><SortTh {...ph('notes', 'text')} className="text-right">ملاحظات</SortTh><th />
         </tr></thead>
         <tbody>
           {[...rows, ...(edit?.isNew ? [edit] : [])].map(p => {
@@ -166,7 +173,8 @@ export default function ReturnWindowTab() {
     queryFn: () => batchesApi.returnWindow(params).then(r => r.data),
   })
   const allLines = data?.lines || []
-  const lines = useMemo(() => allLines.filter(l => !stateF || l.state === stateF), [allLines, stateF])
+  const filteredLines = useMemo(() => allLines.filter(l => !stateF || l.state === stateF), [allLines, stateF])
+  const { sorted: lines, headerProps: lh } = useSortableRows(filteredLines, { getValue: lineVal })
   const reload = () => qc.invalidateQueries({ queryKey: ['batches', 'return-window'] })
   const supplierOf = (l) => l.supplier_code || pick[l.key] || ''
 
@@ -286,12 +294,12 @@ export default function ReturnWindowTab() {
              className={`bg-white rounded-xl border border-gray-200 overflow-x-auto ${kb.containerProps.className}`}>
           <table className="w-full text-sm whitespace-nowrap">
             <thead><tr className="bg-gray-50 border-b border-gray-200 text-gray-600">
-              <th className="px-2 py-2" /><th className="px-2 py-2 text-right">الصنف</th>
-              <th className="px-2 py-2 text-right">الموقع</th><th className="px-2 py-2 text-right">التشغيلة</th>
-              <th className="px-2 py-2 text-right">الصلاحية</th><th className="px-2 py-2 text-right">الكمية</th>
-              <th className="px-2 py-2 text-right">القيمة</th><th className="px-2 py-2 text-right">تُغلق</th>
-              <th className="px-2 py-2 text-right">الحالة</th><th className="px-2 py-2 text-right">المورد / الثقة</th>
-              <th className="px-2 py-2 text-right">سابقاً</th><th className="px-2 py-2 text-right">الطلب / رد المورد</th>
+              <th className="px-2 py-2" /><SortTh {...lh('item', 'text')} className="px-2 py-2 text-right">الصنف</SortTh>
+              <SortTh {...lh('loc', 'text')} className="px-2 py-2 text-right">الموقع</SortTh><SortTh {...lh('batch_no', 'text')} className="px-2 py-2 text-right">التشغيلة</SortTh>
+              <SortTh {...lh('expiry_date', 'date')} className="px-2 py-2 text-right">الصلاحية</SortTh><SortTh {...lh('qty', 'number')} className="px-2 py-2 text-right">الكمية</SortTh>
+              <SortTh {...lh('value', 'number')} className="px-2 py-2 text-right">القيمة</SortTh><SortTh {...lh('closes', 'date')} className="px-2 py-2 text-right">تُغلق</SortTh>
+              <SortTh {...lh('state_label', 'text')} className="px-2 py-2 text-right">الحالة</SortTh><SortTh {...lh('supplier', 'text')} className="px-2 py-2 text-right">المورد / الثقة</SortTh>
+              <SortTh {...lh('history', 'text')} className="px-2 py-2 text-right">سابقاً</SortTh><th className="px-2 py-2 text-right">الطلب / رد المورد</th>
             </tr></thead>
             <tbody>
               {lines.map(l => {

@@ -11,6 +11,8 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { purchasingApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 const pct = (x) => `${Math.round((x ?? 0) * 100)}%`
 const egp = (n) => (n ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
@@ -18,29 +20,9 @@ const invalidate = (qc) => ['phantom-candidates', 'phantom-excluded', 'phantom-s
   .forEach(k => qc.invalidateQueries({ queryKey: [k] }))
 const onErr = (e) => window.alert(e?.response?.data?.detail || e?.message || 'تعذّر تنفيذ الإجراء.')
 
-function useSort(initKey = 'value', initDir = 'desc') {
-  const [key, setKey] = useState(initKey); const [dir, setDir] = useState(initDir)
-  const toggle = (k) => { if (k === key) setDir(d => d === 'asc' ? 'desc' : 'asc'); else { setKey(k); setDir('desc') } }
-  return { key, dir, toggle }
-}
-const applySort = (rows, sort, acc) => {
-  if (!sort.key || !acc[sort.key]) return rows
-  const f = acc[sort.key]
-  const out = [...rows].sort((a, b) => {
-    const x = f(a), y = f(b)
-    if (typeof x === 'number' && typeof y === 'number') return x - y
-    return String(x ?? '').localeCompare(String(y ?? ''), 'ar')
-  })
-  return sort.dir === 'asc' ? out : out.reverse()
-}
-function Th({ label, k, sort }) {
-  const on = sort.key === k
-  return (
-    <th onClick={() => sort.toggle(k)} className="px-3 py-2 font-semibold cursor-pointer select-none whitespace-nowrap hover:text-brand-600">
-      {label}<span className={on ? 'text-brand-600' : 'text-gray-300'}>{on ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ' ⇅'}</span>
-    </th>
-  )
-}
+// derived sort values (value = the reduction value); default = biggest reduction first
+const phantomVal = (r, k) => (k === 'value' ? r.buyback_qty * r.cost : r[k])
+const PHANTOM_DEFAULT = { key: 'value', dir: 'desc', type: 'number' }
 
 function Stat({ label, value, tone = 'text-gray-800' }) {
   return (
@@ -65,29 +47,23 @@ function Toolbar({ med, setMed, q, setQ, medTypes }) {
 }
 
 function Table({ rows, tab, qc }) {
-  const sort = useSort('value', 'desc')
   const confirm = useMutation({ mutationFn: (id) => purchasingApi.phantomConfirm({ item_id: id }), onSuccess: () => invalidate(qc), onError: onErr })
   const exclude = useMutation({
     mutationFn: (id) => purchasingApi.phantomExclude({ item_id: id, note: window.prompt('سبب الاستبعاد (اختياري):') || '' }),
     onSuccess: () => invalidate(qc), onError: onErr,
   })
   const reset = useMutation({ mutationFn: (id) => purchasingApi.phantomReset(id), onSuccess: () => invalidate(qc), onError: onErr })
-  const acc = {
-    code: r => r.code, name: r => r.name, ratio: r => r.phantom_ratio, order: r => r.order_pct,
-    sold: r => r.sold_qty, buyback: r => r.buyback_qty, genuine: r => r.genuine_need,
-    value: r => r.buyback_qty * r.cost,
-  }
-  const sorted = applySort(rows, sort, acc)
+  const { sorted, headerProps: hp } = useSortableRows(rows, { defaultSort: PHANTOM_DEFAULT, getValue: phantomVal })
   if (!rows.length) return <p className="text-gray-400 py-10 text-center">لا توجد أصناف</p>
   return (
     <div className="overflow-x-auto bg-white rounded-xl border border-gray-200" data-tour="shortage-phantom-table">
       <table className="w-full text-sm text-right">
         <thead className="bg-gray-50 text-gray-600 border-b">
           <tr>
-            <Th label="الكود" k="code" sort={sort} /><Th label="الصنف" k="name" sort={sort} />
-            <Th label="نسبة الوهمية" k="ratio" sort={sort} /><Th label="النسبة الموصى بطلبها" k="order" sort={sort} />
-            <Th label="المبيعات" k="sold" sort={sort} /><Th label="إعادة الشراء" k="buyback" sort={sort} />
-            <Th label="الطلب الحقيقي" k="genuine" sort={sort} /><Th label="قيمة التخفيض" k="value" sort={sort} />
+            <SortTh {...hp('code', 'text')} className="px-3 py-2 font-semibold whitespace-nowrap">الكود</SortTh><SortTh {...hp('name', 'text')} className="px-3 py-2 font-semibold whitespace-nowrap">الصنف</SortTh>
+            <SortTh {...hp('phantom_ratio', 'number')} className="px-3 py-2 font-semibold whitespace-nowrap">نسبة الوهمية</SortTh><SortTh {...hp('order_pct', 'number')} className="px-3 py-2 font-semibold whitespace-nowrap">النسبة الموصى بطلبها</SortTh>
+            <SortTh {...hp('sold_qty', 'number')} className="px-3 py-2 font-semibold whitespace-nowrap">المبيعات</SortTh><SortTh {...hp('buyback_qty', 'number')} className="px-3 py-2 font-semibold whitespace-nowrap">إعادة الشراء</SortTh>
+            <SortTh {...hp('genuine_need', 'number')} className="px-3 py-2 font-semibold whitespace-nowrap">الطلب الحقيقي</SortTh><SortTh {...hp('value', 'number')} className="px-3 py-2 font-semibold whitespace-nowrap">قيمة التخفيض</SortTh>
             <th className="px-3 py-2 font-semibold">الحالة</th><th className="px-3 py-2 font-semibold">إجراء</th>
           </tr>
         </thead>

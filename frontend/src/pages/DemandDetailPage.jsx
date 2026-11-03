@@ -13,6 +13,8 @@ import { ar } from 'date-fns/locale'
 import CanDo from '../components/CanDo'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import useHelpTab from '../help/useHelpTab'
+import SortTh from '../components/SortTh'
+import useSortableRows from '../hooks/useSortableRows'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -539,6 +541,10 @@ function DetailSubstitutesRow({ demand, line, onRefresh }) {
 
 // ── Tab 2: Items ──────────────────────────────────────────────────────────────
 
+const itemLineValue = (l, k) => (
+  k === 'name' ? l.item_name : k === 'type' ? l.demand_type_label || l.demand_type
+  : k === 'status' ? l.item_status_label : l[k])
+
 function ItemsTab({ demand, onRefresh }) {
   const [adding, setAdding] = useState(false)
   const [selItem, setSelItem] = useState(null)
@@ -560,6 +566,8 @@ function ItemsTab({ demand, onRefresh }) {
   }
 
   const isEditable = ['new', 'assigned', 'follow_up'].includes(demand.status)
+  // every line is loaded → sort in the browser; the substitutes sub-row stays under its line
+  const lines = useSortableRows(demand.items, { getValue: itemLineValue })
 
   return (
     <div>
@@ -572,17 +580,17 @@ function ItemsTab({ demand, onRefresh }) {
         <table className="w-full text-sm mb-5">
           <thead>
             <tr className="border-b border-gray-100">
-              <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">الصنف</th>
-              <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">الكمية</th>
-              <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">التصنيف</th>
-              <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">المخزون بالفرع</th>
-              <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">القيمة المقدرة</th>
-              <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">الحالة</th>
+              <SortTh {...lines.headerProps('name', 'text')} className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">الصنف</SortTh>
+              <SortTh {...lines.headerProps('quantity', 'number')} className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">الكمية</SortTh>
+              <SortTh {...lines.headerProps('type', 'text')} className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">التصنيف</SortTh>
+              <SortTh {...lines.headerProps('stock_at_branch', 'number')} className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">المخزون بالفرع</SortTh>
+              <SortTh {...lines.headerProps('line_value', 'number')} className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">القيمة المقدرة</SortTh>
+              <SortTh {...lines.headerProps('status', 'text')} className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">الحالة</SortTh>
               {isEditable && <th className="pb-2 px-2" />}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {demand.items.map(line => {
+            {lines.sorted.map(line => {
               const typeColors = {
                 out_of_stock: { bg: '#fef2f2', text: RED,       label: 'نفد' },
                 low_stock:    { bg: '#fffbeb', text: ORANGE,    label: 'منخفض' },

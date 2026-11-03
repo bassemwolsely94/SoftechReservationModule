@@ -11,6 +11,11 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { referralApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
+import useServerSort from '../hooks/useServerSort'
+import SortTh from '../components/SortTh'
+
+// the server sorts all leads (the list is paged); the lead's phone is masked → only the name sorts
+const LEAD_SORT = ['lead_name', 'referrer__name', 'status', 'fraud_score', 'created_at']
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const STATUS_META = {
@@ -179,11 +184,13 @@ function LeadQueueTab() {
   const [inviteLead, setInviteLead] = useState(null)
   const [validateLead, setValidateLead] = useState(null)
   const [eventLead, setEventLead] = useState(null)
+  const [ordering, setOrdering] = useState('')
+  const { headerProps } = useServerSort(ordering, setOrdering, { allowed: LEAD_SORT })
   const qc = useQueryClient()
 
   const { data, isLoading } = useQuery({
-    queryKey: ['referral-leads', tab],
-    queryFn: () => referralApi.leads({ status: tab || undefined }).then(r => r.data),
+    queryKey: ['referral-leads', tab, ordering],
+    queryFn: () => referralApi.leads({ status: tab || undefined, ordering: ordering || undefined }).then(r => r.data),
     refetchInterval: 30_000,
   })
 
@@ -219,11 +226,11 @@ function LeadQueueTab() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-gray-500 text-xs uppercase">
-              <th className="px-3 py-2 text-right">الإحالة</th>
-              <th className="px-3 py-2 text-right">المُحيل</th>
-              <th className="px-3 py-2 text-right">الحالة</th>
-              <th className="px-3 py-2 text-right">الاحتيال</th>
-              <th className="px-3 py-2 text-right">التاريخ</th>
+              <SortTh {...headerProps('lead_name', 'text')} className="px-3 py-2 text-right">الإحالة</SortTh>
+              <SortTh {...headerProps('referrer__name', 'text')} className="px-3 py-2 text-right">المُحيل</SortTh>
+              <SortTh {...headerProps('status', 'text')} className="px-3 py-2 text-right">الحالة</SortTh>
+              <SortTh {...headerProps('fraud_score', 'number')} className="px-3 py-2 text-right">الاحتيال</SortTh>
+              <SortTh {...headerProps('created_at', 'date')} className="px-3 py-2 text-right">التاريخ</SortTh>
               <th className="px-3 py-2 text-right">إجراءات</th>
             </tr>
           </thead>

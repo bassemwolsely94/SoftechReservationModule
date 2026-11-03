@@ -9,6 +9,8 @@ import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { fa } from '../utils/flowArrow'
 import CancelReasonPicker, { cancelNote, EMPTY_CANCEL } from '../components/CancelReasonPicker'
+import SortTh from '../components/SortTh'
+import useSortableRows from '../hooks/useSortableRows'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -205,36 +207,27 @@ function KanbanColumn({ col, cards, onStatusChange, onOpen, isCCOrAdmin, pending
 
 
 // ── List View ─────────────────────────────────────────────────────────────────
+const PRIORITY_ORDER = ['normal', 'urgent', 'chronic', 'high']
+const listValue = (r, k) => (
+  k === 'item_name' ? (r.item_name || r.manual_item_name)
+  : k === 'customer_name' ? (r.customer_name || r.contact_name)
+  : k === 'contact_phone' ? (r.customer_phone || r.contact_phone)
+  : k === 'status' ? COLUMNS.findIndex(c => c.key === r.status)
+  : k === 'priority' ? PRIORITY_ORDER.indexOf(r.priority) : r[k])
+
 function ReservationListView({ reservations, onOpen, isCCOrAdmin }) {
-  const [sortKey, setSortKey] = useState('created_at')
-  const [sortDir, setSortDir] = useState('desc')
-
-  const toggleSort = key => {
-    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortKey(key); setSortDir('desc') }
-  }
-
-  const sorted = [...reservations].sort((a, b) => {
-    let va = a[sortKey] ?? ''
-    let vb = b[sortKey] ?? ''
-    if (typeof va === 'string') va = va.toLowerCase()
-    if (typeof vb === 'string') vb = vb.toLowerCase()
-    if (va < vb) return sortDir === 'asc' ? -1 : 1
-    if (va > vb) return sortDir === 'asc' ? 1 : -1
-    return 0
+  // the shared sortable-grid engine (loaded rows: the newest 500); default = newest first, as before
+  const { sorted, headerProps } = useSortableRows(reservations, {
+    defaultSort: { key: 'created_at', dir: 'desc', type: 'date' },
+    getValue: listValue,
   })
 
-  const SortIcon = ({ k }) => sortKey === k
-    ? <span className="text-brand-500 mr-0.5">{sortDir === 'asc' ? '↑' : '↓'}</span>
-    : <span className="text-gray-300 mr-0.5">↕</span>
-
-  const Th = ({ k, children, cls = '' }) => (
-    <th
-      className={`px-3 py-2.5 text-right text-xs font-semibold text-gray-500 whitespace-nowrap cursor-pointer hover:bg-gray-100 select-none ${cls}`}
-      onClick={() => toggleSort(k)}
-    >
-      {children}<SortIcon k={k} />
-    </th>
+  // a plain function (not an inner component) so the header buttons keep focus across re-sorts
+  const th = (k, type, label, cls = '') => (
+    <SortTh {...headerProps(k, type)}
+      className={`px-3 py-2.5 text-right text-xs font-semibold text-gray-500 whitespace-nowrap ${cls}`}>
+      {label}
+    </SortTh>
   )
 
   if (sorted.length === 0) {
@@ -250,16 +243,16 @@ function ReservationListView({ reservations, onOpen, isCCOrAdmin }) {
       <table className="w-full text-sm border-collapse">
         <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
           <tr>
-            <Th k="id">#</Th>
-            <Th k="item_name">الصنف</Th>
-            <Th k="customer_name">العميل</Th>
-            <Th k="contact_phone">الهاتف</Th>
-            {isCCOrAdmin && <Th k="branch_name">الفرع</Th>}
-            <Th k="status">الحالة</Th>
-            <Th k="priority">الأولوية</Th>
-            <Th k="quantity_requested" cls="w-16">الكمية</Th>
-            <Th k="follow_up_date">المتابعة</Th>
-            <Th k="created_at">تاريخ الإنشاء</Th>
+            {th('id', 'number', '#')}
+            {th('item_name', 'text', 'الصنف')}
+            {th('customer_name', 'text', 'العميل')}
+            {th('contact_phone', 'text', 'الهاتف')}
+            {isCCOrAdmin && th('branch_name', 'text', 'الفرع')}
+            {th('status', 'number', 'الحالة')}
+            {th('priority', 'number', 'الأولوية')}
+            {th('quantity_requested', 'number', 'الكمية', 'w-16')}
+            {th('follow_up_date', 'date', 'المتابعة')}
+            {th('created_at', 'date', 'تاريخ الإنشاء')}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">

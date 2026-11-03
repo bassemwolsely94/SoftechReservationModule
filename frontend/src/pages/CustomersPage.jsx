@@ -4,6 +4,12 @@ import { useQuery } from '@tanstack/react-query'
 import { customersApi } from '../api/client'
 import { EmptyState, SkeletonTable, PageHeader } from '../components/ui'
 import { fa } from '../utils/flowArrow'
+import useServerSort from '../hooks/useServerSort'
+import SortTh from '../components/SortTh'
+
+// header sorting runs on the server (all customers, not the visible page); the phone column is masked → not sortable
+const SORT_KEYS = ['name', 'segment', 'churn_score', 'last_visit_date', 'preferred_branch__name_ar']
+const SELECT_ORDERINGS = ['', '-churn_score', '-ltv', '-days_since_last_visit', '-last_visit_date']
 
 const TYPE_COLOR = {
   blue:  'bg-blue-100 text-blue-700',
@@ -67,6 +73,7 @@ export default function CustomersPage() {
     placeholderData: prev => prev,
   })
 
+  const { headerProps } = useServerSort(ordering, o => { setOrdering(o); setPage(1) }, { allowed: SORT_KEYS })
   const customers   = data?.results || []
   const totalCount  = data?.count   || 0
   const totalPages  = Math.ceil(totalCount / 50)
@@ -116,6 +123,7 @@ export default function CustomersPage() {
             onChange={e => { setOrdering(e.target.value); setPage(1) }}
             className="input-field text-xs py-2 w-40"
           >
+            {!SELECT_ORDERINGS.includes(ordering) && <option value={ordering}>الترتيب: حسب العمود</option>}
             <option value="">الترتيب: الاسم</option>
             <option value="-churn_score">الأعلى خطر انقطاع</option>
             <option value="-ltv">الأعلى قيمة (LTV)</option>
@@ -164,12 +172,12 @@ export default function CustomersPage() {
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>الاسم</th>
+                      <SortTh {...headerProps('name', 'text')}>الاسم</SortTh>
                       <th>الهاتف</th>
-                      <th>القناة / الشريحة</th>
-                      <th>خطر الانقطاع</th>
-                      <th>آخر زيارة</th>
-                      <th>الفرع</th>
+                      <SortTh {...headerProps('segment', 'text')}>القناة / الشريحة</SortTh>
+                      <SortTh {...headerProps('churn_score', 'number')}>خطر الانقطاع</SortTh>
+                      <SortTh {...headerProps('last_visit_date', 'date')}>آخر زيارة</SortTh>
+                      <SortTh {...headerProps('preferred_branch__name_ar', 'text')}>الفرع</SortTh>
                     </tr>
                   </thead>
                   <tbody>
