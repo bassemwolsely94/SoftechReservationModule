@@ -58,6 +58,12 @@ class _MeSerializer(drf_serializers.ModelSerializer):
     can_run_engine   = drf_serializers.SerializerMethodField()
     can_stock_audit  = drf_serializers.SerializerMethodField()   # doc 32: management or a named branch manager
     can_pic_analytics = drf_serializers.SerializerMethodField()  # doc 33: management or a named branch manager
+    features = drf_serializers.SerializerMethodField()           # switches for features that ship dark
+
+    def get_features(self, obj):
+        from django.conf import settings as dj
+        return {'camera_scan': bool(getattr(dj, 'CAMERA_SCAN_ENABLED', False)),
+                'daily_count': bool(getattr(dj, 'DAILY_COUNT_ENABLED', False))}
 
     def get_branch_id(self, obj):
         return obj.branch_id  # Django auto-attribute (FK integer)
@@ -88,6 +94,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
             'phone', 'is_active',
             'can_see_all_customers', 'can_see_customer_phone',
             'mfa_enabled', 'can_supply_write', 'can_run_engine', 'can_stock_audit', 'can_pic_analytics',
+            'features',
         ]
 
 

@@ -606,6 +606,13 @@ SUPPLY_ERP_GROUPS = config('SUPPLY_ERP_GROUPS', default='10,19,21,27')
 # The rates it produces still need a human to approve/execute in /supply; coverage is
 # topped up automatically afterwards. OFF by default.
 DEMAND_ENGINE_SCHEDULE_ENABLED = config('DEMAND_ENGINE_SCHEDULE_ENABLED', default=False, cast=bool)
+
+# Project 2 (docs/superpowers/specs/2026-11-03-phone-scan-and-daily-counts-design.md) — ship dark.
+# CAMERA_SCAN_ENABLED: 📷 button on every item search (phone camera reads the barcode; no backend).
+# DAILY_COUNT_ENABLED: small daily stock counts (20 items per salesperson, blind, reviewed); also
+# needs BranchSettings.daily_count_enabled per pilot branch. Never writes to SOFTECH.
+CAMERA_SCAN_ENABLED = config('CAMERA_SCAN_ENABLED', default=False, cast=bool)
+DAILY_COUNT_ENABLED = config('DAILY_COUNT_ENABLED', default=False, cast=bool)
 DEMAND_ENGINE_SCHEDULE_DAYS    = config('DEMAND_ENGINE_SCHEDULE_DAYS', default='sun,wed')
 DEMAND_ENGINE_SCHEDULE_HOUR    = config('DEMAND_ENGINE_SCHEDULE_HOUR', default=1, cast=int)
 DEMAND_ENGINE_SCHEDULE_MINUTE  = config('DEMAND_ENGINE_SCHEDULE_MINUTE', default=0, cast=int)
