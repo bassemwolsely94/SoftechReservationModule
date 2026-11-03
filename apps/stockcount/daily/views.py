@@ -79,7 +79,7 @@ def _blind(pick, profile, info=None):
     return {
         'pick_id': pick.pk, 'item_code': pick.item_code, 'item_name': pick.item_name,
         'barcodes': extra['barcodes'], 'pack_qty': extra['pack_qty'],
-        'status': pick.status, 'status_label': STATUS_LABELS.get(pick.status, ''),
+        # no status / label: counted, accepted and escalated must look the same to the counter
         'ask_expiry': pick.ask_expiry,
         'done': pick.status not in service.OPEN_FOR_COUNT,
         'is_recount': pick.status == 'recount',
@@ -93,14 +93,15 @@ def my_list(request):
     _on()
     p = _profile(request)
     today = cairo_today()
-    if p is None:
+    if p is None or not p.is_active:
         return Response({'date': today.isoformat(), 'picks': [], 'progress': {'done': 0, 'total': 0},
                          'reminder': REMINDER})
+    sessions = service.counter_sessions(p)
+    if sessions:
+        today = max(x.count_date for x in sessions)
     picks = (DailyCountPick.objects.select_related('session')
-             .filter(Q(session__assigned_to=p, session__count_date=today, session__mode='daily')
-                     | Q(recount_by=p, status='recount'))
-             .exclude(session__status='closed', status='missed')
-             .order_by('status', 'item_name').distinct())
+             .filter(Q(session__in=sessions) | Q(recount_by=p, status='recount'))
+             .order_by('item_name').distinct())
     picks = list(picks)
     info = _item_info([x.item_code for x in picks])
     rows = [_blind(x, p, info) for x in picks]
@@ -116,6 +117,8 @@ def my_list(request):
 def my_count(request):
     _on()
     p = _profile(request)
+    if p is None or not p.is_active:
+        return Response({'detail': 'هذا الصنف ليس ضمن جردك'}, status=404)
     try:
         pick = DailyCountPick.objects.select_related('session').get(
             Q(session__assigned_to=p) | Q(recount_by=p), pk=int(request.data.get('pick_id')))

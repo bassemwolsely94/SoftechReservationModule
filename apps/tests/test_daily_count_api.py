@@ -22,6 +22,11 @@ TODAY = dt.date(2026, 11, 3)
 LIVE = 'apps.stockcount.daily.service.fetch_stock_balance'
 
 
+def at(day, hour, minute=0):
+    from django.utils import timezone
+    return timezone.make_aware(dt.datetime.combine(day, dt.time(hour, minute)))
+
+
 def _grant_manager(profile):
     from apps.stock_audit.models import StockAuditAccess
     StockAuditAccess.objects.create(staff=profile)
@@ -45,6 +50,9 @@ class DailyCountTests(TestCase):
         _, self.mgr, self.cm = make_user('dc_mgr', role='pharmacist', branch=self.branch)
         _grant_manager(self.mgr)
         _, self.admin, self.ca = make_admin('dc_admin')
+        p = mock.patch('apps.stockcount.daily.service.now_local', return_value=at(TODAY, 10))
+        p.start()
+        self.addCleanup(p.stop)
 
     def _gen(self):
         return service.generate(self.branch, TODAY)
@@ -124,6 +132,7 @@ class DailyCountTests(TestCase):
         a = DailyCountAttempt.objects.get(pick=p)
         self.assertEqual((a.expected_qty, a.expected_source, a.difference), (Decimal('4'), 'live', Decimal('-1')))
         self.assertEqual(a.value_egp, Decimal('100'))
+        self.cm.post(f'/api/stockcount/daily/picks/{p.pk}/recount/', {}, format='json')
         with mock.patch(LIVE, side_effect=RuntimeError('down')):
             r = self.c1.post('/api/stockcount/daily/my/count/', {'pick_id': p.pk, 'counted_qty': '5'}, format='json')
         self.assertEqual(r.status_code, 200, r.content)
@@ -247,6 +256,95 @@ class DailyCountTests(TestCase):
         service.close_day(self.branch, TODAY)
         self.assertEqual(DailyCountPick.objects.filter(session__assigned_to=self.s1, status='missed').count(), 14)
         self.assertEqual(StockCountSession.objects.get(assigned_to=self.s1, count_date=TODAY).status, 'closed')
+
+    # ── final-review fixes ────────────────────────────────────────────────────
+    def test_recount_requested_after_close_survives_the_job(self):
+        self._gen()
+        p = self._first_pick(self.s1)
+        self._count(self.c1, p, 4)
+        service.close_day(self.branch, TODAY)
+        with mock.patch('apps.stockcount.daily.service.now_local', return_value=at(TODAY + dt.timedelta(days=1), 10)):
+            r = self.cm.post(f'/api/stockcount/daily/picks/{p.pk}/recount/', {}, format='json')
+            self.assertEqual(r.status_code, 200, r.content)
+            service.run_job(at(TODAY + dt.timedelta(days=1), 11))
+            p.refresh_from_db()
+            self.assertEqual(p.status, 'recount')
+            self.assertIn(p.pk, [x['pick_id'] for x in self.c1.get('/api/stockcount/daily/my/').json()['picks']])
+            self.assertEqual(self._count(self.c1, p, 5).status_code, 200)
+
+    def test_manager_cannot_recount_to_self_and_reviewer_recount_escalates(self):
+        s = DailyCountSettings.get()
+        s.include_pharmacists = True
+        s.save()
+        self._gen()
+        p = self._first_pick(self.s1)
+        self._count(self.c1, p, 4)
+        r = self.cm.post(f'/api/stockcount/daily/picks/{p.pk}/recount/', {'assignee_id': self.mgr.pk}, format='json')
+        self.assertEqual(r.status_code, 400)
+        # the auditor hands it to the branch manager: even a perfect match goes back to the auditor
+        r = self.ca.post(f'/api/stockcount/daily/picks/{p.pk}/recount/', {'assignee_id': self.mgr.pk}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(self._count(self.cm, p, 5).status_code, 200)
+        p.refresh_from_db()
+        self.assertEqual(p.status, 'escalated')
+
+    def test_counter_never_sees_review_state(self):
+        self._gen()
+        p = self._first_pick(self.s1)
+        self._count(self.c1, p, 1)                  # -4 × 100 → escalated
+        p.refresh_from_db()
+        self.assertEqual(p.status, 'escalated')
+        row = next(x for x in self._my(self.c1).json()['picks'] if x['pick_id'] == p.pk)
+        self.assertNotIn('status', row)
+        self.assertNotIn('status_label', row)
+        self.assertEqual((row['done'], row['can_count']), (True, False))
+        q = DailyCountPick.objects.filter(session__assigned_to=self.s1).order_by('pk')[1]
+        self._count(self.c1, q, 5)                  # a match looks exactly the same
+        row2 = next(x for x in self._my(self.c1).json()['picks'] if x['pick_id'] == q.pk)
+        self.assertEqual({k: v for k, v in row.items() if k in ('done', 'can_count', 'is_recount')},
+                         {k: v for k, v in row2.items() if k in ('done', 'can_count', 'is_recount')})
+
+    def test_slow_softech_falls_back_to_mirror_quickly(self):
+        import time
+        self._gen()
+        p = self._first_pick(self.s1)
+
+        def slow(*a, **k):
+            time.sleep(3)
+            return {p.item_code: Decimal('9')}
+        t0 = time.monotonic()
+        with mock.patch(LIVE, side_effect=slow), mock.patch.object(service, 'LIVE_READ_TIMEOUT', 0.3):
+            r = self.c1.post('/api/stockcount/daily/my/count/', {'pick_id': p.pk, 'counted_qty': '5'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertLess(time.monotonic() - t0, 2.5)
+        self.assertEqual(DailyCountAttempt.objects.get(pick=p).expected_source, 'mirror')
+
+    def test_submit_refused_if_day_closed_meanwhile(self):
+        self._gen()
+        p = self._first_pick(self.s1)
+
+        def closing(code, item):
+            service.close_day(self.branch, TODAY)       # the hourly job lands mid-submit
+            return Decimal('5'), 'live'
+        with mock.patch.object(service, 'read_expected', side_effect=closing):
+            r = self.c1.post('/api/stockcount/daily/my/count/', {'pick_id': p.pk, 'counted_qty': '5'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        p.refresh_from_db()
+        self.assertEqual(p.status, 'missed')
+        self.assertFalse(DailyCountAttempt.objects.filter(pick=p).exists())
+
+    def test_branch_open_past_midnight_keeps_the_list(self):
+        bs = BranchSettings.for_branch(self.branch)
+        bs.working_hours = [{'from': '09:00', 'to': '02:00'}]
+        bs.save()
+        self._gen()
+        p = self._first_pick(self.s1)
+        with mock.patch('apps.stockcount.daily.service.now_local', return_value=at(TODAY + dt.timedelta(days=1), 1)):
+            picks = self.c1.get('/api/stockcount/daily/my/').json()['picks']
+            self.assertIn(p.pk, [x['pick_id'] for x in picks])
+            self.assertEqual(self._count(self.c1, p, 5).status_code, 200)
+        with mock.patch('apps.stockcount.daily.service.now_local', return_value=at(TODAY + dt.timedelta(days=1), 3)):
+            self.assertEqual(self.c1.get('/api/stockcount/daily/my/').json()['picks'], [])
 
     def test_existing_session_list_hides_daily(self):
         self._gen()

@@ -19,9 +19,11 @@ from decimal import Decimal, InvalidOperation
 
 from django.conf import settings as dj_settings
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.stockcount.engine import fetch_stock_balance
+from core.threads import ContextThreadPoolExecutor
 from . import picker
 
 logger = logging.getLogger(__name__)
@@ -37,6 +39,10 @@ REVIEW_REASONS = {
 }
 OPEN_FOR_COUNT = ('pending', 'recount')
 ROUNDING = Decimal('0.002')
+# The live SOFTECH read happens while the phone waits: past this many seconds the count is stored
+# against the local mirror instead (a hung SOFTECH must not turn into a gateway timeout).
+LIVE_READ_TIMEOUT = 6
+_live_pool = ContextThreadPoolExecutor(max_workers=4, thread_name_prefix='daily-count-live')
 
 
 class DailyCountError(Exception):
@@ -48,7 +54,11 @@ def enabled() -> bool:
 
 
 def cairo_today() -> dt.date:
-    return timezone.localtime().date()
+    return now_local().date()
+
+
+def now_local():
+    return timezone.localtime()
 
 
 def branch_enabled(branch) -> bool:
@@ -132,21 +142,43 @@ def parse_qty(value) -> Decimal:
     return q.quantize(Decimal('0.001'))
 
 
-def can_count(pick, profile) -> bool:
-    session = pick.session
-    if session.status == 'closed' or profile is None:
+def session_open(session, now=None) -> bool:
+    """A daily list is open until its branch closes that business day (lists of branches that
+    close after midnight stay open past midnight)."""
+    from apps.branches.models import Branch
+    if session.status == 'closed':
         return False
+    branch = Branch.objects.filter(softech_branch_id=session.branch_code).first()
+    return bool(branch) and (now or now_local()) < close_at(branch, session.count_date)
+
+
+def counter_sessions(profile, now=None):
+    """The counter's open daily lists (today's, or yesterday's while the branch is still open)."""
+    from apps.stockcount.models import StockCountSession
+    now = now or now_local()
+    rows = (StockCountSession.objects.filter(mode='daily', assigned_to=profile,
+                                             count_date__gte=now.date() - dt.timedelta(days=1))
+            .exclude(status='closed'))
+    return [x for x in rows if session_open(x, now)]
+
+
+def can_count(pick, profile) -> bool:
+    """Once counted, an item is done for the counter (no silent re-counts); a reviewer's recount
+    reopens it for the person it was handed to."""
+    if profile is None or not profile.is_active:
+        return False
+    session = pick.session
     if pick.status == 'recount':
         return pick.recount_by_id == profile.pk or (pick.recount_by_id is None and session.assigned_to_id == profile.pk)
-    return pick.status in ('pending', 'counted') and session.assigned_to_id == profile.pk
+    return pick.status == 'pending' and session.assigned_to_id == profile.pk and session_open(session)
 
 
 def read_expected(branch_code: str, item_code: str):
     """(qty, source). Live SOFTECH balance for this one item; the local mirror if SOFTECH can't answer."""
     try:
-        live = fetch_stock_balance(branch_code, [item_code])
+        live = _live_pool.submit(fetch_stock_balance, branch_code, [item_code]).result(timeout=LIVE_READ_TIMEOUT)
         return Decimal(live.get(item_code, Decimal('0'))), 'live'
-    except Exception as exc:          # SOFTECH down / slow — never lose the count
+    except Exception as exc:          # SOFTECH down / slow (incl. the timeout) — never lose the count
         logger.warning('daily count: live balance failed for %s/%s: %s', branch_code, item_code, exc)
     from django.db.models import Sum
     from apps.catalog.models import ItemStock
@@ -168,6 +200,11 @@ def branch_has_manager(branch_code: str) -> bool:
         if branch_code in own_branch_codes(g.staff):
             return True
     return False
+
+
+def _is_reviewer(profile, branch_code) -> bool:
+    from apps.stock_audit.access import Access
+    return is_branch_manager(profile, branch_code) or Access(profile.user).management
 
 
 def _escalation_reason(pick, attempt, profile, s) -> str:
@@ -217,7 +254,10 @@ def record_count(pick, profile, counted_qty, physical_expiry=None, client_token=
     cost = Item.objects.filter(softech_id=pick.item_code).values_list('cost_price', flat=True).first() or Decimal('0')
     now = timezone.now()
     with transaction.atomic():
-        pick = DailyCountPick.objects.select_for_update().get(pk=pick.pk)
+        pick = DailyCountPick.objects.select_for_update().select_related('session').get(pk=pick.pk)
+        session = pick.session
+        if not can_count(pick, profile):      # the day closed / a reviewer acted while we read SOFTECH
+            raise DailyCountError('هذا الصنف ليس متاحاً للجرد الآن')
         try:
             with transaction.atomic():
                 attempt = DailyCountAttempt.objects.create(
@@ -226,10 +266,15 @@ def record_count(pick, profile, counted_qty, physical_expiry=None, client_token=
                     value_egp=(abs(diff) * cost).quantize(Decimal('0.01')),
                     physical_expiry=expiry, client_token=client_token or None)
         except IntegrityError:
+            if not client_token:
+                raise
             return DailyCountAttempt.objects.get(client_token=client_token)
         old = pick.status
         match = abs(diff) <= max(s.match_tolerance, ROUNDING)   # strips → packs rounds to 0.001
         reason = '' if match else _escalation_reason(pick, attempt, profile, s)
+        if not reason and old == 'recount' and _is_reviewer(profile, session.branch_code):
+            # a reviewer who has seen the expected quantity recounting it themselves is not blind
+            reason = 'إعادة جرد بواسطة مراجع — يراجعها المراجع المركزي'
         if reason or (pick.escalated and not match):
             pick.escalated = True
             pick.escalation_reason = reason or pick.escalation_reason
@@ -249,7 +294,9 @@ def record_count(pick, profile, counted_qty, physical_expiry=None, client_token=
         if session.snapshot_at is None:
             session.snapshot_at = now
             fields.append('snapshot_at')
-        session.status, session.uploaded_at, session.uploaded_by, session.variance_at = 'uploaded', now, profile, now
+        session.uploaded_at, session.uploaded_by, session.variance_at = now, profile, now
+        if session.status != 'closed':
+            session.status = 'uploaded'
         session.save(update_fields=fields)
     _audit('daily_count_counted', profile, pick,
            old_data={'status': old},
@@ -275,6 +322,8 @@ def request_recount(pick, acc, assignee=None, note=''):
     _check_reviewable(pick, acc)
     if pick.status not in ('counted', 'escalated', 'accepted'):
         raise DailyCountError('لا يمكن طلب إعادة الجرد في هذه الحالة')
+    if assignee is not None and acc.profile is not None and assignee.pk == acc.profile.pk:
+        raise DailyCountError('لا يمكن أن تعيد جرد فرق بتراجعه بنفسك — اختر موظفاً آخر')
     if assignee is not None:
         ok = StaffProfile.objects.filter(pk=assignee.pk, is_active=True,
                                          branch__softech_branch_id=pick.session.branch_code).exists()
@@ -283,9 +332,6 @@ def request_recount(pick, acc, assignee=None, note=''):
     old = pick.status
     pick.status, pick.recount_by = 'recount', assignee or pick.session.assigned_to
     pick.review_note = note or pick.review_note
-    if pick.session.status == 'closed':
-        pick.session.status = 'uploaded'
-        pick.session.save(update_fields=['status', 'updated_at'])
     pick.save(update_fields=['status', 'recount_by', 'review_note', 'updated_at'])
     _audit('daily_count_recount', acc.profile, pick, old_data={'status': old},
            new_data={'status': 'recount', 'recount_by': pick.recount_by_id}, note=note[:255])
@@ -350,12 +396,22 @@ def close_at(branch, day: dt.date) -> dt.datetime:
 
 
 def close_day(branch, day: dt.date) -> int:
+    """The branch closed: not-counted items → «لم يُنجز», sessions closed. A recount a reviewer asked
+    for AFTER the close (reviewing yesterday's differences) is left open for its counter — it lives on
+    the pick, not the closed session."""
     from apps.stockcount.models import DailyCountPick, StockCountSession
+    now = timezone.now()
+    cutoff = close_at(branch, day)
     sessions = StockCountSession.objects.filter(mode='daily', branch_code=branch.softech_branch_id,
                                                 count_date=day).exclude(status='closed')
-    n = DailyCountPick.objects.filter(session__in=sessions, status__in=OPEN_FOR_COUNT).update(
-        status='missed', updated_at=timezone.now())
-    sessions.update(status='closed', variance_at=timezone.now())
+    missed = DailyCountPick.objects.filter(session__in=sessions).filter(
+        Q(status='pending') | Q(status='recount', updated_at__lt=cutoff))
+    ids = list(missed.values_list('pk', flat=True))
+    n = DailyCountPick.objects.filter(pk__in=ids, status__in=OPEN_FOR_COUNT).update(status='missed', updated_at=now)
+    sessions.update(status='closed', variance_at=now)
+    if n:
+        _audit('daily_count_closed', None, branch,
+               note='إغلاق اليوم — أصناف لم تُجرد', extra={'date': day.isoformat(), 'missed': ids})
     return n
 
 

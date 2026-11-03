@@ -123,6 +123,7 @@ class AuditLog(models.Model):
         ('daily_count_accepted',         'جرد يومي — اعتماد فرق'),
         ('daily_count_escalated',        'جرد يومي — إحالة للمراجع'),
         ('daily_count_settings_changed', 'جرد يومي — تعديل الإعدادات'),
+        ('daily_count_closed',           'جرد يومي — إغلاق اليوم (لم يُنجز)'),
 
         # PIC Analytics (doc 33)
         ('pic_analytics_exported',        'تحليلات العملاء — تصدير تقرير'),
