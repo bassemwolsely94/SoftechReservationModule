@@ -32,6 +32,7 @@ from .queries import retention as q_retention
 from .queries.calls import call_center
 from .queries.filters import FilterError, Filters
 from .queries.retention import MAX_PAGE_SIZE, _int_param
+from .settings import setting
 
 
 def _deny(msg='ليس لديك صلاحية — Not allowed'):
@@ -174,6 +175,11 @@ def _run(request, fn, calls=False):
         if isinstance(data, dict):
             data['period'] = {'from': f.start, 'to': f.end, 'data_from': f.data_from,
                               'data_to': f.data_to, 'clamped': f.clamped}
+            # the tunables the on-screen explanations quote (the screen never hard-codes them)
+            data['thresholds'] = {'loyal_months': int(setting('pic_loyal_months')),
+                                  'overdue_factor': float(setting('pic_overdue_factor')),
+                                  'return_hours': int(setting('pic_call_return_hours')),
+                                  'purchase_days': int(setting('pic_call_purchase_days'))}
         return Response(data)
     except FilterError as exc:
         return _bad(str(exc))

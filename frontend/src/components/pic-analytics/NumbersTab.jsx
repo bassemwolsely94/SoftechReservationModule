@@ -10,6 +10,7 @@ import useGridKeyboard from '../../hooks/useGridKeyboard'
 import { errText } from '../../pages/supply/supplyUi'
 import { KpiCard, fmt, fmtDate, fmtDateTime, fmtDuration } from './KpiCards'
 import { Pager } from './MissedTab'
+import Explain from './Explain'
 
 const LABELS = [['staff', 'موظف'], ['supplier', 'مورد'], ['branch', 'فرع'], ['doctor', 'طبيب'], ['spam', 'مزعج'], ['other', 'أخرى']]
 const getKey = r => r.number_id
@@ -121,6 +122,10 @@ function Conversions({ data }) {
         <KpiCard label="أصبحوا عملاء" value={fmt(data?.became_pic)} tone="green" />
         <KpiCard label="أصبحوا عملاء واشتروا" value={fmt(data?.became_pic_and_bought)} tone="brand" />
       </div>
+      <Explain id="nm-conv" hint="أرقام كلمتنا قبل ما تتسجّل كعملاء، ثم اتسجّلت كعميل جديد في الفترة."
+               lines={['«أصبحوا عملاء» = رقم له مكالمة قبل تاريخ تسجيل العميل في SOFTECH، والتسجيل في الفترة المختارة.',
+                       '«واشتروا» = بعد التسجيل (أو في يومه) اشترى فعلاً. التحوّل بيتقسّم على الموظف اللي كلّم الرقم وعلى الفرع اللي اشترى منه.']}
+               example="رقم اتصل في 3 أكتوبر، اتسجّل عميل في 5 أكتوبر، واشترى في 6 أكتوبر ← أصبح عميل واشترى" />
       <div className="grid lg:grid-cols-2 gap-3">
         <SplitTable title="التحوّل حسب الموظف" firstLabel="الموظف" rows={data?.by_agent || []} getKey={getAgentKey} tour="pic-analytics-conv-agent" />
         <SplitTable title="التحوّل حسب الفرع" firstLabel="الفرع" rows={data?.by_branch || []} getKey={getBranchKey} tour="pic-analytics-conv-branch" />
@@ -194,6 +199,11 @@ export default function NumbersTab({ params, ready }) {
     <div className="space-y-4">
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="pic-analytics-numbers-grid">
         <h3 className="text-sm font-bold text-gray-700 px-4 pt-3">أرقام لا ترتبط بأي عميل</h3>
+        <Explain id="nm-list" className="px-4 pb-1"
+                 hint="أرقام اتصلت بينا أو اتصلنا بيها ومش مسجّلة على أي عميل (PIC) — ممكن تبقى عملاء جدد."
+                 lines={['الصف = رقم واحد بمكالماته في الفترة. «النوع» موبايل أو أرضي. الأرقام المشتركة بين عملاء، ومكالمات التحويل، مش بتظهر هنا.',
+                         'لو الرقم مش عميل (موظف، مورد، فرع، طبيب، مزعج) صنّفه فيختفي من هنا ومن الفائتة — وتقدر ترجّعه من «الأرقام المصنّفة».',
+                         'لما العميل يتسجّل في SOFTECH، مكالماته القديمة بتتربط بيه تلقائياً بعد المزامنة وبيظهر في «التحوّل» فوق.']} />
         <div {...kb.containerProps} className={`overflow-x-auto ${kb.containerProps.className}`}>
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-gray-500">

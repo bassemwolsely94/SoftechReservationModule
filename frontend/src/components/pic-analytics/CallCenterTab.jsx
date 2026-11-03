@@ -4,6 +4,7 @@
  */
 import useGridKeyboard from '../../hooks/useGridKeyboard'
 import { KpiCard, fmt, fmtDuration } from './KpiCards'
+import Explain from './Explain'
 
 const getKey = r => r.agent_ext
 
@@ -11,12 +12,21 @@ export default function CallCenterTab({ data }) {
   const rows = data?.rows || []
   const kb = useGridKeyboard({ rows, getKey })
   const cell = 'px-3 py-2 tabular-nums'
+  const th = data?.thresholds || {}
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-tour="pic-analytics-calls-team">
         <KpiCard label="عملاء جدد باعها الفريق" value={fmt(data?.team_new_pics_sold)} tone="green"
                  sub="بكود البائع في الإعدادات" />
       </div>
+      <Explain id="cc-table" hint="سطر لكل تحويلة موظف في مركز الاتصال، عن مكالمات الفترة (بدون مكالمات التحويل)."
+               lines={[
+                 `مكالمة ← شراء %: من المكالمات المُجابة مع عملاء، كام نسبة اللي اشترى صاحبها خلال ${th.purchase_days ?? '—'} أيام. «شراء نفس اليوم %» = اشترى في نفس يوم المكالمة.`,
+                 'عملاء تم الوصول إليهم = عملاء مميّزين ردّ عليهم الموظف. متوسط المحاولات = كام اتصال صادر لنفس الرقم في اليوم لحد ما رد. لم يُوصل إليهم = أرقام ما ردّتش خلال اليوم.',
+                 'عملاء جدد باعهم: عملاء أول شراء لهم في الفترة بفاتورة بكود البائع المربوط بالموظف (— لو التحويلة غير مرتبطة بموظف له كود). بطاقة الفريق فوق = المجموع بدون تكرار.',
+                 'المكالمة على رقم مشترك بين أكتر من PIC بتتحسب مرة واحدة على أحدث مشترٍ.',
+               ]}
+               example={`موظف رد على 40 مكالمة لعملاء، و12 منهم اشتروا خلال ${th.purchase_days ?? '—'} أيام ← 30%`} />
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="pic-analytics-calls-grid">
         <div {...kb.containerProps} className={`overflow-x-auto ${kb.containerProps.className}`}>
           <table className="w-full text-xs">

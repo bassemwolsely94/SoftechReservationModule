@@ -3,6 +3,8 @@
  * the new-PIC reliability warning and the monthly trend. The server decides every number and
  * which keys exist: GP only when the user may see cost, call cards only for management.
  */
+import Explain from './Explain'
+
 export const fmt = (n, d = 0) => (n === null || n === undefined || n === '' || Number.isNaN(Number(n)))
   ? '—' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 export const fmtPct = n => (n === null || n === undefined) ? '—' : `${fmt(n, 1)}%`
@@ -52,6 +54,7 @@ export default function KpiCards({ data, management = false }) {
   const hasGp = 'gp' in data
   const hasCalls = 'calls_in' in data
   const months = data.by_month || []
+  const th = data.thresholds || {}
   const maxNet = Math.max(...months.map(m => Number(m.net) || 0), 1)
   return (
     <div className="space-y-4">
@@ -94,8 +97,21 @@ export default function KpiCards({ data, management = false }) {
         </div>
       )}
 
+      <Explain id="ov-cards" hint="الأرقام كلها عن العملاء (PIC) اللي اشتروا في الفترة المختارة — مش عدد الفواتير."
+               lines={[
+                 'جدد: أول شراء ليهم في الفترة، وتسجيلهم في SOFTECH قبلها بـ30 يوم أو أقل. عائدون: اشتروا في الفترة وليسوا جدد. مُعاد تنشيطهم: عائدون وآخر شراء قبل ده كان من 12 شهر أو أكتر.',
+                 'زيارات: كل فواتير العميل في نفس اليوم = زيارة واحدة (الفواتير بتتعد لوحدها). المرتجعات بتنقص صافي يومها وليست زيارة.',
+                 'بدون PIC: مبيعات فواتير بلا كود عميل أو على حساب عام، عشان الإجمالي يطابق لوحة المبيعات. عملاء مستبعدون: عملاء في قائمة الاستبعاد — مبيعاتهم في سطرهم بس ومش داخلين في أي رقم عملاء.',
+                 'متوسط السلة = صافي المبيعات ÷ الزيارات (مش الفواتير). زيارات لكل عميل = الزيارات ÷ العملاء المميّزين.',
+                 ...(hasGp ? ['إجمالي الربح = صافي المبيعات − التكلفة، والهامش = الربح ÷ صافي المبيعات (للإدارة فقط).'] : []),
+                 'الاحتفاظ بالعملاء: من اشترى في الفترة السابقة المساوية ورجع اشترى في الفترة دي.',
+                 ...(hasCalls ? [`المكالمات: بدون مكالمات التحويل. «فائتة لم يُردّ عليها» = واردة لم يرد عليها أحد، ولا مكالمة مُجابة بنفس الرقم خلال ${th.return_hours ?? '—'} ساعة.`] : []),
+               ]}
+               example="10 عملاء اشتروا 14 زيارة بصافي 7,000 ← زيارات لكل عميل 1.4، وسلة 500" />
+
       <div className="bg-white rounded-xl border border-gray-200 p-4" data-tour="pic-analytics-trend">
-        <h3 className="text-sm font-bold text-gray-700 mb-2">الاتجاه الشهري</h3>
+        <h3 className="text-sm font-bold text-gray-700">الاتجاه الشهري</h3>
+        <Explain className="mb-2" hint="لكل شهر: صافي المبيعات، وعدد العملاء المميّزين، وكام منهم جديد." />
         {months.length === 0 && <p className="text-xs text-gray-400">لا بيانات في الفترة</p>}
         {months.map(m => (
           <BarRow key={m.month} label={m.month} value={Number(m.net) || 0} max={maxNet}

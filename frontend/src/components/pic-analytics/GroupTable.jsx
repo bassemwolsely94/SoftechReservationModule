@@ -4,10 +4,11 @@
  */
 import useGridKeyboard from '../../hooks/useGridKeyboard'
 import { fmt } from './KpiCards'
+import Explain from './Explain'
 
 const getKey = r => r.key
 
-export default function GroupTable({ data, title, note, firstLabel = 'الاسم' }) {
+export default function GroupTable({ data, title, note, firstLabel = 'الاسم', explain }) {
   const rows = data?.rows || []
   const total = data?.total
   const hasGp = rows.some(r => 'gp' in r) || (total && 'gp' in total)
@@ -16,15 +17,22 @@ export default function GroupTable({ data, title, note, firstLabel = 'الاسم
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       {title && <h3 className="text-sm font-bold text-gray-700 px-4 pt-3">{title}</h3>}
+      {explain && <Explain className="px-4 pt-1 pb-1" {...explain} />}
       <div {...kb.containerProps} className={`overflow-x-auto ${kb.containerProps.className}`}>
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-500">
             <tr>
               <th className="px-3 py-2 text-right">{firstLabel}</th>
-              <th className={cell}>عملاء</th><th className={cell}>جدد</th><th className={cell}>عائدون</th>
-              <th className={cell}>مُعاد تنشيطهم</th><th className={cell}>زيارات</th><th className={cell}>صافي</th>
-              {hasGp && <th className={cell}>الربح</th>}
-              <th className={cell}>سلة (صافي)</th><th className={cell}>أصناف/زيارة</th><th className={cell}>سطور لكل زيارة</th>
+              <th className={cell} title="عدد العملاء (PIC) المميّزين اللي اشتروا من هنا في الفترة">عملاء</th>
+              <th className={cell} title="أول شراء ليهم في الفترة (ينسب لأول فاتورة)">جدد</th>
+              <th className={cell} title="اشتروا في الفترة وليسوا جدد">عائدون</th>
+              <th className={cell} title="عائدون وآخر شراء قبل ده من 12 شهر أو أكتر">مُعاد تنشيطهم</th>
+              <th className={cell} title="فواتير العميل في نفس اليوم = زيارة واحدة">زيارات</th>
+              <th className={cell} title="صافي المبيعات بعد المرتجعات">صافي</th>
+              {hasGp && <th className={cell} title="صافي المبيعات − التكلفة">الربح</th>}
+              <th className={cell} title="صافي المبيعات ÷ الزيارات">سلة (صافي)</th>
+              <th className={cell} title="متوسط عدد الوحدات في الزيارة">أصناف/زيارة</th>
+              <th className={cell} title="متوسط عدد سطور الفاتورة في الزيارة">سطور لكل زيارة</th>
             </tr>
           </thead>
           <tbody>

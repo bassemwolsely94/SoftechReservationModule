@@ -11,6 +11,7 @@ import useGridKeyboard from '../../hooks/useGridKeyboard'
 import { errText } from '../../pages/supply/supplyUi'
 import { KpiCard, fmt, fmtDateTime } from './KpiCards'
 import Heatmap from './Heatmap'
+import Explain from './Explain'
 
 const PAGE_SIZE = 50
 const getKey = r => r.call_id
@@ -35,6 +36,10 @@ function Unanswered({ rows }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="pic-analytics-unanswered">
       <h3 className="text-sm font-bold text-gray-700 px-4 pt-3">مكالمات صادرة لم يُرد عليها</h3>
+      <Explain className="px-4 pb-1" hint="مكالمات اتصلنا بيها والعميل ما ردّش (لا رد، مشغول، فشل) — لكل موظف."
+               lines={['محاولات = كل المكالمات الصادرة. أرقام تم الوصول إليها = أرقام رد صاحبها في نفس اليوم، ولم يُوصل إليها = أرقام ما ردّتش خلال اليوم.',
+                       'متوسط المحاولات = كام اتصال لنفس الرقم في اليوم لحد أول رد.']}
+               example="اتصلنا بنفس الرقم 3 مرات في يوم، والتالتة ردّ ← تم الوصول بعد 3 محاولات" />
       <div {...kb.containerProps} className={`overflow-x-auto ${kb.containerProps.className}`}>
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-500">
@@ -105,6 +110,7 @@ export default function MissedTab({ params, ready }) {
   })
 
   const s = summary.data
+  const th = s?.thresholds || rowsQ.data?.thresholds || {}
   const rows = rowsQ.data?.rows || []
   const kb = useGridKeyboard({ rows, getKey })
   const maxQ = Math.max(1, ...(s?.by_queue || []).map(x => x.missed))
@@ -120,13 +126,22 @@ export default function MissedTab({ params, ready }) {
         <KpiCard label="وسيط الدقائق للرد" value={fmt(s?.median_minutes_to_return, 1)} tone="blue" />
       </div>
 
+      <Explain id="ms-cards" hint="الفائتة = مكالمة واردة ما رد عليها حد (تركها في الانتظار، لا رد، مشغول). مكالمات التحويل مش بتتعد."
+               lines={[
+                 `«تم الرد عليها» = بعدها مكالمة مُجابة بنفس الرقم (واردة أو صادرة) خلال ${th.return_hours ?? '—'} ساعة. «لم يُرد عليها» = مفيش اتصال مُجاب خلال المهلة دي.`,
+                 'أرقام فائتة = عدد الأرقام المختلفة (الرقم ممكن يفوت أكتر من مرة). وسيط الدقائق للرد = نص المكالمات اللي اتردّ عليها اتردّ عليها في المدة دي أو أقل.',
+                 'قائمة الاتصال تحت = الفائتة اللي لسه محدش كلّم رقمها، والصف بيختفي أول ما حد يكلّمهم.',
+               ]}
+               example={`اتصل 3 مرات ولا حد رد، وبعد ساعة كلّمناه فرد ← الفائتة اتردّ عليها (ضمن ${th.return_hours ?? '—'} ساعة)`} />
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-4" data-tour="pic-analytics-missed-heatmap">
-          <h3 className="text-sm font-bold text-gray-700 mb-2">الفائتة حسب اليوم والساعة</h3>
+          <h3 className="text-sm font-bold text-gray-700">الفائتة حسب اليوم والساعة</h3>
+          <Explain className="mb-2" id="ms-heatmap" hint="كل خانة = عدد المكالمات الفائتة في يوم وساعة معيّنين (السبت أول الأسبوع). الأحمر الأغمق = أكتر. بيوضح أنهي أوقات بنخسر فيها مكالمات." />
           <Heatmap cells={s?.heatmap} />
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <h3 className="text-sm font-bold text-gray-700 mb-2">حسب الطابور</h3>
+          <h3 className="text-sm font-bold text-gray-700">حسب الطابور</h3>
+          <Explain className="mb-2" hint="الطابور = خط الاستقبال اللي دخلت عليه المكالمة الفائتة." />
           {(s?.by_queue || []).map(x => (
             <div key={x.queue || '—'} className="flex items-center gap-2 py-1 text-xs">
               <span className="w-24 truncate text-gray-600" title={x.queue}>{x.queue || '—'}</span>
@@ -146,6 +161,10 @@ export default function MissedTab({ params, ready }) {
             غير المُعاد الاتصال بها فقط
           </label>
         </div>
+        <Explain id="ms-rows" className="px-4 pt-1"
+                 hint="كل صف = مكالمة فائتة واحدة، مربوطة بالعميل (لو الرقم معروف) وقيمته وهل اشترى بعدها."
+                 lines={[`«اشترى خلال ${th.purchase_days ?? '—'} أيام» = فيه فاتورة لنفس العميل بعد المكالمة في المدة دي. «تم الرد» = أول مكالمة مُجابة بنفس الرقم بعدها، وكام دقيقة بعد.`,
+                         '«اتصل» بيرنّ تليفونك أنت وبيوصّلك بالعميل. «جدولة معاودة» بتسجّل موعد في قايمة المعاودات.']} />
         {onlyOpen && <p className="text-xs text-gray-400 px-4 pt-1">الأرقام المصنّفة (موظف، مورد…) لا تظهر هنا — تجدها في تبويب «أرقام جديدة» ← الأرقام المصنّفة.</p>}
         <div {...kb.containerProps} className={`overflow-x-auto ${kb.containerProps.className}`}>
           <table className="w-full text-xs">
@@ -154,7 +173,7 @@ export default function MissedTab({ params, ready }) {
                 <th className="px-3 py-2 text-right">وقت المكالمة</th><th className="px-3 py-2 text-right">الرقم</th>
                 <th className="px-3 py-2 text-right">العميل</th><th className={cell}>الشريحة</th>
                 <th className={cell}>إجمالي صافي</th><th className={cell}>آخر شراء</th>
-                <th className={cell}>اشترى خلال 7 أيام</th><th className={cell}>تم الرد</th><th className="px-3 py-2 text-right">إجراء</th>
+                <th className={cell}>{`اشترى خلال ${th.purchase_days ?? '—'} أيام`}</th><th className={cell}>تم الرد</th><th className="px-3 py-2 text-right">إجراء</th>
               </tr>
             </thead>
             <tbody>

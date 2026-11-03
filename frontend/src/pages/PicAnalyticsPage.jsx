@@ -22,6 +22,7 @@ import PicTable from '../components/pic-analytics/PicTable'
 import GroupTable from '../components/pic-analytics/GroupTable'
 import RetentionPanel from '../components/pic-analytics/RetentionPanel'
 import AccessPanel from '../components/pic-analytics/AccessPanel'
+import Explain from '../components/pic-analytics/Explain'
 import ExclusionsPanel from '../components/pic-analytics/ExclusionsPanel'
 import CallCenterTab from '../components/pic-analytics/CallCenterTab'
 import MissedTab from '../components/pic-analytics/MissedTab'
@@ -240,22 +241,38 @@ export default function PicAnalyticsPage() {
       )}
       {tab === 'branches' && (
         <div data-tour="pic-analytics-branches-grid">
-          <GroupTable data={branchG.data} firstLabel="الفرع" note="زيارة نفس اليوم في فرعين تُحسب لكل فرع" />
+          <GroupTable data={branchG.data} firstLabel="الفرع" note="زيارة نفس اليوم في فرعين تُحسب لكل فرع"
+                      explain={{ id: 'br', hint: 'كل سطر = عملاء الفرع ومبيعاته في الفترة؛ مجموع الفروع ممكن يزيد عن الإجمالي.',
+                                 lines: ['العميل الجديد بيتنسب لفرع أول فاتورة له في الفترة. العميل العائد بيتحسب لكل فرع اشترى منه (مرة واحدة جوه نفس الفرع).',
+                                         'الزيارة = فواتير العميل في نفس اليوم. زيارة نفس اليوم في فرعين = زيارة لكل فرع، وزيارة واحدة في الإجمالي.',
+                                         'تصنيف جديد/عائد/مُعاد تنشيطه محسوب على كل الفروع، أما الصافي والسلة فعلى الفرع.'],
+                                 example: 'عميل زار فرع أ وفرع ب في نفس اليوم ← زيارة في كل فرع، وزيارة واحدة في الإجمالي' }} />
         </div>
       )}
       {tab === 'salespeople' && (
         <div data-tour="pic-analytics-sales-grid">
-          <GroupTable data={salesG.data} firstLabel="البائع" note="العميل الجديد يُنسب لبائع أول فاتورة له في الفترة" />
+          <GroupTable data={salesG.data} firstLabel="البائع" note="العميل الجديد يُنسب لبائع أول فاتورة له في الفترة"
+                      explain={{ id: 'sp', hint: 'كل سطر = العملاء اللي خدمهم البائع ومبيعاته في الفترة.',
+                                 lines: ['العميل الجديد بيتنسب لبائع أول فاتورة له. العميل العائد بيتحسب لكل بائع باع له في الفترة، لكن مرة واحدة جوه نفس البائع.',
+                                         'استخدمه تعرف مين بيجيب عملاء جدد ومين بيحافظ على العائدين.'],
+                                 example: 'عميل جديد أول فاتورة له مع أحمد، وبعدها اشترى من منى ← جديد عند أحمد، وعائد عند منى' }} />
         </div>
       )}
       {tab === 'channels' && (
         <div className="grid lg:grid-cols-2 gap-4">
           <div data-tour="pic-analytics-channels-grid">
-            <GroupTable data={chanG.data} title="القنوات" firstLabel="القناة" />
+            <GroupTable data={chanG.data} title="القنوات" firstLabel="القناة"
+                        explain={{ id: 'ch', hint: 'نفس تقسيم القنوات في لوحة KPI، فالأرقام تطابقها.',
+                                   lines: ['القناة بتتحدد من نوع البائع وقناة الفاتورة. «مستبعدة من مؤشرات KPI» قناة مستقلة.',
+                                           'العميل الجديد بيتنسب لقناة أول فاتورة له.'] }} />
           </div>
           <div className="space-y-1">
             <div data-tour="pic-analytics-categories-grid">
-              <GroupTable data={catG.data} title="الأصناف" firstLabel="الفئة" />
+              <GroupTable data={catG.data} title="الأصناف" firstLabel="الفئة"
+                          explain={{ id: 'cat', hint: 'صافي كل فئة (دواء، مستحضرات، مكملات…) من مشتريات العملاء في الفترة.',
+                                     lines: ['العميل بيظهر في كل فئة اشترى منها. السلة كاملة، فلو فلترت بفئة ما بيتعرضش الربح ولا الأصناف.',
+                                             'نسبة الزيارات بأكتر من فئة = الزيارات اللي فيها فئتين أو أكتر ÷ كل الزيارات.'],
+                                     example: '40 زيارة من 100 فيها دواء ومستحضرات ← 40%' }} />
             </div>
             {catG.data?.cross_category_rate != null && (
               <p className="text-xs text-gray-500 px-1">نسبة الزيارات بأكثر من فئة: {(catG.data.cross_category_rate * 100).toFixed(1)}%</p>
