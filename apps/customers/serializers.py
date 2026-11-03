@@ -45,7 +45,7 @@ class PurchaseHistorySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'softech_invoice_id', 'branch_name',
             'doc_code', 'is_return',
-            'total_amount', 'invoice_date',
+            'total_amount', 'invoice_date', 'branch',
             'lines',
         ]
 

@@ -40,6 +40,8 @@ KNOWN_PUBLIC_VIEWS = {
     'core.csp.csp_report',
     # N6 public-form proof-of-work challenge (signed, no data; throttled 60/hour per IP)
     'apps.access.public_views.challenge',
+    # Project 4 counselling card page + opt-out (signed send token, throttled, approved text only)
+    'apps.counselling.public_views.counsel_card_public', 'apps.counselling.public_views.counsel_card_opt_out',
 }
 
 _CONVERTERS = {
