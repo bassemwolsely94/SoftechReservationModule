@@ -11,7 +11,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { pbxApi } from '../api/client'
+import { pbxApi, refreshSession } from '../api/client'
 import useAuthStore from '../store/authStore'
 import useHelpTab from '../help/useHelpTab'
 import PbxConfigTab, { PbxStatusBadge } from '../components/pbx/PbxConfigTab'
@@ -193,6 +193,7 @@ function SessionRow({ s }) {
 export default function PbxLivePage() {
   const [activeSessions, setActiveSessions] = useState([])
   const [wsStatus, setWsStatus] = useState('connecting')
+  const [wsGen, setWsGen] = useState(0)   // bumped to reopen the socket after a 4002
   const [customerCard, setCustomerCard] = useState(null)  // { customer, session_id }
   const wsRef = useRef(null)
   const qc = useQueryClient()
@@ -232,7 +233,12 @@ export default function PbxLivePage() {
     wsRef.current = ws
 
     ws.onopen  = () => setWsStatus('connected')
-    ws.onclose = () => setWsStatus('disconnected')
+    ws.onclose = (ev) => {
+      setWsStatus('disconnected')
+      // 4002: the access token ran out (N5) — rotate the cookie and reopen. 4001 / 4403 stay
+      // closed: the 15 s query refresh keeps the page current.
+      if (ev.code === 4002) refreshSession().catch(() => {}).finally(() => setWsGen(g => g + 1))
+    }
     ws.onerror = () => setWsStatus('error')
 
     ws.onmessage = (evt) => {
@@ -275,8 +281,8 @@ export default function PbxLivePage() {
       }
     }
 
-    return () => ws.close()
-  }, [])
+    return () => { ws.onclose = null; ws.close() }
+  }, [wsGen])
 
   const handleCardSession = (session) => {
     if (session._customer) {

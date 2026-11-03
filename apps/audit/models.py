@@ -131,6 +131,11 @@ class AuditLog(models.Model):
         ('zone_policy_changed',          'سياسة منطقة — تعديل'),
         ('softech_gate_denied',          'SOFTECH — رفض حسب المنطقة'),
 
+        # Security N5
+        ('ws_zone_denied',               'اتصال مباشر — رفض حسب المنطقة'),
+        ('export_taken',                 'تصدير ملف'),
+        ('bulk_read_alert',              'قراءة بيانات بكمية غير معتادة'),
+
         # Return-window calendar (P-29)
         ('return_policy_changed',        'مرتجع — تعديل سياسة مورد'),
         ('return_requested',             'مرتجع — طلب مرتجع لمورد'),

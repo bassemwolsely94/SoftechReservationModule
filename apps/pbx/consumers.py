@@ -26,6 +26,8 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.utils import timezone
 
+from apps.access.ws import ZoneGuardMixin
+
 logger = logging.getLogger('elrezeiky.pbx')
 
 
@@ -43,12 +45,15 @@ def may_receive_calls(user, ext) -> bool:
     return bool(record_phones_visible(user) and matrix_allows(profile, 'callcenter', 'view'))
 
 
-class AgentCallConsumer(AsyncWebsocketConsumer):
+class AgentCallConsumer(ZoneGuardMixin, AsyncWebsocketConsumer):
+    socket_kind = 'pbx'
 
     async def connect(self):
         user = self.scope.get('user')
         if not user or not getattr(user, 'is_authenticated', False):
             await self.close(code=4001)
+            return
+        if not await self.zone_admit():          # N5, before the extension / broadcast logic (F2)
             return
 
         ext = await self._get_extension(user)
@@ -69,15 +74,17 @@ class AgentCallConsumer(AsyncWebsocketConsumer):
             await self.channel_layer.group_add(self.personal_group, self.channel_name)
 
         await self.accept()
+        await self.zone_start()
         await self.send(text_data=json.dumps({
             'type': 'connected',
             'extension': ext.extension if ext else None,
         }))
 
     async def disconnect(self, close_code):
+        await self.zone_stop()
         if getattr(self, 'broadcast_group', None):
             await self.channel_layer.group_discard(self.broadcast_group, self.channel_name)
-        if self.personal_group:
+        if getattr(self, 'personal_group', None):
             await self.channel_layer.group_discard(self.personal_group, self.channel_name)
 
     async def receive(self, text_data):

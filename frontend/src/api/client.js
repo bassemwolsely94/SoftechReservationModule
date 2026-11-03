@@ -13,7 +13,9 @@ const api = axios.create({
 
 // One refresh at a time, shared by every request that hit a 401 meanwhile.
 let refreshing = null
-function refreshSession() {
+// Exported for the live sockets: a socket closed with 4002 (access token expired, N5)
+// rotates the cookie here before it reconnects.
+export function refreshSession() {
   if (!refreshing) {
     refreshing = axios.post('/api/auth/refresh/', {}, { headers: XHR, withCredentials: true })
       .finally(() => { refreshing = null })

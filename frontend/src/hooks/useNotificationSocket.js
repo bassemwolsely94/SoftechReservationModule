@@ -16,7 +16,7 @@
  *         = useNotificationSocket()
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { notificationsApi } from '../api/client'
+import { notificationsApi, refreshSession } from '../api/client'
 import useAuthStore from '../store/authStore'
 import useNotificationStore from '../store/notificationStore'
 
@@ -197,15 +197,21 @@ export function useNotificationSocket() {
 
       setIsConnected(false)
 
-      // Don't reconnect on 4001 (auth failure)
-      if (ev.code === 4001) {
+      // Don't reconnect on 4001 (auth failure) or 4403 (not allowed from this place, N5)
+      if (ev.code === 4001 || ev.code === 4403) {
         _startPolling()
         return
       }
 
+      // 4002: the access token ran out (N5) — rotate the cookie, reconnect at the minimum delay
+      const expired = ev.code === 4002
+      if (expired) retryDelay.current = WS_RECONNECT_BASE
+      const reconnect = () => { if (mountedRef.current) connect() }
+
       // Exponential back-off reconnect
       reconnectRef.current = setTimeout(() => {
-        if (mountedRef.current) connect()
+        if (expired) refreshSession().catch(() => {}).finally(reconnect)
+        else reconnect()
       }, retryDelay.current)
       retryDelay.current = Math.min(retryDelay.current * 2, WS_RECONNECT_MAX)
     }

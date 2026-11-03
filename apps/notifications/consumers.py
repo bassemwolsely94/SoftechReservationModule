@@ -19,16 +19,21 @@ import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 
+from apps.access.ws import ZoneGuardMixin
+
 logger = logging.getLogger('elrezeiky.notifications')
 
 
-class NotificationConsumer(AsyncWebsocketConsumer):
+class NotificationConsumer(ZoneGuardMixin, AsyncWebsocketConsumer):
     """Personal real-time notification channel for one authenticated user."""
+    socket_kind = 'notifications'
 
     async def connect(self):
         user = self.scope.get('user')
         if not user or not getattr(user, 'is_authenticated', False):
             await self.close(code=4001)
+            return
+        if not await self.zone_admit():          # N5: account, device, expiry, zone
             return
 
         profile = await self._get_profile(user)
@@ -41,11 +46,13 @@ class NotificationConsumer(AsyncWebsocketConsumer):
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
+        await self.zone_start()
 
         # Deliver any pending (unread) notifications accumulated while offline
         await self._send_pending()
 
     async def disconnect(self, close_code):
+        await self.zone_stop()
         if hasattr(self, 'group_name'):
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
@@ -157,16 +164,19 @@ class NotificationConsumer(AsyncWebsocketConsumer):
         return count
 
 
-class ChatterConsumer(AsyncWebsocketConsumer):
+class ChatterConsumer(ZoneGuardMixin, AsyncWebsocketConsumer):
     """
     Live chatter thread for a specific record.
     URL: /ws/chatter/{model_name}/{record_id}/?token=<jwt>
     """
+    socket_kind = 'chatter'
 
     async def connect(self):
         user = self.scope.get('user')
         if not user or not getattr(user, 'is_authenticated', False):
             await self.close(code=4001)
+            return
+        if not await self.zone_admit():          # N5, before the record checks (F2)
             return
 
         self.model_name = self.scope['url_route']['kwargs']['model_name']
@@ -184,6 +194,7 @@ class ChatterConsumer(AsyncWebsocketConsumer):
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
+        await self.zone_start()
 
     @database_sync_to_async
     def _may_use(self, user):
@@ -199,6 +210,7 @@ class ChatterConsumer(AsyncWebsocketConsumer):
             return None
 
     async def disconnect(self, close_code):
+        await self.zone_stop()
         if hasattr(self, 'group_name'):
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
 

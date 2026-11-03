@@ -5,12 +5,15 @@ A Channels `scope` is turned into a request-shaped object so the same network / 
 code that serves HTTP serves sockets. `verdict` is the outer gate: account, device, token expiry,
 then the zone rules. Consumers run their own record checks after it.
 """
+import asyncio
 import logging
 from dataclasses import dataclass
 from http.cookies import SimpleCookie
 
+from django.core.cache import cache
+
 from apps.users.sessions import account_active
-from core.client_ip import peer_meta
+from core.client_ip import client_ip, peer_meta
 
 from . import context, devices, policy, session_policy
 from .context import AccessContext
@@ -123,3 +126,135 @@ def verdict(scope, user, kind, token_exp=None, now=None):
     if reason is None:
         return WsVerdict(True, None, None, zone, False)
     return WsVerdict(False, CLOSE_ZONE, reason, zone, mode == 'enforce')
+
+
+# ── Consumers ────────────────────────────────────────────────────────────────
+
+AUDIT_ACTION = 'ws_zone_denied'
+DEDUPE_SECONDS = 600
+
+
+def _fresh_user(user_id):
+    """The user as the database has it now: a socket lives for hours, the scope's copy does not
+    see a disabled account. None when it is gone."""
+    from django.contrib.auth import get_user_model
+    if user_id is None:
+        return None
+    return get_user_model().objects.select_related('staff_profile').filter(pk=user_id).first()
+
+
+def _write_audit(user_id, note_text, extra):
+    """One `ws_zone_denied` row, through the `audit_log` alias first (as the SOFTECH gate does),
+    then `default`. True when a row was saved. Never raises."""
+    from apps.audit.models import AuditLog
+    from apps.users.models import StaffProfile
+
+    from .softech_gate import _audit_aliases
+    for alias in _audit_aliases():
+        try:
+            staff = None
+            if user_id is not None:
+                staff = StaffProfile.objects.using(alias).filter(user_id=user_id).first()
+            if AuditLog.log(AUDIT_ACTION, user=staff, note=note_text, extra=extra,
+                            using=alias) is not None:
+                return True
+        except Exception as exc:
+            if type(exc).__name__ != 'DatabaseOperationForbidden':
+                log.warning('ws audit write on %s failed - trying the next', alias, exc_info=True)
+    return False
+
+
+def _note_refusal(scope, user_id, kind, v):
+    """The deduplicated log line and (zone refusals only) AuditLog row of a refused verdict."""
+    if v.close_code != CLOSE_ZONE:
+        return                         # 4001 / 4002: an ordinary end of a session, no row
+    key = f'access:ws:{user_id}:{kind}:{v.zone}:{v.reason}:{int(v.enforced)}'
+    try:
+        if not cache.add(key, 1, DEDUPE_SECONDS):
+            return
+    except Exception:
+        pass
+    log.warning('ws %s user=%s kind=%s zone=%s reason=%s',
+                'denied' if v.enforced else 'would-deny', user_id, kind, v.zone, v.reason)
+    ip = None
+    try:
+        ip = client_ip(ScopeRequest(scope))
+    except Exception:
+        pass
+    extra = {'kind': kind, 'zone': v.zone, 'reason': v.reason, 'enforced': v.enforced,
+             'mode': 'enforce' if v.enforced else 'log', 'ip': ip, 'path': scope.get('path')}
+    if not _write_audit(user_id, f'{kind} / {v.reason} / {v.zone}'[:255], extra):
+        log.error('ws audit row lost (%s %s %s)', user_id, kind, v.reason)
+        try:
+            cache.delete(key)          # retried by the next refusal, not silenced for 10 minutes
+        except Exception:
+            pass
+
+
+def _check(scope, user_id, kind):
+    """The verdict for the socket now, with its log line / audit row. Runs in a worker thread."""
+    v = verdict(scope, _fresh_user(user_id), kind, token_exp=scope.get('token_exp'))
+    if not v.allowed:
+        _note_refusal(scope, user_id, kind, v)
+    return v
+
+
+class ZoneGuardMixin:
+    """Account, device, token expiry and zone for a Channels consumer: at connect (zone_admit),
+    every WS_RECHECK_SECONDS (zone_start's loop) and on an `access.recheck` push to the groups
+    `access_user_<pk>` / `access_all`. Runs after the consumer's own "is authenticated" check and
+    before its record checks (ruling F2)."""
+    socket_kind: str = ''
+
+    def _zone_user_id(self):
+        return getattr(self.scope.get('user'), 'pk', None)
+
+    async def _zone_verdict(self):
+        from channels.db import database_sync_to_async
+        return await database_sync_to_async(_check)(self.scope, self._zone_user_id(),
+                                                    self.socket_kind)
+
+    async def _zone_apply(self):
+        """True when the socket may stay open; False after closing it."""
+        v = await self._zone_verdict()
+        if v.allowed or not v.enforced:
+            return True
+        self._zone_closed = True
+        await self.close(code=v.close_code)
+        return False
+
+    async def zone_admit(self) -> bool:
+        return await self._zone_apply()
+
+    async def zone_start(self):
+        user_id = self._zone_user_id()
+        self._zone_groups = [f'access_user_{user_id}', 'access_all']
+        for group in self._zone_groups:
+            await self.channel_layer.group_add(group, self.channel_name)
+        self._zone_task = asyncio.ensure_future(self._zone_loop())
+
+    async def zone_stop(self):
+        task = getattr(self, '_zone_task', None)
+        if task is not None:
+            task.cancel()
+            self._zone_task = None
+        for group in getattr(self, '_zone_groups', ()):
+            await self.channel_layer.group_discard(group, self.channel_name)
+        self._zone_groups = []
+
+    async def _zone_loop(self):
+        while True:
+            await asyncio.sleep(WS_RECHECK_SECONDS)
+            try:
+                if not await self._zone_apply():
+                    return
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.warning('ws re-check failed (%s)', self.socket_kind, exc_info=True)
+
+    async def access_recheck(self, event):
+        """`access.recheck` pushed to the user's or everyone's group: check once, now."""
+        if getattr(self, '_zone_closed', False):
+            return
+        await self._zone_apply()

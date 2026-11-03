@@ -12,6 +12,10 @@
  * a module-level singleton so the socket is not reopened on re-renders.
  */
 import { useEffect, useState, useCallback } from 'react'
+import { refreshSession } from '../api/client'
+
+const RECONNECT_MS = 5000      // normal reconnect
+const REFUSED_MS   = 60000     // 4001 auth / 4403 not allowed from this place (N5): slow retry
 
 // ── Module-level singleton ────────────────────────────────────────────────────
 let _ws = null
@@ -30,9 +34,17 @@ function _connect() {
     } catch { /* ignore parse errors */ }
   }
 
-  _ws.onclose = () => {
-    // Reconnect after 5 s
-    setTimeout(_connect, 5000)
+  _ws.onclose = (ev) => {
+    if (ev.code === 4001 || ev.code === 4403) {
+      setTimeout(_connect, REFUSED_MS)
+      return
+    }
+    if (ev.code === 4002) {
+      // the access token ran out (N5): rotate the cookie, then the normal reconnect
+      refreshSession().catch(() => {}).finally(() => setTimeout(_connect, RECONNECT_MS))
+      return
+    }
+    setTimeout(_connect, RECONNECT_MS)
   }
 }
 

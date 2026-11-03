@@ -27,6 +27,19 @@ from django.contrib.auth.models import AnonymousUser
 logger = logging.getLogger('elrezeiky.notifications')
 
 
+def _token_claims(token: str):
+    """(exp, dev) of an access token: `exp` as an int epoch, `dev` the device public id or None.
+    (None, None) when the token does not decode. N5: the socket re-checks expiry and the device."""
+    try:
+        from rest_framework_simplejwt.tokens import AccessToken
+        access = AccessToken(token)
+        exp = access.get('exp')
+        dev = access.get('dev')
+        return (int(exp) if exp is not None else None), (str(dev) if dev else None)
+    except Exception:
+        return None, None
+
+
 class JWTAuthMiddleware(BaseMiddleware):
     """
     Async ASGI middleware that extracts ?token=<jwt> from the WebSocket
@@ -46,7 +59,7 @@ class JWTAuthMiddleware(BaseMiddleware):
         params = parse_qs(query_string)
         token_list = params.get('token', [])
         if token_list:                       # legacy clients: ?token=<jwt>
-            return await self._get_user_from_token(token_list[0])
+            return await self._user_for(scope, token_list[0])
         # SPA: the httpOnly access cookie travels with the same-origin handshake,
         # so the token never appears in a URL (proxy / access logs).
         from http.cookies import SimpleCookie
@@ -56,8 +69,14 @@ class JWTAuthMiddleware(BaseMiddleware):
                 jar = SimpleCookie()
                 jar.load(value.decode('latin-1'))
                 if ACCESS_COOKIE in jar:
-                    return await self._get_user_from_token(jar[ACCESS_COOKIE].value)
+                    return await self._user_for(scope, jar[ACCESS_COOKIE].value)
         return AnonymousUser()
+
+    async def _user_for(self, scope, token):
+        """The user of `token`; also keeps its expiry and device in the scope, so the consumer
+        can close the socket when the token runs out or the device is revoked (N5)."""
+        scope['token_exp'], scope['token_dev'] = _token_claims(token)
+        return await self._get_user_from_token(token)
 
     @database_sync_to_async
     def _get_user_from_token(self, token: str):
