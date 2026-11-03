@@ -61,6 +61,7 @@ BRANCH_SCOPE = {
     'insurance':    'open — softech branch code only; HQ claims module (later batch)',
     'replacement':  'own — scoped_cases + authz.require (accessible_branch_ids = branch_scope)',
     'stock_audit':  'own — named branch managers see their branches (branch_scope); management all',
+    'pic_analytics': 'own — named branch managers see their branches (branch_scope); management all',
     'gamification': 'n/a — own data; rankings are network-wide by design',
     'help':         'n/a — no branch data',
     'tasks':        'own + «جميع الفروع» + created / assigned to me; all-branch schedules read-only for branch roles',

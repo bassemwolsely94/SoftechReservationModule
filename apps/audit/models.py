@@ -118,6 +118,14 @@ class AuditLog(models.Model):
         ('stock_audit_access_granted',   'تدقيق المخزون — منح صلاحية مدير فرع'),
         ('stock_audit_access_revoked',   'تدقيق المخزون — سحب صلاحية مدير فرع'),
 
+        # PIC Analytics (doc 33)
+        ('pic_analytics_exported',        'تحليلات العملاء — تصدير تقرير'),
+        ('pic_analytics_access_granted',  'تحليلات العملاء — منح صلاحية'),
+        ('pic_analytics_access_revoked',  'تحليلات العملاء — سحب صلاحية'),
+        ('pic_phone_labelled',            'تحليلات العملاء — تصنيف رقم هاتف'),
+        ('pic_analytics_dialled',         'تحليلات العملاء — اتصال من التقرير'),
+        ('pic_analytics_callback_scheduled', 'تحليلات العملاء — جدولة معاودة اتصال'),
+
         # Personal dashboard live person search (N0/H1)
         ('personal_person_search',       'لوحة شخصية — بحث عن شخص في SOFTECH'),
 

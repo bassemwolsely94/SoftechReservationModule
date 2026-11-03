@@ -216,6 +216,7 @@ INSTALLED_APPS = [
     'apps.personal',       # Personal dashboard — per-user SOFTECH identity claims + configurable widgets
     'apps.gamification',   # Gamification — points, levels/titles, badges, streaks, rankings (recognition only)
     'apps.stock_audit',    # Stock Transactions Audit (doc 32) — read-only stktrans mirror + checks
+    'apps.pic_analytics',  # PIC Analytics (doc 33) — customer dashboard + report, read-only
     'apps.access',         # Trusted networks + request network label (security N1, log only)
     'apps.trace',          # P-58 EDA track-and-trace foundation — dormant (TRACK_TRACE_ENABLED)
 ]

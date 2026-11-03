@@ -105,6 +105,26 @@ def phones_visible(user, customer):
     return is_own(user, customer)
 
 
+def phones_checker(user):
+    """-> fn(customer) with exactly phones_visible's answer, but the user's branch scope and profile
+    are resolved ONCE (phones_visible re-queries them per customer: fine for a page of 50, ruinous
+    for a 45,000-row export)."""
+    if user is None or _external():
+        return lambda customer: False
+    profile = _profile(user)
+    if profile is not None and not profile.can_see_customer_phone:
+        return lambda customer: False
+    ids = branch_scope.branch_ids(user)
+    if ids is None:
+        return lambda customer: True
+
+    def own(customer):
+        if customer.preferred_branch_id is not None:
+            return customer.preferred_branch_id in ids
+        return profile is not None and customer.created_by_id == profile.pk
+    return own
+
+
 def mask(value):
     d = digits(value)
     if not d:
