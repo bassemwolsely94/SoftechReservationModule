@@ -165,11 +165,14 @@ export default function MissedTab({ params, ready }) {
                   <tr key={r.call_id} {...rp} className={`border-t border-gray-100 hover:bg-gray-50 align-top ${rp.className}`}>
                     <td className="px-3 py-2 whitespace-nowrap">{fmtDateTime(r.call_at)}</td>
                     <td className="px-3 py-2 tabular-nums" dir="ltr">{r.customer_number || '—'}</td>
-                    <td className="px-3 py-2">{r.customer_name || (r.shared_pics?.length > 1 ? 'رقم مشترك' : '—')}</td>
+                    <td className="px-3 py-2">
+                      {r.customer_name || (r.shared_pics?.length > 1 ? 'رقم مشترك' : '—')}
+                      {r.pic_excluded && <span className="ms-1 text-gray-400">(مستبعد)</span>}
+                    </td>
                     <td className={cell}>{r.segment || '—'}</td>
                     <td className={cell}>{fmt(r.lifetime_net)}</td>
                     <td className={cell}>{r.last_purchase ? String(r.last_purchase).slice(0, 10) : '—'}</td>
-                    <td className={cell}>{r.pic ? (r.bought_within_7d ? 'نعم' : 'لا') : '—'}</td>
+                    <td className={cell}>{r.pic_excluded ? 'مستبعد' : r.pic ? (r.bought_within_7d ? 'نعم' : 'لا') : '—'}</td>
                     <td className={cell}>{r.returned_at ? `${fmtDateTime(r.returned_at)} (${fmt(r.minutes_to_return, 0)}د)` : '—'}</td>
                     <td className="px-3 py-2">
                       <div className="flex gap-1.5 flex-wrap">

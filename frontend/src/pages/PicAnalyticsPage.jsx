@@ -22,6 +22,7 @@ import PicTable from '../components/pic-analytics/PicTable'
 import GroupTable from '../components/pic-analytics/GroupTable'
 import RetentionPanel from '../components/pic-analytics/RetentionPanel'
 import AccessPanel from '../components/pic-analytics/AccessPanel'
+import ExclusionsPanel from '../components/pic-analytics/ExclusionsPanel'
 import CallCenterTab from '../components/pic-analytics/CallCenterTab'
 import MissedTab from '../components/pic-analytics/MissedTab'
 import NumbersTab from '../components/pic-analytics/NumbersTab'
@@ -233,7 +234,9 @@ export default function PicAnalyticsPage() {
       )}
       {tab === 'pics' && (
         <PicTable data={pics.data} order={order} onOrder={o => { setOrder(o); setPicPage(1) }}
-                  page={picPage} onPage={setPicPage} branchName={branchName} />
+                  page={picPage} onPage={setPicPage} branchName={branchName}
+                  onExclude={access?.can_manage_exclusions
+                    ? async (pic, reason) => { await picAnalyticsApi.exclude({ pic, reason }); refresh() } : undefined} />
       )}
       {tab === 'branches' && (
         <div data-tour="pic-analytics-branches-grid">
@@ -269,6 +272,7 @@ export default function PicAnalyticsPage() {
       {tab === 'missed' && <MissedTab params={params} ready={ready} />}
       {tab === 'numbers' && <NumbersTab params={params} ready={ready} />}
 
+      {access?.can_manage_exclusions && <ExclusionsPanel params={params} ready={ready} />}
       {access?.can_manage_access && <AccessPanel />}
     </div>
   )

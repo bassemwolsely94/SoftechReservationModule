@@ -65,7 +65,16 @@ export default function KpiCards({ data, management = false }) {
         <KpiCard label="جدد" value={fmt(data.new)} tone="green" />
         <KpiCard label="عائدون" value={fmt(data.returning)} tone="blue" sub={`منهم مُعاد تنشيطهم ${fmt(data.reactivated)}`} />
         <KpiCard label="زيارات" value={fmt(data.visits)} sub={`فواتير ${fmt(data.invoices)}`} />
-        <KpiCard label="صافي المبيعات" value={fmt(data.net)} tone="green" sub={data.no_pic_net != null ? `بدون PIC: ${fmt(data.no_pic_net)}` : undefined} />
+        <KpiCard label="صافي المبيعات" value={fmt(data.net)} tone="green" sub={data.no_pic_net != null ? (
+          <>
+            بدون PIC: {fmt(data.no_pic_net)}
+            {data.excluded_net != null && Number(data.excluded_pics) > 0 && (
+              <span className="block" data-tour="pic-analytics-excluded-line">
+                عملاء مستبعدون: {fmt(data.excluded_net)} ({fmt(data.excluded_pics)} عميل)
+              </span>
+            )}
+          </>
+        ) : undefined} />
         {hasGp && <KpiCard label="إجمالي الربح" value={fmt(data.gp)} tone="amber" sub={`هامش ${fmtPct(data.gp_pct)}`} />}
         <KpiCard label="متوسط السلة (صافي)" value={fmt(data.basket_net, 2)} sub={`أصناف ${fmt(data.basket_units, 1)} · فئات ${fmt(data.basket_categories, 1)}`} />
         {data.basket_lines != null && <KpiCard label="سطور لكل زيارة" value={fmt(data.basket_lines, 2)} />}

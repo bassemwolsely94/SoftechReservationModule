@@ -3,6 +3,7 @@
  * Columns that do not exist for the user (GP) are simply absent from the rows; call
  * columns show «—» when the server returns no value.
  */
+import { useState } from 'react'
 import useGridKeyboard from '../../hooks/useGridKeyboard'
 import { fmt, fmtDate, fmtDateTime, fmtDuration } from './KpiCards'
 
@@ -12,7 +13,17 @@ const SORTABLE = { name: 'name', net: 'net', visits: 'visits', last_purchase: 'l
 const BUCKET = { m1: 'شهري', m2: 'كل شهرين', m3: 'كل 3 شهور', m4_6: '4–6 شهور', m7_12: '7–12 شهر', y1plus: 'سنوي+', '': '—' }
 const SEGMENT = { vip: 'VIP', loyal: 'مخلص', regular: 'عادي', at_risk: 'في خطر', dormant: 'نائم', new: 'جديد', churned: 'مفقود' }
 
-export default function PicTable({ data, order, onOrder, page, onPage, branchName }) {
+export default function PicTable({ data, order, onOrder, page, onPage, branchName, onExclude }) {
+  const [open, setOpen] = useState(null)           // the PIC whose inline «استبعاد» reason field is open
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const submit = async (pic) => {
+    setBusy(true); setErr('')
+    try { await onExclude(pic, reason.trim()); setOpen(null); setReason('') }
+    catch (e) { setErr(e?.response?.data?.detail || 'تعذّر الاستبعاد') }
+    finally { setBusy(false) }
+  }
   const rows = data?.rows || []
   const count = data?.count || 0
   const pages = Math.max(1, Math.ceil(count / PAGE_SIZE))
@@ -61,6 +72,21 @@ export default function PicTable({ data, order, onOrder, page, onPage, branchNam
                   <td className="px-2 py-1.5 min-w-[10rem]">
                     <div className="font-medium text-gray-800">{r.name || '—'}</div>
                     <div className="text-gray-400 tabular-nums">{r.pic}{r.phone ? ` · ${r.phone}` : ''}</div>
+                    {onExclude && open !== r.pic && (
+                      <button className="text-xs text-gray-400 hover:text-red-600 hover:underline"
+                              onClick={() => { setOpen(r.pic); setReason(''); setErr('') }}>استبعاد</button>
+                    )}
+                    {onExclude && open === r.pic && (
+                      <div className="flex items-center gap-1 mt-1">
+                        <input className="input-field text-xs py-1 w-44" autoFocus maxLength={255} value={reason}
+                               placeholder="سبب الاستبعاد (مطلوب)"
+                               onChange={e => setReason(e.target.value)}
+                               onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter' && reason.trim()) submit(r.pic); if (e.key === 'Escape') setOpen(null) }} />
+                        <button className="btn-secondary text-xs py-1" disabled={busy || !reason.trim()} onClick={() => submit(r.pic)}>تأكيد</button>
+                        <button className="text-xs text-gray-400 hover:underline" onClick={() => setOpen(null)}>إلغاء</button>
+                      </div>
+                    )}
+                    {onExclude && open === r.pic && err && <div className="text-xs text-red-600">{err}</div>}
                   </td>
                   <td className={c}>{r.last_branch != null ? branchName(r.last_branch) : '—'}</td>
                   <td className={c}>{SEGMENT[r.segment] || r.segment || '—'}</td>
