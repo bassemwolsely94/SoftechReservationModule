@@ -32,7 +32,7 @@ Stats
 """
 from core.threads import ContextThreadPoolExecutor, start_thread
 
-from django.db.models import Count, Exists, OuterRef, Q, Subquery
+from django.db.models import Count, ExpressionWrapper, DurationField, Exists, F, OuterRef, Q, Subquery
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -61,6 +61,24 @@ from .serializers import (
 class JobListCreateView(APIView):
     permission_classes = [IsAuthenticated, CATALOG_EDIT]
 
+    # sortable grid: the list is cut to page_size, so ordering is applied on the server BEFORE the cut
+    ORDERING_FIELDS = ('id', 'item__name', 'status', 'candidates_scored', 'best_score',
+                       'duration', 'triggered_by__first_name', 'created_at')
+
+    def _ordered(self, qs, raw):
+        raw = (raw or '').strip()
+        if not raw:
+            return qs
+        key = raw.lstrip('-')
+        if key not in self.ORDERING_FIELDS:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'ordering': 'حقل ترتيب غير مدعوم'})
+        if key == 'duration':
+            qs = qs.annotate(duration=ExpressionWrapper(F('finished_at') - F('started_at'),
+                                                        output_field=DurationField()))
+        f = F(key).desc(nulls_last=True) if raw.startswith('-') else F(key).asc(nulls_last=True)
+        return qs.order_by(f, '-pk' if raw.startswith('-') else 'pk')
+
     def get(self, request):
         qs = ImageSearchJob.objects.select_related('item', 'triggered_by').order_by('-created_at')
         p  = request.query_params
@@ -72,6 +90,7 @@ class JobListCreateView(APIView):
         if p.get('priority'):
             qs = qs.filter(priority=p['priority'])
 
+        qs = self._ordered(qs, p.get('ordering'))
         page_size = min(int(p.get('page_size', 25)), 100)
         return Response(ImageSearchJobSerializer(qs[:page_size], many=True, context={'request': request}).data)
 

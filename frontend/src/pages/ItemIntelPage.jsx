@@ -19,6 +19,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { itemsApi, productsApi, enrichmentApi, chronicApi } from '../api/client'
 import { useToast } from '../components/ui.jsx'
 import useHelpTab from '../help/useHelpTab'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from '../components/SortTh'
 
 // Pull a human-readable message out of an axios error
 function errMsg(e, fallback = 'حدث خطأ أثناء الحفظ') {
@@ -543,7 +545,7 @@ function ClinicalSection({ data, softech_id }) {
 
 function PurchasingSection({ data }) {
   const net     = data?.demand_network
-  const branches = data?.demand_branches || []
+  const { sorted: branches, headerProps } = useSortableRows(data?.demand_branches || [])
 
   if (!net) return (
     <div className="text-center py-8 text-gray-400">
@@ -593,8 +595,11 @@ function PurchasingSection({ data }) {
             <table className="w-full text-sm border-collapse">
               <thead className="bg-gray-50">
                 <tr>
-                  {['الفرع', 'ABC', 'رصيد', 'أمان', 'متوسط شهري', 'فجوة', 'تغطية', 'توفر', 'إيراد ضائع', 'حالة'].map(h => (
-                    <th key={h} className="text-right px-3 py-2 text-xs text-gray-500 font-medium border-b border-gray-100 whitespace-nowrap">{h}</th>
+                  {[['branch_name', 'text', 'الفرع'], ['abc_class', 'text', 'ABC'], ['current_stock', 'number', 'رصيد'],
+                    ['safety_stock', 'number', 'أمان'], ['monthly_avg', 'number', 'متوسط شهري'], ['gap', 'number', 'فجوة'],
+                    ['coverage_months', 'number', 'تغطية'], ['availability_rate_30d', 'number', 'توفر'],
+                    ['lost_revenue_30d', 'number', 'إيراد ضائع'], ['stock_status', 'text', 'حالة']].map(([k, t, h]) => (
+                    <SortTh key={k} {...headerProps(k, t)} className="text-right px-3 py-2 text-xs text-gray-500 font-medium border-b border-gray-100 whitespace-nowrap">{h}</SortTh>
                   ))}
                 </tr>
               </thead>

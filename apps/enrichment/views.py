@@ -4,7 +4,7 @@ apps/enrichment/views.py
 AI Catalog Enrichment Platform — API views.
 """
 from django.utils import timezone
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Count, F, Prefetch, Q
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -98,16 +98,6 @@ class ItemEnrichmentViewSet(viewsets.ModelViewSet):
         if has_pending in ('1', 'true'):
             qs = qs.filter(suggestions__status='pending').distinct()
 
-        # ── Ordering ─────────────────────────────────────────────────────────
-        ordering = p.get('ordering', 'completeness_score')
-        allowed = {
-            'completeness_score':  'completeness_score',
-            '-completeness_score': '-completeness_score',
-            'item__name':          'item__name',
-            '-last_enriched_at':   '-last_enriched_at',
-        }
-        qs = qs.order_by(allowed.get(ordering, 'completeness_score'))
-
         # ── Annotate pending count for list view ──────────────────────────────
         if self.action == 'list':
             qs = qs.annotate(
@@ -116,6 +106,17 @@ class ItemEnrichmentViewSet(viewsets.ModelViewSet):
                     filter=Q(suggestions__status='pending'),
                 )
             )
+
+        # ── Ordering (sortable grid headers): explicit whitelist, asc or desc, unique pk tiebreak ──
+        ordering = (p.get('ordering') or 'completeness_score').strip()
+        base = ordering.lstrip('-')
+        fields = {'completeness_score', 'item__name', 'item__softech_id', 'is_published', 'last_enriched_at'}
+        if self.action == 'list':
+            fields.add('pending_count_ann')
+        if base not in fields:
+            ordering, base = 'completeness_score', 'completeness_score'
+        field = F(base).desc(nulls_last=True) if ordering.startswith('-') else F(base).asc(nulls_last=True)
+        qs = qs.order_by(field, 'pk')
         return qs
 
     def get_serializer_class(self):

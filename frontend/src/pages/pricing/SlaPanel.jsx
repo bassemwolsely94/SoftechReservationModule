@@ -1,6 +1,8 @@
 /** SlaPanel — pending requests aging report (oldest-first), with age buckets. */
 import { useQuery } from '@tanstack/react-query'
 import { pricingApprovalsApi } from '../../api/client'
+import useSortableRows from '../../hooks/useSortableRows'
+import SortTh from '../../components/SortTh'
 
 const BUCKETS = [
   { key: 'lt1h',  label: '< ساعة',     color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -22,8 +24,12 @@ export default function SlaPanel({ onOpen }) {
     refetchInterval: 30000,
   })
 
+  const { sorted: sortedRows, headerProps } = useSortableRows(data?.requests || [], {
+    getValue: (r, k) => (k === 'new' ? Object.entries(r.new_values || {}).map(([a, v]) => `${a}: ${v}`).join('، ') : r[k]),
+  })
+
   if (isLoading) return <div className="text-center py-12 text-gray-400 text-sm">جاري التحميل…</div>
-  const rows = data?.requests || []
+  const rows = sortedRows
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -45,10 +51,10 @@ export default function SlaPanel({ onOpen }) {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead><tr className="bg-gray-50 text-right border-b">
-            <th className="px-3 py-2 text-xs text-gray-500">العمر</th>
-            <th className="px-3 py-2 text-xs text-gray-500">الصنف</th>
-            <th className="px-3 py-2 text-xs text-gray-500">التعديل المطلوب</th>
-            <th className="px-3 py-2 text-xs text-gray-500">بواسطة</th>
+            <SortTh {...headerProps('age_hours', 'number')} className="px-3 py-2 text-xs text-gray-500">العمر</SortTh>
+            <SortTh {...headerProps('item_name', 'text')} className="px-3 py-2 text-xs text-gray-500">الصنف</SortTh>
+            <SortTh {...headerProps('new', 'text')} className="px-3 py-2 text-xs text-gray-500">التعديل المطلوب</SortTh>
+            <SortTh {...headerProps('requested_by', 'text')} className="px-3 py-2 text-xs text-gray-500">بواسطة</SortTh>
             <th className="px-3 py-2 text-xs text-gray-500"></th>
           </tr></thead>
           <tbody>

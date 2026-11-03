@@ -18,6 +18,8 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import useServerSort from '../hooks/useServerSort'
+import SortTh from '../components/SortTh'
 import { recommendationsApi, customersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import { formatDistanceToNow, format } from 'date-fns'
@@ -234,6 +236,8 @@ function FBTPairsTab() {
   const [ordering, setOrdering] = useState('-score')
   const [page,     setPage]     = useState(1)
   const PAGE_SIZE = 50
+  const { headerProps } = useServerSort(ordering, o => { setOrdering(o || '-score'); setPage(1) },
+    { allowed: ['item_a__name', 'item_b__name', 'confidence', 'lift', 'support', 'co_occurrences', 'score'], defaultOrdering: '-score' })
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['rec-fbt-list', search, ordering, page],
@@ -288,13 +292,13 @@ function FBTPairsTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 text-xs">
-                <th className="text-right px-4 py-3 font-medium">الصنف الأساسي</th>
-                <th className="text-right px-4 py-3 font-medium">الصنف المقترن</th>
-                <th className="text-right px-4 py-3 font-medium w-32">الثقة</th>
-                <th className="text-right px-4 py-3 font-medium w-24">الرفع</th>
-                <th className="text-right px-4 py-3 font-medium w-20">الدعم</th>
-                <th className="text-right px-4 py-3 font-medium w-20">التكرار</th>
-                <th className="text-right px-4 py-3 font-medium w-24">الدرجة</th>
+                <SortTh {...headerProps('item_a__name', 'text')} className="text-right px-4 py-3 font-medium">الصنف الأساسي</SortTh>
+                <SortTh {...headerProps('item_b__name', 'text')} className="text-right px-4 py-3 font-medium">الصنف المقترن</SortTh>
+                <SortTh {...headerProps('confidence', 'number')} className="text-right px-4 py-3 font-medium w-32">الثقة</SortTh>
+                <SortTh {...headerProps('lift', 'number')} className="text-right px-4 py-3 font-medium w-24">الرفع</SortTh>
+                <SortTh {...headerProps('support', 'number')} className="text-right px-4 py-3 font-medium w-20">الدعم</SortTh>
+                <SortTh {...headerProps('co_occurrences', 'number')} className="text-right px-4 py-3 font-medium w-20">التكرار</SortTh>
+                <SortTh {...headerProps('score', 'number')} className="text-right px-4 py-3 font-medium w-24">الدرجة</SortTh>
               </tr>
             </thead>
             <tbody>
