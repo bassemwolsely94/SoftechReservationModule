@@ -60,7 +60,7 @@ Why `cheques` is read directly instead of the A/P `Payment` mirror: the mirror h
 ## Interfaces consumed from Plan 1 (check before Task 1)
 
 `apps/finance/gl/models.py`: `GLAccount(code, is_posting, is_active, party_type, requires_party, requires_branch)`, `LedgerEntry(status draft|approved|reversed, source_type, source_key, period, entry_date, reverses)`, `LedgerLine(party_code, branch, cheque_no, due_date)`, `FinancialPeriod.status`. `apps/finance/gl/ledger.py`: `save_draft(*, user, entry_date, description, lines, book, branch, source_type, source_key, entry=None)`, `reverse(entry_id, *, user, reason, entry_date=None)`, `LedgerError.code`. `apps/finance/gl/names.normalize_ar`.
-**Assumption to verify on `claude/finance-gl` before Task 6:** the mirror entry created by `reverse()` has `source_key=''` (otherwise it collides with the re-draft). If Plan 1 copies the key, Task 6 Step 3 sets the reversal's key to `''` via `reverse(...)` returning the new entry — raise it with the Plan 1 session instead of patching around it.
+**Ruling R6 (Plan 1, confirmed 2026-11-04):** the mirror entry created by `reverse()` has `source_type='reversal'`, `source_key=''` and links to the original through `reverses`, so the original key is free for the re-draft.
 
 ## File Structure
 
@@ -283,7 +283,7 @@ Why `cheques` is read directly instead of the A/P `Payment` mirror: the mirror h
   - `test_second_run_while_running_refused` (`DraftBusy`) *(Review Focus 2)*
   - `test_reader_failure_gives_partial_and_no_vanish`
 - [ ] **Step 2: Run** `python manage.py test apps.tests.test_gl_drafting` — Expected: FAIL.
-- [ ] **Step 3: Verify the Plan 1 assumption** (reversal entry's `source_key`) on `claude/finance-gl`, then implement `drafting.py` and the command.
+- [ ] **Step 3: Implement** `drafting.py` and the command (relies on Ruling R6).
 - [ ] **Step 4: Run** — Expected: PASS.
 - [ ] **Step 5: Commit** — `feat(finance-gl): idempotent drafting engine with late-change handling`
 
