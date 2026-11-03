@@ -45,12 +45,22 @@ class IncentivesPermissionTests(TestCase):
             self.assertEqual(self._client('pharmacist').get(url).status_code, 403, url)
             self.assertEqual(self._client('quality_manager').get(url).status_code, 200, url)
 
+    def _grant(self, role, *actions):
+        for a in actions:
+            RoleModuleAccess.objects.update_or_create(role=role, module='incentives', action=a,
+                                                      defaults={'is_allowed': True})
+        module_access.clear_cache()
+
     def test_finalize_needs_finalize(self):
         r = self._client('quality_manager').post(self._url('finalize/'), PERIOD, format='json')
         self.assertEqual(r.status_code, 403)
         r = self._client('salesperson').post(self._url('finalize/'), PERIOD, format='json')
         self.assertEqual(r.status_code, 403)
+        # owner 2026-11-03: payroll is quality managers + admins only — purchasing's full grant no longer opens it
         r = self._client('purchasing').post(self._url('finalize/'), PERIOD, format='json')
+        self.assertEqual(r.status_code, 403)
+        self._grant('quality_manager', 'finalize')
+        r = self._client('quality_manager').post(self._url('finalize/'), PERIOD, format='json')
         self.assertNotEqual(r.status_code, 403)
 
     def test_calculate_needs_edit_and_force_needs_finalize(self):
@@ -65,10 +75,12 @@ class IncentivesPermissionTests(TestCase):
         c = self._client('quality_manager')
         self.assertEqual(c.patch(self._url(), {'name': 'x'}, format='json').status_code, 403)
         self.assertEqual(c.delete(self._url()).status_code, 403)
-        # purchasing may edit but has no 'delete' grant for programs
-        p = self._client('purchasing')
-        self.assertEqual(p.patch(self._url(), {'name': 'جديد'}, format='json').status_code, 200)
-        self.assertEqual(p.delete(self._url()).status_code, 403)
+        # purchasing's full grant is refused (owner 2026-11-03)
+        self.assertEqual(self._client('purchasing').patch(self._url(), {'name': 'x'}, format='json').status_code, 403)
+        # a quality manager given 'edit' may edit but, without 'delete', not delete
+        self._grant('quality_manager', 'edit')
+        self.assertEqual(c.patch(self._url(), {'name': 'جديد'}, format='json').status_code, 200)
+        self.assertEqual(c.delete(self._url()).status_code, 403)
         self.assertTrue(IncentiveProgram.objects.filter(pk=self.program.pk).exists())
 
     def test_adjustments_need_create(self):
@@ -89,4 +101,6 @@ class IncentivesPermissionTests(TestCase):
         self.assertNotEqual(self._client('admin').post(self._url('finalize/'), PERIOD, format='json').status_code, 403)
         RoleModuleAccess.objects.all().delete()
         module_access.clear_cache()
-        self.assertEqual(self._client('pharmacist').get('/api/incentives/programs/').status_code, 200)
+        # an unseeded matrix doesn't lock the payroll roles out; the role gate still refuses others
+        self.assertEqual(self._client('quality_manager').get('/api/incentives/programs/').status_code, 200)
+        self.assertEqual(self._client('pharmacist').get('/api/incentives/programs/').status_code, 403)

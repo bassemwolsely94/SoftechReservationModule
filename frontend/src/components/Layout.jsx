@@ -1,6 +1,7 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
 import useAuthStore from '../store/authStore'
+import usePermissionStore from '../store/permissionStore'
 import ErrorBoundary from './ErrorBoundary'
 import useNotificationStore from '../store/notificationStore'
 import { useQuery } from '@tanstack/react-query'
@@ -123,7 +124,7 @@ export const NAV_GROUPS = [
       { to: '/delivery/dispatch', icon: '🧭', label: 'لوحة التوزيع',  roles: ['admin','call_center','supervisor','quality_manager'] },
       { to: '/rider',         icon: '🛵', label: 'مهام السائق',       roles: ['admin','delivery','supervisor'] },
       { to: '/stock-count',   icon: '📦', label: 'الجرد الفعلي',     roles: ['admin','pharmacist','supervisor','quality_manager'] },
-      { to: '/tasks',         icon: '✅', label: 'المهام التشغيلية', roles: ['admin','call_center','pharmacist','supervisor'] },
+      { to: '/tasks',         icon: '✅', label: 'المهام التشغيلية', roles: ['admin','call_center','pharmacist','supervisor'], module: 'tasks' },
       { to: '/announcements', icon: '📢', label: 'الإعلانات',        roles: null },
     ],
   },
@@ -191,7 +192,7 @@ export const NAV_GROUPS = [
     items: [
       { to: '/analytics',   icon: '📈', label: 'المبيعات والأداء', roles: ['admin','purchasing','pharmacist','supervisor','quality_manager','viewer'] },
       { to: '/forecasting', icon: '🔮', label: 'التنبؤ بالطلب',   roles: ['admin','purchasing','pharmacist','quality_manager'] },
-      { to: '/incentives',  icon: '💰', label: 'الحوافز',          roles: ['admin','purchasing','quality_manager'] },
+      { to: '/incentives',  icon: '💰', label: 'الحوافز',          roles: ['admin','quality_manager'] },
       { to: '/my-incentives', icon: '🏅', label: 'حوافزي',         roles: null },
       { to: '/targets',     icon: '🎯', label: 'الأهداف البيعية',  roles: ['admin','supervisor','purchasing','pharmacist','quality_manager','viewer'] },
       { to: '/kpi-board',   icon: '📊', label: 'لوحة مؤشرات الفروع', roles: ['admin','supervisor','purchasing','pharmacist','quality_manager','viewer'] },
@@ -260,10 +261,14 @@ export default function Layout() {
   useScreenUsage()
 
   // Filter groups + items by role — or by a server-computed capability (`cap`), e.g.
-  // /supply for SOFTECH groups مخزن/Administrator/Internal Auditor (purchasing/access.py)
+  // /supply for SOFTECH groups مخزن/Administrator/Internal Auditor (purchasing/access.py).
+  // An item with `module` also hides once the matrix takes that module's view away from the
+  // role (until permissions load it stays; the server refuses anyway).
+  const perms   = usePermissionStore(s => s.permissions)
   const visibleGroups = NAV_GROUPS
     .map(g => ({ ...g, items: g.items.filter(n =>
-      !n.roles || n.roles.includes(userRole) || (n.cap && !!user?.[n.cap])) }))
+      (!n.roles || n.roles.includes(userRole) || (n.cap && !!user?.[n.cap]))
+      && (!n.module || !perms || userRole === 'admin' || !!perms[n.module]?.view)) }))
     .filter(g => g.items.length > 0)
 
   // Which group is pinned open (clicked) — auto-tracks active route

@@ -29,8 +29,8 @@ GET /api/gamification/reports/overview/
 GET /api/vouchers/vouchers/
 
 # reason: HQ modules no branch role is granted in the matrix (invoices, purchasing / procurement,
-#   users, incentives payroll — the latter's all-branch-only gate is an open owner decision).
-GET /api/incentives/transactions/
+#   users). Incentives payroll left this list on 2026-11-03: all-branch quality managers and
+#   admins only, enforced in the views (apps/incentives/permissions.py).
 GET /api/invoices/invoice-batches/
 GET /api/invoices/invoices/
 GET /api/invoices/purchase-orders/

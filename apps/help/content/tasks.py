@@ -224,7 +224,7 @@ SCREENS = [
         'title': T('إدارة المهام التشغيلية', 'Operational tasks'),
         'summary': T('كل المهام بثلاث طرق عرض: قائمة، كانبان حسب الحالة، ومهامي. مع إنشاء مهمة جديدة والفلترة بالحالة والأولوية والنوع والفرع والمتأخر.',
                      'All tasks in three views: list, Kanban by status, and my tasks. Create a task and filter by status, priority, type, branch and overdue.'),
-        'audience': T('المديرون والمشرفون والصيادلة والكول سنتر.', 'Managers, supervisors, pharmacists and the call center.'),
+        'audience': T('المديرون والمشرفون والصيادلة والكول سنتر. «المهام» صلاحية مستقلة في «الصلاحيات» (2026-11-03): كل دور له نفس وصوله السابق، وإيقافها لدور يقفل شاشات المهام له من السيرفر.', 'Managers, supervisors, pharmacists and the call center. "Tasks" is its own permission in "Permissions" (2026-11-03): every role keeps its earlier access, and switching it off for a role closes the task screens for it on the server.'),
         'tabs': [
             {'key': 'list', 'title': T('≡ قائمة', '≡ List'), 'body': T('جدول المهام برقمها وحالتها والمسؤول والموعد — مع علامة «متأخر».', 'Task table with number, status, owner and deadline — with an "overdue" mark.')},
             {'key': 'kanban', 'title': T('⊟ كانبان', '⊟ Kanban'), 'body': T('أعمدة حسب الحالة لترى سير العمل بنظرة.', 'Columns by status to see the flow at a glance.')},
@@ -294,8 +294,8 @@ SCREENS = [
         'tips': [T('بتشوف مهام فرعك ومهام «جميع الفروع» وأي مهمة إنت عاملها أو متكلّف بيها حتى لو في فرع تاني.', 'You see your branch\'s tasks, "all branches" tasks, and any task you created or are assigned to, even in another branch.'),
                  T('يعدّل المهمة أو يلغيها منشئها والمكلَّفون بها والمشرف والمدير فقط.',
                    'Only the task creator, its assignees, supervisors and admins can change or cancel a task.')],
-        'updated': '2026-10-31',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-03',
+        'change_note': T('«المهام» صارت صلاحية مستقلة يتحكم فيها المدير لكل دور', '"Tasks" is now its own permission the admin controls per role'),
     },
     {
         'key': 'tasks.detail',

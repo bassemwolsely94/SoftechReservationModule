@@ -30,10 +30,10 @@ All-branch roles: admin, call_center, purchasing, supervisor, quality_manager �
 | `offers` | all | — | — | — | VCED | — | — | VCED | — | all — offers are chain config; apply-to-order and evaluate own (part 2) |
 | `purchasing` | all | — | — | — | VCEAXF | — | V | — | — | all — HQ module; supply cases / decisions own + network (viewer role) |
 | `invoices` | all | — | — | — | VCEAXF | — | — | — | — | open — HQ module; branch roles have no grant |
-| `incentives` | all | — | — | — | VCEAXF | — | — | — | VX | open — all-branch roles only hold it; sales targets (analytics view) own branch |
+| `incentives` | all | — | — | — | — | — | — | — | VX | all-branch quality managers + admins only (owner 2026-11-03, apps/incentives/permissions.py); own progress open; sales targets (analytics view) own branch |
 | `cheques` | all | — | V | — | VCEAXF | — | — | — | — | own — plans, instalments, treasury dashboard |
 | `finance` | all | — | V | — | VCEAXF | — | — | — | V | own branch rows only; consolidated + supplier A/P = all-branch roles (B-1); payments own |
-| `insurance` | all | — | — | — | VCEDAXF | — | — | — | — | open — softech branch code only; HQ claims module (later batch) |
+| `insurance` | all | — | — | — | VCEDAXF | — | — | — | — | open — HQ claims module; claims portfolio report all-branch users only (owner 2026-11-02) |
 | `commerce` | all | — | — | — | VCEDAXF | — | — | — | — | all — no branch field (feature-flag gated) |
 | `replacement` | all | — | VC | — | VX | — | — | VCEAXF | VX | own — scoped_cases + authz.require (accessible_branch_ids = branch_scope) |
 | `callcenter` | all | VCEXS | — | — | — | — | V | VCEDAXSF | VX | own — calls, cases (+ assigned to me), dashboards, converts; omni inbox own + assigned (branch_scope) |
@@ -50,6 +50,7 @@ All-branch roles: admin, call_center, purchasing, supervisor, quality_manager �
 | `gamification` | all | — | — | — | — | — | — | VX | VX | n/a — own data; rankings are network-wide by design |
 | `stock_audit` | all | — | — | — | — | — | — | VAX | VEAX | own — named branch managers see their branches (branch_scope); management all |
 | `pic_analytics` | all | — | — | — | — | — | — | VX | — | own — named branch managers see their branches (branch_scope); management all |
+| `tasks` | all | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | own + «جميع الفروع» + created / assigned to me; all-branch schedules read-only for branch roles |
 
 ## Record-state and separation-of-duty rules enforced on the server
 

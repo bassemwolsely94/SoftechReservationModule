@@ -36,6 +36,7 @@ ALL_MODULES = [
     'gamification',  # points/levels: 'view' = reports, 'export' = Excel, 'edit' = rules + manual awards
     'stock_audit',   # doc 32: 'view' = all branches, 'approve' = review findings, 'export', 'edit' = thresholds
     'pic_analytics', # doc 33: 'view' = all branches + cost/GP + calls tabs, 'export' = Excel (branch managers = named grants)
+    'tasks',         # المهام: own module since 2026-11-03 (owner); every role keeps its access by default
 ]
 
 ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize']
@@ -151,7 +152,7 @@ PERMISSIONS = {
         'stockcount':   RE,
         'purchasing':   {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
         'invoices':     {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
-        'incentives':   {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
+        # incentives: none — payroll is all-branch quality managers and admins only (owner 2026-11-03)
         'cheques':      {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
         'finance':      {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
         'insurance':    {'view', 'create', 'edit', 'delete', 'approve', 'export', 'finalize'},
@@ -275,6 +276,13 @@ PERMISSIONS = {
         'stock_audit':  {'view', 'approve', 'export', 'edit'},   # review + thresholds (doc 32)
     },
 }
+
+# Tasks (owner decision 2026-11-03): its own module. Every role keeps what it had while the task
+# board was open to all staff — the views still limit changes to the creator, the assignees and
+# admin / supervisor. Switch a role off here or in «الصلاحيات» to close the task screens for it.
+TASKS = {'view', 'create', 'edit', 'delete', 'assign', 'finalize'}
+for _role, _modules in PERMISSIONS.items():
+    _modules.setdefault('tasks', set(TASKS))
 
 
 class Command(BaseCommand):
