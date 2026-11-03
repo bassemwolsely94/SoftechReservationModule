@@ -7,7 +7,7 @@ Decisions and strategic hold = purchasing edit/approve, audited (AuditLog).
 
   GET  /api/purchasing/dead-stock/summary/
   GET  /api/purchasing/dead-stock/lines/?lane=&location=&branch=&cause=&flag=&q=&show_decided=1&page=&page_size=
-                                                      (200 a page, rank order; format=xlsx = every line)
+                                                      (200 a page, rank order or &ordering=<col>/-<col>; format=xlsx = every line)
   GET  /api/purchasing/dead-stock/recompute/          {running}
   POST /api/purchasing/dead-stock/recompute/          rebuild the list for the latest engine run (background)
   POST /api/purchasing/dead-stock/decisions/          {item_id, branch_code, decision, reason, until?} · {id, close: true}
@@ -26,9 +26,15 @@ from rest_framework.response import Response
 from core.permissions import matrix_permission
 from core.export_safety import neutralise_formulas
 
+from apps.pic_analytics.queries.ordering import parse_ordering, sort_items
+
 from . import dead_stock as DS
 
 logger = logging.getLogger('elrezeiky.purchasing')
+
+# whitelist of the sortable columns of the lines grid (ordering=<field> / -<field>, sorted before paging)
+LINE_ORDERS = ('name', 'branch_name', 'qty', 'value', 'last_sale_date', 'oldest_arrival_date', 'network_rate',
+               'lane_label', 'cause_label')
 
 DEAD_READ = matrix_permission('analytics')
 DEAD_REVIEW = matrix_permission('purchasing', post=('edit', 'approve'))
@@ -146,6 +152,12 @@ def dead_stock_summary(request):
 def dead_stock_lines(request):
     snap = DS.latest_snapshot()
     lines = _lines(request, snap) if snap else []
+    try:
+        key, desc = parse_ordering(request.query_params.get('ordering'), LINE_ORDERS)
+    except ValueError as e:
+        return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    if key:
+        lines = sort_items(lines, lambda l: l.get(key), desc)         # ALL lines, before paging
     if request.query_params.get('format') == 'xlsx':
         return _excel(lines, snap)                                    # the export is never paged
     try:
