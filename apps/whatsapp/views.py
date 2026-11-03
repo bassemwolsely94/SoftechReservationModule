@@ -104,7 +104,8 @@ class ConversationListView(generics.ListAPIView):
 
     def get_queryset(self):
         from django.db.models import Q
-        qs = WAConversation.objects.select_related('customer', 'assigned_to__user')
+        qs = (WAConversation.objects.select_related('customer', 'assigned_to__user')
+              .exclude(account__is_staff_alerts=True))
         status_filter = self.request.query_params.get('status')
         if status_filter:
             qs = qs.filter(status=status_filter)
@@ -126,7 +127,7 @@ class ConversationListView(generics.ListAPIView):
 class ConversationDetailView(generics.RetrieveUpdateAPIView):
     serializer_class   = WAConversationSerializer
     permission_classes = [IsAuthenticated, WHATSAPP]
-    queryset           = WAConversation.objects.select_related('customer', 'assigned_to')
+    queryset           = WAConversation.objects.select_related('customer', 'assigned_to').exclude(account__is_staff_alerts=True)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

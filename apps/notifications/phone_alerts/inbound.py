@@ -11,6 +11,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from core.sms import sms_number
@@ -100,6 +101,12 @@ def _reply(account, wa_id, body):
         logger.warning('phone alert reply failed: %s', type(exc).__name__)
 
 
+def _by_wamid(wamid):
+    """An alert owns every message id it was ever sent under (reminders overwrite wa_message_id)."""
+    return Q(wa_message_id=wamid) | Q(pk__in=PhoneAlertAttempt.objects.filter(
+        provider_message_id=wamid).values('alert_id'))
+
+
 # ── tap ──────────────────────────────────────────────────────────────────────
 def handle_alert_tap(*, wa_id, payload, context_wamid='', account=None) -> str:
     """Quick-reply «استلمت». First tap from the alert's own phone wins; repeats are no-ops."""
@@ -134,7 +141,7 @@ def handle_free_text(*, wa_id, text, context_wamid='', account=None) -> str:
         base = PhoneAlert.objects.select_for_update(of=('self',)).select_related('recipient_staff')
         alert = None
         if context_wamid:
-            quoted = base.filter(wa_message_id=context_wamid, phone=phone).first()
+            quoted = base.filter(_by_wamid(context_wamid), phone=phone).first()
             if quoted is not None:
                 if quoted.remark:
                     return 'already_remarked'
@@ -167,7 +174,7 @@ def apply_status(wamid, new_status, errors=None) -> bool:
     if not wamid or new_status not in _STATUS_FROM:
         return False
     with transaction.atomic():
-        alert = PhoneAlert.objects.select_for_update().filter(wa_message_id=wamid).first()
+        alert = PhoneAlert.objects.select_for_update(of=('self',)).filter(_by_wamid(wamid)).first()
         if alert is None:
             return False
         error = ''

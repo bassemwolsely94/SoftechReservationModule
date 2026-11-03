@@ -212,6 +212,8 @@ def _is_staff_account(account) -> bool:
     if account is None:
         return False
     try:
+        if getattr(account, 'is_staff_alerts', False):
+            return True
         from apps.notifications.phone_alerts.sender import staff_account
         staff = staff_account()
         return staff is not None and staff.pk == account.pk
@@ -233,6 +235,8 @@ def _handle_staff_inbound(msg: dict, wa_id: str, account) -> None:
             from apps.notifications.phone_alerts.inbound import handle_free_text
             handle_free_text(wa_id=wa_id, text=msg.get('text', {}).get('body', ''),
                              context_wamid=context_wamid, account=account)
+        else:
+            logger.info('WhatsApp staff number: unsupported %s message from %s ignored', msg_type, wa_id)
     except Exception as exc:
         logger.error('WhatsApp staff-number handling failed: %s', exc, exc_info=True)
 

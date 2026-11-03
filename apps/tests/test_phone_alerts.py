@@ -682,3 +682,76 @@ class InboundTests(TestCase):
         h.assert_called_once()
         self.assertEqual(button_registry.dispatch(wa_id=self.WA, payload='refill:999999:branch'), 'unknown')
         self.assertEqual(button_registry.dispatch(wa_id=self.WA, payload='zzz'), 'not_ours')
+
+
+# ── Task 4 fix round 1 ───────────────────────────────────────────────────────
+from apps.notifications.phone_alerts.models import PhoneAlertAttempt as _Attempt
+
+from .factories import make_admin
+
+
+class InboundFixRound1Tests(InboundTests):
+    """Re-runs every InboundTests case too (flag set where the account is the staff number)."""
+
+    def test_staff_threads_hidden_from_customer_inbox(self):
+        ChannelAccount.objects.filter(pk=self.acc.pk).update(is_staff_alerts=True)
+        a = self._alert(status='sent')
+        from apps.whatsapp.sender import WhatsAppSender
+        WhatsAppSender(account=self.acc)._record_outbound(self.WA, 'template', body='x')
+        WhatsAppSender(account=self.acc)._record_outbound(self.WA, 'text', body=inbound.REPLY_TEXT)
+        self.assertEqual(WAConversation.objects.filter(account=self.acc).count(), 1)
+        cust = ChannelAccount.objects.create(channel='whatsapp', name='C', phone_or_handle='1',
+                                             provider='meta_cloud', provider_ref='888')
+        c = WAConversation.objects.create(account=cust, wa_id='201111111111', unread_count=3)
+        WAConversation.objects.filter(account=self.acc).update(unread_count=9)
+        _, _, client = make_admin('inbox_admin')
+        data = client.get('/api/whatsapp/conversations/').json()
+        rows = data['results'] if isinstance(data, dict) else data
+        self.assertEqual([r['id'] for r in rows], [c.pk])
+        staff_conv = WAConversation.objects.get(account=self.acc)
+        self.assertEqual(client.get(f'/api/whatsapp/conversations/{staff_conv.pk}/').status_code, 404)
+        omni = client.get('/api/omni/wallboard/')
+        if omni.status_code == 200:
+            self.assertEqual(omni.json()['conversations']['wa_unread'], 3)
+        del a
+
+    def test_flagged_account_no_longer_configured_still_routes_to_staff(self):
+        self.acc.provider_ref = '555'
+        self.acc.is_staff_alerts = True
+        self.acc.save()
+        SystemSetting.objects.filter(key='phone_alerts_channel_account').delete()
+        self.assertIsNone(sender.staff_account())
+        a = self._alert(status='sent')
+        self._post_webhook([self._inbound('button', f'alert:{a.token}:ack')])
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'acknowledged')
+        self.assertFalse(WAConversation.objects.filter(wa_id=self.WA).exists())
+
+    def test_reply_quoting_first_send_after_reminder_attaches(self):
+        a = self._alert(status='sent', wa_message_id='wamid.SECOND')
+        _Attempt.objects.create(alert=a, result='sent', provider_message_id='wamid.FIRST')
+        _Attempt.objects.create(alert=a, result='sent', provider_message_id='wamid.SECOND')
+        self.assertEqual(self._text('رد على الأولى', context='wamid.FIRST'), 'remark')
+        a.refresh_from_db()
+        self.assertEqual(a.remark, 'رد على الأولى')
+
+    def test_late_receipt_for_first_send_recorded(self):
+        a = self._alert(status='sent', wa_message_id='wamid.SECOND')
+        _Attempt.objects.create(alert=a, result='sent', provider_message_id='wamid.FIRST')
+        self._post_webhook(statuses=[{'id': 'wamid.FIRST', 'status': 'delivered'}])
+        self.assertTrue(a.attempts.filter(result='delivered', provider_message_id='wamid.FIRST').exists())
+
+    def test_late_tap_on_expired_or_escalated_records_ack(self):
+        for st in ('expired', 'escalated'):
+            a = self._alert(status=st)
+            self.assertEqual(self._tap(a), 'acknowledged')
+            a.refresh_from_db()
+            self.assertEqual((a.status, a.ack_at is not None), ('acknowledged', True))
+
+    def test_unsupported_staff_message_type_logged(self):
+        self.acc.provider_ref = '555'
+        self.acc.save()
+        with self.assertLogs('elrezeiky.whatsapp', level='INFO') as cm:
+            self._post_webhook([{'from': self.WA, 'id': 'wamid.v', 'timestamp': '1', 'type': 'audio',
+                                 'audio': {'id': 'm1'}}])
+        self.assertTrue(any('unsupported audio' in m for m in cm.output))

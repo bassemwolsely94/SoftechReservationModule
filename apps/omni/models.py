@@ -105,6 +105,12 @@ class ChannelAccount(models.Model):
         help_text='حساب الإرسال الافتراضي للقناة عندما لا يُحدَّد حساب',
     )
 
+    # Staff phone-alerts number: its threads never appear in the customer inbox.
+    is_staff_alerts = models.BooleanField(
+        default=False, verbose_name='رقم تنبيهات الموظفين',
+        help_text='محادثات هذا الرقم لا تظهر في صندوق العملاء',
+    )
+
     status         = models.CharField(
         max_length=12, choices=STATUS_CHOICES, default='connected',
         db_index=True, verbose_name='الحالة',
