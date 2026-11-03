@@ -1,8 +1,19 @@
-from django.conf import settings
-from django.test import TestCase
+from datetime import datetime, time, timedelta
 
+from django.conf import settings
+from django.contrib.auth.models import User
+from django.test import TestCase
+from django.utils import timezone
+
+from apps.access.models import Device, DeviceUser
+from apps.branches.models import Branch, BranchSettings
+from apps.hr.models import ShiftAssignment, ShiftTemplate
 from apps.notifications.phone_alerts.events import EVENTS
-from apps.notifications.phone_alerts.models import PhoneAlertPolicy
+from apps.notifications.phone_alerts.models import PhoneAlert, PhoneAlertPolicy, WorkOwner
+from apps.notifications.phone_alerts.recipients import on_shift_staff, resolve
+from apps.tasks.models import OperationalTask, TaskAssignment
+from apps.transfers.models import TransferRequest
+from apps.users.models import StaffProfile
 
 
 class PolicySeedTests(TestCase):
@@ -23,18 +34,6 @@ class PolicySeedTests(TestCase):
 
 
 # ── Task 2: recipient resolution + on shift ──────────────────────────────────
-from datetime import time, timedelta
-
-from django.contrib.auth.models import User
-from django.utils import timezone
-
-from apps.access.models import Device, DeviceUser
-from apps.branches.models import Branch, BranchSettings
-from apps.hr.models import ShiftAssignment, ShiftTemplate
-from apps.notifications.phone_alerts.models import WorkOwner
-from apps.notifications.phone_alerts.recipients import on_shift_staff, resolve
-from apps.users.models import StaffProfile
-
 
 def _staff(name, phone, branch=None, **kw):
     u = User.objects.create_user(name, password='x')
@@ -57,8 +56,8 @@ class RecipientTests(TestCase):
         cls.ev_owner = EVENTS['reservation_sourcing']
         cls.ev_branch = EVENTS['reservation_status_urgent']
 
-    def _device_user(self, staff, branch, age_h):
-        d = Device.objects.create(secret_hash=f'h{staff.pk}', branch=branch, status='approved')
+    def _device_user(self, staff, branch, age_h, status='approved'):
+        d = Device.objects.create(secret_hash=f'h{staff.pk}', branch=branch, status=status)
         DeviceUser.objects.create(device=d, user=staff, last_seen=timezone.now() - timedelta(hours=age_h))
 
     def test_owner_branch_specific_beats_global(self):
@@ -127,8 +126,69 @@ class RecipientTests(TestCase):
         self._device_user(nophone, self.b1, 0)
         self.assertEqual(resolve(self.ev_branch, _Src(self.b1)), [])
 
+    def test_device_path_requires_home_branch(self):
+        visitor = _staff('visitor', '01000000020', self.b2)
+        self._device_user(visitor, self.b1, 0)
+        self.assertEqual(on_shift_staff(self.b1), [])
+
+    def test_device_must_be_approved(self):
+        a = _staff('pend', '01000000021', self.b1)
+        b = _staff('rev', '01000000022', self.b1)
+        self._device_user(a, self.b1, 0, status='pending')
+        self._device_user(b, self.b1, 0, status='retired')
+        self.assertEqual(on_shift_staff(self.b1), [])
+
+    def test_implausible_phones_rejected(self):
+        junk = _staff('junk', 'abc', self.b1)
+        blank = _staff('blank', '  ', self.b1)
+        self._device_user(junk, self.b1, 0)
+        self._device_user(blank, self.b1, 0)
+        BranchSettings.objects.create(branch=self.b1, alert_mobile='xyz')
+        self.assertEqual(resolve(self.ev_branch, _Src(self.b1)), [])
+
+    def test_overnight_shift(self):
+        st = _staff('night', '01000000023', self.b1)
+        t = ShiftTemplate.objects.create(name='n', name_ar='ن', branch=self.b1, start_time=time(22, 0),
+                                         end_time=time(6, 0), days_of_week='monday')
+        ShiftAssignment.objects.create(staff=st, shift=t, valid_from=datetime(2026, 1, 1).date())
+        tz = timezone.get_current_timezone()
+        mon_night = timezone.make_aware(datetime(2026, 11, 2, 23, 0), tz)    # Monday 23:00
+        tue_early = timezone.make_aware(datetime(2026, 11, 3, 2, 0), tz)     # Tuesday 02:00 (Monday's shift)
+        tue_night = timezone.make_aware(datetime(2026, 11, 3, 23, 0), tz)    # Tuesday 23:00: not a shift day
+        mon_noon = timezone.make_aware(datetime(2026, 11, 2, 12, 0), tz)
+        self.assertEqual(on_shift_staff(self.b1, mon_night), [st])
+        self.assertEqual(on_shift_staff(self.b1, tue_early), [st])
+        self.assertEqual(on_shift_staff(self.b1, tue_night), [])
+        self.assertEqual(on_shift_staff(self.b1, mon_noon), [])
+
+    def test_transfer_branch_is_requesting_branch(self):
+        s = _staff('ts', '01000000024')
+        WorkOwner.objects.create(kind='hq_transfer_dispatch', staff=s, branch=self.b1)
+        other = _staff('to', '01000000025')
+        WorkOwner.objects.create(kind='hq_transfer_dispatch', staff=other, branch=self.b2)
+        tr = TransferRequest.objects.create(requesting_branch=self.b1, supplying_branch=self.b2)
+        self.assertEqual([x.staff for x in resolve(EVENTS['transfer_hq_submitted'], tr)], [s])
+
+    def test_task_branch_and_assignees(self):
+        creator = _staff('tc', '01000000026', self.b1)
+        a1 = _staff('t1', '01000000027')
+        a2 = _staff('t2', '01000000028')
+        task = OperationalTask.objects.create(title='x', created_by=creator, assigned_to=a1)
+        TaskAssignment.objects.create(task=task, staff=a2)
+        self.assertEqual([x.staff for x in resolve(EVENTS['task_assigned'], task)], [a1, a2])
+        # No task.branch -> creator's branch drives branch-group resolution.
+        from apps.notifications.phone_alerts.recipients import _source_branch
+        self.assertEqual(_source_branch(EVENTS['task_assigned'], task), self.b1)
+        task.branch = self.b2
+        self.assertEqual(_source_branch(EVENTS['task_assigned'], task), self.b2)
+
+    def test_escalation_falls_back_to_supervisors_without_owner_kind(self):
+        u = User.objects.create_user('sup', password='x')
+        sup = StaffProfile.objects.create(user=u, role='supervisor', phone='01000000029')
+        orig = PhoneAlert(event='task_assigned', phone='201')
+        self.assertEqual([x.staff for x in resolve(EVENTS['escalation'], orig)], [sup])
+
     def test_escalation_policy_list_else_escalation_owner(self):
-        from apps.notifications.phone_alerts.models import PhoneAlert, PhoneAlertPolicy
         esc_owner = _staff('eo', '01000000012')
         listed = _staff('li', '01000000013')
         WorkOwner.objects.create(kind='reservation_sourcing', staff=esc_owner, is_escalation=True)

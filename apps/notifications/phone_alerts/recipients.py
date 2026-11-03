@@ -4,6 +4,7 @@ Who gets a phone alert, and on which number.
 ``resolve`` is deterministic: owners / assignees / on-shift staff / escalation list, minus the
 actor, normalised with ``core.sms.sms_number`` and de-duplicated by phone (first staff wins).
 """
+import re
 from datetime import timedelta
 from typing import NamedTuple, Optional
 
@@ -21,6 +22,11 @@ _WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
 class Recipient(NamedTuple):
     staff: Optional[object]   # users.StaffProfile, or None for a bare branch mobile
     phone: str
+
+
+def is_plausible_phone(phone):
+    """After sms_number: Egyptian international form = '20' + 10 digits (12 digits). Rejects '20' from blanks/junk."""
+    return bool(re.fullmatch(r'20\d{10}', phone or ''))
 
 
 def _eligible(qs):
@@ -63,8 +69,11 @@ def on_shift_staff(branch, now=None):
     if branch is None:
         return []
     now = now or timezone.now()
+    # Device path: approved devices of this branch, and only staff whose home branch is this branch
+    # (a visitor signed in on the PC is not "on shift" here).
     ids = set(DeviceUser.objects.filter(
-        device__branch=branch, last_seen__gte=now - DEVICE_RECENCY,
+        device__branch=branch, device__status='approved', user__branch=branch,
+        last_seen__gte=now - DEVICE_RECENCY,
     ).values_list('user_id', flat=True))
     day = timezone.localtime(now).date()
     candidates = ShiftAssignment.objects.filter(
@@ -139,19 +148,24 @@ def resolve(event, source, actor=None, now=None):
             orig = EVENTS.get(source.event) if source is not None else None
             if orig and orig.owner_kind:
                 staff_list = _owners(orig.owner_kind, branch, escalation=True)
+            else:
+                # Controller ruling: no owner_kind (person/branch events) and no escalate_to list
+                # -> escalate to active supervisors.
+                from apps.users.models import StaffProfile
+                staff_list = list(_eligible(StaffProfile.objects.filter(role='supervisor')).order_by('pk'))
 
     actor_id = getattr(actor, 'pk', None)
     actor_phone = sms_number(actor.phone) if actor is not None and getattr(actor, 'phone', '') else None
     out, seen = [], set()
     for s in staff_list:
         phone = sms_number(s.phone)
-        if s.pk == actor_id or phone == actor_phone or phone in seen:
+        if not is_plausible_phone(phone) or s.pk == actor_id or phone == actor_phone or phone in seen:
             continue
         seen.add(phone)
         out.append(Recipient(s, phone))
     for raw in extra:
         phone = sms_number(raw)
-        if phone == actor_phone or phone in seen:
+        if not is_plausible_phone(phone) or phone == actor_phone or phone in seen:
             continue
         seen.add(phone)
         out.append(Recipient(None, phone))
