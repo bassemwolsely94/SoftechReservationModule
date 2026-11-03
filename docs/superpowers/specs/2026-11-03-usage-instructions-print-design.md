@@ -89,9 +89,9 @@ text, status (pending / confirmed / excluded), confirmed_by, confirmed_at.
 2. «الأكثر استخداما» — the most frequently confirmed instruction for this item (ties → most
    recent), from confirmed lines across all sheets.
 3. «محتوى معتمد» — pharmacist-approved curated content owned by Project 4 (drug assistant):
-   one per-item record in `apps/product_experience` with status draft→approved, approved_by/at,
+   one per-item record in `apps/counselling` with status draft→approved, approved_by/at,
    version. This screen reads **approved versions only**, through a read helper Project 4 exposes
-   (`approved_usage_text(item)` or similar; see the shared notes folder). Until it exists this
+   (`apps.counselling.selectors.approved_usage_text(item)`; contract in the shared notes folder, project4-counselling-content-contract.md). Until it exists this
    source returns nothing. `enrichment.ItemEnrichment` is **not** used: its clinical fields are
    AI-filled and auto-approved at ≥0.9 confidence (verified live 2026-11-03: 10 of 38,287 rows have
    dosage, 0 published).

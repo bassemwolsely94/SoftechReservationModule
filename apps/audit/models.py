@@ -155,6 +155,11 @@ class AuditLog(models.Model):
 
         # Received-without-order check (P-31)
         ('receipt_check_decided',        'استلام بدون طلب — قرار'),
+        ('usage_line_confirmed',         'طريقة الاستخدام — تأكيد تعليمات صنف'),
+        ('usage_line_excluded',          'طريقة الاستخدام — استبعاد صنف من الطباعة'),
+        ('usage_sheet_printed',          'طريقة الاستخدام — طلب طباعة'),
+        ('usage_rx_attached',            'طريقة الاستخدام — إرفاق صورة روشتة'),
+        ('usage_settings_changed',       'طريقة الاستخدام — تعديل القوالب والإعدادات'),
 
     ]
 

@@ -63,6 +63,7 @@ import MyIncentivesPage from './pages/MyIncentivesPage'
 import GamificationPage from './pages/GamificationPage'
 import StockAuditPage from './pages/StockAuditPage'
 import PicAnalyticsPage from './pages/PicAnalyticsPage'
+import UsagePrintPage from './pages/UsagePrintPage'
 import UserManagementPage from './pages/UserManagementPage'
 import PermissionsMatrixPage from './pages/PermissionsMatrixPage'
 import PickZonesPage from './pages/PickZonesPage'
@@ -435,6 +436,7 @@ export default function App() {
             <Route path="replacement/new"       element={<RequireRole roles={['admin','supervisor','pharmacist']}><ReplacementNewCasePage /></RequireRole>} />
             <Route path="replacement/:id"       element={<RequireRole roles={['admin','supervisor','purchasing','quality_manager','pharmacist']}><ReplacementCaseDetailPage /></RequireRole>} />
             <Route path="pos"                   element={<POSOrderPage />} />
+            <Route path="usage-print"           element={<UsagePrintPage />} />
             <Route path="pos/exceptions"        element={<RequireRole roles={['admin','supervisor','pharmacist']}><ExceptionCenterPage /></RequireRole>} />
             <Route path="recommendations"       element={<RecommendationsPage />} />
             <Route path="inventory"          element={<InventoryDashboard />} />

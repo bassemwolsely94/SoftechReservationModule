@@ -61,6 +61,7 @@ MODULE_CHOICES = [
     ('stock_audit',  'تدقيق حركات المخزون'),
     ('pic_analytics', 'تحليلات العملاء'),
     ('tasks',        'المهام'),
+    ('usage_print',  'طباعة طريقة الاستخدام'),
 ]
 
 ACTION_CHOICES = [

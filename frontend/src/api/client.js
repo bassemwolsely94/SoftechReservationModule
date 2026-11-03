@@ -2878,6 +2878,20 @@ export const replacementApi = {
 }
 
 // ── Stock Transactions Audit (تدقيق حركات المخزون, doc 32) — every rule enforced server-side ──
+// Usage-instructions slip (Project 5) — flag + RBAC enforced server-side (apps/usage_print/access.py)
+export const usagePrintApi = {
+  sheet:        (params)        => api.get('/usage-print/sheet/', { params }),
+  line:         (id, data)      => api.post(`/usage-print/lines/${id}/`, data),
+  print:        (id, layout)    => api.post(`/usage-print/sheets/${id}/print/`, { layout }),
+  prescription: (id, file)      => {
+    const fd = new FormData()
+    fd.append('prescription_image', file)
+    return api.post(`/usage-print/sheets/${id}/prescription/`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+  settings:     ()              => api.get('/usage-print/settings/'),
+  saveSettings: (data)          => api.put('/usage-print/settings/', data),
+}
+
 export const stockAuditApi = {
   me:           ()              => api.get('/stock-audit/me/'),
   summary:      (params = {})   => api.get('/stock-audit/summary/', { params }),

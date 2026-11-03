@@ -72,6 +72,7 @@
 | `apps/whatsapp` / `apps/pbx` / `apps/omni` / `apps/social` | Comms stack (CEP / unified inbox) |
 | `apps/hr` / `apps/qa` | Geofenced attendance + branch QA (mobile) |
 | `apps/portal` | External customer PWA (magic-link auth) |
+| `apps/usage_print` | «طريقة الاستخدام» — usage-instruction slip per sale invoice on the 80 mm receipt printer (`/usage-print`); deterministic suggestions, human confirms every line, audited; read-only vs SOFTECH; flag `USAGE_PRINT_ENABLED` (default OFF). Spec `docs/superpowers/specs/2026-11-03-usage-instructions-print-design.md` |
 | `apps/gamification` | Gamification (التحفيز): points ledger, levels/titles, badges, streaks, rankings, executive reports — recognition only ([29_GAMIFICATION.md](29_GAMIFICATION.md)) |
 
 ### Partially Complete Modules

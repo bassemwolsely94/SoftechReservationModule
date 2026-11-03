@@ -638,6 +638,18 @@ _RX_MAX_BYTES = 12 * 1024 * 1024
 _RX_TYPES = {'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'}
 
 
+def prescription_image_error(f):
+    """Why an uploaded prescription photo is refused (Arabic), or None when it is fine. Shared by
+    the POS order and the usage-instructions slip (apps/usage_print) so both keep one rule."""
+    if not f:
+        return 'لم تُرفق صورة.'
+    if f.size > _RX_MAX_BYTES:
+        return 'حجم الصورة يتجاوز الحد المسموح (12 ميجابايت).'
+    if getattr(f, 'content_type', None) and f.content_type not in _RX_TYPES:
+        return 'نوع الملف غير مدعوم — استخدم صورة (JPEG/PNG/WebP).'
+    return None
+
+
 @api_view(['POST'])
 @permission_classes([CanOperatePosOrders])
 @parser_classes([MultiPartParser, FormParser])
@@ -654,14 +666,9 @@ def upload_prescription(request, pk):
     if order.is_locked:
         return Response({'detail': 'الأمر مقفل — لا يمكن تعديله.'}, status=status.HTTP_409_CONFLICT)
     f = request.FILES.get('prescription_image') or request.FILES.get('file')
-    if not f:
-        return Response({'detail': 'لم تُرفق صورة.'}, status=status.HTTP_400_BAD_REQUEST)
-    if f.size > _RX_MAX_BYTES:
-        return Response({'detail': 'حجم الصورة يتجاوز الحد المسموح (12 ميجابايت).'},
-                        status=status.HTTP_400_BAD_REQUEST)
-    if getattr(f, 'content_type', None) and f.content_type not in _RX_TYPES:
-        return Response({'detail': 'نوع الملف غير مدعوم — استخدم صورة (JPEG/PNG/WebP).'},
-                        status=status.HTTP_400_BAD_REQUEST)
+    error = prescription_image_error(f)
+    if error:
+        return Response({'detail': error}, status=status.HTTP_400_BAD_REQUEST)
     order.prescription_image = f
     order.save(update_fields=['prescription_image'])
     return Response({'prescription_image': order.prescription_image.url if order.prescription_image else None})
