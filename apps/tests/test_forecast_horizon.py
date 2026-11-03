@@ -223,3 +223,56 @@ class SeasonalityModeApiTests(TestCase):
         bad = self.client.post('/api/forecasting/references/', {'seasonality_mode': 'magic'}, format='json')
         self.assertEqual(bad.status_code, 400)
         self.assertEqual(self.client.get('/api/forecasting/references/').json()['engine_seasonality_mode'], 'branch')
+
+
+class ScenarioSeasonalityChoiceTests(TestCase):
+    """Each scenario chooses its own seasonality (none / chain / branch)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.b = Branch.objects.create(softech_branch_id='986', code='986', name='SC2', is_operational=True)
+        for (y, m, v) in [(2025, 9, 1000), (2026, 8, 1200), (2026, 7, 1100)]:
+            K.objects.create(branch=cls.b, year=y, month=m, metric='cash_delivery', value=Decimal(v))
+
+    def setUp(self):
+        from apps.tests.factories import make_user
+        _, _, self.client = make_user('ss_admin', role='admin', access_all=True)
+
+    def _refs(self):
+        idx = {str(mo): 1.0 for mo in range(1, 13)}
+        idx['9'] = 1.1; idx['8'] = 0.8
+        return {'seasonality': {'cash_delivery': idx}, 'branch_seasonality': {}}
+
+    def test_new_scenario_defaults_to_global_setting_and_can_override(self):
+        from apps.config.models import SystemSetting
+        SystemSetting.objects.update_or_create(key='forecast_seasonality_mode', defaults={'value': 'chain', 'label': 'x'})
+        y, m = _shift_month(*current_ym(), 1)
+        r = self.client.post('/api/forecasting/scenarios/', {'name': 'a', 'year': y, 'month': m}, format='json')
+        self.assertEqual(r.json()['seasonality_mode'], 'chain')
+        r = self.client.post('/api/forecasting/scenarios/', {'name': 'b', 'year': y, 'month': m,
+                                                             'seasonality_mode': 'none'}, format='json')
+        self.assertEqual(r.json()['seasonality_mode'], 'none')
+        sid = r.json()['id']
+        r = self.client.patch(f'/api/forecasting/scenarios/{sid}/', {'seasonality_mode': 'branch'}, format='json')
+        self.assertEqual(r.json()['seasonality_mode'], 'branch')
+
+    def _generate(self, mode):
+        sc = ForecastScenario.objects.create(name=mode, year=2026, month=9, model='b',
+                                             benchmark_growth=Decimal('0'), seasonality_mode=mode)
+        ForecastEngine.ensure_factors(sc)
+        sc.factors.filter(metric='cash_delivery').update(
+            w_lm=Decimal('0.5'), w_pm=Decimal('0.3'), w_yoy=Decimal('0.2'), seasonality_index=Decimal('1'))
+        with mock.patch('apps.forecasting.references.get', return_value=self._refs()):
+            ForecastEngine().generate(sc)
+        return ForecastResult.objects.get(scenario=sc, branch=self.b, metric='cash_delivery')
+
+    def test_none_mode_uses_no_seasonality(self):
+        r = self._generate('none')
+        self.assertIsNone(r.season_index)
+        self.assertEqual(r.model_b, Decimal('1130.00'))          # 600 + 330 + 200
+
+    def test_chain_mode_deseasonalises_and_records_the_index(self):
+        r = self._generate('chain')
+        self.assertEqual(r.season_index, Decimal('1.1000'))
+        # (0.5×1200/0.8 + 0.3×1100/1.0)×1.1 + 0.2×1000 = (750+330)×1.1 + 200
+        self.assertEqual(r.model_b, Decimal('1388.00'))
