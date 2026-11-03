@@ -3,7 +3,7 @@ apps/tasks/serializers.py
 """
 from rest_framework import serializers
 from django.utils import timezone
-from apps.notifications.phone_alerts.hooks import PhoneAlertStatusMixin, PhoneAlertWriteMixin
+from apps.notifications.phone_alerts.hooks import RECORD_EVENTS, PhoneAlertStatusMixin, PhoneAlertWriteMixin
 from .models import (
     OperationalTask, TaskAssignment, TaskItem,
     TaskMessage, TaskAttachment, TaskSchedule, TaskAuditLog,
@@ -213,7 +213,7 @@ class TaskDetailSerializer(PhoneAlertStatusMixin, serializers.ModelSerializer):
 # ── Write serializer ───────────────────────────────────────────────────────────
 
 class TaskWriteSerializer(PhoneAlertWriteMixin, serializers.ModelSerializer):
-    phone_alert_events = ('task_assigned', 'task_status')
+    phone_alert_events = RECORD_EVENTS['task']
 
     class Meta:
         model = OperationalTask

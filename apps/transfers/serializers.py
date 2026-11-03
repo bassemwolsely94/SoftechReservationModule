@@ -1,6 +1,6 @@
 from decimal import Decimal
 from rest_framework import serializers
-from apps.notifications.phone_alerts.hooks import PhoneAlertStatusMixin, PhoneAlertWriteMixin
+from apps.notifications.phone_alerts.hooks import RECORD_EVENTS, PhoneAlertStatusMixin, PhoneAlertWriteMixin
 from .models import TransferRequest, TransferRequestItem, TransferRequestMessage
 from apps.catalog.models import ItemStock
 
@@ -391,7 +391,7 @@ class TransferRequestDetailSerializer(PhoneAlertStatusMixin, serializers.ModelSe
 class TransferRequestCreateSerializer(PhoneAlertWriteMixin, serializers.ModelSerializer):
     items = TransferRequestItemWriteSerializer(many=True, required=False)
 
-    phone_alert_events = ('transfer_hq_submitted', 'transfer_status')
+    phone_alert_events = RECORD_EVENTS['transfer']
 
     class Meta:
         model  = TransferRequest
@@ -420,7 +420,7 @@ class TransferRequestUpdateSerializer(PhoneAlertWriteMixin, serializers.ModelSer
         model  = TransferRequest
         fields = ['notes', 'requesting_branch', 'supplying_branch', 'phone_alert']
 
-    phone_alert_events = ('transfer_hq_submitted', 'transfer_status')
+    phone_alert_events = RECORD_EVENTS['transfer']
 
     def validate(self, data):
         instance = self.instance

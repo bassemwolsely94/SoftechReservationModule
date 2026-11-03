@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from apps.notifications.phone_alerts.hooks import PhoneAlertStatusMixin, PhoneAlertWriteMixin
+from apps.notifications.phone_alerts.hooks import RECORD_EVENTS, PhoneAlertStatusMixin, PhoneAlertWriteMixin
 from .models import Reservation, ReservationStatusLog, ReservationActivity, ReservationDownpayment, ReservationImage, ReservationLine
 
 
@@ -497,7 +497,7 @@ class ReservationDetailSerializer(PhoneAlertStatusMixin, RecordPhoneMask, serial
 # ── Create / Update ───────────────────────────────────────────────────────────
 
 class ReservationCreateSerializer(PhoneAlertWriteMixin, serializers.ModelSerializer):
-    phone_alert_events = ('reservation_sourcing', 'reservation_status_urgent')
+    phone_alert_events = RECORD_EVENTS['reservation']
 
     class Meta:
         model = Reservation
@@ -527,7 +527,7 @@ class ReservationCreateSerializer(PhoneAlertWriteMixin, serializers.ModelSeriali
 
 
 class ReservationUpdateSerializer(PhoneAlertWriteMixin, serializers.ModelSerializer):
-    phone_alert_events = ('reservation_sourcing', 'reservation_status_urgent')
+    phone_alert_events = RECORD_EVENTS['reservation']
 
     class Meta:
         model = Reservation
