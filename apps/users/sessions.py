@@ -29,4 +29,9 @@ def end_sessions(user) -> int:
         _, created = BlacklistedToken.objects.get_or_create(token=token)
         revoked += int(created)
     logger.info('[sessions] user=%s — %d refresh token(s) revoked', user.pk, revoked)
+    try:
+        from apps.access.ws import push_recheck
+        push_recheck([user.pk])
+    except Exception:
+        logger.warning('[sessions] user=%s - socket re-check push failed', user.pk, exc_info=True)
     return revoked

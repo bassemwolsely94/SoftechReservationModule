@@ -128,6 +128,36 @@ def verdict(scope, user, kind, token_exp=None, now=None):
     return WsVerdict(False, CLOSE_ZONE, reason, zone, mode == 'enforce')
 
 
+# ── Server push ──────────────────────────────────────────────────────────────
+
+def _send_recheck(user_ids):
+    """Group-send `access.recheck`. Never raises: a failure is one WARNING line."""
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+        layer = get_channel_layer()
+        if layer is None:
+            return
+        groups = ['access_all'] if user_ids is None else [f'access_user_{i}' for i in user_ids]
+        for group in groups:
+            async_to_sync(layer.group_send)(group, {'type': 'access.recheck'})
+    except Exception as exc:
+        log.warning('access re-check push failed: %s', exc)
+
+
+def push_recheck(user_ids=None):
+    """Ask open sockets to re-run their verdict now: the given users' sockets, or everyone's when
+    `user_ids` is None. Runs after the surrounding transaction commits. Never raises."""
+    ids = None if user_ids is None else list(user_ids)
+    if ids is not None and not ids:
+        return
+    try:
+        from django.db import transaction
+        transaction.on_commit(lambda: _send_recheck(ids))
+    except Exception as exc:
+        log.warning('access re-check push failed: %s', exc)
+
+
 # ── Consumers ────────────────────────────────────────────────────────────────
 
 AUDIT_ACTION = 'ws_zone_denied'

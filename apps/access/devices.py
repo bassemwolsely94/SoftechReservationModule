@@ -340,6 +340,15 @@ class RetiredDevice(Exception):
     pass
 
 
+def _push_device_users(device):
+    """Tell the open sockets of everyone who signed in on `device` to re-check. Never raises."""
+    try:
+        from .ws import push_recheck
+        push_recheck(list(device.device_users.values_list('user__user_id', flat=True)))
+    except Exception:
+        logger.warning("device %s: socket re-check push failed", device.pk, exc_info=True)
+
+
 def set_status(device, status, by, note='', request=None):
     """Change a device's status: save (so the cache drops via post_save), audit, activity log.
     Never use QuerySet.update here - it would skip the invalidation."""
@@ -369,4 +378,5 @@ def set_status(device, status, by, note='', request=None):
     UserActivityLog.objects.create(target_user=device.owner, changed_by=by, action='device_status',
                                    old_value=old_status, new_value=status, note=device.status_note,
                                    device=device, **_request_fields(request))
+    _push_device_users(device)
     return device

@@ -21,3 +21,13 @@ class AccessConfig(AppConfig):
 
         post_save.connect(invalidate_policy, sender=ZonePolicy, dispatch_uid='access_zp_save')
         post_delete.connect(invalidate_policy, sender=ZonePolicy, dispatch_uid='access_zp_delete')
+
+        def _push_all(*args, **kwargs):
+            from .ws import push_recheck
+            push_recheck(None)
+
+        for model, tag in ((ZonePolicy, 'zp'), (TrustedNetwork, 'tn')):
+            post_save.connect(_push_all, sender=model, dispatch_uid=f'access_{tag}_push_save',
+                              weak=False)
+            post_delete.connect(_push_all, sender=model, dispatch_uid=f'access_{tag}_push_delete',
+                                weak=False)
