@@ -113,7 +113,6 @@ export default function ApprovalsPage() {
   const requests = data?.results || data || []
 
   // Pending = every row is loaded → sort in the browser. History is paged by the server → the server sorts.
-  // Pending = every row is loaded → sort in the browser. History is paged by the server → the server sorts.
   const client = useSortableRows(requests, { getValue, persistKey: 'approvals-pending', keys: CLIENT_KEYS })
   const server = useServerSort(ordering, setOrdering, { allowed: SERVER_SORT_KEYS })
   const th = (key, type, label) => (
