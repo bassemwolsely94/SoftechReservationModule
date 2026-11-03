@@ -228,6 +228,7 @@ export const NAV_GROUPS = [
     items: [
       { to: '/audit',            icon: '🛡️', label: 'المراجعة والأمان', roles: ['admin','supervisor','quality_manager'] },
       { to: '/users',            icon: '👤', label: 'المستخدمون',        roles: ['admin','supervisor'] },
+      { to: '/phone-alerts',     icon: '📲', label: 'تنبيهات الموبايل',   roles: ['admin','supervisor'] },
       { to: '/permissions',      icon: '🔐', label: 'الصلاحيات',         roles: ['admin'] },
       { to: '/erp-permissions',  icon: '🧩', label: 'صلاحيات Softech',   roles: ['admin'] },
       { to: '/settings',         icon: '⚙️', label: 'الإعدادات',         roles: ['admin','pharmacist'] },

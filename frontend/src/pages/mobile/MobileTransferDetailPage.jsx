@@ -13,6 +13,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { transfersApi } from '../../api/client'
 import { transferBadgeClass } from './transferStatus'
 import MobileChatter from '../../components/MobileChatter'
+import PhoneAlertStatusChip from '../../components/PhoneAlertStatusChip'
 import { MobileLoading, MobileError } from '../../components/mobileUi'
 import { fa, ba } from '../../utils/flowArrow'
 
@@ -109,6 +110,7 @@ export default function MobileTransferDetailPage() {
         <div className="text-sm text-gray-700">
           {t.requesting_branch_name} <span className="text-gray-400">←</span> {t.supplying_branch_name || '—'}
         </div>
+        <div className="mt-1.5"><PhoneAlertStatusChip status={t.phone_alert_status} remark={t.phone_alert_remark} /></div>
         {t.rejection_reason && <p className="text-xs text-red-600 mt-2">سبب الرفض: {t.rejection_reason}</p>}
         {t.revision_notes &&   <p className="text-xs text-yellow-700 mt-2">التعديل المطلوب: {t.revision_notes}</p>}
         {t.erp_reference &&    <p className="text-xs text-gray-500 mt-2 font-mono" dir="ltr">ERP: {t.erp_reference}</p>}

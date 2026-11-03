@@ -750,6 +750,10 @@ SCREENS = [
             'for your branch and the current status are shown.'),
         'audience': T('الفرع الطالب والفرع المصدر والمشرف.', 'The requesting branch, the supplying branch and supervisors.'),
         'steps': [
+            T('بجوار الحالة شارة «📲» تبيّن وصول تنبيه الموبايل (أُرسل / وصل / قُرئ / استلم / صُعّد / انتهى) وملاحظة المستلم.',
+              'Next to the status a "📲" chip shows how the phone alert is going (Sent / Delivered / Read / Received / Escalated / Expired) and the recipient\'s remark.'),
+            T('«📲 نبّه على الموبايل» (يظهر لو الإدارة فعّلته): يصل واتساب لمسؤول صرف تحويلات المخزن الرئيسي، ثم تنبيهات تغيّر الحالة لموبايل الفرع.',
+              '"📲 Alert by phone" (shown when management enabled it): a WhatsApp message reaches the HQ dispatch owner, then status-change alerts go to the branch mobile.'),
             T('الفرع الطالب: أضف/عدّل الأصناف في المسودة ثم «تقديم الطلب».', 'Requesting branch: add/edit items in the draft, then "Submit".'),
             T('الفرع المصدر: «اعتماد» وأدخل الكمية المعتمدة لكل صنف (يمكن جزئياً)، أو «رفض» بسبب، أو «طلب تعديل» بملاحظات.',
               'Supplying branch: "Approve" with the approved quantity per item (partial allowed), or "Reject" with a reason, or "Request changes" with notes.'),
@@ -940,7 +944,7 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-01',
+        'updated': '2026-11-03',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

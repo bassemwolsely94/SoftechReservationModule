@@ -13,6 +13,7 @@ import CanDo from '../components/CanDo'
 import WhatsAppShareButton from '../components/WhatsAppShareButton'
 import VoiceNoteRecorder from '../components/VoiceNoteRecorder'
 import ItemSearchWidget from '../components/ItemSearchWidget'
+import PhoneAlertStatusChip from '../components/PhoneAlertStatusChip'
 import { fa } from '../utils/flowArrow'
 import SortTh from '../components/SortTh'
 import useSortableRows from '../hooks/useSortableRows'
@@ -1336,6 +1337,7 @@ export default function TransferDetailPage() {
                 style={{ background: s.bg, color: s.text, border: `1px solid ${s.border}` }}>
                 {s.label}
               </span>
+              <PhoneAlertStatusChip status={tr.phone_alert_status} remark={tr.phone_alert_remark} />
               {/* Deep-link to the fulfillment side once issued as a 125 */}
               {(tr.in_transit_docs || []).map(d => (
                 <button data-tour="transfers-detail-transit-link"

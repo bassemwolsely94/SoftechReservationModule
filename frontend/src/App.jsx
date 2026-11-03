@@ -66,6 +66,7 @@ import PicAnalyticsPage from './pages/PicAnalyticsPage'
 import UserManagementPage from './pages/UserManagementPage'
 import PermissionsMatrixPage from './pages/PermissionsMatrixPage'
 import PickZonesPage from './pages/PickZonesPage'
+import PhoneAlertsPage from './pages/PhoneAlertsPage'
 import ErpPermissionsPage from './pages/ErpPermissionsPage'
 import DeliveryDashboard from './pages/DeliveryDashboard'
 import DeliveryAnalyticsPage from './pages/DeliveryAnalyticsPage'
@@ -528,6 +529,9 @@ export default function App() {
               element={<RequireRole roles={['admin','supervisor']}><UserManagementPage /></RequireRole>} />
             {/* pick zones: picking-sheet classification (read: all staff) */}
             <Route path="pick-zones" element={<PickZonesPage />} />
+            {/* phone alerts (WhatsApp): admin + supervisor */}
+            <Route path="phone-alerts"
+              element={<RequireRole roles={['admin','supervisor']}><PhoneAlertsPage /></RequireRole>} />
             {/* permissions matrix: admin only */}
             <Route path="permissions"
               element={<RequireRole roles={['admin']}><PermissionsMatrixPage /></RequireRole>} />
