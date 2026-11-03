@@ -1338,7 +1338,7 @@ in `.env`) and the plain customer page `/api/customers/<id>/` as one row. The PO
 under `BULK_READ_ENFORCEMENT=enforce` a non-admin is blocked from reading customers and exporting for
 `BULK_READ_BLOCK_MINUTES=30`. Admins are never blocked. Default `log`.
 
-**Step 1 - release the code with `release.sh`** (it runs migrate: `audit 0030`, `users 0042`).
+**Step 1 - release the code with `release.sh`** (it runs migrate: `audit 0030`, `users 0044`).
 ```bash
 sudo /opt/elrezeiky/release.sh
 ```
