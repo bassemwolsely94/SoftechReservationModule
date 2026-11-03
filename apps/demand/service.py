@@ -162,11 +162,13 @@ def create_demand(*, phone, customer_name, branch, created_by,
     # System log
     DemandLog.system(demand, f'تم إنشاء الطلب بواسطة {created_by.full_name if created_by else "النظام"}')
 
-    # Try ERP enrichment (non-blocking)
-    try:
-        enrich_demand_from_erp(demand)
-    except Exception:
-        pass
+    # Try ERP enrichment (non-blocking). Self-service (anonymous public form) requests skip it:
+    # no SOFTECH read and no customer link from an anonymous page; staff link them on demand.
+    if source != 'self_service':
+        try:
+            enrich_demand_from_erp(demand)
+        except Exception:
+            pass
 
     # Auto-schedule follow-up
     schedule_followup(demand, hours_from_now=2, created_by=created_by)

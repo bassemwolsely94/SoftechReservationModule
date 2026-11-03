@@ -1203,7 +1203,7 @@ def public_item_lookup(request):
         item = b.item if (b and b.item and b.item.is_active) else None
     if not item:
         return Response({'found': False})
-    return Response({'found': True, 'id': item.id, 'name': item.name, 'softech_id': item.softech_id})
+    return Response({'found': True, 'id': item.id, 'name': item.name})
 
 
 @api_view(['GET'])
@@ -1225,15 +1225,22 @@ def public_branches(request):
 @permission_classes([AllowAny])
 @throttle_classes([PublicDemandThrottle])
 def public_demand_interest(request):
-    """Customer self-registers interest in an out-of-stock item → a demand record.
-    Public, throttled, deduped. No sensitive data returned."""
+    """Customer self-registers interest in an out-of-stock item -> a demand record.
+    Public, throttled, guarded (core/public_guard), write-only: the answer is always {'ok': True}
+    whether the request is new, a duplicate, a bot or over the daily phone limit, so the form
+    never reveals whether a phone is already on file. Reads only phone/name/item/branch plus the
+    guard fields challenge/nonce/website."""
+    from core import public_guard
     phone = _valid_eg_phone(request.data.get('phone'))
     if not phone:
         return Response({'detail': 'رقم هاتف غير صالح (موبايل 11 رقماً يبدأ بـ 01)'}, status=400)
+    name = str(request.data.get('name') or '').strip()
+    if len(name) > 80:
+        return Response({'detail': 'الاسم طويل جداً (80 حرفاً كحد أقصى)'}, status=400)
 
     from apps.catalog.models import Item
     from apps.branches.models import Branch
-    from .models import DemandRecord, DemandItem
+    from .models import DemandItem
 
     item = Item.objects.filter(pk=request.data.get('item'), is_active=True).first()
     if not item:
@@ -1242,21 +1249,29 @@ def public_demand_interest(request):
     if not branch:
         return Response({'detail': 'الفرع غير صحيح'}, status=400)
 
-    # Dedup: same phone+item already open in the last 30 days → idempotent.
+    # Guard last: an invalid form above must not burn one of the phone's daily submissions.
+    try:
+        public_guard.check_submission(request.data, 'notify', phone=phone)
+    except public_guard.GuardError as e:
+        if e.code in public_guard.SILENT_CODES:
+            return Response({'ok': True})
+        return Response({'detail': public_guard.GUARD_MESSAGES[e.code]}, status=400)
+
+    # Dedup: same phone+item already open in the last 30 days -> same answer, no new record.
     if DemandItem.objects.filter(
         item=item, demand__phone=phone,
         demand__status__in=['new', 'assigned', 'follow_up', 'stock_eta',
                             'transfer_suggested', 'purchasing_flagged'],
         demand__created_at__gte=timezone.now() - timedelta(days=30),
     ).exists():
-        return Response({'ok': True, 'already': True})
+        return Response({'ok': True})
 
-    demand = service.create_demand(
-        phone=phone, customer_name=(request.data.get('name') or '').strip(),
+    service.create_demand(
+        phone=phone, customer_name=name,
         branch=branch, created_by=None, source='self_service',
         items_data=[{'item': item.id, 'quantity': 1}],
     )
-    return Response({'ok': True, 'demand_number': demand.demand_number}, status=201)
+    return Response({'ok': True})
 
 
 @api_view(['GET'])

@@ -3,10 +3,14 @@
  * Customer self-service: scan a shelf QR (or open a link) for an out-of-stock
  * item and leave a phone number to be notified when it's back. Lands as a demand.
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { solveChallenge } from '../utils/publicGuard'
 
 const BRAND = 'rgb(var(--c-brand-600))'
+const STALE_MS = 9 * 60 * 1000   // a solved challenge dies at 10 min on the server; refresh before that
+const NO_DEVICE = 'تعذر التحقق من الجهاز — جرّب متصفحاً آخر أو اتصل بالفرع'
+const HIDDEN = { position: 'absolute', left: '-9999px', width: 1, height: 1, opacity: 0, overflow: 'hidden' }
 
 function validPhone(raw) {
   const d = (raw || '').replace(/\D/g, '')
@@ -26,14 +30,29 @@ export default function NotifyPage() {
   const [state, setState]     = useState('form')   // form | done | error
   const [err, setErr]         = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [verifying, setVerifying]   = useState(false)
+  const [website, setWebsite]       = useState('')   // honeypot: humans never see or fill it
+  const solving = useRef(null)   // { promise, at } - one solution is single-use
+
+  // Start solving as soon as the form is shown so the submit rarely waits.
+  function startSolve() {
+    const p = solveChallenge('notify')
+    p.catch(() => {})            // handled where it is awaited
+    solving.current = { promise: p, at: Date.now() }
+  }
+  function ensureSolve() {
+    if (!solving.current || Date.now() - solving.current.at > STALE_MS) startSolve()
+    return solving.current.promise
+  }
+  useEffect(() => { if (itemId) startSolve() }, [itemId])   // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (itemId) {
-      fetch(`/api/demand/public/item/?id=${encodeURIComponent(itemId)}`)
+      fetch(`/api/public/notify/item/?id=${encodeURIComponent(itemId)}`)
         .then(r => r.json()).then(d => { if (d.found) setItem(d) }).catch(() => {})
     }
     if (!urlBranch) {
-      fetch('/api/demand/public/branches/')
+      fetch('/api/public/notify/branches/')
         .then(r => r.json()).then(d => setBranches(d.branches || [])).catch(() => {})
     }
   }, [itemId, urlBranch])
@@ -43,13 +62,25 @@ export default function NotifyPage() {
     if (!branch)            { setErr('اختر الفرع'); return }
     setSubmitting(true); setErr('')
     try {
-      const res = await fetch('/api/demand/public/interest/', {
+      const held = ensureSolve()
+      let sol
+      setVerifying(true)
+      try { sol = await held }
+      catch (e) {
+        solving.current = null
+        setErr(e.message === 'unsupported' || e.message === 'timeout'
+          ? NO_DEVICE : 'تعذّر الاتصال، حاول مرة أخرى')
+        return
+      } finally { setVerifying(false) }
+      solving.current = null    // single-use: the next submit solves afresh
+      const res = await fetch('/api/public/notify/interest/', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item: itemId, branch, phone, name }),
+        body: JSON.stringify({ item: itemId, branch, phone, name,
+          challenge: sol.challenge, nonce: sol.nonce, website }),
       })
-      const data = await res.json()
-      if (res.ok) setState('done')
-      else { setErr(data.detail || 'تعذّر التسجيل، حاول مرة أخرى'); }
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.ok) setState('done')
+      else { setErr(data.detail || 'تعذّر التسجيل، حاول مرة أخرى') }
     } catch { setErr('تعذّر الاتصال، حاول مرة أخرى') }
     finally { setSubmitting(false) }
   }
@@ -83,7 +114,6 @@ export default function NotifyPage() {
             <div className="bg-brand-50 border border-brand-100 rounded-xl p-4 text-center">
               <div className="text-xs text-brand-600 mb-1">الصنف المطلوب</div>
               <div className="font-bold text-gray-800">{item ? item.name : '...'}</div>
-              {item?.softech_id && <div className="text-xs text-gray-400 font-mono mt-0.5">{item.softech_id}</div>}
             </div>
 
             {!urlBranch && (
@@ -109,12 +139,15 @@ export default function NotifyPage() {
                 placeholder="اسمك" value={name} onChange={e => setName(e.target.value)} />
             </div>
 
+            <input type="text" name="website" value={website} onChange={e => setWebsite(e.target.value)}
+              autoComplete="off" tabIndex={-1} aria-hidden="true" style={HIDDEN} />
+
             {err && <div className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2">{err}</div>}
 
             <button onClick={submit} disabled={submitting}
               className="w-full py-3 rounded-xl text-white font-bold text-sm disabled:opacity-50"
               style={{ background: BRAND }}>
-              {submitting ? 'جارٍ التسجيل...' : '🔔 أبلغني عند توفره'}
+              {verifying ? 'جارٍ التحقق…' : submitting ? 'جارٍ التسجيل...' : '🔔 أبلغني عند توفره'}
             </button>
             <p className="text-[11px] text-gray-400 text-center leading-relaxed">
               بتسجيل رقمك توافق على تواصل الصيدلية معك بخصوص هذا الصنف فقط.
