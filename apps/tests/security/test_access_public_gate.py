@@ -18,7 +18,8 @@ from apps.access.public_paths import PUBLIC_GET_ONLY, PUBLIC_PREFIXES, is_public
 BASE = Path(settings.BASE_DIR)
 
 
-def _gate(request_path='/api/customers/', method='get', user_id=None, access=True):
+def _gate(request_path='/api/customers/', method='get', user_id=None, access=True, failed=False,
+          **extra):
     """Run the middleware alone; returns (response, whether the view was reached)."""
     reached = []
 
@@ -26,9 +27,10 @@ def _gate(request_path='/api/customers/', method='get', user_id=None, access=Tru
         reached.append(1)
         return HttpResponse('ok')
 
-    req = getattr(RequestFactory(), method)(request_path)
+    req = getattr(RequestFactory(), method)(request_path, **extra)
     if access:
-        req.access = SimpleNamespace(user_id=user_id, network=SimpleNamespace(ip='41.1.1.1'))
+        req.access = SimpleNamespace(user_id=user_id, failed=failed,
+                                     network=SimpleNamespace(ip='41.1.1.1'))
     return PublicApiMiddleware(view)(req), bool(reached)
 
 
@@ -99,9 +101,64 @@ class PublicGateTests(TestCase):
         self.assertTrue(reached)
 
     def test_missing_access_is_anonymous(self):
+        # no access context and no staff token -> anonymous (decided via user_from_request)
         resp, reached = _gate('/api/customers/', access=False)
         self.assertFalse(reached)
         self.assertEqual(resp.status_code, 401)
+        resp, reached = _gate('/api/customers/', failed=True, HTTP_AUTHORIZATION='Bearer junk')
+        self.assertFalse(reached)
+
+    def _staff_bearer(self):
+        from rest_framework_simplejwt.tokens import AccessToken
+        from apps.tests.factories import make_user
+        return f'Bearer {AccessToken.for_user(make_user("n6gate")[0])}'
+
+    def test_failed_context_with_valid_staff_token_not_refused(self):
+        # I1: the access context failed (user_id unknown) - a valid staff token still passes
+        bearer = self._staff_bearer()
+        resp, reached = _gate('/api/customers/', failed=True, HTTP_AUTHORIZATION=bearer)
+        self.assertTrue(reached)
+        self.assertEqual(resp.status_code, 200)
+        resp, reached = _gate('/api/customers/', access=False, HTTP_AUTHORIZATION=bearer)
+        self.assertTrue(reached)
+
+    def test_failed_context_user_lookup_is_memoised(self):
+        from unittest import mock
+        with mock.patch('core.auth_cookies._user_from_request', return_value=None) as look:
+            req = RequestFactory().get('/api/customers/')
+            req.access = SimpleNamespace(user_id=None, failed=True, network=SimpleNamespace(ip='1.1.1.1'))
+            from core.auth_cookies import user_from_request
+            PublicApiMiddleware(lambda r: HttpResponse('ok'))(req)
+            user_from_request(req)
+        self.assertEqual(look.call_count, 1)
+
+    def test_log_dedupe_key_is_bounded_by_two_segments(self):
+        from apps.access.public_middleware import _dedupe_key
+        a = RequestFactory().get('/api/customers/1/x/y/')
+        b = RequestFactory().get('/api/customers/1/zzz/')
+        self.assertEqual(_dedupe_key(a, '9.9.9.9'), 'access:public-gate:customers:1:9.9.9.9')
+        self.assertEqual(_dedupe_key(a, '9.9.9.9'), _dedupe_key(b, '9.9.9.9'))
+
+    def test_junk_paths_do_not_evict_phone_counters_or_pow_keys(self):
+        # C1: 400 distinct anonymous junk paths in log mode must not cull the per-phone counter
+        # or the used proof-of-work key (Django's default LocMem cache held only 300 entries).
+        from core import public_guard
+        from apps.tests.public_guard_helpers import solved
+        self.assertGreaterEqual(settings.CACHES['default']['OPTIONS']['MAX_ENTRIES'], 50000)
+        with override_settings(PUBLIC_POW_DIFFICULTY=4, PUBLIC_MIN_FILL_SECONDS=0):
+            body = solved('portal_link')
+            public_guard.check_submission(body, 'portal_link', phone='01011112222')
+            key = public_guard._phone_key('portal_link', '01011112222')
+            self.assertEqual(cache.get(key), 1)
+            with override_settings(PUBLIC_API_ENFORCEMENT='log'):
+                with self.assertLogs('elrezeiky.access', 'WARNING'):
+                    for i in range(400):
+                        req = RequestFactory().get(f'/api/junk{i}/x/', REMOTE_ADDR=f'10.1.{i // 250}.{i % 250}')
+                        PublicApiMiddleware(lambda r: HttpResponse('ok'))(req)
+            self.assertEqual(cache.get(key), 1)
+            with self.assertRaises(public_guard.GuardError) as cm:
+                public_guard.check_submission(body, 'portal_link', phone='01011112222')
+            self.assertEqual(cm.exception.code, 'replayed')
 
     def test_non_api_paths_untouched(self):
         resp, reached = _gate('/media/x.png')

@@ -314,6 +314,18 @@ DATABASES = {
 # of default (no second test database).
 DATABASES['audit_log'] = {**DATABASES['default'], 'TEST': {'MIRROR': 'default'}}
 
+# ── CACHE ──────────────────────────────────────────────────────────────────────
+# Per-process memory. Holds every rate counter (DRF throttles, N6 per-phone caps, single-use
+# proof-of-work keys, N3/N4/N5 counters and log dedupe). Django's default of 300 entries culls
+# them under load, which silently removes every limit (N6 C1); a restart forgets all counts.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'elrezeiky-default',
+        'OPTIONS': {'MAX_ENTRIES': config('CACHE_MAX_ENTRIES', default=50000, cast=int)},
+    }
+}
+
 # ── REST FRAMEWORK ─────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -973,7 +985,8 @@ PUBLIC_API_ENFORCEMENT = config('PUBLIC_API_ENFORCEMENT', default='log')
 PUBLIC_POW_TTL_SECONDS  = config('PUBLIC_POW_TTL_SECONDS', default=600, cast=int)
 PUBLIC_POW_DIFFICULTY   = config('PUBLIC_POW_DIFFICULTY', default=16, cast=int)   # leading zero bits
 PUBLIC_MIN_FILL_SECONDS = config('PUBLIC_MIN_FILL_SECONDS', default=3, cast=int)
-PUBLIC_PHONE_DAILY_MAX  = config('PUBLIC_PHONE_DAILY_MAX', default=3, cast=int)   # per form, phone, Cairo day
+PUBLIC_PHONE_DAILY_MAX  = config('PUBLIC_PHONE_DAILY_MAX', default=3, cast=int)   # portal sign-in link, per phone, Cairo day
+PUBLIC_NOTIFY_DAILY_MAX = config('PUBLIC_NOTIFY_DAILY_MAX', default=10, cast=int)  # /notify (shelf QR), per phone, Cairo day
 SLOW_REQUEST_MS = config('SLOW_REQUEST_MS', default=1000, cast=int)
 # N5: Excel / Word exports up to this size get the who/when/where stamp (larger: audit only)
 EXPORT_STAMP_MAX_BYTES = 20 * 1024 * 1024
