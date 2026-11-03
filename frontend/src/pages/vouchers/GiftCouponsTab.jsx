@@ -14,6 +14,8 @@ import { Fragment, useCallback, useEffect, useState } from 'react'
 import { couponsApi } from '../../api/client'
 import useHelpTab from '../../help/useHelpTab'
 import { fa } from '../../utils/flowArrow'
+import useSortableRows from '../../hooks/useSortableRows'
+import SortTh from '../../components/SortTh'
 
 const STAGE_LABEL = {
   stocked: 'في المخزن الرئيسي', issued: 'صُرف لعميل', at_branch: 'في فرع',
@@ -59,25 +61,33 @@ function ErrorLine({ msg }) {
   return msg ? <div className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 my-2">{msg}</div> : null
 }
 
-function EventsTable({ events, showSerial = false }) {
+// «المستند» shows branch/doccode/docnumber → sort by that text
+const eventValue = (e, key) => (key === 'doc' ? `${e.branchcode}/${e.doccode}/${e.docnumber}` : e[key])
+
+// `sortable`: the lists (customer events, sale lines without a serial). A single serial's history is a
+// chronological ledger, so it keeps its order.
+function EventsTable({ events, showSerial = false, sortable = false }) {
+  const { sorted, headerProps } = useSortableRows(events || [], { getValue: eventValue })
+  const th = (key, type, label, cls = 'px-2') => (
+    <SortTh {...(sortable ? headerProps(key, type) : {})} className={cls}>{label}</SortTh>)
   if (!events?.length) return <div className="text-sm text-gray-400 py-3">لا توجد حركات.</div>
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm text-right">
         <thead className="text-xs text-gray-500 border-b">
           <tr>
-            <th className="py-2 px-2">التاريخ</th>
-            {showSerial && <th className="px-2">السريال</th>}
-            <th className="px-2">الحركة</th>
-            <th className="px-2">المستند</th>
-            <th className="px-2">الكمية</th>
-            <th className="px-2">العميل</th>
-            <th className="px-2">إلى فرع</th>
-            <th className="px-2">مستخدم SOFTECH</th>
+            {th('docdate', 'date', 'التاريخ', 'py-2 px-2')}
+            {showSerial && th('serial', 'text', 'السريال')}
+            {th('kind_label', 'text', 'الحركة')}
+            {th('doc', 'text', 'المستند')}
+            {th('qty', 'number', 'الكمية')}
+            {th('customer_pic', 'text', 'العميل')}
+            {th('party_code', 'text', 'إلى فرع')}
+            {th('usercode', 'text', 'مستخدم SOFTECH')}
           </tr>
         </thead>
         <tbody>
-          {events.map(e => (
+          {sorted.map(e => (
             <tr key={e.id} className="border-b border-gray-50">
               <td className="py-1.5 px-2 whitespace-nowrap">{e.docdate}</td>
               {showSerial && <td className="px-2 font-mono" dir="ltr">{e.serial || '—'}</td>}
@@ -217,6 +227,8 @@ function CustomersView() {
   const [all, setAll] = useState(false)
   const [open, setOpen] = useState(null)       // { pic, data }
   const [error, setError] = useState(null)
+  // the list is the top 200 by excess; header sorting reorders those rows
+  const custSort = useSortableRows(data?.rows || [])
 
   useEffect(() => {
     setData(null); setError(null)
@@ -243,13 +255,23 @@ function CustomersView() {
       </div>
       <ErrorLine msg={error} />
       {!data && !error && <div className="text-sm text-gray-400">جارٍ التحميل…</div>}
+      {data && data.rows.length >= 200 && (
+        <div className="text-[11px] text-gray-400 mb-1">أعلى 200 عميل بالزيادة — الترتيب على القائمة المعروضة فقط</div>
+      )}
       {data && (
         <table className="w-full text-sm text-right bg-white rounded-xl border border-gray-200">
           <thead className="text-xs text-gray-500 border-b">
-            <tr><th className="py-2 px-3">كود العميل</th><th>الاسم</th><th>صُرف له</th><th>استخدم</th><th>زيادة</th><th>آخر استخدام</th></tr>
+            <tr>
+              <SortTh {...custSort.headerProps('pic', 'text')} className="py-2 px-3">كود العميل</SortTh>
+              <SortTh {...custSort.headerProps('name', 'text')}>الاسم</SortTh>
+              <SortTh {...custSort.headerProps('issued', 'number')}>صُرف له</SortTh>
+              <SortTh {...custSort.headerProps('redeemed', 'number')}>استخدم</SortTh>
+              <SortTh {...custSort.headerProps('excess', 'number')}>زيادة</SortTh>
+              <SortTh {...custSort.headerProps('last', 'date')}>آخر استخدام</SortTh>
+            </tr>
           </thead>
           <tbody>
-            {data.rows.map(r => (
+            {custSort.sorted.map(r => (
               <Fragment key={r.pic}>
                 <tr onClick={() => toggle(r.pic)}
                   className={`border-b border-gray-50 cursor-pointer hover:bg-gray-50 ${open?.pic === r.pic ? 'bg-gray-50' : ''}`}>
@@ -262,7 +284,7 @@ function CustomersView() {
                 </tr>
                 {open?.pic === r.pic && (
                   <tr><td colSpan={6} className="p-3 bg-gray-50">
-                    {open.data ? <EventsTable events={open.data.events} showSerial /> : <span className="text-gray-400">…</span>}
+                    {open.data ? <EventsTable events={open.data.events} showSerial sortable /> : <span className="text-gray-400">…</span>}
                   </td></tr>
                 )}
               </Fragment>
@@ -313,7 +335,10 @@ function NoSerialView() {
             ))}
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-2">
-            <EventsTable events={data.rows} showSerial />
+            {data.rows.length >= 500 && (
+              <div className="text-[11px] text-gray-400 px-2 pb-1">أحدث 500 سطر — الترتيب على القائمة المعروضة فقط</div>
+            )}
+            <EventsTable events={data.rows} showSerial sortable />
           </div>
         </>
       )}

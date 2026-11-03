@@ -18,6 +18,11 @@ import GiftCouponsTab from './vouchers/GiftCouponsTab'
 import useAuthStore from '../store/authStore'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
+import useServerSort from '../hooks/useServerSort'
+import SortTh from '../components/SortTh'
+
+// the voucher list is paged: the server sorts all vouchers (whitelist in VoucherViewSet.LIST_ORDERINGS)
+const VOUCHER_SORT = ['code', 'title', 'voucher_category', 'voucher_type', 'times_used', 'valid_from', 'status']
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const TYPE_CFG = {
@@ -453,6 +458,8 @@ function VouchersList({ onRedeem }) {
   const [filterType,   setFilterType]   = useState('')
   const [filterCat,    setFilterCat]    = useState('')
   const [searchQ,      setSearchQ]      = useState('')
+  const [ordering,     setOrdering]     = useState('')
+  const { headerProps } = useServerSort(ordering, setOrdering, { allowed: VOUCHER_SORT })
   const [toast,        setToast]        = useState(null)
 
   const showToast = (msg, type = 'success') => {
@@ -467,10 +474,11 @@ function VouchersList({ onRedeem }) {
       if (filterType)   params.type     = filterType
       if (filterCat)    params.category = filterCat
       if (searchQ)      params.search   = searchQ
+      if (ordering)     params.ordering = ordering
       const r = await vouchersApi.list(params)
       setVouchers(r.data.results || r.data)
     } finally { setLoading(false) }
-  }, [filterStatus, filterType, filterCat, searchQ])
+  }, [filterStatus, filterType, filterCat, searchQ, ordering])
 
   useEffect(() => { load() }, [load])
 
@@ -543,8 +551,10 @@ function VouchersList({ onRedeem }) {
           <table className="w-full text-right text-sm">
             <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
               <tr>
-                {['الكود','العنوان','الفئة','النوع / القيمة','الاستخدام','الصلاحية','الحالة','إجراءات'].map(h => (
-                  <th key={h} className="px-3 py-2.5 text-xs font-semibold text-gray-500">{h}</th>
+                {[['الكود', 'code', 'text'], ['العنوان', 'title', 'text'], ['الفئة', 'voucher_category', 'text'],
+                  ['النوع / القيمة', 'voucher_type', 'text'], ['الاستخدام', 'times_used', 'number'],
+                  ['الصلاحية', 'valid_from', 'date'], ['الحالة', 'status', 'text'], ['إجراءات']].map(([h, key, type]) => (
+                  <SortTh key={h} {...(key ? headerProps(key, type) : {})} className="px-3 py-2.5 text-xs font-semibold text-gray-500">{h}</SortTh>
                 ))}
               </tr>
             </thead>
