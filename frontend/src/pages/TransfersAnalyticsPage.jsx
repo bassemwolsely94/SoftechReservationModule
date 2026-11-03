@@ -6,11 +6,14 @@
  * C3 — Discrepancy report: received vs approved quantity mismatches
  */
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { transfersApi } from '../api/client'
 import { useNavigate } from 'react-router-dom'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
+import SortTh from '../components/SortTh'
+import useSortableRows from '../hooks/useSortableRows'
+import useServerSort from '../hooks/useServerSort'
 
 const fmt    = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const fmtPct = n => `${Number(n || 0).toFixed(1)}%`
@@ -59,6 +62,10 @@ function BarRow({ label, value, max, badge, color = 'bg-brand-500' }) {
   )
 }
 
+const rejectionValue = (r, k) => (
+  k === 'branch' ? r['supplying_branch__name_ar']
+  : k === 'pct' ? (r.total > 0 ? r.rejected / r.total : 0) : r[k])
+
 // ── C1 — Analytics Panel ──────────────────────────────────────────────────────
 
 function AnalyticsPanel({ days }) {
@@ -67,6 +74,8 @@ function AnalyticsPanel({ days }) {
     queryFn: () => transfersApi.analytics({ days }).then(r => r.data),
     staleTime: 120_000,
   })
+  // all branches are loaded → sort in the browser (hook before the early return)
+  const rejection = useSortableRows(data?.rejection_by_branch || [], { getValue: rejectionValue })
 
   if (isLoading) return (
     <div className="animate-pulse space-y-4">
@@ -140,14 +149,14 @@ function AnalyticsPanel({ days }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th className="text-right py-2 text-xs font-semibold text-gray-400">الفرع المصدر</th>
-                  <th className="text-right py-2 text-xs font-semibold text-gray-400">إجمالي</th>
-                  <th className="text-right py-2 text-xs font-semibold text-gray-400">مرفوض</th>
-                  <th className="text-right py-2 text-xs font-semibold text-gray-400">نسبة الرفض</th>
+                  <SortTh {...rejection.headerProps('branch', 'text')} className="text-right py-2 text-xs font-semibold text-gray-400">الفرع المصدر</SortTh>
+                  <SortTh {...rejection.headerProps('total', 'number')} className="text-right py-2 text-xs font-semibold text-gray-400">إجمالي</SortTh>
+                  <SortTh {...rejection.headerProps('rejected', 'number')} className="text-right py-2 text-xs font-semibold text-gray-400">مرفوض</SortTh>
+                  <SortTh {...rejection.headerProps('pct', 'number')} className="text-right py-2 text-xs font-semibold text-gray-400">نسبة الرفض</SortTh>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {rejection_by_branch.map((row, i) => {
+                {rejection.sorted.map((row, i) => {
                   const pct = row.total > 0 ? (row.rejected / row.total * 100) : 0
                   return (
                     <tr key={i} className="hover:bg-gray-50">
@@ -179,9 +188,15 @@ function AnalyticsPanel({ days }) {
 
 function DiscrepancyReport() {
   const navigate = useNavigate()
+  const [ordering, setOrdering] = useState('')
+  // the server keeps the first 200 → it sorts ALL discrepancies before the cut
+  const { headerProps } = useServerSort(ordering, setOrdering, {
+    allowed: ['request_number', 'item_name', 'supplying_branch', 'approved_quantity', 'received_quantity', 'discrepancy', 'completed_at'],
+  })
   const { data, isLoading } = useQuery({
-    queryKey: ['transfers-discrepancy'],
-    queryFn: () => transfersApi.discrepancyReport().then(r => r.data),
+    queryKey: ['transfers-discrepancy', ordering],
+    queryFn: () => transfersApi.discrepancyReport({ ordering: ordering || undefined }).then(r => r.data),
+    placeholderData: keepPreviousData,
     staleTime: 300_000,
   })
 
@@ -210,13 +225,13 @@ function DiscrepancyReport() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              <th className="text-right px-4 py-2 text-xs font-semibold text-gray-400">رقم الطلب</th>
-              <th className="text-right px-4 py-2 text-xs font-semibold text-gray-400">الصنف</th>
-              <th className="text-right px-4 py-2 text-xs font-semibold text-gray-400">المصدر</th>
-              <th className="text-right px-4 py-2 text-xs font-semibold text-gray-400">معتمد</th>
-              <th className="text-right px-4 py-2 text-xs font-semibold text-gray-400">مستلم</th>
-              <th className="text-right px-4 py-2 text-xs font-semibold text-gray-400">الفرق</th>
-              <th className="text-right px-4 py-2 text-xs font-semibold text-gray-400">التاريخ</th>
+              <SortTh {...headerProps('request_number', 'text')} className="text-right px-4 py-2 text-xs font-semibold text-gray-400">رقم الطلب</SortTh>
+              <SortTh {...headerProps('item_name', 'text')} className="text-right px-4 py-2 text-xs font-semibold text-gray-400">الصنف</SortTh>
+              <SortTh {...headerProps('supplying_branch', 'text')} className="text-right px-4 py-2 text-xs font-semibold text-gray-400">المصدر</SortTh>
+              <SortTh {...headerProps('approved_quantity', 'number')} className="text-right px-4 py-2 text-xs font-semibold text-gray-400">معتمد</SortTh>
+              <SortTh {...headerProps('received_quantity', 'number')} className="text-right px-4 py-2 text-xs font-semibold text-gray-400">مستلم</SortTh>
+              <SortTh {...headerProps('discrepancy', 'number')} className="text-right px-4 py-2 text-xs font-semibold text-gray-400">الفرق</SortTh>
+              <SortTh {...headerProps('completed_at', 'date')} className="text-right px-4 py-2 text-xs font-semibold text-gray-400">التاريخ</SortTh>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">

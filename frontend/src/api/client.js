@@ -661,7 +661,7 @@ export const transfersApi = {
 
   // Analytics & reporting
   analytics:         (params) => api.get('/transfers/analytics/', { params }),
-  discrepancyReport: ()       => api.get('/transfers/discrepancy-report/'),
+  discrepancyReport: (params) => api.get('/transfers/discrepancy-report/', { params }),
 }
 
 
