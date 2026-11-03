@@ -226,11 +226,13 @@ class StaffChoicesView(APIView):
         q = request.query_params.get('q', '').strip()
         qs = StaffProfile.objects.filter(is_active=True, user__is_active=True).select_related('user', 'branch')
         if q:
+            # most staff carry their name only in softech_username (first/last empty, username = code)
             qs = qs.filter(Q(user__first_name__icontains=q) | Q(user__last_name__icontains=q)
-                           | Q(user__username__icontains=q))
+                           | Q(user__username__icontains=q) | Q(softech_username__icontains=q)
+                           | Q(hr_code__icontains=q))
         return Response([{'id': s.id, 'name': s.full_name, 'role': s.role,
                           'branch': s.branch.name_ar if s.branch_id else None}
-                         for s in qs.order_by('user__first_name')[:30]])
+                         for s in qs.order_by('user__first_name', 'softech_username', 'pk')[:30]])
 
 
 class DialView(APIView):
