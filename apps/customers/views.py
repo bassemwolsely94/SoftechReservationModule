@@ -49,6 +49,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
                            'days_since_last_visit', 'last_visit_date', 'segment',
                            'preferred_branch__name_ar']
     ordering            = ['name']
+    empty_last_fields   = ('segment',)     # blank segment ('' not NULL) sorts last too
 
     def get_queryset(self):
         qs = Customer.objects.select_related(

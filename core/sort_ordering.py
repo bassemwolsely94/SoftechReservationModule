@@ -10,11 +10,11 @@ core/sort_ordering.py — server ordering for sortable grid headers on PAGED lis
   explicit_order_by(raw, allowed, default) — for views that build their own queryset order:
       `allowed` maps the public key to a model field; raises ValidationError (HTTP 400) on an unknown key.
 """
-from django.db.models import F
-from rest_framework import filters
+from django.db.models import F, Value
+from django.db.models.functions import NullIf
 from rest_framework.exceptions import ValidationError
 
-from core.stable_ordering import _with_pk
+from core.stable_ordering import StableOrderingFilter
 
 
 def _expr(field, desc):
@@ -22,15 +22,22 @@ def _expr(field, desc):
     return f.desc(nulls_last=True) if desc else f.asc(nulls_last=True)
 
 
-class NullsLastOrderingFilter(filters.OrderingFilter):
-    def filter_queryset(self, request, queryset, view):
-        asked = request.query_params.get(self.ordering_param)
-        ordering = self.get_ordering(request, queryset, view)
-        if asked and ordering:
-            queryset = queryset.order_by(*[
-                _expr(o.lstrip('-'), o.startswith('-')) for o in ordering])
-            return queryset.order_by(*queryset.query.order_by, 'pk')
-        return _with_pk(super().filter_queryset(request, queryset, view))
+class NullsLastOrderingFilter(StableOrderingFilter):
+    """Honours `?ordering=` on the view's `ordering_fields` only. When asked, NULLs sort last both ways, and
+    so do '' values for the fields in the view's optional `empty_last_fields` (blank-string columns).
+    StableOrderingFilter then appends the unique pk tiebreak. No `?ordering=` -> the view's default."""
+
+    def get_ordering(self, request, queryset, view):
+        ordering = super().get_ordering(request, queryset, view)
+        if not (ordering and request.query_params.get(self.ordering_param)):
+            return ordering
+        blank = set(getattr(view, 'empty_last_fields', ()))
+        out = []
+        for o in ordering:
+            name, desc = o.lstrip('-'), o.startswith('-')
+            f = NullIf(F(name), Value('')) if name in blank else F(name)
+            out.append(f.desc(nulls_last=True) if desc else f.asc(nulls_last=True))
+        return out
 
 
 def staff_name_key(prefix):

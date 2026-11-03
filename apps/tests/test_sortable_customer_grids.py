@@ -10,7 +10,7 @@ from apps.customers.models import Customer
 from apps.referral.models import ReferralCode, ReferralLead
 from apps.vouchers.models import Voucher
 
-from .factories import make_admin, make_branch, make_customer
+from .factories import make_admin, make_branch, make_customer, make_pharmacist, make_user
 
 
 def rows(resp):
@@ -51,6 +51,14 @@ class CustomerOrderingTests(TestCase):
         self.assertEqual(self.ids('-days_since_last_visit')[-1], self.c3.id)
         self.assertEqual(self.ids('days_since_last_visit')[:2], [self.c1.id, self.c2.id])
         self.assertEqual(self.ids('preferred_branch__name_ar')[:2], [self.c2.id, self.c1.id])
+
+    def test_blank_segment_last_both_directions(self):
+        Customer.objects.filter(pk=self.c1.pk).update(segment='vip')
+        Customer.objects.filter(pk=self.c2.pk).update(segment='regular')
+        Customer.objects.filter(pk=self.c3.pk).update(segment='')
+        for o in ('segment', '-segment'):
+            self.assertEqual(self.ids(o)[-1], self.c3.id, o)
+        self.assertEqual(self.ids('segment')[:2], [self.c2.id, self.c1.id])
 
     def test_phone_is_not_an_ordering_field(self):
         # an unknown / masked field is ignored: the default (name) order stays
@@ -95,14 +103,55 @@ class CallCenterOrderingTests(TestCase):
                          [self.l2.id, self.l1.id, self.l3.id])
 
     def test_calls_handled_by_sorts_by_displayed_name(self):
-        ids = [r['id'] for r in rows(self.api.get(self.CALLS, {'ordering': '-handled_by_name_key'}))]
-        self.assertEqual(ids[0], self.l3.id)          # the named agent first (desc); the rest are unassigned
+        _u2, p2, _c = make_user('s4_agent_b', role='call_center', access_all=True)
+        CallLog.objects.filter(pk=self.l1.pk).update(handled_by=p2)
+        names = {self.l3.id: self.p.full_name, self.l1.id: p2.full_name}
+        expect = sorted(names, key=lambda i: names[i].casefold())
+        asc = [r['id'] for r in rows(self.api.get(self.CALLS, {'ordering': 'handled_by_name_key'}))]
+        desc = [r['id'] for r in rows(self.api.get(self.CALLS, {'ordering': '-handled_by_name_key'}))]
+        self.assertEqual(asc, expect + [self.l2.id])             # unassigned call last
+        self.assertEqual(desc, expect[::-1] + [self.l2.id])
 
     def test_cases_every_field_asc_and_desc_is_200(self):
         for f in ['created_at', 'updated_at', 'sla_due', 'priority_rank', 'case_number', 'title', 'category',
                   'status', 'customer__name', 'assigned_to_name_key']:
             for o in (f, '-' + f):
                 self.assertEqual(self.api.get(self.CASES, {'ordering': o}).status_code, 200, o)
+
+    def test_cases_assigned_and_customer_name_order(self):
+        _u2, p2, _c = make_user('s4_agent_c', role='call_center', access_all=True)
+        c2 = make_customer('أحمد', '01000000055')
+        a, b, c, d = CustomerCase.objects.order_by('id')
+        CustomerCase.objects.filter(pk=a.pk).update(assigned_to=self.p)
+        CustomerCase.objects.filter(pk=b.pk).update(assigned_to=p2)
+        CustomerCase.objects.filter(pk=c.pk).update(customer=c2)
+        names = {a.id: self.p.full_name, b.id: p2.full_name}
+        expect = sorted(names, key=lambda i: names[i].casefold())
+        got = [r['id'] for r in rows(self.api.get(self.CASES, {'ordering': 'assigned_to_name_key'}))]
+        self.assertEqual(got[:2], expect)
+        got = [r['id'] for r in rows(self.api.get(self.CASES, {'ordering': '-assigned_to_name_key'}))]
+        self.assertEqual(got[:2], expect[::-1])
+        self.assertEqual(set(got[2:]), {c.id, d.id})             # unassigned last
+        got = [r['id'] for r in rows(self.api.get(self.CASES, {'ordering': 'customer__name'}))]
+        self.assertEqual(got[0], c.id)                           # 'أحمد' before 'عميل'
+        got = [r['id'] for r in rows(self.api.get(self.CASES, {'ordering': '-customer__name'}))]
+        self.assertEqual(got[-1], c.id)
+
+    def test_branch_scope_holds_under_ordering(self):
+        ba, bb = make_branch('فرع أ', 'S4SA'), make_branch('فرع ب', 'S4SB')
+        _u, _p, api_a = make_pharmacist('s4_scoped_a', branch=ba)
+        la = CallLog.objects.create(phone_number='01000000071', branch=ba, duration_seconds=5)
+        lb = CallLog.objects.create(phone_number='01000000072', branch=bb, duration_seconds=6)
+        ca = CustomerCase.objects.create(customer=self.cust, category='other', title='أ', branch=ba, case_number='S4-A')
+        cb = CustomerCase.objects.create(customer=self.cust, category='other', title='ب', branch=bb, case_number='S4-B')
+        for o in ('duration_seconds', '-duration_seconds', 'quality_score', 'handled_by_name_key'):
+            ids = {r['id'] for r in rows(api_a.get(self.CALLS, {'ordering': o}))}
+            self.assertIn(la.id, ids, o)
+            self.assertNotIn(lb.id, ids, o)
+        for o in ('case_number', '-priority_rank', 'assigned_to_name_key'):
+            ids = {r['id'] for r in rows(api_a.get(self.CASES, {'ordering': o}))}
+            self.assertIn(ca.id, ids, o)
+            self.assertNotIn(cb.id, ids, o)
 
     def test_cases_priority_sorts_by_urgency(self):
         pr = [r['priority'] for r in rows(self.api.get(self.CASES, {'ordering': '-priority_rank'}))]
