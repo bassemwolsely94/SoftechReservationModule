@@ -120,6 +120,39 @@ class AMIActionClient:
         raise AMIActionError(f'{complete_event} not received')
 
 
+class DialError(Exception):
+    """A dial request the server refuses; `status` is the HTTP status to answer with."""
+
+    def __init__(self, detail, status=400):
+        super().__init__(detail)
+        self.detail, self.status = detail, status
+
+
+def dial_for(profile, destination, caller_id_name='', request=None) -> dict:
+    """Click-to-call from `profile`'s own extension — the logic behind POST /api/pbx/dial/ and the
+    PIC Analytics server-side dial. Returns {'clean', 'ext'}; raises DialError (400 / 502)."""
+    import re
+    from apps.pbx.models import AgentExtension
+    destination = str(destination or '').strip()
+    if not destination:
+        raise DialError('destination مطلوب', 400)
+    clean = re.sub(r'[^\d+]', '', destination)
+    if not clean:
+        raise DialError('رقم هاتف غير صحيح', 400)
+    ext = AgentExtension.objects.filter(staff=profile).first() if profile else None
+    if ext is None:
+        raise DialError('لا توجد تحويلة مرتبطة بحسابك — اربطها من إدارة التحويلات', 400)
+    name = caller_id_name or (profile.full_name if profile else 'ElRezeiky')
+    try:
+        originate_call(ext.extension, clean, name)
+    except AMIActionError as exc:
+        raise DialError(str(exc), 502)
+    except Exception as exc:
+        from core.errors import public_error
+        raise DialError(f'خطأ AMI غير متوقع: {public_error(request, exc)}', 502)
+    return {'clean': clean, 'ext': ext.extension}
+
+
 def originate_call(caller_ext: str, destination: str, caller_id_name: str = '') -> dict:
     """
     Dial `destination` (external phone number) from the agent's extension.

@@ -1248,6 +1248,8 @@ def sync_customers(conn, sync_run):
                 customer.softech_locked = bool(row[16])
                 customer.softech_deceased = bool(row[17])
                 customer.points_enrolled = bool(row[18])
+            if len(row) > 19:            # PIC analytics: SOFTECH creation date
+                customer.softech_created_at = _to_date(row[19])
 
             objs.append(customer)
             for p in (phone, phone2):
@@ -1280,6 +1282,7 @@ def sync_customers(conn, sync_run):
         'softech_global_code', 'order_branch_code',
         'is_guest',
         'softech_status', 'softech_locked', 'softech_deceased', 'points_enrolled',
+        'softech_created_at',
     ]
     if hasattr(Customer, 'is_chronic_softech'):
         update_fields.append('is_chronic_softech')
@@ -2440,6 +2443,15 @@ def _run_pbx_cdr_relink():
         logger.info('[APScheduler] CDR relink: %s calls changed', cdr.relink_all())
     except Exception as exc:
         logger.warning('pbx cdr relink failed: %s', exc)
+
+
+def _run_pic_facts():
+    """PIC Analytics: nightly rebuild of PicDayFact (last 7 days) + PicRollup (as of yesterday)."""
+    try:
+        from django.core.management import call_command
+        call_command('build_pic_facts')
+    except Exception as exc:
+        logger.exception('pic facts build failed: %s', exc)
 
 
 def _run_stock_ledger_sync(days=3):
@@ -3636,6 +3648,10 @@ def start_scheduler():
     )
     _scheduler.add_job(
         _run_pbx_cdr_relink, 'cron', hour=3, minute=55, id='pbx_cdr_relink',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    _scheduler.add_job(
+        _run_pic_facts, 'cron', hour=4, minute=15, id='pic_facts',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # Stock Transactions Audit ledger (doc 32): every 2 h from 08:00 replaces the last 3 days;

@@ -11,6 +11,7 @@ This is the primary navigation document for the ElRezeiky platform.
 |---|-----|--------|---------|
 | — | [Product & operations review](../product-review/00_INDEX_AND_DECISION_LEDGER.md) | 🔍 DISCOVERY (started 2026-10-30) | Evidence-based review of all 62 apps: inventory + adoption signals, current-state findings, SOFTECH data map, benchmark register, proposal backlog, decision ledger. Nothing authorised for build. |
 | 32 | [32_STOCK_TRANSACTIONS_AUDIT.md](32_STOCK_TRANSACTIONS_AUDIT.md) | ✅ Phases 0–4 BUILT (2026-10-26): ledger mirror + engine (all 9 active checks) + API + `/stock-audit` screen + named branch managers + branch working hours | Stock Transactions Audit (تدقيق حركات المخزون): replaces the Power Query workbook. Read-only `StockLedgerLine` mirror (from HQ, ~3k lines/day) of all `stktrans` doccodes + deterministic engine with 10 checks (below cost, duplicates, invoice price variance, cost fluctuation, adjustments, stock-outs, overstock link, after-hours, returns without invoice, adjustment after count; back-dated dropped); chain-wide editable thresholds + per-branch overrides; findings with review lifecycle; `/stock-audit`. New `apps/stock_audit`. No SOFTECH writes. |
+| 33 | [33_PIC_ANALYTICS.md](33_PIC_ANALYTICS.md) | ✅ BUILT (2026-11-03, branch `claude/pic-analytics`, based on PR 41) | PIC Analytics (تحليلات الـ PIC): PIC-centric customer dashboard + Excel report — new vs returning vs reactivated, frequency, overdue, retention/cohorts, per-branch/salesperson/channel/category, call-center, missed/unanswered calls, new numbers. Read-only: day-fact + rollup tables built from the SOFTECH sales mirror and PBX CDR; no SOFTECH writes. New `apps/pic_analytics`. |
 | 13 | [13_DEMAND_EVOLUTION_ROADMAP.md](13_DEMAND_EVOLUTION_ROADMAP.md) | ✅ BUILT (2026-06-12) | `apps/demand` evolved from a passive lost-sales log into an active recovery + intelligence engine: 4 loops shipped (back-in-stock recovery + ROI, confirmed valuation + reconciliation vs purchasing engine, value-weighted buy signal + therapeutic substitution, customer unmet-demand profile + churn). Plus Demand↔Reservation bridge and module-scoped notifications (demand/followups). Migrations demand/0003–0006, notifications/0015. |
 | — | [SOFTECH_INDIRECT_POS_ORDER_WRITEBACK.md](SOFTECH_INDIRECT_POS_ORDER_WRITEBACK.md) | ✅ INVESTIGATED (2026-06-21) | Full read-only reverse-engineering of the SOFTECH Indirect-POS → Cashier pending-order subsystem: tables (`stktransm5`/`stktrans5`/`branchesales5`), dual serial sequences (`lastdocnumbers` `'000'` staging vs branch `ver_branch=1` final), pricing/tax/cost/discount formulas, channels, payments, points, and the full create→settle→refund lifecycle empirically validated on branch 130. |
 | 14 | [14_PHASE2_INDIRECT_POS_WRITER_DESIGN.md](14_PHASE2_INDIRECT_POS_WRITER_DESIGN.md) | ✅ BUILT (2026-07-25) | Phase-2 SOFTECH pending-order **writer is shipped** as `apps/pos_orders`: PG mirror `SoftechSalesOrder`+lines+payments (referral-doctor/prescription/multi-channel extras), transactional writer modeled on `discount_approvals/replication.py` (collision-safe serial alloc + verify-readback + dry-run), read-back reconciler, **offline retry queue** (`queue-status`/`flush`), discount authority + batch availability. Live SOFTECH writeback (PENDING side only: `stktransm5`/`stktrans5`/`branchesales5`). Desktop `/pos` + mobile `/m/pos`. Ops: `POS_OFFLINE_RESILIENCE.md`, `POS_OPERATOR_RUNBOOK.md`, `MDA_INSTALL_RUNBOOK.md`. See [02_MODULE_REGISTRY.md#pos-orders-indirect-pos-writeback](02_MODULE_REGISTRY.md). |
@@ -70,6 +71,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | Omni (unified inbox / CEP) | `apps/omni` | COMPLETE (Phases 0–5) | [15_CEP_OMNICHANNEL_DESIGN.md](15_CEP_OMNICHANNEL_DESIGN.md) |
 | Social channels (Messenger/IG/Telegram) | `apps/social` | COMPLETE (Phase 3) | [15_CEP_OMNICHANNEL_DESIGN.md](15_CEP_OMNICHANNEL_DESIGN.md) |
 | **POS Orders (Indirect-POS writeback)** | `apps/pos_orders` | **COMPLETE** | [02_MODULE_REGISTRY.md#pos-orders](02_MODULE_REGISTRY.md) + [14_PHASE2_INDIRECT_POS_WRITER_DESIGN.md](14_PHASE2_INDIRECT_POS_WRITER_DESIGN.md) — desktop `/pos` + mobile `/m/pos`; live SOFTECH pending-order writer |
+| **PIC Analytics** | `apps/pic_analytics` | **COMPLETE** | [33_PIC_ANALYTICS.md](33_PIC_ANALYTICS.md) — `PicDayFact`/`PicRollup`/`PhoneLabel`/`PicAnalyticsAccess`; management + granted branch managers; read-only |
 | Insurance (motalba claims) | `apps/insurance` | COMPLETE | Claims + clients + print profiles; SOFTECH motalba sync |
 | Loyalty | `apps/loyalty` | COMPLETE | Points program + per-branch points |
 | Referral | `apps/referral` | COMPLETE | Referral doctor / program |
@@ -133,6 +135,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | Payments | `/api/payments/` | payments |
 | Recommendations | `/api/recommendations/` | recommendations |
 | **POS Orders (indirect-POS writeback)** | `/api/pos-orders/` | pos_orders — list/create + `reference/` + `batches/` + `discount-suggest/` + `queue-status/` + `flush/` + `{id}/ready\|push\|cancel/` + **`contract-assist/{config,patients,history,field-values,approval-check}/`** + **`fefo-split/`** (POS Speed Wave; also `/api/items/softech-search/?network=1`, `/api/customers/address-suggest/`, `/api/composition/alternatives/`) |
+| **PIC Analytics** | `/api/pic-analytics/` | pic_analytics — `access/` · `options/` · `overview/` · `pics/` · `groups/<kind>/` · `retention/` + `retention/overdue/` · `calls/center\|missed\|missed/rows\|unanswered/` · `numbers/` + `conversions/` + `label/` · server-side `dial/` + `callback/` · `export/` (xlsx) · `grants/` (admin). Every view checks `Access` itself (prefix is RBAC-exempt) |
 | Insurance | `/api/insurance/` | insurance |
 | Pricing Approvals (discount writeback) | `/api/pricing-approvals/` | discount_approvals |
 | Approvals (operational + HR) | `/api/approvals/` | approvals |
@@ -301,6 +304,7 @@ Full schema: [03_DATABASE_DICTIONARY.md](03_DATABASE_DICTIONARY.md)
 | ERP Permissions | `/erp-permissions` | ERP / Users | COMPLETE |
 | Targets | `/targets` | Dashboard | COMPLETE |
 | Branch KPI Board (تارجت/تحقيق matrix) | `/kpi-board` | Forecasting (doc 16) | COMPLETE |
+| PIC Analytics (تحليلات الـ PIC) | `/customers/pic-analytics` | PIC Analytics (doc 33) | COMPLETE — tabs: overview · PICs · groups · retention · call center · missed · new numbers; Excel export |
 | Forecast Scenarios (factor-driven targets) | `/forecast-scenarios` | Forecasting (doc 16) | COMPLETE |
 | Announcements | `/announcements` | Notifications | COMPLETE |
 | بدل الروشتة — cases | `/replacement` | Replacement (doc 25) | PHASE 0 — KPI strip, outstanding split, exception chips, universal search |
@@ -449,6 +453,8 @@ Full report: [09_TECHNICAL_DEBT_REPORT.md](09_TECHNICAL_DEBT_REPORT.md)
 | `seed_approval_workflows` | approvals | Seed operational + HR approval workflows | One-time setup |
 | `run_ami_bridge` / `sync_pbx_extensions` | pbx | Issabel AMI live-call bridge + extension sync | Long-running / periodic |
 | `run_gamification` | gamification | Award points for recorded work (`--days N` backfill + close yesterday; `--seed [--reset-defaults]` rules/levels/badges). READ-ONLY vs everything else, never SOFTECH; idempotent (unique source key per event) | Scheduler: `gamification_score` every 30 min + `gamification_day_close` 00:20 + `gamification_champions` 1st of month 01:05 (`--crown YYYY-MM` manual) (`GAMIFICATION_ENABLED`) |
+| `build_pic_facts` | pic_analytics | Rebuild `PicDayFact` (delete+rebuild per day range, idempotent) and `PicRollup` for PIC Analytics; `--since YYYY-MM-DD` (history starts 2024-08-01). Read-only vs SOFTECH | Scheduler `pic_facts` daily 04:15 |
+| `sync_pbx_cdr` | pbx | Pull PBX call records into `CdrCall` (idempotent on `unique_id`), resolve the PIC per call; feeds PIC Analytics call tabs | Scheduler `pbx_cdr_sync` every 10 min + `pbx_cdr_relink` daily 03:55 (re-resolves PICs) |
 
 > **Web Push (VAPID):** keys live in env (`WEBPUSH_VAPID_PUBLIC_KEY` /
 > `_PRIVATE_KEY` / `_ADMIN_EMAIL`). Generate with `npx web-push generate-vapid-keys`

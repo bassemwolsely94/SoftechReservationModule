@@ -35,6 +35,7 @@ ALL_MODULES = [
     'help',          # in-app help: 'edit' = trainer may rewrite a screen's explanation
     'gamification',  # points/levels: 'view' = reports, 'export' = Excel, 'edit' = rules + manual awards
     'stock_audit',   # doc 32: 'view' = all branches, 'approve' = review findings, 'export', 'edit' = thresholds
+    'pic_analytics', # doc 33: 'view' = all branches + cost/GP + calls tabs, 'export' = Excel (branch managers = named grants)
 ]
 
 ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize']
@@ -238,6 +239,7 @@ PERMISSIONS = {
         'replacement':  {'view', 'create', 'edit', 'approve', 'finalize', 'export'},   # بدل: approve + post legs (doc 25)
         'gamification': RE,   # executive gamification reports
         'stock_audit':  {'view', 'approve', 'export'},   # review findings, all branches (doc 32)
+        'pic_analytics': {'view', 'export'},   # PIC dashboard, all branches, cost/GP (doc 33)
     },
 
     # ─────────────────────────────────────────────────────────────────────

@@ -2893,6 +2893,34 @@ export const stockAuditApi = {
   runs:         ()              => api.get('/stock-audit/runs/'),
 }
 
+// PIC Analytics (doc 33) — every read takes the filter bar as query params (from, to, branch, …).
+export const picAnalyticsApi = {
+  access:     ()                => api.get('/pic-analytics/access/'),
+  options:    (params = {})     => api.get('/pic-analytics/options/', { params }),
+  overview:   (params = {})     => api.get('/pic-analytics/overview/', { params }),
+  pics:       (params = {})     => api.get('/pic-analytics/pics/', { params }),
+  groups:     (kind, params = {}) => api.get(`/pic-analytics/groups/${kind}/`, { params }),
+  retention:  (params = {})     => api.get('/pic-analytics/retention/', { params }),
+  overdue:    (params = {})     => api.get('/pic-analytics/retention/overdue/', { params }),
+  exportXlsx: (params = {})     => api.get('/pic-analytics/export/', { params, responseType: 'blob' }),
+  callCenter: (params = {})     => api.get('/pic-analytics/calls/center/', { params }),
+  missed:     (params = {})     => api.get('/pic-analytics/calls/missed/', { params }),
+  missedRows: (params = {})     => api.get('/pic-analytics/calls/missed/rows/', { params }),
+  unanswered: (params = {})     => api.get('/pic-analytics/calls/unanswered/', { params }),
+  missedDial: (callId)          => api.post(`/pic-analytics/calls/missed/${callId}/dial/`),
+  missedCallback: (callId, data) => api.post(`/pic-analytics/calls/missed/${callId}/callback/`, data),
+  numbers:    (params = {})     => api.get('/pic-analytics/numbers/', { params }),
+  conversions: (params = {})    => api.get('/pic-analytics/numbers/conversions/', { params }),
+  numberDial: (numberId)        => api.post(`/pic-analytics/numbers/${numberId}/dial/`),
+  labelNumber: (data)           => api.post('/pic-analytics/numbers/label/', data),
+  labels:     (params = {})     => api.get('/pic-analytics/numbers/labels/', { params }),
+  unlabel:    (labelId)         => api.post(`/pic-analytics/numbers/labels/${labelId}/delete/`),
+  grants:     ()                => api.get('/pic-analytics/grants/'),
+  grant:      (data)            => api.post('/pic-analytics/grants/', data),
+  revoke:     (id, data = {})   => api.post(`/pic-analytics/grants/${id}/revoke/`, data),
+  candidates: (q)               => api.get('/pic-analytics/grants/candidates/', { params: { q } }),
+}
+
 // Contract (تعاقد) fast-entry assist — read-only PG history (POS Speed Wave §5). `customer` = the
 // contract account's personcode (SoftechSalesOrder.cust_branch_code).
 export const posApi = {

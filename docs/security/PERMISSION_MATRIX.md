@@ -49,6 +49,7 @@ All-branch roles: admin, call_center, purchasing, supervisor, quality_manager �
 | `help` | all | — | — | — | — | — | — | VE | VE | n/a — no branch data |
 | `gamification` | all | — | — | — | — | — | — | VX | VX | n/a — own data; rankings are network-wide by design |
 | `stock_audit` | all | — | — | — | — | — | — | VAX | VEAX | own — named branch managers see their branches (branch_scope); management all |
+| `pic_analytics` | all | — | — | — | — | — | — | VX | — | own — named branch managers see their branches (branch_scope); management all |
 
 ## Record-state and separation-of-duty rules enforced on the server
 
