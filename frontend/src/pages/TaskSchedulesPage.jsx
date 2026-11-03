@@ -5,6 +5,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { tasksApi, branchesApi, usersApi } from '../api/client'
+import SortTh from '../components/SortTh'
+import useServerSort from '../hooks/useServerSort'
 
 const FREQ_LABELS = { none: 'لا تتكرر', daily: 'يومي', weekly: 'أسبوعي', monthly: 'شهري' }
 const TYPE_LABELS = {
@@ -159,6 +161,10 @@ export default function TaskSchedulesPage() {
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [runMsg, setRunMsg] = useState(null)
+  const [ordering, setOrdering] = useState('')
+  const { headerProps } = useServerSort(ordering, setOrdering, {
+    allowed: ['name', 'frequency', 'branch', 'assign_to', 'generated_count', 'last_run_at', 'is_active'],
+  })
 
   useEffect(() => {
     branchesApi.list().then(r => setBranches(r.data || [])).catch(() => {})
@@ -168,14 +174,14 @@ export default function TaskSchedulesPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const { data } = await tasksApi.listSchedules()
+      const { data } = await tasksApi.listSchedules({ ordering: ordering || undefined })
       setSchedules(data?.results || data || [])
     } catch {
       setSchedules([])
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [ordering])
 
   useEffect(() => { load() }, [load])
 
@@ -250,7 +256,7 @@ export default function TaskSchedulesPage() {
           />
         )}
 
-        {loading ? (
+        {loading && schedules.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
             <div className="text-2xl animate-spin mb-2">⟳</div>
             <p className="text-sm">جاري التحميل...</p>
@@ -266,13 +272,13 @@ export default function TaskSchedulesPage() {
             <table className="w-full text-right">
               <thead>
                 <tr className="bg-gray-50 border-b text-xs text-gray-500 font-semibold">
-                  <th className="px-4 py-3">الاسم</th>
-                  <th className="px-4 py-3">التكرار</th>
-                  <th className="px-4 py-3">الفرع</th>
-                  <th className="px-4 py-3">المُعيَّن إليه</th>
-                  <th className="px-4 py-3">المهام المولَّدة</th>
-                  <th className="px-4 py-3">آخر تشغيل</th>
-                  <th className="px-4 py-3">الحالة</th>
+                  <SortTh {...headerProps('name', 'text')} className="px-4 py-3">الاسم</SortTh>
+                  <SortTh {...headerProps('frequency', 'number')} className="px-4 py-3">التكرار</SortTh>
+                  <SortTh {...headerProps('branch', 'text')} className="px-4 py-3">الفرع</SortTh>
+                  <SortTh {...headerProps('assign_to', 'text')} className="px-4 py-3">المُعيَّن إليه</SortTh>
+                  <SortTh {...headerProps('generated_count', 'number')} className="px-4 py-3">المهام المولَّدة</SortTh>
+                  <SortTh {...headerProps('last_run_at', 'date')} className="px-4 py-3">آخر تشغيل</SortTh>
+                  <SortTh {...headerProps('is_active', 'number')} className="px-4 py-3">الحالة</SortTh>
                   <th className="px-4 py-3">إجراءات</th>
                 </tr>
               </thead>

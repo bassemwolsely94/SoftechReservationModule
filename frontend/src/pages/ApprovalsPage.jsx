@@ -6,6 +6,17 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { approvalsApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
+import SortTh from '../components/SortTh'
+import useSortableRows from '../hooks/useSortableRows'
+import useServerSort from '../hooks/useServerSort'
+
+const SERVER_SORT_KEYS = ['title', 'workflow__name_ar', 'requested_by_sort', 'status_rank', 'requested_at']
+const SERVER_KEY = { title: 'title', workflow: 'workflow__name_ar', by: 'requested_by_sort', status: 'status_rank', date: 'requested_at' }
+const CLIENT_KEYS = ['title', 'workflow', 'by', 'status', 'date']
+const getValue = (r, k) => ({
+  title: r.title, workflow: r.workflow_name, by: r.requested_by_name,
+  status: (STATUS_LABELS[r.status] || {}).label || r.status, date: r.requested_at,
+}[k])
 
 const STATUS_LABELS = {
   pending:   { label: 'بانتظار القرار', color: 'bg-amber-100 text-amber-800' },
@@ -85,18 +96,31 @@ export default function ApprovalsPage() {
   const [tab, setTab]         = useState('pending')
   useHelpTab(tab)
   const [selected, setSelected] = useState(null)
+  const [ordering, setOrdering] = useState('')
 
   // Pending tab → only requests awaiting MY decision (includes multi-step in_review).
   // History tab → my/all closed requests (backend now accepts a comma status list).
   const { data, isLoading } = useQuery({
-    queryKey: ['approvals', tab],
+    queryKey: ['approvals', tab, tab === 'history' ? ordering : ''],
     queryFn:  () => (tab === 'pending'
       ? approvalsApi.pending({})
-      : approvalsApi.requests({ status: 'approved,rejected,cancelled,expired' })
+      : approvalsApi.requests({ status: 'approved,rejected,cancelled,expired', ordering: ordering || undefined })
     ).then(r => r.data),
+    // keep the rows on screen while a re-sort loads, but never show the other tab's rows
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey?.[1] === tab ? prev : undefined),
   })
 
   const requests = data?.results || data || []
+
+  // Pending = every row is loaded → sort in the browser. History is paged by the server → the server sorts.
+  // Pending = every row is loaded → sort in the browser. History is paged by the server → the server sorts.
+  const client = useSortableRows(requests, { getValue, persistKey: 'approvals-pending', keys: CLIENT_KEYS })
+  const server = useServerSort(ordering, setOrdering, { allowed: SERVER_SORT_KEYS })
+  const th = (key, type, label) => (
+    <SortTh {...(tab === 'pending' ? client.headerProps(key, type) : server.headerProps(SERVER_KEY[key], type))}
+            className="px-4 py-3 text-right font-semibold text-gray-600">{label}</SortTh>
+  )
+  const rows = tab === 'pending' ? client.sorted : requests
 
   return (
     <div className="p-6 max-w-5xl mx-auto" dir="rtl">
@@ -134,16 +158,16 @@ export default function ApprovalsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">العنوان</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">النوع</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">مقدم الطلب</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">الحالة</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">التاريخ</th>
+                {th('title', 'text', 'العنوان')}
+                {th('workflow', 'text', 'النوع')}
+                {th('by', 'text', 'مقدم الطلب')}
+                {th('status', 'text', 'الحالة')}
+                {th('date', 'date', 'التاريخ')}
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody>
-              {requests.map(req => (
+              {rows.map(req => (
                 <tr key={req.id} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900">{req.title}</td>
                   <td className="px-4 py-3 text-gray-500">{req.workflow_name || '—'}</td>
