@@ -309,7 +309,7 @@ class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
                        field_name='assigned_to', new_value=str(updated.assigned_to_id))
             if updated.assigned_to:
                 _notify_assignee(task, updated.assigned_to, staff)
-                phone_alert_hooks.on_task_assigned(updated, staff)
+                phone_alert_hooks.on_task_assigned(updated, staff, only_staff=[updated.assigned_to_id])
 
     def perform_destroy(self, instance):
         staff = _get_staff(self.request)
@@ -423,7 +423,7 @@ def task_assignments(request, pk):
     _log_audit(task, 'assigned', actor, new_value=assignee.full_name)
     _notify_assignee(task, assignee, actor)
     if created:
-        phone_alert_hooks.on_task_assigned(task, actor)
+        phone_alert_hooks.on_task_assigned(task, actor, only_staff=[assignee.pk])
 
     return Response(TaskAssignmentSerializer(assignment).data,
                     status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)

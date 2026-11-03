@@ -1169,13 +1169,14 @@ class WorkflowHookTests(TestCase):
     # toggle rule
     def test_toggle_ignored_when_policy_never(self):
         self._mode('reservation_sourcing', 'never')
+        self._mode('reservation_status_urgent', 'never')
         r = self._reservation(phone_alert=True)
         self.assertEqual(r.status_code, 201, r.data)
         self.assertFalse(r.data['phone_alert'])
         self.assertEqual(self._alerts().count(), 0)
 
     def test_toggle_ignored_when_policy_absent(self):
-        PhoneAlertPolicy.objects.filter(event='task_assigned').delete()
+        PhoneAlertPolicy.objects.filter(event__in=['task_assigned', 'task_status']).delete()
         r = self.admin_client.post('/api/tasks/', {
             'title': 'م', 'assigned_to': self.assignee.pk, 'phone_alert': True}, format='json')
         self.assertEqual(r.status_code, 201, r.data)
@@ -1189,11 +1190,96 @@ class WorkflowHookTests(TestCase):
         self.assertTrue(r.data['phone_alert'])
         self.assertEqual(self._alerts('reservation_sourcing').count(), 1)
 
-    def test_transfer_toggle_follows_supplier_event(self):
+    def test_transfer_toggle_coerced_across_both_events(self):
+        # one toggle per record: False only if BOTH events are never; True if EITHER is always
         self._mode('transfer_hq_submitted', 'never')
         self._mode('transfer_status', 'optional')
+        self.assertTrue(self._transfer(self.hq, phone_alert=True).phone_alert)      # optional keeps the tick
+        self._mode('transfer_status', 'never')
         self.assertFalse(self._transfer(self.hq, phone_alert=True).phone_alert)
-        self.assertTrue(self._transfer(self.other, phone_alert=True).phone_alert)
+        self._mode('transfer_hq_submitted', 'always')
+        self.assertTrue(self._transfer(self.other).phone_alert)
+
+    def test_patch_coercion_never_and_always(self):
+        rid = self._reservation(phone_alert=True).data['id']
+        self._mode('reservation_sourcing', 'never')
+        self._mode('reservation_status_urgent', 'never')
+        r = self.pharm_client.patch(f'/api/reservations/{rid}/', {'phone_alert': True}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        from apps.reservations.models import Reservation
+        self.assertFalse(Reservation.objects.get(pk=rid).phone_alert)
+        self._mode('reservation_status_urgent', 'always')
+        r = self.pharm_client.patch(f'/api/reservations/{rid}/', {'phone_alert': False}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertTrue(Reservation.objects.get(pk=rid).phone_alert)
+        # PATCH without the key leaves the stored value alone
+        self._mode('reservation_status_urgent', 'never')
+        self.pharm_client.patch(f'/api/reservations/{rid}/', {'notes': 'x'}, format='json')
+        self.assertTrue(Reservation.objects.get(pk=rid).phone_alert)
+
+    def test_status_alert_supersedes_previous_open_alert(self):
+        BranchSettings.objects.create(branch=self.branch, alert_mobile='01000000620')
+        tr = self._transfer(self.other, phone_alert=True)
+        self.pharm_client.post(f'/api/transfers/{tr.pk}/submit/')
+        from apps.notifications.phone_alerts.dispatch import fire
+        tr.refresh_from_db()
+        first = fire('transfer_status', tr, actor=self.assignee)
+        self.assertEqual(len(first), 1)
+        second = fire('transfer_status', tr, actor=self.assignee)
+        self.assertEqual(len(second), 1)
+        first[0].refresh_from_db()
+        self.assertEqual(first[0].status, 'expired')
+        self.assertEqual(second[0].status, 'queued')
+        # non-status events keep the dedupe
+        WorkOwner.objects.create(kind='hq_transfer_dispatch', staff=self.owner, branch=self.branch)
+        a = fire('transfer_hq_submitted', tr)
+        self.assertEqual(len(a), 1)
+        self.assertEqual(fire('transfer_hq_submitted', tr), [])
+
+    def test_approve_then_send_to_erp_sends_second_alert(self):
+        BranchSettings.objects.create(branch=self.branch, alert_mobile='01000000621')
+        tr = self._transfer(self.other, phone_alert=True)
+        self.pharm_client.post(f'/api/transfers/{tr.pk}/submit/')
+        from apps.transfers.models import TransferRequest
+        from apps.tests.factories import make_pharmacist
+        _, _, sup_client = make_pharmacist('pa6_sup', branch=self.other)
+        r = sup_client.post(f'/api/transfers/{tr.pk}/approve/', {}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        r = sup_client.post(f'/api/transfers/{tr.pk}/send-to-erp/', {}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        rows = list(self._alerts('transfer_status').order_by('pk'))
+        self.assertEqual([a.status for a in rows], ['expired', 'queued'])
+        self.assertEqual(TransferRequest.objects.get(pk=tr.pk).status, 'sent_to_erp')
+
+    # assignment targets
+    def test_adding_contributor_alerts_only_that_contributor(self):
+        t = OperationalTask.objects.create(title='c', created_by=self.admin, branch=self.branch,
+                                           assigned_to=self.assignee, phone_alert=True)
+        contributor = _staff('pa6_contrib', '01000000603', branch=self.branch)
+        r = self.admin_client.post(f'/api/tasks/{t.pk}/assignments/', {'staff': contributor.pk}, format='json')
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual([a.recipient_staff_id for a in self._alerts('task_assigned')], [contributor.pk])
+
+    def test_reassignment_alerts_only_new_assignee(self):
+        t = OperationalTask.objects.create(title='r', created_by=self.admin, branch=self.branch,
+                                           assigned_to=self.assignee, phone_alert=True)
+        TaskAssignment.objects.create(task=t, staff=self.assignee)
+        new = _staff('pa6_new', '01000000604', branch=self.branch)
+        r = self.admin_client.patch(f'/api/tasks/{t.pk}/', {'assigned_to': new.pk}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual([a.recipient_staff_id for a in self._alerts('task_assigned')], [new.pk])
+
+    # system promotion
+    def test_stock_promotion_fires_urgent_status_alert(self):
+        from django.core.management import call_command
+        from apps.catalog.models import ItemStock
+        from apps.reservations.models import Reservation
+        ItemStock.objects.create(item=self.item, branch=self.branch, softech_store_code='01',
+                                 quantity_on_hand=50)
+        rid = self._reservation(priority='urgent').data['id']
+        self.assertEqual(self._fired(lambda: call_command('notify_stock_available', verbosity=0)),
+                         ['reservation_status_urgent'])
+        self.assertEqual(Reservation.objects.get(pk=rid).status, 'available')
 
     # read-only status
     def test_detail_exposes_phone_alert_status(self):

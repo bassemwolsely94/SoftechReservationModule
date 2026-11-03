@@ -388,16 +388,10 @@ class TransferRequestDetailSerializer(PhoneAlertStatusMixin, serializers.ModelSe
 
 # ── Create / update serializers ───────────────────────────────────────────────
 
-def _transfer_alert_event(supplying_branch):
-    """HQ supplies -> the dispatcher event, otherwise the generic status event."""
-    return 'transfer_hq_submitted' if supplying_branch is not None and supplying_branch.is_hq else 'transfer_status'
-
-
 class TransferRequestCreateSerializer(PhoneAlertWriteMixin, serializers.ModelSerializer):
     items = TransferRequestItemWriteSerializer(many=True, required=False)
 
-    def phone_alert_event(self, attrs):
-        return _transfer_alert_event(attrs.get('supplying_branch'))
+    phone_alert_events = ('transfer_hq_submitted', 'transfer_status')
 
     class Meta:
         model  = TransferRequest
@@ -426,8 +420,7 @@ class TransferRequestUpdateSerializer(PhoneAlertWriteMixin, serializers.ModelSer
         model  = TransferRequest
         fields = ['notes', 'requesting_branch', 'supplying_branch', 'phone_alert']
 
-    def phone_alert_event(self, attrs):
-        return _transfer_alert_event(attrs.get('supplying_branch', self.instance.supplying_branch))
+    phone_alert_events = ('transfer_hq_submitted', 'transfer_status')
 
     def validate(self, data):
         instance = self.instance

@@ -31,15 +31,20 @@ def _wanted(policy, source, requested):
     return bool(requested)
 
 
-def fire(event_key, source, *, actor=None, notification=None, requested=None, raise_errors=False):
+SUPERSEDING_EVENTS = ('transfer_status', 'reservation_status_urgent', 'task_status')
+
+
+def fire(event_key, source, *, actor=None, notification=None, requested=None, raise_errors=False,
+         only_staff=None):
     """Create (and schedule delivery of) the alerts for ``event_key`` on ``source``.
 
     Never raises by default (workflows must not break); ``raise_errors=True`` lets the exception
     propagate after the savepoint has rolled back, for callers (the tick) that must retry.
+    ``only_staff`` (StaffProfile pks) restricts the resolved recipients; None = no filter.
     """
     try:
         with transaction.atomic():   # savepoint: a failure leaves no half-created alerts
-            return _fire(event_key, source, actor, notification, requested)
+            return _fire(event_key, source, actor, notification, requested, only_staff)
     except Exception:
         logger.exception('phone alert fire(%s) failed', event_key)
         if raise_errors:
@@ -47,7 +52,7 @@ def fire(event_key, source, *, actor=None, notification=None, requested=None, ra
         return []
 
 
-def _fire(event_key, source, actor, notification, requested):
+def _fire(event_key, source, actor, notification, requested, only_staff=None):
     event = EVENTS.get(event_key)
     if event is None or source is None:
         return []
@@ -55,9 +60,19 @@ def _fire(event_key, source, actor, notification, requested):
         return []
 
     ct = ContentType.objects.get_for_model(source)
+    recipients = resolve(event, source, actor=actor)
+    if only_staff is not None:
+        allowed = set(only_staff)
+        recipients = [r for r in recipients if r.staff is not None and r.staff.pk in allowed]
+    supersede = event_key in SUPERSEDING_EVENTS
+    if supersede and recipients:
+        # a newer status change replaces the still-open alert for the same record
+        PhoneAlert.objects.filter(
+            event=event_key, source_ct=ct, source_id=source.pk, status__in=OPEN_STATUSES,
+        ).update(status='expired')
     created = []
-    for r in resolve(event, source, actor=actor):
-        exists = PhoneAlert.objects.filter(
+    for r in recipients:
+        exists = (not supersede) and PhoneAlert.objects.filter(
             event=event_key, source_ct=ct, source_id=source.pk, phone=r.phone,
             status__in=OPEN_STATUSES).exists()
         if exists:

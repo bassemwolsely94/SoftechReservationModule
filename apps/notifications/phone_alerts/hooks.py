@@ -35,8 +35,9 @@ def on_transfer_status(transfer, actor=None):
     fire('transfer_status', transfer, actor=actor)
 
 
-def on_task_assigned(task, actor=None):
-    fire('task_assigned', task, actor=actor)
+def on_task_assigned(task, actor=None, only_staff=None):
+    """``only_staff``: alert just the newly assigned person(s) (StaffProfile pks)."""
+    fire('task_assigned', task, actor=actor, only_staff=only_staff)
 
 
 def on_task_status(task, actor=None):
@@ -45,27 +46,33 @@ def on_task_status(task, actor=None):
 
 # ── toggle rule ──────────────────────────────────────────────────────────────
 
-def apply_policy(event_key, requested):
-    """Stored value of the toggle: never/absent -> False, always -> True, optional -> as ticked."""
-    policy = PhoneAlertPolicy.for_event(event_key)
-    if policy is None or policy.mode == 'never':
-        return False
-    if policy.mode == 'always':
+def apply_policy(event_keys, requested):
+    """Stored value of the one per-record toggle, coerced across ALL the model's events:
+    True if any policy is 'always'; False only if every event is never/absent; else as ticked."""
+    if isinstance(event_keys, str):
+        event_keys = (event_keys,)
+    modes = []
+    for key in event_keys:
+        policy = PhoneAlertPolicy.for_event(key)
+        modes.append(policy.mode if policy is not None else 'never')
+    if 'always' in modes:
         return True
+    if all(m == 'never' for m in modes):
+        return False
     return bool(requested)
 
 
 class PhoneAlertWriteMixin:
-    """For write serializers with a ``phone_alert`` field: coerce it by the governing event's policy."""
+    """For write serializers with a ``phone_alert`` field: coerce it by the model's event policies.
 
-    def phone_alert_event(self, attrs):
-        raise NotImplementedError
+    Set ``phone_alert_events`` on the serializer (every event the record can raise).
+    """
+    phone_alert_events = ()
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
         if self.instance is None or 'phone_alert' in attrs:
-            attrs['phone_alert'] = apply_policy(self.phone_alert_event(attrs),
-                                                attrs.get('phone_alert', False))
+            attrs['phone_alert'] = apply_policy(self.phone_alert_events, attrs.get('phone_alert', False))
         return attrs
 
 
@@ -102,7 +109,9 @@ class PhoneAlertStatusMixin:
         if cache is None:
             ids = []
             instance = getattr(parent, 'instance', None)
-            if instance is not None and not hasattr(instance, 'pk'):   # many=True: a page / queryset
+            if instance is not None and not hasattr(instance, 'pk'):   # many=True: page / queryset / manager
+                if hasattr(instance, 'all'):
+                    instance = instance.all()
                 ids = [o.pk for o in instance]
             cache = {'map': alert_info(self.phone_alert_model, ids), 'ids': set(ids)}
             holder._phone_alert_cache = cache

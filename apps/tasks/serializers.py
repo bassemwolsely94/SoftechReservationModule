@@ -213,8 +213,7 @@ class TaskDetailSerializer(PhoneAlertStatusMixin, serializers.ModelSerializer):
 # ── Write serializer ───────────────────────────────────────────────────────────
 
 class TaskWriteSerializer(PhoneAlertWriteMixin, serializers.ModelSerializer):
-    def phone_alert_event(self, attrs):
-        return 'task_assigned'
+    phone_alert_events = ('task_assigned', 'task_status')
 
     class Meta:
         model = OperationalTask

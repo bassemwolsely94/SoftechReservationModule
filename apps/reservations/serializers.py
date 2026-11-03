@@ -497,8 +497,7 @@ class ReservationDetailSerializer(PhoneAlertStatusMixin, RecordPhoneMask, serial
 # ── Create / Update ───────────────────────────────────────────────────────────
 
 class ReservationCreateSerializer(PhoneAlertWriteMixin, serializers.ModelSerializer):
-    def phone_alert_event(self, attrs):
-        return 'reservation_sourcing'
+    phone_alert_events = ('reservation_sourcing', 'reservation_status_urgent')
 
     class Meta:
         model = Reservation
@@ -528,8 +527,7 @@ class ReservationCreateSerializer(PhoneAlertWriteMixin, serializers.ModelSeriali
 
 
 class ReservationUpdateSerializer(PhoneAlertWriteMixin, serializers.ModelSerializer):
-    def phone_alert_event(self, attrs):
-        return 'reservation_sourcing'
+    phone_alert_events = ('reservation_sourcing', 'reservation_status_urgent')
 
     class Meta:
         model = Reservation
