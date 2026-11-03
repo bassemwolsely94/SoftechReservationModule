@@ -27,20 +27,10 @@ from .service import ForecastService
 from .engine import ForecastEngine
 from .backtest import BacktestService
 from core.threads import start_thread
-from core.stable_ordering import StableOrderingFilter
-from django.db.models import F, Value
+from django.db.models import Value
 from django.db.models.functions import Coalesce, Concat, NullIf, Trim
+from core.sort_ordering import NullsLastOrderingFilter as NullsLastOrdering
 
-
-class NullsLastOrdering(StableOrderingFilter):
-    """Sortable-grid ordering with empty values (e.g. category-only seasonality rows with no item) last in
-    BOTH directions, then the unique pk tiebreak."""
-    def get_ordering(self, request, queryset, view):
-        ordering = super().get_ordering(request, queryset, view)
-        if not ordering:
-            return ordering
-        return [(F(f[1:]).desc(nulls_last=True) if f.startswith('-') else F(f).asc(nulls_last=True))
-                if isinstance(f, str) else f for f in ordering]
 
 logger = logging.getLogger('elrezeiky')
 
