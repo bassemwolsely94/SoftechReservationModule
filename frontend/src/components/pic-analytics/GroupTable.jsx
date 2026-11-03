@@ -24,12 +24,12 @@ export default function GroupTable({ data, title, note, firstLabel = 'الاسم
             <tr>
               <th className="px-3 py-2 text-right">{firstLabel}</th>
               <th className={cell} title="عدد العملاء (PIC) المميّزين اللي اشتروا من هنا في الفترة">عملاء</th>
-              <th className={cell} title="أول شراء ليهم في الفترة (ينسب لأول فاتورة)">جدد</th>
+              <th className={cell} title="أول شراء ليهم في الفترة، والكود اتسجل في SOFTECH قبل بداية الفترة بـ30 يوم أو أقل">جدد</th>
               <th className={cell} title="اشتروا في الفترة وليسوا جدد">عائدون</th>
-              <th className={cell} title="عائدون وآخر شراء قبل ده من 12 شهر أو أكتر">مُعاد تنشيطهم</th>
+              <th className={cell} title="عائدون ورجعوا بعد سنة أو أكتر من غير شراء">مُعاد تنشيطهم</th>
               <th className={cell} title="فواتير العميل في نفس اليوم = زيارة واحدة">زيارات</th>
               <th className={cell} title="صافي المبيعات بعد المرتجعات">صافي</th>
-              {hasGp && <th className={cell} title="صافي المبيعات − التكلفة">الربح</th>}
+              {hasGp && <th className={cell} title="إجمالي الربح = مجموع (إيراد السطر − تكلفته) على القنوات المحسوبة في الربح، بدون أصناف زي العبوات المجانية — نفس قواعد لوحة KPI. الهامش = الربح ÷ إيراد القنوات دي (مش ÷ صافي المبيعات)">الربح</th>}
               <th className={cell} title="صافي المبيعات ÷ الزيارات">سلة (صافي)</th>
               <th className={cell} title="متوسط عدد الوحدات في الزيارة">أصناف/زيارة</th>
               <th className={cell} title="متوسط عدد سطور الفاتورة في الزيارة">سطور لكل زيارة</th>

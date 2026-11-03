@@ -102,6 +102,14 @@ class AccessTests(ApiBase):
         t = self.admin_c.get(url('overview/')).json()['thresholds']
         self.assertEqual((t['loyal_months'], t['overdue_factor'], t['return_hours'], t['purchase_days']), (10, 1.5, 24, 7))
 
+    def test_thresholds_bad_setting_falls_back(self):
+        from unittest import mock
+        with mock.patch('apps.pic_analytics.views.setting', side_effect=ValueError('bad')):
+            r = self.admin_c.get(url('overview/'))
+        self.assertEqual(r.status_code, 200)
+        t = r.json()['thresholds']
+        self.assertEqual((t['loyal_months'], t['overdue_factor'], t['return_hours'], t['purchase_days']), (10, 1.5, 24, 7))
+
     def test_call_tabs_run_to_today(self):
         # calls are mirrored every 10 min, so the call tabs are not held back by the nightly fact build
         from django.utils import timezone

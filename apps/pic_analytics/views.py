@@ -32,7 +32,7 @@ from .queries import retention as q_retention
 from .queries.calls import call_center
 from .queries.filters import FilterError, Filters
 from .queries.retention import MAX_PAGE_SIZE, _int_param
-from .settings import setting
+from .settings import DEFAULTS, setting
 
 
 def _deny(msg='ليس لديك صلاحية — Not allowed'):
@@ -164,6 +164,18 @@ def exclusion_suggestions(request):
 # ── the dashboard's read endpoints ───────────────────────────────────────────────────────────────
 # /api/pic-analytics/ is exempt from the RBAC middleware: every view checks Access itself.
 
+def _thresholds():
+    """The tunables the screen quotes; a bad setting value falls back to its default, never a 500."""
+    out = {}
+    for key, name, cast in (('pic_loyal_months', 'loyal_months', int), ('pic_overdue_factor', 'overdue_factor', float),
+                            ('pic_call_return_hours', 'return_hours', int), ('pic_call_purchase_days', 'purchase_days', int)):
+        try:
+            out[name] = cast(setting(key))
+        except (TypeError, ValueError):
+            out[name] = cast(DEFAULTS[key])
+    return out
+
+
 def _run(request, fn, calls=False):
     """Access gate + filter bar + error mapping shared by every read endpoint. fn(f, access) -> data."""
     acc = Access(request)
@@ -176,10 +188,7 @@ def _run(request, fn, calls=False):
             data['period'] = {'from': f.start, 'to': f.end, 'data_from': f.data_from,
                               'data_to': f.data_to, 'clamped': f.clamped}
             # the tunables the on-screen explanations quote (the screen never hard-codes them)
-            data['thresholds'] = {'loyal_months': int(setting('pic_loyal_months')),
-                                  'overdue_factor': float(setting('pic_overdue_factor')),
-                                  'return_hours': int(setting('pic_call_return_hours')),
-                                  'purchase_days': int(setting('pic_call_purchase_days'))}
+            data['thresholds'] = _thresholds()
         return Response(data)
     except FilterError as exc:
         return _bad(str(exc))

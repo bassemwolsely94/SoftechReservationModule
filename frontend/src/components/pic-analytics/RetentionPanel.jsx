@@ -122,7 +122,7 @@ export default function RetentionPanel({ data, overdue, overduePage, onOverduePa
   return (
     <div className="space-y-4">
       <p className="text-xs text-gray-500">
-        كل الأرقام هنا عن العملاء (PIC) اللي اشتروا في الفترة المختارة. الشهور والدورة محسوبة على آخر 12 شهر لحد نهاية الفترة، من كل الفروع.
+        الكروت وأ/ب/ج عن العملاء اللي اشتروا في الفترة المختارة (من كل الفروع، آخر 12 شهر لحد نهاية الفترة). الاحتفاظ والمجموعات (cohorts) موضحين في سطورهم.
       </p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start" data-tour="pic-analytics-retention-kpis">
         <div className="space-y-1">

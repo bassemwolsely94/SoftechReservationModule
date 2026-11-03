@@ -37,7 +37,7 @@ function Unanswered({ rows }) {
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="pic-analytics-unanswered">
       <h3 className="text-sm font-bold text-gray-700 px-4 pt-3">مكالمات صادرة لم يُرد عليها</h3>
       <Explain className="px-4 pb-1" hint="مكالمات اتصلنا بيها والعميل ما ردّش (لا رد، مشغول، فشل) — لكل موظف."
-               lines={['محاولات = كل المكالمات الصادرة. أرقام تم الوصول إليها = أرقام رد صاحبها في نفس اليوم، ولم يُوصل إليها = أرقام ما ردّتش خلال اليوم.',
+               lines={['محاولات = كل المكالمات الصادرة للأرقام دي، بلا رد = اللي ماتردش منها. أرقام تم الوصول إليها = أرقام رد صاحبها في نفس اليوم، ولم يُوصل إليها = أرقام ما ردّتش خلال اليوم.',
                        'متوسط المحاولات = كام اتصال لنفس الرقم في اليوم لحد أول رد.']}
                example="اتصلنا بنفس الرقم 3 مرات في يوم، والتالتة ردّ ← تم الوصول بعد 3 محاولات" />
       <div {...kb.containerProps} className={`overflow-x-auto ${kb.containerProps.className}`}>

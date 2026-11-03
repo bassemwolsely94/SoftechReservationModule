@@ -234,10 +234,17 @@ export default function PicAnalyticsPage() {
         </div>
       )}
       {tab === 'pics' && (
+        <>
+        <Explain id="pics" className="-mt-2"
+                 hint="كل صف = عميل (PIC) اشترى في الفترة. المبالغ والزيارات على فروعك، أما الشريحة وأ/ب/ج و«متأخر» فمحسوبة على كل الفروع."
+                 lines={['أ/ب/ج = شهور الشراء / أطول تتابع شهري / دورة الشراء (تفاصيلها في تبويب «الولاء والتكرار»).',
+                         'المكالمات (وارد، صادر، فائتة، آخر مكالمة، مدة الحديث، مكالمة ← شراء) للإدارة بس، والمكالمة على رقم مشترك بتتحسب مرة واحدة.',
+                         'مرّر على عنوان أي عمود تلاقي شرحه. «استبعاد» بيخرج العميل من كل الأرقام وتقدر ترجّعه من قسم المستبعدين.']} />
         <PicTable data={pics.data} order={order} onOrder={o => { setOrder(o); setPicPage(1) }}
                   page={picPage} onPage={setPicPage} branchName={branchName}
                   onExclude={access?.can_manage_exclusions
                     ? async (pic, reason) => { await picAnalyticsApi.exclude({ pic, reason }); refresh() } : undefined} />
+        </>
       )}
       {tab === 'branches' && (
         <div data-tour="pic-analytics-branches-grid">
@@ -253,9 +260,9 @@ export default function PicAnalyticsPage() {
         <div data-tour="pic-analytics-sales-grid">
           <GroupTable data={salesG.data} firstLabel="البائع" note="العميل الجديد يُنسب لبائع أول فاتورة له في الفترة"
                       explain={{ id: 'sp', hint: 'كل سطر = العملاء اللي خدمهم البائع ومبيعاته في الفترة.',
-                                 lines: ['العميل الجديد بيتنسب لبائع أول فاتورة له. العميل العائد بيتحسب لكل بائع باع له في الفترة، لكن مرة واحدة جوه نفس البائع.',
+                                 lines: ['العميل الجديد جديد للكل، ويتنسب لبائع أول فاتورة له بس. العائد = اشترى في الفترة وليس جديد، ويتحسب عند كل بائع باع له (مرة واحدة جوه نفس البائع).',
                                          'استخدمه تعرف مين بيجيب عملاء جدد ومين بيحافظ على العائدين.'],
-                                 example: 'عميل جديد أول فاتورة له مع أحمد، وبعدها اشترى من منى ← جديد عند أحمد، وعائد عند منى' }} />
+                                 example: 'عميل جديد أول فاتورة له مع أحمد ← يتحسب جديد لأحمد بس؛ لو اشترى بعدها من منى يتحسب عميل عند منى (مش جديد ومش عائد). عميل قديم اشترى من أحمد ومنى ← عائد عند الاتنين' }} />
         </div>
       )}
       {tab === 'channels' && (
@@ -263,7 +270,7 @@ export default function PicAnalyticsPage() {
           <div data-tour="pic-analytics-channels-grid">
             <GroupTable data={chanG.data} title="القنوات" firstLabel="القناة"
                         explain={{ id: 'ch', hint: 'نفس تقسيم القنوات في لوحة KPI، فالأرقام تطابقها.',
-                                   lines: ['القناة بتتحدد من نوع البائع وقناة الفاتورة. «مستبعدة من مؤشرات KPI» قناة مستقلة.',
+                                   lines: ['القناة بتتحدد من قناة الفاتورة بنفس خريطة لوحة KPI؛ غير المربوط = أخرى، والقنوات المستبعدة من KPI بتظهر سطر لوحدها.',
                                            'العميل الجديد بيتنسب لقناة أول فاتورة له.'] }} />
           </div>
           <div className="space-y-1">

@@ -35,11 +35,11 @@ export default function PicTable({ data, order, onOrder, page, onPage, branchNam
     if (!k) return
     onOrder(order === `-${k}` ? k : `-${k}`)
   }
-  const Th = ({ k, children }) => {
+  const Th = ({ k, children, title }) => {
     const sk = SORTABLE[k]
     const on = sk && order.replace('-', '') === sk
     return (
-      <th className={`px-2 py-2 whitespace-nowrap ${sk ? 'cursor-pointer select-none hover:text-brand-700' : ''}`}
+      <th title={title} className={`px-2 py-2 whitespace-nowrap ${sk ? 'cursor-pointer select-none hover:text-brand-700' : ''}`}
           onClick={() => sortBy(k)}>
         {children}{on ? (order.startsWith('-') ? ' ▼' : ' ▲') : ''}
       </th>
@@ -53,14 +53,14 @@ export default function PicTable({ data, order, onOrder, page, onPage, branchNam
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-500">
             <tr>
-              <Th k="name">العميل</Th><th className="px-2 py-2">آخر فرع</th><th className="px-2 py-2">الشريحة</th>
+              <Th k="name">العميل</Th><th className="px-2 py-2">آخر فرع</th><th className="px-2 py-2" title="تصنيف العميل حسب نشاطه (على كل الفروع)">الشريحة</th>
               <Th k="net">صافي</Th>{hasGp && <th className="px-2 py-2">الربح</th>}
               <Th k="visits">زيارات</Th><th className="px-2 py-2">فواتير</th><th className="px-2 py-2">أصناف</th>
-              <th className="px-2 py-2">سلة</th><th className="px-2 py-2">الفئات</th><th className="px-2 py-2">القنوات</th>
-              <th className="px-2 py-2">أول شراء</th><Th k="last_purchase">آخر شراء</Th><Th k="days_since_last">أيام منذ آخر</Th>
-              <th className="px-2 py-2">أ/ب/ج</th><th className="px-2 py-2">متأخر</th>
-              <th className="px-2 py-2">وارد</th><th className="px-2 py-2">صادر</th><th className="px-2 py-2">فائتة</th>
-              <th className="px-2 py-2">آخر مكالمة</th><th className="px-2 py-2">أيام بين المكالمات</th>
+              <th className="px-2 py-2" title="صافي المشتريات ÷ الزيارات">سلة</th><th className="px-2 py-2" title="عدد الفئات المختلفة اللي اشتراها">الفئات</th><th className="px-2 py-2" title="عدد القنوات اللي اشترى منها">القنوات</th>
+              <th className="px-2 py-2">أول شراء</th><Th k="last_purchase">آخر شراء</Th><Th k="days_since_last" title="الأيام من آخر شراء لحد نهاية الفترة">أيام منذ آخر</Th>
+              <th className="px-2 py-2" title="أ: شهور الشراء من آخر 12 · ب: أطول تتابع شهري · ج: دورة الشراء (متوسط الأيام بين زياراته، مجمّع في فئات)">أ/ب/ج</th><th className="px-2 py-2" title="فات على آخر زيارة أكتر من معامل التأخر × دورته المعتادة (محتاج زيارتين على الأقل)">متأخر</th>
+              <th className="px-2 py-2" title="عدد مكالماته الواردة في الفترة">وارد</th><th className="px-2 py-2" title="عدد المكالمات الصادرة له في الفترة">صادر</th><th className="px-2 py-2" title="واردة منه لم يرد عليها أحد">فائتة</th>
+              <th className="px-2 py-2" title="تاريخ ووقت آخر مكالمة في الفترة">آخر مكالمة</th><th className="px-2 py-2">أيام بين المكالمات</th>
               <th className="px-2 py-2">مدة الحديث</th><th className="px-2 py-2">مكالمة ← شراء</th>
             </tr>
           </thead>
@@ -73,7 +73,7 @@ export default function PicTable({ data, order, onOrder, page, onPage, branchNam
                     <div className="font-medium text-gray-800">{r.name || '—'}</div>
                     <div className="text-gray-400 tabular-nums">{r.pic}{r.phone ? ` · ${r.phone}` : ''}</div>
                     {onExclude && open !== r.pic && (
-                      <button className="text-xs text-gray-400 hover:text-red-600 hover:underline"
+                      <button title="يخرج العميل من كل الأرقام والترتيب (مبيعاته في سطر «عملاء مستبعدون»)؛ ممكن استرجاعه" className="text-xs text-gray-400 hover:text-red-600 hover:underline"
                               onClick={() => { setOpen(r.pic); setReason(''); setErr('') }}>استبعاد</button>
                     )}
                     {onExclude && open === r.pic && (
