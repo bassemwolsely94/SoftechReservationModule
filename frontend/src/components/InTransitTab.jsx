@@ -23,6 +23,8 @@ import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
+import useSortableRows from '../hooks/useSortableRows'
+import SortTh from './SortTh'
 
 const toLatinDigits = s =>
   s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -240,6 +242,12 @@ function DetailPanel({ transit, onClose, onAction }) {
   const reconCount = (recon.missing_items?.length || 0)
     + (recon.qty_diffs?.length || 0)
     + (recon.extra_items?.length || 0)
+  // sortable detail tables (hooks before any conditional render); a multi-batch line sorts as one block
+  const itemVal = (r, k) => (k === 'expiry' && (r.batches || []).length > 1) ? null : r[k]
+  const { sorted: itemRows, headerProps: itemH } = useSortableRows(transit.items_snapshot || [], { getValue: itemVal })
+  const { sorted: missRows, headerProps: missH } = useSortableRows(recon.missing_items || [], {})
+  const { sorted: diffRows, headerProps: diffH } = useSortableRows(recon.qty_diffs || [], {})
+  const { sorted: extraRows, headerProps: extraH } = useSortableRows(recon.extra_items || [], {})
   const hasRecon = transit.transit_status === 'erp_mismatch'
     || transit.transit_status === 'received'
     || reconCount > 0
@@ -406,14 +414,14 @@ function DetailPanel({ transit, onClose, onAction }) {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 rounded-xl">
                     <tr>
-                      <th className="text-right px-3 py-2 text-xs text-gray-500 font-semibold">الصنف</th>
-                      <th className="text-right px-3 py-2 text-xs text-gray-500 font-semibold">ت الصلاحية</th>
-                      <th className="text-right px-3 py-2 text-xs text-gray-500 font-semibold">الكمية</th>
-                      <th className="text-right px-3 py-2 text-xs text-gray-500 font-semibold">التكلفة</th>
+                      <SortTh {...itemH('itemname', 'text')} className="text-right px-3 py-2 text-xs text-gray-500 font-semibold">الصنف</SortTh>
+                      <SortTh {...itemH('expiry', 'date')} className="text-right px-3 py-2 text-xs text-gray-500 font-semibold">ت الصلاحية</SortTh>
+                      <SortTh {...itemH('qty', 'number')} className="text-right px-3 py-2 text-xs text-gray-500 font-semibold">الكمية</SortTh>
+                      <SortTh {...itemH('extended_cost', 'number')} className="text-right px-3 py-2 text-xs text-gray-500 font-semibold">التكلفة</SortTh>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {transit.items_snapshot.map((item, i) => {
+                    {itemRows.map((item, i) => {
                       // SOFTECH lists an item's batches on separate lines — do the
                       // same here when a line spans >1 batch. Exports stay aggregated.
                       const batches = item.batches || []
@@ -535,12 +543,12 @@ function DetailPanel({ transit, onClose, onAction }) {
                   <div className="text-sm font-bold text-red-700 mb-2">🚫 أصناف ناقصة ({recon.missing_items.length})</div>
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50"><tr>
-                      <th className="text-right px-3 py-1.5 text-xs text-gray-500">الصنف</th>
-                      <th className="text-right px-3 py-1.5 text-xs text-gray-500">مصروف</th>
-                      <th className="text-right px-3 py-1.5 text-xs text-gray-500">مستلم</th>
+                      <SortTh {...missH('itemname', 'text')} className="text-right px-3 py-1.5 text-xs text-gray-500">الصنف</SortTh>
+                      <SortTh {...missH('sent_qty', 'number')} className="text-right px-3 py-1.5 text-xs text-gray-500">مصروف</SortTh>
+                      <SortTh {...missH('received_qty', 'number')} className="text-right px-3 py-1.5 text-xs text-gray-500">مستلم</SortTh>
                     </tr></thead>
                     <tbody className="divide-y divide-gray-50">
-                      {recon.missing_items.map((it, i) => (
+                      {missRows.map((it, i) => (
                         <tr key={i} className="bg-red-50/40">
                           <td className="px-3 py-1.5"><span className="font-medium text-gray-800">{it.itemname}</span> <span className="text-xs text-gray-400 font-mono">{it.itemcode}</span></td>
                           <td className="px-3 py-1.5 tabular-nums font-bold text-blue-700">{toLatinDigits(String(it.sent_qty))}</td>
@@ -558,13 +566,13 @@ function DetailPanel({ transit, onClose, onAction }) {
                   <div className="text-sm font-bold text-amber-700 mb-2">⚖️ فروق الكميات ({recon.qty_diffs.length})</div>
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50"><tr>
-                      <th className="text-right px-3 py-1.5 text-xs text-gray-500">الصنف</th>
-                      <th className="text-right px-3 py-1.5 text-xs text-gray-500">مصروف</th>
-                      <th className="text-right px-3 py-1.5 text-xs text-gray-500">مستلم</th>
-                      <th className="text-right px-3 py-1.5 text-xs text-gray-500">الفرق</th>
+                      <SortTh {...diffH('itemname', 'text')} className="text-right px-3 py-1.5 text-xs text-gray-500">الصنف</SortTh>
+                      <SortTh {...diffH('sent_qty', 'number')} className="text-right px-3 py-1.5 text-xs text-gray-500">مصروف</SortTh>
+                      <SortTh {...diffH('received_qty', 'number')} className="text-right px-3 py-1.5 text-xs text-gray-500">مستلم</SortTh>
+                      <SortTh {...diffH('diff', 'number')} className="text-right px-3 py-1.5 text-xs text-gray-500">الفرق</SortTh>
                     </tr></thead>
                     <tbody className="divide-y divide-gray-50">
-                      {recon.qty_diffs.map((it, i) => (
+                      {diffRows.map((it, i) => (
                         <tr key={i} className="bg-amber-50/40">
                           <td className="px-3 py-1.5"><span className="font-medium text-gray-800">{it.itemname}</span> <span className="text-xs text-gray-400 font-mono">{it.itemcode}</span></td>
                           <td className="px-3 py-1.5 tabular-nums text-blue-700">{toLatinDigits(String(it.sent_qty))}</td>
@@ -583,11 +591,11 @@ function DetailPanel({ transit, onClose, onAction }) {
                   <div className="text-sm font-bold text-purple-700 mb-2">➕ أصناف زائدة في الاستلام ({recon.extra_items.length})</div>
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50"><tr>
-                      <th className="text-right px-3 py-1.5 text-xs text-gray-500">الصنف</th>
-                      <th className="text-right px-3 py-1.5 text-xs text-gray-500">مستلم</th>
+                      <SortTh {...extraH('itemname', 'text')} className="text-right px-3 py-1.5 text-xs text-gray-500">الصنف</SortTh>
+                      <SortTh {...extraH('received_qty', 'number')} className="text-right px-3 py-1.5 text-xs text-gray-500">مستلم</SortTh>
                     </tr></thead>
                     <tbody className="divide-y divide-gray-50">
-                      {recon.extra_items.map((it, i) => (
+                      {extraRows.map((it, i) => (
                         <tr key={i} className="bg-purple-50/40">
                           <td className="px-3 py-1.5"><span className="font-medium text-gray-800">{it.itemname}</span> <span className="text-xs text-gray-400 font-mono">{it.itemcode}</span></td>
                           <td className="px-3 py-1.5 tabular-nums font-bold text-purple-700">{toLatinDigits(String(it.received_qty))}</td>
