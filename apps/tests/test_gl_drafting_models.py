@@ -83,7 +83,13 @@ class GLDraftingModelTests(TestCase):
             GLSourceMap.objects.create(kind='bank', source_value='40', account=a)
 
     def test_gl_drafting_system_user_exists(self):
-        u = User.objects.get(username='gl-drafting')
+        from apps.finance.gl.drafting import system_user
+        profile = system_user()   # Ruling P12: get_or_create, survives a TransactionTestCase flush
+        u = profile.user
+        self.assertEqual(u.username, 'gl-drafting')
         self.assertFalse(u.is_active)
         self.assertFalse(u.has_usable_password())
-        self.assertEqual(StaffProfile.objects.get(user=u).role, 'viewer')
+        self.assertEqual(profile.role, 'viewer')
+        self.assertEqual(system_user().pk, profile.pk)   # idempotent
+        self.assertEqual(User.objects.filter(username='gl-drafting').count(), 1)
+        self.assertEqual(StaffProfile.objects.filter(user=u).count(), 1)

@@ -70,11 +70,12 @@ class _Superseded(Exception):
 
 
 def system_user() -> StaffProfile:
-    profile = StaffProfile.objects.select_related('user').filter(user__username=SYSTEM_USERNAME).first()
-    if profile is None:   # same as the 0021 data step (Ruling P1)
-        user, _ = User.objects.get_or_create(
-            username=SYSTEM_USERNAME, defaults={'is_active': False, 'password': make_password(None)})
-        profile, _ = StaffProfile.objects.get_or_create(user=user, defaults={'role': 'viewer'})
+    """Ruling P12: get_or_create with the 0021 data-step attributes (inactive, unusable password,
+    role 'viewer'), so a flushed database (TransactionTestCase) never breaks drafting."""
+    user, _ = User.objects.get_or_create(
+        username=SYSTEM_USERNAME, defaults={'is_active': False, 'password': make_password(None)})
+    profile, _ = StaffProfile.objects.select_related('user').get_or_create(
+        user=user, defaults={'role': 'viewer'})
     return profile
 
 
