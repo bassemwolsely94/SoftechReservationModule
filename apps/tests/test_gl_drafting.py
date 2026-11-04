@@ -818,3 +818,23 @@ class EditDecisionP23Tests(Base):
         self.assertEqual((run.counts['deleted'], run.counts['exceptions']), (0, 0))
         self.assertTrue(LedgerEntry.objects.filter(pk=e.pk, status='draft').exists())
         self.assertFalse(SourceException.objects.filter(status='open').exists())
+
+    def test_keep_edit_refused_when_a_doc_moved_to_another_group(self):
+        self.rule(granularity='branch_day')
+        self.docs['sales_tenders'] = [tender('t1', '100.00'), tender('t2', '50.00', pt='40')]
+        self.run_engine()
+        e = self.live('cash:130:2026-03-10').get()
+        self.edit_as_accountant(e, '150.00')
+        self.docs['sales_tenders'][1] = tender('t2', '50.00', pt='40', date=datetime.date(2026, 3, 11))
+        self.run_engine()
+        ex = SourceException.objects.get(status='open', source_doc__source_key='t2')
+        self.assertEqual(ex.detail['code'], 'edited_by_user')
+        with self.assertRaises(DR.DecisionError) as cm:
+            DR.keep_edit(ex.pk, user=self.staff)
+        self.assertEqual(cm.exception.code, 'moved')
+        self.assertEqual(SourceException.objects.get(pk=ex.pk).status, 'open')
+        DR.accept_softech(ex.pk, user=self.staff)   # accepting moves it cleanly
+        self.run_engine()
+        self.assertEqual(self.amounts(self.live('cash:130:2026-03-10').get())[0][1], DEC('100.00'))
+        self.assertEqual(self.amounts(self.live('cash:130:2026-03-11').get())[0][1], DEC('50.00'))
+        self.assertFalse(SourceException.objects.filter(status='open').exists())

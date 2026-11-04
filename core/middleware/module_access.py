@@ -262,6 +262,9 @@ def required(path, method):
             return 'ledger', ('edit',)
         if parts[4:5] == ['parties']:
             return 'ledger', (('edit',) if parts[5:6] in (['import'], ['propose']) else ('approve',))
+        # Ruling P23: deciding on an accountant-edited entry SOFTECH changed = approve
+        if parts[4:5] == ['exceptions'] and parts[6:7] in (['accept-softech'], ['keep-edit']):
+            return 'ledger', ('approve',)
         return 'ledger', ('create',)
     # Market Shortage reads the engine's run status and the shortage screen the vendor list:
     # `shortage` view (purchasing holds it too) — owner decision 2026-10-28, map by screen (Z-7a)

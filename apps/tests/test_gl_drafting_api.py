@@ -422,3 +422,90 @@ class MetaEndpointTests(Base):
         for path in ('rules/meta/', 'parties/persons/', 'exceptions/unmapped-values/'):
             self.assertEqual(module_access.required('/api/finance/gl/' + path, 'GET'),
                              ('ledger', ('view',)), path)
+
+
+class EditDecisionApiTests(Base):
+    """Ruling P23: «اعتماد نسخة سوفتيك» / «إبقاء تعديلي» on an edited_by_user exception."""
+
+    def setUp(self):
+        super().setUp()
+        period, _ = FinancialPeriod.objects.get_or_create(
+            year=2026, month=3, period_type='month',
+            defaults={'period_start': datetime.date(2026, 3, 1), 'period_end': datetime.date(2026, 3, 31)})
+        self.entry = LedgerEntry.objects.create(entry_date=D, book='cash', status='draft', created_by=self.acct_p,
+                                                period=period, source_type='sales_tenders', source_key='k1')
+        self.sd = self.doc('k1', group_key='k1')
+        self.ex = self.exc(self.sd, kind='ledger_error',
+                           detail={'code': 'edited_by_user', 'entry_id': self.entry.pk, 'group_key': 'k1',
+                                   'entry_status': 'draft'},
+                           proposed_lines=[{'account_code': '1302', 'debit': '10.00', 'credit': '0'}])
+
+    def url(self, action, ex=None):
+        return f'{BASE}exceptions/{(ex or self.ex).pk}/{action}/'
+
+    def test_accept_softech_202_starts_redraft_and_audits(self):
+        with mock.patch('apps.finance.gl.drafting_views.start_thread') as st:
+            r = self.acct.post(self.url('accept-softech'), {'note': 'سوفتيك صح'}, format='json')
+        self.assertEqual(r.status_code, 202, r.content)
+        run = GLDraftRun.objects.get(pk=r.data['run_id'])
+        self.assertEqual((run.date_from, run.date_to, run.source_types), (D, D, ['sales_tenders']))
+        self.assertEqual(st.call_args.kwargs['args'][0], run.pk)
+        self.ex.refresh_from_db()
+        self.sd.refresh_from_db()
+        self.assertEqual((self.ex.status, self.ex.resolved_by_id, self.ex.resolution_note),
+                         ('resolved', self.acct_p.pk, 'سوفتيك صح'))
+        self.assertEqual(self.sd.status, 'new')
+        a = AuditLog.objects.get(action='gl_entry_edit_released')
+        self.assertEqual((a.object_id, a.user_id, a.new_data['exception_id']),
+                         (str(self.entry.pk), self.acct_p.pk, self.ex.pk))
+
+    def test_accept_busy_409_rolls_back(self):
+        drafting.start_run(triggered_by='x', date_from=D, date_to=D, source_types=[])
+        with mock.patch('apps.finance.gl.drafting_views.start_thread') as st:
+            r = self.acct.post(self.url('accept-softech'), {}, format='json')
+        self.assertEqual(r.status_code, 409)
+        st.assert_not_called()
+        self.assertEqual(SourceException.objects.get(pk=self.ex.pk).status, 'open')
+        self.assertFalse(AuditLog.objects.filter(action='gl_entry_edit_released').exists())
+
+    def test_keep_edit_200_relinks_and_audits(self):
+        r = self.acct.post(self.url('keep-edit'), {'note': 'تعديلي صح'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data['status'], 'resolved')
+        self.sd.refresh_from_db()
+        self.assertEqual((self.sd.status, self.sd.entry_id, self.sd.group_key), ('drafted', self.entry.pk, 'k1'))
+        self.assertTrue(AuditLog.objects.filter(action='gl_entry_edit_kept', object_id=str(self.entry.pk),
+                                                user=self.acct_p).exists())
+
+    def test_409_when_not_open_or_wrong_kind(self):
+        other = self.exc(self.doc('k2'), kind='no_rule')
+        for action in ('accept-softech', 'keep-edit'):
+            r = self.acct.post(self.url(action, other), {}, format='json')
+            self.assertEqual(r.status_code, 409, action)
+            self.assertIn('detail', r.data)
+        self.assertEqual(self.acct.post(self.url('keep-edit'), {}, format='json').status_code, 200)
+        with mock.patch('apps.finance.gl.drafting_views.start_thread') as st:
+            self.assertEqual(self.acct.post(self.url('accept-softech'), {}, format='json').status_code, 409)
+            st.assert_not_called()
+        self.assertEqual(self.acct.post(f'{BASE}exceptions/999999/keep-edit/', {}, format='json').status_code, 404)
+
+    def test_needs_ledger_approve_and_all_branch(self):
+        from apps.users.models import RoleModuleAccess
+        _, _, viewer = make_user('t8_view3', role='viewer', access_all=True)   # no ledger.approve
+        for a in ('view', 'create', 'approve'):
+            RoleModuleAccess.objects.update_or_create(
+                role='pharmacist', module='ledger', action=a, defaults={'is_allowed': True})
+        module_access.clear_cache()
+        _, _, scoped = make_user('t8_scoped', role='pharmacist', access_all=False)
+        with mock.patch('apps.finance.gl.drafting_views.start_thread') as st:
+            for client in (viewer, scoped):
+                for action in ('accept-softech', 'keep-edit'):
+                    self.assertEqual(client.post(self.url(action), {}, format='json').status_code, 403, action)
+            st.assert_not_called()
+        self.assertEqual(SourceException.objects.get(pk=self.ex.pk).status, 'open')
+        self.assertFalse(AuditLog.objects.filter(action__startswith='gl_entry_edit_').exists())
+
+    def test_routes_need_ledger_approve(self):
+        req = module_access.required
+        self.assertEqual(req(self.url('accept-softech'), 'POST'), ('ledger', ('approve',)))
+        self.assertEqual(req(self.url('keep-edit'), 'POST'), ('ledger', ('approve',)))
