@@ -994,6 +994,66 @@ SCREENS = [
         'updated': '2026-11-01',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
+    {
+        'key': 'pos.usage_print',
+        'routes': ['/usage-print'],
+        'title': T('طريقة الاستخدام (طباعة على ورق الإيصال)', 'Usage instructions (receipt-paper print)'),
+        'summary': T(
+            'اكتب رقم فاتورة البيع فتظهر أصنافها، ولكل صنف طريقة استخدام مقترحة مع مصدرها: آخر مرة لنفس المريض، '
+            'أو الأكثر استخداماً لهذا الصنف، أو محتوى معتمد من الصيدلي. الاقتراح مجرد بداية: تعدّله أو تبنيه من الاختيارات '
+            'السريعة، ثم تؤكد كل صنف أو تختار «لا يطبع». الطباعة لا تُفتح إلا بعد قرار في كل الأصناف. '
+            'يُسجَّل مين أكّد إيه وإمتى، وكل طباعة. الفاتورة تُقرأ من نسخة المبيعات، ولو لسه ما وصلتش تُقرأ مباشرة من SOFTECH '
+            '(قراءة فقط — لا شيء يُكتب في SOFTECH).',
+            'Type a sale invoice number and its items appear, each with a suggested usage instruction and where it came from: '
+            'last time for the same patient, the most used for this item, or pharmacist-approved content. A suggestion is only '
+            'a start: edit it or build it from the quick choices, then confirm each item or choose "Do not print". Printing opens '
+            'only after every item has a decision. Who confirmed what and when, and every print, is logged. The invoice is read '
+            'from the sales copy, and if it has not arrived yet it is read directly from SOFTECH (read only — nothing is written to SOFTECH).'),
+        'audience': T('الصيادلة والبائعون في الفرع؛ القوالب وأسفل الورقة للمشرف والمدير.',
+                      'Pharmacists and salespeople in the branch; presets and the slip footer are for supervisors and admin.'),
+        'tabs': [
+            {'key': 'print', 'title': T('🏷️ الطباعة', '🏷️ Print'),
+             'body': T('رقم الفاتورة ← «فتح الفاتورة» (الفرع والتاريخ = فرعك والنهارده تلقائياً، لحد 7 أيام فاتوا). '
+                       'لكل صنف: راجع النص، عدّله أو اضغط الاختيارات (الكمية + المرات + التوقيت أو جملة جاهزة)، ثم Enter أو «✓ تأكيد». '
+                       'اختار «ورقة واحدة» أو «قطعة لكل صنف» ثم «🖨️ طباعة» أو F9. صورة الروشتة تظهر لو البيع جه من نقطة البيع، '
+                       'أو أرفقها من هنا. لو الفاتورة اتغيرت بعد آخر مرة، الأصناف المتغيرة بترجع تحتاج تأكيد.',
+                       'Invoice number → "Open invoice" (branch and date default to yours and today, up to 7 days back). '
+                       'For each item: check the text, edit it or tap the choices (amount + times + timing, or a ready phrase), then Enter '
+                       'or "✓ Confirm". Pick "One slip" or "One piece per item", then "🖨️ Print" or F9. The prescription photo shows if the '
+                       'sale came from the POS, or attach it here. If the invoice changed since last time, the changed items need confirming again.')},
+            {'key': 'settings', 'title': T('⚙️ القوالب والإعدادات', '⚙️ Presets & settings'),
+             'body': T('اختيارات الكمية والمرات والتوقيت والجمل الجاهزة (سطر لكل اختيار)، ونص أسفل الورقة والخط الساخن وواتساب '
+                       'ورابط QR (الخانة الفارغة لا تظهر). التعديل للمشرف والمدير ويُسجَّل قبل وبعد.',
+                       'The amount, times, timing and ready-phrase choices (one line each), and the slip footer text, hotline, WhatsApp '
+                       'and QR link (an empty field is not printed). Supervisors and admin edit them; every change is logged before and after.')},
+        ],
+        'tips': [T('الاقتراح عمره ما بيتطبع لوحده — لازم حد يأكده.', 'A suggestion never prints by itself — someone must confirm it.'),
+                 T('اسم المريض بيتطبع بس لو الفاتورة على عميل مسجل باسمه.', 'The patient name prints only when the invoice is on a registered named customer.')],
+        'related': ['pos.order'],
+        'tour': [
+            {'target': 'usage-print-number', 'label': T('رقم الفاتورة', 'Invoice number'),
+             'text': T('اكتب رقم فاتورة البيع واضغط Enter.', 'Type the sale invoice number and press Enter.')},
+            {'target': 'usage-print-open', 'label': T('فتح الفاتورة', 'Open invoice'),
+             'text': T('يجيب أصناف الفاتورة من فرعك في التاريخ المختار.', 'Brings the invoice items for your branch on the chosen date.')},
+            {'target': 'usage-print-text', 'label': T('طريقة الاستخدام', 'Usage instruction'),
+             'text': T('الاقتراح ومصدره ظاهرين؛ عدّل النص براحتك.', 'The suggestion and its source are shown; edit the text freely.'),
+             'open_hint': T('يظهر بعد فتح فاتورة.', 'Shows after opening an invoice.')},
+            {'target': 'usage-print-chips', 'label': T('اختيارات سريعة', 'Quick choices'),
+             'text': T('اضغط الكمية ثم المرات ثم التوقيت، أو جملة جاهزة تستبدل النص.', 'Tap amount, then times, then timing, or a ready phrase that replaces the text.'),
+             'open_hint': T('تظهر للصنف اللي بتكتب فيه.', 'Shows for the item you are typing in.')},
+            {'target': 'usage-print-confirm', 'label': T('✓ تأكيد', '✓ Confirm'),
+             'text': T('تأكيدك يتسجل باسمك ويتحفظ عشان يتقترح المرة الجاية.', 'Your confirmation is logged under your name and saved to be suggested next time.')},
+            {'target': 'usage-print-exclude', 'label': T('لا يطبع', 'Do not print'),
+             'text': T('للصنف اللي مش محتاج تعليمات (مثلاً مستحضر تجميل).', 'For an item that needs no instruction (a cosmetic, say).')},
+            {'target': 'usage-print-layout', 'label': T('شكل الطباعة', 'Print layout'),
+             'text': T('ورقة واحدة لكل الأصناف، أو قطعة منفصلة لكل صنف تتحط مع العلبة.', 'One slip for all items, or a separate piece per item to keep with each box.')},
+            {'target': 'usage-print-print', 'label': T('🖨️ طباعة', '🖨️ Print'),
+             'text': T('تتفتح بس لما كل الأصناف يكون ليها قرار. كل طباعة بتتسجل.', 'Opens only when every item has a decision. Every print is logged.')},
+            {'target': 'usage-print-rx', 'label': T('صورة الروشتة', 'Prescription photo'),
+             'text': T('من أمر نقطة البيع لو موجودة، أو أرفقها من هنا.', 'From the POS order when there is one, or attach it here.')},
+        ],
+        'updated': '2026-11-03',
+    },
 ]
 
 # offers have their own status list (shown with the module's workflows)

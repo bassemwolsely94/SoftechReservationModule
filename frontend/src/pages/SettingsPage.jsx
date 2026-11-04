@@ -333,6 +333,8 @@ function BranchCard({ branch, isAdmin, onRefresh, showToast }) {
     { field: 'allow_vouchers',     label: 'القسائم',     label_en: 'Vouchers' },
     { field: 'allow_stockcount',   label: 'الجرد',       label_en: 'Stock Count' },
     { field: 'allow_shortage',     label: 'النواقص',     label_en: 'Shortages' },
+    // Small daily counts pilot (Project 2) — also needs DAILY_COUNT_ENABLED on the server.
+    { field: 'daily_count_enabled', label: 'الجرد اليومي', label_en: 'Daily counts' },
     { field: 'notifications_enabled', label: 'الإشعارات', label_en: 'Notifications' },
   ]
 
