@@ -2178,6 +2178,32 @@ export const glApi = {
   branchPlXlsx:    (params) => api.get('/finance/gl/reports/branch-pl/', xlsx(params)),
   comparison:      (params) => api.get('/finance/gl/reports/comparison/', { params }),
   comparisonXlsx:  (params) => api.get('/finance/gl/reports/comparison/', xlsx(params)),
+  // ── drafting (Plan 2): parties, maps, posting rules, runs, exceptions ──
+  parties:         (params)        => api.get('/finance/gl/parties/', { params }),
+  partiesPage:     (url)           => api.get(String(url).replace(/^.*?\/api(?=\/)/, '')),
+  partyCreate:     (body)          => api.post('/finance/gl/parties/', body),
+  partiesImport:   (file)          => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post('/finance/gl/parties/import/', fd)
+  },
+  partiesPropose:  ()              => api.post('/finance/gl/parties/propose/'),
+  partyConfirm:    (id, personcode) => api.post(`/finance/gl/parties/${id}/confirm/`, { personcode }),
+  partyReject:     (id)            => api.post(`/finance/gl/parties/${id}/reject/`),
+  maps:            (params)        => api.get('/finance/gl/maps/', { params }),
+  mapPut:          (kind, value, body) => api.put(`/finance/gl/maps/${encodeURIComponent(kind)}/${encodeURIComponent(value)}/`, body),
+  rules:           (params)        => api.get('/finance/gl/rules/', { params }),
+  ruleSave:        (body)          => api.post('/finance/gl/rules/', body),
+  ruleVersions:    (code)          => api.get(`/finance/gl/rules/${encodeURIComponent(code)}/versions/`),
+  rulePreview:     (body)          => api.post('/finance/gl/rules/preview/', body),
+  draftRun:        (body)          => api.post('/finance/gl/drafting/run/', body),
+  draftRuns:       (params)        => api.get('/finance/gl/drafting/runs/', { params }),
+  draftRun1:       (id)            => api.get(`/finance/gl/drafting/runs/${id}/`),
+  exceptions:      (params)        => api.get('/finance/gl/exceptions/', { params }),
+  exceptionIgnore: (id, note)      => api.post(`/finance/gl/exceptions/${id}/ignore/`, { note }),
+  exceptionsRedraft: (ids)         => api.post('/finance/gl/exceptions/redraft/', { ids }),
+  entrySource:     (id)            => api.get(`/finance/gl/entries/${id}/source/`),
+  reconParties:    (params)        => api.get('/finance/reconciliation/parties/', { params }),
 }
 
 // ── Recommendations / FBT API ─────────────────────────────────────────────────

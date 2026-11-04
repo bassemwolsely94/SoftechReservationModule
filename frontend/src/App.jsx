@@ -153,6 +153,8 @@ import GLJournalPage from './pages/finance/gl/JournalPage'
 import GLTrialBalancePage from './pages/finance/gl/TrialBalancePage'
 import GLStatementsPage from './pages/finance/gl/StatementsPage'
 import GLAccountStatementPage from './pages/finance/gl/AccountStatementPage'
+import GLPartiesPage from './pages/finance/gl/GLPartiesPage'
+import PostingRulesPage from './pages/finance/gl/PostingRulesPage'
 import ProfitLossPage from './pages/ProfitLossPage'
 import CashViewPage from './pages/CashViewPage'   // P-40 — replaces the retired cash-flow page (P-43)
 import ExpenseAnalyticsPage from './pages/ExpenseAnalyticsPage'
@@ -530,6 +532,8 @@ export default function App() {
               <Route path="trial-balance" element={<GLTrialBalancePage />} />
               <Route path="statements" element={<GLStatementsPage />} />
               <Route path="ledger"    element={<GLAccountStatementPage />} />
+              <Route path="parties"   element={<GLPartiesPage />} />
+              <Route path="rules"     element={<PostingRulesPage />} />
               <Route path="pnl"       element={<ProfitLossPage />} />
               {/* P-40: the 13-week cash view replaces the retired cash-flow page; the old URL redirects. */}
               <Route path="cash"      element={<CashViewPage />} />
