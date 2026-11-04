@@ -3,6 +3,7 @@
  * No sidebar / desktop chrome — just a slim top bar + the screen content,
  * sized for a smartphone browser.
  */
+import PageSuspense from './PageSuspense'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import useAuthStore from '../store/authStore'
 import HelpButton from '../help/HelpButton'
@@ -38,7 +39,7 @@ export default function RiderLayout({ children }) {
           </button>
         </div>
       </header>
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="flex-1 overflow-auto"><PageSuspense>{children}</PageSuspense></main>
       <HelpPanel />
     </div>
   )
