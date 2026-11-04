@@ -7,7 +7,10 @@ import openpyxl
 from django.contrib.auth.models import User
 from django.test import TestCase
 
-from apps.finance.gl.coa_import import import_coa, parse_trial_balance_sheet
+from apps.audit.models import AuditLog
+from apps.finance.gl.coa_import import (
+    TBRow, import_coa, parse_trial_balance_sheet, parse_trial_balance_sheet_with_warnings,
+)
 from apps.finance.gl.names import normalize_ar
 from apps.finance.models import GLAccount, GLAccountGroup
 from apps.users.models import StaffProfile
@@ -128,3 +131,69 @@ class CoaImportTests(TestCase):
         self.assertEqual(res.created, 6)  # 4 rows + 2 system
         self.assertFalse(GLAccount.objects.exists())
         self.assertFalse(GLAccountGroup.objects.exists())
+
+
+def _row(group, code, name='n'):
+    return TBRow(group, code, name, Decimal(1), Decimal(0), Decimal(1))
+
+
+class CoaImportMappingTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='coa_m', password='x')
+        self.staff, _ = StaffProfile.objects.get_or_create(user=self.user)
+
+    def test_group_default_lines(self):
+        import_coa([
+            _row('شركات شقيقة', '2501'), _row('الضرائب', '2601'),
+            _row('المقبوضات غير التجاريه', '1399'), _row('التحويلات', '1310'),
+            _row('جارى الشركاء', '2411'), _row('محزون أول المده', '5301'),
+        ], user=self.staff)
+        line = lambda c: GLAccount.objects.get(code=c).statement_line
+        self.assertEqual(line('2501'), 'creditors')
+        self.assertEqual(line('2601'), 'creditors')
+        self.assertEqual(line('1399'), 'other_debtors')
+        self.assertEqual(line('1310'), 'cash')
+        self.assertEqual(line('2411'), 'partners')
+        self.assertEqual(line('5301'), 'opening_stock')
+        self.assertEqual(GLAccount.objects.get(code='2411').party_type, 'partner')
+
+    def test_closing_stock_not_in_cogs_group(self):
+        import_coa([_row('تكلفة المبيعات', '5101')], user=self.staff)
+        self.assertEqual(GLAccount.objects.get(code='5101').group.name, 'تكلفة المبيعات')
+        self.assertNotEqual(GLAccount.objects.get(code='5302').group.name, 'تكلفة المبيعات')
+
+    def test_contra_revenue_by_code_any_group(self):
+        import_coa([_row('المبيعات', '6018'), _row('ايرادات', '6019')], user=self.staff)
+        for c in ('6018', '6019'):
+            a = GLAccount.objects.get(code=c)
+            self.assertEqual((a.account_type, a.nature), ('contra_revenue', 'debit'))
+
+    def test_audit_on_real_import_not_dry_run(self):
+        import_coa([_row('المبيعات', '6001')], user=self.staff, dry_run=True)
+        self.assertFalse(AuditLog.objects.filter(action='gl_coa_imported').exists())
+        import_coa([_row('المبيعات', '6001')], user=self.staff)
+        log = AuditLog.objects.get(action='gl_coa_imported')
+        self.assertEqual(log.extra['created'], 3)
+
+    def test_reimport_keeps_existing_system_account(self):
+        import_coa([], user=self.staff)
+        acc = GLAccount.objects.get(code='1390')
+        acc.name = 'بضاعة (معدل)'
+        acc.save()
+        import_coa([_row('اصول ثابته', '1390', 'x')], user=self.staff)
+        acc.refresh_from_db()
+        self.assertEqual((acc.name, acc.group.name), ('بضاعة (معدل)', 'بضاعة آخر المدة'))
+
+    def test_unparseable_amount_warns(self):
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        path = os.path.join(d.name, 'w.xlsx')
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(HEADER_2026)
+        ws.append(['اصول ثابته', 1101, 'x', 'abc', 0, 0])
+        wb.save(path)
+        rows, warnings = parse_trial_balance_sheet_with_warnings(path)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual(len(parse_trial_balance_sheet(path)), 1)

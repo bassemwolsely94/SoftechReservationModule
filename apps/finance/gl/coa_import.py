@@ -87,12 +87,14 @@ class ImportResult:
     unknown_groups: list = field(default_factory=list)
 
 
-def _dec(v) -> Decimal:
+def _dec(v, warnings=None, where='') -> Decimal:
     if v is None or (isinstance(v, str) and not v.strip()):
         return Decimal('0')
     try:
         return Decimal(str(v).strip().replace(',', ''))
     except InvalidOperation:
+        if warnings is not None:
+            warnings.append(f'{where}: unparseable amount {v!r} treated as 0')
         return Decimal('0')
 
 
@@ -115,6 +117,12 @@ def _find_header(ws):
 
 
 def parse_trial_balance_sheet(path, sheet_name=None):
+    return parse_trial_balance_sheet_with_warnings(path, sheet_name)[0]
+
+
+def parse_trial_balance_sheet_with_warnings(path, sheet_name=None):
+    """Returns (rows, warnings); warnings list unparseable amount cells (counted as 0)."""
+    warnings = []
     wb = openpyxl.load_workbook(path, data_only=True)
     try:
         sheets = [wb[sheet_name]] if sheet_name else list(wb.worksheets)
@@ -138,12 +146,14 @@ def parse_trial_balance_sheet(path, sheet_name=None):
             code = _code(row[c_i] if c_i < len(row) else None)
             if not code:
                 continue
-            debit = _dec(row[d_i]) if d_i is not None and d_i < len(row) else Decimal('0')
-            credit = abs(_dec(row[cr_i])) if cr_i is not None and cr_i < len(row) else Decimal('0')
+            where = f'row {r + 1} code {code}'
+            debit = _dec(row[d_i], warnings, where) if d_i is not None and d_i < len(row) else Decimal('0')
+            credit = (abs(_dec(row[cr_i], warnings, where))
+                      if cr_i is not None and cr_i < len(row) else Decimal('0'))
             name = row[n_i] if n_i < len(row) else None
             rows.append(TBRow(group, code, str(name).strip() if name is not None else '',
                               debit, credit, debit - credit))
-        return rows
+        return rows, warnings
     finally:
         wb.close()
 
@@ -182,7 +192,7 @@ def _import(rows, res):
         gname, order = GROUP_DISPLAY[key]
         grp = _group(key, gname, sec, order, cache)
         line = BS_LINE_BY_ACCOUNT.get(row.code, line)
-        if row.code in CONTRA_REVENUE and key == normalize_ar('المبيعات'):
+        if row.code in CONTRA_REVENUE:
             typ, nat = 'contra_revenue', 'debit'
         party = PARTY_BY_ACCOUNT.get(row.code) or PARTY_BY_GROUP.get(key) or 'none'
         acc = GLAccount.objects.filter(code=row.code).first()
