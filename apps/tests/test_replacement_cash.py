@@ -22,6 +22,12 @@ D = Decimal
 TODAY = timezone.localdate()
 
 
+def setUpModule():
+    # Re-read the date when this module's tests start, not at import (a run crossing midnight Cairo).
+    global TODAY
+    TODAY = timezone.localdate()
+
+
 class CashPayoutTests(TW._Base):
     approved = TW.LegTests.approved
 
