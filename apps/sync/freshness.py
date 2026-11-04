@@ -43,6 +43,7 @@ DOMAINS = {
     'purchases': {'label_ar': 'المشتريات والوارد', 'source': 'purchases', 'cadence_min': 1440, 'kind': 'snapshot'},
     'purchase_expiry': {'label_ar': 'صلاحيات الشراء', 'source': 'purchase_expiry', 'cadence_min': 1440, 'kind': 'snapshot'},
     'stock_audit': {'label_ar': 'حركات المخزون (التدقيق)', 'source': 'stock_audit', 'cadence_min': 120, 'kind': 'snapshot'},
+    'gl_drafting': {'label_ar': 'ترحيل القيود من سوفتيك', 'source': 'gl_drafting', 'cadence_min': 1440, 'kind': 'snapshot'},
     # Finance mirror (P-43): P&L snapshots refresh with the slow lane; journal and
     # expenses come from the 02:15 nightly sync_finance (last 3 months).
     'finance_pl':       {'label_ar': 'الأرباح والخسائر', 'source': 'finance_pl',       'cadence_min': 60,   'kind': 'snapshot'},
@@ -120,6 +121,20 @@ def _source_stock_audit():
     }
 
 
+def _source_gl_drafting():
+    """GL drafting (finance-gl Plan 2) - GLDraftRun. 'partial' still drafted most documents, so it
+    counts as a success."""
+    from apps.finance.models import GLDraftRun
+    ok = (GLDraftRun.objects.filter(status__in=['success', 'partial'])
+          .order_by('-started_at').first())
+    last = GLDraftRun.objects.order_by('-started_at').first()
+    return {
+        'last_success_at': (ok.finished_at or ok.started_at) if ok else None,
+        'last_attempt_at': (last.finished_at or last.started_at) if last else None,
+        'last_run_failed': bool(last and last.status == 'failed'),
+    }
+
+
 def _source_ar_contracts():
     """Contract receivables (P-41) — the customer-side mirror sync of the tracked contract accounts."""
     from apps.finance.recon_models import ReconciliationRun
@@ -183,7 +198,7 @@ def _source_ap_reconciliation():
 _SOURCES = {'expiry': _source_expiry, 'ap_reconciliation': _source_ap_reconciliation, 'purchases': _source_purchases,
             'ar_contracts': _source_ar_contracts, 'calls': _source_calls,
             'stock_audit': _source_stock_audit, 'purchase_expiry': _source_purchase_expiry,
-            'finance_pl': _source_finance_pl,
+            'finance_pl': _source_finance_pl, 'gl_drafting': _source_gl_drafting,
             'finance_expenses': lambda: _finance_run_source('expense_records'),
             'finance_journal': lambda: _finance_run_source('journal_entries')}
 

@@ -1,7 +1,7 @@
 """General-ledger routes — mounted at /api/finance/gl/ (finance-gl Task 8)."""
 from django.urls import path
 
-from . import views
+from . import drafting_views, views
 
 urlpatterns = [
     path('groups/', views.groups, name='gl-groups'),
@@ -19,4 +19,7 @@ urlpatterns = [
     path('reports/position/', views.report_position, name='gl-position'),
     path('reports/branch-pl/', views.report_branch_pl, name='gl-branch-pl'),
     path('reports/comparison/', views.report_comparison, name='gl-comparison'),
+    path('drafting/run/', drafting_views.drafting_run, name='gl-drafting-run'),
+    path('drafting/runs/', drafting_views.drafting_runs, name='gl-drafting-runs'),
+    path('drafting/runs/<int:pk>/', drafting_views.drafting_run_detail, name='gl-drafting-run-detail'),
 ]
