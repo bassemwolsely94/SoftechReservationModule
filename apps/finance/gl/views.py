@@ -34,6 +34,8 @@ from .coa_import import import_coa, parse_trial_balance_sheet_with_warnings
 CONFLICT_CODES = {'not_draft', 'not_approved', 'already_reversed', 'is_reversal', 'source_conflict'}
 MAX_BULK = 500
 MAX_NOTES = 4000
+MAX_TEXT = 500           # LedgerEntry / LedgerLine description — refused above, never truncated
+MAX_SHORT = 40           # cheque_no / party_code
 MANUAL_BOOKS = ('general', 'cash', 'credit')
 ACCOUNT_EDITABLE = ('name', 'statement_line', 'is_active', 'requires_branch', 'party_type')
 
@@ -198,10 +200,16 @@ def _apply_account_patch(acc, data, profile):
             return _bad('bad_name', 'اسم الحساب مطلوب')
         acc.name = name[:200]
     if 'statement_line' in data:
-        acc.statement_line = str(data['statement_line'] or '').strip()[:40]
+        line = str(data['statement_line'] or '').strip()
+        if line and line not in statements.KNOWN_LINES:
+            return _bad('bad_statement_line', 'بند القائمة غير معروف')
+        acc.statement_line = line
     for flag in ('is_active', 'requires_branch'):
         if flag in data:
             setattr(acc, flag, bool(data[flag]) and data[flag] not in ('false', '0'))
+    # system accounts (1390 / 5302) carry the closing stock: never deactivated or re-lined
+    if acc.is_system and (not acc.is_active or acc.statement_line != before['statement_line']):
+        return _bad('system_account', 'حساب نظام: لا يمكن إيقافه أو تغيير بند القائمة')
     if 'party_type' in data:
         if data['party_type'] not in dict(GLAccount.PARTY_CHOICES):
             return _bad('bad_party_type', 'نوع الطرف غير صحيح')
@@ -298,11 +306,21 @@ class EntryCursor(CursorPagination):
     ordering = ('-entry_date', '-id')
 
 
-def _parse_entry(data):
-    """Request body → save_draft kwargs (raises ValueError with an Arabic message)."""
+def _text(value, limit, name):
+    text = str(value or '')
+    if len(text) > limit:
+        raise ValueError(f'{name}: أطول من المسموح ({limit} حرف)')
+    return text
+
+
+def _parse_entry(data, entry=None):
+    """Request body → save_draft kwargs (raises ValueError with an Arabic message).
+
+    A new entry uses a manual book; an existing draft may keep its own book (a SOFTECH-generated
+    draft is corrected before approval — R15) but never moves to another non-manual book."""
     entry_date = _date(data.get('entry_date'), 'تاريخ القيد')
-    book = data.get('book') or 'general'
-    if book not in MANUAL_BOOKS:
+    book = data.get('book') or (entry.book if entry else 'general')
+    if book not in MANUAL_BOOKS and not (entry is not None and book == entry.book):
         raise ValueError('الدفتر غير صحيح للقيد اليدوي')
     branch = None
     branch_id = _int(data.get('branch') if data.get('branch') is not None else data.get('branch_id'))
@@ -321,13 +339,13 @@ def _parse_entry(data):
             'account_code': str(ln.get('account_code') or '').strip(),
             'debit': ln.get('debit'), 'credit': ln.get('credit'),
             'branch_id': ln.get('branch_id') or None,
-            'party_code': str(ln.get('party_code') or ''),
-            'description': str(ln.get('description') or '')[:500],
-            'cheque_no': str(ln.get('cheque_no') or '')[:40],
+            'party_code': _text(ln.get('party_code'), MAX_SHORT, f'كود طرف السطر {i}'),
+            'description': _text(ln.get('description'), MAX_TEXT, f'بيان السطر {i}'),
+            'cheque_no': _text(ln.get('cheque_no'), MAX_SHORT, f'رقم شيك السطر {i}'),
             'due_date': _date(ln.get('due_date'), f'استحقاق السطر {i}', required=False),
         })
     return {'entry_date': entry_date, 'book': book, 'branch': branch,
-            'description': str(data.get('description') or '')[:500], 'lines': out}
+            'description': _text(data.get('description'), MAX_TEXT, 'البيان'), 'lines': out}
 
 
 def _save(request, entry=None):
@@ -335,7 +353,7 @@ def _save(request, entry=None):
     if profile is None:
         return _no_profile()
     try:
-        kw = _parse_entry(request.data)
+        kw = _parse_entry(request.data, entry)
     except ValueError as e:
         return _bad('bad_input', str(e))
     # notes ride inside save_draft (same transaction + audit row); absent → unchanged
@@ -467,12 +485,14 @@ def entry_reverse(request, pk):
     reason = str(request.data.get('reason') or '').strip()
     if not reason:
         return _bad('reason_required', 'سبب العكس مطلوب')
+    if len(reason) > MAX_TEXT:
+        return _bad('bad_input', f'سبب العكس أطول من المسموح ({MAX_TEXT} حرف)')
     try:
         day = _date(request.data.get('entry_date'), 'تاريخ العكس', required=False)
     except ValueError as e:
         return _bad('bad_input', str(e))
     try:
-        mirror = ledger.reverse(pk, user=profile, reason=reason[:500], entry_date=day)
+        mirror = ledger.reverse(pk, user=profile, reason=reason, entry_date=day)
     except LedgerEntry.DoesNotExist:
         return _bad('not_found', 'القيد غير موجود', status.HTTP_404_NOT_FOUND)
     except ledger.LedgerError as err:
@@ -518,11 +538,23 @@ def report_trial_balance(request):
     def build():
         f, t = _range(request)
         return {'from': f, 'to': t, 'by': by, 'branch': branch,
-                'rows': balances.trial_balance(f, t, branch_id=branch, by=by)}
+                'rows': _with_balances(balances.trial_balance(f, t, branch_id=branch, by=by))}
     resp = _report(request, build, exports.trial_balance)
     if isinstance(resp, Response) and resp.status_code == 200:
         resp.data = resp.data['rows']      # list + its is_total row
     return resp
+
+
+def _with_balances(rows):
+    """Server-decided figures the screens show: `balance` (closing debit − credit, signed) on
+    every row and `balanced` on the total row — the client never sums or compares amounts."""
+    for r in rows:
+        r['balance'] = r['closing_debit'] - r['closing_credit']
+        if r.get('is_total'):
+            r['balanced'] = (r['closing_debit'] == r['closing_credit']
+                             and r['opening_debit'] == r['opening_credit']
+                             and r['period_debit'] == r['period_credit'])
+    return rows
 
 
 @api_view(['GET'])

@@ -124,7 +124,13 @@ class LedgerServiceTests(TestCase):
 
     def test_before_opening_refused(self):
         from apps.finance.gl.ledger import approve, LedgerError
-        e = self._draft(entry_date=D(2025, 12, 31))
+        periods = FinancialPeriod.objects.count()
+        with self.assertRaises(LedgerError) as cm:
+            self._draft(entry_date=D(2025, 12, 31))
+        self.assertEqual(cm.exception.code, 'before_opening')
+        self.assertEqual(FinancialPeriod.objects.count(), periods)   # no old period created
+        # approve keeps its own guard (a draft only the workbook reproducer may date back)
+        e = self._draft(entry_date=D(2025, 12, 31), _allow_before_opening=True)
         with self.assertRaises(LedgerError) as cm:
             approve(e.id, user=self.staff)
         self.assertEqual(cm.exception.code, 'before_opening')

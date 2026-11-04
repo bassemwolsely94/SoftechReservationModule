@@ -305,3 +305,62 @@ class GLApiTests(TestCase):
         r = c.post(BASE + 'entries/', _body(), format='json')
         self.assertEqual(r.status_code, 403, r.content)
         self.assertFalse(LedgerEntry.objects.exists())
+
+    # ── final review wave ───────────────────────────────────────────────────
+    def test_trial_balance_server_decides_balanced_and_balance(self):
+        d = self._draft()
+        self.c.post(f'{BASE}entries/{d["id"]}/approve/')
+        for by in ('account', 'group'):
+            tb = self.c.get(BASE + 'reports/trial-balance/', {'from': '2026-01-01', 'to': '2026-12-31', 'by': by}).data
+            self.assertIs(tb[-1]['balanced'], True)
+            self.assertEqual(sorted(r['balance'] for r in tb[:-1]), ['-100.00', '100.00'])
+        by_code = {r['code']: r for r in self.c.get(BASE + 'reports/trial-balance/',
+                                                     {'from': '2026-01-01', 'to': '2026-12-31'}).data}
+        self.assertEqual(by_code['1101']['balance'], '100.00')
+
+    def test_account_patch_statement_line_and_system_accounts(self):
+        r = self.admin.patch(BASE + 'accounts/1101/', {'statement_line': 'nonsense'}, format='json')
+        self.assertEqual((r.status_code, r.data['code']), (400, 'bad_statement_line'))
+        r = self.admin.patch(BASE + 'accounts/1101/', {'statement_line': 'receivables'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        g = GLAccountGroup.objects.get(name='المبيعات')
+        GLAccount.objects.create(code='5302', name='مخزون آخر المدة', group=g, nature='credit',
+                                 account_type='cogs', statement_line='closing_stock', is_system=True)
+        for body in ({'is_active': False}, {'statement_line': 'net_sales'}):
+            r = self.admin.patch(BASE + 'accounts/5302/', body, format='json')
+            self.assertEqual((r.status_code, r.data['code']), (400, 'system_account'), body)
+        acc = GLAccount.objects.get(code='5302')
+        self.assertEqual((acc.is_active, acc.statement_line), (True, 'closing_stock'))
+        r = self.admin.patch(BASE + 'accounts/5302/', {'name': 'مخزون آخر المدة (2)', 'is_active': True,
+                                                        'statement_line': 'closing_stock'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+
+    def test_put_on_non_manual_draft_keeps_its_book(self):
+        from apps.finance.gl.ledger import save_draft
+        e = save_draft(user=self.acct, entry_date=__import__('datetime').date(2026, 3, 1), description='softech',
+                       book='opening', source_type='softech', source_key='softech:t:1',
+                       lines=[{'account_code': '1101', 'debit': '10'}, {'account_code': '4101', 'credit': '10'}])
+        body = {**_body(debit='12.00', credit='12.00'), 'book': 'opening'}
+        r = self.c.put(f'{BASE}entries/{e.id}/', body, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual((r.data['book'], r.data['source_key'], r.data['total_debit']), ('opening', 'softech:t:1', '12.00'))
+        r = self.c.put(f'{BASE}entries/{e.id}/', {**body, 'book': 'closing'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(self.c.post(BASE + 'entries/', {**_body(), 'book': 'opening'}, format='json').status_code, 400)
+
+    def test_dates_before_opening_and_long_text_refused(self):
+        r = self.c.post(BASE + 'entries/', _body(date='2025-12-31'), format='json')
+        self.assertEqual((r.status_code, r.data['code']), (400, 'before_opening'))
+        body = _body()
+        body['description'] = 'x' * 501
+        self.assertEqual(self.c.post(BASE + 'entries/', body, format='json').status_code, 400)
+        body = _body()
+        body['lines'][0]['description'] = 'x' * 501
+        r = self.c.post(BASE + 'entries/', body, format='json')
+        self.assertEqual((r.status_code, r.data['code']), (400, 'bad_input'))
+        self.assertFalse(LedgerEntry.objects.exists())
+        d = self._draft()
+        self.c.post(f'{BASE}entries/{d["id"]}/approve/')
+        r = self.c.post(f'{BASE}entries/{d["id"]}/reverse/', {'reason': 'x' * 501}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(LedgerEntry.objects.get(pk=d['id']).status, 'approved')

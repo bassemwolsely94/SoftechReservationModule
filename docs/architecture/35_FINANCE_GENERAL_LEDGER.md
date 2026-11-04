@@ -34,6 +34,8 @@ plan: `apps/finance/gl/` never imports `config.sybase`.
 - A source key belongs to one live (draft/approved) entry (`gl_live_source_key_unique`).
 - Any user with `ledger.approve` may approve, including their own entry; creator and approver are stored.
 - Every save / approve / reverse / delete / account edit / import is audited (who, when, before/after).
+  A confirmed chart import writes one `gl_coa_imported` row inside its transaction with the per-account
+  before/after of each changed field; `updated` counts only accounts that changed.
 
 Entry statuses (help workflow `gl_entry`): `draft` → `approved` → `reversed`.
 
@@ -53,15 +55,15 @@ checks its exact action. Writes also need a staff profile (403 `no_profile` othe
 |---|---|---|
 | `GET groups/` | view | `[{id, name, section, order}]` |
 | `GET accounts/?q=&group=&active=` | view | list, `group` nested; `q` uses the shared wildcard search |
-| `PATCH accounts/{code}/` | edit | name, statement_line, is_active, requires_branch, party_type |
+| `PATCH accounts/{code}/` | edit | name, statement_line (known lines only), is_active, requires_branch, party_type; system accounts (1390 / 5302) cannot be deactivated or re-lined |
 | `POST accounts/import/` (multipart `file`, `dry_run`) | edit | `.xlsx` only, ≤ `MAX_UPLOAD_FILE_SIZE`, ≤ `MAX_IMPORT_ROWS`; `{created, updated, unknown_groups, rows, warnings}` |
 | `GET entries/?status=&book=&date_from=&date_to=&branch=&account=&q=` | view | cursor pages `{next, previous, results}`; row has `total_debit`, `created_by_name` |
 | `GET entries/{id}/` | view | with `lines` |
-| `POST entries/` · `PUT entries/{id}/` | create | manual books general/cash/credit; PUT on non-draft → 409; `notes` (≤ 4000, omitted = unchanged) saved and audited with the draft |
+| `POST entries/` · `PUT entries/{id}/` | create | manual books general/cash/credit (a PUT may keep a draft's own non-manual book, R15); dates before 2026-01-01 → `before_opening`; text over its column size → 400 (never truncated); PUT on non-draft → 409; `notes` (≤ 4000, omitted = unchanged) saved and audited with the draft |
 | `DELETE entries/{id}/` | create | drafts only (409 otherwise); audited |
 | `POST entries/{id}/approve/` · `POST entries/approve/ {ids}` | approve | bulk (≤ 500, repeated ids once) → `{results:[{id, ok, number | code, detail}]}` |
 | `POST entries/{id}/reverse/ {reason, entry_date?}` | approve | returns the reversal |
-| `GET reports/trial-balance/?from&to&branch&by` | view | list + `is_total` row |
+| `GET reports/trial-balance/?from&to&branch&by` | view | list + `is_total` row; every row has `balance` (closing Dr − Cr), the total row `balanced` (bool) |
 | `GET reports/account-statement/?code&from&to&party&branch` | view | opening, lines with running balance, closing |
 | `GET reports/statements/?from&to&closing_stock` · `position/?as_of&closing_stock` · `branch-pl/?from&to` · `comparison/?years=` | view | statements / position carry `stock_basis` (entries · supplied · missing) and `warnings` (position also `unclosed_pl`); optional `closing_stock` (≥ 0, ≤ 2 dp, else 400 `bad_amount`) overrides 5302; `branch-pl` → `{columns}`; `comparison` → `[{year, empty, values, pct_of_sales}]` |
 
