@@ -105,4 +105,6 @@ class PublicCardTests(TestCase):
         r = self.anon.get('/api/portal/orders/', HTTP_AUTHORIZATION=f'Portal {tok}')
         self.assertEqual(r.status_code, 200, r.data)
         self.assertEqual(r.data['counsel_cards'][0]['item_count'], 1)
-        self.assertEqual(r.data['counsel_cards'][0]['token'], self.token)
+        # tokens are timestamped, so compare what they sign, not the string (a second may pass)
+        self.assertEqual(signing.loads(r.data['counsel_cards'][0]['token'], salt=cards.CARD_SIGNING_SALT),
+                         signing.loads(self.token, salt=cards.CARD_SIGNING_SALT))
