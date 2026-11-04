@@ -9,7 +9,7 @@
  *
  * Every figure comes from the server; this page lays them out. Print hides the filters.
  */
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { glApi } from '../../../api/client'
@@ -17,7 +17,7 @@ import { usePermissions } from '../../../hooks/usePermission'
 import useHelpTab from '../../../help/useHelpTab'
 import { SkeletonTable, EmptyState } from '../../../components/ui'
 import {
-  money, pct, errOf, listOf, rangeOf, todayIso, saveBlob, useGlBranches, PeriodPicker,
+  money, pct, errOf, listOf, rangeOf, todayIso, saveBlob, PeriodPicker,
   inputCls, btnPlain, ErrorBox,
 } from './glUi'
 
@@ -62,6 +62,8 @@ const TRADING = [
   { label: 'يخصم: مصروفات التشغيل', keys: ['operating_expenses'], col: 0, neg: true },
   { label: 'يخصم: المصروفات التمويلية', keys: ['financing_expenses'], col: 0, neg: true },
   { label: 'يخصم: الإهلاكات', keys: ['depreciation'], col: 0, neg: true },
+  { label: 'إجمالي المصروفات', keys: ['total_expenses'], col: 1, neg: true, optional: true },
+  { label: 'يخصم: حسابات بدون بند', keys: ['unclassified'], col: 0, neg: true, optional: true, hideZero: true },
   { label: 'صافي الربح', keys: ['net_profit'], col: 1, strong: true },
 ]
 const RATIOS = [
@@ -76,7 +78,7 @@ function TwoColumn({ lines, data }) {
         {lines.map((l, i) => {
           if (l.head) return <tr key={i}><td className="px-3 pt-3 pb-1 font-medium text-gray-700" colSpan={3}>{l.label}</td></tr>
           const v = pick(data, ...l.keys)
-          if (v === undefined && l.optional) return null
+          if (l.optional && (v === undefined || (l.hideZero && Number(v) === 0))) return null
           const cls = l.strong ? 'font-bold border-t border-gray-300 bg-gray-50' : ''
           return (
             <tr key={i} className={cls}>
@@ -129,6 +131,7 @@ const POSITION = [
   { label: 'الموردون', keys: ['suppliers'], col: 0, indent: true },
   { label: 'إجمالي الخصوم المتداولة', keys: ['total_current_liabilities', 'current_liabilities_total'], col: 1, neg: true, optional: true },
   { label: 'رأس المال العامل', keys: ['working_capital'], col: 1, strong: true },
+  { label: 'حسابات ميزانية بدون بند', keys: ['unclassified'], col: 1, optional: true, hideZero: true },
   { label: 'إجمالي الاستثمار', keys: ['total_investment'], col: 1, strong: true },
   { label: 'ويُموَّل من: حقوق الملكية', head: true },
   { label: 'رأس المال', keys: ['capital'], col: 0, indent: true },
@@ -156,76 +159,67 @@ function Position({ data }) {
   )
 }
 
-/**
- * Branch P&L → {branches: [{id, name}], rows: [{key, label, is_allocation, values: {id: amount}, total}]}.
- * Accepts that shape, or a list with one dict per branch (transposed here, display only).
- */
-function branchGrid(data) {
-  if (!data) return { branches: [], rows: [] }
-  if (!Array.isArray(data) && Array.isArray(data.rows)) return { branches: data.branches || [], rows: data.rows }
-  const list = listOf(data)
-  if (!list.length || !('branch_id' in list[0] || 'branch' in list[0])) return { branches: [], rows: list }
-  const branches = list.map(b => ({ id: b.branch_id ?? b.branch, name: b.branch_name || '' }))
-  const keys = TRADING.filter(l => l.keys).map(l => l.keys[0])
-  const extra = Object.keys(list[0]).filter(k => !keys.includes(k) && !['branch_id', 'branch', 'branch_name'].includes(k)
-    && list.every(b => b[k] === null || b[k] === undefined || !Number.isNaN(Number(b[k]))))
-  const rows = [...keys, ...extra].filter(k => list.some(b => b[k] !== undefined)).map(k => ({
-    key: k, label: TRADING.find(l => l.keys?.[0] === k)?.label || k,
-    is_allocation: /alloc/.test(k),
-    values: Object.fromEntries(list.map(b => [String(b.branch_id ?? b.branch), b[k]])),
-  }))
-  return { branches, rows }
-}
+const EXPENSE_KEYS = ['general_expenses', 'selling_expenses', 'depreciation', 'operating_expenses', 'financing_expenses']
 
+/**
+ * Branch P&L: the server sends one column per branch (HQ first, total last), each with the
+ * trading/P&L figures before allocation, `allocation` (line → HQ share moved in) and `after`.
+ */
 function Branches({ data }) {
-  const { labelOf } = useGlBranches()
-  const { branches, rows } = useMemo(() => branchGrid(data), [data])
-  if (!rows.length) return <EmptyState title="لا توجد أرقام للفروع في هذه الفترة" />
-  const hasTotal = rows.some(r => r.total !== undefined)
+  const cols = data?.columns || []
+  if (!cols.length) return <EmptyState title="لا توجد أرقام للفروع في هذه الفترة" />
+  const lines = TRADING.filter(l => l.keys)
+  const cell = 'px-3 py-1.5 text-left font-mono tabular-nums'
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="bg-gray-50 text-gray-600 text-xs">
           <tr>
             <th className="text-right px-3 py-2">البند</th>
-            {branches.map(b => <th key={b.id ?? 'hq'} className="text-left px-3 py-2 whitespace-nowrap">{b.id ? (labelOf(b.id, b.name) || b.name) : (b.name || 'المركز الرئيسي')}</th>)}
-            {hasTotal && <th className="text-left px-3 py-2">الإجمالي</th>}
+            {cols.map((c, i) => (
+              <th key={i} className={`text-left px-3 py-2 whitespace-nowrap ${c.is_total ? 'bg-gray-100' : ''}`}>{c.label || c.name}</th>
+            ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map(r => (
-            <tr key={r.key || r.label} className={`border-t border-gray-100 ${r.is_allocation ? 'bg-amber-50/50 text-amber-900' : ''} ${/profit/.test(r.key || '') ? 'font-bold' : ''}`}>
-              <td className="px-3 py-1.5 whitespace-nowrap">{r.label}{r.is_allocation && <span className="ms-1 text-[10px]">(توزيع المركز)</span>}</td>
-              {branches.map(b => (
-                <td key={b.id ?? 'hq'} className="px-3 py-1.5 text-left font-mono tabular-nums" dir="ltr">{money(r.values?.[String(b.id)], { blankZero: true })}</td>
-              ))}
-              {hasTotal && <td className="px-3 py-1.5 text-left font-mono tabular-nums font-medium" dir="ltr">{money(r.total, { blankZero: true })}</td>}
+          {lines.map(l => (
+            <tr key={l.keys[0]} className={`border-t border-gray-100 ${l.strong ? 'font-bold bg-gray-50' : ''}`}>
+              <td className="px-3 py-1.5 whitespace-nowrap">{l.label}</td>
+              {cols.map((c, i) => <td key={i} className={cell} dir="ltr">{money(c[l.keys[0]], { blankZero: true })}</td>)}
             </tr>
           ))}
+          {EXPENSE_KEYS.map(k => (
+            <tr key={`alloc-${k}`} className="border-t border-gray-100 bg-amber-50/50 text-amber-900">
+              <td className="px-3 py-1.5 whitespace-nowrap">توزيع {TRADING.find(l => l.keys?.[0] === k)?.label.replace('يخصم: ', '') || k}</td>
+              {cols.map((c, i) => <td key={i} className={cell} dir="ltr">{money(c.allocation?.[k], { blankZero: true })}</td>)}
+            </tr>
+          ))}
+          <tr className="border-t-2 border-gray-300 font-bold bg-gray-50">
+            <td className="px-3 py-2 whitespace-nowrap">صافي الربح بعد التوزيع</td>
+            {cols.map((c, i) => <td key={i} className={cell} dir="ltr">{money(c.after?.net_profit)}</td>)}
+          </tr>
         </tbody>
       </table>
     </div>
   )
 }
 
+/** Comparison: [{year, empty, values: {...}, pct_of_sales: {...}}] — every figure from the server. */
 function Comparison({ data }) {
   const years = listOf(data)
   if (!years.length) return <EmptyState title="لا توجد سنوات للمقارنة" />
-  const lines = TRADING.filter(l => l.keys && years.some(y => pick(y, ...l.keys) !== undefined))
-  // % of sales: the server's when it sends one, else value ÷ net sales (display only)
-  const pctOf = (y, k) => {
-    const given = y.pct?.[k] ?? y[`${k}_pct`]
-    if (given !== undefined) return pct(given)
-    const s = Number(pick(y, 'net_sales')); const v = Number(pick(y, k))
-    return s && Number.isFinite(v) ? pct(v / s) : '—'
-  }
+  const lines = TRADING.filter(l => l.keys)
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="bg-gray-50 text-gray-600 text-xs">
           <tr>
             <th className="text-right px-3 py-2" rowSpan={2}>البند</th>
-            {years.map(y => <th key={y.year} className="text-center px-3 py-1 border-s border-gray-200" colSpan={2}>{y.year}</th>)}
+            {years.map(y => (
+              <th key={y.year} className="text-center px-3 py-1 border-s border-gray-200" colSpan={2}>
+                {y.year}{y.empty && <span className="ms-1 font-normal text-gray-400">(لا قيود)</span>}
+              </th>
+            ))}
           </tr>
           <tr>
             {years.map(y => (
@@ -242,14 +236,25 @@ function Comparison({ data }) {
               <td className="px-3 py-1.5 whitespace-nowrap">{l.label}</td>
               {years.map(y => (
                 <Fragment key={y.year}>
-                  <td className="px-3 py-1.5 text-left font-mono tabular-nums border-s border-gray-100" dir="ltr">{money(pick(y, ...l.keys), { blankZero: true })}</td>
-                  <td className="px-3 py-1.5 text-left font-mono tabular-nums text-gray-500" dir="ltr">{pctOf(y, l.keys[0])}</td>
+                  <td className="px-3 py-1.5 text-left font-mono tabular-nums border-s border-gray-100" dir="ltr">{money(y.values?.[l.keys[0]], { blankZero: true })}</td>
+                  <td className="px-3 py-1.5 text-left font-mono tabular-nums text-gray-500" dir="ltr">{pct(y.pct_of_sales?.[l.keys[0]])}</td>
                 </Fragment>
               ))}
             </tr>
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+/** Server warnings (missing opening / closing stock, …) — shown above the statement, never hidden. */
+function Warnings({ data }) {
+  const list = data?.warnings || []
+  if (!list.length) return null
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-sm px-3 py-2 space-y-1">
+      {list.map((w, i) => <div key={i}>⚠ {w}</div>)}
     </div>
   )
 }
@@ -315,6 +320,7 @@ export default function StatementsPage() {
       <ErrorBox>{err || (q.isError ? errOf(q.error, 'تعذّر تحميل القائمة') : '')}</ErrorBox>
 
       <h2 className="text-base font-bold text-gray-800">{title}</h2>
+      {(tab === 'trading' || tab === 'position') && <Warnings data={q.data} />}
       {q.isLoading ? <SkeletonTable rows={10} cols={3} /> : q.isError ? null : (
         tab === 'trading' ? <Trading data={q.data} />
           : tab === 'position' ? <Position data={q.data} />
