@@ -707,9 +707,9 @@ SCREENS = [
         'tabs': [
             {'key': 'details', 'title': T('📋 التفاصيل', '📋 Details'),
              'body': T('بيانات العميل (الهاتف، الاسم، كود PIC، ربط ERP)، تفاصيل الطلب (الفرع، الحالة، الأولوية، المصدر، من أنشأه ولمن عُيّن)، '
-                       'ومسار SLA (وقت الإنشاء ← التعيين ← التواصل). لو الطلب «بيع ضائع» يظهر السبب والقيمة المقدرة. «بحث في ERP» يربط العميل بكوده في SOFTECH.',
+                       'ومسار SLA (وقت الإنشاء ← التعيين ← التواصل). لو الطلب «بيع ضائع» يظهر السبب والقيمة المقدرة. «بحث في ERP» يربط العميل بكوده في SOFTECH. الطلبات اللي العميل سجّلها بنفسه من رابط الرف (المصدر «تسجيل ذاتي (QR/رابط)») بتوصل غير مربوطة بعميل ولا بكود SOFTECH — افتح الطلب واضغط «بحث في ERP» عشان تربطها.',
                        'Customer data (phone, name, PIC, ERP link), request details (branch, status, priority, source, creator, assignee) and the SLA path '
-                       '(created → assigned → contacted). For a lost sale the reason and estimated value show. "Search ERP" links the customer to their SOFTECH code.')},
+                       '(created → assigned → contacted). For a lost sale the reason and estimated value show. "Search ERP" links the customer to their SOFTECH code. Requests the customer registered themselves from the shelf link (source "تسجيل ذاتي (QR/رابط)") arrive unmatched, with no customer or SOFTECH code — open the request and press "Search ERP" to match it.')},
             {'key': 'items', 'title': T('💊 الأصناف', '💊 Items'),
              'body': T('الأصناف المطلوبة مع الكمية والمخزون بالفرع والقيمة المقدرة، وعلامة «نقص طويل الأمد» للأصناف المتكررة. '
                        'يمكنك إضافة صنف، وتظهر البدائل المتوفرة بنفس المادة الفعّالة. السعر «يدوي» يعني تقديرياً وليس من SOFTECH.',
@@ -870,8 +870,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-03',
+        'change_note': T('الطلبات الذاتية بتوصل غير مربوطة — اربطها بـ «بحث في ERP»', 'Self-service requests arrive unmatched — match them with "Search ERP"'),
     },
     {
         'key': 'demand.dashboard',

@@ -76,3 +76,15 @@ def bulk_read_settings_check(app_configs, **kwargs):
             'blocked).',
             id='access.W004')]
     return []
+
+
+@register()
+def public_api_settings_check(app_configs, **kwargs):
+    """N6: PUBLIC_API_ENFORCEMENT. An unknown value silently runs as `log` (W005)."""
+    raw = getattr(settings, 'PUBLIC_API_ENFORCEMENT', 'log')
+    if str(raw or 'log').lower() not in ENFORCEMENT:
+        return [Warning(
+            f'PUBLIC_API_ENFORCEMENT={raw!r} is not one of {ENFORCEMENT}: it runs as log (anonymous '
+            'requests to unlisted /api/ paths are not refused).',
+            id='access.W005')]
+    return []

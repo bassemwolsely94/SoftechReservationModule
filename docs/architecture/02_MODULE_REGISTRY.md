@@ -208,10 +208,10 @@ Every module in the platform is registered here with its purpose, status, and de
 | App | `apps/stockcount` |
 | Purpose | Transaction-based stock count sessions with immutable snapshots |
 | Status | **COMPLETE** |
-| Models | `StockCountSession`, `StockCountSnapshot` |
+| Models | `StockCountSession`, `StockCountSnapshot`, **daily counts:** `DailyCountPick`, `DailyCountAttempt` (immutable), `DailyCountSettings` |
 | Key APIs | `/api/stockcount/` |
 | Related Screens | StockCountPage |
-| Business Rules | 6-stage session lifecycle (draft→snapshot_taken→exported→uploaded→variance_ready→closed); 3 modes (transaction/full/filtered); snapshot is IMMUTABLE after creation |
+| Business Rules | 6-stage session lifecycle (draft→snapshot_taken→exported→uploaded→variance_ready→closed); modes transaction/full/filtered/expiry_audit/**daily**; snapshot is IMMUTABLE after creation. **Daily counts (Project 2, 2026-11-03, dark: `DAILY_COUNT_ENABLED` + `BranchSettings.daily_count_enabled`):** `apps/stockcount/daily/` — risk-weighted blind lists per salesperson per day (`picker.py`), expected read live per item at submit (`service.py`), branch manager → central auditor review; `/api/stockcount/daily/`, `/m/daily-count`, «🧮 الجرد اليومي» tab on `/stock-count`; hourly job `daily_count_job`. Never writes to SOFTECH. Spec: `docs/superpowers/specs/2026-11-03-phone-scan-and-daily-counts-design.md` |
 | Dependencies | branches, users |
 
 ---

@@ -38,6 +38,8 @@ KNOWN_PUBLIC_VIEWS = {
     'apps.access.views.whoami',
     # browsers' CSP violation reports — log only, throttled, capped (Batch 6, W-9)
     'core.csp.csp_report',
+    # N6 public-form proof-of-work challenge (signed, no data; throttled 60/hour per IP)
+    'apps.access.public_views.challenge',
 }
 
 _CONVERTERS = {

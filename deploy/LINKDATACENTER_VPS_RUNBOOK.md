@@ -830,12 +830,14 @@ This installs every in-app local OCR engine: Tesseract bindings, RapidOCR (ONNX)
 ### 8.2 Production `.env` — FIRST BOOT IS READ-ONLY
 
 ```bash
-sudo -u elrezeiky cp deploy/staging.env.example .env
+sudo -u elrezeiky cp deploy/production.env.example .env
 sudo -u elrezeiky nano .env
 chmod 600 .env
 ```
-Start from the **staging** template on purpose: SOFTECH kill-switch ON and every writer OFF.
-You flip them to the office values only at cutover (section 11). Fill in:
+Start from the **production** template (`deploy/production.env.example`): it boots as a reader —
+SOFTECH kill-switch ON, `WRITER_INSTANCE=False` and every writer flag listed and OFF
+(`apps/tests/test_go_live.py` keeps it that way). You flip them only at cutover (section 11).
+The block below is the part to fill in:
 
 ```env
 DEBUG=False
@@ -1011,9 +1013,9 @@ sudo systemctl daemon-reload
 sudo systemctl enable elrezeiky-web          # start it after the data restore (section 10)
 # the scheduler is NOT enabled yet — only at cutover (section 11)
 ```
-Add `After=redis-server.service zerotier-one.service elrezeiky-tunnel-watch.service` to both
-`[Unit]` sections, so they start after Redis and the VPN on reboot. (Not `wg-quick@wg0`:
-WireGuard is dormant and disabled — section 5.0.)
+Both units already start after Redis and the VPN (`zerotier-one`, `elrezeiky-tunnel-watch`) on
+reboot. (Not `wg-quick@wg0`: WireGuard is dormant and disabled — section 5.0.) The OCR sidecar
+unit of 8.4 b is also in the repo: `sudo cp deploy/elrezeiky-ocr.service /etc/systemd/system/`.
 
 ### 9.2 Nginx (from `deploy/nginx.conf`)
 
@@ -1381,6 +1383,68 @@ sudo -u elrezeiky /opt/elrezeiky/venv/bin/python /opt/elrezeiky/app/manage.py cl
 **The way back.** Set `BULK_READ_ENFORCEMENT=log` (or `off`) the same way and restart; blocks stop
 at once. Socket refusal goes back with `NETWORK_POLICY_ENFORCEMENT=log` (N3).
 
+#### Batch N6 on the live server
+
+N6 hardens the pages a visitor can open without signing in. (1) **Anonymous gate**: an anonymous
+`/api/` request outside the allow-list (auth, whoami, theme, csp-report, portal, demand/public,
+delivery/track, public, the WhatsApp / Meta / Telegram / TikTok webhooks and signed call-recording
+links) is logged as `public gate would-deny ...` in `log` mode and refused 401 in `enforce`. Switch
+`PUBLIC_API_ENFORCEMENT` off / log / enforce, default `log`; an unknown value runs as `log` and
+`manage.py check` warns `access.W005`. (2) **Self-hosted bot check** (no third-party service): a small
+puzzle solved in the visitor's browser (about 1-2 seconds, single use, 10 minutes of life), a minimum
+fill time of 3 seconds, a hidden honeypot field, and a daily cap per phone per Cairo day: 10 for
+`/notify` (`PUBLIC_NOTIFY_DAILY_MAX`, a shelf-QR customer scans several items) and 3 for the portal
+sign-in link (`PUBLIC_PHONE_DAILY_MAX`); the phone is normalised, so +20 or spaces do not dodge it. It guards «أبلغني عند التوفر»
+(`/notify`) and the portal sign-in link. A refused visitor gets the usual generic answer and nothing
+is stored or sent. (3) `/notify` always answers the same `{ok:true}`, does no SOFTECH lookup and links
+no customer: staff match it with «بحث في ERP» on the demand. (4) Delivery tracking is
+`/api/public/track/<token>/` (the old address keeps working, links already sent stay valid), limited
+to 600 requests an hour per IP; the page refreshes every 60 seconds and slows down on a 429.
+Challenges and per-phone counters live in the process memory: fine for the single `elrezeiky-web`
+process; a restart only forgets today's counts.
+**Cache.** All rate counters (sign-in throttles, per-phone caps, single-use puzzle keys, log dedupe)
+sit in one per-process memory cache of 50,000 entries (`CACHE_MAX_ENTRIES`); a restart forgets the
+counts. **Shelf QR codes** printed for `/notify` must point at `https://` addresses: the puzzle
+needs HTTPS and fails on a plain `http://` page.
+
+**Step 1 - release the code with `release.sh`** (no migrations).
+```bash
+sudo /opt/elrezeiky/release.sh
+```
+
+**Step 2 - read the log lines during the log week.**
+```bash
+sudo journalctl -u elrezeiky-web --since -7d | grep 'public gate would-deny'
+sudo journalctl -u elrezeiky-web --since -7d | grep 'elrezeiky.public_guard'
+```
+A `would-deny` line for a path a real visitor or a partner system uses (a webhook, a link in an SMS)
+means that path is missing from the allow-list: add it in `apps/access/public_paths.py` before
+enforcing. Ignore scanner noise: random probes of made-up `/api/` paths (`/api/.env`, `/api/v1/...`)
+from unknown IPs are bots, not missing paths. The `public_guard` lines carry the refusal code (bad or reused challenge, too fast,
+honeypot filled, phone limit); a steady stream of `phone_limit` from real customers means the limit
+of 10 (`/notify`) or 3 (sign-in link) a day is too tight.
+
+**Step 3 - try it from a phone.** Use a staff or test phone number (each try uses one of that
+phone's daily slots), not a customer's. On mobile data (outside the company network, over HTTPS - the
+puzzle needs it) open `/notify`, pick an item and a branch, and submit once; then open the portal and
+ask for a sign-in link once. Both must answer normally within a few seconds. Expect exactly one new
+demand row on the demand screen (staff side) for the test phone; close or delete it afterwards so it
+does not reach follow-up. Repeat on a low-end Android phone: if the «جارٍ التحقق» wait is longer
+than about 5 seconds, lower `PUBLIC_POW_DIFFICULTY` in `.env` (e.g. 16 → 14; each step down halves
+the work) and restart.
+
+**Step 4 - enforce after a clean week** (owner's action; `.env` changes only after `manage.py check`
+passes, as in N3/N4/N5).
+```bash
+APP=/opt/elrezeiky/app; PY=/opt/elrezeiky/venv/bin/python
+sudo -u elrezeiky $PY $APP/manage.py access_preflight   && sudo -u elrezeiky env PUBLIC_API_ENFORCEMENT=enforce $PY $APP/manage.py check   && sudo sed -i '/^PUBLIC_API_ENFORCEMENT=/d' $APP/.env   && echo 'PUBLIC_API_ENFORCEMENT=enforce' | sudo tee -a $APP/.env >/dev/null   && sudo systemctl restart elrezeiky-web elrezeiky-scheduler
+```
+`access_preflight` shows an informational `public_api_mode` item with the current mode. Afterwards
+repeat Step 3.
+
+**The way back.** Set `PUBLIC_API_ENFORCEMENT=log` (or `off`) the same way and restart; refusals
+stop at once.
+
 #### Company network through the tunnel (split DNS)
 
 Goal: a company device resolves `elrezeikyapp.dawalvry.com` to `10.50.50.77` and reaches the VPS
@@ -1588,7 +1652,8 @@ is down during the window and that the new address is `https://elrezeikyapp.dawa
 **11.1 Freeze the office writers.** In the office `.env` set `SOFTECH_READ_ONLY=True` and
 `WRITER_INSTANCE=False` (P-54), remove any duplicated key (the processes now refuse to start
 on one), restart the office web + scheduler. The boot log must read
-`WRITER_INSTANCE=False … (not the writer instance — none of them can write)`. From now on the
+`WRITER_INSTANCE=False … (not the writer instance — none of them can write)`, and on the office
+`python manage.py writer_status --expect reader` must end with `ROLE = reader` (exit 0). From now on the
 office machine cannot write to SOFTECH — two independent locks.
 
 **11.2 Drain what's in flight — checked on the office instance:**
@@ -1627,7 +1692,8 @@ journalctl -u elrezeiky-scheduler -f          # watch the jobs register and the 
 ```
 Watch one full sync cycle succeed (sales, stock, in-transit, expiry, …) on the freshness bar.
 
-**11.6 Turn SOFTECH writes back on — one writer at a time.** First the kill-switch test (P-54):
+**11.6 Turn SOFTECH writes back on — one writer at a time.** Gate: the office is stopped (11.3)
+and its last `writer_status --expect reader` passed (11.1). First the kill-switch test (P-54):
 with `SOFTECH_READ_ONLY=True` confirm a writer dry-run is refused. Then in the VPS `.env`:
 1. `SOFTECH_READ_ONLY=False` and `WRITER_INSTANCE=True` (this server only — never the office)
 2. Set each `*_ENABLED` flag to its **office value** from your inventory (1.2) — no more than the
@@ -1635,7 +1701,8 @@ with `SOFTECH_READ_ONLY=True` confirm a writer dry-run is refused. Then in the V
    before the next: POS writer → POS cancel log → discount/pricing → ISR (+auto-approve) →
    coverage → invoices → A/P (still OFF — it was gated OFF in the office) → insurance → shortage →
    loyalty/others.
-3. `sudo systemctl restart elrezeiky-web elrezeiky-scheduler` after each change.
+3. `sudo systemctl restart elrezeiky-web elrezeiky-scheduler` after each change, then
+   `sudo -u elrezeiky /opt/elrezeiky/venv/bin/python manage.py writer_status --expect writer`.
 4. Check `/sync` → «🔐 مفاتيح الكتابة في SOFTECH» against the signed-off switch table
    (docs/product-review/06_SPEC_P-54 appendix — value, initials, date for every flag).
 
@@ -1692,7 +1759,9 @@ sudo -u elrezeiky crontab -e
 - Health at a glance: the in-app data-freshness bar + `/sync`.
 - `journalctl -u elrezeiky-web -u elrezeiky-scheduler --since "1 hour ago" -p err`
 - Disk: `df -h` (alert at 80%). RAM: `htop` / `free -h`.
-- External uptime: free UptimeRobot / Better Stack ping of `https://elrezeikyapp.dawalvry.com/` every 5 min → e-mail/WhatsApp.
+- External uptime: free UptimeRobot / Better Stack ping of `https://elrezeikyapp.dawalvry.com/api/public/health/`
+  every 5 min → e-mail/WhatsApp. It answers `{"status":"ok"}` (200) only when Daphne is up **and** reaches
+  PostgreSQL; anything else (502, 503, timeout) is an outage.
 - VPN: if both tunnels are down, every sync fails. `sudo journalctl -t elrezeiky-tunnel` shows
   every ZeroTier ⇄ SSTP switch; `ip route get 192.168.1.8` shows which one carries traffic now.
   The MikroTik netwatch (host 10.50.50.77, 5.0) logs it on the router side; on the VPS add a cron
@@ -1983,7 +2052,10 @@ git checkout -b feature/<name>
 
 ### 13.5 Releasing to production
 
-`/opt/elrezeiky/release.sh` (owned by root: `sudo chown root:root` + `sudo chmod 700`):
+`/opt/elrezeiky/release.sh` is `deploy/release.sh`, installed owned by root:
+`sudo install -o root -g root -m 700 /opt/elrezeiky/app/deploy/release.sh /opt/elrezeiky/release.sh`
+(re-install when a release changes it). It ends by waiting for `/api/public/health/` to answer 200.
+For reference, the core of it:
 ```bash
 #!/usr/bin/env bash
 # Release main to production. Run: sudo /opt/elrezeiky/release.sh

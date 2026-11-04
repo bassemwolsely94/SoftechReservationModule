@@ -5,9 +5,10 @@
  */
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { usePublicGuard, guardFailureMessage } from '../utils/publicGuard'
+import Honeypot from '../components/public/Honeypot'
 
 const BRAND = 'rgb(var(--c-brand-600))'
-
 function validPhone(raw) {
   const d = (raw || '').replace(/\D/g, '')
   return /^01\d{9}$/.test(d) || /^0[2-9]\d{6,8}$/.test(d)
@@ -26,14 +27,16 @@ export default function NotifyPage() {
   const [state, setState]     = useState('form')   // form | done | error
   const [err, setErr]         = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [website, setWebsite]       = useState('')   // honeypot: humans never see or fill it
+  const { getSolution, verifying } = usePublicGuard('notify', !!itemId)
 
   useEffect(() => {
     if (itemId) {
-      fetch(`/api/demand/public/item/?id=${encodeURIComponent(itemId)}`)
+      fetch(`/api/public/notify/item/?id=${encodeURIComponent(itemId)}`)
         .then(r => r.json()).then(d => { if (d.found) setItem(d) }).catch(() => {})
     }
     if (!urlBranch) {
-      fetch('/api/demand/public/branches/')
+      fetch('/api/public/notify/branches/')
         .then(r => r.json()).then(d => setBranches(d.branches || [])).catch(() => {})
     }
   }, [itemId, urlBranch])
@@ -43,13 +46,18 @@ export default function NotifyPage() {
     if (!branch)            { setErr('اختر الفرع'); return }
     setSubmitting(true); setErr('')
     try {
-      const res = await fetch('/api/demand/public/interest/', {
+      let sol
+      try { sol = await getSolution() }
+      catch (e) { setErr(guardFailureMessage(e)); return }
+      const res = await fetch('/api/public/notify/interest/', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item: itemId, branch, phone, name }),
+        body: JSON.stringify({ item: itemId, branch, phone, name,
+          challenge: sol.challenge, nonce: sol.nonce, website }),
       })
-      const data = await res.json()
-      if (res.ok) setState('done')
-      else { setErr(data.detail || 'تعذّر التسجيل، حاول مرة أخرى'); }
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.ok) setState('done')
+      else if (res.status === 429) setErr('طلبات كثيرة — حاول بعد قليل')   // never DRF's English text
+      else { setErr(data.detail || 'تعذّر التسجيل، حاول مرة أخرى') }
     } catch { setErr('تعذّر الاتصال، حاول مرة أخرى') }
     finally { setSubmitting(false) }
   }
@@ -83,7 +91,6 @@ export default function NotifyPage() {
             <div className="bg-brand-50 border border-brand-100 rounded-xl p-4 text-center">
               <div className="text-xs text-brand-600 mb-1">الصنف المطلوب</div>
               <div className="font-bold text-gray-800">{item ? item.name : '...'}</div>
-              {item?.softech_id && <div className="text-xs text-gray-400 font-mono mt-0.5">{item.softech_id}</div>}
             </div>
 
             {!urlBranch && (
@@ -109,12 +116,14 @@ export default function NotifyPage() {
                 placeholder="اسمك" value={name} onChange={e => setName(e.target.value)} />
             </div>
 
+            <Honeypot value={website} onChange={setWebsite} />
+
             {err && <div className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2">{err}</div>}
 
             <button onClick={submit} disabled={submitting}
               className="w-full py-3 rounded-xl text-white font-bold text-sm disabled:opacity-50"
               style={{ background: BRAND }}>
-              {submitting ? 'جارٍ التسجيل...' : '🔔 أبلغني عند توفره'}
+              {verifying ? 'جارٍ التحقق…' : submitting ? 'جارٍ التسجيل...' : '🔔 أبلغني عند توفره'}
             </button>
             <p className="text-[11px] text-gray-400 text-center leading-relaxed">
               بتسجيل رقمك توافق على تواصل الصيدلية معك بخصوص هذا الصنف فقط.

@@ -53,6 +53,8 @@ class StockCountSession(models.Model):
         # purchase-expiry engine (spawned session); stock is captured like a
         # filtered count, and counters also record the real shelf expiry.
         ('expiry_audit', 'جرد صلاحية (تدقيق مادي)'),
+        # Small daily count (Project 2): one session per salesperson per branch per day.
+        ('daily',        'جرد يومي'),
     ]
 
     # ── Identity ──────────────────────────────────────────────────────────────
@@ -74,6 +76,13 @@ class StockCountSession(models.Model):
                                          verbose_name='فلتر التصنيف')
     item_codes_filter = models.JSONField(default=list,
                                          verbose_name='قائمة أصناف محددة')
+
+    # ── Daily count (mode='daily') ────────────────────────────────────────────
+    assigned_to = models.ForeignKey(
+        'users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='daily_count_sessions', verbose_name='المكلّف بالجرد',
+    )
+    count_date  = models.DateField(null=True, blank=True, db_index=True, verbose_name='يوم الجرد')
 
     # ── Aggregated counters (updated on upload) ───────────────────────────────
     item_count    = models.IntegerField(default=0, verbose_name='عدد الأصناف')
@@ -114,6 +123,13 @@ class StockCountSession(models.Model):
                          name='sc_session_branch_status_idx'),
             models.Index(fields=['created_at'],
                          name='sc_session_created_idx'),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['assigned_to', 'count_date', 'branch_code'],
+                condition=models.Q(mode='daily'),
+                name='uniq_daily_count_per_person_day',
+            ),
         ]
 
     def __str__(self):
@@ -192,3 +208,114 @@ class StockCountSnapshot(models.Model):
     def __str__(self):
         return (f'Session {self.session_id} / {self.item_code} '
                 f'exp={self.expected_qty} cnt={self.counted_qty}')
+
+
+# ── Daily counts (جرد يومي) — Project 2, design 2026-11-03 ─────────────────────
+# One StockCountSession (mode='daily') per salesperson per branch per day. Each assigned item is a
+# DailyCountPick; every submission is an immutable DailyCountAttempt (expected read at that moment).
+# The session's StockCountSnapshot row mirrors the LATEST attempt so the variance screens and the
+# stock-audit "adjustment after count" check keep working. Counts never write to SOFTECH.
+
+class DailyCountPick(models.Model):
+    ST_PENDING   = 'pending'
+    ST_COUNTED   = 'counted'
+    ST_RECOUNT   = 'recount'
+    ST_ACCEPTED  = 'accepted'
+    ST_ESCALATED = 'escalated'
+    ST_MISSED    = 'missed'
+    STATUS_CHOICES = [
+        (ST_PENDING,   'لم يُجرد'),
+        (ST_COUNTED,   'تم الجرد'),
+        (ST_RECOUNT,   'مطلوب إعادة جرد'),
+        (ST_ACCEPTED,  'تم الاعتماد'),
+        (ST_ESCALATED, 'مُحال للمراجع'),
+        (ST_MISSED,    'لم يُنجز'),
+    ]
+
+    session   = models.ForeignKey(StockCountSession, on_delete=models.CASCADE, related_name='daily_picks')
+    item_code = models.CharField(max_length=20, verbose_name='كود الصنف')
+    item_name = models.CharField(max_length=255, verbose_name='اسم الصنف')
+    reasons   = models.JSONField(default=list, verbose_name='أسباب الاختيار')
+    weight    = models.DecimalField(max_digits=8, decimal_places=4, default=0, verbose_name='وزن الخطورة')
+    ask_expiry = models.BooleanField(default=False, verbose_name='يُطلب تاريخ الصلاحية')
+    status    = models.CharField(max_length=10, choices=STATUS_CHOICES, default=ST_PENDING, db_index=True)
+
+    latest_attempt = models.ForeignKey('DailyCountAttempt', on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name='+')
+    # a recount can be handed to another salesperson at the branch (still blind)
+    recount_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='daily_count_recounts')
+
+    escalated         = models.BooleanField(default=False, verbose_name='مُحال للمراجع')
+    escalation_reason = models.CharField(max_length=255, blank=True)
+    review_reason = models.CharField(max_length=40, blank=True, verbose_name='سبب الفرق')
+    review_note   = models.TextField(blank=True)
+    needs_softech_adjustment = models.BooleanField(default=False, verbose_name='يحتاج تسوية في SOFTECH')
+    reviewed_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='+')
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'صنف جرد يومي'
+        verbose_name_plural = 'أصناف الجرد اليومي'
+        ordering = ['item_name']
+        constraints = [models.UniqueConstraint(fields=['session', 'item_code'], name='uniq_daily_pick_item')]
+
+
+class DailyCountAttempt(models.Model):
+    """IMMUTABLE — one row per count submission (first count or recount). Never updated."""
+    SRC_LIVE   = 'live'
+    SRC_MIRROR = 'mirror'
+    SOURCE_CHOICES = [(SRC_LIVE, 'SOFTECH مباشرة'), (SRC_MIRROR, 'نسخة محلية')]
+
+    pick        = models.ForeignKey(DailyCountPick, on_delete=models.CASCADE, related_name='attempts')
+    counted_by  = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, related_name='+')
+    counted_qty = models.DecimalField(max_digits=12, decimal_places=3)
+    expected_qty = models.DecimalField(max_digits=12, decimal_places=3)
+    expected_source  = models.CharField(max_length=6, choices=SOURCE_CHOICES)
+    expected_read_at = models.DateTimeField()
+    difference  = models.DecimalField(max_digits=12, decimal_places=3)
+    value_egp   = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    physical_expiry = models.DateField(null=True, blank=True)
+    client_token = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    created_at  = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = 'محاولة جرد يومي'
+        verbose_name_plural = 'محاولات الجرد اليومي'
+        ordering = ['-created_at']
+
+
+class DailyCountSettings(models.Model):
+    """Singleton (pk=1) — chain-wide rules for the daily counts. Edited by management."""
+    items_per_person   = models.PositiveSmallIntegerField(default=20)
+    include_pharmacists = models.BooleanField(default=False)
+    job_hour           = models.PositiveSmallIntegerField(default=7)   # Cairo hour the lists appear
+    rotation_days      = models.PositiveSmallIntegerField(default=14)
+    expiry_days        = models.PositiveSmallIntegerField(default=90)
+    adjust_window_days = models.PositiveSmallIntegerField(default=60)
+    escalate_value_egp = models.DecimalField(max_digits=10, decimal_places=2, default=200)
+    escalate_repeat_count = models.PositiveSmallIntegerField(default=3)
+    escalate_repeat_days  = models.PositiveSmallIntegerField(default=30)
+    match_tolerance    = models.DecimalField(max_digits=6, decimal_places=3, default=0,
+                                             help_text='|difference| ≤ this (packs) counts as a match')
+    w_value   = models.DecimalField(max_digits=5, decimal_places=2, default=1)
+    w_rate    = models.DecimalField(max_digits=5, decimal_places=2, default=1)
+    w_adjust  = models.DecimalField(max_digits=5, decimal_places=2, default=1)
+    w_finding = models.DecimalField(max_digits=5, decimal_places=2, default=1)
+    w_loss    = models.DecimalField(max_digits=5, decimal_places=2, default=1)
+    w_expiry  = models.DecimalField(max_digits=5, decimal_places=2, default=1)
+    w_never   = models.DecimalField(max_digits=5, decimal_places=2, default=1)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'إعدادات الجرد اليومي'
+        verbose_name_plural = 'إعدادات الجرد اليومي'
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj

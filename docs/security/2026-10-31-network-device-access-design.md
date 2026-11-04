@@ -170,7 +170,7 @@ Existing: `/notify` (`apps/demand/views.py:1153-1215`), `/portal` (magic link, o
 - Own path prefix `/api/public/...`. Nothing else is reachable anonymously. The middleware denies any anonymous request outside the allow-listed public paths.
 - Write-only: a field allow-list, server-side validation, length limits, no read-back of stored data (a customer cannot query whether a phone exists = no enumeration).
 - Rate limits per IP **and** per phone; honeypot field + minimum fill time; optional CAPTCHA (owner decision: third-party Turnstile/hCaptcha vs self-hosted).
-- Optional signed, expiring link per invitation (token says which customer/branch/campaign) so random visitors cannot submit.
+- Optional signed, expiring link per invitation (token says which customer/branch/campaign) so random visitors cannot submit. **Not built** (not needed for /notify; revisit with decision 5).
 - Entries land in a **staging** table, reviewed or matched before touching `Customer` (no direct overwrite of master data from the public).
 - No SOFTECH access, ever, from public paths (enforced by the SOFTECH gate: anonymous context = no access).
 
@@ -209,7 +209,7 @@ Behaviour notes:
 
    All external sessions: 2FA required; max 8 h (rider 12 h), no 7-day refresh; phones masked; login alert to user + admins. Every value is editable later per role / per user / per device (audited).
 4. ~~**CAPTCHA provider**~~ — **DECIDED 2026-10-31: self-hosted only**, no third-party service. Layers: proof-of-work challenge (open-source, e.g. ALTCHA, served and verified by our server, signed + single-use + expiring), honeypot field, minimum fill time, rate limits per IP and per phone, staging table before master data. No visitor data leaves our server.
-5. **Which customer data-entry form** you meant (not found in the repo; `/notify` and `/portal` exist).
+5. **Which customer data-entry form** you meant (not found in the repo; `/notify` and `/portal` exist). **Still open after N6**; the public guard (`core/public_guard.py`, `usePublicGuard`) is ready to protect any new form.
 6. Fix the H-list first as a separate hardening batch?
 
 ## 8. Proposed batches
@@ -222,5 +222,5 @@ Behaviour notes:
 | N3 | **Built 2026-11-01** (commits: `e0251a15`, `87460c8c`, `896c7c65`, `1ff97bd1`, `654f04df`, `3fca8d81`, `627be0a1`, `9bb69766`, `8efa9cd2`, `8bfb973b`, `ee76881b`). Zone policy table (owner table 7.3, seeded), access zone Z1-Z4, `PolicyMiddleware` (`log` -> `enforce`), sign-in / refresh follow the zone (2FA, session caps, no legacy remember token), rider confined to the rider screen, phones masked outside, nginx proxy key (`X-ElR-Proxy-Key`), screen «سياسة الشبكات» + Z2 banner + per-user flags. `NETWORK_POLICY_ENFORCEMENT` stays `log`; switching to `enforce` is the owner's action after the log period (runbook «Batch N3 on the live server») | No |
 | N4 | **Built 2026-11-02** (commits: `575515b2`, `5ba62170`, `dfc36f56`, `236b6cd0`, `238ae938`, `8adacd54`, `7444f847`, `bd6d2b73`). Request context follows threads, pools and streams; SOFTECH gate decision (role x zone x scope, `SOFTECH_GATE_ENFORCEMENT` off/log/enforce, default `log`); connections in `config/sybase.py` refuse / read-only / full; a refusal is never "offline" (refused POS orders fail, never queue); SOFTECH write audit records ip, device, zone, scope; preflight + whoami + zone banner. Switching to `enforce` is the owner's action after a log week (runbook «Batch N4 on the live server») | **Yes — gate only (stop-and-ask: POS push path)** |
 | N5 | **Built 2026-11-03** (commits: `28530e6d`, `712d6693`, `5ceacd3c`, `6996a4ef`, `958137be`, `f3e4d36f`, `f74b9690`). Sockets (notifications, chatter, PBX pop-up) re-checked at connect, every 5 min and pushed closed on disable / device / policy change (close codes 4001 / 4002 / 4403; `ws_zone_denied`); every export audited (`export_taken`, `X-ElR-Export-Id`) and .xlsx/.docx stamped in document properties; bulk-read counters with `bulk_read_alert` and a temporary block (`BULK_READ_ENFORCEMENT` off/log/enforce, default `log`; `clear_bulk_block`). Migrations audit 0030, users 0044. Runbook «Batch N5 on the live server» | No |
-| N6 | Public-surface hardening (notify / portal / form) | No |
+| N6 | **Built 2026-11-03** (commits: `50fb130d`, `8254fd4a`, `65b9a234`, `692b5ce8`, `29f9359e`, `0c2223bd`). Anonymous allow-list gate (`PUBLIC_API_ENFORCEMENT` off/log/enforce, default `log`, preflight `public_api_mode`, check `access.W005`); self-hosted bot check (proof of work, single use, honeypot, 3 s minimum fill time, per phone per day 10 on `/notify` and 3 on the sign-in link; one 50,000-entry memory cache); `/notify` write-only with no SOFTECH lookup, canonical `/api/public/*`; portal sign-in link guarded; delivery tracking throttled (600/hour per IP). No migrations. Runbook «Batch N6 on the live server» | No |
 | IT | MikroTik split DNS + routes per branch, ZT DNS push, ZT membership discipline | Network side |

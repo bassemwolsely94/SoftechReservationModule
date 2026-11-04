@@ -39,7 +39,10 @@ from django.utils import timezone
 from rest_framework import filters, generics, status
 from apps.catalog.wildcard import WildcardSearchFilter
 import datetime as _dt
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import (
+    api_view, authentication_classes, permission_classes, throttle_classes,
+)
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .permissions import DENIED, DeliveryModulePermission, driver_of, guard
 from core import branch_scope
@@ -1401,8 +1404,16 @@ def delivery_tracking_link(request, pk):
     return Response({'url': url, 'token': token, 'whatsapp_url': wa})
 
 
+class PublicTrackThrottle(AnonRateThrottle):
+    """Per-IP cap on the anonymous tracking link (N6); tokens are signed, this stops enumeration."""
+    scope = 'public_track'
+    rate = '600/hour'
+
+
 @api_view(['GET'])
+@authentication_classes([])          # a stale staff cookie must never 401 the public page
 @permission_classes([AllowAny])
+@throttle_classes([PublicTrackThrottle])
 def delivery_public_track(request, token):
     """Public (no auth): minimal live status for a tokenized order-tracking link."""
     from django.core import signing

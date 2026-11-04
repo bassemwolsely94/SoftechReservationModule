@@ -340,6 +340,7 @@ Full schema: [03_DATABASE_DICTIONARY.md](03_DATABASE_DICTIONARY.md)
 | **Mobile — Tasks** | `/m/tasks` | Operational tasks (list/detail/complete) | COMPLETE |
 | **Mobile — Voucher Redeem** | `/m/vouchers` | OTP voucher redemption at POS | COMPLETE |
 | **Mobile — Stock Count** | `/m/stock-count` | Sessions + live barcode count entry (instant variance) | COMPLETE |
+| **Mobile — My Count Today** | `/m/daily-count` | Small daily blind count (≈20 risk-weighted items per salesperson), camera scan, offline queue — dark (`DAILY_COUNT_ENABLED`) | BUILT (dark) |
 | **Mobile — POS Order** | `/m/pos` | Indirect-POS order capture → push to cashier (نقطة البيع) | COMPLETE |
 | **Mobile — QA Inspection** | `/m/qa` | Branch QA inspections (templates + pass/fail/na + score) | COMPLETE |
 | **Mobile — Attendance** | `/m/attendance` | Geofenced GPS clock in/out | COMPLETE |

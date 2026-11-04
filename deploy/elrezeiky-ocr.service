@@ -1,0 +1,24 @@
+[Unit]
+Description=ElRezeiky — PaddleOCR box sidecar (local OCR)
+After=network.target
+
+[Service]
+Type=simple
+User=elrezeiky
+Group=elrezeiky
+WorkingDirectory=/opt/elrezeiky/app/ocr_sidecar
+Environment=PADDLE_HOST=127.0.0.1
+Environment=PADDLE_PORT=8077
+Environment=OMP_NUM_THREADS=2
+ExecStart=/opt/elrezeiky/ocr-venv/bin/python server.py
+Restart=always
+RestartSec=10
+# Keep OCR from starving the web app and PostgreSQL on the 8 GB / 4 vCPU plan
+MemoryHigh=1536M
+MemoryMax=2G
+CPUQuota=200%
+Nice=10
+SyslogIdentifier=elrezeiky-ocr
+
+[Install]
+WantedBy=multi-user.target

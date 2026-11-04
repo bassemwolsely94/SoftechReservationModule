@@ -227,6 +227,7 @@ INSTALLED_APPS = [
     'apps.gamification',   # Gamification — points, levels/titles, badges, streaks, rankings (recognition only)
     'apps.stock_audit',    # Stock Transactions Audit (doc 32) — read-only stktrans mirror + checks
     'apps.pic_analytics',  # PIC Analytics (doc 33) — customer dashboard + report, read-only
+    'apps.usage_print',    # Usage-instructions receipt slip (Project 5) — read-only vs SOFTECH, flag below
     'apps.access',         # Trusted networks + request network label (security N1, log only)
     'apps.trace',          # P-58 EDA track-and-trace foundation — dormant (TRACK_TRACE_ENABLED)
 ]
@@ -313,6 +314,18 @@ DATABASES = {
 # of the caller's transaction (the SOFTECH gate's `softech_gate_denied`, N4 I2). Tests: a mirror
 # of default (no second test database).
 DATABASES['audit_log'] = {**DATABASES['default'], 'TEST': {'MIRROR': 'default'}}
+
+# ── CACHE ──────────────────────────────────────────────────────────────────────
+# Per-process memory. Holds every rate counter (DRF throttles, N6 per-phone caps, single-use
+# proof-of-work keys, N3/N4/N5 counters and log dedupe). Django's default of 300 entries culls
+# them under load, which silently removes every limit (N6 C1); a restart forgets all counts.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'elrezeiky-default',
+        'OPTIONS': {'MAX_ENTRIES': config('CACHE_MAX_ENTRIES', default=50000, cast=int)},
+    }
+}
 
 # ── REST FRAMEWORK ─────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
@@ -549,6 +562,8 @@ ERP_SERVICE_USERCODE = config('ERP_SERVICE_USERCODE', default='')
 # SOFTECH; /push returns a dry-run plan only. Flip to True ONLY after the live
 # write path is implemented and validated against SOFTECH_TEST_HOST.
 POS_WRITER_ENABLED = config('POS_WRITER_ENABLED', default=False, cast=bool)
+# Usage-instructions slip (apps.usage_print, Project 5). OFF = screen hidden, API 404. Never writes SOFTECH.
+USAGE_PRINT_ENABLED = config('USAGE_PRINT_ENABLED', default=False, cast=bool)
 POS_WRITER_PROFILE = config('POS_WRITER_PROFILE', default='test')   # test|prod
 # Wave 3 inc3: batch-write OUR POS item-selection telemetry into SOFTECH pos_cancel (the
 # «المبيعات غير المخزنة» activity log — NOT a transactional/financial table). OFF until the
@@ -594,6 +609,13 @@ SUPPLY_ERP_GROUPS = config('SUPPLY_ERP_GROUPS', default='10,19,21,27')
 # The rates it produces still need a human to approve/execute in /supply; coverage is
 # topped up automatically afterwards. OFF by default.
 DEMAND_ENGINE_SCHEDULE_ENABLED = config('DEMAND_ENGINE_SCHEDULE_ENABLED', default=False, cast=bool)
+
+# Project 2 (docs/superpowers/specs/2026-11-03-phone-scan-and-daily-counts-design.md) — ship dark.
+# CAMERA_SCAN_ENABLED: 📷 button on every item search (phone camera reads the barcode; no backend).
+# DAILY_COUNT_ENABLED: small daily stock counts (20 items per salesperson, blind, reviewed); also
+# needs BranchSettings.daily_count_enabled per pilot branch. Never writes to SOFTECH.
+CAMERA_SCAN_ENABLED = config('CAMERA_SCAN_ENABLED', default=False, cast=bool)
+DAILY_COUNT_ENABLED = config('DAILY_COUNT_ENABLED', default=False, cast=bool)
 DEMAND_ENGINE_SCHEDULE_DAYS    = config('DEMAND_ENGINE_SCHEDULE_DAYS', default='sun,wed')
 DEMAND_ENGINE_SCHEDULE_HOUR    = config('DEMAND_ENGINE_SCHEDULE_HOUR', default=1, cast=int)
 DEMAND_ENGINE_SCHEDULE_MINUTE  = config('DEMAND_ENGINE_SCHEDULE_MINUTE', default=0, cast=int)
@@ -956,6 +978,8 @@ MIDDLEWARE += [
     'apps.users.middleware.CurrentUserMiddleware',
     # N1: request.access (network zone/site + role); files SOFTECH load by network (log only)
     'apps.access.middleware.AccessContextMiddleware',
+    # N6: anonymous allow-list for /api/ (apps/access/public_paths.py); mode PUBLIC_API_ENFORCEMENT
+    'apps.access.public_middleware.PublicApiMiddleware',
     # Server-side RoleModuleAccess check for /api/<module>/ (see core/middleware/module_access.py)
     'core.middleware.module_access.ModuleAccessMiddleware',
     # Zone policy (N3): narrows by access zone; mode NETWORK_POLICY_ENFORCEMENT off/log/enforce
@@ -965,6 +989,14 @@ MIDDLEWARE += [
     # P-56: log API requests slower than SLOW_REQUEST_MS (route pattern only) for /sync
     'apps.sync.middleware.SlowRequestMiddleware',
 ]
+# N6: off / log / enforce - anonymous requests to /api/ paths not in apps/access/public_paths.py
+PUBLIC_API_ENFORCEMENT = config('PUBLIC_API_ENFORCEMENT', default='log')
+# N6: self-hosted public-form guard (core/public_guard.py) - proof of work, fill time, per-phone cap
+PUBLIC_POW_TTL_SECONDS  = config('PUBLIC_POW_TTL_SECONDS', default=600, cast=int)
+PUBLIC_POW_DIFFICULTY   = config('PUBLIC_POW_DIFFICULTY', default=16, cast=int)   # leading zero bits
+PUBLIC_MIN_FILL_SECONDS = config('PUBLIC_MIN_FILL_SECONDS', default=3, cast=int)
+PUBLIC_PHONE_DAILY_MAX  = config('PUBLIC_PHONE_DAILY_MAX', default=3, cast=int)   # portal sign-in link, per phone, Cairo day
+PUBLIC_NOTIFY_DAILY_MAX = config('PUBLIC_NOTIFY_DAILY_MAX', default=10, cast=int)  # /notify (shelf QR), per phone, Cairo day
 SLOW_REQUEST_MS = config('SLOW_REQUEST_MS', default=1000, cast=int)
 # N5: Excel / Word exports up to this size get the who/when/where stamp (larger: audit only)
 EXPORT_STAMP_MAX_BYTES = 20 * 1024 * 1024

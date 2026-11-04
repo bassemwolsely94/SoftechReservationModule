@@ -16,6 +16,8 @@ from rest_framework.decorators import (
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
+from core import public_guard
+from core.threads import start_thread
 from apps.portal.auth import IsPortalCustomer, PortalSessionAuthentication
 from apps.portal.serializers import (
     AuthExchangeSerializer, ReorderSerializer, RequestLinkSerializer,
@@ -52,12 +54,26 @@ def request_link(request):
     If a customer matches, mint a short-lived one-login magic link and WhatsApp it.
     """
     ser = RequestLinkSerializer(data=request.data)
-    ser.is_valid(raise_exception=True)
+    ser.is_valid(raise_exception=True)          # own fields first: a bad request never burns a slot
     phone = ser.validated_data['phone']
 
+    # Self-hosted guard (N6). Bots and the per-phone daily cap get the same generic 200 as everyone
+    # (nothing sent, nothing learnt); a stale/replayed/too-fast form is told to reload.
+    try:
+        public_guard.check_submission(request.data, 'portal_link',
+                                      phone=public_guard.normalize_phone(phone))
+    except public_guard.GuardError as e:
+        if e.code in public_guard.SILENT_CODES:
+            return Response({'detail': _GENERIC_LINK_MSG}, status=status.HTTP_200_OK)
+        return Response({'detail': public_guard.GUARD_MESSAGES[e.code]},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    # The link is minted here; the WhatsApp send runs on a thread so a known and an unknown phone
+    # answer in the same time (no timing oracle, N6 I3). A send failure is only logged.
     customer = find_customer_by_phone(phone)
     if customer is not None:
-        send_magic_link(customer, issue_magic_link(customer))
+        start_thread(send_magic_link, args=(customer, issue_magic_link(customer)),
+                     name='portal-magic-link')
 
     return Response({'detail': _GENERIC_LINK_MSG}, status=status.HTTP_200_OK)
 

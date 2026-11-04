@@ -147,6 +147,8 @@ class BranchSettings(models.Model):
     allow_vouchers        = models.BooleanField(default=True, verbose_name='القسائم')
     allow_stockcount      = models.BooleanField(default=True, verbose_name='الجرد')
     allow_shortage        = models.BooleanField(default=True, verbose_name='قائمة النواقص')
+    # Small daily counts (Project 2) — pilot switch per branch, needs DAILY_COUNT_ENABLED too.
+    daily_count_enabled   = models.BooleanField(default=False, verbose_name='الجرد اليومي')
 
     # ── Notification gate — admin can silence an entire branch ─────────────────
     notifications_enabled = models.BooleanField(
