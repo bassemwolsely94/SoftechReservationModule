@@ -42,6 +42,8 @@ KNOWN_PUBLIC_VIEWS = {
     'apps.access.public_views.challenge',
     # Project 4 counselling card page + opt-out (signed send token, throttled, approved text only)
     'apps.counselling.public_views.counsel_card_public', 'apps.counselling.public_views.counsel_card_opt_out',
+    # go-live liveness probe: SELECT 1 → {"status": "ok"|"error"} only, no-store, throttled 300/hour per IP
+    'apps.access.public_views.health',
 }
 
 _CONVERTERS = {

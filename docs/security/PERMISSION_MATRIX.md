@@ -52,7 +52,7 @@ All-branch roles: admin, call_center, purchasing, supervisor, quality_manager �
 | `pic_analytics` | all | — | — | — | — | — | — | VX | — | own — named branch managers see their branches (branch_scope); management all |
 | `tasks` | all | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | own + «جميع الفروع» + created / assigned to me; all-branch schedules read-only for branch roles |
 | `counselling` | all | V | VCEA | V | — | — | — | V | V | all — usage sheets are chain content; card sends record the sending branch (own POS branch_scope on the assistant) |
-| `usage_print` | all | — | VC | VC | — | — | — | VCE | — | open — not reviewed |
+| `usage_print` | all | — | VC | VC | — | — | — | VCE | — | own — invoice lookup (403 before any SOFTECH read), sheets, lines, print, prescription (branch_scope); presets + slip settings chain-wide |
 
 ## Record-state and separation-of-duty rules enforced on the server
 

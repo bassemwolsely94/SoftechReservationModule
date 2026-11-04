@@ -66,6 +66,7 @@ BRANCH_SCOPE = {
     'gamification': 'n/a — own data; rankings are network-wide by design',
     'help':         'n/a — no branch data',
     'tasks':        'own + «جميع الفروع» + created / assigned to me; all-branch schedules read-only for branch roles',
+    'usage_print':  'own — invoice lookup (403 before any SOFTECH read), sheets, lines, print, prescription (branch_scope); presets + slip settings chain-wide',
 }
 
 
