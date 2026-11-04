@@ -6,6 +6,8 @@
  * value, open the rule editor prefilled, or just ignore with a note). «إعادة الترحيل» re-runs the
  * engine for the selected documents. Nothing is decided here — the server resolves every fix.
  * closed_period_change is read-only in Plan 2 (the correction button arrives with the period close).
+ * An accountant-edited entry SOFTECH changed (ledger_error / edited_by_user, Ruling P23) shows both
+ * versions side by side with «اعتماد نسخة سوفتيك» / «إبقاء تعديلي» (ledger.approve).
  */
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -140,10 +142,102 @@ function IgnoreBox({ ex, canCreate, onDone }) {
   )
 }
 
-function RowActions({ ex, perms, onDone, onOpenRule }) {
+// ── ledger_error / edited_by_user (Ruling P23): the accountant's edit vs the new SOFTECH lines ──
+const lineKey = (l) => [String(l?.account_code ?? ''), Number(l?.debit || 0).toFixed(2), Number(l?.credit || 0).toFixed(2), String(l?.branch_id ?? '')]
+
+function LinesTable({ title, lines, other, labelOf, accountName }) {
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="text-xs font-bold text-gray-700 mb-1">{title}</div>
+      <table className="w-full text-xs bg-white border border-gray-200 rounded">
+        <thead className="bg-gray-50 text-gray-500">
+          <tr><th className="text-right px-2 py-1">الحساب</th><th className="text-right px-2 py-1">الفرع</th><th className="text-left px-2 py-1">مدين</th><th className="text-left px-2 py-1">دائن</th></tr>
+        </thead>
+        <tbody>
+          {lines.map((l, i) => {
+            const mine = lineKey(l)
+            const theirs = other[i] ? lineKey(other[i]) : null
+            const diff = (j) => !theirs || theirs[j] !== mine[j]
+            const cell = (j) => (diff(j) ? 'bg-amber-100 font-bold' : '')
+            return (
+              <tr key={i} className={`border-t border-gray-100 ${!theirs ? 'bg-amber-50' : ''}`}>
+                <td className={`px-2 py-1 ${cell(0)}`}><span className="font-mono">{l.account_code}</span> {l.account_name || accountName(l.account_code)}</td>
+                <td className={`px-2 py-1 ${cell(3)}`}>{labelOf(l.branch_id, l.branch_name) || '—'}</td>
+                <td className={`px-2 py-1 text-left font-mono tabular-nums ${cell(1)}`} dir="ltr">{money(l.debit, { blankZero: true })}</td>
+                <td className={`px-2 py-1 text-left font-mono tabular-nums ${cell(2)}`} dir="ltr">{money(l.credit, { blankZero: true })}</td>
+              </tr>
+            )
+          })}
+          {!lines.length && <tr><td colSpan={4} className="px-2 py-2 text-gray-500">لا أسطر (لا شيء يُرحّل)</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function EditDecision({ ex, perms, onDone, onRunStarted, onBusy }) {
+  const { labelOf } = useGlBranches()
+  const [note, setNote] = useState('')
+  const [err, setErr] = useState('')
+  const entryId = ex.detail?.entry_id
+  const entryQ = useQuery({
+    queryKey: ['gl', 'entry', entryId],
+    queryFn: () => glApi.entry(entryId).then(r => r.data),
+    enabled: !!entryId,
+  })
+  const accountsQ = useQuery({
+    queryKey: ['gl', 'accounts', 'posting'],
+    queryFn: () => glApi.accounts({ active: 'true', page_size: 2000 }).then(r => listOf(r.data)),
+    staleTime: 5 * 60 * 1000,
+  })
+  const accountName = (code) => (accountsQ.data || []).find(a => String(a.code) === String(code))?.name || ''
+  const mine = entryQ.data?.lines || []
+  const softech = Array.isArray(ex.proposed_lines) ? ex.proposed_lines : []
+  const fail = (e, fallback) => {
+    if (e?.response?.status === 409 && e?.response?.data?.code === 'busy') onBusy?.()
+    setErr(errOf(e, fallback))
+  }
+  const accept = useMutation({
+    mutationFn: () => glApi.exceptionAcceptSoftech(ex.id, note.trim()).then(r => r.data),
+    onSuccess: (d) => { setErr(''); onRunStarted?.(d.run_id); onDone('اعتُمدت نسخة سوفتيك — يُعاد ترحيل المجموعة الآن', true) },
+    onError: (e) => fail(e, 'تعذّر اعتماد نسخة سوفتيك'),
+  })
+  const keep = useMutation({
+    mutationFn: () => glApi.exceptionKeepEdit(ex.id, note.trim()),
+    onSuccess: () => { setErr(''); onDone('أُبقي تعديلك — لن يتغير القيد حتى يتغير مستند سوفتيك مرة أخرى', true) },
+    onError: (e) => fail(e, 'تعذّر إبقاء التعديل'),
+  })
+  const busy = accept.isPending || keep.isPending
+  return (
+    <div className="space-y-2 text-sm">
+      <div className="text-xs text-gray-600">
+        عدّل محاسب القيد <Link className="text-green-700 hover:underline" to={`/finance/journal?entry=${entryId}&tab=entries`}>#{entryQ.data?.number || entryId}</Link>
+        {ex.detail?.entry_status === 'approved' ? ' (معتمد — الاعتماد يعكسه ويُنشئ مسودة جديدة)' : ' (مسودة)'} ثم تغير مستند سوفتيك. الفروق مظللة.
+      </div>
+      {entryQ.isLoading ? <div className="text-xs text-gray-500">جاري تحميل القيد…</div> : (
+        <div className="flex flex-col lg:flex-row gap-3">
+          <LinesTable title="القيد بعد تعديلك" lines={mine} other={softech} labelOf={labelOf} accountName={accountName} />
+          <LinesTable title="نسخة سوفتيك الجديدة" lines={softech} other={mine} labelOf={labelOf} accountName={accountName} />
+        </div>
+      )}
+      {perms.approve ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <input className={`${inputCls} flex-1 max-w-md`} placeholder="ملاحظة (اختياري)" value={note} onChange={e => setNote(e.target.value)} />
+          <button type="button" className={btnPrimary} disabled={busy} onClick={() => accept.mutate()}>اعتماد نسخة سوفتيك</button>
+          <button type="button" className={btnPlain} disabled={busy} onClick={() => keep.mutate()}>إبقاء تعديلي</button>
+        </div>
+      ) : <div className="text-xs text-gray-500">القرار يحتاج صلاحية الاعتماد</div>}
+      <ErrorBox>{err || (entryQ.isError ? errOf(entryQ.error, 'تعذّر تحميل القيد') : '')}</ErrorBox>
+    </div>
+  )
+}
+
+function RowActions({ ex, perms, onDone, onOpenRule, onRunStarted, onBusy }) {
   const { kind, doc, detail } = ex
   let fix
-  if (kind === 'unmapped_party') {
+  if (kind === 'ledger_error' && detail?.code === 'edited_by_user') {
+    fix = <EditDecision ex={ex} perms={perms} onDone={onDone} onRunStarted={onRunStarted} onBusy={onBusy} />
+  } else if (kind === 'unmapped_party') {
     fix = perms.approve ? <PartyFix ex={ex} onDone={onDone} /> : <div className="text-xs text-gray-500">تأكيد الطرف يحتاج صلاحية الاعتماد</div>
   } else if (kind === 'unmapped_account') {
     if (detail?.kind && (detail?.value !== undefined || detail?.key !== undefined)) {
@@ -315,7 +409,7 @@ export default function ExceptionsTab({ filters, perms, onRunStarted, onBusy }) 
                         </tr>
                         {isOpen && (
                           <tr className="bg-gray-50/70"><td colSpan={colSpan} className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                            <RowActions ex={r} perms={perms} onDone={done} onOpenRule={openRule} />
+                            <RowActions ex={r} perms={perms} onDone={done} onOpenRule={openRule} onRunStarted={onRunStarted} onBusy={onBusy} />
                           </td></tr>
                         )}
                       </Fragment>

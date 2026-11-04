@@ -2207,6 +2207,8 @@ export const glApi = {
   exceptionsPage:  (url)           => api.get(String(url).replace(/^.*?\/api(?=\/)/, '')),
   exceptionIgnore: (id, note)      => api.post(`/finance/gl/exceptions/${id}/ignore/`, { note }),
   exceptionsRedraft: (ids)         => api.post('/finance/gl/exceptions/redraft/', { ids }),
+  exceptionAcceptSoftech: (id, note) => api.post(`/finance/gl/exceptions/${id}/accept-softech/`, { note }),
+  exceptionKeepEdit: (id, note)    => api.post(`/finance/gl/exceptions/${id}/keep-edit/`, { note }),
   entrySource:     (id)            => api.get(`/finance/gl/entries/${id}/source/`),
 }
 
