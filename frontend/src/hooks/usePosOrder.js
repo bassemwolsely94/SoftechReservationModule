@@ -720,6 +720,9 @@ export default function usePosOrder() {
       transprice_total: Math.round(unit * qty * 10000) / 10000,
       custcode: (picCustomer?.cust_branch_code || customer?.cust_branch_code
                  || picCustomer?.softech_pic || customer?.softech_pic || ''),
+      // the person on the screen (missed-sales suggestions); the server keeps it only if it exists
+      customer: (picCustomer?.softech_pic ? picCustomer.id : null)
+                || (customer?.softech_pic ? customer.id : null) || null,
       occurred_at: new Date().toISOString(),
     })
     if (selTimerRef.current) clearTimeout(selTimerRef.current)
