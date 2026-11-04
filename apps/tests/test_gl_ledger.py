@@ -2,12 +2,14 @@
 import datetime
 import threading
 from decimal import Decimal
+from unittest import mock
 
 from django.contrib.auth.models import User
 from django.db import connection
 from django.test import TestCase, TransactionTestCase
 
 from apps.audit.models import AuditLog
+from apps.branches.models import Branch
 from apps.finance.models import (
     FinancialPeriod, GLAccountGroup, GLAccount, LedgerEntry, GLSequence,
 )
@@ -260,6 +262,73 @@ class LedgerServiceTests(TestCase):
         with self.assertRaises(LedgerError) as cm:
             approve(e.id, user=self.staff)
         self.assertEqual(cm.exception.code, 'branch_required')
+
+    def test_audit_failure_rolls_back_approval(self):
+        from apps.finance.gl.ledger import approve
+        e = self._draft()
+        with mock.patch.object(AuditLog, 'save', side_effect=RuntimeError('audit down')):
+            with self.assertRaises(RuntimeError):
+                approve(e.id, user=self.staff)
+        e.refresh_from_db()
+        self.assertEqual(e.status, 'draft')
+        self.assertIsNone(e.number)
+        self.assertIsNone(e.approved_by_id)
+        self.assertFalse(GLSequence.objects.filter(year=2026, last__gt=0).exists())
+        self.assertFalse(AuditLog.objects.filter(action='gl_entry_approved').exists())
+        # the transaction is healthy afterwards: approval works once audit is back
+        self.assertEqual(approve(e.id, user=self.staff).number, 'JV-2026-000001')
+
+    def test_audit_failure_rolls_back_draft(self):
+        with mock.patch.object(AuditLog, 'save', side_effect=RuntimeError('audit down')):
+            with self.assertRaises(RuntimeError):
+                self._draft(source_type='test', source_key='audit-fail')
+        self.assertFalse(LedgerEntry.objects.filter(source_key='audit-fail').exists())
+
+    def test_reversal_mirror_has_own_audit_row(self):
+        from apps.finance.gl.ledger import approve, reverse
+        orig = approve(self._draft().id, user=self.staff)
+        mirror = reverse(orig.id, user=self.staff2, reason='قيد مكرر')
+        log = AuditLog.objects.get(action='gl_entry_reversal_created', object_id=str(mirror.id))
+        self.assertEqual(log.model_name, 'LedgerEntry')
+        self.assertEqual(log.user_id, self.staff2.id)
+        self.assertEqual(log.new_data['number'], mirror.number)
+        self.assertEqual(log.new_data['reverses'], orig.id)
+        self.assertEqual(len(log.new_data['lines']), 2)
+        self.assertEqual(log.extra['reason'], 'قيد مكرر')
+        orig_log = AuditLog.objects.get(action='gl_entry_reversed', object_id=str(orig.id))
+        self.assertEqual(orig_log.new_data['status'], 'reversed')
+
+    def test_unknown_branch_rejected(self):
+        from apps.finance.gl.ledger import LedgerError
+        branch = Branch.objects.create(softech_branch_id='979', name='GL test')
+        ok = self._draft(_lines(branch_id=branch.id))
+        self.assertEqual(ok.lines.get(line_no=1).branch_id, branch.id)
+        missing = Branch.objects.order_by('-pk').values_list('pk', flat=True).first() + 1000
+        with self.assertRaises(LedgerError) as cm:
+            self._draft(_lines(branch_id=missing))
+        self.assertEqual(cm.exception.code, 'bad_branch')
+        self.assertTrue(cm.exception.message)
+        with self.assertRaises(LedgerError) as cm:
+            self._draft(_lines(branch_id='abc'))
+        self.assertEqual(cm.exception.code, 'bad_branch')
+
+    def test_reverse_before_original_refused(self):
+        from apps.finance.gl.ledger import approve, reverse, LedgerError
+        orig = approve(self._draft(entry_date=D(2026, 11, 10)).id, user=self.staff)
+        with self.assertRaises(LedgerError) as cm:
+            reverse(orig.id, user=self.staff, reason='x', entry_date=D(2026, 11, 9))
+        self.assertEqual(cm.exception.code, 'reverse_before_original')
+        self.assertTrue(cm.exception.message)
+        orig.refresh_from_db()
+        self.assertEqual(orig.status, 'approved')
+        later = reverse(orig.id, user=self.staff, reason='x', entry_date=D(2026, 11, 12))
+        self.assertEqual(later.entry_date, D(2026, 11, 12))
+
+    def test_reverse_clears_deactivated_account(self):
+        from apps.finance.gl.ledger import approve, reverse
+        orig = approve(self._draft().id, user=self.staff)
+        GLAccount.objects.filter(code='4101').update(is_active=False)
+        self.assertEqual(reverse(orig.id, user=self.staff, reason='x').status, 'approved')
 
 
 class LedgerConcurrencyTests(TransactionTestCase):

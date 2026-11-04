@@ -16,6 +16,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.audit.models import AuditLog
+from apps.branches.models import Branch
 from apps.finance.models import FinancialPeriod
 
 from .models import GLAccount, GLSequence, LedgerEntry, LedgerLine
@@ -40,6 +41,8 @@ MESSAGES = {
     'already_reversed':    'القيد ده اتعكس قبل كده.',
     'is_reversal':         'القيد ده قيد عكسي، مينفعش يتعكس.',
     'source_conflict':     'فيه قيد تاني شغال مربوط بنفس المصدر.',
+    'bad_branch':          'الفرع المحدد في السطر غير موجود.',
+    'reverse_before_original': 'تاريخ القيد العكسي مينفعش يكون قبل تاريخ القيد الأصلي.',
 }
 
 
@@ -52,6 +55,25 @@ class LedgerError(Exception):
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
+
+def _audit(action, *, user, obj, old_data=None, new_data=None, extra=None, note=''):
+    """Fatal audit write: unlike AuditLog.log (which swallows errors), a failure here raises and
+    rolls back the surrounding posting — a GL entry never commits without its audit row."""
+    row = AuditLog(action=action, note=(note or '')[:255])
+    if user:
+        row.user = user
+        row.user_name = user.full_name
+        row.user_role = user.role
+    if obj is not None:
+        row.model_name = type(obj).__name__
+        row.object_id = str(obj.pk)
+        row.object_repr = str(obj)[:200]
+    row.old_data = old_data or None
+    row.new_data = new_data or None
+    row.extra = extra or None
+    row.save()
+    return row
+
 
 def _amount(value, line_no: int) -> Decimal:
     if value in (None, ''):
@@ -136,11 +158,23 @@ def save_draft(*, user, entry_date, description, lines, book='general', branch=N
         debit, credit = _amount(ln.get('debit'), i), _amount(ln.get('credit'), i)
         if (debit > 0) == (credit > 0):  # both sides, or neither
             raise LedgerError('bad_amount', {'line_no': i})
+        branch_id = ln.get('branch_id') or None
+        if branch_id is not None:
+            try:
+                branch_id = int(branch_id)
+            except (TypeError, ValueError):
+                raise LedgerError('bad_branch', {'line_no': i, 'branch_id': str(branch_id)})
         prepared.append(LedgerLine(
-            line_no=i, account=account, branch_id=ln.get('branch_id') or None,
+            line_no=i, account=account, branch_id=branch_id,
             party_code=(ln.get('party_code') or '').strip(), debit=debit, credit=credit,
             description=ln.get('description') or '', cheque_no=ln.get('cheque_no') or '',
             due_date=ln.get('due_date') or None))
+    branch_ids = {ln.branch_id for ln in prepared if ln.branch_id}
+    if branch_ids:
+        found = set(Branch.objects.filter(pk__in=branch_ids).values_list('pk', flat=True))
+        for ln in prepared:
+            if ln.branch_id and ln.branch_id not in found:
+                raise LedgerError('bad_branch', {'line_no': ln.line_no, 'branch_id': ln.branch_id})
 
     with transaction.atomic():
         period = _period_for(entry_date)
@@ -168,8 +202,8 @@ def save_draft(*, user, entry_date, description, lines, book='general', branch=N
         for ln in prepared:
             ln.entry = entry
         LedgerLine.objects.bulk_create(prepared)
-        AuditLog.log('gl_entry_draft_saved', user=user, obj=entry,
-                     old_data=old, new_data=_snapshot(entry))
+        _audit('gl_entry_draft_saved', user=user, obj=entry,
+               old_data=old, new_data=_snapshot(entry))
     return entry
 
 
@@ -204,8 +238,8 @@ def approve(entry_id: int, *, user, _allow_before_opening: bool = False) -> Ledg
         entry.approved_by = user
         entry.approved_at = timezone.now()
         entry.save(update_fields=['number', 'status', 'approved_by', 'approved_at'])
-        AuditLog.log('gl_entry_approved', user=user, obj=entry,
-                     old_data=old, new_data=_snapshot(entry))
+        _audit('gl_entry_approved', user=user, obj=entry,
+               old_data=old, new_data=_snapshot(entry))
     return entry
 
 
@@ -221,10 +255,13 @@ def reverse(entry_id: int, *, user, reason: str,
         if original.reverses_id:
             raise LedgerError('is_reversal')
         day = entry_date or original.entry_date
+        if day < original.entry_date:
+            raise LedgerError('reverse_before_original')
         if day < OPENING_DATE:
             raise LedgerError('before_opening')
         period = _lock_open_period(day)
 
+        # Intentionally no active/posting account check: a deactivated account can still be cleared.
         old = _snapshot(original)
         mirror = LedgerEntry.objects.create(
             entry_date=day, period=period, book=original.book, branch_id=original.branch_id,
@@ -241,9 +278,12 @@ def reverse(entry_id: int, *, user, reason: str,
         ])
         original.status = 'reversed'
         original.save(update_fields=['status'])
-        AuditLog.log('gl_entry_reversed', user=user, obj=original,
-                     old_data=old, new_data=_snapshot(original),
-                     extra={'reason': reason or '', 'reversal_id': mirror.id,
-                            'reversal_number': mirror.number, 'reversal': _snapshot(mirror)},
-                     note=(reason or '')[:255])
+        _audit('gl_entry_reversed', user=user, obj=original,
+               old_data=old, new_data=_snapshot(original),
+               extra={'reason': reason or '', 'reversal_id': mirror.id,
+                      'reversal_number': mirror.number, 'reversal': _snapshot(mirror)},
+               note=reason or '')
+        _audit('gl_entry_reversal_created', user=user, obj=mirror, new_data=_snapshot(mirror),
+               extra={'reverses_id': original.id, 'reverses_number': original.number,
+                      'reason': reason or ''}, note=reason or '')
     return mirror
