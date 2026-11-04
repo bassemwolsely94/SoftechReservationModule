@@ -6,6 +6,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { tasksApi } from '../../api/client'
 import MobileChatter from '../../components/MobileChatter'
+import PhoneAlertStatusChip from '../../components/PhoneAlertStatusChip'
 import { MobileLoading, MobileError } from '../../components/mobileUi'
 import { ba } from '../../utils/flowArrow'
 
@@ -51,6 +52,7 @@ export default function MobileTaskDetailPage() {
           <h1 className="font-bold text-base text-gray-900">{t.title}</h1>
           <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-700 shrink-0">{t.status_label || t.status}</span>
         </div>
+        <PhoneAlertStatusChip status={t.phone_alert_status} remark={t.phone_alert_remark} />
         {t.description && <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{t.description}</p>}
         {t.due_date && <p className="text-xs text-gray-400 mt-1">يستحق: {t.due_date}</p>}
       </div>

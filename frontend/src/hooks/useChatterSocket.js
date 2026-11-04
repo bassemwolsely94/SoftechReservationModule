@@ -114,6 +114,7 @@ export function useChatterSocket(modelName, recordId) {
       setIsConnected(false)
       // 4001 auth / 4403 not allowed from this place (N5): poll instead
       if (ev.code === 4001 || ev.code === 4403) { _startPolling(); return }
+      // 4500: the server's access re-check failed (transient, N5) — normal back-off reconnect.
       // 4002: the access token ran out (N5) — rotate the cookie, reconnect at the minimum delay
       const expired = ev.code === 4002
       if (expired) retryDelay.current = WS_RECONNECT_BASE

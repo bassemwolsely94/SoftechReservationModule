@@ -59,6 +59,7 @@ class TransferRequest(models.Model):
         db_index=True,
         verbose_name='حالة الطلب',
     )
+    phone_alert = models.BooleanField(default=False, verbose_name='نبّه على الموبايل')
 
     # ── People ────────────────────────────────────────────────────────────────
     created_by = models.ForeignKey(

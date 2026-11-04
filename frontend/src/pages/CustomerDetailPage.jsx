@@ -23,6 +23,7 @@ import { format, formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import useHelpTab from '../help/useHelpTab'
 import CounselSendButton from '../counselling/CounselSendButton'
+import useCounsellingStatus from '../counselling/useCounsellingStatus'
 import { fa } from '../utils/flowArrow'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -303,6 +304,7 @@ function NoteCompose({ customerId, onPosted }) {
 
 function PurchasesTab({ customerId }) {
   const [filter, setFilter] = useState('all')
+  const { homeBranchId } = useCounsellingStatus()   // cards are sent from the user's branch
 
   const { data: purchases, isLoading } = useQuery({
     queryKey: ['customer-purchases', customerId, filter],
@@ -380,7 +382,7 @@ function PurchasesTab({ customerId }) {
                 <span className="text-xs text-gray-400 font-mono">{p.softech_invoice_id}</span>
                 {!p.is_return && (
                   <CounselSendButton customerId={customerId} itemIds={(p.lines || []).map(l => l.item)}
-                                     branchId={p.branch} source="customer360"
+                                     branchId={homeBranchId} source="customer360"
                                      className="text-xs rounded border px-1.5 py-0.5 hover:bg-gray-50" />
                 )}
               </div>

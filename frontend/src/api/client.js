@@ -571,6 +571,25 @@ export const insightsApi = {
   updateRule: (id, data)  => api.patch(`/insights/rules/${id}/`, data),
 }
 
+// Phone alerts (WhatsApp) admin API — admin + supervisor only (enforced server-side)
+export const phoneAlertsApi = {
+  modes:         ()           => api.get('/notifications/phone-alerts/modes/'),
+  policies:      ()           => api.get('/notifications/phone-alerts/policies/'),
+  savePolicies:  (rows)       => api.patch('/notifications/phone-alerts/policies/', rows),
+  owners:        ()           => api.get('/notifications/phone-alerts/owners/'),
+  addOwner:      (data)       => api.post('/notifications/phone-alerts/owners/', data),
+  updateOwner:   (id, data)   => api.patch(`/notifications/phone-alerts/owners/${id}/`, data),
+  deleteOwner:   (id)         => api.delete(`/notifications/phone-alerts/owners/${id}/`),
+  branchMobiles: ()           => api.get('/notifications/phone-alerts/branch-mobiles/'),
+  saveBranchMobile: (data)    => api.patch('/notifications/phone-alerts/branch-mobiles/', data),
+  testBranchMobile: (branchId) => api.post(`/notifications/phone-alerts/branch-mobiles/${branchId}/test/`),
+  channel:       ()           => api.get('/notifications/phone-alerts/channel/'),
+  saveChannel:   (accountId)  => api.put('/notifications/phone-alerts/channel/', { channel_account_id: accountId || null }),
+  log:           (params)     => api.get('/notifications/phone-alerts/log/', { params }),
+  logDetail:     (id)         => api.get(`/notifications/phone-alerts/log/${id}/`),
+  switches:      ()           => api.get('/notifications/phone-alerts/switches/'),
+}
+
 export const notificationsApi = {
   list:        (params = {}) => api.get('/notifications/', { params }),
   unreadCount: (params = {}) => api.get('/notifications/unread-count/', { params }),

@@ -61,8 +61,18 @@ class Command(BaseCommand):
             return 0
 
         recipients = InsightRecipient.objects.filter(active=True)
+        # The 09:00 brief replaces the 07:30 SALES daily text, but only for a recipient it will really
+        # reach: send switch on, a staff WhatsApp account configured, and the recipient has a branch.
+        brief_live = False
+        if run.domain == 'sales' and run.period_type == 'day':
+            from django.conf import settings
+            from apps.notifications.phone_alerts.sender import staff_account
+            brief_live = bool(getattr(settings, 'MORNING_BRIEF_SEND_ENABLED', False)
+                              and staff_account() is not None)
         sent = 0
         for rc in recipients:
+            if brief_live and rc.morning_brief and rc.branch_id:
+                continue
             if run.period_type not in (rc.period_types or '').split(','):
                 continue
             # Scope precedence: salesperson → branch → chain.

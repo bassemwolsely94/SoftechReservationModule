@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { reservationsApi, configApi, demandApi } from '../api/client'
 import { StatusBadge, PriorityBadge, STATUS_OPTIONS } from '../components/StatusBadge'
+import PhoneAlertStatusChip from '../components/PhoneAlertStatusChip'
 import useAuthStore from '../store/authStore'
 import { format, formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
@@ -1615,6 +1616,7 @@ export default function ReservationDetailPage() {
               <h1 className="text-xl font-black text-gray-900">حجز #{r.id}</h1>
               <span className={`badge ${sc.bg} ${sc.text}`}>{r.status_label}</span>
               <PriorityBadge priority={r.priority} />
+              <PhoneAlertStatusChip status={r.phone_alert_status} remark={r.phone_alert_remark} />
               {r.item_softech_id && (
                 <span className="text-xs font-mono text-gray-400 bg-gray-100 px-2 py-0.5 rounded">
                   {r.item_softech_id}

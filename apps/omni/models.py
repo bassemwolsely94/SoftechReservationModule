@@ -105,6 +105,12 @@ class ChannelAccount(models.Model):
         help_text='حساب الإرسال الافتراضي للقناة عندما لا يُحدَّد حساب',
     )
 
+    # Staff phone-alerts number: its threads never appear in the customer inbox.
+    is_staff_alerts = models.BooleanField(
+        default=False, verbose_name='رقم تنبيهات الموظفين',
+        help_text='محادثات هذا الرقم لا تظهر في صندوق العملاء',
+    )
+
     status         = models.CharField(
         max_length=12, choices=STATUS_CHOICES, default='connected',
         db_index=True, verbose_name='الحالة',
@@ -163,9 +169,13 @@ class ChannelAccount(models.Model):
 
     @classmethod
     def default_for(cls, channel: str):
-        """The default sending account for a channel (None when unconfigured)."""
+        """The default sending account for a channel (None when unconfigured).
+
+        Never the staff phone-alerts number: customer traffic (inbox replies, campaigns, OTP,
+        portal links) must not go out from it, or the replies would be swallowed by the staff path."""
         return (
             cls.objects.filter(channel=channel, is_active=True)
+            .exclude(is_staff_alerts=True)
             .order_by('-is_default', 'id')
             .first()
         )

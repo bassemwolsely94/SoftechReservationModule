@@ -57,6 +57,15 @@ class PublicCardTests(TestCase):
         other_salt = signing.dumps({'s': self.send.pk}, salt='counsel-other')
         self.assertEqual(self.anon.get(_url(other_salt)).status_code, 404)
 
+    def test_one_opt_out_row_per_phone(self):
+        """Deferred minor: concurrent taps must not leave duplicate rows (later taps then 500)."""
+        from django.db import IntegrityError, transaction
+        self.anon.post(_url(self.token, opt=True))
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            CounselCardOptOut.objects.create(phone_hash=self.send.phone_hash, source='link')
+        self.assertEqual(self.anon.post(_url(self.token, opt=True)).status_code, 200)
+        self.assertEqual(CounselCardOptOut.objects.filter(phone_hash=self.send.phone_hash).count(), 1)
+
     def test_junk_token_404_not_500(self):
         for junk in ('x', '%00', 'a' * 500, signing.dumps({'s': 'drop'}, salt=cards.CARD_SIGNING_SALT),
                      signing.dumps([1], salt=cards.CARD_SIGNING_SALT)):

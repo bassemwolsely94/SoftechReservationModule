@@ -19,7 +19,7 @@ import logging
 
 from django.conf import settings
 from django.core import signing
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -84,9 +84,13 @@ def opted_out(customer, ph: str) -> bool:
     return q.exists()
 
 
+# a send still in flight (queued) counts too, so two drawers open at once cannot both send
+LIVE = ('queued', 'sent')
+
+
 def _recent_item_ids(ph: str) -> set:
     since = timezone.now() - dt.timedelta(days=int(getattr(settings, 'COUNSEL_CARD_DEDUPE_DAYS', 7)))
-    return set(CounselCardItem.objects.filter(send__phone_hash=ph, send__status='sent',
+    return set(CounselCardItem.objects.filter(send__phone_hash=ph, send__status__in=LIVE,
                                               send__created_at__gte=since)
                .values_list('item_id', flat=True))
 
@@ -138,7 +142,7 @@ def plan_card(*, customer, phone, item_ids) -> dict:
 def _cap_reached(branch) -> bool:
     cap = int(getattr(settings, 'COUNSEL_CARD_DAILY_CAP', 200))
     start = timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
-    return CounselCardSend.objects.filter(branch=branch, status='sent', created_at__gte=start).count() >= cap
+    return CounselCardSend.objects.filter(branch=branch, status__in=LIVE, created_at__gte=start).count() >= cap
 
 
 def _template_ready(name: str) -> bool:
@@ -160,6 +164,8 @@ def send_card(*, customer, phone, item_ids, actor, branch, source='pos', idempot
         raise ValidationError({'idempotency_key': 'مطلوب'})
     existing = CounselCardSend.objects.filter(idempotency_key=key).first()
     if existing:
+        if existing.sent_by_id != getattr(actor, 'pk', None):
+            raise ValidationError({'idempotency_key': 'مفتاح مستخدم من قبل'})
         return existing
     norm = normalise_phone(phone or default_phone(customer))
     if not norm:
@@ -175,18 +181,23 @@ def send_card(*, customer, phone, item_ids, actor, branch, source='pos', idempot
         except IntegrityError:
             return CounselCardSend.objects.get(idempotency_key=key)
 
-    lines = [l for l in _lines(item_ids, ph) if l['content']]
-    if not lines:
-        raise ValidationError({'detail': 'لا يوجد إرشاد معتمد للأصناف المختارة'})
-    if not resend:
-        lines = [l for l in lines if not l['recently_sent']]
-        if not lines:
-            raise ValidationError({'detail': 'أُرسلت إرشادات هذه الأصناف لهذا الرقم مؤخراً — اختر «إعادة الإرسال»'})
-    if _cap_reached(branch):
-        raise ValidationError({'detail': 'تم بلوغ الحد اليومي لرسائل الإرشادات في هذا الفرع'})
-
     try:
         with transaction.atomic():
+            # one send at a time per phone and per branch: the repeat and cap checks below then see
+            # any parallel send's queued row (two drawers, two tills)
+            with connection.cursor() as cur:
+                cur.execute('SELECT pg_advisory_xact_lock(hashtext(%s)), pg_advisory_xact_lock(hashtext(%s))',
+                            [f'counsel-phone:{ph}', f'counsel-branch:{branch.pk}'])
+            lines = [l for l in _lines(item_ids, ph) if l['content']]
+            if not lines:
+                raise ValidationError({'detail': 'لا يوجد إرشاد معتمد للأصناف المختارة'})
+            if not resend:
+                lines = [l for l in lines if not l['recently_sent']]
+                if not lines:
+                    raise ValidationError(
+                        {'detail': 'أُرسلت إرشادات هذه الأصناف لهذا الرقم مؤخراً — اختر «إعادة الإرسال»'})
+            if _cap_reached(branch):
+                raise ValidationError({'detail': 'تم بلوغ الحد اليومي لرسائل الإرشادات في هذا الفرع'})
             send = CounselCardSend.objects.create(status='queued', **base)
             for l in lines:
                 sheet = sheet_for(l['item'])

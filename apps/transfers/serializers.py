@@ -1,5 +1,6 @@
 from decimal import Decimal
 from rest_framework import serializers
+from apps.notifications.phone_alerts.hooks import RECORD_EVENTS, PhoneAlertStatusMixin, PhoneAlertWriteMixin
 from .models import TransferRequest, TransferRequestItem, TransferRequestMessage
 from apps.catalog.models import ItemStock
 
@@ -121,7 +122,10 @@ class TransferRequestMessageCreateSerializer(serializers.ModelSerializer):
 
 # ── Request list serializer ───────────────────────────────────────────────────
 
-class TransferRequestListSerializer(serializers.ModelSerializer):
+class TransferRequestListSerializer(PhoneAlertStatusMixin, serializers.ModelSerializer):
+    phone_alert_model = TransferRequest
+    phone_alert_status = serializers.SerializerMethodField()
+    phone_alert_remark = serializers.SerializerMethodField()
     requesting_branch_name = serializers.SerializerMethodField()
     supplying_branch_name  = serializers.SerializerMethodField()
     created_by_name        = serializers.SerializerMethodField()
@@ -161,13 +165,17 @@ class TransferRequestListSerializer(serializers.ModelSerializer):
             'created_by_name', 'reviewed_by_name',
             'total_items',
             'notes',
+            'phone_alert', 'phone_alert_status', 'phone_alert_remark',
             'created_at', 'updated_at', 'submitted_at',
         ]
 
 
 # ── Request detail serializer ─────────────────────────────────────────────────
 
-class TransferRequestDetailSerializer(serializers.ModelSerializer):
+class TransferRequestDetailSerializer(PhoneAlertStatusMixin, serializers.ModelSerializer):
+    phone_alert_model = TransferRequest
+    phone_alert_status = serializers.SerializerMethodField()
+    phone_alert_remark = serializers.SerializerMethodField()
     requesting_branch_name = serializers.SerializerMethodField()
     supplying_branch_name  = serializers.SerializerMethodField()
     requesting_branch_id   = serializers.SerializerMethodField()
@@ -369,9 +377,10 @@ class TransferRequestDetailSerializer(serializers.ModelSerializer):
             'erp_match_user_id', 'erp_match_user_name', 'erp_match_trans_time',
             'erp_match_store_code', 'erp_matched_items', 'erp_last_checked',
             'erp_check_attempts', 'erp_match_detail', 'can_check_erp_match',
+            'phone_alert', 'phone_alert_status', 'phone_alert_remark',
         ]
         read_only_fields = [
-            'request_number', 'created_by', 'reviewed_by',
+            'phone_alert', 'request_number', 'created_by', 'reviewed_by',
             'submitted_at', 'reviewed_at', 'sent_to_erp_at', 'completed_at',
             'dispatched_at', 'dispatched_by',
         ]
@@ -379,13 +388,15 @@ class TransferRequestDetailSerializer(serializers.ModelSerializer):
 
 # ── Create / update serializers ───────────────────────────────────────────────
 
-class TransferRequestCreateSerializer(serializers.ModelSerializer):
+class TransferRequestCreateSerializer(PhoneAlertWriteMixin, serializers.ModelSerializer):
     items = TransferRequestItemWriteSerializer(many=True, required=False)
+
+    phone_alert_events = RECORD_EVENTS['transfer']
 
     class Meta:
         model  = TransferRequest
         fields = [
-            'id', 'requesting_branch', 'supplying_branch', 'notes', 'items',
+            'id', 'requesting_branch', 'supplying_branch', 'notes', 'items', 'phone_alert',
         ]
         read_only_fields = ['id']
 
@@ -394,7 +405,7 @@ class TransferRequestCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 'الفرع الطالب والفرع المصدر لا يمكن أن يكونا نفس الفرع'
             )
-        return data
+        return super().validate(data)
 
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])
@@ -404,10 +415,12 @@ class TransferRequestCreateSerializer(serializers.ModelSerializer):
         return request
 
 
-class TransferRequestUpdateSerializer(serializers.ModelSerializer):
+class TransferRequestUpdateSerializer(PhoneAlertWriteMixin, serializers.ModelSerializer):
     class Meta:
         model  = TransferRequest
-        fields = ['notes', 'requesting_branch', 'supplying_branch']
+        fields = ['notes', 'requesting_branch', 'supplying_branch', 'phone_alert']
+
+    phone_alert_events = RECORD_EVENTS['transfer']
 
     def validate(self, data):
         instance = self.instance
@@ -419,7 +432,7 @@ class TransferRequestUpdateSerializer(serializers.ModelSerializer):
         dst = data.get('supplying_branch', instance.supplying_branch if instance else None)
         if src and dst and src == dst:
             raise serializers.ValidationError('الفرع الطالب والفرع المصدر لا يمكن أن يكونا نفس الفرع')
-        return data
+        return super().validate(data)
 
 
 # ── Action serializers ────────────────────────────────────────────────────────

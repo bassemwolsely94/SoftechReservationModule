@@ -29,6 +29,21 @@ _STRENGTH_RE = re.compile(r'(\d+(?:\.\d+)?)\s*(mg|mcg|g|ml|iu|unit|%)', re.IGNOR
 _VOLUME_RE   = re.compile(r'(\d+(?:\.\d+)?)\s*(ml|l|fl\.?oz)', re.IGNORECASE)
 
 
+# CLAUDE.md rule 10: clinical content is never decided by a machine. These fields always wait for a
+# pharmacist, whatever the confidence; descriptive fields (brand, maker, strength…) may auto-publish.
+CLINICAL_FIELDS = frozenset({
+    'indication_ar', 'indication_en', 'contraindication_ar', 'warning_ar',
+    'pregnancy_category', 'age_range', 'administration_route_ar',
+    'dosage_ar', 'frequency_ar', 'duration_ar',
+    'side_effects_ar', 'side_effects_en', 'drug_interactions_ar',
+    'rx_otc', 'atc_code', 'storage_condition',
+})
+
+
+def may_auto_publish(field_name: str, confidence: float, threshold: float) -> bool:
+    return field_name not in CLINICAL_FIELDS and confidence >= threshold
+
+
 def _extract_strength(name: str) -> str:
     m = _STRENGTH_RE.search(name or '')
     if m:
@@ -302,7 +317,7 @@ def bulk_generate_suggestions(batch: EnrichmentBatch, chunk_size: int = 100) -> 
             if candidates:
                 obj_list = []
                 for c in candidates:
-                    if c['confidence'] >= batch.auto_publish_threshold:
+                    if may_auto_publish(c['field_name'], c['confidence'], batch.auto_publish_threshold):
                         c['status'] = 'approved'
                         auto_published += 1
                     obj_list.append(EnrichmentSuggestion(**c))

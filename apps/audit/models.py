@@ -159,6 +159,14 @@ class AuditLog(models.Model):
         ('export_taken',                 'تصدير ملف'),
         ('bulk_read_alert',              'قراءة بيانات بكمية غير معتادة'),
 
+        # Phone alerts admin
+        ('phone_alert_policy_changed',   'تنبيهات الموبايل — تعديل سياسة'),
+        ('phone_alert_owner_changed',    'تنبيهات الموبايل — تعديل مسؤول عمل'),
+        ('phone_alert_mobile_changed',   'تنبيهات الموبايل — تعديل موبايل الفرع'),
+        ('phone_alert_channel_changed',  'تنبيهات الموبايل — تغيير حساب واتساب'),
+        ('user_alerts_only_changed',    'مستخدم — تغيير «تنبيهات فقط»'),
+        ('phone_alert_test_sent',        'تنبيهات الموبايل — تنبيه تجريبي'),
+
         # Return-window calendar (P-29)
         ('return_policy_changed',        'مرتجع — تعديل سياسة مورد'),
         ('return_requested',             'مرتجع — طلب مرتجع لمورد'),

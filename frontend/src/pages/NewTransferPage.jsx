@@ -12,6 +12,7 @@ import { transfersApi, branchesApi, itemsApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import BranchSelect from '../components/BranchSelect'
 import ItemSearchWidget from '../components/ItemSearchWidget'
+import PhoneAlertToggle from '../components/PhoneAlertToggle'
 import useTransferPrefill from '../hooks/useTransferPrefill'
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -25,6 +26,7 @@ export default function NewTransferPage() {
   const [sourceBranch,      setSourceBranch]      = useState(String(userBranchId || ''))
   const [destinationBranch, setDestinationBranch] = useState('')
   const [notes,             setNotes]             = useState('')
+  const [phoneAlert,        setPhoneAlert]        = useState(false)
   const [items,             setItems]             = useState([])
   const [itemStocks,        setItemStocks]        = useState({})
   const [submitAndSend,     setSubmitAndSend]     = useState(false)
@@ -74,6 +76,7 @@ export default function NewTransferPage() {
         requesting_branch: Number(sourceBranch),
         supplying_branch:  Number(destinationBranch),
         notes,
+        phone_alert: phoneAlert,
         items: items.map(i => ({ item: i.item.id, quantity: i.qty, notes: i.notes || '' })),
       }
       const res = await transfersApi.create(payload)
@@ -256,6 +259,7 @@ export default function NewTransferPage() {
           <textarea rows={3} className="input-field resize-none text-sm"
             placeholder="سبب الطلب، أولوية، تفاصيل إضافية..."
             value={notes} onChange={e => setNotes(e.target.value)} />
+          <PhoneAlertToggle className="mt-3" kind="transfer" value={phoneAlert} onChange={setPhoneAlert} />
         </div>
 
         {/* Error */}

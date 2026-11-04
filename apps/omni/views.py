@@ -366,7 +366,7 @@ class WallboardView(APIView):
             'unassigned': Conversation.objects.filter(
                 status__in=Conversation.ACTIVE_STATUSES,
                 assigned_to__isnull=True).count(),
-            'wa_unread': WAConversation.objects.aggregate(
+            'wa_unread': WAConversation.objects.exclude(account__is_staff_alerts=True).aggregate(
                 t=Sum('unread_count'))['t'] or 0,
         }
 

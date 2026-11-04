@@ -9,6 +9,7 @@ Never a phone number, customer id, staff name or price. Drafts are never shown.
 """
 from django.conf import settings
 from django.core import signing
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_classes
@@ -89,8 +90,13 @@ def counsel_card_opt_out(request, token):
     send = _send_from(token)
     if send is None:
         return Response(_GONE, status=status.HTTP_404_NOT_FOUND)
-    _, created = CounselCardOptOut.objects.get_or_create(
-        phone_hash=send.phone_hash, customer=send.customer, defaults={'source': 'link'})
-    if created:
-        AuditLog.log('counsel_card_opt_out', obj=send, extra={'source': 'link'})
+    if not CounselCardOptOut.objects.filter(phone_hash=send.phone_hash).exists():
+        try:
+            with transaction.atomic():
+                CounselCardOptOut.objects.create(phone_hash=send.phone_hash, customer=send.customer,
+                                                 source='link')
+        except IntegrityError:                         # a parallel tap got there first
+            pass
+        else:
+            AuditLog.log('counsel_card_opt_out', obj=send, extra={'source': 'link'})
     return Response({'ok': True, 'detail': 'تم إيقاف رسائل الإرشادات'})

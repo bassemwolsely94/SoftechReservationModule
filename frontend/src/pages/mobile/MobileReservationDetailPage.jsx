@@ -13,6 +13,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { reservationsApi } from '../../api/client'
 import useAuthStore from '../../store/authStore'
 import { StatusBadge, PriorityBadge } from '../../components/StatusBadge'
+import PhoneAlertStatusChip from '../../components/PhoneAlertStatusChip'
 import MobileChatter from '../../components/MobileChatter'
 import { MobileLoading, MobileError } from '../../components/mobileUi'
 import { format } from 'date-fns'
@@ -125,6 +126,7 @@ export default function MobileReservationDetailPage() {
         <div className="flex flex-wrap items-center gap-1.5">
           <StatusBadge status={r.status} />
           {r.priority && r.priority !== 'normal' && <PriorityBadge priority={r.priority} />}
+          <PhoneAlertStatusChip status={r.phone_alert_status} remark={r.phone_alert_remark} />
           {r.is_manual_item && (
             <span className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">صنف غير مكوَّد</span>
           )}

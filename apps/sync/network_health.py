@@ -115,6 +115,7 @@ def probe_all_nodes(record=True) -> dict:
         except Exception as exc:
             logger.warning('[network_health] record_run failed: %s', exc)
 
-    ok = sum(1 for r in results.values() if r.get('ok'))
-    logger.info('[network_health] nodes reachable %d/%d', ok, len(results))
+    # a refused node was not looked at: it is neither reachable nor part of the total
+    ok = sum(1 for r in probed.values() if r.get('ok'))
+    logger.info('[network_health] nodes reachable %d/%d', ok, len(probed))
     return results
