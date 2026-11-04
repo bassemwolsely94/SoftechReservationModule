@@ -101,6 +101,21 @@ class SeedTests(TestCase):
         self.assertEqual(res['maps_created'], [])
         self.assertTrue(res['skipped'])
 
+    def test_supplier_cash_debit_lands_on_the_box_branch(self):
+        from decimal import Decimal
+        from apps.finance.gl.sources import SourceDoc
+        seed.seed_gl_drafting(user=self.user)
+        rule = PostingRule.objects.get(code='supplier.cash')
+        d = SourceDoc('supplier_payments', 'chq:100:1', D(2026, 3, 10), '100', '', '',
+                      {'amount': Decimal('50')},
+                      {'bankcode': '40', 'financialdoc': '10', 'direction': 'payment'})
+        hq = Branch.objects.get(softech_branch_id='100').pk
+        lines = R.build_lines(rule, [d], hq_branch_id=hq)
+        by = {l['account_code']: l for l in lines}
+        b130 = Branch.objects.get(softech_branch_id='130').pk
+        self.assertEqual(by['5100']['branch_id'], b130)
+        self.assertEqual(by['1302']['branch_id'], b130)
+
     def test_management_command(self):
         call_command('seed_gl_drafting', verbosity=0)
         self.assertTrue(PostingRule.objects.filter(code='sales.credit').exists())

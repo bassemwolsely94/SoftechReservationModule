@@ -45,6 +45,9 @@ _COND_SOURCE = {
     'direction_in': ('attrs', 'direction'), 'bank_type_in': ('attrs', 'bank_type'),
     'expcode_in': ('attrs', 'expcode'),
 }
+# Ruling P14: static-account line with branch 'map' = branch of the doc's bank map
+BANK_BRANCH_SOURCES = ('supplier_payments', 'customer_collections', 'cheque_maturity',
+                       'treasury_other', 'expenses')
 MAP_KINDS = ('bank', 'expense', 'card_clearing')
 MAP_KEYS = ('bankcode', 'expcode', 'branch_code')
 PLACEHOLDERS = ('branch', 'date', 'docnumber', 'cheqno', 'party')
@@ -131,8 +134,9 @@ def validate_rule(source_type, conditions, lines, action) -> list:
             errs.append(p + 'الحساب مطلوب')
         if ln.get('branch', 'source') not in BRANCH_MODES:
             errs.append(p + f'قيمة الفرع غير معروفة: {ln.get("branch")}')
-        elif ln.get('branch') == 'map' and not ln.get('account_map'):
-            errs.append(p + 'الفرع map يتطلب ربط حساب')
+        elif (ln.get('branch') == 'map' and not ln.get('account_map')
+              and source_type not in BANK_BRANCH_SOURCES):
+            errs.append(p + 'الفرع map على حساب ثابت غير متاح لهذا المصدر')
         if ln.get('party', 'none') not in PARTY_MODES:
             errs.append(p + f'قيمة الطرف غير معروفة: {ln.get("party")}')
         elif ln.get('party') == 'source' and static_acc is not None and static_acc.party_type == 'none':
@@ -253,7 +257,7 @@ def build_lines(rule, docs, *, hq_branch_id) -> list:
                                    .filter(kind=kind, source_value=value).first())
         m = maps[(kind, value)]
         if m is None:
-            raise RuleMiss('unmapped_account', {'kind': kind, 'key': value})
+            raise RuleMiss('unmapped_account', {'kind': kind, 'key': value, 'value': value})
         return m
 
     sums = OrderedDict()   # key -> [amount, description]
@@ -273,7 +277,11 @@ def build_lines(rule, docs, *, hq_branch_id) -> list:
             elif mode == 'hq':
                 branch_id = hq_branch_id
             elif mode == 'map':
-                branch_id = m.branch_id if m else None
+                if m is not None:
+                    branch_id = m.branch_id
+                else:   # static account: the paying/receiving box's branch (Ruling P14)
+                    bank = doc.attrs.get('bankcode')
+                    branch_id = mapped('bank', '' if bank is None else str(bank)).branch_id
             else:
                 branch_id = None
             party_code = ''

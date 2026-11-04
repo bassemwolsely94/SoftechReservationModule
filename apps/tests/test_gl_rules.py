@@ -202,6 +202,31 @@ class BuildTests(Base):
         self.assertEqual(cm.exception.kind, 'unmapped_account')
         self.assertEqual(cm.exception.detail['branch_code'], '999')
 
+    def test_static_account_branch_map_uses_bank_map_branch(self):
+        rule = self.rule([
+            {'side': 'debit', 'account': '5100', 'amount': 'amount', 'branch': 'map'},
+            {'side': 'credit', 'account': '6002', 'amount': 'amount', 'branch': 'hq'},
+        ], source_type='supplier_payments')
+        d = doc(source_type='supplier_payments', branch='100', amounts={'amount': DEC('7')},
+                attrs={'bankcode': '40'})
+        with self.assertRaises(R.RuleMiss) as cm:
+            self.build(rule, [d])
+        self.assertEqual(cm.exception.kind, 'unmapped_account')
+        self.assertEqual(cm.exception.detail['kind'], 'bank')
+        self.assertEqual(cm.exception.detail['value'], '40')
+        R.save_map(user=self.staff, kind='bank', source_value='40', account_code='1302',
+                   branch_id=self.b140.pk)
+        by = {l['account_code']: l for l in self.build(rule, [d])}
+        self.assertEqual(by['5100']['branch_id'], self.b140.pk)
+        self.assertEqual(by['6002']['branch_id'], self.b100.pk)
+
+    def test_static_branch_map_rejected_for_sources_without_a_bank(self):
+        lines = [{'side': 'debit', 'account': '1302', 'amount': 'net', 'branch': 'map'},
+                 {'side': 'credit', 'account': '6002', 'amount': 'net'}]
+        self.assertTrue(R.validate_rule('sales_tenders', {}, lines, 'post'))
+        lines2 = [dict(lines[0], amount='amount'), dict(lines[1], amount='amount')]
+        self.assertEqual(R.validate_rule('expenses', {}, lines2, 'post'), [])
+
     def test_party_line_needs_confirmed_party(self):
         rule = self.rule([
             {'side': 'debit', 'account': '1341', 'amount': 'credit', 'party': 'source'},

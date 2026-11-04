@@ -85,7 +85,7 @@ RULES = [
          description='تُسجل عند السداد النقدي من خزينة الفرع'),
     dict(code='supplier.cash', source_type='supplier_payments', granularity='branch_day', book='cash',
          conditions={'financialdoc_in': ['10'], 'direction_in': ['payment']},
-         lines=[_ln('debit', 'amount', '5100', branch='hq', description='سداد موردين نقداً {branch} {date}'),
+         lines=[_ln('debit', 'amount', '5100', branch='map', description='سداد موردين نقداً {branch} {date}'),
                 _ln('credit', 'amount', **_BANK)]),
     dict(code='supplier.cheque', source_type='supplier_payments', granularity='document',
          book='credit', conditions={'financialdoc_in': ['20'], 'direction_in': ['payment']},
