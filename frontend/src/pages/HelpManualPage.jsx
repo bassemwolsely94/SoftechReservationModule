@@ -16,7 +16,7 @@ import { pick, itemText, label } from '../help/text'
 import { fa } from '../utils/flowArrow'
 
 const ROLES = ['pharmacist', 'salesperson', 'call_center', 'purchasing', 'delivery', 'supervisor',
-  'quality_manager', 'viewer', 'admin']
+  'quality_manager', 'accountant', 'viewer', 'admin']
 const ROLE_NAMES = {
   pharmacist: ['الصيدلي', 'Pharmacist'], salesperson: ['البائع', 'Salesperson'],
   call_center: ['الكول سنتر', 'Call center'], purchasing: ['المشتريات', 'Purchasing'],

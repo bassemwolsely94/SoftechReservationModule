@@ -41,3 +41,11 @@ class LedgerPermissionTests(TestCase):
         _, profile, _ = make_user('adm1', role='admin', access_all=True)
         for action in ('view', 'edit', 'finalize'):
             self.assertTrue(matrix_allows(profile, 'ledger', action))
+
+
+class AccountantBranchScopeTests(TestCase):
+    def test_accountant_sees_everything(self):
+        from core import branch_scope
+        _, profile, _ = make_user('acct_scope', role='accountant', access_all=False)
+        self.assertFalse(profile.access_all_branches)
+        self.assertTrue(branch_scope.sees_everything(profile))

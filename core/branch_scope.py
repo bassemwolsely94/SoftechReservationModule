@@ -14,7 +14,8 @@ owner decision 3, 2026-10-26).
 """
 from __future__ import annotations
 
-ALL_BRANCH_ROLES = ('admin', 'call_center', 'purchasing', 'supervisor', 'quality_manager')
+ALL_BRANCH_ROLES = ('admin', 'call_center', 'purchasing', 'supervisor', 'quality_manager',
+                    'accountant')   # finance data is company-level (ruling R7, security decision B-1)
 
 
 def _profile(user_or_profile):
