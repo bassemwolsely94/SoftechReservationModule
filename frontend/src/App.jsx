@@ -21,6 +21,7 @@ import AnnouncementsPage from './pages/AnnouncementsPage'
 import ReservationsKanban from './pages/ReservationsKanban'
 import ReservationsPage from './pages/ReservationsPage'
 import NewReservationPage from './pages/NewReservationPage'
+import MissedSalesPage from './pages/MissedSalesPage'
 import ReservationDetailPage from './pages/ReservationDetailPage'
 import CustomersPage from './pages/CustomersPage'
 import CustomerDetailPage from './pages/CustomerDetailPage'
@@ -63,6 +64,7 @@ import MyIncentivesPage from './pages/MyIncentivesPage'
 import GamificationPage from './pages/GamificationPage'
 import StockAuditPage from './pages/StockAuditPage'
 import PicAnalyticsPage from './pages/PicAnalyticsPage'
+import UsagePrintPage from './pages/UsagePrintPage'
 import UserManagementPage from './pages/UserManagementPage'
 import PermissionsMatrixPage from './pages/PermissionsMatrixPage'
 import PickZonesPage from './pages/PickZonesPage'
@@ -108,6 +110,8 @@ import MobileQAPage from './pages/mobile/MobileQAPage'
 import MobileQADetailPage from './pages/mobile/MobileQADetailPage'
 import MobileAttendancePage from './pages/mobile/MobileAttendancePage'
 import DeliveryTrackPage from './pages/DeliveryTrackPage'
+import CounselCardPublicPage from './pages/CounselCardPublicPage'
+import CounsellingPage from './pages/CounsellingPage'
 import PaymentTracking from './pages/PaymentTracking'
 import SalesDashboard from './pages/SalesDashboard'
 import PerformanceDashboard from './pages/PerformanceDashboard'
@@ -286,6 +290,8 @@ export default function App() {
           <Route path="/notify" element={<NotifyPage />} />
           {/* Public customer delivery tracking (tokenized, no login) */}
           <Route path="/track/:token" element={<DeliveryTrackPage />} />
+          {/* Public customer counselling card (tokenized, no login) — Project 4 */}
+          <Route path="/c/:token" element={<CounselCardPublicPage />} />
 
           {/* ── Customer self-service portal (external; magic-link auth) ──────
               Fully isolated from staff auth: own API client, own session token,
@@ -363,6 +369,7 @@ export default function App() {
             <Route path="reservations/list"  element={<ReservationsPage />} />
             <Route path="reservations/new"   element={<NewReservationPage />} />
             <Route path="reservations/:id"   element={<ReservationDetailPage />} />
+            <Route path="missed-sales"       element={<MissedSalesPage />} />
             <Route path="transfers"          element={<TransfersPage />} />
             <Route path="transits"           element={<TransitsPage />} />
             <Route path="transfers/new"      element={<NewTransferPage />} />
@@ -426,6 +433,7 @@ export default function App() {
 
             {/* ── Inventory ────────────────────────────────────────────── */}
             <Route path="products"           element={<ProductCatalogPage />} />
+            <Route path="counselling"        element={<CounsellingPage />} />
             <Route path="products/:id"       element={<ProductDetailPage />} />
             <Route path="products/:id/admin" element={<ProductContentAdminPage />} />
             <Route path="products/:id/intel" element={<ItemIntelPage />} />
@@ -438,6 +446,7 @@ export default function App() {
             <Route path="replacement/new"       element={<RequireRole roles={['admin','supervisor','pharmacist']}><ReplacementNewCasePage /></RequireRole>} />
             <Route path="replacement/:id"       element={<RequireRole roles={['admin','supervisor','purchasing','quality_manager','pharmacist']}><ReplacementCaseDetailPage /></RequireRole>} />
             <Route path="pos"                   element={<POSOrderPage />} />
+            <Route path="usage-print"           element={<UsagePrintPage />} />
             <Route path="pos/exceptions"        element={<RequireRole roles={['admin','supervisor','pharmacist']}><ExceptionCenterPage /></RequireRole>} />
             <Route path="recommendations"       element={<RecommendationsPage />} />
             <Route path="inventory"          element={<InventoryDashboard />} />

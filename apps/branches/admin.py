@@ -7,7 +7,7 @@ class BranchSettingsInline(admin.StackedInline):
     extra  = 0
     fields = (
         'allow_reservations', 'allow_transfers',
-        'allow_vouchers', 'allow_stockcount', 'allow_shortage',
+        'allow_vouchers', 'allow_stockcount', 'allow_shortage', 'daily_count_enabled',
         'notifications_enabled',
     )
     verbose_name        = 'إعدادات الفرع'
@@ -35,7 +35,7 @@ class BranchSettingsAdmin(admin.ModelAdmin):
     list_display  = (
         'branch', 'notifications_enabled',
         'allow_reservations', 'allow_transfers',
-        'allow_vouchers', 'allow_stockcount', 'allow_shortage',
+        'allow_vouchers', 'allow_stockcount', 'allow_shortage', 'daily_count_enabled',
     )
     list_filter   = ('notifications_enabled',)
     search_fields = ('branch__name', 'branch__name_ar')

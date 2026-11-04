@@ -715,6 +715,9 @@ SCREENS = [
         ],
         'tips': [
             T('«متأخرة فقط» يعرض المتأخرة عن موعدها؛ «الكل» يعرض القادمة أيضاً.', '"Overdue only" shows past-due entries; "All" also shows upcoming ones.'),
+            T('شارة «📵 تلقائي» = مكالمة واردة فائتة دخلت الطابور وحدها، وتختفي وحدها لما يتم الرد على مكالمة مع نفس الرقم. لو اتصل تاني يزيد العدد.',
+              'The "📵 Auto" badge = a missed inbound call that joined the queue by itself; it leaves by itself once a call with that number is answered. Repeat calls raise the count.'),
+            T('المعاودة التلقائية بعد مواعيد العمل يكون موعدها فتح اليوم التالي.', 'An automatic call-back after working hours is due at the next opening.'),
         ],
         'workflows': [],
         'related': ['callcenter.operator', 'callcenter.cases'],
@@ -725,6 +728,8 @@ SCREENS = [
              'text': T('«متأخرة فقط» اللي موعدها عدّى، و«الكل» كل المكالمات المطلوب معاودتها بالأقدم أولاً.',
                        '"Overdue only" shows past-due callbacks; "All" shows every requested callback, oldest first.'),
              'when': T('ابدأ يومك بالمتأخرة.', 'Start your day with the overdue ones.')},
+            {'target': 'callcenter-callbacks-missed', 'label': T('📵 المكالمات الفائتة فقط', '📵 Missed calls only'),
+             'text': T('يعرض المعاودات اللي اتعملت تلقائياً من مكالمات فائتة بس.', 'Shows only the call-backs created automatically from missed calls.')},
             {'target': 'callcenter-callbacks-card', 'label': T('كارت المعاودة', 'Callback card'),
              'text': T('اسم العميل والغرض والرقم والملاحظات ومين سجّل المكالمة والموعد. الإطار الأحمر يعني متأخرة.',
                        'Customer name, purpose, phone, notes, who logged the call and the due time. A red border means overdue.'),

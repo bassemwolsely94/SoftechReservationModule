@@ -20,6 +20,13 @@ from apps.vouchers.models import CouponBatch, CouponSerial
 D = dt.date
 TODAY = dt.date.today()
 YDAY = TODAY - dt.timedelta(days=1)
+
+
+def setUpModule():
+    # Re-read the date when this module's tests start, not at import (a run crossing midnight Cairo).
+    global TODAY, YDAY
+    TODAY = dt.date.today()
+    YDAY = TODAY - dt.timedelta(days=1)
 S1 = '27286-MFW296'
 S2 = '27287-ABC123'
 URL = '/api/vouchers/coupons/'

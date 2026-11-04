@@ -114,6 +114,11 @@ export default function CommandPalette() {
   const onKeyNav = (e) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setActive((i) => Math.min(i + 1, flat.length - 1)) }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)) }
+    else if (e.key === 'Enter' && e.shiftKey && flat[active]?.kind === 'item') {
+      // Shift+Enter on an item: the drug assistant drawer (Project 4) instead of the product page
+      e.preventDefault(); setOpen(false)
+      window.dispatchEvent(new CustomEvent('drug-assistant:open', { detail: { id: flat[active].data.id } }))
+    }
     else if (e.key === 'Enter') { e.preventDefault(); runRow(flat[active]) }
   }
 

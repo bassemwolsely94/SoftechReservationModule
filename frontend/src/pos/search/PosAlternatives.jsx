@@ -10,6 +10,8 @@ import { useQuery } from '@tanstack/react-query'
 import { posAlternativesApi } from '../../api/client'
 import { Badge, BranchStockPill, Icon } from '../design'
 import useBranchNames from './useBranchNames'
+import DrugAssistantBody from '../../counselling/DrugAssistantBody'
+import useCounsellingStatus from '../../counselling/useCounsellingStatus'
 
 // DrugEye has no documented search parameter we can verify from here, so the default is:
 // open the base page + copy the name to the clipboard. The owner can set the query-parameter name
@@ -30,7 +32,7 @@ function openDrugEye(name, setNote) {
 
 const money = v => (v == null || v === '' ? '' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 }))
 
-function Card({ it, hereBranchId, nameOf, onPick, original = false }) {
+export function AltCard({ it, hereBranchId, nameOf, onPick, original = false }) {
   const others = (it.branch_stock || []).filter(b => String(b.branch_id) !== String(hereBranchId) && Number(b.qty) > 0).slice(0, 3)
   const here = it.here_qty ?? it.qty_at_branch
   return (
@@ -60,12 +62,13 @@ function Card({ it, hereBranchId, nameOf, onPick, original = false }) {
 
 export default function PosAlternatives({ item, branchId, onPick, onClose, sheet = false }) {
   const nameOf = useBranchNames()
+  const { assistant } = useCounsellingStatus()   // Project 4: F7 becomes «معلومات وبدائل» when on
   const [note, setNote] = useState('')
   const itemId = item?.item_id ?? item?.id
   const { data, isLoading, isError } = useQuery({
     queryKey: ['pos-alternatives', itemId, branchId || null],
     queryFn: () => posAlternativesApi.get(itemId, branchId).then(r => r.data),
-    enabled: !!itemId,
+    enabled: !!itemId && !assistant,
     staleTime: 60_000,
   })
   useEffect(() => { setNote('') }, [itemId])
@@ -75,16 +78,17 @@ export default function PosAlternatives({ item, branchId, onPick, onClose, sheet
     <div dir="rtl" className="flex flex-col h-full" onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose?.() } }}>
       <div className="flex items-center gap-2 p-3 border-b bg-gray-50">
         <Icon name="repeat" size={16} className="text-gray-500" />
-        <div className="font-semibold text-sm flex-1">بدائل مؤكدة (نفس المادة الفعّالة)</div>
+        <div className="font-semibold text-sm flex-1">{assistant ? 'معلومات وبدائل' : 'بدائل مؤكدة (نفس المادة الفعّالة)'}</div>
         <button type="button" onClick={onClose} title="إغلاق (Esc)" autoFocus
                 className="p-1.5 rounded hover:bg-gray-200 text-gray-600"><Icon name="x" size={16} /></button>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
         <div>
           <div className="text-[11px] text-gray-500 mb-1">الصنف الأصلي</div>
-          <Card it={item} hereBranchId={branchId} nameOf={nameOf} original />
+          <AltCard it={item} hereBranchId={branchId} nameOf={nameOf} original />
         </div>
-        {isLoading && <div className="text-center text-sm text-gray-400 py-6">جارٍ التحميل…</div>}
+        {assistant && <DrugAssistantBody itemId={itemId} branchId={branchId} onPick={onPick} />}
+        {isLoading && !assistant && <div className="text-center text-sm text-gray-400 py-6">جارٍ التحميل…</div>}
         {isError && <div className="text-center text-sm text-red-600 py-4">تعذّر تحميل البدائل</div>}
         {data && !data.verified && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-sm p-3">
@@ -130,7 +134,7 @@ function Section({ title, rows, hereBranchId, nameOf, onPick }) {
     <div>
       <div className="text-[11px] text-gray-500 mb-1">{title} ({rows.length})</div>
       <div className="space-y-1.5">
-        {rows.map(r => <Card key={r.item_id} it={r} hereBranchId={hereBranchId} nameOf={nameOf} onPick={onPick} />)}
+        {rows.map(r => <AltCard key={r.item_id} it={r} hereBranchId={hereBranchId} nameOf={nameOf} onPick={onPick} />)}
       </div>
     </div>
   )
