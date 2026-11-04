@@ -246,10 +246,32 @@ def _refuse_if_write(sql):
         )
 
 
+_RAW_REFUSED = 'SOFTECH is in read-only mode; the raw connection is not available.'
+
+
+def _refuse_raw(conn):
+    """unwrap() on anything a guarded connection handed out: refused while it enforces."""
+    if conn is None:
+        raise SoftechReadOnlyError(_RAW_REFUSED)
+    raise conn._refusal(_RAW_REFUSED)
+
+
+def _guard_result(obj, conn):
+    """Wrap a ResultSet / DatabaseMetaData that can lead back to the raw connection
+    (getStatement() / getConnection()); anything else is returned as it is."""
+    if obj is None or conn is None or isinstance(
+            obj, (_GuardedResult, _ReadOnlyStatement, bool, int, float, str, bytes)):
+        return obj
+    if hasattr(obj, 'getStatement') or hasattr(obj, 'getConnection'):
+        return _GuardedResult(obj, conn)
+    return obj
+
+
 class _ReadOnlyStatement:
-    """java.sql.Statement / PreparedStatement proxy: checks every SQL string it is handed
-    (a prepared statement's SQL was checked at prepare time, so its no-argument execute()
-    passes) and never hands out the raw connection."""
+    """java.sql.Statement / PreparedStatement / CallableStatement proxy: checks every SQL string
+    it is handed (a prepared statement's SQL was checked at prepare time, so its no-argument
+    execute() passes) and never hands out the raw connection - not through getConnection(),
+    unwrap(), or a ResultSet's getStatement()."""
 
     def __init__(self, stmt, conn=None, check=_refuse_if_write):
         self._stmt = stmt
@@ -265,7 +287,7 @@ class _ReadOnlyStatement:
         return self._call('execute', args)
 
     def executeQuery(self, *args):
-        return self._call('executeQuery', args)
+        return _guard_result(self._call('executeQuery', args), self._conn)
 
     def executeUpdate(self, *args):
         return self._call('executeUpdate', args)
@@ -276,13 +298,72 @@ class _ReadOnlyStatement:
     def addBatch(self, *args):
         return self._call('addBatch', args)
 
+    def getResultSet(self):
+        return _guard_result(self._stmt.getResultSet(), self._conn)
+
+    def getGeneratedKeys(self):
+        return _guard_result(self._stmt.getGeneratedKeys(), self._conn)
+
     def getConnection(self):
         if self._conn is None:
-            raise SoftechReadOnlyError('SOFTECH is in read-only mode; the raw connection is not available.')
+            raise SoftechReadOnlyError(_RAW_REFUSED)
         return self._conn
+
+    def unwrap(self, *args):
+        if self._conn is not None and not self._conn._enforce:
+            return self._stmt.unwrap(*args)
+        _refuse_raw(self._conn)
 
     def __getattr__(self, name):
         return getattr(self._stmt, name)
+
+
+# ResultSet getters on the fetch path: their values never lead back to the connection, so they
+# skip the return-value check (the fetch loop calls them once per column per row).
+_PLAIN_GETTERS = frozenset({
+    'getObject', 'getString', 'getNString', 'getInt', 'getLong', 'getShort', 'getByte', 'getDouble', 'getFloat',
+    'getBigDecimal', 'getBoolean', 'getBytes', 'getDate', 'getTime', 'getTimestamp',
+    'getMetaData', 'getRow', 'getFetchSize', 'getType', 'getConcurrency', 'getWarnings',
+})
+
+
+class _GuardedResult:
+    """ResultSet / DatabaseMetaData handed out by a guarded connection (N4 hardening: before
+    this, getMetaData().getConnection() and ResultSet.getStatement().getConnection() reached
+    the raw connection through __getattr__). getConnection() returns the guarded connection,
+    getStatement() a guarded statement, unwrap() is refused while enforcing, and any other
+    get*() that returns something able to lead back (a metadata ResultSet) is guarded too.
+    Bound methods are cached on first use, so a fetch loop pays the proxy once per method
+    name, not once per row."""
+
+    def __init__(self, obj, conn):
+        self._obj = obj
+        self._conn = conn
+
+    def getConnection(self):
+        return self._conn
+
+    def getStatement(self):
+        stmt = self._obj.getStatement()
+        if stmt is None:
+            return None
+        return _ReadOnlyStatement(stmt, self._conn, self._conn._check)
+
+    def unwrap(self, *args):
+        if not self._conn._enforce:
+            return self._obj.unwrap(*args)
+        _refuse_raw(self._conn)
+
+    def __getattr__(self, name):
+        attr = getattr(self._obj, name)
+        if not callable(attr):
+            return attr
+        if name.startswith('get') and name not in _PLAIN_GETTERS:
+            def call(*args, _method=attr):
+                return _guard_result(_method(*args), self._conn)
+            attr = call
+        self.__dict__[name] = attr
+        return attr
 
 
 class _ReadOnlyJavaConnection:
@@ -292,7 +373,8 @@ class _ReadOnlyJavaConnection:
     `check(sql)` vets every SQL string (default: the global SOFTECH_READ_ONLY refusal).
     `enforce=False` is the gate's observe-only mode: `check` only records would-be writes, so
     the proxy sets no read-only hint and does not block setReadOnly / unwrap. `refusal` builds
-    the exception for setReadOnly(False) / unwrap() when enforcing."""
+    the exception for setReadOnly(False) / unwrap() when enforcing. Nothing it hands out
+    (statements, result sets, metadata) leads back to the raw connection."""
 
     def __init__(self, java_conn, check=_refuse_if_write, enforce=True, refusal=None):
         self._jc = java_conn
@@ -322,11 +404,14 @@ class _ReadOnlyJavaConnection:
     def unwrap(self, *args):
         if not self._enforce:
             return self._jc.unwrap(*args)
-        raise self._refusal('SOFTECH is in read-only mode; the raw connection is not available.')
+        _refuse_raw(self)
 
     def prepareCall(self, sql, *args):
         self._check(f'EXEC {sql}')   # callable statements are procedures — never reads
-        return self._jc.prepareCall(sql, *args)
+        return _ReadOnlyStatement(self._jc.prepareCall(sql, *args), self, self._check)
+
+    def getMetaData(self):
+        return _GuardedResult(self._jc.getMetaData(), self)
 
     def __getattr__(self, name):
         return getattr(self._jc, name)
@@ -338,16 +423,17 @@ def _zone_write_check(decision, label, observe_only):
     def check(sql):
         if is_read_only_sql(sql):
             return
-        gate = _gate()
         first, word = write_signature(sql)
-        gate.note(decision, label, enforced=not observe_only,
-                  mode='log' if observe_only else 'enforce',
-                  extra={'sql_first': first, 'write_word': word})
+        try:
+            # note() is the one log line + audit row for this refusal: no second line here
+            _gate().note(decision, label, enforced=not observe_only,
+                         mode='log' if observe_only else 'enforce',
+                         extra={'sql_first': first, 'write_word': word})
+        except Exception:
+            logger.error('[sybase] SOFTECH gate: a refused write was not recorded%s',
+                         f' [{label}]' if label else '', exc_info=True)
         if observe_only:
             return
-        snippet = ' '.join(str(sql or '').split())[:120]
-        logger.warning('[sybase] SOFTECH gate (read only) blocked statement%s: %s',
-                       f' [{label}]' if label else '', snippet)
         raise SoftechZoneWriteDenied()
     return check
 
@@ -401,7 +487,7 @@ def _connect_with_retry(driver, jdbc_url, props, label=''):
     decision = gate.check(label)
     if decision.grant == gate.NONE:
         raise SoftechAccessDenied(reason=decision.reason)
-    observe_only = decision.grant == gate.READ and gate.mode() != 'enforce'
+    observe_only = decision.grant == gate.READ and gate.mode_of(decision) != 'enforce'
     last_exc = None
     for attempt in range(1, SYBASE_CONNECT_ATTEMPTS + 1):
         t0, failed = time.monotonic(), False

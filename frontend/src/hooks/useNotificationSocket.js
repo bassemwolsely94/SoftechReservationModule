@@ -203,6 +203,8 @@ export function useNotificationSocket() {
         return
       }
 
+      // 4500: the server's access re-check failed (a transient error, N5) — the normal back-off
+      // reconnect below, like any other drop.
       // 4002: the access token ran out (N5) — rotate the cookie, reconnect at the minimum delay
       const expired = ev.code === 4002
       if (expired) retryDelay.current = WS_RECONNECT_BASE

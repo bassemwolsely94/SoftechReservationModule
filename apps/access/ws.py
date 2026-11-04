@@ -26,6 +26,9 @@ log = logging.getLogger('elrezeiky.access')
 CLOSE_AUTH = 4001
 CLOSE_EXPIRED = 4002
 CLOSE_ZONE = 4403
+# the verdict itself failed (a transient error, not a refusal): the client reconnects as after
+# any drop, and no ws_zone_denied row is written. 4403 would send the screen to polling.
+CLOSE_ERROR = 4500
 WS_RECHECK_SECONDS = 300
 
 # kind -> (path given to policy.decide, module)
@@ -122,7 +125,7 @@ def verdict(scope, user, kind, token_exp=None, now=None):
             zone = decision.zone
     except Exception:
         log.warning('socket verdict failed', exc_info=True)
-        return WsVerdict(False, CLOSE_ZONE, 'error', None, mode == 'enforce')
+        return WsVerdict(False, CLOSE_ERROR, 'error', None, mode == 'enforce')
     if reason is None:
         return WsVerdict(True, None, None, zone, False)
     return WsVerdict(False, CLOSE_ZONE, reason, zone, mode == 'enforce')
@@ -182,7 +185,7 @@ def _write_audit(user_id, note_text, extra):
 def _note_refusal(scope, user_id, kind, v):
     """The deduplicated log line and (zone refusals only) AuditLog row of a refused verdict."""
     if v.close_code != CLOSE_ZONE:
-        return                         # 4001 / 4002: an ordinary end of a session, no row
+        return                         # 4001 / 4002 / 4500: not a zone refusal, no row
     key = f'access:ws:{user_id}:{kind}:{v.zone}:{v.reason}:{int(v.enforced)}'
     try:
         if not cache.add(key, 1, DEDUPE_SECONDS):

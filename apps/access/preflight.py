@@ -135,6 +135,44 @@ def check_mfa():
     return out
 
 
+# Usernames that read as a machine, not a person (case-insensitive substring).
+SERVICE_NAME_HINTS = ('svc', 'service', 'bot', 'api', 'system', 'integration', 'smoke', 'cron')
+
+
+def _login(user):
+    return user.last_login.date().isoformat() if user.last_login else 'never signed in'
+
+
+def check_accounts():
+    """Accounts the zone policy does not see as a staff member, for the owner to review before
+    enforce (warn only): active users without a staff profile (a superuser gets the admin rows,
+    anyone else the viewer rows: open inside, blocked outside), and service accounts (no usable
+    password, or a machine-like username) whose sign-ins or tokens the switch may cut off."""
+    from django.contrib.auth import get_user_model
+    users = list(get_user_model().objects.filter(is_active=True)
+                 .select_related('staff_profile').order_by('username'))
+    no_profile = [u for u in users if getattr(u, 'staff_profile', None) is None]
+    service = [u for u in users if not u.has_usable_password()
+               or any(h in u.username.lower() for h in SERVICE_NAME_HINTS)]
+    out = []
+    if no_profile:
+        out.append(Item(WARN, 'accounts_no_profile',
+                        'حسابات نشطة بدون ملف موظف — المدير الأعلى ياخد صفوف «مدير»، والباقي صفوف «مشاهد» (داخل الشبكة فقط). راجعها: اربطها بموظف أو عطّلها',
+                        'Active accounts without a staff profile — a superuser gets the admin rows, anyone else the viewer rows (inside only). Review them: link to a staff member or disable',
+                        _names(f'{u.username} ({"superuser" if u.is_superuser else "viewer rows"}, '
+                               f'{_login(u)})' for u in no_profile)))
+    if service:
+        out.append(Item(WARN, 'accounts_service',
+                        'حسابات خدمة (بدون كلمة سر صالحة أو اسمها يدل على برنامج) — تأكد إن كل واحد بيشتغل من داخل الشبكة أو له صف يسمح له قبل التطبيق الفعلي',
+                        'Service accounts (no usable password, or a machine-like name) — check each one runs from inside the network or has a row that allows it before enforce',
+                        _names(f'{u.username} ({getattr(getattr(u, "staff_profile", None), "role", None) or "no profile"}, '
+                               f'{_login(u)})' for u in service)))
+    if not out:
+        out.append(Item(OK, 'accounts', 'كل الحسابات النشطة مربوطة بموظف، ولا يوجد حساب خدمة',
+                        'Every active account has a staff profile, and there is no service account'))
+    return out
+
+
 def check_devices(now):
     """Selling branches have an approved PC; admins have two approved devices; no fresh pending queue."""
     from apps.access.models import Device, DeviceUser
@@ -263,6 +301,7 @@ def run(now=None):
     items += check_internal_traffic(now)
     items += check_rows()
     items += check_mfa()
+    items += check_accounts()
     items += check_devices(now)
     items += check_softech(now)
     return items
