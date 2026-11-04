@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import useAuthStore from '../store/authStore'
 import usePermissionStore from '../store/permissionStore'
 import ErrorBoundary from './ErrorBoundary'
+import PageSuspense from './PageSuspense'
 import useNotificationStore from '../store/notificationStore'
 import { useQuery } from '@tanstack/react-query'
 import { syncApi } from '../api/client'
@@ -566,7 +567,7 @@ export default function Layout() {
           {/* a broken page shows a short message + reload here; the sidebar keeps working
               and opening another page clears it */}
           <ErrorBoundary scope="page" resetKey={location.pathname}>
-            <Outlet />
+            <PageSuspense><Outlet /></PageSuspense>
           </ErrorBoundary>
         </div>
       </main>

@@ -488,11 +488,13 @@ SYBASE_PASSWORD = config('SYBASE_PASSWORD', default='')
 # Global kill-switch: True refuses EVERY non-read statement on EVERY SOFTECH
 # connection (HQ + branches), whatever the per-feature *_ENABLED flags say.
 # Turn it on for staging / UAT / demos. See config/sybase.py.
-SOFTECH_READ_ONLY = config('SOFTECH_READ_ONLY', default=False, cast=bool)
 # P-54: the ONE instance allowed to write to SOFTECH (production VPS). Every writer gate is
 # WRITER_INSTANCE and <its flag> (config/writers.py), so the office development copy can carry
 # the same flags and still never write. Writer jobs are not even scheduled elsewhere.
 WRITER_INSTANCE = config('WRITER_INSTANCE', default=False, cast=bool)
+# A missing SOFTECH_READ_ONLY line follows the role: every non-writer copy (a worktree .env
+# without the key, a fresh server) gets the driver-level lock too, not only the closed flag gates.
+SOFTECH_READ_ONLY = config('SOFTECH_READ_ONLY', default=not WRITER_INSTANCE, cast=bool)
 # Staging: send every branch-server connection to this host ('host' or 'host:port')
 # instead of the production addresses stored in Branch.db_host.
 SOFTECH_BRANCH_HOST_OVERRIDE = config('SOFTECH_BRANCH_HOST_OVERRIDE', default='')
@@ -1033,6 +1035,10 @@ TRACK_TRACE_ENABLED = config('TRACK_TRACE_ENABLED', default=False, cast=bool)
 RBAC_ENFORCEMENT = config('RBAC_ENFORCEMENT', default='off' if _RUNNING_TESTS else 'log')
 # Seconds the role matrix is cached per process; 0 under tests so no test sees another's rows.
 RBAC_GRANTS_TTL = config('RBAC_GRANTS_TTL', default=0 if _RUNNING_TESTS else 60, cast=float)
+# Roles the matrix is ENFORCED for even while RBAC_ENFORCEMENT=log (not when off): roles created
+# after the matrix review, with no legacy screens to observe — Finance GL's accountant (owner ruling).
+# Comma list in the env; core.middleware.module_access.enforced_roles() reads it as a frozenset.
+RBAC_ENFORCED_ROLES = config('RBAC_ENFORCED_ROLES', default='accountant')
 
 # Phone alerts + morning brief: outward WhatsApp sending is OFF unless switched on.
 # Off => every step still runs and records PhoneAlertAttempt(result='dry_run').

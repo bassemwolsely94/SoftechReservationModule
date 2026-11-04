@@ -8,6 +8,8 @@
 
 **Tech Stack:** Django 5.2 + DRF, PostgreSQL, jConnect/Sybase ASE (SELECT only), APScheduler (`apps/sync/tasks.py`), React 18 + TanStack Query + Tailwind.
 
+**Status:** Plan 1 is on main (checked 2026-11-04: `apps/finance/gl`, migration 0020, doc 35); interfaces below verified against that code.
+
 **Spec:** `docs/superpowers/specs/2026-11-04-finance-general-ledger-design.md` (§7 GLParty / PostingRule / SourceException, §8, §9 screens 2–3, §10, §11a). **Builds on:** `docs/superpowers/plans/2026-11-04-finance-gl-foundation.md` and its rulings R1–R5 (`.superpowers/sdd/2026-11-04-finance-gl-foundation/progress.md` on `claude/finance-gl`).
 
 ## Source verification (2026 data, read-only, 2026-11-04)
@@ -386,7 +388,7 @@ Why `cheques` is read directly instead of the A/P `Payment` mirror: the mirror h
 
 **Files:**
 - Modify: `apps/help/content/finance.py` — new screens `finance.gl_parties`, `finance.gl_rules` (tabs `rules`, `maps`), and the `finance.gl_journal` tabs (`drafts`, `exceptions`) with the exception kinds explained; Arabic + English; `updated` bumped; targets from Tasks 9–10.
-- Modify: `docs/architecture/34_FINANCE_GENERAL_LEDGER.md` (drafting section: readers, verified fields table from this plan, rules model, late-change behaviour, schedule), `02_MODULE_REGISTRY.md`, `04_API_REGISTRY.md`, `05_UI_REGISTRY.md`, `03_DATABASE_DICTIONARY.md`.
+- Modify: `docs/architecture/35_FINANCE_GENERAL_LEDGER.md` (drafting section: readers, verified fields table from this plan, rules model, late-change behaviour, schedule), `02_MODULE_REGISTRY.md`, `04_API_REGISTRY.md`, `05_UI_REGISTRY.md`, `03_DATABASE_DICTIONARY.md`.
 
 - [ ] **Step 1: Write** help and docs.
 - [ ] **Step 2: Run** `python manage.py test apps.tests.test_help apps.tests.test_gl_drafting_models apps.tests.test_gl_parties apps.tests.test_gl_rules apps.tests.test_gl_sources apps.tests.test_gl_drafting apps.tests.test_gl_seed apps.tests.test_gl_drafting_api apps.tests.test_gl_ledger apps.tests.test_gl_api apps.tests.test_finance_freshness` (unique `TEST_DB_NAME`) — Expected: all PASS.

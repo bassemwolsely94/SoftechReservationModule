@@ -17,6 +17,7 @@ import useScreenUsage from '../hooks/useScreenUsage'
 import { useQuery } from '@tanstack/react-query'
 import useAuthStore from '../store/authStore'
 import ErrorBoundary from './ErrorBoundary'
+import PageSuspense from './PageSuspense'
 import { approvalsApi, pricingApprovalsApi, notificationsApi } from '../api/client'
 import { useOnline, useOfflineQueue } from './mobileUi'
 import NetworkBadge from './NetworkBadge'
@@ -175,7 +176,7 @@ export default function MobileLayout({ title = 'صيدليات الرزيقي', 
       {/* ── Content ──────────────────────────────────────────────────────── */}
       <main className="flex-1 overflow-auto pb-20">
         <ZoneBanner />
-        <ErrorBoundary scope="page" resetKey={location.pathname}>{children ?? <Outlet />}</ErrorBoundary>
+        <ErrorBoundary scope="page" resetKey={location.pathname}><PageSuspense>{children ?? <Outlet />}</PageSuspense></ErrorBoundary>
       </main>
 
       {/* ── Bottom tab bar ───────────────────────────────────────────────── */}

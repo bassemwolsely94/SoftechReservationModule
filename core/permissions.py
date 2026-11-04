@@ -120,7 +120,8 @@ def matrix_allows(profile, module: str, *actions) -> bool:
     if profile.role == 'admin':
         return True
     from core.middleware import module_access
-    if module not in module_access.seeded_modules():
+    # an enforced role (RBAC_ENFORCED_ROLES) never fails open: only its own allowed rows count (R17)
+    if module not in module_access.seeded_modules() and profile.role not in module_access.enforced_roles():
         import logging
         logging.getLogger('elrezeiky.rbac').error('RBAC module %s not seeded — %s not enforced', module, actions)
         return True
@@ -195,3 +196,13 @@ def deny_unless(request, module: str, *actions):
     if matrix_allows(_get_profile(request), module, *actions):
         return None
     return Response({'detail': 'ليس لديك صلاحية لهذا الإجراء'}, status=status.HTTP_403_FORBIDDEN)
+
+
+def enforced_role_allows(user, module: str, *actions) -> bool:
+    """For data a view hands every signed-in user (universal search groups, record chatter): a role
+    in RBAC_ENFORCED_ROLES (the accountant) needs the matrix grant — every mode, as the middleware
+    does for it; other roles keep what they see today until the RBAC enforce cutover."""
+    from core.middleware import module_access
+    if not module_access.matrix_enforced_for(user):
+        return True
+    return matrix_allows(getattr(user, 'staff_profile', None), module, *(actions or ('view',)))

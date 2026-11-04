@@ -15,6 +15,11 @@ $U git fetch origin && $U git checkout main && $U git pull --ff-only
 NEW=$($U git rev-parse HEAD)
 if [[ $OLD == "$NEW" ]]; then echo "Nothing new on main."; exit 0; fi
 $U git log --oneline $OLD..$NEW
+# units, nginx and this script are copied out of the repo by hand (runbook §9.1/§9.2, header above)
+if ! $U git diff --quiet $OLD $NEW -- deploy/; then
+  echo "!! deploy/ changed in this release — re-apply by hand where needed (this run does NOT):"
+  $U git diff --stat $OLD $NEW -- deploy/
+fi
 # torch from the CPU index first: requirements.txt has a torch security floor, and if pip had to
 # satisfy it from PyPI it would pull the ~3 GB CUDA build. No-op when the installed torch is new enough.
 echo "== python deps (app)";  $U /opt/elrezeiky/venv/bin/pip install -q "torch>=2.13.0" --index-url https://download.pytorch.org/whl/cpu

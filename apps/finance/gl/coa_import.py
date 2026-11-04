@@ -1,7 +1,9 @@
 """Chart-of-accounts importer from finance's trial-balance pivot sheet (finance-gl Task 4).
 
 Idempotent upsert by account code. Never deletes; never touches is_active or the
-requires_branch / requires_party flags of an existing account.
+requires_branch / requires_party flags of an existing account.  A confirmed import writes ONE
+fatal audit row (gl_coa_imported) inside its transaction with the before/after of every field it
+created or changed; `updated` counts only accounts that actually changed.
 """
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
@@ -9,7 +11,6 @@ from decimal import Decimal, InvalidOperation
 import openpyxl
 from django.db import transaction
 
-from apps.audit.models import AuditLog
 from apps.finance.models import GLAccount, GLAccountGroup
 from .names import normalize_ar
 
@@ -85,6 +86,17 @@ class ImportResult:
     created: int = 0
     updated: int = 0
     unknown_groups: list = field(default_factory=list)
+    before: dict = field(default_factory=dict)   # code -> changed fields before (None = new)
+    after: dict = field(default_factory=dict)    # code -> changed fields after
+
+
+AUDITED_FIELDS = ('name', 'group', 'nature', 'account_type', 'statement_line', 'party_type')
+
+
+def _fields(acc: GLAccount) -> dict:
+    return {'name': acc.name, 'group': acc.group.name if acc.group_id else None,
+            'nature': acc.nature, 'account_type': acc.account_type,
+            'statement_line': acc.statement_line, 'party_type': acc.party_type}
 
 
 def _dec(v, warnings=None, where='') -> Decimal:
@@ -175,9 +187,10 @@ def _import(rows, res):
         if GLAccount.objects.filter(code=code).exists():
             continue
         grp = _group(normalize_ar(gname), gname, sec, 100 + len(cache), cache)
-        GLAccount.objects.create(code=code, name=name, group=grp, nature=nat, account_type=typ,
-                                 statement_line=line, is_system=True)
+        acc = GLAccount.objects.create(code=code, name=name, group=grp, nature=nat, account_type=typ,
+                                       statement_line=line, is_system=True)
         res.created += 1
+        res.before[code], res.after[code] = None, _fields(acc)
     unknown = []
     for row in rows:
         if row.code in SYSTEM_ACCOUNTS:
@@ -197,29 +210,39 @@ def _import(rows, res):
         party = PARTY_BY_ACCOUNT.get(row.code) or PARTY_BY_GROUP.get(key) or 'none'
         acc = GLAccount.objects.filter(code=row.code).first()
         if acc is None:
-            GLAccount.objects.create(code=row.code, name=row.name, group=grp, nature=nat,
-                                     account_type=typ, statement_line=line, party_type=party)
+            acc = GLAccount.objects.create(code=row.code, name=row.name, group=grp, nature=nat,
+                                           account_type=typ, statement_line=line, party_type=party)
             res.created += 1
+            res.before[row.code], res.after[row.code] = None, _fields(acc)
         else:
+            old = _fields(acc)
             acc.name, acc.group, acc.statement_line = row.name, grp, line
             acc.nature, acc.account_type = nat, typ
             if acc.party_type == 'none':
                 acc.party_type = party
-            acc.save()
-            res.updated += 1
+            new = _fields(acc)
+            changed = [k for k in AUDITED_FIELDS if old[k] != new[k]]
+            if changed:
+                acc.save()
+                res.updated += 1
+                res.before[row.code] = {k: old[k] for k in changed}
+                res.after[row.code] = {k: new[k] for k in changed}
     res.unknown_groups = unknown
 
 
 def import_coa(rows, *, user, dry_run=False) -> ImportResult:
+    from .ledger import _audit       # fatal audit write (ledger imports nothing from here)
     res = ImportResult()
     try:
         with transaction.atomic():
             _import(rows, res)
             if dry_run:
                 raise _DryRun
+            # inside the transaction: the import never commits without its audit row
+            _audit('gl_coa_imported', user=user, obj=None, note='chart of accounts import',
+                   old_data=res.before or None, new_data=res.after or None,
+                   extra={'created': res.created, 'updated': res.updated,
+                          'unknown_groups': res.unknown_groups, 'rows': len(rows)})
     except _DryRun:
         return res
-    AuditLog.log('gl_coa_imported', user=user, note='chart of accounts import',
-                 extra={'created': res.created, 'updated': res.updated,
-                        'unknown_groups': res.unknown_groups, 'rows': len(rows)})
     return res
