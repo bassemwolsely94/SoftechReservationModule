@@ -751,8 +751,11 @@ class CouponEvent(models.Model):
         return f'{self.raw_serial or "—"} {self.kind} {self.branchcode}/{self.doccode}/{self.docnumber}'
 
 
+def _digits(phone) -> str:
+    return ''.join(ch for ch in str(phone or '') if ch.isdigit())
+
+
 def _same_phone(phone, *candidates) -> bool:
-    """Same Egyptian number whatever the format (+20 / 0 prefix, spaces, Cairo 02) — the shared
-    exact-key rule in core.phones; an empty/short number never matches."""
-    from core.phones import same_phone
-    return any(same_phone(phone, c) for c in candidates if c)
+    """Same Egyptian number whatever the format (+20 / 0 prefix, spaces) — last 10 digits."""
+    want = _digits(phone)[-10:]
+    return len(want) == 10 and any(_digits(c)[-10:] == want for c in candidates if c)

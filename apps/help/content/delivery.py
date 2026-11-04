@@ -456,7 +456,7 @@ SCREENS = [
         'summary': T('جمّع الطلبات الجاهزة في «مسار» لسائق واحد ثم أطلق المسار دفعة واحدة، وتابع حالة مسارات اليوم والنقد المتوقع لكل مسار.',
                      'Group ready orders into one driver\'s "route", launch the whole route at once, and watch today\'s routes and the cash expected per route.'),
         'audience': T('مسؤول التوزيع، الكول سنتر، المشرفون.', 'The dispatcher, call center, supervisors.'),
-        'tips': [T('المندوب بيشوف رقم المستلم في الطلبات المسندة له حتى لو من فرع تاني. البحث برقم العميل لازم يكون بالرقم كامل.', "A rider sees the recipient's number on orders assigned to them, even from another branch. Looking a customer up by phone needs the full number.")],
+        'tips': [T('المندوب بيشوف رقم المستلم في الطلبات المسندة له حتى لو من فرع تاني. البحث برقم العميل لازم يكون بالرقم كامل — رقم ناقص (أقل من 7 أرقام) بيرجع «اكتب الرقم كامل.» ومبيلاقيش أي عميل، والرقم بيتطابق بالضبط مهما كانت كتابته (+20، مسافات، شرط، أرقام عربية).', "A rider sees the recipient's number on orders assigned to them, even from another branch. Looking a customer up by phone needs the full number — a short number (under 7 digits) returns «اكتب الرقم كامل.» (type the full number) and finds no customer; the number matches exactly however it is written (+20, spaces, dashes, Arabic digits).")],
         'steps': [
             T('من «جاهزة للتكليف» حدد الطلبات المتقاربة جغرافياً.', 'From "Ready to assign" select orders that are close to each other.'),
             T('اختر السائق ثم «إنشاء مسار».', 'Choose the driver, then "Create route".'),
@@ -509,8 +509,8 @@ SCREENS = [
                  'بيظهر على المسارات «المُخطّطة» بس. اضغطه لحظة خروج السائق من الفرع.\n• كل طلبات المسار بتتحول مرة واحدة لـ«في الطريق»، والمسار يبقى «في الطريق 🚚».\n• بعدها السائق بيسجّل التسليم لكل محطة من تطبيقه.',
                  'It shows only on "Planned" routes. Press it the moment the driver leaves the branch.\n• All the route\'s orders switch to "Out for delivery" at once and the route becomes "On the way 🚚".\n• The driver then records each stop\'s delivery from their app.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-04',
+        'change_note': T('البحث عن العميل بالموبايل: رقم ناقص بيرجع «اكتب الرقم كامل.» بدل ما يطابق أي عميل', 'Customer lookup by phone: a short number returns «اكتب الرقم كامل.» instead of matching any customer'),
     },
     {
         'key': 'delivery.driver',

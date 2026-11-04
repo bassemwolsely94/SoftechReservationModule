@@ -15,7 +15,8 @@ const STMT_SORT = ['bank_name', 'total_lines', 'matched_lines', 'status', 'impor
 // type / status labels come from the server (exception_type_label, status_label)
 
 const EXCEPTION_STATUS_COLORS = {
-  open:       'bg-amber-100 text-amber-800',
+  open:          'bg-amber-100 text-amber-800',
+  investigating: 'bg-amber-100 text-amber-800',
   resolved:   'bg-green-100 text-green-800',
   dismissed:  'bg-gray-100 text-gray-500',
   escalated:  'bg-red-100 text-red-700',

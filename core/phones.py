@@ -20,7 +20,11 @@ from django.db.models import Q
 from apps.pbx.cdr import digits_only, national_number, phone_key  # noqa: F401  (re-exported)
 
 PREFILTER_DIGITS = 8          # Cairo landlines are stored with or without their 02 → last 8
-MAX_CANDIDATES = 200          # prefilter rows confirmed per field (a real number has a handful)
+# Rows read from the 8-digit prefilter BEFORE the exact phone_key confirm (per call). A real number
+# has a handful of prefilter hits; 200 only bounds a pathological tail (e.g. '00000000' typed
+# against junk stored numbers). In that case an exact match past row 200 is missed and the lookup
+# says "not found" — the safe failure (nothing wrong is attached), never a wrong match.
+MAX_CANDIDATES = 200
 DEFAULT_FIELDS = ('phone', 'phone_alt')
 
 

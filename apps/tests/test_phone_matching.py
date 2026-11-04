@@ -161,12 +161,30 @@ class ReferralFraudTests(TestCase):
 
 class VoucherPhoneTests(TestCase):
 
-    def test_same_phone(self):
+    def test_same_phone_keeps_its_last_10_digit_rule(self):
+        # private-voucher eligibility: unchanged pending owner sign-off (last 10 digits, 10 required)
         from apps.vouchers.models import _same_phone
         self.assertTrue(_same_phone(FORMATTED, '', STORED))
         self.assertFalse(_same_phone('', '', STORED))
         self.assertFalse(_same_phone('0010', '0010'))
-        self.assertTrue(_same_phone('24842067', '0224842067'))
+        self.assertFalse(_same_phone('24842067', '0224842067'))     # Cairo 8-digit: under 10 digits
+
+
+class SubmitLeadPhoneTests(TestCase):
+
+    def _ser(self, phone):
+        from apps.referral.serializers import SubmitLeadSerializer
+        return SubmitLeadSerializer(data={'lead_name': 'صديق', 'lead_phone': phone})
+
+    def test_short_or_empty_phone_is_rejected(self):
+        for phone in ('123', '000010', 'abc'):
+            ser = self._ser(phone)
+            self.assertFalse(ser.is_valid(), phone)
+            self.assertIn('lead_phone', ser.errors)
+            self.assertIn('كامل', str(ser.errors['lead_phone'][0]))
+
+    def test_full_number_is_accepted(self):
+        self.assertTrue(self._ser(FORMATTED).is_valid())
 
 
 class WhatsAppAndOmniTests(TestCase):
@@ -201,3 +219,34 @@ class PortalLookupTests(TestCase):
         self.assertEqual(find_customer_by_phone(FORMATTED), c)
         self.assertIsNone(find_customer_by_phone('0000010'))
         self.assertIsNone(find_customer_by_phone(''))
+
+
+class CallCenterLookupTests(TestCase):
+    URL = '/api/callcenter/calls/lookup/'
+
+    def setUp(self):
+        from .factories import make_call_center, make_pharmacist
+        _, _, self.agent = make_call_center('cc_phone')
+        _, _, self.branch_user = make_pharmacist('ph_phone')
+        self.customer = make_customer(phone=STORED)
+
+    def _ids(self, client, phone):
+        r = client.get(self.URL, {'phone': phone})
+        return r.status_code, [c['id'] for c in (r.data.get('customers') or [])] if r.status_code == 200 else []
+
+    def test_all_branch_agent_finds_by_last_7_to_9_digits(self):
+        for frag in ('0000010', '00000010', '000000010'):
+            self.assertEqual(self._ids(self.agent, frag), (200, [self.customer.pk]), frag)
+
+    def test_branch_user_cannot_use_a_fragment(self):
+        status, ids = self._ids(self.branch_user, '00000010')
+        self.assertNotIn(self.customer.pk, ids)
+        self.assertNotEqual(status, 200)
+
+    def test_branch_user_full_number_is_exact(self):
+        status, ids = self._ids(self.branch_user, FORMATTED)
+        if status == 200:                       # when the role may use the call-center lookup at all
+            self.assertEqual(ids, [self.customer.pk])
+
+    def test_under_7_digits_finds_nobody(self):
+        self.assertEqual(self._ids(self.agent, '000010'), (200, []))
