@@ -37,7 +37,7 @@ Confirmed by Plan 2 (`docs/superpowers/plans/2026-11-04-finance-gl-drafting.md`,
 | `PostingRule` | not used here | — |
 | `GLDraftRun` | close checklist note | `status` running|success|partial|failed, `date_from`, `date_to`, `source_types` (JSON list; `[]`/null = all types), `finished_at` (adapter only) |
 
-Plan 2 rulings that bind this plan: **P21** — the drafting engine never replaces or reverses an entry an accountant has edited (it raises `ledger_error` with `detail.code='edited_by_user'`); Plan 3's correction entries carry `corrects` and a `#corr:` source key, so the engine never treats them as its own group entries. **P22** — scheduled drafting is off by default (`GL_DRAFTING_SCHEDULE_ENABLED=False`), so the close checklist shows when drafting last covered the month (Task 6). Full rulings: `.superpowers/sdd/2026-11-04-finance-gl-drafting/progress.md` on Plan 2's branch.
+Plan 2 is on main (22301967, migrations finance 0021/0022) and confirmed this contract final. Plan 2 rulings that bind this plan: **P21** — the drafting engine never replaces or reverses an entry an accountant has edited (it raises `ledger_error` with `detail.code='edited_by_user'`); Plan 3's correction entries carry `corrects` and a `#corr:` source key, so the engine never treats them as its own group entries. **P22** — scheduled drafting is off by default (`GL_DRAFTING_SCHEDULE_ENABLED=False`), so the close checklist shows when drafting last covered the month (Task 6). Full rulings: `.superpowers/sdd/2026-11-04-finance-gl-drafting/progress.md` on Plan 2's branch.
 
 Plan 2 adds no `GLAccount.feed`; Task 1 adds it. Plan 2's source verification (shared note `gl-plan2-source-verification.md`): branch cash sales reproduce finance's 6002 within 0–1.7 %; card, purchase returns (5101) and VAT do not yet — Task 4 Step 1 sets `blocks_close=False` on any check whose SOFTECH side does not reproduce finance's figure.
 
@@ -105,8 +105,8 @@ Plan 2 adds no `GLAccount.feed`; Task 1 adds it. Plan 2's source verification (s
 
 **Files:**
 - Create: `apps/finance/gl/periods.py`, `apps/finance/gl/corrections.py`
-- Modify: `apps/finance/gl/ledger.py` (`approve`, `reverse`)
-- Test: `apps/tests/test_gl_corrections.py`
+- Modify: `apps/finance/gl/ledger.py` (`approve`, `reverse`); `apps/finance/gl/drafting.py` (`_closed`, the holder collision parked by Plan 2 — see below)
+- Test: `apps/tests/test_gl_corrections.py`, `apps/tests/test_gl_drafting.py`
 
 **Interfaces:**
 - Consumes: Plan 1 `save_draft`, `approve`, `reverse`, `LedgerError`, `OPENING_DATE`; Task 1 `LedgerEntry.corrects`, adapter.
@@ -118,6 +118,7 @@ Plan 2 adds no `GLAccount.feed`; Task 1 adds it. Plan 2's source verification (s
   - `ledger.reverse(...)` — when the original's period is not open: if `entry_date` is None, the reversal is dated `first_open_period_after(original.entry_date).period_start` and gets `corrects=original`; an explicit `entry_date` in a non-open period still raises `closed_period`.
   - `effective_lines(original: LedgerEntry) -> dict[tuple[account_code, branch_id, party_code], Decimal]` — signed net (debit − credit) of the original plus every approved entry with `corrects=original`.
   - `post_late_correction(original_id: int, new_lines: list[dict], *, user, reason: str, exception_id: int | None = None) -> LedgerEntry` — draft dated `first_open_period_after(original.entry_date).period_start`, `book=original.book`, `source_type=original.source_type`, `corrects=original`, `source_key` = `f'{group_key}#corr:exc{exception_id}'` when called for an exception (`group_key` from `detail.group_key`, **not** the document's source_key — Ruling P19; one exception = one group = one correction, and the live-source-key constraint makes a second post fail with `source_conflict`), else `f'{original.source_key}#corr:{YYYY-MM of correction date}:{n}'` (n = count of existing corrections + 1), description «تصحيح قيد <number> — <reason>». Lines = `new_lines` aggregated by (account, branch, party) minus `effective_lines(original)`; zero nets dropped; positive net → debit, negative → credit. All nets zero → `LedgerError('nothing_to_correct')`. Refuses if the original's period is open (`LedgerError('period_open')` — use normal re-drafting there). With `exception_id`: refuses unless the exception is `open` (`LedgerError('exception_not_open')`) and refuses when `draft_entry_id` is set and that entry is still a live draft (`LedgerError('exception_has_draft')`, «للمجموعة دي مسودة لسه — راجعها أو احذفها الأول»); `new_lines` are the group's whole proposed lines; calls `mark_exception_resolved` in the same transaction as the draft. Audited `gl_late_correction_drafted` with `group_key` and `member_source_keys`.
+  - **Plan 2 parked gap (`drafting.py` `_closed`, ~line 582):** when no open `closed_period_change` row exists for the group, the holder is the first member not already holding another group's open row, else `members[0]` — and `update_or_create` on that busy doc then **overwrites** the other closed group's open exception (one open row per doc and kind), losing that group's correction. Reachable only once months can be closed (this plan). Fix: pick the holder from members whose own `group_key == gk` first (still in the group), then any free member; if every member is busy, do not write — record `engine.group_errors[gk] = 'holder_busy'` (the dict that already makes a run `partial`), leave the members `exception`, and end the run `partial`; the next run retries.
   - `post_late_document(exception_id: int, *, user) -> LedgerEntry` — for a `closed_period_change` exception with **no** `original_entry` and no `draft_entry_id` (a brand-new SOFTECH group in a closed month): one draft of the group's proposed lines as-is, dated `first_open_period_after(source_date).period_start`, `source_key` = `detail.group_key` (posted once per group; a second call hits `exception_not_open` or `source_conflict`), description noting the original document date; resolves the exception in the same transaction (Plan 2's next run releases the members). With an `original_entry`, the API calls `post_late_correction` instead; with `draft_entry_id` it refuses with `exception_has_draft`.
 
 - [ ] **Step 1: Write the failing tests** —
@@ -133,8 +134,9 @@ Plan 2 adds no `GLAccount.feed`; Task 1 adds it. Plan 2's source verification (s
   - `test_new_document_in_closed_month_drafted_in_first_open_month` (exception without `original_entry`)
   - `test_group_exception_posts_one_correction_keyed_by_group_key` (branch-day group of 3 documents, one exception → one correction whose `source_key` starts with `group_key`; a second call → `exception_not_open`, still one entry)
   - `test_exception_with_live_draft_refused` (`detail.entry_id` = a draft → `exception_has_draft`, nothing posted)
-- [ ] **Step 2: Run** `python manage.py test apps.tests.test_gl_corrections apps.tests.test_gl_ledger` — Expected: new tests FAIL, Plan 1's ledger tests still PASS.
-- [ ] **Step 3: Implement** `periods.py`, `corrections.py` and the two `ledger.py` changes.
+  - `test_closed_group_holder_prefers_member_still_in_group` and `test_closed_group_holder_collision_reported_not_overwritten` (one doc is the only free holder for two closed groups → the first group's open exception is unchanged, the run is `partial` with a `holder_busy` group error) — in `apps/tests/test_gl_drafting.py`
+- [ ] **Step 2: Run** `python manage.py test apps.tests.test_gl_corrections apps.tests.test_gl_ledger apps.tests.test_gl_drafting` — Expected: new tests FAIL, existing tests still PASS.
+- [ ] **Step 3: Implement** `periods.py`, `corrections.py`, the two `ledger.py` changes and the `drafting.py` holder fix.
 - [ ] **Step 4: Run** the same command — Expected: all PASS.
 - [ ] **Step 5: Commit** — `feat(finance-gl): period helpers and late-change corrections into the open month`
 
