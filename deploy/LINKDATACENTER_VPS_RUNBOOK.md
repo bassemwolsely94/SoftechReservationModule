@@ -1693,9 +1693,9 @@ office machine cannot write to SOFTECH — two independent locks.
 **11.2 Drain what's in flight — checked on the office instance:**
 - `/api/pos-orders/queue-status/` → queued / push_failed must be **0**. If not, temporarily
   undo 11.1, flush (`flush_pos_orders`), confirm 0, redo 11.1.
-- No ISR / invoice / A/P / insurance pushes in "pushing" state. Review open ISR drafts — memory
-  notes **duplicate live ISR drafts #30/#32 of already-pushed #29**: cancel those duplicates
-  before migrating so they can never be pushed from the new server.
+- No ISR / invoice / A/P / insurance pushes in "pushing" state. Review open ISR drafts: none may
+  be proposed or approved, so nothing can be pushed from the new server. (The duplicate drafts
+  #30/#32 of the already-pushed #29 were cancelled 2026-10-25; checked again 2026-11-05.)
 - Note the last successful run time of each sync domain (freshness bar) — compare after the move.
 
 **11.3 Stop the office instance completely.** Stop the office scheduler and web server, and
