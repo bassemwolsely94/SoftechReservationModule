@@ -43,6 +43,9 @@ Module `ledger` (الحسابات العامة). Role `accountant` (all-branch):
 `finance` view/export, `cheques` view, `dashboard` view. `ledger.edit` (chart edits, import) and
 `ledger.finalize` (period close, Plan 3) are granted by the owner in «الصلاحيات». Every GL endpoint also
 refuses users who are not all-branch (`core.branch_scope.sees_everything`, security batch 5 decision B-1).
+The RBAC middleware (`core/middleware/module_access.py`) maps `/api/finance/gl/` to `ledger` (not
+`finance`): reads need `ledger.view`, writes any of `ledger` create / edit / approve; each view then
+checks its exact action. Writes also need a staff profile (403 `no_profile` otherwise).
 
 ## API — `/api/finance/gl/`
 
@@ -51,20 +54,22 @@ refuses users who are not all-branch (`core.branch_scope.sees_everything`, secur
 | `GET groups/` | view | `[{id, name, section, order}]` |
 | `GET accounts/?q=&group=&active=` | view | list, `group` nested; `q` uses the shared wildcard search |
 | `PATCH accounts/{code}/` | edit | name, statement_line, is_active, requires_branch, party_type |
-| `POST accounts/import/` (multipart `file`, `dry_run`) | edit | `{created, updated, unknown_groups, rows}` |
+| `POST accounts/import/` (multipart `file`, `dry_run`) | edit | `.xlsx` only, ≤ `MAX_UPLOAD_FILE_SIZE`, ≤ `MAX_IMPORT_ROWS`; `{created, updated, unknown_groups, rows, warnings}` |
 | `GET entries/?status=&book=&date_from=&date_to=&branch=&account=&q=` | view | cursor pages `{next, previous, results}`; row has `total_debit`, `created_by_name` |
 | `GET entries/{id}/` | view | with `lines` |
-| `POST entries/` · `PUT entries/{id}/` | create | manual books general/cash/credit; PUT on non-draft → 409 |
+| `POST entries/` · `PUT entries/{id}/` | create | manual books general/cash/credit; PUT on non-draft → 409; `notes` (≤ 4000, omitted = unchanged) saved and audited with the draft |
 | `DELETE entries/{id}/` | create | drafts only (409 otherwise); audited |
-| `POST entries/{id}/approve/` · `POST entries/approve/ {ids}` | approve | bulk → `{results:[{id, ok, number | code, detail}]}` |
+| `POST entries/{id}/approve/` · `POST entries/approve/ {ids}` | approve | bulk (≤ 500, repeated ids once) → `{results:[{id, ok, number | code, detail}]}` |
 | `POST entries/{id}/reverse/ {reason, entry_date?}` | approve | returns the reversal |
 | `GET reports/trial-balance/?from&to&branch&by` | view | list + `is_total` row |
 | `GET reports/account-statement/?code&from&to&party&branch` | view | opening, lines with running balance, closing |
-| `GET reports/statements/?from&to` · `position/?as_of` · `branch-pl/?from&to` · `comparison/?years=` | view | `branch-pl` → `{columns}`; `comparison` → `[{year, empty, values, pct_of_sales}]` |
+| `GET reports/statements/?from&to&closing_stock` · `position/?as_of&closing_stock` · `branch-pl/?from&to` · `comparison/?years=` | view | statements / position carry `stock_basis` (entries · supplied · missing) and `warnings` (position also `unclosed_pl`); optional `closing_stock` (≥ 0, ≤ 2 dp, else 400 `bad_amount`) overrides 5302; `branch-pl` → `{columns}`; `comparison` → `[{year, empty, values, pct_of_sales}]` |
 
-Errors: `LedgerError` → 400 `{code, detail (Arabic, with «السطر n»), extra}`; `not_draft` /
-`already_reversed` → 409. Decimals are strings; ratios are fractions. Any report with `?format=xlsx`
-needs `ledger.export` and returns finance's layout (RTL, Arabic headers, `#,##0.00`, branch "code · name").
+Errors: `LedgerError` → 400 `{code, detail (Arabic, with «السطر n»), extra}`; the state conflicts
+`not_draft`, `not_approved`, `already_reversed`, `is_reversal`, `source_conflict` → 409. A `from` after
+`to` → 400. Decimals are strings; ratios are fractions. Any report with `?format=xlsx` needs
+`ledger.export` (checked before the report is computed) and returns finance's layout (RTL, Arabic headers,
+`#,##0.00`, branch "code · name", server warnings «⚠ …» under the title, formulas neutralised).
 `URL_FORMAT_OVERRIDE` is off, so `format` is an ordinary query parameter here.
 
 ## Screens (hub `/finance`, tabs shown only with `ledger.view`)

@@ -210,6 +210,10 @@ def required(path, method):
     if prefix == 'pos-orders' and len(parts) > 3 and parts[3] == 'referral-stats':
         return 'analytics', (('view',) if method in ('GET', 'HEAD', 'OPTIONS') else _EXPORT_POST)
     safe = method in ('GET', 'HEAD', 'OPTIONS')
+    # General Ledger (finance-gl): its own `ledger` module, not `finance` — the accountant holds
+    # ledger create/approve but only finance view. The views check the exact ledger action.
+    if prefix == 'finance' and parts[3:4] == ['gl']:
+        return 'ledger', (('view',) if safe else ('create', 'edit', 'approve'))
     # Market Shortage reads the engine's run status and the shortage screen the vendor list:
     # `shortage` view (purchasing holds it too) — owner decision 2026-10-28, map by screen (Z-7a)
     if safe and ((prefix == 'purchasing' and parts[3:5] in (['runs', 'latest'], ['runs', 'active']))
