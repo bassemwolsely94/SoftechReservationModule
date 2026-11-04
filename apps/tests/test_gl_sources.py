@@ -8,6 +8,8 @@ from django.test import SimpleTestCase, TestCase
 from apps.finance.gl.sources import READERS, SourceDoc, content_hash
 from apps.finance.gl.sources import purchases as purchases_mod  # noqa: F401  (registers)
 from apps.finance.gl.sources import sales as sales_mod  # noqa: F401  (registers)
+from apps.finance.gl.sources import treasury as treasury_mod  # noqa: F401
+from apps.finance.gl.sources import expenses as expenses_mod  # noqa: F401
 from apps.finance.queries import sybase_gl
 from apps.finance.recon_models import APInvoice, ReconParty
 
@@ -149,3 +151,146 @@ class HashTests(SimpleTestCase):
         c = SourceDoc('x', 'k1', date(2026, 1, 1), '100', 'cash', '', {'a': D('1.01'), 'b': D('2')}, {})
         self.assertEqual(content_hash(a), content_hash(b))
         self.assertNotEqual(content_hash(a), content_hash(c))
+
+
+def chq(**kw):
+    r = {'cheqsno': '1', 'branchcode': '100', 'financialdoccode': '10', 'cheqtype': '20', 'cheqno': '9',
+         'cheqdate': datetime(2026, 3, 5), 'cheqregisterdate': datetime(2026, 3, 5), 'bankcode': '40',
+         'personcode': '5001', 'ptcode': '20', 'cheqvalue': D('100'), 'chequenote': 'n', 'tf_branchcode': None,
+         'tf_bankcode': None, 'tf_cheqsno': None, 'banktype': '0', 'has_expense': 0}
+    r.update(kw)
+    return r
+
+
+def run_cheques(rows, d1=date(2026, 3, 1), d2=date(2026, 3, 31)):
+    f = fake(rows)
+    out = {}
+    for t in ('supplier_payments', 'cheque_maturity', 'customer_collections', 'treasury_other'):
+        for d in READERS[t](d1, d2, f):
+            out[d.source_key] = d
+    return out, f
+
+
+class ChequeReaderTests(SimpleTestCase):
+    def test_pos_rows_dropped(self):
+        docs, _ = run_cheques([chq(cheqsno='1', personcode='-170'),
+                               chq(cheqsno='2', personcode='-170', financialdoccode='30')])
+        self.assertEqual(docs, {})
+
+    def test_expense_vouchers_dropped_only_when_referenced(self):
+        docs, _ = run_cheques([chq(cheqsno='1', personcode='-120', ptcode='-1', has_expense=1),
+                               chq(cheqsno='2', personcode='-120', ptcode='-1', has_expense=0)])
+        self.assertEqual(set(docs), {'chq:100:2'})
+        self.assertEqual((docs['chq:100:2'].source_type, docs['chq:100:2'].kind),
+                         ('treasury_other', 'expense_unlinked'))
+
+    def test_cheque_emits_issue_on_register_date_and_maturity_on_due_date(self):
+        docs, _ = run_cheques([chq(financialdoccode='20', cheqdate=datetime(2026, 4, 20),
+                                   cheqregisterdate=datetime(2026, 3, 5), cheqno='C7')],
+                              date(2026, 3, 1), date(2026, 4, 30))
+        issue, due = docs['chq:100:1'], docs['chqdue:100:1']
+        self.assertEqual((issue.source_type, issue.doc_date), ('supplier_payments', date(2026, 3, 5)))
+        self.assertEqual((due.source_type, due.doc_date), ('cheque_maturity', date(2026, 4, 20)))
+        self.assertEqual(issue.amounts, {'amount': D('100.00')})
+        self.assertEqual(issue.attrs['direction'], 'payment')
+        self.assertEqual(issue.attrs['cheqno'], 'C7')
+        self.assertEqual(issue.attrs['due_date'], '2026-04-20')
+        self.assertEqual(issue.attrs['bank_type'], '0')
+        self.assertEqual(issue.personcode, '5001')
+
+    def test_issue_outside_range_but_due_inside_emits_only_maturity(self):
+        docs, _ = run_cheques([chq(financialdoccode='20', cheqdate=datetime(2026, 4, 20),
+                                   cheqregisterdate=datetime(2026, 3, 5))],
+                              date(2026, 4, 1), date(2026, 4, 30))
+        self.assertEqual(set(docs), {'chqdue:100:1'})
+
+    def test_non_cheque_uses_cheqdate_and_no_maturity(self):
+        docs, _ = run_cheques([chq(financialdoccode='10', cheqdate=datetime(2026, 3, 9),
+                                   cheqregisterdate=datetime(2026, 3, 2))])
+        self.assertEqual(docs['chq:100:1'].doc_date, date(2026, 3, 9))
+        self.assertNotIn('chqdue:100:1', docs)
+
+    def test_ptcode_routes_to_source_type(self):
+        rows = [chq(cheqsno=str(i), ptcode=pt, personcode=pc, cheqtype='10' if pt == '10' else '20')
+                for i, (pt, pc) in enumerate([('20', '5001'), ('10', '7001'), ('30', '3'), ('60', '4'),
+                                              ('70', '5'), ('80', '6'), ('99', '7'), ('-1', '-180')], 1)]
+        docs, _ = run_cheques(rows)
+        got = {k: (d.source_type, d.kind) for k, d in docs.items()}
+        self.assertEqual(got, {
+            'chq:100:1': ('supplier_payments', ''), 'chq:100:2': ('customer_collections', ''),
+            'chq:100:3': ('treasury_other', 'employee'), 'chq:100:4': ('treasury_other', 'partner'),
+            'chq:100:5': ('treasury_other', 'asset_supplier'), 'chq:100:6': ('treasury_other', 'sister_company'),
+            'chq:100:7': ('treasury_other', 'other'), 'chq:100:8': ('treasury_other', 'transfer')})
+        self.assertEqual(docs['chq:100:2'].attrs['direction'], 'receipt')
+
+    def test_transfer_legs_are_two_docs(self):
+        docs, _ = run_cheques([
+            chq(cheqsno='11', ptcode='-1', personcode='-180', cheqtype='20', bankcode='40', tf_branchcode='100',
+                tf_bankcode='04', tf_cheqsno='12'),
+            chq(cheqsno='12', ptcode='-1', personcode='-181', cheqtype='10', bankcode='04', tf_branchcode='100',
+                tf_bankcode='40', tf_cheqsno='11')])
+        self.assertEqual({d.kind for d in docs.values()}, {'transfer'})
+        self.assertEqual(len(docs), 2)
+        self.assertEqual(docs['chq:100:12'].attrs['tf_cheqsno'], '11')
+
+    def test_one_fetch_per_month_for_all_four_types(self):
+        _, f = run_cheques([chq()], date(2026, 3, 1), date(2026, 4, 30))
+        self.assertEqual(len(f.calls), 2)
+
+    def test_row_seen_in_two_month_chunks_emitted_once(self):
+        docs, f = run_cheques([chq(financialdoccode='20', cheqdate=datetime(2026, 4, 2),
+                                   cheqregisterdate=datetime(2026, 3, 30))], date(2026, 3, 1), date(2026, 4, 30))
+        self.assertEqual(sorted(docs), ['chq:100:1', 'chqdue:100:1'])
+
+    def test_sql_shape(self):
+        sql = sybase_gl.sql_cheques(date(2026, 3, 1), date(2026, 3, 31))
+        self.assertTrue(sql.lstrip().upper().startswith('SELECT'))
+        self.assertIn('CONVERT(varchar(10), c.ptcode)', sql)
+        self.assertIn('CONVERT(varchar(20), e.cheqsno)', sql)
+        self.assertIn('banktype', sql)
+
+
+class ExpenseReaderTests(SimpleTestCase):
+    def row(self, **kw):
+        r = {'branchcode': '130', 'expensedate': datetime(2026, 3, 5), 'intervalcode': '1', 'day_sno': '4',
+             'expcode': '43', 'expvalue': D('12.345'), 'expcomment': 'x', 'cheqsno': '77', 'bankcode': '50'}
+        r.update(kw)
+        return r
+
+    def test_expense_doc(self):
+        (d,) = READERS['expenses'](date(2026, 3, 1), date(2026, 3, 31), fake([self.row()]))
+        self.assertEqual(d.source_key, 'exp:130:2026-03-05:1:4')
+        self.assertEqual((d.source_type, d.kind, d.amounts), ('expenses', '43', {'amount': D('12.35')}))
+        self.assertEqual(d.attrs, {'expcode': '43', 'bankcode': '50', 'cheqsno': '77', 'comment': 'x'})
+
+    def test_expense_duplicate_key_marked_not_merged(self):
+        docs = list(READERS['expenses'](date(2026, 3, 1), date(2026, 3, 31),
+                                        fake([self.row(), self.row(expvalue=D('5'))])))
+        self.assertEqual([d.kind for d in docs], ['__duplicate__'])
+        self.assertEqual(docs[0].source_key, 'exp:130:2026-03-05:1:4')
+
+    def test_sql_shape(self):
+        sql = sybase_gl.sql_expenses(date(2026, 3, 1), date(2026, 3, 31))
+        self.assertTrue(sql.lstrip().upper().startswith('SELECT'))
+        self.assertIn('dailyexpenses', sql)
+
+
+class CheckCommandTests(TestCase):
+    def test_mirror_diff_zero_when_vouchers_agree(self):
+        from contextlib import contextmanager
+        from io import StringIO
+        from django.core.management import call_command
+        from apps.finance.recon_models import Payment
+        party = ReconParty.objects.create(party_type='supplier', softech_personcode='5001', name='S')
+        Payment.objects.create(party=party, branchcode='100', cheqsno=1, direction='out', party_type='supplier',
+                               voucher_date=date(2026, 3, 5), amount=D('100'))
+        f = fake([chq()])
+
+        @contextmanager
+        def of():
+            yield f
+        out = StringIO()
+        with mock.patch.object(sybase_gl, 'open_fetch', of):
+            call_command('gl_check_sources', '--source', 'supplier_payments', '--from', '2026-03-01',
+                         '--to', '2026-03-31', stdout=out)
+        self.assertIn('diff           0.00', out.getvalue())

@@ -53,7 +53,32 @@ def sql_credit_docs(d1: date, d2: date) -> str:
     )
 
 
-_SELECT_ONLY = re.compile(r'^\s*select\b', re.I)
+def sql_cheques(d1: date, d2: date) -> str:
+    """Vouchers whose due date (cheqdate) OR issue date (cheqregisterdate) falls in [d1, d2]."""
+    return (
+        "SELECT c.cheqsno, c.branchcode, c.financialdoccode, c.cheqtype, c.cheqno, c.cheqdate, "
+        "c.cheqregisterdate, c.bankcode, c.personcode, CONVERT(varchar(10), c.ptcode) ptcode, c.cheqvalue, "
+        "c.chequenote, c.tf_branchcode, c.tf_bankcode, c.tf_cheqsno, b.banktype, "
+        f"(SELECT COUNT(*) FROM {DB}.dailyexpenses e WHERE e.branchcode = c.branchcode "
+        "AND CONVERT(varchar(20), e.cheqsno) = CONVERT(varchar(20), c.cheqsno)) has_expense "
+        f"FROM {DB}.cheques c, {DB}.banks b "
+        "WHERE b.bankcode = c.bankcode "
+        f"AND (({_bounds('c.cheqdate', d1, d2)}) OR ({_bounds('c.cheqregisterdate', d1, d2)}))"
+    )
+
+
+def sql_expenses(d1: date, d2: date) -> str:
+    """dailyexpenses rows plus the paying box from the linked voucher (cheques on branchcode + cheqsno)."""
+    return (
+        "SELECT d.branchcode, d.expensedate, d.intervalcode, d.day_sno, d.expcode, d.expvalue, d.expcomment, "
+        "d.cheqsno, "
+        f"(SELECT MAX(c.bankcode) FROM {DB}.cheques c WHERE c.branchcode = d.branchcode "
+        "AND CONVERT(varchar(20), c.cheqsno) = CONVERT(varchar(20), d.cheqsno)) bankcode "
+        f"FROM {DB}.dailyexpenses d WHERE {_bounds('d.expensedate', d1, d2)}"
+    )
+
+
+_SELECT_ONLY =re.compile(r'^\s*select\b', re.I)
 _INTO = re.compile(r'\binto\b', re.I)
 
 
