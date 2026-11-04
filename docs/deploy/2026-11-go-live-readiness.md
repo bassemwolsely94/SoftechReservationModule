@@ -11,7 +11,7 @@ Read-only review. Nothing was deployed, pushed to the server or changed on it.
 | Stage | Verdict | Why |
 |---|---|---|
 | **A. VPS live as a reader** (users test on real data; office stays the SOFTECH writer — checklist "Day −1") | **GO** (owner items B8, B9 first) | No code blocker. `main` is green in CI at `60fb01ad` (5406 tests OK) and the frontend builds. The deploy kit, kill-switches and flags are in order. B1, the red CI found earlier in this review, was fixed on `main` during the review. |
-| **B. Cutover** (VPS becomes the only SOFTECH writer — checklist "Day 0", runbook §11) | **NO-GO until B2–B7** | All owner items: the switch table has two conflicting rows and is unsigned, there is no off-site backup or tested restore, 12 office `.env` copies can still write, Ain Shams is unreachable, ISR #30/#32 are still open. |
+| **B. Cutover** (VPS becomes the only SOFTECH writer — checklist "Day 0", runbook §11) | **NO-GO until B2–B7** | All owner items: the switch table has two conflicting rows and is unsigned, there is no off-site backup or tested restore, 13 office `.env` copies can still write, Ain Shams is unreachable, ISR #30/#32 are still open. |
 
 > **Decide before stage A (owner):** the runbook throws the rehearsal database away at cutover (§10.2 → §11.4 restores a fresh office dump).
 > Anything testers enter on the VPS during stage A (reservations, demand, notes, claims) is **lost** at cutover.
