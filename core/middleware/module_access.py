@@ -134,9 +134,25 @@ def _mode_for(role):
     held their module (hr, customers, catalog …). Finance GL ruling: the `accountant` reaches
     ledger / finance / cheques / dashboard / tasks and nothing else, from day one."""
     mode = _mode()
-    if mode == 'log' and role in getattr(settings, 'RBAC_ENFORCED_ROLES', ('accountant',)):
+    if mode == 'log' and role in enforced_roles():
         return 'enforce'
     return mode
+
+
+def enforced_roles() -> frozenset:
+    """settings.RBAC_ENFORCED_ROLES as a set of role names. A plain string (env value) is split on
+    commas — never kept as a string, where `role in 'accountant'` would be a substring test."""
+    roles = getattr(settings, 'RBAC_ENFORCED_ROLES', ('accountant',))
+    if isinstance(roles, str):
+        roles = roles.split(',')
+    return frozenset(str(r).strip() for r in (roles or ()) if str(r).strip())
+
+
+def matrix_enforced_for(user) -> bool:
+    """True for a caller whose role the matrix is enforced for in every mode: views use it to gate
+    data they hand any signed-in user (universal search, chatter) without narrowing legacy roles."""
+    profile = getattr(user, 'staff_profile', None) if not hasattr(user, 'role') else user
+    return bool(profile is not None and getattr(profile, 'role', None) in enforced_roles())
 
 
 def clear_cache():

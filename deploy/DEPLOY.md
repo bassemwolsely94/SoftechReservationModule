@@ -63,6 +63,7 @@ NETWORK_PROXY_KEY=<openssl rand -hex 32>   # N3: same value as in /etc/nginx/elr
 NUM_PROXIES=1                      # nginx appends the client to X-Forwarded-For (throttles + audit IP)
 CSRF_TRUSTED_ORIGINS=https://yourdomain.com
 RBAC_ENFORCEMENT=log               # then 'enforce' once the rbac log is clean
+RBAC_ENFORCED_ROLES=accountant     # comma list: roles refused outside their grants even in log mode (not when off)
 MEDIA_ACCEL_REDIRECT=True          # uploads: Django checks the signed link, Nginx sends the file
 # Login cookies get the Secure flag automatically because BEHIND_HTTPS_PROXY=True.
 ```
