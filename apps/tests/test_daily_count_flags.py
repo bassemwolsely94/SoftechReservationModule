@@ -42,3 +42,30 @@ class BranchPilotSwitchTests(TestCase):
         _, _, c = make_salesperson('pilot_sales', branch=b)
         r = c.patch(f'/api/branches/{b.pk}/settings/', {'daily_count_enabled': True}, format='json')
         self.assertEqual(r.status_code, 403)
+
+
+@override_settings(DAILY_COUNT_ENABLED=True)
+class DailyCountOwnGateTests(TestCase):
+    """/api/stockcount/daily/ has its own gate (counter = own list; reviewers = stock-audit access),
+    like /api/stock-audit/. The `stockcount` matrix module must not block a salesperson's own list."""
+
+    def test_daily_routes_are_not_mapped_to_the_matrix(self):
+        from core.middleware.module_access import required
+        for path in ('/api/stockcount/daily/my/', '/api/stockcount/daily/my/count/', '/api/stockcount/daily/board/'):
+            self.assertIsNone(required(path, 'GET'), path)
+            self.assertIsNone(required(path, 'POST'), path)
+        self.assertIsNotNone(required('/api/stockcount/sessions/', 'GET'))
+
+    def test_salesperson_reaches_own_list_under_enforce(self):
+        from apps.tests.security.fixtures import seed_code_matrix
+        from core.middleware import module_access
+        seed_code_matrix()
+        module_access.clear_cache()
+        self.addCleanup(module_access.clear_cache)
+        _, _, c = make_salesperson('gate_sales')
+        with override_settings(RBAC_ENFORCEMENT='enforce'):
+            self.assertEqual(c.get('/api/stockcount/daily/my/').status_code, 200)
+            # saving a count is a POST — the matrix gives salespeople read-only stockcount
+            r = c.post('/api/stockcount/daily/my/count/', {'pick_id': 999999, 'counted_qty': '1'}, format='json')
+            self.assertEqual(r.status_code, 404, r.content)      # reached the view (no such pick), not 403
+            self.assertEqual(c.get('/api/stockcount/daily/board/').status_code, 403)   # the view's own gate
