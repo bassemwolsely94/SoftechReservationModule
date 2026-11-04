@@ -157,12 +157,14 @@ def propose_matches(*, user) -> dict:
     return res
 
 
-def _confirm(g, user, personcode, basis):
+def _confirm(g, user, personcode, basis, name=''):
     if g.status == 'confirmed' and g.softech_personcode:
         if g.softech_personcode == str(personcode).strip():
             return g
         raise ValueError('هذا الطرف مؤكد بالفعل على كود SOFTECH مختلف')
     old = _snap(g)
+    if name:
+        g.name = name[:200]
     g.softech_personcode = str(personcode).strip()
     g.recon_party = ReconParty.objects.filter(softech_personcode=g.softech_personcode,
                                          party_type=g.party_type).first()
@@ -197,15 +199,15 @@ def reject_party(party_id, *, user) -> GLParty:
     return g
 
 
-def create_party_from_personcode(*, user, party_type, code, personcode) -> GLParty:
+def create_party_from_personcode(*, user, party_type, code, personcode, name='') -> GLParty:
     """Confirmed party for a code finance never listed (from the exceptions inbox)."""
     personcode = str(personcode).strip()
     rp = ReconParty.objects.filter(softech_personcode=personcode, party_type=party_type).first()
     with transaction.atomic():
         g, _ = GLParty.objects.select_for_update().get_or_create(
             party_type=party_type, code=str(code),
-            defaults={'name': (rp.name if rp and rp.name else str(code))[:200]})
-        return _confirm(g, user, personcode, 'manual')
+            defaults={'name': (name or (rp.name if rp and rp.name else str(code)))[:200]})
+        return _confirm(g, user, personcode, 'manual', name=name)
 
 
 def resolve_party(party_type: str, personcode: str):

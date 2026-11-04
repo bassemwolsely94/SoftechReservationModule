@@ -220,6 +220,24 @@ class BuildTests(Base):
         self.assertEqual(by['5100']['branch_id'], self.b140.pk)
         self.assertEqual(by['6002']['branch_id'], self.b100.pk)
 
+    def test_map_without_branch_raises_never_null_branch(self):
+        R.save_map(user=self.staff, kind='bank', source_value='40', account_code='1302')   # no branch
+        for i, lines in enumerate((
+            [{'side': 'debit', 'account_map': 'bank', 'map_key': 'bankcode', 'amount': 'amount',
+              'branch': 'map'},
+             {'side': 'credit', 'account': '6002', 'amount': 'amount', 'branch': 'hq'}],
+            [{'side': 'debit', 'account': '5100', 'amount': 'amount', 'branch': 'map'},
+             {'side': 'credit', 'account': '6002', 'amount': 'amount', 'branch': 'hq'}],
+        )):
+            rule = self.rule(lines, source_type='supplier_payments', code=f'nb{i}')
+            d = doc(source_type='supplier_payments', branch='100', amounts={'amount': DEC('7')},
+                    attrs={'bankcode': '40'})
+            with self.assertRaises(R.RuleMiss) as cm:
+                self.build(rule, [d])
+            self.assertEqual(cm.exception.kind, 'unmapped_account')
+            self.assertEqual(cm.exception.detail, {'kind': 'bank', 'value': '40',
+                                                   'reason': 'map has no branch'})
+
     def test_static_branch_map_rejected_for_sources_without_a_bank(self):
         lines = [{'side': 'debit', 'account': '1302', 'amount': 'net', 'branch': 'map'},
                  {'side': 'credit', 'account': '6002', 'amount': 'net'}]

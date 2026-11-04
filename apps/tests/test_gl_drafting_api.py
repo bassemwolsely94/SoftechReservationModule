@@ -140,6 +140,17 @@ class PartyTests(Base):
         self.assertEqual(r.status_code, 400)
 
 
+class PartyCreateAuditTests(Base):
+    def test_create_party_name_in_audit(self):
+        ReconParty.objects.create(party_type='supplier', softech_personcode='8', name='سوفتيك')
+        r = self.acct.post(BASE + 'parties/', {'type': 'supplier', 'code': '901', 'name': 'اسم نهائي',
+                                               'personcode': '8'}, format='json')
+        self.assertEqual(r.status_code, 201, r.content)
+        row = AuditLog.objects.filter(action='gl_party_confirmed').latest('id')
+        self.assertEqual(row.new_data['name'], 'اسم نهائي')
+        self.assertEqual(r.data['name'], 'اسم نهائي')
+
+
 class MapTests(Base):
     def test_put_get_audit_and_no_delete(self):
         r = self.admin.put(BASE + 'maps/bank/40/', {'account_code': '1302',
@@ -211,6 +222,22 @@ class RuleTests(Base):
         self.assertEqual(r.data['entries'][0]['entry_date'], '2026-03-10')
         self.assertFalse(PostingRule.objects.exists())
         self.assertFalse(LedgerEntry.objects.exists())
+
+    def test_preview_window_boundary(self):
+        body = {'rule': _rule(), 'date_from': '2026-03-01', 'date_to': '2026-03-31'}   # 31 days incl.
+        with mock.patch.dict('apps.finance.gl.sources.READERS', {'sales_tenders': lambda a, b, f: []}):
+            self.assertEqual(self.acct.post(BASE + 'rules/preview/', body, format='json').status_code, 200)
+        body['date_to'] = '2026-04-01'   # 32 days incl.
+        self.assertEqual(self.acct.post(BASE + 'rules/preview/', body, format='json').status_code, 400)
+
+    def test_non_all_branch_user_403_on_write_route(self):
+        body = {'rule': _rule(), 'date_from': '2026-03-01', 'date_to': '2026-03-02'}
+        self.assertEqual(self.pharm.post(BASE + 'rules/preview/', body, format='json').status_code, 403)
+
+    def test_rule_post_rejects_effective_to(self):
+        r = self.admin.post(BASE + 'rules/', _rule(effective_to='2026-12-31'), format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(PostingRule.objects.exists())
 
     def test_preview_bad_rule_400(self):
         body = {'rule': _rule(source_type='nope'), 'date_from': '2026-03-01', 'date_to': '2026-03-02'}

@@ -62,6 +62,21 @@ class SeedTests(TestCase):
         self.assertEqual(GLSourceMap.objects.get(kind='bank', source_value='10').branch.softech_branch_id,
                          '100')
 
+    def test_company_bank_maps_carry_hq_branch(self):
+        seed.seed_gl_drafting(user=self.user)
+        for code in ('04', '06', '01'):
+            self.assertEqual(GLSourceMap.objects.get(kind='bank', source_value=code)
+                             .branch.softech_branch_id, '100', code)
+        self.assertFalse(GLSourceMap.objects.filter(kind='bank', branch__isnull=True).exists())
+
+    def test_bank_maps_skipped_and_reported_without_hq_branch(self):
+        Branch.objects.filter(softech_branch_id='100').delete()
+        res = seed.seed_gl_drafting(user=self.user)
+        skipped = {(s['what'], s['code']): s for s in res['skipped']}
+        for code in ('04', '06', '01'):
+            self.assertEqual(skipped[('map', f'bank:{code}')]['reason'], 'missing_branch')
+            self.assertFalse(GLSourceMap.objects.filter(kind='bank', source_value=code).exists())
+
     def test_seed_is_idempotent_and_keeps_finance_edits(self):
         seed.seed_gl_drafting(user=self.user)
         v1 = PostingRule.objects.get(code='sales.cash', version=1)

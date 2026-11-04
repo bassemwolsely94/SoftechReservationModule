@@ -278,10 +278,14 @@ def build_lines(rule, docs, *, hq_branch_id) -> list:
                 branch_id = hq_branch_id
             elif mode == 'map':
                 if m is not None:
-                    branch_id = m.branch_id
+                    src, branch_id = m, m.branch_id
                 else:   # static account: the paying/receiving box's branch (Ruling P14)
                     bank = doc.attrs.get('bankcode')
-                    branch_id = mapped('bank', '' if bank is None else str(bank)).branch_id
+                    src = mapped('bank', '' if bank is None else str(bank))
+                    branch_id = src.branch_id
+                if branch_id is None:   # Ruling P15: never a NULL branch through a map
+                    raise RuleMiss('unmapped_account', {'kind': src.kind, 'value': src.source_value,
+                                                        'reason': 'map has no branch'})
             else:
                 branch_id = None
             party_code = ''

@@ -154,12 +154,9 @@ def parties_root(request):
         name = str(d.get('name') or '').strip()[:200]
         try:
             g = parties.create_party_from_personcode(user=profile, party_type=ptype, code=code,
-                                                     personcode=personcode)
+                                                     personcode=personcode, name=name)
         except ValueError as e:
             return _err([str(e)])
-        if name and g.name != name:
-            g.name = name
-            g.save(update_fields=['name'])
         return Response(party_json(g), status=status.HTTP_201_CREATED)
     p = request.query_params
     qs = GLParty.objects.select_related('recon_party')
@@ -305,6 +302,8 @@ def rules_root(request):
         if bad:
             return bad
         try:
+            if request.data.get('effective_to'):
+                return _err(['تاريخ الانتهاء يُحدد تلقائياً عند إصدار نسخة جديدة'])
             d = _rule_args(request.data)
             d.pop('effective_to', None)
             if not d.get('code') or not d.get('source_type'):
@@ -342,7 +341,7 @@ def rule_preview(request):
         d2 = _date(request.data.get('date_to'), 'إلى')
         if d2 < d1:
             return _err(['تاريخ النهاية قبل البداية'])
-        if (d2 - d1).days > MAX_PREVIEW_DAYS:
+        if (d2 - d1).days >= MAX_PREVIEW_DAYS:
             return _err([f'مدة التجربة لا تتجاوز {MAX_PREVIEW_DAYS} يوماً'])
         raw = request.data.get('rule')
         if not isinstance(raw, dict):
