@@ -4,6 +4,7 @@ import os
 import tempfile
 from decimal import Decimal
 from io import StringIO
+from unittest import mock
 
 import openpyxl
 from django.contrib.auth.models import User
@@ -65,13 +66,14 @@ class OpeningTests(TestCase):
             self.assertNotIn(code, lines)
 
     def test_profit_equals_closing_stock_minus_pl_net(self):
-        # trading+P&L net S = -50 ; profit = 500 - (-50) = 550 credit... 2409 line = S - closing
-        lines = self._by_code(build_opening_lines(self.rows, CLOSING))
-        # carried 2409 balance (credit 20) is a balance-sheet line; the closing line is separate
+        # S = -50 (trading+P&L net); merged 2409 = carried -20 + (S - closing) = -570 (credit 570)
         amounts = [ln for ln in build_opening_lines(self.rows, CLOSING)
                    if ln['account_code'] == '2409']
-        net = sum(a['debit'] - a['credit'] for a in amounts)
-        self.assertEqual(net, Decimal('-20.00') + Decimal('-50.00') - CLOSING)
+        self.assertEqual(len(amounts), 1)
+        self.assertEqual(amounts[0]['credit'], Decimal('570.00'))
+        self.assertEqual(amounts[0]['debit'], Decimal('0.00'))
+        self.assertIn('مرحل -20.00', amounts[0]['description'])
+        self.assertIn('نتيجة السنة -550.00', amounts[0]['description'])
 
     def test_opening_stock_on_5301(self):
         lines = build_opening_lines(self.rows, CLOSING)
@@ -104,6 +106,26 @@ class OpeningTests(TestCase):
             post_opening(self.path, closing_stock=CLOSING, user=self.staff)
         self.assertEqual(cm.exception.code, 'missing_accounts')
         self.assertEqual(cm.exception.detail['codes'], ['1301', '7001'])
+
+    def test_failed_approve_leaves_no_draft_and_retry_works(self):
+        with mock.patch('apps.finance.gl.opening.approve', side_effect=LedgerError('empty')):
+            with self.assertRaises(LedgerError):
+                post_opening(self.path, closing_stock=CLOSING, user=self.staff)
+        self.assertFalse(LedgerEntry.objects.filter(source_key='opening:2026').exists())
+        entry = post_opening(self.path, closing_stock=CLOSING, user=self.staff)
+        self.assertEqual(entry.status, 'approved')
+
+    def test_closing_stock_validated(self):
+        for bad in ('0', '-5', '1.234', 'NaN', 'Infinity', 'abc'):
+            with self.assertRaises(LedgerError, msg=bad) as cm:
+                build_opening_lines(self.rows, bad)
+            self.assertEqual(cm.exception.code, 'bad_amount')
+        with self.assertRaises(CommandError):
+            call_command('import_gl_opening', self.path, '--closing-stock', '1.234',
+                         '--user', 'open_u', stdout=StringIO())
+        with self.assertRaises(CommandError):
+            call_command('import_gl_opening', self.path, '--closing-stock', 'NaN',
+                         '--user', 'open_u', stdout=StringIO())
 
     def test_unbalanced_tb_refused(self):
         rows = list(self.rows)
