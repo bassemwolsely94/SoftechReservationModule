@@ -140,12 +140,18 @@ def resolve(event, source, actor=None, now=None):
             extra.append(mobile)
     elif event.recipients == 'escalation':
         from .models import PhoneAlertPolicy
-        policy = PhoneAlertPolicy.for_event(event.key)
-        chosen = [s.pk for s in policy.escalate_to.all()] if policy else []
+        # «يُصعَّد إلى»: the escalated event's own list first, then the escalation row's list,
+        # then the owner kind's escalation owners, then supervisors.
+        orig = EVENTS.get(source.event) if source is not None else None
+        chosen = []
+        for key in ([orig.key] if orig else []) + [event.key]:
+            policy = PhoneAlertPolicy.for_event(key)
+            chosen = [s.pk for s in policy.escalate_to.all()] if policy else []
+            if chosen:
+                break
         if chosen:
             staff_list = _staff_by_ids(chosen)
         else:
-            orig = EVENTS.get(source.event) if source is not None else None
             if orig and orig.owner_kind:
                 staff_list = _owners(orig.owner_kind, branch, escalation=True)
             else:

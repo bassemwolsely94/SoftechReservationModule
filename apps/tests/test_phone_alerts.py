@@ -855,7 +855,9 @@ class EventIsOpenTests(TestCase):
 
 
 class TickTests(TestCase):
-    T0 = timezone.now().replace(hour=12, minute=0, second=0, microsecond=0)
+    # anchored in the past: before 12:00 UTC a "today 12:00" T0 lies in the future, and the real
+    # send time stamped by sender._mark_sent would then be earlier than the tick's claim (I5)
+    T0 = (timezone.now() - timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0)
 
     @classmethod
     def setUpTestData(cls):
@@ -947,9 +949,83 @@ class TickTests(TestCase):
         self.assertEqual(a.status, 'expired')
 
     def test_acknowledged_not_reminded(self):
-        for status in ('acknowledged', 'queued', 'failed', 'expired', 'escalated'):
+        # escalated: still open record -> left alone (expiry only, see M1 below)
+        for status in ('acknowledged', 'expired', 'escalated'):
             self._alert(status=status)
         self.assertEqual(jobs.tick(now=self._min(120)), {'reminded': 0, 'escalated': 0, 'expired': 0})
+
+    # final fix wave: I2 + M1
+    def test_failed_alert_is_reminded_then_escalated(self):
+        self._no_escalation()
+        a = self._alert(status='failed')
+        self.assertEqual(jobs.tick(now=self._min(15))['reminded'], 1)
+        a.refresh_from_db()
+        self.assertEqual((a.status, a.reminders_sent), ('sent', 1))      # dry_run resend -> sent
+        PhoneAlertPolicy.objects.filter(event='transfer_hq_submitted').update(escalate_after_min=30)
+        b = self._alert(status='failed')
+        self.assertEqual(jobs.tick(now=self._min(30))['escalated'], 2)
+        b.refresh_from_db()
+        self.assertEqual(b.status, 'escalated')
+
+    def test_queued_alert_escalates_on_the_creation_clock(self):
+        a = self._alert(status='queued')
+        self.assertEqual(jobs.tick(now=self._min(30))['escalated'], 1)
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'escalated')
+
+    def test_stale_queued_alert_is_sent_once_by_the_tick(self):
+        self._no_escalation()
+        a = self._alert(status='queued')
+        PhoneAlert.objects.filter(pk=a.pk).update(last_sent_at=None)
+        self.assertEqual(jobs.tick(now=self._min(1))['reminded'], 0)     # a live on_commit may still send it
+        self.assertFalse(a.attempts.exists())
+        self.assertEqual(jobs.tick(now=self._min(3))['reminded'], 1)
+        a.refresh_from_db()
+        self.assertEqual((a.status, a.reminders_sent), ('sent', 0))      # a first send, not a reminder
+        self.assertEqual(a.attempts.get().result, 'dry_run')
+        sender.deliver_many([a.pk])                                       # a late on_commit sends nothing
+        self.assertEqual(a.attempts.count(), 1)
+
+    def test_claimed_queued_alert_is_not_sent_again_by_the_tick(self):
+        self._no_escalation()
+        a = self._alert(status='queued')
+        # deliver_many claimed it at +2 (last_sent_at set) and is still talking to Meta
+        PhoneAlert.objects.filter(pk=a.pk).update(last_sent_at=self._min(2))
+        self.assertEqual(jobs.tick(now=self._min(3))['reminded'], 0)
+        self.assertFalse(a.attempts.exists())
+
+    def test_deliver_many_claims_before_sending(self):
+        a = self._alert(status='queued')
+        PhoneAlert.objects.filter(pk=a.pk).update(last_sent_at=None)
+        seen = []
+        real = sender.deliver
+
+        def spy(alert, **kw):
+            seen.append(PhoneAlert.objects.get(pk=alert.pk).last_sent_at)
+            return real(alert, **kw)
+        with mock.patch.object(sender, 'deliver', side_effect=spy):
+            sender.deliver_many([a.pk])
+            sender.deliver_many([a.pk])                                   # second run: already claimed
+        self.assertEqual(len(seen), 1)
+        self.assertIsNotNone(seen[0])
+
+    def test_escalated_original_expires_when_its_record_closes(self):
+        a = self._alert(status='escalated')
+        self.assertEqual(jobs.tick(now=self._min(60)), {'reminded': 0, 'escalated': 0, 'expired': 0})
+        self.tr.status = 'completed'
+        self.tr.save()
+        self.assertEqual(jobs.tick(now=self._min(61))['expired'], 1)
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'expired')
+        self.assertFalse(a.attempts.exists())
+
+    def test_escalated_original_does_not_block_a_new_alert(self):
+        a = self._alert(status='escalated')     # e.g. resubmitted after needs_revision
+        with self.captureOnCommitCallbacks(execute=True):
+            new = dispatch.fire('transfer_hq_submitted', self.tr, requested=True)
+        self.assertEqual([x.recipient_staff for x in new], [self.owner])
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'escalated')
 
     def test_delivered_and_read_are_open(self):
         self._no_escalation()
@@ -1687,3 +1763,233 @@ class ModesEndpointTests(TestCase):
         self._set('task_status', 'optional')
         self.assertEqual(self.pharm_client.get(self.URL).data,
                          {'reservation': 'hidden', 'transfer': 'always', 'task': 'optional'})
+
+
+# ── Final fix wave (final-review.md fix-now list) ────────────────────────────
+
+def _inline_thread(target, *, args=(), kwargs=None, name=None, daemon=True):
+    """core.threads.start_thread run inline, so tests stay deterministic and share the test DB."""
+    target(*args, **(kwargs or {}))
+
+
+_module_patches = []
+
+
+def setUpModule():
+    # I3: deliveries run on core.threads.start_thread after commit; run them inline here and keep the
+    # worker's "close this thread's DB connections" from closing the test connection.
+    for p in (mock.patch.object(dispatch, 'start_thread', side_effect=_inline_thread, create=True),
+              mock.patch.object(dispatch, '_close_db', create=True)):
+        p.start()
+        _module_patches.append(p)
+
+
+def tearDownModule():
+    while _module_patches:
+        _module_patches.pop().stop()
+
+
+class FinalFixChannelTests(TestCase):
+    """C2: the staff channel can never swallow customer WhatsApp traffic."""
+    BASE = '/api/notifications/phone-alerts/'
+
+    @classmethod
+    def setUpTestData(cls):
+        from .factories import make_admin, make_user
+        cls.branch = Branch.objects.create(softech_branch_id='981', name='FF Br')
+        _, cls.admin, cls.admin_client = make_admin('ff_admin')
+        _, cls.sup, cls.sup_client = make_user('ff_sup', role='supervisor', branch=cls.branch)
+
+    def _acc(self, name, **kw):
+        return ChannelAccount.objects.create(channel='whatsapp', name=name, phone_or_handle=name,
+                                             provider='meta_cloud', **kw)
+
+    def _put(self, acc, client=None):
+        return (client or self.admin_client).put(self.BASE + 'channel/', {'channel_account_id': acc.pk},
+                                                 format='json')
+
+    def test_supervisor_reads_but_cannot_change_the_channel(self):
+        acc = self._acc('S1')
+        r = self.sup_client.get(self.BASE + 'channel/')
+        self.assertEqual(r.status_code, 200)
+        self.assertIs(r.data['can_change'], False)
+        self.assertIs(self.admin_client.get(self.BASE + 'channel/').data['can_change'], True)
+        self.assertEqual(self._put(acc, self.sup_client).status_code, 403)
+        acc.refresh_from_db()
+        self.assertFalse(acc.is_staff_alerts)
+        self.assertIsNone(SystemSetting.get('phone_alerts_channel_account', None))
+
+    def test_default_customer_account_refused(self):
+        acc = self._acc('D1', is_default=True)
+        r = self._put(acc)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('channel_account_id', r.data)
+        acc.refresh_from_db()
+        self.assertFalse(acc.is_staff_alerts)
+
+    def test_account_with_customer_threads_refused(self):
+        acc = self._acc('C1')
+        WAConversation.objects.create(account=acc, wa_id='201111111111')
+        self.assertEqual(self._put(acc).status_code, 400)
+        acc.refresh_from_db()
+        self.assertFalse(acc.is_staff_alerts)
+
+    def test_threads_with_alerted_staff_phones_are_not_customer_threads(self):
+        acc = self._acc('C2')
+        PhoneAlert.objects.create(event='test', phone='201000000981')
+        WAConversation.objects.create(account=acc, wa_id='201000000981')
+        self.assertEqual(self._put(acc).status_code, 200)
+        acc.refresh_from_db()
+        self.assertTrue(acc.is_staff_alerts)
+
+    def test_get_marks_which_accounts_can_be_chosen(self):
+        ok = self._acc('OK')
+        default = self._acc('DEF', is_default=True)
+        busy = self._acc('BUSY')
+        WAConversation.objects.create(account=busy, wa_id='201111111112')
+        rows = {a['id']: a for a in self.admin_client.get(self.BASE + 'channel/').data['accounts']}
+        self.assertEqual((rows[ok.pk]['eligible'], rows[default.pk]['eligible'], rows[busy.pk]['eligible']),
+                         (True, False, False))
+        self.assertTrue(rows[default.pk]['reason'])
+        self.assertEqual(rows[ok.pk]['reason'], '')
+
+    def test_default_for_never_returns_the_staff_number(self):
+        staff = self._acc('STAFF', is_default=True, is_staff_alerts=True)
+        self.assertIsNone(ChannelAccount.default_for('whatsapp'))
+        cust = self._acc('CUST')
+        self.assertEqual(ChannelAccount.default_for('whatsapp'), cust)
+        del staff
+
+
+class FinalFixRecipientTests(TestCase):
+    """I1: the escalated event's own «يُصعَّد إلى» list wins."""
+
+    def test_escalation_uses_the_original_events_escalate_to(self):
+        esc_owner = _staff('ff_eo', '01000000981')
+        per_event = _staff('ff_pe', '01000000982')
+        general = _staff('ff_ge', '01000000983')
+        WorkOwner.objects.create(kind='reservation_sourcing', staff=esc_owner, is_escalation=True)
+        PhoneAlertPolicy.for_event('reservation_sourcing').escalate_to.add(per_event)
+        PhoneAlertPolicy.for_event('escalation').escalate_to.add(general)
+        ev = EVENTS['escalation']
+        self.assertEqual([x.staff for x in resolve(ev, PhoneAlert(event='reservation_sourcing', phone='201'))],
+                         [per_event])
+        # another event without its own list falls back to the escalation row's list
+        self.assertEqual([x.staff for x in resolve(ev, PhoneAlert(event='transfer_hq_submitted', phone='201'))],
+                         [general])
+
+
+class FinalFixDeliveryTests(TestCase):
+    """I3, I4, I5, M2."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.b1 = Branch.objects.create(softech_branch_id='982', name='فرع ١')
+        cls.b2 = Branch.objects.create(softech_branch_id='983', name='فرع ٢')
+        cls.owner = _staff('ff_own', '01000000984')
+        WorkOwner.objects.create(kind='hq_transfer_dispatch', staff=cls.owner)
+
+    def test_fire_delivers_on_a_background_thread_after_commit(self):
+        tr = TransferRequest.objects.create(requesting_branch=self.b1, supplying_branch=self.b2)
+        dispatch.start_thread.reset_mock()
+        dispatch._close_db.reset_mock()
+        with self.captureOnCommitCallbacks(execute=False) as callbacks:
+            alerts = dispatch.fire('transfer_hq_submitted', tr, requested=True)
+        dispatch.start_thread.assert_not_called()              # nothing inside the transaction
+        for cb in callbacks:
+            cb()
+        dispatch.start_thread.assert_called_once()
+        call = dispatch.start_thread.call_args
+        self.assertEqual(call.kwargs['name'], 'phone-alerts')
+        self.assertEqual(call.kwargs['args'], ([a.pk for a in alerts],))
+        dispatch._close_db.assert_called_once_with()           # the worker releases its connection
+        alerts[0].refresh_from_db()
+        self.assertEqual(alerts[0].status, 'sent')
+
+    def test_message_id_lookups_are_indexed(self):
+        self.assertTrue(PhoneAlert._meta.get_field('wa_message_id').db_index)
+        self.assertTrue(PhoneAlertAttempt._meta.get_field('provider_message_id').db_index)
+
+    def test_mark_sent_never_moves_a_claim_backwards(self):
+        a = PhoneAlert.objects.create(event='task_status', phone='201000000984', status='sent')
+        future = timezone.now() + timedelta(hours=3)
+        PhoneAlert.objects.filter(pk=a.pk).update(last_sent_at=future)
+        a.refresh_from_db()
+        sender.deliver(a, reminder=True)
+        a.refresh_from_db()
+        self.assertEqual(a.last_sent_at, future)
+
+    def _subject(self, source, event):
+        a = PhoneAlert.objects.create(event=event, phone='201000000984',
+                                      source_ct=ContentType.objects.get_for_model(source), source_id=source.pk)
+        return [v['text'] for v in sender.build_staff_alert(a)[0]][2]
+
+    def test_subject_has_no_customer_name_or_raw_status(self):
+        res = Reservation.objects.create(item=make_item(), branch=self.b1, quantity_requested=1,
+                                         contact_name='اسم العميل السري', contact_phone='01033333333')
+        subject = self._subject(res, 'reservation_status_urgent')
+        self.assertTrue(subject.startswith(f'#{res.pk} '), subject)
+        self.assertIn(res.item_label[:20], subject)
+        self.assertNotIn('اسم العميل السري', subject)
+        self.assertNotIn('[', subject)
+        tr = TransferRequest.objects.create(requesting_branch=self.b1, supplying_branch=self.b2)
+        self.assertEqual(self._subject(tr, 'transfer_status'), str(tr.request_number))
+        task = OperationalTask.objects.create(title='جرد الثلاجة')
+        self.assertEqual(self._subject(task, 'task_status'), 'جرد الثلاجة')
+
+
+class FinalFixInboundTests(TestCase):
+    """M4, M5, M8."""
+    WA = '201000000985'
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff_acc = ChannelAccount.objects.create(channel='whatsapp', name='Staff', phone_or_handle='9',
+                                                      provider='meta_cloud', provider_ref='777',
+                                                      is_staff_alerts=True)
+        cls.conv = WAConversation.objects.create(account=cls.staff_acc, wa_id=cls.WA)
+
+    def test_staff_thread_not_readable_or_sendable_by_id(self):
+        from django.utils import timezone as tz
+        WAConversation.objects.filter(pk=self.conv.pk).update(window_expires_at=tz.now() + timedelta(hours=1))
+        WAMessage.objects.create(conversation=self.conv, wamid='wamid.ff1', direction='inbound',
+                                 message_type='text', body='سر')
+        _, _, client = make_admin('ff_inbox')
+        r = client.get(f'/api/whatsapp/conversations/{self.conv.pk}/messages/')
+        rows = r.data['results'] if isinstance(r.data, dict) else r.data
+        self.assertEqual(list(rows), [])
+        with mock.patch('apps.whatsapp.sender.WhatsAppSender.send_text') as st, \
+             mock.patch('apps.whatsapp.sender.WhatsAppSender.send_template') as stp:
+            self.assertEqual(client.post(f'/api/whatsapp/conversations/{self.conv.pk}/send/',
+                                         {'body': 'x'}, format='json').status_code, 404)
+            self.assertEqual(client.post(f'/api/whatsapp/conversations/{self.conv.pk}/send-template/',
+                                         {'template_name': 't'}, format='json').status_code, 404)
+        st.assert_not_called()
+        stp.assert_not_called()
+
+    @override_settings(PHONE_ALERTS_SEND_ENABLED=True)
+    def test_reply_never_falls_back_to_the_customer_number(self):
+        ChannelAccount.objects.create(channel='whatsapp', name='Cust', phone_or_handle='8', is_default=True)
+        with mock.patch('apps.whatsapp.sender.WhatsAppSender') as WA:
+            inbound._reply(None, self.WA, 'x')                 # no webhook account, no staff account set
+        WA.assert_not_called()
+        _use_account(self.staff_acc)
+        with mock.patch('apps.whatsapp.sender.WhatsAppSender') as WA:
+            WA.return_value.is_configured = True
+            inbound._reply(None, self.WA, 'x')
+        WA.assert_called_once_with(account=self.staff_acc)
+
+    @override_settings(PHONE_ALERTS_SEND_ENABLED=False)
+    def test_reply_sends_nothing_with_the_switch_off(self):
+        _use_account(self.staff_acc)
+        with mock.patch('apps.whatsapp.sender.WhatsAppSender') as WA:
+            inbound._reply(self.staff_acc, self.WA, 'x')
+        WA.assert_not_called()
+
+    def test_unsupported_staff_message_log_masks_the_phone(self):
+        with self.assertLogs('elrezeiky.whatsapp', level='INFO') as cm:
+            webhook._handle_staff_inbound({'type': 'audio', 'audio': {'id': 'm'}}, self.WA, self.staff_acc)
+        line = next(m for m in cm.output if 'unsupported audio' in m)
+        self.assertNotIn(self.WA, line)
+        self.assertIn('…0985', line)
+

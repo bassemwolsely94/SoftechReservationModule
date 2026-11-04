@@ -56,6 +56,13 @@ class SchedulerRegistrationTests(SimpleTestCase):
         self.assertEqual((self._cfg['morning_brief'][1]['hour'], self._cfg['morning_brief'][1]['minute']), (9, 0))
         self.assertEqual(self._tz, 'Africa/Cairo')
 
+    def test_phone_alerts_tick_registered_every_minute(self):
+        jobs = [j for j in self._jobs() if j[1] == 'phone_alerts_tick']
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0][0].__name__, '_run_phone_alerts_tick')
+        trigger, kw = self._cfg['phone_alerts_tick']
+        self.assertEqual((trigger, kw['minutes'], kw['max_instances']), ('interval', 1, 1))
+
     def test_pos_jobs_keep_their_ids(self):
         ids = {j[1] for j in self._jobs()}
         self.assertTrue({'pos_orders_flush', 'pos_orders_reconcile'} <= ids)

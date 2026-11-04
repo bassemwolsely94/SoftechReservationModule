@@ -78,7 +78,7 @@ class PhoneAlert(models.Model):
     phone = models.CharField(max_length=20)
     status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='queued')
     token = models.CharField(max_length=32, unique=True, default=_new_token)
-    wa_message_id = models.CharField(max_length=100, blank=True, default='')
+    wa_message_id = models.CharField(max_length=100, blank=True, default='', db_index=True)
     ack_at = models.DateTimeField(null=True, blank=True)
     remark = models.TextField(blank=True, default='')
     reminders_sent = models.PositiveIntegerField(default=0)
@@ -108,7 +108,7 @@ class PhoneAlertAttempt(models.Model):
     alert = models.ForeignKey(PhoneAlert, on_delete=models.CASCADE, related_name='attempts')
     channel = models.CharField(max_length=10, choices=CHANNEL_CHOICES, default='whatsapp')
     result = models.CharField(max_length=10, choices=RESULT_CHOICES)
-    provider_message_id = models.CharField(max_length=100, blank=True, default='')
+    provider_message_id = models.CharField(max_length=100, blank=True, default='', db_index=True)
     error = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
 

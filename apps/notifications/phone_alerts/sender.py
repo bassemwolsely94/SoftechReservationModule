@@ -41,6 +41,23 @@ def _one_line(value, limit=None):
     return text
 
 
+def subject_of(source):
+    """Short, staff-facing subject of the record: never the customer's name or a raw status code
+    (the text goes through Meta to staff phones and shared branch mobiles)."""
+    from apps.reservations.models import Reservation
+    from apps.tasks.models import OperationalTask
+    from apps.transfers.models import TransferRequest
+    if source is None:
+        return ''
+    if isinstance(source, Reservation):
+        return f'#{source.pk} {source.item_label}'
+    if isinstance(source, TransferRequest):
+        return str(source.request_number or source.pk)
+    if isinstance(source, OperationalTask):
+        return source.title or str(source.task_number or source.pk)
+    return ''
+
+
 def build_staff_alert(alert, reminder=False):
     """(variables, payloads) of the ``staff_alert`` template for ``alert``."""
     from .recipients import source_branch
@@ -64,7 +81,7 @@ def build_staff_alert(alert, reminder=False):
         reference = (getattr(source, 'request_number', '') or getattr(source, 'task_number', '')
                      or getattr(source, 'pk', ''))
     texts = [_one_line(title), _one_line(branch.name if branch else '') or '—',
-             _one_line(source, SUBJECT_MAX) or '—', _one_line(reference) or '—']
+             _one_line(subject_of(source), SUBJECT_MAX) or '—', _one_line(reference) or '—']
     variables = [{'type': 'text', 'text': t} for t in texts]
     return variables, [f'alert:{alert.token}:ack']
 
@@ -90,7 +107,10 @@ def _attempt(alert, channel, result, provider_id='', error=''):
 
 
 def _mark_sent(alert, wa_id=None):
-    fields = {'last_sent_at': timezone.now()}
+    now = timezone.now()
+    current = PhoneAlert.objects.filter(pk=alert.pk).values_list('last_sent_at', flat=True).first()
+    # never move the tick's claim backwards (a claim stamped later than the real send stays)
+    fields = {'last_sent_at': max(now, current) if current else now}
     if alert.status in ('queued', 'failed'):
         fields['status'] = 'sent'
     if wa_id:
@@ -162,12 +182,25 @@ def _deliver(alert, reminder, template, variables, payloads):
     return att
 
 
-def deliver_many(alert_ids):
-    """Deliver the alerts with these ids (used from transaction.on_commit).
+def claim_first_send(alert_id, now=None):
+    """Atomically claim a never-sent queued alert (sets ``last_sent_at``). True if this caller won.
 
-    Only alerts still 'queued': one superseded/expired between creation and commit is not sent."""
+    deliver_many (after commit) and the tick (stale queued sweep) both claim first, so the one
+    WhatsApp message goes out once even when they race."""
+    return PhoneAlert.objects.filter(pk=alert_id, status='queued', last_sent_at__isnull=True).update(
+        last_sent_at=now or timezone.now()) == 1
+
+
+def deliver_many(alert_ids):
+    """Deliver the alerts with these ids (after commit, on a background thread).
+
+    Only alerts still 'queued' and not yet claimed: one superseded/expired between creation and
+    commit, or already picked up by the tick, is not sent."""
     try:
         for alert in PhoneAlert.objects.filter(pk__in=alert_ids, status='queued').order_by('pk'):
+            if not claim_first_send(alert.pk):
+                continue
+            alert.refresh_from_db()
             deliver(alert)
     except Exception:
         logger.exception('phone alerts: deliver_many failed for %s', alert_ids)

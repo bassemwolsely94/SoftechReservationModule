@@ -3,13 +3,17 @@ Entry point for workflows: ``fire(event_key, source, actor=...)``.
 
 Policy decides whether an alert goes out (never / optional + requester ticked / always),
 ``recipients.resolve`` decides to whom, and one PhoneAlert row per phone is written. Sending
-happens after the surrounding transaction commits. ``fire`` never raises: a phone alert must
-never break the workflow that triggered it.
+happens after the surrounding transaction commits, on a background thread
+(``core.threads.start_thread``) so a slow WhatsApp API never holds the user's request; the tick
+sends anything a dead thread left ``queued``. ``fire`` never raises: a phone alert must never
+break the workflow that triggered it.
 """
 import logging
 
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
+
+from core.threads import start_thread
 
 from .events import EVENTS
 from .models import PhoneAlert, PhoneAlertPolicy
@@ -18,7 +22,28 @@ from .sender import deliver_many
 
 logger = logging.getLogger('elrezeiky.phone_alerts')
 
-OPEN_STATUSES = ('queued', 'sent', 'delivered', 'read', 'escalated')
+# still-live alerts: a superseding status change expires these
+OPEN_STATUSES = ('queued', 'sent', 'delivered', 'read', 'failed', 'escalated')
+# an alert waiting for this phone blocks a duplicate; an escalated one does not (its escalation
+# already went out), so a reassigned task or a resubmitted transfer alerts again
+DEDUP_STATUSES = ('queued', 'sent', 'delivered', 'read', 'failed')
+
+
+def _close_db():
+    from django.db import connections
+    connections.close_all()
+
+
+def _deliver_in_background(ids):
+    """Thread body: send, then release this thread's DB connections."""
+    try:
+        deliver_many(ids)
+    finally:
+        _close_db()
+
+
+def _deliver_after_commit(ids):
+    start_thread(_deliver_in_background, args=(ids,), name='phone-alerts')
 
 
 def _wanted(policy, source, requested):
@@ -74,7 +99,7 @@ def _fire(event_key, source, actor, notification, requested, only_staff=None):
     for r in recipients:
         exists = (not supersede) and PhoneAlert.objects.filter(
             event=event_key, source_ct=ct, source_id=source.pk, phone=r.phone,
-            status__in=OPEN_STATUSES).exists()
+            status__in=DEDUP_STATUSES).exists()
         if exists:
             continue
         created.append(PhoneAlert.objects.create(
@@ -83,5 +108,5 @@ def _fire(event_key, source, actor, notification, requested, only_staff=None):
             escalation_of=source if isinstance(source, PhoneAlert) else None))
     if created:
         ids = [a.pk for a in created]
-        transaction.on_commit(lambda: deliver_many(ids))
+        transaction.on_commit(lambda: _deliver_after_commit(ids))
     return created
