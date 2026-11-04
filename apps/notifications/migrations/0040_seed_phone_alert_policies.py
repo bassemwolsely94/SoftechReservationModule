@@ -16,5 +16,5 @@ def seed(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [('notifications', '0038_phonealert_phonealertattempt_phonealertpolicy_and_more')]
+    dependencies = [('notifications', '0039_phonealert_phonealertattempt_phonealertpolicy_and_more')]
     operations = [migrations.RunPython(seed, migrations.RunPython.noop)]

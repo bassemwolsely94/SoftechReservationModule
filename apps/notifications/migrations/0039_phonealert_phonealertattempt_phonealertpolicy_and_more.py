@@ -10,8 +10,8 @@ class Migration(migrations.Migration):
     dependencies = [
         ('branches', '0012_branchsettings_alert_mobile'),
         ('contenttypes', '0002_remove_content_type_name'),
-        ('notifications', '0037_alter_notification_notification_type'),
-        ('users', '0048_staffprofile_alerts_only_and_more'),
+        ('notifications', '0038_accountant_role_choice'),
+        ('users', '0050_staffprofile_alerts_only_and_more'),
     ]
 
     operations = [
