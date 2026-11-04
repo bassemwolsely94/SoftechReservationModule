@@ -32,6 +32,7 @@ from .recon_models import (  # noqa: E402,F401  (re-exported for the app registr
 # General Ledger (finance-gl) — same app label, separate module.
 from .gl.models import (  # noqa: E402,F401
     GLAccountGroup, GLAccount, LedgerEntry, LedgerLine, GLSequence,
+    GLParty, GLSourceMap, PostingRule, GLSourceDoc, SourceException, GLDraftRun,
 )
 
 
