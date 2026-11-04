@@ -4,6 +4,11 @@ import django.db.models.deletion
 from django.db import migrations, models
 
 
+def sync_closed_status(apps, schema_editor):
+    # Existing closed periods must read as status='closed' (save() derives is_closed from status).
+    apps.get_model('finance', 'FinancialPeriod').objects.filter(is_closed=True).update(status='closed')
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -54,6 +59,7 @@ class Migration(migrations.Migration):
             name='status',
             field=models.CharField(choices=[('open', 'مفتوحة'), ('closing', 'قيد الإقفال'), ('closed', 'مقفلة')], default='open', max_length=10, verbose_name='الحالة'),
         ),
+        migrations.RunPython(sync_closed_status, migrations.RunPython.noop),
         migrations.CreateModel(
             name='GLAccount',
             fields=[

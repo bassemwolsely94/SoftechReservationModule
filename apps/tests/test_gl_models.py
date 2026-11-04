@@ -69,6 +69,16 @@ class GLModelTests(TestCase):
         p.refresh_from_db()
         self.assertFalse(p.is_closed)
 
+    def test_closed_period_keeps_closed_status_after_save(self):
+        p = FinancialPeriod.objects.create(
+            year=2025, month=1, period_type='month', status='closed',
+            period_start=datetime.date(2025, 1, 1), period_end=datetime.date(2025, 1, 31))
+        p.label = 'x'
+        p.save()
+        p.refresh_from_db()
+        self.assertTrue(p.is_closed)
+        self.assertEqual(p.status, 'closed')
+
     def test_sequence(self):
         s = GLSequence.objects.create(year=2026)
         self.assertEqual(s.last, 0)
