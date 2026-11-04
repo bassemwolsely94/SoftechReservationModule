@@ -1237,7 +1237,7 @@ SCREENS = [
         'title': T('سداد فواتير الموردين (المطابقة)', 'Supplier invoice payments (reconciliation)'),
         'summary': T('ربط سندات الصرف للموردين بالفواتير التي تسددها: النظام يقترح الربط بدرجة ثقة، والمسؤول يعتمد أو يرفض. الاعتماد يُكتب في المرآة لدينا فقط؛ الكتابة في SOFTECH خطوة منفصلة («🖊 كتابة في SOFTECH») للمدير فقط وتعمل فقط حين يُفعَّل مفتاح الكتابة. «المتبقي» حقل محسوب (قيمة الفاتورة − المسدد في SOFTECH − المعتمد بانتظار الكتابة).',
                      'Link supplier payment vouchers to the invoices they pay: the system proposes links with a confidence level, and the responsible person approves or rejects. Approval is written only to our mirror; writing to SOFTECH is a separate admin-only step ("🖊 Write to SOFTECH") that works only when the write switch is on. "Remaining" is computed (invoice value − paid in SOFTECH − approved awaiting write).'),
-        'audience': T('المالية والمشتريات (الإدارة فقط — تسوية الموردين بيانات على مستوى الشركة).', 'Finance and purchasing (management only — supplier reconciliation is company-level data).'),
+        'audience': T('المالية والمشتريات (الإدارة فقط — تسوية الموردين بيانات على مستوى الشركة). المحاسب يفتح تقارير «غير المسددة» و«المسدد جزئياً» و«المرتجعات» وملفات الإكسل الخاصة بها للقراءة فقط، ولا يعتمد ولا يربط ولا يكتب في SOFTECH.', 'Finance and purchasing (management only — supplier reconciliation is company-level data). An accountant may open the unpaid, part-paid and returns reports and their Excel exports, read-only; they cannot approve, link or write to SOFTECH.'),
         'tabs': [
             {'key': 'candidates', 'title': T('المقترحات', 'Proposals'), 'body': T('مقترحات الربط (ثقة عالية/متوسطة/منخفضة/تعارض) مع الفاتورة وتاريخها وقيمتها والسند ومبلغه والمتبقي. افتح الصف لترى أصناف الفاتورة والمرتجعات المرتبطة، ثم اعتمد أو ارفض.', 'Link proposals (high/medium/low confidence/conflict) with the invoice, date, value, voucher, amount and remaining. Open a row to see the invoice items and linked returns, then approve or reject.')},
             {'key': 'exceptions', 'title': T('الاستثناءات', 'Exceptions'), 'body': T('حالات تحتاج مراجعة: سند مكرر محتمل، سند يسمي فاتورة أخرى، مقبوضات تحتاج تحديد (استرداد أم خصم)، وغيرها.', 'Cases needing review: possible duplicate voucher, voucher naming another invoice, receipts needing a decision (refund or deduction), and others.')},
@@ -1429,7 +1429,7 @@ SCREENS = [
              'when': T('قبل مطالبة المورد بمرتجع أو مراجعة سند اتصحّح.', 'Before claiming a return from a supplier or reviewing a corrected voucher.'),
              'open_hint': T('تبويب «غير المسددة (للمالية)».', 'The "Unpaid (for finance)" tab.')},
         ],
-        'updated': '2026-11-01',
+        'updated': '2026-11-05',
         'change_note': T('جانب التعاقدات للقراءة فقط، والمستحقات في شاشتها', 'Contract side read-only; receivables have their own screen'),
     },
 ]
