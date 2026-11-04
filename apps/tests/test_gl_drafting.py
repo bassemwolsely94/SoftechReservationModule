@@ -129,7 +129,7 @@ class DraftingTests(Base):
         self.assertEqual(e1.status, 'draft')
         self.assertEqual(e1.created_by, DR.system_user())
         self.assertEqual(e1.source_type, 'sales_tenders')
-        self.assertEqual(e1.description, 'نقدية 130 2026-03-10')
+        self.assertEqual(e1.description, 'نقدية b130 2026-03-10')
         self.assertEqual(self.amounts(e1), [('1302', DEC('100.00'), 0), ('6002', 0, DEC('100.00'))])
         ids = sorted(LedgerEntry.objects.values_list('id', flat=True))
         sd = GLSourceDoc.objects.get(source_key='t1')

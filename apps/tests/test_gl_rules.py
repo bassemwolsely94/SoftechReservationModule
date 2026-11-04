@@ -277,7 +277,16 @@ class BuildTests(Base):
                 attrs={'cheqno': '555', 'due_date': '2026-04-01'})
         l = self.build(rule, [d])[0]
         self.assertEqual((l['cheque_no'], l['due_date']), ('555', datetime.date(2026, 4, 1)))
-        self.assertEqual(l['description'], 'شيك 555 فرع 130 2026-03-10')
+        self.assertEqual(l['description'], 'شيك 555 فرع b130 2026-03-10')   # P18: name, not code
+
+    def test_branch_placeholder_prefers_arabic_name(self):
+        Branch.objects.filter(pk=self.b130.pk).update(name_ar='فرع المعادي')
+        rule = self.rule([
+            {'side': 'debit', 'account': '1302', 'amount': 'amount', 'description': 'نقدية {branch}'},
+            {'side': 'credit', 'account': '6002', 'amount': 'amount'},
+        ], source_type='cheque_maturity')
+        d = doc(source_type='cheque_maturity', amounts={'amount': DEC('9')}, attrs={'cheqno': '1'})
+        self.assertEqual(self.build(rule, [d])[0]['description'], 'نقدية فرع المعادي')
 
 
 class PreviewAndMapTests(Base):

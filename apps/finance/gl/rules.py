@@ -244,6 +244,14 @@ def build_lines(rule, docs, *, hq_branch_id) -> list:
             raise RuleMiss('unmapped_account', {'branch_code': str(code)})
         return branches[code]
 
+    names = {}
+
+    def branch_name(code):   # Ruling P18: display name, never the bare SOFTECH code
+        if code not in names:
+            b = branches.get(code) or Branch.objects.filter(softech_branch_id=str(code)).first()
+            names[code] = ((b.name_ar or b.name) if b else '') or str(code)
+        return names[code]
+
     def account(code):
         if code not in accounts:
             accounts[code] = GLAccount.objects.filter(code=str(code)).first()
@@ -303,7 +311,7 @@ def build_lines(rule, docs, *, hq_branch_id) -> list:
             amount = Decimal(doc.amounts.get(ln['amount'], 0) or 0)
             key = (ln['side'], acc.code, branch_id, party_code, cheque_no, due)
             desc = (ln.get('description') or '').format(
-                branch=doc.branch_code, date=doc.doc_date.isoformat(),
+                branch=branch_name(doc.branch_code), date=doc.doc_date.isoformat(),
                 docnumber=doc.attrs.get('docnumber', ''), cheqno=doc.attrs.get('cheqno', ''),
                 party=party_code or doc.personcode)
             if key in sums:

@@ -2203,6 +2203,7 @@ export const glApi = {
   draftRuns:       (params)        => api.get('/finance/gl/drafting/runs/', { params }),
   draftRun1:       (id)            => api.get(`/finance/gl/drafting/runs/${id}/`),
   exceptions:      (params)        => api.get('/finance/gl/exceptions/', { params }),
+  exceptionsPage:  (url)           => api.get(String(url).replace(/^.*?\/api(?=\/)/, '')),
   exceptionIgnore: (id, note)      => api.post(`/finance/gl/exceptions/${id}/ignore/`, { note }),
   exceptionsRedraft: (ids)         => api.post('/finance/gl/exceptions/redraft/', { ids }),
   entrySource:     (id)            => api.get(`/finance/gl/entries/${id}/source/`),

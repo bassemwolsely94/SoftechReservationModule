@@ -139,8 +139,8 @@ function Preview({ result, labelOf }) {
   )
 }
 
-/** rule = existing PostingRule json (latest version) | null for a new rule */
-export default function RuleEditor({ rule, canEdit, onClose, onSaved }) {
+/** rule = existing PostingRule json (latest version) | null for a new rule; prefill = {key, source_type, conditions} for a new rule started from an exception */
+export default function RuleEditor({ rule, prefill, canEdit, onClose, onSaved }) {
   const qc = useQueryClient()
   const { branches, labelOf } = useGlBranches()
   const metaQ = useQuery({
@@ -150,8 +150,8 @@ export default function RuleEditor({ rule, canEdit, onClose, onSaved }) {
   const meta = metaQ.data
   const isNew = !rule
   const init = () => ({
-    code: rule?.code || '', source_type: rule?.source_type || 'sales_tenders', description: rule?.description || '',
-    conditions: JSON.parse(JSON.stringify(rule?.conditions || {})), action: rule?.action || 'post',
+    code: rule?.code || '', source_type: rule?.source_type || prefill?.source_type || 'sales_tenders', description: rule?.description || '',
+    conditions: JSON.parse(JSON.stringify(rule?.conditions || prefill?.conditions || {})), action: rule?.action || 'post',
     granularity: rule?.granularity || 'document', book: rule?.book || 'general', priority: rule?.priority ?? 100,
     effective_from: rule ? monthStart() : OPENING_DATE, lines: JSON.parse(JSON.stringify(rule?.lines || [])),
   })
@@ -160,7 +160,7 @@ export default function RuleEditor({ rule, canEdit, onClose, onSaved }) {
   const [msg, setMsg] = useState('')
   const [pv, setPv] = useState({ from: daysAgo(7), to: daysAgo(1) })
   const [result, setResult] = useState(null)
-  useEffect(() => { setF(init()); setResult(null) }, [rule?.code, rule?.version])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setF(init()); setResult(null) }, [rule?.code, rule?.version, prefill?.key])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const accountsQ = useQuery({
     queryKey: ['gl', 'accounts', 'posting'],
