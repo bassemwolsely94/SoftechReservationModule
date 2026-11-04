@@ -185,6 +185,14 @@ class CardTests(TestCase):
         self.assertEqual(r.status_code, 201, r.data)
         self.assertEqual(r.data['status'], 'sent')
 
+    def test_status_says_who_may_send_and_from_which_branch(self):
+        """Deferred minor: the server tells the UI who may open the drawer / assistant (no 403 dead ends)
+        and the user's own branch (Customer-360 sends from it, not from the purchase's branch)."""
+        r = self.sp_c.get('/api/counselling/status/').data
+        self.assertEqual((r['can_send'], r['can_assistant'], r['home_branch_id']), (True, True, self.branch.pk))
+        _, _, d_c = make_user('dl_st', role='delivery', branch=self.branch)
+        self.assertFalse(d_c.get('/api/counselling/status/').data['can_send'])
+
     def test_delivery_role_cannot_send(self):
         _, _, d_c = make_user('dl_cd', role='delivery', branch=self.branch)
         r = d_c.post('/api/counselling/cards/send/', {'customer_id': self.cust.pk, 'item_ids': [self.item.pk],
