@@ -12,6 +12,7 @@ import uuid
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 import openpyxl
+from openpyxl.utils import get_column_letter
 from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
@@ -121,7 +122,9 @@ class _Sheet:
                     self.cells[(c.row, c.column)] = c.value
                     self.order.append((c.row, c.column))
 
-    def find(self, label, after=None):
+    def find(self, label, after=None, prefix=True):
+        """First cell whose normalised text equals `label` (else, if `prefix`, starts with it),
+        after the cell holding `after` when given (row-major order)."""
         want = _n(label)
         start = (0, 0)
         if after:
@@ -134,8 +137,10 @@ class _Sheet:
         exact = [p for p, t in texts if t == want]
         if exact:
             return exact[0]
-        prefix = [p for p, t in texts if t.startswith(want)]
-        return prefix[0] if prefix else None
+        if not prefix:
+            return None
+        starts = [p for p, t in texts if t.startswith(want)]
+        return starts[0] if starts else None
 
     def value_beside(self, pos, how):
         r, c = pos
@@ -156,15 +161,23 @@ class _Sheet:
                 if isinstance(self.cells[p], str) and _n(self.cells[p]) == want]
 
 
+def _addr(pos):
+    return f'{get_column_letter(pos[1])}{pos[0]}' if pos else ''
+
+
 def _read_trading(wb):
-    if TRADING_SHEET not in wb.sheetnames:
+    """(values, label cell addresses) by key."""
+    name = next((s for s in wb.sheetnames if _n(s) == _n(TRADING_SHEET)), None)
+    if name is None:
         raise CommandError(f'sheet {TRADING_SHEET!r} not found')
-    sh = _Sheet(wb[TRADING_SHEET])
-    out = {}
+    sh = _Sheet(wb[name])
+    out, addrs = {}, {}
     for key, label, how in TRADING_FIGURES:
-        pos = sh.find(label)
+        # 'below'/'right' labels are short or shared prefixes: exact match only
+        pos = sh.find(label, prefix=(how == 'left'))
         out[key] = sh.value_beside(pos, how) if pos else None
-    return out
+        addrs[key] = _addr(pos)
+    return out, addrs
 
 
 def _read_position(wb, year):
@@ -172,9 +185,10 @@ def _read_position(wb, year):
     if name is None:
         raise CommandError(f'sheet «الميزانية 31-12-{year}» not found')
     sh = _Sheet(wb[name])
-    out = {}
+    out, addrs = {}, {}
     for key, label, header, after in POSITION_FIGURES:
         pos = sh.find(label, after)
+        addrs[key] = _addr(pos)
         if pos is None:
             out[key] = None
             continue
@@ -192,7 +206,7 @@ def _read_position(wb, year):
         cols.sort(key=lambda c: abs(c - lab_col))
         out[key] = next((_num(sh.cells.get((row, c))) for c in cols
                          if _num(sh.cells.get((row, c))) is not None), None)
-    return out
+    return out, addrs
 
 
 def _counts():
@@ -211,6 +225,9 @@ class Command(BaseCommand):
                                  'created inside the rolled-back transaction')
         parser.add_argument('--tb-sheet', default=None,
                             help='trial-balance sheet (default «ميزان المراجعة <year>»)')
+        parser.add_argument('--allow-existing', action='store_true',
+                            help='run even if approved entries dated on/before 31-12-<year> '
+                                 'already exist (they are then included in the figures)')
 
     def handle(self, *args, **opts):
         year = opts['year']
@@ -225,8 +242,8 @@ class Command(BaseCommand):
             if tb_sheet is None:
                 tb_sheet = next((s for s in wb.sheetnames
                                  if _n(s) == _n(f'ميزان المراجعة {year}')), None)
-            expected_tp = _read_trading(wb)
-            expected_fp = _read_position(wb, year)
+            expected_tp, addr_tp = _read_trading(wb)
+            expected_fp, addr_fp = _read_position(wb, year)
         finally:
             wb.close()
         rows, warnings = parse_trial_balance_sheet_with_warnings(path, tb_sheet)
@@ -237,7 +254,8 @@ class Command(BaseCommand):
         notes = []
         try:
             with transaction.atomic():
-                tp, fp = self._reproduce(rows, year, closing, opts['user'], notes)
+                tp, fp = self._reproduce(rows, year, closing, opts['user'], notes,
+                                         opts['allow_existing'])
                 raise _Rollback
         except _Rollback:
             pass
@@ -245,13 +263,18 @@ class Command(BaseCommand):
 
         for n in notes:
             self.stdout.write(n)
+        for title, res in (('trading_and_pl', tp), ('financial_position', fp)):
+            self.stdout.write(f"{title}: stock_basis={res['stock_basis']}")
+            for w in res['warnings']:
+                self.stdout.write(self.style.WARNING(f'  تحذير: {w}'))
         diffs = 0
         diffs += self._print('حساب المتاجرة والأرباح والخسائر (الختامية بسوفتيك)',
-                             [(k, lbl) for k, lbl, _h in TRADING_FIGURES], tp, expected_tp)
+                             [(k, lbl) for k, lbl, _h in TRADING_FIGURES], tp, expected_tp,
+                             addr_tp)
         diffs += self._print(f'المركز المالى فى 31-12-{year}',
                              [(k, lbl) for k, lbl, _h, _a in POSITION_FIGURES]
                              + [('check', 'الفرق (الاستثمار − حقوق الملكية)')],
-                             fp, {**expected_fp, 'check': Decimal('0')})
+                             fp, {**expected_fp, 'check': Decimal('0')}, addr_fp)
         self.stdout.write('')
         self.stdout.write('GL row counts before → after (must be equal):')
         leaked = False
@@ -265,7 +288,7 @@ class Command(BaseCommand):
             raise CommandError(f'{diffs} figure(s) differ from the workbook')
         self.stdout.write(self.style.SUCCESS('all figures match the workbook; nothing persisted'))
 
-    def _reproduce(self, rows, year, closing, username, notes):
+    def _reproduce(self, rows, year, closing, username, notes, allow_existing=False):
         if username:
             staff = StaffProfile.objects.filter(user__username=username).first()
             if staff is None:
@@ -281,6 +304,9 @@ class Command(BaseCommand):
         start, end = datetime.date(year, 1, 1), datetime.date(year, 12, 31)
         prior = LedgerEntry.objects.filter(status__in=('approved', 'reversed'),
                                            entry_date__lte=end).count()
+        if prior and not allow_existing:
+            raise CommandError(f'{prior} approved entries already dated on/before {end}; they would '
+                               f'mix into the figures (pass --allow-existing to include them)')
         if prior:
             notes.append(f'warning: {prior} approved entries already dated ≤ {end} are included')
         period = _period_for(end)
@@ -318,10 +344,11 @@ class Command(BaseCommand):
         notes.append(f'posted (rolled back): trial balance {len(lines)} lines + closing stock {closing}')
         return trading_and_pl(start, end), financial_position(end)
 
-    def _print(self, title, items, ours, theirs):
+    def _print(self, title, items, ours, theirs, addrs=None):
+        addrs = addrs or {}
         self.stdout.write('')
         self.stdout.write(title)
-        self.stdout.write(f"  {'key':<28} {'ledger':>18} {'workbook':>18} {'diff':>14}")
+        self.stdout.write(f"  {'key':<28} {'ledger':>18} {'workbook':>18} {'diff':>14}  cell")
         diffs = 0
         for key, label in items:
             mine, exp = ours.get(key), theirs.get(key)
@@ -343,5 +370,5 @@ class Command(BaseCommand):
             fmt = (lambda v: '' if v is None else  # + 0 drops a negative zero
                    f'{Decimal(v).quantize(places, rounding=ROUND_HALF_UP) + 0:,}')
             self.stdout.write(f'  {key:<28} {fmt(mine):>18} {fmt(exp):>18} {fmt(d):>14}  '
-                              f'{status}  {label}')
+                              f'{addrs.get(key, ""):<5} {status}  {label}')
         return diffs

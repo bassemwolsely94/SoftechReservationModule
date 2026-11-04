@@ -152,6 +152,13 @@ class StatementsTests(TestCase):
         self._year()
         self._entry(D(2026, 8, 1), [('2341', 120, None), ('1307', -120, None)])  # bank -> credit 70
 
+    def _position_book_rest(self):
+        self._entry(D(2026, 1, 1), [
+            ('1201', 1000, None), ('1251', -300, None), ('1306', 200, None), ('1307', 50, None),
+            ('1341', 400, None), ('1351', 60, None), ('1353', 10, None),
+            ('2341', -500, None), ('2343', -200, None), ('2351', -70, None),
+            ('2400', -800, None), ('2501', -150, None), ('2409', 300, None)])
+
     def test_financial_position_balances(self):
         self._position_book()
         r = financial_position(Y1)
@@ -191,7 +198,7 @@ class StatementsTests(TestCase):
     # ── branch P&L ───────────────────────────────────────────────────────────
 
     def test_branch_pl_allocation_sums_to_consolidated(self):
-        # sales 100 / 100 / 100 → 1/3 each; HQ general 100.00 → 33.33 ×3 = 99.99, +0.01 remainder
+        # net sales: b1 150, b2 100, b3 100, HQ 10 → total 360 (HQ included, ruling R13)
         for b, sale in ((self.b1, 100), (self.b2, 100), (self.b3, 101)):
             self._entry(D(2026, 3, 1), [('1301', sale, b), ('6001', -sale, b)])
         self._entry(D(2026, 3, 1), [('1301', -1, self.b3), ('6018', 1, self.b3)])  # b3 net 100
@@ -204,7 +211,7 @@ class StatementsTests(TestCase):
         total = next(c for c in cols if c['is_total'])
         hq = next(c for c in cols if c['is_hq'])
         branches = [c for c in cols if not c['is_total'] and not c['is_hq']]
-        self.assertEqual({c['branch_id'] for c in branches}, {self.b1.id, self.b2.id, self.b3.id})
+        self.assertEqual([c['branch_id'] for c in branches], [self.b1.id, self.b2.id, self.b3.id])
 
         consolidated = trading_and_pl(Y0, Y1)
         self.assertEqual(total['net_profit'], consolidated['net_profit'])
@@ -215,20 +222,100 @@ class StatementsTests(TestCase):
         self.assertEqual(hq['general_expenses'], _d(100))
         self.assertEqual(hq['depreciation'], _d(10))
         self.assertEqual(hq['net_sales'], _d(10))
-        self.assertEqual(hq['after']['general_expenses'], Z)
-        self.assertEqual(hq['allocation']['general_expenses'], _d(-100))
-        # shares 150/350, 100/350, 100/350 of 100 → 42.86, 28.57, 28.57 = 100.00
+        # HQ keeps its own share 10/360 × 100 = 2.78; moves out 97.22
+        self.assertEqual(hq['after']['general_expenses'], _d('2.78'))
+        self.assertEqual(hq['allocation']['general_expenses'], _d('-97.22'))
+        # 41.67 + 27.78 + 27.78 + 2.78 = 100.01 → remainder -0.01 on b1 (largest)
         alloc = {c['branch_id']: c['allocation'] for c in branches}
-        self.assertEqual(alloc[self.b1.id]['general_expenses'], _d('42.86'))
-        self.assertEqual(alloc[self.b2.id]['general_expenses'], _d('28.57'))
-        self.assertEqual(alloc[self.b3.id]['general_expenses'], _d('28.57'))
-        # depreciation 10: 4.29 + 2.86 + 2.86 = 10.01 → remainder -0.01 on b1 (largest)
-        self.assertEqual(alloc[self.b1.id]['depreciation'], _d('4.28'))
-        self.assertEqual(sum(a['depreciation'] for a in alloc.values()), _d(10))
+        self.assertEqual(alloc[self.b1.id]['general_expenses'], _d('41.66'))
+        self.assertEqual(alloc[self.b2.id]['general_expenses'], _d('27.78'))
+        self.assertEqual(alloc[self.b3.id]['general_expenses'], _d('27.78'))
+        # depreciation 10: HQ 0.28, b1 4.17 → 4.16, b2 2.78, b3 2.78
+        self.assertEqual(hq['after']['depreciation'], _d('0.28'))
+        self.assertEqual(alloc[self.b1.id]['depreciation'], _d('4.16'))
+        self.assertEqual(sum(c['allocation']['depreciation'] for c in cols if not c['is_total']), Z)
+        self.assertEqual(sum(c['after']['depreciation'] for c in cols if not c['is_total']), _d(10))
         b1 = next(c for c in branches if c['branch_id'] == self.b1.id)
         self.assertEqual(b1['operating_expenses'], _d(7))
         self.assertEqual(b1['after']['operating_expenses'], _d(7))
         self.assertEqual(total['allocation']['general_expenses'], Z)
+
+    def test_branch_pl_negative_hq_sales_gets_negative_share(self):
+        # HQ net sales -20 (returns booked at HQ), b1 100, b2 100 → total 180
+        self._entry(D(2026, 3, 1), [('6018', 20, None), ('1301', -20, None)])
+        for b in (self.b1, self.b2):
+            self._entry(D(2026, 3, 1), [('1301', 100, b), ('6001', -100, b)])
+        self._entry(D(2026, 3, 2), [('8001', 90, None), ('1301', -90, None)])
+        cols = branch_pl(Y0, Y1)
+        hq = next(c for c in cols if c['is_hq'])
+        by_id = {c['branch_id']: c for c in cols if not c['is_hq'] and not c['is_total']}
+        self.assertEqual(hq['net_sales'], _d(-20))
+        self.assertEqual(hq['after']['general_expenses'], _d(-10))   # -20/180 × 90
+        self.assertEqual(hq['allocation']['general_expenses'], _d(-100))
+        self.assertEqual(by_id[self.b1.id]['allocation']['general_expenses'], _d(50))
+        self.assertEqual(by_id[self.b2.id]['allocation']['general_expenses'], _d(50))
+        total = next(c for c in cols if c['is_total'])
+        self.assertEqual(sum(c['after']['net_profit'] for c in cols if not c['is_total']),
+                         total['net_profit'])
+
+    def test_branch_pl_zero_sales_keeps_cost_at_hq(self):
+        self._entry(D(2026, 3, 2), [('8001', 30, None), ('1301', -30, None)])
+        self._entry(D(2026, 3, 2), [('8201', 5, self.b1), ('1301', -5, self.b1)])
+        cols = branch_pl(Y0, Y1)
+        hq = next(c for c in cols if c['is_hq'])
+        self.assertEqual(hq['allocation']['general_expenses'], Z)
+        self.assertEqual(hq['after']['general_expenses'], _d(30))
+
+    def test_branch_columns_sorted_numerically(self):
+        b_big = Branch.objects.create(softech_branch_id='1000', name='B1000')
+        for b in (b_big, self.b2, self.b1):
+            self._entry(D(2026, 3, 1), [('1301', 10, b), ('6001', -10, b)])
+        ids = [c['branch_id'] for c in branch_pl(Y0, Y1) if not c['is_hq'] and not c['is_total']]
+        self.assertEqual(ids, [self.b1.id, self.b2.id, b_big.id])
+
+    # ── stock basis (ruling R14) ─────────────────────────────────────────────
+
+    def test_stock_basis_entries(self):
+        self._year()
+        r = trading_and_pl(Y0, Y1)
+        self.assertEqual(r['stock_basis'], 'entries')
+        self.assertEqual(r['warnings'], [])
+        fp = financial_position(Y1)
+        self.assertEqual(fp['stock_basis'], 'entries')
+        self.assertEqual(fp['warnings'], [])
+
+    def test_stock_basis_supplied_overrides_entries(self):
+        self._year()
+        r = trading_and_pl(Y0, Y1, closing_stock=_d(200))
+        self.assertEqual(r['stock_basis'], 'supplied')
+        self.assertEqual(r['closing_stock'], _d(200))
+        self.assertEqual(r['gross_profit'], _d(250))
+        self.assertEqual(r['warnings'], [])
+        self._position_book_rest()
+        fp = financial_position(Y1, closing_stock=_d(200))
+        self.assertEqual(fp['stock_basis'], 'supplied')
+        self.assertEqual(fp['inventory'], _d(200))
+        self.assertEqual(fp['unclosed_pl'], _d(195))
+        self.assertEqual(fp['net_profit'], fp['unclosed_pl'])
+        self.assertEqual(fp['check'], Z)
+
+    def test_stock_basis_missing_mid_year(self):
+        self._year()
+        r = trading_and_pl(Y0, D(2026, 6, 30))  # before the year-end closing-stock entry
+        self.assertEqual(r['stock_basis'], 'missing')
+        self.assertEqual(r['closing_stock'], Z)
+        self.assertEqual(len(r['warnings']), 1)
+        self.assertIn('5302', r['warnings'][0])
+        fp = financial_position(D(2026, 6, 30))
+        self.assertEqual(fp['stock_basis'], 'missing')
+        self.assertEqual(fp['check'], Z)
+
+    def test_warning_when_range_excludes_opening_stock(self):
+        self._year()
+        r = trading_and_pl(D(2026, 2, 1), Y1)
+        self.assertEqual(r['opening_stock'], Z)
+        self.assertEqual(r['stock_basis'], 'entries')
+        self.assertTrue(any('5301' in w for w in r['warnings']))
 
     def test_branch_pl_posts_nothing(self):
         self._entry(D(2026, 3, 1), [('1301', 100, self.b1), ('6001', -100, self.b1)])
@@ -353,3 +440,19 @@ class ReproduceWorkbookCommandTests(TestCase):
             self._run(self._workbook(net_profit=499))
         self.assertEqual(LedgerEntry.objects.count(), 0)
         self.assertEqual(GLAccount.objects.count(), 0)
+
+    def test_existing_entries_refused_without_flag(self):
+        from django.core.management.base import CommandError
+        u = User.objects.create_user(username='gl_repro_existing', password='x')
+        staff, _ = StaffProfile.objects.get_or_create(user=u)
+        g = GLAccountGroup.objects.create(name='مؤقت', section='balance_sheet')
+        for code in ('9991', '9992'):
+            GLAccount.objects.create(code=code, name=code, group=g, nature='debit',
+                                     account_type='asset')
+        e = save_draft(user=staff, entry_date=D(2025, 6, 1), description='old', lines=[
+            {'account_code': '9991', 'debit': _d(5), 'credit': Z},
+            {'account_code': '9992', 'debit': Z, 'credit': _d(5)}])
+        approve(e.id, user=staff, _allow_before_opening=True)
+        with self.assertRaisesMessage(CommandError, '--allow-existing'):
+            self._run(self._workbook())
+        self.assertEqual(LedgerEntry.objects.count(), 1)

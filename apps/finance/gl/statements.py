@@ -117,26 +117,71 @@ def _range_qs(date_from, date_to, branch_id=None):
                                    entry__entry_date__lte=date_to)
 
 
+STOCK_ENTRIES, STOCK_SUPPLIED, STOCK_MISSING = 'entries', 'supplied', 'missing'
+WARN_NO_CLOSING = ('لا يوجد مخزون آخر المدة لهذه الفترة (لا قيد على 5302 ولا قيمة مُدخلة): '
+                   'تكلفة المبيعات ومجمل الربح وصافي الربح غير مكتملة.')
+WARN_NO_OPENING = ('الفترة لا تشمل قيد مخزون أول المدة (5301)، فرصيد أول المدة = صفر: '
+                   'تكلفة المبيعات ومجمل الربح لا تعبّر عن الفترة.')
+
+
+def _line_exists(qs, line: str) -> bool:
+    return qs.filter(account__statement_line=line).exists()
+
+
+def _stock_basis(qs, closing_stock):
+    """(basis, warnings) for the closing/opening stock behind a range queryset."""
+    warnings = []
+    if closing_stock is not None:
+        basis = STOCK_SUPPLIED
+    elif _line_exists(qs, 'closing_stock'):
+        basis = STOCK_ENTRIES
+    else:
+        basis = STOCK_MISSING
+        warnings.append(WARN_NO_CLOSING)
+    if not _line_exists(qs, 'opening_stock'):
+        warnings.append(WARN_NO_OPENING)
+    return basis, warnings
+
+
 def trading_and_pl(date_from: datetime.date, date_to: datetime.date, *,
-                   branch_id: int | None = None) -> dict:
-    """Trading account + P&L for [date_from, date_to] (closing stock = 5302 credit in range)."""
-    return _pl_from_signed(_signed_by_line(_range_qs(date_from, date_to, branch_id)),
-                           _months(date_from, date_to))
+                   branch_id: int | None = None,
+                   closing_stock: Decimal | None = None) -> dict:
+    """Trading account + P&L for [date_from, date_to].
+
+    Closing stock = credit balance of 5302 (line closing_stock) in range, unless `closing_stock`
+    is supplied: then the 5302 entries are ignored and the supplied value is used.
+    `stock_basis` in entries | supplied | missing; `warnings` (Arabic) flag a missing closing
+    stock and a range without the opening-stock (5301) entry.
+    """
+    qs = _range_qs(date_from, date_to, branch_id)
+    basis, warnings = _stock_basis(qs, closing_stock)
+    signed = _signed_by_line(qs)
+    if closing_stock is not None:
+        signed['closing_stock'] = -Decimal(closing_stock)
+    r = _pl_from_signed(signed, _months(date_from, date_to))
+    r['stock_basis'] = basis
+    r['warnings'] = warnings
+    return r
 
 
 def financial_position(as_of: datetime.date, *, closing_stock_from_entries: bool = True,
                        closing_stock: Decimal | None = None) -> dict:
     """Statement of financial position at `as_of`.
 
-    The result line is every unclosed trading/P&L balance to `as_of` (= the current year's net
-    profit once earlier years are closed into 2409), so `check` is 0 whenever the ledger balances.
-    With closing_stock_from_entries=False, the closing-stock entries (lines inventory /
-    closing_stock) are ignored and `closing_stock` is used for both inventory and the result.
+    `unclosed_pl` is every unclosed trading/P&L balance to `as_of` as a profit (= the current
+    year's net profit once earlier years are closed into 2409); `net_profit` is kept as an alias.
+    Using all unclosed balances keeps `check` at 0 whenever the ledger balances.
+    When `closing_stock` is supplied (required with closing_stock_from_entries=False), the
+    closing-stock entries (lines inventory / closing_stock) are ignored and the supplied value
+    is used for both inventory and the result, so `check` stays 0.
+    `stock_basis` / `warnings` as in trading_and_pl, judged over 1-1 of as_of's year .. as_of.
     """
+    if not closing_stock_from_entries and closing_stock is None:
+        raise ValueError('closing_stock is required when closing_stock_from_entries=False')
+    year_qs = _range_qs(datetime.date(as_of.year, 1, 1), as_of)
+    basis, warnings = _stock_basis(year_qs, closing_stock)
     qs = _base().filter(entry__entry_date__lte=as_of)
-    if not closing_stock_from_entries:
-        if closing_stock is None:
-            raise ValueError('closing_stock is required when closing_stock_from_entries=False')
+    if closing_stock is not None:
         qs = qs.exclude(account__statement_line__in=('inventory', 'closing_stock'))
     rows = (qs.values('account__code', 'account__statement_line', 'account__group__name',
                       'account__group__section')
@@ -161,7 +206,8 @@ def financial_position(as_of: datetime.date, *, closing_stock_from_entries: bool
             continue
         bs[line] = bs.get(line, ZERO) + bal
 
-    if not closing_stock_from_entries:
+    if closing_stock is not None:
+        closing_stock = Decimal(closing_stock)
         bs['inventory'] = bs.get('inventory', ZERO) + closing_stock
         pl_signed -= closing_stock
     v = {k: bs.get(k, ZERO) * s + 0 for k, s in _BS_SIGN.items()}  # + 0: no -0.00
@@ -173,10 +219,13 @@ def financial_position(as_of: datetime.date, *, closing_stock_from_entries: bool
     r['unclassified'] = unclassified  # signed balance of BS accounts with no known line
     r['total_investment'] = r['net_fixed_assets'] + r['working_capital'] + unclassified
     r['retained_balance'] = balance_2409
-    r['net_profit'] = -pl_signed
+    r['unclosed_pl'] = -pl_signed + 0
+    r['net_profit'] = r['unclosed_pl']  # backward-compatible alias of unclosed_pl
     r['profit_and_loss'] = -(balance_2409 + pl_signed)
     r['total_equity'] = v['capital'] + v['partners'] + r['profit_and_loss']
     r['check'] = r['total_investment'] - r['total_equity']
+    r['stock_basis'] = basis
+    r['warnings'] = warnings
     return r
 
 
@@ -191,12 +240,14 @@ _BS_SIGN = {
 
 
 def _allocate(amount: Decimal, shares: dict[int, Decimal]) -> dict[int, Decimal]:
-    """round(share / total × amount, 2) half-up; the remainder goes to the largest share."""
+    """round(share / total × amount, 2) half-up; the remainder goes to the largest share.
+
+    Shares may be negative (HQ net sales can be); keys may be None (HQ)."""
     total = sum(shares.values(), ZERO)
     if not shares or total == 0 or amount == 0:
         return {k: ZERO for k in shares}
     out = {k: _q(s / total * amount) for k, s in shares.items()}
-    largest = max(shares, key=lambda k: (shares[k], -k))
+    largest = max(shares, key=lambda k: (shares[k], str(k)))
     out[largest] += amount - sum(out.values(), ZERO)
     return out
 
@@ -206,9 +257,12 @@ def branch_pl(date_from: datetime.date, date_to: datetime.date, *,
     """One column per branch (HQ first) + total; report-time HQ allocation, posts nothing.
 
     HQ = lines with no branch (line or entry header) or whose branch is kind HQ.  HQ expense
-    lines (EXPENSE_LINES) are allocated to the other branches by their net-sales share; HQ's own
-    sales, cost of sales and revenue stay in the HQ column.  Each column carries the figures
-    before allocation at top level, `allocation` (line → amount; negative on HQ) and `after`.
+    lines (EXPENSE_LINES) are allocated across ALL columns, HQ included, by net-sales share, as
+    finance's «الختامية فروع بالتوزيع» does (ruling R13); HQ's net sales may be negative, giving
+    it a negative share.  HQ's own sales, cost of sales and revenue stay in the HQ column.  Each
+    column carries the figures before allocation at top level, `allocation` (line → amount; on
+    HQ = its own share − the HQ amount, so the allocations sum to 0) and `after`.  With zero
+    total sales nothing is allocated.
     """
     if allocation_basis != 'sales':
         raise ValueError(f'unknown allocation basis {allocation_basis!r}')
@@ -232,17 +286,23 @@ def branch_pl(date_from: datetime.date, date_to: datetime.date, *,
     per.setdefault(None, {})
     months = _months(date_from, date_to)
 
-    branch_keys = sorted((k for k in per if k is not None),
-                         key=lambda k: (branches[k].softech_branch_id, k))
-    sales = {k: -per[k].get('net_sales', ZERO) for k in branch_keys}
-    allocation: dict[int | None, dict[str, Decimal]] = {k: {} for k in [None, *branch_keys]}
+    def order(k):
+        sid = (branches[k].softech_branch_id or '').strip()
+        return (0, int(sid), k) if sid.isdigit() else (1, sid, k)
+
+    branch_keys = sorted((k for k in per if k is not None), key=order)
+    keys = [None, *branch_keys]
+    sales = {k: -per[k].get('net_sales', ZERO) for k in keys}
+    allocation: dict[int | None, dict[str, Decimal]] = {k: {} for k in keys}
     for line in EXPENSE_LINES:
         hq_amount = per[None].get(line, ZERO)
         split = _allocate(hq_amount, sales)
-        moved = sum(split.values(), ZERO)
-        allocation[None][line] = -moved
-        for k in branch_keys:
+        if sum(split.values(), ZERO) != hq_amount:  # zero total sales: nothing allocated
+            split = {k: ZERO for k in keys}
+            split[None] = hq_amount
+        for k in keys:
             allocation[k][line] = split[k]
+        allocation[None][line] = split[None] - hq_amount
 
     def column(key, name, is_hq):
         signed = per.get(key, {})
