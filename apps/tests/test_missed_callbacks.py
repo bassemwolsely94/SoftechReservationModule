@@ -10,13 +10,18 @@ from datetime import datetime, timedelta
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
+from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from apps.audit.models import AuditLog
 from apps.callcenter.models import CallLog
 from apps.pbx import missed_callbacks as MC
+from apps.notifications.phone_alerts.events import EVENTS
+from apps.notifications.phone_alerts.models import PhoneAlert, PhoneAlertAttempt, PhoneAlertPolicy, WorkOwner
+from apps.notifications.phone_alerts.sender import build_staff_alert
 from apps.pbx.models import CdrCall
+from apps.users.models import StaffProfile
 from apps.pic_analytics.models import PhoneLabel
 from .factories import make_call_center
 
@@ -124,6 +129,76 @@ class ManualCloseTests(TestCase):
         self.assertEqual(len(rows), 1)
         self.assertTrue(rows[0]['is_auto_callback'])
         self.assertEqual(rows[0]['missed_count'], 1)
+
+
+@ON
+class OverdueAlertTests(TestCase):
+    """An open automatic call-back past its due time raises ONE phone alert to the call-back owners."""
+
+    def setUp(self):
+        u = User.objects.create_user('cb_owner', password='x')
+        self.owner = StaffProfile.objects.create(user=u, role='call_center', phone='01000000077')
+        WorkOwner.objects.create(kind='callcenter_callbacks', staff=self.owner)
+
+    def _queue(self, due_ago_min=5):
+        _cdr()
+        MC.queue_missed_callbacks()
+        log = CallLog.objects.get()
+        CallLog.objects.filter(pk=log.pk).update(callback_due=timezone.now() - timedelta(minutes=due_ago_min))
+        return log
+
+    def _run(self):
+        # deliveries run on a thread after commit: run them inline on the test connection
+        from apps.notifications.phone_alerts import dispatch
+        with patch.object(dispatch, 'start_thread', side_effect=lambda t, args=(), **kw: t(*args)),                 patch.object(dispatch, '_close_db'), self.captureOnCommitCallbacks(execute=True):
+            return MC.run()
+
+    def test_overdue_alerts_owner_once(self):
+        log = self._queue()
+        self.assertEqual(self._run()['alerted'], 1)
+        alert = PhoneAlert.objects.get(event='callback_overdue')
+        self.assertEqual((alert.source, alert.recipient_staff), (log, self.owner))
+        PhoneAlert.objects.filter(pk=alert.pk).update(status='acknowledged')
+        self.assertEqual(self._run()['alerted'], 0)              # never a second alert
+        self.assertEqual(PhoneAlert.objects.filter(event='callback_overdue').count(), 1)
+
+    def test_send_switch_off_is_dry_run(self):
+        self._queue()
+        self._run()
+        att = PhoneAlertAttempt.objects.get()
+        self.assertEqual(att.result, 'dry_run')
+
+    def test_not_yet_due_no_alert(self):
+        self._queue(due_ago_min=-30)
+        self.assertEqual(self._run()['alerted'], 0)
+
+    def test_policy_never_no_alert(self):
+        PhoneAlertPolicy.objects.filter(event='callback_overdue').update(mode='never')
+        self._queue()
+        self.assertEqual(self._run()['alerted'], 0)
+        self.assertFalse(PhoneAlert.objects.exists())
+
+    def test_no_owner_no_alert(self):
+        WorkOwner.objects.all().delete()
+        self._queue()
+        self.assertEqual(self._run()['alerted'], 0)
+
+    def test_manual_callback_not_alerted(self):
+        CallLog.objects.create(phone_number='01055555555', status='callback',
+                               callback_due=timezone.now() - timedelta(minutes=5))
+        self.assertEqual(self._run()['alerted'], 0)
+
+    def test_closed_callback_closes_alert_and_text_has_no_number(self):
+        log = self._queue()
+        self._run()
+        alert = PhoneAlert.objects.get(event='callback_overdue')
+        variables, _ = build_staff_alert(alert)
+        texts = ' '.join(v['text'] for v in variables)
+        self.assertIn(f'#{log.pk}', texts)
+        self.assertNotIn('01012345678', texts)
+        CallLog.objects.filter(pk=log.pk).update(status='answered')
+        log.refresh_from_db()
+        self.assertFalse(EVENTS['callback_overdue'].is_open(log))
 
 
 class FlagOffTests(TestCase):

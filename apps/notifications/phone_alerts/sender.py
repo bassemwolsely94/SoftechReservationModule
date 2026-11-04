@@ -44,6 +44,7 @@ def _one_line(value, limit=None):
 def subject_of(source):
     """Short, staff-facing subject of the record: never the customer's name or a raw status code
     (the text goes through Meta to staff phones and shared branch mobiles)."""
+    from apps.callcenter.models import CallLog
     from apps.reservations.models import Reservation
     from apps.tasks.models import OperationalTask
     from apps.transfers.models import TransferRequest
@@ -55,6 +56,9 @@ def subject_of(source):
         return str(source.request_number or source.pk)
     if isinstance(source, OperationalTask):
         return source.title or str(source.task_number or source.pk)
+    if isinstance(source, CallLog):           # no customer number: staff open the call-back queue
+        count = source.missed_count or 1
+        return f'#{source.pk} مكالمة فائتة' + (f' ×{count}' if count > 1 else '')
     return ''
 
 

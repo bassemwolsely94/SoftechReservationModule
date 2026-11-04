@@ -12,6 +12,9 @@ status='callback' + callback_due, shown on /callcenter/callbacks — no new task
 * routing (owner 2026-11-03): the call-center pool — no agent, no branch;
 * due: CALL + MISSED_CALL_DUE_MINUTES inside working hours, else the next opening hour;
 * auto-close: an answered call on the number after the miss closes it (resolution auto_returned).
+* overdue: an open automatic call-back past its due time raises ONE «معاودة اتصال متأخرة» phone
+  alert (event callback_overdue → «معاودة الاتصال» owners); its policy decides whether anything is
+  created, and nothing is sent while PHONE_ALERTS_SEND_ENABLED is off.
 
 Idempotent: CallLog.missed_cdr is UNIQUE, and missed_count is recomputed (never incremented).
 """
@@ -152,9 +155,36 @@ def close_returned_callbacks(now=None):
     return closed
 
 
+def alert_overdue_callbacks(now=None):
+    """One phone alert per open automatic call-back past its due time (never a second one, even
+    after it was acknowledged or expired). Returns the number of call-backs that raised alerts."""
+    from django.contrib.contenttypes.models import ContentType
+
+    from apps.callcenter.models import CallLog
+    from apps.notifications.phone_alerts import hooks
+    from apps.notifications.phone_alerts.models import PhoneAlert
+
+    now = now or timezone.now()
+    overdue = list(CallLog.objects.filter(
+        status='callback', missed_cdr__isnull=False,
+        callback_due__lte=now, callback_due__gte=now - LOOKBACK).order_by('callback_due', 'pk'))
+    if not overdue:
+        return 0
+    ct = ContentType.objects.get_for_model(CallLog)
+    already = set(PhoneAlert.objects.filter(
+        event='callback_overdue', source_ct=ct, source_id__in=[c.pk for c in overdue],
+    ).values_list('source_id', flat=True))
+    alerted = 0
+    for call in overdue:
+        if call.pk not in already and hooks.on_callback_overdue(call):
+            alerted += 1
+    return alerted
+
+
 def run(now=None):
-    """Close what was returned first, then queue the new misses."""
+    """Close what was returned first, then queue the new misses, then alert the overdue ones."""
     closed = close_returned_callbacks(now)
     summary = queue_missed_callbacks(now)
     summary['closed'] = closed
+    summary['alerted'] = alert_overdue_callbacks(now)
     return summary

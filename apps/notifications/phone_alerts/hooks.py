@@ -44,6 +44,11 @@ def on_task_status(task, actor=None):
     fire('task_status', task, actor=actor)
 
 
+def on_callback_overdue(call):
+    """An automatic missed-call call-back passed its due time and is still open (no requester)."""
+    return fire('callback_overdue', call)
+
+
 # ── toggle rule ──────────────────────────────────────────────────────────────
 
 # Every event a record type can raise (the single source for serializers and the modes endpoint).

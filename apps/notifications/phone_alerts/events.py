@@ -62,6 +62,9 @@ EVENTS = {
     'task_status': Event(
         'task_status', 'تغيّر حالة مهمة', 'tasks.operationaltask',
         'branch', None, _safe(lambda o: o.status not in TASK_CLOSED)),
+    'callback_overdue': Event(
+        'callback_overdue', 'معاودة اتصال متأخرة', 'callcenter.calllog',
+        'owner', 'callcenter_callbacks', _safe(lambda o: o.status == 'callback')),
     'escalation': Event(
         'escalation', 'تصعيد تنبيه لم يُستلم', 'notifications.phonealert',
         'escalation', None, _safe(_escalation_open)),
