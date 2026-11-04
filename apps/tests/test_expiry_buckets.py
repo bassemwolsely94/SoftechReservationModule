@@ -21,6 +21,13 @@ from apps.batches.stock_expiry import (
 TODAY = dt.date.today()
 
 
+def setUpModule():
+    # Re-read the date when this module's tests start, not at import: a full run that crosses
+    # midnight Cairo would otherwise leave TODAY one day behind the code under test.
+    global TODAY
+    TODAY = dt.date.today()
+
+
 def days(n):
     return TODAY + dt.timedelta(days=n)
 

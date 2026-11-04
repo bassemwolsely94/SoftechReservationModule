@@ -40,6 +40,8 @@ KNOWN_PUBLIC_VIEWS = {
     'core.csp.csp_report',
     # N6 public-form proof-of-work challenge (signed, no data; throttled 60/hour per IP)
     'apps.access.public_views.challenge',
+    # go-live liveness probe: SELECT 1 → {"status": "ok"|"error"} only, no-store, throttled 300/hour per IP
+    'apps.access.public_views.health',
 }
 
 _CONVERTERS = {

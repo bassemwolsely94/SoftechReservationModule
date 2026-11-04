@@ -2239,6 +2239,17 @@ def _run_kpi_refresh():
         logger.error('[APScheduler] KPI refresh failed: %s', exc)
 
 
+def _run_daily_count_job():
+    """Small daily counts (Project 2): hand out each pilot branch's lists after the configured hour
+    and close yesterday's/today's lists once the branch has closed. No-op unless
+    DAILY_COUNT_ENABLED. Reads only; never writes to SOFTECH."""
+    try:
+        from apps.stockcount.daily.service import run_job
+        run_job()
+    except Exception as exc:
+        logger.error('[APScheduler] daily count job failed: %s', exc)
+
+
 def _run_purchase_expiry_sync():
     """Incrementally mirror NEW purchase-invoice expiry entries from main suppliers
     into apps.batches.PurchaseExpiryEntry (near-expiry physical audit engine).
@@ -2429,6 +2440,13 @@ def _run_pbx_cdr_sync():
         cdr.notify_bridge_silence()
     except Exception as exc:
         logger.warning('pbx cdr sync failed: %s', exc)
+    try:
+        # Project 3 (b): missed inbound calls → automatic call-backs (no-op while the flag is off)
+        from apps.pbx import missed_callbacks
+        if missed_callbacks.enabled():
+            logger.info('[APScheduler] missed-call callbacks: %s', missed_callbacks.run())
+    except Exception as exc:
+        logger.warning('missed-call callbacks failed: %s', exc)
 
 
 def _run_pbx_cdr_relink():
@@ -2624,6 +2642,18 @@ def _run_pos_cancel_sync():
         logger.info('[APScheduler] pos_cancel sync done')
     except Exception as exc:
         logger.error('[APScheduler] pos_cancel sync failed: %s', exc)
+
+
+def _run_missed_sales():
+    """Project 3: our POS carts' unsold items for a known customer → reservation SUGGESTIONS
+    (Postgres only; a person confirms each one). No-op while MISSED_SALES_ENABLED is off."""
+    try:
+        from apps.pos_orders.missed_sales import detect_missed_sales, enabled
+        if not enabled():
+            return
+        logger.info('[APScheduler] missed sales: %s', detect_missed_sales())
+    except Exception as exc:
+        logger.error('[APScheduler] missed sales failed: %s', exc)
 
 
 def _run_pos_cancel_write():
@@ -3575,6 +3605,12 @@ def start_scheduler():
         _run_purchase_expiry_sync, 'cron', hour=7, minute=0, id='purchase_expiry_sync',
         replace_existing=True, max_instances=1, misfire_grace_time=1800,
     )
+    # Small daily counts (Project 2) — hourly: lists appear after DailyCountSettings.job_hour, close
+    # after the branch's closing time. Gated by DAILY_COUNT_ENABLED inside the job.
+    _scheduler.add_job(
+        _run_daily_count_job, 'cron', minute=5, id='daily_count_job',
+        replace_existing=True, max_instances=1, misfire_grace_time=1800,
+    )
     # Morning chain (P-56) — 07:30, after the procurement/purchase-expiry syncs:
     # A/P–A/R mirror (doc 23) → daily insights (doc 18) → supply follow-up sweep
     # (doc 24) → بدل الروشتة check (doc 25), each starting when the previous ends.
@@ -3713,6 +3749,11 @@ def start_scheduler():
     _scheduler.add_job(
         _run_pos_cancel_sync, 'cron', hour=5, minute=0, id='pos_cancel_sync',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Every 30 min: missed-sale reservation suggestions from our POS carts (no-op while flag OFF).
+    _scheduler.add_job(
+        _run_missed_sales, 'interval', minutes=30, id='missed_sales',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=900,
     )
     # Every 3h: write OUR POS selection telemetry INTO SOFTECH pos_cancel (no-op while flag OFF).
     _scheduler.add_job(

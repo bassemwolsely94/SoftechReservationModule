@@ -105,6 +105,7 @@ EXEMPT_PREFIXES = {'auth', 'notifications', 'personal', 'search', 'help', 'porta
                    'gamification',   # own points open to all; its views check gamification/*
                    'stock-audit',    # own gate apps/stock_audit/access.py: RBAC stock_audit
                    'pic-analytics',  # own gate apps/pic_analytics/access.py: RBAC pic_analytics + named grants
+                   'usage-print',    # own gate apps/usage_print/access.py: flag USAGE_PRINT_ENABLED + RBAC usage_print
                    'public',         # N6 anonymous surface (apps/access/public_urls.py), no business data
                    'csp-report',     # browsers' CSP reports — public, log only (core/csp.py, W-9)
                    'trace'}          # P-58 own gates apps/trace/views.py: parse = admin,
@@ -183,6 +184,11 @@ def required(path, method):
         return None
     prefix = parts[2]
     if prefix in EXEMPT_PREFIXES or path in OPEN_WRITE_EXACT:
+        return None
+    # Small daily counts (Project 2) have their own gate, like /api/stock-audit/: every salesperson
+    # counts their OWN blind list (the matrix gives salespeople read-only stockcount), and review is
+    # for named branch managers + stock_audit management (apps/stockcount/daily/views.py)
+    if prefix == 'stockcount' and parts[3:4] == ['daily']:
         return None
     method = method.upper()
     # POS alternatives live under /api/composition/ (chronic) but belong to the POS module

@@ -36,6 +36,18 @@ import AdvancedItemSearchModal from './AdvancedItemSearchModal'
 import PosResultRow from '../pos/search/PosResultRow'
 import PosItemPreview from '../pos/search/PosItemPreview'
 import StockAge from '../pos/search/StockAge'
+import BarcodeScanner, { cameraAvailable } from './BarcodeScanner'
+import useFeatures from '../hooks/useFeatures'
+
+// A scanned code matches an item when it is the item's code, its primary barcode or one of its
+// extra barcodes (shape differs between the default and the POS search results).
+function matchesCode(item, code) {
+  const c = String(code).trim()
+  if (!c || !item) return false
+  if (String(item.softech_id ?? '').trim() === c || String(item.barcode ?? '').trim() === c) return true
+  const extra = item.barcodes || item.all_barcodes || []
+  return extra.some(b => String(b?.barcode ?? b).trim() === c)
+}
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -271,6 +283,33 @@ export default function ItemSearchWidget({
     onSelect(item)
   }, [onSelect])
 
+  // 📷 camera scan (CAMERA_SCAN_ENABLED): the code goes into the search; once that code's own
+  // results are in, an exact barcode/code match (or a single result) is chosen like a click.
+  const { cameraScan } = useFeatures()
+  const showCamera = cameraScan && cameraAvailable() && !disabled
+  const [scanning, setScanning] = useState(false)
+  const [scanFor, setScanFor]   = useState(null)
+  const [scanMiss, setScanMiss] = useState('')
+
+  function onCameraCode(code) {
+    setScanning(false)
+    setScanMiss('')
+    setQ(code)
+    setOpen(true)
+    setScanFor(code)
+  }
+
+  useEffect(() => {
+    if (scanFor == null) return
+    if (typedQ !== scanFor) { setScanFor(null); return }
+    if (resultsStale) return
+    setScanFor(null)
+    const exact = results.filter(it => matchesCode(it, scanFor))
+    if (exact.length === 1) handleSelect(exact[0])
+    else if (!exact.length && results.length === 1) handleSelect(results[0])
+    else if (!results.length) setScanMiss(scanFor)
+  }, [scanFor, typedQ, resultsStale, results])   // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleAction = useCallback((kind, item, extra) => {
     setOpen(false)
     setQ('')
@@ -358,7 +397,7 @@ export default function ItemSearchWidget({
             className="input-field w-full ps-9 disabled:bg-gray-100 disabled:cursor-not-allowed"
             placeholder={placeholder}
             value={q}
-            onChange={e => { setQ(e.target.value); setOpen(true) }}
+            onChange={e => { setQ(e.target.value); setOpen(true); setScanMiss('') }}
             onKeyDown={isPos ? onPosKeyDown : undefined}
             onFocus={() => setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 150)}
@@ -378,6 +417,21 @@ export default function ItemSearchWidget({
             </span>
           )}
         </div>
+
+        {showCamera && (
+          <button type="button" data-tour="item-search-camera"
+            onClick={() => setScanning(true)}
+            title="مسح الباركود بالكاميرا"
+            aria-label="مسح الباركود بالكاميرا"
+            className="flex-shrink-0 flex items-center justify-center w-9 h-9 border border-gray-300 rounded-lg text-gray-500 hover:text-brand-600 hover:border-brand-400 hover:bg-brand-50 transition-colors"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+              <circle cx="12" cy="13" r="4"/>
+            </svg>
+          </button>
+        )}
 
         {/* Advanced search button (magnifier) */}
         <button data-tour="item-search-advanced"
@@ -410,6 +464,12 @@ export default function ItemSearchWidget({
         </button>
         {isPos && hasPosData && <StockAge asOf={stockAsOf} className="ms-auto" />}
       </p>
+      {scanMiss && (
+        <p className="text-xs text-amber-700 mt-1">
+          لم يُعثر على الباركود <span dir="ltr" className="tabular-nums">{scanMiss}</span> — جرّب البحث بالاسم
+        </p>
+      )}
+      {scanning && <BarcodeScanner onScan={onCameraCode} onClose={() => setScanning(false)} />}
 
       {/* Dropdown */}
       {showDropdown && isPos && (

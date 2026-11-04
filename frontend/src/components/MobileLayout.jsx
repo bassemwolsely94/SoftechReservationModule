@@ -6,7 +6,7 @@
  * scrollable content, and a fixed bottom tab bar sized for a thumb. RTL +
  * safe-area aware (env(safe-area-inset-bottom) via the `pb-safe-bottom` util).
  *
- * Pass `tabs` to render the bottom navigation. Each tab: { to, label, icon,
+ * Pass `tabs` to render the bottom navigation. Each tab: { to, label, icon, feature?,
  * roles?, badge? }. A tab with badge:'approvals' shows a live pending-approvals
  * count (operational engine + pricing/discount).
  * `title` is shown in the top bar (defaults to the active tab's label).
@@ -47,7 +47,8 @@ export default function MobileLayout({ title = 'صيدليات الرزيقي', 
   const { pending, toasts } = useOfflineQueue()
   const [moreOpen, setMoreOpen] = useState(false)
   const role = user?.role || 'viewer'
-  const visibleTabs = tabs.filter(t => !t.roles || t.roles.includes(role))
+  // `feature` (optional) hides a tab while its server switch is off (/api/auth/me/ features).
+  const visibleTabs = tabs.filter(t => (!t.roles || t.roles.includes(role)) && (!t.feature || user?.features?.[t.feature]))
 
   // Split into inline tabs + overflow ("More") when there are too many for the bar.
   const overflow    = visibleTabs.length > INLINE_MAX

@@ -198,7 +198,55 @@ class ReservationViewSet(viewsets.ModelViewSet):
         """
         Override create to inject duplicate detection before save.
         Pass ?force=true to bypass the duplicate check.
+
+        `missed_sale=<id>` (Project 3): a person confirms a missed-sale SUGGESTION into this
+        reservation. The suggestion is locked, must be new and in the user's branches, and is
+        marked confirmed in the SAME transaction — a second confirm gets 409, never a 2nd row.
         """
+        missed_id = request.data.get('missed_sale')
+        if not missed_id:
+            return self._create(request)
+        from apps.pos_orders.missed_sales import enabled as missed_enabled
+        from apps.pos_orders.models import MissedSaleSuggestion
+        if not missed_enabled():
+            return Response({'detail': 'ميزة المبيعات الفائتة غير مفعّلة.'},
+                            status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        try:
+            missed_id = int(missed_id)
+        except (TypeError, ValueError):
+            return Response({'missed_sale': 'رقم غير صالح.'}, status=status.HTTP_400_BAD_REQUEST)
+        with transaction.atomic():
+            missed = branch_scope.get_or_404(MissedSaleSuggestion.objects.select_for_update(),
+                                             request.user, pk=missed_id)
+            if missed.status != MissedSaleSuggestion.STATUS_NEW:
+                return Response({'detail': 'تم البت في هذا الاقتراح بالفعل.'},
+                                status=status.HTTP_409_CONFLICT)
+            if str(request.data.get('customer') or '') != str(missed.customer_id):
+                return Response({'customer': 'العميل يجب أن يكون عميل الاقتراح نفسه.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            resp = self._create(request)
+            if resp.status_code != status.HTTP_201_CREATED:
+                return resp
+            self._confirm_missed_sale(request, missed, resp.data['id'])
+            return resp
+
+    def _confirm_missed_sale(self, request, missed, reservation_id):
+        from apps.audit.models import AuditLog
+        from apps.pos_orders.models import MissedSaleSuggestion
+        staff = get_profile(request)
+        missed.status = MissedSaleSuggestion.STATUS_CONFIRMED
+        missed.reservation_id = reservation_id
+        missed.decided_by, missed.decided_at = staff, timezone.now()
+        missed.save(update_fields=['status', 'reservation', 'decided_by', 'decided_at'])
+        reservation = Reservation.objects.get(pk=reservation_id)
+        log_activity(reservation=reservation, activity_type='note', staff=staff,
+                     message=f'أُنشئ من المبيعات الفائتة #{missed.pk} '
+                             f'(اختير على الكاشير {timezone.localtime(missed.seen_at):%Y-%m-%d %H:%M})')
+        AuditLog.log('missed_sale_confirmed', user=staff, obj=missed, request=request,
+                     changes={'status': ['new', 'confirmed']},
+                     new_data={'reservation': reservation_id})
+
+    def _create(self, request):
         import logging
         _log = logging.getLogger('elrezeiky.reservations')
         serializer = self.get_serializer(data=request.data)

@@ -21,6 +21,7 @@ import AnnouncementsPage from './pages/AnnouncementsPage'
 import ReservationsKanban from './pages/ReservationsKanban'
 import ReservationsPage from './pages/ReservationsPage'
 import NewReservationPage from './pages/NewReservationPage'
+import MissedSalesPage from './pages/MissedSalesPage'
 import ReservationDetailPage from './pages/ReservationDetailPage'
 import CustomersPage from './pages/CustomersPage'
 import CustomerDetailPage from './pages/CustomerDetailPage'
@@ -63,6 +64,7 @@ import MyIncentivesPage from './pages/MyIncentivesPage'
 import GamificationPage from './pages/GamificationPage'
 import StockAuditPage from './pages/StockAuditPage'
 import PicAnalyticsPage from './pages/PicAnalyticsPage'
+import UsagePrintPage from './pages/UsagePrintPage'
 import UserManagementPage from './pages/UserManagementPage'
 import PermissionsMatrixPage from './pages/PermissionsMatrixPage'
 import PickZonesPage from './pages/PickZonesPage'
@@ -103,6 +105,7 @@ import MobileTaskDetailPage from './pages/mobile/MobileTaskDetailPage'
 import MobileVoucherRedeemPage from './pages/mobile/MobileVoucherRedeemPage'
 import MobileStockCountPage from './pages/mobile/MobileStockCountPage'
 import MobileStockCountDetailPage from './pages/mobile/MobileStockCountDetailPage'
+import MobileDailyCountPage from './pages/mobile/MobileDailyCountPage'
 import MobileQAPage from './pages/mobile/MobileQAPage'
 import MobileQADetailPage from './pages/mobile/MobileQADetailPage'
 import MobileAttendancePage from './pages/mobile/MobileAttendancePage'
@@ -215,6 +218,7 @@ const MOBILE_TABS = [
   { to: '/m/customers',    label: 'العملاء',   icon: '👥', roles: ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor', 'quality_manager'] },
   { to: '/m/vouchers',     label: 'القسائم',   icon: '🎫', roles: ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor', 'quality_manager'] },
   { to: '/m/tasks',        label: 'المهام',    icon: '✅', roles: ['admin', 'call_center', 'pharmacist', 'supervisor'] },
+  { to: '/m/daily-count',  label: 'جردي اليوم', icon: '🧮', feature: 'daily_count' },
   { to: '/m/stock-count',  label: 'الجرد',     icon: '📦', roles: ['admin', 'pharmacist', 'supervisor', 'quality_manager'] },
   { to: '/m/qa',           label: 'مراجعة الجودة', icon: '🧹', roles: ['admin', 'quality_manager', 'supervisor', 'pharmacist'] },
   { to: '/m/attendance',   label: 'الحضور',    icon: '🕐' },
@@ -331,6 +335,7 @@ export default function App() {
             <Route path="vouchers"          element={<MobileVoucherRedeemPage />} />
             <Route path="stock-count"       element={<MobileStockCountPage />} />
             <Route path="stock-count/:id"   element={<MobileStockCountDetailPage />} />
+            <Route path="daily-count"       element={<MobileDailyCountPage />} />
             <Route path="qa"                element={<MobileQAPage />} />
             <Route path="qa/:id"            element={<MobileQADetailPage />} />
             <Route path="attendance"        element={<MobileAttendancePage />} />
@@ -360,6 +365,7 @@ export default function App() {
             <Route path="reservations/list"  element={<ReservationsPage />} />
             <Route path="reservations/new"   element={<NewReservationPage />} />
             <Route path="reservations/:id"   element={<ReservationDetailPage />} />
+            <Route path="missed-sales"       element={<MissedSalesPage />} />
             <Route path="transfers"          element={<TransfersPage />} />
             <Route path="transits"           element={<TransitsPage />} />
             <Route path="transfers/new"      element={<NewTransferPage />} />
@@ -435,6 +441,7 @@ export default function App() {
             <Route path="replacement/new"       element={<RequireRole roles={['admin','supervisor','pharmacist']}><ReplacementNewCasePage /></RequireRole>} />
             <Route path="replacement/:id"       element={<RequireRole roles={['admin','supervisor','purchasing','quality_manager','pharmacist']}><ReplacementCaseDetailPage /></RequireRole>} />
             <Route path="pos"                   element={<POSOrderPage />} />
+            <Route path="usage-print"           element={<UsagePrintPage />} />
             <Route path="pos/exceptions"        element={<RequireRole roles={['admin','supervisor','pharmacist']}><ExceptionCenterPage /></RequireRole>} />
             <Route path="recommendations"       element={<RecommendationsPage />} />
             <Route path="inventory"          element={<InventoryDashboard />} />

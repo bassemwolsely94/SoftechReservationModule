@@ -40,6 +40,7 @@ export default function CallbackQueuePage() {
   const navigate    = useNavigate()
   const qc          = useQueryClient()
   const [mode, setMode]             = useState('all')        // 'overdue' | 'all'
+  const [autoOnly, setAutoOnly]     = useState(false)        // missed-call (automatic) call-backs only
   const [dialLoading, setDialLoading] = useState(null)       // call id being dialled
   const [doneLoading, setDoneLoading] = useState(null)       // call id being marked done
   const [toast, setToast]           = useState(null)
@@ -50,8 +51,8 @@ export default function CallbackQueuePage() {
   }, [])
 
   const { data: callbacks = [], isLoading, isError, refetch } = useQuery({
-    queryKey: ['callbacks', mode],
-    queryFn:  () => callCenterApi.pendingCallbacks(mode).then(r => r.data),
+    queryKey: ['callbacks', mode, autoOnly],
+    queryFn:  () => callCenterApi.pendingCallbacks(mode, autoOnly).then(r => r.data),
     refetchInterval: 60_000,
   })
 
@@ -141,6 +142,16 @@ export default function CallbackQueuePage() {
               {m === 'overdue' ? '⚠ متأخرة فقط' : '📋 الكل'}
             </button>
           ))}
+          <button data-tour="callcenter-callbacks-missed"
+            onClick={() => setAutoOnly(v => !v)}
+            className={`px-4 py-1.5 border-r border-gray-200 dark:border-gray-700 transition-colors ${
+              autoOnly
+                ? 'bg-navy-600 text-white'
+                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            📵 المكالمات الفائتة فقط
+          </button>
         </div>
       </div>
 
@@ -167,8 +178,8 @@ export default function CallbackQueuePage() {
         {!isLoading && callbacks.length > 0 && (
           <div className="space-y-3">
             {callbacks.map(call => {
-              const phone    = call.customer?.phone || call.caller_number || null
-              const name     = call.customer?.name  || call.caller_name  || 'غير محدد'
+              const phone    = call.customer?.phone || call.caller_number || call.phone_number || null
+              const name     = call.customer?.name  || call.customer_name || call.caller_name || 'غير محدد'
               const isOverdue = call.callback_due && isPast(parseISO(call.callback_due))
 
               return (
@@ -196,6 +207,12 @@ export default function CallbackQueuePage() {
                         </span>
                       )}
                       {dueBadge(call.callback_due)}
+                      {call.is_auto_callback && (
+                        <span title="أُنشئت تلقائياً من مكالمة فائتة"
+                              className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-2 py-0.5 rounded-full">
+                          📵 تلقائي{call.missed_count > 1 ? ` · ${call.missed_count} مكالمات` : ''}
+                        </span>
+                      )}
                     </div>
 
                     {phone && (
