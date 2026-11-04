@@ -269,6 +269,27 @@ export const posAlternativesApi = {
   get: (item, branch) => api.get('/composition/alternatives/', { params: { item, ...(branch ? { branch } : {}) } }),
 }
 
+// ── Counselling (Project 4, doc 34): drug assistant, pharmacist-approved sheets, WhatsApp card ──
+export const counsellingApi = {
+  status:   ()             => api.get('/counselling/status/'),
+  list:     (params)       => api.get('/counselling/content/', { params }),
+  get:      (id)           => api.get(`/counselling/content/${id}/`),
+  create:   (data)         => api.post('/counselling/content/', data),
+  update:   (id, data)     => api.patch(`/counselling/content/${id}/`, data),
+  submit:   (id)           => api.post(`/counselling/content/${id}/submit/`),
+  approve:  (id)           => api.post(`/counselling/content/${id}/approve/`),
+  retire:   (id, reason)   => api.post(`/counselling/content/${id}/retire/`, { reason }),
+  link:     (id, itemIds)  => api.post(`/counselling/content/${id}/link/`, { item_ids: itemIds }),
+  unlink:   (id, itemId)   => api.post(`/counselling/content/${id}/unlink/`, { item_id: itemId }),
+  suggest:  (id)           => api.get(`/counselling/content/${id}/suggest-items/`),
+  versions: (id)           => api.get(`/counselling/content/${id}/versions/`),
+  needs:    ()             => api.get('/counselling/content/needs/'),
+  aiDraft:  (itemId)       => api.post('/counselling/content/ai-draft/', { item_id: itemId }),
+  assistant:(itemId, branch) => api.get(`/counselling/assistant/${itemId}/`, { params: branch ? { branch } : {} }),
+  previewCard: (data)      => api.post('/counselling/cards/preview/', data),
+  sendCard:    (data)      => api.post('/counselling/cards/send/', data),
+}
+
 export const offersApi = {
   // Offer CRUD (OfferViewSet) — write gated to admin/supervisor/purchasing server-side
   list:   (params) => api.get('/offers/', { params }),

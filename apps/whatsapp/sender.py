@@ -78,9 +78,12 @@ class WhatsAppSender:
         return result
 
     def send_template(self, wa_id: str, template_name: str, language: str = 'ar',
-                      variables: list | None = None, quick_reply_payloads: list | None = None) -> dict:
+                      variables: list | None = None, quick_reply_payloads: list | None = None,
+                      url_button_params: list | None = None) -> dict:
         """quick_reply_payloads: one payload string per QUICK_REPLY button, in template order —
-        returned to us on the tap (inbound message type 'button', button.payload)."""
+        returned to us on the tap (inbound message type 'button', button.payload).
+        url_button_params: the dynamic suffix of each URL button, in template order (indexes follow
+        the quick-reply buttons)."""
         components = []
         if variables:
             components.append({
@@ -91,6 +94,12 @@ class WhatsAppSender:
             components.append({
                 'type': 'button', 'sub_type': 'quick_reply', 'index': str(i),
                 'parameters': [{'type': 'payload', 'payload': p}],
+            })
+        offset = len(quick_reply_payloads or [])
+        for i, p in enumerate(url_button_params or []):
+            components.append({
+                'type': 'button', 'sub_type': 'url', 'index': str(offset + i),
+                'parameters': [{'type': 'text', 'text': p}],
             })
         payload = {
             **self._base(wa_id),

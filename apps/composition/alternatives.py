@@ -2,9 +2,10 @@
 Verified alternatives for the POS (Speed Wave Task 8).
 
 An alternative is another active item whose APPROVED composition (ItemMoleculeIndex rows with
-source='approved') has the identical molecule set. Nothing here reads Item.name_scientific or
-parser-proposed rows, and nothing is substituted automatically — the POS shows the list and the
-pharmacist confirms. Read-only; never touches SOFTECH.
+source='approved') has the identical molecule set. Nothing here reads Item.name_scientific, and
+nothing is substituted automatically — the POS shows the list and the pharmacist confirms.
+unverified_alternatives_for() (Project 4 drug assistant) also counts parser-proposed rows; its
+results are display-only suggestions labelled unverified. Read-only; never touches SOFTECH.
 """
 from collections import defaultdict
 from decimal import Decimal
@@ -37,27 +38,30 @@ def _fmt_sig(sig):
     return ' / '.join(p for p in parts if p)
 
 
-def alternatives_for(item_id, *, branch_id=None, limit=20):
-    empty = {'verified': False, 'same': [], 'other': []}
-    own = list(ItemMoleculeIndex.objects.filter(item_id=item_id))
-    if not own or any(r.source != _APPROVED for r in own):
-        return empty
+def _match(item_id, own, *, approved_only, branch_id, limit, exclude=frozenset()):
+    """Items with the identical molecule set as `own`, split into (same strength+form, other).
+
+    approved_only=True: every row of the candidate must be approved (the verified POS list).
+    approved_only=False: parsed rows count too — callers must label the result unverified."""
     sig = frozenset(_sig_row(r) for r in own)
     mols = _molecules(sig)
     forms = {(r.dosage_form or '').strip().upper() for r in own}
 
-    # candidates: any item sharing at least one approved molecule with the original
-    cand_ids = (ItemMoleculeIndex.objects
-                .filter(source=_APPROVED, item__is_active=True,
-                        molecule__in={r.molecule for r in own})
-                .exclude(item_id=item_id).values_list('item_id', flat=True).distinct())
+    cands = (ItemMoleculeIndex.objects
+             .filter(item__is_active=True, molecule__in={r.molecule for r in own})
+             .exclude(item_id=item_id))
+    if approved_only:
+        cands = cands.filter(source=_APPROVED)
+    cand_ids = cands.values_list('item_id', flat=True).distinct()
     rows_by_item = defaultdict(list)
     for r in ItemMoleculeIndex.objects.filter(item_id__in=list(cand_ids)):
         rows_by_item[r.item_id].append(r)
 
     same_ids, other_ids, forms_of = [], [], {}
     for iid, rs in rows_by_item.items():
-        if any(r.source != _APPROVED for r in rs):
+        if iid in exclude:
+            continue
+        if approved_only and any(r.source != _APPROVED for r in rs):
             continue                                   # any unapproved row disqualifies
         csig = frozenset(_sig_row(r) for r in rs)
         if _molecules(csig) != mols:
@@ -99,4 +103,32 @@ def alternatives_for(item_id, *, branch_id=None, limit=20):
         out.sort(key=lambda r: (-r['here_qty'], r['pack_price'] or 0, r['name']))
         return out[:limit]
 
-    return {'verified': True, 'same': ordered(same_ids), 'other': ordered(other_ids)}
+    return ordered(same_ids), ordered(other_ids)
+
+
+def alternatives_for(item_id, *, branch_id=None, limit=20):
+    empty = {'verified': False, 'same': [], 'other': []}
+    own = list(ItemMoleculeIndex.objects.filter(item_id=item_id))
+    if not own or any(r.source != _APPROVED for r in own):
+        return empty
+    same, other = _match(item_id, own, approved_only=True, branch_id=branch_id, limit=limit)
+    return {'verified': True, 'same': same, 'other': other}
+
+
+def unverified_alternatives_for(item_id, *, branch_id=None, limit=10):
+    """Suggestions from parser-proposed (unreviewed) molecule rows — never offered as a swap.
+
+    Same identical-molecule-set, active and not-blocked rules as alternatives_for, but parsed rows
+    count; anything alternatives_for already returns is left out. Callers MUST show these as
+    unverified («غير موثّق») with no add action — SOFTECH molecule data is dirty (CLAUDE.md rule 5).
+    Never reads Item.name_scientific."""
+    own = list(ItemMoleculeIndex.objects.filter(item_id=item_id))
+    if not own:
+        return {'items': []}
+    verified = alternatives_for(item_id, branch_id=branch_id, limit=1000)
+    seen = frozenset(r['item_id'] for r in verified['same'] + verified['other'])
+    same, other = _match(item_id, own, approved_only=False, branch_id=branch_id, limit=limit, exclude=seen)
+    rows = (same + other)[:limit]
+    for r in rows:
+        r['unverified'] = True
+    return {'items': rows}

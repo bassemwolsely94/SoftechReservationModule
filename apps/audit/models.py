@@ -173,6 +173,17 @@ class AuditLog(models.Model):
         ('usage_rx_attached',            'طريقة الاستخدام — إرفاق صورة روشتة'),
         ('usage_settings_changed',       'طريقة الاستخدام — تعديل القوالب والإعدادات'),
 
+        # Counselling sheets + cards (Project 4, doc 34)
+        ('counselling_drafted',          'إرشاد استخدام — إنشاء مسودة'),
+        ('counselling_edited',           'إرشاد استخدام — تعديل'),
+        ('counselling_submitted',        'إرشاد استخدام — إرسال للاعتماد'),
+        ('counselling_approved',         'إرشاد استخدام — اعتماد'),
+        ('counselling_retired',          'إرشاد استخدام — سحب'),
+        ('counselling_item_linked',      'إرشاد استخدام — ربط صنف'),
+        ('counselling_item_unlinked',    'إرشاد استخدام — فك ربط صنف'),
+        ('counsel_card_sent',            'إرشاد استخدام — إرسال للعميل'),
+        ('counsel_card_opt_out',         'إرشاد استخدام — إيقاف الرسائل'),
+
     ]
 
     # ── Who ───────────────────────────────────────────────────────────────────

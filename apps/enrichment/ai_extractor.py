@@ -316,6 +316,7 @@ def _call_gemini(
     api_key: str,
     model: str,
     limiter: _RateLimiter,
+    clean=None,
 ) -> dict[str, str]:
     """
     Call one Gemini account.  Returns clean result dict, or {} on permanent failure.
@@ -364,7 +365,7 @@ def _call_gemini(
                 )
                 return {}   # truncated JSON cannot be parsed; skip to next provider
 
-            result = _clean_result(_extract_json(text))
+            result = (clean or _clean_result)(_extract_json(text))
             logger.info(
                 '[%s] extracted %d fields for item %s (%s)',
                 limiter.name, len(result), item.pk, item.name,
@@ -413,6 +414,7 @@ def _call_openai(
     api_key: str,
     model: str,
     limiter: _RateLimiter,
+    clean=None,
 ) -> dict[str, str]:
     """
     Call OpenAI chat completions (gpt-4o-mini by default).
@@ -463,7 +465,7 @@ def _call_openai(
                 )
                 return {}
 
-            result = _clean_result(_extract_json(text))
+            result = (clean or _clean_result)(_extract_json(text))
             logger.info(
                 '[%s] extracted %d fields for item %s (%s)',
                 limiter.name, len(result), item.pk, item.name,
@@ -524,45 +526,33 @@ def extract_with_ai_fallback(
     A provider is silently skipped when its key is absent.
     Returns {} only when every configured provider fails.
     """
-    prompt = _build_prompt(item, fda_context)
+    return _provider_chain(item, _build_prompt(item, fda_context))[0]
 
-    # ── Provider 1: Gemini primary ────────────────────────────────────────────
-    key1 = getattr(settings, 'GEMINI_API_KEY', '').strip()
-    if key1:
-        model1 = (
-            getattr(settings, 'GEMINI_MODEL', _GEMINI_MODEL_DEFAULT).strip()
-            or _GEMINI_MODEL_DEFAULT
-        )
-        result = _call_gemini(item, prompt, key1, model1, _gemini1_limiter)
+
+def _provider_chain(item: Item, prompt: str, clean=None) -> tuple[dict, str]:
+    """Gemini primary → Gemini secondary → OpenAI; the first non-empty result and its model name.
+    A provider is silently skipped when its key is absent; ({}, '') when every one fails."""
+    providers = [
+        ('GEMINI_API_KEY', 'GEMINI_MODEL', _GEMINI_MODEL_DEFAULT, _call_gemini, _gemini1_limiter),
+        ('GEMINI_API_KEY_2', 'GEMINI_MODEL_2', _GEMINI_MODEL_DEFAULT, _call_gemini, _gemini2_limiter),
+        ('OPENAI_API_KEY', 'OPENAI_MODEL', _OPENAI_MODEL_DEFAULT, _call_openai, _openai_limiter),
+    ]
+    for key_name, model_name, default_model, call, limiter in providers:
+        key = getattr(settings, key_name, '').strip()
+        if not key:
+            continue
+        model = getattr(settings, model_name, default_model).strip() or default_model
+        result = call(item, prompt, key, model, limiter, clean=clean)
         if result:
-            return result
-        logger.info('Gemini-1 returned nothing for item %s — trying next provider', item.pk)
+            return result, model
+        logger.info('%s returned nothing for item %s — trying next provider', limiter.name, item.pk)
+    return {}, ''
 
-    # ── Provider 2: Gemini secondary ─────────────────────────────────────────
-    key2 = getattr(settings, 'GEMINI_API_KEY_2', '').strip()
-    if key2:
-        model2 = (
-            getattr(settings, 'GEMINI_MODEL_2', _GEMINI_MODEL_DEFAULT).strip()
-            or _GEMINI_MODEL_DEFAULT
-        )
-        result = _call_gemini(item, prompt, key2, model2, _gemini2_limiter)
-        if result:
-            return result
-        logger.info('Gemini-2 returned nothing for item %s — trying next provider', item.pk)
 
-    # ── Provider 3: OpenAI ────────────────────────────────────────────────────
-    oai_key = getattr(settings, 'OPENAI_API_KEY', '').strip()
-    if oai_key:
-        oai_model = (
-            getattr(settings, 'OPENAI_MODEL', _OPENAI_MODEL_DEFAULT).strip()
-            or _OPENAI_MODEL_DEFAULT
-        )
-        result = _call_openai(item, prompt, oai_key, oai_model, _openai_limiter)
-        if result:
-            return result
-        logger.info('OpenAI returned nothing for item %s — all providers exhausted', item.pk)
-
-    return {}
+def complete_json(item: Item, prompt: str) -> tuple[dict, str]:
+    """Free-form JSON completion over the same provider chain + rate limiters (counselling drafts).
+    Returns (raw JSON object, model name) — the caller filters the keys it accepts."""
+    return _provider_chain(item, prompt, clean=lambda raw: raw if isinstance(raw, dict) else {})
 
 
 # ── Backward-compat wrapper ────────────────────────────────────────────────────
