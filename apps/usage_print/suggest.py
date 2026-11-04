@@ -5,7 +5,8 @@ Order (first hit wins; the source is shown to the user next to the text):
   1. patient_last — this patient's last confirmed instruction for this item (named customers only)
   2. item_common  — the instruction most often confirmed for this item (ties → most recent)
   3. curated      — pharmacist-APPROVED per-item content owned by Project 4 (drug assistant), read
-                    through `apps.counselling.selectors.approved_usage_text(item)` when it exists.
+                    through `apps.counselling.selectors.approved_usage_text(item)` (None while that
+                    app's COUNSELLING_CONTENT_ENABLED switch is off).
                     enrichment.ItemEnrichment is never used: its clinical fields are AI-filled.
   4. none         — empty; the user builds it from the preset chips.
 Never an LLM. A suggestion is only a starting text — the line still needs a human ✓.

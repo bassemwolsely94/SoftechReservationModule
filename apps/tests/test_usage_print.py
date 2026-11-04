@@ -158,6 +158,23 @@ class SheetTests(_Base):
         self.assertEqual((ln['text'], ln['suggestion_source']), ('A', 'item_common'))
         self.assertEqual(ln['status'], 'pending')   # a suggestion is never pre-confirmed
 
+    def test_curated_suggestion_from_approved_counselling_only(self):
+        from apps.counselling.services import approve
+        from apps.counselling.models import CounsellingContent, CounsellingContentItem
+        c = CounsellingContent.objects.create(title='Aspirin', dose_ar='قرص', frequency_ar='مرة يوميا',
+                                              with_food='after', created_by=self.ph_profile)
+        CounsellingContentItem.objects.create(content=c, item=self.aspirin, linked_by=self.ph_profile)
+        _sale(self.b1, 610, self.today, self.cust, [(self.aspirin, 1)])
+        with override_settings(COUNSELLING_CONTENT_ENABLED=True):   # draft is never offered
+            self.assertEqual(self.get(610).json()['lines'][0]['suggestion_source'], 'none')
+            approve(self.ph_profile, c)
+            _sale(self.b1, 611, self.today, self.cust, [(self.aspirin, 1)])
+            ln = self.get(611).json()['lines'][0]
+            self.assertEqual((ln['text'], ln['suggestion_source']), ('قرص — مرة يوميا — بعد الأكل', 'curated'))
+            self.assertEqual(ln['status'], 'pending')
+        _sale(self.b1, 612, self.today, self.cust, [(self.aspirin, 1)])   # content switch off → nothing
+        self.assertEqual(self.get(612).json()['lines'][0]['suggestion_source'], 'none')
+
     def test_reopen_after_invoice_changed(self):
         ph = _sale(self.b1, 507, self.today, self.cust, [(self.brilique, 1), (self.aspirin, 1)])
         s = self.get(507).json()
