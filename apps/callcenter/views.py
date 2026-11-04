@@ -212,10 +212,16 @@ class CallLogViewSet(viewsets.ModelViewSet):
             from apps.customers.models import Customer
 
             # All customers sharing this phone (up to 10)
-            customers_qs = (Customer.objects.filter(
-                Q(phone__endswith=tail) | Q(phone_alt__endswith=tail)
-            ).select_related('preferred_branch').order_by('-created_at')[:10]) if tail else []
-            customers_qs = list(customers_qs)
+            base = Customer.objects.select_related('preferred_branch').order_by('-created_at')
+            if branch_scope.branch_ids(request.user) is None:
+                # call-center agents (all-branch) keep fragment lookup: the last 7–9 digits, no exact
+                # confirm. lookup_tail is '' under 7 digits → nothing (never endswith('')).
+                customers_qs = list(base.filter(
+                    Q(phone__endswith=tail) | Q(phone_alt__endswith=tail))[:10]) if tail else []
+            else:
+                # branch staff: the exact national number only (core.phones)
+                from core import phones
+                customers_qs = phones.matching(base, phone, ('phone', 'phone_alt'), limit=10)
 
             # ── Build summary list (always returned — used by picker) ──────────
             result['customers'] = [

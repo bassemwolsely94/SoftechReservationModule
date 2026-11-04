@@ -62,3 +62,10 @@ class SubmitLeadSerializer(serializers.Serializer):
         choices=ReferralLead.RELATIONSHIP_CHOICES, default='friend',
     )
     notes        = serializers.CharField(required=False, allow_blank=True, default='')
+
+    def validate_lead_phone(self, value):
+        # the shared phone rule (core.phones): a number too short to identify anyone is refused
+        from core.phones import phone_key
+        if not phone_key(value):
+            raise serializers.ValidationError('اكتب رقم موبايل الصديق كامل.')
+        return value

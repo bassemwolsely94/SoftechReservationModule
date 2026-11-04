@@ -76,6 +76,19 @@ class AccountantEnforcedInLogModeTests(TestCase):
         self.assertEqual(req('/api/finance/gl/entries/5/reverse/', 'POST'), ('ledger', ('approve',)))
         self.assertEqual(req('/api/finance/gl/accounts/1101/', 'PATCH'), ('ledger', ('edit',)))
         self.assertEqual(req('/api/finance/gl/accounts/import/', 'POST'), ('ledger', ('edit',)))
+        # drafting engine (Plan 2): each write needs exactly what its view checks
+        gl = '/api/finance/gl/'
+        self.assertEqual(req(gl + 'rules/', 'POST'), ('ledger', ('edit',)))
+        self.assertEqual(req(gl + 'rules/preview/', 'POST'), ('ledger', ('view',)))
+        self.assertEqual(req(gl + 'maps/bank/40/', 'PUT'), ('ledger', ('edit',)))
+        self.assertEqual(req(gl + 'parties/import/', 'POST'), ('ledger', ('edit',)))
+        self.assertEqual(req(gl + 'parties/propose/', 'POST'), ('ledger', ('edit',)))
+        self.assertEqual(req(gl + 'parties/', 'POST'), ('ledger', ('approve',)))
+        self.assertEqual(req(gl + 'parties/5/confirm/', 'POST'), ('ledger', ('approve',)))
+        self.assertEqual(req(gl + 'parties/5/reject/', 'POST'), ('ledger', ('approve',)))
+        self.assertEqual(req(gl + 'exceptions/5/ignore/', 'POST'), ('ledger', ('create',)))
+        self.assertEqual(req(gl + 'exceptions/redraft/', 'POST'), ('ledger', ('create',)))
+        self.assertEqual(req(gl + 'drafting/run/', 'POST'), ('ledger', ('create',)))
 
     def test_other_roles_keep_log_mode(self):
         self.assertEqual(module_access._mode_for('pharmacist'), 'log')

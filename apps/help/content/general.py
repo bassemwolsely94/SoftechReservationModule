@@ -1369,8 +1369,8 @@ SCREENS = [
              'body': T('لكل حدث: «لا» (لا يصل تنبيه) أو «اختياري» (يصل لو علّم الموظف «نبّه على الموبايل») أو «دائماً». مع مدة التذكير والتصعيد بالدقائق، وأقصى عدد تذكيرات، ومن يُصعَّد إليهم. «يُصعَّد إلى» في سطر الحدث نفسه يسبق قائمة سطر «تصعيد»، ثم مسؤولي التصعيد، ثم المشرفين. سطر «تصعيد» نفسه لا يُصعَّد مرة أخرى.',
                        'Per event: "No" (no alert), "Optional" (alert when the employee ticks "Alert by phone") or "Always". Plus the reminder and escalation times in minutes, the maximum reminders, and who it escalates to. The event\'s own "Escalate to" list comes first, then the "Escalation" row\'s list, then the escalation owners, then supervisors. The "Escalation" row itself never escalates again.')},
             {'key': 'owners', 'title': T('المسؤولون', 'Owners'),
-             'body': T('من يستقبل تنبيهات توفير الحجوزات وصرف تحويلات المخزن الرئيسي، ومن يُعدّ مسؤول تصعيد. يمكن إضافة عضو «تنبيهات فقط» من شاشة المستخدمين.',
-                       'Who receives reservation-sourcing and HQ-transfer-dispatch alerts, and who counts as an escalation owner. A "phone alerts only" member can be added from the Users screen.')},
+             'body': T('من يستقبل تنبيهات توفير الحجوزات وصرف تحويلات المخزن الرئيسي و«معاودة الاتصال (الكول سنتر)»، ومن يُعدّ مسؤول تصعيد. يمكن إضافة عضو «تنبيهات فقط» من شاشة المستخدمين.',
+                       'Who receives reservation-sourcing, HQ-transfer-dispatch and "Call-backs (call center)" alerts, and who counts as an escalation owner. A "phone alerts only" member can be added from the Users screen.')},
             {'key': 'branches', 'title': T('الفروع', 'Branches'),
              'body': T('حساب واتساب الذي تخرج منه التنبيهات، وموبايل التنبيهات المشترك لكل فرع، وزر «إرسال تجريبي» للتأكد من الرقم. '
                        'تظهر فقط الأرقام المسموح بها: رقم العملاء الأساسي وأي رقم عليه محادثات عملاء لا يظهران، لأن رسائل رقم التنبيهات لا تدخل صندوق العملاء. تغيير الحساب للمدير فقط؛ المشرف يراه.',
@@ -1394,6 +1394,8 @@ SCREENS = [
               '"Test mode — nothing is sent" means the send switch is off or no WhatsApp account is chosen: everything runs and is logged but no message leaves.'),
             T('لو خلّى الموظف «نبّه على الموبايل» بدون علامة والسياسة «دائماً» يصل التنبيه رغم ذلك؛ ولو السياسة «لا» يُتجاهل اختياره.',
               'If the policy is "Always" the alert is sent even when the employee did not tick the box; if it is "No" their tick is ignored.'),
+            T('«معاودة اتصال متأخرة»: معاودة تلقائية من مكالمة فائتة عدّى موعدها ولسه مفتوحة — تنبيه واحد فقط لمسؤولي «معاودة الاتصال (الكول سنتر)». مفيش موظف يعلّم عليه، فـ«اختياري» هنا معناه لا يصل؛ استخدم «دائماً» أو «لا». الرسالة فيها رقم المعاودة وليس رقم العميل.',
+              '"Overdue call-back": an automatic missed-call call-back past its due time and still open — one alert only, to the "Call-backs (call center)" owners. No employee ticks a box for it, so "Optional" means it never sends; use "Always" or "No". The message carries the call-back number, never the customer phone number.'),
         ],
         'related': ['admin.users'],
         'tour': [
@@ -1434,7 +1436,7 @@ SCREENS = [
              'open_hint': T('في تبويب «السجل».', 'On the "Log" tab.')},
         ],
         'updated': '2026-11-04',
-        'change_note': T('حساب واتساب التنبيهات: رقم العملاء مستبعد والتغيير للمدير فقط؛ «يُصعَّد إلى» لكل حدث يعمل',
-                         'Alerts WhatsApp account: the customer number is excluded and only an admin can change it; per-event "Escalate to" now applies'),
+        'change_note': T('حدث جديد «معاودة اتصال متأخرة» ونوع مسؤول «معاودة الاتصال (الكول سنتر)»',
+                         'New event "Overdue call-back" and owner kind "Call-backs (call center)"'),
     },
 ]

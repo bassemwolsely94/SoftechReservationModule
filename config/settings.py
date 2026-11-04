@@ -623,6 +623,11 @@ SUPPLY_ERP_GROUPS = config('SUPPLY_ERP_GROUPS', default='10,19,21,27')
 # topped up automatically afterwards. OFF by default.
 DEMAND_ENGINE_SCHEDULE_ENABLED = config('DEMAND_ENGINE_SCHEDULE_ENABLED', default=False, cast=bool)
 
+# Finance GL (Plan 2, Ruling P22): the 08:30 daily drafting job (SOFTECH -> draft ledger entries).
+# OFF by default until the COA, opening balances and posting rules are in; «تحديث الآن» (draft-now)
+# works either way.
+GL_DRAFTING_SCHEDULE_ENABLED = config('GL_DRAFTING_SCHEDULE_ENABLED', default=False, cast=bool)
+
 # Project 2 (docs/superpowers/specs/2026-11-03-phone-scan-and-daily-counts-design.md) — ship dark.
 # CAMERA_SCAN_ENABLED: 📷 button on every item search (phone camera reads the barcode; no backend).
 # DAILY_COUNT_ENABLED: small daily stock counts (20 items per salesperson, blind, reviewed); also

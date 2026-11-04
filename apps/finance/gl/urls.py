@@ -1,7 +1,7 @@
 """General-ledger routes — mounted at /api/finance/gl/ (finance-gl Task 8)."""
 from django.urls import path
 
-from . import views
+from . import drafting_views, views
 
 urlpatterns = [
     path('groups/', views.groups, name='gl-groups'),
@@ -19,4 +19,25 @@ urlpatterns = [
     path('reports/position/', views.report_position, name='gl-position'),
     path('reports/branch-pl/', views.report_branch_pl, name='gl-branch-pl'),
     path('reports/comparison/', views.report_comparison, name='gl-comparison'),
+    path('entries/<int:pk>/source/', drafting_views.entry_source, name='gl-entry-source'),
+    path('parties/', drafting_views.parties_root, name='gl-parties'),
+    path('parties/persons/', drafting_views.parties_persons, name='gl-parties-persons'),
+    path('parties/import/', drafting_views.parties_import, name='gl-parties-import'),
+    path('parties/propose/', drafting_views.parties_propose, name='gl-parties-propose'),
+    path('parties/<int:pk>/confirm/', drafting_views.party_confirm, name='gl-party-confirm'),
+    path('parties/<int:pk>/reject/', drafting_views.party_reject, name='gl-party-reject'),
+    path('maps/', drafting_views.maps_list, name='gl-maps'),
+    path('maps/<str:kind>/<str:source_value>/', drafting_views.map_put, name='gl-map'),
+    path('rules/', drafting_views.rules_root, name='gl-rules'),
+    path('rules/meta/', drafting_views.rules_meta, name='gl-rules-meta'),
+    path('rules/preview/', drafting_views.rule_preview, name='gl-rules-preview'),
+    path('rules/<str:code>/versions/', drafting_views.rule_versions, name='gl-rule-versions'),
+    path('exceptions/', drafting_views.exceptions_list, name='gl-exceptions'),
+    path('exceptions/counts/', drafting_views.exceptions_counts, name='gl-exceptions-counts'),
+    path('exceptions/unmapped-values/', drafting_views.exceptions_unmapped_values, name='gl-exceptions-unmapped'),
+    path('exceptions/redraft/', drafting_views.exceptions_redraft, name='gl-exceptions-redraft'),
+    path('exceptions/<int:pk>/ignore/', drafting_views.exception_ignore, name='gl-exception-ignore'),
+    path('drafting/run/', drafting_views.drafting_run, name='gl-drafting-run'),
+    path('drafting/runs/', drafting_views.drafting_runs, name='gl-drafting-runs'),
+    path('drafting/runs/<int:pk>/', drafting_views.drafting_run_detail, name='gl-drafting-run-detail'),
 ]

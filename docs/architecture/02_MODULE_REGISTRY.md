@@ -340,6 +340,7 @@ Every module in the platform is registered here with its purpose, status, and de
 | Key APIs | `/api/finance/` |
 | Related Screens | FinanceHubPage (tabs incl. GL: القيود، ميزان المراجعة، القوائم المالية، كشف حساب، دليل الحسابات) |
 | General ledger | `apps/finance/gl/` — finance's own COA + journal + reports (doc 35); `/api/finance/gl/`; RBAC `ledger`, role `accountant`; no SOFTECH reads/writes |
+| GL drafting engine | `apps/finance/gl/{drafting,rules,parties}.py`, `sources/*`, `queries/sybase_gl.py` (doc 35, Plan 2) — SOFTECH SELECT-only readers → versioned `PostingRule`s → **draft** entries via `ledger.save_draft`; parties (`GLParty`), maps (`GLSourceMap`), exceptions inbox, daily 08:30 job + «تحديث الآن»; never approves, never writes SOFTECH |
 
 ---
 

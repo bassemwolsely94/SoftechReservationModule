@@ -8,7 +8,7 @@ class DocumentRevisionAdmin(admin.ModelAdmin):
     list_display = ('code', 'staff', 'kind', 'branchcode', 'doccode', 'docnumber',
                     'status', 'hq_result', 'branch_result', 'updated_at')
     list_filter = ('kind', 'status', 'hq_result')
-    search_fields = ('code', 'docnumber', 'staff__user__username')
+    search_fields = ('code', 'docnumber', 'staff__user__username', 'staff__softech_username')
     readonly_fields = ('created_at', 'updated_at')
 
 
@@ -17,7 +17,7 @@ class DocumentCommentEditAdmin(admin.ModelAdmin):
     list_display = ('id', 'staff', 'branchcode', 'doccode', 'docnumber',
                     'new_comment', 'hq_result', 'branch_result', 'created_at')
     list_filter = ('hq_result', 'branch_result', 'doccode')
-    search_fields = ('docnumber', 'new_comment', 'old_comment', 'staff__user__username')
+    search_fields = ('docnumber', 'new_comment', 'old_comment', 'staff__user__username', 'staff__softech_username')
     readonly_fields = [f.name for f in DocumentCommentEdit._meta.fields]
 
     def has_change_permission(self, request, obj=None):
@@ -29,7 +29,7 @@ class SoftechIdentityClaimAdmin(admin.ModelAdmin):
     list_display = ('id', 'staff', 'kind', 'person_code', 'label', 'status',
                     'reviewed_by', 'created_at')
     list_filter = ('kind', 'status')
-    search_fields = ('person_code', 'label', 'staff__user__username')
+    search_fields = ('person_code', 'label', 'staff__user__username', 'staff__softech_username')
     autocomplete_fields = ()
     readonly_fields = ('created_at', 'updated_at')
 
@@ -39,5 +39,5 @@ class PersonalWidgetAdmin(admin.ModelAdmin):
     list_display = ('id', 'staff', 'widget_type', 'identity', 'column',
                     'position', 'size', 'enabled')
     list_filter = ('widget_type', 'size', 'enabled')
-    search_fields = ('staff__user__username', 'title')
+    search_fields = ('staff__user__username', 'staff__softech_username', 'title')
     readonly_fields = ('created_at', 'updated_at')

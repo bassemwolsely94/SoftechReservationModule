@@ -1849,6 +1849,50 @@ def _run_finance_nightly_sync(months=3):
                 break
 
 
+def _gl_drafting_window(today=None):
+    """First day of the earliest OPEN month among the last two (previous, current) -> yesterday.
+    Months with no FinancialPeriod row count as open (same rule as the drafting engine)."""
+    from apps.finance.gl import drafting
+    today = today or _dt.date.today()
+    cur = today.replace(day=1)
+    prev = (cur - _dt.timedelta(days=1)).replace(day=1)
+    start = next((m for m in (prev, cur) if drafting.accepts_postings(m)), cur)
+    return start, today - _dt.timedelta(days=1)
+
+
+_gl_drafting_off_logged = False
+
+
+def _run_gl_drafting():
+    """Daily finance-gl drafting (08:30, after the 07:30 morning chain refreshed the A/P mirror):
+    SOFTECH source documents -> draft ledger entries. SELECT-only on SOFTECH; a run that is
+    already active (draft-now button) is logged and skipped. OFF unless
+    settings.GL_DRAFTING_SCHEDULE_ENABLED (Ruling P22); the draft-now button is not affected."""
+    global _gl_drafting_off_logged
+    from django.conf import settings
+    if not getattr(settings, 'GL_DRAFTING_SCHEDULE_ENABLED', False):
+        if not _gl_drafting_off_logged:
+            logger.info('[gl_drafting] scheduled drafting is off (GL_DRAFTING_SCHEDULE_ENABLED=False)')
+            _gl_drafting_off_logged = True
+        return None
+    from apps.finance.gl import drafting
+    d1, d2 = _gl_drafting_window()
+    if d2 < d1:
+        logger.info('[gl_drafting] empty window %s..%s - nothing to do', d1, d2)
+        return None
+    try:
+        run = drafting.start_run(triggered_by='scheduler', date_from=d1, date_to=d2, source_types=[])
+    except drafting.DraftBusy:
+        logger.warning('[gl_drafting] another drafting run is active - skipped')
+        return None
+    try:
+        return drafting.draft_range(d1, d2, run=run)
+    except Exception as exc:
+        logger.exception('[gl_drafting] run %s crashed', run.pk)
+        drafting.mark_failed(run.pk, exc)
+        return None
+
+
 # ── ERP match polling ─────────────────────────────────────────────────────────
 
 # 96 polls × 30 min = 48 hours maximum wait before marking timeout
@@ -3661,6 +3705,11 @@ def start_scheduler():
     # of journal / expenses / treasury so /finance never shows a months-old ledger.
     _scheduler.add_job(
         _run_finance_nightly_sync, 'cron', hour=2, minute=15, id='finance_nightly_sync',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Finance GL drafting - 08:30, after the 07:30 morning chain (A/P mirror) has finished.
+    _scheduler.add_job(
+        _run_gl_drafting, 'cron', hour=8, minute=30, id='gl_drafting',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # Daily retention (P-56) — 04:45, quiet hour: engine-run detail rows, old

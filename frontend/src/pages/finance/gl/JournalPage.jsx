@@ -6,19 +6,24 @@
  * keyboard (↑↓ Space Enter Ctrl+A), «اعتماد المحدد» → bulk approve with each refusal
  * shown on its row. A row opens EntryEditor in a side panel; «قيد جديد» opens a blank one.
  */
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { glApi } from '../../../api/client'
 import { usePermissions } from '../../../hooks/usePermission'
 import useSortableRows from '../../../hooks/useSortableRows'
 import useGridKeyboard from '../../../hooks/useGridKeyboard'
+import useHelpTab from '../../../help/useHelpTab'
 import SortTh from '../../../components/SortTh'
+import DataFreshnessBar from '../../../components/DataFreshnessBar'
+import ProgressBar from '../../../components/ProgressBar'
 import BranchSelect from '../../../components/BranchSelect'
 import { SkeletonTable, EmptyState } from '../../../components/ui'
 import EntryEditor from './EntryEditor'
+import ExceptionsTab from './ExceptionsTab'
+import { SOURCE_TYPES } from './RuleEditor'
 import {
-  BOOKS, STATUS, StatusPill, money, errOf, listOf, useGlBranches,
+  BOOKS, STATUS, StatusPill, money, errOf, listOf, todayIso, useGlBranches,
   inputCls, btnPrimary, btnPlain, ErrorBox,
 } from './glUi'
 
@@ -41,6 +46,34 @@ function resultsById(data) {
   }]))
 }
 
+const monthStartIso = () => `${todayIso().slice(0, 8)}01`
+
+/** Progress of a drafting run (draft-now / redraft): polls the run until it leaves 'running'. */
+function RunProgress({ runId, onFinished }) {
+  const runQ = useQuery({
+    queryKey: ['gl', 'draft-run', runId],
+    queryFn: () => glApi.draftRun1(runId).then(r => r.data),
+    enabled: !!runId,
+    refetchInterval: (q) => (q.state.status === 'error' || (q.state.data && q.state.data.status !== 'running') ? false : 2000),
+  })
+  const run = runQ.data
+  const finished = !!run && run.status !== 'running'
+  const started = useRef(Date.now())
+  useEffect(() => { if (finished) onFinished?.(run) }, [finished]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (!runId) return null
+  if (runQ.isError) return <div className="text-sm rounded-lg border border-red-200 bg-red-50 text-red-700 px-3 py-2">تعذّر قراءة حالة الترحيل — حدّث الصفحة</div>
+  const c = run?.counts || {}
+  const msg = run ? `قُرئ ${c.read ?? 0} · جديد ${c.new ?? 0} · مسودات ${c.drafted ?? 0} · استثناءات ${c.exceptions ?? 0}` : 'جاري البدء…'
+  if (!finished) return <ProgressBar label="ترحيل القيود من SOFTECH" message={msg} since={started.current} />
+  const ok = run.status === 'success'
+  return (
+    <div className={`text-sm rounded-lg border px-3 py-2 ${ok ? 'bg-green-50 border-green-200 text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+      {ok ? 'اكتمل الترحيل' : run.status === 'partial' ? 'اكتمل جزئياً' : 'فشل الترحيل'} — {msg}
+      {run.detail?.error && <span> · {String(run.detail.error)}</span>}
+    </div>
+  )
+}
+
 export default function JournalPage() {
   const qc = useQueryClient()
   const perms = usePermissions('ledger')
@@ -48,8 +81,14 @@ export default function JournalPage() {
   const [params, setParams] = useSearchParams()
   const [filters, setFilters] = useState({
     status: params.get('status') ?? 'draft', book: '', date_from: '', date_to: '', branch: '',
-    account: params.get('account') || '', q: '',
+    account: params.get('account') || '', q: '', source: '',
   })
+  const tab = params.get('tab') === 'exceptions' ? 'exceptions' : 'entries'   // follows the URL
+  const setTab = (t) => { const p = new URLSearchParams(params); if (t === 'exceptions') p.set('tab', t); else p.delete('tab'); setParams(p, { replace: true }) }
+  useHelpTab(tab)
+  const [runId, setRunId] = useState(null)
+  const [runNote, setRunNote] = useState('')
+  const [range, setRange] = useState({ from: monthStartIso(), to: todayIso() })
   const [selected, setSelected] = useState(() => new Set())
   const [rowResult, setRowResult] = useState({})
   const [err, setErr] = useState('')
@@ -60,7 +99,14 @@ export default function JournalPage() {
   const [editorKey, setEditorKey] = useState('')
 
   const setF = (patch) => { setFilters(f => ({ ...f, ...patch })); setSelected(new Set()); setRowResult({}) }
-  const apiParams = useMemo(() => Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '')), [filters])
+  const apiParams = useMemo(() => {
+    const { source, ...rest } = filters
+    return Object.fromEntries(Object.entries({ ...rest, source_type: source }).filter(([, v]) => v !== ''))
+  }, [filters])
+  const excFilters = useMemo(() => ({
+    source_type: filters.source && filters.source !== 'manual' ? filters.source : '',
+    date_from: filters.date_from, date_to: filters.date_to, branch: filters.branch,
+  }), [filters.source, filters.date_from, filters.date_to, filters.branch])
 
   const listQ = useInfiniteQuery({
     queryKey: ['gl', 'entries', apiParams],
@@ -69,6 +115,21 @@ export default function JournalPage() {
     getNextPageParam: (last) => (Array.isArray(last) ? undefined : last?.next || undefined),
   })
   const rows = useMemo(() => (listQ.data?.pages || []).flatMap(listOf), [listQ.data])
+  // own key (same 'gl','exceptions' prefix, so invalidations still reach it) - never the list's key
+  const badgeQ = useQuery({
+    queryKey: ['gl', 'exceptions', 'counts', 'all'],
+    queryFn: () => glApi.exceptionsCounts({}).then(r => r.data),
+    refetchInterval: 60000,
+  })
+  const openExceptions = badgeQ.data?.total ?? 0
+  // drop selections that are no longer in the loaded drafts (filter change, reload, approval)
+  useEffect(() => {
+    setSelected(s => {
+      const live = new Set(rows.filter(r => r.status === 'draft').map(r => r.id))
+      const n = new Set([...s].filter(id => live.has(id)))
+      return n.size === s.size ? s : n
+    })
+  }, [rows])
   const { sorted, headerProps } = useSortableRows(rows, { getValue, persistKey: 'gl-journal' })
 
   const setEntryParam = (id) => {
@@ -111,10 +172,52 @@ export default function JournalPage() {
     onError: (e) => { setErr(errOf(e, 'تعذّر الاعتماد')); setSummary('') },
   })
 
+  const draftNow = useMutation({
+    mutationFn: () => glApi.draftRun({ date_from: range.from, date_to: range.to, source_types: [] }).then(r => r.data),
+    onSuccess: (d) => { setRunNote(''); setRunId(d.run_id) },
+    onError: async (e) => {
+      if (e?.response?.status === 409) {
+        setRunNote('يعمل بالفعل — هناك ترحيل جارٍ الآن')
+        try {
+          const r = await glApi.draftRuns({ limit: 3 })
+          const run = listOf(r.data).find(x => x.status === 'running')
+          if (run) setRunId(run.id)
+        } catch { /* the note stays */ }
+      } else setRunNote(errOf(e, 'تعذّر بدء الترحيل'))
+    },
+  })
+  const runFinished = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['gl', 'entries'] })
+    qc.invalidateQueries({ queryKey: ['gl', 'exceptions'] })
+    qc.invalidateQueries({ queryKey: ['data-freshness'] })
+  }, [qc])
+  const draftNowFn = async () => { await draftNow.mutateAsync().catch(() => {}) }
+  const tabBtn = (k) => `px-4 py-1.5 ${tab === k ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`
+
   return (
     <div className="space-y-3" dir="rtl">
+      <div data-tour="finance-gl-journal-freshness">
+        <DataFreshnessBar domains={['gl_drafting', 'ap_reconciliation']} canEdit={!!perms.create} onRefresh={draftNowFn} />
+        <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+          <span>«تحديث الآن» يرحّل مستندات SOFTECH كمسودات من</span>
+          <input type="date" className={inputCls} value={range.from} onChange={e => setRange(r => ({ ...r, from: e.target.value }))} />
+          <span>إلى</span>
+          <input type="date" className={inputCls} value={range.to} onChange={e => setRange(r => ({ ...r, to: e.target.value }))} />
+          {runNote && <span className="text-amber-700 font-medium">{runNote}</span>}
+        </div>
+        <RunProgress runId={runId} onFinished={runFinished} />
+      </div>
+
+      <div className="flex rounded-lg border border-gray-300 overflow-hidden text-sm w-fit">
+        <button type="button" onClick={() => setTab('entries')} className={tabBtn('entries')}>المسودات والقيود</button>
+        <button type="button" onClick={() => setTab('exceptions')} className={tabBtn('exceptions')}>
+          الاستثناءات{openExceptions > 0 && <span className="ms-1.5 rounded-full bg-amber-500 text-white text-[11px] px-1.5">{openExceptions}</span>}
+        </button>
+      </div>
+
       {/* filters */}
       <div className="flex flex-wrap items-center gap-2" data-tour="finance-gl-journal-filters">
+        {tab === 'entries' && (<>
         <select className={inputCls} value={filters.status} onChange={e => setF({ status: e.target.value })}>
           {Object.entries(STATUS).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
           <option value="">كل الحالات</option>
@@ -123,12 +226,19 @@ export default function JournalPage() {
           <option value="">كل الدفاتر</option>
           {Object.entries(BOOKS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
         </select>
+        </>)}
         <label className="text-xs text-gray-500">من</label>
         <input type="date" className={inputCls} value={filters.date_from} onChange={e => setF({ date_from: e.target.value })} />
         <label className="text-xs text-gray-500">إلى</label>
         <input type="date" className={inputCls} value={filters.date_to} onChange={e => setF({ date_to: e.target.value })} />
         <BranchSelect size="sm" className="w-48" branches={branches} value={filters.branch} allLabel="كل الفروع" placeholder="كل الفروع"
                       onChange={v => setF({ branch: v })} />
+        <select className={inputCls} value={filters.source} onChange={e => setF({ source: e.target.value })} title="مصدر القيد">
+          <option value="">كل المصادر</option>
+          {Object.entries(SOURCE_TYPES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          <option value="manual">يدوي</option>
+        </select>
+        {tab === 'entries' && (<>
         <input className={`${inputCls} w-28`} placeholder="كود الحساب" value={filters.account}
                onChange={e => setF({ account: e.target.value.trim() })} />
         <input className={`${inputCls} w-56`} placeholder="بحث في البيان / الرقم" value={filters.q}
@@ -136,8 +246,14 @@ export default function JournalPage() {
         {perms.create && (
           <button type="button" className={`${btnPlain} ms-auto`} onClick={startNew}>+ قيد يدوي</button>
         )}
+        </>)}
       </div>
 
+      {tab === 'exceptions' ? (
+        <ExceptionsTab filters={excFilters} perms={perms} onRunStarted={(id) => { setRunNote(''); setRunId(id) }}
+                       onBusy={() => setRunNote('يعمل بالفعل — هناك ترحيل جارٍ الآن')} />
+      ) : (
+        <>
       {perms.approve && (
         <div className="flex items-center gap-3" data-tour="finance-gl-journal-approve">
           <button type="button" className={btnPrimary} disabled={!selected.size || bulk.isPending}
@@ -212,6 +328,9 @@ export default function JournalPage() {
           </button>
         )}
       </div>
+
+        </>
+      )}
 
       {(openId || creating) && (
         <EntryEditor key={editorKey || openId} entryId={openId} onClose={close}

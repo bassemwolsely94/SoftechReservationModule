@@ -260,6 +260,34 @@ def generate_followup_tasks_bulk(branch=None, days_limit=90, dry_run=False, grac
 
 # ── Legacy per-customer function (kept for API compatibility) ─────────────────
 
+def customer_phcodes(customer):
+    """Every SOFTECH phcode of this customer: own PIC, linked LocalCustomer, same-phone
+    LocalCustomers (core.phones exact match — an empty/short phone matches nobody; the old
+    `phone__endswith=''` collected EVERY LocalCustomer's phcode)."""
+    from apps.erp.models import LocalCustomer
+    from core import phones
+
+    phcodes = []
+    if customer.softech_pic and not customer.is_account_placeholder:
+        phcodes.append(customer.softech_pic)
+
+    # Also check LocalCustomer linkage
+    try:
+        lc = customer.local_customer_profile
+        if lc:
+            phcodes.append(lc.phcode)
+    except Exception:
+        pass
+
+    # Also search by phone
+    try:
+        phcodes += [lc.phcode for lc in phones.matching(LocalCustomer.objects.all(),
+                                                         customer.phone, ('phone',))]
+    except Exception:
+        pass
+    return phcodes
+
+
 def generate_followup_tasks_for_customer(customer, branch=None, dry_run=False):
     """
     Generate tasks for one specific customer.
@@ -269,7 +297,6 @@ def generate_followup_tasks_for_customer(customer, branch=None, dry_run=False):
     softech_id is only the per-branch serial, never a phcode.
     """
     from apps.customers.models import PurchaseHistory
-    from apps.erp.models import LocalCustomer
 
     created = []
     today   = date.today()
@@ -279,27 +306,7 @@ def generate_followup_tasks_for_customer(customer, branch=None, dry_run=False):
             is_chronic=True
         ).select_related('item')
 
-        # Find all phcodes for this customer
-        phcodes = []
-        if customer.softech_pic and not customer.is_account_placeholder:
-            phcodes.append(customer.softech_pic)
-
-        # Also check LocalCustomer linkage
-        try:
-            lc = customer.local_customer_profile
-            if lc:
-                phcodes.append(lc.phcode)
-        except Exception:
-            pass
-
-        # Also search by phone
-        try:
-            tail = customer.phone.strip().replace(' ', '')[-9:]
-            linked_lcs = LocalCustomer.objects.filter(phone__endswith=tail)
-            phcodes += [lc.phcode for lc in linked_lcs]
-        except Exception:
-            pass
-
+        phcodes = customer_phcodes(customer)
         if not phcodes:
             return []
 

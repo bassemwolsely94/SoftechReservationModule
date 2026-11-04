@@ -74,8 +74,8 @@ def phone_for(customer) -> str:
 
 
 def _same_phone(a, b) -> bool:
-    a, b = _digits(a), _digits(b)
-    return bool(a and b) and a[-10:] == b[-10:]
+    from core.phones import same_phone     # the shared exact-key rule
+    return same_phone(a, b)
 
 
 def mask(phone) -> str:

@@ -13,6 +13,7 @@ import { glApi } from '../../../api/client'
 import { usePermissions } from '../../../hooks/usePermission'
 import BranchSelect from '../../../components/BranchSelect'
 import { Spinner } from '../../../components/ui'
+import SourcePanel from './SourcePanel'
 import { wildcardMatch } from '../../../utils/wildcard'
 import {
   BOOKS, StatusPill, money, errOf, listOf, todayIso, accountOf, useGlBranches,
@@ -306,6 +307,10 @@ export default function EntryEditor({ entryId, onClose, onChanged }) {
               <button type="button" onClick={addLine} className="w-full text-sm text-green-700 hover:bg-green-50 py-1.5 border-t border-gray-100">+ سطر</button>
             )}
           </div>
+
+          {id && entry?.source_type && !['manual', 'reversal'].includes(entry.source_type) && (
+            <SourcePanel entryId={id} />
+          )}
 
           {/* totals — display only */}
           <div className="flex flex-wrap gap-4 text-sm bg-gray-50 rounded-lg px-3 py-2" data-tour="finance-gl-entry-totals">

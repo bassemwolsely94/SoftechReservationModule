@@ -57,6 +57,18 @@ class GLApiTests(TestCase):
     def test_requires_auth(self):
         self.assertIn(make_anon_client().get(BASE + 'accounts/').status_code, (401, 403))
 
+    def test_chart_of_accounts_lists_every_account_unpaged(self):
+        # «دليل الحسابات» (/finance/coa) shows the whole chart: no 50-row API page (2026-11-04)
+        grp = GLAccountGroup.objects.get(name='نقدية')
+        GLAccount.objects.bulk_create([
+            GLAccount(code=f'19{i:02d}', name=f'حساب {i}', group=grp, nature='debit',
+                      account_type='asset', statement_line='cash') for i in range(60)])
+        r = self.c.get(BASE + 'accounts/')
+        self.assertEqual(r.status_code, 200)
+        self.assertIsInstance(r.data, list)
+        self.assertEqual(len(r.data), GLAccount.objects.count())
+        self.assertGreater(len(r.data), 50)
+
     def test_non_all_branch_user_403(self):
         self.assertEqual(self.pharm.get(BASE + 'accounts/').status_code, 403)
 
@@ -71,6 +83,18 @@ class GLApiTests(TestCase):
         lst = self.c.get(BASE + 'entries/', {'status': 'approved'})
         self.assertEqual([e['number'] for e in lst.data['results']], ['JV-2026-000001'])
         self.assertEqual(lst.data['results'][0]['total_debit'], '100.00')
+
+    def test_entries_source_type_filter(self):
+        from apps.finance.models import LedgerEntry
+        manual, sales, other = (self._draft()['id'] for _ in range(3))
+        LedgerEntry.objects.filter(pk=sales).update(source_type='sales_tenders')
+        LedgerEntry.objects.filter(pk=other).update(source_type='purchases')
+        ids = lambda **q: sorted(e['id'] for e in self.c.get(BASE + 'entries/', q).data['results'])
+        self.assertEqual(ids(), sorted([manual, sales, other]))
+        self.assertEqual(ids(source_type='sales_tenders'), [sales])
+        self.assertEqual(ids(source_type='manual'), [manual])
+        LedgerEntry.objects.filter(pk=manual).update(source_type='')
+        self.assertEqual(ids(source_type='manual'), [manual])
 
     def test_viewer_cannot_approve(self):
         d = self._draft()

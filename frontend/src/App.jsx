@@ -154,6 +154,8 @@ const GLJournalPage = lazy(() => import('./pages/finance/gl/JournalPage'))
 const GLTrialBalancePage = lazy(() => import('./pages/finance/gl/TrialBalancePage'))
 const GLStatementsPage = lazy(() => import('./pages/finance/gl/StatementsPage'))
 const GLAccountStatementPage = lazy(() => import('./pages/finance/gl/AccountStatementPage'))
+const GLPartiesPage = lazy(() => import('./pages/finance/gl/GLPartiesPage'))
+const PostingRulesPage = lazy(() => import('./pages/finance/gl/PostingRulesPage'))
 const ProfitLossPage = lazy(() => import('./pages/ProfitLossPage'))
 const CashViewPage = lazy(() => import('./pages/CashViewPage'))   // P-40 — replaces the retired cash-flow page (P-43)
 const ExpenseAnalyticsPage = lazy(() => import('./pages/ExpenseAnalyticsPage'))
@@ -533,6 +535,8 @@ export default function App() {
               <Route path="trial-balance" element={<GLTrialBalancePage />} />
               <Route path="statements" element={<GLStatementsPage />} />
               <Route path="ledger"    element={<GLAccountStatementPage />} />
+              <Route path="parties"   element={<GLPartiesPage />} />
+              <Route path="rules"     element={<PostingRulesPage />} />
               <Route path="pnl"       element={<ProfitLossPage />} />
               {/* P-40: the 13-week cash view replaces the retired cash-flow page; the old URL redirects. */}
               <Route path="cash"      element={<CashViewPage />} />

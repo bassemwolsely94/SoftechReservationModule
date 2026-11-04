@@ -254,6 +254,14 @@ def required(path, method):
             return 'ledger', ('edit',)
         if parts[4:5] == ['entries'] and ('approve' in parts[5:7] or 'reverse' in parts[6:7]):
             return 'ledger', ('approve',)
+        # Drafting engine (Plan 2): rule/map edits and party import/propose = edit; party confirm /
+        # reject / create = approve; rule preview only computes = view; exceptions + drafting = create
+        if parts[4:5] == ['rules']:
+            return 'ledger', (('view',) if parts[5:6] == ['preview'] else ('edit',))
+        if parts[4:5] == ['maps']:
+            return 'ledger', ('edit',)
+        if parts[4:5] == ['parties']:
+            return 'ledger', (('edit',) if parts[5:6] in (['import'], ['propose']) else ('approve',))
         return 'ledger', ('create',)
     # Market Shortage reads the engine's run status and the shortage screen the vendor list:
     # `shortage` view (purchasing holds it too) — owner decision 2026-10-28, map by screen (Z-7a)
