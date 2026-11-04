@@ -488,7 +488,7 @@ class _Engine:
             self._closed(gk, live, targets, pending_ok, lines)
             return
         if live is not None and self._edited_by_user(live):
-            self._edited(gk, live, targets, pending_ok)
+            self._edited(gk, live, targets, pending_ok, lines)
             return
         try:
             with transaction.atomic():
@@ -519,7 +519,7 @@ class _Engine:
             self._closed(gk, live, targets, pending_ok, [])
             return False
         if self._edited_by_user(live):
-            self._edited(gk, live, targets, pending_ok)
+            self._edited(gk, live, targets, pending_ok, [])
             return False
         try:
             with transaction.atomic():
@@ -593,16 +593,16 @@ class _Engine:
         self._set(pending_ok, status='exception')
 
     def _edited_by_user(self, live) -> bool:
-        """Ruling P21: an accountant (anyone but the drafting user) saved this entry."""
-        return (AuditLog.objects.filter(action='gl_entry_draft_saved', model_name='LedgerEntry',
-                                        object_id=str(live.pk))
-                .exclude(user_id=self.user.pk).exists())
+        return edited_by_user(live, system=self.user)
 
-    def _edited(self, gk, live, targets, pending_ok):
-        """Ruling P21: never overwrite an accountant's edit; the group waits in the inbox."""
+    def _edited(self, gk, live, targets, pending_ok, lines):
+        """Ruling P21: never overwrite an accountant's edit; the group waits in the inbox.
+        Ruling P23: the row carries the fresh rule lines so the accountant can compare and decide."""
         docs = list(GLSourceDoc.objects.filter(pk__in=targets))
         self._exception(docs, 'ledger_error', MESSAGES['edited_by_user'],
-                        {'code': 'edited_by_user', 'entry_id': live.pk, 'group_key': gk})
+                        {'code': 'edited_by_user', 'entry_id': live.pk, 'group_key': gk,
+                         'entry_status': live.status},
+                        proposed_lines=_canon(lines))
         self._hold({*targets, *pending_ok})
 
     def _ledger_error(self, gk, err, targets, pending_ok):
@@ -627,3 +627,110 @@ class _Engine:
             qs = qs.exclude(kind__in=GROUP_KINDS)
         qs.update(status='resolved', resolved_by=self.user, resolved_at=timezone.now(),
                   resolution_note=RESOLVED_NOTE)
+
+
+# ── Ruling P23: the accountant decides on an edited entry SOFTECH changed ────
+
+EDIT_RELEASED = 'gl_entry_edit_released'   # accept SOFTECH: earlier edits no longer protect the entry
+EDIT_KEPT = 'gl_entry_edit_kept'           # keep my edit: nothing happens until the next change
+ACCEPT_NOTE = 'اعتُمدت نسخة سوفتيك'
+KEEP_NOTE = 'أُبقي تعديل المحاسب'
+
+
+class DecisionError(Exception):
+    """A refused accept / keep decision; the API maps ``code`` to 404 / 409."""
+
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code, self.message = code, message
+
+
+def edited_by_user(live, *, system=None) -> bool:
+    """Ruling P21 + P23: an accountant (anyone but the drafting user) saved this entry after the
+    latest «اعتماد نسخة سوفتيك» on it. AuditLog ids are monotonic, so "newer" = higher id."""
+    system = system or system_user()
+    rows = AuditLog.objects.filter(model_name='LedgerEntry', object_id=str(live.pk))
+    released = (rows.filter(action=EDIT_RELEASED).order_by('-id')
+                .values_list('id', flat=True).first())
+    edits = rows.filter(action='gl_entry_draft_saved').exclude(user_id=system.pk)
+    if released:
+        edits = edits.filter(id__gt=released)
+    return edits.exists()
+
+
+def _decision(exception_id):
+    """Lock an open edited_by_user exception and its whole group -> (row, group rows, docs, entry)."""
+    ex = SourceException.objects.select_for_update().filter(pk=exception_id).first()
+    if ex is None:
+        raise DecisionError('not_found', 'الاستثناء غير موجود')
+    if ex.status != 'open':
+        raise DecisionError('not_open', 'الاستثناء ليس مفتوحاً')
+    detail = ex.detail or {}
+    if ex.kind != 'ledger_error' or detail.get('code') != 'edited_by_user':
+        raise DecisionError('not_edited_by_user', 'هذا الاستثناء ليس تعديلاً يدوياً غيّره سوفتيك')
+    gk = detail.get('group_key') or ''
+    rows = list(SourceException.objects.select_for_update().filter(
+        status='open', kind='ledger_error', detail__code='edited_by_user', detail__group_key=gk))
+    docs = list(GLSourceDoc.objects.select_for_update().filter(pk__in={r.source_doc_id for r in rows}))
+    entry = LedgerEntry.objects.select_for_update().filter(pk=detail.get('entry_id')).first()
+    if entry is None:
+        raise DecisionError('entry_gone', 'القيد لم يعد موجوداً — أعد الترحيل')
+    return ex, gk, rows, docs, entry
+
+
+def _close(rows, user, note):
+    now = timezone.now()
+    for r in rows:
+        r.status, r.resolved_by, r.resolved_at, r.resolution_note = 'resolved', user, now, note
+        r.save(update_fields=['status', 'resolved_by', 'resolved_at', 'resolution_note'])
+
+
+def _decision_audit(action, *, user, entry, ex, gk, rows, note, docs):
+    ledger._audit(action, user=user, obj=entry, note=note,
+                  old_data={'exception_ids': sorted(r.pk for r in rows), 'status': 'open'},
+                  new_data={'exception_id': ex.pk, 'group_key': gk, 'entry_status': entry.status,
+                            'note': note, 'source_keys': sorted(d.source_key for d in docs)})
+
+
+def accept_softech(exception_id, *, user, note='') -> dict:
+    """«اعتماد نسخة سوفتيك»: release the entry, resolve the group's edited_by_user rows and put its
+    held docs back to 'new' so the next run rebuilds the group (a draft is replaced; an approved
+    entry in an open month is reversed + redrafted; a closed month becomes closed_period_change).
+    Returns the window the caller redrafts: {date_from, date_to, source_types, entry_id}."""
+    note = (note or '').strip()
+    with transaction.atomic():
+        ex, gk, rows, docs, entry = _decision(exception_id)
+        _decision_audit(EDIT_RELEASED, user=user, entry=entry, ex=ex, gk=gk, rows=rows,
+                        note=note, docs=docs)
+        _close(rows, user, note or ACCEPT_NOTE)
+        GLSourceDoc.objects.filter(pk__in=[d.pk for d in docs if d.status == 'exception']).update(
+            status='new')
+        span = [d.doc_date for d in docs] + list(
+            GLSourceDoc.objects.filter(group_key=gk).values_list('doc_date', flat=True))
+        types = {d.source_type for d in docs} | set(
+            GLSourceDoc.objects.filter(group_key=gk).values_list('source_type', flat=True))
+    return {'date_from': min(span, default=entry.entry_date), 'date_to': max(span, default=entry.entry_date),
+            'source_types': sorted(types or {entry.source_type}), 'entry_id': entry.pk}
+
+
+def keep_edit(exception_id, *, user, note='') -> SourceException:
+    """«إبقاء تعديلي»: resolve the group's edited_by_user rows and link its held docs back to the
+    live entry as 'drafted' (group_key unchanged), so the engine does nothing until SOFTECH changes
+    the group again - which asks again. A vanished doc is unlinked so it never re-raises."""
+    note = (note or '').strip()
+    with transaction.atomic():
+        ex, gk, rows, docs, entry = _decision(exception_id)
+        if entry.status not in LIVE:
+            raise DecisionError('entry_gone', 'القيد لم يعد قائماً — أعد الترحيل')
+        moved = [d for d in docs if d.status != 'vanished' and d.group_key != gk]
+        if moved:   # its amount now belongs to another group: keeping would count it twice
+            raise DecisionError('moved', 'مستند انتقل إلى مجموعة أخرى (تاريخ أو قاعدة مختلفة) — '
+                                         'لا يمكن إبقاء التعديل؛ اعتمد نسخة سوفتيك')
+        _decision_audit(EDIT_KEPT, user=user, entry=entry, ex=ex, gk=gk, rows=rows, note=note, docs=docs)
+        _close(rows, user, note or KEEP_NOTE)
+        GLSourceDoc.objects.filter(pk__in=[d.pk for d in docs if d.status == 'vanished']).update(
+            entry=None, group_key='')
+        GLSourceDoc.objects.filter(pk__in=[d.pk for d in docs if d.status != 'vanished']).update(
+            status='drafted', entry=entry)
+        ex.refresh_from_db()
+    return ex
