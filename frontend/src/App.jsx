@@ -21,6 +21,7 @@ import AnnouncementsPage from './pages/AnnouncementsPage'
 import ReservationsKanban from './pages/ReservationsKanban'
 import ReservationsPage from './pages/ReservationsPage'
 import NewReservationPage from './pages/NewReservationPage'
+import MissedSalesPage from './pages/MissedSalesPage'
 import ReservationDetailPage from './pages/ReservationDetailPage'
 import CustomersPage from './pages/CustomersPage'
 import CustomerDetailPage from './pages/CustomerDetailPage'
@@ -364,6 +365,7 @@ export default function App() {
             <Route path="reservations/list"  element={<ReservationsPage />} />
             <Route path="reservations/new"   element={<NewReservationPage />} />
             <Route path="reservations/:id"   element={<ReservationDetailPage />} />
+            <Route path="missed-sales"       element={<MissedSalesPage />} />
             <Route path="transfers"          element={<TransfersPage />} />
             <Route path="transits"           element={<TransitsPage />} />
             <Route path="transfers/new"      element={<NewTransferPage />} />

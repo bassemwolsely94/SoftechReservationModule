@@ -569,6 +569,16 @@ POS_WRITER_PROFILE = config('POS_WRITER_PROFILE', default='test')   # test|prod
 # «المبيعات غير المخزنة» activity log — NOT a transactional/financial table). OFF until the
 # owner signs off a dry-run. When False, write_pos_cancel_batch runs in dry-run only.
 POS_CANCEL_WRITE_ENABLED = config('POS_CANCEL_WRITE_ENABLED', default=False, cast=bool)
+# Project 3 (docs/superpowers/specs/2026-11-03-missed-sales-and-missed-calls-design.md). Both ship
+# dark. Missed sales = OUR POS carts' unsold items for a known customer → reservation SUGGESTIONS a
+# person confirms; missed calls = automatic call-back in the existing queue (call-center pool).
+MISSED_SALES_ENABLED = config('MISSED_SALES_ENABLED', default=False, cast=bool)
+MISSED_SALES_MIN_AGE_MINUTES = config('MISSED_SALES_MIN_AGE_MINUTES', default=60, cast=int)
+MISSED_SALES_EXPIRE_DAYS = config('MISSED_SALES_EXPIRE_DAYS', default=14, cast=int)
+MISSED_CALL_CALLBACKS_ENABLED = config('MISSED_CALL_CALLBACKS_ENABLED', default=False, cast=bool)
+MISSED_CALL_OPEN_HOUR = config('MISSED_CALL_OPEN_HOUR', default=9, cast=int)
+MISSED_CALL_CLOSE_HOUR = config('MISSED_CALL_CLOSE_HOUR', default=23, cast=int)
+MISSED_CALL_DUE_MINUTES = config('MISSED_CALL_DUE_MINUTES', default=15, cast=int)
 # Feature 1 (/supply): write our engine's monthly_avg → SOFTECH stkbal.monthlyqty
 # (معدل الإستهلاك). OFF = /supply propose+approve work but execute is refused (409).
 # Flip True ONLY after a reviewed dry-run + a validated rollback write-probe.
