@@ -20,7 +20,7 @@ class LeaveBalanceAdmin(admin.ModelAdmin):
     list_display  = ['staff', 'leave_type', 'year', 'entitled_days',
                      'consumed_days', 'carried_forward', 'remaining_days']
     list_filter   = ['year', 'leave_type']
-    search_fields = ['staff__user__first_name', 'staff__user__last_name']
+    search_fields = ['staff__user__first_name', 'staff__user__last_name', 'staff__softech_username']
     readonly_fields = ['remaining_days']
 
     def remaining_days(self, obj):
@@ -33,7 +33,7 @@ class LeaveRequestAdmin(admin.ModelAdmin):
     list_display  = ['staff', 'leave_type', 'start_date', 'end_date',
                      'days_requested', 'status', 'created_at']
     list_filter   = ['status', 'leave_type']
-    search_fields = ['staff__user__first_name', 'staff__user__last_name']
+    search_fields = ['staff__user__first_name', 'staff__user__last_name', 'staff__softech_username']
     readonly_fields = ['approval_request', 'created_at', 'updated_at']
 
 
@@ -47,7 +47,7 @@ class ShiftTemplateAdmin(admin.ModelAdmin):
 class ShiftAssignmentAdmin(admin.ModelAdmin):
     list_display  = ['staff', 'shift', 'valid_from', 'valid_until', 'assigned_by']
     list_filter   = ['shift']
-    search_fields = ['staff__user__first_name', 'staff__user__last_name']
+    search_fields = ['staff__user__first_name', 'staff__user__last_name', 'staff__softech_username']
 
 
 @admin.register(OvertimeRequest)
@@ -69,7 +69,7 @@ class ExpenseClaimAdmin(admin.ModelAdmin):
     list_display  = ['staff', 'branch', 'category', 'expense_date', 'amount',
                      'allowance_amount', 'status', 'created_at']
     list_filter   = ['status', 'category', 'branch']
-    search_fields = ['staff__user__first_name', 'staff__user__last_name']
+    search_fields = ['staff__user__first_name', 'staff__user__last_name', 'staff__softech_username']
     readonly_fields = ['approval_request', 'finance_record_id', 'paid_at', 'created_at']
 
 
@@ -77,5 +77,5 @@ class ExpenseClaimAdmin(admin.ModelAdmin):
 class PermitAdmin(admin.ModelAdmin):
     list_display  = ['staff', 'permit_type', 'branch', 'date', 'time_from', 'time_to', 'status', 'created_at']
     list_filter   = ['permit_type', 'status', 'branch']
-    search_fields = ['staff__user__first_name', 'staff__user__last_name', 'destination']
+    search_fields = ['staff__user__first_name', 'staff__user__last_name', 'staff__softech_username', 'destination']
     readonly_fields = ['approval_request', 'created_at', 'updated_at']

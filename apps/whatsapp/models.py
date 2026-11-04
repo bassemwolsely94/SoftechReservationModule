@@ -204,11 +204,8 @@ class WAConversation(models.Model):
             return
         try:
             from apps.customers.models import Customer
-            tail = self.wa_id.strip()[-9:]
-            c = (
-                Customer.objects.filter(phone__endswith=tail).first()
-                or Customer.objects.filter(phone_alt__endswith=tail).first()
-            )
+            from core import phones     # wa_id is international (20…); phone_key makes it national
+            c = phones.first_match(Customer.objects.all(), self.wa_id, ('phone', 'phone_alt'))
             if c:
                 self.customer = c
         except Exception:

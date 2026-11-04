@@ -48,6 +48,6 @@ class IncentiveSettlementAdmin(admin.ModelAdmin):
     list_display  = ['program', 'user', 'period_start', 'period_end',
                      'total_incentive', 'transaction_count', 'is_finalized']
     list_filter   = ['program', 'is_finalized']
-    search_fields = ['user__user__first_name', 'user__user__last_name']
+    search_fields = ['user__user__first_name', 'user__user__last_name', 'user__softech_username']
     readonly_fields = ['total_incentive', 'transaction_count', 'is_finalized',
                        'finalized_at', 'finalized_by', 'created_at', 'updated_at']

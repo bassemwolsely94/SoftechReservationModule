@@ -1759,12 +1759,12 @@ def customer_delivery_profile(request):
     from core import branch_scope as _bs
     if _bs.branch_ids(request.user) is not None and len(_ca.digits(phone)) < _ca.MIN_PHONE_DIGITS:
         return Response({'detail': 'اكتب رقم الموبايل كامل.'}, status=status.HTTP_400_BAD_REQUEST)
-    # Find customer by phone (tail match for Egyptian numbers)
-    tail = phone.replace(' ', '').replace('-', '')[-9:]
-    customer = (
-        Customer.objects.filter(phone__endswith=tail).first()
-        or Customer.objects.filter(phone_alt__endswith=tail).first()
-    )
+    # Find customer by phone — the shared rule (core.phones): a number too short to identify
+    # anyone is refused, never matched against every customer
+    from core import phones
+    if phones.phone_q(phone) is None:
+        return Response({'detail': 'اكتب الرقم كامل.'}, status=status.HTTP_400_BAD_REQUEST)
+    customer = phones.first_match(Customer.objects.all(), phone, ('phone', 'phone_alt'))
 
     locations = []
     order_history = {}

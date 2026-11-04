@@ -35,6 +35,7 @@ const MODES = [
 const OWNER_KINDS = [
   { value: 'reservation_sourcing', label: 'توفير الحجوزات' },
   { value: 'hq_transfer_dispatch', label: 'صرف تحويلات المخزن الرئيسي' },
+  { value: 'callcenter_callbacks', label: 'معاودة الاتصال (الكول سنتر)' },
 ]
 
 const INPUT = 'border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-400'

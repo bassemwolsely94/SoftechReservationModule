@@ -41,7 +41,8 @@ class PhoneAlertPolicy(models.Model):
 class WorkOwner(models.Model):
     """Who owns a piece of work (e.g. sourcing reservations, dispatching HQ transfers)."""
     KIND_CHOICES = [('reservation_sourcing', 'توفير الحجوزات'),
-                    ('hq_transfer_dispatch', 'صرف تحويلات المخزن الرئيسي')]
+                    ('hq_transfer_dispatch', 'صرف تحويلات المخزن الرئيسي'),
+                    ('callcenter_callbacks', 'معاودة الاتصال (الكول سنتر)')]
 
     kind = models.CharField(max_length=30, choices=KIND_CHOICES)
     staff = models.ForeignKey('users.StaffProfile', on_delete=models.CASCADE, related_name='work_owner_rows')

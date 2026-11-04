@@ -7,6 +7,7 @@
 import { useEffect } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import ErrorBoundary from '../../components/ErrorBoundary'
+import PageSuspense from '../../components/PageSuspense'
 import { portalApi, portalToken } from '../../portal/portalApi'
 
 const TABS = [
@@ -48,7 +49,7 @@ export default function PortalLayout() {
       </header>
 
       <main className="flex-1 p-4 pb-24">
-        <ErrorBoundary scope="page" resetKey={pathname}><Outlet /></ErrorBoundary>
+        <ErrorBoundary scope="page" resetKey={pathname}><PageSuspense><Outlet /></PageSuspense></ErrorBoundary>
       </main>
 
       <nav className="fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 grid grid-cols-3">

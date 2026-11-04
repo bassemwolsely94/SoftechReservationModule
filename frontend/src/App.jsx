@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { lazy, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import useAuthStore from './store/authStore'
@@ -7,202 +7,203 @@ import usePermissionStore from './store/permissionStore'
 import { initPush } from './push'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
-import NotifyPage from './pages/NotifyPage'
-import DashboardPage from './pages/DashboardPage'
-import MyDashboardPage from './pages/MyDashboardPage'
-import NotificationsInboxPage from './pages/NotificationsInboxPage'
-import TargetsPage from './pages/TargetsPage'
-import KpiBoardPage from './pages/KpiBoardPage'
-import ForecastScenarioPage from './pages/ForecastScenarioPage'
-import InsightsPage from './pages/InsightsPage'
-import ReferralStatsPage from './pages/ReferralStatsPage'
-import VisionCorpusPage from './pages/VisionCorpusPage'
-import AnnouncementsPage from './pages/AnnouncementsPage'
-import ReservationsKanban from './pages/ReservationsKanban'
-import ReservationsPage from './pages/ReservationsPage'
-import NewReservationPage from './pages/NewReservationPage'
-import MissedSalesPage from './pages/MissedSalesPage'
-import ReservationDetailPage from './pages/ReservationDetailPage'
-import CustomersPage from './pages/CustomersPage'
-import CustomerDetailPage from './pages/CustomerDetailPage'
-import SyncPage from './pages/SyncPage'
-import TrustedNetworksPage from './pages/TrustedNetworksPage'
-import DevicesPage from './pages/DevicesPage'
-import ZonePolicyPage from './pages/ZonePolicyPage'
-import TransfersPage from './pages/TransfersPage'
-import TransitsPage from './pages/TransitsPage'
-import NewTransferPage from './pages/NewTransferPage'
-import TransferDetailPage from './pages/TransferDetailPage'
-import PurchasingDashboard from './pages/PurchasingDashboard'
-import MarketShortagePage from './pages/MarketShortagePage'
-import PhantomSalesPage from './pages/PhantomSalesPage'
-import CashOptimizationPage from './pages/CashOptimizationPage'
-import ChronicClassifierPage from './pages/ChronicClassifierPage'
-import SettingsPage from './pages/SettingsPage'
-import StockCountPage from './pages/StockCountPage'
-import ShortagePage from './pages/ShortagePage'
-import POSOrderPage from './pages/POSOrderPage'
-import ExceptionCenterPage from './pages/ExceptionCenterPage'
-import VouchersPage from './pages/VouchersPage'
-import RefillRemindersPage from './pages/RefillRemindersPage'
-import CustomerMergePage from './pages/CustomerMergePage'
-import OffersPage from './pages/OffersPage'
-import InvoicePage from './pages/InvoicePage'
-import IncentivesPage from './pages/IncentivesPage'
-import InsuranceClaimsPage from './pages/InsuranceClaimsPage'
-import CommerceDocumentsPage from './pages/CommerceDocumentsPage'
-import CommerceDocumentEditorPage from './pages/CommerceDocumentEditorPage'
-import InsurancePrintProfilesPage from './pages/InsurancePrintProfilesPage'
-import InsuranceClaimDetailPage from './pages/InsuranceClaimDetailPage'
-import InsurancePrintPage from './pages/InsurancePrintPage'
-import InsuranceClientsPage from './pages/InsuranceClientsPage'
-import InsuranceItemOverridesPage from './pages/InsuranceItemOverridesPage'
-import InsuranceSeparationListsPage from './pages/InsuranceSeparationListsPage'
-import InsuranceRostersPage from './pages/InsuranceRostersPage'
-import InsuranceReportsPage from './pages/InsuranceReportsPage'
-import MyIncentivesPage from './pages/MyIncentivesPage'
-import GamificationPage from './pages/GamificationPage'
-import StockAuditPage from './pages/StockAuditPage'
-import PicAnalyticsPage from './pages/PicAnalyticsPage'
-import UsagePrintPage from './pages/UsagePrintPage'
-import UserManagementPage from './pages/UserManagementPage'
-import PermissionsMatrixPage from './pages/PermissionsMatrixPage'
-import PickZonesPage from './pages/PickZonesPage'
-import PhoneAlertsPage from './pages/PhoneAlertsPage'
-import ErpPermissionsPage from './pages/ErpPermissionsPage'
-import DeliveryDashboard from './pages/DeliveryDashboard'
-import DeliveryAnalyticsPage from './pages/DeliveryAnalyticsPage'
-import DriverDeliveryApp from './pages/DriverDeliveryApp'
-import DispatchBoard from './pages/DispatchBoard'
+const NotifyPage = lazy(() => import('./pages/NotifyPage'))
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const MyDashboardPage = lazy(() => import('./pages/MyDashboardPage'))
+const NotificationsInboxPage = lazy(() => import('./pages/NotificationsInboxPage'))
+const TargetsPage = lazy(() => import('./pages/TargetsPage'))
+const KpiBoardPage = lazy(() => import('./pages/KpiBoardPage'))
+const ForecastScenarioPage = lazy(() => import('./pages/ForecastScenarioPage'))
+const InsightsPage = lazy(() => import('./pages/InsightsPage'))
+const ReferralStatsPage = lazy(() => import('./pages/ReferralStatsPage'))
+const VisionCorpusPage = lazy(() => import('./pages/VisionCorpusPage'))
+const AnnouncementsPage = lazy(() => import('./pages/AnnouncementsPage'))
+const ReservationsKanban = lazy(() => import('./pages/ReservationsKanban'))
+const ReservationsPage = lazy(() => import('./pages/ReservationsPage'))
+const NewReservationPage = lazy(() => import('./pages/NewReservationPage'))
+const MissedSalesPage = lazy(() => import('./pages/MissedSalesPage'))
+const ReservationDetailPage = lazy(() => import('./pages/ReservationDetailPage'))
+const CustomersPage = lazy(() => import('./pages/CustomersPage'))
+const CustomerDetailPage = lazy(() => import('./pages/CustomerDetailPage'))
+const SyncPage = lazy(() => import('./pages/SyncPage'))
+const TrustedNetworksPage = lazy(() => import('./pages/TrustedNetworksPage'))
+const DevicesPage = lazy(() => import('./pages/DevicesPage'))
+const ZonePolicyPage = lazy(() => import('./pages/ZonePolicyPage'))
+const TransfersPage = lazy(() => import('./pages/TransfersPage'))
+const TransitsPage = lazy(() => import('./pages/TransitsPage'))
+const NewTransferPage = lazy(() => import('./pages/NewTransferPage'))
+const TransferDetailPage = lazy(() => import('./pages/TransferDetailPage'))
+const PurchasingDashboard = lazy(() => import('./pages/PurchasingDashboard'))
+const MarketShortagePage = lazy(() => import('./pages/MarketShortagePage'))
+const PhantomSalesPage = lazy(() => import('./pages/PhantomSalesPage'))
+const CashOptimizationPage = lazy(() => import('./pages/CashOptimizationPage'))
+const ChronicClassifierPage = lazy(() => import('./pages/ChronicClassifierPage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const StockCountPage = lazy(() => import('./pages/StockCountPage'))
+const ShortagePage = lazy(() => import('./pages/ShortagePage'))
+const POSOrderPage = lazy(() => import('./pages/POSOrderPage'))
+const ExceptionCenterPage = lazy(() => import('./pages/ExceptionCenterPage'))
+const VouchersPage = lazy(() => import('./pages/VouchersPage'))
+const RefillRemindersPage = lazy(() => import('./pages/RefillRemindersPage'))
+const CustomerMergePage = lazy(() => import('./pages/CustomerMergePage'))
+const OffersPage = lazy(() => import('./pages/OffersPage'))
+const InvoicePage = lazy(() => import('./pages/InvoicePage'))
+const IncentivesPage = lazy(() => import('./pages/IncentivesPage'))
+const InsuranceClaimsPage = lazy(() => import('./pages/InsuranceClaimsPage'))
+const CommerceDocumentsPage = lazy(() => import('./pages/CommerceDocumentsPage'))
+const CommerceDocumentEditorPage = lazy(() => import('./pages/CommerceDocumentEditorPage'))
+const InsurancePrintProfilesPage = lazy(() => import('./pages/InsurancePrintProfilesPage'))
+const InsuranceClaimDetailPage = lazy(() => import('./pages/InsuranceClaimDetailPage'))
+const InsurancePrintPage = lazy(() => import('./pages/InsurancePrintPage'))
+const InsuranceClientsPage = lazy(() => import('./pages/InsuranceClientsPage'))
+const InsuranceItemOverridesPage = lazy(() => import('./pages/InsuranceItemOverridesPage'))
+const InsuranceSeparationListsPage = lazy(() => import('./pages/InsuranceSeparationListsPage'))
+const InsuranceRostersPage = lazy(() => import('./pages/InsuranceRostersPage'))
+const InsuranceReportsPage = lazy(() => import('./pages/InsuranceReportsPage'))
+const MyIncentivesPage = lazy(() => import('./pages/MyIncentivesPage'))
+const GamificationPage = lazy(() => import('./pages/GamificationPage'))
+const StockAuditPage = lazy(() => import('./pages/StockAuditPage'))
+const PicAnalyticsPage = lazy(() => import('./pages/PicAnalyticsPage'))
+const UsagePrintPage = lazy(() => import('./pages/UsagePrintPage'))
+const UserManagementPage = lazy(() => import('./pages/UserManagementPage'))
+const PermissionsMatrixPage = lazy(() => import('./pages/PermissionsMatrixPage'))
+const PickZonesPage = lazy(() => import('./pages/PickZonesPage'))
+const PhoneAlertsPage = lazy(() => import('./pages/PhoneAlertsPage'))
+const ErpPermissionsPage = lazy(() => import('./pages/ErpPermissionsPage'))
+const DeliveryDashboard = lazy(() => import('./pages/DeliveryDashboard'))
+const DeliveryAnalyticsPage = lazy(() => import('./pages/DeliveryAnalyticsPage'))
+const DriverDeliveryApp = lazy(() => import('./pages/DriverDeliveryApp'))
+const DispatchBoard = lazy(() => import('./pages/DispatchBoard'))
 import RiderLayout from './components/RiderLayout'
 import useNumberInputGuards from './hooks/useNumberInputGuards'
 import MobileLayout from './components/MobileLayout'
-import HelpCenterPage from './pages/HelpCenterPage'
-import HelpManualPage from './pages/HelpManualPage'
-import MobilePOSOrderPage from './pages/mobile/MobilePOSOrderPage'
-import MobileReservationsPage from './pages/mobile/MobileReservationsPage'
+import PageSuspense from './components/PageSuspense'
+const HelpCenterPage = lazy(() => import('./pages/HelpCenterPage'))
+const HelpManualPage = lazy(() => import('./pages/HelpManualPage'))
+const MobilePOSOrderPage = lazy(() => import('./pages/mobile/MobilePOSOrderPage'))
+const MobileReservationsPage = lazy(() => import('./pages/mobile/MobileReservationsPage'))
 import { MOBILE_RESERVATION_ROLES, MOBILE_TRANSFER_ROLES } from './pages/mobile/mobileAccess'
-import MobileNewReservationPage from './pages/mobile/MobileNewReservationPage'
-import MobileReservationDetailPage from './pages/mobile/MobileReservationDetailPage'
-import MobileTransfersPage from './pages/mobile/MobileTransfersPage'
-import MobileNewTransferPage from './pages/mobile/MobileNewTransferPage'
-import MobileTransferDetailPage from './pages/mobile/MobileTransferDetailPage'
-import MobileApprovalsPage from './pages/mobile/MobileApprovalsPage'
-import MobileShortagePage from './pages/mobile/MobileShortagePage'
-import MobileNewShortagePage from './pages/mobile/MobileNewShortagePage'
-import MobileShortageDetailPage from './pages/mobile/MobileShortageDetailPage'
-import MobileDeliveryPage from './pages/mobile/MobileDeliveryPage'
-import MobileDeliveryDetailPage from './pages/mobile/MobileDeliveryDetailPage'
-import MobileDemandPage from './pages/mobile/MobileDemandPage'
-import MobileNewDemandPage from './pages/mobile/MobileNewDemandPage'
-import MobileDemandDetailPage from './pages/mobile/MobileDemandDetailPage'
-import MobileItemsPage from './pages/mobile/MobileItemsPage'
-import MobileNotificationsPage from './pages/mobile/MobileNotificationsPage'
-import MobileCustomersPage from './pages/mobile/MobileCustomersPage'
-import MobileMyIncentivesPage from './pages/mobile/MobileMyIncentivesPage'
-import MobileGamificationPage from './pages/mobile/MobileGamificationPage'
-import MobileTasksPage from './pages/mobile/MobileTasksPage'
-import MobileTaskDetailPage from './pages/mobile/MobileTaskDetailPage'
-import MobileVoucherRedeemPage from './pages/mobile/MobileVoucherRedeemPage'
-import MobileStockCountPage from './pages/mobile/MobileStockCountPage'
-import MobileStockCountDetailPage from './pages/mobile/MobileStockCountDetailPage'
-import MobileDailyCountPage from './pages/mobile/MobileDailyCountPage'
-import MobileQAPage from './pages/mobile/MobileQAPage'
-import MobileQADetailPage from './pages/mobile/MobileQADetailPage'
-import MobileAttendancePage from './pages/mobile/MobileAttendancePage'
-import DeliveryTrackPage from './pages/DeliveryTrackPage'
-import CounselCardPublicPage from './pages/CounselCardPublicPage'
-import CounsellingPage from './pages/CounsellingPage'
-import PaymentTracking from './pages/PaymentTracking'
-import SalesDashboard from './pages/SalesDashboard'
-import PerformanceDashboard from './pages/PerformanceDashboard'
-import InventoryDashboard from './pages/InventoryDashboard'
-import TasksPage from './pages/TasksPage'
-import TaskDetailPage from './pages/TaskDetailPage'
-import TaskDashboardPage from './pages/TaskDashboardPage'
-import TaskSchedulesPage from './pages/TaskSchedulesPage'
+const MobileNewReservationPage = lazy(() => import('./pages/mobile/MobileNewReservationPage'))
+const MobileReservationDetailPage = lazy(() => import('./pages/mobile/MobileReservationDetailPage'))
+const MobileTransfersPage = lazy(() => import('./pages/mobile/MobileTransfersPage'))
+const MobileNewTransferPage = lazy(() => import('./pages/mobile/MobileNewTransferPage'))
+const MobileTransferDetailPage = lazy(() => import('./pages/mobile/MobileTransferDetailPage'))
+const MobileApprovalsPage = lazy(() => import('./pages/mobile/MobileApprovalsPage'))
+const MobileShortagePage = lazy(() => import('./pages/mobile/MobileShortagePage'))
+const MobileNewShortagePage = lazy(() => import('./pages/mobile/MobileNewShortagePage'))
+const MobileShortageDetailPage = lazy(() => import('./pages/mobile/MobileShortageDetailPage'))
+const MobileDeliveryPage = lazy(() => import('./pages/mobile/MobileDeliveryPage'))
+const MobileDeliveryDetailPage = lazy(() => import('./pages/mobile/MobileDeliveryDetailPage'))
+const MobileDemandPage = lazy(() => import('./pages/mobile/MobileDemandPage'))
+const MobileNewDemandPage = lazy(() => import('./pages/mobile/MobileNewDemandPage'))
+const MobileDemandDetailPage = lazy(() => import('./pages/mobile/MobileDemandDetailPage'))
+const MobileItemsPage = lazy(() => import('./pages/mobile/MobileItemsPage'))
+const MobileNotificationsPage = lazy(() => import('./pages/mobile/MobileNotificationsPage'))
+const MobileCustomersPage = lazy(() => import('./pages/mobile/MobileCustomersPage'))
+const MobileMyIncentivesPage = lazy(() => import('./pages/mobile/MobileMyIncentivesPage'))
+const MobileGamificationPage = lazy(() => import('./pages/mobile/MobileGamificationPage'))
+const MobileTasksPage = lazy(() => import('./pages/mobile/MobileTasksPage'))
+const MobileTaskDetailPage = lazy(() => import('./pages/mobile/MobileTaskDetailPage'))
+const MobileVoucherRedeemPage = lazy(() => import('./pages/mobile/MobileVoucherRedeemPage'))
+const MobileStockCountPage = lazy(() => import('./pages/mobile/MobileStockCountPage'))
+const MobileStockCountDetailPage = lazy(() => import('./pages/mobile/MobileStockCountDetailPage'))
+const MobileDailyCountPage = lazy(() => import('./pages/mobile/MobileDailyCountPage'))
+const MobileQAPage = lazy(() => import('./pages/mobile/MobileQAPage'))
+const MobileQADetailPage = lazy(() => import('./pages/mobile/MobileQADetailPage'))
+const MobileAttendancePage = lazy(() => import('./pages/mobile/MobileAttendancePage'))
+const DeliveryTrackPage = lazy(() => import('./pages/DeliveryTrackPage'))
+const CounselCardPublicPage = lazy(() => import('./pages/CounselCardPublicPage'))
+const CounsellingPage = lazy(() => import('./pages/CounsellingPage'))
+const PaymentTracking = lazy(() => import('./pages/PaymentTracking'))
+const SalesDashboard = lazy(() => import('./pages/SalesDashboard'))
+const PerformanceDashboard = lazy(() => import('./pages/PerformanceDashboard'))
+const InventoryDashboard = lazy(() => import('./pages/InventoryDashboard'))
+const TasksPage = lazy(() => import('./pages/TasksPage'))
+const TaskDetailPage = lazy(() => import('./pages/TaskDetailPage'))
+const TaskDashboardPage = lazy(() => import('./pages/TaskDashboardPage'))
+const TaskSchedulesPage = lazy(() => import('./pages/TaskSchedulesPage'))
 // Procurement — hub + sub-pages (sub-pages render as tabs inside ProcurementHubPage)
-import ProcurementHubPage from './pages/ProcurementHubPage'
-import ProcurementDashboard from './pages/ProcurementDashboard'
-import SupplierPerformancePage from './pages/SupplierPerformancePage'
-import ProcurementMarginPage from './pages/ProcurementMarginPage'
-import ProcurementOptimizationPage from './pages/ProcurementOptimizationPage'
-import ProcurementHistoryPage from './pages/ProcurementHistoryPage'
-import SupplierSegmentationPage from './pages/SupplierSegmentationPage'
-import FocAnalysisPage from './pages/FocAnalysisPage'
-import SupplierCategoriesPage from './pages/SupplierCategoriesPage'
+const ProcurementHubPage = lazy(() => import('./pages/ProcurementHubPage'))
+const ProcurementDashboard = lazy(() => import('./pages/ProcurementDashboard'))
+const SupplierPerformancePage = lazy(() => import('./pages/SupplierPerformancePage'))
+const ProcurementMarginPage = lazy(() => import('./pages/ProcurementMarginPage'))
+const ProcurementOptimizationPage = lazy(() => import('./pages/ProcurementOptimizationPage'))
+const ProcurementHistoryPage = lazy(() => import('./pages/ProcurementHistoryPage'))
+const SupplierSegmentationPage = lazy(() => import('./pages/SupplierSegmentationPage'))
+const FocAnalysisPage = lazy(() => import('./pages/FocAnalysisPage'))
+const SupplierCategoriesPage = lazy(() => import('./pages/SupplierCategoriesPage'))
 // Analytics — hub renders Sales + Performance + Reservations + Transfers as tabs
-import AnalyticsHubPage from './pages/AnalyticsHubPage'
-import ReservationsAnalyticsPage from './pages/ReservationsAnalyticsPage'
-import TransfersAnalyticsPage from './pages/TransfersAnalyticsPage'
+const AnalyticsHubPage = lazy(() => import('./pages/AnalyticsHubPage'))
+const ReservationsAnalyticsPage = lazy(() => import('./pages/ReservationsAnalyticsPage'))
+const TransfersAnalyticsPage = lazy(() => import('./pages/TransfersAnalyticsPage'))
 // Operations — previously missing routes
-import CallCenterPage from './pages/CallCenterPage'
-import CasesPage from './pages/CasesPage'
-import CallbackQueuePage from './pages/CallbackQueuePage'
-import AuditPage from './pages/AuditPage'
-import FollowUpsPage from './pages/FollowUpsPage'
-import DemandPage from './pages/DemandPage'
-import DemandDashboardPage from './pages/DemandDashboardPage'
-import DemandRecoveryPage from './pages/DemandRecoveryPage'
-import DemandDetailPage from './pages/DemandDetailPage'
+const CallCenterPage = lazy(() => import('./pages/CallCenterPage'))
+const CasesPage = lazy(() => import('./pages/CasesPage'))
+const CallbackQueuePage = lazy(() => import('./pages/CallbackQueuePage'))
+const AuditPage = lazy(() => import('./pages/AuditPage'))
+const FollowUpsPage = lazy(() => import('./pages/FollowUpsPage'))
+const DemandPage = lazy(() => import('./pages/DemandPage'))
+const DemandDashboardPage = lazy(() => import('./pages/DemandDashboardPage'))
+const DemandRecoveryPage = lazy(() => import('./pages/DemandRecoveryPage'))
+const DemandDetailPage = lazy(() => import('./pages/DemandDetailPage'))
 // Finance Intelligence Platform
-import FinanceHubPage from './pages/FinanceHubPage'
-import FinanceDashboardPage from './pages/FinanceDashboardPage'
-import GLAccountsPage from './pages/finance/gl/GLAccountsPage'   // finance's own chart of accounts (GL)
-import GLJournalPage from './pages/finance/gl/JournalPage'
-import GLTrialBalancePage from './pages/finance/gl/TrialBalancePage'
-import GLStatementsPage from './pages/finance/gl/StatementsPage'
-import GLAccountStatementPage from './pages/finance/gl/AccountStatementPage'
-import GLPartiesPage from './pages/finance/gl/GLPartiesPage'
-import PostingRulesPage from './pages/finance/gl/PostingRulesPage'
-import ProfitLossPage from './pages/ProfitLossPage'
-import CashViewPage from './pages/CashViewPage'   // P-40 — replaces the retired cash-flow page (P-43)
-import ExpenseAnalyticsPage from './pages/ExpenseAnalyticsPage'
-import FinanceSchemaPage from './pages/FinanceSchemaPage'
-import ContractReceivablesPage from './pages/ContractReceivablesPage'   // P-41
-import SupplierTermsPage from './pages/SupplierTermsPage'               // P-42
-import ProductCatalogPage from './pages/ProductCatalogPage'
-import ProductDetailPage from './pages/ProductDetailPage'
-import ProductContentAdminPage from './pages/ProductContentAdminPage'
-import WhatsAppCampaignPage from './pages/WhatsAppCampaignPage'
-import WhatsAppInboxPage from './pages/WhatsAppInboxPage'
-import OmniInboxPage from './pages/OmniInboxPage'
-import OmniAccountsPage from './pages/OmniAccountsPage'
-import OmniWallboardPage from './pages/OmniWallboardPage'
-import OmniAutomationsPage from './pages/OmniAutomationsPage'
-import OmniAnalyticsPage from './pages/OmniAnalyticsPage'
-import LoyaltyPage from './pages/LoyaltyPage'
-import BranchPointsPage from './pages/BranchPointsPage'
-import ReferralPage from './pages/ReferralPage'
-import PbxLivePage from './pages/PbxLivePage'
-import ChequePlanningPage from './pages/ChequePlanningPage'
-import CatalogIntelligencePage from './pages/CatalogIntelligencePage'
-import CompositionPage from './pages/CompositionPage'
-import IngredientSearchPage from './pages/IngredientSearchPage'
-import ItemIntelPage from './pages/ItemIntelPage'
-import ImageEnrichmentPage from './pages/ImageEnrichmentPage'
-import RecommendationsPage from './pages/RecommendationsPage'
-import CallCenterAnalyticsPage from './pages/CallCenterAnalyticsPage'
-import PricingApprovalsPage from './pages/PricingApprovalsPage'
-import DiscountAlignmentPage from './pages/DiscountAlignmentPage'
-import SupplyPage from './pages/SupplyPage'
-import ReplacementCasesPage from './pages/ReplacementCasesPage'
-import ReplacementCaseDetailPage from './pages/ReplacementCaseDetailPage'
-import ReplacementNewCasePage from './pages/ReplacementNewCasePage'
-import ApprovalsPage from './pages/ApprovalsPage'
-import BatchesPage from './pages/BatchesPage'
-import HRPage from './pages/HRPage'
-import PaymentAuditPage from './pages/PaymentAuditPage'
-import ReconciliationPage from './pages/ReconciliationPage'
-import ForecastingPage from './pages/ForecastingPage'
-import SecurityPage from './pages/SecurityPage'
+const FinanceHubPage = lazy(() => import('./pages/FinanceHubPage'))
+const FinanceDashboardPage = lazy(() => import('./pages/FinanceDashboardPage'))
+const GLAccountsPage = lazy(() => import('./pages/finance/gl/GLAccountsPage'))   // finance's own chart of accounts (GL)
+const GLJournalPage = lazy(() => import('./pages/finance/gl/JournalPage'))
+const GLTrialBalancePage = lazy(() => import('./pages/finance/gl/TrialBalancePage'))
+const GLStatementsPage = lazy(() => import('./pages/finance/gl/StatementsPage'))
+const GLAccountStatementPage = lazy(() => import('./pages/finance/gl/AccountStatementPage'))
+const GLPartiesPage = lazy(() => import('./pages/finance/gl/GLPartiesPage'))
+const PostingRulesPage = lazy(() => import('./pages/finance/gl/PostingRulesPage'))
+const ProfitLossPage = lazy(() => import('./pages/ProfitLossPage'))
+const CashViewPage = lazy(() => import('./pages/CashViewPage'))   // P-40 — replaces the retired cash-flow page (P-43)
+const ExpenseAnalyticsPage = lazy(() => import('./pages/ExpenseAnalyticsPage'))
+const FinanceSchemaPage = lazy(() => import('./pages/FinanceSchemaPage'))
+const ContractReceivablesPage = lazy(() => import('./pages/ContractReceivablesPage'))   // P-41
+const SupplierTermsPage = lazy(() => import('./pages/SupplierTermsPage'))               // P-42
+const ProductCatalogPage = lazy(() => import('./pages/ProductCatalogPage'))
+const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'))
+const ProductContentAdminPage = lazy(() => import('./pages/ProductContentAdminPage'))
+const WhatsAppCampaignPage = lazy(() => import('./pages/WhatsAppCampaignPage'))
+const WhatsAppInboxPage = lazy(() => import('./pages/WhatsAppInboxPage'))
+const OmniInboxPage = lazy(() => import('./pages/OmniInboxPage'))
+const OmniAccountsPage = lazy(() => import('./pages/OmniAccountsPage'))
+const OmniWallboardPage = lazy(() => import('./pages/OmniWallboardPage'))
+const OmniAutomationsPage = lazy(() => import('./pages/OmniAutomationsPage'))
+const OmniAnalyticsPage = lazy(() => import('./pages/OmniAnalyticsPage'))
+const LoyaltyPage = lazy(() => import('./pages/LoyaltyPage'))
+const BranchPointsPage = lazy(() => import('./pages/BranchPointsPage'))
+const ReferralPage = lazy(() => import('./pages/ReferralPage'))
+const PbxLivePage = lazy(() => import('./pages/PbxLivePage'))
+const ChequePlanningPage = lazy(() => import('./pages/ChequePlanningPage'))
+const CatalogIntelligencePage = lazy(() => import('./pages/CatalogIntelligencePage'))
+const CompositionPage = lazy(() => import('./pages/CompositionPage'))
+const IngredientSearchPage = lazy(() => import('./pages/IngredientSearchPage'))
+const ItemIntelPage = lazy(() => import('./pages/ItemIntelPage'))
+const ImageEnrichmentPage = lazy(() => import('./pages/ImageEnrichmentPage'))
+const RecommendationsPage = lazy(() => import('./pages/RecommendationsPage'))
+const CallCenterAnalyticsPage = lazy(() => import('./pages/CallCenterAnalyticsPage'))
+const PricingApprovalsPage = lazy(() => import('./pages/PricingApprovalsPage'))
+const DiscountAlignmentPage = lazy(() => import('./pages/DiscountAlignmentPage'))
+const SupplyPage = lazy(() => import('./pages/SupplyPage'))
+const ReplacementCasesPage = lazy(() => import('./pages/ReplacementCasesPage'))
+const ReplacementCaseDetailPage = lazy(() => import('./pages/ReplacementCaseDetailPage'))
+const ReplacementNewCasePage = lazy(() => import('./pages/ReplacementNewCasePage'))
+const ApprovalsPage = lazy(() => import('./pages/ApprovalsPage'))
+const BatchesPage = lazy(() => import('./pages/BatchesPage'))
+const HRPage = lazy(() => import('./pages/HRPage'))
+const PaymentAuditPage = lazy(() => import('./pages/PaymentAuditPage'))
+const ReconciliationPage = lazy(() => import('./pages/ReconciliationPage'))
+const ForecastingPage = lazy(() => import('./pages/ForecastingPage'))
+const SecurityPage = lazy(() => import('./pages/SecurityPage'))
 // Customer self-service portal (external — magic-link auth, own shell, NOT staff)
-import PortalLayout from './pages/portal/PortalLayout'
-import PortalLoginPage from './pages/portal/PortalLoginPage'
-import PortalAuthPage from './pages/portal/PortalAuthPage'
-import PortalHomePage from './pages/portal/PortalHomePage'
-import PortalLoyaltyPage from './pages/portal/PortalLoyaltyPage'
-import PortalRefillsPage from './pages/portal/PortalRefillsPage'
+const PortalLayout = lazy(() => import('./pages/portal/PortalLayout'))
+const PortalLoginPage = lazy(() => import('./pages/portal/PortalLoginPage'))
+const PortalAuthPage = lazy(() => import('./pages/portal/PortalAuthPage'))
+const PortalHomePage = lazy(() => import('./pages/portal/PortalHomePage'))
+const PortalLoyaltyPage = lazy(() => import('./pages/portal/PortalLoyaltyPage'))
+const PortalRefillsPage = lazy(() => import('./pages/portal/PortalRefillsPage'))
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -292,6 +293,8 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        {/* pages load on demand; routes outside a layout suspend here */}
+        <PageSuspense>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/notify" element={<NotifyPage />} />
@@ -596,6 +599,7 @@ export default function App() {
 
           </Route>
         </Routes>
+        </PageSuspense>
       </BrowserRouter>
     </QueryClientProvider>
   )

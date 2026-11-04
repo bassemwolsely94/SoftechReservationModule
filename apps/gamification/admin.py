@@ -26,7 +26,7 @@ class BadgeAdmin(admin.ModelAdmin):
 class PointEventAdmin(admin.ModelAdmin):
     list_display = ('staff', 'rule_key', 'points', 'day', 'source_key')
     list_filter = ('category', 'rule_key')
-    search_fields = ('source_key', 'staff__user__username')
+    search_fields = ('source_key', 'staff__user__username', 'staff__softech_username')
     readonly_fields = [f.name for f in PointEvent._meta.fields]
 
     def has_change_permission(self, request, obj=None):   # append-only ledger

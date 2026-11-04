@@ -20,9 +20,10 @@ class PolicySeedTests(TestCase):
     def test_policy_seeded_for_v1_events(self):
         rows = {p.event: p for p in PhoneAlertPolicy.objects.all()}
         self.assertEqual(set(rows), set(EVENTS))
-        self.assertEqual(len(rows), 7)
+        self.assertEqual(len(rows), 8)
         for key, p in rows.items():
-            self.assertEqual(p.mode, 'always' if key == 'escalation' else 'optional', key)
+            # an automatic call-back has no requester to tick the box, so it seeds «دائماً»
+            self.assertEqual(p.mode, 'always' if key in ('escalation', 'callback_overdue') else 'optional', key)
             self.assertEqual((p.remind_after_min, p.escalate_after_min, p.max_reminders), (15, 30, 2))
 
     def test_policy_absent_means_never(self):
@@ -1427,7 +1428,7 @@ class AdminApiTests(TestCase):
         a = self._audit('phone_alert_policy_changed').get()
         self.assertEqual(a.old_data['mode'], 'optional')
         self.assertEqual(a.new_data['mode'], 'never')
-        self.assertEqual(len(self.admin_client.get(self.BASE + 'policies/').data), 7)
+        self.assertEqual(len(self.admin_client.get(self.BASE + 'policies/').data), 8)
 
     def test_policy_patch_validation(self):
         bad = [{'remind_after_min': 0}, {'remind_after_min': 30, 'escalate_after_min': 30},

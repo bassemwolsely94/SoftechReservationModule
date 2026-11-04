@@ -74,6 +74,32 @@ class PaymentAuditOrderingTests(TestCase):
         self.assertEqual(got('?ordering=-exception_type'), sorted(types, reverse=True))
 
 
+class PaymentAuditFieldsTests(TestCase):
+    """The payment-audit page reads only fields the API returns (2026-11-04): server labels for
+    type/status, the bank name, and match_rate as a percent 0–100."""
+
+    def setUp(self):
+        self.branch = make_branch()
+        _, _, self.client = make_admin('audit_fields')
+
+    def test_exception_and_statement_labels(self):
+        PaymentException.objects.create(exception_type=PaymentException.TYPE_DELAYED)
+        e = self.client.get('/api/payments/audit/exceptions/').data['results'][0]
+        self.assertEqual(e['exception_type_label'], 'تسوية متأخرة')
+        self.assertEqual(e['status_label'], 'مفتوح')
+        self.assertIn('payment_amount', e)
+        self.assertIn('payment_ref', e)
+        BankStatementImport.objects.create(
+            branch=self.branch, bank_name='بنك', account_number='123',
+            payment_method=ExternalPayment.METHOD_CHOICES[0][0],
+            statement_from=date(2026, 3, 1), statement_to=date(2026, 3, 31),
+            total_lines=4, matched_lines=3)
+        st = self.client.get('/api/payments/audit/statements/').data['results'][0]
+        self.assertEqual(st['bank_name'], 'بنك')
+        self.assertEqual(st['status_label'], 'في الانتظار')
+        self.assertEqual(st['match_rate'], 75.0)
+
+
 class EveryWhitelistedFieldTests(TestCase):
     """Rule 9: every whitelisted ordering field, ascending and descending, answers 200 (a wrong field name is a 500),
     and ties across a page boundary neither repeat nor drop rows."""

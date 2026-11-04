@@ -718,6 +718,8 @@ SCREENS = [
             T('شارة «📵 تلقائي» = مكالمة واردة فائتة دخلت الطابور وحدها، وتختفي وحدها لما يتم الرد على مكالمة مع نفس الرقم. لو اتصل تاني يزيد العدد.',
               'The "📵 Auto" badge = a missed inbound call that joined the queue by itself; it leaves by itself once a call with that number is answered. Repeat calls raise the count.'),
             T('المعاودة التلقائية بعد مواعيد العمل يكون موعدها فتح اليوم التالي.', 'An automatic call-back after working hours is due at the next opening.'),
+            T('لو المعاودة التلقائية عدّى موعدها ولسه مفتوحة يوصل تنبيه موبايل واحد لمسؤولي «معاودة الاتصال» (من شاشة تنبيهات الموبايل).',
+              'If an automatic call-back passes its due time while still open, one phone alert goes to the "Call-backs" owners (set on the Phone alerts screen).'),
         ],
         'workflows': [],
         'related': ['callcenter.operator', 'callcenter.cases'],
@@ -751,7 +753,8 @@ SCREENS = [
              'text': T('يعيد تحميل الطابور من السيرفر.', 'Reloads the queue from the server.'),
              'open_hint': T('يظهر بس لو التحميل فشل.', 'Shown only when loading failed.')},
         ],
-        'updated': '2026-11-03',
+        'updated': '2026-11-04',
+        'change_note': T('تنبيه موبايل للمعاودة التلقائية المتأخرة', 'Phone alert for an overdue automatic call-back'),
     },
     {
         'key': 'callcenter.pbx',
