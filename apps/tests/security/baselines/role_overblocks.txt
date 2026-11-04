@@ -567,3 +567,14 @@ call_center POST /api/batches/stock-expiry/disposal/987654321/status/
 delivery POST /api/batches/stock-expiry/disposal/987654321/status/
 salesperson POST /api/batches/stock-expiry/disposal/987654321/status/
 viewer POST /api/batches/stock-expiry/disposal/987654321/status/
+
+# reason: Project 4 — the "needs a sheet" queue and similar-item suggestions are curation tools for
+#   counselling → edit holders (pharmacists); view-only roles read approved guidance, not the queue.
+call_center GET /api/counselling/content/987654321/suggest-items/
+call_center GET /api/counselling/content/needs/
+quality_manager GET /api/counselling/content/987654321/suggest-items/
+quality_manager GET /api/counselling/content/needs/
+salesperson GET /api/counselling/content/987654321/suggest-items/
+salesperson GET /api/counselling/content/needs/
+supervisor GET /api/counselling/content/987654321/suggest-items/
+supervisor GET /api/counselling/content/needs/

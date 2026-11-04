@@ -24,7 +24,7 @@ from apps.tests.factories import make_branch, make_user
 APP_JSX = Path(settings.BASE_DIR) / 'frontend' / 'src' / 'App.jsx'
 
 # Public / customer-facing routes: no staff help panel there.
-PUBLIC_PREFIXES = ('/login', '/notify', '/track', '/portal')
+PUBLIC_PREFIXES = ('/login', '/notify', '/track', '/portal', '/c/')   # /c/:token = customer counselling card (Project 4)
 
 
 def _route_tags(src):

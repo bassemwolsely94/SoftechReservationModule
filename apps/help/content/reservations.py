@@ -16,6 +16,24 @@ MODULE = {
         '(notes, photos, voice notes) and can be matched with the sales invoice in SOFTECH to confirm the dispense '
         'really happened.'),
     'workflows': [{
+        'key': 'missed_sales',
+        'title': T('مراحل اقتراح المبيعات الفائتة', 'Missed-sale suggestion stages'),
+        'model': 'pos_orders.MissedSaleSuggestion', 'field': 'status',
+        'intro': T('اقتراح فقط: لا يُنشأ حجز إلا لما موظف يحفظه بنفسه.',
+                   'A suggestion only: no reservation exists until a staff member saves one.'),
+        'states': [
+            {'key': 'new', 'label': T('جديد', 'New'),
+             'desc': T('عميل معروف اختار الصنف على الكاشير ولم يشتره. راجعه: طلب حقيقي أم تصحيح؟',
+                       'A known customer picked the item at the POS and did not buy it. Review it: a real request or a correction?'),
+             'next': ['confirmed', 'rejected', 'expired']},
+            {'key': 'confirmed', 'label': T('تم تأكيده كحجز', 'Confirmed as reservation'),
+             'desc': T('موظف أكّده وحفظ حجزاً عادياً مرتبطاً به.', 'A staff member confirmed it and saved a normal reservation linked to it.')},
+            {'key': 'rejected', 'label': T('مرفوض', 'Rejected'),
+             'desc': T('موظف رفضه مع السبب (سؤال سعر، صنف خطأ…).', 'A staff member rejected it with the reason (price check, wrong item…).')},
+            {'key': 'expired', 'label': T('انتهت صلاحيته', 'Expired'),
+             'desc': T('لم يُبت فيه خلال 14 يوماً فأُغلق تلقائياً.', 'Not decided within 14 days, so it closed automatically.')},
+        ],
+    }, {
         'title': T('مراحل الحجز', 'Reservation stages'),
         'model': 'reservations.Reservation', 'field': 'status',
         'transitions': 'apps.reservations.views.ReservationViewSet._VALID_TRANSITIONS',
@@ -580,7 +598,7 @@ SCREENS = [
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
         'updated': '2026-11-03',
-        'change_note': T('خيار «📲 نبّه على الموبايل» عند تسجيل الحجز', 'The "📲 Alert by phone" option when recording a reservation'),
+        'change_note': T('خيار «📲 نبّه على الموبايل» عند تسجيل الحجز، و«تأكيد كحجز» من المبيعات الفائتة يفتح النموذج جاهزاً', 'The "📲 Alert by phone" option when recording a reservation, and "Confirm as reservation" from missed sales opens the form prefilled'),
     },
     {
         'key': 'reservations.detail',
@@ -817,5 +835,69 @@ SCREENS = [
         ],
         'updated': '2026-10-26',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+    },
+    {
+        'key': 'reservations.missed_sales',
+        'routes': ['/missed-sales'],
+        'title': T('مبيعات فائتة', 'Missed sales'),
+        'summary': T(
+            'أصناف اختارها عميل معروف على كاشير النظام الجديد ولم يشترها — اقتراحات حجز وليست حجوزات. '
+            'راجع كل اقتراح: لو طلب حقيقي اضغط «تأكيد كحجز» فيفتح نموذج الحجز العادي جاهزاً وتحفظه أنت، '
+            'ولو مجرد سؤال سعر أو تصحيح اضغط «رفض» واختر السبب. كل قرار يُسجَّل باسمك ووقته.',
+            'Items a known customer picked on the new POS but did not buy — reservation suggestions, not reservations. '
+            'Review each one: if it is a real request press "Confirm as reservation" to open the normal reservation form '
+            'prefilled and save it yourself; if it was only a price check or a correction press "Reject" and pick the reason. '
+            'Every decision is logged with your name and time.'),
+        'audience': T('صيادلة ومشرفو الفرع (فرعهم فقط)، والكول سنتر والإدارة (كل الفروع).',
+                      'Branch pharmacists and supervisors (their branch only), call center and management (all branches).'),
+        'steps': [
+            T('افتح «جديدة» وابدأ بالأعلى قيمة (رتّب بعمود القيمة).', 'Open "New" and start with the highest value (sort by the value column).'),
+            T('شوف «اشترى في نفس السلة» — يساعدك تفرّق بين طلب حقيقي وتصحيح كاشير.',
+              'Check "Bought in the same cart" — it helps tell a real request from a cashier correction.'),
+            T('طلب حقيقي؟ «تأكيد كحجز» ثم راجع النموذج واحفظ.', 'Real request? "Confirm as reservation", then review the form and save.'),
+            T('غير ذلك؟ «رفض» واختر السبب.', 'Otherwise? "Reject" and pick the reason.'),
+        ],
+        'tips': [
+            T('المصدر هو كاشير النظام الجديد فقط، لأن SOFTECH لا يسجل العميل الحقيقي في سجل المبيعات غير المخزنة.',
+              'The source is our new POS only, because SOFTECH does not record the real customer in its unsaved-sales log.'),
+            T('الصنف اللي اتباع في نفس الفاتورة أو اشتراه العميل بعدها في أي فرع لا يظهر هنا.',
+              'An item sold on the same invoice, or bought by the customer later at any branch, never shows here.'),
+            T('الاقتراح الذي لا يُبت فيه خلال 14 يوماً ينتهي تلقائياً.', 'A suggestion not decided within 14 days expires automatically.'),
+        ],
+        'tabs': [
+            {'key': 'new', 'title': T('جديدة', 'New'), 'body': T('تنتظر قرارك.', 'Waiting for your decision.')},
+            {'key': 'confirmed', 'title': T('تم تأكيدها', 'Confirmed'),
+             'body': T('صارت حجوزات؛ اضغط رقم الحجز لفتحه.', 'Became reservations; click the reservation number to open it.')},
+            {'key': 'rejected', 'title': T('مرفوضة', 'Rejected'),
+             'body': T('مع السبب ومن رفضها ومتى.', 'With the reason, who rejected it and when.')},
+            {'key': 'expired', 'title': T('انتهت', 'Expired'), 'body': T('لم يُبت فيها خلال 14 يوماً.', 'Not decided within 14 days.')},
+        ],
+        'workflows': ['missed_sales'],
+        'related': ['reservations.new', 'reservations.board'],
+        'tour': [
+            {'target': 'missed-sales-status', 'label': T('جديدة · تم تأكيدها · مرفوضة · انتهت', 'New · Confirmed · Rejected · Expired'),
+             'text': T('«جديدة» هي اللي محتاجة قرارك؛ الباقي سجل بالقرارات.', '"New" needs your decision; the rest is the record of decisions.')},
+            {'target': 'missed-sales-table', 'label': T('جدول الاقتراحات', 'Suggestions table'),
+             'text': T('العميل والصنف والكمية والقيمة والفرع واللي اشتراه في نفس السلة. اضغط أي عنوان للترتيب.',
+                       'Customer, item, quantity, value, branch and what was bought in the same cart. Click any header to sort.')},
+            {'target': 'missed-sales-confirm', 'label': T('تأكيد كحجز', 'Confirm as reservation'),
+             'text': T('يفتح نموذج الحجز العادي جاهزاً. الحجز لا يتسجل إلا لما تحفظ.',
+                       'Opens the normal reservation form prefilled. Nothing is saved until you save.'),
+             'open_hint': T('على أي سطر في «جديدة».', 'On any row under "New".')},
+            {'target': 'missed-sales-reject', 'label': T('رفض', 'Reject'),
+             'text': T('اختر السبب («سبب آخر» يحتاج كتابة) ثم «تأكيد الرفض».', 'Pick the reason ("Other" needs text) then "Confirm reject".'),
+             'warn': T('الرفض نهائي ويُسجل باسمك.', 'A rejection is final and logged under your name.'),
+             'open_hint': T('على أي سطر في «جديدة».', 'On any row under "New".')},
+        ],
+        'hints': [
+            {'target': 'missed-sales-refresh', 'label': T('↻ تحديث', '↻ Refresh'),
+             'text': T('يعيد تحميل القائمة. الاقتراحات الجديدة تُبنى كل 30 دقيقة.', 'Reloads the list. New suggestions are built every 30 minutes.')},
+            {'target': 'missed-sales-reject-reason', 'label': T('سبب الرفض', 'Reject reason'),
+             'text': T('السبب يُحفظ مع القرار ويظهر في تبويب «مرفوضة».', 'The reason is kept with the decision and shows under "Rejected".'),
+             'warn': T('بعد «تأكيد الرفض» لا يمكن التراجع.', 'After "Confirm reject" it cannot be undone.'),
+             'open_hint': T('يظهر بعد الضغط على «رفض».', 'Appears after pressing "Reject".')},
+        ],
+        'updated': '2026-11-03',
+        'change_note': T('شاشة جديدة: المبيعات الفائتة', 'New screen: missed sales'),
     },
 ]

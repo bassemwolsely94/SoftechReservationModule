@@ -93,6 +93,7 @@ class Reservation(models.Model):
         ('branch_call',     'الفرع — مكالمة'),
         ('online',          'طلب إلكتروني'),
         ('walk_in',         'زيارة مباشرة'),
+        ('pos_missed',      'مبيعات فائتة'),
     ]
     FULFILLMENT_CHOICES = [
         ('pickup',   'استلام من الفرع'),

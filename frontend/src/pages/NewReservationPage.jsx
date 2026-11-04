@@ -13,9 +13,9 @@
  *  ✓ Stock panel retained below item card
  */
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { reservationsApi, branchesApi, itemsApi, configApi } from '../api/client'
+import { reservationsApi, branchesApi, itemsApi, configApi, customersApi, missedSalesApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import BranchSelect from '../components/BranchSelect'
 import ItemSearchWidget from '../components/ItemSearchWidget'
@@ -253,6 +253,12 @@ export default function NewReservationPage() {
   })
   const upd = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
+  // Project 3: «تأكيد كحجز» from /missed-sales opens this form prefilled. Saving sends
+  // missed_sale so the server confirms the suggestion in the same transaction.
+  const [searchParams] = useSearchParams()
+  const missedSaleId = searchParams.get('missed_sale') || ''
+  const [missedSale, setMissedSale] = useState(null)
+
   const [selectedCustomer, setSelectedCustomer] = useState(null)
   const [selectedItem, setSelectedItem]         = useState(null)   // full item object
   const [selectedItemStock, setSelectedItemStock] = useState(null)
@@ -296,6 +302,7 @@ export default function NewReservationPage() {
     { value: 'branch_whatsapp', label: 'الفرع — واتساب',    icon: '🏪', is_active: true },
     { value: 'branch_call',     label: 'الفرع — مكالمة',    icon: '☎️', is_active: true },
     { value: 'online',          label: 'طلب إلكتروني',       icon: '🌐', is_active: true },
+    { value: 'pos_missed',      label: 'مبيعات فائتة',       icon: '🛒', is_active: true },
   ]
   const FULFILLMENT_FALLBACK = [
     { value: 'pickup',   label: 'استلام من الفرع', icon: '🏪', is_active: true },
@@ -315,6 +322,30 @@ export default function NewReservationPage() {
       .catch(() => setSelectedItemStock([]))
       .finally(() => setStockLoading(false))
   }, [form.item])
+
+  useEffect(() => {
+    if (!missedSaleId) return
+    let alive = true
+    missedSalesApi.get(missedSaleId).then(async ({ data: m }) => {
+      const [cust, item] = await Promise.all([
+        customersApi.get(m.customer).then(r => r.data).catch(() => null),
+        m.item ? itemsApi.get(m.item).then(r => r.data).catch(() => null) : null,
+      ])
+      if (!alive) return
+      setMissedSale(m)
+      if (cust) handleCustomerSelect(cust)
+      if (item) handleItemSelect(item)
+      setForm(f => ({
+        ...f,
+        branch: String(m.branch),
+        quantity_requested: Math.max(1, Math.round(Number(m.qty) || 1)),
+        order_source: 'pos_missed',
+        ...(item ? {} : { manual_item_name: m.item_name }),
+      }))
+    }).catch(() => setError('تعذر تحميل اقتراح المبيعات الفائتة'))
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [missedSaleId])
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -358,6 +389,7 @@ export default function NewReservationPage() {
         if (v !== '') fd.append(k, v)
       })
       if (image) fd.append('image', image)
+      if (missedSale) fd.append('missed_sale', missedSale.id)
       const api = await import('../api/client').then(m => m.default)
       const url = force ? '/reservations/?force=true' : '/reservations/'
       const res = await api.post(url, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
@@ -491,6 +523,14 @@ export default function NewReservationPage() {
 
       {/* Form body */}
       <div className="max-w-2xl mx-auto px-6 py-6 space-y-5">
+
+        {missedSale && (
+          <div data-tour="reservations-new-missed-sale"
+               className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+            تأكيد مبيعات فائتة #{missedSale.id} — {missedSale.item_name} للعميل {missedSale.customer_name}.
+            راجع البيانات ثم احفظ؛ لن يُنشأ الحجز إلا بالحفظ.
+          </div>
+        )}
 
         {/* ── Customer section ─────────────────────────────────────────────── */}
         <div className="bg-white rounded-2xl border border-gray-200 p-5" data-tour="reservations-new-customer">

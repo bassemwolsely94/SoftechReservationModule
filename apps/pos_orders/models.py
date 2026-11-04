@@ -369,6 +369,10 @@ class PosSelectionEvent(models.Model):
 
     custcode        = models.CharField(max_length=8, blank=True)
     seller_usercode = models.CharField(max_length=5, blank=True)
+    # the customer picked on the POS screen (Project 3 missed sales: the PIC is known for certain
+    # only in OUR POS — native pos_cancel.custcode is the sales account, never the person)
+    customer        = models.ForeignKey('customers.Customer', null=True, blank=True,
+                                        on_delete=models.SET_NULL, related_name='pos_selection_events')
 
     occurred_at = models.DateTimeField(db_index=True)               # when the selection happened
     created_by  = models.ForeignKey('users.StaffProfile', null=True, blank=True,
@@ -389,6 +393,72 @@ class PosSelectionEvent(models.Model):
 
     def __str__(self):
         return f'{self.event_type} {self.item_code} @ {self.occurred_at:%Y-%m-%d %H:%M}'
+
+
+class MissedSaleSuggestion(models.Model):
+    """An item a KNOWN customer had on OUR POS cart but did not buy (Project 3, doc
+    docs/superpowers/specs/2026-11-03-missed-sales-and-missed-calls-design.md).
+
+    A SUGGESTION only: built by missed_sales.detect_missed_sales from PosSelectionEvent; a staff
+    member either confirms it into a normal Reservation (through POST /reservations/ with
+    `missed_sale`) or rejects it with a reason. Nothing is ever created automatically.
+    """
+    STATUS_NEW       = 'new'
+    STATUS_CONFIRMED = 'confirmed'
+    STATUS_REJECTED  = 'rejected'
+    STATUS_EXPIRED   = 'expired'
+    STATUS_CHOICES = [
+        (STATUS_NEW,       'جديد'),
+        (STATUS_CONFIRMED, 'تم تأكيده كحجز'),
+        (STATUS_REJECTED,  'مرفوض'),
+        (STATUS_EXPIRED,   'انتهت صلاحيته'),
+    ]
+    REJECT_REASONS = [
+        ('not_wanted',       'العميل لا يريده'),
+        ('price_check',      'سؤال عن السعر فقط'),
+        ('wrong_item',       'صنف خطأ / تصحيح كاشير'),
+        ('bought_elsewhere', 'اشتراه من مكان آخر'),
+        ('other',            'سبب آخر'),
+    ]
+
+    branch     = models.ForeignKey('branches.Branch', on_delete=models.PROTECT,
+                                   related_name='missed_sale_suggestions')
+    customer   = models.ForeignKey('customers.Customer', on_delete=models.CASCADE,
+                                   related_name='missed_sale_suggestions')
+    item       = models.ForeignKey('catalog.Item', null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name='missed_sale_suggestions')
+    item_code  = models.CharField(max_length=6)
+    item_name  = models.CharField(max_length=255, blank=True)
+    qty        = models.DecimalField(max_digits=12, decimal_places=3, default=1)
+    value      = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    cart_token = models.UUIDField(null=True, blank=True)
+    seller_usercode = models.CharField(max_length=5, blank=True)
+    selected_by = models.ForeignKey('users.StaffProfile', null=True, blank=True,
+                                    on_delete=models.SET_NULL, related_name='+')
+    seen_at    = models.DateTimeField(db_index=True, verbose_name='وقت الاختيار على الكاشير')
+
+    status        = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_NEW,
+                                     db_index=True)
+    decided_by    = models.ForeignKey('users.StaffProfile', null=True, blank=True,
+                                      on_delete=models.SET_NULL, related_name='+')
+    decided_at    = models.DateTimeField(null=True, blank=True)
+    reject_reason = models.CharField(max_length=20, choices=REJECT_REASONS, blank=True)
+    reject_note   = models.CharField(max_length=255, blank=True)
+    reservation   = models.OneToOneField('reservations.Reservation', null=True, blank=True,
+                                         on_delete=models.SET_NULL, related_name='missed_sale')
+    created_at    = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-seen_at']
+        verbose_name = 'مبيعات فائتة (اقتراح حجز)'
+        verbose_name_plural = 'المبيعات الفائتة (اقتراحات حجز)'
+        constraints = [
+            models.UniqueConstraint(fields=['cart_token', 'item_code'], name='missed_sale_cart_item_uniq'),
+        ]
+        indexes = [models.Index(fields=['branch', 'status', 'seen_at'])]
+
+    def __str__(self):
+        return f'missed {self.item_code} for {self.customer_id} [{self.status}]'
 
 
 class ContractEntryConfig(models.Model):

@@ -184,7 +184,15 @@ def orders(request):
         'created_at': d.created_at,
     } for d in deliveries]
 
-    return Response({'reservations': res_out, 'deliveries': del_out})
+    from apps.counselling.cards import token_for
+    from apps.counselling.models import CounselCardSend
+    cards_out = [{
+        'created_at': s.created_at,
+        'item_count': s.lines.count(),
+        'token': token_for(s),
+    } for s in CounselCardSend.objects.filter(customer=c, status='sent').order_by('-created_at')[:20]]
+
+    return Response({'reservations': res_out, 'deliveries': del_out, 'counsel_cards': cards_out})
 
 
 @api_view(['GET'])

@@ -90,6 +90,15 @@ class CallLogViewSet(viewsets.ModelViewSet):
         # Batch 5: the one branch helper (all-branch roles see all; branch staff their branches)
         return branch_scope.scope(qs, self.request.user)
 
+    def perform_update(self, serializer):
+        # Project 3: closing a call-back by hand records who/when (an automatic close records
+        # 'auto_returned' in apps/pbx/missed_callbacks.py)
+        was_callback = serializer.instance.status == 'callback'
+        call = serializer.save()
+        if was_callback and call.status != 'callback' and not call.callback_resolution:
+            CallLog.objects.filter(pk=call.pk).update(
+                callback_resolution='manual', callback_resolved_at=timezone.now())
+
     def get_serializer_class(self):
         if self.action == 'list':
             return CallLogListSerializer
@@ -684,6 +693,8 @@ class CallLogViewSet(viewsets.ModelViewSet):
         )
         if mode != 'all':
             qs = qs.filter(callback_due__lte=timezone.now())
+        if request.query_params.get('auto') in ('1', 'true'):     # missed calls only (Project 3)
+            qs = qs.filter(missed_cdr__isnull=False)
         qs = qs.order_by('callback_due')
 
         profile = _profile(request)

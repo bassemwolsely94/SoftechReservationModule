@@ -357,7 +357,7 @@ SCREENS = [
         'audience': T('الصيادلة والكول سنتر والمشرفون.', 'Pharmacists, call center and supervisors.'),
         'tabs': [
             {'key': 'timeline', 'title': T('الجدول الزمني', 'Timeline'), 'body': T('الملاحظات والحجوزات الأخيرة، وخانة لإضافة ملاحظة أو تعليق طبي (Ctrl+Enter).', 'Recent notes and reservations, and a box to add a note or medical comment (Ctrl+Enter).')},
-            {'key': 'purchases', 'title': T('المشتريات', 'Purchases'), 'body': T('فواتير المبيعات والمرتجعات المتزامنة من SOFTECH مع إجمالي المشتريات؛ صفِّ (الكل / مبيعات / مرتجعات).', 'Sales and return invoices synced from SOFTECH with the purchase total; filter (all / sales / returns).')},
+            {'key': 'purchases', 'title': T('المشتريات', 'Purchases'), 'body': T('فواتير المبيعات والمرتجعات المتزامنة من SOFTECH مع إجمالي المشتريات؛ صفِّ (الكل / مبيعات / مرتجعات). زر «📘 إرشادات» على الفاتورة يرسل للعميل إرشادات الاستخدام المعتمدة لأصنافها على واتساب.', 'Sales and return invoices synced from SOFTECH with the purchase total; filter (all / sales / returns). The "📘 guidance" button on an invoice sends the customer the approved usage guidance for its items on WhatsApp.')},
             {'key': 'reservations', 'title': T('الحجوزات', 'Reservations'), 'body': T('كل حجوزات العميل وحالاتها.', 'All the customer\'s reservations and their status.')},
             {'key': 'top', 'title': T('الأدوية الأكثر شراءً', 'Most-bought medicines'), 'body': T('الأصناف التي يشتريها العميل أكثر — مفيدة للتوصية والمتابعة.', 'The items the customer buys most — useful for suggestions and follow-up.')},
             {'key': 'chronic', 'title': T('💊 المزمن', '💊 Chronic'), 'body': T('أدويته المزمنة مع آخر شراء والجرعة/الصرف التالي والمتأخر، والمتابعات النشطة.', 'Their chronic medicines with last purchase, next refill and overdue ones, and active follow-ups.')},
@@ -493,7 +493,7 @@ SCREENS = [
              'when': T('اكتبها واضحة — الصيدلي بيشوفها وهو بيصرف.', 'Write them clearly — the pharmacist sees them when dispensing.'),
              'open_hint': T('بعد «تعديل» في كارت «أمراض مزمنة».', 'After "Edit" on the "Chronic conditions" card.')},
         ],
-        'updated': '2026-11-01',
+        'updated': '2026-11-03',
         'change_note': T('الجدول الزمني يعرض كل مبيعات العميل بالـPIC من المزامنة اليومية', 'The timeline shows all of the customer\'s sales by PIC from the daily sync'),
     },
     {

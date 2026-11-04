@@ -582,7 +582,7 @@ def selection_events_ingest(request):
     """Capture POS item-selection telemetry (Wave 3 inc3) into PosSelectionEvent — later batch-written
     to SOFTECH pos_cancel. Fire-and-forget from the POS: a bad row is skipped, never 500s the client.
     Body: {branch, cart_token, events:[{item,item_code,item_name,doc_kind,event_type,itemsaleprice,
-    transprice,transqty,transprice_total,custcode,occurred_at}]}. Attribution (seller/created_by) is
+    transprice,transqty,transprice_total,custcode,customer,occurred_at}]}. Attribution (seller/created_by) is
     server-authoritative — the client cannot spoof who selected."""
     from decimal import Decimal, InvalidOperation
     from django.utils.dateparse import parse_datetime
@@ -611,6 +611,23 @@ def selection_events_ingest(request):
         except (InvalidOperation, TypeError, ValueError):
             return Decimal('0')
 
+    # the customer picked on the screen (missed-sales source) — kept only if it really exists
+    from apps.customers.models import Customer
+    cust_ids = set()
+    for e in events[:200]:
+        try:
+            cust_ids.add(int(e.get('customer')))
+        except (TypeError, ValueError, AttributeError):
+            pass
+    known_customers = set(Customer.objects.filter(pk__in=cust_ids).values_list('pk', flat=True))         if cust_ids else set()
+
+    def _cust(v):
+        try:
+            v = int(v)
+        except (TypeError, ValueError):
+            return None
+        return v if v in known_customers else None
+
     objs = []
     for e in events[:200]:                      # hard cap per request
         code = str(e.get('item_code') or '').strip()[:6]
@@ -626,6 +643,7 @@ def selection_events_ingest(request):
             itemsaleprice=_d(e.get('itemsaleprice')), transprice=_d(e.get('transprice')),
             transqty=_d(e.get('transqty')), transprice_total=_d(e.get('transprice_total')),
             custcode=str(e.get('custcode') or '')[:8], seller_usercode=seller,
+            customer_id=_cust(e.get('customer')),
             occurred_at=occ, created_by=sp,
         ))
     if objs:

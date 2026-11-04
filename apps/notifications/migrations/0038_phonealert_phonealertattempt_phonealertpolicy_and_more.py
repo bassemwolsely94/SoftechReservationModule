@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
         ('branches', '0012_branchsettings_alert_mobile'),
         ('contenttypes', '0002_remove_content_type_name'),
         ('notifications', '0037_alter_notification_notification_type'),
-        ('users', '0046_staffprofile_alerts_only_and_more'),
+        ('users', '0048_staffprofile_alerts_only_and_more'),
     ]
 
     operations = [

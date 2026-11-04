@@ -32,10 +32,10 @@ QUERY_ONE_SALE = """
         AND sm.doccode    = st.doccode
         AND sm.docnumber  = st.docnumber
         AND sm.docdate    = st.docdate
-    WHERE st.branchcode = '{branch}'
+    WHERE st.branchcode = ?
     AND st.doccode = '115'
-    AND st.docnumber = {docnumber}
-    AND st.docdate = '{docdate}'
+    AND st.docnumber = ?
+    AND st.docdate = ?
 """
 
 
@@ -101,15 +101,15 @@ def _connections(branch):
 
 
 def _read_live(branch, docnumber, docdate):
-    sql = QUERY_ONE_SALE.format(branch=str(branch.softech_branch_id).replace("'", ''),
-                                docnumber=int(docnumber), docdate=docdate.strftime('%Y%m%d'))
+    # Bound parameters only; docnumber is DECIMAL in SOFTECH → pass an int, date as YYYYMMDD.
+    params = [str(branch.softech_branch_id), int(docnumber), docdate.strftime('%Y%m%d')]
     last_error = None
     for connect in _connections(branch):
         conn = None
         try:
             conn = connect()
             cur = conn.cursor()
-            cur.execute(sql, timeout=LIVE_TIMEOUT)
+            cur.execute(QUERY_ONE_SALE, params, timeout=LIVE_TIMEOUT)
             return cur.fetchall()
         except Exception as exc:   # gate denial, unreachable node, timeout → try the next server
             last_error = exc
