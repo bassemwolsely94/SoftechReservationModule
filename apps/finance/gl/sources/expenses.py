@@ -20,8 +20,12 @@ def read_expenses(date_from, date_to, fetch):
                 dup.add(key)
                 continue
             expcode = code(r['expcode'])
+            v_date = r.get('v_cheqdate')
+            linked = sybase_gl.expense_voucher_linked(
+                code(r.get('v_personcode')), to_date(v_date) if v_date else None, d)
+            bankcode = code(r.get('bankcode')) if linked else ''   # Ruling P20: no voucher -> unmapped
             seen[key] = SourceDoc('expenses', key, d, branch, expcode, '', {'amount': q(r['expvalue'])},
-                                  {'expcode': expcode, 'bankcode': code(r.get('bankcode')),
+                                  {'expcode': expcode, 'bankcode': bankcode,
                                    'cheqsno': code(r.get('cheqsno')), 'comment': (r.get('expcomment') or '').strip()})
             order.append(key)
     for key in order:

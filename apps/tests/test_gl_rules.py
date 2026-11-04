@@ -76,6 +76,13 @@ class ValidationTests(Base):
             self.assertTrue(R.validate_rule('sales_tenders', {}, lines, 'post'), code)
         self.assertTrue(R.validate_rule('sales_tenders', {}, [CASH[0]], 'post'))
 
+    def test_placeholder_format_spec_or_conversion_rejected(self):
+        for desc in ('{branch:>99999}', '{date!r}', '{party!s:10}', 'x {cheqno:.3}'):
+            errs = R.validate_rule('sales_tenders', {}, [dict(CASH[0], description=desc), CASH[1]], 'post')
+            self.assertTrue(errs, desc)
+        ok = [dict(CASH[0], description='نقدية {branch} {date} {{literal}}'), CASH[1]]
+        self.assertEqual(R.validate_rule('sales_tenders', {}, ok, 'post'), [])
+
     def test_skip_rule_with_lines_rejected(self):
         self.assertTrue(R.validate_rule('sales_tenders', {}, CASH, 'skip'))
         self.assertEqual(R.validate_rule('sales_tenders', {}, [], 'skip'), [])
@@ -179,6 +186,18 @@ class BuildTests(Base):
         lines = self.build(rule, [d])
         by = {l['account_code']: l for l in lines}
         self.assertEqual(by['1302']['branch_id'], self.b130.pk)   # 'source' default -> doc branch
+
+    def test_empty_map_value_is_unmapped_even_if_a_blank_map_exists(self):
+        """Ruling P20: an expense with no linked voucher (bankcode '') is always unmapped_account."""
+        GLSourceMap.objects.create(kind='bank', source_value='', account=self.a1302, branch=self.b130)
+        rule = self.rule([
+            {'side': 'debit', 'account': '5100', 'amount': 'amount', 'branch': 'source'},
+            {'side': 'credit', 'account_map': 'bank', 'map_key': 'bankcode', 'amount': 'amount', 'branch': 'map'},
+        ], source_type='expenses')
+        d = doc(source_type='expenses', amounts={'amount': DEC('5')}, attrs={'bankcode': '', 'expcode': '12'})
+        with self.assertRaises(R.RuleMiss) as cm:
+            self.build(rule, [d])
+        self.assertEqual((cm.exception.kind, cm.exception.detail['value']), ('unmapped_account', ''))
 
     def test_branch_modes_hq_map_none_and_unknown_branch(self):
         R.save_map(user=self.staff, kind='bank', source_value='40', account_code='1302',

@@ -53,6 +53,17 @@ class TendersTests(SimpleTestCase):
         docs = {d.source_key: d for d in READERS['sales_tenders'](date(2026, 3, 1), date(2026, 3, 31), fake(self.rows()))}
         self.assertEqual(docs['bs:130:2026-03-05:50'].kind, 'pt50')
 
+    def test_paymenttype_in_attrs_and_condition_matches_through_real_reader(self):
+        """Final review #1: paymenttype_in was dead because tender docs carried attrs {}."""
+        from apps.finance.gl.rules import rule_matches
+        from apps.finance.models import PostingRule
+        docs = {d.source_key: d for d in READERS['sales_tenders'](date(2026, 3, 1), date(2026, 3, 31), fake(self.rows()))}
+        self.assertEqual(docs['bs:130:2026-03-05:40'].attrs, {'paymenttype': '40'})
+        card_only = PostingRule(code='c', source_type='sales_tenders', effective_from=date(2026, 1, 1),
+                                conditions={'paymenttype_in': ['40']}, lines=[], is_active=True)
+        self.assertEqual([k for k, d in sorted(docs.items()) if rule_matches(card_only, d)],
+                         ['bs:130:2026-03-05:40'])
+
     def test_one_query_per_calendar_month(self):
         f = fake([])
         list(READERS['sales_tenders'](date(2026, 1, 20), date(2026, 3, 10), f))
@@ -253,7 +264,8 @@ class ChequeReaderTests(SimpleTestCase):
 class ExpenseReaderTests(SimpleTestCase):
     def row(self, **kw):
         r = {'branchcode': '130', 'expensedate': datetime(2026, 3, 5), 'intervalcode': '1', 'day_sno': '4',
-             'expcode': '43', 'expvalue': D('12.345'), 'expcomment': 'x', 'cheqsno': '77', 'bankcode': '50'}
+             'expcode': '43', 'expvalue': D('12.345'), 'expcomment': 'x', 'cheqsno': '77', 'bankcode': '50',
+             'v_personcode': '-120', 'v_cheqdate': datetime(2026, 3, 5)}
         r.update(kw)
         return r
 
@@ -299,9 +311,94 @@ class CheckCommandTests(TestCase):
 class ExpenseKeyP8Tests(SimpleTestCase):
     def test_rows_differing_only_by_cheqsno_are_two_docs(self):
         base = {'branchcode': '130', 'expensedate': datetime(2026, 3, 5), 'intervalcode': '1', 'day_sno': '4',
-                'expcode': '43', 'expvalue': D('5'), 'expcomment': '', 'bankcode': '50'}
+                'expcode': '43', 'expvalue': D('5'), 'expcomment': '', 'bankcode': '50',
+                'v_personcode': '-120', 'v_cheqdate': datetime(2026, 3, 5)}
         docs = list(READERS['expenses'](date(2026, 3, 1), date(2026, 3, 31),
                                         fake([dict(base, cheqsno='77'), dict(base, cheqsno='78')])))
         self.assertEqual([d.source_key for d in docs],
                          ['exp:130:2026-03-05:1:4:77', 'exp:130:2026-03-05:1:4:78'])
         self.assertNotIn('__duplicate__', [d.kind for d in docs])
+
+
+class ExpenseVoucherLinkP20Tests(SimpleTestCase):
+    """Ruling P20: expense <-> voucher link = same branch, voucher personcode '-120',
+    |expensedate - cheqdate| <= 31 days. The fake fetch plays SOFTECH: it evaluates the two reader
+    queries over small cheques / dailyexpenses tables with its own copy of the predicate."""
+
+    def setUp(self):
+        self.cheques = [
+            chq(cheqsno='1', branchcode='130', personcode='-120', ptcode='-1', bankcode='50',
+                cheqdate=datetime(2026, 3, 5)),                      # -120, expense 3 days later -> linked
+            chq(cheqsno='2', branchcode='130', personcode='-120', ptcode='-1', bankcode='50',
+                cheqdate=datetime(2026, 3, 1)),                      # -120, expense 40 days later -> not linked
+            chq(cheqsno='3', branchcode='130', personcode='4490', ptcode='10', cheqtype='10', bankcode='50',
+                cheqdate=datetime(2026, 3, 6)),                      # customer voucher -> never an expense
+        ]
+        self.expenses = [
+            {'branchcode': '130', 'expensedate': datetime(2026, 3, 8), 'intervalcode': '1', 'day_sno': '1',
+             'expcode': '12', 'expvalue': D('10'), 'expcomment': '', 'cheqsno': '1'},
+            {'branchcode': '130', 'expensedate': datetime(2026, 4, 10), 'intervalcode': '1', 'day_sno': '2',
+             'expcode': '12', 'expvalue': D('20'), 'expcomment': '', 'cheqsno': '2'},
+            {'branchcode': '130', 'expensedate': datetime(2026, 3, 6), 'intervalcode': '1', 'day_sno': '3',
+             'expcode': '12', 'expvalue': D('30'), 'expcomment': '', 'cheqsno': '3'},
+        ]
+
+    @staticmethod
+    def _linked(e, c):
+        return (e['branchcode'] == c['branchcode'] and str(e['cheqsno']) == str(c['cheqsno'])
+                and c['personcode'] == '-120' and abs((e['expensedate'] - c['cheqdate']).days) <= 31)
+
+    def fetch(self, sql):
+        if 'dailyexpenses d WHERE' in sql:
+            out = []
+            for e in self.expenses:
+                hits = [c for c in self.cheques if self._linked(e, c)]
+                out.append({**e, 'bankcode': max((c['bankcode'] for c in hits), default=None),
+                            'v_personcode': max((c['personcode'] for c in hits), default=None),
+                            'v_cheqdate': max((c['cheqdate'] for c in hits), default=None)})
+            return out
+        return [{**c, 'has_expense': sum(1 for e in self.expenses if self._linked(e, c))}
+                for c in self.cheques]
+
+    def read(self, t, d1=date(2026, 3, 1), d2=date(2026, 4, 30)):
+        return {d.source_key: d for d in READERS[t](d1, d2, self.fetch)}
+
+    def test_minus_120_within_31_days_is_linked_and_dropped_from_treasury(self):
+        exp = self.read('expenses')
+        self.assertEqual(exp['exp:130:2026-03-08:1:1:1'].attrs['bankcode'], '50')
+        self.assertNotIn('chq:130:1', self.read('treasury_other'))
+
+    def test_minus_120_forty_days_apart_is_not_linked(self):
+        exp = self.read('expenses')
+        self.assertEqual(exp['exp:130:2026-04-10:1:2:2'].attrs['bankcode'], '')
+        other = self.read('treasury_other')
+        self.assertEqual(other['chq:130:2'].kind, 'expense_unlinked')
+
+    def test_non_minus_120_voucher_never_dropped(self):
+        self.assertEqual(self.read('expenses')['exp:130:2026-03-06:1:3:3'].attrs['bankcode'], '')
+        self.assertIn('chq:130:3', self.read('customer_collections'))
+
+    def test_reader_rechecks_returned_voucher_columns(self):
+        """Defence in depth: even if SQL returned a voucher, the reader applies the same predicate."""
+        base = {'branchcode': '130', 'expensedate': datetime(2026, 3, 5), 'intervalcode': '1', 'day_sno': '4',
+                'expcode': '43', 'expvalue': D('1'), 'expcomment': '', 'cheqsno': '77', 'bankcode': '50'}
+        rows = [dict(base, day_sno='1', v_personcode='-120', v_cheqdate=datetime(2026, 4, 5)),   # 31 days
+                dict(base, day_sno='2', v_personcode='-120', v_cheqdate=datetime(2026, 4, 6)),   # 32 days
+                dict(base, day_sno='3', v_personcode='5001', v_cheqdate=datetime(2026, 3, 5)),
+                dict(base, day_sno='4', v_personcode=None, v_cheqdate=None, bankcode=None)]
+        got = {d.source_key.split(':')[4]: d.attrs['bankcode']
+               for d in READERS['expenses'](date(2026, 3, 1), date(2026, 3, 31), fake(rows))}
+        self.assertEqual(got, {'1': '50', '2': '', '3': '', '4': ''})
+
+    def test_sql_predicate_in_both_queries(self):
+        chq_sql = sybase_gl.sql_cheques(date(2026, 3, 1), date(2026, 3, 31))
+        exp_sql = sybase_gl.sql_expenses(date(2026, 3, 1), date(2026, 3, 31))
+        for sql in (chq_sql, exp_sql):
+            self.assertIn("c.personcode = '-120'", sql)
+            self.assertIn('ABS(DATEDIFF(day, ', sql)
+            self.assertIn(', c.cheqdate)) <= 31', sql)
+            self.assertIn('CONVERT(varchar(20), c.cheqsno)', sql)
+        self.assertIn('e.branchcode = c.branchcode', chq_sql)
+        self.assertIn('CONVERT(varchar(20), e.cheqsno)', chq_sql)
+        self.assertIn('d.branchcode = c.branchcode', exp_sql)
+        self.assertIn('CONVERT(varchar(20), d.cheqsno)', exp_sql)

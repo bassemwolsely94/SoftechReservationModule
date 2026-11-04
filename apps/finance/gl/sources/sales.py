@@ -44,7 +44,7 @@ def read_sales_tenders(date_from, date_to, fetch):
         sales, returns = q(v['sales']), q(v['returns'])
         yield SourceDoc('sales_tenders', f'bs:{branch}:{d.isoformat()}:{pt}', d, branch,
                         TENDER_KINDS.get(pt, f'pt{pt}'), '',
-                        {'sales': sales, 'returns': returns, 'net': sales - returns}, {})
+                        {'sales': sales, 'returns': returns, 'net': sales - returns}, {'paymenttype': pt})
 
 
 def read_credit_sales(date_from, date_to, fetch):

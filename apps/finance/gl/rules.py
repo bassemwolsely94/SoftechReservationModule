@@ -142,13 +142,19 @@ def validate_rule(source_type, conditions, lines, action) -> list:
             errs.append(p + f'قيمة الطرف غير معروفة: {ln.get("party")}')
         elif ln.get('party') == 'source' and static_acc is not None and static_acc.party_type == 'none':
             errs.append(p + f'الحساب {static_acc.code} ليس حساب طرف')
+        desc = ln.get('description') or ''
+        if not isinstance(desc, str):
+            errs.append(p + 'البيان يجب أن يكون نصاً')
+            desc = ''
         try:
-            names = [n for _, n, _, _ in Formatter().parse(ln.get('description') or '') if n is not None]
+            fields = [(n, spec, conv) for _, n, spec, conv in Formatter().parse(desc) if n is not None]
         except ValueError:
-            names = ['?']
-        for name in names:
+            fields = [('?', '', None)]
+        for name, spec, conv in fields:
             if name not in PLACEHOLDERS:
                 errs.append(p + f'متغير غير مسموح في البيان: {{{name}}}')
+            elif spec or conv:   # no {x:>99999} / {x!r}: placeholders are plain names only
+                errs.append(p + f'المتغير {{{name}}} لا يقبل تنسيقاً أو تحويلاً')
     if not ('debit' in sides and 'credit' in sides):
         errs.append('قاعدة الترحيل تحتاج سطر مدين وسطر دائن على الأقل')
     return errs
@@ -261,6 +267,8 @@ def build_lines(rule, docs, *, hq_branch_id) -> list:
         return a
 
     def mapped(kind, value):
+        if value == '':   # Ruling P20: no source value (e.g. expense without a voucher) is never mapped
+            raise RuleMiss('unmapped_account', {'kind': kind, 'key': '', 'value': ''})
         if (kind, value) not in maps:
             maps[(kind, value)] = (GLSourceMap.objects.select_related('account')
                                    .filter(kind=kind, source_value=value).first())

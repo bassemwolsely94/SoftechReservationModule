@@ -26,7 +26,10 @@ def _build(date_from, date_to, fetch):
                 continue
             seen.add((branch, sno))
             person, fdoc, ptcode = code(r['personcode']), code(r['financialdoccode']), code(r['ptcode'])
-            if person == '-170' or (person == '-120' and int(r.get('has_expense') or 0) > 0):
+            # -170 = POS takings (in sales_tenders); a -120 voucher linked to a dailyexpenses row
+            # (Ruling P20, predicate in sql_cheques) is posted by the expenses reader
+            if person == '-170' or (person == sybase_gl.EXPENSE_VOUCHER_PERSON
+                                    and int(r.get('has_expense') or 0) > 0):
                 continue
             due = to_date(r['cheqdate']) if r.get('cheqdate') else None
             reg = to_date(r['cheqregisterdate']) if r.get('cheqregisterdate') else None
