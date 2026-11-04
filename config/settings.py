@@ -1033,6 +1033,9 @@ TRACK_TRACE_ENABLED = config('TRACK_TRACE_ENABLED', default=False, cast=bool)
 RBAC_ENFORCEMENT = config('RBAC_ENFORCEMENT', default='off' if _RUNNING_TESTS else 'log')
 # Seconds the role matrix is cached per process; 0 under tests so no test sees another's rows.
 RBAC_GRANTS_TTL = config('RBAC_GRANTS_TTL', default=0 if _RUNNING_TESTS else 60, cast=float)
+# Roles the matrix is ENFORCED for even while RBAC_ENFORCEMENT=log (not when off): roles created
+# after the matrix review, with no legacy screens to observe — Finance GL's accountant (owner ruling).
+RBAC_ENFORCED_ROLES = ('accountant',)
 
 # Phone alerts + morning brief: outward WhatsApp sending is OFF unless switched on.
 # Off => every step still runs and records PhoneAlertAttempt(result='dry_run').

@@ -127,6 +127,18 @@ def _mode():
     return mode if mode in ('off', 'log', 'enforce') else 'log'
 
 
+def _mode_for(role):
+    """The mode for one caller. Roles in RBAC_ENFORCED_ROLES are enforced whenever the middleware
+    is on (log or enforce): a role created after the matrix was reviewed has no legacy screens to
+    observe in log mode, and many older views only check IsAuthenticated because every role then
+    held their module (hr, customers, catalog …). Finance GL ruling: the `accountant` reaches
+    ledger / finance / cheques / dashboard / tasks and nothing else, from day one."""
+    mode = _mode()
+    if mode == 'log' and role in getattr(settings, 'RBAC_ENFORCED_ROLES', ('accountant',)):
+        return 'enforce'
+    return mode
+
+
 def clear_cache():
     _grants_cache.update(at=0.0, by_role={}, seeded=False, modules=frozenset())
 
@@ -212,8 +224,16 @@ def required(path, method):
     safe = method in ('GET', 'HEAD', 'OPTIONS')
     # General Ledger (finance-gl): its own `ledger` module, not `finance` — the accountant holds
     # ledger create/approve but only finance view. The views check the exact ledger action.
+    # Writes need exactly what the view asks (apps/finance/gl/views.py): chart of accounts (PATCH,
+    # import) = edit; approve / bulk approve / reverse = approve; drafts (POST, PUT, DELETE) = create.
     if prefix == 'finance' and parts[3:4] == ['gl']:
-        return 'ledger', (('view',) if safe else ('create', 'edit', 'approve'))
+        if safe:
+            return 'ledger', ('view',)
+        if parts[4:5] == ['accounts']:
+            return 'ledger', ('edit',)
+        if parts[4:5] == ['entries'] and ('approve' in parts[5:7] or 'reverse' in parts[6:7]):
+            return 'ledger', ('approve',)
+        return 'ledger', ('create',)
     # Market Shortage reads the engine's run status and the shortage screen the vendor list:
     # `shortage` view (purchasing holds it too) — owner decision 2026-10-28, map by screen (Z-7a)
     if safe and ((prefix == 'purchasing' and parts[3:5] in (['runs', 'latest'], ['runs', 'active']))
@@ -362,6 +382,7 @@ class ModuleAccessMiddleware:
         profile = _staff_profile(request)
         if profile is None or profile.role == 'admin':
             return None
+        mode = _mode_for(profile.role)
         module, actions = need
         by_role, seeded = _grants()
         granted = by_role.get(profile.role, set())
