@@ -1874,7 +1874,13 @@ def _run_gl_drafting():
     except drafting.DraftBusy:
         logger.warning('[gl_drafting] another drafting run is active - skipped')
         return None
-    return drafting.draft_range(d1, d2, run=run)
+    try:
+        return drafting.draft_range(d1, d2, run=run)
+    except Exception:
+        logger.exception('[gl_drafting] run %s crashed', run.pk)
+        from apps.finance.models import GLDraftRun
+        GLDraftRun.objects.filter(pk=run.pk, status='running').update(status='failed')
+        return None
 
 
 # ── ERP match polling ─────────────────────────────────────────────────────────

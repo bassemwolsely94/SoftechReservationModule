@@ -64,7 +64,11 @@ def drafting_run(request):
     except drafting.DraftBusy:
         return Response({'code': 'busy', 'detail': 'هناك عملية ترحيل جارية الآن'},
                         status=status.HTTP_409_CONFLICT)
-    start_thread(_background, args=(run.pk, d1, d2, types or None), name=f'gl-draft-{run.pk}')
+    try:
+        start_thread(_background, args=(run.pk, d1, d2, types or None), name=f'gl-draft-{run.pk}')
+    except Exception:
+        GLDraftRun.objects.filter(pk=run.pk, status='running').update(status='failed')
+        raise
     return Response({'run_id': run.pk}, status=status.HTTP_202_ACCEPTED)
 
 

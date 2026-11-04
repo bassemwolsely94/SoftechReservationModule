@@ -116,6 +116,75 @@ class SeedTests(TestCase):
         self.assertEqual(by['5100']['branch_id'], b130)
         self.assertEqual(by['1302']['branch_id'], b130)
 
+    def test_seeded_rule_table(self):
+        seed.seed_gl_drafting(user=self.user)
+        got = {}
+        for r in PostingRule.objects.all():
+            lines = [(ln['side'], ln.get('account') or f"{ln['account_map']}:{ln['map_key']}",
+                      ln['amount'], ln.get('branch', 'source'), ln.get('party', ''),
+                      bool(ln.get('cheque'))) for ln in r.lines]
+            got[r.code] = (r.source_type, r.granularity, r.book, r.action, r.conditions, lines)
+        S, H, M = 'source', 'hq', 'map'
+        bank = 'bank:bankcode'
+        want = {
+            'sales.cash': ('sales_tenders', 'branch_day', 'cash', 'post',
+                           {'kind_in': ['cash'], 'branch_not_in': ['100']},
+                           [('debit', '1302', 'net', S, '', False), ('credit', '6002', 'net', S, '', False)]),
+            'sales.hq_store': ('sales_tenders', 'branch_day', 'cash', 'post',
+                               {'kind_in': ['cash'], 'branch_in': ['100']},
+                               [('debit', '1301', 'net', H, '', False), ('credit', '6011', 'net', H, '', False)]),
+            'sales.card': ('sales_tenders', 'branch_day', 'cash', 'post', {'kind_in': ['card']},
+                           [('debit', 'card_clearing:branch_code', 'net', M, '', False),
+                            ('credit', '6006', 'net', S, '', False)]),
+            'sales.change_discount': ('sales_tenders', 'branch_day', 'cash', 'post',
+                                      {'kind_in': ['change_discount']},
+                                      [('debit', '6022', 'net', S, '', False),
+                                       ('credit', '6002', 'net', S, '', False)]),
+            'sales.credit': ('credit_sales', 'party_day', 'credit', 'post', {},
+                             [('debit', '1341', 'credit', H, 'source', False),
+                              ('credit', '6003', 'credit', H, '', False),
+                              ('debit', '6021', 'discount_share', H, '', False),
+                              ('credit', '6003', 'discount_share', H, '', False)]),
+            'purchases.hq': ('purchases', 'document', 'credit', 'post',
+                             {'branch_in': ['100'], 'kind_in': ['invoice']},
+                             [('debit', '5104', 'value', H, '', False),
+                              ('credit', '2341', 'value', H, 'source', False)]),
+            'purchases.hq_return': ('purchases', 'document', 'credit', 'post',
+                                    {'branch_in': ['100'], 'kind_in': ['return']},
+                                    [('debit', '2341', 'value', H, 'source', False),
+                                     ('credit', '5105', 'value', H, '', False)]),
+            'purchases.branch': ('purchases', 'document', 'credit', 'skip',
+                                 {'branch_not_in': ['100']}, []),
+            'supplier.cash': ('supplier_payments', 'branch_day', 'cash', 'post',
+                              {'financialdoc_in': ['10'], 'direction_in': ['payment']},
+                              [('debit', '5100', 'amount', M, '', False),
+                               ('credit', bank, 'amount', M, '', False)]),
+            'supplier.cheque': ('supplier_payments', 'document', 'credit', 'post',
+                                {'financialdoc_in': ['20'], 'direction_in': ['payment']},
+                                [('debit', '2341', 'amount', H, 'source', False),
+                                 ('credit', '2343', 'amount', H, '', True)]),
+            'cheque.maturity': ('cheque_maturity', 'document', 'general', 'post',
+                                {'direction_in': ['payment']},
+                                [('debit', '2343', 'amount', H, '', True),
+                                 ('credit', bank, 'amount', M, '', False)]),
+            'customer.collection': ('customer_collections', 'document', 'general', 'post',
+                                    {'financialdoc_in': ['10', '20'], 'direction_in': ['receipt']},
+                                    [('debit', bank, 'amount', M, '', False),
+                                     ('credit', '1341', 'amount', H, 'source', False)]),
+            'expenses.box': ('expenses', 'branch_day', 'cash', 'post', {},
+                             [('debit', 'expense:expcode', 'amount', S, '', False),
+                              ('credit', bank, 'amount', M, '', False)]),
+            'treasury.transfer_in': ('treasury_other', 'document', 'general', 'post',
+                                     {'kind_in': ['transfer'], 'direction_in': ['receipt']},
+                                     [('debit', bank, 'amount', M, '', False),
+                                      ('credit', '1320', 'amount', H, '', False)]),
+            'treasury.transfer_out': ('treasury_other', 'document', 'general', 'post',
+                                      {'kind_in': ['transfer'], 'direction_in': ['payment']},
+                                      [('debit', '1320', 'amount', H, '', False),
+                                       ('credit', bank, 'amount', M, '', False)]),
+        }
+        self.assertEqual(got, want)
+
     def test_management_command(self):
         call_command('seed_gl_drafting', verbosity=0)
         self.assertTrue(PostingRule.objects.filter(code='sales.credit').exists())
@@ -218,10 +287,35 @@ class RunEndpointTests(TestCase):
         self.assertFalse(GLDraftRun.objects.exists())
 
     def test_run_endpoint_needs_ledger_create(self):
-        with mock.patch('apps.finance.gl.drafting_views.start_thread'):
+        from apps.users.models import RoleModuleAccess
+        from core.middleware import module_access
+        # view-only: all-branch + ledger.view, no ledger.create
+        RoleModuleAccess.objects.update_or_create(
+            role='supervisor', module='ledger', action='view', defaults={'is_allowed': True})
+        RoleModuleAccess.objects.update_or_create(
+            role='supervisor', module='ledger', action='create', defaults={'is_allowed': False})
+        # create but not all-branch: ledger.create granted, access_all_branches False
+        for a in ('view', 'create'):
+            RoleModuleAccess.objects.update_or_create(
+                role='pharmacist', module='ledger', action=a, defaults={'is_allowed': True})
+        module_access.clear_cache()
+        _, _, view_only = make_user('gs_viewonly', role='supervisor', access_all=True)
+        _, _, scoped = make_user('gs_scoped', role='pharmacist', access_all=False)
+        with mock.patch('apps.finance.gl.drafting_views.start_thread') as st:
+            self.assertEqual(view_only.get(BASE + 'drafting/runs/').status_code, 200)
+            self.assertEqual(view_only.post(BASE + 'drafting/run/', self.body, format='json').status_code, 403)
+            self.assertEqual(scoped.get(BASE + 'drafting/runs/').status_code, 403)
+            self.assertEqual(scoped.post(BASE + 'drafting/run/', self.body, format='json').status_code, 403)
             self.assertEqual(self.viewer.post(BASE + 'drafting/run/', self.body, format='json').status_code, 403)
-            self.assertEqual(self.pharm.post(BASE + 'drafting/run/', self.body, format='json').status_code, 403)
+            st.assert_not_called()
         self.assertFalse(GLDraftRun.objects.exists())
+
+    def test_failed_thread_start_marks_run_failed(self):
+        with mock.patch('apps.finance.gl.drafting_views.start_thread', side_effect=RuntimeError('x')):
+            self.acct.raise_request_exception = False
+            r = self.acct.post(BASE + 'drafting/run/', self.body, format='json')
+        self.assertEqual(r.status_code, 500)
+        self.assertEqual(GLDraftRun.objects.get().status, 'failed')
 
     def test_runs_list_and_detail(self):
         run = GLDraftRun.objects.create(status='success', date_from=D(2026, 3, 1), date_to=D(2026, 3, 2),

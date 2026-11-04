@@ -58,7 +58,7 @@ RULES = [
                 _ln('credit', 'net', '6011', branch='hq')]),
     dict(code='sales.card', source_type='sales_tenders', granularity='branch_day', book='cash',
          conditions={'kind_in': ['card']},
-         lines=[_ln('debit', 'net', map='card_clearing', key='branch_code',
+         lines=[_ln('debit', 'net', map='card_clearing', key='branch_code', branch='map',
                     description='مبيعات بطاقات {branch} {date}'),
                 _ln('credit', 'net', '6006')]),
     dict(code='sales.change_discount', source_type='sales_tenders', granularity='branch_day',
