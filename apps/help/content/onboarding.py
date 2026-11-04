@@ -67,6 +67,9 @@ ROLE_PATHS = {
         'stockcount.sessions', 'transfers.transits', 'demand.dashboard', 'analytics.sales',
         'analytics.insights', 'incentives.programs', 'hr.approvals',
     ] + _SELF,
+    'accountant': _START + [
+        'finance.dashboard', 'finance.pnl', 'finance.expenses', 'finance.cash', 'finance.reconciliation',
+    ] + _SELF,
     'admin': _START + [
         'admin.users', 'admin.permissions', 'admin.erp_permissions', 'admin.settings', 'admin.sync',
         'admin.audit', 'hr.approvals', 'pricing.approvals', 'pos.order', 'pos.exceptions',

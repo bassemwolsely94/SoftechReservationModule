@@ -321,7 +321,10 @@ Default pagination: CursorPagination (50 items)
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/api/finance/dashboard/` | GET | Financial summary KPIs |
-| `/api/finance/coa/` | GET | Chart of accounts |
+| `/api/finance/gl/groups/`, `/api/finance/gl/accounts/` | GET / PATCH | GL chart of accounts (doc 35) |
+| `/api/finance/gl/accounts/import/` | POST | Import COA from finance's trial balance (dry run → confirm) |
+| `/api/finance/gl/entries/` (+ `{id}/`, `{id}/approve/`, `{id}/reverse/`, `approve/`) | GET/POST/PUT/DELETE | Journal entries: drafts, approval, reversal |
+| `/api/finance/gl/reports/{trial-balance,account-statement,statements,position,branch-pl,comparison}/` | GET | GL reports; `?format=xlsx` = Excel (ledger.export) |
 | `/api/finance/pnl/` | GET | Profit & loss |
 | `/api/finance/cashflow/` | GET | Cash flow |
 | `/api/finance/expenses/` | GET | Expense analytics |
