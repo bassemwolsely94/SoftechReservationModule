@@ -292,6 +292,8 @@ viewer GET /api/pbx/extensions/status/
 viewer GET /api/pbx/staff-choices/
 
 # reason: Z-11c — the purchasing and supply dashboards are the purchasing / supply-group home screens.
+accountant GET /api/dashboard/purchasing/
+accountant GET /api/dashboard/supply/
 call_center GET /api/dashboard/purchasing/
 call_center GET /api/dashboard/supply/
 delivery GET /api/dashboard/purchasing/

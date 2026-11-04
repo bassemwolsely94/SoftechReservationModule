@@ -451,7 +451,7 @@ class ReproduceWorkbookCommandTests(TestCase):
                                      account_type='asset')
         e = save_draft(user=staff, entry_date=D(2025, 6, 1), description='old', lines=[
             {'account_code': '9991', 'debit': _d(5), 'credit': Z},
-            {'account_code': '9992', 'debit': Z, 'credit': _d(5)}])
+            {'account_code': '9992', 'debit': Z, 'credit': _d(5)}], _allow_before_opening=True)
         approve(e.id, user=staff, _allow_before_opening=True)
         with self.assertRaisesMessage(CommandError, '--allow-existing'):
             self._run(self._workbook())

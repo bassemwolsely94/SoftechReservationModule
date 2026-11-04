@@ -51,7 +51,7 @@ export default function TrialBalancePage() {
   })
   const { rows, totals } = useMemo(() => split(q.data), [q.data])
   const { sorted, headerProps } = useSortableRows(rows, { persistKey: `gl-tb-${by}` })
-  const balanced = totals && money(totals.closing_debit) === money(totals.closing_credit)
+  const balanced = totals?.balanced === true     // decided by the server
 
   const toStatement = (code) => navigate(`/finance/ledger?code=${encodeURIComponent(code)}&from=${period.from}&to=${period.to}`)
   const exportXlsx = () => saveBlob(glApi.trialBalanceXlsx(params), `ميزان_المراجعة_${period.from}_${period.to}.xlsx`)

@@ -113,6 +113,7 @@ def _snapshot(entry: LedgerEntry) -> dict:
         'book': entry.book,
         'branch_id': entry.branch_id,
         'description': entry.description,
+        'notes': entry.notes,
         'source_type': entry.source_type,
         'source_key': entry.source_key,
         'created_by': entry.created_by_id,
@@ -147,8 +148,17 @@ def _lock_open_period(day: datetime.date) -> FinancialPeriod:
 # ── public API ───────────────────────────────────────────────────────────────
 
 def save_draft(*, user, entry_date, description, lines, book='general', branch=None,
-               source_type='', source_key='', entry: LedgerEntry | None = None) -> LedgerEntry:
-    """Create a draft, or replace the header + lines of an existing draft."""
+               source_type='', source_key='', entry: LedgerEntry | None = None,
+               notes: str | None = None, _allow_before_opening: bool = False) -> LedgerEntry:
+    """Create a draft, or replace the header + lines of an existing draft.
+
+    A date before OPENING_DATE is refused (`before_opening`) — no FinancialPeriod is created for
+    it. `_allow_before_opening` is for gl_reproduce_workbook only (rolled back).
+
+    `notes`: None keeps the draft's notes unchanged ('' on a new draft); a string replaces them —
+    inside the same transaction and audit row as the rest of the draft."""
+    if entry_date < OPENING_DATE and not _allow_before_opening:
+        raise LedgerError('before_opening')
     # validate lines before touching the DB
     codes = {str(ln.get('account_code') or '') for ln in lines}
     accounts = {a.code: a for a in GLAccount.objects.filter(code__in=codes)}
@@ -194,6 +204,8 @@ def save_draft(*, user, entry_date, description, lines, book='general', branch=N
         entry.description = description or ''
         entry.source_type = source_type or ''
         entry.source_key = source_key or ''
+        if notes is not None:
+            entry.notes = notes
         try:
             with transaction.atomic():
                 entry.save()
