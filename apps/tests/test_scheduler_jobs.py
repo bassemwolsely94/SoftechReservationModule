@@ -11,9 +11,12 @@ from apps.sync import tasks
 class _FakeScheduler:
     def __init__(self, *a, **kw):
         self.jobs = []
+        self.cfg = {}
+        self.tz = kw.get('timezone')
         self.running = False
 
     def add_job(self, func, trigger, *args, **kwargs):
+        self.cfg[kwargs.get('id')] = (trigger, kwargs)
         self.jobs.append((getattr(func, '__wrapped__', func), kwargs.get('id'), func))
 
     def add_listener(self, *a, **kw):
@@ -33,6 +36,7 @@ class SchedulerRegistrationTests(SimpleTestCase):
              mock.patch.object(tasks, '_patch_apscheduler_for_python312', lambda: None), \
              mock.patch.object(tasks, '_scheduler', None):
             tasks.start_scheduler()
+            self._cfg, self._tz = tasks._scheduler.cfg, tasks._scheduler.tz
             return tasks._scheduler.jobs
 
     def test_no_job_function_registered_twice_on_the_same_cadence(self):
@@ -43,6 +47,21 @@ class SchedulerRegistrationTests(SimpleTestCase):
         for name in ('_flush_pos_orders', '_reconcile_pos_orders'):
             with self.subTest(job=name):
                 self.assertEqual(sum(1 for f, _, _ in jobs if f.__name__ == name), 1)
+
+    def test_morning_brief_registered_daily_at_0900_cairo(self):
+        jobs = [j for j in self._jobs() if j[1] == 'morning_brief']
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0][0].__name__, '_run_morning_brief')
+        self.assertEqual(self._cfg['morning_brief'][0], 'cron')
+        self.assertEqual((self._cfg['morning_brief'][1]['hour'], self._cfg['morning_brief'][1]['minute']), (9, 0))
+        self.assertEqual(self._tz, 'Africa/Cairo')
+
+    def test_phone_alerts_tick_registered_every_minute(self):
+        jobs = [j for j in self._jobs() if j[1] == 'phone_alerts_tick']
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0][0].__name__, '_run_phone_alerts_tick')
+        trigger, kw = self._cfg['phone_alerts_tick']
+        self.assertEqual((trigger, kw['minutes'], kw['max_instances']), ('interval', 1, 1))
 
     def test_pos_jobs_keep_their_ids(self):
         ids = {j[1] for j in self._jobs()}

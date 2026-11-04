@@ -51,6 +51,10 @@ Privacy rules (final review):
 - The content API returns draft text only to `counselling → edit` holders. View-only roles see the approved snapshot.
 - The card preview returns the masked phone only.
 - There is no per-customer card-history endpoint. Sends are in `AuditLog` and the omni timeline.
+- `status/` also returns `can_assistant` (POS view), `can_send` (POS create) and `home_branch_id`. The UI hides the assistant tab and the send button from roles that would get a 403, and Customer-360 sends from the user's own branch.
+- Sends are serialised per phone and per branch (Postgres advisory lock). Queued sends count toward the 7-day repeat check and the daily cap. An idempotency key only ever returns its own sender's send. There is one opt-out row per phone.
+- Approved versions cannot be deleted in admin, and item links are read-only there.
+- Related: AI enrichment batches never auto-publish clinical fields (`enrichment.suggestion_generator.CLINICAL_FIELDS`).
 - The public page keeps serving approved text for sent links even if `COUNSELLING_CONTENT_ENABLED` is later turned off. Retire a sheet to withdraw it.
 
 **Owner action before sending:** in WhatsApp Manager, submit the Utility template `counsel_card` (Arabic):

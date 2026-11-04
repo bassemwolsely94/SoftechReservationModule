@@ -21,6 +21,7 @@ import BranchSelect from '../components/BranchSelect'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import CustomerSearchWidget from '../components/CustomerSearchWidget'
 import ChannelContactField from '../components/ChannelContactField'
+import PhoneAlertToggle from '../components/PhoneAlertToggle'
 import api from '../api/client'
 
 // ── Stock panel ────────────────────────────────────────────────────────────────
@@ -248,6 +249,7 @@ export default function NewReservationPage() {
     expected_arrival_date: '',
     order_source:          '',
     fulfillment_method:    '',
+    phone_alert:           false,
   })
   const upd = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -829,6 +831,9 @@ export default function NewReservationPage() {
               onChange={e => upd('notes', e.target.value)}
               placeholder="أي تفاصيل إضافية..." />
           </div>
+
+          <PhoneAlertToggle kind="reservation" value={form.phone_alert}
+            onChange={v => upd('phone_alert', v)} />
 
           {/* Image upload */}
           <div data-tour="reservations-new-image">

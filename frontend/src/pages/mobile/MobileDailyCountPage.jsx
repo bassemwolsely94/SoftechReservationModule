@@ -37,6 +37,7 @@ export default function MobileDailyCountPage() {
   const [note, setNote]       = useState('')
   const [scanning, setScanning] = useState(false)
   const [doneLocal, setDoneLocal] = useState({})     // pick_id → true (queued offline / just saved)
+  const [token, setToken]     = useState('')     // one per opened item: a retry after a lost reply can't save twice
 
   const q = useQuery({
     queryKey: ['m-daily-count'],
@@ -58,7 +59,7 @@ export default function MobileDailyCountPage() {
   if (!dailyCount) return <Navigate to="/m/me" replace />
 
   function open(p) {
-    setCurrent(p); setPacks(''); setUnits(''); setExpiry(''); setError(''); setNote('')
+    setCurrent(p); setPacks(''); setUnits(''); setExpiry(''); setError(''); setNote(''); setToken(newToken())
     setTimeout(() => packsRef.current?.focus(), 50)
   }
 
@@ -81,7 +82,7 @@ export default function MobileDailyCountPage() {
     setBusy(true); setError('')
     try {
       const res = await queuedPost('/stockcount/daily/my/count/', {
-        pick_id: current.pick_id, counted_qty: qty, client_token: newToken(),
+        pick_id: current.pick_id, counted_qty: qty, client_token: token,
         ...(current.ask_expiry && expiry ? { physical_expiry: expiry } : {}),
       }, { label: 'جرد يومي' })
       setDoneLocal(d => ({ ...d, [current.pick_id]: true }))

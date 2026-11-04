@@ -9,6 +9,7 @@ from rest_framework.test import APIClient
 from apps.customers.models import Customer
 from apps.delivery.models import DeliveryOrder
 from apps.tests.factories import make_branch
+from apps.portal import views as portal_views
 from apps.tests.public_guard_helpers import portal_send_inline, solved
 from core import public_guard
 
@@ -68,10 +69,22 @@ class PortalLinkGuardTests(TestCase):
         send.assert_not_called()
         self.assertEqual(self.start_thread.call_count, 1)
         call = self.start_thread.call_args
-        self.assertIs(call.args[0], send)
+        self.assertIs(call.args[0], portal_views._send_link)
         customer, token = call.kwargs['args']
         self.assertEqual(customer.phone, '01055667788')
         self.assertTrue(token)
+
+    def test_send_thread_closes_its_db_connection(self):
+        # the thread's own connection is closed after the send, also when the send raises
+        with mock.patch('apps.portal.views.send_magic_link') as send, \
+                mock.patch('apps.portal.views.connections') as conns:
+            portal_views._send_link('cust', 'tok')
+            send.assert_called_once_with('cust', 'tok')
+            conns.close_all.assert_called_once_with()
+            send.side_effect = RuntimeError('whatsapp down')
+            with self.assertRaises(RuntimeError):
+                portal_views._send_link('cust', 'tok')
+            self.assertEqual(conns.close_all.call_count, 2)
 
     def test_invalid_phone_does_not_burn_a_slot(self):
         for _ in range(5):

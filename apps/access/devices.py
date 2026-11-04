@@ -89,6 +89,8 @@ def enroll(request, profile):
     Only the SPA enrols (its requests carry X-Requested-With: XMLHttpRequest): scripts and
     body-token clients get no device and no `dev` claim (N2 final wave, I-3)."""
     try:
+        if getattr(profile, 'alerts_only', False):      # phone-alerts-only staff never get a device
+            return None, None, False
         if (request.META.get('HTTP_X_REQUESTED_WITH') or '') != 'XMLHttpRequest':
             return None, None, False
         from django.db import transaction

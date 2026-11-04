@@ -7,6 +7,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { tasksApi, branchesApi, usersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import { fa } from '../utils/flowArrow'
+import PhoneAlertStatusChip from '../components/PhoneAlertStatusChip'
 
 // ── Constants (shared with TasksPage) ─────────────────────────────────────────
 
@@ -532,6 +533,7 @@ export default function TaskDetailPage() {
           {task.is_overdue && (
             <span className="text-xs text-red-600 font-semibold">⚠ متأخرة</span>
           )}
+          <PhoneAlertStatusChip status={task.phone_alert_status} remark={task.phone_alert_remark} />
           <div className="flex-1" />
           {/* Actions */}
           {!isDone && (

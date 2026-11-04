@@ -180,30 +180,7 @@ class ForecastAccuracyViewSet(viewsets.ModelViewSet):
 # actuals from KpiActualRollup + matched SalesTargets + attainment/pace.
 # ════════════════════════════════════════════════════════════════════════════
 
-BOARD_METRICS = [
-    KpiActualRollup.M_CASH_DELIVERY, KpiActualRollup.M_CREDIT,
-    KpiActualRollup.M_GROSS_PROFIT, KpiActualRollup.M_CUSTOMERS,
-    KpiActualRollup.M_BEAUTY,
-]
-
-
-def _latest_complete_date(year, month):
-    """Last day of the month with COMPLETE sales data, for correct to-date pacing:
-      • month fully over → its last day;  • future month → None;
-      • in-progress → the latest synced sales day strictly before today (today is partial)."""
-    from calendar import monthrange
-    from django.db.models import Max
-    from apps.customers.models import PurchaseHistory
-    today  = date.today()
-    mstart = date(year, month, 1)
-    mend   = date(year, month, monthrange(year, month)[1])
-    if mend < today:
-        return mend
-    if mstart > today:
-        return None
-    return (PurchaseHistory.objects.filter(
-        invoice_date__date__gte=mstart, invoice_date__date__lt=today)
-        .aggregate(m=Max('invoice_date__date'))['m'])
+from .kpi_board import BOARD_METRICS  # noqa: E402  (board maths live in kpi_board)
 
 
 class KpiBoardView(APIView):
@@ -215,18 +192,13 @@ class KpiBoardView(APIView):
     def get(self, request):
         from apps.branches.models import Branch
         from apps.incentives.models import SalesTarget
-        from calendar import monthrange
+        from apps.forecasting import kpi_board
 
         today = date.today()
         year  = int(request.query_params.get('year',  today.year))
         month = int(request.query_params.get('month', today.month))
 
-        m_start = date(year, month, 1)
-        m_end   = date(year, month, monthrange(year, month)[1])
-        data_through = _latest_complete_date(year, month)
-        total = (m_end - m_start).days + 1
-        elapsed = ((data_through - m_start).days + 1) if data_through else 0
-        frac = (elapsed / total) if total else 0
+        m_start, m_end, data_through, total, elapsed, frac = kpi_board.month_pacing(year, month)
 
         # actuals from rollups (rebuilt daily) → {(branch_id, metric): value}
         rollups = KpiActualRollup.objects.filter(
@@ -236,10 +208,8 @@ class KpiBoardView(APIView):
         branch_ids_with_data = {r['branch_id'] for r in rollups}
 
         # editable targets overlapping the month (branch + chain scope) → value + id
-        tqs = SalesTarget.objects.filter(
-            metric__in=BOARD_METRICS, period_start__lte=m_end, period_end__gte=m_start,
-            scope_type__in=[SalesTarget.SCOPE_BRANCH, SalesTarget.SCOPE_CHAIN],
-        ).values('id', 'scope_type', 'branch_id', 'metric', 'target_value')
+        tqs = kpi_board.month_targets(m_start, m_end, BOARD_METRICS,
+                                      [SalesTarget.SCOPE_BRANCH, SalesTarget.SCOPE_CHAIN])
         branch_target = {}
         chain_target  = {}
         for t in tqs:
@@ -253,25 +223,8 @@ class KpiBoardView(APIView):
         branches = (analytics_branches().filter(id__in=branch_ids_with_data)
                     .order_by('code', 'softech_branch_id')) if branch_ids_with_data else []
 
-        def pace(a, t):
-            if not t:
-                return None
-            if data_through is None:
-                return 'pending'
-            if data_through >= m_end:
-                return 'met' if a >= t else 'missed'
-            return 'ahead' if a >= (t * frac) else 'behind'
-
         def cell(a, t, tid=None):
-            exp = (t * frac) if t else 0                       # target pro-rated to data_through
-            return {
-                'actual': round(a, 2),
-                'target': (round(t, 2) if t else None),        # full-month target
-                'target_todate': (round(exp, 2) if t else None),
-                'pct': (round(a / exp * 100, 1) if exp else None),      # vs to-date (legacy %)
-                'pct_full': (round(a / t * 100, 1) if t else None),     # progress vs full month
-                'pace': pace(a, t), 'target_id': tid,
-            }
+            return kpi_board.make_cell(a, t, tid, data_through, m_end, frac)
 
         rows = []
         totals_actual = {m: 0.0 for m in BOARD_METRICS}

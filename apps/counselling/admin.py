@@ -15,8 +15,24 @@ class CounsellingContentAdmin(admin.ModelAdmin):
 class CounsellingContentVersionAdmin(admin.ModelAdmin):
     list_display = ('content', 'version', 'approved_by', 'approved_at')
 
+    # approved versions are the record of what customers were shown: never edited or deleted
     def has_change_permission(self, request, obj=None):
         return False
 
+    def has_delete_permission(self, request, obj=None):
+        return False
 
-admin.site.register(CounsellingContentItem)
+
+@admin.register(CounsellingContentItem)
+class CounsellingContentItemAdmin(admin.ModelAdmin):
+    """Read-only: linking / unlinking goes through the audited review screen (services.link_items)."""
+    list_display = ('content', 'item', 'linked_by', 'linked_at')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

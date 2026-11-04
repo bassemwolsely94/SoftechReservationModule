@@ -129,11 +129,13 @@ Every module in the platform is registered here with its purpose, status, and de
 | Purpose | Persistent notifications + real-time WebSocket push + Odoo-style chatter |
 | Status | **COMPLETE** |
 | Migrations | 10 |
-| Models | `Notification`, `NotificationLog`, `ChatterMessage` |
-| Key APIs | `/api/notifications/` |
+| Models | `Notification`, `NotificationLog`, `ChatterMessage`, `PhoneAlert`, `PhoneAlertAttempt`, `PhoneAlertPolicy` |
+| Key APIs | `/api/notifications/`, `/api/notifications/phone-alerts/` |
 | Related Screens | NotificationPanel, NotificationBell |
 | Business Rules | 19 notification types; 5-min dedup window by `dedup_key`; BranchSettings gate; real-time via Channels group `notifications_user_{profile_id}` |
 | Dependencies | users, branches, channels (Redis) |
+| Phone alerts | `apps/notifications/phone_alerts/` (events, recipients, dispatch, sender, inbound, jobs, views): urgent reservation/transfer/task events go to staff phones over WhatsApp (`staff_alert` template, tap «استلمت», remark, reminders, escalation). Inbound taps via `apps/whatsapp/button_registry.py`; every-minute `phone_alerts_tick` job. Kill switches `PHONE_ALERTS_SEND_ENABLED` / `MORNING_BRIEF_SEND_ENABLED` (default OFF = `dry_run` attempts). Also carries the weekly expiry worklist WhatsApp (`kind='brief'`, `event='expiry_worklist'`). Spec: `docs/superpowers/specs/2026-11-03-phone-alerts-and-morning-brief-design.md` |
+| Morning brief | `apps/insights/brief.py`: 09:00 Africa/Cairo WhatsApp brief per branch (`morning_brief` template, «التفاصيل» tap), reuses `InsightEngine`, `KpiResolver` and `apps/forecasting/kpi_board.py`; replaces the 07:30 daily insights send for brief recipients once live |
 
 ---
 
@@ -336,7 +338,8 @@ Every module in the platform is registered here with its purpose, status, and de
 | Purpose | Financial intelligence (CoA, P&L, cash flow, expense analytics) |
 | Status | **PARTIAL** (UI scaffolded; backend reads external data) |
 | Key APIs | `/api/finance/` |
-| Related Screens | FinanceHubPage (6 tabs) |
+| Related Screens | FinanceHubPage (tabs incl. GL: القيود، ميزان المراجعة، القوائم المالية، كشف حساب، دليل الحسابات) |
+| General ledger | `apps/finance/gl/` — finance's own COA + journal + reports (doc 35); `/api/finance/gl/`; RBAC `ledger`, role `accountant`; no SOFTECH reads/writes |
 
 ---
 

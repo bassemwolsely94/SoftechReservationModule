@@ -486,7 +486,10 @@ SCREENS = [
             'نموذج تسجيل طلب عميل لصنف أو أكثر، مع رؤية المخزون في الفرع وكل الشبكة أثناء التسجيل.',
             'The form to record a customer\'s request for one or more items, showing stock at the branch and across the network while you type.'),
         'audience': T('الصيادلة، مركز الاتصال، المندوبون.', 'Pharmacists, call center, salespeople.'),
-        'steps': _STEPS_NEW,
+        'steps': _STEPS_NEW + [
+            T('«📲 نبّه على الموبايل» (يظهر لو الإدارة فعّلته): يصل واتساب لمسؤول التوفير ويتابعه لحد ما يضغط «استلمت». لو الإدارة جعلته «دائماً» يكون مفعّل ولا يمكن إلغاؤه.',
+              '"📲 Alert by phone" (shown when management enabled it): a WhatsApp message reaches the sourcing owner and follows up until they tap "Received". If management made it "always" it is on and cannot be unticked.'),
+        ],
         'tips': _TIPS_NEW,
         'faq': [
             {'q': T('الصنف موجود في فرع آخر، هل أسجّل حجزاً؟', 'The item is at another branch — should I still reserve?'),
@@ -595,7 +598,7 @@ SCREENS = [
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
         'updated': '2026-11-03',
-        'change_note': T('«تأكيد كحجز» من المبيعات الفائتة يفتح النموذج جاهزاً', '"Confirm as reservation" from missed sales opens the form prefilled'),
+        'change_note': T('خيار «📲 نبّه على الموبايل» عند تسجيل الحجز، و«تأكيد كحجز» من المبيعات الفائتة يفتح النموذج جاهزاً', 'The "📲 Alert by phone" option when recording a reservation, and "Confirm as reservation" from missed sales opens the form prefilled'),
     },
     {
         'key': 'reservations.detail',
@@ -609,6 +612,8 @@ SCREENS = [
             'dispense with the SOFTECH document.'),
         'audience': T('كل من يتابع الحجز.', 'Everyone who follows the reservation.'),
         'steps': [
+            T('بجوار الحالة شارة «📲» (أُرسل / وصل / قُرئ / استلم / صُعّد / انتهى) تبيّن وصول تنبيه الموبايل، وملاحظة المستلم إن كتب واحدة.',
+              'Next to the status a "📲" chip (Sent / Delivered / Read / Received / Escalated / Expired) shows how the phone alert is going, plus the recipient\'s remark if they wrote one.'),
             T('أعلى الصفحة: الحالة الحالية وأزرار الانتقال المسموح بها فقط (مثلاً «المخزون متاح» ← «تم التواصل»). اكتب ملاحظة بسبب التغيير.',
               'At the top: the current status and only the allowed next moves (e.g. "Available" → "Contacted"). Write a note with the reason.'),
             T('في سجل المحادثة سجّل كل ما حدث: مكالمة أُجريت، رد العميل، فحص المخزون… ويمكنك إرفاق صورة أو تسجيل ملاحظة صوتية (Ctrl+Enter للإرسال).',
@@ -781,7 +786,7 @@ SCREENS = [
              'warn': T('الإلغاء نهائي — الحجز مايرجعش.', 'A cancel is final — the reservation cannot come back.'),
              'open_hint': T('بعد «إلغاء ✕» من أزرار دورك.', 'After "Cancel ✕" in your role buttons.')},
         ],
-        'updated': '2026-11-01',
+        'updated': '2026-11-03',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

@@ -78,7 +78,11 @@ Framework: React 18 + React Router 6 + TanStack Query 5 + Zustand + Tailwind CSS
     /analytics/transfers  → TransfersAnalyticsPage
   /finance                → FinanceHubPage (tabbed)
     /finance/dashboard    → FinanceDashboardPage
-    /finance/coa          → ChartOfAccountsPage
+    /finance/coa          → GLAccountsPage (finance's own COA, doc 35)
+    /finance/journal      → finance/gl/JournalPage (+ EntryEditor panel)
+    /finance/trial-balance → finance/gl/TrialBalancePage
+    /finance/ledger       → finance/gl/AccountStatementPage
+    /finance/statements   → finance/gl/StatementsPage (?tab=trading|position|branches|comparison)
     /finance/pnl          → ProfitLossPage
     /finance/cashflow     → CashFlowPage
     /finance/expenses     → ExpenseAnalyticsPage
@@ -99,6 +103,7 @@ Framework: React 18 + React Router 6 + TanStack Query 5 + Zustand + Tailwind CSS
   /forecasting            → ForecastingPage
   /targets                → TargetsPage
   /announcements          → AnnouncementsPage
+  /phone-alerts           → PhoneAlertsPage          (admin/supervisor)
   /approvals              → ApprovalsPage (operational + HR)
   /hr                     → HRPage
   /audit                  → AuditPage (admin only)
@@ -413,6 +418,7 @@ routing note above. Reuse `CustomerSearchWidget`, `ItemSearchWidget`, `StatusBad
 | PbxLivePage | `/pbx/live` | Live call wallboard (Issabel AMI) | `/api/pbx/live/`, `spy/` | COMPLETE |
 | TargetsPage | `/targets` | Sales targets | `/api/dashboard/` | COMPLETE |
 | AnnouncementsPage | `/announcements` | Internal announcements | `/api/notifications/` | COMPLETE |
+| PhoneAlertsPage | `/phone-alerts` | Phone alerts admin: policies, owners, branch mobiles, staff channel, log, send switches (admin/supervisor). Plus `PhoneAlertToggle` on new reservation/transfer and `PhoneAlertStatusChip` on records | `/api/notifications/phone-alerts/` | COMPLETE |
 
 ---
 

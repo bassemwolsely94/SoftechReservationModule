@@ -8,6 +8,7 @@ import { tasksApi, branchesApi, usersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import useHelpTab from '../help/useHelpTab'
 import SortTh from '../components/SortTh'
+import PhoneAlertToggle from '../components/PhoneAlertToggle'
 import useServerSort from '../hooks/useServerSort'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -169,7 +170,7 @@ function TaskRow({ task, onClick }) {
 function NewTaskModal({ onClose, onCreated, branches, staff }) {
   const [form, setForm] = useState({
     title: '', description: '', task_type: 'other', category: 'operations',
-    priority: 'normal', branch: '', assigned_to: '', due_date: '', tags: '',
+    priority: 'normal', branch: '', assigned_to: '', due_date: '', tags: '', phone_alert: false,
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -265,6 +266,9 @@ function NewTaskModal({ onClose, onCreated, branches, staff }) {
               onChange={e => set('description', e.target.value)}
             />
           </div>
+
+          <PhoneAlertToggle kind="task" value={form.phone_alert}
+            onChange={v => set('phone_alert', v)} />
         </div>
         <div className="flex gap-2 p-4 border-t justify-end">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>

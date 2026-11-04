@@ -351,7 +351,8 @@ def _collect_inventory(sc, day, start, end):
     from apps.stockcount.models import StockCountSession
     # daily counts (mode='daily', 20 small lists a day per branch) are not a completed stock count
     for s in StockCountSession.objects.filter(status__in=('variance_ready', 'closed'),
-                                              variance_at__gte=start, variance_at__lt=end)             .exclude(mode='daily') \
+                                              variance_at__gte=start, variance_at__lt=end) \
+            .exclude(mode='daily') \
             .values('id', 'uploaded_by_id', 'created_by_id', 'variance_at'):
         sc.award(s['uploaded_by_id'] or s['created_by_id'], 'stockcount_completed',
                  f"sc:{s['id']}", s['variance_at'])

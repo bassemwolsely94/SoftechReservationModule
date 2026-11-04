@@ -68,6 +68,7 @@ import UsagePrintPage from './pages/UsagePrintPage'
 import UserManagementPage from './pages/UserManagementPage'
 import PermissionsMatrixPage from './pages/PermissionsMatrixPage'
 import PickZonesPage from './pages/PickZonesPage'
+import PhoneAlertsPage from './pages/PhoneAlertsPage'
 import ErpPermissionsPage from './pages/ErpPermissionsPage'
 import DeliveryDashboard from './pages/DeliveryDashboard'
 import DeliveryAnalyticsPage from './pages/DeliveryAnalyticsPage'
@@ -147,7 +148,11 @@ import DemandDetailPage from './pages/DemandDetailPage'
 // Finance Intelligence Platform
 import FinanceHubPage from './pages/FinanceHubPage'
 import FinanceDashboardPage from './pages/FinanceDashboardPage'
-import ChartOfAccountsPage from './pages/ChartOfAccountsPage'
+import GLAccountsPage from './pages/finance/gl/GLAccountsPage'   // finance's own chart of accounts (GL)
+import GLJournalPage from './pages/finance/gl/JournalPage'
+import GLTrialBalancePage from './pages/finance/gl/TrialBalancePage'
+import GLStatementsPage from './pages/finance/gl/StatementsPage'
+import GLAccountStatementPage from './pages/finance/gl/AccountStatementPage'
 import ProfitLossPage from './pages/ProfitLossPage'
 import CashViewPage from './pages/CashViewPage'   // P-40 — replaces the retired cash-flow page (P-43)
 import ExpenseAnalyticsPage from './pages/ExpenseAnalyticsPage'
@@ -305,7 +310,7 @@ export default function App() {
           </Route>
           {/* Standalone mobile rider screen (no desktop sidebar) */}
           <Route path="/rider" element={<RequireAuth><RequireRole roles={['delivery','admin','supervisor']}><RiderLayout><DriverDeliveryApp /></RiderLayout></RequireRole></RequireAuth>} />
-          <Route path="/rider/security" element={<RequireAuth><RiderLayout><SecurityPage /></RiderLayout></RequireAuth>} />
+          <Route path="/rider/security" element={<RequireAuth><RequireRole roles={['delivery','admin','supervisor']}><RiderLayout><SecurityPage /></RiderLayout></RequireRole></RequireAuth>} />
 
           {/* ── Standalone mobile web surfaces (no desktop sidebar) ─────────
               Phone-friendly, thin views over the existing APIs. Pilot: reservations.
@@ -520,7 +525,11 @@ export default function App() {
             <Route path="finance" element={<FinanceHubPage />}>
               <Route index element={<Navigate to="dashboard" replace />} />
               <Route path="dashboard" element={<FinanceDashboardPage />} />
-              <Route path="coa"       element={<ChartOfAccountsPage />} />
+              <Route path="coa"       element={<GLAccountsPage />} />
+              <Route path="journal"   element={<GLJournalPage />} />
+              <Route path="trial-balance" element={<GLTrialBalancePage />} />
+              <Route path="statements" element={<GLStatementsPage />} />
+              <Route path="ledger"    element={<GLAccountStatementPage />} />
               <Route path="pnl"       element={<ProfitLossPage />} />
               {/* P-40: the 13-week cash view replaces the retired cash-flow page; the old URL redirects. */}
               <Route path="cash"      element={<CashViewPage />} />
@@ -540,6 +549,9 @@ export default function App() {
               element={<RequireRole roles={['admin','supervisor']}><UserManagementPage /></RequireRole>} />
             {/* pick zones: picking-sheet classification (read: all staff) */}
             <Route path="pick-zones" element={<PickZonesPage />} />
+            {/* phone alerts (WhatsApp): admin + supervisor */}
+            <Route path="phone-alerts"
+              element={<RequireRole roles={['admin','supervisor']}><PhoneAlertsPage /></RequireRole>} />
             {/* permissions matrix: admin only */}
             <Route path="permissions"
               element={<RequireRole roles={['admin']}><PermissionsMatrixPage /></RequireRole>} />

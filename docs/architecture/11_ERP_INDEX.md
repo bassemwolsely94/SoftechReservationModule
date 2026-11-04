@@ -11,6 +11,7 @@ This is the primary navigation document for the ElRezeiky platform.
 |---|-----|--------|---------|
 | — | [Product & operations review](../product-review/00_INDEX_AND_DECISION_LEDGER.md) | 🔍 DISCOVERY (started 2026-10-30) | Evidence-based review of all 62 apps: inventory + adoption signals, current-state findings, SOFTECH data map, benchmark register, proposal backlog, decision ledger. Nothing authorised for build. |
 | 32 | [32_STOCK_TRANSACTIONS_AUDIT.md](32_STOCK_TRANSACTIONS_AUDIT.md) | ✅ Phases 0–4 BUILT (2026-10-26): ledger mirror + engine (all 9 active checks) + API + `/stock-audit` screen + named branch managers + branch working hours | Stock Transactions Audit (تدقيق حركات المخزون): replaces the Power Query workbook. Read-only `StockLedgerLine` mirror (from HQ, ~3k lines/day) of all `stktrans` doccodes + deterministic engine with 10 checks (below cost, duplicates, invoice price variance, cost fluctuation, adjustments, stock-outs, overstock link, after-hours, returns without invoice, adjustment after count; back-dated dropped); chain-wide editable thresholds + per-branch overrides; findings with review lifecycle; `/stock-audit`. New `apps/stock_audit`. No SOFTECH writes. |
+| 35 | [35_FINANCE_GENERAL_LEDGER.md](35_FINANCE_GENERAL_LEDGER.md) | ✅ Plan 1 BUILT (2026-11-04) — Plans 2 (SOFTECH drafting) and 3 (close & reconcile) planned | Finance General Ledger (دفتر الأستاذ العام): finance's own 4-digit chart of accounts, opening entry 1-1-2026, manual entries with approval (JV numbers) and reversal, trial balance, account statement, trading/P&L, financial position, branch P&L, year comparison; role `accountant`, RBAC module `ledger`; `/api/finance/gl/`, `/finance/{coa,journal,trial-balance,ledger,statements}`. No SOFTECH reads or writes. |
 | 33 | [33_PIC_ANALYTICS.md](33_PIC_ANALYTICS.md) | ✅ BUILT (2026-11-03, branch `claude/pic-analytics`, based on PR 41) | PIC Analytics (تحليلات الـ PIC): PIC-centric customer dashboard + Excel report — new vs returning vs reactivated, frequency, overdue, retention/cohorts, per-branch/salesperson/channel/category, call-center, missed/unanswered calls, new numbers. Read-only: day-fact + rollup tables built from the SOFTECH sales mirror and PBX CDR; no SOFTECH writes. New `apps/pic_analytics`. |
 | 34 | [34_DRUG_ASSISTANT_COUNSELLING.md](34_DRUG_ASSISTANT_COUNSELLING.md) | ✅ BUILT (2026-11-03) — all switches OFF | Project 4: pharmacist-approved usage sheets (`/counselling`, AI drafts only), staff drug assistant (POS F7 «معلومات وبدائل», Ctrl+K, `/m/items`, product tab; verified vs unverified alternatives, drafts only to pharmacists), staff-sent WhatsApp counselling card (no medicine name; private `/c/:token` page; audit + opt-out); read helpers shared with the dosage-label printer. |
 | 13 | [13_DEMAND_EVOLUTION_ROADMAP.md](13_DEMAND_EVOLUTION_ROADMAP.md) | ✅ BUILT (2026-06-12) | `apps/demand` evolved from a passive lost-sales log into an active recovery + intelligence engine: 4 loops shipped (back-in-stock recovery + ROI, confirmed valuation + reconciliation vs purchasing engine, value-weighted buy signal + therapeutic substitution, customer unmet-demand profile + churn). Plus Demand↔Reservation bridge and module-scoped notifications (demand/followups). Migrations demand/0003–0006, notifications/0015. |
@@ -42,7 +43,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | Demand Records | `apps/demand` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#demand) |
 | Transfer Requests | `apps/transfers` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#transfers) |
 | Users / Roles | `apps/users` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#users) |
-| Notifications | `apps/notifications` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#notifications) |
+| Notifications (+ phone alerts) | `apps/notifications` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#notifications) |
 | Purchasing / Demand Engine | `apps/purchasing` | PARTIAL | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#purchasing) |
 | Supplier Invoices | `apps/invoices` | PARTIAL | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#invoices) |
 | Vouchers | `apps/vouchers` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#vouchers) — incl. **gift-coupon stock archive + serial generator** ([SOFTECH_GIFT_VOUCHER_STOCKING.md](SOFTECH_GIFT_VOUCHER_STOCKING.md)) |
@@ -111,6 +112,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | Demand | `/api/demand/` | demand |
 | Transfers | `/api/transfers/` | transfers |
 | Notifications | `/api/notifications/` | notifications |
+| Phone alerts | `/api/notifications/phone-alerts/` (incl. `modes/`) | notifications |
 | Vouchers | `/api/vouchers/` | vouchers |
 | Incentives | `/api/incentives/` | incentives |
 | Stock Count | `/api/stockcount/` | stockcount |
@@ -308,6 +310,7 @@ Full schema: [03_DATABASE_DICTIONARY.md](03_DATABASE_DICTIONARY.md)
 | PIC Analytics (تحليلات الـ PIC) | `/customers/pic-analytics` | PIC Analytics (doc 33) | COMPLETE — tabs: overview · PICs · groups · retention · call center · missed · new numbers; Excel export |
 | Forecast Scenarios (factor-driven targets) | `/forecast-scenarios` | Forecasting (doc 16) | COMPLETE |
 | Announcements | `/announcements` | Notifications | COMPLETE |
+| Phone Alerts (تنبيهات الموبايل) | `/phone-alerts` | Notifications (phone alerts) | COMPLETE — policies · owners · branch mobiles · channel · log · switches |
 | بدل الروشتة — cases | `/replacement` | Replacement (doc 25) | PHASE 0 — KPI strip, outstanding split, exception chips, universal search |
 | بدل الروشتة — case workspace | `/replacement/:id` | Replacement (doc 25) | PHASE 0 — progress rail, lineage tree (confirm/reject proposed receipts), items, append-only ledger, exceptions, reconciliation |
 | Unified Inbox (Omni) | `/omni/inbox` | Omni / CEP | PARTIAL (Phase 0 — WA + calls, one timeline) |
@@ -417,6 +420,8 @@ Full report: [09_TECHNICAL_DEBT_REPORT.md](09_TECHNICAL_DEBT_REPORT.md)
 | `generate_demand_records` | demand | Update ItemDemandStat | Daily |
 | `generate_followup_tasks` | followups | Create scheduled follow-up tasks | Daily |
 | `send_followup_reminders` | notifications | Send overdue follow-up reminders | Hourly |
+| `phone_alerts_tick` | notifications | Remind / escalate / expire open phone alerts | Every minute |
+| `morning_brief` | insights | 09:00 branch morning brief over WhatsApp (`MORNING_BRIEF_SEND_ENABLED`, default OFF) | Daily 09:00 Cairo |
 | `check_demand_sla` | demand | Escalate demand-intake SLA breaches (new>10m, assigned>20m) | Hourly |
 | `seed_trusted_networks` | access | Seed trusted networks from branch `db_host` values + ZeroTier staff VPN; dry run unless `--apply`, idempotent | One-time setup |
 | `seed_config` | config | Seed default settings + dropdown options (incl. `replenishment_pick_zones` rules) | One-time setup |

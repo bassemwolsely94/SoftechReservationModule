@@ -40,10 +40,17 @@ class StatusView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        from apps.pos_orders.permissions import CanViewPos
+        from .permissions import PosCreate
+        p = _profile(request)
         return Response({
             'assistant': _flag('DRUG_ASSISTANT_ENABLED'),
             'content': _flag('COUNSELLING_CONTENT_ENABLED'),
             'cards': _flag('COUNSEL_CARD_SEND_ENABLED'),
+            # who may use the counter parts (same checks the endpoints make), so the UI shows no dead ends
+            'can_assistant': CanViewPos().has_permission(request, self),
+            'can_send': PosCreate().has_permission(request, self),
+            'home_branch_id': getattr(p, 'branch_id', None),
         })
 
 

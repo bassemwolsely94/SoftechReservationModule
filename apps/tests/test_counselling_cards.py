@@ -105,6 +105,26 @@ class CardTests(TestCase):
         with self.assertRaises(Exception):
             self._send(resend=True)
 
+    def test_queued_send_counts_for_dedupe(self):
+        """Deferred minor: a send still in flight (queued) blocks a parallel duplicate."""
+        s = self._send()
+        CounselCardSend.objects.filter(pk=s.pk).update(status='queued')
+        with self.assertRaises(Exception):
+            self._send()
+
+    @override_settings(COUNSEL_CARD_DAILY_CAP=1)
+    def test_queued_send_counts_for_cap(self):
+        s = self._send()
+        CounselCardSend.objects.filter(pk=s.pk).update(status='queued')
+        with self.assertRaises(Exception):
+            self._send(item_ids=[self.item.pk], resend=True)
+
+    def test_idempotency_key_is_per_sender(self):
+        """Deferred minor: another user's key never returns that user's send."""
+        self._send('shared-key')
+        with self.assertRaises(Exception):
+            self._send('shared-key', actor=self.ph)
+
     def test_template_has_no_item_name(self):
         self._send()
         sent = repr(self.fake.templates)
@@ -164,6 +184,14 @@ class CardTests(TestCase):
                 'idempotency_key': 'api-1'}, format='json')
         self.assertEqual(r.status_code, 201, r.data)
         self.assertEqual(r.data['status'], 'sent')
+
+    def test_status_says_who_may_send_and_from_which_branch(self):
+        """Deferred minor: the server tells the UI who may open the drawer / assistant (no 403 dead ends)
+        and the user's own branch (Customer-360 sends from it, not from the purchase's branch)."""
+        r = self.sp_c.get('/api/counselling/status/').data
+        self.assertEqual((r['can_send'], r['can_assistant'], r['home_branch_id']), (True, True, self.branch.pk))
+        _, _, d_c = make_user('dl_st', role='delivery', branch=self.branch)
+        self.assertFalse(d_c.get('/api/counselling/status/').data['can_send'])
 
     def test_delivery_role_cannot_send(self):
         _, _, d_c = make_user('dl_cd', role='delivery', branch=self.branch)

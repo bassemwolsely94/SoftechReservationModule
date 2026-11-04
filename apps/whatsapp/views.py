@@ -104,7 +104,8 @@ class ConversationListView(generics.ListAPIView):
 
     def get_queryset(self):
         from django.db.models import Q
-        qs = WAConversation.objects.select_related('customer', 'assigned_to__user')
+        qs = (WAConversation.objects.select_related('customer', 'assigned_to__user')
+              .exclude(account__is_staff_alerts=True))
         status_filter = self.request.query_params.get('status')
         if status_filter:
             qs = qs.filter(status=status_filter)
@@ -126,7 +127,7 @@ class ConversationListView(generics.ListAPIView):
 class ConversationDetailView(generics.RetrieveUpdateAPIView):
     serializer_class   = WAConversationSerializer
     permission_classes = [IsAuthenticated, WHATSAPP]
-    queryset           = WAConversation.objects.select_related('customer', 'assigned_to')
+    queryset           = WAConversation.objects.select_related('customer', 'assigned_to').exclude(account__is_staff_alerts=True)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -141,6 +142,7 @@ class MessageListView(generics.ListAPIView):
         return (
             WAMessage.objects
             .filter(conversation_id=self.kwargs['conversation_id'])
+            .exclude(conversation__account__is_staff_alerts=True)   # staff alert threads stay private
             .order_by('created_at')
             .select_related('media', 'template', 'sent_by')
         )
@@ -155,7 +157,7 @@ class SendTextView(APIView):
 
     def post(self, request, conversation_id):
         try:
-            convo = WAConversation.objects.get(pk=conversation_id)
+            convo = WAConversation.objects.exclude(account__is_staff_alerts=True).get(pk=conversation_id)
         except WAConversation.DoesNotExist:
             return Response({'detail': 'المحادثة غير موجودة'}, status=404)
 
@@ -185,7 +187,7 @@ class SendTemplateView(APIView):
 
     def post(self, request, conversation_id):
         try:
-            convo = WAConversation.objects.get(pk=conversation_id)
+            convo = WAConversation.objects.exclude(account__is_staff_alerts=True).get(pk=conversation_id)
         except WAConversation.DoesNotExist:
             return Response({'detail': 'المحادثة غير موجودة'}, status=404)
 

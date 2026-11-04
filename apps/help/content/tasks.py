@@ -231,6 +231,8 @@ SCREENS = [
             {'key': 'mine', 'title': T('👤 مهامي', '👤 My tasks'), 'body': T('المهام المسندة لك فقط — ابدأ يومك منها.', 'Only the tasks assigned to you — start your day here.')},
         ],
         'steps': [
+            T('في «مهمة جديدة» علّم «📲 نبّه على الموبايل» (لو متاح) ليصل المعيَّن إليه تنبيه واتساب يضغط منه «استلمت».',
+              'In "New task" tick "📲 Alert by phone" (when available) so the assignee gets a WhatsApp alert and taps "Received".'),
             T('«مهمة جديدة»: العنوان (مطلوب)، النوع، الأولوية، الفرع، الموعد النهائي، تعيين إلى، والوصف.', '"New task": title (required), type, priority, branch, deadline, assignee and description.'),
             T('اضغط مهمة لفتح تفاصيلها.', 'Click a task to open it.'),
             T('«لوحة التحكم» لنظرة عامة على الأداء.', '"Dashboard" for an overview of performance.'),
@@ -305,6 +307,8 @@ SCREENS = [
                      'One task in full: description, checklist, comments and activity, attachments, the team (owner/contributor/reviewer/watcher) and the event log.'),
         'audience': T('المسؤول عن المهمة وفريقها.', 'The task owner and team.'),
         'steps': [
+            T('بجوار الحالة شارة «📲» تبيّن وصول تنبيه الموبايل وملاحظة المستلم.',
+              'Next to the status a "📲" chip shows how the phone alert is going and the recipient\'s remark.'),
             T('حدّث الحالة والأولوية والموعد من «تفاصيل المهمة» أو «تعديل».', 'Update status, priority and deadline from "Task details" or "Edit".'),
             T('علّم عناصر «قائمة الأعمال» عند إنجازها، وأضف عناصر جديدة.', 'Tick checklist items as you finish them, and add new ones.'),
             T('اكتب التحديثات في التعليقات (Ctrl+Enter) وارفع الملفات في المرفقات.', 'Post updates in comments (Ctrl+Enter) and upload files to attachments.'),
@@ -409,7 +413,7 @@ SCREENS = [
              'text': T('يفتح السجل اللي المهمة اتعملت عشانه (حجز، تحويل…).', 'Opens the record the task was made for (reservation, transfer…).'),
              'open_hint': T('يظهر بس لو المهمة مربوطة بسجل.', 'Shown only when the task is linked to a record.')},
         ],
-        'updated': '2026-11-01',
+        'updated': '2026-11-03',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

@@ -14,6 +14,7 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import TransferRequest, TransferRequestItem, TransferRequestMessage
+from apps.notifications.phone_alerts import hooks as phone_alert_hooks
 from core import branch_scope
 from core.sort_ordering import NullsLastOrderingFilter, explicit_order_by, staff_name_key
 from core.sort_rank import branch_label, choice_rank
@@ -245,6 +246,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         tr.save(update_fields=['status', 'submitted_at', 'updated_at'])
 
         _system_log(tr, f'تم تقديم الطلب بواسطة {profile.full_name}')
+        phone_alert_hooks.on_transfer_submitted(tr, profile)
         _notify(
             tr,
             f'طلب تحويل جديد — {tr.request_number}',
@@ -294,6 +296,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
                     line.save(update_fields=['approved_quantity'])
 
         _system_log(tr, f'تم اعتماد الطلب بواسطة {profile.full_name}')
+        phone_alert_hooks.on_transfer_status(tr, profile)
         _notify(
             tr,
             f'تم اعتماد طلبك — {tr.request_number}',
@@ -334,6 +337,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         tr.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'rejection_reason', 'updated_at'])
 
         _system_log(tr, f'تم رفض الطلب بواسطة {profile.full_name}. السبب: {tr.rejection_reason}')
+        phone_alert_hooks.on_transfer_status(tr, profile)
         _notify(
             tr,
             f'تم رفض طلبك — {tr.request_number}',
@@ -374,6 +378,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         tr.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'revision_notes', 'updated_at'])
 
         _system_log(tr, f'طُلب التعديل بواسطة {profile.full_name}: {tr.revision_notes}')
+        phone_alert_hooks.on_transfer_status(tr, profile)
         _notify(
             tr,
             f'يحتاج طلبك تعديلاً — {tr.request_number}',
@@ -424,6 +429,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
             update_fields += ['erp_match_status', 'erp_check_attempts']
 
         tr.save(update_fields=update_fields)
+        phone_alert_hooks.on_transfer_status(tr, profile)
 
         ref_label = f' (مرجع: {erp_ref})' if erp_ref else ''
         _system_log(
@@ -575,6 +581,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
                     line.save(update_fields=['received_quantity'])
 
         _system_log(tr, f'تم إغلاق الطلب كمكتمل بواسطة {profile.full_name}')
+        phone_alert_hooks.on_transfer_status(tr, profile)
 
         return Response(
             TransferRequestDetailSerializer(tr, context={'request': request}).data
@@ -603,6 +610,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         tr.save(update_fields=['status', 'updated_at'])
 
         _system_log(tr, f'تم إلغاء الطلب بواسطة {profile.full_name}')
+        phone_alert_hooks.on_transfer_status(tr, profile)
 
         return Response({'detail': 'تم إلغاء الطلب'})
 

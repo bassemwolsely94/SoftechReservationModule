@@ -25,6 +25,6 @@ class InsightRunAdmin(admin.ModelAdmin):
 
 @admin.register(InsightRecipient)
 class InsightRecipientAdmin(admin.ModelAdmin):
-    list_display  = ['name', 'wa_number', 'branch', 'salesperson_usercode', 'period_types', 'active']
-    list_filter   = ['active', 'branch']
+    list_display  = ['name', 'wa_number', 'branch', 'salesperson_usercode', 'period_types', 'morning_brief', 'active']
+    list_filter   = ['active', 'morning_brief', 'branch']
     search_fields = ['name', 'wa_number', 'salesperson_usercode']

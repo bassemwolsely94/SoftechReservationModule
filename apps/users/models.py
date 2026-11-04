@@ -12,6 +12,7 @@ ROLE_CHOICES = [
     ('viewer',          'Viewer — Read Only'),
     ('supervisor',      'Supervisor — Call Center Supervisor'),
     ('quality_manager', 'Quality Manager — QA & Scoring'),
+    ('accountant',      'Accountant — General Ledger'),
 ]
 
 # Canonical module identifiers used by RoleModuleAccess
@@ -61,6 +62,7 @@ MODULE_CHOICES = [
     ('stock_audit',  'تدقيق حركات المخزون'),
     ('pic_analytics', 'تحليلات العملاء'),
     ('tasks',        'المهام'),
+    ('ledger',       'الحسابات العامة'),
     ('counselling',  'إرشادات الاستخدام'),
     ('usage_print',  'طباعة طريقة الاستخدام'),
 ]
@@ -154,6 +156,10 @@ class StaffProfile(models.Model):
     role     = models.CharField(max_length=20, choices=ROLE_CHOICES, default='salesperson', verbose_name='الدور')
     phone    = models.CharField(max_length=20, blank=True, verbose_name='الهاتف')
     is_active = models.BooleanField(default=True, verbose_name='نشط')
+
+    # Phone alerts (WhatsApp): alerts_only = receives alerts but has no app access; enabled = may be alerted.
+    alerts_only = models.BooleanField(default=False, verbose_name='تنبيهات فقط')
+    phone_alerts_enabled = models.BooleanField(default=True, verbose_name='تفعيل تنبيهات الموبايل')
 
     # Opt-in: also push the weekly near-expiry worklist to this manager on WhatsApp
     # (in addition to the in-app notification). Requires `phone` set + the feature

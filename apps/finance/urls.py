@@ -2,7 +2,7 @@
 apps/finance/urls.py — Finance Intelligence Platform URL routing.
 """
 
-from django.urls import path
+from django.urls import include, path
 
 from . import views
 from . import recon_views
@@ -11,6 +11,9 @@ from . import supplier_terms_views as stv   # P-42
 from . import cash_views                     # P-40
 
 urlpatterns = [
+
+    # ── General ledger on finance's own chart of accounts (finance-gl) ────────
+    path('gl/', include('apps.finance.gl.urls')),
 
     # ── A/P–A/R Reconciliation (سداد فواتير) — doc 23 ─────────────────────────
     path('receivables/summary/', receivables_views.receivables_summary, name='receivables-summary'),

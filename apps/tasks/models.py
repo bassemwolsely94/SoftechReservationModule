@@ -120,6 +120,7 @@ class OperationalTask(models.Model):
         max_length=20, choices=STATUS_CHOICES,
         default='open', db_index=True, verbose_name='الحالة',
     )
+    phone_alert = models.BooleanField(default=False, verbose_name='نبّه على الموبايل')
 
     # ── Relations ──────────────────────────────────────────────────────────────
     branch = models.ForeignKey(

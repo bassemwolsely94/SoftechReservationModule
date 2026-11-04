@@ -1192,6 +1192,11 @@ Read-only. It prints an Arabic + English checklist and exits 1 on a blocker: the
 the proxy key; internal sign-ins (overall and per branch); riders and other outside-allowed users
 without 2FA (by name); selling branches without an approved device; admins with fewer than two
 approved devices; the admin Z1 row; roles missing rows. Fix every ✘ and read every `!`.
+Two `!` items are a review list, not a blocker: `accounts_no_profile` (active accounts without a staff
+profile: a superuser gets the admin rows, anyone else the viewer rows, so inside only) and
+`accounts_service` (no usable password, or a machine-like username: svc / service / bot / api /
+system / integration / smoke / cron). Before enforce, link each one to a staff member, disable it, or
+make sure it only works from inside the network.
 
 **Step 8 - last look at the log.**
 ```bash
@@ -1275,6 +1280,11 @@ sudo -u elrezeiky $PY $APP/manage.py access_preflight
 ```
 No `softech_no_context` item (BLOCK: a SOFTECH use that carries no user/zone, which `enforce` would
 refuse). `softech_would_deny` (WARN) lists who would be refused; `softech_mode` shows the mode.
+Fixed before enforce (no action): a read-only connection no longer hands out the raw connection
+through `getMetaData().getConnection()`, a result set's `getStatement()` or `unwrap()`; a refused
+write is one `softech gate denied` line (no second `[sybase] … blocked statement` line); the mode is
+read once per connect, so an unsafe setup writes one `enforce refused` ERROR per connect, not two; and
+the health sweep's `nodes reachable x/y` leaves out the nodes the gate refused.
 
 **Step 5 - switch to enforce (the owner's action).**
 ```bash
@@ -1322,7 +1332,8 @@ PBX call pop-up) are checked at connect, every 5 minutes, and at once when an ac
 device's status changes, or the zone policy / trusted networks change. Close codes: 4001 signed
 out / disabled / device blocked (screen falls back to polling), 4002 token expired (screen renews the
 session and reconnects quietly; at the default token lifetime this happens about once an hour, which is
-normal), 4403 zone refusal (polling). Without `REDIS_URL` the channel layer lives inside the web
+normal), 4403 zone refusal (polling), 4500 the re-check itself failed (a transient error: the screen
+reconnects as after any drop, and no `ws_zone_denied` row is written). Without `REDIS_URL` the channel layer lives inside the web
 process, so a re-check pushed from the scheduler or a `manage.py` command reaches nobody; the
 5-minute loop still catches it. The call pop-up works only inside the company
 network (Z1/Z2). It follows `NETWORK_POLICY_ENFORCEMENT`: in `log` a `ws would-deny` line and an
@@ -1437,7 +1448,11 @@ the work) and restart.
 passes, as in N3/N4/N5).
 ```bash
 APP=/opt/elrezeiky/app; PY=/opt/elrezeiky/venv/bin/python
-sudo -u elrezeiky $PY $APP/manage.py access_preflight   && sudo -u elrezeiky env PUBLIC_API_ENFORCEMENT=enforce $PY $APP/manage.py check   && sudo sed -i '/^PUBLIC_API_ENFORCEMENT=/d' $APP/.env   && echo 'PUBLIC_API_ENFORCEMENT=enforce' | sudo tee -a $APP/.env >/dev/null   && sudo systemctl restart elrezeiky-web elrezeiky-scheduler
+sudo -u elrezeiky $PY $APP/manage.py access_preflight \
+  && sudo -u elrezeiky env PUBLIC_API_ENFORCEMENT=enforce $PY $APP/manage.py check \
+  && sudo sed -i '/^PUBLIC_API_ENFORCEMENT=/d' $APP/.env \
+  && echo 'PUBLIC_API_ENFORCEMENT=enforce' | sudo tee -a $APP/.env >/dev/null \
+  && sudo systemctl restart elrezeiky-web elrezeiky-scheduler
 ```
 `access_preflight` shows an informational `public_api_mode` item with the current mode. Afterwards
 repeat Step 3.

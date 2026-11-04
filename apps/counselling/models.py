@@ -164,7 +164,7 @@ class CounselCardOptOut(models.Model):
     """The customer asked to stop counselling messages (by customer and/or phone)."""
     customer = models.ForeignKey('customers.Customer', null=True, blank=True, on_delete=models.CASCADE,
                                  related_name='+')
-    phone_hash = models.CharField(max_length=64, db_index=True)
+    phone_hash = models.CharField(max_length=64, unique=True)      # one row per phone
     source = models.CharField(max_length=20, default='link')     # link | staff
     created_at = models.DateTimeField(auto_now_add=True)
 

@@ -10,7 +10,7 @@ import useAuthStore from '../store/authStore'
 const ROLES = [
   ['admin', 'مدير'], ['supervisor', 'مشرف'], ['pharmacist', 'صيدلي'], ['salesperson', 'مندوب'],
   ['call_center', 'مركز اتصال'], ['purchasing', 'مشتريات'], ['delivery', 'توصيل'],
-  ['quality_manager', 'جودة'], ['viewer', 'عرض'],
+  ['quality_manager', 'جودة'], ['accountant', 'محاسب'], ['viewer', 'عرض'],
 ]
 
 export default function AnnouncementsPage() {

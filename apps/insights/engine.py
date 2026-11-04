@@ -192,6 +192,21 @@ class InsightEngine:
         return '\n'.join(lines).strip()
 
     @classmethod
+    def top_negative_for_branch(cls, run, branch, lang='ar', limit=3):
+        """The branch's worst genuine declines of a stored run, as message strings.
+
+        Only the volume / comparison categories count (sales, basket, returns, margin versus the
+        prior period); coverage / data-hygiene, discount, mix and highlight findings are not
+        declines. Critical before warning, then the larger magnitude (|value|, as the engine's
+        own attention list does), then pk."""
+        code = branch.code or branch.softech_branch_id
+        key = 'message_ar' if lang == 'ar' else 'message_en'
+        rows = list(run.findings.filter(scope_key=code, severity__in=('critical', 'warning'),
+                                        category__in=('volume', 'comparison')))
+        rows.sort(key=lambda f: (cls._SEV_ORDER.get(f.severity, 3), -abs(float(f.value or 0)), f.pk))
+        return [getattr(f, key) for f in rows[:limit]]
+
+    @classmethod
     def render_for_salesperson(cls, run, usercode, lang):
         """Re-render a stored run filtered to one salesperson's findings (standings, over-
         discount, basket, etc.) — for rep-level (WhatsApp) reports. None if nothing for them."""

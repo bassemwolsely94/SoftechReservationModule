@@ -24,6 +24,23 @@ def _approved_sheet(item, profile, **fields):
     return c
 
 
+class AdminLockTests(TestCase):
+    """Deferred minor: approved versions cannot be deleted and item links are not edited in admin
+    (both go through the audited services)."""
+    def test_admin_is_read_only_for_versions_and_links(self):
+        from django.contrib import admin
+        from django.test import RequestFactory
+        req = RequestFactory().get('/')
+        req.user = make_user('adm_lock', role='admin')[0]
+        req.user.is_superuser = req.user.is_staff = True
+        va = admin.site._registry[CounsellingContentVersion]
+        la = admin.site._registry[CounsellingContentItem]
+        self.assertFalse(va.has_delete_permission(req))
+        self.assertFalse(va.has_change_permission(req))
+        for perm in (la.has_add_permission(req), la.has_change_permission(req), la.has_delete_permission(req)):
+            self.assertFalse(perm)
+
+
 @override_settings(**ON)
 class ContentModelTests(TestCase):
     def setUp(self):

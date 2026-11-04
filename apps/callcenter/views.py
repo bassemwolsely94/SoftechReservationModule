@@ -844,6 +844,8 @@ class CallLogViewSet(viewsets.ModelViewSet):
                 ci.save(update_fields=['converted_to', 'converted_reservation'])
 
                 created.append({'call_item_id': ci.pk, 'reservation_id': res.pk})
+                from apps.notifications.phone_alerts import hooks as phone_alert_hooks
+                phone_alert_hooks.on_reservation_created(res, profile)
 
         except Exception as e:
             return Response({'detail': f'فشل إنشاء الحجز: {public_error(request, e)}'}, status=500)

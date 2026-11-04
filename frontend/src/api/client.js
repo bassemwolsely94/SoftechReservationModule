@@ -571,6 +571,25 @@ export const insightsApi = {
   updateRule: (id, data)  => api.patch(`/insights/rules/${id}/`, data),
 }
 
+// Phone alerts (WhatsApp) admin API — admin + supervisor only (enforced server-side)
+export const phoneAlertsApi = {
+  modes:         ()           => api.get('/notifications/phone-alerts/modes/'),
+  policies:      ()           => api.get('/notifications/phone-alerts/policies/'),
+  savePolicies:  (rows)       => api.patch('/notifications/phone-alerts/policies/', rows),
+  owners:        ()           => api.get('/notifications/phone-alerts/owners/'),
+  addOwner:      (data)       => api.post('/notifications/phone-alerts/owners/', data),
+  updateOwner:   (id, data)   => api.patch(`/notifications/phone-alerts/owners/${id}/`, data),
+  deleteOwner:   (id)         => api.delete(`/notifications/phone-alerts/owners/${id}/`),
+  branchMobiles: ()           => api.get('/notifications/phone-alerts/branch-mobiles/'),
+  saveBranchMobile: (data)    => api.patch('/notifications/phone-alerts/branch-mobiles/', data),
+  testBranchMobile: (branchId) => api.post(`/notifications/phone-alerts/branch-mobiles/${branchId}/test/`),
+  channel:       ()           => api.get('/notifications/phone-alerts/channel/'),
+  saveChannel:   (accountId)  => api.put('/notifications/phone-alerts/channel/', { channel_account_id: accountId || null }),
+  log:           (params)     => api.get('/notifications/phone-alerts/log/', { params }),
+  logDetail:     (id)         => api.get(`/notifications/phone-alerts/log/${id}/`),
+  switches:      ()           => api.get('/notifications/phone-alerts/switches/'),
+}
+
 export const notificationsApi = {
   list:        (params = {}) => api.get('/notifications/', { params }),
   unreadCount: (params = {}) => api.get('/notifications/unread-count/', { params }),
@@ -2122,6 +2141,42 @@ export const financeApi = {
 
   // Sync Run History
   syncRuns:        (params)       => api.get('/finance/sync-runs/', { params }),
+}
+
+// ── Finance general ledger («الحسابات العامة») — finance's own chart of accounts ──
+// Errors come back as {code, detail}; amounts are Decimal strings.
+const xlsx = (params) => ({ params: { ...params, format: 'xlsx' }, responseType: 'blob' })
+export const glApi = {
+  groups:          (params)        => api.get('/finance/gl/groups/', { params }),
+  accounts:        (params)        => api.get('/finance/gl/accounts/', { params }),
+  accountUpdate:   (code, body)    => api.patch(`/finance/gl/accounts/${encodeURIComponent(code)}/`, body),
+  accountsImport:  (file, dryRun)  => {
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('dry_run', dryRun ? 'true' : 'false')
+    return api.post('/finance/gl/accounts/import/', fd)
+  },
+  entries:         (params)        => api.get('/finance/gl/entries/', { params }),
+  entriesPage:     (url)           => api.get(url),                       // cursor `next` link
+  entry:           (id)            => api.get(`/finance/gl/entries/${id}/`),
+  entryCreate:     (body)          => api.post('/finance/gl/entries/', body),
+  entryUpdate:     (id, body)      => api.put(`/finance/gl/entries/${id}/`, body),
+  entryDelete:     (id)            => api.delete(`/finance/gl/entries/${id}/`),
+  entryApprove:    (id)            => api.post(`/finance/gl/entries/${id}/approve/`),
+  entriesApprove:  (ids)           => api.post('/finance/gl/entries/approve/', { ids }),
+  entryReverse:    (id, reason)    => api.post(`/finance/gl/entries/${id}/reverse/`, { reason }),
+  trialBalance:       (params) => api.get('/finance/gl/reports/trial-balance/', { params }),
+  trialBalanceXlsx:   (params) => api.get('/finance/gl/reports/trial-balance/', xlsx(params)),
+  accountStatement:     (params) => api.get('/finance/gl/reports/account-statement/', { params }),
+  accountStatementXlsx: (params) => api.get('/finance/gl/reports/account-statement/', xlsx(params)),
+  statements:      (params) => api.get('/finance/gl/reports/statements/', { params }),
+  statementsXlsx:  (params) => api.get('/finance/gl/reports/statements/', xlsx(params)),
+  position:        (params) => api.get('/finance/gl/reports/position/', { params }),
+  positionXlsx:    (params) => api.get('/finance/gl/reports/position/', xlsx(params)),
+  branchPl:        (params) => api.get('/finance/gl/reports/branch-pl/', { params }),
+  branchPlXlsx:    (params) => api.get('/finance/gl/reports/branch-pl/', xlsx(params)),
+  comparison:      (params) => api.get('/finance/gl/reports/comparison/', { params }),
+  comparisonXlsx:  (params) => api.get('/finance/gl/reports/comparison/', xlsx(params)),
 }
 
 // ── Recommendations / FBT API ─────────────────────────────────────────────────
