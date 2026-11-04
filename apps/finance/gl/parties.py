@@ -1,0 +1,193 @@
+"""Finance party codes <-> SOFTECH persons (Plan 2 / Task 2).
+
+Finance's sub-ledger codes (suppliers / creditors / customers) are imported as GLParty rows,
+proposed against ReconParty by normalised name, and only ever *confirmed* by a human. An
+unconfirmed party never resolves, so its documents become exceptions (spec section 7).
+"""
+from dataclasses import dataclass
+
+import openpyxl
+from django.db import IntegrityError, transaction
+from django.utils import timezone
+
+from apps.audit.models import AuditLog
+from apps.finance.models import GLParty, ReconParty
+from .names import normalize_ar
+
+STOP_WORDS = {'شركه', 'شركة', 'ش', 'للادويه', 'لتجاره', 'الادويه', 'ادويه', 'فرع', 'و', 'ال'}
+_SKIP = {'total', 'grand total', normalize_ar('الرصيد الافتتاحى')}
+_HEADERS = {'suppliar code': 'supplier', 'customer code': 'customer'}
+
+
+@dataclass(frozen=True)
+class PartyRow:
+    party_type: str
+    code: str
+    name: str
+
+
+def _audit(action, *, user, obj, old_data=None, new_data=None, extra=None):
+    row = AuditLog(action=action)
+    if user:
+        row.user, row.user_name, row.user_role = user, user.full_name, user.role
+    if obj is not None:
+        row.model_name, row.object_id = type(obj).__name__, str(obj.pk)
+        row.object_repr = str(obj)[:200]
+    row.old_data, row.new_data, row.extra = old_data or None, new_data or None, extra or None
+    row.save()
+
+
+def _snap(p):
+    return {'party_type': p.party_type, 'code': p.code, 'name': p.name,
+            'softech_personcode': p.softech_personcode, 'status': p.status,
+            'proposal_basis': p.proposal_basis}
+
+
+def _code(v):
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return str(int(v))
+    s = str(v).strip()
+    if not s or s.lower() in _SKIP or normalize_ar(s) in _SKIP:
+        return None
+    try:
+        return str(int(float(s)))
+    except ValueError:
+        return None
+
+
+def parse_party_sheets(path) -> list[PartyRow]:
+    """Read sub-ledger pivots by header ('suppliar code' / 'customer code'), not position.
+    The name is the cell right of the code. Duplicate (type, code) keep the first name."""
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    seen, out = set(), []
+    for ws in wb.worksheets:
+        rows = list(ws.iter_rows(values_only=True))
+        hdr = None
+        for i, r in enumerate(rows):
+            for j, c in enumerate(r):
+                t = _HEADERS.get(str(c or '').strip().lower())
+                if t:
+                    hdr = (i, j, t)
+                    break
+            if hdr:
+                break
+        if not hdr:
+            continue
+        i0, j, ptype = hdr
+        for r in rows[i0 + 1:]:
+            if j >= len(r):
+                continue
+            code = _code(r[j])
+            if not code:
+                continue
+            name = str(r[j + 1] or '').strip() if j + 1 < len(r) else ''
+            if (ptype, code) in seen:
+                continue
+            seen.add((ptype, code))
+            out.append(PartyRow(ptype, code, name))
+    wb.close()
+    return out
+
+
+def import_parties(rows, *, user) -> dict:
+    created = updated = 0
+    with transaction.atomic():
+        for r in rows:
+            obj, was_new = GLParty.objects.get_or_create(
+                party_type=r.party_type, code=r.code, defaults={'name': r.name[:200]})
+            if was_new:
+                created += 1
+            elif r.name and obj.name != r.name[:200]:
+                obj.name = r.name[:200]
+                obj.save(update_fields=['name'])
+                updated += 1
+        _audit('gl_parties_imported', user=user, obj=None,
+               extra={'created': created, 'updated': updated, 'rows': len(rows)})
+    return {'created': created, 'updated': updated}
+
+
+def _tokens(name) -> frozenset:
+    return frozenset(t for t in normalize_ar(name).split() if t not in STOP_WORDS)
+
+
+def propose_matches(*, user) -> dict:
+    """Propose (never confirm) a ReconParty for every unmapped party; exactly one candidate."""
+    recon = {}
+    for rp in ReconParty.objects.all():
+        recon.setdefault(rp.party_type, []).append(rp)
+    res = {'exact': 0, 'tokens': 0, 'none': 0}
+    with transaction.atomic():
+        for g in GLParty.objects.filter(status='unmapped', is_active=True):
+            cands = recon.get(g.party_type, [])
+            norm = normalize_ar(g.name)
+            hit, basis = [], 'exact'
+            if norm:
+                hit = [c for c in cands if normalize_ar(c.name) == norm]
+                if not hit:
+                    tk = _tokens(g.name)
+                    if tk:
+                        hit, basis = [c for c in cands if _tokens(c.name) == tk], 'tokens'
+            if len(hit) != 1:
+                res['none'] += 1
+                continue
+            old = _snap(g)
+            g.recon_party, g.softech_personcode = hit[0], hit[0].softech_personcode
+            g.status, g.proposal_basis = 'proposed', basis
+            g.save(update_fields=['recon_party', 'softech_personcode', 'status', 'proposal_basis'])
+            _audit('gl_party_proposed', user=user, obj=g, old_data=old, new_data=_snap(g))
+            res[basis] += 1
+    return res
+
+
+def _confirm(g, user, personcode, basis):
+    old = _snap(g)
+    g.softech_personcode = str(personcode).strip()
+    g.recon_party = ReconParty.objects.filter(softech_personcode=g.softech_personcode).first()
+    g.status, g.proposal_basis = 'confirmed', basis or g.proposal_basis or 'manual'
+    g.confirmed_by, g.confirmed_at = user, timezone.now()
+    try:
+        with transaction.atomic():
+            g.save()
+    except IntegrityError:
+        raise ValueError('كود SOFTECH هذا مربوط بطرف آخر مؤكد بالفعل') from None
+    _audit('gl_party_confirmed', user=user, obj=g, old_data=old, new_data=_snap(g))
+    return g
+
+
+def confirm_party(party_id, *, user, personcode: str) -> GLParty:
+    if not str(personcode or '').strip():
+        raise ValueError('كود SOFTECH مطلوب')
+    with transaction.atomic():
+        g = GLParty.objects.select_for_update().get(pk=party_id)
+        basis = g.proposal_basis if (g.softech_personcode == str(personcode).strip()
+                                     and g.proposal_basis) else 'manual'
+        return _confirm(g, user, personcode, basis)
+
+
+def reject_party(party_id, *, user) -> GLParty:
+    with transaction.atomic():
+        g = GLParty.objects.select_for_update().get(pk=party_id)
+        old = _snap(g)
+        g.status, g.softech_personcode, g.recon_party = 'rejected', '', None
+        g.save(update_fields=['status', 'softech_personcode', 'recon_party'])
+        _audit('gl_party_rejected', user=user, obj=g, old_data=old, new_data=_snap(g))
+    return g
+
+
+def create_party_from_personcode(*, user, party_type, code, personcode) -> GLParty:
+    """Confirmed party for a code finance never listed (from the exceptions inbox)."""
+    personcode = str(personcode).strip()
+    rp = ReconParty.objects.filter(softech_personcode=personcode, party_type=party_type).first()
+    with transaction.atomic():
+        g, _ = GLParty.objects.select_for_update().get_or_create(
+            party_type=party_type, code=str(code),
+            defaults={'name': (rp.name if rp and rp.name else str(code))[:200]})
+        return _confirm(g, user, personcode, 'manual')
+
+
+def resolve_party(party_type: str, personcode: str):
+    """Confirmed + active only; proposals never resolve."""
+    return GLParty.objects.filter(party_type=party_type, softech_personcode=str(personcode),
+                                  status='confirmed', is_active=True).first()
