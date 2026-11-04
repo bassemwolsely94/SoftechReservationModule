@@ -8,10 +8,10 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('branches', '0011_branchsettings_alert_mobile'),
+        ('branches', '0012_branchsettings_alert_mobile'),
         ('contenttypes', '0002_remove_content_type_name'),
         ('notifications', '0037_alter_notification_notification_type'),
-        ('users', '0045_staffprofile_alerts_only_and_more'),
+        ('users', '0046_staffprofile_alerts_only_and_more'),
     ]
 
     operations = [
