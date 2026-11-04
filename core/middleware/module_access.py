@@ -185,6 +185,11 @@ def required(path, method):
     prefix = parts[2]
     if prefix in EXEMPT_PREFIXES or path in OPEN_WRITE_EXACT:
         return None
+    # Small daily counts (Project 2) have their own gate, like /api/stock-audit/: every salesperson
+    # counts their OWN blind list (the matrix gives salespeople read-only stockcount), and review is
+    # for named branch managers + stock_audit management (apps/stockcount/daily/views.py)
+    if prefix == 'stockcount' and parts[3:4] == ['daily']:
+        return None
     method = method.upper()
     # POS alternatives live under /api/composition/ (chronic) but belong to the POS module
     if prefix == 'composition' and len(parts) > 3 and parts[3] == 'alternatives':
