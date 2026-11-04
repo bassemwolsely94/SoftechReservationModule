@@ -60,7 +60,7 @@ export default function TrialBalancePage() {
   return (
     <div className="space-y-3" dir="rtl">
       <div className="flex flex-wrap items-center gap-2">
-        <PeriodPicker value={period} onChange={setPeriod} dataTour="finance-gl-tb-period" />
+        <div data-tour="finance-gl-tb-period"><PeriodPicker value={period} onChange={setPeriod} /></div>
         <BranchSelect size="sm" className="w-48" branches={branches} value={branch} allLabel="كل الفروع" placeholder="كل الفروع" onChange={setBranch} />
         <div className="flex rounded-lg border border-gray-300 overflow-hidden text-sm">
           {[['account', 'بالحساب'], ['group', 'بالمجموعة']].map(([k, l]) => (

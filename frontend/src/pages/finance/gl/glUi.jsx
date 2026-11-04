@@ -129,14 +129,14 @@ export function ErrorBox({ children }) {
 }
 
 /** Period picker shared by the reports: month / quarter / year / custom. */
-export function PeriodPicker({ value, onChange, dataTour }) {
+export function PeriodPicker({ value, onChange }) {
   const { kind, from, to } = value
   const pick = (k) => {
     if (k === 'custom') onChange({ kind: k, from, to })
     else onChange({ kind: k, ...rangeOf(k, from || todayIso()) })
   }
   return (
-    <div className="flex flex-wrap items-center gap-2" data-tour={dataTour}>
+    <div className="flex flex-wrap items-center gap-2">
       <div className="flex rounded-lg border border-gray-300 overflow-hidden text-sm">
         {[['month', 'شهر'], ['quarter', 'ربع'], ['year', 'سنة'], ['custom', 'مخصص']].map(([k, l]) => (
           <button key={k} type="button" onClick={() => pick(k)}
