@@ -51,6 +51,7 @@ All-branch roles: admin, call_center, purchasing, supervisor, quality_manager �
 | `stock_audit` | all | — | — | — | — | — | — | VAX | VEAX | own — named branch managers see their branches (branch_scope); management all |
 | `pic_analytics` | all | — | — | — | — | — | — | VX | — | own — named branch managers see their branches (branch_scope); management all |
 | `tasks` | all | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | own + «جميع الفروع» + created / assigned to me; all-branch schedules read-only for branch roles |
+| `usage_print` | all | — | VC | VC | — | — | — | VCE | — | own — invoice lookup (403 before any SOFTECH read), sheets, lines, print, prescription (branch_scope); presets + slip settings chain-wide |
 
 ## Record-state and separation-of-duty rules enforced on the server
 
