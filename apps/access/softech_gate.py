@@ -11,7 +11,7 @@ never widens anything.
 """
 import contextvars
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from django.conf import settings
 from django.core.cache import cache
@@ -43,6 +43,9 @@ class GateDecision:
     reason: str | None
     scope: str
     zone: str | None
+    # the mode check() decided under: callers read it here instead of calling mode() again
+    # (a second call repeated the unsafe-setup ERROR line and was unguarded)
+    mode: str | None = None
 
 
 def mode():
@@ -57,6 +60,27 @@ def mode():
             _log_unsafe(problem, switch='SOFTECH_GATE_ENFORCEMENT')
             return 'log'
     return value
+
+
+def mode_of(decision):
+    """The mode a decision was made under. check() always carries it; a decision built by hand
+    (tests, callers) without one asks mode(), guarded: a failing lookup is log."""
+    if decision.mode is not None:
+        return decision.mode
+    try:
+        return mode()
+    except Exception:
+        log.error('softech gate: mode lookup failed - treated as log', exc_info=True)
+        return 'log'
+
+
+def _note_quietly(decision, label, **kwargs):
+    """note(), which must never raise out of check(): a failure here would turn an enforced
+    refusal into gate_error, which is FULL inside the network."""
+    try:
+        note(decision, label, **kwargs)
+    except Exception:
+        log.error('softech gate: audit row lost (%s %s)', decision, label, exc_info=True)
 
 
 def decide(scope, ctx, profile):
@@ -135,8 +159,9 @@ def _failed(reason, label, scope, current_mode):
         except Exception:
             pass
         grant = FULL if inside else NONE
-    decision = GateDecision(grant, reason, scope, zone)
-    note(GateDecision(NONE, reason, scope, zone), label, enforced=grant == NONE, mode=current_mode)
+    decision = GateDecision(grant, reason, scope, zone, current_mode)
+    _note_quietly(GateDecision(NONE, reason, scope, zone, current_mode), label,
+                  enforced=grant == NONE, mode=current_mode)
     return decision
 
 
@@ -157,21 +182,21 @@ def check(label=''):
         from apps.sync.softech_load import current_scope
         scope = current_scope()
         if current_mode == 'off':
-            return GateDecision(FULL, None, scope, None)
+            return GateDecision(FULL, None, scope, None, current_mode)
         ctx = access_context.current()
         profile = None
         if str(scope).startswith('web') and ctx is not None and not ctx.failed:
             profile = _subject(ctx)
-        decision = decide(scope, ctx, profile)
+        decision = replace(decide(scope, ctx, profile), mode=current_mode)
         if decision.reason == 'context_failed' and decision.grant == FULL:
             if _dedupe(f'access:softech-gate:ctxfail:{decision.zone}'):
                 log.error('softech gate: access context failed inside the network - allowed (%s)',
                           label)
         if decision.grant == NONE:
             enforced = current_mode == 'enforce'
-            note(decision, label, enforced=enforced, mode=current_mode)
+            _note_quietly(decision, label, enforced=enforced, mode=current_mode)
             if not enforced:
-                return GateDecision(FULL, decision.reason, scope, decision.zone)
+                return GateDecision(FULL, decision.reason, scope, decision.zone, current_mode)
         return decision
     except _SubjectFailed:
         return _failed('subject_failed', label, scope, current_mode)
@@ -296,11 +321,7 @@ def require_write(label=''):
         return None
     if decision.grant == NONE:
         return decision            # check() returns NONE only in enforce, already noted
-    try:
-        enforcing = mode() == 'enforce'
-    except Exception:
-        enforcing = False
-    if not enforcing:
+    if mode_of(decision) != 'enforce':
         return None
-    note(decision, label, enforced=True, mode='enforce')
+    _note_quietly(decision, label, enforced=True, mode='enforce')
     return decision

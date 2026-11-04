@@ -240,9 +240,11 @@ export default function PbxLivePage() {
     ws.onopen  = () => setWsStatus('connected')
     ws.onclose = (ev) => {
       setWsStatus('disconnected')
-      // 4002: the access token ran out (N5) — rotate the cookie and reopen. 4001 / 4403 stay
-      // closed: the 15 s query refresh keeps the page current.
+      // 4002: the access token ran out (N5) — rotate the cookie and reopen. 4500: the server's
+      // access re-check failed (transient) — reopen after a pause. 4001 / 4403 stay closed: the
+      // 15 s query refresh keeps the page current.
       if (ev.code === 4002) refreshSession().catch(() => {}).finally(() => setWsGen(g => g + 1))
+      else if (ev.code === 4500) setTimeout(() => setWsGen(g => g + 1), 5000)
     }
     ws.onerror = () => setWsStatus('error')
 
