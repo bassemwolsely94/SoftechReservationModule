@@ -20,7 +20,7 @@ Legend: **[owner]** = only the owner can do it (credentials, server, DNS, router
 | `.env`, OCR sidecar, units, nginx, TLS, frontend (§8.2–9.4) | **owner confirms**. The runbook N0–N6 steps talk about "the live server", so the web may already run read-only | — |
 | Rehearsal restore (§10) | **owner confirms** | — |
 | Office copy | **The office is still the SOFTECH writer today**: `WRITER_INSTANCE=True`, `SOFTECH_READ_ONLY=False`, 17 writer flags ON. It runs `runserver 0.0.0.0:8000` + `run_scheduler` | office `.env`, 2026-11-03 |
-| Code on `main` | 2026-11-04: go-live batch plus Projects 2–5 merged (PRs #55–#59): camera scan, daily counts, missed sales / call-backs, drug assistant + counselling card, and the usage slip. Each ships behind its own switch, OFF in `deploy/production.env.example`. Still open: PR #53 (N6 follow-ups, green) and PR #54 (N3–N5 "before enforce", backend tests failing). Phone-alerts is not on `main` yet | git |
+| Code on `main` | 2026-11-04: go-live batch plus Projects 2–5 merged (PRs #55–#59): camera scan, daily counts, missed sales / call-backs, drug assistant + counselling card, and the usage slip. Each ships behind its own switch, OFF in `deploy/production.env.example`. Still open: PR #53 (N6 follow-ups, green) and PR #54 (N3–N5 "before enforce", backend tests failing). Phone alerts + the 09:00 morning brief merged as `14af2b45` (switches OFF; jobs `phone_alerts_tick` every minute, `morning_brief` 09:00). Deploy migrations include audit 0037, branches 0012, users 0050, reservations 0023 and notifications 0039–0041 | git |
 
 > ⚠ **Found 2026-11-03: there is more than one office `.env`.** Besides the project `.env`, 14 Claude worktrees under
 > `.claude\worktrees\*\.env` have their own copy.
@@ -142,6 +142,10 @@ From then on the office copy is the read-only development copy (P-54). It must s
   - `MISSED_SALES_ENABLED` / `MISSED_CALL_CALLBACKS_ENABLED`;
   - `DRUG_ASSISTANT_ENABLED` / `COUNSELLING_CONTENT_ENABLED`;
   - `USAGE_PRINT_ENABLED`.
+- [ ] `PHONE_ALERTS_SEND_ENABLED` / `MORNING_BRIEF_SEND_ENABLED` go on only after all of these:
+  - the staff-alerts WhatsApp number is connected and marked `is_staff_alerts`;
+  - Meta has approved their templates;
+  - one test alert reaches a phone.
 - [ ] `COUNSEL_CARD_SEND_ENABLED` only after both of these:
   - Meta has approved the `counsel_card` template;
   - `COUNSEL_PHONE_HASH_KEY` is set (once, and never changed after that).
