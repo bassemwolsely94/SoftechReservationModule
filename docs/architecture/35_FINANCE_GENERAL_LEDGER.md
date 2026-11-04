@@ -153,14 +153,21 @@ SOFTECH SELECT ──reader──▶ SourceDoc ──upsert──▶ GLSourceDoc
 | `supplier_payments` | `cheques` `ptcode=20`: `cheqsno, branchcode, financialdoccode (10 نقدي / 20 شيك بنكي / 90 قيد تسوية), cheqtype (10 receipt / 20 payment), cheqno, cheqdate (= due date), cheqregisterdate (= issue), bankcode, personcode, cheqvalue, chequenote` | cash from boxes 40/50/60/70/80/10: 1.49 / 1.84 / 2.36 / 4.68 / 1.68 / 1.46M vs 5100 per branch 1.53 / 1.76 / 2.33 / 4.74 / 1.64 / 1.46M ✓ | cash: Dr 5100 (box's branch) / Cr box map; cheque: Dr 2341 party / Cr 2343 (cheque no, due date) dated `cheqregisterdate` |
 | `cheque_maturity` | same rows, `financialdoccode='20'`; **`cheqcashdate` is NULL on all 664 cheques of 2026** → SOFTECH never records clearing | finance's «اوراق الدفع» is by due date | Dr 2343 / Cr bank map dated `cheqdate` |
 | `customer_collections` | `cheques` `ptcode=10` (`custpayments` is empty) | HQ bank 04/06 receipts 24.8M Jan–Aug | Dr bank/box map / Cr 1341 party; `financialdoccode 90` (virtual bank 05) → exception |
-| `expenses` | `dailyexpenses` `branchcode, expensedate, intervalcode, day_sno, expcode, expvalue, expcomment, cheqsno` + paying box via `cheques.bankcode` on (`branchcode, cheqsno`); every 2026 row has a voucher | petty branch expenses ≈ 0.5M; code 43 «كوبون خدمة العملاء» 1.29M at HQ = item issues, not cash | Dr expense map / Cr box map, branch-day |
+| `expenses` | `dailyexpenses` `branchcode, expensedate, intervalcode, day_sno, expcode, expvalue, expcomment, cheqsno` + paying box via `cheques.bankcode` of the linked voucher (**P20** link below); a row without one gets `bankcode ''` → `unmapped_account` | petty branch expenses ≈ 0.5M; code 43 «كوبون خدمة العملاء» 1.29M at HQ = item issues, not cash | Dr expense map / Cr box map, branch-day |
 | `treasury_other` | `cheques` `ptcode=-1`, `personcode` −180 / −181 (box↔box / box↔bank transfer legs, `tf_branchcode / tf_bankcode / tf_cheqsno`), other ptcodes (30 موظف, 60 شريك, 70 مورد أصول, 80 شركة شقيقة) | 6 transfer rows in 2026 (36M on 2026-01-01) | transfer legs via 1320 التحويلات; everything else → exception |
 | bank movements | `bankstrans` is **empty**; no bank-statement data in SOFTECH | — | none — manual entries |
 
 Reader rules that keep one SOFTECH row in one place: `cheques` rows with `personcode='-170'` (POS takings)
-are dropped — the cash is already in `sales_tenders`; `personcode='-120'` rows referenced by a
-`dailyexpenses` row are dropped (posted by `expenses`); an unreferenced −120 row becomes a
-`treasury_other` doc of kind `expense_unlinked`. `cheques` is read directly (not via the A/P `Payment`
+are dropped — the cash is already in `sales_tenders`; `personcode='-120'` rows linked to a
+`dailyexpenses` row are dropped (posted by `expenses`); an unlinked −120 row becomes a
+`treasury_other` doc of kind `expense_unlinked`. **P20 — the expense↔voucher link** (both
+`sql_cheques.has_expense` and the expenses reader's paying box, `sybase_gl._expense_link`): same branch,
+same `cheqsno` (`CONVERT(varchar(20), …)` on both sides), `cheques.personcode = '-120'` and
+`ABS(DATEDIFF(day, expensedate, cheqdate)) <= 31`; the reader re-checks the returned voucher columns
+(`expense_voucher_linked`). At HQ `cheqsno` is not a voucher link and it repeats across years, so an
+unbounded match dropped vouchers silently; now a non −120 voucher is never dropped and an expense with no
+linked voucher is a visible `unmapped_account`. Tender docs carry `attrs.paymenttype`, so the
+`paymenttype_in` rule condition works. `cheques` is read directly (not via the A/P `Payment`
 mirror, which lacks `cheqregisterdate` and holds only supplier / contract-customer vouchers); one
 fetch per run is memoised across the four cheques readers (P3). `gl_check_sources` compares the readers
 with the A/P mirror (live check, 2026: diff 0 for all months, expenses 6802 docs, 0 duplicate keys).
@@ -209,8 +216,16 @@ with the A/P mirror (live check, 2026: diff 0 for all months, expenses 6802 docs
 - **Late changes** (spec §11a), per changed or vanished doc:
   - draft entry → replaced (or deleted when the group disappears, audited `gl_entry_draft_deleted`, **P4**);
   - approved entry in a month that accepts postings → reversed (`reverse()`, source_type `reversal`) and a new draft;
-  - approved entry in a month that does not accept postings → `closed_period_change` exception with
-    `original_entry` and `proposed_lines`; nothing posted (Plan 3 posts the correction);
+  - approved entry (or live draft) in a month that does not accept postings → **one**
+    `closed_period_change` exception per group (**P19**), on the group's first member (lowest
+    `source_key`), with `detail.group_key`, `detail.member_source_keys`, `proposed_lines` and
+    `original_entry` (approved) or `detail.entry_id` (live draft); nothing posted. The other members are
+    held (status `exception`, no row of their own), retried with the group, and released when that one
+    exception resolves. Plan 3 posts one correction per exception = per group;
+  - **accountant edits are never overwritten (P21)**: before replacing, deleting or reversing a live entry
+    the engine looks for an `AuditLog` `gl_entry_draft_saved` on it by anyone but `gl-drafting`; if found the
+    entry is left alone and the group gets a `ledger_error` exception with `detail.code='edited_by_user'`,
+    `entry_id`, `group_key` (resolves with the group);
   - an entry deleted/reversed by hand is re-drafted as a new **draft** on the next run covering its date
     (**P9**) — never approved automatically; use «تجاهل» to silence a doc permanently.
 - **Vanish guard** (**P10**): per source type per run, if the docs about to be marked vanished exceed 20 %
@@ -234,15 +249,20 @@ with the A/P mirror (live check, 2026: diff 0 for all months, expenses 6802 docs
 | `unbalanced_rule` | the rule's lines don't balance for the doc | fix the rule lines |
 | `closed_period_change` | doc changed after its month stopped accepting postings | read-only; corrected in an open month (Plan 3 posts it) |
 | `duplicate_source_key` | the same key appeared twice in one read | check the source |
-| `ledger_error` | `save_draft` refused (inactive account, before opening…) | read the message, fix, redraft |
+| `ledger_error` | `save_draft` refused (inactive account, before opening…), or `edited_by_user` (P21) | read the message, fix, redraft; for `edited_by_user` review the entry by hand |
 
 An exception resolves itself on redraft; «تجاهل» needs a reason and keeps the doc status `exception`.
 
 ## Schedule and freshness
 
 `apps/sync/tasks.py::_run_gl_drafting` — daily **08:30** (after the 07:30 morning chain refreshes the A/P
-mirror): window = first day of the earliest open month among (previous, current) → yesterday
-(`_gl_drafting_window`); a busy run is logged and skipped; a crash marks the run `failed`. Freshness
+mirror), **OFF by default (P22)**: it returns at once (one info log per process) unless
+`GL_DRAFTING_SCHEDULE_ENABLED=True` (settings via env, default `False`; listed in
+`deploy/production.env.example` / `staging.env.example`). The owner flips it once the COA, opening
+balances and rules are in; «تحديث الآن» works either way. When on: window = first day of the earliest open
+month among (previous, current) → yesterday (`_gl_drafting_window`); a busy run is logged and skipped; a
+crash marks the run `failed` with `finished_at` and `detail.error`. Draft-now and exception redraft refuse a
+range starting before `OPENING_DATE` (2026-01-01) with 400. Freshness
 domain `gl_drafting` («ترحيل القيود من سوفتيك», cadence 1440 min) feeds the journal's freshness bar;
 «تحديث الآن» starts the same engine for a chosen range (`ledger.create`).
 

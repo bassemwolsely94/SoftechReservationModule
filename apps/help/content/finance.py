@@ -732,9 +732,11 @@ SCREENS = [
                        '• لا توجد قاعدة: مفيش قاعدة بتنطبق على المستند — أضف قاعدة أو وسّع شروط موجودة.\n'
                        '• قاعدتان متعارضتان: قاعدتان بنفس الأولوية بينطبقوا على نفس المستند — فرّق بالأولوية أو الشروط.\n'
                        '• قاعدة غير متوازنة: أسطر القاعدة مبتديش مدين = دائن لهذا المستند — صحّح الأسطر.\n'
-                       '• تغيير في فترة مغلقة: مستند اتغيّر في SOFTECH بعد ما شهره اتقفل — مفيش حاجة اتسجلت، والتصحيح يدوي في شهر مفتوح.\n'
+                       '• تغيير في فترة مغلقة: مستند اتغيّر في SOFTECH بعد ما شهره اتقفل — مفيش حاجة اتسجلت، والتصحيح يدوي في شهر مفتوح. بيظهر سطر واحد للقيد كله (على أول مستند فيه) ومعاه قائمة مستنداته.\n'
                        '• مفتاح مصدر مكرر: نفس مستند SOFTECH ظهر مرتين — راجع المصدر قبل أي ترحيل.\n'
                        '• خطأ في الدفتر: رفض الدفتر القيد (حساب موقوف، تاريخ قبل 1/1/2026…) — اقرأ الرسالة وصحّحها.\n'
+                       '• قيد عدّله محاسب: لو محاسب عدّل مسودة بإيده وبعدين المستند اتغيّر في SOFTECH، الترحيل مبيلمسش تعديله — بيظهر «خطأ في الدفتر» وتراجع القيد بنفسك.\n'
+                       '• مصروف من غير سند صرف: لو مفيش سند صرف مصروفات (-120) لنفس الفرع وفي حدود 31 يوم من تاريخ المصروف، بيظهر «حساب غير مربوط».\n'
                        'الاستثناء المعالج بيتحل لوحده عند إعادة الترحيل؛ «تجاهل» بسبب لما المستند ميتسجلش عن قصد.',
                        'SOFTECH documents that did not become an entry, grouped by kind; each kind has its fix in the row, then "Redraft".\n'
                        '• Unmapped party: the document is for a supplier/customer not yet confirmed in "Parties" — confirm it or create one.\n'
@@ -742,16 +744,19 @@ SCREENS = [
                        '• No rule: no rule matches the document — add a rule or widen an existing one.\n'
                        '• Ambiguous rule: two rules with the same priority match the same document — separate them by priority or conditions.\n'
                        '• Unbalanced rule: the rule lines do not give debit = credit for this document — fix the lines.\n'
-                       '• Closed-period change: a SOFTECH document changed after its month was closed — nothing was posted; correct it by hand in an open month.\n'
+                       '• Closed-period change: a SOFTECH document changed after its month was closed — nothing was posted; correct it by hand in an open month. One row covers the whole entry (on its first document) and lists its documents.\n'
                        '• Duplicate source key: the same SOFTECH document appeared twice — check the source before drafting.\n'
                        '• Ledger error: the ledger refused the entry (stopped account, date before 1-1-2026…) — read the message and fix it.\n'
+                       '• Entry edited by an accountant: if someone edited a draft by hand and the SOFTECH document then changed, drafting leaves the edit alone — a "Ledger error" appears and you review the entry yourself.\n'
+                       '• Expense without a payment voucher: with no expense voucher (-120) on the same branch within 31 days of the expense date, it shows as "Unmapped account".\n'
                        'A handled exception resolves itself on redraft; "Ignore" with a reason when the document is deliberately not posted.')},
         ],
         'tour': [
             {'target': 'finance-gl-journal-freshness', 'label': T('شريط الحداثة · ترحيل الآن', 'Freshness bar · Draft now'),
              'text': T('بيقول آخر مرة اترحلت فيها مستندات SOFTECH كمسودات. «تحديث الآن» يرحّل الفترة المختارة فوراً ويعرض التقدم.', 'Shows when SOFTECH documents were last drafted. "Refresh now" drafts the chosen range at once and shows progress.'),
-             'more': T('• المدى الافتراضي من أول الشهر لحد النهارده.\n• لو في ترحيل شغال (الجدولة أو شخص تاني) هتظهر «يعمل بالفعل» ومتتكررش.\n• بيخلّق مسودات بس — مبيعتمدش أي قيد.\n• الزر لمن له صلاحية الإنشاء (ledger.create).',
-                       '• The default range is the start of this month to today.\n• If a run is already going (the scheduler or someone else) you see "already running" and nothing is duplicated.\n• It creates drafts only — it never approves an entry.\n• The button is for users allowed to create (ledger.create).'),
+             'warn': T('الترحيل التلقائي اليومي متوقف حتى يفعّله المدير. «تحديث الآن» شغال في أي وقت.', 'Automatic daily drafting is off until the manager turns it on. "Refresh now" works at any time.'),
+             'more': T('• المدى الافتراضي من أول الشهر لحد النهارده، ومينفعش يبدأ قبل 1/1/2026.\n• لو في ترحيل شغال (الجدولة أو شخص تاني) هتظهر «يعمل بالفعل» ومتتكررش.\n• بيخلّق مسودات بس — مبيعتمدش أي قيد.\n• الزر لمن له صلاحية الإنشاء (ledger.create).',
+                       '• The default range is the start of this month to today, and it cannot start before 1-1-2026.\n• If a run is already going (the scheduler or someone else) you see "already running" and nothing is duplicated.\n• It creates drafts only — it never approves an entry.\n• The button is for users allowed to create (ledger.create).'),
              'open_hint': T('لمن له صلاحية الإنشاء (ledger.create).', 'For users allowed to create (ledger.create).')},
             {'target': 'finance-gl-exceptions-grid', 'label': T('الاستثناءات', 'Exceptions'),
              'text': T('مجمّعة بالنوع. اضغط «معالجة» على الصف لتصلحه في مكانه، أو اتجاهله بسبب، أو حدّد عدة صفوف واضغط «إعادة الترحيل».', 'Grouped by kind. Press "Handle" on a row to fix it in place, ignore it with a reason, or tick several rows and press "Redraft".'),
@@ -779,7 +784,7 @@ SCREENS = [
              'open_hint': T('افتح قيداً أو «+ قيد يدوي».', 'Open an entry or "+ Manual entry".')},
         ],
         'updated': '2026-11-04',
-        'change_note': T('القيود: شريط الحداثة وترحيل الآن، تبويب الاستثناءات، ومصدر القيد', 'Journal: freshness bar and draft now, exceptions tab, and entry source'),
+        'change_note': T('القيود: الترحيل اليومي متوقف حتى يفعّله المدير، سطر واحد لتغيير الفترة المغلقة، وتعديل المحاسب محفوظ', 'Journal: daily drafting off until the manager turns it on, one row per closed-period change, accountant edits kept'),
     },
     {
         'key': 'finance.gl_parties',
@@ -1530,7 +1535,7 @@ SCREENS = [
              'when': T('قبل مطالبة المورد بمرتجع أو مراجعة سند اتصحّح.', 'Before claiming a return from a supplier or reviewing a corrected voucher.'),
              'open_hint': T('تبويب «غير المسددة (للمالية)».', 'The "Unpaid (for finance)" tab.')},
         ],
-        'updated': '2026-11-05',
+        'updated': '2026-11-04',
         'change_note': T('جانب التعاقدات للقراءة فقط، والمستحقات في شاشتها', 'Contract side read-only; receivables have their own screen'),
     },
 ]
