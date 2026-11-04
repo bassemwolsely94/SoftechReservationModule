@@ -7,7 +7,7 @@ to `request.user.customer`. A customer id is never accepted from the client.
 """
 from django.conf import settings
 from django.core import signing
-from django.db import transaction
+from django.db import connections, transaction
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import (
@@ -72,10 +72,19 @@ def request_link(request):
     # answer in the same time (no timing oracle, N6 I3). A send failure is only logged.
     customer = find_customer_by_phone(phone)
     if customer is not None:
-        start_thread(send_magic_link, args=(customer, issue_magic_link(customer)),
+        start_thread(_send_link, args=(customer, issue_magic_link(customer)),
                      name='portal-magic-link')
 
     return Response({'detail': _GENERIC_LINK_MSG}, status=status.HTTP_200_OK)
+
+
+def _send_link(customer, token):
+    """The magic-link send, run on its own thread: the WhatsApp sender writes its log rows on this
+    thread's database connection, so close it when done (send_magic_link logs its own failures)."""
+    try:
+        send_magic_link(customer, token)
+    finally:
+        connections.close_all()
 
 
 @api_view(['POST'])
@@ -184,7 +193,15 @@ def orders(request):
         'created_at': d.created_at,
     } for d in deliveries]
 
-    return Response({'reservations': res_out, 'deliveries': del_out})
+    from apps.counselling.cards import token_for
+    from apps.counselling.models import CounselCardSend
+    cards_out = [{
+        'created_at': s.created_at,
+        'item_count': s.lines.count(),
+        'token': token_for(s),
+    } for s in CounselCardSend.objects.filter(customer=c, status='sent').order_by('-created_at')[:20]]
+
+    return Response({'reservations': res_out, 'deliveries': del_out, 'counsel_cards': cards_out})
 
 
 @api_view(['GET'])

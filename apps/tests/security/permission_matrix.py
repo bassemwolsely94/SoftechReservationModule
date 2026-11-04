@@ -57,6 +57,7 @@ BRANCH_SCOPE = {
     'users':        'all — HQ module',
     'admin':        'all — HQ module',
     'commerce':     'all — no branch field (feature-flag gated)',
+    'counselling':  'all — usage sheets are chain content; card sends record the sending branch (own POS branch_scope on the assistant)',
     'offers':       'all — offers are chain config; apply-to-order and evaluate own (part 2)',
     'insurance':    'open — HQ claims module; claims portfolio report all-branch users only (owner 2026-11-02)',
     'replacement':  'own — scoped_cases + authz.require (accessible_branch_ids = branch_scope)',
@@ -64,7 +65,9 @@ BRANCH_SCOPE = {
     'pic_analytics': 'own — named branch managers see their branches (branch_scope); management all',
     'gamification': 'n/a — own data; rankings are network-wide by design',
     'help':         'n/a — no branch data',
+    'ledger':       'all — finance GL is company-level: every /api/finance/gl/ endpoint refuses branch-scoped users (B-1)',
     'tasks':        'own + «جميع الفروع» + created / assigned to me; all-branch schedules read-only for branch roles',
+    'usage_print':  'own — invoice lookup (403 before any SOFTECH read), sheets, lines, print, prescription (branch_scope); presets + slip settings chain-wide',
 }
 
 

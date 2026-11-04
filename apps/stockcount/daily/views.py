@@ -204,8 +204,15 @@ def board(request):
     if branch:
         picks = picks.filter(session__branch_code=branch)
     diffs = [_diff_row(x, acc, names, s.match_tolerance) for x in picks.order_by('-latest_attempt__value_egp', 'pk')]
-    return Response({'date': day.isoformat(), 'people': people, 'differences': diffs,
-                     'reasons': service.REVIEW_REASONS, 'management': acc.management})
+    out = {'date': day.isoformat(), 'people': people, 'differences': diffs,
+           'reasons': service.REVIEW_REASONS, 'management': acc.management}
+    if acc.management:
+        # «توزيع الآن»: the pilot branches management may hand today's lists out for by hand
+        from apps.branches.models import Branch
+        out['pilot_branches'] = [
+            {'code': b.softech_branch_id, 'name': b.name_ar or b.name}
+            for b in Branch.objects.filter(is_active=True, settings__daily_count_enabled=True).order_by('softech_branch_id')]
+    return Response(out)
 
 
 def _pick_for_review(request, pk):
@@ -331,6 +338,7 @@ def _report_xlsx(rows, days):
     from io import BytesIO
     from django.http import HttpResponse
     from openpyxl import Workbook
+    from core.export_safety import neutralise_formulas
     wb = Workbook()
     ws = wb.active
     ws.title = 'الجرد اليومي'
@@ -340,7 +348,7 @@ def _report_xlsx(rows, days):
         ws.append([r['branch_name'], r['staff_name'], r['assigned'], r['counted'], r['missed'],
                    r['completion_pct'], r['differences'], r['value_egp']])
     buf = BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)        # names typed by staff must never run as formulas (W-4)
     resp = HttpResponse(buf.getvalue(),
                         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     resp['Content-Disposition'] = f'attachment; filename="daily-counts-{days}d.xlsx"'

@@ -9,6 +9,8 @@ import { useQuery } from '@tanstack/react-query'
 import { itemsApi } from '../../api/client'
 import ItemSearchWidget from '../../components/ItemSearchWidget'
 import { MobileLoading, MobileError } from '../../components/mobileUi'
+import DrugAssistantBody from '../../counselling/DrugAssistantBody'
+import useCounsellingStatus from '../../counselling/useCounsellingStatus'
 
 function toLatin(s) {
   return s ? String(s).replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -23,6 +25,8 @@ const STOCK_CLASS = {
 
 export default function MobileItemsPage() {
   const [item, setItem] = useState(null)
+  const [info, setInfo] = useState(false)
+  const { assistant } = useCounsellingStatus()
 
   const { data: stock, isLoading, isError, refetch } = useQuery({
     queryKey: ['m-item-stock', item?.id],
@@ -51,6 +55,15 @@ export default function MobileItemsPage() {
               <span data-tour="catalog-mobile-items-total" className="text-[11px] text-gray-600 bg-gray-100 px-2 py-0.5 rounded">إجمالي الشبكة: {toLatin(total)}</span>
             </div>
           </div>
+
+          {assistant && (
+            <div className="bg-white rounded-2xl border border-gray-200 p-4" data-tour="catalog-mobile-items-info">
+              <button type="button" onClick={() => setInfo(v => !v)} className="w-full flex items-center justify-between font-semibold text-gray-700 text-sm">
+                <span>ℹ️ معلومات الصنف والبدائل</span><span className="text-gray-400">{info ? '▲' : '▼'}</span>
+              </button>
+              {info && <div className="mt-3"><DrugAssistantBody itemId={item.id} /></div>}
+            </div>
+          )}
 
           <div className="bg-white rounded-2xl border border-gray-200 p-4" data-tour="catalog-mobile-items-stock">
             <h2 className="font-semibold text-gray-700 text-sm mb-2.5">📦 المخزون حسب الفرع</h2>

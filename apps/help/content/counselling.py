@@ -1,0 +1,153 @@
+from . import T
+
+MODULE = {
+    'key': 'counselling', 'group': 'inventory', 'icon': '📘',
+    'brief': T('إرشادات استخدام معتمدة من الصيدلي: للموظف على الكاونتر، وللعميل على واتساب.',
+               'Pharmacist-approved usage guidance: for staff at the counter and for the customer on WhatsApp.'),
+    'title': T('إرشادات الاستخدام', 'Usage guidance'),
+    'summary': T(
+        'الصيدلي يكتب (أو يبدأ من مسودة آلية) إرشاد استخدام واحد، ويعلّم الأصناف اللي بتشاركه (عبوات وأكواد مختلفة لنفس '
+        'الدواء)، ثم يعتمده. الإصدار المعتمد فقط هو اللي يوصل للعميل — في رسالة واتساب «إرشادات الاستخدام» وعلى ملصق الجرعة. '
+        'أي تعديل بعد الاعتماد يرجع مسودة، والعملاء يفضلوا شايفين الإصدار المعتمد لحد ما يتعتمد التعديل.',
+        'A pharmacist writes (or starts from an AI draft) one usage sheet, ticks the items that share it (other packs and codes '
+        'of the same medicine) and approves it. Only the approved version reaches the customer — in the WhatsApp "usage '
+        'guidance" message and on the dosage label. Any edit after approval becomes a draft again; customers keep seeing the '
+        'approved version until the edit is approved.'),
+    'workflows': [
+        {
+            'key': 'sheet',
+            'title': T('مراحل الإرشاد', 'Sheet stages'),
+            'model': 'counselling.CounsellingContent', 'field': 'status',
+            'states': [
+                {'key': 'draft', 'label': T('مسودة', 'Draft'),
+                 'desc': T('مكتوبة يدوياً أو مسودة آلية. لا تظهر للعميل ولا لموظف الكاونتر.',
+                           'Written by hand or drafted by AI. Not shown to customers or counter staff.'),
+                 'next': ['pending_review', 'approved', 'retired']},
+                {'key': 'pending_review', 'label': T('بانتظار الاعتماد', 'Pending approval'),
+                 'desc': T('أُرسلت لصيدلي يراجعها ويعتمدها.', 'Sent for a pharmacist to review and approve.'),
+                 'next': ['approved', 'draft', 'retired']},
+                {'key': 'approved', 'label': T('معتمد', 'Approved'),
+                 'desc': T('يصل للعملاء ولملصق الجرعة. كل اعتماد يحفظ إصداراً لا يتغير.',
+                           'Reaches customers and the dosage label. Each approval keeps an unchangeable version.'),
+                 'next': ['draft', 'retired']},
+                {'key': 'retired', 'label': T('مسحوب', 'Withdrawn'),
+                 'desc': T('لا يصل لأي عميل؛ الروابط القديمة تعرض «تم سحب هذه الإرشادات — راجع الصيدلي».',
+                           'Reaches no customer; old links show "This guidance was withdrawn — ask the pharmacist".')},
+            ],
+        },
+        {
+            'key': 'card',
+            'title': T('رسالة الإرشادات للعميل', 'The customer guidance message'),
+            'model': 'counselling.CounselCardSend', 'field': 'status',
+            'states': [
+                {'key': 'queued', 'label': T('قيد الإرسال', 'Sending'), 'desc': T('تم الحفظ وجارٍ الإرسال لواتساب.', 'Saved and being sent to WhatsApp.'),
+                 'next': ['sent', 'failed']},
+                {'key': 'sent', 'label': T('أُرسلت', 'Sent'), 'desc': T('وصلت لواتساب برابط خاص صالح 90 يوماً.', 'Delivered to WhatsApp with a private link valid for 90 days.')},
+                {'key': 'failed', 'label': T('فشل الإرسال', 'Failed'),
+                 'desc': T('مثلاً قالب واتساب لم يُعتمد بعد أو خطأ من مزوّد الخدمة. أعد المحاولة لاحقاً.',
+                           'E.g. the WhatsApp template is not approved yet or a provider error. Try again later.')},
+                {'key': 'blocked_optout', 'label': T('العميل أوقف الرسائل', 'Customer opted out'),
+                 'desc': T('العميل ضغط «إيقاف رسائل الإرشادات» — لا نرسل له.', 'The customer pressed "stop guidance messages" — we do not send.')},
+            ],
+        },
+    ],
+    'flows': [
+        {
+            'key': 'overview',
+            'title': T('جولة في إرشادات الاستخدام', 'A tour of usage guidance'),
+            'summary': T('إزاي الصيدلي يكتب إرشاداً ويربطه بالأصناف ويعتمده، عشان يوصل للعميل وللملصق.',
+                         'How a pharmacist writes a sheet, links it to items and approves it so it reaches the customer and the label.'),
+            'roles': ['admin', 'pharmacist'],
+            'steps': [
+                {'target': 'nav-counselling', 'nav': '/counselling', 'label': T('إرشادات الاستخدام', 'Usage guidance'),
+                 'text': T('«المخزون» ← «إرشادات الاستخدام».', '"Inventory" → "Usage guidance".')},
+                {'target': 'counselling-tabs', 'route': '/counselling', 'label': T('مراحل الإرشاد', 'Sheet stages'),
+                 'text': T('ابدأ من «يحتاج محتوى»: الأصناف الأكثر مبيعاً بدون إرشاد.', 'Start from "Needs content": best sellers with no sheet.')},
+                {'target': 'counselling-grid', 'route': '/counselling', 'label': T('القائمة', 'The list'),
+                 'text': T('اضغط صفاً يفتح المحرر على الجنب.', 'Click a row to open the editor on the side.')},
+                {'target': 'counselling-new', 'route': '/counselling', 'label': T('إرشاد جديد لصنف…', 'New sheet for an item…'),
+                 'text': T('أو ابحث عن أي صنف لتبدأ له إرشاداً.', 'Or search any item to start a sheet for it.')},
+            ],
+        },
+    ],
+    'journeys': [
+        {'key': 'curate', 'shell': 'desktop',
+         'title': T('كتابة إرشاد واعتماده', 'Write and approve a sheet'),
+         'summary': T('من «يحتاج محتوى» لإرشاد معتمد مرتبط بكل عبوات الدواء.',
+                      'From "Needs content" to an approved sheet linked to every pack of the medicine.'),
+         'roles': ['admin', 'pharmacist'],
+         'steps': [
+            {'screen': 'counselling.review', 'target': 'counselling-tabs', 'label': T('يحتاج محتوى', 'Needs content'),
+             'text': T('ابدأ بالأصناف الأكثر مبيعاً اللي مالهاش إرشاد.', 'Start with the best-selling items that have no sheet.')},
+            {'screen': 'counselling.review', 'target': 'counselling-ai-draft', 'label': T('مسودة آلية', 'AI draft'),
+             'text': T('اختصار: مسودة يكتبها الذكاء الاصطناعي — راجعها كلمة كلمة.', 'Shortcut: an AI-written draft — review it word by word.'),
+             'warn': T('المسودة الآلية قد تخطئ؛ لا تعتمدها قبل المراجعة.', 'An AI draft can be wrong; never approve it unreviewed.'),
+             'open_hint': T('اختر صنفاً من «يحتاج محتوى».', 'Pick an item from "Needs content".')},
+            {'screen': 'counselling.review', 'target': 'counselling-items', 'label': T('الأصناف المرتبطة', 'Linked items'),
+             'text': T('اربط العبوات والأكواد الأخرى لنفس الدواء من الاقتراحات.', 'Link the other packs and codes of the same medicine from the suggestions.'),
+             'open_hint': T('افتح إرشاداً محفوظاً.', 'Open a saved sheet.')},
+            {'screen': 'counselling.review', 'target': 'counselling-approve', 'label': T('اعتماد', 'Approve'),
+             'text': T('الاعتماد يجعل النص يصل للعملاء ويُسجَّل باسمك.', 'Approving makes the text reach customers and records your name.'),
+             'warn': T('النص المعتمد يُرسل للعملاء كما هو.', 'Approved text is sent to customers as is.'),
+             'open_hint': T('افتح مسودة.', 'Open a draft.')},
+         ]},
+    ],
+}
+
+SCREENS = [
+    {
+        'key': 'counselling.review',
+        'routes': ['/counselling'],
+        'updated': '2026-11-03',
+        'title': T('إرشادات الاستخدام', 'Usage guidance'),
+        'summary': T('قائمة الإرشادات بمراحلها، ومحرر الإرشاد على الجنب: الحقول، الأصناف المرتبطة، والاعتماد أو السحب.',
+                     'The sheets by stage, with the sheet editor on the side: fields, linked items, and approve or withdraw.'),
+        'audience': T('الصيادلة (كتابة واعتماد)، ومدير الجودة (قراءة).', 'Pharmacists (write and approve); quality manager (read).'),
+        'steps': [
+            T('ابدأ من «يحتاج محتوى»: أصناف اتباعت آخر 30 يوم ومالهاش إرشاد، الأكثر مبيعاً أولاً.',
+              'Start from "Needs content": items sold in the last 30 days with no sheet, best sellers first.'),
+            T('اختر صنفاً واكتب الإرشاد ثم «حفظ كمسودة»، أو «مسودة آلية» ثم راجعها.',
+              'Pick an item and write the sheet, then "Save as draft", or "AI draft" and review it.'),
+            T('اربط باقي عبوات وأكواد نفس الدواء من «أصناف مشابهة بالاسم» — الربط يدوي دائماً.',
+              'Link the other packs and codes of the same medicine from "similar by name" — linking is always manual.'),
+            T('«اعتماد» يحفظ إصداراً جديداً يصل للعملاء. «سحب» مع السبب يوقف وصوله فوراً.',
+              '"Approve" saves a new version that reaches customers. "Withdraw" with a reason stops it at once.'),
+        ],
+        'tabs': [
+            {'key': 'needs', 'title': T('يحتاج محتوى', 'Needs content'), 'body': T('أصناف مباعة بدون إرشاد.', 'Sold items with no sheet.')},
+            {'key': 'draft', 'title': T('مسودات', 'Drafts'), 'body': T('مسودات يدوية أو آلية وتعديلات لم تُعتمد.', 'Hand or AI drafts and unapproved edits.')},
+            {'key': 'pending_review', 'title': T('بانتظار الاعتماد', 'Pending approval'), 'body': T('أُرسلت للاعتماد.', 'Sent for approval.')},
+            {'key': 'approved', 'title': T('معتمد', 'Approved'), 'body': T('تصل للعملاء الآن.', 'Reaching customers now.')},
+            {'key': 'retired', 'title': T('مسحوب', 'Withdrawn'), 'body': T('موقوفة ولا تصل لأحد.', 'Stopped; reach no one.')},
+        ],
+        'tips': [
+            T('اكتب بلغة بسيطة يفهمها العميل؛ وفي الجرعات غير المؤكدة اكتب «حسب إرشاد الطبيب».',
+              'Write in plain words a customer understands; where a dose is not certain write "as your doctor advises".'),
+            T('التعديل بعد الاعتماد لا يغيّر ما يراه العملاء حتى تعتمده من جديد.',
+              'Editing after approval does not change what customers see until you approve again.'),
+        ],
+        'faq': [
+            {'q': T('من يقدر يعتمد؟', 'Who can approve?'),
+             'a': T('الصيدلي والمدير فقط (صلاحية «إرشادات الاستخدام → اعتماد»).', 'Pharmacists and admin only ("Usage guidance → approve").')},
+            {'q': T('هل المسودة الآلية تُرسل للعميل؟', 'Is an AI draft sent to customers?'),
+             'a': T('لا. لا يصل للعميل إلا نص اعتمده صيدلي.', 'No. Only text a pharmacist approved reaches a customer.')},
+        ],
+        'tour': [
+            {'target': 'counselling-tabs', 'label': T('مراحل الإرشاد', 'Sheet stages'),
+             'text': T('بدّل بين «يحتاج محتوى» والمسودات والمعتمد والمسحوب.', 'Switch between "Needs content", drafts, approved and withdrawn.')},
+            {'target': 'counselling-grid', 'label': T('القائمة', 'The list'),
+             'text': T('اضغط صفاً (أو Enter) يفتح المحرر على الجنب. الأعمدة قابلة للترتيب.', 'Click a row (or Enter) to open the editor on the side. Columns sort.')},
+            {'target': 'counselling-new', 'label': T('إرشاد جديد لصنف…', 'New sheet for an item…'),
+             'text': T('ابحث عن أي صنف لتبدأ له إرشاداً.', 'Search any item to start a sheet for it.')},
+            {'target': 'counselling-editor', 'label': T('المحرر', 'The editor'),
+             'text': T('الحقول والأصناف المرتبطة وأزرار الحفظ والاعتماد.', 'Fields, linked items and the save / approve buttons.'),
+             'open_hint': T('افتح أي صف.', 'Open any row.')},
+            {'target': 'counselling-approve', 'label': T('اعتماد', 'Approve'),
+             'text': T('يجعل النص الحالي يصل للعملاء ويحفظ إصداراً.', 'Makes the current text reach customers and saves a version.'),
+             'warn': T('راجع النص كاملاً قبل الاعتماد.', 'Review the whole text before approving.'),
+             'open_hint': T('افتح مسودة غير معدّلة.', 'Open an unedited draft.')},
+        ],
+        'related': ['pos.order', 'catalog.product'],
+        'workflows': ['sheet', 'card'],
+    },
+]

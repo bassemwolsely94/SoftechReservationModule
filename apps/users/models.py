@@ -63,6 +63,8 @@ MODULE_CHOICES = [
     ('pic_analytics', 'تحليلات العملاء'),
     ('tasks',        'المهام'),
     ('ledger',       'الحسابات العامة'),
+    ('counselling',  'إرشادات الاستخدام'),
+    ('usage_print',  'طباعة طريقة الاستخدام'),
 ]
 
 ACTION_CHOICES = [

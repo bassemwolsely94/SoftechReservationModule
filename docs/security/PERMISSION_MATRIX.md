@@ -8,49 +8,52 @@ Actions: **V** view · **C** create · **E** edit · **D** delete · **A** appro
 
 ## Branch scope
 
-All-branch roles: admin, call_center, purchasing, supervisor, quality_manager — and anyone with `access_all_branches`. Everyone else sees their home branch plus `allowed_branches`. A `restricted_branches` entry always wins, even over all-branch roles. A branch role with no branch, an inactive account or a user without a staff profile sees nothing (`core/branch_scope.py`, owner decision 3).
+All-branch roles: admin, call_center, purchasing, supervisor, quality_manager, accountant — and anyone with `access_all_branches`. Everyone else sees their home branch plus `allowed_branches`. A `restricted_branches` entry always wins, even over all-branch roles. A branch role with no branch, an inactive account or a user without a staff profile sees nothing (`core/branch_scope.py`, owner decision 3).
 
 ## Matrix
 
-| module | admin | call_center | pharmacist | salesperson | purchasing | delivery | viewer | supervisor | quality_manager | branch scope for branch roles |
-|---|---|---|---|---|---|---|---|---|---|---|
-| `pos` | all | VC | VC | VC | — | — | — | VCE | — | own — orders, actions, queue, exceptions, flush, referral stats |
-| `reservations` | all | VCEXS | VCEAF | VCE | — | — | V | VCEAXS | VX | own — list, detail, activity, merge target, dashboard, analytics |
-| `demand` | all | VCEXS | VCE | VCE | — | — | V | VCEAXS | VX | own — list, detail, actions, create (branch_scope); analytics pages network-wide (open) |
-| `transfers` | all | V | VCEAF | VC | VCEAXF | — | V | VAX | VX | own side — requesting OR supplying (decision 3) via branch_scope; workflow sides stay home-branch / HQ lists; create + edit own requesting side |
-| `followups` | all | VCEXS | VCEA | VCE | — | — | V | VCEDAXSF | VX | own — tasks, dashboard (?branch narrows), generate, reminders (branch_scope) |
-| `delivery` | all | VCS | VCEAF | VC | VX | VE | V | VCEAXS | VX | own (+ rider: orders assigned to them) |
-| `customers` | all | VE | VE | V | VX | V | V | VEX | VX | find any by full phone (masked), browse / name-search / edit / churn list own (B-2) |
-| `chronic` | all | VE | VE | V | V | — | V | VE | VX | all — catalogue data |
-| `campaigns` | all | VCE | V | — | VCEAX | — | — | VCEAX | V | all — HQ module |
-| `vouchers` | all | VA | VAF | VA | VCEXS | — | V | VCEAXS | VX | all — chain-wide redemption |
-| `catalog` | all | V | VEX | V | VEAX | V | V | V | V | all — stock is readable network-wide (decision 3); batches, expiry alerts, expiry reports, disposals and expiry count sessions own (part 2); rebalance suggestions all |
-| `stockcount` | all | — | VCEXF | — | VX | — | V | VCE | VX | own — sessions by SOFTECH branch code (scope_code); create / spawn own only |
-| `shortage` | all | VCE | VCEAX | VCE | VCEAX | — | V | VCEAX | VX | own — lists, items, exports, aggregate; stock-check shows other branches (transfers) |
-| `offers` | all | — | — | — | VCED | — | — | VCED | — | all — offers are chain config; apply-to-order and evaluate own (part 2) |
-| `purchasing` | all | — | — | — | VCEAXF | — | V | — | — | all — HQ module; supply cases / decisions own + network (viewer role) |
-| `invoices` | all | — | — | — | VCEAXF | — | — | — | — | open — HQ module; branch roles have no grant |
-| `incentives` | all | — | — | — | VCEAXF | — | — | — | VCEAXF | all-branch admins, quality managers and purchasing only (owner 2026-11-03, apps/incentives/permissions.py); own progress open; sales targets (analytics view) own branch |
-| `cheques` | all | — | V | — | VCEAXF | — | — | — | — | own — plans, instalments, treasury dashboard |
-| `finance` | all | — | V | — | VCEAXF | — | — | — | V | own branch rows only; consolidated + supplier A/P = all-branch roles (B-1); payments own |
-| `insurance` | all | — | — | — | VCEDAXF | — | — | — | — | open — HQ claims module; claims portfolio report all-branch users only (owner 2026-11-02) |
-| `commerce` | all | — | — | — | VCEDAXF | — | — | — | — | all — no branch field (feature-flag gated) |
-| `replacement` | all | — | VC | — | VX | — | — | VCEAXF | VX | own — scoped_cases + authz.require (accessible_branch_ids = branch_scope) |
-| `callcenter` | all | VCEXS | — | — | — | — | V | VCEDAXSF | VX | own — calls, cases (+ assigned to me), dashboards, converts; omni inbox own + assigned (branch_scope) |
-| `hr` | all | VC | VC | VC | VC | VC | V | VCAX | VX | role — own records; managers see all |
-| `approvals` | all | — | VA | — | VA | — | V | VA | VA | n/a — scoped by requester / approver |
-| `analytics` | all | V | V | — | VX | — | V | VX | VX | own — sales, performance, customers, churn, inventory; cross-branch P&L / capital boards all-branch roles (B-1); customer search B-2 |
-| `dashboard` | all | V | V | V | V | V | V | V | V | own — reservation + sales KPIs (?branch only narrows) |
-| `audit` | all | — | — | — | — | — | — | VX | VX | all — HQ module |
-| `sync` | all | — | — | — | — | — | — | — | — | all — HQ module |
-| `settings` | all | — | V | — | V | — | — | — | — | all — HQ module |
-| `users` | all | — | — | — | — | — | — | V | — | all — HQ module |
-| `admin` | all | — | — | — | — | — | — | — | — | all — HQ module |
-| `help` | all | — | — | — | — | — | — | VE | VE | n/a — no branch data |
-| `gamification` | all | — | — | — | — | — | — | VX | VX | n/a — own data; rankings are network-wide by design |
-| `stock_audit` | all | — | — | — | — | — | — | VAX | VEAX | own — named branch managers see their branches (branch_scope); management all |
-| `pic_analytics` | all | — | — | — | — | — | — | VX | — | own — named branch managers see their branches (branch_scope); management all |
-| `tasks` | all | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | own + «جميع الفروع» + created / assigned to me; all-branch schedules read-only for branch roles |
+| module | admin | call_center | pharmacist | salesperson | purchasing | delivery | viewer | supervisor | quality_manager | accountant | branch scope for branch roles |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `pos` | all | VC | VC | VC | — | — | — | VCE | — | — | own — orders, actions, queue, exceptions, flush, referral stats |
+| `reservations` | all | VCEXS | VCEAF | VCE | — | — | V | VCEAXS | VX | — | own — list, detail, activity, merge target, dashboard, analytics |
+| `demand` | all | VCEXS | VCE | VCE | — | — | V | VCEAXS | VX | — | own — list, detail, actions, create (branch_scope); analytics pages network-wide (open) |
+| `transfers` | all | V | VCEAF | VC | VCEAXF | — | V | VAX | VX | — | own side — requesting OR supplying (decision 3) via branch_scope; workflow sides stay home-branch / HQ lists; create + edit own requesting side |
+| `followups` | all | VCEXS | VCEA | VCE | — | — | V | VCEDAXSF | VX | — | own — tasks, dashboard (?branch narrows), generate, reminders (branch_scope) |
+| `delivery` | all | VCS | VCEAF | VC | VX | VE | V | VCEAXS | VX | — | own (+ rider: orders assigned to them) |
+| `customers` | all | VE | VE | V | VX | V | V | VEX | VX | — | find any by full phone (masked), browse / name-search / edit / churn list own (B-2) |
+| `chronic` | all | VE | VE | V | V | — | V | VE | VX | — | all — catalogue data |
+| `campaigns` | all | VCE | V | — | VCEAX | — | — | VCEAX | V | — | all — HQ module |
+| `vouchers` | all | VA | VAF | VA | VCEXS | — | V | VCEAXS | VX | — | all — chain-wide redemption |
+| `catalog` | all | V | VEX | V | VEAX | V | V | V | V | — | all — stock is readable network-wide (decision 3); batches, expiry alerts, expiry reports, disposals and expiry count sessions own (part 2); rebalance suggestions all |
+| `stockcount` | all | — | VCEXF | — | VX | — | V | VCE | VX | — | own — sessions by SOFTECH branch code (scope_code); create / spawn own only |
+| `shortage` | all | VCE | VCEAX | VCE | VCEAX | — | V | VCEAX | VX | — | own — lists, items, exports, aggregate; stock-check shows other branches (transfers) |
+| `offers` | all | — | — | — | VCED | — | — | VCED | — | — | all — offers are chain config; apply-to-order and evaluate own (part 2) |
+| `purchasing` | all | — | — | — | VCEAXF | — | V | — | — | — | all — HQ module; supply cases / decisions own + network (viewer role) |
+| `invoices` | all | — | — | — | VCEAXF | — | — | — | — | — | open — HQ module; branch roles have no grant |
+| `incentives` | all | — | — | — | VCEAXF | — | — | — | VCEAXF | — | all-branch admins, quality managers and purchasing only (owner 2026-11-03, apps/incentives/permissions.py); own progress open; sales targets (analytics view) own branch |
+| `cheques` | all | — | V | — | VCEAXF | — | — | — | — | V | own — plans, instalments, treasury dashboard |
+| `finance` | all | — | V | — | VCEAXF | — | — | — | V | VX | own branch rows only; consolidated + supplier A/P = all-branch roles (B-1); payments own |
+| `insurance` | all | — | — | — | VCEDAXF | — | — | — | — | — | open — HQ claims module; claims portfolio report all-branch users only (owner 2026-11-02) |
+| `commerce` | all | — | — | — | VCEDAXF | — | — | — | — | — | all — no branch field (feature-flag gated) |
+| `replacement` | all | — | VC | — | VX | — | — | VCEAXF | VX | — | own — scoped_cases + authz.require (accessible_branch_ids = branch_scope) |
+| `callcenter` | all | VCEXS | — | — | — | — | V | VCEDAXSF | VX | — | own — calls, cases (+ assigned to me), dashboards, converts; omni inbox own + assigned (branch_scope) |
+| `hr` | all | VC | VC | VC | VC | VC | V | VCAX | VX | — | role — own records; managers see all |
+| `approvals` | all | — | VA | — | VA | — | V | VA | VA | — | n/a — scoped by requester / approver |
+| `analytics` | all | V | V | — | VX | — | V | VX | VX | — | own — sales, performance, customers, churn, inventory; cross-branch P&L / capital boards all-branch roles (B-1); customer search B-2 |
+| `dashboard` | all | V | V | V | V | V | V | V | V | V | own — reservation + sales KPIs (?branch only narrows) |
+| `audit` | all | — | — | — | — | — | — | VX | VX | — | all — HQ module |
+| `sync` | all | — | — | — | — | — | — | — | — | — | all — HQ module |
+| `settings` | all | — | V | — | V | — | — | — | — | — | all — HQ module |
+| `users` | all | — | — | — | — | — | — | V | — | — | all — HQ module |
+| `admin` | all | — | — | — | — | — | — | — | — | — | all — HQ module |
+| `help` | all | — | — | — | — | — | — | VE | VE | — | n/a — no branch data |
+| `gamification` | all | — | — | — | — | — | — | VX | VX | — | n/a — own data; rankings are network-wide by design |
+| `stock_audit` | all | — | — | — | — | — | — | VAX | VEAX | — | own — named branch managers see their branches (branch_scope); management all |
+| `pic_analytics` | all | — | — | — | — | — | — | VX | — | — | own — named branch managers see their branches (branch_scope); management all |
+| `tasks` | all | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | own + «جميع الفروع» + created / assigned to me; all-branch schedules read-only for branch roles |
+| `ledger` | all | — | — | — | — | — | — | — | — | VCAX | all — finance GL is company-level: every /api/finance/gl/ endpoint refuses branch-scoped users (B-1) |
+| `counselling` | all | V | VCEA | V | — | — | — | V | V | — | all — usage sheets are chain content; card sends record the sending branch (own POS branch_scope on the assistant) |
+| `usage_print` | all | — | VC | VC | — | — | — | VCE | — | — | own — invoice lookup (403 before any SOFTECH read), sheets, lines, print, prescription (branch_scope); presets + slip settings chain-wide |
 
 ## Record-state and separation-of-duty rules enforced on the server
 

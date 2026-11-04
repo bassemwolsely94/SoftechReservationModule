@@ -2,6 +2,7 @@ import { useState } from 'react'
 import ItemSearchWidget from '../../components/ItemSearchWidget'
 import PosImageSearch from '../../pos/search/PosImageSearch'
 import PosAlternatives from '../../pos/search/PosAlternatives'
+import CounselSendButton from '../../counselling/CounselSendButton'
 import { Icon } from '../../pos/design'
 import PrescriptionOcrModal from '../../components/PrescriptionOcrModal'
 import PicHistoryModal from '../../components/PicHistoryModal'
@@ -228,6 +229,8 @@ export default function MobilePOSOrderPage() {
           <span className="font-bold text-green-700 text-base">الصافي {money(P.totals.net)}</span>
         </div>
         <MPointsBadge P={P} />
+        <CounselSendButton customerId={P.picCustomer?.id || P.customer?.id} itemIds={P.lines.map(l => l.item)}
+                           branchId={P.branch} label="📘 إرسال إرشادات الاستخدام" className="w-full py-2 rounded border text-xs" />
         <div className="grid grid-cols-4 gap-2 text-xs">
           <button onClick={() => setSheet('pay')} data-tour="pos-mobile-pay" className="py-2 rounded border">السداد ({P.tenders.length})</button>
           <button onClick={P.parkOrder} data-tour="pos-mobile-park" className="py-2 rounded border">⏸ تعليق</button>

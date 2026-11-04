@@ -148,6 +148,13 @@ export const reservationsApi = {
   createForce:  (data) => api.post('/reservations/?force=true', data),
 }
 
+// Project 3 — «مبيعات فائتة»: suggestions only; confirm = POST /reservations/ with missed_sale
+export const missedSalesApi = {
+  list:   (params)               => api.get('/pos-orders/missed-sales/', { params }),
+  get:    (id)                   => api.get(`/pos-orders/missed-sales/${id}/`),
+  reject: (id, reason, note = '') => api.post(`/pos-orders/missed-sales/${id}/reject/`, { reason, note }),
+}
+
 // ── Customers ─────────────────────────────────────────────────────────────────
 
 export const customersApi = {
@@ -260,6 +267,27 @@ export const itemsApi = {
 export const posAlternativesApi = {
   /** Verified alternatives (approved active ingredients only) — {verified, same[], other[]}. */
   get: (item, branch) => api.get('/composition/alternatives/', { params: { item, ...(branch ? { branch } : {}) } }),
+}
+
+// ── Counselling (Project 4, doc 34): drug assistant, pharmacist-approved sheets, WhatsApp card ──
+export const counsellingApi = {
+  status:   ()             => api.get('/counselling/status/'),
+  list:     (params)       => api.get('/counselling/content/', { params }),
+  get:      (id)           => api.get(`/counselling/content/${id}/`),
+  create:   (data)         => api.post('/counselling/content/', data),
+  update:   (id, data)     => api.patch(`/counselling/content/${id}/`, data),
+  submit:   (id)           => api.post(`/counselling/content/${id}/submit/`),
+  approve:  (id)           => api.post(`/counselling/content/${id}/approve/`),
+  retire:   (id, reason)   => api.post(`/counselling/content/${id}/retire/`, { reason }),
+  link:     (id, itemIds)  => api.post(`/counselling/content/${id}/link/`, { item_ids: itemIds }),
+  unlink:   (id, itemId)   => api.post(`/counselling/content/${id}/unlink/`, { item_id: itemId }),
+  suggest:  (id)           => api.get(`/counselling/content/${id}/suggest-items/`),
+  versions: (id)           => api.get(`/counselling/content/${id}/versions/`),
+  needs:    ()             => api.get('/counselling/content/needs/'),
+  aiDraft:  (itemId)       => api.post('/counselling/content/ai-draft/', { item_id: itemId }),
+  assistant:(itemId, branch) => api.get(`/counselling/assistant/${itemId}/`, { params: branch ? { branch } : {} }),
+  previewCard: (data)      => api.post('/counselling/cards/preview/', data),
+  sendCard:    (data)      => api.post('/counselling/cards/send/', data),
 }
 
 export const offersApi = {
@@ -1785,8 +1813,8 @@ export const callCenterApi = {
     }),
 
   // Pending callbacks — mode='overdue'|'all'
-  pendingCallbacks: (mode = 'overdue') =>
-    api.get('/callcenter/calls/pending-callbacks/', { params: { mode } }),
+  pendingCallbacks: (mode = 'overdue', auto = false) =>
+    api.get('/callcenter/calls/pending-callbacks/', { params: { mode, ...(auto ? { auto: 1 } : {}) } }),
   markCallbackDone: (id) => api.patch(`/callcenter/calls/${id}/`, { status: 'answered' }),
 
   // Dashboard KPIs
@@ -2929,6 +2957,20 @@ export const replacementApi = {
 }
 
 // ── Stock Transactions Audit (تدقيق حركات المخزون, doc 32) — every rule enforced server-side ──
+// Usage-instructions slip (Project 5) — flag + RBAC enforced server-side (apps/usage_print/access.py)
+export const usagePrintApi = {
+  sheet:        (params)        => api.get('/usage-print/sheet/', { params }),
+  line:         (id, data)      => api.post(`/usage-print/lines/${id}/`, data),
+  print:        (id, layout)    => api.post(`/usage-print/sheets/${id}/print/`, { layout }),
+  prescription: (id, file)      => {
+    const fd = new FormData()
+    fd.append('prescription_image', file)
+    return api.post(`/usage-print/sheets/${id}/prescription/`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+  settings:     ()              => api.get('/usage-print/settings/'),
+  saveSettings: (data)          => api.put('/usage-print/settings/', data),
+}
+
 export const stockAuditApi = {
   me:           ()              => api.get('/stock-audit/me/'),
   summary:      (params = {})   => api.get('/stock-audit/summary/', { params }),
