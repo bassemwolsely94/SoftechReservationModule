@@ -15,7 +15,7 @@ def read_expenses(date_from, date_to, fetch):
             if not (d1 <= d <= d2):
                 continue
             branch = code(r['branchcode'])
-            key = f"exp:{branch}:{d.isoformat()}:{code(r['intervalcode'])}:{code(r['day_sno'])}"
+            key = f"exp:{branch}:{d.isoformat()}:{code(r['intervalcode'])}:{code(r['day_sno'])}:{code(r.get('cheqsno'))}"
             if key in seen:
                 dup.add(key)
                 continue

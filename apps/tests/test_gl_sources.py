@@ -259,7 +259,7 @@ class ExpenseReaderTests(SimpleTestCase):
 
     def test_expense_doc(self):
         (d,) = READERS['expenses'](date(2026, 3, 1), date(2026, 3, 31), fake([self.row()]))
-        self.assertEqual(d.source_key, 'exp:130:2026-03-05:1:4')
+        self.assertEqual(d.source_key, 'exp:130:2026-03-05:1:4:77')
         self.assertEqual((d.source_type, d.kind, d.amounts), ('expenses', '43', {'amount': D('12.35')}))
         self.assertEqual(d.attrs, {'expcode': '43', 'bankcode': '50', 'cheqsno': '77', 'comment': 'x'})
 
@@ -267,7 +267,7 @@ class ExpenseReaderTests(SimpleTestCase):
         docs = list(READERS['expenses'](date(2026, 3, 1), date(2026, 3, 31),
                                         fake([self.row(), self.row(expvalue=D('5'))])))
         self.assertEqual([d.kind for d in docs], ['__duplicate__'])
-        self.assertEqual(docs[0].source_key, 'exp:130:2026-03-05:1:4')
+        self.assertEqual(docs[0].source_key, 'exp:130:2026-03-05:1:4:77')
 
     def test_sql_shape(self):
         sql = sybase_gl.sql_expenses(date(2026, 3, 1), date(2026, 3, 31))
@@ -294,3 +294,14 @@ class CheckCommandTests(TestCase):
             call_command('gl_check_sources', '--source', 'supplier_payments', '--from', '2026-03-01',
                          '--to', '2026-03-31', stdout=out)
         self.assertIn('diff           0.00', out.getvalue())
+
+
+class ExpenseKeyP8Tests(SimpleTestCase):
+    def test_rows_differing_only_by_cheqsno_are_two_docs(self):
+        base = {'branchcode': '130', 'expensedate': datetime(2026, 3, 5), 'intervalcode': '1', 'day_sno': '4',
+                'expcode': '43', 'expvalue': D('5'), 'expcomment': '', 'bankcode': '50'}
+        docs = list(READERS['expenses'](date(2026, 3, 1), date(2026, 3, 31),
+                                        fake([dict(base, cheqsno='77'), dict(base, cheqsno='78')])))
+        self.assertEqual([d.source_key for d in docs],
+                         ['exp:130:2026-03-05:1:4:77', 'exp:130:2026-03-05:1:4:78'])
+        self.assertNotIn('__duplicate__', [d.kind for d in docs])
