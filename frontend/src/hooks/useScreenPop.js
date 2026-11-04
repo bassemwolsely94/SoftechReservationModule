@@ -44,6 +44,7 @@ function _connect() {
       refreshSession().catch(() => {}).finally(() => setTimeout(_connect, RECONNECT_MS))
       return
     }
+    // anything else, 4500 included (the server's access re-check failed, N5): normal reconnect
     setTimeout(_connect, RECONNECT_MS)
   }
 }

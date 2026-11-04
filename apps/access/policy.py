@@ -26,7 +26,8 @@ READ_OPEN = ('/api/help/', '/api/notifications/announcements/')
 # ... plus these own-session writes under READ_OPEN.
 OWN_SESSION_WRITES = (
     re.compile(r'^/api/notifications/announcements/\d+/ack/$'),
-    re.compile(r'^/api/help/(ask|tour-event|onboarding/learned)/$'),
+    # feedback/ POST is the «هل أفاد هذا الشرح؟» answer; its GET list and resolve stay trainers'
+    re.compile(r'^/api/help/(ask|tour-event|onboarding/learned|feedback)/$'),
     re.compile(r'^/api/help/quizzes/[^/]+/submit/$'),
 )
 
