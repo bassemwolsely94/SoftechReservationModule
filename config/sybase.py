@@ -477,6 +477,37 @@ def _load():
     return softech_load
 
 
+def sql_reason_chain(exc, limit=4):
+    """The server's own reason behind a jConnect error. JZ00L ("Login failed. Examine the
+    SQLWarnings chained to this exception") carries it only in getNextException() — e.g.
+    "not enough user connections" vs a bad password. '' when there is no chain. Never raises."""
+    parts = []
+    try:
+        cur = exc.getNextException()
+    except Exception:
+        return ''
+    while cur is not None and len(parts) < limit:
+        try:
+            msg = str(cur.getMessage() or '').strip()
+        except Exception:
+            msg = str(cur).strip()
+        if msg and msg not in parts:
+            parts.append(msg)
+        try:
+            cur = cur.getNextException()
+        except Exception:
+            break
+    return ' | '.join(parts)
+
+
+def _connect_error_text(exc):
+    """≤200 chars (the watchdog's last_error cap), the server reason kept whole when present."""
+    reason = sql_reason_chain(exc)
+    if not reason:
+        return str(exc)[:200]
+    return f'{str(exc)[:60]} — server: {reason[:125]}'
+
+
 def _connect_with_retry(driver, jdbc_url, props, label=''):
     """driver.connect() with bounded retries for the flaky branch link.
 
@@ -501,7 +532,7 @@ def _connect_with_retry(driver, jdbc_url, props, label=''):
             logger.warning(
                 '[sybase] connect attempt %d/%d failed%s: %s',
                 attempt, SYBASE_CONNECT_ATTEMPTS,
-                f' [{label}]' if label else '', str(exc)[:120],
+                f' [{label}]' if label else '', _connect_error_text(exc),
             )
             if attempt < SYBASE_CONNECT_ATTEMPTS:
                 time.sleep(SYBASE_CONNECT_RETRY_DELAY)
@@ -636,7 +667,7 @@ def probe_connection(host, port=5000, db_name='SOFTECHDB9', login_timeout=None):
         return {'ok': True, 'elapsed_ms': round((time.time() - t0) * 1000, 1), 'error': None}
     except Exception as exc:
         return {'ok': False, 'elapsed_ms': round((time.time() - t0) * 1000, 1),
-                'error': str(exc)[:200]}
+                'error': _connect_error_text(exc)}
     finally:
         if conn is not None:
             try:

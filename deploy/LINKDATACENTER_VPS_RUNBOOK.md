@@ -1460,6 +1460,25 @@ repeat Step 3.
 **The way back.** Set `PUBLIC_API_ENFORCEMENT=log` (or `off`) the same way and restart; refusals
 stop at once.
 
+#### Compression and index.html caching (2026-11-04) on the live server
+
+`deploy/nginx.conf` now gzips JS/CSS/JSON (the main JS chunk is ~5 MB raw, ~1.2 MB gzipped) and
+serves `index.html` with `Cache-Control: no-cache`, so a browser never asks for chunks a release
+deleted. Edit the live file in place (don't re-copy the template):
+
+```bash
+sudo nano /etc/nginx/sites-available/elrezeiky
+#  1. http level, next to the `map $server_addr $elr_network` block, add:
+#       map $uri $elr_spa_expires { /index.html -1; default 1h; }
+#  2. in the 443 server block, under client_max_body_size, add the six gzip lines from deploy/nginx.conf
+#  3. in `location /`: replace `expires 1h;` + `add_header Cache-Control "public";` with
+#       expires $elr_spa_expires;
+sudo nginx -t && sudo systemctl reload nginx
+curl -sI https://elrezeikyapp.dawalvry.com/ | grep -i cache-control                  # → no-cache
+curl -s -H 'Accept-Encoding: gzip' -o /dev/null -w '%{size_download}
+'      https://elrezeikyapp.dawalvry.com/assets/$(curl -s https://elrezeikyapp.dawalvry.com/ | grep -o 'index-[^"]*\.js' | tail -1)   # ~1.2 MB, not ~5 MB
+```
+
 #### Company network through the tunnel (split DNS)
 
 Goal: a company device resolves `elrezeikyapp.dawalvry.com` to `10.50.50.77` and reaches the VPS
