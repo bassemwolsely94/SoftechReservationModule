@@ -1860,10 +1860,21 @@ def _gl_drafting_window(today=None):
     return start, today - _dt.timedelta(days=1)
 
 
+_gl_drafting_off_logged = False
+
+
 def _run_gl_drafting():
     """Daily finance-gl drafting (08:30, after the 07:30 morning chain refreshed the A/P mirror):
     SOFTECH source documents -> draft ledger entries. SELECT-only on SOFTECH; a run that is
-    already active (draft-now button) is logged and skipped."""
+    already active (draft-now button) is logged and skipped. OFF unless
+    settings.GL_DRAFTING_SCHEDULE_ENABLED (Ruling P22); the draft-now button is not affected."""
+    global _gl_drafting_off_logged
+    from django.conf import settings
+    if not getattr(settings, 'GL_DRAFTING_SCHEDULE_ENABLED', False):
+        if not _gl_drafting_off_logged:
+            logger.info('[gl_drafting] scheduled drafting is off (GL_DRAFTING_SCHEDULE_ENABLED=False)')
+            _gl_drafting_off_logged = True
+        return None
     from apps.finance.gl import drafting
     d1, d2 = _gl_drafting_window()
     if d2 < d1:
@@ -1876,10 +1887,9 @@ def _run_gl_drafting():
         return None
     try:
         return drafting.draft_range(d1, d2, run=run)
-    except Exception:
+    except Exception as exc:
         logger.exception('[gl_drafting] run %s crashed', run.pk)
-        from apps.finance.models import GLDraftRun
-        GLDraftRun.objects.filter(pk=run.pk, status='running').update(status='failed')
+        drafting.mark_failed(run.pk, exc)
         return None
 
 

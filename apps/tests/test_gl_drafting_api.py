@@ -200,6 +200,22 @@ class RuleTests(Base):
         self.assertEqual(r.status_code, 400)
         self.assertFalse(PostingRule.objects.exists())
 
+    def test_field_validation_400_not_500(self):
+        """code slug <= 60, description str <= model length, priority int in smallint range."""
+        self.admin.raise_request_exception = False
+        bad = [dict(code='bad code'), dict(code='x' * 61), dict(code=''), dict(code=['a']), dict(code='-x'),
+               dict(description=['x']), dict(description='x' * 301), dict(description=5),
+               dict(priority=40000), dict(priority=-40000), dict(priority='abc'), dict(priority=1.5),
+               dict(priority=True), dict(priority=None), dict(source_type=['sales_tenders']),
+               dict(granularity={'a': 1})]
+        for kw in bad:
+            r = self.admin.post(BASE + 'rules/', _rule(**kw), format='json')
+            self.assertEqual(r.status_code, 400, (kw, r.status_code))
+        self.assertFalse(PostingRule.objects.exists())
+        r = self.admin.post(BASE + 'rules/', _rule(code='sales.cash-2_x', description='d' * 300, priority=-32768),
+                            format='json')
+        self.assertEqual(r.status_code, 201, r.content)
+
     def test_preview_range_limit(self):
         body = {'rule': _rule(), 'date_from': '2026-03-01', 'date_to': '2026-05-01'}
         self.assertEqual(self.acct.post(BASE + 'rules/preview/', body, format='json').status_code, 400)
@@ -305,6 +321,15 @@ class ExceptionTests(Base):
         self.assertEqual((run.date_from, run.date_to), (D, datetime.date(2026, 4, 2)))
         self.assertEqual(sorted(run.source_types), ['credit_sales', 'sales_tenders'])
         self.assertEqual(st.call_args.kwargs['args'][0], run.pk)
+
+    def test_redraft_before_opening_date_refused(self):
+        e = self.exc(self.doc('old', doc_date=datetime.date(2025, 12, 31)))
+        with mock.patch('apps.finance.gl.drafting_views.start_thread') as st:
+            r = self.acct.post(BASE + 'exceptions/redraft/', {'ids': [e.pk]}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('2026-01-01', r.data['detail'])
+        st.assert_not_called()
+        self.assertFalse(GLDraftRun.objects.exists())
 
     def test_redraft_busy_409_and_bad_ids(self):
         e = self.exc()

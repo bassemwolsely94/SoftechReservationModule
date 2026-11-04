@@ -4,6 +4,7 @@ Finance's sub-ledger codes (suppliers / creditors / customers) are imported as G
 proposed against ReconParty by normalised name, and only ever *confirmed* by a human. An
 unconfirmed party never resolves, so its documents become exceptions (spec section 7).
 """
+import math
 from dataclasses import dataclass
 
 import openpyxl
@@ -47,12 +48,16 @@ def _code(v):
     """Integer-like cell -> str(int); anything else (None, text, totals, fractions) -> None."""
     if isinstance(v, bool) or v is None:
         return None
-    if isinstance(v, (int, float)):
-        return str(int(v)) if float(v) == int(v) else None
-    s = str(v).strip()
-    try:
-        f = float(s)
-    except ValueError:
+    if isinstance(v, int):
+        return str(v)
+    if isinstance(v, float):
+        f = v
+    else:
+        try:
+            f = float(str(v).strip())
+        except ValueError:
+            return None
+    if not math.isfinite(f):   # 'nan' / 'inf' cells: skip the row, never raise
         return None
     return str(int(f)) if f == int(f) else None
 

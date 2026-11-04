@@ -3,7 +3,7 @@ import datetime
 from unittest import mock
 
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from apps.branches.models import Branch
@@ -248,6 +248,41 @@ class SchedulerTests(TestCase):
                                        period_end=D(2026, 10, 31))
         self.assertEqual(tasks._gl_drafting_window(today), (D(2026, 11, 1), D(2026, 11, 3)))
 
+    @override_settings(GL_DRAFTING_SCHEDULE_ENABLED=False)
+    def test_job_is_off_by_default_switch(self):
+        """Ruling P22: scheduled drafting does nothing until the owner flips the switch."""
+        from django.conf import settings as dj
+        from apps.finance.gl import drafting as DRmod
+        self.assertFalse(dj.GL_DRAFTING_SCHEDULE_ENABLED)
+        with mock.patch.object(tasks, '_gl_drafting_window') as win, \
+             mock.patch.object(DRmod, 'draft_range') as dr, \
+             mock.patch.object(tasks, '_gl_drafting_off_logged', False):
+            self.assertIsNone(tasks._run_gl_drafting())
+            with self.assertLogs('elrezeiky.sync', 'INFO') as logs:
+                tasks._gl_drafting_off_logged = False
+                tasks._run_gl_drafting()
+                tasks._run_gl_drafting()
+        self.assertEqual(sum('scheduled drafting is off' in m for m in logs.output), 1)   # logged once
+        win.assert_not_called()
+        dr.assert_not_called()
+        self.assertFalse(GLDraftRun.objects.exists())
+
+    def test_settings_default_is_off(self):
+        from django.conf import settings as dj
+        src = open(dj.BASE_DIR / 'config' / 'settings.py', encoding='utf-8').read()
+        self.assertIn("GL_DRAFTING_SCHEDULE_ENABLED = config('GL_DRAFTING_SCHEDULE_ENABLED', default=False, cast=bool)", src)
+
+    @override_settings(GL_DRAFTING_SCHEDULE_ENABLED=True)
+    def test_job_crash_marks_run_failed_with_finished_at_and_error(self):
+        with mock.patch.object(tasks, '_gl_drafting_window', return_value=(D(2026, 10, 1), D(2026, 11, 3))), \
+             mock.patch.object(drafting, 'draft_range', side_effect=RuntimeError('boom')):
+            self.assertIsNone(tasks._run_gl_drafting())
+        run = GLDraftRun.objects.get()
+        self.assertEqual(run.status, 'failed')
+        self.assertIsNotNone(run.finished_at)
+        self.assertEqual(run.detail['error'], 'RuntimeError: boom')
+
+    @override_settings(GL_DRAFTING_SCHEDULE_ENABLED=True)
     def test_job_uses_scheduler_trigger_and_survives_busy(self):
         with mock.patch.object(tasks, '_gl_drafting_window', return_value=(D(2026, 10, 1), D(2026, 11, 3))), \
              mock.patch.object(drafting, 'draft_range') as dr:
@@ -324,6 +359,29 @@ class RunEndpointTests(TestCase):
             self.assertEqual(self.viewer.post(BASE + 'drafting/run/', self.body, format='json').status_code, 403)
             st.assert_not_called()
         self.assertFalse(GLDraftRun.objects.exists())
+
+    def test_draft_now_works_with_schedule_switch_off(self):
+        with self.settings(GL_DRAFTING_SCHEDULE_ENABLED=False), \
+             mock.patch('apps.finance.gl.drafting_views.start_thread') as st:
+            r = self.acct.post(BASE + 'drafting/run/', self.body, format='json')
+        self.assertEqual(r.status_code, 202, r.content)
+        st.assert_called_once()
+
+    def test_draft_now_before_opening_date_refused(self):
+        r = self.acct.post(BASE + 'drafting/run/', {'date_from': '2025-12-31', 'date_to': '2026-01-05'},
+                           format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('2026-01-01', r.data['detail'])
+        self.assertFalse(GLDraftRun.objects.exists())
+
+    def test_background_crash_sets_finished_at_and_error(self):
+        from apps.finance.gl import drafting_views
+        run = drafting.start_run(triggered_by='t', date_from=D(2026, 3, 1), date_to=D(2026, 3, 2), source_types=[])
+        with mock.patch.object(drafting, 'draft_range', side_effect=ValueError('bad')):
+            drafting_views._background(run.pk, D(2026, 3, 1), D(2026, 3, 2), None)
+        run.refresh_from_db()
+        self.assertEqual((run.status, run.detail['error']), ('failed', 'ValueError: bad'))
+        self.assertIsNotNone(run.finished_at)
 
     def test_failed_thread_start_marks_run_failed(self):
         with mock.patch('apps.finance.gl.drafting_views.start_thread', side_effect=RuntimeError('x')):

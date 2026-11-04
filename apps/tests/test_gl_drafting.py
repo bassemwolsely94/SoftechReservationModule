@@ -205,6 +205,7 @@ class DraftingTests(Base):
         self.assertEqual(ex.kind, 'closed_period_change')
         self.assertEqual(ex.original_entry, original)
         self.assertEqual(ex.proposed_lines[0]['debit'], '90.00')
+        self.assertEqual((ex.detail['group_key'], ex.detail['member_source_keys']), ('t1', ['t1']))
         self.run_engine()   # re-run: nothing more
         self.assertEqual(LedgerEntry.objects.count(), n)
         self.assertEqual(SourceException.objects.filter(source_doc__source_key='t1').count(), 1)
@@ -215,6 +216,55 @@ class DraftingTests(Base):
         self.assertEqual(self.amounts(self.live('t1').get())[0][1], DEC('90.00'))
         ex.refresh_from_db()
         self.assertEqual(ex.status, 'resolved')
+
+    def test_closed_branch_day_group_of_n_docs_gives_one_exception(self):
+        """Ruling P19: an N-doc group changed in a closed month -> exactly one exception (first member),
+        the others held without rows; reopening the month releases the whole group."""
+        self.rule(granularity='branch_day')
+        gk = 'cash:130:2026-03-10'
+        self.docs['sales_tenders'] = [tender('t3', '30.00', pt='60'), tender('t1', '10.00'),
+                                      tender('t2', '20.00', pt='40')]
+        self.run_engine()
+        a = self.live(gk).get()
+        approve(a.id, user=self.staff)
+        self.close_month(MAR10)
+        self.docs['sales_tenders'] = [tender('t3', '33.00', pt='60'), tender('t1', '11.00'),
+                                      tender('t2', '22.00', pt='40')]
+        for _ in range(2):   # a re-run changes nothing and never adds a second exception
+            n = LedgerEntry.objects.count()
+            run = self.run_engine()
+            self.assertEqual(LedgerEntry.objects.count(), n)
+            ex = SourceException.objects.get(status='open')
+            self.assertEqual((ex.kind, ex.source_doc.source_key), ('closed_period_change', 't1'))
+            self.assertEqual(ex.detail['member_source_keys'], ['t1', 't2', 't3'])
+            self.assertEqual((ex.detail['group_key'], ex.original_entry_id), (gk, a.id))
+            self.assertEqual(ex.proposed_lines[0]['debit'], '66.00')
+            self.assertEqual(run.counts['exceptions'], 1)
+            self.assertEqual(SourceException.objects.count(), 1)
+            self.assertEqual(set(GLSourceDoc.objects.values_list('status', flat=True)), {'exception'})
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'approved')
+        self.close_month(MAR10, 'open')
+        run = self.run_engine()
+        self.assertEqual((run.counts['reversed'], run.counts['created']), (1, 1))
+        new = self.live(gk).get()
+        self.assertEqual(self.amounts(new)[0][1], DEC('66.00'))
+        self.assertEqual(set(GLSourceDoc.objects.values_list('status', 'entry_id')), {('drafted', new.id)})
+        ex.refresh_from_db()
+        self.assertEqual(ex.status, 'resolved')
+
+    def test_closed_period_change_on_live_draft_names_the_entry(self):
+        self.rule(granularity='branch_day')
+        self.docs['sales_tenders'] = [tender('t1', '10.00'), tender('t2', '20.00', pt='40')]
+        self.run_engine()
+        draft = self.live('cash:130:2026-03-10').get()
+        self.close_month(MAR10)
+        self.docs['sales_tenders'] = [tender('t1', '15.00'), tender('t2', '20.00', pt='40')]
+        self.run_engine()
+        ex = SourceException.objects.get(status='open')
+        self.assertEqual((ex.original_entry, ex.detail['entry_id']), (None, draft.id))
+        self.assertEqual(ex.detail['member_source_keys'], ['t1', 't2'])
+        self.assertEqual(LedgerEntry.objects.get(pk=draft.pk).status, 'draft')
 
     def test_new_doc_in_closed_period_is_exception(self):
         self.rule()
@@ -484,8 +534,12 @@ class LateChangeSafetyTests(Base):
             b = self.live('cash:130:2026-04-01').get()
             self.assertEqual(self.amounts(b)[0][1], DEC('50.00'))
             self.assertEqual(GLSourceDoc.objects.get(source_key='t2').entry_id, b.id)
-            ex = SourceException.objects.get(source_doc__source_key='t2')
-            self.assertEqual((ex.kind, ex.status, ex.original_entry_id), ('closed_period_change', 'open', a.id))
+            # Ruling P19: ONE exception for group A, on its first member, listing every member
+            ex = SourceException.objects.get(kind='closed_period_change')
+            self.assertEqual((ex.source_doc.source_key, ex.status, ex.original_entry_id), ('t1', 'open', a.id))
+            self.assertEqual(ex.detail['group_key'], 'cash:130:2026-03-31')
+            self.assertEqual(ex.detail['member_source_keys'], ['t1', 't2'])
+            self.assertFalse(SourceException.objects.filter(source_doc__source_key='t2').exists())
             if i == 1:   # run 2 changes nothing
                 self.assertEqual(LedgerEntry.objects.count(), n)
                 for k in ('created', 'replaced', 'reversed', 'deleted'):
@@ -582,3 +636,67 @@ class LateChangeSafetyTests(Base):
                          '--source', 'sales_tenders', '--allow-mass-vanish', stdout=out)
         self.assertIn('  vanished: 12\n', out.getvalue())
         self.assertFalse(LedgerEntry.objects.exists())
+
+
+class AccountantEditP21Tests(Base):
+    """Ruling P21: an engine draft edited by an accountant is never replaced or reversed."""
+
+    def edit_as_accountant(self, entry, amount):
+        from apps.finance.gl.ledger import save_draft
+        lines = [{'account_code': '1302', 'debit': DEC(amount), 'credit': DEC('0'), 'branch_id': self.b130.pk},
+                 {'account_code': '6002', 'debit': DEC('0'), 'credit': DEC(amount), 'branch_id': self.b130.pk}]
+        return save_draft(entry=entry, user=self.staff, entry_date=entry.entry_date, description='تعديل المحاسب',
+                          lines=lines, book=entry.book, branch=entry.branch, source_type=entry.source_type,
+                          source_key=entry.source_key)
+
+    def test_source_change_after_accountant_edit_leaves_entry_and_raises(self):
+        self.rule()
+        self.docs['sales_tenders'] = [tender('t1', '100.00')]
+        self.run_engine()
+        e = self.live('t1').get()
+        self.edit_as_accountant(e, '95.00')
+        self.docs['sales_tenders'] = [tender('t1', '90.00')]
+        for _ in range(2):
+            run = self.run_engine()
+            self.assertEqual((run.counts['replaced'], run.counts['reversed'], run.counts['created']), (0, 0, 0))
+            e.refresh_from_db()
+            self.assertEqual((e.status, e.description), ('draft', 'تعديل المحاسب'))
+            self.assertEqual(self.amounts(e)[0][1], DEC('95.00'))
+            ex = SourceException.objects.get(status='open')
+            self.assertEqual((ex.kind, ex.detail['code'], ex.detail['entry_id'], ex.detail['group_key']),
+                             ('ledger_error', 'edited_by_user', e.id, 't1'))
+        self.assertEqual(GLSourceDoc.objects.get(source_key='t1').status, 'exception')
+
+    def test_vanished_doc_does_not_delete_an_edited_draft(self):
+        self.rule()
+        self.docs['sales_tenders'] = [tender('t1', '100.00')]
+        self.run_engine()
+        e = self.live('t1').get()
+        self.edit_as_accountant(e, '100.00')
+        self.docs['sales_tenders'] = []
+        run = self.run_engine()
+        self.assertEqual(run.counts['deleted'], 0)
+        self.assertTrue(LedgerEntry.objects.filter(pk=e.pk, status='draft').exists())
+        self.assertEqual(SourceException.objects.get(status='open').detail['code'], 'edited_by_user')
+
+    def test_unchanged_source_after_edit_raises_nothing(self):
+        self.rule()
+        self.docs['sales_tenders'] = [tender('t1', '100.00')]
+        self.run_engine()
+        e = self.live('t1').get()
+        self.edit_as_accountant(e, '95.00')
+        run = self.run_engine()
+        self.assertEqual(run.counts['exceptions'], 0)
+        self.assertFalse(SourceException.objects.exists())
+        self.assertEqual(self.amounts(self.live('t1').get())[0][1], DEC('95.00'))
+
+    def test_engine_own_saves_do_not_count_as_edits(self):
+        self.rule()
+        self.docs['sales_tenders'] = [tender('t1', '100.00')]
+        self.run_engine()
+        self.docs['sales_tenders'] = [tender('t1', '90.00')]
+        self.run_engine()
+        self.docs['sales_tenders'] = [tender('t1', '80.00')]
+        run = self.run_engine()
+        self.assertEqual(run.counts['replaced'], 1)
+        self.assertFalse(SourceException.objects.exists())

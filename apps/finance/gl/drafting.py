@@ -21,6 +21,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from apps.audit.models import AuditLog
 from apps.branches.models import Branch
 from apps.finance.models import (
     FinancialPeriod, GLDraftRun, GLSourceDoc, LedgerEntry, PostingRule, SourceException,
@@ -57,6 +58,7 @@ LIVE = ('draft', 'approved')
 GROUP_KINDS = ('closed_period_change', 'ledger_error')   # raised for a whole group; detail.group_key
 MESSAGES = {
     'closed_period_change': 'تغير مستند سوفتيك في فترة لا تقبل الترحيل؛ يُصحح في أول شهر مفتوح',
+    'edited_by_user': 'عدّل محاسب هذا القيد يدوياً وتغير مستند سوفتيك؛ لم يُستبدل القيد — راجعه يدوياً',
     'duplicate_source_key': 'مفتاح المصدر مكرر في سوفتيك؛ لم يُرحل',
 }
 
@@ -94,6 +96,17 @@ def start_run(*, triggered_by, date_from, date_to, source_types) -> GLDraftRun:
                 source_types=list(source_types or []), status='running', heartbeat_at=now)
     except IntegrityError:
         raise DraftBusy('a drafting run is already running')
+
+
+def mark_failed(run_id, exc) -> None:
+    """Last-line-of-defence crash marking (scheduler job / draft-now thread): status 'failed',
+    finished_at and detail.error, only if the run is still 'running'."""
+    run = GLDraftRun.objects.filter(pk=run_id, status='running').first()
+    if run is None:
+        return
+    run.status, run.finished_at = 'failed', timezone.now()
+    run.detail = {**(run.detail or {}), 'error': f'{type(exc).__name__}: {exc}'[:1000]}
+    run.save(update_fields=['status', 'finished_at', 'detail'])
 
 
 def draft_range(date_from, date_to, *, source_types=None, run: GLDraftRun, fetch=None,
@@ -287,6 +300,17 @@ class _Engine:
             for doc_id, det in SourceException.objects.filter(
                     status='open', source_doc_id__in=pks[i:i + 1000]).values_list('source_doc_id', 'detail'):
                 open_details[doc_id].append(det or {})
+        # Ruling P19: a closed_period_change sits on one member only; the others are found here
+        by_member = defaultdict(list)
+        for det in SourceException.objects.filter(status='open', kind='closed_period_change').values_list(
+                'detail', flat=True):
+            for k in (det or {}).get('member_source_keys') or ():
+                by_member[k].append(det)
+        if by_member:
+            for sd in [*existing.values(), *gone, *retry_vanished]:
+                for det in by_member.get(sd.source_key, ()):
+                    if det not in open_details[sd.pk]:
+                        open_details[sd.pk].append(det)
 
         # previously-seen docs of this type in the window (before this read changes any status)
         seen_before = len(gone) + sum(1 for sd in existing.values() if sd.status != 'vanished'
@@ -463,6 +487,9 @@ class _Engine:
         if not accepts_postings(entry_date) or (live is not None and not accepts_postings(live.entry_date)):
             self._closed(gk, live, targets, pending_ok, lines)
             return
+        if live is not None and self._edited_by_user(live):
+            self._edited(gk, live, targets, pending_ok)
+            return
         try:
             with transaction.atomic():
                 kw = dict(user=self.user, entry_date=entry_date, description=desc, lines=lines,
@@ -490,6 +517,9 @@ class _Engine:
         """Delete a draft / reverse an approved entry whose group has nothing left to post."""
         if not accepts_postings(live.entry_date):
             self._closed(gk, live, targets, pending_ok, [])
+            return False
+        if self._edited_by_user(live):
+            self._edited(gk, live, targets, pending_ok)
             return False
         try:
             with transaction.atomic():
@@ -529,13 +559,51 @@ class _Engine:
             status='resolved', resolved_by=self.user, resolved_at=now, resolution_note=RESOLVED_NOTE)
 
     def _closed(self, gk, live, targets, pending_ok, lines):
+        """Ruling P19: ONE closed_period_change per group, on its first member (lowest source_key),
+        listing every member; the other members are held (status 'exception', no row of their own)
+        and are retried with the group until that exception resolves (Plan 3 corrects per group)."""
+        docs = {sd.pk: sd for sd in GLSourceDoc.objects.filter(
+            Q(pk__in=targets) | Q(group_key=gk, status__in=MEMBER_STATUSES))}
+        members = sorted(docs.values(), key=lambda sd: (sd.source_key, sd.pk))
         detail = {'group_key': gk, 'entry_id': live.pk if live else None,
-                  'entry_date': live.entry_date.isoformat() if live else None}
+                  'entry_date': live.entry_date.isoformat() if live else None,
+                  'member_source_keys': [sd.source_key for sd in members]}
         original = live if live is not None and live.status == 'approved' else None
-        docs = list(GLSourceDoc.objects.filter(pk__in=targets))
-        self._exception(docs, 'closed_period_change', MESSAGES['closed_period_change'], detail,
-                        original_entry=original, proposed_lines=_canon(lines))
+        fields = {'message': MESSAGES['closed_period_change'], 'detail': _canon(detail),
+                  'original_entry': original, 'proposed_lines': _canon(lines)}
+        row = (SourceException.objects.select_for_update()
+               .filter(status='open', kind='closed_period_change', detail__group_key=gk).order_by('pk').first())
+        if row is None:
+            # the first member that does not already hold another group's open change (one open
+            # row per doc and kind); the lowest member otherwise (that row then follows this group)
+            busy = set(SourceException.objects.filter(
+                status='open', kind='closed_period_change', source_doc_id__in=list(docs))
+                .values_list('source_doc_id', flat=True))
+            holder = next((sd for sd in members if sd.pk not in busy), members[0] if members else None)
+            if holder is not None:
+                SourceException.objects.update_or_create(
+                    source_doc=holder, kind='closed_period_change', status='open',
+                    defaults={'source_date': holder.doc_date, **fields})
+                self.counts['exceptions'] += 1
+        else:
+            for k, v in fields.items():
+                setattr(row, k, v)
+            row.save(update_fields=list(fields))
+            self.counts['exceptions'] += 1
         self._set(pending_ok, status='exception')
+
+    def _edited_by_user(self, live) -> bool:
+        """Ruling P21: an accountant (anyone but the drafting user) saved this entry."""
+        return (AuditLog.objects.filter(action='gl_entry_draft_saved', model_name='LedgerEntry',
+                                        object_id=str(live.pk))
+                .exclude(user_id=self.user.pk).exists())
+
+    def _edited(self, gk, live, targets, pending_ok):
+        """Ruling P21: never overwrite an accountant's edit; the group waits in the inbox."""
+        docs = list(GLSourceDoc.objects.filter(pk__in=targets))
+        self._exception(docs, 'ledger_error', MESSAGES['edited_by_user'],
+                        {'code': 'edited_by_user', 'entry_id': live.pk, 'group_key': gk})
+        self._hold({*targets, *pending_ok})
 
     def _ledger_error(self, gk, err, targets, pending_ok):
         docs = list(GLSourceDoc.objects.filter(pk__in=targets))

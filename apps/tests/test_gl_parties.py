@@ -160,3 +160,12 @@ class PartyTests(TestCase):
                                            personcode='222')
         g.refresh_from_db()
         self.assertEqual(g.softech_personcode, '111')
+
+
+class CodeCellTests(TestCase):
+    def test_non_finite_numbers_are_skipped_never_raise(self):
+        for v in ('nan', 'NaN', 'inf', '-inf', 'Infinity', float('nan'), float('inf')):
+            self.assertIsNone(P._code(v), v)
+        self.assertEqual((P._code(12.0), P._code('34'), P._code(' 56.0 '), P._code(7)), ('12', '34', '56', '7'))
+        self.assertIsNone(P._code(1.5))
+        self.assertIsNone(P._code(True))

@@ -6,6 +6,7 @@ runs/{id}/ feed the ProgressBar. All-branch users only, RBAC module ``ledger``.
 import datetime
 import logging
 import os
+import re
 import tempfile
 
 from django.db import transaction
@@ -27,6 +28,7 @@ from core.threads import start_thread
 from core.upload_safety import capped_rows, max_upload_bytes
 
 from . import drafting, parties, rules
+from .ledger import OPENING_DATE
 from .drafting_serializers import (
     exception_json, map_json, party_json, rule_json, source_doc_json,
 )
@@ -41,6 +43,9 @@ PREVIEW = _perms(post=('view',))             # computes only, saves nothing
 MAX_PREVIEW_DAYS = 31
 MAX_NOTE = 2000
 MAX_SPAN_DAYS = 400
+BEFORE_OPENING = f'لا يمكن الترحيل قبل تاريخ الافتتاح {OPENING_DATE.isoformat()}'
+RULE_CODE_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,59}$')   # seed codes use dots: sales.cash
+MAX_RULE_DESCRIPTION = 300   # PostingRule.description max_length
 
 
 def _bad(detail):
@@ -59,9 +64,9 @@ def _background(run_id, date_from, date_to, source_types):
     run = GLDraftRun.objects.get(pk=run_id)
     try:
         drafting.draft_range(date_from, date_to, source_types=source_types, run=run)
-    except Exception:   # draft_range records its own failures; last line of defence
+    except Exception as exc:   # draft_range records its own failures; last line of defence
         logger.exception('gl draft-now run %s crashed', run_id)
-        GLDraftRun.objects.filter(pk=run_id, status='running').update(status='failed')
+        drafting.mark_failed(run_id, exc)
 
 
 @api_view(['POST'])
@@ -74,6 +79,8 @@ def drafting_run(request):
         return _bad('التاريخ غير صحيح (YYYY-MM-DD)')
     if d2 < d1:
         return _bad('تاريخ النهاية قبل البداية')
+    if d1 < OPENING_DATE:
+        return _bad(BEFORE_OPENING)
     if (d2 - d1).days > MAX_SPAN_DAYS:
         return _bad('المدة أطول من المسموح')
     types = request.data.get('source_types') or []
@@ -283,11 +290,26 @@ def _rule_args(data):
         d['effective_to'] = _date(d['effective_to'], 'ساري حتى')
     else:
         d.pop('effective_to', None)
+    if 'code' in d and (not isinstance(d['code'], str) or not RULE_CODE_RE.match(d['code'])):
+        raise ValueError('الكود: حروف إنجليزية وأرقام و . _ - فقط، حتى 60 حرفاً')
+    if 'description' in d:
+        if d['description'] is None:
+            d['description'] = ''
+        if not isinstance(d['description'], str) or len(d['description']) > MAX_RULE_DESCRIPTION:
+            raise ValueError(f'الوصف نص حتى {MAX_RULE_DESCRIPTION} حرف')
     if 'priority' in d:
+        p = d['priority']
+        if isinstance(p, bool) or isinstance(p, float) and not p.is_integer():
+            raise ValueError('الأولوية يجب أن تكون رقماً صحيحاً')
         try:
-            d['priority'] = int(d['priority'])
-        except (TypeError, ValueError):
-            raise ValueError('الأولوية يجب أن تكون رقماً')
+            d['priority'] = int(p)
+        except (TypeError, ValueError, OverflowError):
+            raise ValueError('الأولوية يجب أن تكون رقماً صحيحاً')
+        if not -32768 <= d['priority'] <= 32767:
+            raise ValueError('الأولوية خارج المدى المسموح (-32768 إلى 32767)')
+    for k in ('source_type', 'action', 'granularity', 'book'):
+        if k in d and not isinstance(d[k], str):
+            raise ValueError(f'{k}: شكل غير صحيح')
     if 'conditions' in d and not isinstance(d['conditions'], dict):
         raise ValueError('الشروط: شكل غير صحيح')
     if 'lines' in d and not isinstance(d['lines'], list):
@@ -435,6 +457,8 @@ def exceptions_redraft(request):
     docs = GLSourceDoc.objects.filter(exceptions__pk__in=ids).distinct()
     agg = docs.aggregate(lo=Min('doc_date'), hi=Max('doc_date'))
     d1, d2 = agg['lo'], agg['hi']
+    if d1 < OPENING_DATE:
+        return _err([BEFORE_OPENING])
     if (d2 - d1).days > MAX_SPAN_DAYS:
         return _err(['المدة أطول من المسموح'])
     types = sorted(set(docs.values_list('source_type', flat=True)))
