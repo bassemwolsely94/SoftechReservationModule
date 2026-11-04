@@ -44,17 +44,31 @@ def _snap(p):
 
 
 def _code(v):
-    if v is None:
+    """Integer-like cell -> str(int); anything else (None, text, totals, fractions) -> None."""
+    if isinstance(v, bool) or v is None:
         return None
     if isinstance(v, (int, float)):
-        return str(int(v))
+        return str(int(v)) if float(v) == int(v) else None
+    s = str(v).strip()
+    try:
+        f = float(s)
+    except ValueError:
+        return None
+    return str(int(f)) if f == int(f) else None
+
+
+def _name(v):
+    """Non-empty, non-numeric text, else None."""
+    if v is None or isinstance(v, (int, float)):
+        return None
     s = str(v).strip()
     if not s or s.lower() in _SKIP or normalize_ar(s) in _SKIP:
         return None
     try:
-        return str(int(float(s)))
-    except ValueError:
+        float(s)
         return None
+    except ValueError:
+        return s
 
 
 def parse_party_sheets(path) -> list[PartyRow]:
@@ -82,7 +96,9 @@ def parse_party_sheets(path) -> list[PartyRow]:
             code = _code(r[j])
             if not code:
                 continue
-            name = str(r[j + 1] or '').strip() if j + 1 < len(r) else ''
+            name = _name(r[j + 1]) if j + 1 < len(r) else None
+            if not name:
+                continue
             if (ptype, code) in seen:
                 continue
             seen.add((ptype, code))
@@ -142,9 +158,14 @@ def propose_matches(*, user) -> dict:
 
 
 def _confirm(g, user, personcode, basis):
+    if g.status == 'confirmed' and g.softech_personcode:
+        if g.softech_personcode == str(personcode).strip():
+            return g
+        raise ValueError('هذا الطرف مؤكد بالفعل على كود SOFTECH مختلف')
     old = _snap(g)
     g.softech_personcode = str(personcode).strip()
-    g.recon_party = ReconParty.objects.filter(softech_personcode=g.softech_personcode).first()
+    g.recon_party = ReconParty.objects.filter(softech_personcode=g.softech_personcode,
+                                         party_type=g.party_type).first()
     g.status, g.proposal_basis = 'confirmed', basis or g.proposal_basis or 'manual'
     g.confirmed_by, g.confirmed_at = user, timezone.now()
     try:

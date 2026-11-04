@@ -16,22 +16,24 @@ def _workbook(path):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = 'الموردين'
-    ws.append(['title row'])
-    ws.append(['suppliar code', 'Supplier', 'Balance'])
-    ws.append([92, 'فارما اوفرسيز ', 100])
-    ws.append([105.0, 'شركة النيل للادويه', 5])
-    ws.append(['', 'blank code', 1])
-    ws.append(['الرصيد الافتتاحى', None, 9])
-    ws.append(['Total', None, 105])
-    ws2 = wb.create_sheet('الدائنون')
-    ws2.append(['suppliar code', 'name', 'Balance'])
-    ws2.append([92, 'فارما اوفرسيز', 3])
-    ws2.append([300, 'دائن اخر', 3])
-    ws2.append(['Grand Total', None, 6])
+    ws.append(['suppliar code', 'Suppliar name', 'Credit', 'Debt', 'Grand Total'])
+    ws.append([92, 'فارما اوفرسيز ', -1, 2, 1])
+    ws.append([105.0, 'شركة النيل للادويه', 5, 0, 5])
+    ws.append([None, None, 'الرصيد الافتتاحى', -5, None])
+    ws.append([None, None, 3, -1, 2])
+    ws.append([1, None, 4, 0, 4])           # code with blank name -> skipped
+    ws.append(['Total', None, 105, 0, 105])
+    ws2 = wb.create_sheet('مشتريات الموردين')
+    ws2.append(['suppliar code', 'Suppliar name', 'MONTH', 'Credit', 'Debt', 'Grand Total'])
+    ws2.append([92, 'فارما اوفرسيز', 1, 3, 0, 3])
+    ws2.append([None, None, 2, 3, 0, 3])
+    ws2.append([300, 'دائن اخر', 1, 3, 0, 3])
+    ws2.append([None, None, 1, 1, 0, 1])    # month number 1 must not become party 1
+    ws2.append(['Grand Total', None, None, 6, 0, 6])
     ws3 = wb.create_sheet('العملاء')
-    ws3.append(['customer code', 'name', 'Balance'])
-    ws3.append([92, 'عميل تسعة', 7])
-    ws3.append(['Total', None, 7])
+    ws3.append(['customer code', 'customer name', 'Credit', 'Debt', 'Grand Total'])
+    ws3.append([92, 'عميل تسعة', 7, 0, 7])
+    ws3.append(['Total', None, 7, 0, 7])
     wb.create_sheet('other').append(['nothing', 'here'])
     wb.save(path)
 
@@ -55,14 +57,16 @@ class PartyTests(TestCase):
         self.assertIn(('supplier', '105', 'شركة النيل للادويه'), got)
         self.assertIn(('supplier', '300', 'دائن اخر'), got)
         self.assertIn(('customer', '92', 'عميل تسعة'), got)
-        self.assertFalse([r for r in rows if r.code in ('', 'Total', 'Grand Total')
-                          or 'الرصيد' in r.code])
+        self.assertEqual(len(rows), 4)
+        self.assertFalse([r for r in rows if r.code in ('1', '2', '3', '5')])
+        self.assertTrue(all(r.name and not r.name.isdigit() for r in rows))
 
     def test_same_code_in_suppliers_and_creditors_is_one_party(self):
         res = P.import_parties(self._rows(), user=self.staff)
         self.assertEqual(GLParty.objects.filter(party_type='supplier', code='92').count(), 1)
         self.assertEqual(GLParty.objects.filter(party_type='customer', code='92').count(), 1)
         self.assertEqual(res['created'], 4)
+        self.assertEqual(GLParty.objects.get(party_type='supplier', code='92').name, 'فارما اوفرسيز')
         res2 = P.import_parties(self._rows(), user=self.staff)
         self.assertEqual(res2['created'], 0)
         self.assertTrue(AuditLog.objects.filter(action='gl_parties_imported').exists())
@@ -137,3 +141,22 @@ class PartyTests(TestCase):
                                            personcode='888')
         self.assertTrue(n.is_confirmed)
         self.assertEqual(P.resolve_party('supplier', '888').pk, n.pk)
+
+    def test_recon_party_lookup_is_type_scoped(self):
+        ReconParty.objects.create(party_type='customer', softech_personcode='9100', name='x')
+        g = self._gl('9', 'x', 'supplier')
+        P.confirm_party(g.pk, user=self.staff, personcode='9100')
+        g.refresh_from_db()
+        self.assertIsNone(g.recon_party)
+
+    def test_confirm_to_different_personcode_refused_same_is_noop(self):
+        g = self._gl('4', 'd')
+        P.confirm_party(g.pk, user=self.staff, personcode='111')
+        P.confirm_party(g.pk, user=self.staff, personcode='111')
+        with self.assertRaises(ValueError):
+            P.confirm_party(g.pk, user=self.staff, personcode='222')
+        with self.assertRaises(ValueError):
+            P.create_party_from_personcode(user=self.staff, party_type='supplier', code='4',
+                                           personcode='222')
+        g.refresh_from_db()
+        self.assertEqual(g.softech_personcode, '111')
