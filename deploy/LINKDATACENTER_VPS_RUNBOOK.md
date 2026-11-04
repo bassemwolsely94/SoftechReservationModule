@@ -1448,7 +1448,11 @@ the work) and restart.
 passes, as in N3/N4/N5).
 ```bash
 APP=/opt/elrezeiky/app; PY=/opt/elrezeiky/venv/bin/python
-sudo -u elrezeiky $PY $APP/manage.py access_preflight   && sudo -u elrezeiky env PUBLIC_API_ENFORCEMENT=enforce $PY $APP/manage.py check   && sudo sed -i '/^PUBLIC_API_ENFORCEMENT=/d' $APP/.env   && echo 'PUBLIC_API_ENFORCEMENT=enforce' | sudo tee -a $APP/.env >/dev/null   && sudo systemctl restart elrezeiky-web elrezeiky-scheduler
+sudo -u elrezeiky $PY $APP/manage.py access_preflight \
+  && sudo -u elrezeiky env PUBLIC_API_ENFORCEMENT=enforce $PY $APP/manage.py check \
+  && sudo sed -i '/^PUBLIC_API_ENFORCEMENT=/d' $APP/.env \
+  && echo 'PUBLIC_API_ENFORCEMENT=enforce' | sudo tee -a $APP/.env >/dev/null \
+  && sudo systemctl restart elrezeiky-web elrezeiky-scheduler
 ```
 `access_preflight` shows an informational `public_api_mode` item with the current mode. Afterwards
 repeat Step 3.
