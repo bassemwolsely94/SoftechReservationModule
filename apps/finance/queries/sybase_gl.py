@@ -54,6 +54,7 @@ def sql_credit_docs(d1: date, d2: date) -> str:
 
 
 _SELECT_ONLY = re.compile(r'^\s*select\b', re.I)
+_INTO = re.compile(r'bintob', re.I)
 
 
 @contextmanager
