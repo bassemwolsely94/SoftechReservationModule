@@ -16,12 +16,12 @@ import { pick, itemText, label } from '../help/text'
 import { fa } from '../utils/flowArrow'
 
 const ROLES = ['pharmacist', 'salesperson', 'call_center', 'purchasing', 'delivery', 'supervisor',
-  'quality_manager', 'viewer', 'admin']
+  'quality_manager', 'accountant', 'viewer', 'admin']
 const ROLE_NAMES = {
   pharmacist: ['الصيدلي', 'Pharmacist'], salesperson: ['البائع', 'Salesperson'],
   call_center: ['الكول سنتر', 'Call center'], purchasing: ['المشتريات', 'Purchasing'],
   delivery: ['الطيار / التوصيل', 'Delivery'], supervisor: ['المشرف', 'Supervisor'],
-  quality_manager: ['مدير الجودة', 'Quality manager'], viewer: ['مشاهد', 'Viewer'], admin: ['مدير النظام', 'Admin'],
+  quality_manager: ['مدير الجودة', 'Quality manager'], accountant: ['المحاسب', 'Accountant'], viewer: ['مشاهد', 'Viewer'], admin: ['مدير النظام', 'Admin'],
 }
 
 export default function HelpManualPage() {

@@ -12,6 +12,7 @@ ROLE_CHOICES = [
     ('viewer',          'Viewer — Read Only'),
     ('supervisor',      'Supervisor — Call Center Supervisor'),
     ('quality_manager', 'Quality Manager — QA & Scoring'),
+    ('accountant',      'Accountant — General Ledger'),
 ]
 
 # Canonical module identifiers used by RoleModuleAccess
@@ -61,6 +62,7 @@ MODULE_CHOICES = [
     ('stock_audit',  'تدقيق حركات المخزون'),
     ('pic_analytics', 'تحليلات العملاء'),
     ('tasks',        'المهام'),
+    ('ledger',       'الحسابات العامة'),
     ('counselling',  'إرشادات الاستخدام'),
     ('usage_print',  'طباعة طريقة الاستخدام'),
 ]

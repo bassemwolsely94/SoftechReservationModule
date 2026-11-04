@@ -2124,6 +2124,42 @@ export const financeApi = {
   syncRuns:        (params)       => api.get('/finance/sync-runs/', { params }),
 }
 
+// ── Finance general ledger («الحسابات العامة») — finance's own chart of accounts ──
+// Errors come back as {code, detail}; amounts are Decimal strings.
+const xlsx = (params) => ({ params: { ...params, format: 'xlsx' }, responseType: 'blob' })
+export const glApi = {
+  groups:          (params)        => api.get('/finance/gl/groups/', { params }),
+  accounts:        (params)        => api.get('/finance/gl/accounts/', { params }),
+  accountUpdate:   (code, body)    => api.patch(`/finance/gl/accounts/${encodeURIComponent(code)}/`, body),
+  accountsImport:  (file, dryRun)  => {
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('dry_run', dryRun ? 'true' : 'false')
+    return api.post('/finance/gl/accounts/import/', fd)
+  },
+  entries:         (params)        => api.get('/finance/gl/entries/', { params }),
+  entriesPage:     (url)           => api.get(url),                       // cursor `next` link
+  entry:           (id)            => api.get(`/finance/gl/entries/${id}/`),
+  entryCreate:     (body)          => api.post('/finance/gl/entries/', body),
+  entryUpdate:     (id, body)      => api.put(`/finance/gl/entries/${id}/`, body),
+  entryDelete:     (id)            => api.delete(`/finance/gl/entries/${id}/`),
+  entryApprove:    (id)            => api.post(`/finance/gl/entries/${id}/approve/`),
+  entriesApprove:  (ids)           => api.post('/finance/gl/entries/approve/', { ids }),
+  entryReverse:    (id, reason)    => api.post(`/finance/gl/entries/${id}/reverse/`, { reason }),
+  trialBalance:       (params) => api.get('/finance/gl/reports/trial-balance/', { params }),
+  trialBalanceXlsx:   (params) => api.get('/finance/gl/reports/trial-balance/', xlsx(params)),
+  accountStatement:     (params) => api.get('/finance/gl/reports/account-statement/', { params }),
+  accountStatementXlsx: (params) => api.get('/finance/gl/reports/account-statement/', xlsx(params)),
+  statements:      (params) => api.get('/finance/gl/reports/statements/', { params }),
+  statementsXlsx:  (params) => api.get('/finance/gl/reports/statements/', xlsx(params)),
+  position:        (params) => api.get('/finance/gl/reports/position/', { params }),
+  positionXlsx:    (params) => api.get('/finance/gl/reports/position/', xlsx(params)),
+  branchPl:        (params) => api.get('/finance/gl/reports/branch-pl/', { params }),
+  branchPlXlsx:    (params) => api.get('/finance/gl/reports/branch-pl/', xlsx(params)),
+  comparison:      (params) => api.get('/finance/gl/reports/comparison/', { params }),
+  comparisonXlsx:  (params) => api.get('/finance/gl/reports/comparison/', xlsx(params)),
+}
+
 // ── Recommendations / FBT API ─────────────────────────────────────────────────
 export const recommendationsApi = {
   latestRun:    ()                    => api.get('/recommendations/run/'),

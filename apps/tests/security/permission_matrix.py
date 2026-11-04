@@ -65,6 +65,7 @@ BRANCH_SCOPE = {
     'pic_analytics': 'own — named branch managers see their branches (branch_scope); management all',
     'gamification': 'n/a — own data; rankings are network-wide by design',
     'help':         'n/a — no branch data',
+    'ledger':       'all — finance GL is company-level: every /api/finance/gl/ endpoint refuses branch-scoped users (B-1)',
     'tasks':        'own + «جميع الفروع» + created / assigned to me; all-branch schedules read-only for branch roles',
     'usage_print':  'own — invoice lookup (403 before any SOFTECH read), sheets, lines, print, prescription (branch_scope); presets + slip settings chain-wide',
 }
