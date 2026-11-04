@@ -117,6 +117,13 @@ class AuditLog(models.Model):
         ('stock_audit_finding_reviewed', 'تدقيق المخزون — مراجعة ملاحظة'),
         ('stock_audit_access_granted',   'تدقيق المخزون — منح صلاحية مدير فرع'),
         ('stock_audit_access_revoked',   'تدقيق المخزون — سحب صلاحية مدير فرع'),
+        ('daily_count_generated',        'جرد يومي — توزيع القوائم'),
+        ('daily_count_counted',          'جرد يومي — تسجيل جرد'),
+        ('daily_count_recount',          'جرد يومي — طلب إعادة جرد'),
+        ('daily_count_accepted',         'جرد يومي — اعتماد فرق'),
+        ('daily_count_escalated',        'جرد يومي — إحالة للمراجع'),
+        ('daily_count_settings_changed', 'جرد يومي — تعديل الإعدادات'),
+        ('daily_count_closed',           'جرد يومي — إغلاق اليوم (لم يُنجز)'),
 
         # PIC Analytics (doc 33)
         ('pic_analytics_exported',        'تحليلات العملاء — تصدير تقرير'),
@@ -128,6 +135,11 @@ class AuditLog(models.Model):
         ('pic_analytics_callback_scheduled', 'تحليلات العملاء — جدولة معاودة اتصال'),
         ('pic_analytics_pic_excluded',    'تحليلات العملاء — استبعاد عميل من التحليل'),
         ('pic_analytics_pic_included',    'تحليلات العملاء — إرجاع عميل للتحليل'),
+        # Project 3 — missed sales / missed calls
+        ('missed_sale_confirmed',            'مبيعات فائتة — تأكيد كحجز'),
+        ('missed_sale_rejected',             'مبيعات فائتة — رفض'),
+        ('missed_call_callback_created',     'مكالمة فائتة — معاودة اتصال تلقائية'),
+        ('missed_call_callback_auto_closed', 'مكالمة فائتة — إغلاق تلقائي بعد الرد'),
 
         # Personal dashboard live person search (N0/H1)
         ('personal_person_search',       'لوحة شخصية — بحث عن شخص في SOFTECH'),
@@ -155,6 +167,22 @@ class AuditLog(models.Model):
 
         # Received-without-order check (P-31)
         ('receipt_check_decided',        'استلام بدون طلب — قرار'),
+        ('usage_line_confirmed',         'طريقة الاستخدام — تأكيد تعليمات صنف'),
+        ('usage_line_excluded',          'طريقة الاستخدام — استبعاد صنف من الطباعة'),
+        ('usage_sheet_printed',          'طريقة الاستخدام — طلب طباعة'),
+        ('usage_rx_attached',            'طريقة الاستخدام — إرفاق صورة روشتة'),
+        ('usage_settings_changed',       'طريقة الاستخدام — تعديل القوالب والإعدادات'),
+
+        # Counselling sheets + cards (Project 4, doc 34)
+        ('counselling_drafted',          'إرشاد استخدام — إنشاء مسودة'),
+        ('counselling_edited',           'إرشاد استخدام — تعديل'),
+        ('counselling_submitted',        'إرشاد استخدام — إرسال للاعتماد'),
+        ('counselling_approved',         'إرشاد استخدام — اعتماد'),
+        ('counselling_retired',          'إرشاد استخدام — سحب'),
+        ('counselling_item_linked',      'إرشاد استخدام — ربط صنف'),
+        ('counselling_item_unlinked',    'إرشاد استخدام — فك ربط صنف'),
+        ('counsel_card_sent',            'إرشاد استخدام — إرسال للعميل'),
+        ('counsel_card_opt_out',         'إرشاد استخدام — إيقاف الرسائل'),
 
     ]
 

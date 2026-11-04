@@ -1,7 +1,9 @@
 [Unit]
 Description=ElRezeiky Pharmacy Platform — Background Scheduler (APScheduler)
-After=network.target postgresql.service elrezeiky-web.service
-Wants=postgresql.service
+# Redis (channels) and the SOFTECH tunnel (ZeroTier primary, SSTP watchdog) must be up first;
+# a unit that does not exist on this machine is ignored.
+After=network-online.target postgresql.service redis-server.service zerotier-one.service elrezeiky-tunnel-watch.service elrezeiky-web.service
+Wants=network-online.target postgresql.service redis-server.service
 # Do NOT use BindsTo — the scheduler must survive a web restart and vice versa
 
 [Service]

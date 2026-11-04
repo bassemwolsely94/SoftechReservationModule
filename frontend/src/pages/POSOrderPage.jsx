@@ -10,6 +10,7 @@ import PrescriptionOcrModal from '../components/PrescriptionOcrModal'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import PosImageSearch from '../pos/search/PosImageSearch'
 import PosAlternatives from '../pos/search/PosAlternatives'
+import CounselSendButton from '../counselling/CounselSendButton'
 import ContractAssist, { ClaimField } from '../pos/contract/ContractAssist'
 import QuickSellGrid from '../components/QuickSellGrid'
 import StockLookupDrawer from '../components/StockLookupDrawer'
@@ -1084,6 +1085,7 @@ function FooterBar({ P, onParked, onReceipt }) {
         ? <button onClick={() => P.submit(true)} disabled={P.busy || !P.lines.length} title="إرسال فعلي للكاشير" data-tour="pos-order-send"
                   className="h-8 px-3 rounded bg-red-600 text-white font-semibold disabled:opacity-40 flex items-center gap-1.5">⚠ إرسال <kbd className="text-[10px] bg-white/20 rounded px-1">F10</kbd></button>
         : <span className="h-8 px-2 rounded bg-gray-100 text-gray-400 text-[11px] flex items-center" title="يُفعّل بمفتاح الكاتب المعتمد من المالك" data-tour="pos-order-send">🔒 مُعطّل</span>}
+      <CounselSendButton customerId={P.picCustomer?.id || P.customer?.id} itemIds={P.lines.map(l => l.item)} branchId={P.branch} />
       <button onClick={P.reset} title="أمر جديد" data-tour="pos-order-reset" className="h-8 px-2 rounded border text-red-600 hover:bg-red-50">↺</button>
     </div>
   )

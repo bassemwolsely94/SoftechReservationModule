@@ -196,6 +196,7 @@ INSTALLED_APPS = [
     'apps.tasks',
     'apps.procurement',
     'apps.product_experience',
+    'apps.counselling',    # Project 4: drug assistant + pharmacist-approved counselling cards
     'apps.finance',
     'apps.recommendations',
     'apps.campaigns',
@@ -227,6 +228,7 @@ INSTALLED_APPS = [
     'apps.gamification',   # Gamification — points, levels/titles, badges, streaks, rankings (recognition only)
     'apps.stock_audit',    # Stock Transactions Audit (doc 32) — read-only stktrans mirror + checks
     'apps.pic_analytics',  # PIC Analytics (doc 33) — customer dashboard + report, read-only
+    'apps.usage_print',    # Usage-instructions receipt slip (Project 5) — read-only vs SOFTECH, flag below
     'apps.access',         # Trusted networks + request network label (security N1, log only)
     'apps.trace',          # P-58 EDA track-and-trace foundation — dormant (TRACK_TRACE_ENABLED)
 ]
@@ -561,11 +563,23 @@ ERP_SERVICE_USERCODE = config('ERP_SERVICE_USERCODE', default='')
 # SOFTECH; /push returns a dry-run plan only. Flip to True ONLY after the live
 # write path is implemented and validated against SOFTECH_TEST_HOST.
 POS_WRITER_ENABLED = config('POS_WRITER_ENABLED', default=False, cast=bool)
+# Usage-instructions slip (apps.usage_print, Project 5). OFF = screen hidden, API 404. Never writes SOFTECH.
+USAGE_PRINT_ENABLED = config('USAGE_PRINT_ENABLED', default=False, cast=bool)
 POS_WRITER_PROFILE = config('POS_WRITER_PROFILE', default='test')   # test|prod
 # Wave 3 inc3: batch-write OUR POS item-selection telemetry into SOFTECH pos_cancel (the
 # «المبيعات غير المخزنة» activity log — NOT a transactional/financial table). OFF until the
 # owner signs off a dry-run. When False, write_pos_cancel_batch runs in dry-run only.
 POS_CANCEL_WRITE_ENABLED = config('POS_CANCEL_WRITE_ENABLED', default=False, cast=bool)
+# Project 3 (docs/superpowers/specs/2026-11-03-missed-sales-and-missed-calls-design.md). Both ship
+# dark. Missed sales = OUR POS carts' unsold items for a known customer → reservation SUGGESTIONS a
+# person confirms; missed calls = automatic call-back in the existing queue (call-center pool).
+MISSED_SALES_ENABLED = config('MISSED_SALES_ENABLED', default=False, cast=bool)
+MISSED_SALES_MIN_AGE_MINUTES = config('MISSED_SALES_MIN_AGE_MINUTES', default=60, cast=int)
+MISSED_SALES_EXPIRE_DAYS = config('MISSED_SALES_EXPIRE_DAYS', default=14, cast=int)
+MISSED_CALL_CALLBACKS_ENABLED = config('MISSED_CALL_CALLBACKS_ENABLED', default=False, cast=bool)
+MISSED_CALL_OPEN_HOUR = config('MISSED_CALL_OPEN_HOUR', default=9, cast=int)
+MISSED_CALL_CLOSE_HOUR = config('MISSED_CALL_CLOSE_HOUR', default=23, cast=int)
+MISSED_CALL_DUE_MINUTES = config('MISSED_CALL_DUE_MINUTES', default=15, cast=int)
 # Feature 1 (/supply): write our engine's monthly_avg → SOFTECH stkbal.monthlyqty
 # (معدل الإستهلاك). OFF = /supply propose+approve work but execute is refused (409).
 # Flip True ONLY after a reviewed dry-run + a validated rollback write-probe.
@@ -606,6 +620,13 @@ SUPPLY_ERP_GROUPS = config('SUPPLY_ERP_GROUPS', default='10,19,21,27')
 # The rates it produces still need a human to approve/execute in /supply; coverage is
 # topped up automatically afterwards. OFF by default.
 DEMAND_ENGINE_SCHEDULE_ENABLED = config('DEMAND_ENGINE_SCHEDULE_ENABLED', default=False, cast=bool)
+
+# Project 2 (docs/superpowers/specs/2026-11-03-phone-scan-and-daily-counts-design.md) — ship dark.
+# CAMERA_SCAN_ENABLED: 📷 button on every item search (phone camera reads the barcode; no backend).
+# DAILY_COUNT_ENABLED: small daily stock counts (20 items per salesperson, blind, reviewed); also
+# needs BranchSettings.daily_count_enabled per pilot branch. Never writes to SOFTECH.
+CAMERA_SCAN_ENABLED = config('CAMERA_SCAN_ENABLED', default=False, cast=bool)
+DAILY_COUNT_ENABLED = config('DAILY_COUNT_ENABLED', default=False, cast=bool)
 DEMAND_ENGINE_SCHEDULE_DAYS    = config('DEMAND_ENGINE_SCHEDULE_DAYS', default='sun,wed')
 DEMAND_ENGINE_SCHEDULE_HOUR    = config('DEMAND_ENGINE_SCHEDULE_HOUR', default=1, cast=int)
 DEMAND_ENGINE_SCHEDULE_MINUTE  = config('DEMAND_ENGINE_SCHEDULE_MINUTE', default=0, cast=int)
@@ -789,6 +810,18 @@ REFILL_REMINDER_SEND_ENABLED = config('REFILL_REMINDER_SEND_ENABLED', default=Fa
 REFILL_REMINDER_TEMPLATE     = config('REFILL_REMINDER_TEMPLATE', default='refill_reminder')
 REFILL_REMINDER_LANGUAGE     = config('REFILL_REMINDER_LANGUAGE', default='ar')
 REFILL_REMINDER_DAILY_CAP    = config('REFILL_REMINDER_DAILY_CAP', default=300, cast=int)
+# Project 4 (doc 34): staff drug assistant, pharmacist-approved counselling sheets, WhatsApp counselling card.
+DRUG_ASSISTANT_ENABLED      = config('DRUG_ASSISTANT_ENABLED', default=False, cast=bool)
+COUNSELLING_CONTENT_ENABLED = config('COUNSELLING_CONTENT_ENABLED', default=False, cast=bool)
+COUNSEL_CARD_SEND_ENABLED   = config('COUNSEL_CARD_SEND_ENABLED', default=False, cast=bool)
+COUNSEL_CARD_TEMPLATE       = config('COUNSEL_CARD_TEMPLATE', default='counsel_card')
+COUNSEL_CARD_LANGUAGE       = config('COUNSEL_CARD_LANGUAGE', default='ar')
+COUNSEL_CARD_DAILY_CAP      = config('COUNSEL_CARD_DAILY_CAP', default=200, cast=int)   # per branch per Cairo day
+COUNSEL_CARD_TOKEN_DAYS     = config('COUNSEL_CARD_TOKEN_DAYS', default=90, cast=int)
+COUNSEL_CARD_DEDUPE_DAYS    = config('COUNSEL_CARD_DEDUPE_DAYS', default=7, cast=int)
+# Keys the phone hash behind counselling opt-outs and the 7-day repeat check. Deliberately NOT
+# SECRET_KEY: rotating that must never cancel a customer's opt-out. Set once; never change it.
+COUNSEL_PHONE_HASH_KEY      = config('COUNSEL_PHONE_HASH_KEY', default='elrezeiky-counsel-phone-v1')
 # بدل الروشتة daily read-only check (apps/sync/tasks._run_replacement_check).
 REPLACEMENT_DAILY_CHECK_ENABLED = config('REPLACEMENT_DAILY_CHECK_ENABLED', default=True, cast=bool)
 REPLACEMENT_DAILY_CHECK_DAYS    = config('REPLACEMENT_DAILY_CHECK_DAYS', default=60, cast=int)

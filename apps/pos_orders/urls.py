@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import missed_sales_views as msv
 
 urlpatterns = [
     path('',                  views.OrderListCreateView.as_view(), name='pos-order-list'),
@@ -18,6 +19,9 @@ urlpatterns = [
     path('lost-sales/',       views.lost_sales_view,               name='pos-order-lost-sales'),
     path('lost-sales-trends/', views.lost_sales_trends_view,       name='pos-order-lost-sales-trends'),
     path('selection-events/', views.selection_events_ingest,       name='pos-order-selection-events'),
+    path('missed-sales/',     msv.MissedSaleList.as_view(),        name='pos-missed-sales'),
+    path('missed-sales/<int:pk>/',        msv.missed_sale_detail,  name='pos-missed-sale-detail'),
+    path('missed-sales/<int:pk>/reject/', msv.missed_sale_reject,  name='pos-missed-sale-reject'),
     path('return-lookup/',    views.return_lookup,                 name='pos-order-return-lookup'),
     path('referral-stats/',   views.referral_stats,                name='pos-order-referral-stats'),
     path('flush/',            views.flush_now,                     name='pos-order-flush'),

@@ -126,6 +126,12 @@ All extracted business rules, organized by domain.
 | `difference = counted_qty − expected_qty` | Computed on upload | `apps/stockcount/views.py` |
 | Session modes: transaction / full / filtered | Determines snapshot strategy | `apps/stockcount/models.py` |
 | Store code `102/103/105` excluded from stock count | Same as catalog rule | `apps/stockcount/` |
+| Daily counts are BLIND: the counter's API never returns expected qty, difference, value or pick reasons | `my/` + `my/count/` responses | `apps/stockcount/daily/views.py` |
+| Daily-count expected qty = live SOFTECH balance of that one item at submit (operational stores); SOFTECH down → `ItemStock` mirror, flagged `expected_source='mirror'` | `read_expected` | `apps/stockcount/daily/service.py` |
+| Every daily count is an immutable `DailyCountAttempt`; a recount is a new attempt; same `client_token` twice = one attempt | `record_count` | `apps/stockcount/daily/service.py` |
+| Daily lists: salespeople on the branch roster (pharmacists optional), approved leave skipped, no item twice per branch per day, 20 each by default; lists close at the branch's closing time (24h/no hours → midnight Cairo), unfinished → «لم يُنجز» | `generate`, `close_day`, `close_at` | `apps/stockcount/daily/service.py` |
+| Daily differences escalate to the central auditor when value ≥ 200 EGP, ≥ 3 differences on the item in 30 days, the counter is the branch manager, or the branch has no named manager; escalated = auditor only | `_escalation_reason`, `_check_reviewable` | `apps/stockcount/daily/service.py` |
+| Daily sessions are excluded from the classic session API and from the gamification `stockcount_completed` award | `get_queryset`, `_collect_inventory` | `apps/stockcount/views.py`, `apps/gamification/engine.py` |
 
 ---
 

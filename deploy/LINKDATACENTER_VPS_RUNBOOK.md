@@ -830,12 +830,14 @@ This installs every in-app local OCR engine: Tesseract bindings, RapidOCR (ONNX)
 ### 8.2 Production `.env` — FIRST BOOT IS READ-ONLY
 
 ```bash
-sudo -u elrezeiky cp deploy/staging.env.example .env
+sudo -u elrezeiky cp deploy/production.env.example .env
 sudo -u elrezeiky nano .env
 chmod 600 .env
 ```
-Start from the **staging** template on purpose: SOFTECH kill-switch ON and every writer OFF.
-You flip them to the office values only at cutover (section 11). Fill in:
+Start from the **production** template (`deploy/production.env.example`): it boots as a reader —
+SOFTECH kill-switch ON, `WRITER_INSTANCE=False` and every writer flag listed and OFF
+(`apps/tests/test_go_live.py` keeps it that way). You flip them only at cutover (section 11).
+The block below is the part to fill in:
 
 ```env
 DEBUG=False
@@ -1011,9 +1013,9 @@ sudo systemctl daemon-reload
 sudo systemctl enable elrezeiky-web          # start it after the data restore (section 10)
 # the scheduler is NOT enabled yet — only at cutover (section 11)
 ```
-Add `After=redis-server.service zerotier-one.service elrezeiky-tunnel-watch.service` to both
-`[Unit]` sections, so they start after Redis and the VPN on reboot. (Not `wg-quick@wg0`:
-WireGuard is dormant and disabled — section 5.0.)
+Both units already start after Redis and the VPN (`zerotier-one`, `elrezeiky-tunnel-watch`) on
+reboot. (Not `wg-quick@wg0`: WireGuard is dormant and disabled — section 5.0.) The OCR sidecar
+unit of 8.4 b is also in the repo: `sudo cp deploy/elrezeiky-ocr.service /etc/systemd/system/`.
 
 ### 9.2 Nginx (from `deploy/nginx.conf`)
 
@@ -1661,7 +1663,8 @@ is down during the window and that the new address is `https://elrezeikyapp.dawa
 **11.1 Freeze the office writers.** In the office `.env` set `SOFTECH_READ_ONLY=True` and
 `WRITER_INSTANCE=False` (P-54), remove any duplicated key (the processes now refuse to start
 on one), restart the office web + scheduler. The boot log must read
-`WRITER_INSTANCE=False … (not the writer instance — none of them can write)`. From now on the
+`WRITER_INSTANCE=False … (not the writer instance — none of them can write)`, and on the office
+`python manage.py writer_status --expect reader` must end with `ROLE = reader` (exit 0). From now on the
 office machine cannot write to SOFTECH — two independent locks.
 
 **11.2 Drain what's in flight — checked on the office instance:**
@@ -1700,7 +1703,8 @@ journalctl -u elrezeiky-scheduler -f          # watch the jobs register and the 
 ```
 Watch one full sync cycle succeed (sales, stock, in-transit, expiry, …) on the freshness bar.
 
-**11.6 Turn SOFTECH writes back on — one writer at a time.** First the kill-switch test (P-54):
+**11.6 Turn SOFTECH writes back on — one writer at a time.** Gate: the office is stopped (11.3)
+and its last `writer_status --expect reader` passed (11.1). First the kill-switch test (P-54):
 with `SOFTECH_READ_ONLY=True` confirm a writer dry-run is refused. Then in the VPS `.env`:
 1. `SOFTECH_READ_ONLY=False` and `WRITER_INSTANCE=True` (this server only — never the office)
 2. Set each `*_ENABLED` flag to its **office value** from your inventory (1.2) — no more than the
@@ -1708,7 +1712,8 @@ with `SOFTECH_READ_ONLY=True` confirm a writer dry-run is refused. Then in the V
    before the next: POS writer → POS cancel log → discount/pricing → ISR (+auto-approve) →
    coverage → invoices → A/P (still OFF — it was gated OFF in the office) → insurance → shortage →
    loyalty/others.
-3. `sudo systemctl restart elrezeiky-web elrezeiky-scheduler` after each change.
+3. `sudo systemctl restart elrezeiky-web elrezeiky-scheduler` after each change, then
+   `sudo -u elrezeiky /opt/elrezeiky/venv/bin/python manage.py writer_status --expect writer`.
 4. Check `/sync` → «🔐 مفاتيح الكتابة في SOFTECH» against the signed-off switch table
    (docs/product-review/06_SPEC_P-54 appendix — value, initials, date for every flag).
 
@@ -1765,7 +1770,9 @@ sudo -u elrezeiky crontab -e
 - Health at a glance: the in-app data-freshness bar + `/sync`.
 - `journalctl -u elrezeiky-web -u elrezeiky-scheduler --since "1 hour ago" -p err`
 - Disk: `df -h` (alert at 80%). RAM: `htop` / `free -h`.
-- External uptime: free UptimeRobot / Better Stack ping of `https://elrezeikyapp.dawalvry.com/` every 5 min → e-mail/WhatsApp.
+- External uptime: free UptimeRobot / Better Stack ping of `https://elrezeikyapp.dawalvry.com/api/public/health/`
+  every 5 min → e-mail/WhatsApp. It answers `{"status":"ok"}` (200) only when Daphne is up **and** reaches
+  PostgreSQL; anything else (502, 503, timeout) is an outage.
 - VPN: if both tunnels are down, every sync fails. `sudo journalctl -t elrezeiky-tunnel` shows
   every ZeroTier ⇄ SSTP switch; `ip route get 192.168.1.8` shows which one carries traffic now.
   The MikroTik netwatch (host 10.50.50.77, 5.0) logs it on the router side; on the VPS add a cron
@@ -2056,7 +2063,10 @@ git checkout -b feature/<name>
 
 ### 13.5 Releasing to production
 
-`/opt/elrezeiky/release.sh` (owned by root: `sudo chown root:root` + `sudo chmod 700`):
+`/opt/elrezeiky/release.sh` is `deploy/release.sh`, installed owned by root:
+`sudo install -o root -g root -m 700 /opt/elrezeiky/app/deploy/release.sh /opt/elrezeiky/release.sh`
+(re-install when a release changes it). It ends by waiting for `/api/public/health/` to answer 200.
+For reference, the core of it:
 ```bash
 #!/usr/bin/env bash
 # Release main to production. Run: sudo /opt/elrezeiky/release.sh

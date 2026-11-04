@@ -280,6 +280,11 @@ class CallLogListSerializer(RecordPhoneMask, serializers.ModelSerializer):
     has_recording   = serializers.SerializerMethodField()
     has_transcript  = serializers.SerializerMethodField()
 
+    is_auto_callback = serializers.SerializerMethodField()
+
+    def get_is_auto_callback(self, obj):
+        return obj.missed_cdr_id is not None
+
     class Meta:
         model  = CallLog
         fields = [
@@ -293,6 +298,7 @@ class CallLogListSerializer(RecordPhoneMask, serializers.ModelSerializer):
             'handled_by', 'handled_by_name',
             'branch_name', 'called_at',
             'callback_due', 'needs_callback',
+            'is_auto_callback', 'missed_count', 'callback_resolution',
             'case', 'has_case',
             'quality_score',
             'ai_sentiment', 'ai_urgency',

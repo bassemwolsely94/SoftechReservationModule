@@ -229,6 +229,7 @@ DEFAULT_DROPDOWNS = [
     dict(dropdown_key='reservation_order_source', label='الفرع — مكالمة',      label_en='Branch Call',     value='branch_call',     icon='☎️', order=3, is_system=True),
     dict(dropdown_key='reservation_order_source', label='طلب إلكتروني',         label_en='Online',          value='online',          icon='🌐', order=4, is_system=True),
     dict(dropdown_key='reservation_order_source', label='زيارة الفرع',          label_en='Walk-in',         value='walk_in',         icon='🚶', order=5, is_system=False),
+    dict(dropdown_key='reservation_order_source', label='مبيعات فائتة',         label_en='Missed sale',     value='pos_missed',      icon='🛒', order=6, is_system=True),
 
     # reservation_priority
     dict(dropdown_key='reservation_priority', label='عادي',           label_en='Normal',  value='normal',  icon='⚪', color='gray',   order=0, is_system=True),
