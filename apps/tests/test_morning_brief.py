@@ -92,7 +92,9 @@ class ComposeTests(_Base):
         pos = [t.index(h) for h in heads]
         self.assertEqual(pos, sorted(pos))
         self.assertIn('فرع الزيتون', t)
-        self.assertIn('1,500', t)                    # yesterday net sales
+        self.assertIn('1,500', t)                    # yesterday cash + delivery (board bucket)
+        self.assertIn('• نقدى + توصيل: 1,500', t)     # the board's label, not «صافي المبيعات» (M3)
+        self.assertNotIn('صافي المبيعات', t)
         self.assertIn('750', t)                      # average basket
         self.assertIn('2', t)
         self.assertIn('+25', t)                      # vs same weekday last week
@@ -211,6 +213,20 @@ class SendAllTests(_Base):
 
     def test_brief_dry_run_when_switch_off(self):
         self._send()
+        for a in PhoneAlert.objects.filter(kind='brief'):
+            self.assertEqual([x.result for x in a.attempts.all()], ['dry_run'])
+
+    @override_settings(PHONE_ALERTS_SEND_ENABLED=True, MORNING_BRIEF_SEND_ENABLED=False)
+    def test_brief_follows_its_own_switch_not_the_phone_alerts_one(self):
+        from apps.omni.models import ChannelAccount
+        from apps.config.models import SystemSetting
+        acc = ChannelAccount.objects.create(channel='whatsapp', name='staff', is_active=True)
+        SystemSetting.objects.update_or_create(key='phone_alerts_channel_account',
+                                               defaults={'value': str(acc.pk)})
+        with mock.patch('apps.whatsapp.sender.WhatsAppSender') as WA:
+            WA.return_value.is_configured = True
+            self.assertEqual(self._send(), 2)
+        WA.return_value.send_template.assert_not_called()
         for a in PhoneAlert.objects.filter(kind='brief'):
             self.assertEqual([x.result for x in a.attempts.all()], ['dry_run'])
 

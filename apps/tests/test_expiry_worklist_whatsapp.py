@@ -94,3 +94,19 @@ class WorklistWhatsAppTests(TestCase):
             self.assertFalse(sender._sending_enabled(a))
         with override_settings(PHONE_ALERTS_SEND_ENABLED=True, MORNING_BRIEF_SEND_ENABLED=False):
             self.assertTrue(sender._sending_enabled(a))
+
+    @override_settings(PHONE_ALERTS_SEND_ENABLED=True)
+    def test_rerun_in_the_same_week_sends_nothing_twice(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        self._flag(True)
+        with _conf(), mock.patch(SEND_TPL, return_value={}) as send:
+            self._run()
+            self._run()
+        self.assertEqual(send.call_count, 1)
+        self.assertEqual(PhoneAlert.objects.filter(event='expiry_worklist').count(), 1)
+        # last ISO week's heads-up does not block this week's
+        PhoneAlert.objects.update(created_at=timezone.now() - timedelta(days=7))
+        with _conf(), mock.patch(SEND_TPL, return_value={}) as send:
+            self._run()
+        self.assertEqual(send.call_count, 1)

@@ -63,7 +63,7 @@ def _yesterday_section(branch, yesterday):
     sales_before = r.resolve(SALES_METRIC, start=week, end=week, **kw)
     basket = (sales / orders) if orders else None
     lines = [f'*{H_YESTERDAY}*',
-             f'• صافي المبيعات: {_n(sales)} ج.م',
+             f'• {K.METRIC_LABELS[SALES_METRIC]}: {_n(sales)} ج.م',   # the board's «نقدى + توصيل»
              f'• عدد الفواتير: {_n(orders)}',
              f'• متوسط الفاتورة: {_n(basket) + " ج.م" if basket is not None else "—"}',
              f'• عن نفس اليوم الأسبوع الماضي: {_signed_pct(sales, sales_before)}']
@@ -172,7 +172,7 @@ def send_all(day=None) -> int:
     day = day or timezone.localdate()
     start = timezone.make_aware(datetime.combine(day, time.min))        # the brief's Cairo calendar day
     end = timezone.make_aware(datetime.combine(day + timedelta(days=1), time.min))
-    ct =ContentType.objects.get_for_model(Branch)
+    ct = ContentType.objects.get_for_model(Branch)
     branch_ids = set(InsightRecipient.objects.filter(morning_brief=True, active=True, branch__isnull=False)
                      .values_list('branch_id', flat=True))
     count = 0

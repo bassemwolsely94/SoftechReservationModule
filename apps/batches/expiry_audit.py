@@ -1199,8 +1199,16 @@ def _maybe_whatsapp_worklist(recipients, bname, count, body):
         from apps.notifications.phone_alerts.recipients import is_plausible_phone
         variables = [{'type': 'text', 'text': t}
                      for t in ('قائمة صلاحيات الأسبوع', str(bname or '—'), f'{count} صنف', '—')]
+        # once per ISO week per person: a rerun of the weekly job sends nothing twice
+        from datetime import datetime, time, timedelta
+        from django.utils import timezone
+        today = timezone.localdate()
+        week_start = timezone.make_aware(
+            datetime.combine(today - timedelta(days=today.weekday()), time.min))
+        done = set(PhoneAlert.objects.filter(event='expiry_worklist', created_at__gte=week_start)
+                   .values_list('recipient_staff_id', flat=True))
         for r in recipients:
-            if not getattr(r, 'notify_expiry_worklist_wa', False):
+            if not getattr(r, 'notify_expiry_worklist_wa', False) or r.pk in done:
                 continue
             phone = sms_number((r.phone or '').strip())
             if not is_plausible_phone(phone):
