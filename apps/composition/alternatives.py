@@ -38,8 +38,8 @@ def _fmt_sig(sig):
     return ' / '.join(p for p in parts if p)
 
 
-def _match(item_id, own, *, approved_only, branch_id, limit, exclude=frozenset()):
-    """Items with the identical molecule set as `own`, split into (same strength+form, other).
+def _candidates(item_id, own, *, approved_only, exclude=frozenset()):
+    """Ids with the identical molecule set as `own`: (same strength+form, other, rows_by_item, forms_of).
 
     approved_only=True: every row of the candidate must be approved (the verified POS list).
     approved_only=False: parsed rows count too — callers must label the result unverified."""
@@ -69,7 +69,13 @@ def _match(item_id, own, *, approved_only, branch_id, limit, exclude=frozenset()
         cform = {(r.dosage_form or '').strip().upper() for r in rs}
         forms_of[iid] = rs[0].dosage_form
         (same_ids if csig == sig and cform == forms else other_ids).append(iid)
+    return same_ids, other_ids, rows_by_item, forms_of
 
+
+def _match(item_id, own, *, approved_only, branch_id, limit, exclude=frozenset()):
+    """Built rows (stock, price, thumb) for _candidates, split into (same, other)."""
+    same_ids, other_ids, rows_by_item, forms_of = _candidates(item_id, own, approved_only=approved_only,
+                                                              exclude=exclude)
     all_ids = same_ids + other_ids
     # archived / sale-stopped items are never offered (pharmacy safety wins)
     items = {i.id: i for i in Item.objects.filter(id__in=all_ids, is_active=True)
@@ -125,8 +131,10 @@ def unverified_alternatives_for(item_id, *, branch_id=None, limit=10):
     own = list(ItemMoleculeIndex.objects.filter(item_id=item_id))
     if not own:
         return {'items': []}
-    verified = alternatives_for(item_id, branch_id=branch_id, limit=1000)
-    seen = frozenset(r['item_id'] for r in verified['same'] + verified['other'])
+    seen = frozenset()
+    if all(r.source == _APPROVED for r in own):         # what alternatives_for offers as verified
+        v_same, v_other, _, _ = _candidates(item_id, own, approved_only=True)
+        seen = frozenset(v_same + v_other)
     same, other = _match(item_id, own, approved_only=False, branch_id=branch_id, limit=limit, exclude=seen)
     rows = (same + other)[:limit]
     for r in rows:

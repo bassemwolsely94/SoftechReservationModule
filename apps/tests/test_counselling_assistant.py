@@ -70,6 +70,16 @@ class AssistantTests(TestCase):
         _idx(self.a, 'BISOPROLOL', 5, source='parsed'); _idx(b, 'BISOPROLOL', 5, source='parsed')
         self.assertEqual(unverified_alternatives_for(self.a.pk)['items'], [])
 
+    def test_unverified_builds_stock_once(self):
+        """Deferred minor: verified matches are only excluded, never built (stock / thumbs) first."""
+        from unittest import mock
+        b, c = make_item('BISOCOR 5', 'AS007'), make_item('BISOLOL 5', 'AS008')
+        _idx(self.a, 'BISOPROLOL', 5); _idx(b, 'BISOPROLOL', 5); _idx(c, 'BISOPROLOL', 5, source='parsed')
+        with mock.patch('apps.composition.alternatives.network_stock', return_value={}) as ns:
+            rows = unverified_alternatives_for(self.a.pk)['items']
+        self.assertEqual([r['softech_id'] for r in rows], ['AS008'])
+        self.assertEqual(ns.call_count, 1)
+
     def test_never_reads_name_scientific(self):
         b = make_item('OTHER', 'AS006')
         for it in (self.a, b):

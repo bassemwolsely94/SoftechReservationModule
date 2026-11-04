@@ -1,16 +1,17 @@
 /**
  * «إرسال إرشادات الاستخدام» — opens SendCardDrawer for the given customer + items. Hidden unless
- * the content or sending switch is on, and only when there is a customer and at least one item.
+ * the content or sending switch is on, the user may send (POS create, server-decided), and there is a
+ * customer and at least one item.
  */
 import { useState } from 'react'
 import SendCardDrawer from './SendCardDrawer'
 import useCounsellingStatus from './useCounsellingStatus'
 
 export default function CounselSendButton({ customerId, itemIds, branchId, source = 'pos', className = '', label = '📘 إرشادات' }) {
-  const { content, cards } = useCounsellingStatus()
+  const { content, cards, canSend } = useCounsellingStatus()
   const [open, setOpen] = useState(false)
   const ids = (itemIds || []).filter(Boolean)
-  if (!(content || cards) || !customerId || !ids.length) return null
+  if (!(content || cards) || !canSend || !customerId || !ids.length) return null
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} title="إرسال إرشادات الاستخدام للعميل على واتساب"
