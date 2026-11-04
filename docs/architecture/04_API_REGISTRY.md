@@ -337,6 +337,12 @@ Webhook: inbound quick-reply taps `alert:<token>:ack` and `brief:<token>` are ro
 | `/api/finance/gl/accounts/import/` | POST | Import COA from finance's trial balance (dry run → confirm) |
 | `/api/finance/gl/entries/` (+ `{id}/`, `{id}/approve/`, `{id}/reverse/`, `approve/`) | GET/POST/PUT/DELETE | Journal entries: drafts, approval, reversal |
 | `/api/finance/gl/reports/{trial-balance,account-statement,statements,position,branch-pl,comparison}/` | GET | GL reports; `?format=xlsx` = Excel (ledger.export) |
+| `/api/finance/gl/entries/{id}/source/` | GET | Source documents + rule behind a drafted entry (doc 35 Plan 2) |
+| `/api/finance/gl/parties/` (+ `persons/`, `import/`, `propose/`, `{id}/confirm/`, `{id}/reject/`) | GET/POST | GL parties ↔ SOFTECH persons; confirm/reject = `ledger.approve`, import/propose = `ledger.edit` |
+| `/api/finance/gl/maps/`, `/api/finance/gl/maps/{kind}/{value}/` | GET / PUT | Cash-box/bank, expense and card-clearing maps to accounts (`ledger.edit`, audited) |
+| `/api/finance/gl/rules/` (+ `meta/`, `preview/`, `{code}/versions/`) | GET/POST | Versioned posting rules (`ledger.edit`); preview computes only (view) |
+| `/api/finance/gl/exceptions/` (+ `counts/`, `unmapped-values/`, `redraft/`, `{id}/ignore/`) | GET / POST | Drafting exceptions inbox (`ledger.create` for writes) |
+| `/api/finance/gl/drafting/run/`, `drafting/runs/`, `drafting/runs/{id}/` | POST / GET | Start a drafting run (409 when one is active) and read progress (`ledger.create`) |
 | `/api/finance/pnl/` | GET | Profit & loss |
 | `/api/finance/cashflow/` | GET | Cash flow |
 | `/api/finance/expenses/` | GET | Expense analytics |
