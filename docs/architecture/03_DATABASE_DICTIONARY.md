@@ -2492,6 +2492,10 @@ Tables prefixed with their Django app name.
 
 ## FINANCE  (finance intelligence — read/derive from SOFTECH; no SOFTECH writes)
 
+### finance_glaccountgroup · finance_glaccount · finance_ledgerentry · finance_ledgerline · finance_glsequence  (general ledger — doc 35)
+
+Finance's own ledger (no SOFTECH link). `glaccountgroup(name unique, section balance_sheet|trading|pl, order)`; `glaccount(code unique ≤10, name, group FK, nature debit|credit, account_type, statement_line, is_posting, is_active, is_system, requires_branch, requires_party, party_type)`; `ledgerentry(number unique null — JV-YYYY-NNNNNN at approval, entry_date, period FK financialperiod, book cash|credit|general|opening|closing, branch FK null, description, status draft|approved|reversed, source_type, source_key — unique among live entries, created_by/approved_by FK staffprofile, approved_at, reverses FK self, notes)`; `ledgerline(entry FK cascade, line_no, account FK, branch FK null, party_code, debit/credit Decimal(18,2) — one side only, ≥0, description, cheque_no, due_date)`; `glsequence(year unique, last)`. `financialperiod` gains `status open|closing|closed`, `closed_by`, `closed_at`.
+
 ### finance_financeschematable  (SOFTECH schema discovery/catalog)
 | Column | Type | Notes |
 |--------|------|-------|

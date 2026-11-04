@@ -146,7 +146,7 @@ const n0 = v => (v || 0).toLocaleString('en-US')
 const secs = ms => (ms || 0) >= 60_000 ? `${n0(Math.round(ms / 60_000))} د` : `${n0(Math.round((ms || 0) / 1000))} ث`
 
 // roles the user screen does not offer in its picker, but whose traffic still shows here
-const EXTRA_ROLE_LABELS = { supervisor: 'مشرف', quality_manager: 'مدير الجودة' }
+const EXTRA_ROLE_LABELS = { supervisor: 'مشرف', quality_manager: 'مدير الجودة', accountant: 'محاسب' }
 
 function scopeLabel(s) {
   if (!s) return '—'

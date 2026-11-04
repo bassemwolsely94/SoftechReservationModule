@@ -338,7 +338,8 @@ Every module in the platform is registered here with its purpose, status, and de
 | Purpose | Financial intelligence (CoA, P&L, cash flow, expense analytics) |
 | Status | **PARTIAL** (UI scaffolded; backend reads external data) |
 | Key APIs | `/api/finance/` |
-| Related Screens | FinanceHubPage (6 tabs) |
+| Related Screens | FinanceHubPage (tabs incl. GL: القيود، ميزان المراجعة، القوائم المالية، كشف حساب، دليل الحسابات) |
+| General ledger | `apps/finance/gl/` — finance's own COA + journal + reports (doc 35); `/api/finance/gl/`; RBAC `ledger`, role `accountant`; no SOFTECH reads/writes |
 
 ---
 
