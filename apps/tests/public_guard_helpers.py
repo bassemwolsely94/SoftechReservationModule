@@ -19,9 +19,11 @@ def solved(form, **fields):
 
 def portal_send_inline(test):
     """Run the portal's magic-link send (core.threads.start_thread in apps.portal.views) inline for
-    the rest of `test`, so assertions on the sender see it and the test DB connection is shared."""
+    the rest of `test`, so assertions on the sender see it and the test DB connection is shared.
+    The thread's own connection close is skipped: inline, it would close the test's connection."""
     def _inline(target, *, args=(), kwargs=None, name=None, daemon=True):
-        target(*args, **(kwargs or {}))
+        with mock.patch('apps.portal.views.connections'):
+            target(*args, **(kwargs or {}))
     p = mock.patch('apps.portal.views.start_thread', side_effect=_inline)
     started = p.start()
     test.addCleanup(p.stop)
