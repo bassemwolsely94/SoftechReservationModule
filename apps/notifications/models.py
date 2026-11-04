@@ -1046,3 +1046,9 @@ class AnnouncementRead(models.Model):
 
     def __str__(self):
         return f'{self.staff} ✓ {self.announcement_id}'
+
+
+# Phone alerts models live in their own package; importing registers them under this app label.
+from apps.notifications.phone_alerts.models import (  # noqa: E402,F401
+    PhoneAlertPolicy, WorkOwner, PhoneAlert, PhoneAlertAttempt,
+)

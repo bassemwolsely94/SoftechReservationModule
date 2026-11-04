@@ -119,6 +119,11 @@ def _handle_inbound_message(msg: dict, value: dict, phone_number_id: str, accoun
     if not wa_id:
         return None
 
+    # Staff-alerts number: taps and remarks go to phone alerts, never to the customer inbox.
+    if _is_staff_account(account):
+        _handle_staff_inbound(msg, wa_id, account)
+        return None
+
     # Duplicate detection — Meta retries webhook delivery; wamid is globally unique
     if wamid and WAMessage.objects.filter(wamid=wamid, direction='inbound').exists():
         logger.debug('Duplicate webhook delivery for wamid %s — skipped', wamid)
@@ -191,15 +196,50 @@ def _handle_inbound_message(msg: dict, value: dict, phone_number_id: str, accoun
 
     logger.debug('Inbound WhatsApp message from %s: %s', wa_id, preview[:50])
 
-    # Quick-reply taps routed to their feature (refill reminders). Never breaks the inbox.
+    # Quick-reply taps routed to their feature by payload prefix. Never breaks the inbox.
     if msg_type == 'button':
         try:
-            from apps.followups.refill_reminders import handle_button_reply
-            handle_button_reply(wa_id=wa_id, payload=msg.get('button', {}).get('payload', ''),
-                                context_wamid=(msg.get('context') or {}).get('id', ''), account=account)
+            from apps.whatsapp import button_registry
+            button_registry.dispatch(wa_id=wa_id, payload=msg.get('button', {}).get('payload', ''),
+                                     context_wamid=(msg.get('context') or {}).get('id', ''),
+                                     account=account)
         except Exception as exc:
             logger.error('WhatsApp button reply handling failed: %s', exc, exc_info=True)
     return wa_msg
+
+
+def _is_staff_account(account) -> bool:
+    if account is None:
+        return False
+    try:
+        if getattr(account, 'is_staff_alerts', False):
+            return True
+        from apps.notifications.phone_alerts.sender import staff_account
+        staff = staff_account()
+        return staff is not None and staff.pk == account.pk
+    except Exception as exc:
+        logger.error('WhatsApp webhook: staff account check failed: %s', exc)
+        return False
+
+
+def _handle_staff_inbound(msg: dict, wa_id: str, account) -> None:
+    """Message to the staff-alerts number: button tap -> registry, text -> remark. No inbox rows."""
+    try:
+        context_wamid = (msg.get('context') or {}).get('id', '')
+        msg_type = msg.get('type', 'text')
+        if msg_type == 'button':
+            from apps.whatsapp import button_registry
+            button_registry.dispatch(wa_id=wa_id, payload=msg.get('button', {}).get('payload', ''),
+                                     context_wamid=context_wamid, account=account)
+        elif msg_type == 'text':
+            from apps.notifications.phone_alerts.inbound import handle_free_text
+            handle_free_text(wa_id=wa_id, text=msg.get('text', {}).get('body', ''),
+                             context_wamid=context_wamid, account=account)
+        else:
+            logger.info('WhatsApp staff number: unsupported %s message from …%s ignored',
+                        msg_type, str(wa_id or '')[-4:])
+    except Exception as exc:
+        logger.error('WhatsApp staff-number handling failed: %s', exc, exc_info=True)
 
 
 def _handle_status_update(status: dict) -> None:
@@ -211,6 +251,12 @@ def _handle_status_update(status: dict) -> None:
 
     if not wamid:
         return
+
+    try:
+        from apps.notifications.phone_alerts.inbound import apply_status
+        apply_status(wamid, new_status, status.get('errors'))
+    except Exception as exc:
+        logger.error('Phone alert status update failed: %s', exc, exc_info=True)
 
     try:
         msg = WAMessage.objects.get(wamid=wamid)

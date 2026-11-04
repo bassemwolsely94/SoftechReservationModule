@@ -164,6 +164,9 @@ class BranchSettings(models.Model):
     working_hours = models.JSONField(default=list, blank=True, verbose_name='مواعيد العمل',
                                      help_text='[{"from": "08:00", "to": "01:00"}] — optional "label", "doccodes"')
 
+    # Phone alerts: the branch's shared mobile that receives urgent WhatsApp alerts.
+    alert_mobile  = models.CharField(max_length=20, blank=True, default='', verbose_name='موبايل تنبيهات الفرع')
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

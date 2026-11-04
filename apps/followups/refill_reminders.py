@@ -270,6 +270,8 @@ def _create_reservation(rem, choice):
                + ' — يُرجى الاتصال لتأكيد الأصناف قبل التجهيز'))
     ReservationStatusLog.objects.create(reservation=res, old_status='', new_status='pending',
                                         changed_by=None, note='أُنشئ من رد العميل على تذكير الصرف (واتساب)')
+    from apps.notifications.phone_alerts import hooks as phone_alert_hooks
+    phone_alert_hooks.on_reservation_created(res)
     try:
         Notification.send_to_call_center(
             notification_type='reservation_created',
@@ -337,3 +339,13 @@ def summary(days=30):
             'reply_rate': round(100 * by_status.get('replied', 0) / sent, 1) if sent else 0,
             'reservations': qs.exclude(reservation=None).count(),
             'opt_outs': RefillReminderOptOut.objects.count()}
+
+
+# ── WhatsApp button routing ───────────────────────────────────────────────────
+# Looked up by name at call time (not bound) so the webhook always reaches the current handler.
+def _register_buttons():
+    from apps.whatsapp import button_registry
+    button_registry.register("refill:", lambda **kw: handle_button_reply(**kw))
+
+
+_register_buttons()

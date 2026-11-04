@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.db.models import Count, Q, Sum, Avg, F
 from datetime import date, timedelta
 
+from apps.notifications.phone_alerts import hooks as phone_alert_hooks
 from core import branch_scope
 from core.export_safety import neutralise_formulas
 from core.sort_ordering import NullsLastOrderingFilter
@@ -371,6 +372,8 @@ class ReservationViewSet(viewsets.ModelViewSet):
         except Exception:
             pass
 
+        phone_alert_hooks.on_reservation_created(reservation, staff)
+
     # ── Change Status ──────────────────────────────────────────────────────────
 
     # ── Gap-6: Valid status transition graph ──────────────────────────────────
@@ -464,6 +467,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
 
         reservation.status = new_status
         reservation.save(update_fields=['status', 'updated_at'])
+        phone_alert_hooks.on_reservation_status(reservation, staff)
 
         # Notify about the status change
         try:
@@ -1211,6 +1215,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
             )
             target.status = 'cancelled'
             target.save(update_fields=['status', 'updated_at'])
+            phone_alert_hooks.on_reservation_status(target, staff)
 
             log_activity(
                 reservation=reservation,
@@ -1302,6 +1307,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
                 )
                 r.status = new_status_val
                 r.save(update_fields=['status', 'updated_at'])
+                phone_alert_hooks.on_reservation_status(r, staff)
                 updated += 1
             return Response({'updated': updated, 'skipped': skipped})
 

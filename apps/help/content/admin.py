@@ -231,6 +231,8 @@ SCREENS = [
         'summary': T('إنشاء المستخدمين وتعديلهم وتعطيلهم، وإعادة تعيين كلمة المرور، وسجل نشاط كل مستخدم (دخول، تغيير دور أو فرع أو صلاحيات).', 'Create, edit and deactivate users, reset passwords, and each user\'s activity log (logins, role, branch or permission changes).'),
         'audience': T('المدير (والمشرف للعرض).', 'Admins (supervisors can view).'),
         'steps': [
+            T('«📲 تنبيهات الموبايل فقط»: عضو يستقبل تنبيهات واتساب بدون دخول للنظام (يكفي الاسم والموبايل، بدون كلمة مرور أو مستخدم SOFTECH) — الفلتر «📲 تنبيهات فقط» يعرضهم. إلغاؤها لا يعيد الدخول: أعد تعيين كلمة المرور ثم فعّل الحساب. وخانة «يستقبل تنبيهات الموبايل» لإيقاف التنبيهات عن شخص بعينه.',
+              '"📲 Phone alerts only": a member who gets WhatsApp alerts without access to the system (name and mobile are enough, no password or SOFTECH user) — the "📲 Alerts only" filter lists them. Turning it off does not restore login: reset the password, then re-activate the account. The "Receives phone alerts" box stops alerts for one person.'),
             T('«إضافة مستخدم»: ابحث عن اسم المستخدم في SOFTECH ليُربط به، ثم كلمة المرور والاسم والهاتف وكود الموارد البشرية.', '"Add user": search the SOFTECH username to link, then password, name, phone and HR code.'),
             T('حدد الدور والفرع الأساسي، وصلاحيات الوصول: وصول لكل الفروع، قنوات البيع المسموح بها في نقطة البيع (فارغ = كلها)، رؤية عملاء كل الفروع، رؤية رقم هاتف العميل.', 'Set the role and main branch, and access: all branches, allowed POS sales channels (empty = all), see customers of all branches, see customer phone numbers.'),
             T('«الحساب نشط» لإيقاف أو تفعيل الدخول بدون حذف المستخدم.', '"Account active" stops or allows login without deleting the user.'),
@@ -364,7 +366,7 @@ SCREENS = [
                        'The old password stops working at once. At least 10 characters and not common — hand it to the employee in person.'),
              'open_hint': T('اضغط «🔑 إعادة تعيين كلمة المرور» على صف المستخدم.', 'Press "🔑 Reset password" on the user\'s row.')},
         ],
-        'updated': '2026-11-01',
+        'updated': '2026-11-03',
         'change_note': T('خياران للمدير (التصدير والكتابة في SOFTECH من جهاز معتمد خارج الشبكة)، وشرح أوضح لأزرار «اعرض لي»', 'Two admin options (export and SOFTECH writes from an approved device outside the network); clearer "Show me" buttons'),
     },
     {

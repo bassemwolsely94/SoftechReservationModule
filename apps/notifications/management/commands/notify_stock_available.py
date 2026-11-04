@@ -59,6 +59,8 @@ class Command(BaseCommand):
             )
             r.status = 'available'
             r.save(update_fields=['status', 'updated_at'])
+            from apps.notifications.phone_alerts import hooks as phone_alert_hooks
+            phone_alert_hooks.on_reservation_status(r, None)
 
             # Log to chatter
             try:

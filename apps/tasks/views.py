@@ -12,6 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.notifications.models import Notification
+from apps.notifications.phone_alerts import hooks as phone_alert_hooks
 from core import branch_scope
 from core.permissions import matrix_permission
 from core.sort_ordering import explicit_order_by, staff_name_key
@@ -220,6 +221,7 @@ class TaskListCreateView(generics.ListCreateAPIView):
         _add_system_message(task, f'تم إنشاء المهمة بواسطة {staff.full_name if staff else "النظام"}')
         if task.assigned_to:
             _notify_assignee(task, task.assigned_to, staff)
+            phone_alert_hooks.on_task_assigned(task, staff)
 
     def create(self, request, *args, **kwargs):
         ser = TaskWriteSerializer(data=request.data, context={'request': request})
@@ -296,6 +298,7 @@ class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
             _add_system_message(task,
                 f'تغيرت الحالة من "{dict(STATUS_CHOICES).get(old_status)}" إلى "{updated.get_status_display()}"')
             _notify_watchers(task, f'تغيرت حالة المهمة إلى: {updated.get_status_display()}', staff)
+            phone_alert_hooks.on_task_status(updated, staff)
 
         if updated.priority != old_priority:
             _log_audit(task, 'priority_changed', staff,
@@ -306,6 +309,7 @@ class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
                        field_name='assigned_to', new_value=str(updated.assigned_to_id))
             if updated.assigned_to:
                 _notify_assignee(task, updated.assigned_to, staff)
+                phone_alert_hooks.on_task_assigned(updated, staff, only_staff=[updated.assigned_to_id])
 
     def perform_destroy(self, instance):
         staff = _get_staff(self.request)
@@ -313,6 +317,7 @@ class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
                    field_name='status', old_value=instance.status, new_value='cancelled')
         instance.status = 'cancelled'
         instance.save(update_fields=['status'])
+        phone_alert_hooks.on_task_status(instance, staff)
 
 
 # ── Complete Task ──────────────────────────────────────────────────────────────
@@ -347,6 +352,7 @@ def task_complete(request, pk):
     _log_audit(task, 'completed', staff)
     _add_system_message(task, f'تم إغلاق المهمة بواسطة {staff.full_name if staff else "النظام"}')
     _notify_watchers(task, f'تم اكتمال المهمة: {task.title}', staff)
+    phone_alert_hooks.on_task_status(task, staff)
 
     return Response(TaskDetailSerializer(task, context={'request': request}).data)
 
@@ -374,6 +380,7 @@ def task_reopen(request, pk):
     _log_audit(task, 'status_changed', staff,
                field_name='status', old_value=old_status, new_value='open')
     _add_system_message(task, f'تمت إعادة فتح المهمة بواسطة {staff.full_name if staff else "النظام"}')
+    phone_alert_hooks.on_task_status(task, staff)
 
     return Response({'detail': 'تمت إعادة الفتح.'})
 
@@ -415,6 +422,8 @@ def task_assignments(request, pk):
 
     _log_audit(task, 'assigned', actor, new_value=assignee.full_name)
     _notify_assignee(task, assignee, actor)
+    if created:
+        phone_alert_hooks.on_task_assigned(task, actor, only_staff=[assignee.pk])
 
     return Response(TaskAssignmentSerializer(assignment).data,
                     status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)

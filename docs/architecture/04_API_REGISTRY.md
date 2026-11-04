@@ -141,6 +141,18 @@ Default pagination: CursorPagination (50 items)
 | `/api/notifications/unread-count/` | GET | Badge count |
 | `/api/notifications/chatter/` | GET, POST | Generic chatter messages |
 | `/api/notifications/chatter/{id}/` | GET, DELETE | Chatter detail |
+| `/api/notifications/phone-alerts/modes/` | GET | Effective send mode per switch (live / dry-run) |
+| `/api/notifications/phone-alerts/policies/` | GET, PATCH | Per-event policy (never / toggle / always, reminder & escalation timing); admin/supervisor, audited |
+| `/api/notifications/phone-alerts/owners/` | GET, POST | Work owners who receive alerts |
+| `/api/notifications/phone-alerts/owners/{id}/` | PATCH, DELETE | Owner detail |
+| `/api/notifications/phone-alerts/branch-mobiles/` | GET, PATCH | Shared branch mobile numbers (masked for non-admins) |
+| `/api/notifications/phone-alerts/branch-mobiles/{branch_id}/test/` | POST | Send a test alert to a branch mobile |
+| `/api/notifications/phone-alerts/channel/` | GET, PUT | Staff-alerts WhatsApp `ChannelAccount` |
+| `/api/notifications/phone-alerts/log/` | GET | Alert log (filters, sortable) |
+| `/api/notifications/phone-alerts/log/{id}/` | GET | Alert detail with delivery attempts |
+| `/api/notifications/phone-alerts/switches/` | GET | Send switches state (env kill switches, read-only) |
+
+Webhook: inbound quick-reply taps `alert:<token>:ack` and `brief:<token>` are routed by payload prefix (`apps/whatsapp/button_registry.py`).
 
 **WebSocket channels:**  
 - `ws://host/ws/notifications/` → group `notifications_user_{profile_id}`  
