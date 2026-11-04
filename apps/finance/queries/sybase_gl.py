@@ -40,7 +40,7 @@ def sql_branchesales(d1: date, d2: date) -> str:
 
 def sql_credit_docs(d1: date, d2: date) -> str:
     return (
-        "SELECT m.branchcode, m.doccode, m.docnumber, m.docdate, b.personcode, "
+        "SELECT m.branchcode, m.doccode, m.docnumber, m.docdate, MIN(b.personcode) pmin, MAX(b.personcode) pmax, "
         "SUM(b.paymentvalue) credit, m.docvalue, m.docvalue1, m.docvalue3 "
         f"FROM {DB}.stktransm m, {DB}.branchesales b "
         "WHERE m.branchcode = b.branchcode AND m.doccode = b.doccode "
@@ -48,7 +48,7 @@ def sql_credit_docs(d1: date, d2: date) -> str:
         "AND m.docdate = b.docdate "
         "AND m.doccode IN ('115','30') AND b.paymenttype = '10' "
         f"AND {_bounds('m.docdate', d1, d2)} "
-        "GROUP BY m.branchcode, m.doccode, m.docnumber, m.docdate, b.personcode, "
+        "GROUP BY m.branchcode, m.doccode, m.docnumber, m.docdate, "
         "m.docvalue, m.docvalue1, m.docvalue3"
     )
 
@@ -62,7 +62,7 @@ def open_fetch():
     conn = get_sybase_connection()
 
     def fetch(sql: str) -> list[dict]:
-        if not isinstance(sql, str) or not _SELECT_ONLY.match(sql) or ';' in sql:
+        if not isinstance(sql, str) or not _SELECT_ONLY.match(sql) or ';' in sql or _INTO.search(sql):
             raise ValueError('GL readers may only run a single SELECT statement')
         rows, cols = _fetch(conn, sql)
         return [dict(zip(cols, r)) for r in rows]

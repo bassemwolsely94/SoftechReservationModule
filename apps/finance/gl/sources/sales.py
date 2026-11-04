@@ -58,17 +58,21 @@ def read_credit_sales(date_from, date_to, fetch):
             credit = Decimal(str(r['credit'] or 0))
             value = Decimal(str(r['docvalue'] or 0))
             if value == 0:
-                gross, tax = credit, credit
+                gross, tax = credit, Decimal(0)
             else:
                 gross = credit * Decimal(str(r['docvalue1'] or 0)) / value
                 tax = credit * Decimal(str(r['docvalue3'] or 0)) / value
             gross_q = q(gross) * sign
             credit_q = q(credit) * sign
+            pmin, pmax = code(r['pmin']), code(r['pmax'])
+            attrs = {'doccode': doccode, 'docnumber': num}
+            if pmin != pmax:
+                attrs['mixed_personcodes'] = [pmin, pmax]
             yield SourceDoc('credit_sales', f'cs:{branch}:{doccode}:{num}:{d.isoformat()}', d, branch,
-                            'return' if sign < 0 else 'sale', code(r['personcode']),
+                            'return' if sign < 0 else 'sale', pmin if pmin == pmax else '',
                             {'credit': credit_q, 'gross_share': gross_q, 'discount_share': gross_q - credit_q,
                              'tax_share': q(tax) * sign},
-                            {'doccode': doccode, 'docnumber': num})
+                            attrs)
 
 
 READERS['sales_tenders'] = read_sales_tenders

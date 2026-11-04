@@ -61,7 +61,7 @@ class TendersTests(SimpleTestCase):
 class CreditTests(SimpleTestCase):
     def row(self, doccode='115', credit='600'):
         return {'branchcode': '130', 'doccode': doccode, 'docnumber': '1234.0', 'docdate': datetime(2026, 3, 5),
-                'personcode': '7001.0', 'credit': D(credit), 'docvalue': D('1000'), 'docvalue1': D('1100'),
+                'pmin': '7001.0', 'pmax': '7001.0', 'credit': D(credit), 'docvalue': D('1000'), 'docvalue1': D('1100'),
                 'docvalue3': D('50')}
 
     def test_credit_doc_shares_prorated_and_quantised(self):
@@ -83,6 +83,15 @@ class CreditTests(SimpleTestCase):
         (doc,) = READERS['credit_sales'](date(2026, 3, 1), date(2026, 3, 31), fake([r]))
         self.assertEqual(doc.amounts['gross_share'], D('600.00'))
         self.assertEqual(doc.amounts['discount_share'], D('0.00'))
+        self.assertEqual(doc.amounts['tax_share'], D('0.00'))
+
+    def test_mixed_personcodes_one_doc_empty_party(self):
+        r = self.row()
+        r['pmax'] = '7002'
+        docs = list(READERS['credit_sales'](date(2026, 3, 1), date(2026, 3, 31), fake([r])))
+        self.assertEqual(len(docs), 1)
+        self.assertEqual(docs[0].personcode, '')
+        self.assertEqual(docs[0].attrs['mixed_personcodes'], ['7001', '7002'])
 
 
 class SqlTests(SimpleTestCase):
@@ -94,10 +103,14 @@ class SqlTests(SimpleTestCase):
             self.assertIn("'2026-04-01'", sql)
             self.assertNotIn(' TOP ', sql.upper())
 
+    def test_month_chunks_cross_year(self):
+        self.assertEqual(list(sybase_gl.month_chunks(date(2025, 12, 20), date(2026, 1, 5))),
+                         [(date(2025, 12, 20), date(2025, 12, 31)), (date(2026, 1, 1), date(2026, 1, 5))])
+
     def test_open_fetch_refuses_non_select(self):
         with mock.patch.object(sybase_gl, 'get_sybase_connection') as g:
             with sybase_gl.open_fetch() as fetch:
-                for bad in ('DELETE FROM x', 'update x set a=1', 'select 1; drop table x', ''):
+                for bad in ('DELETE FROM x', 'update x set a=1', 'select 1; drop table x', 'SELECT a INTO t FROM x', 'select a into #t from x', ''):
                     with self.assertRaises(ValueError):
                         fetch(bad)
             g.return_value.close.assert_called_once()
