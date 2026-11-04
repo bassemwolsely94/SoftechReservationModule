@@ -236,7 +236,8 @@ def _handle_staff_inbound(msg: dict, wa_id: str, account) -> None:
             handle_free_text(wa_id=wa_id, text=msg.get('text', {}).get('body', ''),
                              context_wamid=context_wamid, account=account)
         else:
-            logger.info('WhatsApp staff number: unsupported %s message from %s ignored', msg_type, wa_id)
+            logger.info('WhatsApp staff number: unsupported %s message from …%s ignored',
+                        msg_type, str(wa_id or '')[-4:])
     except Exception as exc:
         logger.error('WhatsApp staff-number handling failed: %s', exc, exc_info=True)
 

@@ -142,6 +142,7 @@ class MessageListView(generics.ListAPIView):
         return (
             WAMessage.objects
             .filter(conversation_id=self.kwargs['conversation_id'])
+            .exclude(conversation__account__is_staff_alerts=True)   # staff alert threads stay private
             .order_by('created_at')
             .select_related('media', 'template', 'sent_by')
         )
@@ -156,7 +157,7 @@ class SendTextView(APIView):
 
     def post(self, request, conversation_id):
         try:
-            convo = WAConversation.objects.get(pk=conversation_id)
+            convo = WAConversation.objects.exclude(account__is_staff_alerts=True).get(pk=conversation_id)
         except WAConversation.DoesNotExist:
             return Response({'detail': 'المحادثة غير موجودة'}, status=404)
 
@@ -186,7 +187,7 @@ class SendTemplateView(APIView):
 
     def post(self, request, conversation_id):
         try:
-            convo = WAConversation.objects.get(pk=conversation_id)
+            convo = WAConversation.objects.exclude(account__is_staff_alerts=True).get(pk=conversation_id)
         except WAConversation.DoesNotExist:
             return Response({'detail': 'المحادثة غير موجودة'}, status=404)
 

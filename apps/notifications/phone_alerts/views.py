@@ -212,21 +212,54 @@ def branch_mobile_test(request, branch_id):
 
 # ── channel ──────────────────────────────────────────────────────────────────
 
-def _channel_payload():
+REFUSE_DEFAULT = 'هذا رقم واتساب العملاء الأساسي — اختر رقماً مخصصاً للموظفين'
+REFUSE_CUSTOMERS = 'على هذا الرقم محادثات عملاء — اختر رقماً مخصصاً للموظفين'
+
+
+def _has_customer_threads(account):
+    """Any thread on ``account`` with someone we never alerted (= a customer), or omni traffic."""
+    from apps.omni.models import TimelineEvent
+    from apps.whatsapp.models import WAConversation
+    alerted = PhoneAlert.objects.values('phone')
+    return (WAConversation.objects.filter(account=account).exclude(wa_id__in=alerted).exists()
+            or TimelineEvent.objects.filter(account=account).exists())
+
+
+def channel_refusal(account):
+    """Why ``account`` may not become the staff-alerts number ('' = it may).
+
+    Flagging an account routes every inbound message on it to the staff path (no inbox rows),
+    so the customer number, or any number customers already write to, is refused."""
+    if account.is_default:
+        return REFUSE_DEFAULT
+    if _has_customer_threads(account):
+        return REFUSE_CUSTOMERS
+    return ''
+
+
+def _channel_payload(request):
     from apps.omni.models import ChannelAccount
     from .sender import staff_account
     current = staff_account()
-    accounts = [{'id': a.pk, 'name': a.name, 'phone_or_handle': a.phone_or_handle,
-                 'is_active': a.is_active, 'is_staff_alerts': a.is_staff_alerts}
-                for a in ChannelAccount.objects.filter(channel='whatsapp').order_by('name')]
-    return {'channel_account_id': current.pk if current else None, 'accounts': accounts}
+    accounts = []
+    for a in ChannelAccount.objects.filter(channel='whatsapp').order_by('name'):
+        # the current staff number stays selectable (its staff threads are not customer threads)
+        reason = '' if (current and a.pk == current.pk) else channel_refusal(a)
+        accounts.append({'id': a.pk, 'name': a.name, 'phone_or_handle': a.phone_or_handle,
+                         'is_active': a.is_active, 'is_staff_alerts': a.is_staff_alerts,
+                         'eligible': not reason, 'reason': reason})
+    return {'channel_account_id': current.pk if current else None, 'accounts': accounts,
+            'can_change': _is_admin(request)}
 
 
 @api_view(['GET', 'PUT'])
 @permission_classes(PERMS)
 def channel(request):
     if request.method == 'GET':
-        return Response(_channel_payload())
+        return Response(_channel_payload(request))
+    if not _is_admin(request):     # supervisors may look, only an admin changes the number
+        return Response({'detail': 'تغيير حساب واتساب التنبيهات للمدير فقط'},
+                        status=http.HTTP_403_FORBIDDEN)
     from apps.config.models import SystemSetting
     from apps.omni.models import ChannelAccount
     from .sender import ACCOUNT_SETTING, staff_account
@@ -243,6 +276,9 @@ def channel(request):
             if new is None:
                 return Response({'channel_account_id': 'اختر حساب واتساب صحيحاً'},
                                 status=http.HTTP_400_BAD_REQUEST)
+            reason = '' if (old and old.pk == new.pk) else channel_refusal(new)
+            if reason:
+                return Response({'channel_account_id': reason}, status=http.HTTP_400_BAD_REQUEST)
             # Persistent: keeps this number's threads out of the customer inbox. Never auto-cleared.
             if not new.is_staff_alerts:
                 ChannelAccount.objects.filter(pk=new.pk).update(is_staff_alerts=True)
@@ -253,7 +289,7 @@ def channel(request):
         _audit(request, 'phone_alert_channel_changed', new or old,
                {'channel_account_id': old.pk if old else None},
                {'channel_account_id': new.pk if new else None})
-    return Response(_channel_payload())
+    return Response(_channel_payload(request))
 
 
 # ── log ──────────────────────────────────────────────────────────────────────

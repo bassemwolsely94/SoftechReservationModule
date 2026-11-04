@@ -123,7 +123,9 @@ function PolicyRow({ policy, staff }) {
         {msg('mode')}
       </td>
       <td className="px-3 py-2.5">{num('remind_after_min')}</td>
-      <td className="px-3 py-2.5">{num('escalate_after_min')}</td>
+      {/* an escalation never escalates again: its timing field would do nothing */}
+      <td className="px-3 py-2.5">{policy.event === 'escalation'
+        ? <span className="text-xs text-gray-400">لا يُصعَّد</span> : num('escalate_after_min')}</td>
       <td className="px-3 py-2.5">{num('max_reminders')}</td>
       <td className="px-3 py-2.5">
         <select multiple size={3} className={`${INPUT} w-48`} value={(draft.escalate_to || []).map(String)}
@@ -288,6 +290,10 @@ function ChannelCard() {
   const [pick, setPick] = useState(null)
   const [err, setErr] = useState('')
   const current = pick ?? (data?.channel_account_id ?? '')
+  const canChange = !!data?.can_change
+  // the server decides which numbers may carry staff alerts (never the customer number)
+  const choices = (data?.accounts || []).filter(a => a.eligible)
+  const hidden = (data?.accounts || []).length - choices.length
   const save = useMutation({
     mutationFn: () => phoneAlertsApi.saveChannel(current === '' ? null : Number(current)),
     onSuccess: () => {
@@ -300,16 +306,21 @@ function ChannelCard() {
   return (
     <div data-tour="phone-alerts-channel" className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-wrap items-end gap-3">
       <label className="text-xs text-gray-500">حساب واتساب الذي تخرج منه التنبيهات
-        <select className={`${INPUT} block mt-1 min-w-64`} value={current} onChange={e => setPick(e.target.value)}>
+        <select className={`${INPUT} block mt-1 min-w-64`} value={current} disabled={!canChange}
+          onChange={e => setPick(e.target.value)}>
           <option value="">— لم يُحدَّد (وضع تجريبي) —</option>
-          {(data?.accounts || []).map(a => (
+          {choices.map(a => (
             <option key={a.id} value={a.id}>{a.name} · {a.phone_or_handle}{a.is_active ? '' : ' (موقوف)'}</option>
           ))}
         </select>
       </label>
-      <button className={BTN} disabled={pick === null || save.isPending} onClick={() => save.mutate()}>حفظ</button>
-      <p className="text-xs text-gray-400 w-full">
-        رقم مخصص للموظفين فقط — محادثاته لا تظهر في صندوق العملاء.
+      {canChange && (
+        <button className={BTN} disabled={pick === null || save.isPending} onClick={() => save.mutate()}>حفظ</button>
+      )}
+      <p className="text-xs text-amber-700 w-full">
+        رقم مخصص للموظفين فقط — رسائله لا تدخل صندوق العملاء، فلا تختر رقم العملاء
+        {hidden > 0 ? ` (أُخفي ${hidden} رقم عليه محادثات عملاء أو هو رقم العملاء الأساسي).` : '.'}
+        {!canChange && ' التغيير للمدير فقط.'}
       </p>
       {err && <p className="text-sm text-red-600 w-full">{err}</p>}
     </div>

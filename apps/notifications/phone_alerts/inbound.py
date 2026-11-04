@@ -94,6 +94,11 @@ def _reply(account, wa_id, body):
         return
     try:
         from apps.whatsapp.sender import WhatsAppSender
+        from .sender import staff_account
+        # never WhatsAppSender(account=None): that falls back to the customer number
+        account = account or staff_account()
+        if account is None:
+            return
         wa = WhatsAppSender(account=account)
         if wa.is_configured:
             wa.send_text(wa_id=wa_id, body=body)
@@ -218,7 +223,10 @@ def handle_brief_tap(*, wa_id, payload, context_wamid='', account=None) -> str:
         from .sender import staff_account
         # the alert's own Cairo day, so the full text matches the data date of the 09:00 headline
         text = brief.compose(alert.source, timezone.localdate(alert.created_at)).text
-        wa = WhatsAppSender(account=account or staff_account())
+        account = account or staff_account()
+        if account is None:      # never fall back to the customer number
+            raise RuntimeError('no staff WhatsApp account')
+        wa = WhatsAppSender(account=account)
         if not wa.is_configured:
             raise RuntimeError('WhatsApp account has no credentials')
         result = wa.send_text(wa_id=wa_id, body=text[:4000])
