@@ -19,7 +19,8 @@ class CanManageOffers(BasePermission):
         if view is not None and hasattr(view, 'action') and view.action is None:
             return True                       # a method the route lacks: DRF answers 405
         from core.middleware import module_access
-        if 'offers' not in module_access.seeded_modules():   # offers rows not added yet (Z-5c)
+        if ('offers' not in module_access.seeded_modules()      # offers rows not added yet (Z-5c);
+                and p.role not in module_access.enforced_roles()):   # enforced roles: matrix only (R17)
             return request.method in SAFE_METHODS or p.role in WRITE_ROLES
         from core.permissions import matrix_allows
         m = request.method

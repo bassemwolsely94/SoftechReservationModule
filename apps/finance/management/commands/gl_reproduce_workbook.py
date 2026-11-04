@@ -331,13 +331,13 @@ class Command(BaseCommand):
         try:
             tb = save_draft(user=staff, entry_date=end, description=f'ميزان المراجعة {year}',
                             lines=lines, book='general', source_type='reproduce',
-                            source_key=f'reproduce:tb:{year}')
+                            source_key=f'reproduce:tb:{year}', _allow_before_opening=True)
             approve(tb.pk, user=staff, _allow_before_opening=True)
             cs = save_draft(user=staff, entry_date=end, description=f'بضاعة آخر المدة {year}',
                             lines=[{'account_code': '1390', 'debit': closing, 'credit': 0},
                                    {'account_code': '5302', 'debit': 0, 'credit': closing}],
                             book='closing', source_type='reproduce',
-                            source_key=f'reproduce:closing:{year}')
+                            source_key=f'reproduce:closing:{year}', _allow_before_opening=True)
             approve(cs.pk, user=staff, _allow_before_opening=True)
         except LedgerError as e:
             raise CommandError(f'{e} {e.detail}')

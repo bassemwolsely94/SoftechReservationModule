@@ -2157,7 +2157,8 @@ export const glApi = {
     return api.post('/finance/gl/accounts/import/', fd)
   },
   entries:         (params)        => api.get('/finance/gl/entries/', { params }),
-  entriesPage:     (url)           => api.get(url),                       // cursor `next` link
+  // cursor `next` link: absolute (http://host/api/…) → relative to baseURL, so it goes through the proxy
+  entriesPage:     (url)           => api.get(String(url).replace(/^.*?\/api(?=\/)/, '')),
   entry:           (id)            => api.get(`/finance/gl/entries/${id}/`),
   entryCreate:     (body)          => api.post('/finance/gl/entries/', body),
   entryUpdate:     (id, body)      => api.put(`/finance/gl/entries/${id}/`, body),

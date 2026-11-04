@@ -38,7 +38,8 @@ def role_allows(staff, action: str) -> bool:
     if getattr(staff.user, 'is_superuser', False) or staff.role == 'admin':
         return True
     from apps.users.models import RoleModuleAccess
-    if RoleModuleAccess.objects.filter(module=MODULE).exists():
+    from core.middleware.module_access import enforced_roles   # their rows never seed a module (R17)
+    if RoleModuleAccess.objects.filter(module=MODULE).exclude(role__in=enforced_roles()).exists():
         return staff.can_do(MODULE, ACTION_TO_MATRIX[action])
     return staff.role in FALLBACK_ROLES[action]
 

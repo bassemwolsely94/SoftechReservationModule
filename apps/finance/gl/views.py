@@ -2,14 +2,15 @@
 
 Every view: authenticated, RBAC module `ledger`, and all-branch users only (security batch 5,
 decision B-1: ledger data is company-level).  State changes go through gl/ledger.py; this module
-only parses input and shapes output.  LedgerError → 400 {code, detail} (409 for not_draft /
-already_reversed).  Decimals are serialised as strings.  `?format=xlsx` on a report needs
-ledger.export and returns finance's Excel layout (gl/exports.py).
+only parses input and shapes output.  LedgerError → {code, detail, extra}: 409 for the state
+conflicts (CONFLICT_CODES), 400 for the rest.  Decimals are serialised as strings.  `?format=xlsx`
+on a report needs ledger.export (checked before the report is computed) and returns finance's
+Excel layout (gl/exports.py).  Writes need a staff profile (the ledger's created_by / audit user).
 """
 import datetime
 import os
 import tempfile
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
 from django.db.models import Q, Sum
@@ -20,17 +21,21 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 
-from apps.audit.models import AuditLog
 from apps.branches.models import Branch
 from apps.catalog.wildcard import filter_and_rank
 from apps.finance.models import GLAccount, GLAccountGroup, LedgerEntry, LedgerLine
 from core.branch_scope import sees_everything
 from core.permissions import deny_unless, matrix_permission
+from core.upload_safety import capped_rows, max_upload_bytes
 
 from . import balances, exports, ledger, statements
-from .coa_import import import_coa, parse_trial_balance_sheet
+from .coa_import import import_coa, parse_trial_balance_sheet_with_warnings
 
-CONFLICT_CODES = {'not_draft', 'already_reversed'}
+CONFLICT_CODES = {'not_draft', 'not_approved', 'already_reversed', 'is_reversal', 'source_conflict'}
+MAX_BULK = 500
+MAX_NOTES = 4000
+MAX_TEXT = 500           # LedgerEntry / LedgerLine description — refused above, never truncated
+MAX_SHORT = 40           # cheque_no / party_code
 MANUAL_BOOKS = ('general', 'cash', 'credit')
 ACCOUNT_EDITABLE = ('name', 'statement_line', 'is_active', 'requires_branch', 'party_type')
 
@@ -102,6 +107,25 @@ def _profile(request):
     return getattr(request.user, 'staff_profile', None)
 
 
+def _no_profile():
+    return _bad('no_profile', 'المستخدم ليس له ملف موظف.', status.HTTP_403_FORBIDDEN)
+
+
+def _closing_stock(request):
+    """Optional `closing_stock` override: finite, ≥ 0, < 1e16, at most 2 decimals — else
+    LedgerError bad_amount (→ 400)."""
+    raw = (request.query_params.get('closing_stock') or '').strip()
+    if not raw:
+        return None
+    try:
+        d = Decimal(raw)
+    except InvalidOperation:
+        raise ledger.LedgerError('bad_amount')
+    if not d.is_finite() or d < 0 or d >= Decimal('1e16') or d != d.quantize(Decimal('0.01')):
+        raise ledger.LedgerError('bad_amount')
+    return d.quantize(Decimal('0.01'))
+
+
 def _branch_label(b):
     if b is None:
         return ''
@@ -152,11 +176,23 @@ def accounts(request):
 @api_view(['PATCH'])
 @permission_classes(EDIT)
 def account_update(request, code):
-    try:
-        acc = GLAccount.objects.select_related('group').get(code=code)
-    except GLAccount.DoesNotExist:
-        return _bad('not_found', 'الحساب غير موجود', status.HTTP_404_NOT_FOUND)
-    data = request.data
+    profile = _profile(request)
+    if profile is None:
+        return _no_profile()
+    with transaction.atomic():
+        try:
+            acc = GLAccount.objects.select_for_update().select_related('group').get(code=code)
+        except GLAccount.DoesNotExist:
+            return _bad('not_found', 'الحساب غير موجود', status.HTTP_404_NOT_FOUND)
+        resp = _apply_account_patch(acc, request.data, profile)
+        if resp is not None:
+            return resp
+    return Response(_account(acc))
+
+
+def _apply_account_patch(acc, data, profile):
+    """Set the editable fields; a refusal Response, or None once saved + audited (fatal audit:
+    the change rolls back if its audit row cannot be written)."""
     before = _account(acc)
     if 'name' in data:
         name = str(data['name'] or '').strip()
@@ -164,29 +200,42 @@ def account_update(request, code):
             return _bad('bad_name', 'اسم الحساب مطلوب')
         acc.name = name[:200]
     if 'statement_line' in data:
-        acc.statement_line = str(data['statement_line'] or '').strip()[:40]
+        line = str(data['statement_line'] or '').strip()
+        if line and line not in statements.KNOWN_LINES:
+            return _bad('bad_statement_line', 'بند القائمة غير معروف')
+        acc.statement_line = line
     for flag in ('is_active', 'requires_branch'):
         if flag in data:
             setattr(acc, flag, bool(data[flag]) and data[flag] not in ('false', '0'))
+    # system accounts (1390 / 5302) carry the closing stock: never deactivated or re-lined
+    if acc.is_system and (not acc.is_active or acc.statement_line != before['statement_line']):
+        return _bad('system_account', 'حساب نظام: لا يمكن إيقافه أو تغيير بند القائمة')
     if 'party_type' in data:
         if data['party_type'] not in dict(GLAccount.PARTY_CHOICES):
             return _bad('bad_party_type', 'نوع الطرف غير صحيح')
         acc.party_type = data['party_type']
+    after = _account(acc)
+    if after == before:
+        return None
     acc.save()
-    AuditLog.log('gl_account_updated', user=_profile(request), obj=acc,
-                 old_data=before, new_data=_account(acc))
-    return Response(_account(acc))
+    ledger._audit('gl_account_updated', user=profile, obj=acc, old_data=before, new_data=after)
+    return None
 
 
 @api_view(['POST'])
 @permission_classes(EDIT)
 @parser_classes([MultiPartParser, FormParser])
 def accounts_import(request):
+    profile = _profile(request)
+    if profile is None:
+        return _no_profile()
     f = request.FILES.get('file')
     if f is None:
         return _bad('no_file', 'اختر ملف Excel')
-    if not f.name.lower().endswith('.xlsx'):
+    if os.path.splitext(f.name or '')[1].lower() != '.xlsx':
         return _bad('bad_file', 'الملف لازم يكون Excel (.xlsx)')
+    if f.size and f.size > max_upload_bytes():
+        return _bad('bad_file', 'الملف أكبر من المسموح')
     dry_run = str(request.data.get('dry_run', 'true')).lower() in ('1', 'true', 'yes')
     fd, path = tempfile.mkstemp(suffix='.xlsx')
     try:
@@ -194,14 +243,19 @@ def accounts_import(request):
             for chunk in f.chunks():
                 out.write(chunk)
         try:
-            rows = parse_trial_balance_sheet(path, request.data.get('sheet') or None)
-        except Exception:      # unreadable workbook / no header row
+            rows, warnings = parse_trial_balance_sheet_with_warnings(path, request.data.get('sheet') or None)
+            rows = list(capped_rows(rows))
+        except Exception:      # unreadable workbook / missing sheet / no header row / too many rows
             return _bad('bad_file', 'تعذّر قراءة الملف: لم يُعثر على ميزان المراجعة')
-        res = import_coa(rows, user=_profile(request), dry_run=dry_run)
+        res = import_coa(rows, user=profile, dry_run=dry_run)
     finally:
-        os.remove(path)
+        try:
+            os.remove(path)
+        except OSError:
+            pass
     return Response({'dry_run': dry_run, 'rows': len(rows), 'created': res.created,
-                     'updated': res.updated, 'unknown_groups': res.unknown_groups})
+                     'updated': res.updated, 'unknown_groups': res.unknown_groups,
+                     'warnings': warnings})
 
 
 # ── entries ──────────────────────────────────────────────────────────────────
@@ -252,11 +306,21 @@ class EntryCursor(CursorPagination):
     ordering = ('-entry_date', '-id')
 
 
-def _parse_entry(data):
-    """Request body → save_draft kwargs (raises ValueError with an Arabic message)."""
+def _text(value, limit, name):
+    text = str(value or '')
+    if len(text) > limit:
+        raise ValueError(f'{name}: أطول من المسموح ({limit} حرف)')
+    return text
+
+
+def _parse_entry(data, entry=None):
+    """Request body → save_draft kwargs (raises ValueError with an Arabic message).
+
+    A new entry uses a manual book; an existing draft may keep its own book (a SOFTECH-generated
+    draft is corrected before approval — R15) but never moves to another non-manual book."""
     entry_date = _date(data.get('entry_date'), 'تاريخ القيد')
-    book = data.get('book') or 'general'
-    if book not in MANUAL_BOOKS:
+    book = data.get('book') or (entry.book if entry else 'general')
+    if book not in MANUAL_BOOKS and not (entry is not None and book == entry.book):
         raise ValueError('الدفتر غير صحيح للقيد اليدوي')
     branch = None
     branch_id = _int(data.get('branch') if data.get('branch') is not None else data.get('branch_id'))
@@ -275,29 +339,33 @@ def _parse_entry(data):
             'account_code': str(ln.get('account_code') or '').strip(),
             'debit': ln.get('debit'), 'credit': ln.get('credit'),
             'branch_id': ln.get('branch_id') or None,
-            'party_code': str(ln.get('party_code') or ''),
-            'description': str(ln.get('description') or '')[:500],
-            'cheque_no': str(ln.get('cheque_no') or '')[:40],
+            'party_code': _text(ln.get('party_code'), MAX_SHORT, f'كود طرف السطر {i}'),
+            'description': _text(ln.get('description'), MAX_TEXT, f'بيان السطر {i}'),
+            'cheque_no': _text(ln.get('cheque_no'), MAX_SHORT, f'رقم شيك السطر {i}'),
             'due_date': _date(ln.get('due_date'), f'استحقاق السطر {i}', required=False),
         })
     return {'entry_date': entry_date, 'book': book, 'branch': branch,
-            'description': str(data.get('description') or '')[:500], 'lines': out}
+            'description': _text(data.get('description'), MAX_TEXT, 'البيان'), 'lines': out}
 
 
 def _save(request, entry=None):
+    profile = _profile(request)
+    if profile is None:
+        return _no_profile()
     try:
-        kw = _parse_entry(request.data)
+        kw = _parse_entry(request.data, entry)
     except ValueError as e:
         return _bad('bad_input', str(e))
+    # notes ride inside save_draft (same transaction + audit row); absent → unchanged
+    notes = None
+    if 'notes' in request.data:
+        notes = str(request.data.get('notes') or '')
+        if len(notes) > MAX_NOTES:
+            return _bad('bad_input', f'الملاحظات أطول من المسموح ({MAX_NOTES} حرف)')
     try:
-        with transaction.atomic():
-            saved = ledger.save_draft(user=_profile(request), entry=entry,
-                                      source_type=entry.source_type if entry else 'manual',
-                                      source_key=entry.source_key if entry else '', **kw)
-            notes = str(request.data.get('notes') or '')
-            if notes != saved.notes:
-                saved.notes = notes
-                saved.save(update_fields=['notes'])
+        saved = ledger.save_draft(user=profile, entry=entry, notes=notes,
+                                  source_type=entry.source_type if entry else 'manual',
+                                  source_key=entry.source_key if entry else '', **kw)
     except ledger.LedgerError as e:
         return _ledger_error(e)
     return Response(_entry_detail(_entries_qs().get(pk=saved.pk)),
@@ -351,12 +419,15 @@ def entry(request, pk):
         return _ledger_error(ledger.LedgerError('not_draft'))
     if request.method == 'PUT':
         return _save(request, entry=e)
+    profile = _profile(request)
+    if profile is None:
+        return _no_profile()
     with transaction.atomic():
         locked = LedgerEntry.objects.select_for_update().get(pk=pk)
         if locked.status != 'draft':
             return _ledger_error(ledger.LedgerError('not_draft'))
         snapshot = ledger._snapshot(locked)
-        ledger._audit('gl_entry_draft_deleted', user=_profile(request), obj=locked, old_data=snapshot)
+        ledger._audit('gl_entry_draft_deleted', user=profile, obj=locked, old_data=snapshot)
         locked.delete()
     return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -364,8 +435,11 @@ def entry(request, pk):
 @api_view(['POST'])
 @permission_classes(APPROVE)
 def entry_approve(request, pk):
+    profile = _profile(request)
+    if profile is None:
+        return _no_profile()
     try:
-        e = ledger.approve(pk, user=_profile(request))
+        e = ledger.approve(pk, user=profile)
     except LedgerEntry.DoesNotExist:
         return _bad('not_found', 'القيد غير موجود', status.HTTP_404_NOT_FOUND)
     except ledger.LedgerError as err:
@@ -376,16 +450,21 @@ def entry_approve(request, pk):
 @api_view(['POST'])
 @permission_classes(APPROVE)
 def entries_approve(request):
-    ids = request.data.get('ids') or []
+    profile = _profile(request)
+    if profile is None:
+        return _no_profile()
+    ids = request.data.get('ids') if isinstance(request.data, dict) else None
     if not isinstance(ids, list) or not ids:
         return _bad('bad_input', 'اختر قيداً واحداً على الأقل')
-    if len(ids) > 500:
-        return _bad('bad_input', 'الحد الأقصى 500 قيد في المرة')
+    if len(ids) > MAX_BULK:
+        return _bad('bad_input', f'الحد الأقصى {MAX_BULK} قيد في المرة')
     results = []
-    for raw in ids:
-        pk = _int(raw)
+    # each approval is its own transaction (one refusal never blocks the rest); a repeated id is
+    # tried once
+    for raw in dict.fromkeys(_int(i) if _int(i) is not None else str(i) for i in ids):
+        pk = raw if isinstance(raw, int) else None
         try:
-            e = ledger.approve(pk, user=_profile(request))
+            e = ledger.approve(pk, user=profile)
             results.append({'id': pk, 'ok': True, 'number': e.number})
         except LedgerEntry.DoesNotExist:
             results.append({'id': raw, 'ok': False, 'code': 'not_found', 'detail': 'القيد غير موجود'})
@@ -400,15 +479,20 @@ def entries_approve(request):
 @api_view(['POST'])
 @permission_classes(APPROVE)
 def entry_reverse(request, pk):
+    profile = _profile(request)
+    if profile is None:
+        return _no_profile()
     reason = str(request.data.get('reason') or '').strip()
     if not reason:
         return _bad('reason_required', 'سبب العكس مطلوب')
+    if len(reason) > MAX_TEXT:
+        return _bad('bad_input', f'سبب العكس أطول من المسموح ({MAX_TEXT} حرف)')
     try:
         day = _date(request.data.get('entry_date'), 'تاريخ العكس', required=False)
     except ValueError as e:
         return _bad('bad_input', str(e))
     try:
-        mirror = ledger.reverse(pk, user=_profile(request), reason=reason[:500], entry_date=day)
+        mirror = ledger.reverse(pk, user=profile, reason=reason, entry_date=day)
     except LedgerEntry.DoesNotExist:
         return _bad('not_found', 'القيد غير موجود', status.HTTP_404_NOT_FOUND)
     except ledger.LedgerError as err:
@@ -419,7 +503,11 @@ def entry_reverse(request, pk):
 # ── reports ──────────────────────────────────────────────────────────────────
 
 def _range(request):
-    return _date(request.query_params.get('from'), 'من'), _date(request.query_params.get('to'), 'إلى')
+    f = _date(request.query_params.get('from'), 'من')
+    t = _date(request.query_params.get('to'), 'إلى')
+    if f > t:
+        raise ValueError('تاريخ البداية بعد تاريخ النهاية')
+    return f, t
 
 
 def _report(request, build, export=None):
@@ -430,6 +518,8 @@ def _report(request, build, export=None):
             return denied
     try:
         data = build()
+    except ledger.LedgerError as e:      # e.g. closing_stock → bad_amount
+        return _ledger_error(e)
     except ValueError as e:
         return _bad('bad_input', str(e))
     if _wants_xlsx(request):
@@ -448,11 +538,23 @@ def report_trial_balance(request):
     def build():
         f, t = _range(request)
         return {'from': f, 'to': t, 'by': by, 'branch': branch,
-                'rows': balances.trial_balance(f, t, branch_id=branch, by=by)}
+                'rows': _with_balances(balances.trial_balance(f, t, branch_id=branch, by=by))}
     resp = _report(request, build, exports.trial_balance)
     if isinstance(resp, Response) and resp.status_code == 200:
         resp.data = resp.data['rows']      # list + its is_total row
     return resp
+
+
+def _with_balances(rows):
+    """Server-decided figures the screens show: `balance` (closing debit − credit, signed) on
+    every row and `balanced` on the total row — the client never sums or compares amounts."""
+    for r in rows:
+        r['balance'] = r['closing_debit'] - r['closing_credit']
+        if r.get('is_total'):
+            r['balanced'] = (r['closing_debit'] == r['closing_credit']
+                             and r['opening_debit'] == r['opening_credit']
+                             and r['period_debit'] == r['period_credit'])
+    return rows
 
 
 @api_view(['GET'])
@@ -479,7 +581,8 @@ def report_account_statement(request):
 def report_statements(request):
     def build():
         f, t = _range(request)
-        return {'from': f, 'to': t, **statements.trading_and_pl(f, t)}
+        return {'from': f, 'to': t,
+                **statements.trading_and_pl(f, t, closing_stock=_closing_stock(request))}
     return _report(request, build, exports.trading)
 
 
@@ -488,7 +591,8 @@ def report_statements(request):
 def report_position(request):
     def build():
         as_of = _date(request.query_params.get('as_of'), 'التاريخ')
-        return {'as_of': as_of, **statements.financial_position(as_of)}
+        return {'as_of': as_of,
+                **statements.financial_position(as_of, closing_stock=_closing_stock(request))}
     return _report(request, build, exports.position)
 
 

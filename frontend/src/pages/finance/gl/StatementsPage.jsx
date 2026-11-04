@@ -8,6 +8,8 @@
  *   comparison  years × lines, value and % of sales («الختامية المجمعة»)
  *
  * Every figure comes from the server; this page lays them out. Print hides the filters.
+ * Trading / position take an optional closing-stock value (`closing_stock`) that replaces the
+ * 5302 entries for that report only — the server validates it and posts nothing.
  */
 import { Fragment, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -44,7 +46,8 @@ function pick(d, ...keys) {
   return undefined
 }
 
-const amt = (v, neg = false) => (v === undefined || v === null ? '' : neg && Number(v) !== 0 ? `(${money(Math.abs(v))})` : money(v))
+// «يخصم» lines: a positive deduction shows in parentheses; a negative one keeps its sign
+const amt = (v, neg = false) => (v === undefined || v === null ? '' : neg && Number(v) > 0 ? `(${money(v)})` : money(v))
 
 // ── trading + P&L lines: [label, key(s), column, kind] — column 0 = detail, 1 = total ──
 const TRADING = [
@@ -248,9 +251,16 @@ function Comparison({ data }) {
   )
 }
 
-/** Server warnings (missing opening / closing stock, …) — shown above the statement, never hidden. */
-function Warnings({ data }) {
-  const list = data?.warnings || []
+/** Server warnings (missing opening / closing stock, …) — shown above the statement, never hidden.
+ *  trading / position: data.warnings; branches: the total column's; comparison: each year's. */
+function warningsOf(tab, data) {
+  if (!data) return []
+  if (tab === 'branches') return (data.columns || []).find(c => c.is_total)?.warnings || []
+  if (tab === 'comparison') return listOf(data).flatMap(y => (y.values?.warnings || []).map(w => `${y.year}: ${w}`))
+  return data.warnings || []
+}
+
+function Warnings({ list }) {
   if (!list.length) return null
   return (
     <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-sm px-3 py-2 space-y-1">
@@ -270,11 +280,14 @@ export default function StatementsPage() {
   const [period, setPeriod] = useState(() => ({ kind: 'year', ...rangeOf('year') }))
   const [asOf, setAsOf] = useState(todayIso())
   const [years, setYears] = useState(`${thisYear - 1},${thisYear}`)
+  const [stockDraft, setStockDraft] = useState('')
+  const [stock, setStock] = useState('')          // applied on Enter / leaving the field
   const [err, setErr] = useState('')
+  const stockParam = stock.trim() ? { closing_stock: stock.trim() } : {}
 
   const call = {
-    trading:    { params: { from: period.from, to: period.to }, get: glApi.statements, xlsx: glApi.statementsXlsx },
-    position:   { params: { as_of: asOf }, get: glApi.position, xlsx: glApi.positionXlsx },
+    trading:    { params: { from: period.from, to: period.to, ...stockParam }, get: glApi.statements, xlsx: glApi.statementsXlsx },
+    position:   { params: { as_of: asOf, ...stockParam }, get: glApi.position, xlsx: glApi.positionXlsx },
     branches:   { params: { from: period.from, to: period.to }, get: glApi.branchPl, xlsx: glApi.branchPlXlsx },
     comparison: { params: { years: years.replace(/\s/g, '') }, get: glApi.comparison, xlsx: glApi.comparisonXlsx },
   }[tab]
@@ -312,6 +325,20 @@ export default function StatementsPage() {
             <input className={`${inputCls} w-40`} dir="ltr" value={years} onChange={e => setYears(e.target.value)} placeholder="2025,2026" />
           </>
         )}
+        {(tab === 'trading' || tab === 'position') && (
+          <div className="flex items-center gap-1" data-tour="finance-gl-closing-stock">
+            <label className="text-xs text-gray-500" htmlFor="gl-closing-stock">مخزون آخر المدة (اختياري)</label>
+            <input id="gl-closing-stock" className={`${inputCls} w-36`} dir="ltr" inputMode="decimal"
+                   placeholder="من القيود" value={stockDraft}
+                   onChange={e => setStockDraft(e.target.value)}
+                   onBlur={() => setStock(stockDraft)}
+                   onKeyDown={e => { if (e.key === 'Enter') setStock(stockDraft) }} />
+            {stock && (
+              <button type="button" className="text-xs text-gray-500 hover:text-gray-800"
+                      onClick={() => { setStock(''); setStockDraft('') }} title="الرجوع لقيود 5302">✕</button>
+            )}
+          </div>
+        )}
         <div className="ms-auto flex gap-2">
           <button type="button" className={btnPlain} onClick={() => window.print()}>🖨️ طباعة</button>
           {perms.export && <button type="button" className={btnPlain} onClick={exportXlsx}>📥 Excel</button>}
@@ -320,7 +347,10 @@ export default function StatementsPage() {
       <ErrorBox>{err || (q.isError ? errOf(q.error, 'تعذّر تحميل القائمة') : '')}</ErrorBox>
 
       <h2 className="text-base font-bold text-gray-800">{title}</h2>
-      {(tab === 'trading' || tab === 'position') && <Warnings data={q.data} />}
+      {(tab === 'trading' || tab === 'position') && stock && q.data?.stock_basis === 'supplied' && (
+        <div className="text-xs text-gray-500">مخزون آخر المدة من القيمة المُدخلة ({money(stock)}) بدل قيود 5302 — للعرض فقط، مبيتسجلش قيد.</div>
+      )}
+      <Warnings list={warningsOf(tab, q.data)} />
       {q.isLoading ? <SkeletonTable rows={10} cols={3} /> : q.isError ? null : (
         tab === 'trading' ? <Trading data={q.data} />
           : tab === 'position' ? <Position data={q.data} />

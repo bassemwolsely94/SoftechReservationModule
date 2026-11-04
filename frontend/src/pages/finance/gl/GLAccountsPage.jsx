@@ -30,6 +30,15 @@ function getValue(row, key) {
   return row[key]
 }
 
+/** Trial-balance rows → {code: signed balance string} (server `balance`; totals row skipped). */
+function balanceIndex(data) {
+  const rows = Array.isArray(data) ? data : (data?.rows || [])
+  return Object.fromEntries(rows.filter(r => r.code && !r.is_total).map(r => [String(r.code), r.balance]))
+}
+
+/** "-12.50" → "12.50": the side (Dr / Cr) is shown next to the figure. */
+const unsigned = (v) => String(v ?? '0').replace(/^-/, '')
+
 function useDebounced(v, ms = 300) {
   const [d, setD] = useState(v)
   useEffect(() => { const t = setTimeout(() => setD(v), ms); return () => clearTimeout(t) }, [v, ms])
@@ -52,6 +61,7 @@ function ImportBox({ onDone }) {
     onError: (e) => setErr(errOf(e, 'تعذّر قراءة الملف')),
   })
   const unknown = preview?.unknown_groups || []
+  const warnings = preview?.warnings || []
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-3 space-y-2" data-tour="finance-gl-accounts-import">
       <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -70,6 +80,11 @@ function ImportBox({ onDone }) {
           جديد: <b>{preview.created ?? 0}</b> · تحديث: <b>{preview.updated ?? 0}</b>
           {unknown.length > 0 && (
             <span className="text-amber-700"> · مجموعات غير معروفة لن تُستورد: {unknown.join('، ')}</span>
+          )}
+          {warnings.length > 0 && (
+            <ul className="mt-1 text-xs text-amber-700 list-disc ps-5 space-y-0.5">
+              {warnings.map((w, i) => <li key={i}>{w}</li>)}
+            </ul>
           )}
         </div>
       )}
@@ -140,7 +155,7 @@ function AccountRow({ a, canEdit, editing, onEdit, onCancel, onStatement }) {
       <td className={`${cell} text-left font-mono tabular-nums ${bal < 0 ? 'text-red-600' : ''}`} dir="ltr">
         {bal === undefined ? '—' : (
           <button type="button" className="hover:underline" onClick={() => onStatement(a.code)} title="كشف حساب">
-            {money(Math.abs(bal))} {bal === 0 ? '' : bal > 0 ? 'Dr' : 'Cr'}
+            {money(unsigned(a._balanceText))} {bal === 0 ? '' : bal > 0 ? 'Dr' : 'Cr'}
           </button>
         )}
       </td>
@@ -181,14 +196,19 @@ export default function GLAccountsPage() {
     queryFn: () => glApi.trialBalance({ from: OPENING_DATE, to: today, by: 'account' }).then(r => r.data),
     staleTime: 60 * 1000,
   })
-  const balanceByCode = useMemo(() => {
-    const rows = Array.isArray(tbQ.data) ? tbQ.data : (tbQ.data?.rows || [])
-    return Object.fromEntries(rows.filter(r => r.code).map(r =>
-      [String(r.code), Number(r.closing_debit || 0) - Number(r.closing_credit || 0)]))
-  }, [tbQ.data])
+  // group totals: the trial balance by group (the server sums; the page never adds amounts)
+  const tbGroupQ = useQuery({
+    queryKey: ['gl', 'tb-group-balances', today],
+    queryFn: () => glApi.trialBalance({ from: OPENING_DATE, to: today, by: 'group' }).then(r => r.data),
+    staleTime: 60 * 1000,
+  })
+  const balanceByCode = useMemo(() => balanceIndex(tbQ.data), [tbQ.data])
+  const balanceByGroup = useMemo(() => balanceIndex(tbGroupQ.data), [tbGroupQ.data])
 
   const rows = useMemo(() => (accountsQ.data || []).map(a => ({
-    ...a, _balance: tbQ.data ? (balanceByCode[String(a.code)] ?? 0) : undefined,
+    ...a,
+    _balance: tbQ.data ? Number(balanceByCode[String(a.code)] ?? 0) : undefined,   // sorting / sign only
+    _balanceText: balanceByCode[String(a.code)] ?? '0.00',                       // server figure, shown as is
   })), [accountsQ.data, balanceByCode, tbQ.data])
   const { sorted, headerProps } = useSortableRows(rows, {
     getValue, persistKey: 'gl-accounts', defaultSort: { key: 'code', dir: 'asc', type: 'text' },
@@ -217,7 +237,6 @@ export default function GLAccountsPage() {
     <AccountRow key={a.code} a={a} canEdit={!!perms.edit} editing={editing === a.code}
                 onEdit={() => setEditing(a.code)} onCancel={() => setEditing(null)} onStatement={toStatement} />
   )
-  const groupBalance = (accs) => accs.reduce((s, a) => s + (a._balance || 0), 0)
 
   return (
     <div className="space-y-4" dir="rtl" data-tour="finance-coa-view">
@@ -275,7 +294,8 @@ export default function GLAccountsPage() {
               {view === 'flat' ? sorted.map(rowFor) : tree.map(({ group: g, accounts }) => {
                 const key = String(g.id ?? g.name)
                 const closed = !!collapsed[key]
-                const gb = groupBalance(accounts)
+                const gbText = balanceByGroup[String(g.id)] ?? '0.00'
+                const gb = Number(gbText)
                 return (
                   <Fragment key={key}>
                     <tr className="bg-gray-50 border-t border-gray-200 cursor-pointer select-none"
@@ -288,7 +308,7 @@ export default function GLAccountsPage() {
                         </span>
                       </td>
                       <td className="px-3 py-2 text-left font-mono tabular-nums font-bold" dir="ltr">
-                        {tbQ.data ? `${money(Math.abs(gb))} ${gb === 0 ? '' : gb > 0 ? 'Dr' : 'Cr'}` : ''}
+                        {tbGroupQ.data ? `${money(unsigned(gbText))} ${gb === 0 ? '' : gb > 0 ? 'Dr' : 'Cr'}` : ''}
                       </td>
                       <td />
                     </tr>

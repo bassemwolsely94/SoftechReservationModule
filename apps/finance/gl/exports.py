@@ -18,6 +18,7 @@ from .statements import EXPENSE_LINES, LABELS
 MONEY = '#,##0.00'
 PCT = '0.00%'
 HEAD_FILL = PatternFill('solid', fgColor='022871')
+WARN_FONT = Font(bold=True, color='B45309')
 
 TRADING_ROWS = ['net_sales', 'opening_stock', 'net_purchases', 'closing_stock', 'cost_of_sales',
                 'gross_profit', 'other_revenue', 'capital_gains', *EXPENSE_LINES, 'total_expenses',
@@ -46,7 +47,9 @@ def _num(v):
     return float(v) if isinstance(v, (Decimal, int, float, str)) else v
 
 
-def _book(title, subtitle, headers, widths):
+def _book(title, subtitle, headers, widths, warnings=()):
+    """Title, subtitle, then each server warning («⚠ …», under the title so nobody misses it),
+    a blank row and the header row."""
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = title[:31]
@@ -54,15 +57,19 @@ def _book(title, subtitle, headers, widths):
     ws.append([title])
     ws['A1'].font = Font(bold=True, size=13)
     ws.append([subtitle])
+    for w in warnings or ():
+        ws.append([f'⚠ {w}'])
+        ws.cell(row=ws.max_row, column=1).font = WARN_FONT
     ws.append([])
     ws.append(headers)
+    head = ws.max_row
     for i, w in enumerate(widths, start=1):
-        cell = ws.cell(row=4, column=i)
+        cell = ws.cell(row=head, column=i)
         cell.font = Font(bold=True, color='FFFFFF')
         cell.fill = HEAD_FILL
         cell.alignment = Alignment(horizontal='center')
         ws.column_dimensions[cell.column_letter].width = w
-    ws.freeze_panes = 'A5'
+    ws.freeze_panes = f'A{head + 1}'
     return wb, ws
 
 
@@ -120,7 +127,8 @@ def account_statement(d):
 
 
 def trading(d):
-    wb, ws = _book('الختامية', f'من {d["from"]} إلى {d["to"]}', ['البند', 'القيمة'], [36, 18])
+    wb, ws = _book('الختامية', f'من {d["from"]} إلى {d["to"]}', ['البند', 'القيمة'], [36, 18],
+                   warnings=d.get('warnings'))
     for k in TRADING_ROWS:
         if k == 'unclassified' and not d.get(k):
             continue
@@ -134,13 +142,12 @@ def trading(d):
         ws.cell(row=ws.max_row, column=2).number_format = PCT
     ws.append(['متوسط المبيعات الشهرى', _num(d.get('monthly_avg_sales'))])
     ws.cell(row=ws.max_row, column=2).number_format = MONEY
-    for w in d.get('warnings') or []:
-        ws.append([w])
     return _response(wb, f'trading_pl_{d["from"]}_{d["to"]}.xlsx')
 
 
 def position(d):
-    wb, ws = _book('المركز المالى', f'فى {d["as_of"]}', ['البند', 'القيمة'], [36, 18])
+    wb, ws = _book('المركز المالى', f'فى {d["as_of"]}', ['البند', 'القيمة'], [36, 18],
+                   warnings=d.get('warnings'))
     for k, label in POSITION_ROWS:
         if k in ('unclassified', 'check') and not d.get(k):
             continue
@@ -148,8 +155,6 @@ def position(d):
         if k.startswith('total_') or k == 'working_capital':
             _bold_row(ws, ws.max_row)
     _fmt(ws, 2, 2)
-    for w in d.get('warnings') or []:
-        ws.append([w])
     return _response(wb, f'financial_position_{d["as_of"]}.xlsx')
 
 
