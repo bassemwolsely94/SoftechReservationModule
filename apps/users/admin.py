@@ -49,7 +49,7 @@ class UserBranchAccessAdmin(admin.ModelAdmin):
 
     list_display  = ['staff', 'branch', 'granted_by', 'granted_at']
     list_filter   = ['branch']
-    search_fields = ['staff__user__username', 'branch__name']
+    search_fields = ['staff__user__username', 'staff__softech_username', 'branch__name']
     raw_id_fields = ['staff', 'branch', 'granted_by']
     readonly_fields = ['granted_at']
 

@@ -37,7 +37,8 @@ class ApprovalDecisionInline(admin.TabularInline):
 class ApprovalRequestAdmin(admin.ModelAdmin):
     list_display   = ['title', 'workflow', 'status', 'requested_by', 'requested_at', 'is_overdue']
     list_filter    = ['status', 'workflow', 'is_overdue']
-    search_fields  = ['title', 'requested_by__user__first_name', 'requested_by__user__last_name']
+    search_fields  = ['title', 'requested_by__user__first_name', 'requested_by__user__last_name',
+                      'requested_by__softech_username']
     readonly_fields = ['content_type', 'object_id', 'context_data', 'requested_at', 'completed_at']
     inlines        = [ApprovalDecisionInline]
 
