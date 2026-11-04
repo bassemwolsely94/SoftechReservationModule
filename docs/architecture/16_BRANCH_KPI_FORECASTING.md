@@ -45,6 +45,13 @@
   (button shows it) and resets the factor `seasonality_index` to 1 — that field is now a manual
   multiplier («تعديل يدوي»); old scenarios keep their stored ×S values. 55-month backtest still
   favours none for money metrics.
+- **5-year history loaded (2026-11-04):** backfill 2021-11 → 2024-07 complete (33 months; 2024-03
+  retried after a Sybase read error) → references span 2021-11 → 2026-10 (60 months). Backtest
+  #11 (36-month window): Model B wins all 5 metrics (WAPE cash 6.69, credit 13.52, profit 5.38,
+  customers 12.14, beauty 9.9). Seasonality still loses for money metrics at chain and branch
+  level (branch h1: cash 9.7 none / 10.6 chain / 11.1 branch; credit 15.3 / 19.7 / 22.7; profit
+  9.5 / 10.2 / 12.0); customers ≈ tie → default stays «بدون موسمية». Re-check via «الدقة حسب المدى»
+  on each backtest.
 - **Phase 6 (salesperson & category scopes):** `KpiResolver.resolve` gained `category_id`
   (line-based, a category's own sales) alongside `softech_user` (salesperson, header-based);
   `SalesTarget.actual_value()` routes all three scopes. `ForecastScenario.scope_type`
