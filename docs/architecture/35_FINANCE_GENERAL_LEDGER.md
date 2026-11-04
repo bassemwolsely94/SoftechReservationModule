@@ -147,7 +147,7 @@ SOFTECH SELECT ──reader──▶ SourceDoc ──upsert──▶ GLSourceDoc
 |---|---|---|---|
 | `sales_tenders` | `branchesales` `branchcode, doccode (115 sale / 30 return), docdate, paymenttype, paymentvalue`; tenders used: 30 نقدي, 40 بطاقة, 60 خصم فكة (10 أجل → `credit_sales`) | cash = Σ115 − Σ30 per branch: 130 3.883M / 140 5.274M / 150 6.670M / 160 8.304M / 170 4.609M vs 6002 3.910 / 5.276 / 6.667 / 8.304 / 4.531 ✓; card 4.09M vs 6006 3.02M ✗ | Dr 1302 (branch) / Cr 6002 (branch); card Dr clearing map / Cr 6006 |
 | `credit_sales` | `branchesales` paymenttype 10 (+`personcode`) joined to `stktransm` (`docvalue` net, `docvalue1` gross before customer discount, `docvalue3` tax) on `branchcode, doccode, docnumber, docdate` | net credit 24.16M vs 6003 − 6021 24.31M ✓; finance books every credit sale on HQ | Dr 1341 party / Cr 6003, both on HQ; discount pair Dr 6021 / Cr 6003 |
-| HQ store sales (rule, not a reader) | tenders / credit docs with `branchcode='100'` | 589K vs 6011 438K ≈ | `sales_tenders` at 100 → Cr 6011 |
+| HQ store sales (rule, not a reader) | tenders / credit docs with `branchcode='100'` | 589K vs 6011 438K ≈ | `sales_tenders` at 100 → Cr 6011; HQ change discount (tender 60) `sales.hq_change_discount` (priority 110 over `sales.change_discount`) Dr 6022 / Cr 6011 on HQ |
 | `purchases` | `finance.APInvoice` mirror, doccode 10/120 (`branchcode, docnumber, docdate, docnumber2, doc_value, due_date, party.softech_personcode`) | all 10: 49.82M vs 5100+5104 49.49M ✓; HQ 10: 36.42M vs 5104 HQ 35.99M ✓; 120: 1.39M vs 5101+5105 3.80M ✗ | HQ: Dr 5104 / Cr 2341 party; HQ 120: Dr 2341 / Cr 5105; branch invoices: **skip** (booked at payment) |
 | FOC | free lines are zero-value in purchases | no GL effect under periodic stock (spec §11a) | none — no reader |
 | `supplier_payments` | `cheques` `ptcode=20`: `cheqsno, branchcode, financialdoccode (10 نقدي / 20 شيك بنكي / 90 قيد تسوية), cheqtype (10 receipt / 20 payment), cheqno, cheqdate (= due date), cheqregisterdate (= issue), bankcode, personcode, cheqvalue, chequenote` | cash from boxes 40/50/60/70/80/10: 1.49 / 1.84 / 2.36 / 4.68 / 1.68 / 1.46M vs 5100 per branch 1.53 / 1.76 / 2.33 / 4.74 / 1.64 / 1.46M ✓ | cash: Dr 5100 (box's branch) / Cr box map; cheque: Dr 2341 party / Cr 2343 (cheque no, due date) dated `cheqregisterdate` |
@@ -225,7 +225,22 @@ with the A/P mirror (live check, 2026: diff 0 for all months, expenses 6802 docs
   - **accountant edits are never overwritten (P21)**: before replacing, deleting or reversing a live entry
     the engine looks for an `AuditLog` `gl_entry_draft_saved` on it by anyone but `gl-drafting`; if found the
     entry is left alone and the group gets a `ledger_error` exception with `detail.code='edited_by_user'`,
-    `entry_id`, `group_key` (resolves with the group);
+    `entry_id`, `group_key`, `entry_status` and `proposed_lines` (the fresh rule lines) (resolves with the group);
+  - **the accountant decides (P23)** on such an exception, from the inbox (`ledger.approve`, all-branch):
+    «اعتماد نسخة سوفتيك» (`POST exceptions/{id}/accept-softech/`) writes `AuditLog`
+    `gl_entry_edit_released` on the entry, resolves the group's `edited_by_user` rows, puts the held docs
+    back to `new` and starts a redraft over the group's dates / source types (202 `{run_id}`; release and
+    run start commit together, so a busy engine 409 changes nothing). P21 now counts only
+    `gl_entry_draft_saved` rows **newer** (higher AuditLog id) than the latest release, so the draft is
+    replaced, an approved entry in an open month is reversed + redrafted, a closed month raises
+    `closed_period_change` as usual — and an edit saved after the release is protected again.
+    «إبقاء تعديلي» (`POST exceptions/{id}/keep-edit/`) writes `gl_entry_edit_kept`, resolves the rows and
+    relinks the held docs to the live entry as `drafted` (group_key unchanged): nothing happens until
+    SOFTECH changes the group again, which asks again. Keep is refused (409) when a doc moved to another
+    group (date / rule change — keeping would count it twice) or the entry is no longer live; a vanished
+    doc is unlinked on keep so it never re-raises. Both 404 unknown / 409 not open or not `edited_by_user`;
+    the audit row carries the exception id, group, source keys and the note. A recurring wrong account
+    belongs in the rule / map, not in per-draft edits;
   - an entry deleted/reversed by hand is re-drafted as a new **draft** on the next run covering its date
     (**P9**) — never approved automatically; use «تجاهل» to silence a doc permanently.
 - **Vanish guard** (**P10**): per source type per run, if the docs about to be marked vanished exceed 20 %
@@ -249,7 +264,7 @@ with the A/P mirror (live check, 2026: diff 0 for all months, expenses 6802 docs
 | `unbalanced_rule` | the rule's lines don't balance for the doc | fix the rule lines |
 | `closed_period_change` | doc changed after its month stopped accepting postings | read-only; corrected in an open month (Plan 3 posts it) |
 | `duplicate_source_key` | the same key appeared twice in one read | check the source |
-| `ledger_error` | `save_draft` refused (inactive account, before opening…), or `edited_by_user` (P21) | read the message, fix, redraft; for `edited_by_user` review the entry by hand |
+| `ledger_error` | `save_draft` refused (inactive account, before opening…), or `edited_by_user` (P21) | read the message, fix, redraft; for `edited_by_user` compare «القيد بعد تعديلك» / «نسخة سوفتيك الجديدة» and choose «اعتماد نسخة سوفتيك» or «إبقاء تعديلي» (P23) |
 
 An exception resolves itself on redraft; «تجاهل» needs a reason and keeps the doc status `exception`.
 
@@ -281,10 +296,11 @@ domain `gl_drafting` («ترحيل القيود من سوفتيك», cadence 144
 | `GET exceptions/` · `exceptions/counts/` · `exceptions/unmapped-values/` | view | server-side filters (`kind`, `status`, `source`, dates, branch); counts for the badge and chips |
 | `POST exceptions/redraft/` · `exceptions/{id}/ignore/` | create | redraft selected exceptions' dates; ignore with a reason |
 | `POST drafting/run/` · `GET drafting/runs/` · `drafting/runs/{id}/` | create · view | async run (409 while another is active) with progress |
+| `POST exceptions/{id}/accept-softech/` · `exceptions/{id}/keep-edit/` | approve | P23 decision on an `edited_by_user` exception; accept = 202 `{run_id}`, keep = 200; audited on the entry |
 
 RBAC (`core/middleware/module_access.py`, tested in `test_rbac_accountant`): rules / maps / party import and
 propose = `ledger.edit`; party confirm / reject / create = `ledger.approve`; rule preview = view;
-exceptions and drafting = `ledger.create`. The accountant role has no `ledger.edit` by design (spec §10).
+exceptions and drafting = `ledger.create`; the P23 accept / keep decisions = `ledger.approve`. The accountant role has no `ledger.edit` by design (spec §10).
 
 ## Screens added
 
