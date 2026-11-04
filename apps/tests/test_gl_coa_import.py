@@ -174,6 +174,27 @@ class CoaImportMappingTests(TestCase):
         import_coa([_row('المبيعات', '6001')], user=self.staff)
         log = AuditLog.objects.get(action='gl_coa_imported')
         self.assertEqual(log.extra['created'], 3)
+        self.assertIsNone(log.old_data['6001'])
+        self.assertEqual(log.new_data['6001']['statement_line'], 'net_sales')
+
+    def test_reimport_audits_per_account_diff_and_counts_real_changes(self):
+        import_coa([_row('المبيعات', '6001', 'مبيعات'), _row('المبيعات', '6002', 'مرتجع')],
+                   user=self.staff)
+        AuditLog.objects.filter(action='gl_coa_imported').delete()
+        res = import_coa([_row('المبيعات', '6001', 'مبيعات نقدية'), _row('المبيعات', '6002', 'مرتجع')],
+                         user=self.staff)
+        self.assertEqual((res.created, res.updated), (0, 1))     # 6002 unchanged → not counted
+        log = AuditLog.objects.get(action='gl_coa_imported')
+        self.assertEqual(log.old_data, {'6001': {'name': 'مبيعات'}})
+        self.assertEqual(log.new_data, {'6001': {'name': 'مبيعات نقدية'}})
+        self.assertEqual(log.extra['updated'], 1)
+
+    def test_import_rolls_back_when_audit_fails(self):
+        from unittest import mock
+        with mock.patch('apps.audit.models.AuditLog.save', side_effect=RuntimeError('audit down')):
+            with self.assertRaises(RuntimeError):
+                import_coa([_row('المبيعات', '6001')], user=self.staff)
+        self.assertFalse(GLAccount.objects.filter(code='6001').exists())
 
     def test_reimport_keeps_existing_system_account(self):
         import_coa([], user=self.staff)

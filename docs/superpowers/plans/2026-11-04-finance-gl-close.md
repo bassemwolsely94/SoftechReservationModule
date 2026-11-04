@@ -15,7 +15,7 @@
 ## Global Constraints
 
 - **Never write to SOFTECH.** SOFTECH reads only in `apps/finance/gl/softech_stock.py` and `apps/finance/gl/softech_checks.py`, SELECT-only, through `config.sybase.get_sybase_connection()` (the gate and read-only check apply); Sybase quirks: `SET ROWCOUNT n` not `TOP`, no `getColumnTypeName`. No other `gl/` module imports `config.sybase` (Plan 1's rule stays for them).
-- Plan 1's constraints all hold: `Decimal(18,2)`; >2 decimals rejected; `ROUND_HALF_UP` only where rounding is unavoidable; approved entries immutable; one live entry per source key; all-branch users only (`sees_everything`); every state change via `AuditLog.log(...)` with before/after; nothing before 2026-01-01.
+- Plan 1's constraints all hold: `Decimal(18,2)`; >2 decimals rejected; `ROUND_HALF_UP` only where rounding is unavoidable; approved entries immutable; one live entry per source key; all-branch users only (`sees_everything`); every state change audited with before/after through Plan 1's fatal `ledger._audit(...)` (as built: a failed audit write rolls the posting back — not `AuditLog.log`, which swallows errors); nothing before 2026-01-01.
 - Every entry this plan creates is made with Plan 1's `save_draft` then `approve` / `reverse` (`gl/ledger.py`). No direct `LedgerEntry.objects.create` / `.update(status=...)` outside `gl/ledger.py`.
 - Close, reopen and year-end need `ledger.finalize` (manager grant, Plan 1 Task 1). Explaining differences needs `ledger.approve`. Editing comparison checks and the closing-stock store map needs `ledger.edit`. Importing manual entries needs `ledger.create`; imported entries arrive as **drafts**.
 - Months close in order: a month can close only if the previous month is closed (except January 2026, the first ledger month). Reopening is allowed up to 3 closed months back (owner, 2026-11-04; SystemSetting `gl_reopen_window_months`, default 3) and cascades: reopening month M also reopens every closed month after M, which are then closed again in order.
@@ -27,7 +27,7 @@
 
 ## Plan 2 contract (what this plan assumes Plan 2 provides)
 
-Confirmed by Plan 2 (`docs/superpowers/plans/2026-11-04-finance-gl-drafting.md`, commit f909702d); re-check against Plan 2 as merged before Task 1 and adjust only `gl/plan2_adapter.py` if anything moved.
+Confirmed by Plan 2 (`docs/superpowers/plans/2026-11-04-finance-gl-drafting.md`, commit f909702d; re-checked against the copy on main fb19d444 on 2026-11-04 — same shape; `SourceException` reaches its document through `source_doc` FK → `GLSourceDoc.source_key`; `GLParty` party_type `supplier` covers both 2341 and 2351); re-check against Plan 2 as merged before Task 1 and adjust only `gl/plan2_adapter.py` if anything moved.
 
 | Name | Used for | Shape (per Plan 2) |
 |---|---|---|
@@ -108,14 +108,14 @@ Plan 2 adds no `GLAccount.feed`; Task 1 adds it. Plan 2's source verification (s
 **Interfaces:**
 - Consumes: Plan 1 `save_draft`, `approve`, `reverse`, `LedgerError`, `OPENING_DATE`; Task 1 `LedgerEntry.corrects`, adapter.
 - Produces:
-  - `month_period(d: date) -> FinancialPeriod` (get or create the month period, `status='open'`), `previous_month(p) -> FinancialPeriod | None`, `next_month(p) -> FinancialPeriod`.
+  - `month_period(d: date) -> FinancialPeriod` — Plan 1's `ledger._period_for(d)` made public (keep `_period_for` as an alias; do not add a second get-or-create), `previous_month(p) -> FinancialPeriod | None`, `next_month(p) -> FinancialPeriod`.
   - `accepts_postings(d: date) -> bool` — `month_period(d).status == 'open'`. Plan 2's drafting job calls this.
   - `first_open_period_after(d: date) -> FinancialPeriod` — earliest month period with `status='open'` and `period_start > d`, creating the next month if none.
   - `ledger.approve(..., _close_service: bool = False)` — when True, a period in status `closing` is accepted (only `gl/close.py` passes it). Otherwise unchanged; approving into `closing` raises `LedgerError('period_closing')` (new code, Arabic message «الفترة قيد الإقفال»), mapped to 409 in Task 10.
   - `ledger.reverse(...)` — when the original's period is not open: if `entry_date` is None, the reversal is dated `first_open_period_after(original.entry_date).period_start` and gets `corrects=original`; an explicit `entry_date` in a non-open period still raises `closed_period`.
   - `effective_lines(original: LedgerEntry) -> dict[tuple[account_code, branch_id, party_code], Decimal]` — signed net (debit − credit) of the original plus every approved entry with `corrects=original`.
   - `post_late_correction(original_id: int, new_lines: list[dict], *, user, reason: str, exception_id: int | None = None) -> LedgerEntry` — draft dated `first_open_period_after(original.entry_date).period_start`, `book=original.book`, `source_type=original.source_type`, `source_key=f'{original.source_key}#corr:{YYYY-MM of correction date}:{n}'` (n = count of existing corrections + 1), `corrects=original`, description «تصحيح قيد <number> — <reason>». Lines = `new_lines` aggregated by (account, branch, party) minus `effective_lines(original)`; zero nets dropped; positive net → debit, negative → credit. All nets zero → `LedgerError('nothing_to_correct')`. Refuses if the original's period is open (`LedgerError('period_open')` — use normal re-drafting there). With `exception_id`, calls `mark_exception_resolved` after the draft is saved. Audited `gl_late_correction_drafted`.
-  - `post_late_document(exception_id: int, *, user) -> LedgerEntry` — for a `closed_period_change` exception with **no** `original_entry` (a brand-new SOFTECH document in a closed month): a draft of `proposed_lines` as-is, dated `first_open_period_after(source_date).period_start`, `source_key` = the exception's source key, description noting the original document date; resolves the exception. With an `original_entry`, the API calls `post_late_correction` instead.
+  - `post_late_document(exception_id: int, *, user) -> LedgerEntry` — for a `closed_period_change` exception with **no** `original_entry` (a brand-new SOFTECH document in a closed month): a draft of `proposed_lines` as-is, dated `first_open_period_after(source_date).period_start`, `source_key` = the exception's source key, description noting the original document date; resolves the exception. `source_key` = `exception.source_doc.source_key` (Plan 2 `GLSourceDoc`); the adapter's `mark_exception_resolved` also points `source_doc.entry` at the new draft. With an `original_entry`, the API calls `post_late_correction` instead.
 
 - [ ] **Step 1: Write the failing tests** —
   - `test_accepts_postings_false_for_closing_and_closed`
@@ -321,7 +321,7 @@ Plan 2 adds no `GLAccount.feed`; Task 1 adds it. Plan 2's source verification (s
 
 **Interfaces:**
 - Consumes: Tasks 2–9.
-- Produces (prefix `/api/finance/gl/`, `[IsAuthenticated, matrix_permission('ledger', ...)]` + Plan 1's all-branch gate; Decimals as strings; `CloseError`/`LedgerError` → 400 `{code, detail}`, `period_closing`/`not_open` → 409):
+- Produces (prefix `/api/finance/gl/`; reuse Plan 1's `gl/views.py` helpers as built — `_perms(...)` (IsAuthenticated + `AllBranchOnly` + `matrix_permission('ledger', ...)`), `_ledger_error`, `_j`; add `period_closing` to `CONFLICT_CODES`; Decimals as strings; `CloseError` → 400 `{code, detail}` except `not_open` → 409):
 
   | Method · path | Action | Notes |
   |---|---|---|
@@ -337,7 +337,7 @@ Plan 2 adds no `GLAccount.feed`; Task 1 adds it. Plan 2's source verification (s
   | `GET subledgers/{kind}/?from&to` · `GET subledgers/suppliers-vs-ap/?as_of` | view | `?format=xlsx` needs export |
   | `POST corrections/ {original_id, lines, reason, exception_id?}` | create | `post_late_correction` |
   | `POST corrections/from-exception/ {exception_id, reason}` | create | `original_entry` set → `post_late_correction` with `proposed_lines`; else `post_late_document` |
-  | `POST manual-import/preview/` · `POST manual-import/ {include_mixed}` (multipart) | create | upload is size/type checked with the existing upload helper in `core/` |
+  | `POST manual-import/preview/` · `POST manual-import/ {include_mixed}` (multipart) | create | upload is size/type checked with `core.upload_safety` (`max_upload_bytes`, `capped_rows`), as Plan 1's `accounts_import` does |
   | `POST validation/` (multipart, `through`) | view + export | returns the xlsx |
   | `GET closing-stock-stores/` · `PATCH closing-stock-stores/` | view / edit | the `gl_closing_stock_stores` setting with defaults filled in; audited |
 
@@ -398,11 +398,11 @@ Plan 2 adds no `GLAccount.feed`; Task 1 adds it. Plan 2's source verification (s
 
 **Files:**
 - Modify: `apps/help/content/finance.py` — screens `finance.gl_close` (tabs months/stock/cutover, statuses open/closing/closed explained), `finance.gl_subledgers` (per-tab), `finance.gl_softech_compare`; AR + EN; `updated` = execution date; targets from Tasks 12–13. Update `finance.gl_journal` help: late corrections («تصحيح قيد») and the `period_closing` refusal.
-- Modify: `docs/architecture/34_FINANCE_GENERAL_LEDGER.md` (close flow, store map, comparison checks, corrections, cutover commands, Plan 2 contract), `04_API_REGISTRY.md`, `05_UI_REGISTRY.md`, `03_DATABASE_DICTIONARY.md`.
+- Modify: `docs/architecture/35_FINANCE_GENERAL_LEDGER.md` (close flow, store map, comparison checks, corrections, cutover commands, Plan 2 contract), `04_API_REGISTRY.md`, `05_UI_REGISTRY.md`, `03_DATABASE_DICTIONARY.md`.
 - [ ] **Step 1: Write** help and docs.
 - [ ] **Step 2: Run** `python manage.py test apps.tests.test_help apps.tests.test_gl_close_models apps.tests.test_gl_corrections apps.tests.test_gl_softech_stock apps.tests.test_gl_compare apps.tests.test_gl_subledgers apps.tests.test_gl_close apps.tests.test_gl_year_end apps.tests.test_gl_manual_import apps.tests.test_gl_validation apps.tests.test_gl_close_api apps.tests.test_gl_compare_job` plus Plan 1 and Plan 2 `test_gl_*` modules (unique `TEST_DB_NAME`) — Expected: all PASS.
 - [ ] **Step 3: Run** `python manage.py test apps.tests` and `cd frontend && npm run build` — Expected: no new failures vs main.
-- [ ] **Step 4: Commit** — `docs(finance-gl): close and reconcile help, architecture doc 34`
+- [ ] **Step 4: Commit** — `docs(finance-gl): close and reconcile help, architecture doc 35`
 
 ---
 

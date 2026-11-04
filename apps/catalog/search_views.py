@@ -14,6 +14,8 @@ from rest_framework.response import Response
 from .universal import universal_search, TYPES, DEFAULT_LIMIT
 
 MAX_LIMIT = 25
+# Result group → the RBAC module it belongs to (items: none, every screen picks items).
+TYPE_MODULE = {'customers': 'customers', 'orders': 'pos', 'reservations': 'reservations'}
 
 
 @api_view(['GET'])
@@ -40,6 +42,16 @@ def universal_search_view(request):
         requested = [t.strip() for t in types_param.split(',') if t.strip()]
         types = [t for t in requested if t in TYPES] or None
 
-    results = universal_search(q, branch_id=branch_id, limit=limit, types=types, user=request.user)
+    # A role the matrix is enforced for (the accountant) sees only the groups it holds the module
+    # for; items stay open (pickers). /api/search/ is exempt from the middleware, so check here.
+    from core.permissions import enforced_role_allows
+    requested = list(types or TYPES)
+    allowed = [t for t in requested
+               if t not in TYPE_MODULE or enforced_role_allows(request.user, TYPE_MODULE[t], 'view')]
+    # never call with an empty list: universal_search reads "no types" as "every type"
+    results = (universal_search(q, branch_id=branch_id, limit=limit, types=allowed, user=request.user)
+               if allowed else {})
+    for t in requested:                 # same response shape; a refused group is just empty
+        results.setdefault(t, [])
     total = sum(len(v) for v in results.values())
     return Response({'query': q.strip(), 'count': total, 'results': results})

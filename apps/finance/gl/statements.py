@@ -239,6 +239,10 @@ _BS_SIGN = {
 }
 
 
+# Every statement line an account may carry (PATCH accounts/ validates against it).
+KNOWN_LINES = frozenset(PL_KNOWN | set(_BS_SIGN) | {'retained'})
+
+
 def _allocate(amount: Decimal, shares: dict[int, Decimal]) -> dict[int, Decimal]:
     """round(share / total × amount, 2) half-up; the remainder goes to the largest share.
 

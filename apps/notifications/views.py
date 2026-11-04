@@ -742,6 +742,9 @@ def chatter_list(request, model_name, record_id):
     profile = _get_profile(request)
     if not profile:
         return Response(status=status.HTTP_403_FORBIDDEN)
+    from apps.notifications.chatter_access import module_allows
+    if not module_allows(request.user, model_name):
+        return Response({'detail': 'ليس لديك صلاحية على هذه الوحدة'}, status=status.HTTP_403_FORBIDDEN)
 
     # Branch scope enforcement
     from core import branch_scope
@@ -829,6 +832,9 @@ def chatter_post(request, model_name, record_id):
     profile = _get_profile(request)
     if not profile:
         return Response(status=status.HTTP_403_FORBIDDEN)
+    from apps.notifications.chatter_access import module_allows
+    if not module_allows(request.user, model_name):
+        return Response({'detail': 'ليس لديك صلاحية على هذه الوحدة'}, status=status.HTTP_403_FORBIDDEN)
 
     # Validate model_name against an allowed list to prevent arbitrary group names
     if model_name not in _ALLOWED_CHATTER_MODELS:

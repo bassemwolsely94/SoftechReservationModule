@@ -127,6 +127,34 @@ def _mode():
     return mode if mode in ('off', 'log', 'enforce') else 'log'
 
 
+def _mode_for(role):
+    """The mode for one caller. Roles in RBAC_ENFORCED_ROLES are enforced whenever the middleware
+    is on (log or enforce): a role created after the matrix was reviewed has no legacy screens to
+    observe in log mode, and many older views only check IsAuthenticated because every role then
+    held their module (hr, customers, catalog …). Finance GL ruling: the `accountant` reaches
+    ledger / finance / cheques / dashboard / tasks and nothing else, from day one."""
+    mode = _mode()
+    if mode == 'log' and role in enforced_roles():
+        return 'enforce'
+    return mode
+
+
+def enforced_roles() -> frozenset:
+    """settings.RBAC_ENFORCED_ROLES as a set of role names. A plain string (env value) is split on
+    commas — never kept as a string, where `role in 'accountant'` would be a substring test."""
+    roles = getattr(settings, 'RBAC_ENFORCED_ROLES', ('accountant',))
+    if isinstance(roles, str):
+        roles = roles.split(',')
+    return frozenset(str(r).strip() for r in (roles or ()) if str(r).strip())
+
+
+def matrix_enforced_for(user) -> bool:
+    """True for a caller whose role the matrix is enforced for in every mode: views use it to gate
+    data they hand any signed-in user (universal search, chatter) without narrowing legacy roles."""
+    profile = getattr(user, 'staff_profile', None) if not hasattr(user, 'role') else user
+    return bool(profile is not None and getattr(profile, 'role', None) in enforced_roles())
+
+
 def clear_cache():
     _grants_cache.update(at=0.0, by_role={}, seeded=False, modules=frozenset())
 
@@ -137,9 +165,13 @@ def _grants():
     if now - _grants_cache['at'] > float(getattr(settings, 'RBAC_GRANTS_TTL', 60)):
         from apps.users.models import RoleModuleAccess
         by_role, modules = {}, set()
+        enforced = enforced_roles()
         rows = RoleModuleAccess.objects.values_list('role', 'module', 'action', 'is_allowed')
         for role, module, action, allowed in rows:
-            modules.add(module)                  # an explicit denial counts as seeded too
+            # an explicit denial counts as seeded too — but not an enforced role's rows (R17): the
+            # accountant's deny rows must not end another role's fail-open on an unseeded module
+            if role not in enforced:
+                modules.add(module)
             if allowed:
                 by_role.setdefault(role, set()).add((module, action))
         _grants_cache.update(at=now, by_role=by_role, seeded=bool(modules), modules=frozenset(modules))
@@ -147,7 +179,8 @@ def _grants():
 
 
 def seeded_modules() -> frozenset:
-    """Modules that have at least one RoleModuleAccess row (allowed or not). A module nobody has a
+    """Modules that have at least one RoleModuleAccess row (allowed or not) of a role outside
+    RBAC_ENFORCED_ROLES (R17 — enforced roles never change another role's seeding). A module nobody has a
     row for isn't seeded yet — a fresh install, or a module whose rows a migration hasn't added
     (Batch 4, Z-5c)."""
     _grants()
@@ -210,6 +243,18 @@ def required(path, method):
     if prefix == 'pos-orders' and len(parts) > 3 and parts[3] == 'referral-stats':
         return 'analytics', (('view',) if method in ('GET', 'HEAD', 'OPTIONS') else _EXPORT_POST)
     safe = method in ('GET', 'HEAD', 'OPTIONS')
+    # General Ledger (finance-gl): its own `ledger` module, not `finance` — the accountant holds
+    # ledger create/approve but only finance view. The views check the exact ledger action.
+    # Writes need exactly what the view asks (apps/finance/gl/views.py): chart of accounts (PATCH,
+    # import) = edit; approve / bulk approve / reverse = approve; drafts (POST, PUT, DELETE) = create.
+    if prefix == 'finance' and parts[3:4] == ['gl']:
+        if safe:
+            return 'ledger', ('view',)
+        if parts[4:5] == ['accounts']:
+            return 'ledger', ('edit',)
+        if parts[4:5] == ['entries'] and ('approve' in parts[5:7] or 'reverse' in parts[6:7]):
+            return 'ledger', ('approve',)
+        return 'ledger', ('create',)
     # Market Shortage reads the engine's run status and the shortage screen the vendor list:
     # `shortage` view (purchasing holds it too) — owner decision 2026-10-28, map by screen (Z-7a)
     if safe and ((prefix == 'purchasing' and parts[3:5] in (['runs', 'latest'], ['runs', 'active']))
@@ -358,6 +403,7 @@ class ModuleAccessMiddleware:
         profile = _staff_profile(request)
         if profile is None or profile.role == 'admin':
             return None
+        mode = _mode_for(profile.role)
         module, actions = need
         by_role, seeded = _grants()
         granted = by_role.get(profile.role, set())
@@ -375,7 +421,7 @@ class ModuleAccessMiddleware:
         )
         if mode != 'enforce':
             return None
-        if not seeded:
+        if not seeded and profile.role not in enforced_roles():
             logger.error('RBAC_ENFORCEMENT=enforce but RoleModuleAccess is empty — '
                          'not blocking (run manage.py seed_permissions)')
             return None

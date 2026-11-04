@@ -39,7 +39,8 @@ def supply_allowed(request, action: str) -> bool:
         return True
     try:
         from apps.users.models import RoleModuleAccess
-        if RoleModuleAccess.objects.filter(module=MODULE).exists():
+        from core.middleware.module_access import enforced_roles   # their rows never seed a module (R17)
+        if RoleModuleAccess.objects.filter(module=MODULE).exclude(role__in=enforced_roles()).exists():
             # Matrix is seeded for this module → it is AUTHORITATIVE, including an
             # explicit denial (is_allowed=False) configured by an admin.
             return p.can_do(MODULE, action)
