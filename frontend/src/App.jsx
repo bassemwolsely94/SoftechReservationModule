@@ -149,17 +149,17 @@ const DemandDetailPage = lazy(() => import('./pages/DemandDetailPage'))
 // Finance Intelligence Platform
 const FinanceHubPage = lazy(() => import('./pages/FinanceHubPage'))
 const FinanceDashboardPage = lazy(() => import('./pages/FinanceDashboardPage'))
-import GLAccountsPage from './pages/finance/gl/GLAccountsPage'   // finance's own chart of accounts (GL)
+const GLAccountsPage = lazy(() => import('./pages/finance/gl/GLAccountsPage'))   // finance's own chart of accounts (GL)
 const GLJournalPage = lazy(() => import('./pages/finance/gl/JournalPage'))
 const GLTrialBalancePage = lazy(() => import('./pages/finance/gl/TrialBalancePage'))
 const GLStatementsPage = lazy(() => import('./pages/finance/gl/StatementsPage'))
 const GLAccountStatementPage = lazy(() => import('./pages/finance/gl/AccountStatementPage'))
 const ProfitLossPage = lazy(() => import('./pages/ProfitLossPage'))
-import CashViewPage from './pages/CashViewPage'   // P-40 — replaces the retired cash-flow page (P-43)
+const CashViewPage = lazy(() => import('./pages/CashViewPage'))   // P-40 — replaces the retired cash-flow page (P-43)
 const ExpenseAnalyticsPage = lazy(() => import('./pages/ExpenseAnalyticsPage'))
 const FinanceSchemaPage = lazy(() => import('./pages/FinanceSchemaPage'))
-import ContractReceivablesPage from './pages/ContractReceivablesPage'   // P-41
-import SupplierTermsPage from './pages/SupplierTermsPage'               // P-42
+const ContractReceivablesPage = lazy(() => import('./pages/ContractReceivablesPage'))   // P-41
+const SupplierTermsPage = lazy(() => import('./pages/SupplierTermsPage'))               // P-42
 const ProductCatalogPage = lazy(() => import('./pages/ProductCatalogPage'))
 const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'))
 const ProductContentAdminPage = lazy(() => import('./pages/ProductContentAdminPage'))
