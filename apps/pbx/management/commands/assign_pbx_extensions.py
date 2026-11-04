@@ -43,14 +43,30 @@ def _get_staff(username_or_none, staff_id=None):
             raise CommandError(f'No StaffProfile with id={staff_id}')
 
     if username_or_none:
-        # Try StaffProfile first
-        sp = StaffProfile.objects.filter(user__username=username_or_none).first()
+        from django.db.models import Q
+        term = username_or_none.strip()
+        if not term:
+            raise CommandError('Empty --staff. Pass a username, HR code, name or use --staff-id.')
+        # Exact identity first: Django username, HR code, SOFTECH user name
+        sp = StaffProfile.objects.filter(user__username=term).first()
         if sp:
             return sp
-        # Fallback: match by full name fragment
-        sp = StaffProfile.objects.filter(user__first_name__icontains=username_or_none).first()
-        if sp:
-            return sp
+        exact = list(StaffProfile.objects.filter(Q(hr_code__iexact=term)
+                                                 | Q(softech_username__iexact=term))[:2])
+        if len(exact) == 1:
+            return exact[0]
+        # Fallback: name fragment — most staff keep their name only in softech_username
+        # (first/last empty, username = a numeric code). Ambiguous fragments are refused,
+        # never resolved to whichever row comes first.
+        found = list(StaffProfile.objects.select_related('user').filter(
+            Q(user__first_name__icontains=term) | Q(user__last_name__icontains=term)
+            | Q(softech_username__icontains=term)).order_by('pk')[:6])
+        if len(found) == 1:
+            return found[0]
+        if found:
+            names = ', '.join(f'#{s.pk} {s.softech_username or s.user.get_full_name() or s.user.username}'
+                              for s in found[:5])
+            raise CommandError(f'"{term}" matches several staff ({names}). Use --staff-id.')
         raise CommandError(
             f'No staff user found for "{username_or_none}". '
             f'Pass a Django username or use --staff-id.'

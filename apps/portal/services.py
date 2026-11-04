@@ -7,7 +7,6 @@ import logging
 import urllib.parse
 
 from django.conf import settings
-from django.db.models import Q
 
 from apps.customers.models import Customer
 
@@ -37,16 +36,12 @@ def find_customer_by_phone(phone: str) -> Customer | None:
     the Egypt country-code / leading-zero variations. Returns None if not found
     (callers must NOT leak this to the client).
     """
-    core = _core_digits(phone)
-    if len(core) < 8:
-        return None
-    qs = Customer.objects.filter(
-        Q(phone__endswith=core)
-        | Q(phone_alt__endswith=core)
-        | Q(whatsapp_phone__endswith=core)
-    ).exclude(softech_pic__isnull=True).exclude(softech_pic='')
+    from core import phones     # the shared rule: exact national number, short input → None
+    qs = Customer.objects.exclude(softech_pic__isnull=True).exclude(softech_pic='')
     # Prefer a non-guest, fully-synced customer if several share a number.
-    return qs.order_by('is_guest', 'id').first()
+    found = phones.matching(qs.order_by('is_guest', 'id'), phone,
+                            ('phone', 'phone_alt', 'whatsapp_phone'), limit=1)
+    return found[0] if found else None
 
 
 def issue_magic_link(customer: Customer) -> str:

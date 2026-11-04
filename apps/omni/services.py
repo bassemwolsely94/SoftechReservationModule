@@ -24,9 +24,12 @@ from apps.omni.models import ChannelAccount, Conversation, TimelineEvent
 logger = logging.getLogger('elrezeiky.omni')
 
 
-def _phone_tail(phone: str) -> str:
-    """Last 9 digits — same matching convention as WAConversation/CallSession."""
-    return (phone or '').strip().replace(' ', '')[-9:]
+def _by_phone(qs, phone: str):
+    """Most recent active conversation with this contact number (core.phones: exact national key,
+    so an empty/short number finds nothing)."""
+    from core import phones
+    found = phones.matching(qs.order_by('-last_activity_at'), phone, ('contact_phone',), limit=1)
+    return found[0] if found else None
 
 
 def resolve_conversation(*, customer=None, phone: str = '',
@@ -43,13 +46,8 @@ def resolve_conversation(*, customer=None, phone: str = '',
     if customer is not None:
         convo = qs.filter(customer=customer).order_by('-last_activity_at').first()
     if convo is None and phone:
-        tail = _phone_tail(phone)
-        if tail:
-            convo = (
-                qs.filter(contact_phone__endswith=tail)
-                .order_by('-last_activity_at')
-                .first()
-            )
+        convo = _by_phone(qs, phone)
+        if convo is not None:
             # Adopt the customer on a previously-anonymous conversation
             if convo and customer is not None and convo.customer_id is None:
                 convo.customer = customer
@@ -127,12 +125,7 @@ def emit(event_type: str, obj, *, customer=None, phone: str = '',
             if customer is not None:
                 convo = qs.filter(customer=customer).order_by('-last_activity_at').first()
             if convo is None and phone:
-                tail = _phone_tail(phone)
-                convo = (
-                    qs.filter(contact_phone__endswith=tail)
-                    .order_by('-last_activity_at').first()
-                    if tail else None
-                )
+                convo = _by_phone(qs, phone)
             if convo is None:
                 return None
         else:

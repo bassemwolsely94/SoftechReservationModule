@@ -16,7 +16,8 @@ class AgentExtensionAdmin(admin.ModelAdmin):
     list_editable  = ['extension_type', 'is_active']
     list_filter    = ['extension_type', 'gateway_type', 'is_active']
     search_fields  = ['extension', 'sip_peer', 'staff__user__first_name',
-                      'staff__user__last_name', 'staff__user__username']
+                      'staff__user__last_name', 'staff__user__username',
+                      'staff__softech_username']
     raw_id_fields  = ['staff']
     readonly_fields = ['last_status', 'last_ip', 'created_at', 'updated_at']
 

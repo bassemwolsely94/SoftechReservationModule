@@ -184,19 +184,6 @@ class AgentExtension(models.Model):
     def is_gateway(self) -> bool:
         return self.extension_type == self.TYPE_GATEWAY
 
-    def normalize_number(self, raw: str) -> str:
-        """
-        Strip any PBX-added prefix / suffix from a caller number received
-        on this gateway so the clean E.164-ish number is stored.
-        e.g.  raw='001234567890', call_prefix='00' → '1234567890'
-        """
-        num = (raw or '').strip()
-        if self.call_prefix and num.startswith(self.call_prefix):
-            num = num[len(self.call_prefix):]
-        if self.call_suffix and num.endswith(self.call_suffix):
-            num = num[:-len(self.call_suffix)]
-        return num or raw
-
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # PBXQueue — Asterisk queue definition

@@ -139,10 +139,11 @@ class LocalCustomerViewSet(viewsets.ReadOnlyModelViewSet):
                 'branch', 'linked_customer'
             ).first()
         elif phone:
-            tail = phone.replace(' ', '')[-9:]
-            lc = LocalCustomer.objects.filter(
-                phone__endswith=tail
-            ).select_related('branch', 'linked_customer').first()
+            from core import phones
+            if phones.phone_q(phone) is None:
+                return Response({'detail': 'اكتب الرقم كامل.'}, status=400)
+            lc = phones.first_match(
+                LocalCustomer.objects.select_related('branch', 'linked_customer'), phone, ('phone',))
         else:
             return Response({'detail': 'phone أو phcode مطلوب'}, status=400)
 

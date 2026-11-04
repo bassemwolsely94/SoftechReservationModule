@@ -483,15 +483,16 @@ class ReplacementCaseViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
         from types import SimpleNamespace
         from apps.customers import access as _ca
         if digits == pic.replace(' ', '').lstrip('+') and len(digits) >= _ca.MIN_PHONE_DIGITS:   # a phone number
-            tail = digits[-10:]
-            found = (Customer.objects.filter(Q(phone__endswith=tail) | Q(phone_alt__endswith=tail)
-                                             | Q(whatsapp_phone__endswith=tail))
-                     .exclude(softech_pic='').values('softech_pic', 'name', 'phone',
-                                                     'preferred_branch_id', 'created_by_id')[:10])
-            patients = [{'pic': f['softech_pic'], 'name': f['name'],
+            from core import phones     # the shared rule: exact national number
+            found = phones.matching(
+                Customer.objects.exclude(softech_pic='').only(
+                    'softech_pic', 'name', 'phone', 'phone_alt', 'whatsapp_phone',
+                    'preferred_branch_id', 'created_by_id'),
+                digits, ('phone', 'phone_alt', 'whatsapp_phone'), limit=10)
+            patients = [{'pic': f.softech_pic, 'name': f.name,
                          'phone': _ca.customer_phone(request.user, SimpleNamespace(
-                             preferred_branch_id=f['preferred_branch_id'],
-                             created_by_id=f['created_by_id']), f['phone'] or '')} for f in found]
+                             preferred_branch_id=f.preferred_branch_id,
+                             created_by_id=f.created_by_id), f.phone or '')} for f in found]
             if len(patients) != 1:
                 return Response({'results': [], 'patients': patients})
             pic = patients[0]['pic']
