@@ -307,6 +307,30 @@ class PreviewAndMapTests(Base):
         with self.assertRaises(R.RuleError):
             R.preview_rule(dict(draft, lines=[]), D, D, readers={'sales_tenders': reader})
 
+    def test_preview_without_fetch_opens_and_closes_softech_connection(self):
+        from contextlib import contextmanager
+        from unittest import mock
+        log = {'opened': 0, 'closed': 0, 'sql': []}
+
+        @contextmanager
+        def fake_open():
+            log['opened'] += 1
+            try:
+                yield lambda sql: (log['sql'].append(sql) or [])
+            finally:
+                log['closed'] += 1
+
+        def reader(d1, d2, fetch):
+            fetch('SELECT 1')
+            return [doc('a', amounts={'net': DEC('3')})]
+        draft = {'source_type': 'sales_tenders', 'conditions': {}, 'lines': CASH, 'action': 'post'}
+        with mock.patch('apps.finance.queries.sybase_gl.open_fetch', fake_open):
+            out = R.preview_rule(draft, D, D, readers={'sales_tenders': reader})
+            self.assertEqual(out['totals']['entries'], 1)
+            # a reader that never fetches does not open a connection
+            R.preview_rule(draft, D, D, readers={'sales_tenders': lambda d1, d2, f: []})
+        self.assertEqual(log, {'opened': 1, 'closed': 1, 'sql': ['SELECT 1']})
+
     def test_save_map_audited_before_after(self):
         m = R.save_map(user=self.staff, kind='bank', source_value='40', account_code='1302', note='x')
         m2 = R.save_map(user=self.staff, kind='bank', source_value='40', account_code='6002')

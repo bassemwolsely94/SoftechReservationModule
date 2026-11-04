@@ -5,6 +5,7 @@ matching). Editing a rule creates a new version; maps are audited with before/af
 writes ledger entries or touches SOFTECH: ``build_lines`` returns Plan 1 ``save_draft`` line dicts.
 """
 from collections import OrderedDict
+from contextlib import ExitStack
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from string import Formatter
@@ -356,7 +357,16 @@ def preview_rule(rule_or_draft, date_from, date_to, *, fetch=None, readers=None,
     if hq_branch_id is None:
         hq = Branch.objects.filter(softech_branch_id='100').first()
         hq_branch_id = hq.pk if hq else None
-    docs = [d for d in reader(date_from, date_to, fetch) if rule_matches(rule, d)]
+    with ExitStack() as stack:
+        if fetch is None:   # real path: one SOFTECH connection, opened only if the reader fetches
+            holder = {}
+
+            def fetch(sql):
+                if 'f' not in holder:
+                    from apps.finance.queries.sybase_gl import open_fetch   # lazy: gl/ never imports config.sybase at load
+                    holder['f'] = stack.enter_context(open_fetch())
+                return holder['f'](sql)
+        docs = [d for d in reader(date_from, date_to, fetch) if rule_matches(rule, d)]
     groups = OrderedDict()
     for d in docs:
         groups.setdefault(_group_key(rule, d), []).append(d)
