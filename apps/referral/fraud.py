@@ -27,6 +27,9 @@ import logging
 from django.utils import timezone
 from datetime import timedelta
 
+from core import phones
+from core.phones import same_phone
+
 logger = logging.getLogger('elrezeiky.referral')
 
 AUTO_REJECT_THRESHOLD = 80
@@ -65,15 +68,9 @@ class FraudEngine:
 
     def _check_self_referral(self):
         try:
-            referrer_phones = set()
             c = self.lead.referrer
-            if c.phone:
-                referrer_phones.add(c.phone.strip().replace(' ', '')[-9:])
-            if c.phone_alt:
-                referrer_phones.add(c.phone_alt.strip().replace(' ', '')[-9:])
-
-            lead_tail = self.lead.lead_phone.strip().replace(' ', '')[-9:]
-            if lead_tail in referrer_phones:
+            # exact national number (core.phones) — two empty phones are NOT the same person
+            if any(same_phone(self.lead.lead_phone, p) for p in (c.phone, c.phone_alt)):
                 self._add('self_referral', 100, 'رقم هاتف المُحيل مطابق لرقم الصديق')
         except Exception as exc:
             logger.debug('self_referral check failed: %s', exc)
@@ -81,20 +78,22 @@ class FraudEngine:
     def _check_duplicate_phone(self):
         from apps.referral.models import ReferralLead
         try:
-            qs = ReferralLead.objects.filter(
-                lead_phone=self.lead.lead_phone,
-                status__in=['pending', 'invited', 'registered', 'validated'],
-            ).exclude(pk=self.lead.pk)
-            if qs.exists():
-                self._add('duplicate_phone', 40, f'رقم الهاتف موجود بالفعل في {qs.count()} إحالة')
+            dupes = phones.matching(
+                ReferralLead.objects.filter(
+                    status__in=['pending', 'invited', 'registered', 'validated'],
+                ).exclude(pk=self.lead.pk),
+                self.lead.lead_phone, ('lead_phone',),
+            )
+            if dupes:
+                self._add('duplicate_phone', 40, f'رقم الهاتف موجود بالفعل في {len(dupes)} إحالة')
         except Exception as exc:
             logger.debug('duplicate_phone check failed: %s', exc)
 
         # Also check if the phone is already a Customer
         try:
             from apps.customers.models import Customer
-            tail = self.lead.lead_phone.strip().replace(' ', '')[-9:]
-            if Customer.objects.filter(phone__endswith=tail, is_guest=False).exists():
+            if phones.matching(Customer.objects.filter(is_guest=False), self.lead.lead_phone,
+                               ('phone',), limit=1):
                 self._add('duplicate_phone', 20, 'رقم الهاتف مسجَّل بالفعل كعميل')
         except Exception as exc:
             logger.debug('customer phone check failed: %s', exc)
@@ -103,19 +102,17 @@ class FraudEngine:
         from apps.referral.models import ReferralLead
         try:
             # Does the lead's phone number belong to someone who has referred the current referrer?
-            tail = self.lead.lead_phone.strip().replace(' ', '')[-9:]
             from apps.customers.models import Customer
-            lead_customer = (
-                Customer.objects.filter(phone__endswith=tail).first()
-                or Customer.objects.filter(phone_alt__endswith=tail).first()
-            )
+            lead_customer = phones.first_match(Customer.objects.all(), self.lead.lead_phone,
+                                               ('phone', 'phone_alt'))
             if not lead_customer:
                 return
-            if ReferralLead.objects.filter(
-                referrer=lead_customer,
-                lead_phone__endswith=self.lead.referrer.phone[-9:] if self.lead.referrer.phone else '',
-                status__in=['validated', 'rewarded'],
-            ).exists():
+            # was `lead_phone__endswith=''` when the referrer had no phone → every lead matched
+            if phones.matching(
+                ReferralLead.objects.filter(referrer=lead_customer,
+                                            status__in=['validated', 'rewarded']),
+                self.lead.referrer.phone, ('lead_phone',), limit=1,
+            ):
                 self._add('circular_referral', 80, 'الصديق المُحال سبق أن أحال المُحيل')
         except Exception as exc:
             logger.debug('circular_referral check failed: %s', exc)

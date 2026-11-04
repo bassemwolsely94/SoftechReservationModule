@@ -212,10 +212,11 @@ class CallLogViewSet(viewsets.ModelViewSet):
             from apps.customers.models import Customer
 
             # All customers sharing this phone (up to 10)
-            customers_qs = (Customer.objects.filter(
-                Q(phone__endswith=tail) | Q(phone_alt__endswith=tail)
-            ).select_related('preferred_branch').order_by('-created_at')[:10]) if tail else []
-            customers_qs = list(customers_qs)
+            # prefilter on the tail, then the exact national key (core.phones) — no near-misses
+            from core import phones
+            customers_qs = phones.matching(
+                Customer.objects.select_related('preferred_branch').order_by('-created_at'),
+                phone, ('phone', 'phone_alt'), limit=10)
 
             # ── Build summary list (always returned — used by picker) ──────────
             result['customers'] = [
