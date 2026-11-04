@@ -239,14 +239,6 @@ quality_manager GET /api/finance/reconciliation/returns-chains/export/
 quality_manager GET /api/finance/reconciliation/review/export/
 quality_manager GET /api/finance/reconciliation/unpaid/
 quality_manager GET /api/finance/reconciliation/unpaid/export/
-# accountant (Finance GL, 2026-11-04): same pre-existing gate — these reports / exports are
-#   admin / pharmacist only in apps/finance/recon_views.py (_is_admin_or_pharmacist); unchanged here.
-accountant GET /api/finance/reconciliation/partial/
-accountant GET /api/finance/reconciliation/partial/export/
-accountant GET /api/finance/reconciliation/returns-chains/export/
-accountant GET /api/finance/reconciliation/review/export/
-accountant GET /api/finance/reconciliation/unpaid/
-accountant GET /api/finance/reconciliation/unpaid/export/
 
 # reason: Z-11c — follow-up maintenance (dedupe / cleanup / backfill / priority scores / reminders run-now)
 #   are admin batch jobs.

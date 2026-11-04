@@ -117,3 +117,39 @@ class EnforcedRolesDoNotSeedTests(TestCase):
         from core.permissions import matrix_allows
         self.assertFalse(matrix_allows(self.acc, 'replacement', 'view'))
         self.assertFalse(matrix_allows(self.acc, 'customers', 'view'))      # no rows at all
+
+
+RECON = '/api/finance/reconciliation/'
+RECON_READ_ROUTES = ('unpaid/', 'unpaid/export/', 'partial/', 'partial/export/',
+                     'returns-chains/export/', 'review/export/')
+RECON_WRITE_ROUTES = ('candidates/987654321/approve/', 'allocations/manual/',
+                      'allocations/987654321/write-softech/', 'allocations/bulk-write-softech/')
+
+
+class AccountantReconReportsReadOnlyTests(TestCase):
+    """Owner decision 2026-11-05: the accountant may open the A/P reconciliation reports and
+    their exports (read-only) but holds no matching / approval / SOFTECH-write action."""
+
+    def setUp(self):
+        seed_code_matrix()
+        self.acc = bearer_client(make_user('acc_recon', role='accountant')[0])
+
+    def tearDown(self):
+        module_access.clear_cache()
+
+    def test_reports_and_exports_open(self):
+        for route in RECON_READ_ROUTES:
+            with self.subTest(route=route):
+                self.assertNotEqual(self.acc.get(RECON + route).status_code, 403)
+
+    def test_write_routes_stay_refused(self):
+        for route in RECON_WRITE_ROUTES:
+            with self.subTest(route=route):
+                self.assertEqual(self.acc.post(RECON + route, {}, format='json').status_code, 403)
+
+    def test_purchasing_and_quality_manager_still_refused_on_reports(self):
+        for role in ('purchasing', 'quality_manager'):
+            c = bearer_client(make_user(f'{role}_recon', role=role)[0])
+            for route in RECON_READ_ROUTES:
+                with self.subTest(role=role, route=route):
+                    self.assertEqual(c.get(RECON + route).status_code, 403)
