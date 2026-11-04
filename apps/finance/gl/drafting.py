@@ -18,6 +18,7 @@ from decimal import Decimal
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.branches.models import Branch
@@ -45,7 +46,9 @@ SYSTEM_USERNAME = 'gl-drafting'
 REVERSE_REASON = 'تغير مستند سوفتيك'
 RESOLVED_NOTE = 'حُلّ تلقائياً عند إعادة الترحيل'
 VANISHED_NOTE = 'اختفى المستند من سوفتيك'
-STALE_AFTER = timedelta(hours=2)
+STALE_AFTER = timedelta(minutes=30)   # Ruling P11: no heartbeat for 30 min = crashed
+VANISH_GUARD_SHARE = Decimal('0.2')   # Ruling P10
+VANISH_GUARD_MIN = 10
 SOURCE_ORDER = tuple(SOURCE_FIELDS)
 COUNT_KEYS = ('read', 'new', 'changed', 'unchanged', 'vanished', 'drafted', 'skipped', 'exceptions',
               'created', 'replaced', 'reversed', 'deleted')
@@ -62,6 +65,10 @@ class DraftBusy(Exception):
     """Another drafting run is active (the API maps this to 409)."""
 
 
+class _Superseded(Exception):
+    """This run's row is no longer 'running' (a stale takeover marked it failed)."""
+
+
 def system_user() -> StaffProfile:
     profile = StaffProfile.objects.select_related('user').filter(user__username=SYSTEM_USERNAME).first()
     if profile is None:   # same as the 0021 data step (Ruling P1)
@@ -73,33 +80,42 @@ def system_user() -> StaffProfile:
 
 def start_run(*, triggered_by, date_from, date_to, source_types) -> GLDraftRun:
     now = timezone.now()
-    for stale in GLDraftRun.objects.filter(status='running', started_at__lt=now - STALE_AFTER):
+    cutoff = now - STALE_AFTER
+    for stale in GLDraftRun.objects.filter(status='running').filter(
+            Q(heartbeat_at__lt=cutoff) | Q(heartbeat_at__isnull=True, started_at__lt=cutoff)):
         stale.status, stale.finished_at = 'failed', now
-        stale.detail = {**(stale.detail or {}), 'error': 'stale run (no finish after 2 h)'}
+        stale.detail = {**(stale.detail or {}), 'error': 'stale run (no heartbeat for 30 min)'}
         stale.save(update_fields=['status', 'finished_at', 'detail'])
     try:
         with transaction.atomic():
             return GLDraftRun.objects.create(
                 triggered_by=(triggered_by or '')[:60], date_from=date_from, date_to=date_to,
-                source_types=list(source_types or []), status='running')
+                source_types=list(source_types or []), status='running', heartbeat_at=now)
     except IntegrityError:
         raise DraftBusy('a drafting run is already running')
 
 
 def draft_range(date_from, date_to, *, source_types=None, run: GLDraftRun, fetch=None,
-                readers=None) -> GLDraftRun:
-    """Draft every source type in [date_from, date_to]. ``readers`` overrides ``READERS`` (tests)."""
+                readers=None, allow_mass_vanish=False) -> GLDraftRun:
+    """Draft every source type in [date_from, date_to]. ``readers`` overrides ``READERS`` (tests).
+    ``allow_mass_vanish`` bypasses the Ruling P10 guard (CLI --allow-mass-vanish only)."""
     readers = READERS if readers is None else readers
     types = list(source_types) if source_types else [t for t in SOURCE_ORDER if t in readers]
     with ExitStack() as stack:
         if fetch is None:
             fetch = _lazy_fetch(stack)
-        engine = _Engine(run, fetch, readers)
+        engine = _Engine(run, fetch, readers, allow_mass_vanish=allow_mass_vanish)
         try:
             engine.load()
             for t in types:
+                engine.heartbeat()
                 engine.draft_type(t, date_from, date_to)
-            run.status = 'partial' if engine.reader_errors else 'success'
+            partial = engine.reader_errors or engine.group_errors or engine.detail.get('vanish_guard')
+            run.status = 'partial' if partial else 'success'
+        except _Superseded:
+            logger.warning('gl drafting run %s superseded', run.pk)
+            run.status = 'failed'
+            engine.detail['error'] = 'superseded'
         except Exception as exc:   # fatal: record, never leave the run 'running'
             logger.exception('gl drafting run %s failed', run.pk)
             run.status = 'failed'
@@ -108,6 +124,8 @@ def draft_range(date_from, date_to, *, source_types=None, run: GLDraftRun, fetch
     run.detail = {**(run.detail or {}), **engine.detail}
     if engine.reader_errors:
         run.detail['reader_errors'] = engine.reader_errors
+    if engine.group_errors:
+        run.detail['group_errors'] = engine.group_errors
     run.finished_at = timezone.now()
     run.save(update_fields=['status', 'counts', 'detail', 'finished_at'])
     return run
@@ -145,11 +163,18 @@ def _line_tuple(ln: dict):
 
 
 class _Engine:
-    def __init__(self, run, fetch, readers):
+    def __init__(self, run, fetch, readers, allow_mass_vanish=False):
         self.run, self.fetch, self.readers = run, fetch, readers
+        self.allow_mass_vanish = allow_mass_vanish
         self.counts = dict.fromkeys(COUNT_KEYS, 0)
         self.detail = {'zero_groups': []}
         self.reader_errors = {}
+        self.group_errors = {}
+
+    def heartbeat(self):
+        """Ruling P11: refresh heartbeat_at; abort if the run row is no longer ours ('running')."""
+        if not GLDraftRun.objects.filter(pk=self.run.pk, status='running').update(heartbeat_at=timezone.now()):
+            raise _Superseded()
 
     def load(self):
         """Once per run: system user, HQ branch and the active rules (a rule edit applies next run)."""
@@ -173,13 +198,57 @@ class _Engine:
             return
         self.counts['read'] += len(docs)
         groups = defaultdict(set)        # group_key -> trigger doc pks
+        self.old_of = defaultdict(set)   # doc pk -> groups it may still sit in (rebuilt first)
         with transaction.atomic():
             dirty = self._upsert(t, d1, d2, docs, groups)
         for sd, doc in dirty:
             self._classify(sd, doc, groups)
+        self._done = set()
         for gk in sorted(groups):
-            if gk:
-                self._group(gk, groups[gk])
+            self._process(gk, groups)
+
+    def _touch_old(self, sd, open_details, groups):
+        for g in self._old_groups(sd, open_details):
+            groups[g].add(sd.pk)
+            self.old_of[sd.pk].add(g)
+
+    def _process(self, gk, groups):
+        """Rebuild ``gk`` after the old groups of its pending members (I1c), so a doc whose old
+        group could not be rebuilt is held out (status 'exception') instead of sitting in two
+        live entries. A non-LedgerError failure becomes a ledger_error exception; the run goes on."""
+        if not gk or gk in self._done:
+            return
+        self._done.add(gk)
+        pending = list(GLSourceDoc.objects.filter(group_key=gk, status='new').values_list('pk', flat=True))
+        for pk in pending:
+            for og in sorted(self.old_of.get(pk, ())):
+                if og != gk:
+                    self._process(og, groups)
+        self.heartbeat()
+        triggers = groups.get(gk, set())
+        try:
+            with transaction.atomic():
+                self._group_locked(gk, triggers)
+        except (_Superseded, KeyboardInterrupt):
+            raise
+        except Exception as exc:
+            logger.exception('gl drafting group %s failed', gk)
+            self._group_failed(gk, triggers, exc)
+
+    def _group_failed(self, gk, triggers, exc):
+        err = f'{type(exc).__name__}: {exc}'[:300]
+        self.group_errors[gk] = err
+        pending = GLSourceDoc.objects.filter(group_key=gk, status='new').values_list('pk', flat=True)
+        targets = {*triggers, *pending}
+        with transaction.atomic():
+            self._exception(list(GLSourceDoc.objects.filter(pk__in=targets)), 'ledger_error',
+                            f'تعذر ترحيل المجموعة: {err}', {'code': 'engine_error', 'group_key': gk, 'error': err})
+            self._hold(targets)
+
+    def _hold(self, pks):
+        """Keep docs out of every group until their old group is rebuilt (retried next run)."""
+        GLSourceDoc.objects.filter(pk__in=list(pks)).exclude(status='vanished').update(
+            status='exception', last_run=self.run)
 
     def _old_groups(self, sd, open_details):
         keys = set()
@@ -218,6 +287,9 @@ class _Engine:
                     status='open', source_doc_id__in=pks[i:i + 1000]).values_list('source_doc_id', 'detail'):
                 open_details[doc_id].append(det or {})
 
+        # previously-seen docs of this type in the window (before this read changes any status)
+        seen_before = len(gone) + sum(1 for sd in existing.values() if sd.status != 'vanished'
+                                      and sd.source_type == t and d1 <= sd.doc_date <= d2)
         now, dirty, create, seen = timezone.now(), [], [], []
         for key, d in by_key.items():
             h = content_hash(d)
@@ -230,8 +302,8 @@ class _Engine:
                 self.counts['new'] += 1
                 continue
             if sd.content_hash != h or sd.status == 'vanished' or sd.source_type != t:
-                for g in self._old_groups(sd, open_details):
-                    groups[g].add(sd.pk)
+                self._touch_old(sd, open_details, groups)
+                sd.status = 'new'   # I1a: a crash before classify still retries it next run
                 sd.source_type, sd.doc_date, sd.branch_code = t, d.doc_date, d.branch_code
                 sd.kind, sd.personcode = d.kind, d.personcode
                 sd.amounts, sd.attrs = _canon(d.amounts), _canon(d.attrs)
@@ -245,26 +317,29 @@ class _Engine:
             self.counts['unchanged'] += 1
             seen.append(sd.pk)
             if self._needs_retry(sd, d, open_details):
-                for g in self._old_groups(sd, open_details):
-                    groups[g].add(sd.pk)
+                self._touch_old(sd, open_details, groups)
                 dirty.append((sd, d))
         for sd, d in zip(GLSourceDoc.objects.bulk_create([c[0] for c in create]), [c[1] for c in create]):
             dirty.append((sd, d))
         for i in range(0, len(seen), 1000):
             GLSourceDoc.objects.filter(pk__in=seen[i:i + 1000]).update(last_seen=now, last_run=self.run)
 
+        if (gone and not self.allow_mass_vanish and len(gone) > VANISH_GUARD_MIN
+                and len(gone) > VANISH_GUARD_SHARE * seen_before):
+            # Ruling P10: a silently empty / short read must never reverse entries en masse
+            self.detail.setdefault('vanish_guard', {})[t] = {'would_vanish': len(gone), 'seen': seen_before}
+            gone = []
         for sd in gone:
-            for g in self._old_groups(sd, open_details):
-                groups[g].add(sd.pk)
+            self._touch_old(sd, open_details, groups)
         if gone:
             gone_pks = [sd.pk for sd in gone]
             GLSourceDoc.objects.filter(pk__in=gone_pks).update(status='vanished', last_run=self.run)
-            SourceException.objects.filter(source_doc_id__in=gone_pks, status='open').update(
+            SourceException.objects.filter(source_doc_id__in=gone_pks, status='open').exclude(
+                kind__in=GROUP_KINDS).update(   # C1: group kinds resolve only with their group
                 status='resolved', resolved_by=self.user, resolved_at=now, resolution_note=VANISHED_NOTE)
             self.counts['vanished'] += len(gone)
         for sd in retry_vanished:   # still linked to a live entry, or a closed-month change pending
-            for g in self._old_groups(sd, open_details):
-                groups[g].add(sd.pk)
+            self._touch_old(sd, open_details, groups)
         return dirty
 
     def _needs_retry(self, sd, doc, open_details) -> bool:
@@ -280,13 +355,14 @@ class _Engine:
             return True
         if rule.pk != sd.rule_id:
             return True   # a rule version change (Review Focus 5)
-        if rule.action == 'skip':
-            return not (sd.status == 'skipped' and not sd.group_key)
+        entry_live = bool(sd.entry_id and sd.entry and sd.entry.status in LIVE)
+        if rule.action == 'skip':   # I1b: a skipped doc still inside a live entry must be removed
+            return not (sd.status == 'skipped' and not sd.group_key) or entry_live
         if sd.group_key != _group_key(rule, doc):
             return True
         if sd.status == 'drafted':
-            return not (sd.entry_id and sd.entry and sd.entry.status in LIVE)
-        return sd.status != 'skipped'
+            return not entry_live
+        return sd.status != 'skipped' or entry_live
 
     # ── per doc ──────────────────────────────────────────────────────────────
 
@@ -344,14 +420,6 @@ class _Engine:
             return (build(good) if good else []), good, bad
         except RuleMiss as miss:   # not expected: per-doc balanced lines sum to balanced lines
             return [], [], bad + [(sd, miss) for sd in good]
-
-    def _group(self, gk, trigger_pks):
-        try:
-            with transaction.atomic():
-                self._group_locked(gk, trigger_pks)
-        except Exception:
-            logger.exception('gl drafting group %s failed', gk)
-            raise
 
     def _group_locked(self, gk, trigger_pks):
         live = (LedgerEntry.objects.select_for_update()
@@ -453,7 +521,8 @@ class _Engine:
         elif new_entry is not None:
             GLSourceDoc.objects.filter(entry_id=new_entry.pk).exclude(pk__in=good_pks).update(entry=None)
         now = timezone.now()
-        SourceException.objects.filter(source_doc_id__in=good_pks, status='open').update(
+        SourceException.objects.filter(source_doc_id__in=good_pks, status='open').exclude(
+            kind__in=GROUP_KINDS).update(   # C1: a closed-month change on another group stays open
             status='resolved', resolved_by=self.user, resolved_at=now, resolution_note=RESOLVED_NOTE)
         SourceException.objects.filter(status='open', kind__in=GROUP_KINDS, detail__group_key=gk).update(
             status='resolved', resolved_by=self.user, resolved_at=now, resolution_note=RESOLVED_NOTE)
@@ -470,7 +539,7 @@ class _Engine:
     def _ledger_error(self, gk, err, targets, pending_ok):
         docs = list(GLSourceDoc.objects.filter(pk__in=targets))
         self._exception(docs, 'ledger_error', err.message, {'code': err.code, 'group_key': gk, **err.detail})
-        self._set(pending_ok, status='exception')
+        self._hold({*targets, *pending_ok})
 
     # ── exceptions ───────────────────────────────────────────────────────────
 

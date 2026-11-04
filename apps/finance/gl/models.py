@@ -248,6 +248,7 @@ class GLDraftRun(models.Model):
                       ('partial', 'جزئي'), ('failed', 'فشل')]
     started_at   = models.DateTimeField(auto_now_add=True, verbose_name='بدأ')
     finished_at  = models.DateTimeField(null=True, blank=True, verbose_name='انتهى')
+    heartbeat_at = models.DateTimeField(null=True, blank=True, verbose_name='آخر نبضة')
     status       = models.CharField(max_length=10, choices=STATUS_CHOICES, default='running',
                                     verbose_name='الحالة')
     date_from    = models.DateField(verbose_name='من')

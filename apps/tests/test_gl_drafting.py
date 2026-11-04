@@ -77,12 +77,12 @@ class Base(TestCase):
             return [d for d in self.docs[t] if d1 <= d.doc_date <= d2]
         return read
 
-    def run_engine(self, types=None):
+    def run_engine(self, types=None, d1=D1, d2=D2, **kw):
         types = types or ['sales_tenders']
-        run = DR.start_run(triggered_by='test', date_from=D1, date_to=D2, source_types=types)
+        run = DR.start_run(triggered_by='test', date_from=d1, date_to=d2, source_types=types)
         readers = {t: self.reader(t) for t in self.docs}
-        return DR.draft_range(D1, D2, source_types=types, run=run, fetch=lambda sql: [],
-                              readers=readers)
+        return DR.draft_range(d1, d2, source_types=types, run=run, fetch=lambda sql: [],
+                              readers=readers, **kw)
 
     def rule(self, code='cash', lines=CASH, source_type='sales_tenders', granularity='document',
              action='post', eff=datetime.date(2026, 1, 1), priority=100, conditions=None):
@@ -372,10 +372,24 @@ class DraftingTests(Base):
 
     def test_stale_running_run_is_failed_on_start(self):
         old = DR.start_run(triggered_by='a', date_from=D1, date_to=D2, source_types=[])
-        GLDraftRun.objects.filter(pk=old.pk).update(started_at=timezone.now() - datetime.timedelta(hours=3))
+        self.assertIsNotNone(old.heartbeat_at)
+        GLDraftRun.objects.filter(pk=old.pk).update(heartbeat_at=timezone.now() - datetime.timedelta(minutes=20))
+        with self.assertRaises(DR.DraftBusy):   # 20 min without a heartbeat: still alive
+            DR.start_run(triggered_by='b', date_from=D1, date_to=D2, source_types=[])
+        GLDraftRun.objects.filter(pk=old.pk).update(heartbeat_at=timezone.now() - datetime.timedelta(minutes=31))
         new = DR.start_run(triggered_by='b', date_from=D1, date_to=D2, source_types=[])
         old.refresh_from_db()
         self.assertEqual((old.status, new.status), ('failed', 'running'))
+
+    def test_superseded_run_aborts(self):
+        self.rule()
+        self.docs['sales_tenders'] = [tender('t1', '10.00')]
+        run = DR.start_run(triggered_by='a', date_from=D1, date_to=D2, source_types=['sales_tenders'])
+        GLDraftRun.objects.filter(pk=run.pk).update(status='failed')   # taken over by another start
+        run = DR.draft_range(D1, D2, source_types=['sales_tenders'], run=run, fetch=lambda sql: [],
+                             readers={'sales_tenders': self.reader('sales_tenders')})
+        self.assertEqual((run.status, run.detail['error']), ('failed', 'superseded'))
+        self.assertFalse(LedgerEntry.objects.exists())
 
     def test_reader_failure_gives_partial_and_no_vanish(self):
         self.rule()
@@ -439,7 +453,132 @@ class CommandTests(Base):
         with mock.patch.dict(DR.READERS, {'sales_tenders': self.reader('sales_tenders')}):
             call_command('gl_draft', '--from', '2026-03-01', '--to', '2026-03-31',
                          '--source', 'sales_tenders', '--dry-run', stdout=out)
-        self.assertIn('created', out.getvalue())
+        self.assertIn('  created: 1\n', out.getvalue())
+        self.assertIn('  new: 1\n', out.getvalue())
         self.assertFalse(LedgerEntry.objects.exists())
         self.assertFalse(GLSourceDoc.objects.exists())
         self.assertFalse(GLDraftRun.objects.exists())
+
+
+class LateChangeSafetyTests(Base):
+    MAR31 = datetime.date(2026, 3, 31)
+    APR1 = datetime.date(2026, 4, 1)
+
+    def test_move_out_of_closed_group_keeps_exception_open(self):
+        """C1: closed-month group A keeps its exception; the doc drafts in open group B; no auto-resolve."""
+        self.rule(granularity='branch_day')
+        d2 = datetime.date(2026, 4, 30)
+        self.docs['sales_tenders'] = [tender('t1', '100.00', date=self.MAR31),
+                                      tender('t2', '50.00', pt='40', date=self.MAR31)]
+        self.run_engine(d2=d2)
+        a = self.live('cash:130:2026-03-31').get()
+        approve(a.id, user=self.staff)
+        a_lines = self.amounts(a)
+        self.close_month(self.MAR31)
+        self.docs['sales_tenders'][1] = tender('t2', '50.00', pt='40', date=self.APR1)
+        for i in range(2):
+            n = LedgerEntry.objects.count()
+            run = self.run_engine(d2=d2)
+            a.refresh_from_db()
+            self.assertEqual((a.status, self.amounts(a)), ('approved', a_lines))
+            b = self.live('cash:130:2026-04-01').get()
+            self.assertEqual(self.amounts(b)[0][1], DEC('50.00'))
+            self.assertEqual(GLSourceDoc.objects.get(source_key='t2').entry_id, b.id)
+            ex = SourceException.objects.get(source_doc__source_key='t2')
+            self.assertEqual((ex.kind, ex.status, ex.original_entry_id), ('closed_period_change', 'open', a.id))
+            if i == 1:   # run 2 changes nothing
+                self.assertEqual(LedgerEntry.objects.count(), n)
+                for k in ('created', 'replaced', 'reversed', 'deleted'):
+                    self.assertEqual(run.counts[k], 0, k)
+
+    def test_crash_between_upsert_and_classify_is_repaired(self):
+        from unittest import mock
+        self.rule()
+        self.docs['sales_tenders'] = [tender('t1', '100.00')]
+        self.run_engine()
+        self.docs['sales_tenders'] = [tender('t1', '90.00')]
+        with mock.patch.object(DR._Engine, '_classify', side_effect=RuntimeError('crash')):
+            run = self.run_engine()
+        self.assertEqual(run.status, 'failed')
+        self.assertEqual(self.amounts(self.live('t1').get())[0][1], DEC('100.00'))
+        run = self.run_engine()
+        self.assertEqual(run.status, 'success')
+        self.assertEqual(self.amounts(self.live('t1').get())[0][1], DEC('90.00'))
+
+    def test_skipped_doc_still_linked_to_live_entry_is_removed(self):
+        self.rule()
+        self.docs['sales_tenders'] = [tender('t1', '100.00')]
+        self.run_engine()
+        e = self.live('t1').get()
+        skip = R.save_rule(user=self.staff, code='cash', source_type='sales_tenders',
+                           effective_from=datetime.date(2026, 3, 1), conditions={}, lines=[], action='skip')
+        # simulate a crash after classify (doc skipped) but before its old group was rebuilt
+        GLSourceDoc.objects.filter(source_key='t1').update(status='skipped', rule=skip, group_key='')
+        run = self.run_engine()
+        self.assertEqual(run.counts['deleted'], 1)
+        self.assertFalse(LedgerEntry.objects.filter(pk=e.pk).exists())
+        sd = GLSourceDoc.objects.get(source_key='t1')
+        self.assertEqual((sd.status, sd.entry_id), ('skipped', None))
+
+    def test_old_group_failure_holds_doc_out_of_new_group(self):
+        """I1c: B < A; A's rebuild raises a non-LedgerError -> doc never in two live entries."""
+        from unittest import mock
+        self.rule(granularity='branch_day')
+        A, B = 'cash:130:2026-03-10', 'cash:130:2026-03-09'
+        self.docs['sales_tenders'] = [tender('t1', '100.00'), tender('t2', '50.00', pt='40')]
+        self.run_engine()
+        approve(self.live(A).get().id, user=self.staff)
+        self.docs['sales_tenders'][1] = tender('t2', '50.00', pt='40', date=datetime.date(2026, 3, 9))
+        real = DR._Engine._group_locked
+
+        def boom(engine, gk, triggers):
+            if gk == A:
+                raise RuntimeError('db hiccup')
+            return real(engine, gk, triggers)
+        with mock.patch.object(DR._Engine, '_group_locked', boom):
+            run = self.run_engine()
+        self.assertEqual(run.status, 'partial')
+        self.assertIn(A, run.detail['group_errors'])
+        self.assertEqual(self.amounts(self.live(A).get())[0][1], DEC('150.00'))
+        self.assertFalse(self.live(B).exists())
+        sd = GLSourceDoc.objects.get(source_key='t2')
+        self.assertEqual(sd.status, 'exception')
+        self.assertEqual(sd.exceptions.get(status='open').kind, 'ledger_error')
+        run = self.run_engine()   # healthy again: A reversed + redrafted, then B
+        self.assertEqual(run.status, 'success')
+        self.assertEqual(self.amounts(self.live(A).get())[0][1], DEC('100.00'))
+        self.assertEqual(self.amounts(self.live(B).get())[0][1], DEC('50.00'))
+        self.assertFalse(SourceException.objects.filter(status='open').exists())
+
+    def test_mass_vanish_guard(self):
+        self.rule()
+        self.docs['sales_tenders'] = [tender(f't{i}', '1.00') for i in range(12)]
+        self.run_engine()
+        self.docs['sales_tenders'] = []   # a silently empty read
+        run = self.run_engine()
+        self.assertEqual(run.status, 'partial')
+        self.assertEqual(run.counts['vanished'], 0)
+        self.assertEqual(run.detail['vanish_guard']['sales_tenders'], {'would_vanish': 12, 'seen': 12})
+        self.assertEqual(LedgerEntry.objects.filter(status='draft').count(), 12)
+        run = self.run_engine(allow_mass_vanish=True)
+        self.assertEqual((run.status, run.counts['vanished'], run.counts['deleted']), ('success', 12, 12))
+
+    def test_command_allow_mass_vanish_flag(self):
+        from io import StringIO
+        from unittest import mock
+
+        from django.core.management import call_command
+        self.rule()
+        self.docs['sales_tenders'] = [tender(f't{i}', '1.00') for i in range(12)]
+        self.run_engine()
+        self.docs['sales_tenders'] = []
+        with mock.patch.dict(DR.READERS, {'sales_tenders': self.reader('sales_tenders')}):
+            out = StringIO()
+            call_command('gl_draft', '--from', '2026-03-01', '--to', '2026-03-31',
+                         '--source', 'sales_tenders', stdout=out)
+            self.assertIn('status: partial', out.getvalue())
+            out = StringIO()
+            call_command('gl_draft', '--from', '2026-03-01', '--to', '2026-03-31',
+                         '--source', 'sales_tenders', '--allow-mass-vanish', stdout=out)
+        self.assertIn('  vanished: 12\n', out.getvalue())
+        self.assertFalse(LedgerEntry.objects.exists())
