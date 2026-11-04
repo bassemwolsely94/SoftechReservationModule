@@ -38,6 +38,7 @@ ALL_MODULES = [
     'pic_analytics', # doc 33: 'view' = all branches + cost/GP + calls tabs, 'export' = Excel (branch managers = named grants)
     'tasks',         # المهام: own module since 2026-11-03 (owner); every role keeps its access by default
     'counselling',   # إرشادات الاستخدام (Project 4): 'edit' = write / AI-draft / link items, 'approve' = make customer-facing
+    'usage_print',   # طباعة طريقة الاستخدام: 'view' open, 'create' confirm + print, 'edit' presets + slip settings
 ]
 
 ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize']
@@ -99,6 +100,7 @@ PERMISSIONS = {
     'pharmacist': {
         'dashboard':    RO,
         'pos':          {'view', 'create'},         # indirect-POS operator
+        'usage_print':  {'view', 'create'},         # confirm + print usage-instruction slips
         'reservations': {'view', 'create', 'edit', 'approve', 'finalize'},
         # approve = mark stock available;  finalize = mark fulfilled
         'demand':       {'view', 'create', 'edit'},
@@ -131,6 +133,7 @@ PERMISSIONS = {
     'salesperson': {
         'dashboard':    RO,
         'pos':          {'view', 'create'},         # indirect-POS operator (floor)
+        'usage_print':  {'view', 'create'},         # confirm + print usage-instruction slips
         'reservations': {'view', 'create', 'edit'},
         'demand':       {'view', 'create', 'edit'},
         'transfers':    {'view', 'create'},
@@ -223,6 +226,7 @@ PERMISSIONS = {
     'supervisor': {
         'dashboard':    RO,
         'pos':          {'view', 'create', 'edit'},
+        'usage_print':  {'view', 'create', 'edit'},   # + presets and slip settings
         'reservations': {'view', 'create', 'edit', 'approve', 'export', 'assign'},
         'demand':       {'view', 'create', 'edit', 'approve', 'export', 'assign'},
         'transfers':    {'view', 'approve', 'export'},

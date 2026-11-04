@@ -211,6 +211,26 @@ class CallLog(models.Model):
         null=True, blank=True,
         verbose_name='موعد معاودة الاتصال',
     )
+    # Project 3 — automatic call-back for a missed inbound call (apps/pbx/missed_callbacks.py).
+    # missed_cdr is UNIQUE → the job can never queue the same missed call twice.
+    missed_cdr = models.OneToOneField(
+        'pbx.CdrCall', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='auto_callback', verbose_name='المكالمة الفائتة',
+    )
+    missed_count = models.PositiveSmallIntegerField(
+        default=0, verbose_name='عدد المكالمات الفائتة',
+        help_text='كم مرة اتصل هذا الرقم ولم يُرد عليه قبل معاودة الاتصال',
+    )
+    CALLBACK_RESOLUTION_CHOICES = [
+        ('',              '—'),
+        ('manual',        'أُغلقت يدوياً'),
+        ('auto_returned', 'أُغلقت تلقائياً بعد مكالمة تم الرد عليها'),
+    ]
+    callback_resolution = models.CharField(
+        max_length=15, choices=CALLBACK_RESOLUTION_CHOICES, blank=True, default='',
+        verbose_name='طريقة إغلاق المعاودة',
+    )
+    callback_resolved_at = models.DateTimeField(null=True, blank=True, verbose_name='وقت إغلاق المعاودة')
 
     SOURCE_CHOICES = [
         ('manual', 'تسجيل الموظف'),

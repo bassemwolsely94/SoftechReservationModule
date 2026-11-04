@@ -9,6 +9,7 @@ from . import public_views
 
 urlpatterns = [
     path('challenge/', public_views.challenge),
+    path('health/', public_views.health),     # liveness: DB reachable → 200, else 503
     path('track/<str:token>/', delivery_views.delivery_public_track),
     # Project 4: the customer's counselling card (signed send token) + its opt-out link
     path('counsel/<str:token>/', counsel_views.counsel_card_public),

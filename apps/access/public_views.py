@@ -29,3 +29,31 @@ def challenge(request):
     # the browser waits this long after fetching before it submits (frontend/src/utils/publicGuard.js)
     data['min_fill_seconds'] = int(settings.PUBLIC_MIN_FILL_SECONDS)
     return Response(data)
+
+
+class HealthThrottle(AnonRateThrottle):
+    """Per client IP: an uptime monitor pings every minute or five."""
+    scope = 'public_health'
+
+    def get_rate(self):
+        return '300/hour'
+
+
+@api_view(['GET'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+@throttle_classes([HealthThrottle])
+def health(request):
+    """Liveness for nginx / release.sh / an external uptime monitor: 200 when this process can
+    reach PostgreSQL, else 503. Says nothing else (no version, no scheduler, no SOFTECH)."""
+    from django.db import connection
+    try:
+        with connection.cursor() as cur:
+            cur.execute('SELECT 1')
+            cur.fetchone()
+    except Exception:
+        resp = Response({'status': 'error'}, status=503)
+    else:
+        resp = Response({'status': 'ok'})
+    resp['Cache-Control'] = 'no-store'
+    return resp

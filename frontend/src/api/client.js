@@ -148,6 +148,13 @@ export const reservationsApi = {
   createForce:  (data) => api.post('/reservations/?force=true', data),
 }
 
+// Project 3 — «مبيعات فائتة»: suggestions only; confirm = POST /reservations/ with missed_sale
+export const missedSalesApi = {
+  list:   (params)               => api.get('/pos-orders/missed-sales/', { params }),
+  get:    (id)                   => api.get(`/pos-orders/missed-sales/${id}/`),
+  reject: (id, reason, note = '') => api.post(`/pos-orders/missed-sales/${id}/reject/`, { reason, note }),
+}
+
 // ── Customers ─────────────────────────────────────────────────────────────────
 
 export const customersApi = {
@@ -1179,6 +1186,21 @@ export const shortageApi = {
 
 // ── Stock Count ───────────────────────────────────────────────────────────────
 
+// Small daily counts (Project 2) — /api/stockcount/daily/ (404 while DAILY_COUNT_ENABLED is off).
+export const dailyCountApi = {
+  my:        ()           => api.get('/stockcount/daily/my/'),
+  board:     (params)     => api.get('/stockcount/daily/board/', { params }),
+  staff:     (branch)     => api.get('/stockcount/daily/staff/', { params: { branch } }),
+  report:    (params)     => api.get('/stockcount/daily/report/', { params }),
+  reportXlsx: (params)    => api.get('/stockcount/daily/report/', { params: { ...params, export: 'xlsx' }, responseType: 'blob' }),
+  recount:   (id, data)   => api.post(`/stockcount/daily/picks/${id}/recount/`, data),
+  accept:    (id, data)   => api.post(`/stockcount/daily/picks/${id}/accept/`, data),
+  escalate:  (id, data)   => api.post(`/stockcount/daily/picks/${id}/escalate/`, data),
+  generate:  (data)       => api.post('/stockcount/daily/generate/', data),
+  settings:  ()           => api.get('/stockcount/daily/settings/'),
+  saveSettings: (data)    => api.patch('/stockcount/daily/settings/', data),
+}
+
 export const stockCountApi = {
   // Session CRUD
   list:         (params) => api.get('/stockcount/sessions/', { params }),
@@ -1791,8 +1813,8 @@ export const callCenterApi = {
     }),
 
   // Pending callbacks — mode='overdue'|'all'
-  pendingCallbacks: (mode = 'overdue') =>
-    api.get('/callcenter/calls/pending-callbacks/', { params: { mode } }),
+  pendingCallbacks: (mode = 'overdue', auto = false) =>
+    api.get('/callcenter/calls/pending-callbacks/', { params: { mode, ...(auto ? { auto: 1 } : {}) } }),
   markCallbackDone: (id) => api.patch(`/callcenter/calls/${id}/`, { status: 'answered' }),
 
   // Dashboard KPIs
@@ -2899,6 +2921,20 @@ export const replacementApi = {
 }
 
 // ── Stock Transactions Audit (تدقيق حركات المخزون, doc 32) — every rule enforced server-side ──
+// Usage-instructions slip (Project 5) — flag + RBAC enforced server-side (apps/usage_print/access.py)
+export const usagePrintApi = {
+  sheet:        (params)        => api.get('/usage-print/sheet/', { params }),
+  line:         (id, data)      => api.post(`/usage-print/lines/${id}/`, data),
+  print:        (id, layout)    => api.post(`/usage-print/sheets/${id}/print/`, { layout }),
+  prescription: (id, file)      => {
+    const fd = new FormData()
+    fd.append('prescription_image', file)
+    return api.post(`/usage-print/sheets/${id}/prescription/`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+  settings:     ()              => api.get('/usage-print/settings/'),
+  saveSettings: (data)          => api.put('/usage-print/settings/', data),
+}
+
 export const stockAuditApi = {
   me:           ()              => api.get('/stock-audit/me/'),
   summary:      (params = {})   => api.get('/stock-audit/summary/', { params }),

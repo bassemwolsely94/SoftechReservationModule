@@ -71,6 +71,7 @@ urlpatterns = [
     path('api/access/', include('apps.access.urls')),                # security N1 — network badge + trusted networks
     path('api/stock-audit/', include('apps.stock_audit.urls')),
     path('api/pic-analytics/', include('apps.pic_analytics.urls')),   # doc 33 — gated in apps/pic_analytics/access.py
+    path('api/usage-print/', include('apps.usage_print.urls')),       # Project 5 — flag + RBAC in apps/usage_print/access.py
     path('api/trace/', include('apps.trace.urls')),          # P-58 — dormant; parse/ is admin-only     # doc 32 — gated in apps/stock_audit/access.py
     # Customer-facing self-service portal (external; magic-link auth, customer-scoped)
     path('api/portal/',     include('apps.portal.urls')),

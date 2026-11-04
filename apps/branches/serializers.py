@@ -8,7 +8,7 @@ class BranchSettingsSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'branch',
             'allow_reservations', 'allow_transfers',
-            'allow_vouchers', 'allow_stockcount', 'allow_shortage',
+            'allow_vouchers', 'allow_stockcount', 'allow_shortage', 'daily_count_enabled',
             'notifications_enabled', 'is_24h', 'working_hours',
             'created_at', 'updated_at',
         ]

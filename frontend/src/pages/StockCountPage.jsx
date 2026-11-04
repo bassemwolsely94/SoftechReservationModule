@@ -4,6 +4,8 @@ import CanDo from '../components/CanDo';
 import useHelpTab from '../help/useHelpTab'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
+import DailyCountTab from './stockcount/DailyCountTab'
+import useAuthStore from '../store/authStore'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -841,6 +843,8 @@ const TABS = [
   { key: 'snapshot', label: '📸 اللقطة' },
   { key: 'count',    label: '📊 العد' },
   { key: 'variance', label: '📉 الفروق' },
+  // Small daily counts (Project 2) — shown when DAILY_COUNT_ENABLED and the user may review.
+  { key: 'daily',    label: '🧮 الجرد اليومي', standalone: true },
 ];
 
 export default function StockCountPage() {
@@ -848,6 +852,9 @@ export default function StockCountPage() {
   useHelpTab(activeTab)
   const [selectedSession, setSelectedSession] = useState(null);
   const [refresh, setRefresh]               = useState(0);
+  const user = useAuthStore(s => s.user);
+  const showDaily = !!(user?.features?.daily_count && user?.can_stock_audit);
+  const tabs = TABS.filter(t => t.key !== 'daily' || showDaily);
 
   function handleSelect(s) {
     setSelectedSession(s);
@@ -892,8 +899,8 @@ export default function StockCountPage() {
 
       {/* Tabs */}
       <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', padding: '0 32px', display: 'flex', gap: 0 }} data-tour="stockcount-sessions-tabs">
-        {TABS.map(tab => {
-          const disabled = tab.key !== 'sessions' && !selectedSession;
+        {tabs.map(tab => {
+          const disabled = tab.key !== 'sessions' && !tab.standalone && !selectedSession;
           return (
             <button key={tab.key}
               disabled={disabled}
@@ -933,6 +940,7 @@ export default function StockCountPage() {
         {activeTab === 'variance' && selectedSession && (
           <VarianceTab session={selectedSession} onRefresh={refreshSession} />
         )}
+        {activeTab === 'daily' && showDaily && <DailyCountTab />}
       </div>
     </div>
   );

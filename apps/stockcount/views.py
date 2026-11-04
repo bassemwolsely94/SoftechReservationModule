@@ -85,6 +85,10 @@ class StockCountSessionViewSet(viewsets.ModelViewSet):
         # Batch 5 part 2: only the user's branches (sessions carry the SOFTECH code); every
         # detail action goes through get_object(), so it inherits this.
         qs     = branch_scope.scope_code(qs, self.request.user)
+        # Daily counts (mode='daily') live behind /api/stockcount/daily/ only: they are blind for the
+        # counter and every count is an immutable attempt, so the classic session endpoints
+        # (snapshots, count-item, upload, close) must never reach them.
+        qs     = qs.exclude(mode='daily')
         branch = self.request.query_params.get('branch_code')
         st     = self.request.query_params.get('status')
         mode   = self.request.query_params.get('mode')
