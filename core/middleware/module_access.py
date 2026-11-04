@@ -165,9 +165,13 @@ def _grants():
     if now - _grants_cache['at'] > float(getattr(settings, 'RBAC_GRANTS_TTL', 60)):
         from apps.users.models import RoleModuleAccess
         by_role, modules = {}, set()
+        enforced = enforced_roles()
         rows = RoleModuleAccess.objects.values_list('role', 'module', 'action', 'is_allowed')
         for role, module, action, allowed in rows:
-            modules.add(module)                  # an explicit denial counts as seeded too
+            # an explicit denial counts as seeded too — but not an enforced role's rows (R17): the
+            # accountant's deny rows must not end another role's fail-open on an unseeded module
+            if role not in enforced:
+                modules.add(module)
             if allowed:
                 by_role.setdefault(role, set()).add((module, action))
         _grants_cache.update(at=now, by_role=by_role, seeded=bool(modules), modules=frozenset(modules))
@@ -175,7 +179,8 @@ def _grants():
 
 
 def seeded_modules() -> frozenset:
-    """Modules that have at least one RoleModuleAccess row (allowed or not). A module nobody has a
+    """Modules that have at least one RoleModuleAccess row (allowed or not) of a role outside
+    RBAC_ENFORCED_ROLES (R17 — enforced roles never change another role's seeding). A module nobody has a
     row for isn't seeded yet — a fresh install, or a module whose rows a migration hasn't added
     (Batch 4, Z-5c)."""
     _grants()
@@ -416,7 +421,7 @@ class ModuleAccessMiddleware:
         )
         if mode != 'enforce':
             return None
-        if not seeded:
+        if not seeded and profile.role not in enforced_roles():
             logger.error('RBAC_ENFORCEMENT=enforce but RoleModuleAccess is empty — '
                          'not blocking (run manage.py seed_permissions)')
             return None

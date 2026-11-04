@@ -84,3 +84,36 @@ class AccountantEnforcedInLogModeTests(TestCase):
     @override_settings(RBAC_ENFORCEMENT='off')
     def test_off_stays_off(self):
         self.assertEqual(module_access._mode_for('accountant'), 'off')
+
+
+class EnforcedRolesDoNotSeedTests(TestCase):
+    """R17: an enforced role's rows (users.0051 writes accountant deny rows for every module) never
+    end another role's fail-open on a module nobody else has rows for; the enforced role itself
+    never fails open."""
+
+    def setUp(self):
+        from apps.users.models import RoleModuleAccess
+        RoleModuleAccess.objects.all().delete()
+        RoleModuleAccess.objects.create(role='accountant', module='replacement', action='view',
+                                        is_allowed=False)
+        module_access.clear_cache()
+        self.ph = make_user('r17_ph', role='pharmacist')[1]
+        self.acc = make_user('r17_acc', role='accountant')[1]
+
+    def tearDown(self):
+        module_access.clear_cache()
+
+    def test_accountant_rows_do_not_seed_a_module(self):
+        self.assertNotIn('replacement', module_access.seeded_modules())
+
+    def test_other_roles_keep_the_unseeded_fallback(self):
+        from core.permissions import matrix_allows
+        from apps.replacement import authz
+        self.assertTrue(matrix_allows(self.ph, 'replacement', 'view'))
+        self.assertEqual(authz.role_allows(self.ph, 'create'),
+                         self.ph.role in authz.FALLBACK_ROLES['create'])
+
+    def test_enforced_role_never_fails_open(self):
+        from core.permissions import matrix_allows
+        self.assertFalse(matrix_allows(self.acc, 'replacement', 'view'))
+        self.assertFalse(matrix_allows(self.acc, 'customers', 'view'))      # no rows at all
