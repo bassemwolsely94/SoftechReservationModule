@@ -5,14 +5,15 @@ from .models import BankStatementImport, BankStatementLine, PaymentException
 class BankStatementImportSerializer(serializers.ModelSerializer):
     imported_by_name = serializers.CharField(source='imported_by.full_name', read_only=True, default='')
     branch_name      = serializers.CharField(source='branch.name',           read_only=True)
-    match_rate       = serializers.SerializerMethodField()
+    status_label     = serializers.CharField(source='get_status_display',    read_only=True)
+    match_rate       = serializers.SerializerMethodField()   # percent 0–100
 
     class Meta:
         model  = BankStatementImport
         fields = [
             'id', 'branch', 'branch_name', 'bank_name', 'account_number',
             'payment_method', 'statement_from', 'statement_to', 'raw_file',
-            'status', 'total_lines', 'matched_lines', 'unmatched_lines',
+            'status', 'status_label', 'total_lines', 'matched_lines', 'unmatched_lines',
             'match_rate', 'error_message',
             'imported_by', 'imported_by_name', 'imported_at', 'completed_at',
         ]
@@ -64,13 +65,15 @@ class PaymentExceptionSerializer(serializers.ModelSerializer):
     payment_ref = serializers.CharField(
         source='payment.reference_number', read_only=True, default=''
     )
+    exception_type_label = serializers.CharField(source='get_exception_type_display', read_only=True)
+    status_label         = serializers.CharField(source='get_status_display', read_only=True)
 
     class Meta:
         model  = PaymentException
         fields = [
             'id', 'payment', 'payment_ref', 'payment_amount',
-            'statement_line', 'exception_type', 'severity', 'anomaly_score',
-            'detail', 'status', 'assigned_to', 'assigned_to_name',
+            'statement_line', 'exception_type', 'exception_type_label', 'severity', 'anomaly_score',
+            'detail', 'status', 'status_label', 'assigned_to', 'assigned_to_name',
             'resolved_by', 'resolved_by_name', 'resolved_at', 'resolution_notes',
             'abuse_flag_id', 'created_at',
         ]

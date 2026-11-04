@@ -1142,8 +1142,8 @@ SCREENS = [
         'summary': T('رفع كشف الحساب البنكي (CSV/Excel) ومطابقته تلقائياً بالمدفوعات المسجّلة، ومعالجة الاستثناءات.', 'Upload the bank statement (CSV/Excel) and match it automatically to recorded payments, then handle exceptions.'),
         'audience': T('المالية.', 'Finance.'),
         'tabs': [
-            {'key': 'exceptions', 'title': T('⚠️ الاستثناءات', '⚠️ Exceptions'), 'body': T('حركات تحتاج قراراً: غير مسجّلة، مكررة، تسوية متأخرة، فرع خاطئ، تباين في المبلغ، مؤشر إساءة. «معالجة» ← ملاحظة التسوية ← «حل الاستثناء» أو «تجاهل».', 'Lines that need a decision: unrecorded, duplicate, late settlement, wrong branch, amount mismatch, abuse signal. "Handle" → settlement note → "Resolve" or "Ignore".')},
-            {'key': 'statements', 'title': T('🏦 الكشوف البنكية', '🏦 Bank statements'), 'body': T('الكشوف المرفوعة بعدد السطور والمطابق ونسبة المطابقة؛ «رفع كشف حساب» و«تشغيل المطابقة».', 'Uploaded statements with line count, matched and match rate; "Upload statement" and "Run matching".')},
+            {'key': 'exceptions', 'title': T('⚠️ الاستثناءات', '⚠️ Exceptions'), 'body': T('حركات تحتاج قراراً: دفعة مفقودة من الكشف، حركة بنكية غير مسجّلة، مكررة، دفع جزئي، فرع أو مبلغ أو كاشير خاطئ، تسوية متأخرة، شذوذ / إشارة احتيال. «معالجة» ← ملاحظة التسوية ← «حل الاستثناء» أو «تجاهل».', 'Lines that need a decision: payment missing from the statement, unrecorded bank line, duplicate, partial payment, wrong branch, amount or cashier, late settlement, anomaly / fraud signal. "Handle" → settlement note → "Resolve" or "Ignore".')},
+            {'key': 'statements', 'title': T('🏦 الكشوف البنكية', '🏦 Bank statements'), 'body': T('الكشوف المرفوعة: البنك ورقم الحساب، عدد السطور والمطابق ونسبة المطابقة والحالة؛ «رفع كشف حساب» و«تشغيل المطابقة».', 'Uploaded statements: bank and account number, line count, matched, match rate and status; "Upload statement" and "Run matching".')},
         ],
         'related': ['finance.payments'],
         'tour': [
@@ -1167,12 +1167,14 @@ SCREENS = [
              'label': T('⚠️ الاستثناءات · 🏦 الكشوف البنكية', '⚠️ Exceptions · 🏦 Bank statements')},
             {'target': 'finance-payment-audit-exceptions', 'text': T('الاستثناءات المفتوحة: النوع والمبلغ والمرجع والحالة والتاريخ — تظهر عند وجودها.',
                                               'Open exceptions: type, amount, reference, status and date — shown when there are any.'),
-             'more': T('الأنواع: غير مسجّلة (في البنك ومش متسجلة عندنا)، مكررة، تسوية متأخرة، فرع خاطئ، تباين في المبلغ، ومؤشر إساءة.\n'
-                       '• مؤشر الإساءة بيطلع لما دفعة تبعد كتير عن المعتاد للكاشير أو طريقة الدفع — راجعه بعناية.',
-                       'Types: unrecorded (in the bank but not recorded here), duplicate, late settlement, wrong branch, amount mismatch and abuse signal.\n'
-                       '• An abuse signal appears when a payment is far from the usual for that cashier or payment method — review it carefully.'),
+             'more': T('الأنواع (اسمها جاي من السيرفر): دفعة مفقودة من الكشف، حركة بنكية غير مسجّلة (في البنك ومش متسجلة عندنا)، دفعة مكررة، دفع جزئي، فرع خاطئ، مبلغ خاطئ، كاشير خاطئ، تسوية متأخرة، وشذوذ / إشارة احتيال.\n'
+                       '• «شذوذ / إشارة احتيال» بيطلع لما دفعة تبعد كتير عن المعتاد للكاشير أو طريقة الدفع — راجعه بعناية.\n'
+                       '• الحالة: مفتوح، قيد التحقيق، محلول، مرفوض.',
+                       'Types (named by the server): payment missing from the statement, unrecorded bank line (in the bank but not recorded here), duplicate payment, partial payment, wrong branch, wrong amount, wrong cashier, late settlement, and anomaly / fraud signal.\n'
+                       '• "Anomaly / fraud signal" appears when a payment is far from the usual for that cashier or payment method — review it carefully.\n'
+                       '• Status: open, investigating, resolved, dismissed.'),
              'label': T('الاستثناءات المفتوحة', 'Open exceptions'),
-             'when': T('ابدأ بـ «🚨 مؤشر إساءة» و«مكرر».', 'Start with "🚨 Abuse signal" and "Duplicate".'),
+             'when': T('ابدأ بـ «شذوذ / إشارة احتيال» و«دفعة مكررة».', 'Start with "Anomaly / fraud signal" and "Duplicate payment".'),
              'open_hint': T('تبويب «⚠️ الاستثناءات» — يظهر لو فيه مفتوح.', 'The "⚠️ Exceptions" tab — shown when any are open.')},
             {'target': 'finance-payment-audit-handle', 'text': T('«معالجة» تفتح نافذة لكتابة ملاحظة ثم «حل الاستثناء» أو «تجاهل».',
                                               '«معالجة» (Handle) opens a window to add a note, then «حل الاستثناء» (Resolve) or «تجاهل» (Ignore).'),
@@ -1182,8 +1184,8 @@ SCREENS = [
                        '• "Resolve" and "Ignore" both close the exception and record your name and the time.'),
              'label': T('معالجة', 'Handle'),
              'open_hint': T('على استثناء مفتوح.', 'On an open exception.')},
-            {'target': 'finance-payment-audit-statements', 'text': T('في تبويب الكشوف: المرجع والسطور والمطابق ونسبة المطابقة والحالة.',
-                                              'On the statements tab: reference, lines, matched, match rate and status.'),
+            {'target': 'finance-payment-audit-statements', 'text': T('في تبويب الكشوف: البنك / الحساب والسطور والمطابق ونسبة المطابقة والحالة.',
+                                              'On the statements tab: bank / account, lines, matched, match rate and status.'),
              'more': T('نسبة مطابقة واطية معناها إن فيه حركات كتير في البنك مش لاقية دفعة مسجلة — هتلاقيها استثناءات.\n'
                        '• الحالات: في الانتظار، قيد المعالجة، مكتمل، فشل.',
                        'A low match rate means many bank lines have no recorded payment — you will find them as exceptions.\n'
@@ -1220,7 +1222,7 @@ SCREENS = [
             {'target': 'finance-payment-audit-dismiss',
              'label': T('تجاهل', 'Ignore'),
              'text': T('يغلق الاستثناء «متجاهل» بلا حل.', 'Closes the exception as "dismissed" without a fix.'),
-             'warn': T('لا تتجاهل مؤشر إساءة أو تبايناً في المبلغ بلا تحقق.', 'Never ignore an abuse signal or amount mismatch unchecked.'),
+             'warn': T('لا تتجاهل «شذوذ / إشارة احتيال» أو «مبلغ خاطئ» بلا تحقق.', 'Never ignore an anomaly / fraud signal or a wrong amount unchecked.'),
              'open_hint': T('داخل نافذة «معالجة». يحتاج صلاحية «اعتماد».', 'Inside the "Handle" box. Needs "approve" permission.')},
         ],
         'tips': [
@@ -1228,8 +1230,8 @@ SCREENS = [
               'Every action is checked on the server (Permissions Matrix, finance module): viewing needs "view", "Resolve" and "Ignore" need "approve", assigning needs "assign" or "approve", and uploading a statement needs "create".'),
         ],
 
-        'updated': '2026-11-01',
-        'change_note': T('جولة «اعرض لي» رجعت كاملة: شرح كل خطوة مع تلميح الزر', 'The full "Show me" tour is back: every step\'s explanation with its button hint'),
+        'updated': '2026-11-04',
+        'change_note': T('أسماء أنواع الاستثناءات وحالاتها من السيرفر، عمود «البنك / الحساب»، نسبة مطابقة صحيحة، وملاحظة التسوية بتتحفظ', 'Exception type and status names come from the server, a "Bank / account" column, a correct match rate, and the settlement note is now saved'),
     },
     {
         'key': 'finance.reconciliation',

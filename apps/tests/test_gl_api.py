@@ -57,6 +57,18 @@ class GLApiTests(TestCase):
     def test_requires_auth(self):
         self.assertIn(make_anon_client().get(BASE + 'accounts/').status_code, (401, 403))
 
+    def test_chart_of_accounts_lists_every_account_unpaged(self):
+        # «دليل الحسابات» (/finance/coa) shows the whole chart: no 50-row API page (2026-11-04)
+        grp = GLAccountGroup.objects.get(name='نقدية')
+        GLAccount.objects.bulk_create([
+            GLAccount(code=f'19{i:02d}', name=f'حساب {i}', group=grp, nature='debit',
+                      account_type='asset', statement_line='cash') for i in range(60)])
+        r = self.c.get(BASE + 'accounts/')
+        self.assertEqual(r.status_code, 200)
+        self.assertIsInstance(r.data, list)
+        self.assertEqual(len(r.data), GLAccount.objects.count())
+        self.assertGreater(len(r.data), 50)
+
     def test_non_all_branch_user_403(self):
         self.assertEqual(self.pharm.get(BASE + 'accounts/').status_code, 403)
 

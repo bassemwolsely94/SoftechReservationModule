@@ -10,16 +10,9 @@ import useServerSort from '../hooks/useServerSort'
 import SortTh from '../components/SortTh'
 
 const EXC_SORT = ['exception_type', 'payment__amount', 'payment__reference_number', 'status', 'created_at']
-const STMT_SORT = ['id', 'total_lines', 'matched_lines', 'status', 'imported_at']
+const STMT_SORT = ['bank_name', 'total_lines', 'matched_lines', 'status', 'imported_at']
 
-const EXCEPTION_TYPE_LABELS = {
-  unrecorded:         'غير مسجل',
-  duplicate:          'مكرر',
-  delayed_settlement: 'تسوية متأخرة',
-  wrong_branch:       'فرع خاطئ',
-  amount_mismatch:    'تباين في المبلغ',
-  abuse_flag:         '🚨 مؤشر إساءة',
-}
+// type / status labels come from the server (exception_type_label, status_label)
 
 const EXCEPTION_STATUS_COLORS = {
   open:       'bg-amber-100 text-amber-800',
@@ -80,7 +73,7 @@ function ResolveModal({ exception, onClose }) {
   const [err, setErr]   = useState(null)
 
   const resolve = useMutation({
-    mutationFn: () => paymentAuditApi.resolveException(exception.id, { note }),
+    mutationFn: () => paymentAuditApi.resolveException(exception.id, { resolution_notes: note }),
     onSuccess:  () => { qc.invalidateQueries({ queryKey: ['payment-audit', 'exceptions'] }); onClose() },
     onError:    e  => setErr(e.response?.data?.detail || 'خطأ'),
   })
@@ -95,7 +88,7 @@ function ResolveModal({ exception, onClose }) {
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
         <h3 className="text-lg font-bold mb-1">معالجة الاستثناء</h3>
         <p className="text-sm text-gray-500 mb-4">
-          {EXCEPTION_TYPE_LABELS[exception.exception_type] || exception.exception_type} — {exception.amount ? Number(exception.amount).toLocaleString('ar-EG') + ' ج' : ''}
+          {exception.exception_type_label || exception.exception_type}{exception.payment_amount ? ' — ' + Number(exception.payment_amount).toLocaleString('ar-EG') + ' ج' : ''}
         </p>
         <textarea data-tour="finance-payment-audit-note" value={note} onChange={e => setNote(e.target.value)}
           placeholder="ملاحظة التسوية..."
@@ -206,7 +199,7 @@ export default function PaymentAuditPage() {
                 {exceptions.map(ex => (
                   <tr key={ex.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium">
-                      {EXCEPTION_TYPE_LABELS[ex.exception_type] || ex.exception_type}
+                      {ex.exception_type_label || ex.exception_type}
                     </td>
                     <td className="px-4 py-3 font-semibold">
                       {ex.payment_amount ? Number(ex.payment_amount).toLocaleString('ar-EG') + ' ج' : '—'}
@@ -216,7 +209,7 @@ export default function PaymentAuditPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${EXCEPTION_STATUS_COLORS[ex.status] || 'bg-gray-100'}`}>
-                        {ex.status}
+                        {ex.status_label || ex.status}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-500 text-xs">
@@ -251,7 +244,7 @@ export default function PaymentAuditPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  <SortTh {...stmtSort('id', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">المرجع البنكي</SortTh>
+                  <SortTh {...stmtSort('bank_name')} className="px-4 py-3 text-right font-semibold text-gray-600">البنك / الحساب</SortTh>
                   <SortTh {...stmtSort('total_lines', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">إجمالي السطور</SortTh>
                   <SortTh {...stmtSort('matched_lines', 'number')} className="px-4 py-3 text-right font-semibold text-gray-600">مطابق</SortTh>
                   <th className="px-4 py-3 text-right font-semibold text-gray-600">نسبة المطابقة</th>
@@ -263,7 +256,10 @@ export default function PaymentAuditPage() {
               <tbody>
                 {statements.map(s => (
                   <tr key={s.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium font-mono text-xs">{s.bank_reference || `#${s.id}`}</td>
+                    <td className="px-4 py-3 font-medium text-xs">
+                      {s.bank_name || `#${s.id}`}
+                      {s.account_number && <span className="text-gray-400 font-mono"> · {s.account_number}</span>}
+                    </td>
                     <td className="px-4 py-3">{s.total_lines ?? '—'}</td>
                     <td className="px-4 py-3">{s.matched_lines ?? '—'}</td>
                     <td className="px-4 py-3">
@@ -271,19 +267,20 @@ export default function PaymentAuditPage() {
                         <div className="flex items-center gap-2">
                           <div className="flex-1 bg-gray-200 rounded-full h-1.5">
                             <div className="bg-green-500 h-1.5 rounded-full"
-                              style={{ width: `${Math.round(s.match_rate * 100)}%` }} />
+                              style={{ width: `${Math.min(100, Math.round(s.match_rate))}%` }} />
                           </div>
-                          <span className="text-xs">{Math.round(s.match_rate * 100)}%</span>
+                          <span className="text-xs">{Math.round(s.match_rate)}%</span>
                         </div>
                       ) : '—'}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                        s.status === 'matched' ? 'bg-green-100 text-green-800' :
+                        s.status === 'completed' ? 'bg-green-100 text-green-800' :
                         s.status === 'pending' ? 'bg-amber-100 text-amber-800' :
+                        s.status === 'failed' ? 'bg-red-100 text-red-700' :
                         'bg-gray-100 text-gray-600'
                       }`}>
-                        {s.status}
+                        {s.status_label || s.status}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-500 text-xs">
