@@ -488,11 +488,13 @@ SYBASE_PASSWORD = config('SYBASE_PASSWORD', default='')
 # Global kill-switch: True refuses EVERY non-read statement on EVERY SOFTECH
 # connection (HQ + branches), whatever the per-feature *_ENABLED flags say.
 # Turn it on for staging / UAT / demos. See config/sybase.py.
-SOFTECH_READ_ONLY = config('SOFTECH_READ_ONLY', default=False, cast=bool)
 # P-54: the ONE instance allowed to write to SOFTECH (production VPS). Every writer gate is
 # WRITER_INSTANCE and <its flag> (config/writers.py), so the office development copy can carry
 # the same flags and still never write. Writer jobs are not even scheduled elsewhere.
 WRITER_INSTANCE = config('WRITER_INSTANCE', default=False, cast=bool)
+# A missing SOFTECH_READ_ONLY line follows the role: every non-writer copy (a worktree .env
+# without the key, a fresh server) gets the driver-level lock too, not only the closed flag gates.
+SOFTECH_READ_ONLY = config('SOFTECH_READ_ONLY', default=not WRITER_INSTANCE, cast=bool)
 # Staging: send every branch-server connection to this host ('host' or 'host:port')
 # instead of the production addresses stored in Branch.db_host.
 SOFTECH_BRANCH_HOST_OVERRIDE = config('SOFTECH_BRANCH_HOST_OVERRIDE', default='')

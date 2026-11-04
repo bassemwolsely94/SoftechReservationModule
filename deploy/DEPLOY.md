@@ -1,5 +1,11 @@
 # ElRezeiky Platform — VPS Deployment Guide
 
+> **Superseded (2026-11-04).** Production is the LDC VPS: follow
+> [`LINKDATACENTER_VPS_RUNBOOK.md`](LINKDATACENTER_VPS_RUNBOOK.md) for setup and cutover,
+> [`../docs/GO_LIVE_CHECKLIST.md`](../docs/GO_LIVE_CHECKLIST.md) for the go-live order and
+> `release.sh` for every release. This older generic guide is kept for background only; where it
+> differs (paths, `.env` location, writer flags), the runbook wins.
+
 ## Architecture (3 separate processes)
 
 ```
