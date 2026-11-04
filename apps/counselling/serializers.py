@@ -23,6 +23,16 @@ class CounsellingContentSerializer(serializers.ModelSerializer):
                   'updated_by_name', 'updated_at', 'created_at', 'has_unapproved_changes')
         read_only_fields = fields
 
+    def to_representation(self, obj):
+        """Draft / AI-draft text reaches only `counselling → edit` holders (review finding 1). Everyone
+        else sees the approved snapshot, or blank fields when nothing is approved yet."""
+        data = super().to_representation(obj)
+        if not self.context.get('show_drafts'):
+            approved = obj.approved_version.data if obj.approved_version_id else {}
+            for f in CONTENT_FIELDS:
+                data[f] = approved.get(f, '')
+        return data
+
     def get_items(self, obj):
         return [{'item_id': l.item_id, 'name': l.item.name, 'softech_id': l.item.softech_id}
                 for l in obj.links.select_related('item').order_by('linked_at')]

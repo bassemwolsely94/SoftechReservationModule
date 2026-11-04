@@ -4,7 +4,7 @@
 status/            switches for the frontend (any signed-in staff)
 content/…          the pharmacist review screen (`counselling` module; 503 while the content switch is off)
 assistant/<id>/    staff drug assistant (POS view; 404 while the assistant switch is off)
-cards/…            the WhatsApp counselling card (POS create to send)
+cards/preview|send/ the WhatsApp counselling card (POS create to send)
 """
 from django.conf import settings
 from django.db.models import Q
@@ -18,13 +18,18 @@ from core.sort_ordering import explicit_order_by
 
 from . import services
 from .models import CounsellingContent
-from .permissions import CounsellingAccess
+from .permissions import CounsellingAccess, can
 from .selectors import content_enabled
 from .serializers import CounsellingContentSerializer, CounsellingVersionSerializer
 
 
 def _profile(request):
     return getattr(request.user, 'staff_profile', None)
+
+
+def _ser(request, obj, many=False):
+    return CounsellingContentSerializer(obj, many=many,
+                                        context={'show_drafts': can(_profile(request), 'edit')}).data
 
 
 def _flag(name):
@@ -65,6 +70,9 @@ class ContentListCreate(_ContentGate, generics.ListCreateAPIView):
     serializer_class = CounsellingContentSerializer
     counselling_action = 'create'
 
+    def get_serializer_context(self):
+        return {**super().get_serializer_context(), 'show_drafts': can(_profile(self.request), 'edit')}
+
     def get_queryset(self):
         qs = CounsellingContent.objects.select_related('approved_by', 'updated_by')
         st = self.request.query_params.get('status')
@@ -79,18 +87,18 @@ class ContentListCreate(_ContentGate, generics.ListCreateAPIView):
 
     def create(self, request, *args, **kwargs):
         c = services.create_sheet(_profile(request), request.data, request.data.get('item_ids') or [])
-        return Response(CounsellingContentSerializer(c).data, status=status.HTTP_201_CREATED)
+        return Response(_ser(request, c), status=status.HTTP_201_CREATED)
 
 
 class ContentDetail(_ContentGate, APIView):
     counselling_action = 'edit'
 
     def get(self, request, pk):
-        return Response(CounsellingContentSerializer(get_object_or_404(CounsellingContent, pk=pk)).data)
+        return Response(_ser(request, get_object_or_404(CounsellingContent, pk=pk)))
 
     def patch(self, request, pk):
         c = services.edit_sheet(_profile(request), get_object_or_404(CounsellingContent, pk=pk), request.data)
-        return Response(CounsellingContentSerializer(c).data)
+        return Response(_ser(request, c))
 
 
 class _ContentAction(_ContentGate, APIView):
@@ -100,7 +108,7 @@ class _ContentAction(_ContentGate, APIView):
 
 class ContentSubmit(_ContentAction):
     def post(self, request, pk):
-        return Response(CounsellingContentSerializer(services.submit(_profile(request), self._content(pk))).data)
+        return Response(_ser(request, services.submit(_profile(request), self._content(pk))))
 
 
 class ContentApprove(_ContentAction):
@@ -110,7 +118,7 @@ class ContentApprove(_ContentAction):
         c = self._content(pk)
         services.approve(_profile(request), c)
         c.refresh_from_db()
-        return Response(CounsellingContentSerializer(c).data)
+        return Response(_ser(request, c))
 
 
 class ContentRetire(_ContentAction):
@@ -118,21 +126,21 @@ class ContentRetire(_ContentAction):
 
     def post(self, request, pk):
         c = services.retire(_profile(request), self._content(pk), request.data.get('reason', ''))
-        return Response(CounsellingContentSerializer(c).data)
+        return Response(_ser(request, c))
 
 
 class ContentLink(_ContentAction):
     def post(self, request, pk):
         c = self._content(pk)
         services.link_items(_profile(request), c, request.data.get('item_ids') or [])
-        return Response(CounsellingContentSerializer(c).data)
+        return Response(_ser(request, c))
 
 
 class ContentUnlink(_ContentAction):
     def post(self, request, pk):
         c = self._content(pk)
         services.unlink_item(_profile(request), c, request.data.get('item_id'))
-        return Response(CounsellingContentSerializer(c).data)
+        return Response(_ser(request, c))
 
 
 class ContentSuggestItems(_ContentAction):
@@ -167,7 +175,7 @@ class ContentAiDraft(_ContentGate, APIView):
         if not str(raw or '').isdigit():
             return Response({'detail': 'item_id مطلوب'}, status=status.HTTP_400_BAD_REQUEST)
         c = draft_for_item(_profile(request), get_object_or_404(Item, pk=int(raw)))
-        return Response(CounsellingContentSerializer(c).data, status=status.HTTP_201_CREATED)
+        return Response(_ser(request, c), status=status.HTTP_201_CREATED)
 
 
 class AssistantView(APIView):
@@ -233,19 +241,3 @@ class CardSend(_CardBase):
                          'fail_reason': send.fail_reason, 'phone': send.phone_masked,
                          'items': send.lines.count()},
                         status=status.HTTP_201_CREATED)
-
-
-class CardHistory(_CardBase):
-    def get(self, request):
-        from .models import CounselCardSend
-        c = self._customer(request)
-        if c is None:
-            return Response({'detail': 'customer مطلوب'}, status=status.HTTP_400_BAD_REQUEST)
-        rows = (CounselCardSend.objects.filter(customer=c).select_related('sent_by', 'branch')
-                .prefetch_related('lines__item')[:50])
-        return Response({'results': [{
-            'id': s.pk, 'created_at': s.created_at, 'status': s.status, 'status_label': s.get_status_display(),
-            'phone': s.phone_masked, 'sent_by': s.sent_by.full_name if s.sent_by else '',
-            'branch_id': s.branch_id, 'opened': s.first_opened_at is not None,
-            'items': [l.item.name for l in s.lines.all()],
-        } for s in rows]})

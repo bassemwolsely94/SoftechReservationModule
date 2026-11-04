@@ -138,6 +138,24 @@ class CardTests(TestCase):
         self.assertEqual(r.data['phone'], '010*****678')
         self.assertFalse(CounselCardSend.objects.exists())
 
+    def test_preview_never_returns_the_full_phone(self):
+        """Review finding 2: preview shows the masked phone only (customers decision B-2)."""
+        r = self.sp_c.post('/api/counselling/cards/preview/',
+                           {'customer_id': self.cust.pk, 'item_ids': [self.item.pk]}, format='json')
+        self.assertNotIn('01012345678', str(r.data))
+        self.assertNotIn('201012345678', str(r.data))
+
+    def test_no_card_history_route(self):
+        """Review finding 3: per-customer medicine history is not exposed to counter roles."""
+        r = self.sp_c.get('/api/counselling/cards/', {'customer': self.cust.pk})
+        self.assertEqual(r.status_code, 404)
+
+    def test_opt_out_hash_survives_secret_key_rotation(self):
+        """Review finding 4: rotating SECRET_KEY must not cancel opt-outs."""
+        before = cards.phone_hash('201012345678')
+        with override_settings(SECRET_KEY='rotated-' + 'x' * 50):
+            self.assertEqual(cards.phone_hash('201012345678'), before)
+
     def test_salesperson_can_send_via_api(self):
         from unittest import mock
         with mock.patch('apps.whatsapp.sender.WhatsAppSender', return_value=self.fake):

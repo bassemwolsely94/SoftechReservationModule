@@ -799,6 +799,9 @@ COUNSEL_CARD_LANGUAGE       = config('COUNSEL_CARD_LANGUAGE', default='ar')
 COUNSEL_CARD_DAILY_CAP      = config('COUNSEL_CARD_DAILY_CAP', default=200, cast=int)   # per branch per Cairo day
 COUNSEL_CARD_TOKEN_DAYS     = config('COUNSEL_CARD_TOKEN_DAYS', default=90, cast=int)
 COUNSEL_CARD_DEDUPE_DAYS    = config('COUNSEL_CARD_DEDUPE_DAYS', default=7, cast=int)
+# Keys the phone hash behind counselling opt-outs and the 7-day repeat check. Deliberately NOT
+# SECRET_KEY: rotating that must never cancel a customer's opt-out. Set once; never change it.
+COUNSEL_PHONE_HASH_KEY      = config('COUNSEL_PHONE_HASH_KEY', default='elrezeiky-counsel-phone-v1')
 # بدل الروشتة daily read-only check (apps/sync/tasks._run_replacement_check).
 REPLACEMENT_DAILY_CHECK_ENABLED = config('REPLACEMENT_DAILY_CHECK_ENABLED', default=True, cast=bool)
 REPLACEMENT_DAILY_CHECK_DAYS    = config('REPLACEMENT_DAILY_CHECK_DAYS', default=60, cast=int)

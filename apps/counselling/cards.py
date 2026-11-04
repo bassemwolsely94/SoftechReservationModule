@@ -50,7 +50,7 @@ def normalise_phone(raw) -> str | None:
 
 
 def phone_hash(phone: str) -> str:
-    return hmac.new(settings.SECRET_KEY.encode(), phone.encode(), hashlib.sha256).hexdigest()
+    return hmac.new(settings.COUNSEL_PHONE_HASH_KEY.encode(), phone.encode(), hashlib.sha256).hexdigest()
 
 
 def mask(phone: str) -> str:
@@ -125,7 +125,6 @@ def plan_card(*, customer, phone, item_ids) -> dict:
     return {
         'enabled': enabled(),
         'phone': mask(norm) if norm else '',
-        'phone_raw': norm or '',
         'blocked_reason': blocked,
         'first_name': name,
         'message_preview': message_text(name, '…/c/<رابط خاص>'),

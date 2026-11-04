@@ -98,6 +98,15 @@ class ReviewApiTests(TestCase):
         self.assertEqual(self.sp_c.post(f'{BASE}{cid}/approve/').status_code, 403)
         self.assertEqual(self.sp_c.get(f'{BASE}{cid}/').status_code, 200)        # read is fine
 
+    def test_view_roles_never_see_draft_text(self):
+        """Review finding 1: the content API must not hand draft / AI-draft text to view-only roles."""
+        cid = self._create().data['id']
+        self.ph_c.patch(f'{BASE}{cid}/', {'dose_ar': 'مسودة لم تعتمد'}, format='json')
+        for url in (f'{BASE}{cid}/', BASE):
+            body = str(self.sp_c.get(url).data)
+            self.assertNotIn('مسودة لم تعتمد', body, url)
+        self.assertIn('مسودة لم تعتمد', str(self.ph_c.get(f'{BASE}{cid}/').data))
+
     def test_supervisor_cannot_approve(self):
         cid = self._create().data['id']
         self.assertEqual(self.sv_c.post(f'{BASE}{cid}/approve/').status_code, 403)

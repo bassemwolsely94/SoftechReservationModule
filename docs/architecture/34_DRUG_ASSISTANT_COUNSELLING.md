@@ -45,6 +45,14 @@ Design: [spec](../superpowers/specs/2026-11-03-drug-assistant-counselling-card-d
 
 Other settings: `COUNSEL_CARD_TEMPLATE` (`counsel_card`), `_LANGUAGE` (`ar`), `_DAILY_CAP` (200), `_TOKEN_DAYS` (90), `_DEDUPE_DAYS` (7).
 
+`COUNSEL_PHONE_HASH_KEY` keys the phone hash behind opt-outs and the 7-day repeat check. It is deliberately not `SECRET_KEY`, so rotating secrets never cancels an opt-out. Set it once in `.env` and never change it. Rotating `SECRET_KEY` only expires the sent `/c/` links.
+
+Privacy rules (final review):
+- The content API returns draft text only to `counselling → edit` holders. View-only roles see the approved snapshot.
+- The card preview returns the masked phone only.
+- There is no per-customer card-history endpoint. Sends are in `AuditLog` and the omni timeline.
+- The public page keeps serving approved text for sent links even if `COUNSELLING_CONTENT_ENABLED` is later turned off. Retire a sheet to withdraw it.
+
 **Owner action before sending:** in WhatsApp Manager, submit the Utility template `counsel_card` (Arabic):
 - Body: «مرحباً {{1}}، إرشادات استخدام مشترياتك من صيدليات الرزيقي جاهزة»
 - One URL button: `https://<FRONTEND_BASE_URL>/c/{{1}}`

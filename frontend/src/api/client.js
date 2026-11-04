@@ -281,7 +281,6 @@ export const counsellingApi = {
   assistant:(itemId, branch) => api.get(`/counselling/assistant/${itemId}/`, { params: branch ? { branch } : {} }),
   previewCard: (data)      => api.post('/counselling/cards/preview/', data),
   sendCard:    (data)      => api.post('/counselling/cards/send/', data),
-  cards:       (customer)  => api.get('/counselling/cards/', { params: { customer } }),
 }
 
 export const offersApi = {
