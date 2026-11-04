@@ -333,3 +333,51 @@ class RoutingTests(TestCase):
             method = 'PUT' if path.startswith('maps/') else 'POST'
             self.assertEqual(req('/api/finance/gl/' + path, method), ('ledger', (act,)), path)
         self.assertEqual(req('/api/finance/gl/rules/preview/', 'POST'), ('ledger', ('view',)))
+
+
+class MetaEndpointTests(Base):
+    """Ruling P16: read-only metadata / person search / unmapped values (ledger view)."""
+
+    def test_rules_meta_reads_rules_py(self):
+        from apps.finance.gl import rules as R
+        r = self.acct.get(BASE + 'rules/meta/')
+        self.assertEqual(r.status_code, 200, r.content)
+        d = r.data
+        self.assertEqual(d['source_fields']['credit_sales'], list(R.SOURCE_FIELDS['credit_sales']))
+        self.assertEqual(d['condition_keys']['paymenttype_in'], ['sales_tenders'])
+        self.assertEqual(sorted(d['bank_branch_sources']), sorted(R.BANK_BRANCH_SOURCES))
+        self.assertEqual(d['map_key_for_kind']['card_clearing'], 'branch_code')
+        self.assertIn('hq', d['branch_modes'])
+        self.assertIn('cheqno', d['placeholders'])
+        self.assertEqual(self.pharm.get(BASE + 'rules/meta/').status_code, 403)
+
+    def test_parties_persons_filters_and_caps(self):
+        for i in range(55):
+            ReconParty.objects.create(party_type='supplier', softech_personcode=f'9{i:03d}', name=f'شركة نور {i}')
+        ReconParty.objects.create(party_type='customer', softech_personcode='8001', name='شركة نور عميل')
+        r = self.acct.get(BASE + 'parties/persons/', {'type': 'supplier', 'q': 'نور'})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(len(r.data['results']), 50)
+        self.assertTrue(all(x['party_type'] == 'supplier' for x in r.data['results']))
+        r = self.acct.get(BASE + 'parties/persons/', {'type': 'customer', 'q': '8001'})
+        self.assertEqual([x['softech_personcode'] for x in r.data['results']], ['8001'])
+        self.assertEqual(self.pharm.get(BASE + 'parties/persons/').status_code, 403)
+
+    def test_unmapped_values_distinct_open_with_counts(self):
+        d1, d2, d3 = self.doc('u1'), self.doc('u2'), self.doc('u3')
+        self.exc(d1, 'unmapped_account', detail={'kind': 'bank', 'value': '40'})
+        self.exc(d2, 'unmapped_account', detail={'kind': 'bank', 'value': '40'})
+        self.exc(d3, 'unmapped_account', detail={'kind': 'expense', 'value': '43'})
+        closed = self.exc(self.doc('u4'), 'unmapped_account', detail={'kind': 'bank', 'value': '99'})
+        SourceException.objects.filter(pk=closed.pk).update(status='ignored')
+        self.exc(self.doc('u5'), 'unmapped_account', detail={'account': '1302'})   # no map value
+        r = self.acct.get(BASE + 'exceptions/unmapped-values/', {'kind': 'unmapped_account'})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data['results'], [{'kind': 'bank', 'value': '40', 'count': 2},
+                                             {'kind': 'expense', 'value': '43', 'count': 1}])
+        self.assertEqual(self.pharm.get(BASE + 'exceptions/unmapped-values/').status_code, 403)
+
+    def test_get_routes_are_ledger_view(self):
+        for path in ('rules/meta/', 'parties/persons/', 'exceptions/unmapped-values/'):
+            self.assertEqual(module_access.required('/api/finance/gl/' + path, 'GET'),
+                             ('ledger', ('view',)), path)

@@ -41,7 +41,7 @@ function PersonPicker({ party, onPick, onClose, busy }) {
   useEffect(() => { ref.current?.focus(); ref.current?.select() }, [])
   const res = useQuery({
     queryKey: ['gl', 'recon-parties', party.party_type, dq],
-    queryFn: () => glApi.reconParties({ search: dq || undefined, party_type: party.party_type, page_size: 15 })
+    queryFn: () => glApi.partyPersons({ q: dq || undefined, type: party.party_type })
       .then(r => listOf(r.data)),
     enabled: dq.trim().length >= 2,
   })
@@ -86,7 +86,7 @@ function ImportBar({ onDone }) {
     mutationFn: () => glApi.partiesPropose().then(r => r.data),
     onSuccess: (d) => {
       setErr('')
-      setMsg(`اكتملت المطابقة: ${Object.entries(d || {}).map(([k, v]) => `${k} ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' · ')}`)
+      setMsg(`اكتملت المطابقة: مطابقة تامة ${d?.exact ?? 0} · بالكلمات ${d?.tokens ?? 0} · بدون ${d?.none ?? 0}`)
       onDone()
     },
     onError: (e) => { setMsg(''); setErr(errOf(e, 'تعذّر تنفيذ المطابقة')) },

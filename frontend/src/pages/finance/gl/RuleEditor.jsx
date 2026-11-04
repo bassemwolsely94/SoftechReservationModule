@@ -11,7 +11,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { glApi } from '../../../api/client'
 import { AccountPicker } from './EntryEditor'
 import {
-  money, errOf, listOf, todayIso, useGlBranches, inputCls, btnPrimary, btnPlain, ErrorBox,
+  OPENING_DATE, money, errOf, listOf, useGlBranches, inputCls, btnPrimary, btnPlain, ErrorBox,
 } from './glUi'
 
 export const SOURCE_TYPES = {
@@ -24,50 +24,62 @@ export const SOURCE_TYPES = {
   expenses: 'المصروفات',
   treasury_other: 'خزينة أخرى',
 }
-// mirrors apps/finance/gl/rules.py (the server re-validates everything)
-export const SOURCE_FIELDS = {
-  sales_tenders: ['net', 'sales', 'returns'],
-  credit_sales: ['credit', 'gross_share', 'discount_share', 'tax_share'],
-  purchases: ['value'],
-  supplier_payments: ['amount'], cheque_maturity: ['amount'], customer_collections: ['amount'],
-  expenses: ['amount'], treasury_other: ['amount'],
-}
+// Arabic labels only - which fields / conditions / modes exist comes from GET rules/meta/ (rules.py)
 const FIELD_LABEL = {
   net: 'الصافي', sales: 'المبيعات', returns: 'المرتجعات', credit: 'الآجل', gross_share: 'الإجمالي قبل الخصم',
   discount_share: 'الخصم', tax_share: 'الضريبة', value: 'القيمة', amount: 'المبلغ',
 }
-const CHEQUES = ['supplier_payments', 'cheque_maturity', 'customer_collections', 'treasury_other']
-const ALL = Object.keys(SOURCE_TYPES)
-export const CONDITION_KEYS = {
-  branch_in: { label: 'الفرع ضمن', types: ALL },
-  branch_not_in: { label: 'الفرع ليس ضمن', types: ALL },
-  kind_in: { label: 'النوع ضمن', types: ALL },
-  paymenttype_in: { label: 'طريقة الدفع', types: ['sales_tenders'] },
-  doccode_in: { label: 'كود المستند', types: ['purchases', 'credit_sales'] },
-  financialdoc_in: { label: 'المستند المالي', types: CHEQUES },
-  direction_in: { label: 'الاتجاه', types: CHEQUES },
-  bank_type_in: { label: 'نوع الخزينة/البنك', types: CHEQUES },
-  expcode_in: { label: 'كود المصروف', types: ['expenses'] },
+export const CONDITION_LABEL = {
+  branch_in: 'الفرع ضمن', branch_not_in: 'الفرع ليس ضمن', kind_in: 'النوع ضمن', paymenttype_in: 'طريقة الدفع',
+  doccode_in: 'كود المستند', financialdoc_in: 'المستند المالي', direction_in: 'الاتجاه',
+  bank_type_in: 'نوع الخزينة/البنك', expcode_in: 'كود المصروف',
 }
 export const MAP_KINDS = { bank: 'خزينة / بنك', expense: 'مصروف', card_clearing: 'تسوية بطاقات' }
-const MAP_KEY_FOR = { bank: 'bankcode', expense: 'expcode', card_clearing: 'branch_code' }
 const MAP_KEY_LABEL = { bankcode: 'كود الخزينة/البنك', expcode: 'كود المصروف', branch_code: 'فرع المستند' }
-const BRANCH_MODES = { source: 'فرع المستند', hq: 'المركز الرئيسي', map: 'فرع الربط', none: 'بدون فرع' }
-const PARTY_MODES = { none: 'بدون', source: 'طرف المستند' }
-const GRANULARITY = { document: 'مستند', branch_day: 'فرع/يوم', party_day: 'طرف/يوم' }
-const BOOKS = { general: 'عامة', cash: 'نقدية', credit: 'آجل' }
-const PLACEHOLDERS = '{branch} {date} {docnumber} {cheqno} {party}'
+const BRANCH_LABEL = { source: 'فرع المستند', hq: 'المركز الرئيسي', map: 'فرع الربط', none: 'بدون فرع' }
+const PARTY_LABEL = { none: 'بدون', source: 'طرف المستند' }
+const GRANULARITY_LABEL = { document: 'مستند', branch_day: 'فرع/يوم', party_day: 'طرف/يوم' }
+const BOOK_LABEL = { general: 'عامة', cash: 'نقدية', credit: 'آجل' }
 
-export const summarizeConditions = (c) => {
+export const summarizeConditions = (c, branchName = (x) => x) => {
   const e = Object.entries(c || {})
-  return e.length ? e.map(([k, v]) => `${CONDITION_KEYS[k]?.label || k}: ${(v || []).join('،')}`).join(' · ') : 'كل المستندات'
+  return e.length ? e.map(([k, v]) => `${CONDITION_LABEL[k] || k}: ${(v || []).map(x => (k === 'branch_in' || k === 'branch_not_in' ? branchName(x) : x)).join('،')}`).join(' · ') : 'كل المستندات'
 }
 export const summarizeLines = (lines, action) => {
   if (action === 'skip') return 'تجاهل (لا ترحيل)'
   return (lines || []).map(l => `${l.side === 'debit' ? 'م' : 'د'} ${l.account || `ربط ${MAP_KINDS[l.account_map] || l.account_map}`}`).join(' / ')
 }
 
-const blankLine = (src) => ({ side: 'debit', account: '', account_map: '', map_key: '', amount: SOURCE_FIELDS[src]?.[0] || '', branch: 'source', party: 'none', cheque: false, description: '' })
+const blankLine = (fields) => ({ side: 'debit', account: '', account_map: '', map_key: '', amount: fields?.[0] || '', branch: 'source', party: 'none', cheque: false, description: '' })
+
+const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const monthStart = () => { const d = new Date(); return isoOf(new Date(d.getFullYear(), d.getMonth(), 1)) }
+const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return isoOf(d) }
+
+/** Branch conditions: pick a branch, store its SOFTECH code, show the labelled name (never a bare code). */
+function BranchChips({ values, onChange, disabled, branches, labelOf }) {
+  const nameOf = (code) => {
+    const b = branches.find(x => String(x.softech_branch_id) === String(code))
+    return b ? labelOf(b.id) : code
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {values.map(v => (
+        <span key={v} className="inline-flex items-center gap-1 bg-green-50 text-green-800 border border-green-200 rounded-full px-2 py-0.5 text-xs">
+          {nameOf(v)}{!disabled && <button type="button" aria-label="حذف" onClick={() => onChange(values.filter(x => x !== v))}>×</button>}
+        </span>
+      ))}
+      {!disabled && (
+        <select className={`${inputCls} !py-0.5`} value="" onChange={e => { const c = e.target.value; if (c && !values.includes(c)) onChange([...values, c]) }}>
+          <option value="">+ فرع</option>
+          {branches.filter(b => !values.includes(String(b.softech_branch_id))).map(b => (
+            <option key={b.id} value={String(b.softech_branch_id)}>{labelOf(b.id)}</option>
+          ))}
+        </select>
+      )}
+    </div>
+  )
+}
 
 function Chips({ values, onChange, disabled }) {
   const [t, setT] = useState('')
@@ -130,18 +142,23 @@ function Preview({ result, labelOf }) {
 /** rule = existing PostingRule json (latest version) | null for a new rule */
 export default function RuleEditor({ rule, canEdit, onClose, onSaved }) {
   const qc = useQueryClient()
-  const { labelOf } = useGlBranches()
+  const { branches, labelOf } = useGlBranches()
+  const metaQ = useQuery({
+    queryKey: ['gl', 'rules-meta'], staleTime: 30 * 60 * 1000,
+    queryFn: () => glApi.rulesMeta().then(r => r.data),
+  })
+  const meta = metaQ.data
   const isNew = !rule
   const init = () => ({
     code: rule?.code || '', source_type: rule?.source_type || 'sales_tenders', description: rule?.description || '',
     conditions: JSON.parse(JSON.stringify(rule?.conditions || {})), action: rule?.action || 'post',
     granularity: rule?.granularity || 'document', book: rule?.book || 'general', priority: rule?.priority ?? 100,
-    effective_from: todayIso(), lines: JSON.parse(JSON.stringify(rule?.lines || [])),
+    effective_from: rule ? monthStart() : OPENING_DATE, lines: JSON.parse(JSON.stringify(rule?.lines || [])),
   })
   const [f, setF] = useState(init)
   const [err, setErr] = useState('')
   const [msg, setMsg] = useState('')
-  const [pv, setPv] = useState({ from: '2026-08-01', to: '2026-08-07' })
+  const [pv, setPv] = useState({ from: daysAgo(7), to: daysAgo(1) })
   const [result, setResult] = useState(null)
   useEffect(() => { setF(init()); setResult(null) }, [rule?.code, rule?.version])   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -164,7 +181,7 @@ export default function RuleEditor({ rule, canEdit, onClose, onSaved }) {
     ...f, priority: Number(f.priority) || 0,
     lines: f.action === 'skip' ? [] : f.lines.map(l => {
       const o = { side: l.side, amount: l.amount, branch: l.branch || 'source', party: l.party || 'none' }
-      if (l.account_map) { o.account_map = l.account_map; o.map_key = l.map_key || MAP_KEY_FOR[l.account_map] } else o.account = l.account
+      if (l.account_map) { o.account_map = l.account_map; o.map_key = l.map_key || meta?.map_key_for_kind?.[l.account_map] } else o.account = l.account
       if (l.cheque) o.cheque = true
       if (l.description) o.description = l.description
       return o
@@ -181,13 +198,15 @@ export default function RuleEditor({ rule, canEdit, onClose, onSaved }) {
     onError: (e) => { setMsg(''); setErr(errOf(e, 'تعذّر حفظ القاعدة')) },
   })
   const test = useMutation({
-    mutationFn: () => glApi.rulePreview({ date_from: pv.from, date_to: pv.to, rule: body() }).then(r => r.data),
+    mutationFn: () => glApi.rulePreview({ date_from: pv.from, date_to: pv.to, rule: { ...body(), effective_from: pv.from } }).then(r => r.data),
     onSuccess: (d) => { setErr(''); setResult(d) },
     onError: (e) => { setResult(null); setErr(errOf(e, 'تعذّرت التجربة')) },
   })
 
   const src = f.source_type
-  const condKeys = Object.entries(CONDITION_KEYS).filter(([, c]) => c.types.includes(src))
+  const condKeys = Object.entries(meta?.condition_keys || {}).filter(([, types]) => types.includes(src))
+  const srcFields = meta?.source_fields?.[src] || []
+  const isCheque = (meta?.cheque_sources || []).includes(src)
   const ro = !canEdit
 
   return (
@@ -198,7 +217,8 @@ export default function RuleEditor({ rule, canEdit, onClose, onSaved }) {
         <button type="button" className={`${btnPlain} ms-auto`} onClick={onClose}>إغلاق</button>
       </div>
 
-      <fieldset disabled={ro} className="space-y-3 disabled:opacity-90">
+      {metaQ.isError && <ErrorBox>{errOf(metaQ.error, 'تعذّر تحميل خيارات القواعد')}</ErrorBox>}
+      <fieldset disabled={ro || !meta} className="space-y-3 disabled:opacity-90">
         <div className="grid gap-2 sm:grid-cols-3">
           <label className="space-y-0.5"><span className="text-xs text-gray-500">الكود</span>
             <input className={`${inputCls} w-full font-mono`} value={f.code} disabled={!isNew} dir="ltr"
@@ -208,7 +228,11 @@ export default function RuleEditor({ rule, canEdit, onClose, onSaved }) {
                     onChange={e => setF(x => ({ ...x, source_type: e.target.value, conditions: {}, lines: [] }))}>
               {Object.entries(SOURCE_TYPES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
           <label className="space-y-0.5"><span className="text-xs text-gray-500">سارية من (تاريخ المستند)</span>
-            <input type="date" className={`${inputCls} w-full`} value={f.effective_from} onChange={e => set('effective_from', e.target.value)} /></label>
+            <input type="date" className={`${inputCls} w-full`} value={f.effective_from} onChange={e => set('effective_from', e.target.value)} />
+            <span className="block text-[11px] text-gray-500">
+              {isNew ? 'القاعدة الجديدة تسري على المستندات من 2026-01-01 افتراضياً.'
+                : 'النسخة الجديدة تسري من أول الشهر الحالي؛ المستندات قبل هذا التاريخ تبقى على النسخة القديمة.'}
+            </span></label>
         </div>
         <label className="block space-y-0.5"><span className="text-xs text-gray-500">الوصف</span>
           <input className={`${inputCls} w-full`} value={f.description} onChange={e => set('description', e.target.value)} /></label>
@@ -218,17 +242,17 @@ export default function RuleEditor({ rule, canEdit, onClose, onSaved }) {
               <option value="post">ترحيل</option><option value="skip">تجاهل</option></select></label>
           <label className="space-y-0.5"><span className="text-xs text-gray-500">التجميع</span>
             <select className={`${inputCls} w-full`} value={f.granularity} onChange={e => set('granularity', e.target.value)}>
-              {Object.entries(GRANULARITY).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+              {(meta?.granularities || []).map(k => <option key={k} value={k}>{GRANULARITY_LABEL[k] || k}</option>)}</select></label>
           <label className="space-y-0.5"><span className="text-xs text-gray-500">الدفتر</span>
             <select className={`${inputCls} w-full`} value={f.book} onChange={e => set('book', e.target.value)}>
-              {Object.entries(BOOKS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+              {(meta?.books || []).map(k => <option key={k} value={k}>{BOOK_LABEL[k] || k}</option>)}</select></label>
           <label className="space-y-0.5"><span className="text-xs text-gray-500">الأولوية</span>
             <input type="number" className={`${inputCls} w-full`} value={f.priority} onChange={e => set('priority', e.target.value)} /></label>
         </div>
 
         <div className="space-y-1.5">
           <div className="text-xs font-medium text-gray-600">الشروط</div>
-          {condKeys.map(([k, c]) => {
+          {condKeys.map(([k]) => {
             const on = k in f.conditions
             return (
               <div key={k} className="flex flex-wrap items-center gap-2">
@@ -237,9 +261,11 @@ export default function RuleEditor({ rule, canEdit, onClose, onSaved }) {
                     const cond = { ...x.conditions }
                     if (e.target.checked) cond[k] = []; else delete cond[k]
                     return { ...x, conditions: cond }
-                  })} /> {c.label}
+                  })} /> {CONDITION_LABEL[k] || k}
                 </label>
-                {on && <Chips values={f.conditions[k]} disabled={ro} onChange={v => setF(x => ({ ...x, conditions: { ...x.conditions, [k]: v } }))} />}
+                {on && (k === 'branch_in' || k === 'branch_not_in'
+                  ? <BranchChips values={f.conditions[k]} disabled={ro} branches={branches} labelOf={labelOf} onChange={v => setF(x => ({ ...x, conditions: { ...x.conditions, [k]: v } }))} />
+                  : <Chips values={f.conditions[k]} disabled={ro} onChange={v => setF(x => ({ ...x, conditions: { ...x.conditions, [k]: v } }))} />)}
               </div>
             )
           })}
@@ -249,7 +275,7 @@ export default function RuleEditor({ rule, canEdit, onClose, onSaved }) {
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <div className="text-xs font-medium text-gray-600">الأسطر</div>
-              {!ro && <button type="button" className="text-xs text-green-700 hover:underline" onClick={() => setF(x => ({ ...x, lines: [...x.lines, blankLine(x.source_type)] }))}>+ سطر</button>}
+              {!ro && <button type="button" className="text-xs text-green-700 hover:underline" onClick={() => setF(x => ({ ...x, lines: [...x.lines, blankLine(meta?.source_fields?.[x.source_type])] }))}>+ سطر</button>}
             </div>
             {f.lines.map((l, i) => (
               <div key={i} className="border border-gray-200 rounded-lg p-2 grid gap-2 sm:grid-cols-6 items-end">
@@ -258,14 +284,14 @@ export default function RuleEditor({ rule, canEdit, onClose, onSaved }) {
                     <option value="debit">مدين</option><option value="credit">دائن</option></select></label>
                 <label className="space-y-0.5"><span className="text-xs text-gray-500">الحساب من</span>
                   <select className={`${inputCls} w-full`} value={l.account_map || ''}
-                          onChange={e => setLine(i, e.target.value ? { account_map: e.target.value, map_key: MAP_KEY_FOR[e.target.value], account: '' } : { account_map: '', map_key: '' })}>
+                          onChange={e => setLine(i, e.target.value ? { account_map: e.target.value, map_key: meta?.map_key_for_kind?.[e.target.value], account: '' } : { account_map: '', map_key: '' })}>
                     <option value="">حساب ثابت</option>
-                    {Object.entries(MAP_KINDS).map(([k, lb]) => <option key={k} value={k}>ربط: {lb}</option>)}</select></label>
+                    {(meta?.map_kinds || []).map(k => <option key={k} value={k}>ربط: {MAP_KINDS[k] || k}</option>)}</select></label>
                 <div className="sm:col-span-2 space-y-0.5">
                   {l.account_map ? (
                     <><span className="text-xs text-gray-500">مفتاح الربط</span>
-                      <select className={`${inputCls} w-full`} value={l.map_key || MAP_KEY_FOR[l.account_map]} onChange={e => setLine(i, { map_key: e.target.value })}>
-                        {Object.entries(MAP_KEY_LABEL).map(([k, lb]) => <option key={k} value={k}>{lb}</option>)}</select></>
+                      <select className={`${inputCls} w-full`} value={l.map_key || meta?.map_key_for_kind?.[l.account_map] || ''} onChange={e => setLine(i, { map_key: e.target.value })}>
+                        {(meta?.map_keys || []).map(k => <option key={k} value={k}>{MAP_KEY_LABEL[k] || k}</option>)}</select></>
                   ) : (
                     <><span className="text-xs text-gray-500">الحساب</span>
                       <AccountPicker value={l.account} name={nameOf[String(l.account)] || ''} accounts={accounts} disabled={ro}
@@ -274,17 +300,17 @@ export default function RuleEditor({ rule, canEdit, onClose, onSaved }) {
                 </div>
                 <label className="space-y-0.5"><span className="text-xs text-gray-500">المبلغ</span>
                   <select className={`${inputCls} w-full`} value={l.amount} onChange={e => setLine(i, { amount: e.target.value })}>
-                    {(SOURCE_FIELDS[src] || []).map(a => <option key={a} value={a}>{FIELD_LABEL[a] || a}</option>)}</select></label>
+                    {srcFields.map(a => <option key={a} value={a}>{FIELD_LABEL[a] || a}</option>)}</select></label>
                 <label className="space-y-0.5"><span className="text-xs text-gray-500">الفرع</span>
                   <select className={`${inputCls} w-full`} value={l.branch || 'source'} onChange={e => setLine(i, { branch: e.target.value })}>
-                    {Object.entries(BRANCH_MODES).map(([k, lb]) => <option key={k} value={k}>{lb}</option>)}</select></label>
+                    {(meta?.branch_modes || []).map(k => <option key={k} value={k}>{BRANCH_LABEL[k] || k}</option>)}</select></label>
                 <label className="space-y-0.5"><span className="text-xs text-gray-500">الطرف</span>
                   <select className={`${inputCls} w-full`} value={l.party || 'none'} onChange={e => setLine(i, { party: e.target.value })}>
-                    {Object.entries(PARTY_MODES).map(([k, lb]) => <option key={k} value={k}>{lb}</option>)}</select></label>
-                {CHEQUES.includes(src) && (
+                    {(meta?.party_modes || []).map(k => <option key={k} value={k}>{PARTY_LABEL[k] || k}</option>)}</select></label>
+                {isCheque && (
                   <label className="flex items-center gap-1 text-xs pb-2"><input type="checkbox" checked={!!l.cheque} onChange={e => setLine(i, { cheque: e.target.checked })} /> رقم الشيك/الاستحقاق</label>
                 )}
-                <label className="sm:col-span-3 space-y-0.5"><span className="text-xs text-gray-500">البيان ({PLACEHOLDERS})</span>
+                <label className="sm:col-span-3 space-y-0.5"><span className="text-xs text-gray-500">البيان ({(meta?.placeholders || []).map(x => `{${x}}`).join(' ')})</span>
                   <input className={`${inputCls} w-full`} value={l.description || ''} onChange={e => setLine(i, { description: e.target.value })} /></label>
                 {!ro && <button type="button" className="text-xs text-red-600 hover:underline pb-2" onClick={() => setF(x => ({ ...x, lines: x.lines.filter((_, j) => j !== i) }))}>حذف السطر</button>}
               </div>

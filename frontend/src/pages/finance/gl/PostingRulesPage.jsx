@@ -16,12 +16,14 @@ import SortTh from '../../../components/SortTh'
 import { SkeletonTable, EmptyState } from '../../../components/ui'
 import RuleEditor, { SOURCE_TYPES, summarizeConditions, summarizeLines } from './RuleEditor'
 import SourceMapsPanel from './SourceMapsPanel'
-import { errOf, listOf, inputCls, btnPrimary, ErrorBox } from './glUi'
+import { errOf, listOf, useGlBranches, inputCls, btnPrimary, ErrorBox } from './glUi'
 
 const GRANULARITY = { document: 'مستند', branch_day: 'فرع/يوم', party_day: 'طرف/يوم' }
 
 export default function PostingRulesPage() {
   const perms = usePermissions('ledger')
+  const { branches, labelOf } = useGlBranches()
+  const branchName = (code) => { const b = branches.find(x => String(x.softech_branch_id) === String(code)); return b ? labelOf(b.id) : code }
   const [tab, setTab] = useState('rules')
   useHelpTab(tab)
   const [source, setSource] = useState('')
@@ -33,12 +35,11 @@ export default function PostingRulesPage() {
     queryFn: () => glApi.rules({ source_type: source || undefined, active: onlyActive ? '1' : undefined }).then(r => listOf(r.data)),
   })
   const rows = useMemo(() => (rulesQ.data || []).map(r => ({
-    ...r, _cond: summarizeConditions(r.conditions), _lines: summarizeLines(r.lines, r.action),
+    ...r, _cond: summarizeConditions(r.conditions, branchName), _lines: summarizeLines(r.lines, r.action),
     _dates: `${r.effective_from || ''} ${r.effective_to || ''}`,
-  })), [rulesQ.data])
+  })), [rulesQ.data, branches]) // eslint-disable-line react-hooks/exhaustive-deps
   const { sorted, headerProps } = useSortableRows(rows, {
     persistKey: 'gl-rules', defaultSort: { key: 'source_type', dir: 'asc', type: 'text' },
-    getValue: (r, k) => (k === 'effective_from' ? r.effective_from : r[k]),
   })
   const editing = open && open !== 'new' ? rows.find(r => r.code === open.code) || open : null
 

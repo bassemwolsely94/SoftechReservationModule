@@ -2192,6 +2192,9 @@ export const glApi = {
   partyReject:     (id)            => api.post(`/finance/gl/parties/${id}/reject/`),
   maps:            (params)        => api.get('/finance/gl/maps/', { params }),
   mapPut:          (kind, value, body) => api.put(`/finance/gl/maps/${encodeURIComponent(kind)}/${encodeURIComponent(value)}/`, body),
+  rulesMeta:       ()              => api.get('/finance/gl/rules/meta/'),
+  partyPersons:    (params)        => api.get('/finance/gl/parties/persons/', { params }),
+  unmappedValues:  (params)        => api.get('/finance/gl/exceptions/unmapped-values/', { params }),
   rules:           (params)        => api.get('/finance/gl/rules/', { params }),
   ruleSave:        (body)          => api.post('/finance/gl/rules/', body),
   ruleVersions:    (code)          => api.get(`/finance/gl/rules/${encodeURIComponent(code)}/versions/`),
@@ -2203,7 +2206,6 @@ export const glApi = {
   exceptionIgnore: (id, note)      => api.post(`/finance/gl/exceptions/${id}/ignore/`, { note }),
   exceptionsRedraft: (ids)         => api.post('/finance/gl/exceptions/redraft/', { ids }),
   entrySource:     (id)            => api.get(`/finance/gl/entries/${id}/source/`),
-  reconParties:    (params)        => api.get('/finance/reconciliation/parties/', { params }),
 }
 
 // ── Recommendations / FBT API ─────────────────────────────────────────────────

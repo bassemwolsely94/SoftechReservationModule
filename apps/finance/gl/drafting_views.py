@@ -20,7 +20,8 @@ from rest_framework.response import Response
 from apps.branches.models import Branch
 from apps.catalog.wildcard import filter_and_rank
 from apps.finance.models import (
-    GLDraftRun, GLParty, GLSourceDoc, GLSourceMap, LedgerEntry, PostingRule, SourceException,
+    GLDraftRun, GLParty, GLSourceDoc, GLSourceMap, LedgerEntry, PostingRule, ReconParty,
+    SourceException,
 )
 from core.threads import start_thread
 from core.upload_safety import capped_rows, max_upload_bytes
@@ -450,3 +451,57 @@ def entry_source(request, pk):
                         status=status.HTTP_404_NOT_FOUND)
     docs = GLSourceDoc.objects.filter(entry_id=pk).select_related('rule').order_by('doc_date', 'id')
     return Response({'docs': [source_doc_json(d) for d in docs]})
+
+
+# ── read-only metadata for the screens (Ruling P16) ──────────────────────────
+
+@api_view(['GET'])
+@permission_classes(VIEW)
+def rules_meta(request):
+    """Everything the rule editor offers, read from rules.py - the UI keeps no copy."""
+    return Response({
+        'source_fields': {k: list(v) for k, v in rules.SOURCE_FIELDS.items()},
+        'condition_keys': {k: list(v) for k, v in rules.CONDITION_KEYS.items()},
+        'map_kinds': list(rules.MAP_KINDS), 'map_keys': list(rules.MAP_KEYS),
+        'map_key_for_kind': {'bank': 'bankcode', 'expense': 'expcode', 'card_clearing': 'branch_code'},
+        'branch_modes': list(rules.BRANCH_MODES), 'party_modes': list(rules.PARTY_MODES),
+        'placeholders': list(rules.PLACEHOLDERS),
+        'bank_branch_sources': list(rules.BANK_BRANCH_SOURCES),
+        'cheque_sources': list(rules._CHEQUES),
+        'actions': ['post', 'skip'],
+        'granularities': [k for k, _ in PostingRule.GRANULARITY_CHOICES],
+        'books': [k for k, _ in PostingRule.BOOK_CHOICES],
+    })
+
+
+@api_view(['GET'])
+@permission_classes(VIEW)
+def parties_persons(request):
+    """SOFTECH persons (A/P mirror) for the party picker; wildcard search, at most 50."""
+    p = request.query_params
+    qs = ReconParty.objects.all()
+    if p.get('type'):
+        qs = qs.filter(party_type=p['type'])
+    q = (p.get('q') or '').strip()
+    if q:
+        qs = filter_and_rank(qs, q, ['softech_personcode', 'name'])
+    qs = qs.order_by('name', 'id')[:50]
+    return Response({'results': [{'id': r.pk, 'party_type': r.party_type,
+                                  'softech_personcode': r.softech_personcode, 'name': r.name}
+                                 for r in qs]})
+
+
+@api_view(['GET'])
+@permission_classes(VIEW)
+def exceptions_unmapped_values(request):
+    """Distinct values behind open unmapped_account exceptions: [{kind, value, count}]."""
+    kind = request.query_params.get('kind') or 'unmapped_account'
+    counts = {}
+    for d in (SourceException.objects.filter(status='open', kind=kind)
+              .values_list('detail', flat=True).iterator()):
+        d = d or {}
+        if d.get('kind') and d.get('value') not in (None, ''):
+            k = (str(d['kind']), str(d['value']))
+            counts[k] = counts.get(k, 0) + 1
+    return Response({'results': [{'kind': k, 'value': v, 'count': n}
+                                 for (k, v), n in sorted(counts.items())]})

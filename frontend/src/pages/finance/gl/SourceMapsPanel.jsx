@@ -68,8 +68,8 @@ export default function SourceMapsPanel({ canEdit }) {
 
   const mapsQ = useQuery({ queryKey: ['gl', 'maps', kind], queryFn: () => glApi.maps({ kind }).then(r => listOf(r.data)) })
   const exQ = useQuery({
-    queryKey: ['gl', 'exceptions', 'unmapped_account'],
-    queryFn: () => glApi.exceptions({ kind: 'unmapped_account', status: 'open' }).then(r => listOf(r.data)),
+    queryKey: ['gl', 'exceptions', 'unmapped-values'],
+    queryFn: () => glApi.unmappedValues({ kind: 'unmapped_account' }).then(r => listOf(r.data)),
   })
   const accountsQ = useQuery({
     queryKey: ['gl', 'accounts', 'posting'],
@@ -85,8 +85,7 @@ export default function SourceMapsPanel({ canEdit }) {
     // values the engine reported as unmapped for this kind and that have no row yet
     const missing = new Set()
     ;(exQ.data || []).forEach(e => {
-      const d = e.detail || {}
-      if (d.kind === kind && d.value !== undefined && d.value !== null && !have.has(String(d.value))) missing.add(String(d.value))
+      if (e.kind === kind && !have.has(String(e.value))) missing.add(String(e.value))
     })
     extra.forEach(v => { if (!have.has(v)) missing.add(v) })
     const out = [...have.values()]
@@ -95,7 +94,6 @@ export default function SourceMapsPanel({ canEdit }) {
   }, [mapsQ.data, exQ.data, extra, kind])
   const { sorted, headerProps } = useSortableRows(rows, {
     persistKey: 'gl-maps', defaultSort: { key: 'source_value', dir: 'asc', type: 'text' },
-    getValue: (r, k) => (k === 'unmapped' ? (r.unmapped ? 0 : 1) : r[k]),
   })
   const unmappedCount = rows.filter(r => r.unmapped).length
   const done = () => { qc.invalidateQueries({ queryKey: ['gl', 'maps'] }); qc.invalidateQueries({ queryKey: ['gl', 'exceptions'] }); setExtra([]) }
