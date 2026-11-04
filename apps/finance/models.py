@@ -29,6 +29,10 @@ from .recon_models import (  # noqa: E402,F401  (re-exported for the app registr
     MatchCandidate, MatchEvidence, ReconException, ReconAuditEvent, ReturnLink,
     ContractReceivableTerms, SupplierTerm, APInvoiceSlice, CashOpeningBalance, FixedOutflow, CashViewSnapshot,
 )
+# General Ledger (finance-gl) — same app label, separate module.
+from .gl.models import (  # noqa: E402,F401
+    GLAccountGroup, GLAccount, LedgerEntry, LedgerLine, GLSequence,
+)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -156,6 +160,14 @@ class FinancialPeriod(models.Model):
     period_end   = models.DateField()
     label        = models.CharField(max_length=20, blank=True)  # e.g. "2024-03", "2024-Q1"
     is_closed    = models.BooleanField(default=False)
+    # General Ledger lifecycle; is_closed is kept in sync (status == 'closed').
+    status       = models.CharField(
+        max_length=10, default='open', verbose_name='الحالة',
+        choices=[('open', 'مفتوحة'), ('closing', 'قيد الإقفال'), ('closed', 'مقفلة')])
+    closed_by    = models.ForeignKey(
+        'users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='+', verbose_name='أقفلها')
+    closed_at    = models.DateTimeField(null=True, blank=True, verbose_name='وقت الإقفال')
     created_at   = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -176,6 +188,7 @@ class FinancialPeriod(models.Model):
                 self.label = f'{self.year}-Q{q}'
             else:
                 self.label = str(self.year)
+        self.is_closed = (self.status == 'closed')
         super().save(*args, **kwargs)
 
 
