@@ -105,6 +105,26 @@ class CardTests(TestCase):
         with self.assertRaises(Exception):
             self._send(resend=True)
 
+    def test_queued_send_counts_for_dedupe(self):
+        """Deferred minor: a send still in flight (queued) blocks a parallel duplicate."""
+        s = self._send()
+        CounselCardSend.objects.filter(pk=s.pk).update(status='queued')
+        with self.assertRaises(Exception):
+            self._send()
+
+    @override_settings(COUNSEL_CARD_DAILY_CAP=1)
+    def test_queued_send_counts_for_cap(self):
+        s = self._send()
+        CounselCardSend.objects.filter(pk=s.pk).update(status='queued')
+        with self.assertRaises(Exception):
+            self._send(item_ids=[self.item.pk], resend=True)
+
+    def test_idempotency_key_is_per_sender(self):
+        """Deferred minor: another user's key never returns that user's send."""
+        self._send('shared-key')
+        with self.assertRaises(Exception):
+            self._send('shared-key', actor=self.ph)
+
     def test_template_has_no_item_name(self):
         self._send()
         sent = repr(self.fake.templates)
