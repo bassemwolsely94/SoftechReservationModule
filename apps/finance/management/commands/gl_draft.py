@@ -1,8 +1,10 @@
-"""python manage.py gl_draft --from YYYY-MM-DD --to YYYY-MM-DD [--source TYPE ...] [--dry-run] [--allow-mass-vanish]
+"""python manage.py gl_draft --from YYYY-MM-DD --to YYYY-MM-DD [--source TYPE ...] [--dry-run]
+                            [--allow-mass-vanish]
 
 Runs the GL drafting engine over a date range: SOFTECH source documents (SELECT only) → draft ledger
 entries. ``--allow-mass-vanish`` bypasses the guard that refuses to vanish > 20 % (and > 10) of a
-type's documents in one run (Ruling P10). ``--dry-run`` runs everything inside one transaction and rolls it back, printing the counts.
+type's documents in one run (Ruling P10). ``--dry-run`` runs everything inside one transaction and
+rolls it back, printing the counts.
 """
 from datetime import date
 
