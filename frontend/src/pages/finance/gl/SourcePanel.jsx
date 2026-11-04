@@ -16,6 +16,12 @@ import { SOURCE_TYPES } from './RuleEditor'
 
 const DOC_STATUS = { new: 'جديد', drafted: 'مرحّل', skipped: 'مُتجاوز', exception: 'استثناء', vanished: 'اختفى', changed: 'تغيّر' }
 
+const fmtTs = (t) => (t ? t.replace('T', ' ').slice(0, 16) : '—')
+function attrsText(attrs) {
+  const e = Object.entries(attrs || {})
+  return e.length ? e.map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(',') : (typeof v === 'object' && v ? JSON.stringify(v) : v)}`).join(' · ') : '—'
+}
+
 export function amountsText(amounts) {
   const e = Object.entries(amounts || {})
   return e.length ? e.map(([k, v]) => `${k} ${money(v)}`).join(' · ') : '—'
@@ -54,7 +60,7 @@ export default function SourcePanel({ entryId }) {
           {q.data && !rows.length && <div className="text-xs text-gray-500">لا مستندات مرتبطة بهذا القيد</div>}
           {rule && (
             <div className="text-xs text-gray-600">
-              القاعدة: <Link className="text-green-700 hover:underline font-mono" to="/finance/rules">{rule.rule_code}</Link>
+              القاعدة: <Link className="text-green-700 hover:underline font-mono" to={`/finance/rules?code=${encodeURIComponent(rule.rule_code)}`}>{rule.rule_code}</Link>
               {' '}— النسخة {rule.rule_version}
               {rule.source_type && <> · {SOURCE_TYPES[rule.source_type] || rule.source_type}</>}
             </div>
@@ -68,6 +74,7 @@ export default function SourcePanel({ entryId }) {
                     <SortTh {...headerProps('doc_date', 'date')} className="text-right px-2 py-1.5">التاريخ</SortTh>
                     <SortTh {...headerProps('_branch')} className="text-right px-2 py-1.5">الفرع</SortTh>
                     <SortTh {...headerProps('_amounts')} className="text-right px-2 py-1.5">المبالغ</SortTh>
+                    <th className="text-right px-2 py-1.5">الخصائص</th>
                     <SortTh {...headerProps('version', 'number')} className="text-right px-2 py-1.5">النسخة</SortTh>
                     <SortTh {...headerProps('status')} className="text-right px-2 py-1.5">الحالة</SortTh>
                   </tr>
@@ -79,7 +86,11 @@ export default function SourcePanel({ entryId }) {
                       <td className="px-2 py-1 whitespace-nowrap">{d.doc_date}</td>
                       <td className="px-2 py-1">{d._branch}</td>
                       <td className="px-2 py-1 font-mono tabular-nums" dir="ltr">{d._amounts}</td>
-                      <td className="px-2 py-1">{d.version}</td>
+                      <td className="px-2 py-1 text-gray-600 max-w-xs break-words" dir="ltr">{attrsText(d.attrs)}</td>
+                      <td className="px-2 py-1 whitespace-nowrap" title={`بصمة ${d.content_hash || ''}`}>
+                        {d.version}
+                        <div className="text-[10px] text-gray-400">أول ظهور {fmtTs(d.first_seen)}<br />آخر ظهور {fmtTs(d.last_seen)}</div>
+                      </td>
                       <td className="px-2 py-1">{DOC_STATUS[d.status] || d.status}</td>
                     </tr>
                   ))}

@@ -247,6 +247,22 @@ class RuleTests(Base):
 
 
 class ExceptionTests(Base):
+    def test_counts_by_kind_and_source(self):
+        d1 = self.doc('c1')
+        d2 = self.doc('c2', source_type='credit_sales')
+        self.exc(d1, 'no_rule')
+        self.exc(d1, 'unmapped_party')
+        e3 = self.exc(d2, 'no_rule')
+        r = self.acct.get(BASE + 'exceptions/counts/')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data, {'total': 3, 'by_kind': {'no_rule': 2, 'unmapped_party': 1}})
+        r = self.acct.get(BASE + 'exceptions/counts/', {'source_type': 'credit_sales'})
+        self.assertEqual(r.data, {'total': 1, 'by_kind': {'no_rule': 1}})
+        e3.status = 'ignored'
+        e3.save(update_fields=['status'])
+        self.assertEqual(self.acct.get(BASE + 'exceptions/counts/').data['total'], 2)
+        self.assertEqual(self.pharm.get(BASE + 'exceptions/counts/').status_code, 403)
+
     def test_filter_and_ignore_audited(self):
         d1 = self.doc('a')
         d2 = self.doc('b', source_type='credit_sales', doc_date=datetime.date(2026, 4, 2))

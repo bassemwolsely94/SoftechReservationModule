@@ -62,13 +62,15 @@ function PartyFix({ ex, onDone }) {
     <div className="space-y-1.5 text-sm">
       <div className="text-xs text-gray-600">شخص SOFTECH <span className="font-mono">{personcode || '—'}</span> ({type === 'customer' ? 'عميل' : 'مورد'})</div>
       {found.isLoading ? <div className="text-xs text-gray-500">جاري البحث…</div>
-        : p && p.status === 'proposed' ? (
-          <div className="flex items-center gap-2">
-            <span>الطرف المقترح: <b>{p.code}</b> · {p.name}</span>
-            <button type="button" className={btnPrimary} disabled={confirm.isPending} onClick={() => confirm.mutate(p)}>تأكيد الطرف</button>
-          </div>
-        ) : p && p.status === 'confirmed' ? (
+        : p && p.status === 'confirmed' ? (
           <div className="text-green-700">الطرف {p.code} مؤكد بالفعل — أعد الترحيل</div>
+        ) : p ? (
+          <div className="flex items-center gap-2">
+            <span>{p.status === 'rejected' ? 'طرف مرفوض سابقاً' : 'الطرف المقترح'}: <b>{p.code}</b> · {p.name}</span>
+            <button type="button" className={btnPrimary} disabled={confirm.isPending} onClick={() => confirm.mutate(p)}>
+              {p.status === 'rejected' ? 'إعادة تأكيد الطرف' : 'تأكيد الطرف'}
+            </button>
+          </div>
         ) : (
           <form className="flex flex-wrap items-center gap-2" onSubmit={e => { e.preventDefault(); if (code.trim()) create.mutate() }}>
             <input className={`${inputCls} w-32`} placeholder="كود الطرف (مالية)" value={code} onChange={e => setCode(e.target.value)} />
@@ -96,6 +98,7 @@ function MapFix({ ex, onDone }) {
   })
   const accounts = useMemo(() => (accountsQ.data || []).filter(a => a.is_posting !== false), [accountsQ.data])
   const name = accounts.find(a => String(a.code) === String(account))?.name || ''
+  const needBranch = ex.detail?.reason === 'map has no branch' || kind === 'bank' || kind === 'card_clearing'
   const save = useMutation({
     mutationFn: () => glApi.mapPut(kind, value, { account_code: account, branch_id: branch ? Number(branch) : null, note: '' }),
     onSuccess: () => { setErr(''); onDone('تم الربط — اضغط «إعادة الترحيل»') },
@@ -107,10 +110,10 @@ function MapFix({ ex, onDone }) {
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-72"><AccountPicker value={account} name={name} accounts={accounts} onPick={a => setAccount(a.code)} /></div>
         <select className={inputCls} value={branch} onChange={e => setBranch(e.target.value)}>
-          <option value="">{kind === 'card_clearing' ? '— اختر فرعاً —' : 'بدون فرع'}</option>
+          <option value="">{needBranch ? '— اختر فرعاً —' : 'بدون فرع'}</option>
           {branches.map(b => <option key={b.id} value={b.id}>{labelOf(b.id)}</option>)}
         </select>
-        <button type="button" className={btnPrimary} disabled={!account || save.isPending} onClick={() => save.mutate()}>حفظ الربط</button>
+        <button type="button" className={btnPrimary} disabled={!account || (needBranch && !branch) || save.isPending} onClick={() => save.mutate()}>حفظ الربط</button>
       </div>
       <ErrorBox>{err}</ErrorBox>
     </div>
@@ -202,7 +205,7 @@ export default function ExceptionsTab({ filters, perms, onRunStarted, onBusy }) 
     queryKey: ['gl', 'exceptions', params],
     queryFn: ({ pageParam }) => (pageParam ? glApi.exceptionsPage(pageParam) : glApi.exceptions(params)).then(r => r.data),
     initialPageParam: null,
-    getNextPageParam: (last) => last?.next || undefined,
+    getNextPageParam: (last) => last?.next ?? undefined,
   })
   const rows = useMemo(() => (listQ.data?.pages || []).flatMap(listOf).map(e => ({
     ...e, _date: e.source_date, _branch: branchName(e.doc?.branch_code),
@@ -214,11 +217,25 @@ export default function ExceptionsTab({ filters, perms, onRunStarted, onBusy }) 
   })
   const groups = useMemo(() => KIND_ORDER.map(k => ({ kind: k, items: sorted.filter(r => r.kind === k) })).filter(g => g.items.length), [sorted])
   const flat = useMemo(() => groups.flatMap(g => g.items), [groups])
+  const selectable = useMemo(() => flat.filter(r => r.kind !== 'closed_period_change'), [flat])
+  const countsQ = useQuery({
+    queryKey: ['gl', 'exceptions', 'counts', filters.source_type || 'all'],
+    queryFn: () => glApi.exceptionsCounts({ source_type: filters.source_type || undefined }).then(r => r.data),
+  })
+  const byKind = countsQ.data?.by_kind || {}
 
   useEffect(() => { setSelected(new Set()) }, [params])
+  // keep only selections still in the loaded rows (after a redraft / ignore reload)
+  useEffect(() => {
+    setSelected(s => {
+      const live = new Set(selectable.map(r => r.id))
+      const n = new Set([...s].filter(id => live.has(id)))
+      return n.size === s.size ? s : n
+    })
+  }, [selectable])
   const refresh = () => { qc.invalidateQueries({ queryKey: ['gl', 'exceptions'] }) }
-  const toggle = (r) => setSelected(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n })
-  const selectAll = () => setSelected(s => (s.size === flat.length ? new Set() : new Set(flat.map(r => r.id))))
+  const toggle = (r) => r.kind !== 'closed_period_change' && setSelected(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n })
+  const selectAll = () => setSelected(s => (s.size === selectable.length ? new Set() : new Set(selectable.map(r => r.id))))
   const kb = useGridKeyboard({
     rows: flat, getKey: r => r.id, onToggle: toggle, onSelectAll: selectAll,
     onConfirm: (r) => setOpenRow(o => (o === r.id ? null : r.id)), onClose: () => setOpenRow(null),
@@ -244,13 +261,12 @@ export default function ExceptionsTab({ filters, perms, onRunStarted, onBusy }) 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        {groups.map(g => (
-          <button key={g.kind} type="button" onClick={() => setKindFilter(k => (k === g.kind ? '' : g.kind))}
-                  className={`px-2.5 py-1 rounded-full border text-xs ${kindFilter === g.kind ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}>
-            {KIND_LABEL[g.kind]} · {g.items.length}
+        {KIND_ORDER.filter(k => byKind[k] || k === kindFilter).map(k => (
+          <button key={k} type="button" onClick={() => setKindFilter(x => (x === k ? '' : k))}
+                  className={`px-2.5 py-1 rounded-full border text-xs ${kindFilter === k ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}>
+            {KIND_LABEL[k]} · {byKind[k] ?? 0}
           </button>
         ))}
-        {kindFilter && !groups.length && <button type="button" className={btnPlain} onClick={() => setKindFilter('')}>إلغاء الفلتر</button>}
         {canSelect && (
           <button type="button" className={`${btnPrimary} ms-auto`} disabled={!selected.size || redraft.isPending} onClick={() => redraft.mutate()}>
             {redraft.isPending ? 'جاري البدء…' : `إعادة الترحيل${selected.size ? ` (${selected.size})` : ''}`}
@@ -268,7 +284,7 @@ export default function ExceptionsTab({ filters, perms, onRunStarted, onBusy }) 
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-600 text-xs">
                 <tr>
-                  {canSelect && <th className="px-2 py-2 w-8"><input type="checkbox" checked={!!flat.length && selected.size === flat.length} onChange={selectAll} title="تحديد الكل" /></th>}
+                  {canSelect && <th className="px-2 py-2 w-8"><input type="checkbox" checked={!!selectable.length && selected.size === selectable.length} onChange={selectAll} title="تحديد الكل" /></th>}
                   <SortTh {...headerProps('_date', 'date')} className="text-right px-3 py-2">التاريخ</SortTh>
                   <SortTh {...headerProps('_branch')} className="text-right px-3 py-2">الفرع</SortTh>
                   <SortTh {...headerProps('_source')} className="text-right px-3 py-2">المصدر</SortTh>
@@ -288,7 +304,7 @@ export default function ExceptionsTab({ filters, perms, onRunStarted, onBusy }) 
                       <Fragment key={r.id}>
                         <tr {...kbp} className={`border-t border-gray-100 cursor-pointer hover:bg-gray-50 ${selected.has(r.id) ? 'bg-green-50/60' : ''} ${isOpen ? 'bg-blue-50/60' : ''} ${kbp.className}`}
                             onClick={() => setOpenRow(isOpen ? null : r.id)}>
-                          {canSelect && <td className="px-2 py-1.5" onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r)} /></td>}
+                          {canSelect && <td className="px-2 py-1.5" onClick={e => e.stopPropagation()}><input type="checkbox" disabled={r.kind === 'closed_period_change'} checked={selected.has(r.id)} onChange={() => toggle(r)} /></td>}
                           <td className="px-3 py-1.5 whitespace-nowrap">{r._date}</td>
                           <td className="px-3 py-1.5">{r._branch}</td>
                           <td className="px-3 py-1.5">{r._source}</td>

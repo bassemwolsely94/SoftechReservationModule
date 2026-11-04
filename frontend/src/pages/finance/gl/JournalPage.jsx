@@ -54,13 +54,14 @@ function RunProgress({ runId, onFinished }) {
     queryKey: ['gl', 'draft-run', runId],
     queryFn: () => glApi.draftRun1(runId).then(r => r.data),
     enabled: !!runId,
-    refetchInterval: (q) => (q.state.data && q.state.data.status !== 'running' ? false : 2000),
+    refetchInterval: (q) => (q.state.status === 'error' || (q.state.data && q.state.data.status !== 'running') ? false : 2000),
   })
   const run = runQ.data
   const finished = !!run && run.status !== 'running'
   const started = useRef(Date.now())
   useEffect(() => { if (finished) onFinished?.(run) }, [finished]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!runId) return null
+  if (runQ.isError) return <div className="text-sm rounded-lg border border-red-200 bg-red-50 text-red-700 px-3 py-2">تعذّر قراءة حالة الترحيل — حدّث الصفحة</div>
   const c = run?.counts || {}
   const msg = run ? `قُرئ ${c.read ?? 0} · جديد ${c.new ?? 0} · مسودات ${c.drafted ?? 0} · استثناءات ${c.exceptions ?? 0}` : 'جاري البدء…'
   if (!finished) return <ProgressBar label="ترحيل القيود من SOFTECH" message={msg} since={started.current} />
@@ -82,7 +83,8 @@ export default function JournalPage() {
     status: params.get('status') ?? 'draft', book: '', date_from: '', date_to: '', branch: '',
     account: params.get('account') || '', q: '', source: '',
   })
-  const [tab, setTab] = useState(params.get('tab') === 'exceptions' ? 'exceptions' : 'entries')
+  const tab = params.get('tab') === 'exceptions' ? 'exceptions' : 'entries'   // follows the URL
+  const setTab = (t) => { const p = new URLSearchParams(params); if (t === 'exceptions') p.set('tab', t); else p.delete('tab'); setParams(p, { replace: true }) }
   useHelpTab(tab)
   const [runId, setRunId] = useState(null)
   const [runNote, setRunNote] = useState('')
@@ -97,8 +99,10 @@ export default function JournalPage() {
   const [editorKey, setEditorKey] = useState('')
 
   const setF = (patch) => { setFilters(f => ({ ...f, ...patch })); setSelected(new Set()); setRowResult({}) }
-  // `source` is a view filter on the loaded rows (the entries endpoint has no source filter)
-  const apiParams = useMemo(() => Object.fromEntries(Object.entries(filters).filter(([k, v]) => v !== '' && k !== 'source')), [filters])
+  const apiParams = useMemo(() => {
+    const { source, ...rest } = filters
+    return Object.fromEntries(Object.entries({ ...rest, source_type: source }).filter(([, v]) => v !== ''))
+  }, [filters])
   const excFilters = useMemo(() => ({
     source_type: filters.source && filters.source !== 'manual' ? filters.source : '',
     date_from: filters.date_from, date_to: filters.date_to, branch: filters.branch,
@@ -110,17 +114,22 @@ export default function JournalPage() {
     initialPageParam: null,
     getNextPageParam: (last) => (Array.isArray(last) ? undefined : last?.next || undefined),
   })
-  const allRows = useMemo(() => (listQ.data?.pages || []).flatMap(listOf), [listQ.data])
-  const rows = useMemo(() => (filters.source
-    ? allRows.filter(r => (filters.source === 'manual' ? (!r.source_type || r.source_type === 'manual') : r.source_type === filters.source))
-    : allRows), [allRows, filters.source])
+  const rows = useMemo(() => (listQ.data?.pages || []).flatMap(listOf), [listQ.data])
+  // own key (same 'gl','exceptions' prefix, so invalidations still reach it) - never the list's key
   const badgeQ = useQuery({
-    queryKey: ['gl', 'exceptions', {}],
-    queryFn: () => glApi.exceptions({}).then(r => r.data),
+    queryKey: ['gl', 'exceptions', 'counts', 'all'],
+    queryFn: () => glApi.exceptionsCounts({}).then(r => r.data),
     refetchInterval: 60000,
   })
-  const openExceptions = listOf(badgeQ.data).length
-  const openMore = !!badgeQ.data?.next
+  const openExceptions = badgeQ.data?.total ?? 0
+  // drop selections that are no longer in the loaded drafts (filter change, reload, approval)
+  useEffect(() => {
+    setSelected(s => {
+      const live = new Set(rows.filter(r => r.status === 'draft').map(r => r.id))
+      const n = new Set([...s].filter(id => live.has(id)))
+      return n.size === s.size ? s : n
+    })
+  }, [rows])
   const { sorted, headerProps } = useSortableRows(rows, { getValue, persistKey: 'gl-journal' })
 
   const setEntryParam = (id) => {
@@ -202,7 +211,7 @@ export default function JournalPage() {
       <div className="flex rounded-lg border border-gray-300 overflow-hidden text-sm w-fit">
         <button type="button" onClick={() => setTab('entries')} className={tabBtn('entries')}>المسودات والقيود</button>
         <button type="button" onClick={() => setTab('exceptions')} className={tabBtn('exceptions')}>
-          الاستثناءات{openExceptions > 0 && <span className="ms-1.5 rounded-full bg-amber-500 text-white text-[11px] px-1.5">{openExceptions}{openMore ? '+' : ''}</span>}
+          الاستثناءات{openExceptions > 0 && <span className="ms-1.5 rounded-full bg-amber-500 text-white text-[11px] px-1.5">{openExceptions}</span>}
         </button>
       </div>
 

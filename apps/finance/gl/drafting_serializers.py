@@ -45,5 +45,8 @@ def exception_json(e):
 def source_doc_json(d):
     row = doc_json(d)
     row.update(rule_code=d.rule.code if d.rule else None,
-               rule_version=d.rule.version if d.rule else None)
+               rule_version=d.rule.version if d.rule else None,
+               content_hash=(d.content_hash or '')[:12],
+               first_seen=d.first_seen.isoformat() if d.first_seen else None,
+               last_seen=d.last_seen.isoformat() if d.last_seen else None)
     return row

@@ -33,6 +33,7 @@ urlpatterns = [
     path('rules/preview/', drafting_views.rule_preview, name='gl-rules-preview'),
     path('rules/<str:code>/versions/', drafting_views.rule_versions, name='gl-rule-versions'),
     path('exceptions/', drafting_views.exceptions_list, name='gl-exceptions'),
+    path('exceptions/counts/', drafting_views.exceptions_counts, name='gl-exceptions-counts'),
     path('exceptions/unmapped-values/', drafting_views.exceptions_unmapped_values, name='gl-exceptions-unmapped'),
     path('exceptions/redraft/', drafting_views.exceptions_redraft, name='gl-exceptions-redraft'),
     path('exceptions/<int:pk>/ignore/', drafting_views.exception_ignore, name='gl-exception-ignore'),

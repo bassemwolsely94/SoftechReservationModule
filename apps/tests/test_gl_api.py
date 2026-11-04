@@ -72,6 +72,18 @@ class GLApiTests(TestCase):
         self.assertEqual([e['number'] for e in lst.data['results']], ['JV-2026-000001'])
         self.assertEqual(lst.data['results'][0]['total_debit'], '100.00')
 
+    def test_entries_source_type_filter(self):
+        from apps.finance.models import LedgerEntry
+        manual, sales, other = (self._draft()['id'] for _ in range(3))
+        LedgerEntry.objects.filter(pk=sales).update(source_type='sales_tenders')
+        LedgerEntry.objects.filter(pk=other).update(source_type='purchases')
+        ids = lambda **q: sorted(e['id'] for e in self.c.get(BASE + 'entries/', q).data['results'])
+        self.assertEqual(ids(), sorted([manual, sales, other]))
+        self.assertEqual(ids(source_type='sales_tenders'), [sales])
+        self.assertEqual(ids(source_type='manual'), [manual])
+        LedgerEntry.objects.filter(pk=manual).update(source_type='')
+        self.assertEqual(ids(source_type='manual'), [manual])
+
     def test_viewer_cannot_approve(self):
         d = self._draft()
         self.assertEqual(self.viewer.post(f'{BASE}entries/{d["id"]}/approve/').status_code, 403)

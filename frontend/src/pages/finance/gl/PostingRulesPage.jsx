@@ -6,7 +6,8 @@
  * (bank / expense / card-clearing) the rules read. Editing a rule creates a new version; nothing
  * is deleted. View needs ledger.view, edits need ledger.edit — the server enforces both.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { glApi } from '../../../api/client'
 import { usePermissions } from '../../../hooks/usePermission'
@@ -41,6 +42,13 @@ export default function PostingRulesPage() {
   const { sorted, headerProps } = useSortableRows(rows, {
     persistKey: 'gl-rules', defaultSort: { key: 'source_type', dir: 'asc', type: 'text' },
   })
+  const [params] = useSearchParams()
+  const wantCode = params.get('code')
+  useEffect(() => {   // /finance/rules?code=... opens that rule (from the entry source panel)
+    if (!wantCode || open) return
+    const hit = rows.find(r => r.code === wantCode)
+    if (hit) setOpen(hit)
+  }, [wantCode, rows]) // eslint-disable-line react-hooks/exhaustive-deps
   const editing = open && open !== 'new' ? rows.find(r => r.code === open.code) || open : null
 
   return (

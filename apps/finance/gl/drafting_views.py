@@ -9,7 +9,7 @@ import os
 import tempfile
 
 from django.db import transaction
-from django.db.models import Max, Min
+from django.db.models import Count, Max, Min
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, parser_classes, permission_classes
@@ -382,6 +382,17 @@ def exceptions_list(request):
     pager = ExceptionCursor()
     page = pager.paginate_queryset(qs, request)
     return pager.get_paginated_response([exception_json(e) for e in page])
+
+
+@api_view(['GET'])
+@permission_classes(VIEW)
+def exceptions_counts(request):
+    """Open exceptions per kind (optionally one source_type) - the tab badge and kind chips."""
+    qs = SourceException.objects.filter(status='open')
+    if request.query_params.get('source_type'):
+        qs = qs.filter(source_doc__source_type=request.query_params['source_type'])
+    by_kind = {r['kind']: r['n'] for r in qs.values('kind').annotate(n=Count('id'))}
+    return Response({'total': sum(by_kind.values()), 'by_kind': by_kind})
 
 
 @api_view(['POST'])

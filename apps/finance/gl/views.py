@@ -395,6 +395,11 @@ def entries(request):
     if branch:
         qs = qs.filter(Q(branch_id=branch) |
                        Q(pk__in=LedgerLine.objects.filter(branch_id=branch).values('entry_id')))
+    st = (p.get('source_type') or '').strip()
+    if st == 'manual':
+        qs = qs.filter(source_type__in=('', 'manual'))
+    elif st:
+        qs = qs.filter(source_type=st)
     if p.get('account'):
         qs = qs.filter(pk__in=LedgerLine.objects.filter(
             account__code=p['account'].strip()).values('entry_id'))
