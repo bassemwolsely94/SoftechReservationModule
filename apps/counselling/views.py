@@ -151,7 +151,8 @@ class ContentUnlink(_ContentAction):
 
 
 class ContentSuggestItems(_ContentAction):
-    counselling_read_action = 'edit'
+    # Reads follow `counselling → view` like every other sheet read (round 2 R3, owner default §8 Q5:
+    # the matrix wins). Linking a suggested item is still ContentLink (edit).
 
     def get(self, request, pk):
         return Response({'results': services.suggest_items(self._content(pk))})
@@ -165,7 +166,8 @@ class ContentVersions(_ContentAction):
 
 
 class NeedsContent(_ContentGate, APIView):
-    counselling_read_action = 'edit'
+    # The screen's FIRST tab: view-only roles opened /counselling straight onto a 403 (round 2 R3,
+    # owner default §8 Q5 — the matrix wins). Read-only list of sold items with no sheet.
 
     def get(self, request):
         return Response({'results': services.needs_content_queue()})
