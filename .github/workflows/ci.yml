@@ -65,7 +65,10 @@ jobs:
       - name: Run tests (with coverage)
         run: |
           coverage run manage.py test --noinput --verbosity 2
-          coverage report --skip-covered | tail -40
+          # Floor = the measured total, rounded down (R7, 2026-11-05: 73.97%). It never goes down.
+          # pipefail: without it `| tail` would hide the --fail-under exit code.
+          set -o pipefail
+          coverage report --skip-covered --fail-under=73 | tail -40
 
       - name: Static security scan (bandit, new findings only)
         run: bandit -r apps core config -x apps/tests,migrations -ll -q -b apps/tests/security/bandit-baseline.json
