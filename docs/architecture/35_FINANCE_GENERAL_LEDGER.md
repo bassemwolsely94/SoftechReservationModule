@@ -280,13 +280,20 @@ An exception resolves itself on redraft; «تجاهل» needs a reason and keeps
 
 - **P24 — inter-company cash transfers.** The treasury reader classifies SOFTECH transfer vouchers
   (`personcode` -180 box↔box, -181 box↔bank) by their other side, with `source_key` unchanged
-  (`sources/treasury.py::_transfer_kinds`, a pure function of the fetched row set):
-  - `transfer_branch` + `attrs.counterpart_branch` — the voucher's own `tf_branchcode` (when it is another
-    branch), else (the HQ leg) the branch of the one voucher in the same fetch whose `tf_branchcode` /
-    `tf_cheqsno` point back at it. Two different branches pointing at one voucher → no counterpart.
-  - `transfer_bank` + `attrs.tf_bankcode` — no counterpart branch, `tf_bankcode` set. When both legs of a
-    same-branch box↔bank pair are in the fetch, the receipt leg is `transfer_bank_mirror` and the seeded
-    skip rule `treasury.box_bank_mirror` drops it (the two legs carry the same movement — never posted twice).
+  (`sources/treasury.py::_transfer_kinds`). The kind never depends on the drafted range, so a voucher
+  keeps its kind (and entry) whichever window drafts it. `attrs.counterpart_branch` is set on transfer
+  vouchers only (other cheques keep their content hash).
+  - -180 box↔box: counterpart branch = the voucher's own `tf_branchcode` (when it is another branch),
+    else the one branch whose leg points back at it (`tf_branchcode` / `tf_cheqsno`) — first in the
+    fetch, then, for an HQ leg, by one extra read-only SELECT over `cheques` with no date bound
+    (`sybase_gl.sql_transfer_legs_pointing_at`, ints and constants only; **P28**). HQ on either side →
+    `transfer_branch`; branch↔branch → `transfer_b2b` (**P29**, exception); an HQ leg still unpaired or
+    ambiguous → `transfer_unpaired` (**P28**, exception — never the 1320 suspense); a branch leg with no
+    counterpart stays `transfer`.
+  - -181 box↔bank (**P27**, decided from the row alone): the leg whose own `bankcode` is a bank
+    (`banks.banktype` 1) is `transfer_bank_mirror` and the skip rule `treasury.box_bank_mirror` drops it;
+    the box leg (banktype 0) with `tf_bankcode` is `transfer_bank` and posts box vs bank(`tf_bankcode`) —
+    also when it is alone. A -181 without `tf_bankcode` stays `transfer`.
   - `transfer` otherwise (unchanged: `treasury.transfer_in/out` via suspense 1320).
   New map kind `intercompany` (SOFTECH branch code → finance's sister-company account, branch = HQ; the
   map PUT needs a branch) and map keys `counterpart_branch` / `tf_bankcode` (migration 0023 changes only
@@ -299,7 +306,10 @@ An exception resolves itself on redraft; «تجاهل» needs a reason and keeps
   | `treasury.hq_transfer_out` | transfer_branch, 100, payment | Dr intercompany by counterpart (HQ) / Cr box map |
   | `treasury.hq_transfer_in` | transfer_branch, 100, receipt | Dr box map / Cr intercompany by counterpart (HQ) |
   | `treasury.box_bank_in` / `_out` | transfer_bank, receipt / payment | Dr box / Cr bank map by `tf_bankcode` (and reverse) |
-  | `treasury.box_bank_mirror` | transfer_bank_mirror | skip |
+  | `treasury.box_bank_mirror` | transfer_bank_mirror (financialdoc 10) | skip |
+
+  `transfer_unpaired` and `transfer_b2b` have no rule on purpose (`no_rule` exceptions). Map rows and the
+  exceptions fix keyed by a branch code (intercompany, card clearing) show «code · name».
   Intercompany maps: 130→2408 علياء, 140→2413 الجيزة, 150→2405 عين شمس, 160→2406 باب الحديد, 170→2417 محسن
   (missing accounts skipped and reported, P5). 2404 «شركات شقيقة شركة الرزيقى لادارة الصيدليات» is the
   branch-side account, as in finance's cash book.
@@ -317,7 +327,10 @@ An exception resolves itself on redraft; «تجاهل» needs a reason and keeps
   «الكود» + «اسم المورد» → supplier, «كود الموظف» + «Name in Arabic» → employee, «كود العميل» +
   «اسم العميل» → customer (same code / name guards). `import_parties(create_only=True)` /
   `import_gl_parties <xlsx> --create-only [--propose]` only adds missing codes and never renames or
-  touches an existing party — the 2026 sub-ledger names stay authoritative.
+  touches an existing party — the 2026 sub-ledger names stay authoritative. Master-sheet rows are
+  imported **only** in create-only mode; the default mode (and the «استيراد» button) skips them and
+  reports `master_skipped` / `master_sheets` (command: «skipped N master-sheet rows …»). Master rows are
+  deduplicated separately, so a skipped master sheet never hides a sub-ledger row.
 
 ### Not drafted from SOFTECH (finance keeps booking these by hand)
 

@@ -730,7 +730,7 @@ SCREENS = [
                        '• طرف غير مربوط: المستند لمورد/عميل لسه مش مؤكد في «الأطراف» — أكّده أو أنشئ طرفاً.\n'
                        '• حساب غير مربوط: خزينة/بنك أو كود مصروف أو تسوية بطاقات أو فرع تحويل (شركة شقيقة) مالهاش حساب في جداول الربط — اربطها بحساب وفرع.\n'
                        '• المشتريات النقدية بتظهر على مرحلتين (5100 ← 2341 للمورد، و2341 للمورد ← الخزينة)؛ مورد مش مؤكد بيعمل «طرف غير مربوط» لسنده بس وباقي اليوم بيترحل.\n'
-                       '• تحويلات «قيد تسوية» 1/1/2026 بين المركز والفروع بتفضل «لا توجد قاعدة» عن قصد — تتسجل يدوياً. وتسليم نقدية الفروع اليومي للمركز (1302 ↔ 1301)، وزيادة/عجز الوردية 1303، والكوبونات 2354، وتسوية البطاقات للبنك مش موجودين في SOFTECH فبيتسجلوا يدوياً.\n'
+                       '• تحويلات «قيد تسوية» 1/1/2026 بين المركز والفروع، وتحويل من المركز مالوش طرف في فرع، والتحويل بين فرعين، بتفضل «لا توجد قاعدة» عن قصد — تتسجل يدوياً. وتسليم نقدية الفروع اليومي للمركز (1302 ↔ 1301)، وزيادة/عجز الوردية 1303، والكوبونات 2354، وتسوية البطاقات للبنك مش موجودين في SOFTECH فبيتسجلوا يدوياً.\n'
                        '• لا توجد قاعدة: مفيش قاعدة بتنطبق على المستند — أضف قاعدة أو وسّع شروط موجودة.\n'
                        '• قاعدتان متعارضتان: قاعدتان بنفس الأولوية بينطبقوا على نفس المستند — فرّق بالأولوية أو الشروط.\n'
                        '• قاعدة غير متوازنة: أسطر القاعدة مبتديش مدين = دائن لهذا المستند — صحّح الأسطر.\n'
@@ -748,7 +748,7 @@ SCREENS = [
                        '• Unmapped party: the document is for a supplier/customer not yet confirmed in "Parties" — confirm it or create one.\n'
                        '• Unmapped account: a cash box/bank, expense code, card clearing or transfer branch (sister company) with no account in the maps — map it to an account and branch.\n'
                        '• Cash purchases show in two legs (5100 → 2341 for the supplier, and 2341 for the supplier → the cash box); an unconfirmed supplier makes "Unmapped party" for its voucher only and the rest of the day drafts.\n'
-                       '• The 1-1-2026 «قيد تسوية» transfers between head office and branches stay "No rule" on purpose — key them by hand. Daily branch cash handovers to head office (1302 ↔ 1301), shift over/short 1303, coupons 2354 and card settlement to the bank are not in SOFTECH, so they are keyed by hand.\n'
+                       '• The 1-1-2026 «قيد تسوية» transfers between head office and branches, a head-office transfer with no branch leg, and a transfer between two branches stay "No rule" on purpose — key them by hand. Daily branch cash handovers to head office (1302 ↔ 1301), shift over/short 1303, coupons 2354 and card settlement to the bank are not in SOFTECH, so they are keyed by hand.\n'
                        '• No rule: no rule matches the document — add a rule or widen an existing one.\n'
                        '• Ambiguous rule: two rules with the same priority match the same document — separate them by priority or conditions.\n'
                        '• Unbalanced rule: the rule lines do not give debit = credit for this document — fix the lines.\n'
@@ -808,8 +808,8 @@ SCREENS = [
         'tour': [
             {'target': 'finance-gl-parties-propose', 'label': T('استيراد · اقتراح المطابقة', 'Import · Propose matches'),
              'text': T('ارفع ملف أطراف الحسابات (Excel) ثم «اقتراح المطابقة» يقترح لكل طرف شخص SOFTECH بنفس الاسم.', 'Upload the party Excel from the accounts file, then "Propose matches" suggests a SOFTECH person with the same name for each party.'),
-             'more': T('• المطابقة بالاسم العربي بعد التوحيد (همزات، ياء/ألف مقصورة، مسافات): «تطابق تام» أو «تطابق كلمات».\n• ده اقتراح بس — مفيش طرف بيبقى مؤكد من غير ضغطتك.\n• الاستيراد يضيف ويحدّث ومبيمسحش، وإعادة تشغيله آمنة.\n• الزرّان لمن له صلاحية التعديل (ledger.edit).',
-                       '• Matching is on the normalised Arabic name (hamza, alef/yeh variants, spaces): "exact" or "word match".\n• It is a proposal only — no party becomes confirmed without your click.\n• Import adds and updates and never deletes; running it again is safe.\n• Both buttons are for users allowed to edit (ledger.edit).'),
+             'more': T('• المطابقة بالاسم العربي بعد التوحيد (همزات، ياء/ألف مقصورة، مسافات): «تطابق تام» أو «تطابق كلمات».\n• ده اقتراح بس — مفيش طرف بيبقى مؤكد من غير ضغطتك.\n• الاستيراد يضيف ويحدّث ومبيمسحش، وإعادة تشغيله آمنة.\n• شيتات 2020 الرئيسية (الموردين/الموظفين/العملاء) بتتخطى هنا ويتقال عددها — بتتستورد بأمر import_gl_parties --create-only بس، ومبتغيّرش اسم طرف موجود.\n• الزرّان لمن له صلاحية التعديل (ledger.edit).',
+                       '• Matching is on the normalised Arabic name (hamza, alef/yeh variants, spaces): "exact" or "word match".\n• It is a proposal only — no party becomes confirmed without your click.\n• Import adds and updates and never deletes; running it again is safe.\n• The 2020 master sheets (suppliers/employees/customers) are skipped here and counted — they are imported only by the import_gl_parties --create-only command, which never renames an existing party.\n• Both buttons are for users allowed to edit (ledger.edit).'),
              'open_hint': T('لمن له صلاحية التعديل (ledger.edit).', 'For users allowed to edit (ledger.edit).')},
             {'target': 'finance-gl-parties-grid', 'label': T('جدول الأطراف', 'Parties table'),
              'text': T('كل طرف بنوعه وكوده واسمه وحالته (غير مربوط · مقترح · مؤكد · مرفوض). Enter يؤكد المقترح، و«رفض» يرفضه.', 'Each party with its type, code, name and status (unmapped · proposed · confirmed · rejected). Enter confirms the proposal and "Reject" rejects it.'),
@@ -817,8 +817,8 @@ SCREENS = [
                        '• Filters: type (supplier/customer/employee/partner/other), status and search.\n• A proposal shows the SOFTECH person and the basis — check the name before confirming.\n• After confirming, "Redraft" in the Journal exceptions tab turns "unmapped party" documents into drafts.\n• A party confirmed to one SOFTECH code cannot be confirmed to another person.\n• Every confirm / reject / rename is logged (who, when).'),
              'warn': T('التأكيد بيحدد على أي حساب طرف هيتسجل كل مستند مستقبلي — تأكد من الاسم.', 'Confirming decides which party account every future document posts to — check the name.')},
         ],
-        'updated': '2026-11-04',
-        'change_note': T('شاشة جديدة: الأطراف (ربط أطراف دفتر الأستاذ بـ SOFTECH)', 'New screen: Parties (link ledger parties to SOFTECH)'),
+        'updated': '2026-11-05',
+        'change_note': T('الأطراف: شيتات 2020 الرئيسية بتتخطى في الاستيراد العادي', 'Parties: the 2020 master sheets are skipped by the normal import'),
     },
     {
         'key': 'finance.gl_rules',
@@ -831,11 +831,11 @@ SCREENS = [
             {'key': 'rules', 'title': T('القواعد', 'Rules'),
              'body': T('قاعدة لكل نوع مستند: الشروط (فرع، نوع، دفع…)، التجميع (مستند · فرع/يوم · طرف/يوم)، الدفتر، الأولوية، والأسطر (مدين/دائن، الحساب، الفرع، الطرف، المبلغ من حقل مسموح). «تجربة» تعرض القيود اللي كانت هتتعمل لفترة من غير ما تسجّل حاجة.\n'
                        '• المشتريات النقدية (supplier.cash) بتتسجل على مرحلتين زي دفتر النقدية: من 5100 إلى 2341 للمورد، ثم من 2341 للمورد إلى الخزينة — فحساب 2341 بيبيّن كل مورد نقدي، سطرين لكل مورد في الفرع/اليوم، والبيان فيه المورد وملاحظة السند (غالباً رقم الفاتورة).\n'
-                       '• تحويلات النقدية بين المركز والفروع: في الفرع من/إلى 2404 قصاد خزينته، وفي المركز من/إلى حساب الشركة الشقيقة للفرع (ربط «شركة شقيقة») قصاد خزينة المركز. تحويل خزينة ↔ بنك بيتسجل قصاد ربط البنك للطرف التاني، ولو الطرفين موجودين في SOFTECH التاني بيتجاهل عشان ميتسجلش مرتين. تحويلات «قيد تسوية» 1/1/2026 بتفضل استثناءات.\n'
+                       '• تحويلات النقدية بين المركز والفروع: في الفرع من/إلى 2404 قصاد خزينته، وفي المركز من/إلى حساب الشركة الشقيقة للفرع (ربط «شركة شقيقة») قصاد خزينة المركز. تحويل خزينة ↔ بنك بيتسجل قصاد ربط البنك للطرف التاني، والطرف المسجل على البنك نفسه بيتجاهل دايماً عشان ميتسجلش مرتين. تحويل من المركز مالوش طرف في أي فرع، والتحويل بين فرعين، بيظهروا استثناءات «لا توجد قاعدة» تتسجل يدوياً. تحويلات «قيد تسوية» 1/1/2026 بتفضل استثناءات.\n'
                        '• قاعدة بيانات اتعمل لها seed قبل 5/11/2026 بتفضل على قاعدة المشتريات النقدية القديمة (سطرين) لحد ما المالية تعدّلها هنا.',
                        'One rule per document type: conditions (branch, kind, payment…), grouping (document · branch/day · party/day), book, priority and lines (debit/credit, account, branch, party, amount from an allowed field). "Test" shows the entries that would be made for a range without saving anything.\n'
                        '• Cash purchases (supplier.cash) post in two legs like the finance cash book: Dr 5100 / Cr 2341 for the supplier, then Dr 2341 for the supplier / Cr the cash box — so 2341 shows every cash supplier, a pair of lines per supplier per branch/day, described with the supplier and the voucher note (usually the invoice no.).\n'
-                       '• Cash transfers between head office and branches: at the branch Dr/Cr 2404 against its box; at head office Dr/Cr the branch\'s sister-company account ("Sister company" map) against the head-office box. A box ↔ bank transfer posts against the bank map of the other side; when both legs are in SOFTECH the second is skipped so it is never posted twice. The 1-1-2026 «قيد تسوية» transfers stay exceptions.\n'
+                       '• Cash transfers between head office and branches: at the branch Dr/Cr 2404 against its box; at head office Dr/Cr the branch\'s sister-company account ("Sister company" map) against the head-office box. A box ↔ bank transfer posts against the bank map of the other side; the leg recorded on the bank itself is always skipped so it is never posted twice. A head-office transfer with no branch leg, and a transfer between two branches, show as "No rule" exceptions to key by hand. The 1-1-2026 «قيد تسوية» transfers stay exceptions.\n'
                        '• A database seeded before 5-11-2026 keeps the old two-line cash purchase rule until finance edits it here.')},
             {'key': 'maps', 'title': T('جداول الربط', 'Maps'),
              'body': T('خزينة/بنك SOFTECH ← حساب المالية والفرع (فرع الخزينة هو فرع القيد)، أكواد المصروف ← حساب، تسوية البطاقات، و«شركة شقيقة»: كود فرع SOFTECH ← حساب الشركة الشقيقة في المالية (130 علياء 2408، 140 الجيزة 2413، 150 عين شمس 2405، 160 باب الحديد 2406، 170 محسن 2417) على المركز الرئيسي، للتحويلات النقدية بين المركز والفروع. أي قيمة من SOFTECH من غير ربط بتتحول لاستثناء «حساب غير مربوط». كل تعديل بيتسجل بالقبل والبعد.',
