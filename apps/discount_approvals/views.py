@@ -234,7 +234,10 @@ def price_preview(request):
     Query params: pack_price, pack_qty, sale_tax_pct
     """
     pack_price_str  = request.query_params.get('pack_price', '0')
-    pack_qty        = int(request.query_params.get('pack_qty', 1) or 1)
+    try:
+        pack_qty    = int(request.query_params.get('pack_qty', 1) or 1)
+    except (TypeError, ValueError):
+        return Response({'detail': 'pack_qty must be a whole number'}, status=400)
     sale_tax_pct    = request.query_params.get('sale_tax_pct', '0')
     result = compute_derived_preview(pack_price_str, pack_qty, sale_tax_pct)
     return Response(result)
@@ -734,7 +737,10 @@ def who_changed_what(request):
     from config.sybase import get_sybase_connection
     from .replication import _usercode_name_map
 
-    days = max(1, min(int(request.query_params.get('days', 30) or 30), 90))
+    try:
+        days = max(1, min(int(request.query_params.get('days', 30) or 30), 90))
+    except (TypeError, ValueError):
+        return Response({'detail': 'days must be a whole number'}, status=400)
     cutoff = timezone.now() - timedelta(days=days)
     cutoff_str = cutoff.strftime('%Y-%m-%d %H:%M:%S')
 
@@ -832,8 +838,11 @@ def discount_impact(request):
     from django.db.models import Sum
     from apps.purchasing.models import SalesTransactionLine
 
-    window = max(7, min(int(request.query_params.get('window', 30) or 30), 120))
-    min_after = max(1, int(request.query_params.get('min_after_days', 7) or 7))
+    try:
+        window = max(7, min(int(request.query_params.get('window', 30) or 30), 120))
+        min_after = max(1, int(request.query_params.get('min_after_days', 7) or 7))
+    except (TypeError, ValueError):
+        return Response({'detail': 'window / min_after_days must be whole numbers'}, status=400)
     branch = (request.query_params.get('branch') or '').strip()
     today = timezone.now().date()
 

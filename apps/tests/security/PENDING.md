@@ -22,3 +22,7 @@ and `apps/tests/test_money_insurance_replacement.py`; proposed diffs in the R2 P
 - M-2: stacked offers can push a POS line past 100% — `offers/attach.build_attach_plan` sums the per-offer amounts without the engine's per-line gross cap (10% + 60% + fixed → cust_discp 170%, negative line total)
 - M-3: a prescription's net_override never reaches the claim total — `insurance/importer.recalculate_claim_final_totals` (and the invoice export) rebuild the net from the summed splits
 - M-4: the claim net can differ by cents from the sum of the printed row nets (rows rounded each, claim rounded once) — keep Power-Query parity or sum the rows?
+
+## Round 2 — R7 (per-app tests, 2026-11-05)
+
+- I-1: insurance claim «تحصيل دفعة» always answers 400 {"claim": required} — the screen sends no claim and the payments action never takes it from the URL (deductions was fixed the same way); fix touches payment recording, awaiting owner OK (`apps/tests/test_insurance_r7_claims.py`)
