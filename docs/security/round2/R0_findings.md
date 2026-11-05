@@ -61,7 +61,7 @@ R4 turns this into a ratcheted baseline.
 
 ### Inline suppressions
 
-There are **8 `# nosec`**, all naming their bandit rule and giving a reason, and **126 `# noqa`**.
+There were **8 `# nosec`** at R0 (10 after two reviewed Finance GL query builders landed the same day), all naming their bandit rule and giving a reason, and **126 `# noqa`**.
 These counts are now enforced by `apps/tests/security/test_suppression_count.py`: every `# nosec`
 must give a rule and a reason, and neither count may grow.
 

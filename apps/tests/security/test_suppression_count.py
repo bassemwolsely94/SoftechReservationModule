@@ -7,6 +7,10 @@ without a reviewed reason, and the number of suppressions only goes down.
   away; raise it only in a reviewed change that says why.
 
 Measured 2026-11-05 (round-2 R0): 8 nosec (all with rule + reason), 126 noqa.
+Raised to 10 the same day, reviewed: Finance GL Plan 2 added two B608 query builders in
+apps/finance/queries/sybase_gl.py (sql_transfer_legs_pointing_at, sql_bank_transfer_partners) —
+every interpolated code passes _digits() (digits only, else ValueError) and dates go through
+date.isoformat(), so no free text reaches the SQL.
 """
 import re
 from pathlib import Path
@@ -14,7 +18,7 @@ from pathlib import Path
 from django.conf import settings
 from django.test import SimpleTestCase
 
-MAX_NOSEC = 8
+MAX_NOSEC = 10
 MAX_NOQA = 126
 ROOTS = ('apps', 'core', 'config')
 NOSEC = re.compile(r'#\s*nosec\b(.*)$')
