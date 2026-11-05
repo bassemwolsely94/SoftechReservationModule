@@ -1733,7 +1733,7 @@ with `SOFTECH_READ_ONLY=True` confirm a writer dry-run is refused. Then in the V
 2. Set each `*_ENABLED` flag to its **office value** from your inventory (1.2) — no more than the
    office had. Recommended order, verifying each with a real transaction and a SOFTECH read-back
    before the next: POS writer → POS cancel log → discount/pricing → ISR (+auto-approve) →
-   coverage → invoices → A/P (still OFF — it was gated OFF in the office) → insurance → shortage →
+   coverage → invoices → A/P (ON in the office and live — 53,811 allocations written by 2026-11-05) → insurance → shortage →
    loyalty/others.
 3. `sudo systemctl restart elrezeiky-web elrezeiky-scheduler` after each change, then
    `sudo -u elrezeiky /opt/elrezeiky/venv/bin/python manage.py writer_status --expect writer`.

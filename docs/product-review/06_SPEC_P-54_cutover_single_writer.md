@@ -95,9 +95,11 @@
 | COVERAGE_WRITER_ENABLED / COVERAGE_WRITE_MAXQTY / COVERAGE_AUTO_TOPUP_ENABLED | stkbal max stock | ON | |
 | INVOICE_WRITER_ENABLED / INVOICE_SUPPLIER_ITEM_WRITE_ENABLED | purchase posting, itemssuppliers | ON | |
 | SHORTAGE_SOFTECH_WRITE_ENABLED | items shortage flags | ON | |
-| AP_RECONCILE_WRITER_ENABLED | A/P allocations | ON | |
+| AP_RECONCILE_WRITER_ENABLED | A/P allocations (person-triggered, not scheduled) | ON — the office has it ON and has written 53,811 allocations (checked 2026-11-05) | |
+| AP_RECONCILE_UPDATE_PATIENTDATA | A/P extra field update | OFF — not set in the office `.env` (code default False) | |
+| INSURANCE_SOFTECH_WRITE_ENABLED | insurance re-price writeback (only through the guarded plan) | ON — the office has it ON and the writeback is live | |
 | POS_OFFERS_EXECUTION_ENABLED / _POSDISCP_WRITE / _PROMO_WRITE | offers | ON (note: promotions also need the P-38 gate) | |
 | CUSTOMER_BRANCH_COPY_WRITE_ENABLED / POINTS_REMOVAL_WRITE_ENABLED | customer flags / points | ON | |
 | DEMAND_ENGINE_SCHEDULE_ENABLED | engine schedule | ON | |
 | POS_WRITER_ENABLED | indirect POS | OFF until P-39 parity | |
-| PRICING_SOFTECH_WRITE_ENABLED, REPLICATION_REPAIR_ENABLED, LOYALTY_SOFTECH_WRITE_ENABLED, PERSONAL_COMMENT_WRITE_ENABLED, POS_CANCEL_WRITE_ENABLED, REPLACEMENT_POSTING_ENABLED, INSURANCE_SOFTECH_WRITE_ENABLED, CUSTOMER_MERGE_WRITE_ENABLED | (currently OFF everywhere) | owner to decide | |
+| PRICING_SOFTECH_WRITE_ENABLED, REPLICATION_REPAIR_ENABLED, LOYALTY_SOFTECH_WRITE_ENABLED, PERSONAL_COMMENT_WRITE_ENABLED, POS_CANCEL_WRITE_ENABLED, REPLACEMENT_POSTING_ENABLED, CUSTOMER_MERGE_WRITE_ENABLED | (currently OFF everywhere) | owner to decide | |
