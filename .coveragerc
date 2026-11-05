@@ -1,5 +1,5 @@
-# Coverage for the backend suite (CI: coverage run manage.py test). No floor yet —
-# the first full green run sets it in Batch 7 of the security suite.
+# Coverage for the backend suite (CI: coverage run manage.py test). Floor: 73% in ci.yml —
+# set by R7 (2026-11-05) from the measured 73.97%; raise it, never lower it.
 [run]
 source = apps, core, config
 omit =

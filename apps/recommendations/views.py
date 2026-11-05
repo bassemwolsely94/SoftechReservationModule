@@ -75,9 +75,13 @@ def trigger_engine(request):
     if RecommendationEngineRun.objects.filter(status='running').exists():
         return Response({'detail': 'يوجد تشغيل جارٍ بالفعل'}, status=409)
 
-    lookback_days  = int(request.data.get('lookback_days',  365))
-    min_support    = float(request.data.get('min_support',   0.001))
-    min_confidence = float(request.data.get('min_confidence', 0.05))
+    try:
+        lookback_days  = int(request.data.get('lookback_days',  365))
+        min_support    = float(request.data.get('min_support',   0.001))
+        min_confidence = float(request.data.get('min_confidence', 0.05))
+    except (TypeError, ValueError):
+        return Response({'detail': 'lookback_days / min_support / min_confidence must be numbers'},
+                        status=400)
 
     from apps.recommendations.engine import run_fbt_engine
 
@@ -134,10 +138,14 @@ def fbt_for_item(request):
     if not item_id:
         return Response({'detail': 'item_id مطلوب'}, status=400)
 
-    limit = min(int(request.query_params.get('limit', 6)), 20)
+    try:
+        limit = min(int(request.query_params.get('limit', 6)), 20)
+        item_id = int(item_id)
+    except (TypeError, ValueError):
+        return Response({'detail': 'item_id / limit must be whole numbers'}, status=400)
 
     from apps.recommendations.engine import get_fbt_for_item
-    recs = get_fbt_for_item(int(item_id), limit=limit)
+    recs = get_fbt_for_item(item_id, limit=limit)
     return Response(recs)
 
 
@@ -154,10 +162,14 @@ def customer_recs(request):
     if not cid:
         return Response({'detail': 'customer_id مطلوب'}, status=400)
 
-    limit = min(int(request.query_params.get('limit', 8)), 20)
+    try:
+        limit = min(int(request.query_params.get('limit', 8)), 20)
+        cid = int(cid)
+    except (TypeError, ValueError):
+        return Response({'detail': 'customer_id / limit must be whole numbers'}, status=400)
 
     from apps.recommendations.engine import get_customer_recs
-    recs = get_customer_recs(int(cid), limit=limit)
+    recs = get_customer_recs(cid, limit=limit)
     return Response(recs)
 
 
