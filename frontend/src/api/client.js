@@ -2187,6 +2187,12 @@ export const glApi = {
     fd.append('file', file)
     return api.post('/finance/gl/parties/import/', fd)
   },
+  partiesConfirmUpload: (file, dryRun) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('dry_run', dryRun ? 'true' : 'false')
+    return api.post('/finance/gl/parties/confirm-upload/', fd)
+  },
   partiesPropose:  ()              => api.post('/finance/gl/parties/propose/'),
   partyConfirm:    (id, personcode) => api.post(`/finance/gl/parties/${id}/confirm/`, { personcode }),
   partyReject:     (id)            => api.post(`/finance/gl/parties/${id}/reject/`),
@@ -2851,6 +2857,7 @@ export const paymentAuditApi = {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
   runMatching:     (id)          => api.post(`/payments/audit/statements/${id}/run-matching/`),
+  formOptions:     ()            => api.get('/payments/audit/statements/form-options/'),
 
   // Statement lines
   lines:           (params)      => api.get('/payments/audit/stmt-lines/', { params }),

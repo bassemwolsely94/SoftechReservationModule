@@ -586,7 +586,7 @@ export default function App() {
               element={<RequireRole roles={['admin','quality_manager','purchasing']}><IncentivesPage /></RequireRole>} />
             {/* cheques + finance: admin + purchasing + pharmacist */}
             <Route path="cheques"
-              element={<RequireRole roles={['admin','purchasing','pharmacist']}><ChequePlanningPage /></RequireRole>} />
+              element={<RequireRole roles={['admin','purchasing','pharmacist','accountant']}><ChequePlanningPage /></RequireRole>} />
 
             {/* ── New Modules (Phases 1–5) ─────────────────────────────── */}
             {/* approvals inbox: roles that approve something (server still enforces per-step eligibility) */}
@@ -594,7 +594,7 @@ export default function App() {
             <Route path="batches"       element={<BatchesPage />} />
             <Route path="hr"            element={<HRPage />} />
             <Route path="payment-audit" element={<RequireRole roles={['admin','purchasing','pharmacist']}><PaymentAuditPage /></RequireRole>} />
-            <Route path="reconciliation" element={<RequireRole roles={['admin','purchasing','pharmacist']}><ReconciliationPage /></RequireRole>} />
+            <Route path="reconciliation" element={<RequireRole roles={['admin','purchasing','pharmacist','accountant']}><ReconciliationPage /></RequireRole>} />
             <Route path="forecasting"   element={<RequireRole roles={['admin','purchasing','pharmacist','quality_manager']}><ForecastingPage /></RequireRole>} />
 
           </Route>

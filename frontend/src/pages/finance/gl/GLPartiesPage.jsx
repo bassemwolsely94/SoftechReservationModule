@@ -76,7 +76,8 @@ function ImportBar({ onDone }) {
   const imp = useMutation({
     mutationFn: () => glApi.partiesImport(file).then(r => r.data),
     onSuccess: (d) => {
-      setErr(''); setMsg(`تم الاستيراد: ${d.rows ?? 0} صف · جديد ${d.created ?? 0} · تحديث ${d.updated ?? 0}`)
+      setErr(''); setMsg(`تم الاستيراد: ${d.rows ?? 0} صف · جديد ${d.created ?? 0} · تحديث ${d.updated ?? 0}`
+        + (d.master_skipped ? ` · تم تخطي ${d.master_skipped} صف من شيتات 2020 الرئيسية (تُستورد بأمر --create-only فقط)` : ''))
       setFile(null); if (fileRef.current) fileRef.current.value = ''
       onDone()
     },
@@ -106,6 +107,81 @@ function ImportBar({ onDone }) {
         </button>
       </div>
       {msg && <div className="text-sm text-green-700">{msg}</div>}
+      <ErrorBox>{err}</ErrorBox>
+    </div>
+  )
+}
+
+// ── confirm many at once from the reviewed suggestions sheet (ledger.approve) ─
+const OUTCOMES = {
+  will_confirm: { label: 'سيتأكد', cls: 'text-green-700' },
+  confirmed:    { label: 'تأكد', cls: 'text-green-700' },
+  unchanged:    { label: 'بدون تغيير', cls: 'text-gray-500' },
+  error:        { label: 'مرفوض', cls: 'text-red-600' },
+}
+
+function ConfirmUploadBar({ onDone }) {
+  const fileRef = useRef(null)
+  const [file, setFile] = useState(null)
+  const [preview, setPreview] = useState(null)
+  const [done, setDone] = useState(null)
+  const [err, setErr] = useState('')
+  const reset = () => { setFile(null); setPreview(null); if (fileRef.current) fileRef.current.value = '' }
+  const run = useMutation({
+    mutationFn: (dryRun) => glApi.partiesConfirmUpload(file, dryRun).then(r => r.data),
+    onSuccess: (d) => {
+      setErr('')
+      if (d.applied) { setDone(d); reset(); onDone() } else { setDone(null); setPreview(d) }
+    },
+    onError: (e) => setErr(errOf(e, 'تعذّر قراءة الملف')),
+  })
+  const shown = preview || done
+  const c = shown?.counts || {}
+  const toConfirm = c.will_confirm || 0
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-3 space-y-2" data-tour="finance-gl-parties-confirm-upload">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="font-medium text-gray-700">تأكيد من ملف المراجعة (Excel)</span>
+        <input ref={fileRef} type="file" accept=".xlsx" className="text-xs"
+               onChange={e => { setFile(e.target.files?.[0] || null); setPreview(null); setDone(null); setErr('') }} />
+        <button type="button" className={btnPlain} disabled={!file || run.isPending} onClick={() => run.mutate(true)}>
+          {run.isPending && !preview ? 'جاري القراءة…' : 'معاينة'}
+        </button>
+        {preview && toConfirm > 0 && (
+          <button type="button" className={btnPrimary} disabled={run.isPending} onClick={() => run.mutate(false)}>
+            {run.isPending ? 'جاري التأكيد…' : `تأكيد ${toConfirm} طرف`}
+          </button>
+        )}
+        {preview && <button type="button" className={btnPlain} onClick={reset}>إلغاء</button>}
+      </div>
+      <div className="text-xs text-gray-500">
+        الملف فيه أعمدة «النوع» و«كود المالية» و«الكود المعتمد». الصفوف اللي «الكود المعتمد» فيها فاضي بتتجاهل.
+      </div>
+      {shown && (
+        <div className="text-sm">
+          {done ? 'تم: ' : 'المعاينة: '}
+          {Object.entries(OUTCOMES).filter(([k]) => c[k]).map(([k, o]) => (
+            <span key={k} className={`me-3 ${o.cls}`}>{o.label} {c[k]}</span>
+          ))}
+        </div>
+      )}
+      {shown && shown.results?.some(r => r.outcome === 'error') && (
+        <div className="max-h-48 overflow-y-auto border border-red-100 rounded-lg">
+          <table className="w-full text-xs">
+            <tbody>
+              {shown.results.filter(r => r.outcome === 'error').map(r => (
+                <tr key={r.row} className="border-t border-red-50">
+                  <td className="px-2 py-1 text-gray-500 whitespace-nowrap">سطر {r.row}</td>
+                  <td className="px-2 py-1 font-mono">{r.code ?? ''}</td>
+                  <td className="px-2 py-1">{r.name ?? ''}</td>
+                  <td className="px-2 py-1 font-mono">{r.personcode ?? ''}</td>
+                  <td className="px-2 py-1 text-red-600">{r.detail}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       <ErrorBox>{err}</ErrorBox>
     </div>
   )
@@ -178,6 +254,7 @@ export default function GLPartiesPage() {
       </div>
 
       {perms.edit && <ImportBar onDone={refresh} />}
+      {canApprove && <ConfirmUploadBar onDone={refresh} />}
       <ErrorBox>{err || (listQ.isError ? errOf(listQ.error, 'تعذّر تحميل الأطراف') : '')}</ErrorBox>
 
       <div {...kb.containerProps}

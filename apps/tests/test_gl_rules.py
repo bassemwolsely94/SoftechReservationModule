@@ -307,6 +307,54 @@ class BuildTests(Base):
         d = doc(source_type='cheque_maturity', amounts={'amount': DEC('9')}, attrs={'cheqno': '1'})
         self.assertEqual(self.build(rule, [d])[0]['description'], 'نقدية فرع المعادي')
 
+    def test_note_placeholder_and_description_capped_at_500(self):
+        rule = self.rule([
+            {'side': 'debit', 'account': '1302', 'amount': 'amount', 'description': 'فاتورة {note}'},
+            {'side': 'credit', 'account': '6002', 'amount': 'amount'},
+        ], source_type='cheque_maturity')
+        d = doc(source_type='cheque_maturity', amounts={'amount': DEC('9')}, attrs={'note': 'ف 123 {x}'})
+        self.assertEqual(self.build(rule, [d])[0]['description'], 'فاتورة ف 123 {x}')
+        d2 = doc(source_type='cheque_maturity', amounts={'amount': DEC('9')}, attrs={'note': 'ن' * 900})
+        self.assertEqual(len(self.build(rule, [d2])[0]['description']), 500)
+        d3 = doc(source_type='cheque_maturity', amounts={'amount': DEC('9')})   # no note attr
+        self.assertEqual(self.build(rule, [d3])[0]['description'], 'فاتورة ')
+
+
+class InterCompanyP24Tests(Base):
+    """Ruling P24: 'intercompany' map by counterpart_branch, bank map by tf_bankcode."""
+
+    def test_map_kinds_and_keys_validate(self):
+        self.assertIn('intercompany', R.MAP_KINDS)
+        self.assertIn('counterpart_branch', R.MAP_KEYS)
+        self.assertIn('tf_bankcode', R.MAP_KEYS)
+        self.assertIn('note', R.PLACEHOLDERS)
+        lines = [{'side': 'debit', 'account_map': 'intercompany', 'map_key': 'counterpart_branch',
+                  'amount': 'amount', 'branch': 'hq'},
+                 {'side': 'credit', 'account_map': 'bank', 'map_key': 'tf_bankcode', 'amount': 'amount',
+                  'branch': 'map'}]
+        self.assertEqual(R.validate_rule('treasury_other', {}, lines, 'post'), [])
+
+    def test_intercompany_and_tf_bank_lines(self):
+        R.save_map(user=self.staff, kind='intercompany', source_value='130', account_code='1302',
+                   branch_id=self.b100.pk)
+        R.save_map(user=self.staff, kind='bank', source_value='04', account_code='5100',
+                   branch_id=self.b100.pk)
+        rule = self.rule([
+            {'side': 'debit', 'account_map': 'intercompany', 'map_key': 'counterpart_branch',
+             'amount': 'amount', 'branch': 'hq'},
+            {'side': 'credit', 'account_map': 'bank', 'map_key': 'tf_bankcode', 'amount': 'amount',
+             'branch': 'map'}], source_type='treasury_other')
+        d = doc(branch='100', source_type='treasury_other', amounts={'amount': DEC('5')},
+                attrs={'counterpart_branch': '130', 'tf_bankcode': '04'})
+        lines = R.build_lines(rule, [d], hq_branch_id=self.b100.pk)
+        self.assertEqual([(l['account_code'], l['debit'], l['credit'], l['branch_id']) for l in lines],
+                         [('1302', DEC('5.00'), 0, self.b100.pk), ('5100', 0, DEC('5.00'), self.b100.pk)])
+        with self.assertRaises(R.RuleMiss) as cm:   # unmapped counterpart -> exception, never a guess
+            R.build_lines(rule, [doc(branch='100', source_type='treasury_other', amounts={'amount': DEC('5')},
+                                     attrs={'counterpart_branch': '170', 'tf_bankcode': '04'})],
+                          hq_branch_id=self.b100.pk)
+        self.assertEqual((cm.exception.kind, cm.exception.detail['kind']), ('unmapped_account', 'intercompany'))
+
 
 class PreviewAndMapTests(Base):
     def test_preview_saves_nothing(self):

@@ -181,7 +181,8 @@ class GLParty(models.Model):
 
 
 class GLSourceMap(models.Model):
-    KIND_CHOICES = [('bank', 'خزينة/بنك'), ('expense', 'مصروف'), ('card_clearing', 'تسوية بطاقات')]
+    KIND_CHOICES = [('bank', 'خزينة/بنك'), ('expense', 'مصروف'), ('card_clearing', 'تسوية بطاقات'),
+                    ('intercompany', 'شركة شقيقة')]   # Ruling P24: SOFTECH branch code -> sister-company account
     kind         = models.CharField(max_length=15, choices=KIND_CHOICES, verbose_name='النوع')
     source_value = models.CharField(max_length=20, verbose_name='قيمة المصدر')
     account      = models.ForeignKey(GLAccount, on_delete=models.PROTECT, related_name='+',

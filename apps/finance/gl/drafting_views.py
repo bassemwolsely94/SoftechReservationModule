@@ -213,6 +213,43 @@ def parties_import(request):
 
 
 @api_view(['POST'])
+@permission_classes(PARTIES)
+@parser_classes([MultiPartParser, FormParser])
+def parties_confirm_upload(request):
+    """The reviewed suggestions sheet: «النوع» + «كود المالية» + «الكود المعتمد». dry_run=true (default)
+    previews every row and saves nothing; dry_run=false confirms the valid rows (each audited)."""
+    profile, bad = _need_profile(request)
+    if bad:
+        return bad
+    f = request.FILES.get('file')
+    if f is None:
+        return _err(['اختر ملف Excel'])
+    if os.path.splitext(f.name or '')[1].lower() != '.xlsx':
+        return _err(['الملف لازم يكون Excel (.xlsx)'])
+    if f.size and f.size > max_upload_bytes():
+        return _err(['الملف أكبر من المسموح'])
+    apply = str(request.data.get('dry_run', 'true')).lower() in ('false', '0', 'no')
+    fd, path = tempfile.mkstemp(suffix='.xlsx')
+    try:
+        with os.fdopen(fd, 'wb') as out:
+            for chunk in f.chunks():
+                out.write(chunk)
+        try:
+            rows, problems = parties.parse_confirm_sheet(path)
+            rows = list(capped_rows(rows))
+        except ValueError as e:
+            return _err([str(e)])
+        except Exception:
+            return _err(['تعذّر قراءة الملف'])
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+    return Response(parties.bulk_confirm(rows, problems, user=profile, apply=apply))
+
+
+@api_view(['POST'])
 @permission_classes(PARTY_EDIT)
 def parties_propose(request):
     profile, bad = _need_profile(request)
@@ -267,6 +304,8 @@ def map_put(request, kind, source_value):
     branch_id = _int(request.data.get('branch_id'))
     if kind == 'card_clearing' and not branch_id:
         return _err(['ربط تسوية البطاقات يحتاج فرعاً'])
+    if kind == 'intercompany' and not branch_id:   # Ruling P24: the HQ branch
+        return _err(['ربط الشركات الشقيقة يحتاج فرعاً (المركز الرئيسي)'])
     try:
         m = rules.save_map(user=profile, kind=kind, source_value=source_value,
                            account_code=str(request.data.get('account_code') or ''),
@@ -581,7 +620,7 @@ def rules_meta(request):
         'source_fields': {k: list(v) for k, v in rules.SOURCE_FIELDS.items()},
         'condition_keys': {k: list(v) for k, v in rules.CONDITION_KEYS.items()},
         'map_kinds': list(rules.MAP_KINDS), 'map_keys': list(rules.MAP_KEYS),
-        'map_key_for_kind': {'bank': 'bankcode', 'expense': 'expcode', 'card_clearing': 'branch_code'},
+        'map_key_for_kind': dict(rules.MAP_KEY_FOR_KIND),
         'branch_modes': list(rules.BRANCH_MODES), 'party_modes': list(rules.PARTY_MODES),
         'placeholders': list(rules.PLACEHOLDERS),
         'bank_branch_sources': list(rules.BANK_BRANCH_SOURCES),
