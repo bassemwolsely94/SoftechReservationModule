@@ -7,8 +7,13 @@ a CSV Excel also runs cells that start with + - @ or a tab / CR. `=HYPERLINK(...
 sheet's data to an outside site and DDE can start programs on the staff PC.
 
   • `neutralise_formulas(wb)` — call right before `wb.save()`: every formula cell is written as
-    plain text (the same characters, nothing added). Exports that build real formulas on purpose
-    (the KPI board, the ISR fulfilment sheet) do not call it.
+    plain text (the same characters, nothing added).
+  • `neutralise_formulas(wb, keep_safe_formulas=True)` — for exports that build real formulas on
+    purpose (the KPI board, the ISR fulfilment sheet; round 2, R5). A formula stays live only when
+    it is plain arithmetic: cell / range references inside this workbook, numbers, quoted text and
+    the functions in `SAFE_FUNCTIONS`. Anything else — HYPERLINK, WEBSERVICE, DDE (`cmd|...`),
+    an outside-workbook reference (`[1]Sheet!A1`), a name, or text the tokenizer can't read — is
+    written as plain text, so typed text can never become a live formula.
   • `csv_writer(f)` — drop-in for `csv.writer(f)`: a risky text cell gets a leading apostrophe;
     plain numbers such as "-5" or "+20%" stay as they are.
 """
@@ -21,9 +26,52 @@ _CSV_TRIGGERS = ('=', '+', '-', '@', '\t', '\r')
 _PLAIN_NUMBER = re.compile(r'^[+-]?\d[\d,]*(\.\d+)?%?$')
 
 
-def neutralise_formulas(wb):
+# Functions a code-built formula may use (round 2, R5). Only maths, logic, lookups inside the
+# workbook and text joins — nothing that reaches a network, a file, another program or the clipboard.
+SAFE_FUNCTIONS = frozenset({
+    'ABS', 'AND', 'AVERAGE', 'AVERAGEIF', 'AVERAGEIFS', 'CEILING', 'CHOOSE', 'CONCAT',
+    'CONCATENATE', 'COUNT', 'COUNTA', 'COUNTBLANK', 'COUNTIF', 'COUNTIFS', 'FLOOR', 'IF', 'IFERROR',
+    'IFS', 'INDEX', 'INT', 'ISBLANK', 'ISNUMBER', 'LEN', 'MATCH', 'MAX', 'MAXIFS', 'MEDIAN', 'MIN',
+    'MINIFS', 'MOD', 'NOT', 'OR', 'ROUND', 'ROUNDDOWN', 'ROUNDUP', 'SUM', 'SUMIF', 'SUMIFS',
+    'SUMPRODUCT', 'TEXT', 'TRUE', 'FALSE', 'VLOOKUP', 'XLOOKUP',
+})
+_COL = r'\$?[A-Z]{1,3}'
+_ROW = r'\$?\d{1,7}'
+# a sheet name, quoted or bare; no '[' (another workbook), no '\\' or '/' (a path)
+_SHEET = r"(?:'(?:[^'\[\]\\/?*:|]|'')+'|[A-Za-z_؀-ۿ][\w.؀-ۿ]*)!"
+_SAFE_REF = re.compile(
+    rf'^(?:{_SHEET})?(?:{_COL}{_ROW}(?::{_COL}{_ROW})?|{_COL}:{_COL}|{_ROW}:{_ROW})$')
+
+
+def is_safe_formula(text) -> bool:
+    """True when `text` (a string starting with '=') is a plain in-workbook calculation."""
+    from openpyxl.formula import Tokenizer
+    if not isinstance(text, str) or not text.startswith('=') or '|' in text:
+        return False
+    try:
+        tokens = Tokenizer(text).items
+    except Exception:                             # unreadable → treat as typed text
+        return False
+    if sum(t.subtype == 'OPEN' for t in tokens) != sum(t.subtype == 'CLOSE' for t in tokens):
+        return False                              # unbalanced brackets: not a formula we built
+    for tok in tokens:
+        if tok.type == 'FUNC' and tok.subtype == 'OPEN':
+            if tok.value[:-1].upper() not in SAFE_FUNCTIONS:
+                return False
+        elif tok.type == 'OPERAND' and tok.subtype == 'RANGE':
+            if tok.value.upper() in ('TRUE', 'FALSE'):
+                continue
+            if not _SAFE_REF.match(tok.value):
+                return False
+        elif tok.type == 'OPERAND' and tok.subtype not in ('NUMBER', 'TEXT', 'LOGICAL', 'ERROR'):
+            return False
+    return True
+
+
+def neutralise_formulas(wb, keep_safe_formulas=False):
     """Write every formula cell of `wb` as text. Returns `wb` so callers can chain `.save()`.
 
+    With `keep_safe_formulas=True` a formula that `is_safe_formula` accepts stays live.
     A write-only workbook can't be walked after the fact: each of its sheets must have been
     wrapped with `safe_sheet()` when it was created, or this refuses."""
     if getattr(wb, 'write_only', False):
@@ -36,6 +84,8 @@ def neutralise_formulas(wb):
         for row in ws.iter_rows():
             for cell in row:
                 if cell.data_type == 'f' and isinstance(cell.value, str):
+                    if keep_safe_formulas and is_safe_formula(cell.value):
+                        continue
                     cell.data_type = 's'
     return wb
 

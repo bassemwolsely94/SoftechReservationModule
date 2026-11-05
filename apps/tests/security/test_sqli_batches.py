@@ -60,3 +60,21 @@ class ExpiryCandidatesApiTests(TestCase):
             r = self.c.post('/api/batches/purchase-expiry/candidates/',
                             {'from': '2026-11', 'to': '2027-01', 'branches': '130,170'}, format='json')
         self.assertNotEqual(r.status_code, 400, r.content)
+
+
+class PurchaseExpiryBackfillTests(TestCase):
+    """Round 2, R5 step 7: the backfill's supplier list includes return-policy codes typed on the
+    P-29 screen (SupplierReturnPolicy.supplier_code). They reach SOFTECH as bound params."""
+
+    def test_return_policy_supplier_code_is_bound(self):
+        import datetime
+        from apps.batches.models import PurchaseExpiryAuditRun
+        from apps.procurement.models import SupplierReturnPolicy
+        code = "'or 1=1--"
+        SupplierReturnPolicy.objects.create(supplier_code=code, supplier_name='x')
+        d1, d2 = datetime.date(2026, 1, 1), datetime.date(2026, 1, 31)
+        run = PurchaseExpiryAuditRun.objects.create(window_from=d1, window_to=d2)
+        with RecordingSybase() as rec:
+            expiry_audit.run_backfill(run, d1, d2)
+        self.assertTrue(rec.calls)
+        assert_payload_bound(self, rec.calls, code)

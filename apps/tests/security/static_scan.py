@@ -609,7 +609,14 @@ class _UnsafeExport(_Scoped):
         self.generic_visit(node)
 
 
+# The sanitising wrappers themselves (csv_writer / csv_dict_writer wrap the raw csv writers):
+# every other file must call them, so the one file that defines them is not an export site.
+_EXPORT_SAFETY_MODULE = 'core/export_safety.py'
+
+
 def unsafe_export_sites(tree, path) -> set:
+    if path == _EXPORT_SAFETY_MODULE:
+        return set()
     v = _UnsafeExport(path)
     v.visit(tree)
     return v.sites

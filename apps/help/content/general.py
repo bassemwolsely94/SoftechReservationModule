@@ -1377,8 +1377,8 @@ SCREENS = [
                        'The WhatsApp account alerts go out from, each branch\'s shared alert mobile, and a "Test send" button to check the number. '
                        'Only allowed numbers are listed: the main customer number and any number customers already write to are hidden, because messages to the alerts number never reach the customer inbox. Only an admin can change the account; a supervisor can see it.')},
             {'key': 'log', 'title': T('السجل', 'Log'),
-             'body': T('كل تنبيه بحالته (أُرسل / وصل / قُرئ / استلم / صُعّد / انتهى) وملاحظة المستلم ومحاولات الإرسال. فلتر بالحالة والحدث واليوم.',
-                       'Every alert with its status (Sent / Delivered / Read / Received / Escalated / Expired), the recipient\'s remark and the delivery attempts. Filter by status, event and day.')},
+             'body': T('كل تنبيه بحالته (أُرسل / وصل / قُرئ / استلم / صُعّد / انتهى) وملاحظة المستلم ومحاولات الإرسال. محاولة «throttled» معناها أن نفس الرقم وصله تنبيه من نفس النوع خلال آخر 10 دقائق فلم يُرسل مرة ثانية؛ التذكير يعيد المحاولة في موعده. فلتر بالحالة والحدث واليوم.',
+                       'Every alert with its status (Sent / Delivered / Read / Received / Escalated / Expired), the recipient\'s remark and the delivery attempts. An attempt marked "throttled" means the same number got an alert of the same type in the last 10 minutes, so it was not sent again; the reminder tries again on its own clock. Filter by status, event and day.')},
         ],
         'steps': [
             T('ابدأ من تبويب «السياسات»: حدد لكل حدث هل يُنبَّه عليه، ومدة التذكير والتصعيد.',
@@ -1390,6 +1390,8 @@ SCREENS = [
             T('راجع «السجل» لتعرف من استلم ومن لم يستلم.', 'Check the "Log" to see who received and who did not.'),
         ],
         'tips': [
+            T('حد الإرسال: رقم واحد يستقبل رسالة تلقائية واحدة على الأكثر من كل نوع (تنبيه حدث، معاودة اتصال، الملخص الصباحي، تقارير المؤشرات) كل 10 دقائق. الرسائل تذهب فقط لموبايل الموظف المفعّل له التنبيه، أو موبايل الفرع، أو مستلمي الملخص.',
+              'Send limit: one number gets at most one automatic message of each type (an event alert, a call-back, the morning brief, the insight reports) every 10 minutes. Messages go only to the mobile of a staff member with alerts on, the branch mobile, or the brief recipients.'),
             T('«وضع تجريبي — لا يتم الإرسال» معناه أن مفتاح الإرسال مغلق أو لم يُختَر حساب واتساب: كل شيء يعمل ويُسجَّل لكن لا تخرج رسائل.',
               '"Test mode — nothing is sent" means the send switch is off or no WhatsApp account is chosen: everything runs and is logged but no message leaves.'),
             T('لو خلّى الموظف «نبّه على الموبايل» بدون علامة والسياسة «دائماً» يصل التنبيه رغم ذلك؛ ولو السياسة «لا» يُتجاهل اختياره.',
@@ -1435,8 +1437,8 @@ SCREENS = [
                        'Every alert with its status; click a row to see the recipient\'s remark and the delivery attempts.'),
              'open_hint': T('في تبويب «السجل».', 'On the "Log" tab.')},
         ],
-        'updated': '2026-11-04',
-        'change_note': T('حدث جديد «معاودة اتصال متأخرة» ونوع مسؤول «معاودة الاتصال (الكول سنتر)»',
-                         'New event "Overdue call-back" and owner kind "Call-backs (call center)"'),
+        'updated': '2026-11-05',
+        'change_note': T('حد إرسال: رسالة تلقائية واحدة لكل رقم من كل نوع كل 10 دقائق (محاولة «throttled» في السجل)',
+                         'Send limit: one automatic message per number per type every 10 minutes ("throttled" attempt in the log)'),
     },
 ]

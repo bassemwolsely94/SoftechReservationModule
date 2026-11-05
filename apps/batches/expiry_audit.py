@@ -247,14 +247,16 @@ def run_backfill(run, window_from, window_to, branch=None, categories=None,
     try:
         for start_iso, end_iso in _month_chunks(window_from, window_to):
             for sup_chunk in _chunks(supplier_codes, _SUPPLIER_CHUNK):
-                in_list = ', '.join(f"'{c}'" for c in sup_chunk)
+                # supplier codes are bound (round 2, R5): a return-policy code is typed on the
+                # P-29 screen, so it must never become SQL text
+                in_list = ', '.join('?' for _ in sup_chunk)
                 sql = QUERY_PURCHASE_EXPIRY_WINDOW.format(
                     start=start_iso, end=end_iso,
                     suppliers=in_list, branch_filter=branch_filter,
                 )
                 cur = conn.cursor()
                 try:
-                    cur.execute(sql, timeout=timeout)
+                    cur.execute(sql, [str(c) for c in sup_chunk], timeout=timeout)
                     rows = cur.fetchall()
                 finally:
                     cur.close()

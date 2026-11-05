@@ -152,3 +152,29 @@ class LiveWritePathTests(TestCase):
         e.refresh_from_db()
         self.assertIsNone(e.softech_written_at)                  # UN-claimed → retried, no dup
         self.assertIn('ASE down', e.write_error)
+
+
+@override_settings(POS_CANCEL_WRITE_ENABLED=True)
+class ConcurrentRunTests(TestCase):
+    """Round 2, R6 step 1: two scheduler processes. Run B claims the same events after run A
+    read them but before A's claim; A must then insert nothing. Today A's claim is an
+    unconditional `filter(id__in=ids).update(...)`, so both runs INSERT — held as S-3."""
+
+    from apps.tests.security.baseline import pending as _pending
+
+    @_pending('S-3')
+    def test_events_claimed_by_another_run_are_not_inserted_again(self):
+        br = make_branch()
+        e = _evt(br, code='77777')
+        real = PCW._sold_codes_by_cart
+
+        def other_run_claims_first(tokens):
+            PosSelectionEvent.objects.filter(pk=e.pk).update(softech_written_at=timezone.now())
+            return real(tokens)
+        inserts = []
+        with patch.object(PCW, '_sold_codes_by_cart', side_effect=other_run_claims_first), \
+             patch('config.sybase.get_branch_connection', return_value=MagicMock()), \
+             patch('apps.pos_orders.writer._exec_insert',
+                   side_effect=lambda conn, table, row: inserts.append(row)):
+            PCW.write_pos_cancel_batch(dry_run=False, min_age_minutes=0)
+        self.assertEqual(inserts, [])

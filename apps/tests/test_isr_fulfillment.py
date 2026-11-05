@@ -120,6 +120,15 @@ class ComputeTests(TestCase):   # the workbook reads «بيانات الصنف»
 
 @_NO_LABELS
 class WorkbookTests(TestCase):   # the workbook reads «بيانات الصنف» live
+    def test_every_built_formula_survives_neutralising(self):
+        # R5: the exports save through neutralise_formulas(wb, keep_safe_formulas=True)
+        from core.export_safety import is_safe_formula
+        wb = F.build_workbook(_snap(), 2)
+        formulas = [c.value for ws in wb.worksheets for row in ws.iter_rows() for c in row
+                    if c.data_type == 'f']
+        self.assertTrue(formulas)
+        self.assertEqual([f for f in formulas if not is_safe_formula(f)], [])
+
     def test_sheets_coverage_cell_and_formulas(self):
         wb = F.build_workbook(_snap(), 2)
         self.assertEqual(wb.sheetnames, ['ملخص', 'ISR 261609', 'الشرح'])

@@ -27,6 +27,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.core.cache import cache
 from django.http import HttpResponse
+from core.export_safety import neutralise_formulas
 from django.shortcuts import get_object_or_404
 from rest_framework import status as http
 from rest_framework.decorators import api_view, parser_classes, permission_classes
@@ -489,7 +490,7 @@ def branch_request_analysis_export(request, pk):
     except ValueError as exc:
         return Response({'detail': str(exc)}, status=http.HTTP_400_BAD_REQUEST)
     buf = io.BytesIO()
-    F.build_workbook(snap, **cov).save(buf)
+    neutralise_formulas(F.build_workbook(snap, **cov), keep_safe_formulas=True).save(buf)
     resp = HttpResponse(buf.getvalue(),
                         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     resp['Content-Disposition'] = (f'attachment; filename="whatsapp_request_{req.pk}_br'

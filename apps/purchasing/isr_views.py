@@ -24,6 +24,7 @@ from django.utils import timezone
 from apps.purchasing.models import IsrPush
 from apps.branches.models import Branch
 from . import isr_writer
+from core.export_safety import neutralise_formulas
 
 logger = logging.getLogger(__name__)
 
@@ -493,7 +494,7 @@ def isr_fulfilment_export(request):
     except ValueError as exc:
         return _fulfil_error(exc)
     buf = io.BytesIO()
-    F.build_workbook(snap, **cov).save(buf)
+    neutralise_formulas(F.build_workbook(snap, **cov), keep_safe_formulas=True).save(buf)
     resp = HttpResponse(buf.getvalue(),
                         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     resp['Content-Disposition'] = f'attachment; filename="{F.workbook_filename(snap)}"'

@@ -198,6 +198,12 @@ def send_card(*, customer, phone, item_ids, actor, branch, source='pos', idempot
                         {'detail': 'أُرسلت إرشادات هذه الأصناف لهذا الرقم مؤخراً — اختر «إعادة الإرسال»'})
             if _cap_reached(branch):
                 raise ValidationError({'detail': 'تم بلوغ الحد اليومي لرسائل الإرشادات في هذا الفرع'})
+            # owner question 6 (round 2, R5): 1 card per number per SEND_MIN_INTERVAL_SECONDS, even
+            # with «إعادة الإرسال». Last check, inside this transaction: a refusal above keeps the slot.
+            from apps.notifications import send_limits
+            claimed_at = timezone.now()
+            if not send_limits.claim('counsel_card', norm, now=claimed_at):
+                raise ValidationError({'detail': 'أُرسلت رسالة إرشادات لهذا الرقم منذ أقل من 10 دقائق — حاول لاحقاً'})
             send = CounselCardSend.objects.create(status='queued', **base)
             for l in lines:
                 sheet = sheet_for(l['item'])
@@ -207,6 +213,8 @@ def send_card(*, customer, phone, item_ids, actor, branch, source='pos', idempot
         return CounselCardSend.objects.get(idempotency_key=key)
 
     _deliver(send, norm, sender)
+    if send.status == 'failed':                        # reached nobody: the 10-minute slot goes back
+        send_limits.release('counsel_card', norm, claimed_at)
     AuditLog.log('counsel_card_sent', user=actor, obj=send,
                  new_data={'status': send.status, 'phone': send.phone_masked, 'channel': send.channel,
                            'items': [{'item': l['item'].pk, 'version': l['content']['version']} for l in lines]},
