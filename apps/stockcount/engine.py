@@ -567,6 +567,11 @@ def process_upload(session, rows: list, uploaded_by=None) -> dict:
         except (InvalidOperation, TypeError, ValueError):
             rejected.append(code)
             continue
+        if counted < 0:
+            # same rule as the live count-item entry («الكمية يجب ألا تكون سالبة») — a shelf can't hold
+            # a negative count; a typo'd sign would book a phantom deficit (round-2 R2).
+            rejected.append(code)
+            continue
 
         diff = counted - snap.expected_qty
 
