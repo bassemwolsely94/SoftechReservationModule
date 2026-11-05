@@ -32,11 +32,11 @@ class _Base(TestCase):
         self.today = timezone.localdate()
 
     def pay(self, amount='100.00', *, user='default', branch=None, method='instapay', days_ago=0,
-            status='confirmed'):
+            status='confirmed', ref=''):
         return ExternalPayment.objects.create(
             branch=branch or self.b1, method=method, amount=Decimal(amount),
             payment_date=self.today - timedelta(days=days_ago), status=status,
-            created_by=self.user if user == 'default' else user,
+            created_by=self.user if user == 'default' else user, reference_number=ref,
         )
 
 
@@ -48,8 +48,24 @@ class DuplicateTests(_Base):
         created = S.detect_exceptions(b.pk)
         self.assertEqual([e.exception_type for e in created], ['duplicate'])
         exc = created[0]
-        self.assertEqual(exc.severity, 'critical')
+        self.assertEqual(exc.severity, 'warning')          # owner 2026-11-05: review, not critical
         self.assertIn('اليوم', exc.detail)
+
+    def test_different_references_are_different_payments(self):
+        self.pay(ref='IP-1001')
+        p = self.pay(ref='IP-1002')
+        S.detect_exceptions(p.pk)
+        self.assertNotIn('duplicate', _types(p))
+
+    def test_same_or_missing_reference_is_a_duplicate(self):
+        self.pay(ref='IP-2001')
+        p = self.pay(ref='ip-2001')
+        S.detect_exceptions(p.pk)
+        self.assertIn('duplicate', _types(p))
+        self.pay(ref='')
+        q = self.pay(ref='IP-3001')
+        S.detect_exceptions(q.pk)
+        self.assertIn('duplicate', _types(q))
 
     def test_different_method_amount_or_day_or_cancelled_is_not(self):
         self.pay(method='vodafone_cash')
@@ -140,6 +156,24 @@ class AnomalyTests(_Base):
         p = self.pay('102')
         self.assertLess(S.calculate_anomaly_score(p), Decimal('70'))
         self.assertFalse(PaymentException.objects.filter(exception_type='anomaly').exists())
+
+    def test_small_change_on_uniform_history_is_not_unusual(self):
+        for i in range(6):
+            self.pay('50', days_ago=i + 1)                 # always 50 EGP → σ = 0
+        p = self.pay('60')                                 # 10 EGP away: below 100 EGP / 20 %
+        self.assertEqual(S.calculate_anomaly_score(p), Decimal('0'))
+        self.assertFalse(AbuseFlag.objects.exists())
+
+    def test_large_relative_but_small_absolute_change_is_not_unusual(self):
+        self._history(6)                                   # ~100 EGP normal
+        p = self.pay('180')                                # +80 %: but under 100 EGP away
+        self.assertEqual(S.calculate_anomaly_score(p), Decimal('0'))
+
+    def test_large_absolute_but_small_relative_change_is_not_unusual(self):
+        for i, amt in enumerate(['5000', '5100', '4900', '5050', '4950', '5000']):
+            self.pay(amt, days_ago=i + 1)
+        p = self.pay('5600')                               # +600 EGP but only +12 %
+        self.assertEqual(S.calculate_anomaly_score(p), Decimal('0'))
 
     def test_outlier_scores_high_and_raises_one_linked_flag(self):
         self._history(6)

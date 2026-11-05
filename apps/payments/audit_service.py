@@ -18,6 +18,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.payments.models import (
@@ -37,6 +38,10 @@ _FUZZY_DATE_DAYS  = 2
 _ANOMALY_CRITICAL = 70                # score threshold → escalate to AbuseFlag
 _ANOMALY_MIN_SAMPLES = 5               # fewer samples → score 0 (inconclusive)
 _ANOMALY_WINDOW_DAYS = 90              # population window
+# owner 2026-11-05: an amount only counts as unusual when it is materially away from the person's
+# normal — at least 100 EGP AND at least 20 % of their average (a 50→60 EGP change is not a signal)
+_ANOMALY_MIN_ABS_DIFF = Decimal('100')
+_ANOMALY_MIN_REL_DIFF = Decimal('0.20')
 
 
 class PaymentAuditService:
@@ -188,18 +193,27 @@ class PaymentAuditService:
 
         # ① Duplicate — same recorder, amount, method and day. The payment time is not stored,
         #    so the window is the whole payment day.
+        #    owner 2026-11-05: a different reference number means a different payment (several
+        #    customers paying the same amount the same day is normal) — only same or missing
+        #    references count, and it is a warning for review, not critical.
         if payment.created_by_id is not None:
-            n = (ExternalPayment.objects.filter(
-                    created_by_id = payment.created_by_id,
-                    amount        = payment.amount,
-                    method        = payment.method,
-                    payment_date  = payment.payment_date,
-                 ).exclude(pk=payment.pk).exclude(status=ExternalPayment.STATUS_CANCELLED).count())
+            same = (ExternalPayment.objects.filter(
+                        created_by_id = payment.created_by_id,
+                        amount        = payment.amount,
+                        method        = payment.method,
+                        payment_date  = payment.payment_date,
+                    ).exclude(pk=payment.pk).exclude(status=ExternalPayment.STATUS_CANCELLED))
+            ref = (payment.reference_number or '').strip()
+            if ref:
+                same = same.filter(Q(reference_number__iexact=ref) | Q(reference_number='')
+                                   | Q(reference_number__isnull=True))
+            n = same.count()
             if n:
                 cls._record(
-                    created, payment, PaymentException.TYPE_DUPLICATE, PaymentException.SEVERITY_CRITICAL,
-                    f'تكرار محتمل: {n} دفعة أخرى بنفس المبلغ وطريقة الدفع سجّلها نفس المستخدم '
-                    f'في نفس اليوم ({payment.payment_date}) — وقت الدفع غير مسجّل، فالمقارنة باليوم كله',
+                    created, payment, PaymentException.TYPE_DUPLICATE, PaymentException.SEVERITY_WARNING,
+                    f'تكرار محتمل: {n} دفعة أخرى بنفس المبلغ وطريقة الدفع والمرجع (أو بدون مرجع) '
+                    f'سجّلها نفس المستخدم في نفس اليوم ({payment.payment_date}) — وقت الدفع غير مسجّل، '
+                    f'فالمقارنة باليوم كله',
                 )
 
         # ② Delayed settlement — payment older than 3 days still "pending"
@@ -248,7 +262,10 @@ class PaymentAuditService:
             return Decimal('0'), None, None, len(amounts)   # not enough history — inconclusive
         mu    = statistics.mean(float(a) for a in amounts)
         sigma = statistics.stdev(float(a) for a in amounts) or 1.0
-        z     = abs(float(payment.amount) - mu) / sigma
+        diff  = abs(float(payment.amount) - mu)
+        if diff < float(_ANOMALY_MIN_ABS_DIFF) or diff < float(_ANOMALY_MIN_REL_DIFF) * abs(mu):
+            return Decimal('0'), mu, sigma, len(amounts)    # not materially away from normal
+        z     = diff / sigma
         score = Decimal(str(min(100, round(z * 20, 2))))
         return score, mu, sigma, len(amounts)
 
