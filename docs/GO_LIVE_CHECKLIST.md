@@ -74,7 +74,7 @@ Claude sessions on the PC are not allowed to SSH to the VPS. Do these in order.
 5. [ ] **`ocr_tessdata/` copied** to the VPS (§8.4 a). It is git-ignored.
 6. [ ] **TLS**: `certbot` for `elrezeikyapp.dawalvry.com` (§9.3).
 7. [ ] **Ain Shams node** (192.168.3.10:5000) reachable over the tunnel. This is a branch-side route. Until it is fixed, that branch's syncs fail on the VPS.
-8. [ ] **Before cutover (§11.2):** cancel the duplicate ISR drafts #30 / #32 of the already-pushed #29.
+8. [x] **Before cutover (§11.2):** cancel the duplicate ISR drafts #30 / #32 of the already-pushed #29. Done: cancelled 2026-10-25 with the ISR guards (`apps/purchasing/isr_guards.py`); checked 2026-11-05 that #29 is pushed and no draft is proposed or approved.
 9. [ ] **WhatsApp / Meta (§11.7, can follow go-live by a day):**
    - the WhatsApp token, phone number id, app secret and verify token;
    - the Meta webhook URL → `https://elrezeikyapp.dawalvry.com/api/whatsapp/webhook/` (and `/api/social/webhook/meta/`);
@@ -105,7 +105,7 @@ Claude sessions on the PC are not allowed to SSH to the VPS. Do these in order.
 | **W0** | VPS | `writer_status --expect reader` | `ROLE = reader`, exit 0 |
 | **W1** | office | Make **every** office `.env` a reader with the PowerShell block below, then restart the office web + scheduler | The block prints `READER` for every file |
 | **W2** | office | In the project folder: `venv\Scripts\python manage.py writer_status --expect reader` | `ROLE = reader`, exit 0. The scheduler boot log says `not the writer instance` |
-| **W3** | office | Drain (§11.2). `/api/pos-orders/queue-status/` must show queued and push_failed = 0. No ISR / invoice / A/P / insurance item may be "pushing". ISR #30/#32 must be cancelled | All zero. **If something is still queued: stop and ask.** Never flip the office back to writer while the VPS has any writer flag on |
+| **W3** | office | Drain (§11.2). `/api/pos-orders/queue-status/` must show queued and push_failed = 0. No ISR / invoice / A/P / insurance item may be "pushing". No ISR draft may be proposed or approved (#30/#32 were cancelled 2026-10-25) | All zero. **If something is still queued: stop and ask.** Never flip the office back to writer while the VPS has any writer flag on |
 | **W4** | office | Stop everything (§11.3): every `runserver`, every `run_scheduler`, `daphne` and the NSSM service `ElRezeikyPlatform` if installed, plus Task Scheduler / Startup entries | Task Manager: no `python.exe` with `runserver` / `run_scheduler` / `daphne` |
 | **W5** | both | Final `pg_dump` (office) → restore + `migrate` on the VPS (§11.4). Start the VPS web + **scheduler**, still a reader (§11.5) | One full sync cycle is green on the freshness bar. `writer_status --expect reader` still passes |
 | **W6** | VPS | Kill-switch test (§11.6). Then in `/opt/elrezeiky/app/.env` set `SOFTECH_READ_ONLY=False` + `WRITER_INSTANCE=True`, with **all writer flags still False**. Restart web + scheduler. Run `writer_status --expect writer` | `ROLE = writer`, every flag `effective=False` |
