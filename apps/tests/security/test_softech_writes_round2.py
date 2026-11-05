@@ -80,6 +80,16 @@ class ClassificationIdempotencyTests(TestCase):
         self.assertTrue(res[0].get('unchanged'))
         self.assertEqual(AuditLog.objects.filter(action='softech_item_class_written').count(), audits)
 
+    def test_item_already_right_in_softech_still_fixes_our_copy(self):
+        # SOFTECH already holds '9' but our copy still says '3': no SOFTECH write, copy corrected
+        cur = _ItemsCursor({'itemorigincode': '9'})
+        err, res = self._apply(cur)
+        self.assertIsNone(err)
+        self.assertEqual(cur.updates, 0)
+        self.assertTrue(res[0].get('unchanged'))
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.origin_code, '9')
+
     def test_refuses_while_another_run_holds_the_lock(self):
         from apps.vouchers.coupon_dashboard import pg_lock
         from apps.discount_approvals.alignment import LOCK_CLASSIFICATION

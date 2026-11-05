@@ -283,6 +283,11 @@ def _apply_classification_locked(plan, usercode, actor):
             try:
                 cur.execute(read_sql, [it.softech_id])           # already there → nothing to write
                 if _at_target(cur.fetchone()):
+                    stale = [df for _, df, v in set_cols if getattr(it, df) != v]
+                    if stale:                                     # our copy catches up; SOFTECH untouched
+                        for _, df, v in set_cols:
+                            setattr(it, df, v)
+                        it.save(update_fields=stale)
                     results.append({'softech_id': it.softech_id, 'ok': True, 'unchanged': True})
                     continue
                 cur.execute(sql, params)
