@@ -252,3 +252,15 @@ class AtomicReversalTests(TestCase):
             with self.assertRaises(W.ReconWriteError):
                 W.complete_half_reversal(alloc)
         self.assertEqual(fake.paid, D('840'))
+
+    def test_failed_half_reversal_is_audited(self):
+        # round-2 R1, owner decision D3 (2026-11-05): a refused or failed repair leaves a row too
+        fake = _TxFake()
+        alloc = self.written(fake)
+        with mock.patch('config.sybase.get_sybase_connection', return_value=fake):
+            with self.assertRaises(W.ReconWriteError):
+                W.complete_half_reversal(alloc, note='test')
+        ev = ReconAuditEvent.objects.filter(action='allocation_reverse_failed', allocation=alloc).first()
+        self.assertIsNotNone(ev, 'a failed half-reversal left no audit row')
+        self.assertTrue(ev.after_state.get('half_landed_repair'))
+        self.assertIn('still present', ev.after_state.get('error', ''))

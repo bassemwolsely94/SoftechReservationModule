@@ -69,7 +69,10 @@ class SoftechAuditTests(TestCase):
         from apps.catalog.models import Item
         from apps.discount_approvals import alignment
         it = Item.objects.create(softech_id='91001', name='X', origin_code='3', store_classif='1')
-        with mock.patch('config.sybase.get_sybase_connection', return_value=_Conn(_Cur(('9',)))):
+        # SOFTECH holds '3' before the write (round-2 R1 reads it first and skips an item already
+        # at its target), '9' on the read-back after it
+        with mock.patch('config.sybase.get_sybase_connection', return_value=_Conn(_Cur(('9',)))), \
+                mock.patch.object(_Cur, 'fetchone', side_effect=[('3',), ('9',)]):
             err, res = alignment.apply_classification_changes(
                 [{'item_id': it.id, 'origin_code': '9'}], '19', actor=self.user)
         self.assertIsNone(err)

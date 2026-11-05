@@ -19,6 +19,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--commit', action='store_true')
+        parser.add_argument('--actor', default='', help='username of the staff member writing (required with --commit)')
         parser.add_argument('--limit', type=int, default=0, help='max invoices (0 = all)')
         parser.add_argument('--invoice', type=int, help='one APInvoice id')
 
@@ -62,6 +63,7 @@ class Command(BaseCommand):
         return keep
 
     def handle(self, *args, **o):
+        actor = W.command_actor(o['actor'], o['commit'])
         if o['commit'] and not W.writer_enabled():
             raise SystemExit('AP_RECONCILE_WRITER_ENABLED is off')
         ours = set(ReconAuditEvent.objects.filter(action='allocation_written')
@@ -87,7 +89,7 @@ class Command(BaseCommand):
             inv = allocs[0].invoice
             for attempt in range(4):
                 try:
-                    res = W.fix_due_before(inv, allocs, conn=conn, commit=o['commit'])
+                    res = W.fix_due_before(inv, allocs, conn=conn, commit=o['commit'], user=actor)
                     ch = res['changes']
                     if ch:
                         stats['invoices_changed'] += 1

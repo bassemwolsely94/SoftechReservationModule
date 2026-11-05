@@ -982,7 +982,7 @@ function ItemsTab({ tr, onRefresh }) {
                   className="btn-primary text-xs px-3 disabled:opacity-50">
                   {saving ? 'جارٍ الإضافة...' : 'إضافة'}
                 </button>
-                <button onClick={() => { setAdding(false); setSelectedItem(null); setItemSearchText(''); setError('') }}
+                <button onClick={() => { setAdding(false); setSelectedItem(null); setError('') }}
                   disabled={saving}
                   className="btn-secondary text-xs px-3 disabled:opacity-50">إلغاء</button>
               </div>

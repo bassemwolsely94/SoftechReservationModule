@@ -1,16 +1,10 @@
 # Owner: Batch 7. Requests that answered 500 or raised, for some role, with SOFTECH and the internet offline.
-
-admin POST /api/pricing-approvals/replication/scan/
-admin POST /api/vouchers/documents/x/mark-used/
-call_center POST /api/vouchers/documents/x/mark-used/
-pharmacist POST /api/vouchers/documents/x/mark-used/
-salesperson POST /api/vouchers/documents/x/mark-used/
-supervisor POST /api/vouchers/documents/x/mark-used/
+# R7 (2026-11-05): empty — replication scan answers 503, voucher mark-used fixed (V-1).
 
 # reason: round 2 R3 — found when the sweep started sending real (seeded) records to detail routes:
 #   the canary Planter fills every field with a neutral value, and these views answer 500 on such a row
 #   (or on the empty body the sweep sends). Real robustness bugs or planter artefacts, unproven which —
-#   handed to R7 (role_crashes target 0) with this list. No permission question: admin crashes too.
+#   to triage (R7 closed the original six; these appeared only once the sweep used real records). No permission question: admin crashes too.
 admin DELETE /api/insurance/clients/987654321/
 admin DELETE /api/insurance/subclients/987654321/
 admin GET /api/pricing-approvals/987654321/replication/

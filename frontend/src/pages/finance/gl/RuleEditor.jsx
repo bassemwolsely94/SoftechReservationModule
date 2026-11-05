@@ -34,8 +34,8 @@ export const CONDITION_LABEL = {
   doccode_in: 'كود المستند', financialdoc_in: 'المستند المالي', direction_in: 'الاتجاه',
   bank_type_in: 'نوع الخزينة/البنك', expcode_in: 'كود المصروف',
 }
-export const MAP_KINDS = { bank: 'خزينة / بنك', expense: 'مصروف', card_clearing: 'تسوية بطاقات' }
-const MAP_KEY_LABEL = { bankcode: 'كود الخزينة/البنك', expcode: 'كود المصروف', branch_code: 'فرع المستند' }
+export const MAP_KINDS = { bank: 'خزينة / بنك', expense: 'مصروف', card_clearing: 'تسوية بطاقات', intercompany: 'شركة شقيقة' }
+const MAP_KEY_LABEL = { bankcode: 'كود الخزينة/البنك', expcode: 'كود المصروف', branch_code: 'فرع المستند', counterpart_branch: 'الفرع المقابل للتحويل', tf_bankcode: 'البنك المقابل للتحويل' }
 const BRANCH_LABEL = { source: 'فرع المستند', hq: 'المركز الرئيسي', map: 'فرع الربط', none: 'بدون فرع' }
 const PARTY_LABEL = { none: 'بدون', source: 'طرف المستند' }
 const GRANULARITY_LABEL = { document: 'مستند', branch_day: 'فرع/يوم', party_day: 'طرف/يوم' }

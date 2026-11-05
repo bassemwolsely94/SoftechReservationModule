@@ -728,7 +728,9 @@ SCREENS = [
             {'key': 'exceptions', 'title': T('الاستثناءات', 'Exceptions'),
              'body': T('مستندات SOFTECH اللي ما اترحلتش لقيد، مجمّعة بالنوع، وكل نوع له علاجه في الصف ثم «إعادة الترحيل».\n'
                        '• طرف غير مربوط: المستند لمورد/عميل لسه مش مؤكد في «الأطراف» — أكّده أو أنشئ طرفاً.\n'
-                       '• حساب غير مربوط: خزينة/بنك أو كود مصروف أو تسوية بطاقات مالهاش حساب في جداول الربط — اربطها بحساب وفرع.\n'
+                       '• حساب غير مربوط: خزينة/بنك أو كود مصروف أو تسوية بطاقات أو فرع تحويل (شركة شقيقة) مالهاش حساب في جداول الربط — اربطها بحساب وفرع.\n'
+                       '• المشتريات النقدية بتظهر على مرحلتين (5100 ← 2341 للمورد، و2341 للمورد ← الخزينة)؛ مورد مش مؤكد بيعمل «طرف غير مربوط» لسنده بس وباقي اليوم بيترحل.\n'
+                       '• تحويلات «قيد تسوية» 1/1/2026 بين المركز والفروع، وتحويل من المركز مالوش طرف في فرع، والتحويل بين فرعين، بتفضل «لا توجد قاعدة» عن قصد — تتسجل يدوياً. وتسليم نقدية الفروع اليومي للمركز (1302 ↔ 1301)، وزيادة/عجز الوردية 1303، والكوبونات 2354، وتسوية البطاقات للبنك مش موجودين في SOFTECH فبيتسجلوا يدوياً.\n'
                        '• لا توجد قاعدة: مفيش قاعدة بتنطبق على المستند — أضف قاعدة أو وسّع شروط موجودة.\n'
                        '• قاعدتان متعارضتان: قاعدتان بنفس الأولوية بينطبقوا على نفس المستند — فرّق بالأولوية أو الشروط.\n'
                        '• قاعدة غير متوازنة: أسطر القاعدة مبتديش مدين = دائن لهذا المستند — صحّح الأسطر.\n'
@@ -744,7 +746,9 @@ SCREENS = [
                        'الاستثناء المعالج بيتحل لوحده عند إعادة الترحيل؛ «تجاهل» بسبب لما المستند ميتسجلش عن قصد.',
                        'SOFTECH documents that did not become an entry, grouped by kind; each kind has its fix in the row, then "Redraft".\n'
                        '• Unmapped party: the document is for a supplier/customer not yet confirmed in "Parties" — confirm it or create one.\n'
-                       '• Unmapped account: a cash box/bank, expense code or card clearing with no account in the maps — map it to an account and branch.\n'
+                       '• Unmapped account: a cash box/bank, expense code, card clearing or transfer branch (sister company) with no account in the maps — map it to an account and branch.\n'
+                       '• Cash purchases show in two legs (5100 → 2341 for the supplier, and 2341 for the supplier → the cash box); an unconfirmed supplier makes "Unmapped party" for its voucher only and the rest of the day drafts.\n'
+                       '• The 1-1-2026 «قيد تسوية» transfers between head office and branches, a head-office transfer with no branch leg, and a transfer between two branches stay "No rule" on purpose — key them by hand. Daily branch cash handovers to head office (1302 ↔ 1301), shift over/short 1303, coupons 2354 and card settlement to the bank are not in SOFTECH, so they are keyed by hand.\n'
                        '• No rule: no rule matches the document — add a rule or widen an existing one.\n'
                        '• Ambiguous rule: two rules with the same priority match the same document — separate them by priority or conditions.\n'
                        '• Unbalanced rule: the rule lines do not give debit = credit for this document — fix the lines.\n'
@@ -792,7 +796,7 @@ SCREENS = [
              'open_hint': T('افتح قيداً أو «+ قيد يدوي».', 'Open an entry or "+ Manual entry".')},
         ],
         'updated': '2026-11-05',
-        'change_note': T('القيود: قيد عدّله محاسب وغيّره SOFTECH — قارن النسختين واختار «اعتماد نسخة سوفتيك» أو «إبقاء تعديلي»', 'Journal: an accountant-edited entry SOFTECH changed — compare both versions and choose "Accept the SOFTECH version" or "Keep my edit"'),
+        'change_note': T('القيود: تحويلات النقدية بين المركز والفروع والمشتريات النقدية على مرحلتين عبر 2341، وقيد عدّله محاسب وغيّره SOFTECH — «اعتماد نسخة سوفتيك» أو «إبقاء تعديلي»', 'Journal: cash transfers between head office and branches and two-leg cash purchases through 2341, and an accountant-edited entry SOFTECH changed — "Accept the SOFTECH version" or "Keep my edit"'),
     },
     {
         'key': 'finance.gl_parties',
@@ -804,8 +808,8 @@ SCREENS = [
         'tour': [
             {'target': 'finance-gl-parties-propose', 'label': T('استيراد · اقتراح المطابقة', 'Import · Propose matches'),
              'text': T('ارفع ملف أطراف الحسابات (Excel) ثم «اقتراح المطابقة» يقترح لكل طرف شخص SOFTECH بنفس الاسم.', 'Upload the party Excel from the accounts file, then "Propose matches" suggests a SOFTECH person with the same name for each party.'),
-             'more': T('• المطابقة بالاسم العربي بعد التوحيد (همزات، ياء/ألف مقصورة، مسافات): «تطابق تام» أو «تطابق كلمات».\n• ده اقتراح بس — مفيش طرف بيبقى مؤكد من غير ضغطتك.\n• الاستيراد يضيف ويحدّث ومبيمسحش، وإعادة تشغيله آمنة.\n• الزرّان لمن له صلاحية التعديل (ledger.edit).',
-                       '• Matching is on the normalised Arabic name (hamza, alef/yeh variants, spaces): "exact" or "word match".\n• It is a proposal only — no party becomes confirmed without your click.\n• Import adds and updates and never deletes; running it again is safe.\n• Both buttons are for users allowed to edit (ledger.edit).'),
+             'more': T('• المطابقة بالاسم العربي بعد التوحيد (همزات، ياء/ألف مقصورة، مسافات): «تطابق تام» أو «تطابق كلمات».\n• ده اقتراح بس — مفيش طرف بيبقى مؤكد من غير ضغطتك.\n• الاستيراد يضيف ويحدّث ومبيمسحش، وإعادة تشغيله آمنة.\n• شيتات 2020 الرئيسية (الموردين/الموظفين/العملاء) بتتخطى هنا ويتقال عددها — بتتستورد بأمر import_gl_parties --create-only بس، ومبتغيّرش اسم طرف موجود.\n• الزرّان لمن له صلاحية التعديل (ledger.edit).',
+                       '• Matching is on the normalised Arabic name (hamza, alef/yeh variants, spaces): "exact" or "word match".\n• It is a proposal only — no party becomes confirmed without your click.\n• Import adds and updates and never deletes; running it again is safe.\n• The 2020 master sheets (suppliers/employees/customers) are skipped here and counted — they are imported only by the import_gl_parties --create-only command, which never renames an existing party.\n• Both buttons are for users allowed to edit (ledger.edit).'),
              'open_hint': T('لمن له صلاحية التعديل (ledger.edit).', 'For users allowed to edit (ledger.edit).')},
             {'target': 'finance-gl-parties-confirm-upload', 'label': T('تأكيد من ملف المراجعة', 'Confirm from the review sheet'),
              'text': T('ارفع ملف المقترحات بعد ما تملا «الكود المعتمد»: «معاينة» تعرض اللي هيتأكد واللي مرفوض، و«تأكيد» يأكد الصفوف السليمة بس.', 'Upload the suggestions sheet once «الكود المعتمد» is filled: "Preview" shows what will be confirmed and what is refused; "Confirm" confirms only valid rows.'),
@@ -820,7 +824,7 @@ SCREENS = [
              'warn': T('التأكيد بيحدد على أي حساب طرف هيتسجل كل مستند مستقبلي — تأكد من الاسم.', 'Confirming decides which party account every future document posts to — check the name.')},
         ],
         'updated': '2026-11-05',
-        'change_note': T('الأطراف: تأكيد أطراف كتير مرة واحدة من ملف المراجعة (معاينة ثم تأكيد)', 'Parties: confirm many parties at once from the review sheet (preview, then confirm)'),
+        'change_note': T('الأطراف: تأكيد أطراف كتير مرة واحدة من ملف المراجعة (معاينة ثم تأكيد)، وشيتات 2020 الرئيسية بتتخطى في الاستيراد العادي', 'Parties: confirm many parties at once from the review sheet (preview, then confirm); the 2020 master sheets are skipped by the normal import'),
     },
     {
         'key': 'finance.gl_rules',
@@ -831,11 +835,17 @@ SCREENS = [
         'audience': T('المدير المالي (تعديل: ledger.edit) والمحاسبون (عرض).', 'The finance manager (edit: ledger.edit) and accountants (view).'),
         'tabs': [
             {'key': 'rules', 'title': T('القواعد', 'Rules'),
-             'body': T('قاعدة لكل نوع مستند: الشروط (فرع، نوع، دفع…)، التجميع (مستند · فرع/يوم · طرف/يوم)، الدفتر، الأولوية، والأسطر (مدين/دائن، الحساب، الفرع، الطرف، المبلغ من حقل مسموح). «تجربة» تعرض القيود اللي كانت هتتعمل لفترة من غير ما تسجّل حاجة.',
-                       'One rule per document type: conditions (branch, kind, payment…), grouping (document · branch/day · party/day), book, priority and lines (debit/credit, account, branch, party, amount from an allowed field). "Test" shows the entries that would be made for a range without saving anything.')},
+             'body': T('قاعدة لكل نوع مستند: الشروط (فرع، نوع، دفع…)، التجميع (مستند · فرع/يوم · طرف/يوم)، الدفتر، الأولوية، والأسطر (مدين/دائن، الحساب، الفرع، الطرف، المبلغ من حقل مسموح). «تجربة» تعرض القيود اللي كانت هتتعمل لفترة من غير ما تسجّل حاجة.\n'
+                       '• المشتريات النقدية (supplier.cash) بتتسجل على مرحلتين زي دفتر النقدية: من 5100 إلى 2341 للمورد، ثم من 2341 للمورد إلى الخزينة — فحساب 2341 بيبيّن كل مورد نقدي، سطرين لكل مورد في الفرع/اليوم، والبيان فيه المورد وملاحظة السند (غالباً رقم الفاتورة).\n'
+                       '• تحويلات النقدية بين المركز والفروع: في الفرع من/إلى 2404 قصاد خزينته، وفي المركز من/إلى حساب الشركة الشقيقة للفرع (ربط «شركة شقيقة») قصاد خزينة المركز. تحويل خزينة ↔ بنك بيتسجل قصاد ربط البنك للطرف التاني، والطرف المسجل على البنك نفسه بيتجاهل دايماً عشان ميتسجلش مرتين. تحويل من المركز مالوش طرف في أي فرع، والتحويل بين فرعين، بيظهروا استثناءات «لا توجد قاعدة» تتسجل يدوياً. تحويلات «قيد تسوية» 1/1/2026 بتفضل استثناءات.\n'
+                       '• قاعدة بيانات اتعمل لها seed قبل 5/11/2026 بتفضل على قاعدة المشتريات النقدية القديمة (سطرين) لحد ما المالية تعدّلها هنا.',
+                       'One rule per document type: conditions (branch, kind, payment…), grouping (document · branch/day · party/day), book, priority and lines (debit/credit, account, branch, party, amount from an allowed field). "Test" shows the entries that would be made for a range without saving anything.\n'
+                       '• Cash purchases (supplier.cash) post in two legs like the finance cash book: Dr 5100 / Cr 2341 for the supplier, then Dr 2341 for the supplier / Cr the cash box — so 2341 shows every cash supplier, a pair of lines per supplier per branch/day, described with the supplier and the voucher note (usually the invoice no.).\n'
+                       '• Cash transfers between head office and branches: at the branch Dr/Cr 2404 against its box; at head office Dr/Cr the branch\'s sister-company account ("Sister company" map) against the head-office box. A box ↔ bank transfer posts against the bank map of the other side; the leg recorded on the bank itself is always skipped so it is never posted twice. A head-office transfer with no branch leg, and a transfer between two branches, show as "No rule" exceptions to key by hand. The 1-1-2026 «قيد تسوية» transfers stay exceptions.\n'
+                       '• A database seeded before 5-11-2026 keeps the old two-line cash purchase rule until finance edits it here.')},
             {'key': 'maps', 'title': T('جداول الربط', 'Maps'),
-             'body': T('خزينة/بنك SOFTECH ← حساب المالية والفرع (فرع الخزينة هو فرع القيد)، أكواد المصروف ← حساب، وتسوية البطاقات. أي قيمة من SOFTECH من غير ربط بتتحول لاستثناء «حساب غير مربوط». كل تعديل بيتسجل بالقبل والبعد.',
-                       'SOFTECH cash box / bank → finance account and branch (the box branch is the entry branch), expense codes → account, and card clearing. Any SOFTECH value without a map becomes an "unmapped account" exception. Every change is logged with before and after.')},
+             'body': T('خزينة/بنك SOFTECH ← حساب المالية والفرع (فرع الخزينة هو فرع القيد)، أكواد المصروف ← حساب، تسوية البطاقات، و«شركة شقيقة»: كود فرع SOFTECH ← حساب الشركة الشقيقة في المالية (130 علياء 2408، 140 الجيزة 2413، 150 عين شمس 2405، 160 باب الحديد 2406، 170 محسن 2417) على المركز الرئيسي، للتحويلات النقدية بين المركز والفروع. أي قيمة من SOFTECH من غير ربط بتتحول لاستثناء «حساب غير مربوط». كل تعديل بيتسجل بالقبل والبعد.',
+                       'SOFTECH cash box / bank → finance account and branch (the box branch is the entry branch), expense codes → account, card clearing, and "Sister company": SOFTECH branch code → the finance sister-company account (130 Aliaa 2408, 140 Giza 2413, 150 Ain Shams 2405, 160 Bab El Hadid 2406, 170 Mohsen 2417) at head office, for cash transfers between head office and branches. Any SOFTECH value without a map becomes an "unmapped account" exception. Every change is logged with before and after.')},
         ],
         'tour': [
             {'target': 'finance-gl-rules-grid', 'label': T('جدول القواعد', 'Rules table'),
@@ -855,12 +865,12 @@ SCREENS = [
              'open_hint': T('داخل محرر القاعدة.', 'Inside the rule editor.')},
             {'target': 'finance-gl-maps-grid', 'label': T('جداول الربط', 'Maps table'),
              'text': T('كل قيمة من SOFTECH (خزينة/بنك، كود مصروف، تسوية بطاقات) مع حساب المالية والفرع. عدّل في الصف.', 'Each SOFTECH value (cash box/bank, expense code, card clearing) with its finance account and branch. Edit in the row.'),
-             'more': T('• خزائن الفروع بتاخد فرعها؛ حسابات البنوك بتتسجّل على المركز الرئيسي (شركة الرزيقي).\n• خريطة بنك/بطاقات من غير فرع بتترفض (مفيش فرع فاضي في سطر القيد).\n• قيم SOFTECH الناقصة اللي جايبة استثناءات بتظهر مظللة.\n• التعديل بيتسجل بالقبل والبعد، ثم «إعادة الترحيل» تطبقه.',
-                       '• Branch cash boxes take their own branch; bank accounts post to head office (the company).\n• A bank/card map without a branch is refused (no empty branch on an entry line).\n• SOFTECH values missing a map that cause exceptions are highlighted.\n• The edit is logged with before and after; then "Redraft" applies it.'),
+             'more': T('• خزائن الفروع بتاخد فرعها؛ حسابات البنوك بتتسجّل على المركز الرئيسي (شركة الرزيقي).\n• خريطة بنك/بطاقات/شركة شقيقة من غير فرع بتترفض (مفيش فرع فاضي في سطر القيد)؛ الشركة الشقيقة فرعها المركز الرئيسي.\n• قيم SOFTECH الناقصة اللي جايبة استثناءات بتظهر مظللة.\n• التعديل بيتسجل بالقبل والبعد، ثم «إعادة الترحيل» تطبقه.',
+                       '• Branch cash boxes take their own branch; bank accounts post to head office (the company).\n• A bank/card/sister-company map without a branch is refused (no empty branch on an entry line); a sister company takes head office.\n• SOFTECH values missing a map that cause exceptions are highlighted.\n• The edit is logged with before and after; then "Redraft" applies it.'),
              'open_hint': T('تبويب «جداول الربط».', 'The "Maps" tab.')},
         ],
-        'updated': '2026-11-04',
-        'change_note': T('شاشة جديدة: قواعد الترحيل وجداول الربط', 'New screen: Posting rules and maps'),
+        'updated': '2026-11-05',
+        'change_note': T('تحويلات النقدية بين المركز والفروع (ربط «شركة شقيقة») والمشتريات النقدية على مرحلتين عبر 2341', 'Cash transfers between head office and branches ("Sister company" map) and two-leg cash purchases through 2341'),
     },
     {
         'key': 'finance.gl_trial_balance',

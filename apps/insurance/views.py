@@ -188,6 +188,15 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
             subclient = InsuranceSubClient.objects.get(pk=subclient_id)
         except InsuranceSubClient.DoesNotExist:
             return Response({'error': 'الفئة غير موجودة'}, status=status.HTTP_400_BAD_REQUEST)
+        from django.utils.dateparse import parse_date
+        try:
+            period_from = parse_date(str(request.data.get('period_from') or '')[:10])
+            period_to   = parse_date(str(request.data.get('period_to') or '')[:10])
+        except ValueError:
+            period_from = period_to = None
+        if not period_from or not period_to:
+            return Response({'error': 'period_from و period_to مطلوبان (YYYY-MM-DD)'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         contract = None
         local_disc = imported_disc = tarsia_disc = 0
@@ -206,8 +215,8 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
             claim_number              = _next_claim_number(),
             subclient                 = subclient,
             contract                  = contract,
-            period_from               = request.data.get('period_from'),
-            period_to                 = request.data.get('period_to'),
+            period_from               = period_from,
+            period_to                 = period_to,
             softech_motalba_no        = request.data.get('softech_motalba_no', ''),
             applied_local_disc_pct    = local_disc,
             applied_imported_disc_pct = imported_disc,
@@ -745,8 +754,13 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
         choices = request.data.get('choices') or {}
         if not isinstance(choices, dict) or not choices:
             return Response({'error': 'لا توجد اختيارات'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            rx_ids = [int(k) for k in choices]
+        except (TypeError, ValueError):
+            return Response({'error': 'مفاتيح الاختيارات يجب أن تكون أرقام الروشتات'},
+                            status=status.HTTP_400_BAD_REQUEST)
         staff = getattr(request.user, 'staff_profile', None)
-        by_id = {rx.id: rx for rx in claim.prescriptions.filter(pk__in=[int(k) for k in choices])}
+        by_id = {rx.id: rx for rx in claim.prescriptions.filter(pk__in=rx_ids)}
         applied = 0
         for k, name in choices.items():
             rx = by_id.get(int(k))

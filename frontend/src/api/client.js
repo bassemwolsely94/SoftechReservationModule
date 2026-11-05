@@ -297,11 +297,6 @@ export const offersApi = {
   create: (data) => api.post('/offers/', data),
   update: (id, data) => api.patch(`/offers/${id}/`, data),
   remove: (id) => api.delete(`/offers/${id}/`),
-  list:     (params) => api.get('/offers/', { params }),
-  get:      (id) => api.get(`/offers/${id}/`),
-  create:   (data) => api.post('/offers/', data),
-  update:   (id, data) => api.patch(`/offers/${id}/`, data),
-  remove:   (id) => api.delete(`/offers/${id}/`),
   // Deterministic discount plan for a basket (read-only). body:
   // { basket:[{softech_id,qty,unit_price}], customer, branch, channel }
   evaluate: (body) => api.post('/offers/evaluate/', body),

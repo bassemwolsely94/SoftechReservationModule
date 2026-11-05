@@ -1394,7 +1394,9 @@ def recalculate_claim_final_totals(claim: InsuranceClaim) -> None:
     tarsia_disc   = Decimal(str(claim.applied_tarsia_disc_pct   or 0))
 
     local = imported = tarsia = gross = discount = net = Decimal('0')
+    override_delta = Decimal('0')   # Σ (net_override − Power-Query net) — M-3
     rx_count = 0
+    from .classifier import powerquery_totals_from_splits
 
     for rx in claim.prescriptions.all():
         if rx.id in excluded_ids:
@@ -1411,6 +1413,8 @@ def recalculate_claim_final_totals(claim: InsuranceClaim) -> None:
             if adj.net_override is not None:
                 rx_net  = adj.net_override
                 rx_disc = gb - rx_net
+                pq = powerquery_totals_from_splits(lb, ib, tb, local_disc, imported_disc, tarsia_disc)
+                override_delta += rx_net - pq['net_after']
             else:
                 ld  = (lb * local_disc    / 100).quantize(Decimal('0.01'))
                 id_ = (ib * imported_disc / 100).quantize(Decimal('0.01'))
@@ -1444,11 +1448,14 @@ def recalculate_claim_final_totals(claim: InsuranceClaim) -> None:
         rx_count += 1
 
     # ── Claim totals via the Power-Query net formula on the summed splits ─────
-    from .classifier import powerquery_totals_from_splits
     t = powerquery_totals_from_splits(local, imported, tarsia,
                                       local_disc, imported_disc, tarsia_disc)
     local, imported, tarsia = t['local_before'], t['imported_before'], t['tarsia_before']
-    gross, discount, net    = t['gross_before'], t['total_discount'], t['net_after']
+    gross, net = t['gross_before'], t['net_after']
+    # A net_override is the agreed net for its prescription (owner, 2026-11-05, M-3): it replaces
+    # that prescription's Power-Query net in the claim total. Same rule as invoice_builder.
+    net = net + override_delta
+    discount = gross - net
 
     claim.final_rx_count        = rx_count
     claim.final_local_before    = local

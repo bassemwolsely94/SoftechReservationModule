@@ -6,6 +6,7 @@ import useLangStore from './store/langStore'
 import usePermissionStore from './store/permissionStore'
 import { initPush } from './push'
 import Layout from './components/Layout'
+import { RequireAuth, RequireRole } from './components/RouteGuards'
 import LoginPage from './pages/LoginPage'
 const NotifyPage = lazy(() => import('./pages/NotifyPage'))
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
@@ -235,25 +236,6 @@ const MOBILE_TABS = [
   { to: '/m/my-incentives', label: 'حوافزي',   icon: '🏅' },
   { to: '/m/gamification',  label: 'التحفيز',  icon: '🏆' },
 ]
-
-function RequireAuth({ children }) {
-  const { isAuthenticated, isLoading } = useAuthStore()
-  if (isLoading) return (
-    <div className="min-h-screen flex items-center justify-center bg-brand-50">
-      <div className="text-brand-600 text-xl font-cairo font-semibold animate-pulse">
-        صيدليات الرزيقي...
-      </div>
-    </div>
-  )
-  return isAuthenticated ? children : <Navigate to="/login" replace />
-}
-
-function RequireRole({ roles, children }) {
-  const { user } = useAuthStore()
-  const userRole = user?.role || 'viewer'
-  if (!roles.includes(userRole)) return <Navigate to="/dashboard" replace />
-  return children
-}
 
 // A rider lives on /rider only (N3 H4): any other staff route sends the delivery role back there,
 // except «أمان الحساب» (/security), which opens inside the rider shell at /rider/security so a rider

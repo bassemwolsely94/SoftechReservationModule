@@ -480,9 +480,11 @@ def _record_approval_insight(candidate: ImageCandidate, approved: bool) -> None:
             )
         # Update rolling avg quality score for this source/brand combo
         if approved and candidate.quality_score > 0:
+            # obj holds the counts from BEFORE the F() increment above (R7: the old maths
+            # divided by that stale count, so each approval overwrote the average).
+            prior = obj.approved
             new_avg = round(
-                (obj.avg_quality_score * max(obj.approved - 1, 0) + candidate.quality_score)
-                / max(obj.approved, 1), 4
+                (obj.avg_quality_score * prior + candidate.quality_score) / (prior + 1), 4
             )
             ImageApprovalInsight.objects.filter(pk=obj.pk).update(avg_quality_score=new_avg)
     except Exception as exc:

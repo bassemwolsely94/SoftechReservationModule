@@ -24,6 +24,7 @@ paramiko>=3.4                 # optional: read call recordings from Issabel over
 qrcode>=8.0
 pyotp>=2.9.0                   # TOTP 2FA (RFC 6238) for approval-role logins
 openpyxl>=3.1.0
+python-docx>=1.1.0           # insurance cover letter + submission package (apps/insurance/letter.py)
 rapidfuzz>=3.6.0
 # ── WebSocket / real-time ─────────────────────────────────────────────────────
 channels>=4.0.0               # Django Channels — WebSocket support

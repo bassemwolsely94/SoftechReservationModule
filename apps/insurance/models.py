@@ -1384,6 +1384,8 @@ class SoftechDateEditRun(models.Model):
     plan        = models.ForeignKey('SoftechWritePlan', on_delete=models.SET_NULL, null=True,
                                     blank=True, related_name='date_runs')
     reason      = models.TextField(blank=True, verbose_name='سبب التجاوز')
+    # the motalba rows' dates before the change — [{'motalbano', 'docdate'}] (round-2 R1, owner Q1)
+    motalba_old_dates = models.JSONField(null=True, blank=True, verbose_name='تواريخ المطالبة قبل التعديل')
 
     class Meta:
         verbose_name = 'تعديل تاريخ إيصال سوفتك'
