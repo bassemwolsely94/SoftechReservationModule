@@ -23,6 +23,7 @@ urlpatterns = [
     path('parties/', drafting_views.parties_root, name='gl-parties'),
     path('parties/persons/', drafting_views.parties_persons, name='gl-parties-persons'),
     path('parties/import/', drafting_views.parties_import, name='gl-parties-import'),
+    path('parties/confirm-upload/', drafting_views.parties_confirm_upload, name='gl-parties-confirm-upload'),
     path('parties/propose/', drafting_views.parties_propose, name='gl-parties-propose'),
     path('parties/<int:pk>/confirm/', drafting_views.party_confirm, name='gl-party-confirm'),
     path('parties/<int:pk>/reject/', drafting_views.party_reject, name='gl-party-reject'),

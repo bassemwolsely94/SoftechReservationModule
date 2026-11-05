@@ -192,6 +192,9 @@ class AuditLog(models.Model):
         ('counsel_card_sent',            'إرشاد استخدام — إرسال للعميل'),
         ('counsel_card_opt_out',         'إرشاد استخدام — إيقاف الرسائل'),
 
+        # Payment audit — bank statement upload (apps/payments/audit_views.py)
+        ('bank_statement_uploaded',      'مراجعة المدفوعات — رفع كشف حساب بنكي'),
+
     ]
 
     # ── Who ───────────────────────────────────────────────────────────────────
@@ -342,6 +345,7 @@ class AbuseFlag(models.Model):
         ('after_hours_activity',    '⚠️ نشاط خارج أوقات العمل'),
         ('bulk_deletions',          '⚠️ حذف جماعي'),
         ('override_pattern',        '⚠️ تجاوزات متكررة'),
+        ('payment_anomaly',         '⚠️ دفعة غير معتادة'),   # apps.payments.audit_service
     ]
 
     SEVERITY_CHOICES = [

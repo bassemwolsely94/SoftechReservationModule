@@ -2326,6 +2326,18 @@ def _run_supply_case_sweep():
         logger.error('[APScheduler] supply case sweep failed: %s', exc)
 
 
+def _run_payment_exception_checks():
+    """Nightly payment exception checks (duplicate / delayed / wrong branch + anomaly score) over
+    the last 7 days of external payments. The command does nothing while the setting
+    payments.exception_checks_enabled is off (default). Writes only PaymentException / AbuseFlag."""
+    try:
+        from django.core.management import call_command
+        call_command('run_payment_exception_checks', days=7, verbosity=0)
+        logger.info('[APScheduler] payment exception checks done')
+    except Exception as exc:
+        logger.error('[APScheduler] payment exception checks failed: %s', exc)
+
+
 def _run_ap_reconciliation_sync():
     """Daily INCREMENTAL A/P–A/R reconciliation mirror sync (doc 23). Rolling
     ~4-month window over all suppliers (idempotent update_or_create picks up new
@@ -3791,6 +3803,11 @@ def start_scheduler():
     # Sales history catch-up — 03:45 re-syncs the last 7 days (the fast lane only re-reads 2).
     _scheduler.add_job(
         _run_sales_history_catchup, 'cron', hour=3, minute=45, id='sales_history_catchup',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Payment exception checks — 05:10 nightly; a no-op until payments.exception_checks_enabled is on.
+    _scheduler.add_job(
+        _run_payment_exception_checks, 'cron', hour=5, minute=10, id='payment_exception_checks',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # Nightly itemssuppliers mirror (supplier ↔ item links + supplier item codes) — 04:30.
