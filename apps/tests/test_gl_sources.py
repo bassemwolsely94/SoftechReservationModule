@@ -429,6 +429,7 @@ class TransferKindP24Tests(SimpleTestCase):
         self.assertTrue(sql.lstrip().upper().startswith('SELECT'))
         self.assertIn("CONVERT(varchar(10), c.tf_bankcode) = '04'", sql)   # leading zero kept
         self.assertIn("pb.bankcode = c.bankcode AND CONVERT(varchar(5), pb.banktype) = '0'", sql)   # P31
+        self.assertIn('CONVERT(varchar(2), pb.banktype) banktype FROM', sql)
         self.assertIn("ABS(DATEDIFF(day, c.cheqdate, '2026-06-10')) <= 31", sql)
         for bad in ([("1'; DROP", d)], []):
             with self.assertRaises(ValueError):
@@ -451,7 +452,10 @@ class TransferKindP24Tests(SimpleTestCase):
         self.assertIn('CONVERT(varchar(10), c.ptcode)', sql)
         self.assertIn('CONVERT(varchar(20), e.cheqsno)', sql)
         self.assertIn('banktype', sql)
-        self.assertIn('tb.banktype tf_type', sql)              # Ruling P31
+        # jConnect drops a plain column's alias: both banktypes must be expressions (fix round 4)
+        self.assertIn('CONVERT(varchar(2), b.banktype) banktype, CONVERT(varchar(2), tb.banktype) tf_type', sql)
+        self.assertNotIn('b.banktype,', sql)
+        self.assertNotIn('tb.banktype tf_type', sql.replace('CONVERT(varchar(2), tb.banktype) tf_type', ''))
         self.assertIn('c.tf_bankcode *= tb.bankcode', sql)
 
 

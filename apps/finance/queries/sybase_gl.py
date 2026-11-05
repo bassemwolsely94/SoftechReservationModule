@@ -84,7 +84,10 @@ def sql_cheques(d1: date, d2: date) -> str:
     return (
         "SELECT c.cheqsno, c.branchcode, c.financialdoccode, c.cheqtype, c.cheqno, c.cheqdate, "  # nosec B608 - only date.isoformat() values and module constants are interpolated
         "c.cheqregisterdate, c.bankcode, c.personcode, CONVERT(varchar(10), c.ptcode) ptcode, c.cheqvalue, "
-        "c.chequenote, c.tf_branchcode, c.tf_bankcode, c.tf_cheqsno, b.banktype, tb.banktype tf_type, "
+        "c.chequenote, c.tf_branchcode, c.tf_bankcode, c.tf_cheqsno, "
+        # jConnect drops the alias of a plain column (tb.banktype would come back as 'banktype' and
+        # overwrite b.banktype): select both as expressions so the aliases survive
+        "CONVERT(varchar(2), b.banktype) banktype, CONVERT(varchar(2), tb.banktype) tf_type, "
         f"(SELECT COUNT(*) FROM {DB}.dailyexpenses e WHERE {_expense_link('e.expensedate')}) has_expense "
         f"FROM {DB}.cheques c, {DB}.banks b, {DB}.banks tb "
         "WHERE b.bankcode = c.bankcode AND c.tf_bankcode *= tb.bankcode "
@@ -136,7 +139,8 @@ def sql_transfer_legs_pointing_at(legs) -> str:
 def sql_bank_transfer_partners(legs) -> str:
     """Ruling P30: box-side legs of -181 box<->bank transfers for bank-side rows: same branch,
     tf_cheqsno = the bank row's cheqsno, tf_bankcode = the bank row's bankcode, dated within
-    TRANSFER_PAIR_DAYS, own box a cash box (banktype 0, Ruling P31). ``legs`` = [(branchcode, cheqsno, bankcode, cheqdate)]; same guards."""
+    TRANSFER_PAIR_DAYS, own box a cash box (banktype 0, Ruling P31).
+    ``legs`` = [(branchcode, cheqsno, bankcode, cheqdate)]; same guards."""
     conds = [f"(CONVERT(varchar(10), c.branchcode) = '{_digits(b)}' "
              f"AND CONVERT(varchar(20), c.tf_cheqsno) = '{_digits(sno)}' "
              f"AND CONVERT(varchar(10), c.tf_bankcode) = '{_digits(bank)}' AND {_near(d)})"
@@ -144,7 +148,7 @@ def sql_bank_transfer_partners(legs) -> str:
     if not conds:
         raise ValueError('no legs')
     return (
-        _PAIR_COLS + f", pb.banktype FROM {DB}.cheques c, {DB}.banks pb "  # nosec B608 - only digit codes, date.isoformat() values and module constants are interpolated
+        _PAIR_COLS + f", CONVERT(varchar(2), pb.banktype) banktype FROM {DB}.cheques c, {DB}.banks pb "  # nosec B608 - only digit codes, date.isoformat() values and module constants are interpolated
         f"WHERE c.personcode = '{TRANSFER_BANK_PERSON}' AND pb.bankcode = c.bankcode "
         f"AND CONVERT(varchar(5), pb.banktype) = '{BANK_TYPE_BOX}' AND ({' OR '.join(conds)})"
     )
