@@ -121,10 +121,10 @@ SCHEDULER_JOB_GUARDS = {
         'the "claim" is NOT conditional (no softech_written_at__isnull=True, no row count check): two runs that read the same events both claim and both INSERT into SOFTECH pos_cancel; a failing run\'s un-claim can also clear the other run\'s claim; WRITES SOFTECH'),
     'coverage_topup': ('once_per_period_check', 'apps.purchasing.coverage_writer.topup_due', "qs.filter(status='success').exists()",
         'checks a successful CoverageTopUp for the run, then writes, no lock (racy); the write is an absolute SET of stkbal.maxnowqtymonths/maxnowqty so a duplicate lands the same values, but doubles branch writes and audit rows; WRITES SOFTECH'),
-    'pricing_replication_audit': ('idempotent_upsert', 'apps.discount_approvals.replication.force_replication', 'UPDATE SOFTECHDB9.dbo.items SET itemlastupdate = GETDATE() WHERE itemcode = ?',
-        'no lock at all; a duplicate run makes a 2nd scan, a 2nd admin push (dedup key = scan id) and re-stamps itemlastupdate again (harmless re-pull); WRITES SOFTECH when REPLICATION_REPAIR_ENABLED + auto_repair'),
-    'pricing_replication_full_audit': ('idempotent_upsert', 'apps.discount_approvals.replication.force_replication', 'UPDATE SOFTECHDB9.dbo.items SET itemlastupdate = GETDATE() WHERE itemcode = ?',
-        'weekly full-catalog variant of pricing_replication_audit, same (missing) guard'),
+    'pricing_replication_audit': ('advisory_lock', 'apps.discount_approvals.replication.force_replication', 'with pg_lock(LOCK_REPLICATION) as got:',
+        'the SOFTECH re-stamp (force_replication) runs under advisory lock LOCK_REPLICATION with a repeat window (round 2 R1); the read-only scan itself is unlocked, so a duplicate run makes a 2nd scan and a 2nd admin push (dedup key = scan id)'),
+    'pricing_replication_full_audit': ('advisory_lock', 'apps.discount_approvals.replication.force_replication', 'with pg_lock(LOCK_REPLICATION) as got:',
+        'weekly full-catalog variant of pricing_replication_audit, same lock'),
 
     # ── Customer / staff WhatsApp & SMS senders ───────────────────────────────
     'wa_campaign_drain': ('row_lock', 'apps.campaigns.dispatcher.drain_queue', "filter(pk=item.pk, status='pending').update(status='processing')",
