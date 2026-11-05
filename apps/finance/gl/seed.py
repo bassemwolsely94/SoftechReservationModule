@@ -28,6 +28,8 @@ EXPENSE_MAPS = [   # name-verified only; every other expcode raises unmapped_acc
     ('10', '3117'), ('102', '3188'), ('97', '3156'), ('50', '3122'), ('86', '3200'),
     ('32', '1304'), ('109', '1351'),
 ]
+# Ruling P24: SOFTECH branch code -> finance's sister-company account, booked at HQ
+INTERCOMPANY_MAPS = [('130', '2408'), ('140', '2413'), ('150', '2405'), ('160', '2406'), ('170', '2417')]
 
 
 def _ln(side, amount, account=None, *, map=None, key=None, branch='source', party=None,
@@ -90,9 +92,14 @@ RULES = [
     dict(code='purchases.branch', source_type='purchases', granularity='document', book='credit',
          action='skip', conditions={'branch_not_in': ['100']}, lines=[],
          description='تُسجل عند السداد النقدي من خزينة الفرع'),
+    # Ruling P25: two legs through 2341 so the supplier sub-ledger lists every cash supplier
     dict(code='supplier.cash', source_type='supplier_payments', granularity='branch_day', book='cash',
          conditions={'financialdoc_in': ['10'], 'direction_in': ['payment']},
-         lines=[_ln('debit', 'amount', '5100', branch='map', description='سداد موردين نقداً {branch} {date}'),
+         lines=[_ln('debit', 'amount', '5100', branch='map', description='مشتريات نقدية {branch} {date}'),
+                _ln('credit', 'amount', '2341', branch='map', party='source',
+                    description='مشتريات نقدية {party} {note}'),
+                _ln('debit', 'amount', '2341', branch='map', party='source',
+                    description='مشتريات نقدية {party} {note}'),
                 _ln('credit', 'amount', **_BANK)]),
     dict(code='supplier.cheque', source_type='supplier_payments', granularity='document',
          book='credit', conditions={'financialdoc_in': ['20'], 'direction_in': ['payment']},
@@ -121,6 +128,48 @@ RULES = [
          book='general', conditions={'kind_in': ['transfer'], 'direction_in': ['payment']},
          lines=[_ln('debit', 'amount', '1320', branch='hq', description='تحويل خزينة صادر {cheqno}'),
                 _ln('credit', 'amount', **_BANK)]),
+    # Ruling P24: inter-company cash transfers (priority 120 beats the generic transfer rules).
+    # financialdoc 10 only: the 1-1-2026 «قيد تسوية» vouchers (financialdoc 90) stay exceptions.
+    dict(code='treasury.branch_transfer_out', source_type='treasury_other', granularity='document',
+         book='cash', priority=120,
+         conditions={'kind_in': ['transfer_branch'], 'branch_not_in': ['100'],
+                     'direction_in': ['payment'], 'financialdoc_in': ['10']},
+         lines=[_ln('debit', 'amount', '2404', description='تحويل نقدية {branch} {date}'),
+                _ln('credit', 'amount', **_BANK)]),
+    dict(code='treasury.branch_transfer_in', source_type='treasury_other', granularity='document',
+         book='cash', priority=120,
+         conditions={'kind_in': ['transfer_branch'], 'branch_not_in': ['100'],
+                     'direction_in': ['receipt'], 'financialdoc_in': ['10']},
+         lines=[_ln('debit', 'amount', description='تحويل نقدية وارد {branch} {date}', **_BANK),
+                _ln('credit', 'amount', '2404')]),
+    dict(code='treasury.hq_transfer_out', source_type='treasury_other', granularity='document',
+         book='cash', priority=120,
+         conditions={'kind_in': ['transfer_branch'], 'branch_in': ['100'],
+                     'direction_in': ['payment'], 'financialdoc_in': ['10']},
+         lines=[_ln('debit', 'amount', map='intercompany', key='counterpart_branch', branch='hq',
+                    description='تحويل نقدية من المركز {date}'),
+                _ln('credit', 'amount', **_BANK)]),
+    dict(code='treasury.hq_transfer_in', source_type='treasury_other', granularity='document',
+         book='cash', priority=120,
+         conditions={'kind_in': ['transfer_branch'], 'branch_in': ['100'],
+                     'direction_in': ['receipt'], 'financialdoc_in': ['10']},
+         lines=[_ln('debit', 'amount', description='تحويل نقدية وارد للمركز {date}', **_BANK),
+                _ln('credit', 'amount', map='intercompany', key='counterpart_branch', branch='hq')]),
+    dict(code='treasury.box_bank_in', source_type='treasury_other', granularity='document',
+         book='cash', priority=120,
+         conditions={'kind_in': ['transfer_bank'], 'direction_in': ['receipt'], 'financialdoc_in': ['10']},
+         lines=[_ln('debit', 'amount', description='تحويل من البنك {branch} {date}', **_BANK),
+                _ln('credit', 'amount', map='bank', key='tf_bankcode', branch='map')]),
+    dict(code='treasury.box_bank_out', source_type='treasury_other', granularity='document',
+         book='cash', priority=120,
+         conditions={'kind_in': ['transfer_bank'], 'direction_in': ['payment'], 'financialdoc_in': ['10']},
+         lines=[_ln('debit', 'amount', map='bank', key='tf_bankcode', branch='map',
+                    description='إيداع بالبنك {branch} {date}'),
+                _ln('credit', 'amount', **_BANK)]),
+    # the second leg of a same-branch box<->bank pair repeats the first: drafted once, never twice
+    dict(code='treasury.box_bank_mirror', source_type='treasury_other', granularity='document',
+         book='cash', priority=120, action='skip', conditions={'kind_in': ['transfer_bank_mirror']},
+         lines=[], description='الطرف المقابل لتحويل خزينة/بنك مُرحّل من الطرف الآخر'),
 ]
 
 
@@ -154,7 +203,8 @@ def seed_gl_drafting(*, user) -> dict:
         result['rules_created'].append(r['code'])
 
     entries = ([('bank', code, acc, br, note) for code, acc, br, note in BANK_MAPS]
-               + [('expense', code, acc, None, '') for code, acc in EXPENSE_MAPS])
+               + [('expense', code, acc, None, '') for code, acc in EXPENSE_MAPS]
+               + [('intercompany', code, acc, '100', 'شركة شقيقة') for code, acc in INTERCOMPANY_MAPS])
     for kind, value, acc, branch_code, note in entries:
         label = f'{kind}:{value}'
         if GLSourceMap.objects.filter(kind=kind, source_value=value).exists():

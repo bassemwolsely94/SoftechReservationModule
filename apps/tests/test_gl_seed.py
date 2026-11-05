@@ -25,6 +25,7 @@ def _all_codes():
         codes.update(seed._rule_accounts(r))
     codes.update(a for _, a, _, _ in seed.BANK_MAPS)
     codes.update(a for _, a in seed.EXPENSE_MAPS)
+    codes.update(a for _, a in seed.INTERCOMPANY_MAPS)
     return sorted(codes)
 
 
@@ -53,7 +54,8 @@ class SeedTests(TestCase):
         res = seed.seed_gl_drafting(user=self.user)
         self.assertEqual(res['skipped'], [])
         self.assertEqual(len(res['rules_created']), len(seed.RULES))
-        self.assertEqual(len(res['maps_created']), len(seed.BANK_MAPS) + len(seed.EXPENSE_MAPS))
+        self.assertEqual(len(res['maps_created']), len(seed.BANK_MAPS) + len(seed.EXPENSE_MAPS)
+                         + len(seed.INTERCOMPANY_MAPS))
         for rule in PostingRule.objects.all():
             self.assertEqual(R.validate_rule(rule.source_type, rule.conditions, rule.lines,
                                              rule.action), [], rule.code)
@@ -112,16 +114,21 @@ class SeedTests(TestCase):
         GLAccount.objects.all().delete()
         res = seed.seed_gl_drafting(user=self.user)
         # only rules with no static account (skip / all-mapped) can be created
-        self.assertEqual(sorted(res['rules_created']), ['expenses.box', 'purchases.branch'])
+        self.assertEqual(sorted(res['rules_created']),
+                         ['expenses.box', 'purchases.branch', 'treasury.box_bank_in', 'treasury.box_bank_mirror',
+                          'treasury.box_bank_out', 'treasury.hq_transfer_in', 'treasury.hq_transfer_out'])
         self.assertEqual(res['maps_created'], [])
         self.assertTrue(res['skipped'])
 
     def test_supplier_cash_debit_lands_on_the_box_branch(self):
         from decimal import Decimal
         from apps.finance.gl.sources import SourceDoc
+        from apps.finance.models import GLParty
         seed.seed_gl_drafting(user=self.user)
+        GLParty.objects.create(party_type='supplier', code='92', name='s', softech_personcode='5001',
+                               status='confirmed')
         rule = PostingRule.objects.get(code='supplier.cash')
-        d = SourceDoc('supplier_payments', 'chq:100:1', D(2026, 3, 10), '100', '', '',
+        d = SourceDoc('supplier_payments', 'chq:100:1', D(2026, 3, 10), '100', '', '5001',
                       {'amount': Decimal('50')},
                       {'bankcode': '40', 'financialdoc': '10', 'direction': 'payment'})
         hq = Branch.objects.get(softech_branch_id='100').pk
@@ -130,6 +137,95 @@ class SeedTests(TestCase):
         b130 = Branch.objects.get(softech_branch_id='130').pk
         self.assertEqual(by['5100']['branch_id'], b130)
         self.assertEqual(by['1302']['branch_id'], b130)
+
+    def test_supplier_cash_two_legs_through_2341_per_supplier(self):
+        """Ruling P25: Dr 5100 / Cr 2341 (party) / Dr 2341 (party) / Cr box, one 2341 pair per supplier."""
+        from decimal import Decimal
+        from apps.finance.gl.sources import SourceDoc
+        from apps.finance.models import GLParty, LedgerEntry
+        seed.seed_gl_drafting(user=self.user)
+        for code, pc in (('92', '5001'), ('105', '5002')):
+            GLParty.objects.create(party_type='supplier', code=code, name=code, softech_personcode=pc,
+                                   status='confirmed')
+        day = D(2026, 3, 10)
+
+        def pay(sno, pc, amount, note):
+            return SourceDoc('supplier_payments', f'chq:140:{sno}', day, '140', '', pc,
+                             {'amount': Decimal(amount)},
+                             {'bankcode': '50', 'financialdoc': '10', 'direction': 'payment', 'note': note})
+        docs = [pay('1', '5001', '100', 'فاتورة 77'), pay('2', '5002', '40', 'ف 9'),
+                pay('3', '5001', '10', 'ف 78'), pay('4', '9999', '5', 'غير مؤكد')]
+        run = drafting.start_run(triggered_by='t', date_from=day, date_to=day, source_types=['supplier_payments'])
+        run = drafting.draft_range(day, day, source_types=['supplier_payments'], run=run, fetch=lambda sql: [],
+                                   readers={'supplier_payments': lambda d1, d2, f: docs})
+        e = LedgerEntry.objects.get(source_type='supplier_payments')
+        b140 = Branch.objects.get(softech_branch_id='140').pk
+        got = [(ln.account.code, ln.party_code, ln.debit, ln.credit, ln.branch_id, ln.description)
+               for ln in e.lines.select_related('account').order_by('line_no')]
+        z = Decimal('0')
+        self.assertEqual(got, [
+            ('5100', '', Decimal('150.00'), z, b140, 'مشتريات نقدية b140 2026-03-10'),
+            ('2341', '92', z, Decimal('110.00'), b140, 'مشتريات نقدية 92 فاتورة 77'),
+            ('2341', '92', Decimal('110.00'), z, b140, 'مشتريات نقدية 92 فاتورة 77'),
+            ('1302', '', z, Decimal('150.00'), b140, ''),
+            ('2341', '105', z, Decimal('40.00'), b140, 'مشتريات نقدية 105 ف 9'),
+            ('2341', '105', Decimal('40.00'), z, b140, 'مشتريات نقدية 105 ف 9'),
+        ])   # lines in first-seen order (build_lines), one 2341 pair per supplier
+        # the unconfirmed supplier's voucher is an exception on its own, the day still drafts
+        from apps.finance.models import SourceException
+        ex = SourceException.objects.select_related('source_doc').get()
+        self.assertEqual((ex.source_doc.source_key, ex.kind), ('chq:140:4', 'unmapped_party'))
+
+    def _transfer_rows(self):
+        from datetime import datetime
+        base = dict(ptcode='-1', personcode='-180', financialdoccode='10', cheqdate=datetime(2026, 6, 10),
+                    cheqregisterdate=datetime(2026, 6, 10), cheqno='', banktype='0', has_expense=0,
+                    chequenote='', tf_branchcode=None, tf_bankcode=None, tf_cheqsno=None)
+
+        def r(**kw):
+            return {**base, **kw}
+        from decimal import Decimal as Dec
+        return [
+            # HQ pays 100K from box 10 to branch 160; the 160 leg (box 70) points back at it
+            r(branchcode='100', cheqsno='501', cheqtype='20', bankcode='10', cheqvalue=Dec('100000')),
+            r(branchcode='160', cheqsno='77', cheqtype='10', bankcode='70', tf_branchcode='100',
+              tf_cheqsno='501', cheqvalue=Dec('100000')),
+            # 1-1-style «قيد تسوية» (financialdoc 90) stays an exception
+            r(branchcode='100', cheqsno='1', cheqtype='20', bankcode='10', tf_branchcode='150',
+              financialdoccode='90', cheqvalue=Dec('20000000')),
+            # box 10 -> bank 04 at HQ, both legs present: posted once
+            r(branchcode='100', cheqsno='600', cheqtype='20', bankcode='10', personcode='-181',
+              tf_bankcode='04', tf_cheqsno='601', cheqvalue=Dec('1000000')),
+            r(branchcode='100', cheqsno='601', cheqtype='10', bankcode='04', personcode='-181',
+              tf_bankcode='10', tf_cheqsno='600', cheqvalue=Dec('1000000')),
+        ]
+
+    def test_intercompany_transfers_draft_both_companies_and_bank_once(self):
+        """Ruling P24 end to end through the real treasury reader (fake SOFTECH rows)."""
+        from decimal import Decimal
+        from apps.finance.models import LedgerEntry, SourceException
+        seed.seed_gl_drafting(user=self.user)
+        rows = self._transfer_rows()
+        day = D(2026, 6, 10)
+        run = drafting.start_run(triggered_by='t', date_from=day, date_to=day, source_types=['treasury_other'])
+        run = drafting.draft_range(day, day, source_types=['treasury_other'], run=run,
+                                   fetch=lambda sql: list(rows))
+        hq = Branch.objects.get(softech_branch_id='100').pk
+        b160 = Branch.objects.get(softech_branch_id='160').pk
+        z = Decimal('0')
+
+        def lines(key):
+            e = LedgerEntry.objects.get(source_key=key)
+            return [(ln.account.code, ln.debit, ln.credit, ln.branch_id)
+                    for ln in e.lines.select_related('account').order_by('line_no')]
+        keys = set(LedgerEntry.objects.values_list('source_key', flat=True))
+        self.assertEqual(keys, {'chq:100:501', 'chq:160:77', 'chq:100:600'})
+        hq_key, br_key, bank_key = 'chq:100:501', 'chq:160:77', 'chq:100:600'
+        self.assertEqual(lines(hq_key), [('2406', Decimal('100000.00'), z, hq), ('1301', z, Decimal('100000.00'), hq)])
+        self.assertEqual(lines(br_key), [('1302', Decimal('100000.00'), z, b160), ('2404', z, Decimal('100000.00'), b160)])
+        self.assertEqual(lines(bank_key), [('1310', Decimal('1000000.00'), z, hq), ('1301', z, Decimal('1000000.00'), hq)])
+        ex = list(SourceException.objects.values_list('source_doc__source_key', 'kind'))
+        self.assertEqual(ex, [('chq:100:1', 'no_rule')])
 
     def test_seeded_rule_table(self):
         seed.seed_gl_drafting(user=self.user)
@@ -141,6 +237,7 @@ class SeedTests(TestCase):
             got[r.code] = (r.source_type, r.granularity, r.book, r.action, r.conditions, lines)
         S, H, M = 'source', 'hq', 'map'
         bank = 'bank:bankcode'
+        tfbank, ic = 'bank:tf_bankcode', 'intercompany:counterpart_branch'
         want = {
             'sales.cash': ('sales_tenders', 'branch_day', 'cash', 'post',
                            {'kind_in': ['cash'], 'branch_not_in': ['100']},
@@ -177,6 +274,8 @@ class SeedTests(TestCase):
             'supplier.cash': ('supplier_payments', 'branch_day', 'cash', 'post',
                               {'financialdoc_in': ['10'], 'direction_in': ['payment']},
                               [('debit', '5100', 'amount', M, '', False),
+                               ('credit', '2341', 'amount', M, 'source', False),
+                               ('debit', '2341', 'amount', M, 'source', False),
                                ('credit', bank, 'amount', M, '', False)]),
             'supplier.cheque': ('supplier_payments', 'document', 'credit', 'post',
                                 {'financialdoc_in': ['20'], 'direction_in': ['payment']},
@@ -201,8 +300,51 @@ class SeedTests(TestCase):
                                       {'kind_in': ['transfer'], 'direction_in': ['payment']},
                                       [('debit', '1320', 'amount', H, '', False),
                                        ('credit', bank, 'amount', M, '', False)]),
+            # Ruling P24
+            'treasury.branch_transfer_out': ('treasury_other', 'document', 'cash', 'post',
+                                             {'kind_in': ['transfer_branch'], 'branch_not_in': ['100'],
+                                              'direction_in': ['payment'], 'financialdoc_in': ['10']},
+                                             [('debit', '2404', 'amount', S, '', False),
+                                              ('credit', bank, 'amount', M, '', False)]),
+            'treasury.branch_transfer_in': ('treasury_other', 'document', 'cash', 'post',
+                                            {'kind_in': ['transfer_branch'], 'branch_not_in': ['100'],
+                                             'direction_in': ['receipt'], 'financialdoc_in': ['10']},
+                                            [('debit', bank, 'amount', M, '', False),
+                                             ('credit', '2404', 'amount', S, '', False)]),
+            'treasury.hq_transfer_out': ('treasury_other', 'document', 'cash', 'post',
+                                         {'kind_in': ['transfer_branch'], 'branch_in': ['100'],
+                                          'direction_in': ['payment'], 'financialdoc_in': ['10']},
+                                         [('debit', ic, 'amount', H, '', False),
+                                          ('credit', bank, 'amount', M, '', False)]),
+            'treasury.hq_transfer_in': ('treasury_other', 'document', 'cash', 'post',
+                                        {'kind_in': ['transfer_branch'], 'branch_in': ['100'],
+                                         'direction_in': ['receipt'], 'financialdoc_in': ['10']},
+                                        [('debit', bank, 'amount', M, '', False),
+                                         ('credit', ic, 'amount', H, '', False)]),
+            'treasury.box_bank_in': ('treasury_other', 'document', 'cash', 'post',
+                                     {'kind_in': ['transfer_bank'], 'direction_in': ['receipt'],
+                                      'financialdoc_in': ['10']},
+                                     [('debit', bank, 'amount', M, '', False),
+                                      ('credit', tfbank, 'amount', M, '', False)]),
+            'treasury.box_bank_out': ('treasury_other', 'document', 'cash', 'post',
+                                      {'kind_in': ['transfer_bank'], 'direction_in': ['payment'],
+                                       'financialdoc_in': ['10']},
+                                      [('debit', tfbank, 'amount', M, '', False),
+                                       ('credit', bank, 'amount', M, '', False)]),
+            'treasury.box_bank_mirror': ('treasury_other', 'document', 'cash', 'skip',
+                                         {'kind_in': ['transfer_bank_mirror']}, []),
         }
         self.assertEqual(got, want)
+        for code in ('treasury.branch_transfer_out', 'treasury.branch_transfer_in', 'treasury.hq_transfer_out',
+                     'treasury.hq_transfer_in', 'treasury.box_bank_in', 'treasury.box_bank_out',
+                     'treasury.box_bank_mirror'):
+            self.assertEqual(PostingRule.objects.get(code=code).priority, 120, code)
+        self.assertEqual(PostingRule.objects.get(code='supplier.cash').lines[1]['description'],
+                         'مشتريات نقدية {party} {note}')
+        ics = {m.source_value: (m.account.code, m.branch.softech_branch_id)
+               for m in GLSourceMap.objects.filter(kind='intercompany')}
+        self.assertEqual(ics, {'130': ('2408', '100'), '140': ('2413', '100'), '150': ('2405', '100'),
+                               '160': ('2406', '100'), '170': ('2417', '100')})
         hq = PostingRule.objects.get(code='sales.hq_change_discount')
         self.assertEqual(hq.priority, 110)
         self.assertEqual(hq.lines[0]['description'], 'خصم فكة المركز {date}')
