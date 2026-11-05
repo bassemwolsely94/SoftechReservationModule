@@ -6,6 +6,8 @@
  * value, open the rule editor prefilled, or just ignore with a note). «إعادة الترحيل» re-runs the
  * engine for the selected documents. Nothing is decided here — the server resolves every fix.
  * closed_period_change is read-only in Plan 2 (the correction button arrives with the period close).
+ * An accountant-edited entry SOFTECH changed (ledger_error / edited_by_user, Ruling P23) shows both
+ * versions side by side with «اعتماد نسخة سوفتيك» / «إبقاء تعديلي» (ledger.approve).
  */
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -140,10 +142,155 @@ function IgnoreBox({ ex, canCreate, onDone }) {
   )
 }
 
-function RowActions({ ex, perms, onDone, onOpenRule }) {
+// ── ledger_error / edited_by_user (Ruling P23): the accountant's edit vs the new SOFTECH lines ──
+const s_ = (v) => String(v ?? '')
+const amt = (v) => Number(v || 0).toFixed(2)
+const matchKey = (l) => [s_(l?.account_code), s_(l?.branch_id), s_(l?.party_code)].join('|')
+const CMP = [
+  ['debit', (l) => amt(l.debit)], ['credit', (l) => amt(l.credit)], ['description', (l) => s_(l.description)],
+  ['cheque_no', (l) => s_(l.cheque_no)], ['due_date', (l) => s_(l.due_date).slice(0, 10)],
+]
+
+/** Pair lines by (account, branch, party) — not by position — so an inserted line does not shift
+ *  every row after it. -> [{mine, theirs}] in the order of «mine», then lines only SOFTECH has. */
+function pairLines(mine, theirs) {
+  const pool = new Map()
+  theirs.forEach((l, i) => { const k = matchKey(l); pool.set(k, [...(pool.get(k) || []), i]) })
+  const used = new Set()
+  const rows = mine.map((l) => {
+    const q = pool.get(matchKey(l)) || []
+    const i = q.shift()
+    if (i === undefined) return { mine: l, theirs: null }
+    used.add(i)
+    return { mine: l, theirs: theirs[i] }
+  })
+  theirs.forEach((l, i) => { if (!used.has(i)) rows.push({ mine: null, theirs: l }) })
+  return rows
+}
+
+function DiffTable({ rows, labelOf, accountName }) {
+  const hl = 'bg-amber-100 font-bold'
+  const side = (l, o, extraRow) => {
+    if (!l) return <td colSpan={5} className="px-2 py-1 text-gray-400 border-e border-gray-200">— لا يوجد —</td>
+    const ch = (j) => (extraRow || (o && CMP[j][1](o) !== CMP[j][1](l)) ? hl : '')
+    const meta = [l.description, l.cheque_no && `شيك ${l.cheque_no}`, l.due_date && `استحقاق ${s_(l.due_date).slice(0, 10)}`].filter(Boolean)
+    const metaChanged = [2, 3, 4].some(j => ch(j))
+    return (
+      <>
+        <td className={`px-2 py-1 ${extraRow ? hl : ''}`}><span className="font-mono">{l.account_code}</span> {l.account_name || accountName(l.account_code)}</td>
+        <td className={`px-2 py-1 ${extraRow ? hl : ''}`}>{labelOf(l.branch_id, l.branch_name) || '—'}{l.party_code ? <> · <span className="font-mono">{l.party_code}</span></> : null}</td>
+        <td className={`px-2 py-1 text-left font-mono tabular-nums ${ch(0)}`} dir="ltr">{money(l.debit, { blankZero: true })}</td>
+        <td className={`px-2 py-1 text-left font-mono tabular-nums ${ch(1)}`} dir="ltr">{money(l.credit, { blankZero: true })}</td>
+        <td className={`px-2 py-1 text-gray-600 border-e border-gray-200 ${metaChanged ? hl : ''}`}>{meta.join(' · ') || '—'}</td>
+      </>
+    )
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs bg-white border border-gray-200 rounded">
+        <thead className="bg-gray-50 text-gray-500">
+          <tr>
+            <th colSpan={5} className="text-right px-2 py-1 border-e border-gray-200 text-gray-700">القيد بعد تعديلك</th>
+            <th colSpan={5} className="text-right px-2 py-1 text-gray-700">نسخة سوفتيك الجديدة</th>
+          </tr>
+          <tr>
+            {[0, 1].map(k => (
+              <Fragment key={k}>
+                <th className="text-right px-2 py-1">الحساب</th><th className="text-right px-2 py-1">الفرع · الطرف</th>
+                <th className="text-left px-2 py-1">مدين</th><th className="text-left px-2 py-1">دائن</th>
+                <th className="text-right px-2 py-1 border-e border-gray-200">البيان · شيك · استحقاق</th>
+              </Fragment>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-t border-gray-100">
+              {side(r.mine, r.theirs, !r.theirs)}
+              {side(r.theirs, r.mine, !r.mine)}
+            </tr>
+          ))}
+          {!rows.length && <tr><td colSpan={10} className="px-2 py-2 text-gray-500">لا أسطر</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function EditDecision({ ex, perms, onDone, onRunStarted, onBusy }) {
+  const { labelOf } = useGlBranches()
+  const [note, setNote] = useState('')
+  const [err, setErr] = useState('')
+  const d = ex.detail || {}
+  const entryId = d.entry_id
+  const entryQ = useQuery({
+    queryKey: ['gl', 'entry', entryId],
+    queryFn: () => glApi.entry(entryId).then(r => r.data),
+    enabled: !!entryId,
+  })
+  const accountsQ = useQuery({
+    queryKey: ['gl', 'accounts', 'posting'],
+    queryFn: () => glApi.accounts({ active: 'true', page_size: 2000 }).then(r => listOf(r.data)),
+    staleTime: 5 * 60 * 1000,
+  })
+  const accountName = (code) => (accountsQ.data || []).find(a => String(a.code) === String(code))?.name || ''
+  const entry = entryQ.data
+  const softech = Array.isArray(ex.proposed_lines) ? ex.proposed_lines : []
+  const rows = useMemo(() => pairLines(entry?.lines || [], softech), [entry, softech])
+  const dateChanged = entry && d.proposed_entry_date && s_(entry.entry_date).slice(0, 10) !== d.proposed_entry_date
+  const descChanged = entry && d.proposed_description !== undefined && s_(entry.description) !== s_(d.proposed_description)
+  const fail = (e, fallback) => {
+    if (e?.response?.status === 409 && e?.response?.data?.code === 'busy') onBusy?.()
+    setErr(errOf(e, fallback))
+  }
+  const body = () => ({ note: note.trim(), version: ex.proposal_version })
+  const accept = useMutation({
+    mutationFn: () => glApi.exceptionAcceptSoftech(ex.id, body()).then(r => r.data),
+    onSuccess: (r) => { setErr(''); onRunStarted?.(r.run_id); onDone('اعتُمدت نسخة سوفتيك — يُعاد ترحيل المجموعة الآن', true) },
+    onError: (e) => fail(e, 'تعذّر اعتماد نسخة سوفتيك'),
+  })
+  const keep = useMutation({
+    mutationFn: () => glApi.exceptionKeepEdit(ex.id, body()),
+    onSuccess: () => { setErr(''); onDone('أُبقي تعديلك — لن يتغير القيد حتى يتغير مستند سوفتيك مرة أخرى', true) },
+    onError: (e) => fail(e, 'تعذّر إبقاء التعديل'),
+  })
+  const busy = accept.isPending || keep.isPending
+  return (
+    <div className="space-y-2 text-sm">
+      <div className="text-xs text-gray-600">
+        عدّل محاسب القيد <Link className="text-green-700 hover:underline" to={`/finance/journal?entry=${entryId}&tab=entries`}>#{entry?.number || entryId}</Link>
+        {d.entry_status === 'approved' ? ' (معتمد — الاعتماد يعكسه ويُنشئ مسودة جديدة)' : ' (مسودة)'} ثم تغير مستند سوفتيك. الفروق مظللة.
+      </div>
+      {(dateChanged || descChanged) && (
+        <div className="text-xs bg-amber-50 border border-amber-200 rounded px-2 py-1 space-y-0.5">
+          {dateChanged && <div>التاريخ: {s_(entry.entry_date).slice(0, 10)} ← في سوفتيك <b>{d.proposed_entry_date}</b></div>}
+          {descChanged && <div>البيان: «{entry.description}» ← في سوفتيك <b>«{d.proposed_description}»</b></div>}
+        </div>
+      )}
+      {entryQ.isLoading ? <div className="text-xs text-gray-500">جاري تحميل القيد…</div>
+        : <DiffTable rows={rows} labelOf={labelOf} accountName={accountName} />}
+      {!softech.length && <div className="text-xs text-gray-600">نسخة سوفتيك: لا شيء يُرحّل لهذه المجموعة الآن (المسودة تُحذف أو المعتمد يُعكس).</div>}
+      {d.held_out > 0 && (
+        <div className="text-xs text-amber-700">ملاحظة: نسخة سوفتيك لا تشمل {d.held_out} مستند(ات) من المجموعة محجوزة باستثناءات خاصة بها — عالجها وستدخل القيد عند إعادة الترحيل.</div>
+      )}
+      {perms.approve ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <input className={`${inputCls} flex-1 max-w-md`} placeholder="ملاحظة (اختياري)" value={note} onChange={e => setNote(e.target.value)} />
+          <button type="button" className={btnPrimary} disabled={busy || !ex.proposal_version} onClick={() => accept.mutate()}>اعتماد نسخة سوفتيك</button>
+          <button type="button" className={btnPlain} disabled={busy || !ex.proposal_version} onClick={() => keep.mutate()}>إبقاء تعديلي</button>
+        </div>
+      ) : <div className="text-xs text-gray-500">القرار يحتاج صلاحية الاعتماد</div>}
+      <ErrorBox>{err || (entryQ.isError ? errOf(entryQ.error, 'تعذّر تحميل القيد') : '')}</ErrorBox>
+    </div>
+  )
+}
+
+function RowActions({ ex, perms, onDone, onOpenRule, onRunStarted, onBusy }) {
   const { kind, doc, detail } = ex
   let fix
-  if (kind === 'unmapped_party') {
+  if (kind === 'ledger_error' && detail?.code === 'edited_by_user') {
+    fix = <EditDecision ex={ex} perms={perms} onDone={onDone} onRunStarted={onRunStarted} onBusy={onBusy} />
+  } else if (kind === 'unmapped_party') {
     fix = perms.approve ? <PartyFix ex={ex} onDone={onDone} /> : <div className="text-xs text-gray-500">تأكيد الطرف يحتاج صلاحية الاعتماد</div>
   } else if (kind === 'unmapped_account') {
     if (detail?.kind && (detail?.value !== undefined || detail?.key !== undefined)) {
@@ -315,7 +462,7 @@ export default function ExceptionsTab({ filters, perms, onRunStarted, onBusy }) 
                         </tr>
                         {isOpen && (
                           <tr className="bg-gray-50/70"><td colSpan={colSpan} className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                            <RowActions ex={r} perms={perms} onDone={done} onOpenRule={openRule} />
+                            <RowActions ex={r} perms={perms} onDone={done} onOpenRule={openRule} onRunStarted={onRunStarted} onBusy={onBusy} />
                           </td></tr>
                         )}
                       </Fragment>
