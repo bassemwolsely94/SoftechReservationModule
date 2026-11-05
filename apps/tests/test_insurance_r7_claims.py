@@ -10,7 +10,6 @@ from decimal import Decimal
 from unittest import mock
 
 from apps.insurance import models as m
-from apps.tests.security.baseline import pending
 from apps.tests.test_insurance_r7 import API, InsuranceR7Base, add_line, add_rx, mk_claim
 
 C = f'{API}claims/'
@@ -156,7 +155,6 @@ class ReceiptEditTests(InsuranceR7Base):
 
 class CollectionsTests(InsuranceR7Base):
 
-    @pending('I-1')
     def test_recording_a_payment_from_the_screen_payload(self):
         claim = mk_claim(self.sub)
         # exactly what InsuranceClaimDetailPage.jsx sends: payment_date, amount, reference, notes
@@ -164,6 +162,8 @@ class CollectionsTests(InsuranceR7Base):
                                                        'reference': '', 'notes': ''}, format='json')
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(self.api.get(f'{C}{claim.pk}/payments/').json()[0]['amount'], '500.00')
+        self.assertEqual(m.InsurancePayment.objects.get().claim, claim)       # from the URL
+        self.assertTrue(claim.audit_events.filter(action='payment').exists())
 
     def test_payments_list_and_post_with_claim_in_body(self):
         claim = mk_claim(self.sub)
