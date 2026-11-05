@@ -118,8 +118,8 @@ apps/finance/recon_writer.py::reverse_allocation
 # reason: internal-only — dates + agent usercodes only from the build_call_center_rollups command; quotes stripped (triage 2026-10-26)
 apps/forecasting/cc_softech.py::cc_returns_from_softech
 
-# reason: internal-only — docno filter of '?' fragments; bound (triage 2026-10-26)
-apps/insurance/importer.py::_fetch_lines_batch
+# reason: internal-only — receipt filter = RECEIPT_KEY_FILTER '?' fragments joined by OR; every value bound (2026-11-05)
+apps/insurance/importer.py::_fetch_receipt_lines
 
 # reason: internal-only — _LINE_COLS / _HDR_COLS constants; values bound (triage 2026-10-26)
 apps/insurance/reprice_service.py::_read_receipt

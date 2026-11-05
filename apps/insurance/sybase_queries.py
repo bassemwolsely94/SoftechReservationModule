@@ -438,6 +438,21 @@ QUERY_PRESCRIPTION_LINES_CLASSIFIED = """
     ORDER BY st.itemcode
 """
 
+# ── PRESCRIPTION LINES — many receipts per query (claim import) ───────────────
+# Same 12 columns as QUERY_PRESCRIPTION_LINES_CLASSIFIED, prefixed by the receipt key
+# [0] st.docnumber [1] st.branchcode [2] st.doccode. {receipt_filter} = RECEIPT_KEY_FILTER
+# joined by OR, params (branchcode, doccode, docnumber) per receipt. Matching the full
+# stktrans_x index key (branchcode, doccode, docnumber) keeps each lookup an index seek,
+# and doccode keeps out lines of other documents sharing the number (doc types are
+# numbered separately per branch — return 15540/140 also matched a 2024 doccode-25 doc).
+RECEIPT_KEY_FILTER = '(st.branchcode = ? AND st.doccode = ? AND st.docnumber = CONVERT(numeric(6), ?))'
+QUERY_PRESCRIPTION_LINES_BATCH_TEMPLATE = (
+    QUERY_PRESCRIPTION_LINES_CLASSIFIED
+    .split('WHERE st.docnumber')[0]
+    .replace('SELECT\n', 'SELECT\n        st.docnumber,\n        st.branchcode,\n        st.doccode,\n', 1)
+    + '    WHERE {receipt_filter}\n    ORDER BY st.docnumber, st.itemcode\n'
+)
+
 # Patient name source (confirmed 2026-06-02):
 # companiesitems.patientname joined via (docnumber, branchcode, doccode).
 # Gives 100% coverage (546/546) for motalba 117 — exact match to Softech HTM report.
@@ -607,52 +622,6 @@ QUERY_ALL_MOTALBA_LINES_CLASSIFIED = """
       AND m.motalbano  = ?
       AND m.invdel = 1
     ORDER BY m.motalba_docorder, m.docnumber, st.itemcode
-"""
-
-# ── ITEM LINES BY DOCNUMBER (fast — no stktransm join, no branchcode in WHERE) ──
-# Used by the batch importer.  Returns all item lines for a list of docnumbers.
-# stktransm is NOT joined here because:
-#   a) its join condition (sm.docdate = st.docdate on DATETIME) is slow
-#   b) patient name is resolved from motalba.ppersoncode separately
-# branchcode is NOT in the WHERE clause because RTRIM() prevents index use;
-# branchcode filtering is done in Python after fetching.
-# Columns: [0]=docnumber, [1]=branchcode, [2]=itemcode, [3]=itemname,
-#          [4]=transqty, [5]=transprice, [6]=transprice_total,
-#          [7]=importedorigin, [8]=itemstoreclassif, [9]=itemorigincode,
-#          [10]=custdiscpdescr
-# Params: one CONVERT(numeric(6), ?) per docnumber — build dynamically.
-QUERY_ITEM_LINES_DOCNOS_TEMPLATE = """
-    SELECT
-        st.docnumber,
-        st.branchcode,
-        st.itemcode,
-        i.itemname,
-        st.transqty,
-        st.transprice,
-        st.transprice_total,
-        io.importedorigin,
-        i.itemstoreclassif,
-        i.itemorigincode,
-        cc.custdiscpdescr,
-        st.itemsaleprice,
-        ci.patientname
-    FROM SOFTECHDB9.dbo.stktrans st
-    JOIN SOFTECHDB9.dbo.stktransm sm
-        ON  sm.docnumber  = st.docnumber
-        AND sm.branchcode = st.branchcode
-        AND sm.doccode    = st.doccode
-    JOIN SOFTECHDB9.dbo.items i
-        ON i.itemcode = st.itemcode
-    LEFT JOIN SOFTECHDB9.dbo.itemsorigin io
-        ON io.itemorigincode = i.itemorigincode
-    LEFT JOIN SOFTECHDB9.dbo.custdiscpclassif cc
-        ON cc.custdiscpcode = i.itemstoreclassif
-    LEFT JOIN SOFTECHDB9.dbo.companiesitems ci
-        ON  ci.docnumber  = st.docnumber
-        AND ci.branchcode = st.branchcode
-        AND ci.doccode    = st.doccode
-    WHERE {docno_filter}
-    ORDER BY st.docnumber, st.itemcode
 """
 
 # ── HCICLAIMFORMS — claim form submission tracking ────────────────────────────
