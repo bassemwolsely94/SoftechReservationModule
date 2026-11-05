@@ -894,3 +894,45 @@ class EditDecisionP23Tests(Base):
         e, ex = self.edited_exception()
         self.assertEqual((ex.detail['proposed_entry_date'], ex.detail['held_out']), ('2026-03-10', 0))
         self.assertEqual(ex.detail['proposed_description'], 'نقدية b130 2026-03-10')
+
+
+class BranchCostHookP33Tests(Base):
+    """Ruling P33: a run with sales_tenders refreshes the SOFTECH branch cost of its months,
+    best-effort (a failure is recorded, the run is not failed)."""
+
+    def cost_fetch(self, fail=False):
+        calls = []
+
+        def fetch(sql):
+            calls.append(sql)
+            if 'docvalue2' in sql:
+                if fail:
+                    raise RuntimeError('SOFTECH slow')
+                return [{'branchcode': '130', 'doccode': '115', 'cost': DEC('70')},
+                        {'branchcode': '130', 'doccode': '30', 'cost': DEC('5')}]
+            return []
+        fetch.calls = calls
+        return fetch
+
+    def go(self, fetch, types=('sales_tenders',)):
+        run = DR.start_run(triggered_by='test', date_from=D1, date_to=D2, source_types=list(types))
+        readers = {t: self.reader(t) for t in self.docs}
+        return DR.draft_range(D1, D2, source_types=list(types), run=run, fetch=fetch, readers=readers)
+
+    def test_sales_run_syncs_branch_cost(self):
+        from apps.finance.models import GLBranchCost
+        run = self.go(self.cost_fetch())
+        self.assertEqual(run.status, 'success')
+        self.assertEqual(run.detail['branch_cost_rows'], 1)
+        row = GLBranchCost.objects.get()
+        self.assertEqual((row.year, row.month, row.branch_code, row.net_cost), (2026, 3, '130', DEC('65.00')))
+
+    def test_branch_cost_failure_never_fails_the_run(self):
+        run = self.go(self.cost_fetch(fail=True))
+        self.assertEqual(run.status, 'success')
+        self.assertIn('SOFTECH slow', run.detail['branch_cost_error'])
+
+    def test_no_sync_without_sales_tenders(self):
+        f = self.cost_fetch()
+        self.go(f, types=('credit_sales',))
+        self.assertFalse(any('docvalue2' in c for c in f.calls))

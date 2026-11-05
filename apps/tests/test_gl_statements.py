@@ -324,6 +324,83 @@ class StatementsTests(TestCase):
         branch_pl(Y0, Y1)
         self.assertEqual((LedgerEntry.objects.count(), LedgerLine.objects.count()), before)
 
+    # ── SOFTECH branch cost of sales (Ruling P33) ────────────────────────────
+
+    def _cost(self, year, month, code, net):
+        from apps.finance.models import GLBranchCost
+        from django.utils import timezone
+        GLBranchCost.objects.create(year=year, month=month, branch_code=code, sales_cost=_d(net),
+                                    return_cost=Z, net_cost=_d(net), synced_at=timezone.now())
+
+    def test_branch_pl_softech_cost_and_gross_profit(self):
+        self._entry(D(2026, 8, 3), [('1301', 1000, self.b1), ('6001', -1000, self.b1)])
+        self._entry(D(2026, 8, 3), [('1301', 500, self.b2), ('6001', -500, self.b2)])
+        self._entry(D(2026, 8, 3), [('1301', 10, None), ('6001', -10, None)])
+        self._cost(2026, 8, '972', 600)
+        self._cost(2026, 8, '973', 300)
+        self._cost(2026, 8, '971', 5)
+        self._cost(2026, 8, '999', 7)     # a branch with no ledger column: only in the total
+        self._cost(2026, 9, '972', 1000)  # outside the range
+        cols = branch_pl(D(2026, 7, 1), D(2026, 8, 31))
+        by = {('hq' if c['is_hq'] else 'total' if c['is_total'] else c['branch_id']): c for c in cols}
+        self.assertEqual((by[self.b1.id]['softech_cost'], by[self.b1.id]['softech_gross_profit']),
+                         (_d(600), _d(400)))
+        self.assertEqual((by[self.b2.id]['softech_cost'], by[self.b2.id]['softech_gross_profit']),
+                         (_d(300), _d(200)))
+        self.assertEqual((by['hq']['softech_cost'], by['hq']['softech_gross_profit']), (_d(5), _d(5)))
+        self.assertEqual((by['total']['softech_cost'], by['total']['softech_gross_profit']),
+                         (_d(912), _d(598)))
+        for c in cols:
+            self.assertEqual(c['softech_cost_months_missing'], ['2026-07'])
+        self.assertTrue(any('2026-07' in w for w in by['total']['warnings']))
+        # the ledger-based lines are unchanged
+        self.assertEqual(by[self.b1.id]['gross_profit'], _d(1000))
+
+    def test_branch_pl_no_missing_months_no_warning(self):
+        self._entry(D(2026, 8, 3), [('1301', 100, self.b1), ('6001', -100, self.b1)])
+        self._cost(2026, 8, '972', 60)
+        cols = branch_pl(D(2026, 8, 1), D(2026, 8, 31))
+        total = next(c for c in cols if c['is_total'])
+        self.assertEqual(total['softech_cost_months_missing'], [])
+        self.assertFalse(any('سوفتيك' in w for w in total['warnings']))
+
+    def test_sync_branch_cost_whole_months_idempotent_returns_subtract(self):
+        from apps.finance.gl.branch_cost import sync_branch_cost
+        from apps.finance.models import GLBranchCost
+        rows = [{'branchcode': '972', 'doccode': '115', 'cost': _d('1000.004')},
+                {'branchcode': '972', 'doccode': '30.0', 'cost': _d('100')},
+                {'branchcode': '973.0', 'doccode': '115', 'cost': _d('50')}]
+        calls = []
+
+        def fetch(sql):
+            calls.append(sql)
+            return list(rows)
+        self.assertEqual(sync_branch_cost(D(2026, 8, 5), D(2026, 8, 20), fetch=fetch), 2)
+        self.assertEqual(len(calls), 1)
+        self.assertIn("'2026-08-01'", calls[0])
+        self.assertIn("'2026-09-01'", calls[0])
+        r = GLBranchCost.objects.get(branch_code='972')
+        self.assertEqual((r.year, r.month, r.sales_cost, r.return_cost, r.net_cost),
+                         (2026, 8, _d('1000.00'), _d('100.00'), _d('900.00')))
+        rows[0] = {'branchcode': '972', 'doccode': '115', 'cost': _d('1200')}
+        rows.pop()   # 973 no longer has sales in August: its row goes
+        self.assertEqual(sync_branch_cost(D(2026, 8, 1), D(2026, 8, 31), fetch=fetch), 1)
+        self.assertEqual(list(GLBranchCost.objects.values_list('branch_code', 'net_cost')),
+                         [('972', _d('1100.00'))])
+
+    def test_sync_branch_cost_empty_month_keeps_rows_and_spans_months(self):
+        from apps.finance.gl.branch_cost import sync_branch_cost
+        from apps.finance.models import GLBranchCost
+        self._cost(2026, 8, '972', 60)
+        calls = []
+
+        def fetch(sql):
+            calls.append(sql)
+            return []
+        self.assertEqual(sync_branch_cost(D(2026, 7, 31), D(2026, 8, 1), fetch=fetch), 0)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(GLBranchCost.objects.count(), 1)   # an empty read never wipes a month
+
     # ── comparison ───────────────────────────────────────────────────────────
 
     def test_comparison_one_row_per_year(self):
@@ -456,3 +533,22 @@ class ReproduceWorkbookCommandTests(TestCase):
         with self.assertRaisesMessage(CommandError, '--allow-existing'):
             self._run(self._workbook())
         self.assertEqual(LedgerEntry.objects.count(), 1)
+
+
+class BranchCostCommandTests(TestCase):
+    def test_command_uses_open_fetch(self):
+        from contextlib import contextmanager
+        from io import StringIO
+        from unittest import mock
+
+        from django.core.management import call_command
+        from apps.finance.models import GLBranchCost
+
+        @contextmanager
+        def fake_open():
+            yield lambda sql: [{'branchcode': '130', 'doccode': '115', 'cost': Decimal('9')}]
+        out = StringIO()
+        with mock.patch('apps.finance.queries.sybase_gl.open_fetch', fake_open):
+            call_command('gl_sync_branch_cost', '--from', '2026-08-01', '--to', '2026-08-31', stdout=out)
+        self.assertIn('rows written: 1', out.getvalue())
+        self.assertEqual(GLBranchCost.objects.get().net_cost, Decimal('9.00'))

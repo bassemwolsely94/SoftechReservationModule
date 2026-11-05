@@ -162,11 +162,14 @@ function Position({ data }) {
   )
 }
 
+// Ruling P33: SOFTECH cost of sales (report-time, from the server) beside the ledger figures
+const SOFTECH_ROWS = [['softech_cost', 'تكلفة المبيعات بنسبة سوفتيك'], ['softech_gross_profit', 'مجمل الربح بسوفتيك']]
 const EXPENSE_KEYS = ['general_expenses', 'selling_expenses', 'depreciation', 'operating_expenses', 'financing_expenses']
 
 /**
  * Branch P&L: the server sends one column per branch (HQ first, total last), each with the
- * trading/P&L figures before allocation, `allocation` (line → HQ share moved in) and `after`.
+ * trading/P&L figures before allocation, `allocation` (line → HQ share moved in) and `after`,
+ * plus softech_cost / softech_gross_profit (missing months come as a total-column warning).
  */
 function Branches({ data }) {
   const cols = data?.columns || []
@@ -186,10 +189,18 @@ function Branches({ data }) {
         </thead>
         <tbody>
           {lines.map(l => (
-            <tr key={l.keys[0]} className={`border-t border-gray-100 ${l.strong ? 'font-bold bg-gray-50' : ''}`}>
-              <td className="px-3 py-1.5 whitespace-nowrap">{l.label}</td>
-              {cols.map((c, i) => <td key={i} className={cell} dir="ltr">{money(c[l.keys[0]], { blankZero: true })}</td>)}
-            </tr>
+            <Fragment key={l.keys[0]}>
+              <tr className={`border-t border-gray-100 ${l.strong ? 'font-bold bg-gray-50' : ''}`}>
+                <td className="px-3 py-1.5 whitespace-nowrap">{l.label}</td>
+                {cols.map((c, i) => <td key={i} className={cell} dir="ltr">{money(c[l.keys[0]], { blankZero: true })}</td>)}
+              </tr>
+              {l.keys[0] === 'gross_profit' && SOFTECH_ROWS.map(([k, label]) => (
+                <tr key={k} className="border-t border-gray-100 bg-sky-50/50 text-sky-900">
+                  <td className="px-3 py-1.5 whitespace-nowrap">{label}</td>
+                  {cols.map((c, i) => <td key={i} className={cell} dir="ltr">{money(c[k], { blankZero: true })}</td>)}
+                </tr>
+              ))}
+            </Fragment>
           ))}
           {EXPENSE_KEYS.map(k => (
             <tr key={`alloc-${k}`} className="border-t border-gray-100 bg-amber-50/50 text-amber-900">

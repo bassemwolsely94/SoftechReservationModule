@@ -611,7 +611,8 @@ def report_branch_pl(request):
         labels = {b.pk: _branch_label(b) for b in Branch.objects.filter(pk__in=ids)}
         for c in cols:
             c['label'] = labels.get(c.get('branch_id')) or c['name']
-        return {'from': f, 'to': t, 'columns': cols}
+        missing = cols[-1].get('softech_cost_months_missing', []) if cols else []
+        return {'from': f, 'to': t, 'columns': cols, 'softech_cost_months_missing': missing}
     return _report(request, build, exports.branch_pl)
 
 

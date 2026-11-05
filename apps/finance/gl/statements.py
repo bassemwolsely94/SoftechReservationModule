@@ -46,6 +46,7 @@ LABELS = {
     'financing_expenses': 'المصاريف التمويلية', 'other_revenue': 'ايرادات',
     'capital_gains': 'ارباح راسمالية بيع اصول', 'net_profit': 'صافى الارباح',
     'total_expenses': 'اجمالى المصاريف', 'unclassified': 'حسابات بدون بند',
+    'softech_cost': 'تكلفة المبيعات بنسبة سوفتيك', 'softech_gross_profit': 'مجمل الربح بسوفتيك',
 }
 
 
@@ -328,7 +329,44 @@ def branch_pl(date_from: datetime.date, date_to: datetime.date, *,
                  **consolidated,
                  'allocation': {ln: ZERO for ln in EXPENSE_LINES},
                  'after': consolidated})
+    hq = (branches[min(hq_ids)] if hq_ids
+          else Branch.objects.filter(kind=Branch.KIND_HQ).order_by('pk').first())
+    hq_code = ((hq.softech_branch_id or '').strip() if hq else '') or HQ_CODE
+    _softech_cost(cols, date_from, date_to,
+                  {k: (branches[k].softech_branch_id or '').strip() for k in branch_keys}, hq_code)
     return cols
+
+
+HQ_CODE = '100'
+WARN_SOFTECH_COST = 'تكلفة المبيعات بسوفتيك غير متزامنة لشهور: {months} — صفّا سوفتيك ناقصان لهذه الشهور.'
+
+
+def _softech_cost(cols, date_from, date_to, codes: dict, hq_code: str) -> None:
+    """Ruling P33: per column ``softech_cost`` (sum of GLBranchCost.net_cost for the months the
+    range touches; branch by softech_branch_id), ``softech_gross_profit`` = net sales - that cost,
+    and ``softech_cost_months_missing`` (months with no GLBranchCost row at all). Report-time only."""
+    from apps.finance.models import GLBranchCost
+    from .branch_cost import month_keys
+    months = month_keys(date_from, date_to)
+    per_code: dict[str, Decimal] = {}
+    have = set()
+    for r in GLBranchCost.objects.filter(year__gte=months[0][0], year__lte=months[-1][0]).values(
+            'year', 'month', 'branch_code', 'net_cost'):
+        if (r['year'], r['month']) not in months:
+            continue
+        have.add((r['year'], r['month']))
+        per_code[r['branch_code']] = per_code.get(r['branch_code'], ZERO) + r['net_cost']
+    missing = [f'{y}-{m:02d}' for y, m in months if (y, m) not in have]
+    for c in cols:
+        if c['is_total']:
+            cost = sum(per_code.values(), ZERO)
+        else:
+            cost = per_code.get(hq_code if c['is_hq'] else codes.get(c['branch_id'], ''), ZERO)
+        c['softech_cost'] = cost
+        c['softech_gross_profit'] = c['net_sales'] - cost
+        c['softech_cost_months_missing'] = missing
+        if c['is_total'] and missing:
+            c['warnings'] = [*c.get('warnings', []), WARN_SOFTECH_COST.format(months='، '.join(missing))]
 
 
 PCT_KEYS = ('opening_stock', 'net_purchases', 'closing_stock', 'net_sales', 'cost_of_sales',
