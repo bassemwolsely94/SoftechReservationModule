@@ -26,7 +26,6 @@ admin POST /api/demand/987654321/fulfill/
 admin POST /api/demand/987654321/stock-eta/
 admin POST /api/demand/987654321/suggest-transfer/
 admin POST /api/forecasting/scenarios/987654321/generate/
-admin POST /api/payments/audit/statements/987654321/run-matching/
 admin POST /api/transits/987654321/add-note/
 admin POST /api/transits/987654321/force-close/
 admin POST /api/transits/987654321/mark-received/
@@ -60,7 +59,6 @@ purchasing GET /api/transits/987654321/
 purchasing GET /api/transits/987654321/export-picking/
 purchasing GET /api/transits/987654321/export-stocking/
 purchasing POST /api/forecasting/scenarios/987654321/generate/
-purchasing POST /api/payments/audit/statements/987654321/run-matching/
 purchasing POST /api/transits/987654321/add-note/
 purchasing POST /api/transits/987654321/force-close/
 purchasing POST /api/transits/987654321/mark-received/

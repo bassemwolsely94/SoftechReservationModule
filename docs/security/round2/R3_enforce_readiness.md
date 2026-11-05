@@ -37,8 +37,8 @@ Any line there for a role and screen that should work is a matrix gap to fix bef
 - **Real records behind detail routes (R3.1).** `sweep.seed_detail_paths()` plants one row per detail
   route that admin cannot reach with the dummy id (the canary `Planter`), picking the model by the
   view's queryset, then the app's models closest in name to the path, and keeping the first one admin
-  actually reaches. About 565 detail routes now get a real record; `role_unproven` fell from 469
-  lines to 95, each with a reason (nested replacement chains, and routes that need a record in a specific state).
+  actually reaches. About 565 detail routes now get a real record; `role_unproven` fell from 460
+  lines to 93, each with a reason (nested replacement chains, and routes that need a record in a specific state).
 - **Route catalogue fix.** DRF's `<drf_format_suffix:format>` api-root pattern rendered as
   `/api/<prefix>/x`, a path that does not resolve; it accounted for the `/api/config/x`, `/api/hr/x`,
   `/api/qa/x`, `/api/enrichment/x` unproven lines. `routes._render` now skips it.
@@ -66,11 +66,11 @@ Any line there for a role and screen that should work is a matrix gap to fix bef
 
 | Baseline | Before R3/R4 (`main`) | After | Every line reasoned | Notes |
 |---|---:|---:|---|---|
-| `role_unproven` | 460 | 95 | yes | real records behind detail routes; route-catalogue fix removed the fake `/x` paths |
+| `role_unproven` | 460 | 93 | yes | real records behind detail routes; route-catalogue fix removed the fake `/x` paths |
 | `role_overblocks` | 463 | 525 | yes | −8 counselling (opened, Q-2); +70 seen only with real records (task owner rule, rider / role rules on delivery actions, replacement managers, SOFTECH ERP-match role lists — Q-8) |
-| `role_leaks_log` | 2 | 182 | yes — 2 settled, 180 **OPEN owner questions Q-5 / Q-7** | real records exercised delete / edit for the first time; enforce closes every one (`role_leaks_enforce` stays 0) |
+| `role_leaks_log` | 2 | 184 | yes — 2 settled, 182 **OPEN owner questions Q-5 / Q-7** | real records exercised delete / edit for the first time; enforce closes every one (`role_leaks_enforce` stays 0) |
 | `role_leaks_enforce` | 0 | 0 | — | |
-| `role_crashes` | 6 | 101 | yes (95 handed to R7) | 500s only visible on real records; admin crashes too, so no permission question |
+| `role_crashes` | 6 | 99 | yes (93 handed to R7) | 500s only visible on real records; admin crashes too, so no permission question |
 | `open_to_all_staff` (new) | — | 92 | yes | own-data / help / pickers / open reads / matrix-consistent (all roles but the middleware-enforced accountant hold the module) |
 | `branch_canary_leaks` | 22 | 49 | yes | +27 `GET-DETAIL` lines (B-2 customer reads, shared config, HQ modules incl. insurance, vouchers, stock-audit management); 1 fixed (forecast results) |
 | `canary_skipped_models` (new) | — | 2 | yes | |
@@ -114,7 +114,7 @@ change per view once the owner confirms.
 | Q-2 | Counselling curation lists (R3 applied the default) | counselling `view` | was `edit` only | **Applied: matrix wins.** Say no if the needs queue should stay a pharmacists-only screen; then the tab must be hidden for view-only roles instead. |
 | Q-3 | Loyalty redeem / approve redemption (PENDING **D-64**, the one D6 view left in a stop-and-ask area that does not check inside) | `customers` grant | only "logged in" (in log mode any signed-in staff member) | **Add RouteModulePermission** — `permission_classes = [IsAuthenticated, RouteModulePermission]` on `RedeemRewardView` and `ApproveRedemptionView` (`apps/loyalty/views.py`); the owner OKs the diff. |
 | Q-5 | Missed sales (`/api/pos-orders/missed-sales/`, Project 3) | the middleware maps the prefix to `pos` | the view checks `reservations` (suggestions are confirmed into reservations) — quality manager and viewer hold reservations view, not pos view, so they read the list in log mode | **Owner picks the module.** Default (matrix wins) = `pos`; that would refuse quality manager / viewer, who may use it today, so per D6's no-lockout rule it is listed, not changed. Under enforce today the middleware already refuses them. |
-| Q-7 | **Write actions the view lets through though the matrix says no** (180 lines of `role_leaks_log`, found once the sweep used real records; `enforce` refuses every one today). **a — customers (top priority):** every role, viewer included, can DELETE a customer; view-only roles (delivery, salesperson, purchasing, quality manager, viewer) can edit a customer / health profile / conditions, add notes and approve a loyalty redemption. **b — QA inspections:** editable by every hr holder. **c — forecasting / sales targets:** written by the analyst roles per Z-7b / Z-9a, while the matrix gives them no analytics edit / delete (paper mismatch only). **d — insight rules:** editable by every analytics view holder, viewer included. **e — deleting a record or a document line** by roles with create / edit but not delete (reservation lines / images, shortage items, demand lines, chronic tags, catalog bundles, call-center calls, transit config, cheque plans, invoice lines …). | the role's matrix action (edit / delete) | module grant (or branch) only | **a, b, d: add RouteModulePermission** (matrix wins, Q5) — lockout-free for every role the matrix grants; owner confirms no counter role edits customers today without `customers edit`. **c: grant analytics edit / delete to supervisor / purchasing** so matrix and decision agree. **e: per module — grant `delete` where the role really removes lines, else RouteModulePermission.** Not changed in R3 (D6's no-lockout rule). |
+| Q-7 | **Write actions the view lets through though the matrix says no** (182 lines of `role_leaks_log`, found once the sweep used real records; `enforce` refuses every one today). **a — customers (top priority):** every role, viewer included, can DELETE a customer; view-only roles (delivery, salesperson, purchasing, quality manager, viewer) can edit a customer / health profile / conditions, add notes and approve a loyalty redemption. **b — QA inspections:** editable by every hr holder. **c — forecasting / sales targets:** written by the analyst roles per Z-7b / Z-9a, while the matrix gives them no analytics edit / delete (paper mismatch only). **d — insight rules:** editable by every analytics view holder, viewer included. **e — deleting a record or a document line** by roles with create / edit but not delete (reservation lines / images, shortage items, demand lines, chronic tags, catalog bundles, call-center calls, transit config, cheque plans, invoice lines, product images …). | the role's matrix action (edit / delete) | module grant (or branch) only | **a, b, d: add RouteModulePermission** (matrix wins, Q5) — lockout-free for every role the matrix grants; owner confirms no counter role edits customers today without `customers edit`. **c: grant analytics edit / delete to supervisor / purchasing** so matrix and decision agree. **e: per module — grant `delete` where the role really removes lines, else RouteModulePermission.** Not changed in R3 (D6's no-lockout rule). |
 | Q-8 | SOFTECH ERP match (`check-erp-match`) on reservations and transfers | reservations / transfers create holders | hard-coded role lists (reservations: admin / pharmacist / purchasing; transfers: admin / purchasing) | **Keep** (it reads SOFTECH); a "yes" records it as an owner line. |
 | Q-4 | Forecast scenario results (R4 detail canary) | analytics view (pharmacist holds it) | listed every branch's result rows | **Fixed** to the caller's branches + the chain total (owner decisions 3 / B-1); say so if branch pharmacists should see other branches' targets. |
 
@@ -147,9 +147,9 @@ traces sends by number. Owner question **Q-6**: should phones also be masked ins
 
 ## 9. Handed over
 
-- **R7 (per-app tests):** 95 new `role_crashes` lines — 500s that appear only on real records
+- **R7 (per-app tests):** 93 new `role_crashes` lines — 500s that appear only on real records
   (transits list / detail / exports, reservation detail and images, demand actions, insurance client
-  deletes, forecasting generate, payments matching run …). List in `baselines/role_crashes.txt` under the
+  deletes, forecasting generate …). List in `baselines/role_crashes.txt` under the
   round-2 reason.
 - **Test-runner note:** `manage.py test --parallel` closes the database connection under the sweeps
   (every later request fails "connection already closed"); run the security sweeps serially. Serial

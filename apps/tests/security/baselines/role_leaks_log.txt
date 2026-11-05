@@ -216,3 +216,5 @@ supervisor DELETE /api/demand/987654321/items/987654321/
 supervisor DELETE /api/reservations/987654321/images/987654321/delete/
 supervisor DELETE /api/reservations/987654321/lines/987654321/delete/
 supervisor DELETE /api/shortage/lists/987654321/items/987654321/delete/
+pharmacist DELETE /api/images/products/987654321/images/987654321/
+purchasing DELETE /api/images/products/987654321/images/987654321/
