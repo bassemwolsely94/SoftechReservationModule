@@ -8,16 +8,17 @@ Rules:
   • fuzzy match  : |credit - amount| ≤ 1% AND |date_diff| ≤ 2 days                  → confidence 0.8
   • no match     : PaymentException(type='unrecorded')
 
-Anomaly scoring uses per-cashier/per-method statistics (μ ± σ).
+Anomaly scoring uses per-recorder (created_by) / per-method statistics (μ ± σ).
 Critical anomalies (score ≥ 70) create / link an AbuseFlag record.
 """
 
 import logging
 import statistics
-from datetime import timedelta, datetime
+from datetime import timedelta
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.payments.models import (
@@ -27,17 +28,20 @@ from apps.payments.models import (
     PaymentException,
 )
 
-try:
-    from apps.audit.models import AbuseFlag  # may not exist in every deployment
-    _ABUSE_FLAG_AVAILABLE = True
-except ImportError:
-    _ABUSE_FLAG_AVAILABLE = False
+from apps.audit.models import AbuseFlag
+from core.branch_scope import sees_all_branches
 
 logger = logging.getLogger('elrezeiky')
 
 _FUZZY_AMOUNT_TOL = Decimal('0.01')   # 1 %
 _FUZZY_DATE_DAYS  = 2
 _ANOMALY_CRITICAL = 70                # score threshold → escalate to AbuseFlag
+_ANOMALY_MIN_SAMPLES = 5               # fewer samples → score 0 (inconclusive)
+_ANOMALY_WINDOW_DAYS = 90              # population window
+# owner 2026-11-05: an amount only counts as unusual when it is materially away from the person's
+# normal — at least 100 EGP AND at least 20 % of their average (a 50→60 EGP change is not a signal)
+_ANOMALY_MIN_ABS_DIFF = Decimal('100')
+_ANOMALY_MIN_REL_DIFF = Decimal('0.20')
 
 
 class PaymentAuditService:
@@ -155,75 +159,85 @@ class PaymentAuditService:
 
     # ──────────────────────────────────────────────────────────────────────────
     # Exception detection for a specific payment
+    # (run nightly by `run_payment_exception_checks` when the setting
+    #  payments.exception_checks_enabled is on). These checks only create
+    #  PaymentException / AbuseFlag rows — never change a payment, a match or SOFTECH.
     # ──────────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _creator_profile(payment: ExternalPayment):
+        """The StaffProfile of the user who recorded the payment, or None."""
+        user = payment.created_by
+        return getattr(user, 'staff_profile', None) if user is not None else None
+
+    @classmethod
+    def _record(cls, created: list, payment, exception_type, severity, detail) -> None:
+        exc, new = PaymentException.objects.get_or_create(
+            payment=payment, exception_type=exception_type,
+            defaults={'severity': severity, 'detail': detail},
+        )
+        if new:
+            created.append(exc)
 
     @classmethod
     def detect_exceptions(cls, payment_id: int) -> list[PaymentException]:
         """
         Inspect a single ExternalPayment for rule-based anomalies.
-        Returns list of newly created PaymentException objects.
+        Returns the newly created PaymentException objects (at most one per payment + type,
+        so a rerun creates nothing new).
         """
-        payment = ExternalPayment.objects.select_related('cashier', 'branch').get(pk=payment_id)
+        payment = ExternalPayment.objects.select_related(
+            'created_by__staff_profile__branch', 'branch',
+        ).get(pk=payment_id)
         created = []
 
-        # ① Duplicate detection — same cashier, same amount, within 5 min
-        window_start = datetime.combine(payment.payment_date, payment.payment_time or datetime.min.time())
-        window_start = timezone.make_aware(window_start) if timezone.is_naive(window_start) else window_start
-        window_end   = window_start + timedelta(minutes=5)
-
-        dupes = ExternalPayment.objects.filter(
-            cashier        = payment.cashier,
-            amount         = payment.amount,
-            payment_method = payment.payment_method,
-            payment_date   = payment.payment_date,
-        ).exclude(pk=payment.pk)
-
-        if dupes.exists():
-            exc, new = PaymentException.objects.get_or_create(
-                payment        = payment,
-                exception_type = 'duplicate',
-                defaults={
-                    'severity': 'critical',
-                    'detail': f'تكرار محتمل: {dupes.count()} دفعة مشابهة لنفس الكاشير في نفس اليوم',
-                },
-            )
-            if new:
-                created.append(exc)
+        # ① Duplicate — same recorder, amount, method and day. The payment time is not stored,
+        #    so the window is the whole payment day.
+        #    owner 2026-11-05: a different reference number means a different payment (several
+        #    customers paying the same amount the same day is normal) — only same or missing
+        #    references count, and it is a warning for review, not critical.
+        if payment.created_by_id is not None:
+            same = (ExternalPayment.objects.filter(
+                        created_by_id = payment.created_by_id,
+                        amount        = payment.amount,
+                        method        = payment.method,
+                        payment_date  = payment.payment_date,
+                    ).exclude(pk=payment.pk).exclude(status=ExternalPayment.STATUS_CANCELLED))
+            ref = (payment.reference_number or '').strip()
+            if ref:
+                same = same.filter(Q(reference_number__iexact=ref) | Q(reference_number='')
+                                   | Q(reference_number__isnull=True))
+            n = same.count()
+            if n:
+                cls._record(
+                    created, payment, PaymentException.TYPE_DUPLICATE, PaymentException.SEVERITY_WARNING,
+                    f'تكرار محتمل: {n} دفعة أخرى بنفس المبلغ وطريقة الدفع والمرجع (أو بدون مرجع) '
+                    f'سجّلها نفس المستخدم في نفس اليوم ({payment.payment_date}) — وقت الدفع غير مسجّل، '
+                    f'فالمقارنة باليوم كله',
+                )
 
         # ② Delayed settlement — payment older than 3 days still "pending"
-        if payment.status == 'pending':
-            age_days = (timezone.now().date() - payment.payment_date).days
+        if payment.status == ExternalPayment.STATUS_PENDING:
+            age_days = (timezone.localdate() - payment.payment_date).days
             if age_days >= 3:
-                exc, new = PaymentException.objects.get_or_create(
-                    payment        = payment,
-                    exception_type = 'delayed',
-                    defaults={
-                        'severity': 'warning',
-                        'detail': f'الدفعة في حالة انتظار منذ {age_days} يوم',
-                    },
+                cls._record(
+                    created, payment, PaymentException.TYPE_DELAYED, PaymentException.SEVERITY_WARNING,
+                    f'الدفعة في حالة انتظار منذ {age_days} يوم',
                 )
-                if new:
-                    created.append(exc)
 
-        # ③ Wrong-branch: cashier's assigned branch ≠ payment branch
+        # ③ Wrong branch — the recorder's home branch ≠ the payment branch. All-branch users
+        #    (call center, HQ roles, access_all_branches) legitimately record for any branch.
+        profile = cls._creator_profile(payment)
         if (
-            hasattr(payment.cashier, 'branch')
-            and payment.cashier.branch_id
-            and payment.cashier.branch_id != payment.branch_id
+            profile is not None
+            and profile.branch_id
+            and not sees_all_branches(profile)
+            and profile.branch_id != payment.branch_id
         ):
-            exc, new = PaymentException.objects.get_or_create(
-                payment        = payment,
-                exception_type = 'wrong_branch',
-                defaults={
-                    'severity': 'warning',
-                    'detail': (
-                        f'فرع الكاشير={payment.cashier.branch_id} '
-                        f'≠ فرع الدفعة={payment.branch_id}'
-                    ),
-                },
+            cls._record(
+                created, payment, PaymentException.TYPE_WRONG_BRANCH, PaymentException.SEVERITY_WARNING,
+                f'فرع المستخدم: {profile.branch} ≠ فرع الدفعة: {payment.branch}',
             )
-            if new:
-                created.append(exc)
 
         return created
 
@@ -232,79 +246,121 @@ class PaymentAuditService:
     # ──────────────────────────────────────────────────────────────────────────
 
     @classmethod
+    def _anomaly_stats(cls, payment: ExternalPayment):
+        """(score, mean, stdev, samples) against the same recorder + method, last 90 days."""
+        if payment.created_by_id is None:
+            return Decimal('0'), None, None, 0
+        amounts = list(
+            ExternalPayment.objects.filter(
+                created_by_id     = payment.created_by_id,
+                method            = payment.method,
+                payment_date__gte = payment.payment_date - timedelta(days=_ANOMALY_WINDOW_DAYS),
+            ).exclude(pk=payment.pk).exclude(status=ExternalPayment.STATUS_CANCELLED)
+            .values_list('amount', flat=True)
+        )
+        if len(amounts) < _ANOMALY_MIN_SAMPLES:
+            return Decimal('0'), None, None, len(amounts)   # not enough history — inconclusive
+        mu    = statistics.mean(float(a) for a in amounts)
+        sigma = statistics.stdev(float(a) for a in amounts) or 1.0
+        diff  = abs(float(payment.amount) - mu)
+        if diff < float(_ANOMALY_MIN_ABS_DIFF) or diff < float(_ANOMALY_MIN_REL_DIFF) * abs(mu):
+            return Decimal('0'), mu, sigma, len(amounts)    # not materially away from normal
+        z     = diff / sigma
+        score = Decimal(str(min(100, round(z * 20, 2))))
+        return score, mu, sigma, len(amounts)
+
+    @classmethod
     def calculate_anomaly_score(cls, payment: ExternalPayment) -> Decimal:
         """
         Returns a 0–100 score.  High score = more anomalous.
         Method: compare this payment's amount to the population of the same
-        cashier + payment_method in the last 90 days.
-        Score = min(100, |z| × 20) where z = (x - μ) / σ.
-        Critical (≥ 70) → creates / links an AbuseFlag.
+        recorder (created_by) + method in the last 90 days, cancelled payments excluded.
+        Score = min(100, |z| × 20) where z = (x - μ) / σ; fewer than 5 samples → 0;
+        no recorder → 0. Critical (≥ 70) → an 'anomaly' PaymentException + an AbuseFlag.
         """
-        from django.db.models import Avg, StdDev
-
-        qs = ExternalPayment.objects.filter(
-            cashier        = payment.cashier,
-            payment_method = payment.payment_method,
-            payment_date__gte = payment.payment_date - timedelta(days=90),
-        ).exclude(pk=payment.pk)
-
-        amounts = list(qs.values_list('amount', flat=True))
-
-        if len(amounts) < 5:
-            # Not enough history — score 0 (inconclusive)
-            return Decimal('0')
-
-        mu    = statistics.mean(float(a) for a in amounts)
-        sigma = statistics.stdev(float(a) for a in amounts) or 1.0
-        z     = abs(float(payment.amount) - mu) / sigma
-        score = Decimal(str(min(100, round(z * 20, 2))))
-
-        # Escalate to AbuseFlag if critical
+        score, mu, sigma, samples = cls._anomaly_stats(payment)
         if score >= _ANOMALY_CRITICAL:
-            cls._escalate_to_abuse_flag(payment, score)
-
+            cls._escalate_to_abuse_flag(payment, score, mean=mu, stdev=sigma, samples=samples)
         return score
 
     @classmethod
-    def _escalate_to_abuse_flag(cls, payment: ExternalPayment, score: Decimal) -> None:
-        """Create or update AbuseFlag and link abuse_flag_id on the PaymentException."""
-        if not _ABUSE_FLAG_AVAILABLE:
-            logger.warning('AbuseFlag model not available — skipping escalation for payment #%s', payment.pk)
-            return
-
+    def _escalate_to_abuse_flag(cls, payment: ExternalPayment, score: Decimal, *,
+                                mean=None, stdev=None, samples=0) -> None:
+        """Record the 'anomaly' PaymentException and raise ONE payment_anomaly AbuseFlag on the
+        recorder for review (none when the recorder has no staff profile), linked back through
+        abuse_flag_id. A flag already raised for this payment (any status — a reviewed or
+        dismissed one is not re-raised every night) is reused."""
         try:
-            flag, _ = AbuseFlag.objects.get_or_create(
-                related_object_type = 'external_payment',
-                related_object_id   = payment.pk,
-                defaults={
-                    'flag_type':   'payment_anomaly',
-                    'description': (
-                        f'درجة شذوذ {score}/100 — كاشير: {payment.cashier_id} | '
-                        f'طريقة: {payment.payment_method} | مبلغ: {payment.amount}'
-                    ),
-                    'severity': 'high',
-                },
-            )
-            # Link flag ID back to any open PaymentException for this payment
-            PaymentException.objects.filter(
-                payment        = payment,
-                exception_type = 'anomaly',
-                abuse_flag_id__isnull = True,
-            ).update(abuse_flag_id=flag.pk)
+            with transaction.atomic():
+                flag = None
+                profile = cls._creator_profile(payment)
+                if profile is not None:
+                    existing = AbuseFlag.objects.filter(flag_type='payment_anomaly',
+                                                        evidence__payment_id=payment.pk)
+                    flag = existing.filter(status='open').first() or existing.first()
+                    if flag is None:
+                        flag = AbuseFlag.objects.create(
+                            staff        = profile,
+                            flag_type    = 'payment_anomaly',
+                            severity     = 'critical',
+                            description  = (
+                                f'دفعة غير معتادة: درجة شذوذ {score}/100 — '
+                                f'طريقة الدفع: {payment.get_method_display()} | المبلغ: {payment.amount} ج.م'
+                            ),
+                            evidence     = {
+                                'payment_id': payment.pk,
+                                'score': float(score),
+                                'mean': round(mean, 2) if mean is not None else None,
+                                'stdev': round(stdev, 2) if stdev is not None else None,
+                                'samples': samples,
+                            },
+                            count        = 1,
+                            window_hours = _ANOMALY_WINDOW_DAYS * 24,
+                        )
 
-            # Create an anomaly exception if one doesn't exist
-            PaymentException.objects.get_or_create(
-                payment        = payment,
-                exception_type = 'anomaly',
-                defaults={
-                    'severity':     'critical',
-                    'anomaly_score': score,
-                    'detail':       f'درجة شذوذ إحصائي: {score}/100',
-                    'abuse_flag_id': flag.pk,
-                },
-            )
+                exc, _ = PaymentException.objects.get_or_create(
+                    payment        = payment,
+                    exception_type = PaymentException.TYPE_ANOMALY,
+                    defaults={
+                        'severity':      PaymentException.SEVERITY_CRITICAL,
+                        'anomaly_score': score,
+                        'detail':        f'درجة شذوذ إحصائي: {score}/100',
+                        'abuse_flag_id': flag.pk if flag else None,
+                    },
+                )
+                if flag is not None and exc.abuse_flag_id is None:
+                    exc.abuse_flag_id = flag.pk
+                    exc.save(update_fields=['abuse_flag_id'])
         except Exception:
             logger.exception('Failed to escalate payment #%s to AbuseFlag', payment.pk)
+
+    @classmethod
+    def run_exception_checks(cls, *, days: int = 7) -> dict:
+        """Both checks over payments created in the last `days` days (cancelled ones skipped).
+        Idempotent: a rerun creates nothing new. Writes only PaymentException / AbuseFlag."""
+        since = timezone.now() - timedelta(days=days)
+        ids = list(ExternalPayment.objects.filter(created_at__gte=since)
+                   .exclude(status=ExternalPayment.STATUS_CANCELLED)
+                   .order_by('pk').values_list('pk', flat=True))
+        anomalies_qs = PaymentException.objects.filter(exception_type=PaymentException.TYPE_ANOMALY)
+        flags_qs = AbuseFlag.objects.filter(flag_type='payment_anomaly')
+        anomalies_before, flags_before = anomalies_qs.count(), flags_qs.count()
+        exceptions = failed = 0
+        for pk in ids:
+            try:                        # one bad payment must not stop the rest of the run
+                exceptions += len(cls.detect_exceptions(pk))
+                cls.calculate_anomaly_score(
+                    ExternalPayment.objects.select_related('created_by__staff_profile').get(pk=pk))
+            except Exception:
+                failed += 1
+                logger.exception('payment exception checks failed for payment #%s', pk)
+        return {
+            'payments': len(ids),
+            'failed': failed,
+            'exceptions_created': exceptions,
+            'anomalies_created': anomalies_qs.count() - anomalies_before,
+            'flags_created': flags_qs.count() - flags_before,
+        }
 
     # ──────────────────────────────────────────────────────────────────────────
     # Manual match
