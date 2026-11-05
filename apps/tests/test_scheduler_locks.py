@@ -28,6 +28,8 @@ from django.test import SimpleTestCase
 from apps.sync import tasks
 
 SCHEDULER_JOB_GUARDS = {
+    'payment_exception_checks': ('once_per_period_check', 'apps.payments.audit_service.PaymentAuditService', 'PaymentException.objects.get_or_create(',
+        'nightly, switch off by default; get_or_create with no unique constraint (racy) - a duplicate run could add a second exception row; in-app only, no sends, no SOFTECH'),
     # ── SOFTECH sync lanes ────────────────────────────────────────────────────
     'softech_sync_fast': ('idempotent_upsert', 'apps.sync.tasks.sync_stock', 'update_conflicts=True',
         'stock/sales mirror is bulk upsert; _manual_run_in_flight only skips when a MANUAL run is live, not a 2nd scheduled one; post-hooks (reservation stock alerts, notify_stock_available) send web push with the 5-min unread dedup (racy)'),
