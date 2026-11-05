@@ -313,7 +313,8 @@ class ValidateVoucherSerializer(serializers.Serializer):
 
 
 class MarkUsedSerializer(serializers.Serializer):
-    reference_code = serializers.CharField(max_length=20)
+    # The document comes from the URL; the POS screen posts {} (R7 / V-1).
+    reference_code = serializers.CharField(max_length=20, required=False)
     order_amount   = serializers.DecimalField(max_digits=10, decimal_places=3,
                                                required=False, allow_null=True)
     notes          = serializers.CharField(max_length=300, required=False, allow_blank=True)

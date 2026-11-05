@@ -612,7 +612,9 @@ class DocumentViewSet(viewsets.GenericViewSet):
         try:
             doc = (
                 VoucherRedemptionDocument.objects
-                .select_for_update()
+                # Lock only the document row: PostgreSQL refuses FOR UPDATE on the nullable
+                # side of the otp outer join (every call answered 500 before, R7 / V-1).
+                .select_for_update(of=('self',))
                 .select_related('voucher', 'otp')
                 .get(reference_code=reference_code.upper())
             )

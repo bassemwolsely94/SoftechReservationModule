@@ -920,7 +920,11 @@ class IncentiveProgramViewSet(viewsets.ModelViewSet):
         except ValueError as e:
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        comp_days = int(request.query_params.get('comparison_days', 30))
+        try:
+            comp_days = int(request.query_params.get('comparison_days', 30))
+        except (TypeError, ValueError):
+            return Response({'detail': 'comparison_days must be a whole number'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         # Dates for before/after windows
         before_start = period_start - timedelta(days=comp_days)
@@ -1488,9 +1492,13 @@ class SuggestItemsView(APIView):
 
     def get(self, request):
         params = request.query_params
-        expiry_days = int(params.get('expiry_within_days', 90))
+        try:
+            expiry_days = int(params.get('expiry_within_days', 90))
+            max_results = int(params.get('max_results', 30))
+        except (TypeError, ValueError):
+            return Response({'detail': 'expiry_within_days / max_results must be whole numbers'},
+                            status=status.HTTP_400_BAD_REQUEST)
         branch_code = params.get('branch_code', '').strip() or None
-        max_results = int(params.get('max_results', 30))
         tag_filter  = set(t.strip() for t in params.get('include_tags', '').split(',') if t.strip())
 
         scored: dict = {}  # item_code → {item_code, item_name, score, tags, ...}

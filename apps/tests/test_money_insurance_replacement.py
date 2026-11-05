@@ -36,7 +36,6 @@ from apps.replacement.models import (CashPayout, EntitlementLedgerEntry as E, Re
                                      ReversalRequest)
 
 from .factories import make_branch
-from .security.baseline import pending
 from .test_softech_reprice_guard import RECEIPTS, _fake_read
 
 D = Decimal
@@ -164,10 +163,9 @@ class ClaimTotalsTests(TestCase):
         self.assertEqual(self.claim.final_total_discount, sum((r.total_discount for r in rows), D('0')))
         self.assertEqual(self.claim.final_gross_before - self.claim.final_total_discount, self.claim.final_net_after)
 
-    @pending('M-3')
     def test_a_net_override_reaches_the_claim_total(self):
-        # An adjustment's net_override (تجاوز مباشر) is added row by row, then thrown away: the claim
-        # net is rebuilt from the summed splits, so the override never reaches final_net_after.
+        # M-3 (owner, 2026-11-05): an adjustment's net_override (تجاوز مباشر) is the agreed net for that
+        # prescription, in the claim total and in the invoice export alike.
         a = self.rx('100.00', '0', '0')                                       # net 85.00
         b = self.rx('200.00', '0', '0')                                       # net 170.00
         m.InsuranceClaimAdjustment.objects.create(prescription=b, net_override=D('150.00'), reason='R2')
@@ -175,16 +173,30 @@ class ClaimTotalsTests(TestCase):
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.final_net_after, a.net_after + D('150.00'))
         self.assertEqual(self.claim.final_gross_before - self.claim.final_total_discount, self.claim.final_net_after)
+        # the invoice export agrees, at the cover total and in the row's own day subtotal
+        from apps.insurance.invoice_builder import build_invoice_dataset
+        data = build_invoice_dataset(self.claim)
+        self.assertEqual(D(str(data['claim_totals']['net_after'])), self.claim.final_net_after)
+        self.assertEqual(D(str(data['claim_totals']['total_discount'])), self.claim.final_total_discount)
+        ct = data['claim_totals']
+        cats = sum(D(str(ct[k])) for k in ('local_discount', 'imported_discount', 'tarsia_discount'))
+        self.assertEqual(cats, D(str(ct['total_discount'])))
+        day_nets = sum(D(str(d['day_totals']['net_after'])) for d in data['days'])
+        self.assertEqual(day_nets, self.claim.final_net_after)
 
-    @pending('M-4')
-    def test_claim_net_equals_the_sum_of_the_rounded_row_nets(self):
-        # Each row's net is rounded to the cent; the claim net is the formula over the summed splits,
-        # rounded once. Three rows of 10.05 local at 15%: row net 8.5425 → 8.54, Σ = 25.62; claim 25.6275 → 25.63.
+    def test_claim_net_keeps_the_power_query_formula_over_the_summed_splits(self):
+        # M-4, owner-accepted 2026-11-05 ("keep current method"): the claim net is the Power-Query formula
+        # over the summed splits, rounded once, to match finance's workbook. It can differ by a few piasters
+        # from Σ the printed row nets. Three rows of 10.05 local at 15%: rows 8.54 each = 25.62; claim 25.63.
         for _ in range(3):
             self.rx('10.05', '0', '0')
         recalculate_claim_final_totals(self.claim)
         self.claim.refresh_from_db()
-        self.assertEqual(self.claim.final_net_after, sum((r.net_after for r in self.included()), D('0')))
+        self.assertEqual(sum((r.net_after for r in self.included()), D('0')), D('25.62'))
+        self.assertEqual(self.claim.final_net_after, D('25.63'))
+        self.assertEqual(self.claim.final_net_after,
+                         powerquery_totals_from_splits(D('30.15'), D('0'), D('0'),
+                                                       D('15'), D('10'), D('0'))['net_after'])
 
 
 class OneActiveClaimPerReceiptTests(TestCase):

@@ -847,7 +847,7 @@ SCREENS = [
         ],
         'updated': '2026-11-05',
     
-        'change_note': T('استرجاع تاريخ الإيصال يرجّع تاريخ المطالبة الأصلى كمان (يُحفظ وقت التعديل)', 'Restoring a receipt date also restores the original motalba date (saved at the time of the change)'),
+        'change_note': T('الصافى المباشر لروشتة يدخل الآن فى إجمالى المطالبة والطباعة والتصدير؛ واسترجاع تاريخ الإيصال يرجّع تاريخ المطالبة الأصلى كمان', "A prescription's net override now counts in the claim total, print and export; restoring a receipt date also restores the original motalba date"),
     },
     {
         'key': 'insurance.print',
