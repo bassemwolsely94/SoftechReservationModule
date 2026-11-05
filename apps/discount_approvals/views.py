@@ -511,8 +511,16 @@ def run_replication_scan(request):
     from .notify import notify_admins_replication_gaps
     raw = request.data.get('days', 30)
     full = str(raw) in ('0', 'full', 'all')
-    days = None if full else max(1, min(int(raw or 30), 90))
-    scan = scan_recent(days=days, persist=True, triggered_by=request.user)
+    try:
+        days = None if full else max(1, min(int(raw or 30), 90))
+    except (TypeError, ValueError):
+        return Response({'detail': 'days must be a whole number (0 = full catalog)'}, status=400)
+    try:
+        scan = scan_recent(days=days, persist=True, triggered_by=request.user)
+    except Exception:
+        # scan_recent already stored the scan as FAILED with the error; SOFTECH is down.
+        logger.exception('run_replication_scan: SOFTECH scan failed')
+        return Response({'detail': 'تعذر الاتصال بقاعدة بيانات ERP حالياً'}, status=503)
     notify_admins_replication_gaps(scan)
     from .serializers import ReplicationScanSerializer
     return Response(ReplicationScanSerializer(scan).data, status=201)
