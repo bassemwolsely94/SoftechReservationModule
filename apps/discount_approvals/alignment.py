@@ -213,6 +213,9 @@ def list_tiers():
     }
 
 
+LOCK_CLASSIFICATION = 7_301_011     # pg advisory lock: one classification write run at a time (R1, Q2)
+
+
 def apply_classification_changes(plan, usercode, *, actor=None):
     """
     Write classification codes (origin / contract-discount tier) to SOFTECH items
@@ -225,16 +228,29 @@ def apply_classification_changes(plan, usercode, *, actor=None):
     Returns (error_or_None, [ {softech_id, ok, error?}, ... ]).
     ADMIN-only + a valid SOFTECH usercode must be enforced by the caller.
     Every verified item → one AuditLog row (who, old → new class) — Batch 2, P-16.
+
+    Idempotent (round-2 R1, owner Q2 2026-11-05): one run at a time (advisory lock
+    LOCK_CLASSIFICATION), and an item SOFTECH already holds at its target class is skipped —
+    reported ok + unchanged, no UPDATE — so a repeat click no longer re-stamps itemlastupdate and
+    re-triggers replication to every branch.
     """
-    from django.conf import settings
-    from config.sybase import get_sybase_connection
-    from apps.catalog.models import Item
-    from core.softech_audit import audit_softech_write
+    from apps.vouchers.coupon_dashboard import pg_lock
 
     if not writer_allowed('PRICING_SOFTECH_WRITE_ENABLED'):
         return 'كتابة الأصناف إلى SOFTECH معطّلة (PRICING_SOFTECH_WRITE_ENABLED=False)', []
     if not plan:
         return 'لا توجد تغييرات', []
+    with pg_lock(LOCK_CLASSIFICATION) as got:
+        if not got:
+            return 'كتابة تصنيف أخرى إلى SOFTECH قيد التنفيذ — أعد المحاولة بعد لحظات.', []
+        return _apply_classification_locked(plan, usercode, actor)
+
+
+def _apply_classification_locked(plan, usercode, actor):
+    from config.sybase import get_sybase_connection
+    from apps.catalog.models import Item
+    from core.softech_audit import audit_softech_write
+
     items = {i.id: i for i in Item.objects.filter(id__in=[p.get('item_id') for p in plan])}
 
     results = []
@@ -258,16 +274,21 @@ def apply_classification_changes(plan, usercode, *, actor=None):
             sql = (f'UPDATE SOFTECHDB9.dbo.items SET {set_clause}, '
                    f'usercode = ?, itemlastupdate = GETDATE() WHERE itemcode = ?')
             params = [v for _, _, v in set_cols] + [str(usercode), it.softech_id]
+            verify = ', '.join(col for col, _, _ in set_cols)
+            read_sql = f'SELECT {verify} FROM SOFTECHDB9.dbo.items WHERE itemcode = ?'
+
+            def _at_target(r):
+                return bool(r) and all(str(r[i] or '').strip() == set_cols[i][2]
+                                       for i in range(len(set_cols)))
             try:
+                cur.execute(read_sql, [it.softech_id])           # already there → nothing to write
+                if _at_target(cur.fetchone()):
+                    results.append({'softech_id': it.softech_id, 'ok': True, 'unchanged': True})
+                    continue
                 cur.execute(sql, params)
-                verify = ', '.join(col for col, _, _ in set_cols)
-                cur.execute(f'SELECT {verify} FROM SOFTECHDB9.dbo.items WHERE itemcode = ?',
-                            [it.softech_id])
+                cur.execute(read_sql, [it.softech_id])
                 row = cur.fetchone()
-                ok = bool(row) and all(
-                    str(row[i] or '').strip() == set_cols[i][2] for i in range(len(set_cols))
-                )
-                if ok:
+                if _at_target(row):
                     before = {df: getattr(it, df) for _, df, _ in set_cols}
                     for _, django_field, v in set_cols:
                         setattr(it, django_field, v)

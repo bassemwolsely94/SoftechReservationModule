@@ -68,15 +68,25 @@ def _set_docdate(cur, docno, branch, doccode, yyyymmdd):
 def _set_motalba_docdate(cur, docno, branch, doccode, yyyymmdd):
     """Align the MOTALBA's per-receipt docdate (HQ-only; the motalba table has no
     branch-node copy).  One receipt can appear in several motalbano rows → updates
-    all of them.  NOT reverted (the motalba keeps the corrected date)."""
+    all of them.
+
+    Returns (rows updated, old dates). The old dates are read first and kept on the run, and
+    _revert_locked puts each row back to its own date (round-2 R1, owner Q1 + follow-up
+    2026-11-05; before that the motalba kept the corrected date on revert)."""
+    cur.execute(
+        "SELECT motalbano, docdate FROM SOFTECHDB9.dbo.motalba "
+        "WHERE docnumber=CONVERT(numeric(6),?) AND branchcode=? AND doccode=?",
+        [docno, branch, doccode])
+    old = [{'motalbano': str(no).strip(), 'docdate': d.date().isoformat() if hasattr(d, 'date') else str(d)}
+           for no, d in (cur.fetchall() or [])]
     cur.execute(
         "UPDATE SOFTECHDB9.dbo.motalba SET docdate=CONVERT(datetime,?,112) "
         "WHERE docnumber=CONVERT(numeric(6),?) AND branchcode=? AND doccode=?",
         [yyyymmdd, docno, branch, doccode])
     try:
-        return cur.rowcount
+        return cur.rowcount, old
     except Exception:
-        return None
+        return None, old
 
 
 def date_preview(docno, branch, new_date, doccode=_DOCCODE):
@@ -179,8 +189,10 @@ def _apply_locked(claim, docno, branch, nd, user, doccode, expected_old=None, re
         hq.begin(); bconn.begin()
         _set_docdate(hcur, docno, branch, doccode, nd_str)          # receipt (HQ)
         _set_docdate(bcur, docno, branch, doccode, nd_str)          # receipt (branch)
-        motalba_rows = _set_motalba_docdate(hcur, docno, branch, doccode, nd_str)  # motalba (HQ) — stays on revert
+        motalba_rows, motalba_old = _set_motalba_docdate(hcur, docno, branch, doccode, nd_str)  # motalba (HQ) — stays on revert
         bconn.commit(); hq.commit()
+        run.motalba_old_dates = motalba_old
+        run.save(update_fields=['motalba_old_dates'])
     except Exception as e:
         try: hq.rollback()
         except Exception: pass
@@ -215,10 +227,19 @@ def _revert_locked(run, user=None):
     old_str = run.old_date.strftime('%Y%m%d')
     hq = _hq_conn(charset='cp1256'); hcur = hq.cursor()
     bconn = _open_branch(run.branchcode, charset='cp1256'); bcur = bconn.cursor()
+    restored = 0
     try:
         hq.begin(); bconn.begin()
         _set_docdate(hcur, run.docnumber, run.branchcode, run.doccode, old_str)
         _set_docdate(bcur, run.docnumber, run.branchcode, run.doccode, old_str)
+        # the motalba rows go back too, each to its own recorded date (owner 2026-11-05 — it used
+        # to keep the corrected date). A run from before the dates were kept leaves them as is.
+        for row in (run.motalba_old_dates or []):
+            hcur.execute(
+                "UPDATE SOFTECHDB9.dbo.motalba SET docdate=CONVERT(datetime,?,112) "
+                "WHERE motalbano=? AND docnumber=CONVERT(numeric(6),?) AND branchcode=? AND doccode=?",
+                [row['docdate'].replace('-', ''), row['motalbano'], run.docnumber, run.branchcode, run.doccode])
+            restored += 1
         bconn.commit(); hq.commit()
         run.status = SoftechDateEditRun.STATUS_REVERTED
         run.reverted_at = timezone.now()
@@ -231,7 +252,7 @@ def _revert_locked(run, user=None):
         raise
     finally:
         hcur.close(); bcur.close(); hq.close(); bconn.close()
-    return {'reverted': True, 'restored_date': run.old_date.isoformat()}
+    return {'reverted': True, 'restored_date': run.old_date.isoformat(), 'motalba_restored': restored}
 
 
 # ── preview → typed confirmation → apply (the only UI write path) ─────────────
