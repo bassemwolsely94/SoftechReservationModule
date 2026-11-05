@@ -236,11 +236,19 @@ with the A/P mirror (live check, 2026: diff 0 for all months, expenses 6802 docs
     `closed_period_change` as usual — and an edit saved after the release is protected again.
     «إبقاء تعديلي» (`POST exceptions/{id}/keep-edit/`) writes `gl_entry_edit_kept`, resolves the rows and
     relinks the held docs to the live entry as `drafted` (group_key unchanged): nothing happens until
-    SOFTECH changes the group again, which asks again. Keep is refused (409) when a doc moved to another
-    group (date / rule change — keeping would count it twice) or the entry is no longer live; a vanished
-    doc is unlinked on keep so it never re-raises. Both 404 unknown / 409 not open or not `edited_by_user`;
-    the audit row carries the exception id, group, source keys and the note. A recurring wrong account
-    belongs in the rule / map, not in per-draft edits;
+    SOFTECH changes the group again, which asks again. Keep is refused (409) while a drafting run is
+    active («الترحيل يعمل الآن»), when a doc moved to another group (date / rule change), now falls under
+    a skip rule (own message), or is still linked to another live entry (moved in from an edited group
+    whose row it overwrote) — any of those would count its amount twice — or when the entry is no longer
+    live; a vanished doc is unlinked on keep so it never re-raises. Both need `version` = the exception's
+    `proposal_version` (sha256 of the canonical `proposed_lines`, in the list JSON) the accountant saw;
+    a different one is 409 «تغيّرت نسخة سوفتيك — راجعها مرة أخرى» (missing = 400). Locks follow the
+    engine's order (LedgerEntry → GLSourceDoc → SourceException) and re-check after locking. The detail
+    also carries `proposed_entry_date`, `proposed_description` and `held_out` (group docs held by their
+    own exception, not in `proposed_lines`). Both 404 unknown / 409 not open or not `edited_by_user`;
+    the audit row carries the exception id, group, source keys and the note. If the background accept run
+    fails, the released docs stay `new` and wait for the next run («تحديث الآن» or the schedule) — the
+    release is not undone. A recurring wrong account belongs in the rule / map, not in per-draft edits;
   - an entry deleted/reversed by hand is re-drafted as a new **draft** on the next run covering its date
     (**P9**) — never approved automatically; use «تجاهل» to silence a doc permanently.
 - **Vanish guard** (**P10**): per source type per run, if the docs about to be marked vanished exceed 20 %

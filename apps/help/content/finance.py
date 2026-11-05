@@ -738,6 +738,7 @@ SCREENS = [
                        '• قيد عدّله محاسب: لو محاسب عدّل مسودة بإيده وبعدين المستند اتغيّر في SOFTECH، الترحيل مبيلمسش تعديله — بيظهر «خطأ في الدفتر». اضغط «معالجة» تشوف جنب بعض «القيد بعد تعديلك» و«نسخة سوفتيك الجديدة» والفروق متظللة، واختار:\n'
                        '   – «اعتماد نسخة سوفتيك»: القيد بيترحّل تاني من SOFTECH فوراً (المسودة تتستبدل؛ المعتمد في شهر مفتوح يتعكس وتتعمل مسودة جديدة). تعديلك القديم مبقاش يحميه، لكن أي تعديل جديد بعدها محمي تاني.\n'
                        '   – «إبقاء تعديلي»: القيد يفضل زي ما عدّلته ومحدش يلمسه — لحد ما المستند يتغير في SOFTECH تاني، ساعتها بيسألك تاني.\n'
+                       '   لو الترحيل اللي بيبدأ بعد «اعتماد نسخة سوفتيك» فشل، المستندات بتستنى لحد ما تضغط «تحديث الآن» (أو الترحيل اليومي). «إبقاء تعديلي» مش متاح وترحيل شغال، ولو نسخة سوفتيك اتغيرت وإنت بتراجع هيطلب منك تراجعها تاني.\n'
                        '   القرار لمن له صلاحية الاعتماد، والملاحظة اختيارية، وبيتسجل مين قرر وإمتى. لو حساب بيطلع غلط كل مرة، صلّحه في «قواعد الترحيل» أو جداول الربط مرة واحدة بدل ما تعدّل كل مسودة.\n'
                        '• مصروف من غير سند صرف: لو مفيش سند صرف مصروفات (-120) لنفس الفرع وفي حدود 31 يوم من تاريخ المصروف، بيظهر «حساب غير مربوط».\n'
                        'الاستثناء المعالج بيتحل لوحده عند إعادة الترحيل؛ «تجاهل» بسبب لما المستند ميتسجلش عن قصد.',
@@ -753,6 +754,7 @@ SCREENS = [
                        '• Entry edited by an accountant: if someone edited a draft by hand and the SOFTECH document then changed, drafting leaves the edit alone — a "Ledger error" appears. Press "Handle" to see "The entry after your edit" next to "The new SOFTECH version", differences highlighted, and choose:\n'
                        '   – "Accept the SOFTECH version": the entry is redrafted from SOFTECH at once (a draft is replaced; an approved entry in an open month is reversed and a new draft made). Your old edit no longer protects it, but any new edit after that is protected again.\n'
                        '   – "Keep my edit": the entry stays as you edited it and nothing touches it — until the SOFTECH document changes again, then you are asked again.\n'
+                       '   If the run that starts after "Accept the SOFTECH version" fails, the documents wait until you press "Refresh now" (or the daily drafting). "Keep my edit" is not available while a run is going, and if the SOFTECH version changed while you were reviewing you are asked to review it again.\n'
                        '   The decision needs approve permission, the note is optional, and who decided and when is logged. If an account comes out wrong every time, fix it once in "Posting rules" or the maps instead of editing each draft.\n'
                        '• Expense without a payment voucher: with no expense voucher (-120) on the same branch within 31 days of the expense date, it shows as "Unmapped account".\n'
                        'A handled exception resolves itself on redraft; "Ignore" with a reason when the document is deliberately not posted.')},
