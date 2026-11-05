@@ -56,7 +56,7 @@ def expense_voucher_linked(voucher_personcode, voucher_date, expense_date) -> bo
 
 def sql_branchesales(d1: date, d2: date) -> str:
     return (
-        "SELECT branchcode, doccode, docdate, paymenttype, SUM(paymentvalue) s "
+        "SELECT branchcode, doccode, docdate, paymenttype, SUM(paymentvalue) s "  # nosec B608 - only date.isoformat() values and module constants are interpolated
         f"FROM {DB}.branchesales "
         f"WHERE doccode IN ('115','30') AND paymenttype <> '10' AND {_bounds('docdate', d1, d2)} "
         "GROUP BY branchcode, doccode, docdate, paymenttype"
@@ -65,7 +65,7 @@ def sql_branchesales(d1: date, d2: date) -> str:
 
 def sql_credit_docs(d1: date, d2: date) -> str:
     return (
-        "SELECT m.branchcode, m.doccode, m.docnumber, m.docdate, MIN(b.personcode) pmin, MAX(b.personcode) pmax, "
+        "SELECT m.branchcode, m.doccode, m.docnumber, m.docdate, MIN(b.personcode) pmin, MAX(b.personcode) pmax, "  # nosec B608 - only date.isoformat() values and module constants are interpolated
         "SUM(b.paymentvalue) credit, m.docvalue, m.docvalue1, m.docvalue3 "
         f"FROM {DB}.stktransm m, {DB}.branchesales b "
         "WHERE m.branchcode = b.branchcode AND m.doccode = b.doccode "
@@ -81,7 +81,7 @@ def sql_credit_docs(d1: date, d2: date) -> str:
 def sql_cheques(d1: date, d2: date) -> str:
     """Vouchers whose due date (cheqdate) OR issue date (cheqregisterdate) falls in [d1, d2]."""
     return (
-        "SELECT c.cheqsno, c.branchcode, c.financialdoccode, c.cheqtype, c.cheqno, c.cheqdate, "
+        "SELECT c.cheqsno, c.branchcode, c.financialdoccode, c.cheqtype, c.cheqno, c.cheqdate, "  # nosec B608 - only date.isoformat() values and module constants are interpolated
         "c.cheqregisterdate, c.bankcode, c.personcode, CONVERT(varchar(10), c.ptcode) ptcode, c.cheqvalue, "
         "c.chequenote, c.tf_branchcode, c.tf_bankcode, c.tf_cheqsno, b.banktype, "
         f"(SELECT COUNT(*) FROM {DB}.dailyexpenses e WHERE {_expense_link('e.expensedate')}) has_expense "
@@ -96,7 +96,7 @@ def sql_expenses(d1: date, d2: date) -> str:
     ``_expense_link``). No linked voucher -> NULL bankcode -> the engine raises unmapped_account."""
     link = _expense_link('d.expensedate').replace('e.', 'd.')
     return (
-        "SELECT d.branchcode, d.expensedate, d.intervalcode, d.day_sno, d.expcode, d.expvalue, d.expcomment, "
+        "SELECT d.branchcode, d.expensedate, d.intervalcode, d.day_sno, d.expcode, d.expvalue, d.expcomment, "  # nosec B608 - only date.isoformat() values and module constants are interpolated
         "d.cheqsno, "
         f"(SELECT MAX(c.bankcode) FROM {DB}.cheques c WHERE {link}) bankcode, "
         f"(SELECT MAX(c.personcode) FROM {DB}.cheques c WHERE {link}) v_personcode, "
