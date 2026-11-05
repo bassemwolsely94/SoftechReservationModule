@@ -845,9 +845,9 @@ SCREENS = [
              'when': T('بعد ما تختار الصفوف والأعمدة.', 'After choosing the rows and columns.'),
              'open_hint': T('تبويب «تحليل البيانات»، بعد ظهور نتيجة.', 'The "Data analysis" tab, once a result shows.')},
         ],
-        'updated': '2026-11-02',
+        'updated': '2026-11-05',
     
-        'change_note': T('اقتراح فئة الفوترة لكل روشتة من سجل المرضى، والتخصيص التلقائى يستثنى المستبعد ويضيف اليدوى والملاحق؛ لا يُحدَّد أى سطر تلقائياً فى فصل الأسماء ومراجعة الأسماء', 'A billing-group suggestion per receipt from the patient roster, and auto-assign skips excluded receipts and adds manual ones and supplements; nothing is pre-selected in name separation or name review'),
+        'change_note': T('الصافى المباشر (تجاوز مباشر) لروشتة يدخل الآن فى إجمالى المطالبة وفى الطباعة والتصدير؛ باقى الإجمالى بمعادلة Power Query كما هو', "A prescription's net override now counts in the claim total and in the print and export; the rest of the total keeps the Power Query formula"),
     },
     {
         'key': 'insurance.print',

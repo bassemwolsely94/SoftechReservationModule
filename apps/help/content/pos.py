@@ -993,8 +993,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-05',
+        'change_note': T('العرض لا يُطبَّق على صنف عليه علامة أمان تمنع البيع، وخصم العروض المتراكمة على السطر لا يتعدى قيمته', 'An offer never applies to an item whose safety flag blocks the sale, and stacked offers never discount a line beyond its value'),
     },
     {
         'key': 'pos.usage_print',
