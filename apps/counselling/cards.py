@@ -68,6 +68,42 @@ def default_phone(customer) -> str:
     return phone_for(customer) if customer else ''
 
 
+def record_phones(customer) -> list:
+    """The customer's own mobiles on record (WhatsApp number, phone, alternate), normalised, in
+    that order, without repeats. Round 2 S-1 (owner OK 2026-11-05): a card goes only to one of these."""
+    out = []
+    for raw in (getattr(customer, 'whatsapp_phone', ''), getattr(customer, 'phone', ''),
+                getattr(customer, 'phone_alt', '')):
+        n = normalise_phone(raw)
+        if n and n not in out:
+            out.append(n)
+    return out
+
+
+PHONE_REFUSALS = {
+    'no_customer': 'اختر العميل أولاً — الإرشادات تُرسل لرقم مسجّل على العميل فقط',
+    'no_phone': 'لا يوجد موبايل مصري مسجّل على العميل — أضفه في بيانات العميل أولاً',
+    'not_on_record': 'الرقم غير مسجّل على هذا العميل — اختر من أرقامه أو حدّث بيانات العميل',
+}
+
+
+def pick_phone(customer, phone='', phone_index=None):
+    """-> (normalised phone or None, refusal reason or ''). The phone must be on the customer's record:
+    chosen by its place in ``record_phones`` (the drawer), or typed and matching one of them."""
+    if customer is None:
+        return None, 'no_customer'
+    rec = record_phones(customer)
+    if str(phone_index if phone_index is not None else '').strip().isdigit():
+        i = int(phone_index)
+        return (rec[i], '') if i < len(rec) else (None, 'not_on_record')
+    if str(phone or '').strip():
+        norm = normalise_phone(phone)
+        if not norm:
+            return None, 'bad_phone'
+        return (norm, '') if norm in rec else (None, 'not_on_record')
+    return (rec[0], '') if rec else (None, 'no_phone')
+
+
 def token_for(send) -> str:
     return signing.dumps({'s': send.pk}, salt=CARD_SIGNING_SALT)
 
@@ -119,16 +155,19 @@ def message_text(name: str, url: str) -> str:
     return f'{hello}إرشادات استخدام مشترياتك من صيدليات الرزيقي: {url}'
 
 
-def plan_card(*, customer, phone, item_ids) -> dict:
+def plan_card(*, customer, phone, item_ids, phone_index=None) -> dict:
     """What a send would do — never writes. Used by the drawer's preview (switch on or off)."""
-    norm = normalise_phone(phone or default_phone(customer))
+    norm, refused = pick_phone(customer, phone, phone_index)
     ph = phone_hash(norm) if norm else ''
     lines = _lines(item_ids, ph)
-    blocked = 'bad_phone' if not norm else ('opted_out' if opted_out(customer, ph) else '')
+    blocked = refused or ('opted_out' if opted_out(customer, ph) else '')
     name = first_name(customer)
     return {
         'enabled': enabled(),
         'phone': mask(norm) if norm else '',
+        # the customer's numbers on record, masked; the drawer sends back the chosen index
+        'phones': [{'index': i, 'label': mask(n)} for i, n in enumerate(record_phones(customer))]
+                  if customer is not None else [],
         'blocked_reason': blocked,
         'first_name': name,
         'message_preview': message_text(name, '…/c/<رابط خاص>'),
@@ -156,7 +195,7 @@ def _window_open(phone: str) -> bool:
 
 
 def send_card(*, customer, phone, item_ids, actor, branch, source='pos', idempotency_key='',
-              resend=False, sender=None) -> CounselCardSend:
+              resend=False, sender=None, phone_index=None) -> CounselCardSend:
     if not enabled():
         raise ValidationError({'detail': 'الإرسال غير مفعّل'})
     key = (idempotency_key or '').strip()[:64]
@@ -167,9 +206,9 @@ def send_card(*, customer, phone, item_ids, actor, branch, source='pos', idempot
         if existing.sent_by_id != getattr(actor, 'pk', None):
             raise ValidationError({'idempotency_key': 'مفتاح مستخدم من قبل'})
         return existing
-    norm = normalise_phone(phone or default_phone(customer))
-    if not norm:
-        raise ValidationError({'phone': 'رقم موبايل مصري غير صحيح'})
+    norm, refused = pick_phone(customer, phone, phone_index)
+    if refused:
+        raise ValidationError({'phone': PHONE_REFUSALS.get(refused, 'رقم موبايل مصري غير صحيح')})
     ph = phone_hash(norm)
     base = dict(customer=customer, first_name=first_name(customer), phone_masked=mask(norm), phone_hash=ph,
                 branch=branch, sent_by=actor, source=source if source in dict(CounselCardSend.SOURCE_CHOICES)

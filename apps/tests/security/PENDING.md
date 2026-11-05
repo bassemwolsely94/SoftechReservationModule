@@ -14,11 +14,10 @@ masked; call center and all-branch roles edit anyone (`apps/customers/access.py`
 and quality manager are all-branch roles (`core/branch_scope.ALL_BRANCH_ROLES`).
 - W-1: voucher generate-otp hands the plain code to the staff member (wa.me text + QR)
 
-## Round 2, R5 — sends (2026-11-05)
+## Round 2, R5/R6 — decided 2026-11-05 (owner), all fixed
 
-- S-1: a counselling card can go to any mobile the till types (or with no customer at all), not only the number on the customer's record. Restricting it changes the Project 4 till flow, so it waits for the owner. Held by `test_send_limits.CounselCardLimitTests.test_card_goes_only_to_the_number_on_the_customer_record`.
-- S-2: the supplier-invoice write batch (`apps/invoices/writer.py`) and the supplier-code mapping batch (`apps/invoices/supplier_items.py::inject_mapping`) open a raw jConnect statement, so no query timeout is armed and a stalled HQ link can hold the job. Adding one changes a SOFTECH write path (a timeout mid-batch must roll back cleanly), so it waits for the owner. Held by `test_sybase_deadline.RawStatementSitesTests.test_softech_write_batches_have_a_query_timeout`.
-- S-3: `pos_cancel_write` (SOFTECH `pos_cancel` INSERT) claims its events with an unconditional `filter(id__in=ids).update(softech_written_at=now)` — no `softech_written_at__isnull=True` filter and no row-count check — so two scheduler processes that read the same events both INSERT, and a failed run's un-claim can clear the other run's claim. Fix (claim only rows still unclaimed, write only those) changes a SOFTECH write path, so it waits for the owner. Held by `test_pos_cancel_writer.ConcurrentRunTests`.
+S-1 fixed: a counselling card goes only to a mobile on the customer's record (WhatsApp number, phone, alternate) and needs a customer; the drawer picks from those numbers (`counselling/cards.pick_phone`). S-2 fixed: the supplier-invoice and supplier-mapping SOFTECH write batches arm `config.sybase.apply_write_batch_timeout` (`SOFTECH_WRITE_BATCH_TIMEOUT`, 120 s); a timed-out return is held until SOFTECH is checked (`writer.TIMEOUT_UNKNOWN`). S-3 fixed: `pos_cancel_write` claims only unclaimed events under a per-run token and writes only those. Also built: only one scheduler process may run (`apps/sync/scheduler_lock.py`); a second one starts no jobs and alerts the admins.
+
 
 ## Round 2 / R2 money — decided 2026-11-05 (owner)
 

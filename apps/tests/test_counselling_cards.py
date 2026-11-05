@@ -72,13 +72,50 @@ class CardTests(TestCase):
 
     def test_opted_out_phone_blocked(self):
         CounselCardOptOut.objects.create(phone_hash=cards.phone_hash('201012345678'))
-        s = self._send(phone='+20 101 234 5678', customer=None)
+        s = self._send(phone='+20 101 234 5678')                  # the customer's own number, typed
         self.assertEqual(s.status, 'blocked_optout')
         self.assertEqual(self.fake.templates, [])
 
     def test_opted_out_customer_blocked_on_other_phone(self):
         CounselCardOptOut.objects.create(customer=self.cust, phone_hash='x')
+        Customer.objects.filter(pk=self.cust.pk).update(phone_alt='01112345678')
+        self.cust.refresh_from_db()
         self.assertEqual(self._send(phone='01112345678').status, 'blocked_optout')
+
+    # ── S-1 (owner OK 2026-11-05): only a number on the customer's record ────────────────
+    def test_card_needs_a_customer(self):
+        from rest_framework.exceptions import ValidationError
+        with self.assertRaises(ValidationError):
+            self._send(phone='01012345678', customer=None)
+        self.assertEqual(self.fake.templates, [])
+
+    def test_typed_number_not_on_record_is_refused(self):
+        from rest_framework.exceptions import ValidationError
+        with self.assertRaises(ValidationError):
+            self._send(phone='01099998888')
+        self.assertFalse(CounselCardSend.objects.exists())
+
+    def test_pick_by_index_from_the_record(self):
+        Customer.objects.filter(pk=self.cust.pk).update(whatsapp_phone='01155556666')
+        self.cust.refresh_from_db()
+        self.assertEqual(cards.record_phones(self.cust), ['201155556666', '201012345678'])
+        s = self._send(phone_index=1)
+        self.assertEqual(s.status, 'sent')
+        self.assertEqual(self.fake.templates[-1]['wa_id'], '201012345678')
+        with self.assertRaises(Exception):
+            self._send(phone_index=5)
+
+    def test_preview_lists_the_record_numbers_masked(self):
+        Customer.objects.filter(pk=self.cust.pk).update(phone_alt='01155556666')
+        r = self.sp_c.post('/api/counselling/cards/preview/',
+                           {'customer_id': self.cust.pk, 'item_ids': [self.item.pk]}, format='json')
+        self.assertEqual(r.data['phones'], [{'index': 0, 'label': '010*****678'},
+                                            {'index': 1, 'label': '011*****666'}])
+        self.assertNotIn('01155556666', str(r.data))
+        r = self.sp_c.post('/api/counselling/cards/preview/',
+                           {'customer_id': self.cust.pk, 'item_ids': [self.item.pk], 'phone': '01099998888'},
+                           format='json')
+        self.assertEqual(r.data['blocked_reason'], 'not_on_record')
 
     def test_only_approved_versions_pinned(self):
         services.create_sheet(self.ph, {'dose_ar': 'مسودة'}, [self.item2.pk])      # draft only
