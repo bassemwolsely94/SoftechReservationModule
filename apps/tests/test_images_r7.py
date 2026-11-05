@@ -13,8 +13,10 @@ Business rules: the name normaliser, scorer helpers (file size, text match, dupl
 learned source weight, job de-duplication and the run_job pipeline (search / download / score
 all mocked — no network, no thread).
 """
+import importlib.util
 import io
 import shutil
+import unittest
 import tempfile
 from unittest import mock
 
@@ -30,6 +32,10 @@ from apps.images.scorer import _score_file_size, _score_text_match, are_duplicat
 from apps.tests.factories import make_category, make_item, make_user
 from apps.tests.security.fixtures import bearer_client, seed_code_matrix
 from core.middleware import module_access
+
+# imagehash is a production dependency left out of requirements-ci.txt (heavy); without it
+# are_duplicates() is always False by design.
+HAS_IMAGEHASH = importlib.util.find_spec('imagehash') is not None
 
 API = '/api/images/'
 
@@ -381,6 +387,7 @@ class ScorerAndLearningRuleTests(TestCase):
         self.assertAlmostEqual(_score_text_match('ARCOXIA', '90mg', 'tablet', meta), (1.0 + 0.8 + 0.6) / 3)
         self.assertEqual(_score_text_match('PANADOL', '', '', meta), 0.0)
 
+    @unittest.skipUnless(HAS_IMAGEHASH, 'imagehash not installed (CI slim set)')
     def test_duplicates(self):
         self.assertTrue(are_duplicates('ffffffffffffffff', 'fffffffffffffff0'))
         self.assertFalse(are_duplicates('ffffffffffffffff', '0000000000000000'))
@@ -465,6 +472,7 @@ class RunJobPipelineTests(TestCase):
         self.assertEqual((job.status, job.last_error),
                          ('failed', 'All candidates below quality/watermark threshold'))
 
+    @unittest.skipUnless(HAS_IMAGEHASH, 'imagehash not installed (CI slim set)')
     def test_duplicate_phash_dropped(self):
         job = self._run(self._res(2), [0.6, 0.6], phashes=['ffffffffffffffff', 'fffffffffffffffe'])
         self.assertEqual(job.candidates_scored, 1)
