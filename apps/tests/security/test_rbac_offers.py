@@ -41,7 +41,8 @@ class OffersModuleTests(TestCase):
         self.assertEqual(module_access.required('/api/offers/apply-to-order/', 'POST')[0], 'pos')
 
     def test_menu_lists_offers_under_inventory(self):
-        layout = (Path(settings.BASE_DIR) / 'frontend/src/components/Layout.jsx').read_text(encoding='utf-8')
+        # the menu data lives in navGroups.js (Layout.jsx imports it and renders it)
+        layout = (Path(settings.BASE_DIR) / 'frontend/src/components/navGroups.js').read_text(encoding='utf-8')
         start = layout.index("id: 'inventory'")
         end = layout.index("id: 'purchasing'")
         self.assertIn("to: '/offers'", layout[start:end], 'offers not in the المخزون menu section')
