@@ -104,7 +104,10 @@ class PhoneAlert(models.Model):
 class PhoneAlertAttempt(models.Model):
     CHANNEL_CHOICES = [('whatsapp', 'واتساب'), ('sms', 'SMS')]
     RESULT_CHOICES = [('sent', 'sent'), ('dry_run', 'dry_run'), ('failed', 'failed'),
-                      ('delivered', 'delivered'), ('read', 'read')]
+                      ('delivered', 'delivered'), ('read', 'read'),
+                      # round 2, R5: the same number got this message type within the last
+                      # SEND_MIN_INTERVAL_SECONDS — not sent (apps/notifications/send_limits.py)
+                      ('throttled', 'throttled')]
 
     alert = models.ForeignKey(PhoneAlert, on_delete=models.CASCADE, related_name='attempts')
     channel = models.CharField(max_length=10, choices=CHANNEL_CHOICES, default='whatsapp')
@@ -115,3 +118,19 @@ class PhoneAlertAttempt(models.Model):
 
     class Meta:
         ordering = ['created_at']
+
+
+class SendThrottle(models.Model):
+    """Last automatic send per (recipient, message type) — round 2, R5 (owner question 6: at most
+    1 automatic message per recipient per 10 minutes per type). The recipient is stored only as
+    a SHA-256 of its digits. Claimed atomically by ``apps.notifications.send_limits.claim``."""
+    recipient_hash = models.CharField(max_length=64)
+    kind = models.CharField(max_length=80)
+    last_sent_at = models.DateTimeField()
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['recipient_hash', 'kind'],
+                                               name='send_throttle_recipient_kind_uniq')]
+
+    def __str__(self):
+        return f'{self.kind} @ {self.last_sent_at:%Y-%m-%d %H:%M}'

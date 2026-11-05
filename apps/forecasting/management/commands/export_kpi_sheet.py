@@ -36,6 +36,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **o):
         from apps.forecasting.kpi_export import build_target_workbook
+        from core.export_safety import neutralise_formulas
         models = tuple(m.strip() for m in o['models'].split(',') if m.strip() in ('a', 'b', 'avg'))
         if not models:
             raise CommandError('No valid models (use a,b,avg).')
@@ -47,6 +48,7 @@ class Command(BaseCommand):
             incentive_threshold=Decimal(str(o['threshold'])),
             benchmark_growth=Decimal(str(o['benchmark'])),
         )
-        wb.save(out)
+        # live target formulas stay; anything not plain arithmetic is written as text (R5)
+        neutralise_formulas(wb, keep_safe_formulas=True).save(out)
         self.stdout.write(self.style.SUCCESS(
             f"Wrote {out}  (sheets: {', '.join(wb.sheetnames)})"))

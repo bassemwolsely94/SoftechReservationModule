@@ -92,6 +92,9 @@ class CardTests(TestCase):
             self._send(item_ids=[self.item2.pk])
         self.assertFalse(CounselCardSend.objects.exists())
 
+    # the 10-minute per-number limit (round 2, R5) is tested in security/test_send_limits.py;
+    # here the resend rule itself is under test, so the limit is off
+    @override_settings(SEND_MIN_INTERVAL_SECONDS=0)
     def test_recent_item_skipped_unless_resend(self):
         self._send()
         with self.assertRaises(Exception):

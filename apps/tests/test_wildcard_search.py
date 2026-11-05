@@ -158,3 +158,42 @@ class SearchEndpointTests(TestCase):
             r = self.c.get('/api/items/softech-search/', {'q': 'voltren 50'})
         res = r.json()['results']
         self.assertTrue(res and res[0]['name'] == 'VOLTAREN 50MG 20TAB' and res[0].get('approx'))
+
+
+class LikeSpecialsAreLiteralTests(TestCase):
+    """Round 2, R5: LIKE's own specials in typed text are matched as text, never as a pattern.
+    `_` and `\` are always literal; `%` is literal in the exact-text tier (it ranks first) and,
+    by the owner decision of 2026-10-05, a wildcard like `*` in the pattern tiers."""
+
+    def setUp(self):
+        P.reset_index()
+        self.it = _items('ALPHA_BETA 10MG', 'ALPHAXBETA 10MG', 'GAMMA\DELTA SYRUP',
+                         'GAMMAXDELTA SYRUP', 'ZETA 1% GEL', 'ZETA 1X GEL', "O'NEIL; DROP TABLE")
+
+    def names(self, q):
+        from apps.catalog.models import Item
+        names = dict(Item.objects.values_list('id', 'name'))
+        return [(names[i], t) for i, t in W.item_search(q) if t not in ('sound', 'approx')]
+
+    def test_underscore_is_not_a_single_char_wildcard(self):
+        self.assertEqual([n for n, _ in self.names('alpha_beta')], ['ALPHA_BETA 10MG'])
+
+    def test_backslash_is_not_an_escape(self):
+        self.assertEqual([n for n, _ in self.names('gamma\delta')], ['GAMMA\DELTA SYRUP'])
+
+    def test_percent_is_literal_in_the_exact_text_tier(self):
+        res = self.names('zeta 1% gel')
+        self.assertEqual([n for n, t in res if t == 'literal'], ['ZETA 1% GEL'])
+        self.assertEqual(res[0][0], 'ZETA 1% GEL')
+
+    def test_quote_and_semicolon_are_plain_text(self):
+        self.assertEqual([n for n, _ in self.names("o'neil; drop")], ["O'NEIL; DROP TABLE"])
+        from apps.catalog.models import Item
+        self.assertEqual(Item.objects.count(), 7)
+
+    def test_wq_module_filter_keeps_specials_literal(self):
+        from apps.catalog.models import Item
+        got = set(Item.objects.filter(W.wq('alpha_beta', 'name')).values_list('name', flat=True))
+        self.assertEqual(got, {'ALPHA_BETA 10MG'})
+        got = set(Item.objects.filter(W.wq('gamma\delta', 'name')).values_list('name', flat=True))
+        self.assertEqual(got, {'GAMMA\DELTA SYRUP'})

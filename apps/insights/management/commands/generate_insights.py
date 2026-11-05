@@ -85,6 +85,10 @@ class Command(BaseCommand):
                 body = InsightEngine.render_for_branch(run, rc.branch_id, 'ar')
                 if body is None:
                     continue
+            # owner question 6 (round 2, R5): a re-run within 10 minutes sends nothing again
+            from apps.notifications.send_limits import claim
+            if not claim(f'insights:{run.domain}:{run.period_type}', rc.wa_number):
+                continue
             try:
                 sender.send_text(wa_id=rc.wa_number, body=body[:4000])
                 sent += 1

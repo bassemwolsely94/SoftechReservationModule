@@ -82,6 +82,28 @@ class KpiExportTests(TestCase):
         self.assertEqual(ws['AC25'].value, '=I19')
         self.assertTrue(ws.sheet_view.rightToLeft)
 
+    def test_every_built_formula_survives_neutralising(self):
+        # R5: the exports save through neutralise_formulas(wb, keep_safe_formulas=True); every
+        # formula the builder writes must pass the safe-formula check, or the sheet would go dead
+        from core.export_safety import is_safe_formula
+        wb = build_target_workbook(2026, 10, models=('a', 'b', 'avg'), days_elapsed=8)
+        formulas = [c.value for ws in wb.worksheets for row in ws.iter_rows() for c in row
+                    if c.data_type == 'f']
+        self.assertTrue(formulas)
+        self.assertEqual([f for f in formulas if not is_safe_formula(f)], [])
+
+    def test_scenario_formulas_survive_neutralising(self):
+        from core.export_safety import is_safe_formula
+        from apps.forecasting.kpi_export import build_scenario_workbook
+        from apps.forecasting.models import ForecastScenario
+        sc = ForecastScenario.objects.create(name='Exp', year=2026, month=10,
+                                             scope_type='branch', model='avg')
+        ForecastEngine().generate(sc)
+        wb = build_scenario_workbook(sc)
+        bad = [c.value for ws in wb.worksheets for row in ws.iter_rows() for c in row
+               if c.data_type == 'f' and not is_safe_formula(c.value)]
+        self.assertEqual(bad, [])
+
     def test_days_knobs(self):
         wb = build_target_workbook(2026, 10, models=('avg',), days_elapsed=8)
         ws = wb[wb.sheetnames[0]]

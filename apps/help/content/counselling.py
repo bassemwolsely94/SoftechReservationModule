@@ -40,7 +40,7 @@ MODULE = {
             'title': T('رسالة الإرشادات للعميل', 'The customer guidance message'),
             'model': 'counselling.CounselCardSend', 'field': 'status',
             'states': [
-                {'key': 'queued', 'label': T('قيد الإرسال', 'Sending'), 'desc': T('تم الحفظ وجارٍ الإرسال لواتساب.', 'Saved and being sent to WhatsApp.'),
+                {'key': 'queued', 'label': T('قيد الإرسال', 'Sending'), 'desc': T('تم الحفظ وجارٍ الإرسال لواتساب. رسالة واحدة على الأكثر لنفس الرقم كل 10 دقائق، حتى مع «إعادة الإرسال».', 'Saved and being sent to WhatsApp. At most one message to the same number every 10 minutes, even with "Resend".'),
                  'next': ['sent', 'failed']},
                 {'key': 'sent', 'label': T('أُرسلت', 'Sent'), 'desc': T('وصلت لواتساب برابط خاص صالح 90 يوماً.', 'Delivered to WhatsApp with a private link valid for 90 days.')},
                 {'key': 'failed', 'label': T('فشل الإرسال', 'Failed'),
@@ -98,7 +98,7 @@ SCREENS = [
     {
         'key': 'counselling.review',
         'routes': ['/counselling'],
-        'updated': '2026-11-03',
+        'updated': '2026-11-05',
         'title': T('إرشادات الاستخدام', 'Usage guidance'),
         'summary': T('قائمة الإرشادات بمراحلها، ومحرر الإرشاد على الجنب: الحقول، الأصناف المرتبطة، والاعتماد أو السحب.',
                      'The sheets by stage, with the sheet editor on the side: fields, linked items, and approve or withdraw.'),

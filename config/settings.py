@@ -1049,3 +1049,6 @@ RBAC_ENFORCED_ROLES = config('RBAC_ENFORCED_ROLES', default='accountant')
 # Off => every step still runs and records PhoneAlertAttempt(result='dry_run').
 PHONE_ALERTS_SEND_ENABLED = config('PHONE_ALERTS_SEND_ENABLED', default=False, cast=bool)
 MORNING_BRIEF_SEND_ENABLED = config('MORNING_BRIEF_SEND_ENABLED', default=False, cast=bool)
+# Round 2, R5 (owner question 6): at most 1 automatic message per recipient per type per this many
+# seconds — phone alerts, call-back alerts, morning brief, insights texts, counselling cards.
+SEND_MIN_INTERVAL_SECONDS = config('SEND_MIN_INTERVAL_SECONDS', default=600, cast=int)
