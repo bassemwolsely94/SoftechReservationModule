@@ -20,56 +20,97 @@ def _kind_other(ptcode: str, personcode: str) -> str:
 
 
 HQ = sybase_gl.HQ_BRANCH
-BOX_TRANSFER, BANK_TRANSFER = sybase_gl.TRANSFER_BOX_PERSON, '-181'
+BOX_TRANSFER, BANK_TRANSFER = sybase_gl.TRANSFER_BOX_PERSON, sybase_gl.TRANSFER_BANK_PERSON
 BANK_TYPE_BANK = '1'   # banks.banktype: 0 = cash box, 1 = bank account
-_LOOKUP_CHUNK = 500
+PAIR_DAYS = sybase_gl.TRANSFER_PAIR_DAYS
+_LOOKUP_CHUNK = 200
+
+
+def _day(r):
+    return to_date(r['cheqdate']) if r.get('cheqdate') else None
+
+
+def _near(a, b) -> bool:
+    return a is not None and b is not None and abs((a - b).days) <= PAIR_DAYS
+
+
+def _chunks(items):
+    for i in range(0, len(items), _LOOKUP_CHUNK):
+        yield items[i:i + _LOOKUP_CHUNK]
 
 
 def _transfer_kinds(rows, fetch) -> dict:
     """(branch, cheqsno) -> (kind, counterpart_branch) for every -180 / -181 voucher.
 
-    -181 box<->bank (Ruling P27, decided from the row alone): the leg whose own box is a bank
-    (banktype 1) is 'transfer_bank_mirror' (skipped); the box leg is 'transfer_bank' (posts box vs
-    bank(tf_bankcode)); no tf_bankcode -> 'transfer'.
+    The other leg of a transfer counts only when its cheqdate is within PAIR_DAYS of this leg's
+    (Ruling P30: cheqsno repeats across years). It is looked for in this fetch first, then by one
+    read-only SELECT per kind of lookup, with no range bound - so the kind never depends on the
+    range drafted.
+    -181 box<->bank (P27/P30): the bank-side leg (its own box is a bank, banktype 1) is
+    'transfer_bank_mirror' (skipped) only when its box-side partner exists (same branch, tf_cheqsno =
+    its cheqsno, tf_bankcode = its bankcode), else 'transfer_unpaired' (exception, never a silent
+    skip); the box leg with tf_bankcode is 'transfer_bank' (posts box vs bank(tf_bankcode), also
+    alone); no tf_bankcode -> 'transfer'.
     -180 box<->box (P24/P28/P29): counterpart branch = own tf_branchcode (another branch), else the
-    one branch whose leg points back (tf_branchcode / tf_cheqsno) - first in this fetch, then for HQ
-    legs by one read-only SELECT with no date bound (``sql_transfer_legs_pointing_at``). HQ on either
-    side -> 'transfer_branch'; branch<->branch -> 'transfer_b2b'; an HQ leg still unpaired (or
-    ambiguous) -> 'transfer_unpaired'; a branch leg with no counterpart stays 'transfer'. None of
-    this depends on the range drafted, so the same voucher always gets the same kind."""
+    one branch whose leg points back (tf_branchcode / tf_cheqsno) - for an HQ leg also by
+    ``sql_transfer_legs_pointing_at``. HQ on either side -> 'transfer_branch'; branch<->branch ->
+    'transfer_b2b'; an HQ leg still unpaired (or ambiguous) -> 'transfer_unpaired'; a branch leg
+    with no counterpart stays 'transfer'."""
     tf = {(code(r['branchcode']), code(r['cheqsno'])): r for r in rows
           if code(r['personcode']) in (BOX_TRANSFER, BANK_TRANSFER)}
 
-    def pointing(src):
+    def pointing(src):   # (tf_branchcode, tf_cheqsno) -> [(branch, date)] for -180 legs
         back = {}
         for r in src:
             if code(r['personcode']) != BOX_TRANSFER:
                 continue
             b, tb, ts = code(r['branchcode']), code(r.get('tf_branchcode')), code(r.get('tf_cheqsno'))
             if tb and ts and tb != b:
-                back.setdefault((tb, ts), set()).add(b)
+                back.setdefault((tb, ts), []).append((b, _day(r)))
         return back
+
+    def branches_near(back, key, day):
+        return {b for b, d in back.get(key, ()) if _near(d, day)}
+
+    def box_partner(src, branch, sno, bank, day):   # P30 (b): the box leg of a bank-side -181 row
+        return any(code(p['personcode']) == BANK_TRANSFER and code(p['branchcode']) == branch
+                   and code(p.get('tf_cheqsno')) == sno and code(p.get('tf_bankcode')) == bank
+                   and code(p['cheqsno']) != sno and _near(_day(p), day) for p in src)
 
     back = pointing(tf.values())
     own = {k: code(r.get('tf_branchcode')) for k, r in tf.items()}
-    unresolved = sorted(sno for (b, sno), r in tf.items()
-                        if b == HQ and code(r['personcode']) == BOX_TRANSFER
-                        and not (own[(b, sno)] and own[(b, sno)] != b)
-                        and len(back.get((b, sno), ())) != 1 and sno.isdigit())
+
+    # P28/P30 (a): HQ -180 legs not paired in the fetch -> one bounded SELECT
+    hq_open = sorted((sno, _day(r)) for (b, sno), r in tf.items()
+                     if b == HQ and code(r['personcode']) == BOX_TRANSFER and _day(r)
+                     and not (own[(b, sno)] and own[(b, sno)] != b)
+                     and len(branches_near(back, (b, sno), _day(r))) != 1 and sno.isdigit())
     looked = {}
-    for i in range(0, len(unresolved), _LOOKUP_CHUNK):
-        part = unresolved[i:i + _LOOKUP_CHUNK]
-        wanted = set(part)
-        hits = [r for r in fetch(sybase_gl.sql_transfer_legs_pointing_at(part))   # re-checked in Python
-                if code(r.get('tf_branchcode')) == HQ and code(r.get('tf_cheqsno')) in wanted]
+    for part in _chunks(hq_open):
+        hits = [h for h in fetch(sybase_gl.sql_transfer_legs_pointing_at(part))   # re-checked below
+                if code(h.get('tf_branchcode')) == HQ]
         for k, v in pointing(hits).items():
-            looked.setdefault(k, set()).update(v)
+            looked.setdefault(k, []).extend(v)
+
+    # P30 (b): bank-side -181 rows whose box leg is not in the fetch -> one bounded SELECT
+    def is_bank_side(r):
+        return code(r['personcode']) == BANK_TRANSFER and code(r.get('banktype')) == BANK_TYPE_BANK
+
+    bank_open = sorted((b, sno, code(r['bankcode']), _day(r)) for (b, sno), r in tf.items()
+                       if is_bank_side(r) and _day(r)
+                       and not box_partner(tf.values(), b, sno, code(r['bankcode']), _day(r))
+                       and b.isdigit() and sno.isdigit() and code(r['bankcode']).isdigit())
+    partners = []
+    for part in _chunks(bank_open):
+        partners.extend(fetch(sybase_gl.sql_bank_transfer_partners(part)))   # re-checked below
 
     out = {}
     for (branch, sno), r in tf.items():
+        day = _day(r)
         if code(r['personcode']) == BANK_TRANSFER:
-            if code(r.get('banktype')) == BANK_TYPE_BANK:
-                out[(branch, sno)] = ('transfer_bank_mirror', '')
+            if is_bank_side(r):
+                paired = box_partner(list(tf.values()) + partners, branch, sno, code(r['bankcode']), day)
+                out[(branch, sno)] = ('transfer_bank_mirror' if paired else 'transfer_unpaired', '')
             elif code(r.get('tf_bankcode')):
                 out[(branch, sno)] = ('transfer_bank', '')
             else:
@@ -77,9 +118,9 @@ def _transfer_kinds(rows, fetch) -> dict:
             continue
         counterpart = own[(branch, sno)] if own[(branch, sno)] != branch else ''
         if not counterpart:
-            cands = back.get((branch, sno), set())
+            cands = branches_near(back, (branch, sno), day)
             if len(cands) != 1 and branch == HQ:
-                cands = looked.get((branch, sno), set()) | cands
+                cands = branches_near(looked, (branch, sno), day) | cands
             counterpart = next(iter(cands)) if len(cands) == 1 else ''
         if counterpart:
             kind = 'transfer_branch' if HQ in (branch, counterpart) else 'transfer_b2b'

@@ -285,7 +285,7 @@ An exception resolves itself on redraft; «تجاهل» needs a reason and keeps
   vouchers only (other cheques keep their content hash).
   - -180 box↔box: counterpart branch = the voucher's own `tf_branchcode` (when it is another branch),
     else the one branch whose leg points back at it (`tf_branchcode` / `tf_cheqsno`) — first in the
-    fetch, then, for an HQ leg, by one extra read-only SELECT over `cheques` with no date bound
+    fetch, then, for an HQ leg, by one extra read-only SELECT over `cheques` with no range bound (±31 days of the leg, P30)
     (`sybase_gl.sql_transfer_legs_pointing_at`, ints and constants only; **P28**). HQ on either side →
     `transfer_branch`; branch↔branch → `transfer_b2b` (**P29**, exception); an HQ leg still unpaired or
     ambiguous → `transfer_unpaired` (**P28**, exception — never the 1320 suspense); a branch leg with no
@@ -294,6 +294,11 @@ An exception resolves itself on redraft; «تجاهل» needs a reason and keeps
     (`banks.banktype` 1) is `transfer_bank_mirror` and the skip rule `treasury.box_bank_mirror` drops it;
     the box leg (banktype 0) with `tf_bankcode` is `transfer_bank` and posts box vs bank(`tf_bankcode`) —
     also when it is alone. A -181 without `tf_bankcode` stays `transfer`.
+  - **P30**: the other leg counts only when its `cheqdate` is within ±31 days (cheqsno repeats across
+    years), in the fetch and in the SELECT (`DATEDIFF`, re-checked in Python). A bank-side row is the
+    mirror only when its box partner (same branch, `tf_cheqsno` = its cheqsno, `tf_bankcode` = its
+    bankcode, ±31 days) exists — in the fetch or by one read-only SELECT (`sql_bank_transfer_partners`);
+    otherwise it is `transfer_unpaired` (exception), never a silent skip.
   - `transfer` otherwise (unchanged: `treasury.transfer_in/out` via suspense 1320).
   New map kind `intercompany` (SOFTECH branch code → finance's sister-company account, branch = HQ; the
   map PUT needs a branch) and map keys `counterpart_branch` / `tf_bankcode` (migration 0023 changes only

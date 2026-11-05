@@ -243,8 +243,9 @@ class SeedTests(TestCase):
         rows[1] = {**rows[1], 'cheqdate': datetime(2026, 6, 11), 'cheqregisterdate': datetime(2026, 6, 11)}
         for d1, d2, fetched in ((D(2026, 6, 10), D(2026, 6, 11), rows), (D(2026, 6, 11), D(2026, 6, 11), rows[1:])):
             run = drafting.start_run(triggered_by='t', date_from=d1, date_to=d2, source_types=['treasury_other'])
+            # the bounded partner lookup (P30) still sees the box leg drafted in the first run
             run = drafting.draft_range(d1, d2, source_types=['treasury_other'], run=run,
-                                       fetch=lambda sql, f=fetched: list(f))
+                                       fetch=lambda sql, f=fetched: list(rows if 'DATEDIFF(day, c.cheqdate' in sql else f))
             self.assertEqual(run.status, 'success', run.detail)
             self.assertEqual(list(LedgerEntry.objects.filter(status__in=['draft', 'approved'])
                                   .values_list('source_key', flat=True)), ['chq:100:600'])

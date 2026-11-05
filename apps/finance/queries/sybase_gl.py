@@ -93,22 +93,57 @@ def sql_cheques(d1: date, d2: date) -> str:
 
 HQ_BRANCH = '100'
 TRANSFER_BOX_PERSON = '-180'
+TRANSFER_BANK_PERSON = '-181'
+TRANSFER_PAIR_DAYS = 31   # Ruling P30: cheqsno repeats across years, so the other leg must be near in time
+_DIGITS = re.compile(r'^\d{1,20}$')
 
 
-def sql_transfer_legs_pointing_at(cheqsnos) -> str:
-    """Ruling P28: branch legs of box->box transfers that point back at the given HQ vouchers
-    (tf_branchcode = HQ, tf_cheqsno IN ...). No date bound: the other leg may sit in another range.
-    ``cheqsnos`` are coerced to int, so only integers and module constants are interpolated."""
-    keys = sorted({int(str(s).strip()) for s in cheqsnos})
-    if not keys:
-        raise ValueError('no cheqsnos')
-    in_list = ', '.join(f"'{k}'" for k in keys)
+def _digits(v) -> str:
+    """A SOFTECH code made of digits only (leading zeros kept, e.g. bank '04'), else ValueError."""
+    s = str(v).strip()
+    if not _DIGITS.match(s):
+        raise ValueError(f'not a digit code: {v!r}')
+    return s
+
+
+def _near(d: date) -> str:
+    return f"ABS(DATEDIFF(day, c.cheqdate, '{d.isoformat()}')) <= {TRANSFER_PAIR_DAYS}"
+
+
+_PAIR_COLS = ("SELECT c.branchcode, c.cheqsno, c.personcode, c.bankcode, c.tf_branchcode, c.tf_bankcode, "
+              "c.tf_cheqsno, c.cheqdate ")
+
+
+def sql_transfer_legs_pointing_at(legs) -> str:
+    """Ruling P28/P30: branch legs of box->box transfers pointing back at HQ vouchers
+    (tf_branchcode = HQ, tf_cheqsno = the HQ cheqsno) dated within TRANSFER_PAIR_DAYS of the HQ leg.
+    ``legs`` = [(cheqsno, cheqdate)]; codes must be digits and dates ``date``, so only digit codes,
+    isoformat dates and module constants are interpolated."""
+    conds = [f"(CONVERT(varchar(20), c.tf_cheqsno) = '{_digits(sno)}' AND {_near(d)})"
+             for sno, d in sorted(set(legs))]
+    if not conds:
+        raise ValueError('no legs')
     return (
-        "SELECT c.branchcode, c.cheqsno, c.personcode, c.tf_branchcode, c.tf_cheqsno "  # nosec B608 - only int() values and module constants are interpolated
-        f"FROM {DB}.cheques c "
+        _PAIR_COLS + f"FROM {DB}.cheques c "  # nosec B608 - only digit codes, date.isoformat() values and module constants are interpolated
         f"WHERE c.personcode = '{TRANSFER_BOX_PERSON}' "
         f"AND CONVERT(varchar(10), c.tf_branchcode) = '{HQ_BRANCH}' "
-        f"AND CONVERT(varchar(20), c.tf_cheqsno) IN ({in_list})"
+        f"AND ({' OR '.join(conds)})"
+    )
+
+
+def sql_bank_transfer_partners(legs) -> str:
+    """Ruling P30: box-side legs of -181 box<->bank transfers for bank-side rows: same branch,
+    tf_cheqsno = the bank row's cheqsno, tf_bankcode = the bank row's bankcode, dated within
+    TRANSFER_PAIR_DAYS. ``legs`` = [(branchcode, cheqsno, bankcode, cheqdate)]; same guards."""
+    conds = [f"(CONVERT(varchar(10), c.branchcode) = '{_digits(b)}' "
+             f"AND CONVERT(varchar(20), c.tf_cheqsno) = '{_digits(sno)}' "
+             f"AND CONVERT(varchar(10), c.tf_bankcode) = '{_digits(bank)}' AND {_near(d)})"
+             for b, sno, bank, d in sorted(set(legs))]
+    if not conds:
+        raise ValueError('no legs')
+    return (
+        _PAIR_COLS + f"FROM {DB}.cheques c "  # nosec B608 - only digit codes, date.isoformat() values and module constants are interpolated
+        f"WHERE c.personcode = '{TRANSFER_BANK_PERSON}' AND ({' OR '.join(conds)})"
     )
 
 
