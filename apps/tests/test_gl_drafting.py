@@ -700,3 +700,197 @@ class AccountantEditP21Tests(Base):
         run = self.run_engine()
         self.assertEqual(run.counts['replaced'], 1)
         self.assertFalse(SourceException.objects.exists())
+
+
+class EditDecisionP23Tests(Base):
+    """Ruling P23: the accountant decides — accept the new SOFTECH version or keep the edit."""
+    edit_as_accountant = AccountantEditP21Tests.edit_as_accountant
+
+    def edited_exception(self):
+        self.rule()
+        self.docs['sales_tenders'] = [tender('t1', '100.00')]
+        self.run_engine()
+        e = self.live('t1').get()
+        self.edit_as_accountant(e, '95.00')
+        self.docs['sales_tenders'] = [tender('t1', '90.00')]
+        self.run_engine()
+        return e, SourceException.objects.get(status='open')
+
+    def test_exception_carries_proposed_lines_and_entry_status(self):
+        e, ex = self.edited_exception()
+        self.assertEqual(ex.detail['entry_status'], 'draft')
+        got = [(ln['account_code'], ln['debit'], ln['credit']) for ln in ex.proposed_lines]
+        self.assertEqual(got, [('1302', '90.00', '0'), ('6002', '0', '90.00')])
+        self.assertEqual(ex.proposed_lines[0]['branch_id'], self.b130.pk)
+
+    def test_accept_softech_replaces_the_edited_draft(self):
+        e, ex = self.edited_exception()
+        res = DR.accept_softech(ex.pk, user=self.staff, note='سوفتيك صح')
+        self.assertEqual((res['date_from'], res['date_to'], res['source_types']), (MAR10, MAR10, ['sales_tenders']))
+        ex.refresh_from_db()
+        self.assertEqual((ex.status, ex.resolved_by, ex.resolution_note), ('resolved', self.staff, 'سوفتيك صح'))
+        self.assertEqual(GLSourceDoc.objects.get(source_key='t1').status, 'new')
+        from apps.audit.models import AuditLog
+        a = AuditLog.objects.get(action='gl_entry_edit_released')
+        self.assertEqual((a.object_id, a.user, a.new_data['exception_id']), (str(e.pk), self.staff, ex.pk))
+        run = self.run_engine()
+        self.assertEqual(run.counts['replaced'], 1)
+        e.refresh_from_db()
+        self.assertEqual(self.amounts(e)[0][1], DEC('90.00'))
+        self.assertFalse(SourceException.objects.filter(status='open').exists())
+        self.assertEqual(GLSourceDoc.objects.get(source_key='t1').status, 'drafted')
+
+    def test_accept_softech_on_approved_entry_reverses_and_redrafts(self):
+        self.rule()
+        self.docs['sales_tenders'] = [tender('t1', '100.00')]
+        self.run_engine()
+        e = self.live('t1').get()
+        self.edit_as_accountant(e, '95.00')
+        approve(e.id, user=self.staff)
+        self.docs['sales_tenders'] = [tender('t1', '90.00')]
+        self.run_engine()
+        ex = SourceException.objects.get(status='open')
+        self.assertEqual(ex.detail['entry_status'], 'approved')
+        DR.accept_softech(ex.pk, user=self.staff)
+        run = self.run_engine()
+        self.assertEqual((run.counts['reversed'], run.counts['created']), (1, 1))
+        e.refresh_from_db()
+        self.assertEqual(e.status, 'reversed')
+        new = self.live('t1').get()
+        self.assertEqual((new.status, self.amounts(new)[0][1]), ('draft', DEC('90.00')))
+
+    def test_keep_edit_holds_until_the_next_softech_change(self):
+        e, ex = self.edited_exception()
+        DR.keep_edit(ex.pk, user=self.staff, note='تعديلي صح')
+        ex.refresh_from_db()
+        self.assertEqual((ex.status, ex.resolution_note), ('resolved', 'تعديلي صح'))
+        sd = GLSourceDoc.objects.get(source_key='t1')
+        self.assertEqual((sd.status, sd.entry_id, sd.group_key), ('drafted', e.pk, 't1'))
+        from apps.audit.models import AuditLog
+        self.assertTrue(AuditLog.objects.filter(action='gl_entry_edit_kept', object_id=str(e.pk),
+                                                user=self.staff).exists())
+        run = self.run_engine()   # SOFTECH unchanged: nothing happens
+        for k in ('changed', 'replaced', 'reversed', 'created', 'exceptions'):
+            self.assertEqual(run.counts[k], 0, k)
+        self.assertFalse(SourceException.objects.filter(status='open').exists())
+        self.assertEqual(self.amounts(self.live('t1').get())[0][1], DEC('95.00'))
+        self.docs['sales_tenders'] = [tender('t1', '80.00')]   # the next change asks again
+        run = self.run_engine()
+        self.assertEqual(run.counts['replaced'], 0)
+        ex2 = SourceException.objects.get(status='open')
+        self.assertEqual((ex2.detail['code'], ex2.proposed_lines[0]['debit']), ('edited_by_user', '80.00'))
+
+    def test_edit_after_release_is_protected_again(self):
+        e, ex = self.edited_exception()
+        DR.accept_softech(ex.pk, user=self.staff)
+        self.run_engine()
+        self.edit_as_accountant(e, '85.00')
+        self.docs['sales_tenders'] = [tender('t1', '70.00')]
+        run = self.run_engine()
+        self.assertEqual(run.counts['replaced'], 0)
+        self.assertEqual(SourceException.objects.get(status='open').detail['code'], 'edited_by_user')
+        self.assertEqual(self.amounts(self.live('t1').get())[0][1], DEC('85.00'))
+
+    def test_decisions_refuse_non_open_or_other_kinds(self):
+        e, ex = self.edited_exception()
+        DR.keep_edit(ex.pk, user=self.staff)
+        with self.assertRaises(DR.DecisionError) as cm:
+            DR.accept_softech(ex.pk, user=self.staff)
+        self.assertEqual(cm.exception.code, 'not_open')
+        other = SourceException.objects.create(source_doc=GLSourceDoc.objects.get(source_key='t1'),
+                                               kind='no_rule', source_date=MAR10, message='m')
+        for fn in (DR.accept_softech, DR.keep_edit):
+            with self.assertRaises(DR.DecisionError) as cm:
+                fn(other.pk, user=self.staff)
+            self.assertEqual(cm.exception.code, 'not_edited_by_user')
+
+    def test_keep_edit_on_vanished_doc_stops_asking(self):
+        self.rule()
+        self.docs['sales_tenders'] = [tender('t1', '100.00')]
+        self.run_engine()
+        e = self.live('t1').get()
+        self.edit_as_accountant(e, '100.00')
+        self.docs['sales_tenders'] = []
+        self.run_engine()
+        ex = SourceException.objects.get(status='open')
+        DR.keep_edit(ex.pk, user=self.staff)
+        run = self.run_engine()
+        self.assertEqual((run.counts['deleted'], run.counts['exceptions']), (0, 0))
+        self.assertTrue(LedgerEntry.objects.filter(pk=e.pk, status='draft').exists())
+        self.assertFalse(SourceException.objects.filter(status='open').exists())
+
+    def test_keep_edit_refused_when_a_doc_moved_to_another_group(self):
+        self.rule(granularity='branch_day')
+        self.docs['sales_tenders'] = [tender('t1', '100.00'), tender('t2', '50.00', pt='40')]
+        self.run_engine()
+        e = self.live('cash:130:2026-03-10').get()
+        self.edit_as_accountant(e, '150.00')
+        self.docs['sales_tenders'][1] = tender('t2', '50.00', pt='40', date=datetime.date(2026, 3, 11))
+        self.run_engine()
+        ex = SourceException.objects.get(status='open', source_doc__source_key='t2')
+        self.assertEqual(ex.detail['code'], 'edited_by_user')
+        with self.assertRaises(DR.DecisionError) as cm:
+            DR.keep_edit(ex.pk, user=self.staff)
+        self.assertEqual(cm.exception.code, 'moved')
+        self.assertEqual(SourceException.objects.get(pk=ex.pk).status, 'open')
+        DR.accept_softech(ex.pk, user=self.staff)   # accepting moves it cleanly
+        self.run_engine()
+        self.assertEqual(self.amounts(self.live('cash:130:2026-03-10').get())[0][1], DEC('100.00'))
+        self.assertEqual(self.amounts(self.live('cash:130:2026-03-11').get())[0][1], DEC('50.00'))
+        self.assertFalse(SourceException.objects.filter(status='open').exists())
+
+    def test_keep_edit_refused_when_doc_still_sits_in_another_live_entry(self):
+        """Review fix 1: a doc moves O -> G, both edited; G's row overwrites the doc's only open
+        ledger_error row (group_key G). Keeping G must not relink it while O still carries it."""
+        self.rule(granularity='branch_day')
+        mar11 = datetime.date(2026, 3, 11)
+        self.docs['sales_tenders'] = [tender('t1', '100.00'), tender('t2', '50.00', pt='40'),
+                                      tender('t3', '30.00', date=mar11)]
+        self.run_engine()
+        o, g = self.live('cash:130:2026-03-10').get(), self.live('cash:130:2026-03-11').get()
+        self.edit_as_accountant(o, '150.00')
+        self.edit_as_accountant(g, '31.00')
+        self.docs['sales_tenders'][1] = tender('t2', '50.00', pt='40', date=mar11)
+        self.run_engine()
+        ex = SourceException.objects.get(status='open', source_doc__source_key='t2')
+        self.assertEqual(ex.detail['group_key'], 'cash:130:2026-03-11')   # overwritten by G
+        sd = GLSourceDoc.objects.get(source_key='t2')
+        self.assertEqual((sd.group_key, sd.entry_id), ('cash:130:2026-03-11', o.pk))
+        with self.assertRaises(DR.DecisionError) as cm:
+            DR.keep_edit(ex.pk, user=self.staff)
+        self.assertEqual(cm.exception.code, 'moved')
+        self.assertEqual(GLSourceDoc.objects.get(source_key='t2').entry_id, o.pk)
+        self.assertEqual(SourceException.objects.get(pk=ex.pk).status, 'open')
+
+    def test_keep_edit_refused_for_a_doc_now_skipped(self):
+        self.rule()
+        self.docs['sales_tenders'] = [tender('t1', '100.00')]
+        self.run_engine()
+        e = self.live('t1').get()
+        self.edit_as_accountant(e, '95.00')
+        self.rule(code='skip60', action='skip', priority=200, conditions={'kind_in': ['cash']})
+        self.docs['sales_tenders'] = [tender('t1', '90.00')]
+        self.run_engine()
+        ex = SourceException.objects.get(status='open')
+        with self.assertRaises(DR.DecisionError) as cm:
+            DR.keep_edit(ex.pk, user=self.staff)
+        self.assertEqual(cm.exception.code, 'skipped')
+        self.assertIn('قاعدة تخطٍّ', cm.exception.message)
+
+    def test_stale_version_and_running_engine_refused(self):
+        e, ex = self.edited_exception()
+        v = DR.proposal_version(ex.proposed_lines)
+        for fn in (DR.accept_softech, DR.keep_edit):
+            with self.assertRaises(DR.DecisionError) as cm:
+                fn(ex.pk, user=self.staff, version='x' + v)
+            self.assertEqual(cm.exception.code, 'stale')
+        DR.start_run(triggered_by='x', date_from=D1, date_to=D2, source_types=[])
+        with self.assertRaises(DR.DecisionError) as cm:
+            DR.keep_edit(ex.pk, user=self.staff, version=v)
+        self.assertEqual(cm.exception.code, 'busy')
+        self.assertEqual(SourceException.objects.get(pk=ex.pk).status, 'open')
+
+    def test_detail_carries_proposed_header_and_held_out_count(self):
+        e, ex = self.edited_exception()
+        self.assertEqual((ex.detail['proposed_entry_date'], ex.detail['held_out']), ('2026-03-10', 0))
+        self.assertEqual(ex.detail['proposed_description'], 'نقدية b130 2026-03-10')

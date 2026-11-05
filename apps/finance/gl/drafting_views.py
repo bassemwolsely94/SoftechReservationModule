@@ -32,7 +32,7 @@ from .ledger import OPENING_DATE
 from .drafting_serializers import (
     exception_json, map_json, party_json, rule_json, source_doc_json,
 )
-from .views import EDIT, VIEW, _date, _int, _j, _no_profile, _perms, _profile
+from .views import APPROVE, EDIT, VIEW, _date, _int, _j, _no_profile, _perms, _profile
 
 logger = logging.getLogger(__name__)
 
@@ -474,6 +474,89 @@ def exceptions_redraft(request):
         GLDraftRun.objects.filter(pk=run.pk, status='running').update(status='failed')
         raise
     return Response({'run_id': run.pk}, status=status.HTTP_202_ACCEPTED)
+
+
+# ── Ruling P23: accountant's decision on an edited entry SOFTECH changed ────
+
+_DECISION_HTTP = {'not_found': status.HTTP_404_NOT_FOUND}
+BUSY = 'هناك عملية ترحيل جارية الآن'
+
+
+class _Refused(Exception):
+    def __init__(self, response):
+        super().__init__('refused')
+        self.response = response
+
+
+def _decision_refused(e: drafting.DecisionError):
+    return Response({'code': e.code, 'detail': e.message},
+                    status=_DECISION_HTTP.get(e.code, status.HTTP_409_CONFLICT))
+
+
+def _decision_args(request):
+    """-> (note, version, error response). ``version`` = proposal_version of the lines shown."""
+    note = request.data.get('note')
+    note = '' if note is None else str(note).strip()
+    if len(note) > MAX_NOTE:
+        return note, None, _err([f'الملاحظة أطول من {MAX_NOTE} حرف'])
+    version = request.data.get('version')
+    if not isinstance(version, str) or not version:
+        return note, None, _err(['نسخة سوفتيك المعروضة مطلوبة (version) — أعد تحميل الصفحة'])
+    return note, version, None
+
+
+@api_view(['POST'])
+@permission_classes(APPROVE)
+def exception_accept_softech(request, pk):
+    """«اعتماد نسخة سوفتيك»: release the edit and redraft the group's window now (202 {run_id}).
+    The release and the run start commit together: a busy engine (409) changes nothing."""
+    profile, bad = _need_profile(request)
+    if bad:
+        return bad
+    note, version, bad = _decision_args(request)
+    if bad:
+        return bad
+    try:
+        with transaction.atomic():
+            try:
+                win = drafting.accept_softech(pk, user=profile, note=note, version=version)
+            except drafting.DecisionError as e:
+                raise _Refused(_decision_refused(e))
+            d1, d2, types = win['date_from'], win['date_to'], win['source_types']
+            if d1 < OPENING_DATE:
+                raise _Refused(_err([BEFORE_OPENING]))
+            if (d2 - d1).days > MAX_SPAN_DAYS:
+                raise _Refused(_err(['المدة أطول من المسموح']))
+            try:
+                run = drafting.start_run(triggered_by=f'user:{request.user.pk}', date_from=d1, date_to=d2,
+                                         source_types=types)
+            except drafting.DraftBusy:
+                raise _Refused(Response({'code': 'busy', 'detail': BUSY}, status=status.HTTP_409_CONFLICT))
+    except _Refused as r:
+        return r.response
+    try:
+        start_thread(_background, args=(run.pk, d1, d2, types), name=f'gl-accept-{run.pk}')
+    except Exception:
+        GLDraftRun.objects.filter(pk=run.pk, status='running').update(status='failed')
+        raise
+    return Response({'run_id': run.pk}, status=status.HTTP_202_ACCEPTED)
+
+
+@api_view(['POST'])
+@permission_classes(APPROVE)
+def exception_keep_edit(request, pk):
+    """«إبقاء تعديلي»: keep the accountant's entry; nothing changes until SOFTECH changes again."""
+    profile, bad = _need_profile(request)
+    if bad:
+        return bad
+    note, version, bad = _decision_args(request)
+    if bad:
+        return bad
+    try:
+        ex = drafting.keep_edit(pk, user=profile, note=note, version=version)
+    except drafting.DecisionError as e:
+        return _decision_refused(e)
+    return Response(exception_json(SourceException.objects.select_related('source_doc').get(pk=ex.pk)))
 
 
 # ── entry -> source documents ────────────────────────────────────────────────

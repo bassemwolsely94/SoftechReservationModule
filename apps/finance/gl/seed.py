@@ -65,6 +65,12 @@ RULES = [
     dict(code='sales.change_discount', source_type='sales_tenders', granularity='branch_day',
          book='cash', conditions={'kind_in': ['change_discount']},
          lines=[_ln('debit', 'net', '6022'), _ln('credit', 'net', '6002')]),
+    # HQ cash sales sit on 6011 (sales.hq_store), so HQ's waived small change credits 6011 too;
+    # priority 110 wins over sales.change_discount at branch 100 without editing that rule
+    dict(code='sales.hq_change_discount', source_type='sales_tenders', granularity='branch_day',
+         book='cash', priority=110, conditions={'kind_in': ['change_discount'], 'branch_in': ['100']},
+         lines=[_ln('debit', 'net', '6022', branch='hq', description='خصم فكة المركز {date}'),
+                _ln('credit', 'net', '6011', branch='hq')]),
     dict(code='sales.credit', source_type='credit_sales', granularity='party_day', book='credit',
          conditions={},
          lines=[_ln('debit', 'credit', '1341', branch='hq', party='source',
@@ -140,7 +146,7 @@ def seed_gl_drafting(*, user) -> dict:
                                       'reason': 'missing_account', 'accounts': gone})
             continue
         try:
-            save_rule(user=user, effective_from=EFFECTIVE_FROM, priority=100, **r)
+            save_rule(user=user, effective_from=EFFECTIVE_FROM, **{'priority': 100, **r})
         except RuleError as e:
             result['skipped'].append({'what': 'rule', 'code': r['code'], 'reason': 'invalid',
                                       'errors': e.errors})

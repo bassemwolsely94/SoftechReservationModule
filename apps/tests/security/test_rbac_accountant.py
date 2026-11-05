@@ -88,6 +88,8 @@ class AccountantEnforcedInLogModeTests(TestCase):
         self.assertEqual(req(gl + 'parties/5/reject/', 'POST'), ('ledger', ('approve',)))
         self.assertEqual(req(gl + 'exceptions/5/ignore/', 'POST'), ('ledger', ('create',)))
         self.assertEqual(req(gl + 'exceptions/redraft/', 'POST'), ('ledger', ('create',)))
+        self.assertEqual(req(gl + 'exceptions/5/accept-softech/', 'POST'), ('ledger', ('approve',)))
+        self.assertEqual(req(gl + 'exceptions/5/keep-edit/', 'POST'), ('ledger', ('approve',)))
         self.assertEqual(req(gl + 'drafting/run/', 'POST'), ('ledger', ('create',)))
 
     def test_other_roles_keep_log_mode(self):

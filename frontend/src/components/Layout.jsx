@@ -210,12 +210,13 @@ export const NAV_GROUPS = [
   {
     id: 'finance', label: 'المالية', section: 'المالية',
     items: [
-      { to: '/finance',        icon: '💹', label: 'الذكاء المالي',   roles: ['admin','purchasing','pharmacist','quality_manager'] },
-      { to: '/cheques',        icon: '📝', label: 'تخطيط الشيكات',  roles: ['admin','purchasing','pharmacist'] },
+      { to: '/finance/journal', icon: '📒', label: 'الحسابات العامة', roles: ['admin','accountant'] },
+      { to: '/finance',        icon: '💹', label: 'الذكاء المالي',   roles: ['admin','purchasing','pharmacist','quality_manager','accountant'] },
+      { to: '/cheques',        icon: '📝', label: 'تخطيط الشيكات',  roles: ['admin','purchasing','pharmacist','accountant'] },
       // P-43: /payments (external payments, no data yet) hidden from the menu — the
       // route and code stay; re-add this line if finance asks for it.
       { to: '/payment-audit',  icon: '🏦', label: 'مراجعة الكشوف',  roles: ['admin','purchasing','pharmacist'] },
-      { to: '/reconciliation', icon: '🔗', label: 'سداد الموردين',  roles: ['admin','purchasing','pharmacist'] },
+      { to: '/reconciliation', icon: '🔗', label: 'سداد الموردين',  roles: ['admin','purchasing','pharmacist','accountant'] },
       { to: '/insurance',      icon: '🏥', label: 'مطالبات التأمين', roles: ['admin','purchasing'] },
       { to: '/replacement',    icon: '🔁', label: 'بدل الروشتة',     roles: ['admin','supervisor','purchasing','quality_manager','pharmacist'] },
       { to: '/commerce',       icon: '🧩', label: 'المستندات التجارية', roles: ['admin','purchasing'] },
