@@ -89,7 +89,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | Recommendations | `apps/recommendations` | PARTIAL | Product recommendation engine |
 | Campaigns | `apps/campaigns` | PARTIAL | Campaign management |
 | Cheques | `apps/cheques` | PARTIAL | Cheque planning |
-| Payments | `apps/payments` | PARTIAL | Payment tracking + audit |
+| Payments | `apps/payments` | PARTIAL | Payment tracking + audit. `manage.py run_payment_exception_checks [--days 7] [--force]` (nightly 05:10): duplicate / delayed / wrong-branch exceptions + anomaly score → `payment_anomaly` AbuseFlag; no-op until setting `payments.exception_checks_enabled` (default off); writes only PaymentException / AbuseFlag |
 | Tasks | `apps/tasks` | PARTIAL | Operational tasks + schedules + dashboard |
 | Dashboard | `apps/dashboard` | PARTIAL | Home dashboard aggregations |
 | In-app help (دليل الاستخدام) | `apps/help` | COMPLETE | [28_IN_APP_HELP.md](28_IN_APP_HELP.md) — repo content + trainer edits, F1 panel + `/help` |

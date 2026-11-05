@@ -67,10 +67,10 @@ SC_MORE_DOWNLOAD = T(
 SC_MORE_UPLOAD = T(
     'اختار الملف بعد ما تملاه (xlsx أو xls أو csv) واضغط «⬆️ رفع النتائج».\n'
     '• النظام بيحسب لكل صنف الفرق مقابل اللقطة ويعرض ملخص: مطابق، زيادة، نقص.\n'
-    '• الأصناف اللي مش في اللقطة بتتجاهل مع تنبيه. بديل أسرع: العد المباشر من الموبايل.',
+    '• الأصناف اللي مش في اللقطة بتتجاهل مع تنبيه، وكمان أي كمية بالسالب (زي العد من الموبايل). بديل أسرع: العد المباشر من الموبايل.',
     'Pick the filled file (xlsx, xls or csv) and press "⬆️ Upload results".\n'
     '• The system calculates each item\'s difference vs the snapshot and shows a summary: match, surplus, deficit.\n'
-    '• Items not in the snapshot are ignored with a warning. Faster alternative: count live on the phone.')
+    '• Items not in the snapshot are ignored with a warning, and so is any negative quantity (same as mobile counting). Faster alternative: count live on the phone.')
 SC_MORE_VSUMMARY = T(
     'إجمالي الأصناف وعدد المطابق والزيادة (المعدود أكتر من المتوقع) والنقص (المعدود أقل).\n'
     '• نسبة كبيرة من الفروق غالباً معناها حركة حصلت بعد اللقطة أو عد غلط — أعد عدّ الأصناف الكبيرة قبل التسوية.',
@@ -529,8 +529,8 @@ SCREENS = [
              'text': T('يفتح الجلسة على تبويباتها: 📸 اللقطة، 📊 العد، 📉 الفروق.', 'Opens the session on its tabs: 📸 Snapshot, 📊 Count, 📉 Variances.'),
              'when': T('لما تكمّل جرد شغّال أو تراجع فروقات جلسة.', 'To continue a running count or review a session\'s variances.')},
         ],
-        'updated': '2026-11-03',
-        'change_note': T('تبويب جديد «🧮 الجرد اليومي»: متابعة ومراجعة الجرد اليومي الصغير', 'New "🧮 Daily counts" tab: follow up and review the small daily counts'),
+        'updated': '2026-11-05',
+        'change_note': T('رفع نتائج CSV رجع يشتغل، والرفع بيرفض الكمية بالسالب زي العد من الموبايل', 'CSV results upload works again, and uploads refuse a negative quantity, like mobile counting'),
     },
     {
         'key': 'stockcount.mobile',

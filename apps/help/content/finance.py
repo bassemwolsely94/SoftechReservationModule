@@ -1272,19 +1272,21 @@ SCREENS = [
         'summary': T('رفع كشف الحساب البنكي (CSV/Excel) ومطابقته تلقائياً بالمدفوعات المسجّلة، ومعالجة الاستثناءات.', 'Upload the bank statement (CSV/Excel) and match it automatically to recorded payments, then handle exceptions.'),
         'audience': T('المالية.', 'Finance.'),
         'tabs': [
-            {'key': 'exceptions', 'title': T('⚠️ الاستثناءات', '⚠️ Exceptions'), 'body': T('حركات تحتاج قراراً: دفعة مفقودة من الكشف، حركة بنكية غير مسجّلة، مكررة، دفع جزئي، فرع أو مبلغ أو كاشير خاطئ، تسوية متأخرة، شذوذ / إشارة احتيال. «معالجة» ← ملاحظة التسوية ← «حل الاستثناء» أو «تجاهل».', 'Lines that need a decision: payment missing from the statement, unrecorded bank line, duplicate, partial payment, wrong branch, amount or cashier, late settlement, anomaly / fraud signal. "Handle" → settlement note → "Resolve" or "Ignore".')},
-            {'key': 'statements', 'title': T('🏦 الكشوف البنكية', '🏦 Bank statements'), 'body': T('الكشوف المرفوعة: البنك ورقم الحساب، عدد السطور والمطابق ونسبة المطابقة والحالة؛ «رفع كشف حساب» و«تشغيل المطابقة».', 'Uploaded statements: bank and account number, line count, matched, match rate and status; "Upload statement" and "Run matching".')},
+            {'key': 'exceptions', 'title': T('⚠️ الاستثناءات', '⚠️ Exceptions'), 'body': T('حركات تحتاج قراراً: دفعة مفقودة من الكشف، حركة بنكية غير مسجّلة، مكررة، دفع جزئي، فرع أو مبلغ أو كاشير خاطئ، تسوية متأخرة، شذوذ / إشارة احتيال. «معالجة» ← ملاحظة التسوية ← «حل الاستثناء» أو «تجاهل».\n• الفحص التلقائي الليلي (مقفول لحد ما الأدمن يفعّل إعداد «فحص استثناءات المدفوعات تلقائياً»): بيعلّم الدفعة المكررة (نفس المستخدم والمبلغ وطريقة الدفع في نفس اليوم، ونفس رقم المرجع أو بدون مرجع — مرجعين مختلفين يعني دفعتين مختلفتين)، والدفعة «في الانتظار» من 3 أيام أو أكثر، والدفعة المسجّلة لفرع غير فرع المستخدم (ماعدا الكول سنتر والإدارة)، والمبلغ غير المعتاد لنفس المستخدم وطريقة الدفع (لازم يبعد عن معدله 100 جنيه على الأقل و20% على الأقل). المبلغ غير المعتاد بيرفع كمان إشارة «دفعة غير معتادة» على الموظف للمراجعة. الفحص بيسجّل استثناءات بس — ما بيغيّرش أي دفعة.', 'Lines that need a decision: payment missing from the statement, unrecorded bank line, duplicate, partial payment, wrong branch, amount or cashier, late settlement, anomaly / fraud signal. "Handle" → settlement note → "Resolve" or "Ignore".\n• The nightly automatic check (off until an admin enables the setting «فحص استثناءات المدفوعات تلقائياً», automatic payment exception checks) flags a duplicate (same user, amount, method and day, with the same reference or none — two different references are two different payments), a payment "pending" for 3 days or more, a payment recorded for a branch other than the user\'s own (call center and HQ excepted), and an unusual amount for that user and method (at least 100 EGP and at least 20% away from their average). An unusual amount also raises a "payment anomaly" abuse flag on the staff member for review. The check only records exceptions — it never changes a payment.')},
+            {'key': 'statements', 'title': T('🏦 الكشوف البنكية', '🏦 Bank statements'), 'body': T('الكشوف المرفوعة: البنك ورقم الحساب، عدد السطور والمطابق ونسبة المطابقة والحالة؛ «رفع كشف حساب» و«تشغيل المطابقة». الكشف اللي ملفه ما اتقراش بيظهر «فشل» ومعاه السبب — صلّح الملف وارفعه تاني.', 'Uploaded statements: bank and account number, line count, matched, match rate and status; "Upload statement" and "Run matching". A statement whose file could not be read shows "failed" with the reason — fix the file and upload it again.')},
         ],
         'related': ['finance.payments'],
         'tour': [
-            {'target': 'finance-payment-audit-upload', 'text': T('«+ رفع كشف حساب» لرفع كشف بنكي (CSV/Excel) مع مرجع اختياري.',
-                                              '«+ رفع كشف حساب» (Upload statement) uploads a bank statement (CSV/Excel) with an optional reference.'),
-             'more': T('بتختار الملف من البنك وتكتب المرجع البنكي لو حابب، وتضغط رفع.\n'
-                       '• الكشف بيظهر في «🏦 الكشوف البنكية» بحالة معلّقة.\n'
-                       '• المطابقة مش بتشتغل لوحدها — شغّلها من زر «تشغيل المطابقة».',
-                       'You choose the file from the bank, add the bank reference if you like, and upload.\n'
-                       '• The statement appears in "🏦 Bank statements" as pending.\n'
-                       '• Matching does not start by itself — run it with "Run matching".'),
+            {'target': 'finance-payment-audit-upload', 'text': T('«+ رفع كشف حساب» لرفع كشف بنكي (CSV/Excel) للفرع والفترة.',
+                                              '«+ رفع كشف حساب» (Upload statement) uploads a bank statement (CSV/Excel) for a branch and period.'),
+             'more': T('بتختار الفرع والبنك وطريقة الدفع والفترة (من / إلى) والملف، وتضغط «رفع».\n'
+                       '• السيرفر بيقرا الملف ويحفظ كل حركة كسطر، والكشف بيظهر في «🏦 الكشوف البنكية» بعدد سطوره وحالة «في الانتظار».\n'
+                       '• المطابقة مش بتشتغل لوحدها — شغّلها من زر «تشغيل المطابقة».\n'
+                       '• الرفع بيتسجّل في سجل المراجعة باسمك واسم الملف وعدد السطور.',
+                       'You pick the branch, bank, payment method, period (from / to) and the file, then press "Upload".\n'
+                       '• The server reads the file and saves every transaction as a line; the statement appears in "🏦 Bank statements" with its line count, as pending.\n'
+                       '• Matching does not start by itself — run it with "Run matching".\n'
+                       '• The upload is recorded in the audit log with your name, the file name and the line count.'),
              'label': T('+ رفع كشف حساب', '+ Upload statement')},
             {'target': 'finance-payment-audit-tabs', 'text': T('«⚠️ الاستثناءات» المفتوحة بعددها، و«🏦 الكشوف البنكية».',
                                               '«⚠️ الاستثناءات» (Exceptions) with their open count, and «🏦 الكشوف البنكية» (Bank statements).'),
@@ -1331,14 +1333,51 @@ SCREENS = [
              'label': T('تشغيل المطابقة', 'Run matching'),
              'when': T('بعد الرفع مباشرة. لا يكتب في SOFTECH.', 'Right after uploading. It does not write to SOFTECH.'),
              'open_hint': T('على كشف بحالة pending في تبويب الكشوف.', 'On a pending statement in the statements tab.')},
+            {'target': 'finance-payment-audit-upload-branch',
+             'label': T('الفرع', 'Branch'),
+             'text': T('الفرع اللي الكشف بتاعه — بتشوف فروعك بس، وفرعك متختار لوحده.', 'The branch the statement belongs to — you only see your branches, and yours is preselected.'),
+             'open_hint': T('اضغط «+ رفع كشف حساب».', 'Press "+ Upload statement".')},
+            {'target': 'finance-payment-audit-upload-bank',
+             'label': T('اسم البنك / المحفظة', 'Bank / wallet name'),
+             'text': T('اكتب اسم البنك أو المحفظة، أو اختاره من الأسماء اللي اتكتبت قبل كده. رقم الحساب اختياري.', 'Type the bank or wallet name, or pick one used before. The account number is optional.'),
+             'open_hint': T('اضغط «+ رفع كشف حساب».', 'Press "+ Upload statement".')},
+            {'target': 'finance-payment-audit-upload-method',
+             'label': T('طريقة الدفع', 'Payment method'),
+             'text': T('طريقة الدفع اللي الكشف بيغطيها (تحويل بنكي، إنستاباي، فودافون كاش…) — المطابقة بتدوّر في الدفعات المسجلة بنفس الطريقة ونفس الفرع.', 'The payment method the statement covers (bank transfer, InstaPay, Vodafone Cash…) — matching looks at payments recorded with the same method and branch.'),
+             'open_hint': T('اضغط «+ رفع كشف حساب».', 'Press "+ Upload statement".')},
+            {'target': 'finance-payment-audit-upload-period',
+             'label': T('من تاريخ / إلى تاريخ', 'From / to date'),
+             'text': T('فترة الكشف؛ «إلى» لازم تكون بعد «من» أو نفس اليوم.', 'The statement period; "to" must be on or after "from".'),
+             'when': T('الحركة اللي تاريخها برة الفترة بتتحفظ برضه، بس بيظهر تنبيه بعددها.', 'A line dated outside the period is still saved, but a warning shows how many there are.'),
+             'open_hint': T('اضغط «+ رفع كشف حساب».', 'Press "+ Upload statement".')},
             {'target': 'finance-payment-audit-upload-file',
              'label': T('الملف (CSV / Excel)', 'File (CSV / Excel)'),
-             'text': T('اختر ملف الكشف، واكتب المرجع البنكي لو موجود.', 'Pick the statement file, and type the bank reference if you have one.'),
+             'text': T('ملف csv أو xlsx (لحد 10 ميجا) فيه عمود التاريخ، ومعاه «مدين» و«دائن» أو عمود «المبلغ».', 'A csv or xlsx file (up to 10 MB) with a date column, plus "Debit" and "Credit" or one "Amount" column.'),
+             'more': T('العناوين اللي بنفهمها:\n'
+                       '• التاريخ: التاريخ، تاريخ الحركة، تاريخ العملية، Date، Transaction Date، Txn Date، Posting Date.\n'
+                       '• مدين / سحب / منه / Debit / Withdrawal / Dr — ودائن / إيداع / له / Credit / Deposit / Cr.\n'
+                       '• أو عمود واحد «المبلغ» / Amount: الموجب إيداع والسالب سحب.\n'
+                       '• اختياري: المرجع / رقم المرجع / رقم العملية / Reference / Ref / Ref No / Transaction ID / Cheque No، البيان / الوصف / التفاصيل / Description / Details / Narrative / Remarks، الرصيد / Balance، تاريخ القيمة / Value Date.',
+                       'Headers we understand:\n'
+                       '• Date: Date, Transaction Date, Txn Date, Posting Date (or التاريخ، تاريخ الحركة، تاريخ العملية).\n'
+                       '• Debit / Withdrawal / Dr (مدين، سحب، منه) — and Credit / Deposit / Cr (دائن، إيداع، له).\n'
+                       '• Or one Amount column (المبلغ): positive is a deposit, negative a withdrawal.\n'
+                       '• Optional: Reference / Ref / Ref No / Transaction ID / Cheque No, Description / Details / Narrative / Remarks, Balance, Value Date.'),
              'open_hint': T('اضغط «+ رفع كشف حساب».', 'Press "+ Upload statement".')},
             {'target': 'finance-payment-audit-upload-save',
              'label': T('رفع', 'Upload'),
-             'text': T('يحفظ الكشف بحالة pending في تبويب «🏦 الكشوف البنكية».', 'Saves the statement as pending in the "🏦 Bank statements" tab.'),
+             'text': T('يقرا الملف ويحفظ سطوره، والكشف يظهر «في الانتظار» في تبويب «🏦 الكشوف البنكية». لو فيه مشكلة في خانة بتظهر تحتها.', 'Reads the file and saves its lines; the statement shows as pending in the "🏦 Bank statements" tab. A problem with a field shows right under it.'),
              'when': T('المطابقة لا تبدأ وحدها — شغّلها من التبويب.', 'Matching does not start by itself — run it from the tab.'),
+             'more': T('• عادي يكون فوق العناوين سطور عنوان (اسم البنك، رقم الحساب) — بندوّر على العناوين في أول 15 سطر.\n'
+                       '• التاريخ يوم/شهر/سنة أو سنة-شهر-يوم؛ المبالغ ممكن تكون بفواصل أو «ج.م» أو أرقام عربية، والسالب بين قوسين.\n'
+                       '• سطور الإجمالي والرصيد الافتتاحي والختامي بتتشال لوحدها.\n'
+                       '• ملف xls القديم: احفظه xlsx أو csv الأول.\n'
+                       '• لو العناوين مش مفهومة أو فيه سطر تاريخه أو مبلغه مش مفهوم، مفيش ولا سطر بيتحفظ: الكشف بيظهر «فشل» والرسالة بتقول السبب.',
+                       '• Title rows above the headers (bank name, account number) are fine — we look for the headers in the first 15 rows.\n'
+                       '• Dates are day/month/year or year-month-day; amounts may carry thousands separators, "EGP" / «ج.م» or Arabic digits, and a negative may be in brackets.\n'
+                       '• Total, opening and closing balance rows are dropped by themselves.\n'
+                       '• An old xls file: save it as xlsx or csv first.\n'
+                       '• If the headers are not understood, or a row has an unreadable date or amount, no line is saved: the statement shows "failed" with the reason.'),
              'open_hint': T('داخل نافذة الرفع، بعد اختيار الملف.', 'Inside the upload box, after picking the file.')},
             {'target': 'finance-payment-audit-note',
              'label': T('ملاحظة التسوية', 'Settlement note'),
@@ -1360,8 +1399,8 @@ SCREENS = [
               'Every action is checked on the server (Permissions Matrix, finance module): viewing needs "view", "Resolve" and "Ignore" need "approve", assigning needs "assign" or "approve", and uploading a statement needs "create".'),
         ],
 
-        'updated': '2026-11-04',
-        'change_note': T('أسماء أنواع الاستثناءات وحالاتها من السيرفر، عمود «البنك / الحساب»، نسبة مطابقة صحيحة، وملاحظة التسوية بتتحفظ', 'Exception type and status names come from the server, a "Bank / account" column, a correct match rate, and the settlement note is now saved'),
+        'updated': '2026-11-05',
+        'change_note': T('فحص تلقائي ليلي للاستثناءات (مكرر، متأخر، فرع مختلف، مبلغ غير معتاد) — مقفول لحد ما الأدمن يفعّله', 'Nightly automatic exception check (duplicate, delayed, other branch, unusual amount) — off until an admin enables it'),
     },
     {
         'key': 'finance.reconciliation',
