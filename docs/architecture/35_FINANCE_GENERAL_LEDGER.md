@@ -266,7 +266,7 @@ with the A/P mirror (live check, 2026: diff 0 for all months, expenses 6802 docs
 | Kind | Meaning | Fix in the UI |
 |---|---|---|
 | `unmapped_party` | doc's person has no confirmed `GLParty` | confirm the proposal / create a party |
-| `unmapped_account` | bank / expense / card_clearing value (or a bank map without branch) has no map | map the value to account + branch |
+| `unmapped_account` | bank / expense / card_clearing / intercompany value (or a bank map without branch) has no map | map the value to account + branch |
 | `no_rule` | no active rule matches | add / widen a rule (editor opens with the doc's conditions) |
 | `ambiguous_rule` | two rules, same priority | change priority or conditions |
 | `unbalanced_rule` | the rule's lines don't balance for the doc | fix the rule lines |
@@ -275,6 +275,56 @@ with the A/P mirror (live check, 2026: diff 0 for all months, expenses 6802 docs
 | `ledger_error` | `save_draft` refused (inactive account, before opening…), or `edited_by_user` (P21) | read the message, fix, redraft; for `edited_by_user` compare «القيد بعد تعديلك» / «نسخة سوفتيك الجديدة» and choose «اعتماد نسخة سوفتيك» or «إبقاء تعديلي» (P23) |
 
 An exception resolves itself on redraft; «تجاهل» needs a reason and keeps the doc status `exception`.
+
+## Journal gaps from finance's 2020 cash book (2026-11-05, Rulings P24–P26)
+
+- **P24 — inter-company cash transfers.** The treasury reader classifies SOFTECH transfer vouchers
+  (`personcode` -180 box↔box, -181 box↔bank) by their other side, with `source_key` unchanged
+  (`sources/treasury.py::_transfer_kinds`, a pure function of the fetched row set):
+  - `transfer_branch` + `attrs.counterpart_branch` — the voucher's own `tf_branchcode` (when it is another
+    branch), else (the HQ leg) the branch of the one voucher in the same fetch whose `tf_branchcode` /
+    `tf_cheqsno` point back at it. Two different branches pointing at one voucher → no counterpart.
+  - `transfer_bank` + `attrs.tf_bankcode` — no counterpart branch, `tf_bankcode` set. When both legs of a
+    same-branch box↔bank pair are in the fetch, the receipt leg is `transfer_bank_mirror` and the seeded
+    skip rule `treasury.box_bank_mirror` drops it (the two legs carry the same movement — never posted twice).
+  - `transfer` otherwise (unchanged: `treasury.transfer_in/out` via suspense 1320).
+  New map kind `intercompany` (SOFTECH branch code → finance's sister-company account, branch = HQ; the
+  map PUT needs a branch) and map keys `counterpart_branch` / `tf_bankcode` (migration 0023 changes only
+  the choices). Seeded (priority 120, all `financialdoc_in ['10']` so the 1-1-2026 «قيد تسوية» vouchers,
+  financialdoc 90, stay `no_rule` exceptions):
+  | Rule | Kind / branch / direction | Lines |
+  |---|---|---|
+  | `treasury.branch_transfer_out` | transfer_branch, not 100, payment | Dr 2404 (doc branch) / Cr box map |
+  | `treasury.branch_transfer_in` | transfer_branch, not 100, receipt | Dr box map / Cr 2404 (doc branch) |
+  | `treasury.hq_transfer_out` | transfer_branch, 100, payment | Dr intercompany by counterpart (HQ) / Cr box map |
+  | `treasury.hq_transfer_in` | transfer_branch, 100, receipt | Dr box map / Cr intercompany by counterpart (HQ) |
+  | `treasury.box_bank_in` / `_out` | transfer_bank, receipt / payment | Dr box / Cr bank map by `tf_bankcode` (and reverse) |
+  | `treasury.box_bank_mirror` | transfer_bank_mirror | skip |
+  Intercompany maps: 130→2408 علياء, 140→2413 الجيزة, 150→2405 عين شمس, 160→2406 باب الحديد, 170→2417 محسن
+  (missing accounts skipped and reported, P5). 2404 «شركات شقيقة شركة الرزيقى لادارة الصيدليات» is the
+  branch-side account, as in finance's cash book.
+- **P25 — cash purchases through 2341.** `supplier.cash` (branch_day) now has four lines: Dr 5100 (box
+  branch) / Cr 2341 (party, box branch) / Dr 2341 (party, box branch) / Cr box map, so the 2341
+  sub-ledger lists every cash supplier like finance's two-leg booking. 2341 lines aggregate per party
+  (one pair per supplier per branch-day) with «مشتريات نقدية {party} {note}» — new placeholder `{note}` =
+  the voucher note (usually the invoice no.; of the party's first voucher that day); every rendered line
+  description is capped at 500 characters. An unconfirmed supplier → `unmapped_party` for that voucher
+  only. **The seed is create-only**: a database seeded before this batch keeps the old two-line
+  `supplier.cash` (and gets the new transfer rules / maps on the next `seed_gl_drafting`) until finance
+  edits the rule in «قواعد الترحيل» (production is not seeded yet).
+- **P26 — party import from the 2020 master sheets.** `parse_party_sheets` also reads finance's master
+  sheets by their (code, name) header pair, normalised (`normalize_ar`, trailing spaces ignored):
+  «الكود» + «اسم المورد» → supplier, «كود الموظف» + «Name in Arabic» → employee, «كود العميل» +
+  «اسم العميل» → customer (same code / name guards). `import_parties(create_only=True)` /
+  `import_gl_parties <xlsx> --create-only [--propose]` only adds missing codes and never renames or
+  touches an existing party — the 2026 sub-ledger names stay authoritative.
+
+### Not drafted from SOFTECH (finance keeps booking these by hand)
+
+- Daily branch→HQ cash handovers and 1302↔1301 transfers — not in SOFTECH (branch boxes are never emptied there).
+- Shift over / short (1303) — SOFTECH `pos_shiftclosing` exists, but no deterministic formula reproduces finance's 1303.
+- Coupons (2354) — in 2026 expense code 43 is HQ store issues (doccode 170, 400 each), not cash; the account is finance's call.
+- Card settlement 1327 / 1329 → bank — SOFTECH has no settlement data.
 
 ## Schedule and freshness
 
@@ -298,7 +348,7 @@ domain `gl_drafting` («ترحيل القيود من سوفتيك», cadence 144
 | `GET parties/persons/?type=&q=` | view | ReconParty search for the picker (wildcards) |
 | `POST parties/import/` · `parties/propose/` | edit | Excel import; name-match proposals |
 | `POST parties/{id}/confirm/` · `reject/` | approve | audited; a personcode already confirmed to another party is refused |
-| `GET maps/` · `PUT maps/{kind}/{value}/` | view · edit | audited before/after; bank / card maps need a branch |
+| `GET maps/` · `PUT maps/{kind}/{value}/` | view · edit | audited before/after; bank / card / intercompany maps need a branch |
 | `GET rules/` · `POST rules/` · `GET rules/meta/` · `GET rules/{code}/versions/` | view · edit | list, versioned save, constants for the editor (source fields, conditions, modes), history |
 | `POST rules/preview/` | view | «تجربة»; computes only |
 | `GET exceptions/` · `exceptions/counts/` · `exceptions/unmapped-values/` | view | server-side filters (`kind`, `status`, `source`, dates, branch); counts for the badge and chips |
@@ -322,7 +372,7 @@ exceptions and drafting = `ledger.create`; the P23 accept / keep decisions = `le
 
 ```
 python manage.py seed_gl_drafting                      # rules + maps from the verification table (idempotent)
-python manage.py import_gl_parties <xlsx> [--propose]  # finance parties; --propose runs name matching
+python manage.py import_gl_parties <xlsx> [--create-only] [--propose]  # finance parties (P26); --propose runs name matching
 python manage.py gl_draft --from YYYY-MM-DD --to YYYY-MM-DD [--source TYPE]... [--dry-run] [--allow-mass-vanish]
 python manage.py gl_check_sources --from … --to … [--source all]   # readers vs the A/P mirror (read-only)
 ```
@@ -336,6 +386,7 @@ Purchases split (branch invoices booked at payment vs HQ credit); cash purchase 
 from SOFTECH returns); card sales (4.09M vs 3.02M; processor per branch) — card tenders stay exceptions
 until answered; credit-sales presentation (6003 gross / 6021 discount vs net) and credit returns (6018
 vs netting); VAT source (docvalue3 ≠ 2362 / 2363, no VAT lines seeded); cheque maturity posted on the
-due date (SOFTECH never records clearing); bank movements / card settlements / box→bank deposits stay
-manual (`bankstrans` empty); the 36M of 1-1-2026 transfers; expense code 43; supplier-invoice dating
+due date (SOFTECH never records clearing); bank movements / card settlements stay manual (`bankstrans`
+empty; box↔bank transfer vouchers are drafted since P24); the 36M of 1-1-2026 transfers (financialdoc 90,
+left as exceptions by P24); expense code 43; supplier-invoice dating
 basis; rule editing = `ledger.edit` (finance manager).
