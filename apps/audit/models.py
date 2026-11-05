@@ -345,6 +345,7 @@ class AbuseFlag(models.Model):
         ('after_hours_activity',    '⚠️ نشاط خارج أوقات العمل'),
         ('bulk_deletions',          '⚠️ حذف جماعي'),
         ('override_pattern',        '⚠️ تجاوزات متكررة'),
+        ('payment_anomaly',         '⚠️ دفعة غير معتادة'),   # apps.payments.audit_service
     ]
 
     SEVERITY_CHOICES = [
