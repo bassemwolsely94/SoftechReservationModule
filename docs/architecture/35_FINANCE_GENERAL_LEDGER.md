@@ -299,6 +299,12 @@ An exception resolves itself on redraft; «تجاهل» needs a reason and keeps
     mirror only when its box partner (same branch, `tf_cheqsno` = its cheqsno, `tf_bankcode` = its
     bankcode, ±31 days) exists — in the fetch or by one read-only SELECT (`sql_bank_transfer_partners`);
     otherwise it is `transfer_unpaired` (exception), never a silent skip.
+  - **P31**: -181 legs are classified by both banktypes — own `banktype` and `tf_type` (banktype of
+    `tf_bankcode`, outer join `c.tf_bankcode *= tb.bankcode` in `sql_cheques`). box(0)→bank(1) =
+    `transfer_bank`; bank(1)→box(0) = mirror only if its partner exists and is itself a box (banktype 0,
+    checked in the fetch and joined in `sql_bank_transfer_partners`). Same-type pairs (box↔box,
+    bank↔bank — 5 and 24 rows in 2019–2021) and an unknown tf type are `transfer_unpaired`, so they
+    never post zero times or twice. The parties import message shows the skipped master-sheet rows.
   - `transfer` otherwise (unchanged: `treasury.transfer_in/out` via suspense 1320).
   New map kind `intercompany` (SOFTECH branch code → finance's sister-company account, branch = HQ; the
   map PUT needs a branch) and map keys `counterpart_branch` / `tf_bankcode` (migration 0023 changes only

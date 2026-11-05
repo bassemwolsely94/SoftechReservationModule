@@ -76,7 +76,8 @@ function ImportBar({ onDone }) {
   const imp = useMutation({
     mutationFn: () => glApi.partiesImport(file).then(r => r.data),
     onSuccess: (d) => {
-      setErr(''); setMsg(`تم الاستيراد: ${d.rows ?? 0} صف · جديد ${d.created ?? 0} · تحديث ${d.updated ?? 0}`)
+      setErr(''); setMsg(`تم الاستيراد: ${d.rows ?? 0} صف · جديد ${d.created ?? 0} · تحديث ${d.updated ?? 0}`
+        + (d.master_skipped ? ` · تم تخطي ${d.master_skipped} صف من شيتات 2020 الرئيسية (تُستورد بأمر --create-only فقط)` : ''))
       setFile(null); if (fileRef.current) fileRef.current.value = ''
       onDone()
     },

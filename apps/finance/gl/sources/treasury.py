@@ -21,7 +21,7 @@ def _kind_other(ptcode: str, personcode: str) -> str:
 
 HQ = sybase_gl.HQ_BRANCH
 BOX_TRANSFER, BANK_TRANSFER = sybase_gl.TRANSFER_BOX_PERSON, sybase_gl.TRANSFER_BANK_PERSON
-BANK_TYPE_BANK = '1'   # banks.banktype: 0 = cash box, 1 = bank account
+BANK_TYPE_BOX, BANK_TYPE_BANK = '0', '1'   # banks.banktype: 0 = cash box, 1 = bank account
 PAIR_DAYS = sybase_gl.TRANSFER_PAIR_DAYS
 _LOOKUP_CHUNK = 200
 
@@ -46,11 +46,11 @@ def _transfer_kinds(rows, fetch) -> dict:
     (Ruling P30: cheqsno repeats across years). It is looked for in this fetch first, then by one
     read-only SELECT per kind of lookup, with no range bound - so the kind never depends on the
     range drafted.
-    -181 box<->bank (P27/P30): the bank-side leg (its own box is a bank, banktype 1) is
-    'transfer_bank_mirror' (skipped) only when its box-side partner exists (same branch, tf_cheqsno =
-    its cheqsno, tf_bankcode = its bankcode), else 'transfer_unpaired' (exception, never a silent
-    skip); the box leg with tf_bankcode is 'transfer_bank' (posts box vs bank(tf_bankcode), also
-    alone); no tf_bankcode -> 'transfer'.
+    -181 box<->bank (P27/P30/P31), by BOTH banktypes (own `banktype` and `tf_type` of tf_bankcode):
+    box(0) -> bank(1) = 'transfer_bank' (posts box vs bank(tf_bankcode), also alone); bank(1) -> box(0)
+    = 'transfer_bank_mirror' (skipped) only when its box-side partner exists (same branch, tf_cheqsno
+    = its cheqsno, tf_bankcode = its bankcode, its own banktype 0); anything else - no partner,
+    box<->box, bank<->bank, unknown tf type - is 'transfer_unpaired' (exception, never 0 or 2 posts).
     -180 box<->box (P24/P28/P29): counterpart branch = own tf_branchcode (another branch), else the
     one branch whose leg points back (tf_branchcode / tf_cheqsno) - for an HQ leg also by
     ``sql_transfer_legs_pointing_at``. HQ on either side -> 'transfer_branch'; branch<->branch ->
@@ -72,8 +72,9 @@ def _transfer_kinds(rows, fetch) -> dict:
     def branches_near(back, key, day):
         return {b for b, d in back.get(key, ()) if _near(d, day)}
 
-    def box_partner(src, branch, sno, bank, day):   # P30 (b): the box leg of a bank-side -181 row
+    def box_partner(src, branch, sno, bank, day):   # P30 (b) / P31: the box leg of a bank-side -181 row
         return any(code(p['personcode']) == BANK_TRANSFER and code(p['branchcode']) == branch
+                   and code(p.get('banktype')) == BANK_TYPE_BOX
                    and code(p.get('tf_cheqsno')) == sno and code(p.get('tf_bankcode')) == bank
                    and code(p['cheqsno']) != sno and _near(_day(p), day) for p in src)
 
@@ -93,8 +94,11 @@ def _transfer_kinds(rows, fetch) -> dict:
             looked.setdefault(k, []).extend(v)
 
     # P30 (b): bank-side -181 rows whose box leg is not in the fetch -> one bounded SELECT
-    def is_bank_side(r):
-        return code(r['personcode']) == BANK_TRANSFER and code(r.get('banktype')) == BANK_TYPE_BANK
+    def types(r):
+        return code(r.get('banktype')), code(r.get('tf_type'))
+
+    def is_bank_side(r):   # bank(1) leg pointing at a box(0)
+        return code(r['personcode']) == BANK_TRANSFER and types(r) == (BANK_TYPE_BANK, BANK_TYPE_BOX)
 
     bank_open = sorted((b, sno, code(r['bankcode']), _day(r)) for (b, sno), r in tf.items()
                        if is_bank_side(r) and _day(r)
@@ -111,10 +115,10 @@ def _transfer_kinds(rows, fetch) -> dict:
             if is_bank_side(r):
                 paired = box_partner(list(tf.values()) + partners, branch, sno, code(r['bankcode']), day)
                 out[(branch, sno)] = ('transfer_bank_mirror' if paired else 'transfer_unpaired', '')
-            elif code(r.get('tf_bankcode')):
+            elif types(r) == (BANK_TYPE_BOX, BANK_TYPE_BANK) and code(r.get('tf_bankcode')):
                 out[(branch, sno)] = ('transfer_bank', '')
-            else:
-                out[(branch, sno)] = ('transfer', '')
+            else:   # box<->box, bank<->bank or unknown tf type (Ruling P31)
+                out[(branch, sno)] = ('transfer_unpaired', '')
             continue
         counterpart = own[(branch, sno)] if own[(branch, sno)] != branch else ''
         if not counterpart:

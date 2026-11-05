@@ -194,9 +194,9 @@ class SeedTests(TestCase):
             r(branchcode='100', cheqsno='1', cheqtype='20', bankcode='10', tf_branchcode='150',
               financialdoccode='90', cheqvalue=Dec('20000000')),
             # box 10 -> bank 04 at HQ, both legs present: posted once
-            r(branchcode='100', cheqsno='600', cheqtype='20', bankcode='10', personcode='-181',
+            r(branchcode='100', cheqsno='600', cheqtype='20', bankcode='10', personcode='-181', tf_type='1',
               tf_bankcode='04', tf_cheqsno='601', cheqvalue=Dec('1000000')),
-            r(branchcode='100', cheqsno='601', cheqtype='10', bankcode='04', personcode='-181', banktype='1',
+            r(branchcode='100', cheqsno='601', cheqtype='10', bankcode='04', personcode='-181', banktype='1', tf_type='0',
               tf_bankcode='10', tf_cheqsno='600', cheqvalue=Dec('1000000')),
             # HQ leg nobody points at (P28) and a branch<->branch pair (P29): exceptions, never 1320
             r(branchcode='100', cheqsno='700', cheqtype='20', bankcode='10', cheqvalue=Dec('5')),
