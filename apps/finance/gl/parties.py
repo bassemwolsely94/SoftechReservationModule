@@ -18,6 +18,14 @@ from .names import normalize_ar
 STOP_WORDS = {'شركه', 'شركة', 'ش', 'للادويه', 'لتجاره', 'الادويه', 'ادويه', 'فرع', 'و', 'ال'}
 _SKIP = {'total', 'grand total', normalize_ar('الرصيد الافتتاحى')}
 _HEADERS = {'suppliar code': 'supplier', 'customer code': 'customer'}
+# Ruling P26: finance's 2020 master sheets - (code header, name header) pairs, normalised
+_MASTER_HEADERS = {(normalize_ar('الكود'), normalize_ar('اسم المورد')): 'supplier',
+                   (normalize_ar('كود الموظف'), 'name in arabic'): 'employee',
+                   (normalize_ar('كود العميل'), normalize_ar('اسم العميل')): 'customer'}
+
+
+def _hdr(v) -> str:
+    return normalize_ar(v).lower()
 
 
 @dataclass(frozen=True)
@@ -77,8 +85,9 @@ def _name(v):
 
 
 def parse_party_sheets(path) -> list[PartyRow]:
-    """Read sub-ledger pivots by header ('suppliar code' / 'customer code'), not position.
-    The name is the cell right of the code. Duplicate (type, code) keep the first name."""
+    """Read sub-ledger pivots by header ('suppliar code' / 'customer code') and the 2020 master
+    sheets by their (code, name) header pair (Ruling P26), never by position. The name is the cell
+    right of the code. Duplicate (type, code) keep the first name."""
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     seen, out = set(), []
     for ws in wb.worksheets:
@@ -86,7 +95,9 @@ def parse_party_sheets(path) -> list[PartyRow]:
         hdr = None
         for i, r in enumerate(rows):
             for j, c in enumerate(r):
-                t = _HEADERS.get(str(c or '').strip().lower())
+                t = _HEADERS.get(_hdr(c))
+                if not t and j + 1 < len(r):
+                    t = _MASTER_HEADERS.get((_hdr(c), _hdr(r[j + 1])))
                 if t:
                     hdr = (i, j, t)
                     break
@@ -112,7 +123,9 @@ def parse_party_sheets(path) -> list[PartyRow]:
     return out
 
 
-def import_parties(rows, *, user) -> dict:
+def import_parties(rows, *, user, create_only=False) -> dict:
+    """Create missing parties; rename existing ones unless `create_only` (Ruling P26: the 2020
+    master sheets only add codes - the 2026 sub-ledger names stay authoritative)."""
     created = updated = 0
     with transaction.atomic():
         for r in rows:
@@ -120,12 +133,13 @@ def import_parties(rows, *, user) -> dict:
                 party_type=r.party_type, code=r.code, defaults={'name': r.name[:200]})
             if was_new:
                 created += 1
-            elif r.name and obj.name != r.name[:200]:
+            elif not create_only and r.name and obj.name != r.name[:200]:
                 obj.name = r.name[:200]
                 obj.save(update_fields=['name'])
                 updated += 1
         _audit('gl_parties_imported', user=user, obj=None,
-               extra={'created': created, 'updated': updated, 'rows': len(rows)})
+               extra={'created': created, 'updated': updated, 'rows': len(rows),
+                      'create_only': bool(create_only)})
     return {'created': created, 'updated': updated}
 
 
