@@ -2857,6 +2857,7 @@ export const paymentAuditApi = {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
   runMatching:     (id)          => api.post(`/payments/audit/statements/${id}/run-matching/`),
+  formOptions:     ()            => api.get('/payments/audit/statements/form-options/'),
 
   // Statement lines
   lines:           (params)      => api.get('/payments/audit/stmt-lines/', { params }),

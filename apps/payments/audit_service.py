@@ -4,7 +4,7 @@ PaymentAuditService
 Matches bank statement lines to ExternalPayment records and detects anomalies.
 
 Rules:
-  • exact match  : reference == payment.transaction_ref AND credit ≈ payment.amount  → confidence 1.0
+  • exact match  : reference == payment.reference_number AND credit ≈ payment.amount  → confidence 1.0
   • fuzzy match  : |credit - amount| ≤ 1% AND |date_diff| ≤ 2 days                  → confidence 0.8
   • no match     : PaymentException(type='unrecorded')
 
@@ -69,12 +69,12 @@ class PaymentAuditService:
             candidate_payments = list(
                 ExternalPayment.objects.filter(
                     branch=stmt.branch,
-                    payment_method=stmt.payment_method,
+                    method=stmt.payment_method,
                     payment_date__range=(
                         stmt.statement_from - timedelta(days=_FUZZY_DATE_DAYS),
                         stmt.statement_to   + timedelta(days=_FUZZY_DATE_DAYS),
                     ),
-                ).select_related('cashier')
+                )
             )
 
             for line in lines:
@@ -135,8 +135,8 @@ class PaymentAuditService:
         if line.reference:
             for p in candidates:
                 if (
-                    p.transaction_ref
-                    and p.transaction_ref.strip() == line.reference.strip()
+                    p.reference_number
+                    and p.reference_number.strip() == line.reference.strip()
                     and abs(p.amount - line.credit) < Decimal('0.01')
                 ):
                     return p, 'auto_exact', Decimal('1.000')

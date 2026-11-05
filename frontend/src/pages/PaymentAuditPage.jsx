@@ -22,47 +22,152 @@ const EXCEPTION_STATUS_COLORS = {
   escalated:  'bg-red-100 text-red-700',
 }
 
+const EMPTY_FORM = { branch: '', bank_name: '', account_number: '', payment_method: '', statement_from: '', statement_to: '' }
+
+// DRF answers {field: [msg]} (or {detail}); keep each message next to its field
+function fieldErrors(data) {
+  if (!data || typeof data !== 'object') return { _: 'فشل الرفع' }
+  const out = {}
+  for (const [k, v] of Object.entries(data)) {
+    if (k === 'warnings') continue
+    out[k === 'detail' || k === 'non_field_errors' ? '_' : k] = Array.isArray(v) ? v.join(' ') : String(v)
+  }
+  return Object.keys(out).length ? out : { _: 'فشل الرفع' }
+}
+
+function FieldError({ msg }) {
+  return msg ? <p className="text-red-600 text-xs mt-1">{msg}</p> : null
+}
+
 function UploadModal({ onClose }) {
   const qc       = useQueryClient()
   const fileRef  = useRef(null)
-  const [file, setFile]     = useState(null)
-  const [bankRef, setBankRef] = useState('')
-  const [err, setErr]       = useState(null)
+  const [file, setFile]       = useState(null)
+  const [form, setForm]       = useState(EMPTY_FORM)
+  const [errs, setErrs]       = useState({})
+  const [done, setDone]       = useState(null)   // {total_lines, warnings} after a good upload with warnings
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const { data: opts } = useQuery({
+    queryKey: ['payment-audit', 'form-options'],
+    queryFn:  () => paymentAuditApi.formOptions().then(r => r.data),
+    staleTime: 60_000,
+  })
+  const branches = opts?.branches || []
+  const methods  = opts?.payment_methods || []
+  const branch   = form.branch || (opts?.default_branch ? String(opts.default_branch) : '')
+
+  const datesBad = form.statement_from && form.statement_to && form.statement_from > form.statement_to
+  const ready = file && branch && form.bank_name.trim() && form.payment_method
+    && form.statement_from && form.statement_to && !datesBad
 
   const upload = useMutation({
     mutationFn: () => {
       const fd = new FormData()
-      fd.append('file', file)
-      if (bankRef) fd.append('bank_reference', bankRef)
+      fd.append('raw_file', file)
+      fd.append('branch', branch)
+      for (const k of ['bank_name', 'account_number', 'payment_method', 'statement_from', 'statement_to']) {
+        fd.append(k, form[k].trim())
+      }
       return paymentAuditApi.uploadStatement(fd)
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['payment-audit', 'statements'] }); onClose() },
-    onError:   e  => setErr(e.response?.data?.detail || 'فشل الرفع'),
+    onSuccess: r => {
+      qc.invalidateQueries({ queryKey: ['payment-audit', 'statements'] })
+      qc.invalidateQueries({ queryKey: ['payment-audit', 'form-options'] })
+      if (r.data?.warnings?.length) setDone(r.data)
+      else onClose()
+    },
+    onError: e => {
+      qc.invalidateQueries({ queryKey: ['payment-audit', 'statements'] })   // a failed import is kept
+      setErrs(fieldErrors(e.response?.data))
+    },
   })
+
+  const input = 'w-full border rounded-lg px-3 py-2 text-sm'
+  const label = 'block text-xs text-gray-500 mb-1'
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" dir="rtl">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
         <h3 className="text-lg font-bold mb-4">رفع كشف حساب بنكي</h3>
-        <div className="mb-4">
-          <label className="block text-xs text-gray-500 mb-1">المرجع البنكي (اختياري)</label>
-          <input value={bankRef} onChange={e => setBankRef(e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 text-sm" />
-        </div>
-        <div className="mb-4">
-          <label className="block text-xs text-gray-500 mb-1">الملف (CSV / Excel)</label>
-          <input type="file" ref={fileRef} data-tour="finance-payment-audit-upload-file" accept=".csv,.xlsx,.xls"
-            onChange={e => setFile(e.target.files[0])}
-            className="w-full text-sm" />
-        </div>
-        {err && <p className="text-red-600 text-sm mb-3">{err}</p>}
-        <div className="flex gap-3 justify-end">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>
-          <button data-tour="finance-payment-audit-upload-save" onClick={() => upload.mutate()} disabled={upload.isPending || !file}
-            className="px-5 py-2 text-sm bg-brand-600 text-white rounded-lg disabled:opacity-50">
-            {upload.isPending ? 'جاري الرفع...' : 'رفع'}
-          </button>
-        </div>
+        {done ? (
+          <>
+            <p className="text-sm text-green-700 mb-3">تم رفع {done.total_lines} سطر — شغّل المطابقة من تبويب «🏦 الكشوف البنكية».</p>
+            <ul className="text-sm text-amber-800 bg-amber-50 rounded-lg p-3 mb-4 list-disc pr-5">
+              {done.warnings.map(w => <li key={w}>{w}</li>)}
+            </ul>
+            <div className="flex justify-end">
+              <button onClick={onClose} className="px-5 py-2 text-sm bg-brand-600 text-white rounded-lg">إغلاق</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div className="col-span-2">
+                <label className={label}>الفرع</label>
+                <select data-tour="finance-payment-audit-upload-branch" value={branch}
+                  onChange={e => set('branch', e.target.value)} className={input}>
+                  <option value="">— اختر الفرع —</option>
+                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+                <FieldError msg={errs.branch} />
+              </div>
+              <div>
+                <label className={label}>اسم البنك / المحفظة</label>
+                <input data-tour="finance-payment-audit-upload-bank" list="payment-audit-bank-names"
+                  value={form.bank_name} onChange={e => set('bank_name', e.target.value)} className={input} />
+                <datalist id="payment-audit-bank-names">
+                  {(opts?.bank_names || []).map(n => <option key={n} value={n} />)}
+                </datalist>
+                <FieldError msg={errs.bank_name} />
+              </div>
+              <div>
+                <label className={label}>رقم الحساب (اختياري)</label>
+                <input value={form.account_number} onChange={e => set('account_number', e.target.value)}
+                  className={input} dir="ltr" />
+                <FieldError msg={errs.account_number} />
+              </div>
+              <div className="col-span-2">
+                <label className={label}>طريقة الدفع</label>
+                <select data-tour="finance-payment-audit-upload-method" value={form.payment_method}
+                  onChange={e => set('payment_method', e.target.value)} className={input}>
+                  <option value="">— اختر —</option>
+                  {methods.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
+                <FieldError msg={errs.payment_method} />
+              </div>
+              <div>
+                <label className={label}>من تاريخ</label>
+                <input data-tour="finance-payment-audit-upload-period" type="date" value={form.statement_from}
+                  onChange={e => set('statement_from', e.target.value)} className={input} />
+                <FieldError msg={errs.statement_from} />
+              </div>
+              <div>
+                <label className={label}>إلى تاريخ</label>
+                <input type="date" value={form.statement_to} min={form.statement_from || undefined}
+                  onChange={e => set('statement_to', e.target.value)} className={input} />
+                <FieldError msg={errs.statement_to || (datesBad ? '«إلى تاريخ» قبل «من تاريخ»' : '')} />
+              </div>
+            </div>
+            <div className="mb-4">
+              <label className={label}>الملف (CSV / Excel)</label>
+              <input type="file" ref={fileRef} data-tour="finance-payment-audit-upload-file" accept=".csv,.xlsx,.xls"
+                onChange={e => setFile(e.target.files[0])}
+                className="w-full text-sm" />
+              <p className="text-xs text-gray-400 mt-1">أعمدة لازمة: التاريخ + مدين/دائن أو المبلغ. المرجع والبيان والرصيد اختيارية.</p>
+              <FieldError msg={errs.raw_file} />
+            </div>
+            {errs._ && <p className="text-red-600 text-sm mb-3">{errs._}</p>}
+            <div className="flex gap-3 justify-end">
+              <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>
+              <button data-tour="finance-payment-audit-upload-save" onClick={() => { setErrs({}); upload.mutate() }}
+                disabled={upload.isPending || !ready}
+                className="px-5 py-2 text-sm bg-brand-600 text-white rounded-lg disabled:opacity-50">
+                {upload.isPending ? 'جاري الرفع...' : 'رفع'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -283,6 +388,9 @@ export default function PaymentAuditPage() {
                       }`}>
                         {s.status_label || s.status}
                       </span>
+                      {s.status === 'failed' && s.error_message && (
+                        <p className="text-xs text-red-600 mt-1 max-w-xs">{s.error_message}</p>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-gray-500 text-xs">
                       {s.imported_at ? new Date(s.imported_at).toLocaleDateString('ar-EG') : '—'}
