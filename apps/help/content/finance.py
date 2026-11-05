@@ -735,7 +735,11 @@ SCREENS = [
                        '• تغيير في فترة مغلقة: مستند اتغيّر في SOFTECH بعد ما شهره اتقفل — مفيش حاجة اتسجلت، والتصحيح يدوي في شهر مفتوح. بيظهر سطر واحد للقيد كله (على أول مستند فيه) ومعاه قائمة مستنداته.\n'
                        '• مفتاح مصدر مكرر: نفس مستند SOFTECH ظهر مرتين — راجع المصدر قبل أي ترحيل.\n'
                        '• خطأ في الدفتر: رفض الدفتر القيد (حساب موقوف، تاريخ قبل 1/1/2026…) — اقرأ الرسالة وصحّحها.\n'
-                       '• قيد عدّله محاسب: لو محاسب عدّل مسودة بإيده وبعدين المستند اتغيّر في SOFTECH، الترحيل مبيلمسش تعديله — بيظهر «خطأ في الدفتر» وتراجع القيد بنفسك.\n'
+                       '• قيد عدّله محاسب: لو محاسب عدّل مسودة بإيده وبعدين المستند اتغيّر في SOFTECH، الترحيل مبيلمسش تعديله — بيظهر «خطأ في الدفتر». اضغط «معالجة» تشوف جنب بعض «القيد بعد تعديلك» و«نسخة سوفتيك الجديدة» والفروق متظللة، واختار:\n'
+                       '   – «اعتماد نسخة سوفتيك»: القيد بيترحّل تاني من SOFTECH فوراً (المسودة تتستبدل؛ المعتمد في شهر مفتوح يتعكس وتتعمل مسودة جديدة). تعديلك القديم مبقاش يحميه، لكن أي تعديل جديد بعدها محمي تاني.\n'
+                       '   – «إبقاء تعديلي»: القيد يفضل زي ما عدّلته ومحدش يلمسه — لحد ما المستند يتغير في SOFTECH تاني، ساعتها بيسألك تاني.\n'
+                       '   لو الترحيل اللي بيبدأ بعد «اعتماد نسخة سوفتيك» فشل، المستندات بتستنى لحد ما تضغط «تحديث الآن» (أو الترحيل اليومي). «إبقاء تعديلي» مش متاح وترحيل شغال، ولو نسخة سوفتيك اتغيرت وإنت بتراجع هيطلب منك تراجعها تاني.\n'
+                       '   القرار لمن له صلاحية الاعتماد، والملاحظة اختيارية، وبيتسجل مين قرر وإمتى. لو حساب بيطلع غلط كل مرة، صلّحه في «قواعد الترحيل» أو جداول الربط مرة واحدة بدل ما تعدّل كل مسودة.\n'
                        '• مصروف من غير سند صرف: لو مفيش سند صرف مصروفات (-120) لنفس الفرع وفي حدود 31 يوم من تاريخ المصروف، بيظهر «حساب غير مربوط».\n'
                        'الاستثناء المعالج بيتحل لوحده عند إعادة الترحيل؛ «تجاهل» بسبب لما المستند ميتسجلش عن قصد.',
                        'SOFTECH documents that did not become an entry, grouped by kind; each kind has its fix in the row, then "Redraft".\n'
@@ -747,7 +751,11 @@ SCREENS = [
                        '• Closed-period change: a SOFTECH document changed after its month was closed — nothing was posted; correct it by hand in an open month. One row covers the whole entry (on its first document) and lists its documents.\n'
                        '• Duplicate source key: the same SOFTECH document appeared twice — check the source before drafting.\n'
                        '• Ledger error: the ledger refused the entry (stopped account, date before 1-1-2026…) — read the message and fix it.\n'
-                       '• Entry edited by an accountant: if someone edited a draft by hand and the SOFTECH document then changed, drafting leaves the edit alone — a "Ledger error" appears and you review the entry yourself.\n'
+                       '• Entry edited by an accountant: if someone edited a draft by hand and the SOFTECH document then changed, drafting leaves the edit alone — a "Ledger error" appears. Press "Handle" to see "The entry after your edit" next to "The new SOFTECH version", differences highlighted, and choose:\n'
+                       '   – "Accept the SOFTECH version": the entry is redrafted from SOFTECH at once (a draft is replaced; an approved entry in an open month is reversed and a new draft made). Your old edit no longer protects it, but any new edit after that is protected again.\n'
+                       '   – "Keep my edit": the entry stays as you edited it and nothing touches it — until the SOFTECH document changes again, then you are asked again.\n'
+                       '   If the run that starts after "Accept the SOFTECH version" fails, the documents wait until you press "Refresh now" (or the daily drafting). "Keep my edit" is not available while a run is going, and if the SOFTECH version changed while you were reviewing you are asked to review it again.\n'
+                       '   The decision needs approve permission, the note is optional, and who decided and when is logged. If an account comes out wrong every time, fix it once in "Posting rules" or the maps instead of editing each draft.\n'
                        '• Expense without a payment voucher: with no expense voucher (-120) on the same branch within 31 days of the expense date, it shows as "Unmapped account".\n'
                        'A handled exception resolves itself on redraft; "Ignore" with a reason when the document is deliberately not posted.')},
         ],
@@ -760,8 +768,8 @@ SCREENS = [
              'open_hint': T('لمن له صلاحية الإنشاء (ledger.create).', 'For users allowed to create (ledger.create).')},
             {'target': 'finance-gl-exceptions-grid', 'label': T('الاستثناءات', 'Exceptions'),
              'text': T('مجمّعة بالنوع. اضغط «معالجة» على الصف لتصلحه في مكانه، أو اتجاهله بسبب، أو حدّد عدة صفوف واضغط «إعادة الترحيل».', 'Grouped by kind. Press "Handle" on a row to fix it in place, ignore it with a reason, or tick several rows and press "Redraft".'),
-             'more': T('• طرف غير مربوط: أكّد الطرف المقترح أو أنشئ طرفاً جديداً.\n• حساب غير مربوط: اربط القيمة بحساب وفرع.\n• لا توجد قاعدة / قاعدتان: يفتح محرر القاعدة بشروط المستند.\n• تغيير في فترة مغلقة: للقراءة فقط، يُصحح في أول شهر مفتوح.\n• أسهم وSpace وEnter وCtrl+A للتنقل والتحديد.',
-                       '• Unmapped party: confirm the proposed party or create one.\n• Unmapped account: map the value to an account and branch.\n• No rule / two rules: opens the rule editor with the document conditions.\n• Closed-period change: read-only, corrected in the first open month.\n• Arrows, Space, Enter and Ctrl+A to move and select.'),
+             'more': T('• طرف غير مربوط: أكّد الطرف المقترح أو أنشئ طرفاً جديداً.\n• حساب غير مربوط: اربط القيمة بحساب وفرع.\n• لا توجد قاعدة / قاعدتان: يفتح محرر القاعدة بشروط المستند.\n• تغيير في فترة مغلقة: للقراءة فقط، يُصحح في أول شهر مفتوح.\n• قيد عدّله محاسب: النسختين جنب بعض و«اعتماد نسخة سوفتيك» أو «إبقاء تعديلي».\n• أسهم وSpace وEnter وCtrl+A للتنقل والتحديد.',
+                       '• Unmapped party: confirm the proposed party or create one.\n• Unmapped account: map the value to an account and branch.\n• No rule / two rules: opens the rule editor with the document conditions.\n• Closed-period change: read-only, corrected in the first open month.\n• Entry edited by an accountant: both versions side by side, then "Accept the SOFTECH version" or "Keep my edit".\n• Arrows, Space, Enter and Ctrl+A to move and select.'),
              'open_hint': T('تبويب «الاستثناءات».', 'The "Exceptions" tab.')},
             {'target': 'finance-gl-journal-filters', 'label': T('الفلاتر · قيد يدوي', 'Filters · Manual entry'),
              'text': T('الحالة (المسودات أولاً)، الدفتر، التاريخ، الفرع، كود الحساب، والبحث. «+ قيد يدوي» يفتح قيد فاضي.', 'Status (drafts first), book, dates, branch, account code and search. "+ Manual entry" opens a blank entry.'),
@@ -783,8 +791,8 @@ SCREENS = [
              'text': T('للمتابعة وإنت بتكتب. الاعتماد بيرفض أي قيد مش متزن، والسيرفر هو اللي بيحسب.', 'For checking as you type. Approval refuses any unbalanced entry; the server does the sums.'),
              'open_hint': T('افتح قيداً أو «+ قيد يدوي».', 'Open an entry or "+ Manual entry".')},
         ],
-        'updated': '2026-11-04',
-        'change_note': T('القيود: الترحيل اليومي متوقف حتى يفعّله المدير، سطر واحد لتغيير الفترة المغلقة، وتعديل المحاسب محفوظ', 'Journal: daily drafting off until the manager turns it on, one row per closed-period change, accountant edits kept'),
+        'updated': '2026-11-05',
+        'change_note': T('القيود: قيد عدّله محاسب وغيّره SOFTECH — قارن النسختين واختار «اعتماد نسخة سوفتيك» أو «إبقاء تعديلي»', 'Journal: an accountant-edited entry SOFTECH changed — compare both versions and choose "Accept the SOFTECH version" or "Keep my edit"'),
     },
     {
         'key': 'finance.gl_parties',

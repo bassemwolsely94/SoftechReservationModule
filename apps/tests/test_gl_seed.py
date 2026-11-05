@@ -155,6 +155,10 @@ class SeedTests(TestCase):
                                       {'kind_in': ['change_discount']},
                                       [('debit', '6022', 'net', S, '', False),
                                        ('credit', '6002', 'net', S, '', False)]),
+            'sales.hq_change_discount': ('sales_tenders', 'branch_day', 'cash', 'post',
+                                         {'kind_in': ['change_discount'], 'branch_in': ['100']},
+                                         [('debit', '6022', 'net', H, '', False),
+                                          ('credit', '6011', 'net', H, '', False)]),
             'sales.credit': ('credit_sales', 'party_day', 'credit', 'post', {},
                              [('debit', '1341', 'credit', H, 'source', False),
                               ('credit', '6003', 'credit', H, '', False),
@@ -199,6 +203,40 @@ class SeedTests(TestCase):
                                        ('credit', bank, 'amount', M, '', False)]),
         }
         self.assertEqual(got, want)
+        hq = PostingRule.objects.get(code='sales.hq_change_discount')
+        self.assertEqual(hq.priority, 110)
+        self.assertEqual(hq.lines[0]['description'], 'خصم فكة المركز {date}')
+        self.assertEqual(PostingRule.objects.get(code='sales.change_discount').priority, 100)
+
+    def test_change_discount_credits_6011_at_hq_and_6002_at_branches(self):
+        """Tender 60 «خصم فكة»: HQ cash sales sit on 6011, so the HQ rule (priority 110) wins there."""
+        from decimal import Decimal
+        from apps.finance.gl.sources import SourceDoc
+        from apps.finance.models import LedgerEntry
+        seed.seed_gl_drafting(user=self.user)
+        day = D(2026, 3, 10)
+
+        def t60(key, branch):
+            return SourceDoc('sales_tenders', key, day, branch, 'change_discount', '',
+                             {'net': Decimal('0.50'), 'sales': Decimal('0.50'), 'returns': Decimal('0')},
+                             {'paymenttype': '60'})
+        docs = [t60('hq60', '100'), t60('b60', '140')]
+        run = drafting.start_run(triggered_by='t', date_from=day, date_to=day, source_types=['sales_tenders'])
+        run = drafting.draft_range(day, day, source_types=['sales_tenders'], run=run, fetch=lambda sql: [],
+                                   readers={'sales_tenders': lambda d1, d2, f: docs})
+        self.assertEqual(run.status, 'success', run.detail)
+        hq = Branch.objects.get(softech_branch_id='100')
+        b140 = Branch.objects.get(softech_branch_id='140')
+
+        def lines(key):
+            e = LedgerEntry.objects.get(source_key=key)
+            return e, [(ln.account.code, ln.debit, ln.credit, ln.branch_id)
+                       for ln in e.lines.select_related('account').order_by('line_no')]
+        e, got = lines('sales.hq_change_discount:100:2026-03-10')
+        self.assertEqual(got, [('6022', Decimal('0.50'), 0, hq.pk), ('6011', 0, Decimal('0.50'), hq.pk)])
+        self.assertEqual(e.description, 'خصم فكة المركز 2026-03-10')
+        _, got = lines('sales.change_discount:140:2026-03-10')
+        self.assertEqual(got, [('6022', Decimal('0.50'), 0, b140.pk), ('6002', 0, Decimal('0.50'), b140.pk)])
 
     def test_management_command(self):
         call_command('seed_gl_drafting', verbosity=0)

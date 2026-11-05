@@ -37,7 +37,7 @@ Confirmed by Plan 2 (`docs/superpowers/plans/2026-11-04-finance-gl-drafting.md`,
 | `PostingRule` | not used here | — |
 | `GLDraftRun` | close checklist note | `status` running|success|partial|failed, `date_from`, `date_to`, `source_types` (JSON list; `[]`/null = all types), `finished_at` (adapter only) |
 
-Plan 2 is on main (22301967, migrations finance 0021/0022) and confirmed this contract final. Plan 2 rulings that bind this plan: **P21** — the drafting engine never replaces or reverses an entry an accountant has edited (it raises `ledger_error` with `detail.code='edited_by_user'`); Plan 3's correction entries carry `corrects` and a `#corr:` source key, so the engine never treats them as its own group entries. **P22** — scheduled drafting is off by default (`GL_DRAFTING_SCHEDULE_ENABLED=False`), so the close checklist shows when drafting last covered the month (Task 6). Full rulings: `.superpowers/sdd/2026-11-04-finance-gl-drafting/progress.md` on Plan 2's branch.
+Plan 2 is on main (22301967, migrations finance 0021/0022) and confirmed this contract final. Plan 2 rulings that bind this plan: **P21** — the drafting engine never replaces or reverses an entry an accountant has edited (it raises `ledger_error` with `detail.code='edited_by_user'`); Plan 3's correction entries carry `corrects` and a `#corr:` source key, so the engine never treats them as its own group entries. **P23** (main 9f66a739) — an `edited_by_user` exception (kind `ledger_error`, `detail.code='edited_by_user'`) now carries `proposed_lines`, `proposal_version` and is released by `POST exceptions/<id>/accept-softech/` or `keep-edit/` (both `ledger.approve`, version required); it is an ordinary open exception for the close checklist. **P22** — scheduled drafting is off by default (`GL_DRAFTING_SCHEDULE_ENABLED=False`), so the close checklist shows when drafting last covered the month (Task 6). Full rulings: `.superpowers/sdd/2026-11-04-finance-gl-drafting/progress.md` on Plan 2's branch.
 
 Plan 2 adds no `GLAccount.feed`; Task 1 adds it. Plan 2's source verification (shared note `gl-plan2-source-verification.md`): branch cash sales reproduce finance's 6002 within 0–1.7 %; card, purchase returns (5101) and VAT do not yet — Task 4 Step 1 sets `blocks_close=False` on any check whose SOFTECH side does not reproduce finance's figure.
 
@@ -225,7 +225,7 @@ Plan 2 adds no `GLAccount.feed`; Task 1 adds it. Plan 2's source verification (s
   - `checklist(period) -> list[dict]` — items `{key, label_ar, ok: bool, blocking: bool, detail}` in this order:
     1. `previous_closed` (blocking; Jan 2026 always ok)
     2. `no_drafts` — no `draft` entries dated in the month (blocking; detail = count + link filter)
-    3. `no_exceptions` — `open_exception_count(period_start, period_end) == 0` (blocking)
+    3. `no_exceptions` — `open_exception_count(period_start, period_end) == 0` (blocking; counts every open kind, including `edited_by_user` rows (P23), whose fix is Plan 2's accept-softech / keep-edit on the review inbox)
     4. `comparison_fresh` — `not is_stale(period)` (blocking)
     5. `comparison_explained` — no line with `needs_explanation` on a check with `blocks_close` (blocking)
     6. `suppliers_explained` — same for `supplier_balance` (not blocking; detail = unexplained count and total)
