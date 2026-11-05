@@ -267,6 +267,8 @@ def map_put(request, kind, source_value):
     branch_id = _int(request.data.get('branch_id'))
     if kind == 'card_clearing' and not branch_id:
         return _err(['ربط تسوية البطاقات يحتاج فرعاً'])
+    if kind == 'intercompany' and not branch_id:   # Ruling P24: the HQ branch
+        return _err(['ربط الشركات الشقيقة يحتاج فرعاً (المركز الرئيسي)'])
     try:
         m = rules.save_map(user=profile, kind=kind, source_value=source_value,
                            account_code=str(request.data.get('account_code') or ''),
@@ -581,7 +583,7 @@ def rules_meta(request):
         'source_fields': {k: list(v) for k, v in rules.SOURCE_FIELDS.items()},
         'condition_keys': {k: list(v) for k, v in rules.CONDITION_KEYS.items()},
         'map_kinds': list(rules.MAP_KINDS), 'map_keys': list(rules.MAP_KEYS),
-        'map_key_for_kind': {'bank': 'bankcode', 'expense': 'expcode', 'card_clearing': 'branch_code'},
+        'map_key_for_kind': dict(rules.MAP_KEY_FOR_KIND),
         'branch_modes': list(rules.BRANCH_MODES), 'party_modes': list(rules.PARTY_MODES),
         'placeholders': list(rules.PLACEHOLDERS),
         'bank_branch_sources': list(rules.BANK_BRANCH_SOURCES),

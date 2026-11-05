@@ -240,9 +240,77 @@ class ChequeReaderTests(SimpleTestCase):
                 tf_bankcode='04', tf_cheqsno='12'),
             chq(cheqsno='12', ptcode='-1', personcode='-181', cheqtype='10', bankcode='04', tf_branchcode='100',
                 tf_bankcode='40', tf_cheqsno='11')])
-        self.assertEqual({d.kind for d in docs.values()}, {'transfer'})
+        # same-branch box<->bank pair (Ruling P24): the payment leg posts, the receipt leg is its mirror
+        self.assertEqual({k: d.kind for k, d in docs.items()},
+                         {'chq:100:11': 'transfer_bank', 'chq:100:12': 'transfer_bank_mirror'})
         self.assertEqual(len(docs), 2)
         self.assertEqual(docs['chq:100:12'].attrs['tf_cheqsno'], '11')
+
+
+class TransferKindP24Tests(SimpleTestCase):
+    """Ruling P24: transfer vouchers carry the counterpart SOFTECH branch or bank (fake 2026 rows)."""
+
+    def tf(self, **kw):
+        base = dict(ptcode='-1', personcode='-180', financialdoccode='10', cheqdate=datetime(2026, 6, 10),
+                    cheqregisterdate=datetime(2026, 6, 10))
+        base.update(kw)
+        return chq(**base)
+
+    def run6(self, rows):
+        return run_cheques(rows, date(2026, 6, 1), date(2026, 6, 30))[0]
+
+    def test_hq_leg_paired_through_branch_leg(self):
+        docs = self.run6([
+            self.tf(branchcode='100', cheqsno='501', cheqtype='20', bankcode='10', cheqvalue=D('100000')),
+            self.tf(branchcode='160', cheqsno='77', cheqtype='10', bankcode='70', tf_branchcode='100',
+                    tf_cheqsno='501', cheqvalue=D('100000'))])
+        hq, br = docs['chq:100:501'], docs['chq:160:77']
+        self.assertEqual((hq.kind, hq.attrs['counterpart_branch']), ('transfer_branch', '160'))
+        self.assertEqual((br.kind, br.attrs['counterpart_branch']), ('transfer_branch', '100'))
+        self.assertEqual(hq.attrs['direction'], 'payment')
+        self.assertEqual(br.attrs['direction'], 'receipt')
+
+    def test_hq_leg_with_own_tf_branchcode(self):
+        docs = self.run6([self.tf(branchcode='100', cheqsno='1', tf_branchcode='150', financialdoccode='90')])
+        d = docs['chq:100:1']
+        self.assertEqual((d.kind, d.attrs['counterpart_branch'], d.attrs['financialdoc']),
+                         ('transfer_branch', '150', '90'))
+
+    def test_bank_transfer_without_counterpart_branch(self):
+        docs = self.run6([self.tf(branchcode='100', cheqsno='2', personcode='-181', tf_bankcode='04')])
+        d = docs['chq:100:2']
+        self.assertEqual((d.kind, d.attrs['tf_bankcode'], d.attrs['counterpart_branch']),
+                         ('transfer_bank', '04', ''))
+
+    def test_unpaired_transfer_stays_transfer(self):
+        docs = self.run6([self.tf(branchcode='100', cheqsno='3'),
+                          # own branch as tf_branchcode is not a counterpart
+                          self.tf(branchcode='130', cheqsno='4', tf_branchcode='130')])
+        self.assertEqual({d.kind for d in docs.values()}, {'transfer'})
+        self.assertEqual(docs['chq:100:3'].attrs['counterpart_branch'], '')
+
+    def test_two_different_branch_legs_naming_one_hq_voucher_is_ambiguous(self):
+        docs = self.run6([
+            self.tf(branchcode='100', cheqsno='9'),
+            self.tf(branchcode='150', cheqsno='1', cheqtype='10', tf_branchcode='100', tf_cheqsno='9'),
+            self.tf(branchcode='160', cheqsno='1', cheqtype='10', tf_branchcode='100', tf_cheqsno='9')])
+        self.assertEqual(docs['chq:100:9'].kind, 'transfer')
+        self.assertEqual(docs['chq:150:1'].kind, 'transfer_branch')
+
+    def test_pairing_is_order_independent_and_keeps_source_keys(self):
+        rows = [self.tf(branchcode='100', cheqsno='501', cheqtype='20', bankcode='10'),
+                self.tf(branchcode='160', cheqsno='77', cheqtype='10', bankcode='70', tf_branchcode='100',
+                        tf_cheqsno='501')]
+        a = self.run6(rows)
+        b = self.run6(list(reversed(rows)) + [self.tf(branchcode='999', cheqsno='0', cheqvalue=D('1'))])
+        self.assertEqual({k: (d.kind, d.attrs['counterpart_branch']) for k, d in a.items()},
+                         {k: (d.kind, d.attrs['counterpart_branch']) for k, d in b.items() if k in a})
+        self.assertEqual(set(a), {'chq:100:501', 'chq:160:77'})
+
+    def test_non_transfer_vouchers_untouched(self):
+        docs = self.run6([self.tf(cheqsno='5', personcode='5001', ptcode='20', tf_branchcode='150')])
+        d = docs['chq:100:5']
+        self.assertEqual((d.source_type, d.kind, d.attrs['counterpart_branch']), ('supplier_payments', '', ''))
 
     def test_one_fetch_per_month_for_all_four_types(self):
         _, f = run_cheques([chq()], date(2026, 3, 1), date(2026, 4, 30))

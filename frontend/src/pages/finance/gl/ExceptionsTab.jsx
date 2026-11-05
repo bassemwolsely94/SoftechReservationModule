@@ -100,7 +100,7 @@ function MapFix({ ex, onDone }) {
   })
   const accounts = useMemo(() => (accountsQ.data || []).filter(a => a.is_posting !== false), [accountsQ.data])
   const name = accounts.find(a => String(a.code) === String(account))?.name || ''
-  const needBranch = ex.detail?.reason === 'map has no branch' || kind === 'bank' || kind === 'card_clearing'
+  const needBranch = ex.detail?.reason === 'map has no branch' || kind === 'bank' || kind === 'card_clearing' || kind === 'intercompany'
   const save = useMutation({
     mutationFn: () => glApi.mapPut(kind, value, { account_code: account, branch_id: branch ? Number(branch) : null, note: '' }),
     onSuccess: () => { setErr(''); onDone('تم الربط — اضغط «إعادة الترحيل»') },

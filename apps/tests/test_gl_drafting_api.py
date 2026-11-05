@@ -179,6 +179,14 @@ class MapTests(Base):
                            {'account_code': '1310', 'branch_id': self.branch.pk}, format='json')
         self.assertEqual(r.status_code, 200, r.content)
 
+    def test_intercompany_map_requires_branch(self):   # Ruling P24: branch = HQ
+        r = self.admin.put(BASE + 'maps/intercompany/160/', {'account_code': '1310'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        r = self.admin.put(BASE + 'maps/intercompany/160/',
+                           {'account_code': '1310', 'branch_id': self.branch.pk}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(GLSourceMap.objects.get(kind='intercompany', source_value='160').account.code, '1310')
+
 
 class RuleTests(Base):
     def test_versioning_list_and_versions(self):
@@ -388,6 +396,12 @@ class MetaEndpointTests(Base):
         self.assertEqual(d['condition_keys']['paymenttype_in'], ['sales_tenders'])
         self.assertEqual(sorted(d['bank_branch_sources']), sorted(R.BANK_BRANCH_SOURCES))
         self.assertEqual(d['map_key_for_kind']['card_clearing'], 'branch_code')
+        # Ruling P24
+        self.assertIn('intercompany', d['map_kinds'])
+        self.assertEqual(d['map_key_for_kind']['intercompany'], 'counterpart_branch')
+        self.assertIn('counterpart_branch', d['map_keys'])
+        self.assertIn('tf_bankcode', d['map_keys'])
+        self.assertIn('note', d['placeholders'])
         self.assertIn('hq', d['branch_modes'])
         self.assertIn('cheqno', d['placeholders'])
         self.assertEqual(self.pharm.get(BASE + 'rules/meta/').status_code, 403)

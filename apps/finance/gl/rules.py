@@ -49,9 +49,13 @@ _COND_SOURCE = {
 # Ruling P14: static-account line with branch 'map' = branch of the doc's bank map
 BANK_BRANCH_SOURCES = ('supplier_payments', 'customer_collections', 'cheque_maturity',
                        'treasury_other', 'expenses')
-MAP_KINDS = ('bank', 'expense', 'card_clearing')
-MAP_KEYS = ('bankcode', 'expcode', 'branch_code')
-PLACEHOLDERS = ('branch', 'date', 'docnumber', 'cheqno', 'party')
+MAP_KINDS = ('bank', 'expense', 'card_clearing', 'intercompany')
+# Ruling P24: counterpart_branch / tf_bankcode are the transfer voucher's other side
+MAP_KEYS = ('bankcode', 'expcode', 'branch_code', 'counterpart_branch', 'tf_bankcode')
+MAP_KEY_FOR_KIND = {'bank': 'bankcode', 'expense': 'expcode', 'card_clearing': 'branch_code',
+                    'intercompany': 'counterpart_branch'}
+PLACEHOLDERS = ('branch', 'date', 'docnumber', 'cheqno', 'party', 'note')
+DESCRIPTION_MAX = 500   # LedgerLine.description
 BRANCH_MODES = ('source', 'hq', 'map', 'none')
 PARTY_MODES = ('source', 'none')
 
@@ -321,7 +325,7 @@ def build_lines(rule, docs, *, hq_branch_id) -> list:
             desc = (ln.get('description') or '').format(
                 branch=branch_name(doc.branch_code), date=doc.doc_date.isoformat(),
                 docnumber=doc.attrs.get('docnumber', ''), cheqno=doc.attrs.get('cheqno', ''),
-                party=party_code or doc.personcode)
+                party=party_code or doc.personcode, note=doc.attrs.get('note') or '')[:DESCRIPTION_MAX]
             if key in sums:
                 sums[key][0] += amount
             else:

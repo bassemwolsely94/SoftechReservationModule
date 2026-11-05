@@ -1,7 +1,8 @@
 /**
  * SourceMapsPanel.jsx — «الربط»: SOFTECH value → finance account (+ branch) for the posting rules.
  *
- * Kinds: bank (خزينة/بنك by bank code), expense (by expense code), card_clearing (by branch code).
+ * Kinds: bank (خزينة/بنك by bank code), expense (by expense code), card_clearing (by branch code),
+ * intercompany (by the transfer's counterpart SOFTECH branch -> sister-company account, branch = HQ).
  * Values the drafting engine could not map (open «unmapped_account» exceptions) appear highlighted
  * with an empty account, so a person only picks the account and saves. Edits need ledger.edit; the
  * server audits before/after and never deletes a map.
@@ -41,7 +42,7 @@ function MapRow({ row, accounts, nameOf, branches, canEdit, kind, onSaved }) {
       </td>
       <td className="px-3 py-1.5">
         <select className={inputCls} value={branch} disabled={!canEdit} onChange={e => setBranch(e.target.value)}>
-          <option value="">{kind === 'card_clearing' ? '— اختر فرعاً —' : 'بدون فرع'}</option>
+          <option value="">{kind === 'card_clearing' || kind === 'intercompany' ? '— اختر فرعاً —' : 'بدون فرع'}</option>
           {branches.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
         </select>
       </td>
