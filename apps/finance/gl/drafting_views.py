@@ -493,10 +493,16 @@ def _decision_refused(e: drafting.DecisionError):
                     status=_DECISION_HTTP.get(e.code, status.HTTP_409_CONFLICT))
 
 
-def _decision_note(request):
+def _decision_args(request):
+    """-> (note, version, error response). ``version`` = proposal_version of the lines shown."""
     note = request.data.get('note')
     note = '' if note is None else str(note).strip()
-    return note, (_err([f'الملاحظة أطول من {MAX_NOTE} حرف']) if len(note) > MAX_NOTE else None)
+    if len(note) > MAX_NOTE:
+        return note, None, _err([f'الملاحظة أطول من {MAX_NOTE} حرف'])
+    version = request.data.get('version')
+    if not isinstance(version, str) or not version:
+        return note, None, _err(['نسخة سوفتيك المعروضة مطلوبة (version) — أعد تحميل الصفحة'])
+    return note, version, None
 
 
 @api_view(['POST'])
@@ -507,13 +513,13 @@ def exception_accept_softech(request, pk):
     profile, bad = _need_profile(request)
     if bad:
         return bad
-    note, bad = _decision_note(request)
+    note, version, bad = _decision_args(request)
     if bad:
         return bad
     try:
         with transaction.atomic():
             try:
-                win = drafting.accept_softech(pk, user=profile, note=note)
+                win = drafting.accept_softech(pk, user=profile, note=note, version=version)
             except drafting.DecisionError as e:
                 raise _Refused(_decision_refused(e))
             d1, d2, types = win['date_from'], win['date_to'], win['source_types']
@@ -543,11 +549,11 @@ def exception_keep_edit(request, pk):
     profile, bad = _need_profile(request)
     if bad:
         return bad
-    note, bad = _decision_note(request)
+    note, version, bad = _decision_args(request)
     if bad:
         return bad
     try:
-        ex = drafting.keep_edit(pk, user=profile, note=note)
+        ex = drafting.keep_edit(pk, user=profile, note=note, version=version)
     except drafting.DecisionError as e:
         return _decision_refused(e)
     return Response(exception_json(SourceException.objects.select_related('source_doc').get(pk=ex.pk)))

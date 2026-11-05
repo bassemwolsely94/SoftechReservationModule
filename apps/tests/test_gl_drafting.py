@@ -838,3 +838,59 @@ class EditDecisionP23Tests(Base):
         self.assertEqual(self.amounts(self.live('cash:130:2026-03-10').get())[0][1], DEC('100.00'))
         self.assertEqual(self.amounts(self.live('cash:130:2026-03-11').get())[0][1], DEC('50.00'))
         self.assertFalse(SourceException.objects.filter(status='open').exists())
+
+    def test_keep_edit_refused_when_doc_still_sits_in_another_live_entry(self):
+        """Review fix 1: a doc moves O -> G, both edited; G's row overwrites the doc's only open
+        ledger_error row (group_key G). Keeping G must not relink it while O still carries it."""
+        self.rule(granularity='branch_day')
+        mar11 = datetime.date(2026, 3, 11)
+        self.docs['sales_tenders'] = [tender('t1', '100.00'), tender('t2', '50.00', pt='40'),
+                                      tender('t3', '30.00', date=mar11)]
+        self.run_engine()
+        o, g = self.live('cash:130:2026-03-10').get(), self.live('cash:130:2026-03-11').get()
+        self.edit_as_accountant(o, '150.00')
+        self.edit_as_accountant(g, '31.00')
+        self.docs['sales_tenders'][1] = tender('t2', '50.00', pt='40', date=mar11)
+        self.run_engine()
+        ex = SourceException.objects.get(status='open', source_doc__source_key='t2')
+        self.assertEqual(ex.detail['group_key'], 'cash:130:2026-03-11')   # overwritten by G
+        sd = GLSourceDoc.objects.get(source_key='t2')
+        self.assertEqual((sd.group_key, sd.entry_id), ('cash:130:2026-03-11', o.pk))
+        with self.assertRaises(DR.DecisionError) as cm:
+            DR.keep_edit(ex.pk, user=self.staff)
+        self.assertEqual(cm.exception.code, 'moved')
+        self.assertEqual(GLSourceDoc.objects.get(source_key='t2').entry_id, o.pk)
+        self.assertEqual(SourceException.objects.get(pk=ex.pk).status, 'open')
+
+    def test_keep_edit_refused_for_a_doc_now_skipped(self):
+        self.rule()
+        self.docs['sales_tenders'] = [tender('t1', '100.00')]
+        self.run_engine()
+        e = self.live('t1').get()
+        self.edit_as_accountant(e, '95.00')
+        self.rule(code='skip60', action='skip', priority=200, conditions={'kind_in': ['cash']})
+        self.docs['sales_tenders'] = [tender('t1', '90.00')]
+        self.run_engine()
+        ex = SourceException.objects.get(status='open')
+        with self.assertRaises(DR.DecisionError) as cm:
+            DR.keep_edit(ex.pk, user=self.staff)
+        self.assertEqual(cm.exception.code, 'skipped')
+        self.assertIn('قاعدة تخطٍّ', cm.exception.message)
+
+    def test_stale_version_and_running_engine_refused(self):
+        e, ex = self.edited_exception()
+        v = DR.proposal_version(ex.proposed_lines)
+        for fn in (DR.accept_softech, DR.keep_edit):
+            with self.assertRaises(DR.DecisionError) as cm:
+                fn(ex.pk, user=self.staff, version='x' + v)
+            self.assertEqual(cm.exception.code, 'stale')
+        DR.start_run(triggered_by='x', date_from=D1, date_to=D2, source_types=[])
+        with self.assertRaises(DR.DecisionError) as cm:
+            DR.keep_edit(ex.pk, user=self.staff, version=v)
+        self.assertEqual(cm.exception.code, 'busy')
+        self.assertEqual(SourceException.objects.get(pk=ex.pk).status, 'open')
+
+    def test_detail_carries_proposed_header_and_held_out_count(self):
+        e, ex = self.edited_exception()
+        self.assertEqual((ex.detail['proposed_entry_date'], ex.detail['held_out']), ('2026-03-10', 0))
+        self.assertEqual(ex.detail['proposed_description'], 'نقدية b130 2026-03-10')

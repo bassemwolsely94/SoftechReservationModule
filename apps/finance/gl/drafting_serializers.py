@@ -1,4 +1,5 @@
 """JSON shapes for the drafting API (Plan 2 / Task 8). Decimals leave as strings, dates as ISO."""
+from .drafting import proposal_version
 from .views import _j
 
 
@@ -37,7 +38,8 @@ def doc_json(d):
 def exception_json(e):
     return _j({'id': e.pk, 'kind': e.kind, 'status': e.status, 'source_date': e.source_date,
                'message': e.message, 'detail': e.detail, 'original_entry': e.original_entry_id,
-               'proposed_lines': e.proposed_lines, 'created_at': e.created_at,
+               'proposed_lines': e.proposed_lines, 'proposal_version': proposal_version(e.proposed_lines),
+               'created_at': e.created_at,
                'resolution_note': e.resolution_note, 'resolved_at': e.resolved_at,
                'doc': doc_json(e.source_doc)})
 

@@ -439,13 +439,14 @@ class EditDecisionApiTests(Base):
                            detail={'code': 'edited_by_user', 'entry_id': self.entry.pk, 'group_key': 'k1',
                                    'entry_status': 'draft'},
                            proposed_lines=[{'account_code': '1302', 'debit': '10.00', 'credit': '0'}])
+        self.v = drafting.proposal_version(self.ex.proposed_lines)
 
     def url(self, action, ex=None):
         return f'{BASE}exceptions/{(ex or self.ex).pk}/{action}/'
 
     def test_accept_softech_202_starts_redraft_and_audits(self):
         with mock.patch('apps.finance.gl.drafting_views.start_thread') as st:
-            r = self.acct.post(self.url('accept-softech'), {'note': 'سوفتيك صح'}, format='json')
+            r = self.acct.post(self.url('accept-softech'), {'note': 'سوفتيك صح', 'version': self.v}, format='json')
         self.assertEqual(r.status_code, 202, r.content)
         run = GLDraftRun.objects.get(pk=r.data['run_id'])
         self.assertEqual((run.date_from, run.date_to, run.source_types), (D, D, ['sales_tenders']))
@@ -462,14 +463,14 @@ class EditDecisionApiTests(Base):
     def test_accept_busy_409_rolls_back(self):
         drafting.start_run(triggered_by='x', date_from=D, date_to=D, source_types=[])
         with mock.patch('apps.finance.gl.drafting_views.start_thread') as st:
-            r = self.acct.post(self.url('accept-softech'), {}, format='json')
+            r = self.acct.post(self.url('accept-softech'), {'version': self.v}, format='json')
         self.assertEqual(r.status_code, 409)
         st.assert_not_called()
         self.assertEqual(SourceException.objects.get(pk=self.ex.pk).status, 'open')
         self.assertFalse(AuditLog.objects.filter(action='gl_entry_edit_released').exists())
 
     def test_keep_edit_200_relinks_and_audits(self):
-        r = self.acct.post(self.url('keep-edit'), {'note': 'تعديلي صح'}, format='json')
+        r = self.acct.post(self.url('keep-edit'), {'note': 'تعديلي صح', 'version': self.v}, format='json')
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual(r.data['status'], 'resolved')
         self.sd.refresh_from_db()
@@ -480,14 +481,14 @@ class EditDecisionApiTests(Base):
     def test_409_when_not_open_or_wrong_kind(self):
         other = self.exc(self.doc('k2'), kind='no_rule')
         for action in ('accept-softech', 'keep-edit'):
-            r = self.acct.post(self.url(action, other), {}, format='json')
+            r = self.acct.post(self.url(action, other), {'version': self.v}, format='json')
             self.assertEqual(r.status_code, 409, action)
             self.assertIn('detail', r.data)
-        self.assertEqual(self.acct.post(self.url('keep-edit'), {}, format='json').status_code, 200)
+        self.assertEqual(self.acct.post(self.url('keep-edit'), {'version': self.v}, format='json').status_code, 200)
         with mock.patch('apps.finance.gl.drafting_views.start_thread') as st:
-            self.assertEqual(self.acct.post(self.url('accept-softech'), {}, format='json').status_code, 409)
+            self.assertEqual(self.acct.post(self.url('accept-softech'), {'version': self.v}, format='json').status_code, 409)
             st.assert_not_called()
-        self.assertEqual(self.acct.post(f'{BASE}exceptions/999999/keep-edit/', {}, format='json').status_code, 404)
+        self.assertEqual(self.acct.post(f'{BASE}exceptions/999999/keep-edit/', {'version': self.v}, format='json').status_code, 404)
 
     def test_needs_ledger_approve_and_all_branch(self):
         from apps.users.models import RoleModuleAccess
@@ -500,7 +501,7 @@ class EditDecisionApiTests(Base):
         with mock.patch('apps.finance.gl.drafting_views.start_thread') as st:
             for client in (viewer, scoped):
                 for action in ('accept-softech', 'keep-edit'):
-                    self.assertEqual(client.post(self.url(action), {}, format='json').status_code, 403, action)
+                    self.assertEqual(client.post(self.url(action), {'version': self.v}, format='json').status_code, 403, action)
             st.assert_not_called()
         self.assertEqual(SourceException.objects.get(pk=self.ex.pk).status, 'open')
         self.assertFalse(AuditLog.objects.filter(action__startswith='gl_entry_edit_').exists())
@@ -509,3 +510,25 @@ class EditDecisionApiTests(Base):
         req = module_access.required
         self.assertEqual(req(self.url('accept-softech'), 'POST'), ('ledger', ('approve',)))
         self.assertEqual(req(self.url('keep-edit'), 'POST'), ('ledger', ('approve',)))
+
+    def test_list_exposes_proposal_version(self):
+        r = self.acct.get(BASE + 'exceptions/?kind=ledger_error')
+        self.assertEqual(r.data['results'][0]['proposal_version'], self.v)
+
+    def test_stale_or_missing_version_refused(self):
+        with mock.patch('apps.finance.gl.drafting_views.start_thread') as st:
+            for action in ('accept-softech', 'keep-edit'):
+                r = self.acct.post(self.url(action), {'version': 'old'}, format='json')
+                self.assertEqual(r.status_code, 409, action)
+                self.assertEqual(r.data['detail'], 'تغيّرت نسخة سوفتيك — راجعها مرة أخرى')
+                self.assertEqual(self.acct.post(self.url(action), {}, format='json').status_code, 400, action)
+            st.assert_not_called()
+        self.assertEqual(SourceException.objects.get(pk=self.ex.pk).status, 'open')
+        self.assertFalse(AuditLog.objects.filter(action__startswith='gl_entry_edit_').exists())
+
+    def test_keep_edit_refused_while_engine_runs(self):
+        drafting.start_run(triggered_by='x', date_from=D, date_to=D, source_types=[])
+        r = self.acct.post(self.url('keep-edit'), {'version': self.v}, format='json')
+        self.assertEqual(r.status_code, 409)
+        self.assertIn('الترحيل يعمل الآن', r.data['detail'])
+        self.assertEqual(SourceException.objects.get(pk=self.ex.pk).status, 'open')

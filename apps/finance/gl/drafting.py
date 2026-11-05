@@ -9,6 +9,8 @@ A month that does not accept postings is never touched: the change becomes a
 Entries are written only through ``ledger.save_draft`` / ``ledger.reverse`` (keyword arguments);
 the engine never approves. Vanished drafts are deleted here with an audit row (Ruling P4).
 """
+import hashlib
+import json
 import logging
 from collections import defaultdict
 from contextlib import ExitStack
@@ -466,7 +468,7 @@ class _Engine:
         good_pks = [sd.pk for sd in good]
 
         if not lines:   # nothing to post: an empty or zero group
-            if live is not None and not self._remove(live, gk, targets, pending_ok):
+            if live is not None and not self._remove(live, gk, targets, pending_ok, {'held_out': len(bad)}):
                 return
             if good:
                 self._set(good_pks, status='skipped', entry=None)
@@ -488,7 +490,9 @@ class _Engine:
             self._closed(gk, live, targets, pending_ok, lines)
             return
         if live is not None and self._edited_by_user(live):
-            self._edited(gk, live, targets, pending_ok, lines)
+            self._edited(gk, live, targets, pending_ok, lines,
+                         {'proposed_entry_date': entry_date.isoformat(), 'proposed_description': desc,
+                          'held_out': len(bad)})
             return
         try:
             with transaction.atomic():
@@ -513,13 +517,13 @@ class _Engine:
         self.counts['drafted'] += len(pending_ok)
         self._settled(gk, live, entry, good_pks, targets)
 
-    def _remove(self, live, gk, targets, pending_ok) -> bool:
+    def _remove(self, live, gk, targets, pending_ok, edited_extra=None) -> bool:
         """Delete a draft / reverse an approved entry whose group has nothing left to post."""
         if not accepts_postings(live.entry_date):
             self._closed(gk, live, targets, pending_ok, [])
             return False
         if self._edited_by_user(live):
-            self._edited(gk, live, targets, pending_ok, [])
+            self._edited(gk, live, targets, pending_ok, [], edited_extra)
             return False
         try:
             with transaction.atomic():
@@ -595,13 +599,13 @@ class _Engine:
     def _edited_by_user(self, live) -> bool:
         return edited_by_user(live, system=self.user)
 
-    def _edited(self, gk, live, targets, pending_ok, lines):
+    def _edited(self, gk, live, targets, pending_ok, lines, extra=None):
         """Ruling P21: never overwrite an accountant's edit; the group waits in the inbox.
         Ruling P23: the row carries the fresh rule lines so the accountant can compare and decide."""
         docs = list(GLSourceDoc.objects.filter(pk__in=targets))
         self._exception(docs, 'ledger_error', MESSAGES['edited_by_user'],
                         {'code': 'edited_by_user', 'entry_id': live.pk, 'group_key': gk,
-                         'entry_status': live.status},
+                         'entry_status': live.status, **(extra or {})},
                         proposed_lines=_canon(lines))
         self._hold({*targets, *pending_ok})
 
@@ -658,23 +662,54 @@ def edited_by_user(live, *, system=None) -> bool:
     return edits.exists()
 
 
-def _decision(exception_id):
-    """Lock an open edited_by_user exception and its whole group -> (row, group rows, docs, entry)."""
-    ex = SourceException.objects.select_for_update().filter(pk=exception_id).first()
+def proposal_version(proposed_lines) -> str:
+    """Staleness token of what the accountant compared: sha256 of the canonical proposed lines."""
+    raw = json.dumps(_canon(proposed_lines or []), sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+    return hashlib.sha256(raw.encode('utf-8')).hexdigest()
+
+
+def _engine_running() -> bool:
+    cutoff = timezone.now() - STALE_AFTER
+    return GLDraftRun.objects.filter(status='running').filter(
+        Q(heartbeat_at__gte=cutoff) | Q(heartbeat_at__isnull=True, started_at__gte=cutoff)).exists()
+
+
+STALE = 'تغيّرت نسخة سوفتيك — راجعها مرة أخرى'
+
+
+def _decision(exception_id, version):
+    """Validate an open edited_by_user exception and lock its group in the engine's order
+    (LedgerEntry -> GLSourceDoc -> SourceException), re-checking after the locks.
+    -> (row, group_key, group rows, docs, entry)."""
+    ex = SourceException.objects.filter(pk=exception_id).first()
     if ex is None:
         raise DecisionError('not_found', 'الاستثناء غير موجود')
-    if ex.status != 'open':
-        raise DecisionError('not_open', 'الاستثناء ليس مفتوحاً')
-    detail = ex.detail or {}
-    if ex.kind != 'ledger_error' or detail.get('code') != 'edited_by_user':
-        raise DecisionError('not_edited_by_user', 'هذا الاستثناء ليس تعديلاً يدوياً غيّره سوفتيك')
+
+    def check(row):
+        if row.status != 'open':
+            raise DecisionError('not_open', 'الاستثناء ليس مفتوحاً')
+        d = row.detail or {}
+        if row.kind != 'ledger_error' or d.get('code') != 'edited_by_user':
+            raise DecisionError('not_edited_by_user', 'هذا الاستثناء ليس تعديلاً يدوياً غيّره سوفتيك')
+        return d
+    detail = check(ex)
     gk = detail.get('group_key') or ''
-    rows = list(SourceException.objects.select_for_update().filter(
-        status='open', kind='ledger_error', detail__code='edited_by_user', detail__group_key=gk))
-    docs = list(GLSourceDoc.objects.select_for_update().filter(pk__in={r.source_doc_id for r in rows}))
+    group = SourceException.objects.filter(
+        status='open', kind='ledger_error', detail__code='edited_by_user', detail__group_key=gk)
     entry = LedgerEntry.objects.select_for_update().filter(pk=detail.get('entry_id')).first()
     if entry is None:
         raise DecisionError('entry_gone', 'القيد لم يعد موجوداً — أعد الترحيل')
+    docs = list(GLSourceDoc.objects.select_for_update().filter(
+        pk__in=set(group.values_list('source_doc_id', flat=True))).order_by('pk'))
+    ex = SourceException.objects.select_for_update().get(pk=ex.pk)
+    detail = check(ex)
+    if detail.get('group_key') != gk or detail.get('entry_id') != entry.pk:
+        raise DecisionError('stale', STALE)
+    if version is not None and str(version) != proposal_version(ex.proposed_lines):
+        raise DecisionError('stale', STALE)
+    rows = list(group.select_for_update().order_by('pk'))
+    if {r.source_doc_id for r in rows} - {d.pk for d in docs}:   # the group grew meanwhile
+        raise DecisionError('stale', STALE)
     return ex, gk, rows, docs, entry
 
 
@@ -692,14 +727,14 @@ def _decision_audit(action, *, user, entry, ex, gk, rows, note, docs):
                             'note': note, 'source_keys': sorted(d.source_key for d in docs)})
 
 
-def accept_softech(exception_id, *, user, note='') -> dict:
+def accept_softech(exception_id, *, user, note='', version=None) -> dict:
     """«اعتماد نسخة سوفتيك»: release the entry, resolve the group's edited_by_user rows and put its
     held docs back to 'new' so the next run rebuilds the group (a draft is replaced; an approved
     entry in an open month is reversed + redrafted; a closed month becomes closed_period_change).
     Returns the window the caller redrafts: {date_from, date_to, source_types, entry_id}."""
     note = (note or '').strip()
     with transaction.atomic():
-        ex, gk, rows, docs, entry = _decision(exception_id)
+        ex, gk, rows, docs, entry = _decision(exception_id, version)
         _decision_audit(EDIT_RELEASED, user=user, entry=entry, ex=ex, gk=gk, rows=rows,
                         note=note, docs=docs)
         _close(rows, user, note or ACCEPT_NOTE)
@@ -713,24 +748,34 @@ def accept_softech(exception_id, *, user, note='') -> dict:
             'source_types': sorted(types or {entry.source_type}), 'entry_id': entry.pk}
 
 
-def keep_edit(exception_id, *, user, note='') -> SourceException:
+def keep_edit(exception_id, *, user, note='', version=None) -> SourceException:
     """«إبقاء تعديلي»: resolve the group's edited_by_user rows and link its held docs back to the
     live entry as 'drafted' (group_key unchanged), so the engine does nothing until SOFTECH changes
-    the group again - which asks again. A vanished doc is unlinked so it never re-raises."""
+    the group again - which asks again. A vanished doc is unlinked so it never re-raises.
+    Refused while the engine runs (it could be rebuilding this group) and whenever keeping would
+    leave a doc's amount in two entries (moved group, skip rule, still linked to another entry)."""
     note = (note or '').strip()
+    if _engine_running():
+        raise DecisionError('busy', 'الترحيل يعمل الآن — انتظر حتى ينتهي ثم أعد المحاولة')
     with transaction.atomic():
-        ex, gk, rows, docs, entry = _decision(exception_id)
+        ex, gk, rows, docs, entry = _decision(exception_id, version)
         if entry.status not in LIVE:
             raise DecisionError('entry_gone', 'القيد لم يعد قائماً — أعد الترحيل')
-        moved = [d for d in docs if d.status != 'vanished' and d.group_key != gk]
-        if moved:   # its amount now belongs to another group: keeping would count it twice
+        present = [d for d in docs if d.status != 'vanished']
+        if any(not d.group_key for d in present):
+            raise DecisionError('skipped', 'مستند صارت له قاعدة تخطٍّ (لا يُرحّل) — '
+                                           'لا يمكن إبقاء التعديل؛ اعتمد نسخة سوفتيك')
+        if any(d.group_key != gk for d in present):   # its amount now belongs to another group
             raise DecisionError('moved', 'مستند انتقل إلى مجموعة أخرى (تاريخ أو قاعدة مختلفة) — '
+                                         'لا يمكن إبقاء التعديل؛ اعتمد نسخة سوفتيك')
+        others = {d.entry_id for d in present if d.entry_id and d.entry_id != entry.pk}
+        if others and LedgerEntry.objects.filter(pk__in=others, status__in=LIVE).exists():
+            raise DecisionError('moved', 'مستند ما زال داخل قيد آخر (انتقل من مجموعة أخرى) — '
                                          'لا يمكن إبقاء التعديل؛ اعتمد نسخة سوفتيك')
         _decision_audit(EDIT_KEPT, user=user, entry=entry, ex=ex, gk=gk, rows=rows, note=note, docs=docs)
         _close(rows, user, note or KEEP_NOTE)
         GLSourceDoc.objects.filter(pk__in=[d.pk for d in docs if d.status == 'vanished']).update(
             entry=None, group_key='')
-        GLSourceDoc.objects.filter(pk__in=[d.pk for d in docs if d.status != 'vanished']).update(
-            status='drafted', entry=entry)
+        GLSourceDoc.objects.filter(pk__in=[d.pk for d in present]).update(status='drafted', entry=entry)
         ex.refresh_from_db()
     return ex
