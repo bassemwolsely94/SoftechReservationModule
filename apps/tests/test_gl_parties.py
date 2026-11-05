@@ -215,9 +215,43 @@ class MasterSheetP26Tests(TestCase):
         self.assertEqual(GLParty.objects.get(party_type='employee', code='7').status, 'unmapped')
         log = AuditLog.objects.filter(action='gl_parties_imported').latest('id')
         self.assertTrue(log.extra['create_only'])
-        # the default mode still renames (2026 sub-ledgers are authoritative)
-        res = P.import_parties(self._rows(), user=self.staff)
-        self.assertEqual(res['updated'], 1)
+
+    def test_default_mode_skips_and_reports_master_sheets(self):
+        """Review minor 8: master sheets only count in create_only mode."""
+        GLParty.objects.create(party_type='supplier', code='92', name='فارما اوفرسيز')
+        rows = self._rows()
+        self.assertTrue(all(r.master for r in rows))
+        res = P.import_parties(rows, user=self.staff)
+        self.assertEqual((res['created'], res['updated'], res['master_skipped']), (0, 0, 4))
+        self.assertEqual(res['master_sheets'], ['العملاء', 'الموردين ', 'الموظفين'])
+        self.assertEqual(GLParty.objects.get(party_type='supplier', code='92').name, 'فارما اوفرسيز')
+        self.assertEqual(GLParty.objects.count(), 1)
+
+    def test_master_row_never_hides_a_sub_ledger_row(self):
+        p = os.path.join(tempfile.mkdtemp(), 'mix.xlsx')
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'الموردين '
+        ws.append(['الكود', 'اسم المورد '])
+        ws.append([92, 'اسم 2020'])
+        ws2 = wb.create_sheet('pivot')
+        ws2.append(['suppliar code', 'Suppliar name'])
+        ws2.append([92, 'اسم 2026'])
+        wb.save(p)
+        res = P.import_parties(P.parse_party_sheets(p), user=self.staff)
+        self.assertEqual((res['created'], res['master_skipped']), (1, 1))
+        self.assertEqual(GLParty.objects.get(party_type='supplier', code='92').name, 'اسم 2026')
+
+    def test_command_default_mode_reports_skipped_master_sheets(self):
+        from io import StringIO
+        from django.core.management import call_command
+        p = os.path.join(tempfile.mkdtemp(), 'm.xlsx')
+        _master_workbook(p)
+        out = StringIO()
+        call_command('import_gl_parties', p, stdout=out)
+        self.assertIn('created=0 updated=0', out.getvalue())
+        self.assertIn('skipped 4 master-sheet rows', out.getvalue())
+        self.assertFalse(GLParty.objects.exists())
 
     def test_command_create_only(self):
         from io import StringIO

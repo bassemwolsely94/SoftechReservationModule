@@ -33,6 +33,8 @@ class PartyRow:
     party_type: str
     code: str
     name: str
+    master: bool = False   # from a 2020 master sheet (Ruling P26): imported only in create_only mode
+    sheet: str = ''
 
 
 def _audit(action, *, user, obj, old_data=None, new_data=None, extra=None):
@@ -87,7 +89,8 @@ def _name(v):
 def parse_party_sheets(path) -> list[PartyRow]:
     """Read sub-ledger pivots by header ('suppliar code' / 'customer code') and the 2020 master
     sheets by their (code, name) header pair (Ruling P26), never by position. The name is the cell
-    right of the code. Duplicate (type, code) keep the first name."""
+    right of the code. Duplicate (type, code) keep the first name (master rows are deduplicated
+    separately, so a skipped master sheet never hides a sub-ledger row)."""
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     seen, out = set(), []
     for ws in wb.worksheets:
@@ -95,17 +98,18 @@ def parse_party_sheets(path) -> list[PartyRow]:
         hdr = None
         for i, r in enumerate(rows):
             for j, c in enumerate(r):
-                t = _HEADERS.get(_hdr(c))
+                t, master = _HEADERS.get(_hdr(c)), False
                 if not t and j + 1 < len(r):
                     t = _MASTER_HEADERS.get((_hdr(c), _hdr(r[j + 1])))
+                    master = bool(t)
                 if t:
-                    hdr = (i, j, t)
+                    hdr = (i, j, t, master)
                     break
             if hdr:
                 break
         if not hdr:
             continue
-        i0, j, ptype = hdr
+        i0, j, ptype, master = hdr
         for r in rows[i0 + 1:]:
             if j >= len(r):
                 continue
@@ -115,20 +119,25 @@ def parse_party_sheets(path) -> list[PartyRow]:
             name = _name(r[j + 1]) if j + 1 < len(r) else None
             if not name:
                 continue
-            if (ptype, code) in seen:
+            if (master, ptype, code) in seen:
                 continue
-            seen.add((ptype, code))
-            out.append(PartyRow(ptype, code, name))
+            seen.add((master, ptype, code))
+            out.append(PartyRow(ptype, code, name, master, ws.title))
     wb.close()
     return out
 
 
 def import_parties(rows, *, user, create_only=False) -> dict:
     """Create missing parties; rename existing ones unless `create_only` (Ruling P26: the 2020
-    master sheets only add codes - the 2026 sub-ledger names stay authoritative)."""
+    master sheets only add codes - the 2026 sub-ledger names stay authoritative). Master-sheet rows
+    are imported only in `create_only` mode; otherwise they are skipped and reported."""
     created = updated = 0
+    skipped = [r for r in rows if r.master and not create_only]
+    master_sheets = sorted({r.sheet for r in skipped})
     with transaction.atomic():
         for r in rows:
+            if r.master and not create_only:
+                continue
             obj, was_new = GLParty.objects.get_or_create(
                 party_type=r.party_type, code=r.code, defaults={'name': r.name[:200]})
             if was_new:
@@ -139,8 +148,10 @@ def import_parties(rows, *, user, create_only=False) -> dict:
                 updated += 1
         _audit('gl_parties_imported', user=user, obj=None,
                extra={'created': created, 'updated': updated, 'rows': len(rows),
-                      'create_only': bool(create_only)})
-    return {'created': created, 'updated': updated}
+                      'create_only': bool(create_only), 'master_skipped': len(skipped),
+                      'master_sheets': master_sheets})
+    return {'created': created, 'updated': updated, 'master_skipped': len(skipped),
+            'master_sheets': master_sheets}
 
 
 def _tokens(name) -> frozenset:
