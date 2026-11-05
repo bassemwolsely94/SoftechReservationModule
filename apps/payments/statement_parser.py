@@ -25,6 +25,9 @@ ALLOWED_EXTENSIONS = ('csv', 'xlsx', 'xls')
 HEADER_SEARCH_ROWS = 15
 
 
+UNREADABLE_FILE = 'تعذّر قراءة الملف — تأكد أنه CSV أو Excel سليم'
+
+
 class StatementParseError(ValueError):
     """The file cannot be read as a statement; the message is shown to the user as-is."""
 
@@ -193,6 +196,8 @@ def _read_csv(data: bytes):
             continue
     else:
         raise StatementParseError('تعذّر قراءة ملف CSV — احفظه بترميز UTF-8.')
+    if '\x00' in text:                                         # a binary / corrupt file
+        raise StatementParseError(UNREADABLE_FILE)
     sample = text[:4096]
     try:
         dialect = csv.Sniffer().sniff(sample, delimiters=',;\t|')
@@ -319,13 +324,11 @@ def parse_statement(fileobj, filename: str, statement_from=None, statement_to=No
 
         debit = credit = Decimal('0')
         if 'debit' in cols or 'credit' in cols:
-            d, c = money('debit'), money('credit')
-            debit = (d if d > 0 else 0) + (-c if c < 0 else 0)
-            credit = (c if c > 0 else 0) + (-d if d < 0 else 0)
+            # the column decides the side, never the sign (some banks print debits as negatives)
+            debit, credit = abs(money('debit')), abs(money('credit'))
         else:
             a = money('amount')
             credit, debit = (a, Decimal('0')) if a > 0 else (Decimal('0'), -a)
-        debit, credit = Decimal(debit), Decimal(credit)
         if debit == 0 and credit == 0:
             zero_rows += 1
             continue

@@ -6,6 +6,7 @@ and «تشغيل المطابقة» over the parsed lines. Synthetic in-memory f
 import io
 import shutil
 import tempfile
+from unittest import mock
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -16,7 +17,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from apps.audit.models import AuditLog
 from apps.payments.models import BankStatementImport, BankStatementLine, ExternalPayment
 from apps.payments.statement_parser import (
-    MAX_STATEMENT_BYTES, StatementParseError, parse_amount, parse_date, parse_statement,
+    MAX_STATEMENT_BYTES, UNREADABLE_FILE, StatementParseError, parse_amount, parse_date, parse_statement,
 )
 from apps.tests.factories import make_branch, make_branch2, make_user
 from apps.users.models import RoleModuleAccess
@@ -56,9 +57,16 @@ class ParserTests(SimpleTestCase):
         self.assertEqual(lines[0]['credit'], Decimal('1250.50'))
         self.assertEqual(lines[0]['reference'], 'TX1')
         self.assertEqual(lines[0]['balance'], Decimal('10000.00'))
-        # a negative in the debit column is money in, not money out
-        self.assertEqual((lines[1]['debit'], lines[1]['credit']), (Decimal('0'), Decimal('15.00')))
+        # the column decides the side: (15) in «مدين» is still a debit
+        self.assertEqual((lines[1]['debit'], lines[1]['credit']), (Decimal('15.00'), Decimal('0')))
         self.assertEqual(warnings, [])
+
+    def test_sign_never_moves_a_value_to_the_other_column(self):
+        text = 'Date,Debit,Credit\n01/10/2026,-200,\n02/10/2026,,-300\n03/10/2026,5,7\n'
+        lines, _ = parse_statement(_csv(text), 's.csv', D1, D2)
+        self.assertEqual([(l['debit'], l['credit']) for l in lines],
+                         [(Decimal('200.00'), Decimal('0')), (Decimal('0'), Decimal('300.00')),
+                          (Decimal('5.00'), Decimal('7.00'))])
 
     def test_english_headers_and_signed_amount(self):
         text = ('Txn Date,Ref No.,Narrative,Amount,Balance\n'
@@ -228,6 +236,24 @@ class UploadApiTests(TestCase):
         self.assertIn('«Foo»', stmt.error_message)
         self.assertFalse(stmt.lines.exists())
         self.assertEqual(self.fin.post(f'{URL}{stmt.pk}/run-matching/').status_code, 400)
+
+    def test_nul_byte_csv_fails_cleanly(self):
+        r = self._post(self.fin, b'Date,Credit\n01/10/2026,5\x00\n')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data['detail'], UNREADABLE_FILE)
+        stmt = BankStatementImport.objects.get()
+        self.assertEqual((stmt.status, stmt.total_lines), ('failed', 0))
+        self.assertFalse(stmt.lines.exists())
+
+    def test_unexpected_error_rolls_back_the_lines(self):
+        with mock.patch.object(BankStatementLine.objects, 'bulk_create', side_effect=RuntimeError('disk full')), \
+                self.assertLogs('elrezeiky', level='ERROR'):
+            r = self._post(self.fin, self.CSV)
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data['detail'], UNREADABLE_FILE)
+        stmt = BankStatementImport.objects.get()
+        self.assertEqual((stmt.status, stmt.total_lines), ('failed', 0))
+        self.assertFalse(stmt.lines.exists())
 
     def test_half_good_file_leaves_no_lines(self):
         r = self._post(self.fin, b'Date,Credit\n01/10/2026,5\nnot-a-date,10\n')

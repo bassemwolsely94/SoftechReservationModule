@@ -28,7 +28,7 @@ from .audit_serializers import (
     PaymentExceptionSerializer,
 )
 from .audit_service import PaymentAuditService
-from .statement_parser import StatementParseError, parse_statement
+from .statement_parser import UNREADABLE_FILE, StatementParseError, parse_statement
 from .models import BankStatementImport, BankStatementLine, ExternalPayment, PaymentException
 
 logger = logging.getLogger('elrezeiky')
@@ -97,8 +97,16 @@ class BankStatementImportViewSet(StableOrderingMixin, viewsets.ModelViewSet):
                 stmt.save(update_fields=['total_lines', 'unmatched_lines'])
         except StatementParseError as exc:
             stmt.status        = BankStatementImport.STATUS_FAILED
-            stmt.error_message = str(exc)
+            stmt.error_message = str(exc).replace('\x00', '')
             stmt.save(update_fields=['status', 'error_message'])
+        except Exception:
+            logger.exception('statement import #%s: reading %s failed', stmt.pk, file_name)
+            warnings = []
+            stmt.status          = BankStatementImport.STATUS_FAILED
+            stmt.error_message   = UNREADABLE_FILE
+            stmt.total_lines     = 0
+            stmt.unmatched_lines = 0
+            stmt.save(update_fields=['status', 'error_message', 'total_lines', 'unmatched_lines'])
         stmt._parse_warnings = warnings
         AuditLog.log('bank_statement_uploaded', user=_staff(self.request), obj=stmt, request=self.request,
                      note=f'{file_name} — {stmt.total_lines} سطر'[:255],
