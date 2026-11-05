@@ -361,7 +361,41 @@ def scan_recent(days=30, persist=True, triggered_by=None, is_scheduled=False):
 
 # ── force re-replication (catch a branch that was down) ──────────────────────
 
-def force_replication(softech_id, erp_usercode=None, mode='restamp', target_branches=None):
+LOCK_REPLICATION = 7_301_012          # pg advisory lock: one forced repair at a time (R1, Q2)
+REPAIR_REPEAT_MINUTES = 10            # a second repair of the same item inside this window is refused
+
+
+def force_replication(softech_id, erp_usercode=None, mode='restamp', target_branches=None, actor=None):
+    """Guarded entry point (round-2 R1, owner Q2 2026-11-05): one repair at a time
+    (LOCK_REPLICATION); the same item repaired again within REPAIR_REPEAT_MINUTES is refused
+    ('repaired_recently') — a double click, or the auto_repair job overlapping an admin repair,
+    no longer re-stamps SOFTECH twice; every repair that reaches SOFTECH leaves an AuditLog row
+    `softech_replication_forced` (who, item, mode, result) whatever called it (decision D4)."""
+    import datetime
+    from django.utils import timezone
+    from apps.audit.models import AuditLog
+    from apps.vouchers.coupon_dashboard import pg_lock
+    from core.softech_audit import audit_softech_write
+
+    if not writer_allowed('REPLICATION_REPAIR_ENABLED'):
+        return {'restamped': False, 'pushed': {}, 'error': 'replication_repair_disabled'}
+    with pg_lock(LOCK_REPLICATION) as got:
+        if not got:
+            return {'restamped': False, 'pushed': {}, 'error': 'busy'}
+        since = timezone.now() - datetime.timedelta(minutes=REPAIR_REPEAT_MINUTES)
+        if AuditLog.objects.filter(action='softech_replication_forced', created_at__gte=since,
+                                   extra__softech_id=str(softech_id)).exists():
+            return {'restamped': False, 'pushed': {}, 'error': 'repaired_recently'}
+        result = _force_replication_locked(softech_id, mode, target_branches)
+        if result.get('restamped') or result.get('pushed'):
+            audit_softech_write('softech_replication_forced', actor=actor,
+                                after={'restamped': result.get('restamped'), 'pushed': result.get('pushed')},
+                                softech_id=str(softech_id), mode=mode,
+                                target_branches=list(target_branches or []))
+        return result
+
+
+def _force_replication_locked(softech_id, mode='restamp', target_branches=None):
     """
     Force a missed change to reach branches.
 
@@ -385,14 +419,11 @@ def force_replication(softech_id, erp_usercode=None, mode='restamp', target_bran
 
     target_branches: list of branchcodes to push to (None = all).
     Returns dict {restamped: bool, pushed: {branchcode: 'ok'|'reverted'|'error..'}}
+    Called only from force_replication (switch, lock, repeat window and audit live there).
     """
-    from django.conf import settings
     from config.sybase import get_sybase_connection, get_branch_connection
 
     result = {'restamped': False, 'pushed': {}}
-    if not writer_allowed('REPLICATION_REPAIR_ENABLED'):
-        result['error'] = 'replication_repair_disabled'
-        return result
 
     # Read authoritative HQ row — including the ORIGINAL editor to preserve it
     conn = get_sybase_connection()

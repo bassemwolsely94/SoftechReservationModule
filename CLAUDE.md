@@ -54,3 +54,22 @@ For every batch of work:
 Stop and ask before: schema changes that affect SOFTECH sync, any change to discount/pricing
 calculation logic, anything touching payment or checkout completion, and anything that could
 cause a double-post to SOFTECH.
+
+## Security definition of done for a new module or app
+A new app, screen group or API prefix is not done until each item below is true. The security
+sweeps in `apps/tests/security/` catch new routes automatically; these are the per-module items
+they can't. (Round-2 plan, docs/security/2026-11-05-full-project-test-plan.md.)
+1. **Access:** its API prefix is mapped in `core/middleware/module_access.py` (`MODULE_BY_PREFIX`,
+   or `EXEMPT_PREFIXES` / `READ_OPEN_PREFIXES` with a comment naming its own gate). Every view has
+   a module permission stronger than `IsAuthenticated` (`MatrixPermission` / `matrix_permission`),
+   or a reasoned entry on the open-to-all-staff list. New modules get a `MODULE_CHOICES` +
+   `seed_permissions.py` row; `PERMISSION_MATRIX.md` is regenerated.
+2. **Branches:** branch-level data goes through `core/branch_scope` (or the code says why it is
+   company-level and who may see it). The canary planter can build its models (not in `skipped`).
+3. **SOFTECH:** reads only through `config/sybase.py`; any write is registered in
+   `apps/tests/security/softech_write_manifest.py` with flag (default OFF, in `config/writers.py`),
+   dry-run default, idempotency guard and audit — or stop and ask.
+4. **Privacy:** phone numbers through `apps/customers/access.py` masking; no secret or phone in
+   logs or error text (`core/errors.public_error`); exports through `core/export_safety.py`.
+5. **Tests:** view + permission tests and a business-rule test for its money/stock logic.
+6. **Suppressions:** no new `# nosec` / `# noqa` or baseline line without a written reason.

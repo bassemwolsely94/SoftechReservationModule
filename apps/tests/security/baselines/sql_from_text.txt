@@ -20,9 +20,9 @@ apps/pos_orders/writer.py::_delete_pending_from_softech
 
 # Owner: Batch 2 (SOFTECH write path — needs owner OK) — constants / mirror values / bound; no user text interpolated
 apps/customers/branch_copy.py::copy_one
-apps/discount_approvals/alignment.py::apply_classification_changes
+apps/discount_approvals/alignment.py::_apply_classification_locked
 apps/discount_approvals/alignment.py::create_new_tier
-apps/discount_approvals/replication.py::force_replication
+apps/discount_approvals/replication.py::_force_replication_locked
 apps/discount_approvals/services.py::execute_price_change
 apps/finance/recon_writer.py::_live_write._write_steps
 apps/finance/recon_writer.py::_reverse_steps

@@ -554,7 +554,7 @@ SCREENS = [
              'label': T('تواريخ لم تُسترجع', 'Dates not restored yet'),
              'text': T('كل إيصال تاريخه مُعدَّل فى سوفتك ولم يُسترجع، ومنذ كم يوم. «↩ استرجاع التاريخ» يعيد تاريخ الإيصال (اضغط مرتين).',
                        'Every receipt whose SOFTECH date is changed and not restored, and for how many days. "↩ Restore date" puts the receipt date back (click twice).'),
-             'warn': T('الاسترجاع كتابة فى سوفتك؛ تاريخ المطالبة يبقى مصححاً.', 'Restoring writes to SOFTECH; the motalba date stays corrected.'),
+             'warn': T('الاسترجاع كتابة فى سوفتك؛ يرجّع تاريخ الإيصال وتاريخ المطالبة الأصلى المحفوظ.', 'Restoring writes to SOFTECH; it puts back the receipt date and the saved original motalba date.'),
              'open_hint': T('يظهر عند وجود تاريخ مُعدَّل لم يُسترجع.', 'Appears when a changed date is not restored.')},
             {'target': 'insurance-claim-billing-suggest',
              'label': T('اقتراحات من سجل المرضى', 'Suggestions from the patient roster'),
@@ -787,7 +787,7 @@ SCREENS = [
              'warn': T('كتابة في سوفتك — مؤقتة: استرجع تاريخ الإيصال بعد الطباعة على طول. للمسودة بس.', 'Writes to SOFTECH — temporary: restore the receipt date right after printing. Drafts only.'),
              'open_hint': T('تبويب «تعديلات سوفتك»، والمطالبة مسودة.', 'The "SOFTECH edits" tab, with the claim in draft.')},
             {'target': 'insurance-claim-date-revert', 'label': T('↩ استرجاع التاريخ', '↩ Restore date'),
-             'text': T('يرجّع تاريخ الإيصال الأصلي في سوفتك. تاريخ المطالبة بيفضل مصحّح.', 'Restores the original receipt date in SOFTECH. The claim date stays corrected.'),
+             'text': T('يرجّع تاريخ الإيصال الأصلي في سوفتك، ويرجّع تاريخ المطالبة كمان لو اتحفظ وقت التعديل.', 'Restores the original receipt date in SOFTECH, and the motalba date too when it was saved at the time of the change.'),
              'when': T('على طول بعد ما تطبع الإيصال بالتاريخ الجديد.', 'Right after printing the receipt with the new date.'),
              'warn': T('كتابة في سوفتك على الرئيسي والفرع.', 'Writes to SOFTECH on HQ and the branch.'),
              'open_hint': T('فى شريط «تاريخه مُعدَّل ولم يُسترجع» أعلى البطاقة.', 'In the "date changed, not restored" bar at the top of the card.')},
@@ -847,7 +847,7 @@ SCREENS = [
         ],
         'updated': '2026-11-05',
     
-        'change_note': T('الصافى المباشر (تجاوز مباشر) لروشتة يدخل الآن فى إجمالى المطالبة وفى الطباعة والتصدير؛ باقى الإجمالى بمعادلة Power Query كما هو', "A prescription's net override now counts in the claim total and in the print and export; the rest of the total keeps the Power Query formula"),
+        'change_note': T('الصافى المباشر لروشتة يدخل الآن فى إجمالى المطالبة والطباعة والتصدير؛ واسترجاع تاريخ الإيصال يرجّع تاريخ المطالبة الأصلى كمان', "A prescription's net override now counts in the claim total, print and export; restoring a receipt date also restores the original motalba date"),
     },
     {
         'key': 'insurance.print',

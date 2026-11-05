@@ -325,7 +325,9 @@ class ReplicationViewTests(_Base):
                            return_value={'ok': True}) as fr:
             r = self.admin.post(f'{BASE}{req.pk}/force-replication/', {'mode': 'push'}, format='json')
         self.assertEqual(r.json(), {'ok': True})
-        fr.assert_called_once_with('R7P01', mode='push')
+        # the admin who asked is passed on, for the softech_replication_forced audit row (round-2 D4)
+        fr.assert_called_once_with('R7P01', mode='push', actor=mock.ANY)
+        self.assertEqual(fr.call_args.kwargs['actor'].username, 'r7da_admin')
 
     def test_scans_list_and_detail(self):
         scan = ReplicationScan.objects.create(status=ReplicationScan.STATUS_DONE, items_with_gaps=1)
@@ -464,14 +466,17 @@ class AlignmentViewTests(_Base):
 
     @override_settings(**WRITES_ON)
     def test_apply_writes_and_verifies_the_new_origin(self):
-        conn, cur = _conn(fetchone=('O2',))
+        # SOFTECH holds the old origin first (round-2 R1 reads it before writing, owner Q2), the new
+        # one on the read-back
+        conn, cur = _conn(fetchone=[('O1',), ('O2',)])
         with mock.patch('config.sybase.get_sybase_connection', return_value=conn):
             r = self.admin.post(f'{BASE}alignment/apply/',
                                 {'changes': [{'item_id': self.item.pk, 'origin_code': 'O2'},
                                              {'item_id': 999999, 'origin_code': 'O2'}]}, format='json')
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual((r.json()['applied'], r.json()['failed']), (1, 1))
-        self.assertEqual(cur.execute.call_args_list[0][0][1], ['O2', 'U77', 'R7P01'])
+        updates = [c for c in cur.execute.call_args_list if c[0][0].lstrip().upper().startswith('UPDATE')]
+        self.assertEqual([c[0][1] for c in updates], [['O2', 'U77', 'R7P01']])
         self.item.refresh_from_db()
         self.assertEqual(self.item.origin_code, 'O2')
 

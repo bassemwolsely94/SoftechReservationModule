@@ -20,17 +20,30 @@ def probes_enabled() -> bool:
     return bool(getattr(settings, 'SOFTECH_PROBES_ENABLED', False))
 
 
-def _message(what: str) -> str:
-    return (f'{what}: writes to SOFTECH (rehearsal / diagnostic) — refused while '
-            f'SOFTECH_PROBES_ENABLED=False. Turn it on deliberately, run, turn it off.')
+def _copy_may_probe() -> bool:
+    """The writer copy may probe; a reader only while SOFTECH_READ_ONLY keeps the connection
+    read-only (round-2 R1, owner decision D1 2026-11-05 — probes used to ignore WRITER_INSTANCE)."""
+    return bool(getattr(settings, 'WRITER_INSTANCE', False)) or bool(getattr(settings, 'SOFTECH_READ_ONLY', True))
+
+
+def _refusal(what: str):
+    if not probes_enabled():
+        return (f'{what}: writes to SOFTECH (rehearsal / diagnostic) — refused while '
+                f'SOFTECH_PROBES_ENABLED=False. Turn it on deliberately, run, turn it off.')
+    if not _copy_may_probe():
+        return (f'{what}: writes to SOFTECH (rehearsal / diagnostic) — refused on a non-writer copy '
+                f'with SOFTECH_READ_ONLY=False (WRITER_INSTANCE=False). Run it on the writer.')
+    return None
 
 
 def require_probes(what: str) -> None:
-    if not probes_enabled():
-        raise SoftechProbesDisabled(_message(what))
+    msg = _refusal(what)
+    if msg:
+        raise SoftechProbesDisabled(msg)
 
 
 def command_require_probes(what: str) -> None:
-    if not probes_enabled():
+    msg = _refusal(what)
+    if msg:
         from django.core.management.base import CommandError
-        raise CommandError(_message(what))
+        raise CommandError(msg)

@@ -23,10 +23,13 @@ class Command(BaseCommand):
         parser.add_argument('--allocation', type=int, required=True)
         parser.add_argument('--commit', action='store_true',
                             help='attempt live write (still needs AP_RECONCILE_WRITER_ENABLED=True)')
+        parser.add_argument('--actor', default='', help='username of the staff member writing (required with --commit)')
 
     def handle(self, *args, **o):
         from apps.finance.models import Allocation
         from apps.finance import recon_writer
+
+        actor = recon_writer.command_actor(o['actor'], o['commit'])
 
         try:
             alloc = Allocation.objects.select_related('payment', 'invoice').get(pk=o['allocation'])
@@ -34,7 +37,7 @@ class Command(BaseCommand):
             raise CommandError(f'allocation {o["allocation"]} not found')
 
         try:
-            res = recon_writer.push_allocation(alloc, dry_run=not o['commit'])
+            res = recon_writer.push_allocation(alloc, dry_run=not o['commit'], user=actor)
         except recon_writer.ReconWriteError as e:
             raise CommandError(str(e))
 

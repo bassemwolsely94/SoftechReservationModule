@@ -199,6 +199,24 @@ def build_plan(allocation: Allocation) -> dict:
 
 # ── push (GATED) ──────────────────────────────────────────────────────────────
 
+def command_actor(username, commit: bool):
+    """The StaffProfile a management command writes SOFTECH on behalf of. Live runs (--commit)
+    must name an active staff user with --actor, so every ReconAuditEvent says who did it — they
+    used to record performed_by=None (round-2 R1, owner decision D2, 2026-11-05). A dry run
+    writes nothing and needs no actor."""
+    from django.core.management.base import CommandError
+    if not commit:
+        return None
+    if not username:
+        raise CommandError('--actor <username> is required with --commit (who is writing to SOFTECH?)')
+    from apps.users.models import StaffProfile
+    profile = (StaffProfile.objects.select_related('user')
+               .filter(user__username=username, is_active=True, user__is_active=True).first())
+    if profile is None:
+        raise CommandError(f'--actor {username!r}: no active staff user with that username')
+    return profile
+
+
 def push_allocation(allocation: Allocation, *, dry_run: bool = True,
                     user=None, force: bool = False, conn=None) -> dict:
     """
@@ -705,6 +723,14 @@ def complete_half_reversal(allocation: Allocation, *, user=None, note: str = '',
             raise ReconWriteIntegrityError(f'header did not update ({hdr} ≠ {new_paid}) — STOP')
         result.update({'reversed': True, 'docvaluepay': str(new_paid), 'fatcurrentstatus': fat})
         APInvoice.objects.filter(pk=allocation.invoice_id).update(doc_value_pay=hdr)
+    except Exception as exc:
+        # a refused or failed repair is audited too (round-2 R1, owner decision D3, 2026-11-05)
+        ReconAuditEvent.objects.create(
+            action='allocation_reverse_failed', allocation=allocation,
+            party=allocation.invoice.party, performed_by=user,
+            after_state={'error': str(exc), 'steps': result['steps'], 'half_landed_repair': True},
+            detail=f'فشل إكمال عكس نصف منفَّذ: {exc}'[:1000])
+        raise
     finally:
         if own:
             try:

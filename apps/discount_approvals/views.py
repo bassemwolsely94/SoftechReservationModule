@@ -299,7 +299,7 @@ def request_force_replication(request, pk):
     # Repair preserves the item's original editor — no approver usercode needed.
     mode = request.data.get('mode', 'restamp')
     from .replication import force_replication
-    out = force_replication(obj.item.softech_id, mode=mode)
+    out = force_replication(obj.item.softech_id, mode=mode, actor=request.user)
     return Response(out)
 
 
@@ -588,7 +588,7 @@ def repair_gaps(request):
     items = sorted({g.item_softech_id for g in gaps})
     results = {}
     for code in items:
-        out = force_replication(code, mode=mode)
+        out = force_replication(code, mode=mode, actor=request.user)
         results[code] = out
 
     # Mark gaps repaired + re-verify

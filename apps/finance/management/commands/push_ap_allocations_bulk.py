@@ -26,6 +26,7 @@ class Command(BaseCommand):
         parser.add_argument('--strategy', default='', help='limit to one matching strategy')
         parser.add_argument('--limit', type=int, default=0)
         parser.add_argument('--commit', action='store_true', help='actually write (needs the flag ON)')
+        parser.add_argument('--actor', default='', help='username of the staff member writing (required with --commit)')
         parser.add_argument('--reconnect-every', type=int, default=500)
         parser.add_argument('--shard', default='',
                             help="'i/N' — only suppliers with party_id mod N == i. Shards are "
@@ -51,6 +52,7 @@ class Command(BaseCommand):
         from apps.finance.models import Allocation
         from config.sybase import get_sybase_connection
 
+        actor = W.command_actor(o['actor'], o['commit'])
         live = o['commit'] and W.writer_enabled()
         if o['commit'] and not W.writer_enabled():
             self.stdout.write(self.style.WARNING('writer flag is OFF → dry run only'))
@@ -95,7 +97,7 @@ class Command(BaseCommand):
                     stats['changed_meanwhile'] += 1
                     continue
                 try:
-                    res = W.push_allocation(alloc, dry_run=not live, conn=conn)
+                    res = W.push_allocation(alloc, dry_run=not live, conn=conn, user=actor)
                 except W.ReconWriteIntegrityError as exc:
                     self.stdout.write(self.style.ERROR(f'INTEGRITY STOP at allocation {aid}: {exc}'))
                     stats['integrity_stop'] += 1
@@ -116,7 +118,7 @@ class Command(BaseCommand):
                         stats['stopped_network'] += 1
                         break
                     try:
-                        res = W.push_allocation(alloc, dry_run=not live, conn=conn)
+                        res = W.push_allocation(alloc, dry_run=not live, conn=conn, user=actor)
                     except W.ReconWriteIntegrityError as exc2:
                         self.stdout.write(self.style.ERROR(f'INTEGRITY STOP at allocation {aid}: {exc2}'))
                         stats['integrity_stop'] += 1
