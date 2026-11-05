@@ -50,7 +50,13 @@ def _code(client, method, path):
         return f'raised {type(exc).__name__}'
 
 
+def _clear_cache():
+    from django.core.cache import cache
+    cache.clear()
+
+
 class GlCompanyScopeTests(TestCase):
+    maxDiff = None
 
     @classmethod
     def setUpTestData(cls):
@@ -81,6 +87,7 @@ class GlCompanyScopeTests(TestCase):
                             out[f'{m} {path}'] = _code(client, m, path)
         finally:
             logging.disable(previous)
+            _clear_cache()   # rolled-back requests still write the cache (locks, throttles)
         return out
 
     def test_there_are_gl_routes_and_branch_roles(self):

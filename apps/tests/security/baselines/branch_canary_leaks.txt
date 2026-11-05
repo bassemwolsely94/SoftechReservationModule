@@ -40,3 +40,50 @@ GET /api/procurement/margins/
 GET /api/procurement/segments/summary/
 GET /api/purchasing/isr/pushes/
 GET /api/users/erp-users/
+
+# ── Round 2, R4 step 2: DETAIL routes of planted records (lines "GET-DETAIL <canonical path>") ───────
+
+# reason: owner decision B-2 (2026-10-30) — a customer can buy at any branch, so a FOUND customer opens
+#   (profile, POS summary, patient profile, loyalty account / SOFTECH balance) whatever their branch;
+#   another branch's phone numbers are masked (phone canary sweep checks that).
+GET-DETAIL /api/customers/987654321/
+GET-DETAIL /api/customers/987654321/patient-profile/
+GET-DETAIL /api/customers/987654321/pos-summary/
+GET-DETAIL /api/loyalty/customers/987654321/account/
+GET-DETAIL /api/loyalty/customers/987654321/softech-balance/
+
+# reason: the detail of configuration lists already shared across branches (list lines above): area
+#   fees, rider roster, shift templates, omni channel accounts, replacement rules, pick zones and item
+#   overrides.
+GET-DETAIL /api/delivery/area-fees/987654321/
+GET-DETAIL /api/delivery/drivers/987654321/
+GET-DETAIL /api/hr/shifts/987654321/
+GET-DETAIL /api/omni/accounts/987654321/
+GET-DETAIL /api/replacement/rules/987654321/
+GET-DETAIL /api/transits/item-overrides/987654321/
+GET-DETAIL /api/transits/pick-zones/987654321/
+
+# reason: vouchers are redeemed chain-wide (list line above); a voucher and its printable document
+#   open at any branch.
+GET-DETAIL /api/vouchers/vouchers/987654321/
+GET-DETAIL /api/vouchers/documents/x/
+GET-DETAIL /api/vouchers/documents/x/print/
+
+# reason: HQ modules no branch role is granted in the matrix (the sweep grants every module to prove
+#   scoping alone): invoices, purchasing / procurement, users, insurance (admin + purchasing only —
+#   claims are per contract company, prepared centrally).
+GET-DETAIL /api/invoices/invoice-batches/987654321/
+GET-DETAIL /api/invoices/invoices/987654321/
+GET-DETAIL /api/invoices/purchase-orders/987654321/
+GET-DETAIL /api/procurement/items/x/analysis/
+GET-DETAIL /api/purchasing/isr/pushes/987654321/
+GET-DETAIL /api/purchasing/rates/pushes/987654321/
+GET-DETAIL /api/users/erp-users/987654321/
+GET-DETAIL /api/insurance/claims/987654321/
+GET-DETAIL /api/insurance/claims/987654321/invoice-dataset/
+GET-DETAIL /api/insurance/claims/987654321/readiness/
+GET-DETAIL /api/insurance/claims/987654321/roster-check/
+
+# reason: doc 32 — a stock_audit `view` holder is management and sees every branch by design; the
+#   sweep's branch-B user holds it. Named branch managers stay own-branch (test_named_grants).
+GET-DETAIL /api/stock-audit/findings/987654321/

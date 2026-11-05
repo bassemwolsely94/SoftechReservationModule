@@ -206,3 +206,28 @@ def enforced_role_allows(user, module: str, *actions) -> bool:
     if not module_access.matrix_enforced_for(user):
         return True
     return matrix_allows(getattr(user, 'staff_profile', None), module, *(actions or ('view',)))
+
+
+class RouteModulePermission(BasePermission):
+    """The view-level twin of ModuleAccessMiddleware (round 2, owner decision D6).
+
+    Production runs RBAC_ENFORCEMENT=log, so a view that checks only IsAuthenticated is open to
+    every signed-in staff member whatever the matrix says. This class asks the SAME question the
+    middleware asks — module_access.required(path, method) → (module, actions), then the matrix —
+    so it refuses exactly what `enforce` would refuse and nothing more (no new lockout). Paths the
+    middleware does not check (exempt prefixes, open reads, own-gated sub-apps) pass."""
+    message = 'ليس لديك صلاحية على هذه الوحدة'
+
+    def has_permission(self, request, view):
+        from core.middleware.module_access import required
+        m = request.method
+        if view is not None and not hasattr(view, m.lower()):
+            return True                      # no handler: DRF answers 405
+        need = required(request.path_info, m)
+        if need is None:
+            return True
+        module, actions = need
+        profile = _get_profile(request)
+        if profile is None:                  # profile-less superuser (the middleware passes it too)
+            return bool(getattr(request.user, 'is_superuser', False))
+        return matrix_allows(profile, module, *actions)

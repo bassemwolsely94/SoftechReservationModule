@@ -8,6 +8,7 @@ from .models import Category, Item, ItemStock, EXCLUDED_STORE_CODES
 from .serializers import CategorySerializer, ItemSerializer, ItemStockSerializer, ItemSearchSerializer
 from .wildcard import WildcardSearchFilter
 from core.errors import public_error
+from core.permissions import RouteModulePermission  # round 2, D6
 
 # ── Static filter option lists (reused by both ItemViewSet and purchasing.filter_options) ──
 
@@ -175,13 +176,13 @@ def apply_item_operational_filters(qs, params):
 
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
     serializer_class = CategorySerializer
     queryset = Category.objects.all().order_by('name')
 
 
 class ItemViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
     # search runs AFTER ordering: its rank (literal text → pattern → any word order) leads,
     # the chosen sort column orders within each rank
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter, WildcardSearchFilter]

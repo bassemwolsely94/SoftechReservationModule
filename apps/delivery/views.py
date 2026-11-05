@@ -195,6 +195,7 @@ class DriverDetailView(generics.RetrieveUpdateAPIView):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 from core.permissions import matrix_permission                     # noqa: E402
+from core.permissions import RouteModulePermission  # round 2, D6
 
 # Customer delivery locations = the `delivery` module (Batch 4, Z-9c — viewer could add them):
 # reads need view, adding / editing create or edit, removing edit or delete.
@@ -359,7 +360,7 @@ class DeliveryOrderDetailView(generics.RetrieveUpdateAPIView):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_assign(request, pk):
     """
     POST /api/delivery/{id}/assign/
@@ -429,7 +430,7 @@ def delivery_assign(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_accept(request, pk):
     """POST /api/delivery/{id}/accept/ — driver accepts the assignment."""
     order = get_object_or_404(_orders(request), pk=pk)
@@ -453,7 +454,7 @@ def delivery_accept(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_dispatch(request, pk):
     """POST /api/delivery/{id}/dispatch/ — driver is out for delivery."""
     order = get_object_or_404(_orders(request), pk=pk)
@@ -491,7 +492,7 @@ def delivery_dispatch(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_complete(request, pk):
     """POST /api/delivery/{id}/complete/ — fully delivered."""
     order = get_object_or_404(_orders(request), pk=pk)
@@ -586,7 +587,7 @@ def delivery_complete(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_partial(request, pk):
     """POST /api/delivery/{id}/partial/ — partially delivered."""
     order = get_object_or_404(_orders(request), pk=pk)
@@ -610,7 +611,7 @@ def delivery_partial(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_unavailable(request, pk):
     """POST /api/delivery/{id}/unavailable/ — customer not available."""
     order = get_object_or_404(_orders(request), pk=pk)
@@ -633,7 +634,7 @@ def delivery_unavailable(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_fail(request, pk):
     """POST /api/delivery/{id}/fail/ — Body: { reason (required), notes (opt) }"""
     order = get_object_or_404(_orders(request), pk=pk)
@@ -662,7 +663,7 @@ def delivery_fail(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_cancel(request, pk):
     """POST /api/delivery/{id}/cancel/ — Body: { reason (required) }"""
     order = get_object_or_404(_orders(request), pk=pk)
@@ -690,7 +691,7 @@ def delivery_cancel(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_return(request, pk):
     """POST /api/delivery/{id}/return/"""
     order = get_object_or_404(_orders(request), pk=pk)
@@ -713,7 +714,7 @@ def delivery_return(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_close(request, pk):
     """POST /api/delivery/{id}/close/"""
     order = get_object_or_404(_orders(request), pk=pk)
@@ -737,7 +738,7 @@ def delivery_close(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_collect_cash(request, pk):
     """
     POST /api/delivery/{id}/collect-cash/
@@ -787,7 +788,7 @@ def delivery_collect_cash(request, pk):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_order_items(request, pk):
     """
     GET /api/delivery/{id}/items/
@@ -899,7 +900,7 @@ def delivery_order_items(request, pk):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_whatsapp_message(request, pk):
     """
     GET /api/delivery/{id}/whatsapp/
@@ -1003,7 +1004,7 @@ def delivery_whatsapp_message(request, pk):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_summary(request):
     """GET /api/delivery/summary/ — quick KPI card data."""
     denied = guard(request, 'view')
@@ -1057,7 +1058,7 @@ def delivery_summary(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_dashboard(request):
     """
     GET /api/delivery/dashboard/
@@ -1154,7 +1155,7 @@ def delivery_dashboard(request):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_threshold_check(request):
     """
     GET /api/delivery/threshold/?value=450&branch=1&area=Nasr+City&governorate=Cairo
@@ -1226,7 +1227,7 @@ def delivery_threshold_check(request):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_route_plan(request):
     """
     GET /api/delivery/route-plan/?branch=X&driver=Y&date=YYYY-MM-DD
@@ -1321,7 +1322,7 @@ def delivery_route_plan(request):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def driver_app_my_orders(request):
     """
     GET /api/delivery/app/my-orders/
@@ -1343,7 +1344,7 @@ def driver_app_my_orders(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def driver_app_update_location(request, pk):
     """
     POST /api/delivery/app/orders/{id}/location/
@@ -1380,7 +1381,7 @@ _TRACK_MAX_AGE = 14 * 24 * 3600   # link valid 14 days
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_tracking_link(request, pk):
     """Staff: get a shareable tracking link (+ WhatsApp share URL) for an order."""
     denied = guard(request, 'view')
@@ -1500,7 +1501,7 @@ class DeliveryAreaFeeDetailView(generics.RetrieveUpdateDestroyAPIView):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def driver_performance(request):
     """
     GET /api/delivery/driver-performance/?date_from=&date_to=&branch=
@@ -1586,7 +1587,7 @@ def driver_performance(request):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_area_heatmap(request):
     """
     GET /api/delivery/area-heatmap/?date_from=&date_to=&branch=
@@ -1674,7 +1675,7 @@ def _thirty_days_ago():
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_shift_report(request):
     """
     GET /api/delivery/shift-report/?date_from=&date_to=&branch=
@@ -1737,7 +1738,7 @@ def delivery_shift_report(request):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def customer_delivery_profile(request):
     """
     GET /api/delivery/customer-profile/?phone=01012345678
@@ -1834,7 +1835,7 @@ def customer_delivery_profile(request):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_submit_csat(request, pk):
     """
     POST /api/delivery/{id}/csat/
@@ -1887,7 +1888,7 @@ def delivery_submit_csat(request, pk):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_csat_report(request):
     """
     GET /api/delivery/csat-report/?date_from=&date_to=&branch=
@@ -1950,7 +1951,7 @@ from .serializers import DeliveryRouteSerializer  # noqa: E402
 
 
 @api_view(['GET', 'POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_routes(request):
     """GET list (?date=&driver=&status=) · POST create {driver_id, route_date?, order_ids:[ordered], notes?}."""
     denied = guard(request, 'view' if request.method == 'GET' else 'assign')
@@ -2014,7 +2015,7 @@ def delivery_routes(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_route_detail(request, pk):
     denied = guard(request, 'view')
     if denied:
@@ -2024,7 +2025,7 @@ def delivery_route_detail(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_route_dispatch(request, pk):
     """Dispatch the whole route: move its orders to out-for-delivery in one action."""
     denied = guard(request, 'assign')
@@ -2053,7 +2054,7 @@ def delivery_route_dispatch(request, pk):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def driver_app_my_route(request):
     """GET /api/delivery/app/my-route/ — the current driver's active route for today (sequenced)."""
     driver = getattr(getattr(request.user, 'staff_profile', None), 'driver_profile', None)
@@ -2076,7 +2077,7 @@ _BACKFILL_ROLES = frozenset({'admin', 'supervisor', 'call_center', 'pharmacist'}
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def delivery_backfill(request, pk):
     """
     POST /api/delivery/{id}/backfill/   (branch users only)

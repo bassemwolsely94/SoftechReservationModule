@@ -22,17 +22,18 @@ from apps.loyalty.serializers import (
     PointTransactionSerializer, RewardCatalogSerializer,
     RedemptionRequestSerializer, SoftechPointsLogSerializer,
 )
+from core.permissions import RouteModulePermission  # round 2, D6
 
 
 class TierListView(generics.ListAPIView):
     serializer_class   = LoyaltyTierSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
     queryset           = LoyaltyTier.objects.order_by('order')
 
 
 class AccountDetailView(generics.RetrieveAPIView):
     serializer_class   = LoyaltyAccountSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
 
     def get_object(self):
         from django.shortcuts import get_object_or_404
@@ -46,7 +47,7 @@ class AccountDetailView(generics.RetrieveAPIView):
 
 class TransactionListView(generics.ListAPIView):
     serializer_class   = PointTransactionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
 
     def get_queryset(self):
         return PointTransaction.objects.filter(
@@ -252,7 +253,7 @@ class SoftechBalanceView(APIView):
 
     Used by branch staff at the counter when a customer asks for their balance.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
 
     def get(self, request, customer_id):
         from apps.loyalty.pic_bridge import (
@@ -311,7 +312,7 @@ class SoftechBalanceView(APIView):
 class SoftechLogView(generics.ListAPIView):
     """Call-centre: history of SOFTECH point adjustments for a customer."""
     serializer_class   = SoftechPointsLogSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
 
     def get_queryset(self):
         return (
@@ -323,7 +324,7 @@ class SoftechLogView(generics.ListAPIView):
 
 class RewardCatalogView(generics.ListAPIView):
     serializer_class   = RewardCatalogSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
 
     def get_queryset(self):
         return RewardCatalog.objects.filter(is_active=True).order_by('points_cost')
@@ -331,7 +332,7 @@ class RewardCatalogView(generics.ListAPIView):
 
 class RedemptionListView(generics.ListAPIView):
     serializer_class   = RedemptionRequestSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
 
     def get_queryset(self):
         return RedemptionRequest.objects.filter(

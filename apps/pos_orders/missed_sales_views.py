@@ -38,7 +38,7 @@ class MissedSalesPermission(BasePermission):
 
 class MissedSaleSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source='customer.name', read_only=True)
-    customer_phone = serializers.CharField(source='customer.phone', read_only=True)
+    customer_phone = serializers.SerializerMethodField()
     customer_pic = serializers.CharField(source='customer.softech_pic', read_only=True)
     branch_name = serializers.CharField(source='branch.name', read_only=True)
     status_label = serializers.CharField(source='get_status_display', read_only=True)
@@ -54,6 +54,14 @@ class MissedSaleSerializer(serializers.ModelSerializer):
                   'seller_usercode', 'selected_by_name', 'status', 'status_label',
                   'reject_reason', 'reject_reason_label', 'reject_note', 'decided_by_name',
                   'decided_at', 'reservation', 'bought_in_cart']
+
+    def get_customer_phone(self, o):
+        """The number serves this branch's own record (D2), masked for staff who may not see phones
+        (D3 / D4) — round 2 R4 phone canary."""
+        from apps.customers.access import record_phone
+        value = getattr(o.customer, 'phone', '') if o.customer_id else ''
+        request = self.context.get('request')
+        return record_phone(request.user, value) if (value and request is not None) else value
 
     def get_selected_by_name(self, o):
         return o.selected_by.full_name if o.selected_by_id else ''
@@ -120,7 +128,7 @@ def missed_sale_detail(request, pk):
         return Response(DISABLED, status=status.HTTP_503_SERVICE_UNAVAILABLE)
     o = branch_scope.get_or_404(MissedSaleSuggestion.objects.select_related('customer', 'branch'),
                                 request.user, pk=pk)
-    return Response(MissedSaleSerializer(o, context={'sold_by_cart': _sold_by_cart({o.cart_token})}).data)
+    return Response(MissedSaleSerializer(o, context={'sold_by_cart': _sold_by_cart({o.cart_token}), 'request': request}).data)
 
 
 @api_view(['POST'])
@@ -148,4 +156,4 @@ def missed_sale_reject(request, pk):
     AuditLog.log('missed_sale_rejected', user=profile, obj=o, request=request,
                  changes={'status': ['new', 'rejected']},
                  note=f'{o.get_reject_reason_display()}{" — " + note if note else ""}')
-    return Response(MissedSaleSerializer(o).data)
+    return Response(MissedSaleSerializer(o, context={'request': request}).data)

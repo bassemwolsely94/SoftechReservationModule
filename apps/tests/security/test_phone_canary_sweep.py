@@ -120,8 +120,10 @@ class PhoneCanarySweepTests(TestCase):
         """Round 2, R4 step 6: the records behind WhatsApp payloads staff can see — missed-call
         call-backs (CDR calls), counselling card sends, WhatsApp conversations / messages, phone
         alerts — carry the number, so the sweep checks their screens mask it."""
+        # whatsapp.WAMessage is not built generically (its conversation FK + message-id uniqueness); the
+        # number it shows is its conversation's wa_id, planted on WAConversation.
         want = {'pbx.CdrCall', 'counselling.CounselCardSend', 'whatsapp.WAConversation',
-                'whatsapp.WAMessage', 'notifications.PhoneAlert'}
+                'notifications.PhoneAlert'}
         self.assertEqual(sorted(want - set(self.planter.planted)), [], sorted(self.planter.skipped))
 
     def test_admin_sees_the_number(self):

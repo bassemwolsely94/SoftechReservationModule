@@ -13,3 +13,12 @@ customer by full phone; browse / name search / edit / churn list own branch; oth
 masked; call center and all-branch roles edit anyone (`apps/customers/access.py`). B-3: supervisor
 and quality manager are all-branch roles (`core/branch_scope.ALL_BRANCH_ROLES`).
 - W-1: voucher generate-otp hands the plain code to the staff member (wa.me text + QR)
+
+## Round 2, R3 — owner decision D6 (2026-11-05): views that checked only "logged in"
+
+D6 (decision pack, default Fix) gave 107 such views `core.permissions.RouteModulePermission` — the
+middleware's own rule at view level, so nothing is refused that `enforce` would not refuse. These
+are in stop-and-ask areas. Users, counselling cards and cheque plans already check inside the view
+(tests in `test_d6_route_gate.py` pass); this one waits for the owner to OK the one-line diff
+(`permission_classes = [IsAuthenticated, RouteModulePermission]`):
+- D-64: loyalty redeem / approve redemption — reachable without the `customers` grant in log mode (customer money)

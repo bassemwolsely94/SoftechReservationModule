@@ -52,6 +52,23 @@ ANSWER_SECRETS_ADMIN = {'password': SECRET_PW, 'token': FAKE_TOKEN}
 _JWT = re.compile(r'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.')
 
 
+def _release_worker_locks():
+    """Admin's POST {} reached views that take a process lock and hand it to a background worker to
+    release; the Tripwire never starts that worker, so release what it would have (refresh / recompute locks)."""
+    import importlib
+    for mod, attr in (('apps.stock_audit.views', '_refresh_lock'), ('apps.finance.receivables_views', '_refresh_lock'),
+                      ('apps.finance.supplier_terms_views', '_recompute_lock'),
+                      ('apps.purchasing.dead_stock_views', '_lock')):
+        lock = getattr(importlib.import_module(mod), attr)
+        if lock.locked():
+            lock.release()
+
+
+def _clear_cache():
+    from django.core.cache import cache
+    cache.clear()
+
+
 class LeakyTripwire(Tripwire):
     """The usual Tripwire, but a SOFTECH connection fails with a message full of secrets."""
 
@@ -75,8 +92,8 @@ class LogScanner(logging.Handler):
             text = record.getMessage()
         except Exception:          # noqa: BLE001 — a bad format string is not our finding
             text = str(record.msg)
-        if record.exc_info:
-            text += ' ' + logging.Formatter().formatException(record.exc_info)
+        if record.exc_info:          # what a handler prints: the pre-rendered (redacted) text if any
+            text += ' ' + (record.exc_text or logging.Formatter().formatException(record.exc_info))
         for what, needle in LOG_SECRETS.items():
             if needle in text:
                 self.hits.add(f'{what} {record.name}')
@@ -142,6 +159,7 @@ class PrivacyLogSweepTests(TestCase):
                     type(cls.planter.customer).objects.filter(pk=cls.planter.customer.pk).update(softech_pic=PIC)
             finally:
                 logging.disable(previous)
+                _clear_cache()   # rolled-back requests still write the cache (locks, throttles)
             routes = sorted(p for p in protected_routes() if SWEEP_ID not in p)
             with LogScanner() as scan:
                 for path in routes:
@@ -156,6 +174,8 @@ class PrivacyLogSweepTests(TestCase):
                                 if needle in body:
                                     cls.answer_hits.add(f'{what} {who} {method} {path}')
             cls.log_hits = scan.hits
+            _clear_cache()
+            _release_worker_locks()
             cls.softech_errors = len(tw.softech_calls)
 
     @classmethod

@@ -21,6 +21,7 @@ from .models import CounsellingContent
 from .permissions import CounsellingAccess, can
 from .selectors import content_enabled
 from .serializers import CounsellingContentSerializer, CounsellingVersionSerializer
+from core.permissions import RouteModulePermission  # round 2, D6
 
 
 def _profile(request):
@@ -37,7 +38,7 @@ def _flag(name):
 
 
 class StatusView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
 
     def get(self, request):
         from apps.pos_orders.permissions import CanViewPos
@@ -146,7 +147,10 @@ class ContentLink(_ContentAction):
 class ContentUnlink(_ContentAction):
     def post(self, request, pk):
         c = self._content(pk)
-        services.unlink_item(_profile(request), c, request.data.get('item_id'))
+        raw = request.data.get('item_id')
+        if not str(raw or '').isdigit():          # was int(None) → 500 (round 2 R3 seeded sweep)
+            return Response({'detail': 'item_id مطلوب'}, status=status.HTTP_400_BAD_REQUEST)
+        services.unlink_item(_profile(request), c, int(raw))
         return Response(_ser(request, c))
 
 

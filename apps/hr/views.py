@@ -41,6 +41,7 @@ from .serializers import (
     PermitSerializer, SubmitPermitSerializer,
 )
 from .service import HrService, HrError
+from core.permissions import RouteModulePermission  # round 2, D6
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -103,7 +104,7 @@ def _subject_kwargs(request, d):
 class LeaveTypeViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
                        viewsets.GenericViewSet):
     """GET /api/hr/leave-types/"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
     serializer_class   = LeaveTypeSerializer
     queryset           = LeaveType.objects.filter(is_active=True)
 
@@ -115,7 +116,7 @@ class LeaveBalanceViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     GET /api/hr/leave-balances/          — my balances
     GET /api/hr/leave-balances/?staff=X  — admin/supervisor: another employee
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
     serializer_class   = LeaveBalanceSerializer
 
     def get_queryset(self):
@@ -139,7 +140,7 @@ class LeaveRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     # sortable grid: whitelisted ?ordering= (annotations = what the cell shows), NULLs last, pk tiebreak
     filter_backends    = [NullsLastOrderingFilter]
     ordering_fields    = ['staff_sort', 'code_sort', 'leave_type__name_ar', 'start_date', 'end_date', 'days_requested', 'status_rank', 'created_at']
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
     serializer_class   = LeaveRequestSerializer
 
     def get_queryset(self):
@@ -211,7 +212,7 @@ class OvertimeRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     # sortable grid: whitelisted ?ordering= (annotations = what the cell shows), NULLs last, pk tiebreak
     filter_backends    = [NullsLastOrderingFilter]
     ordering_fields    = ['staff_sort', 'code_sort', 'date', 'hours', 'status_rank', 'created_at']
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
     serializer_class   = OvertimeRequestSerializer
 
     def get_queryset(self):
@@ -262,7 +263,7 @@ class SalaryAdvanceViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     # sortable grid: whitelisted ?ordering= (annotations = what the cell shows), NULLs last, pk tiebreak
     filter_backends    = [NullsLastOrderingFilter]
     ordering_fields    = ['staff_sort', 'amount', 'repayment_date', 'reason', 'status_rank', 'created_at']
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
     serializer_class   = SalaryAdvanceSerializer
 
     def get_queryset(self):
@@ -313,7 +314,7 @@ class ExpenseClaimViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     # sortable grid: whitelisted ?ordering= (annotations = what the cell shows), NULLs last, pk tiebreak
     filter_backends    = [NullsLastOrderingFilter]
     ordering_fields    = ['staff_sort', 'amount', 'category_sort', 'description', 'status_rank', 'created_at']
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
     serializer_class   = ExpenseClaimSerializer
 
     def get_queryset(self):
@@ -378,7 +379,7 @@ class PermitViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     # sortable grid: whitelisted ?ordering= (annotations = what the cell shows), NULLs last, pk tiebreak
     filter_backends    = [NullsLastOrderingFilter]
     ordering_fields    = ['staff_sort', 'code_sort', 'type_sort', 'date', 'time_from', 'destination', 'status_rank', 'created_at']
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
     serializer_class   = PermitSerializer
 
     def get_queryset(self):
@@ -499,7 +500,7 @@ def _attendance_dict(rec):
 
 class AttendanceViewSet(viewsets.ViewSet):
     """GET /api/hr/attendance/ (list), /status/, POST /check-in/, /check-out/."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
 
     def _geofence(self, branch, lat, lng):
         """Return (distance_m, ok). ok is None when branch coords are unknown."""

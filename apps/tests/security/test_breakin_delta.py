@@ -32,7 +32,9 @@ from rest_framework.test import APIClient
 from .routes import Tripwire, handles
 from .sweep import FEATURE_FLAGS_ON, METHODS, protected_routes
 
-_REFUSED = {401, 403, 405}
+# 404 / 503 carry no data: commerce answers 503 while COMMERCE is switched off (before auth), and the
+# two nested replacement action routes answer 404 to everyone (their pattern never reaches a view).
+_REFUSED = {401, 403, 404, 405, 503}
 
 
 def _code(client, method, path):
@@ -50,8 +52,14 @@ def _code(client, method, path):
         return f'raised {type(exc).__name__}'
 
 
+def _clear_cache():
+    from django.core.cache import cache
+    cache.clear()
+
+
 class AnonymousRefusalTests(TestCase):
     """No protected route answers an anonymous caller, in either public-gate mode."""
+    maxDiff = None
 
     def _sweep(self, mode):
         anon, out = APIClient(), {}
@@ -68,6 +76,7 @@ class AnonymousRefusalTests(TestCase):
                                 out[f'{m} {path}'] = code
         finally:
             logging.disable(previous)
+            _clear_cache()   # rolled-back requests still write the cache (locks, throttles)
         return out
 
     def test_anonymous_refused_everywhere_with_the_gate_off(self):
@@ -81,6 +90,7 @@ class AnonymousRefusalTests(TestCase):
 class TokenReplayTests(TestCase):
     """A signed token is bound to its purpose (salt). Each new token type is minted with every
     OTHER known salt for the same object and must be refused by its own reader."""
+    maxDiff = None
 
     def test_counsel_card_reader_refuses_other_purposes(self):
         from apps.counselling.cards import CARD_SIGNING_SALT

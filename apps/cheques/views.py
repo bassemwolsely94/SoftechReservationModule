@@ -31,6 +31,7 @@ from .serializers import (
     PlanPreviewRequestSerializer,
     PlanPreviewItemSerializer,
 )
+from core.permissions import RouteModulePermission  # round 2, D6
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ def _get_staff(request):
 
 class HolidayListView(generics.ListAPIView):
     """GET /api/cheques/holidays/?year=2025"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
     serializer_class   = HolidaySerializer
 
     def get_queryset(self):
@@ -60,7 +61,7 @@ class HolidayListView(generics.ListAPIView):
 # ── Preview (no DB write) ─────────────────────────────────────────────────────
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def preview_cheque_plan(request):
     """
     POST /api/cheques/preview/
@@ -240,7 +241,7 @@ def update_instalment(request, plan_pk, inst_pk):
 # ── Treasury dashboard ────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def treasury_dashboard(request):
     """
     GET /api/cheques/treasury/

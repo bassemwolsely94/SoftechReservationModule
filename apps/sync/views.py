@@ -11,6 +11,7 @@ SYNC = matrix_permission('sync')      # sync logs / scheduler state = sync view 
 from rest_framework.response import Response
 from rest_framework import status
 from .models import SyncRun, SyncLog
+from core.permissions import RouteModulePermission  # round 2, D6
 
 logger = logging.getLogger('elrezeiky.sync')
 
@@ -33,7 +34,7 @@ class SyncRunSerializer(serializers.ModelSerializer):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def sync_status(request):
     last = SyncRun.objects.first()
     return Response(SyncRunSerializer(last).data if last else {'status': 'no_sync_yet'})
@@ -103,7 +104,7 @@ def sync_logs(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def data_freshness(request):
     """
     Per-domain data freshness for the module-level freshness bars.
@@ -156,7 +157,7 @@ def scheduler_status(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def branch_health(request):
     """
     Network Sybase reachability — HQ + every operational branch.
@@ -241,7 +242,7 @@ def branch_health(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def softech_load(request):
     """
     What the platform asks of SOFTECH (doc 30): logins, queries, rows and time over
@@ -299,7 +300,7 @@ def softech_load(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def slow_requests(request):
     """
     Top 10 slowest API endpoints over the last ?days= (default 14, max 30) by p95
@@ -336,7 +337,7 @@ def slow_requests(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def writer_switches(request):
     """
     P-54 switch table: every SOFTECH writer flag with its .env value, its effective state
