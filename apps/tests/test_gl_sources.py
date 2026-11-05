@@ -231,16 +231,16 @@ class ChequeReaderTests(SimpleTestCase):
             'chq:100:1': ('supplier_payments', ''), 'chq:100:2': ('customer_collections', ''),
             'chq:100:3': ('treasury_other', 'employee'), 'chq:100:4': ('treasury_other', 'partner'),
             'chq:100:5': ('treasury_other', 'asset_supplier'), 'chq:100:6': ('treasury_other', 'sister_company'),
-            'chq:100:7': ('treasury_other', 'other'), 'chq:100:8': ('treasury_other', 'transfer')})
+            'chq:100:7': ('treasury_other', 'other'), 'chq:100:8': ('treasury_other', 'transfer_unpaired')})
         self.assertEqual(docs['chq:100:2'].attrs['direction'], 'receipt')
 
     def test_transfer_legs_are_two_docs(self):
         docs, _ = run_cheques([
-            chq(cheqsno='11', ptcode='-1', personcode='-180', cheqtype='20', bankcode='40', tf_branchcode='100',
+            chq(cheqsno='11', ptcode='-1', personcode='-181', cheqtype='20', bankcode='40', tf_branchcode='100',
                 tf_bankcode='04', tf_cheqsno='12'),
             chq(cheqsno='12', ptcode='-1', personcode='-181', cheqtype='10', bankcode='04', tf_branchcode='100',
-                tf_bankcode='40', tf_cheqsno='11')])
-        # same-branch box<->bank pair (Ruling P24): the payment leg posts, the receipt leg is its mirror
+                tf_bankcode='40', tf_cheqsno='11', banktype='1')])
+        # box<->bank pair (Ruling P27): the box leg posts, the bank leg (banktype 1) is the mirror
         self.assertEqual({k: d.kind for k, d in docs.items()},
                          {'chq:100:11': 'transfer_bank', 'chq:100:12': 'transfer_bank_mirror'})
         self.assertEqual(len(docs), 2)
@@ -286,7 +286,9 @@ class TransferKindP24Tests(SimpleTestCase):
         docs = self.run6([self.tf(branchcode='100', cheqsno='3'),
                           # own branch as tf_branchcode is not a counterpart
                           self.tf(branchcode='130', cheqsno='4', tf_branchcode='130')])
-        self.assertEqual({d.kind for d in docs.values()}, {'transfer'})
+        # Ruling P28: an HQ leg nobody points at is 'transfer_unpaired' (exception, never 1320)
+        self.assertEqual({k: d.kind for k, d in docs.items()},
+                         {'chq:100:3': 'transfer_unpaired', 'chq:130:4': 'transfer'})
         self.assertEqual(docs['chq:100:3'].attrs['counterpart_branch'], '')
 
     def test_two_different_branch_legs_naming_one_hq_voucher_is_ambiguous(self):
@@ -294,7 +296,7 @@ class TransferKindP24Tests(SimpleTestCase):
             self.tf(branchcode='100', cheqsno='9'),
             self.tf(branchcode='150', cheqsno='1', cheqtype='10', tf_branchcode='100', tf_cheqsno='9'),
             self.tf(branchcode='160', cheqsno='1', cheqtype='10', tf_branchcode='100', tf_cheqsno='9')])
-        self.assertEqual(docs['chq:100:9'].kind, 'transfer')
+        self.assertEqual(docs['chq:100:9'].kind, 'transfer_unpaired')
         self.assertEqual(docs['chq:150:1'].kind, 'transfer_branch')
 
     def test_pairing_is_order_independent_and_keeps_source_keys(self):
@@ -310,7 +312,54 @@ class TransferKindP24Tests(SimpleTestCase):
     def test_non_transfer_vouchers_untouched(self):
         docs = self.run6([self.tf(cheqsno='5', personcode='5001', ptcode='20', tf_branchcode='150')])
         d = docs['chq:100:5']
-        self.assertEqual((d.source_type, d.kind, d.attrs['counterpart_branch']), ('supplier_payments', '', ''))
+        self.assertEqual((d.source_type, d.kind), ('supplier_payments', ''))
+        self.assertNotIn('counterpart_branch', d.attrs)   # review minor 4: hash of other cheques unchanged
+
+    def test_branch_to_branch_is_b2b(self):   # Ruling P29
+        docs = self.run6([
+            self.tf(branchcode='150', cheqsno='5', cheqtype='20', bankcode='60', tf_branchcode='160', tf_cheqsno='8'),
+            self.tf(branchcode='160', cheqsno='8', cheqtype='10', bankcode='70', tf_branchcode='150', tf_cheqsno='5')])
+        self.assertEqual({k: (d.kind, d.attrs['counterpart_branch']) for k, d in docs.items()},
+                         {'chq:150:5': ('transfer_b2b', '160'), 'chq:160:8': ('transfer_b2b', '150')})
+
+    def test_bank_mirror_decided_by_own_banktype(self):   # Ruling P27
+        docs = self.run6([self.tf(branchcode='100', cheqsno='601', personcode='-181', cheqtype='10',
+                                  bankcode='04', banktype='1', tf_bankcode='10', tf_cheqsno='600')])
+        self.assertEqual(docs['chq:100:601'].kind, 'transfer_bank_mirror')   # alone, still the mirror
+        docs = self.run6([self.tf(branchcode='100', cheqsno='600', personcode='-181', cheqtype='20',
+                                  bankcode='10', tf_bankcode='04', tf_cheqsno='601')])
+        self.assertEqual(docs['chq:100:600'].kind, 'transfer_bank')   # lone box leg posts
+
+    def test_hq_leg_paired_by_lookup_without_its_branch_leg(self):   # Ruling P28: no churn
+        hq = self.tf(branchcode='100', cheqsno='501', cheqtype='20', bankcode='10', cheqvalue=D('100000'))
+        br = self.tf(branchcode='160', cheqsno='77', cheqtype='10', bankcode='70', tf_branchcode='100',
+                     tf_cheqsno='501', cheqvalue=D('100000'), cheqdate=datetime(2026, 7, 2),
+                     cheqregisterdate=datetime(2026, 7, 2))
+        calls = []
+
+        def fetch(sql):
+            calls.append(sql)
+            if 'tf_cheqsno) IN' in sql:
+                return [br, self.tf(branchcode='150', cheqsno='3', tf_branchcode='100', tf_cheqsno='999')]
+            return [hq]
+        alone = {d.source_key: d for d in READERS['treasury_other'](date(2026, 6, 1), date(2026, 6, 30), fetch)}
+        both = self.run6([hq, br])
+        a, b = alone['chq:100:501'], both['chq:100:501']
+        self.assertEqual((a.kind, a.attrs), (b.kind, b.attrs))
+        self.assertEqual((a.kind, a.attrs['counterpart_branch']), ('transfer_branch', '160'))
+        lookups = [s for s in calls if 'tf_cheqsno) IN' in s]
+        self.assertEqual(len(lookups), 1)
+        self.assertIn("IN ('501')", lookups[0])
+
+    def test_lookup_sql_shape(self):
+        sql = sybase_gl.sql_transfer_legs_pointing_at(['12', 7, ' 7 '])
+        self.assertTrue(sql.lstrip().upper().startswith('SELECT'))
+        self.assertIn("personcode = '-180'", sql)
+        self.assertIn("CONVERT(varchar(10), c.tf_branchcode) = '100'", sql)
+        self.assertIn("IN ('7', '12')", sql)
+        self.assertNotIn('cheqdate', sql)   # no date bound
+        with self.assertRaises(ValueError):
+            sybase_gl.sql_transfer_legs_pointing_at(["1'; DROP"])
 
     def test_one_fetch_per_month_for_all_four_types(self):
         _, f = run_cheques([chq()], date(2026, 3, 1), date(2026, 4, 30))

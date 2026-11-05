@@ -17,39 +17,77 @@ def _kind_other(ptcode: str, personcode: str) -> str:
     return OTHER_KINDS.get(ptcode, 'other')
 
 
-def _transfer_kinds(rows) -> dict:
-    """Ruling P24: (branch, cheqsno) -> (kind, counterpart_branch) for every -180/-181 voucher.
 
-    Counterpart branch = the voucher's own tf_branchcode (when it is another branch), else the branch
-    of the one voucher in this fetch whose tf_branchcode/tf_cheqsno point back at it (the HQ leg of
-    a pair). Two different branches pointing at one voucher are ambiguous -> no counterpart. A
-    same-branch box<->bank pair whose two legs are both present posts once: the receipt leg is
-    'transfer_bank_mirror'. Pure function of the row set, so row order never changes the result."""
+
+HQ = sybase_gl.HQ_BRANCH
+BOX_TRANSFER, BANK_TRANSFER = sybase_gl.TRANSFER_BOX_PERSON, '-181'
+BANK_TYPE_BANK = '1'   # banks.banktype: 0 = cash box, 1 = bank account
+_LOOKUP_CHUNK = 500
+
+
+def _transfer_kinds(rows, fetch) -> dict:
+    """(branch, cheqsno) -> (kind, counterpart_branch) for every -180 / -181 voucher.
+
+    -181 box<->bank (Ruling P27, decided from the row alone): the leg whose own box is a bank
+    (banktype 1) is 'transfer_bank_mirror' (skipped); the box leg is 'transfer_bank' (posts box vs
+    bank(tf_bankcode)); no tf_bankcode -> 'transfer'.
+    -180 box<->box (P24/P28/P29): counterpart branch = own tf_branchcode (another branch), else the
+    one branch whose leg points back (tf_branchcode / tf_cheqsno) - first in this fetch, then for HQ
+    legs by one read-only SELECT with no date bound (``sql_transfer_legs_pointing_at``). HQ on either
+    side -> 'transfer_branch'; branch<->branch -> 'transfer_b2b'; an HQ leg still unpaired (or
+    ambiguous) -> 'transfer_unpaired'; a branch leg with no counterpart stays 'transfer'. None of
+    this depends on the range drafted, so the same voucher always gets the same kind."""
     tf = {(code(r['branchcode']), code(r['cheqsno'])): r for r in rows
-          if code(r['personcode']) in ('-180', '-181')}
-    back = {}
-    for (branch, sno), r in tf.items():
-        tb, ts = code(r.get('tf_branchcode')), code(r.get('tf_cheqsno'))
-        if tb and ts and tb != branch:
-            back.setdefault((tb, ts), set()).add(branch)
+          if code(r['personcode']) in (BOX_TRANSFER, BANK_TRANSFER)}
+
+    def pointing(src):
+        back = {}
+        for r in src:
+            if code(r['personcode']) != BOX_TRANSFER:
+                continue
+            b, tb, ts = code(r['branchcode']), code(r.get('tf_branchcode')), code(r.get('tf_cheqsno'))
+            if tb and ts and tb != b:
+                back.setdefault((tb, ts), set()).add(b)
+        return back
+
+    back = pointing(tf.values())
+    own = {k: code(r.get('tf_branchcode')) for k, r in tf.items()}
+    unresolved = sorted(sno for (b, sno), r in tf.items()
+                        if b == HQ and code(r['personcode']) == BOX_TRANSFER
+                        and not (own[(b, sno)] and own[(b, sno)] != b)
+                        and len(back.get((b, sno), ())) != 1 and sno.isdigit())
+    looked = {}
+    for i in range(0, len(unresolved), _LOOKUP_CHUNK):
+        part = unresolved[i:i + _LOOKUP_CHUNK]
+        wanted = set(part)
+        hits = [r for r in fetch(sybase_gl.sql_transfer_legs_pointing_at(part))   # re-checked in Python
+                if code(r.get('tf_branchcode')) == HQ and code(r.get('tf_cheqsno')) in wanted]
+        for k, v in pointing(hits).items():
+            looked.setdefault(k, set()).update(v)
+
     out = {}
     for (branch, sno), r in tf.items():
-        own = code(r.get('tf_branchcode'))
-        if own and own != branch:
-            out[(branch, sno)] = ('transfer_branch', own)
+        if code(r['personcode']) == BANK_TRANSFER:
+            if code(r.get('banktype')) == BANK_TYPE_BANK:
+                out[(branch, sno)] = ('transfer_bank_mirror', '')
+            elif code(r.get('tf_bankcode')):
+                out[(branch, sno)] = ('transfer_bank', '')
+            else:
+                out[(branch, sno)] = ('transfer', '')
             continue
-        pointing = back.get((branch, sno), set())
-        if len(pointing) == 1:
-            out[(branch, sno)] = ('transfer_branch', next(iter(pointing)))
-        elif code(r.get('tf_bankcode')):
-            partner = tf.get((branch, code(r.get('tf_cheqsno'))))
-            mirror = (partner is not None and partner is not r
-                      and code(partner.get('tf_cheqsno')) == sno and code(r['cheqtype']) == '10'
-                      and code(partner['cheqtype']) != '10' and code(partner.get('tf_bankcode')))
-            out[(branch, sno)] = ('transfer_bank_mirror' if mirror else 'transfer_bank', '')
+        counterpart = own[(branch, sno)] if own[(branch, sno)] != branch else ''
+        if not counterpart:
+            cands = back.get((branch, sno), set())
+            if len(cands) != 1 and branch == HQ:
+                cands = looked.get((branch, sno), set()) | cands
+            counterpart = next(iter(cands)) if len(cands) == 1 else ''
+        if counterpart:
+            kind = 'transfer_branch' if HQ in (branch, counterpart) else 'transfer_b2b'
+            out[(branch, sno)] = (kind, counterpart)
         else:
-            out[(branch, sno)] = ('transfer', '')
+            out[(branch, sno)] = ('transfer_unpaired' if branch == HQ else 'transfer', '')
     return out
+
 
 
 def _build(date_from, date_to, fetch):
@@ -61,7 +99,7 @@ def _build(date_from, date_to, fetch):
                 continue
             seen.add((branch, sno))
             rows.append(r)
-    transfers = _transfer_kinds(rows)
+    transfers = _transfer_kinds(rows, fetch)
     docs = []
     for r in rows:
         branch, sno = code(r['branchcode']), code(r['cheqsno'])
@@ -81,16 +119,17 @@ def _build(date_from, date_to, fetch):
             stype, kind = 'customer_collections', ''
         else:
             stype, kind = 'treasury_other', _kind_other(ptcode, person)
-        counterpart = ''
-        if kind == 'transfer':
+        transfer = kind == 'transfer'
+        if transfer:
             kind, counterpart = transfers.get((branch, sno), ('transfer', ''))
         amount = q(r['cheqvalue'])
         attrs = {'financialdoc': fdoc, 'direction': 'receipt' if code(r['cheqtype']) == '10' else 'payment',
                  'bankcode': code(r['bankcode']), 'bank_type': code(r.get('banktype')),
                  'cheqno': code(r['cheqno']), 'due_date': due.isoformat() if due else None,
                  'note': (r.get('chequenote') or '').strip(), 'tf_branchcode': code(r.get('tf_branchcode')),
-                 'tf_bankcode': code(r.get('tf_bankcode')), 'tf_cheqsno': code(r.get('tf_cheqsno')),
-                 'counterpart_branch': counterpart}
+                 'tf_bankcode': code(r.get('tf_bankcode')), 'tf_cheqsno': code(r.get('tf_cheqsno'))}
+        if transfer:   # transfer vouchers only, so other cheques keep their content hash
+            attrs['counterpart_branch'] = counterpart
         if doc_date and date_from <= doc_date <= date_to:
             docs.append(SourceDoc(stype, f'chq:{branch}:{sno}', doc_date, branch, kind, person,
                                   {'amount': amount}, attrs))

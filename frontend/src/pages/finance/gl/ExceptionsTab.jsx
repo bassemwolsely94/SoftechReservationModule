@@ -20,6 +20,8 @@ import { SkeletonTable, EmptyState } from '../../../components/ui'
 import { AccountPicker } from './EntryEditor'
 import RuleEditor, { SOURCE_TYPES, MAP_KINDS } from './RuleEditor'
 import { amountsText } from './SourcePanel'
+import { BRANCH_KEYED } from './SourceMapsPanel'
+import useBranchLabels from '../../../hooks/useBranchLabels'
 import {
   money, errOf, listOf, useGlBranches, inputCls, btnPrimary, btnPlain, ErrorBox,
 } from './glUi'
@@ -88,6 +90,7 @@ function PartyFix({ ex, onDone }) {
 // ── unmapped_account with a (kind, value): map it now ────────────────────────
 function MapFix({ ex, onDone }) {
   const { branches, labelOf } = useGlBranches()
+  const bl = useBranchLabels()
   const kind = ex.detail?.kind
   const value = String(ex.detail?.value ?? ex.detail?.key ?? '')
   const [account, setAccount] = useState('')
@@ -108,7 +111,8 @@ function MapFix({ ex, onDone }) {
   })
   return (
     <div className="space-y-1.5 text-sm">
-      <div className="text-xs text-gray-600">ربط {MAP_KINDS[kind] || kind}: <span className="font-mono">{value}</span></div>
+      <div className="text-xs text-gray-600">ربط {MAP_KINDS[kind] || kind}: {BRANCH_KEYED.has(kind)
+        ? <span>{bl(value)}</span> : <span className="font-mono">{value}</span>}</div>
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-72"><AccountPicker value={account} name={name} accounts={accounts} onPick={a => setAccount(a.code)} /></div>
         <select className={inputCls} value={branch} onChange={e => setBranch(e.target.value)}>

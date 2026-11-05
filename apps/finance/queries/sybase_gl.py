@@ -91,6 +91,27 @@ def sql_cheques(d1: date, d2: date) -> str:
     )
 
 
+HQ_BRANCH = '100'
+TRANSFER_BOX_PERSON = '-180'
+
+
+def sql_transfer_legs_pointing_at(cheqsnos) -> str:
+    """Ruling P28: branch legs of box->box transfers that point back at the given HQ vouchers
+    (tf_branchcode = HQ, tf_cheqsno IN ...). No date bound: the other leg may sit in another range.
+    ``cheqsnos`` are coerced to int, so only integers and module constants are interpolated."""
+    keys = sorted({int(str(s).strip()) for s in cheqsnos})
+    if not keys:
+        raise ValueError('no cheqsnos')
+    in_list = ', '.join(f"'{k}'" for k in keys)
+    return (
+        "SELECT c.branchcode, c.cheqsno, c.personcode, c.tf_branchcode, c.tf_cheqsno "  # nosec B608 - only int() values and module constants are interpolated
+        f"FROM {DB}.cheques c "
+        f"WHERE c.personcode = '{TRANSFER_BOX_PERSON}' "
+        f"AND CONVERT(varchar(10), c.tf_branchcode) = '{HQ_BRANCH}' "
+        f"AND CONVERT(varchar(20), c.tf_cheqsno) IN ({in_list})"
+    )
+
+
 def sql_expenses(d1: date, d2: date) -> str:
     """dailyexpenses rows plus the paying box from the linked voucher (Ruling P20 link, see
     ``_expense_link``). No linked voucher -> NULL bankcode -> the engine raises unmapped_account."""

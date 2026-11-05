@@ -15,9 +15,13 @@ import SortTh from '../../../components/SortTh'
 import { SkeletonTable, EmptyState } from '../../../components/ui'
 import { AccountPicker } from './EntryEditor'
 import { MAP_KINDS } from './RuleEditor'
+import useBranchLabels from '../../../hooks/useBranchLabels'
 import { errOf, listOf, useGlBranches, inputCls, btnPrimary, ErrorBox } from './glUi'
 
-function MapRow({ row, accounts, nameOf, branches, canEdit, kind, onSaved }) {
+// maps keyed by a SOFTECH branch code: show "code · name", never the bare code
+export const BRANCH_KEYED = new Set(['card_clearing', 'intercompany'])
+
+function MapRow({ row, accounts, nameOf, branches, canEdit, kind, onSaved, bl }) {
   const [account, setAccount] = useState(row.account_code || '')
   const [branch, setBranch] = useState(row.branch_id ? String(row.branch_id) : '')
   const [note, setNote] = useState(row.note || '')
@@ -32,8 +36,8 @@ function MapRow({ row, accounts, nameOf, branches, canEdit, kind, onSaved }) {
   })
   return (
     <tr className={`border-t border-gray-100 ${row.unmapped ? 'bg-amber-50' : ''}`}>
-      <td className="px-3 py-1.5 font-mono">
-        {row.source_value}
+      <td className={`px-3 py-1.5 ${BRANCH_KEYED.has(kind) ? '' : 'font-mono'}`}>
+        {BRANCH_KEYED.has(kind) ? bl(row.source_value) : row.source_value}
         {row.unmapped && <span className="ms-2 text-[10px] text-amber-700">غير مربوط</span>}
       </td>
       <td className="px-3 py-1.5 w-80">
@@ -63,6 +67,7 @@ function MapRow({ row, accounts, nameOf, branches, canEdit, kind, onSaved }) {
 export default function SourceMapsPanel({ canEdit }) {
   const qc = useQueryClient()
   const { branches, labelOf } = useGlBranches()
+  const bl = useBranchLabels()
   const [kind, setKind] = useState('bank')
   const [newValue, setNewValue] = useState('')
   const [extra, setExtra] = useState([])
@@ -135,7 +140,7 @@ export default function SourceMapsPanel({ canEdit }) {
             </thead>
             <tbody>
               {sorted.map(r => (
-                <MapRow key={`${kind}:${r.source_value}:${r.account_code}:${r.branch_id}`} row={r} kind={kind} accounts={accounts} nameOf={nameOf}
+                <MapRow key={`${kind}:${r.source_value}:${r.account_code}:${r.branch_id}`} row={r} kind={kind} bl={bl} accounts={accounts} nameOf={nameOf}
                         branches={branchOpts} canEdit={canEdit} onSaved={done} />
               ))}
             </tbody>

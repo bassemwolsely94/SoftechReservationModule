@@ -158,17 +158,19 @@ RULES = [
     dict(code='treasury.box_bank_in', source_type='treasury_other', granularity='document',
          book='cash', priority=120,
          conditions={'kind_in': ['transfer_bank'], 'direction_in': ['receipt'], 'financialdoc_in': ['10']},
-         lines=[_ln('debit', 'amount', description='تحويل من البنك {branch} {date}', **_BANK),
+         lines=[_ln('debit', 'amount', description='تحويل بين الخزينة والبنك {branch} {date}', **_BANK),
                 _ln('credit', 'amount', map='bank', key='tf_bankcode', branch='map')]),
     dict(code='treasury.box_bank_out', source_type='treasury_other', granularity='document',
          book='cash', priority=120,
          conditions={'kind_in': ['transfer_bank'], 'direction_in': ['payment'], 'financialdoc_in': ['10']},
          lines=[_ln('debit', 'amount', map='bank', key='tf_bankcode', branch='map',
-                    description='إيداع بالبنك {branch} {date}'),
+                    description='تحويل بين الخزينة والبنك {branch} {date}'),
                 _ln('credit', 'amount', **_BANK)]),
-    # the second leg of a same-branch box<->bank pair repeats the first: drafted once, never twice
+    # Ruling P27: the bank-side leg (its own box is a bank, banktype 1) repeats the box leg: never posted.
+    # transfer_unpaired (P28) and transfer_b2b (P29) have no rule on purpose -> exceptions.
     dict(code='treasury.box_bank_mirror', source_type='treasury_other', granularity='document',
-         book='cash', priority=120, action='skip', conditions={'kind_in': ['transfer_bank_mirror']},
+         book='cash', priority=120, action='skip',
+         conditions={'kind_in': ['transfer_bank_mirror'], 'financialdoc_in': ['10']},
          lines=[], description='الطرف المقابل لتحويل خزينة/بنك مُرحّل من الطرف الآخر'),
 ]
 

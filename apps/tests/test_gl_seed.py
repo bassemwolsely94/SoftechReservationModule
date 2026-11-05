@@ -196,8 +196,12 @@ class SeedTests(TestCase):
             # box 10 -> bank 04 at HQ, both legs present: posted once
             r(branchcode='100', cheqsno='600', cheqtype='20', bankcode='10', personcode='-181',
               tf_bankcode='04', tf_cheqsno='601', cheqvalue=Dec('1000000')),
-            r(branchcode='100', cheqsno='601', cheqtype='10', bankcode='04', personcode='-181',
+            r(branchcode='100', cheqsno='601', cheqtype='10', bankcode='04', personcode='-181', banktype='1',
               tf_bankcode='10', tf_cheqsno='600', cheqvalue=Dec('1000000')),
+            # HQ leg nobody points at (P28) and a branch<->branch pair (P29): exceptions, never 1320
+            r(branchcode='100', cheqsno='700', cheqtype='20', bankcode='10', cheqvalue=Dec('5')),
+            r(branchcode='150', cheqsno='8', cheqtype='20', bankcode='60', tf_branchcode='160', tf_cheqsno='9',
+              cheqvalue=Dec('7')),
         ]
 
     def test_intercompany_transfers_draft_both_companies_and_bank_once(self):
@@ -225,7 +229,25 @@ class SeedTests(TestCase):
         self.assertEqual(lines(br_key), [('1302', Decimal('100000.00'), z, b160), ('2404', z, Decimal('100000.00'), b160)])
         self.assertEqual(lines(bank_key), [('1310', Decimal('1000000.00'), z, hq), ('1301', z, Decimal('1000000.00'), hq)])
         ex = list(SourceException.objects.values_list('source_doc__source_key', 'kind'))
-        self.assertEqual(ex, [('chq:100:1', 'no_rule')])
+        self.assertEqual(sorted(ex), [('chq:100:1', 'no_rule'), ('chq:100:700', 'no_rule'), ('chq:150:8', 'no_rule')])
+        self.assertEqual(LedgerEntry.objects.get(source_key=bank_key).description,
+                         'تحويل بين الخزينة والبنك b100 2026-06-10')
+
+    def test_box_bank_pair_drafted_once_across_two_runs(self):
+        """Ruling P27: the mirror is decided by the row, so drafting only the bank leg's day later
+        never adds a second entry."""
+        from datetime import datetime
+        from apps.finance.models import LedgerEntry
+        seed.seed_gl_drafting(user=self.user)
+        rows = [r for r in self._transfer_rows() if r['cheqsno'] in ('600', '601')]
+        rows[1] = {**rows[1], 'cheqdate': datetime(2026, 6, 11), 'cheqregisterdate': datetime(2026, 6, 11)}
+        for d1, d2, fetched in ((D(2026, 6, 10), D(2026, 6, 11), rows), (D(2026, 6, 11), D(2026, 6, 11), rows[1:])):
+            run = drafting.start_run(triggered_by='t', date_from=d1, date_to=d2, source_types=['treasury_other'])
+            run = drafting.draft_range(d1, d2, source_types=['treasury_other'], run=run,
+                                       fetch=lambda sql, f=fetched: list(f))
+            self.assertEqual(run.status, 'success', run.detail)
+            self.assertEqual(list(LedgerEntry.objects.filter(status__in=['draft', 'approved'])
+                                  .values_list('source_key', flat=True)), ['chq:100:600'])
 
     def test_seeded_rule_table(self):
         seed.seed_gl_drafting(user=self.user)
@@ -332,7 +354,7 @@ class SeedTests(TestCase):
                                       [('debit', tfbank, 'amount', M, '', False),
                                        ('credit', bank, 'amount', M, '', False)]),
             'treasury.box_bank_mirror': ('treasury_other', 'document', 'cash', 'skip',
-                                         {'kind_in': ['transfer_bank_mirror']}, []),
+                                         {'kind_in': ['transfer_bank_mirror'], 'financialdoc_in': ['10']}, []),
         }
         self.assertEqual(got, want)
         for code in ('treasury.branch_transfer_out', 'treasury.branch_transfer_in', 'treasury.hq_transfer_out',
