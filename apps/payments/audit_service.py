@@ -328,13 +328,18 @@ class PaymentAuditService:
         anomalies_qs = PaymentException.objects.filter(exception_type=PaymentException.TYPE_ANOMALY)
         flags_qs = AbuseFlag.objects.filter(flag_type='payment_anomaly')
         anomalies_before, flags_before = anomalies_qs.count(), flags_qs.count()
-        exceptions = 0
+        exceptions = failed = 0
         for pk in ids:
-            exceptions += len(cls.detect_exceptions(pk))
-            cls.calculate_anomaly_score(
-                ExternalPayment.objects.select_related('created_by__staff_profile').get(pk=pk))
+            try:                        # one bad payment must not stop the rest of the run
+                exceptions += len(cls.detect_exceptions(pk))
+                cls.calculate_anomaly_score(
+                    ExternalPayment.objects.select_related('created_by__staff_profile').get(pk=pk))
+            except Exception:
+                failed += 1
+                logger.exception('payment exception checks failed for payment #%s', pk)
         return {
             'payments': len(ids),
+            'failed': failed,
             'exceptions_created': exceptions,
             'anomalies_created': anomalies_qs.count() - anomalies_before,
             'flags_created': flags_qs.count() - flags_before,
