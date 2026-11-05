@@ -48,8 +48,8 @@ def _transfer_kinds(rows, fetch) -> dict:
     range drafted.
     -181 box<->bank (P27/P30/P31), by BOTH banktypes (own `banktype` and `tf_type` of tf_bankcode):
     box(0) -> bank(1) = 'transfer_bank' (posts box vs bank(tf_bankcode), also alone); bank(1) -> box(0)
-    = 'transfer_bank_mirror' (skipped) only when its box-side partner exists (same branch, tf_cheqsno
-    = its cheqsno, tf_bankcode = its bankcode, its own banktype 0); anything else - no partner,
+    = 'transfer_bank_mirror' (skipped) only when its box-side partner exists (same branch, cheqsno =
+    its tf_cheqsno, bankcode = its tf_bankcode, tf_bankcode = its bankcode, banktype 0); anything else - no partner,
     box<->box, bank<->bank, unknown tf type - is 'transfer_unpaired' (exception, never 0 or 2 posts).
     -180 box<->box (P24/P28/P29): counterpart branch = own tf_branchcode (another branch), else the
     one branch whose leg points back (tf_branchcode / tf_cheqsno) - for an HQ leg also by
@@ -72,11 +72,18 @@ def _transfer_kinds(rows, fetch) -> dict:
     def branches_near(back, key, day):
         return {b for b, d in back.get(key, ()) if _near(d, day)}
 
-    def box_partner(src, branch, sno, bank, day):   # P30 (b) / P31: the box leg of a bank-side -181 row
-        return any(code(p['personcode']) == BANK_TRANSFER and code(p['branchcode']) == branch
-                   and code(p.get('banktype')) == BANK_TYPE_BOX
-                   and code(p.get('tf_cheqsno')) == sno and code(p.get('tf_bankcode')) == bank
-                   and code(p['cheqsno']) != sno and _near(_day(p), day) for p in src)
+    def leg(r):   # the bank-side row's pointer at its box partner (live SOFTECH, fix round 5)
+        return (code(r['branchcode']), code(r.get('tf_cheqsno')), code(r.get('tf_bankcode')),
+                code(r['bankcode']), _day(r))
+
+    def box_partner(src, branch, tf_sno, tf_bank, bank, day):   # P30 (b) / P31
+        """The bank-side row points at its box leg: partner.cheqsno = its tf_cheqsno, partner.bankcode =
+        its tf_bankcode (a box, banktype 0), partner.tf_bankcode = its bankcode, same branch, near."""
+        return bool(tf_sno) and any(
+            code(p['personcode']) == BANK_TRANSFER and code(p['branchcode']) == branch
+            and code(p.get('banktype')) == BANK_TYPE_BOX and code(p['cheqsno']) == tf_sno
+            and code(p['bankcode']) == tf_bank and code(p.get('tf_bankcode')) == bank
+            and _near(_day(p), day) for p in src)
 
     back = pointing(tf.values())
     own = {k: code(r.get('tf_branchcode')) for k, r in tf.items()}
@@ -100,10 +107,9 @@ def _transfer_kinds(rows, fetch) -> dict:
     def is_bank_side(r):   # bank(1) leg pointing at a box(0)
         return code(r['personcode']) == BANK_TRANSFER and types(r) == (BANK_TYPE_BANK, BANK_TYPE_BOX)
 
-    bank_open = sorted((b, sno, code(r['bankcode']), _day(r)) for (b, sno), r in tf.items()
-                       if is_bank_side(r) and _day(r)
-                       and not box_partner(tf.values(), b, sno, code(r['bankcode']), _day(r))
-                       and b.isdigit() and sno.isdigit() and code(r['bankcode']).isdigit())
+    bank_open = sorted(leg(r) for r in tf.values()
+                       if is_bank_side(r) and _day(r) and not box_partner(tf.values(), *leg(r))
+                       and all(x.isdigit() for x in leg(r)[:4]))
     partners = []
     for part in _chunks(bank_open):
         partners.extend(fetch(sybase_gl.sql_bank_transfer_partners(part)))   # re-checked below
@@ -113,7 +119,7 @@ def _transfer_kinds(rows, fetch) -> dict:
         day = _day(r)
         if code(r['personcode']) == BANK_TRANSFER:
             if is_bank_side(r):
-                paired = box_partner(list(tf.values()) + partners, branch, sno, code(r['bankcode']), day)
+                paired = box_partner(list(tf.values()) + partners, *leg(r))
                 out[(branch, sno)] = ('transfer_bank_mirror' if paired else 'transfer_unpaired', '')
             elif types(r) == (BANK_TYPE_BOX, BANK_TYPE_BANK) and code(r.get('tf_bankcode')):
                 out[(branch, sno)] = ('transfer_bank', '')

@@ -296,8 +296,9 @@ An exception resolves itself on redraft; «تجاهل» needs a reason and keeps
     also when it is alone. A -181 without `tf_bankcode` stays `transfer`.
   - **P30**: the other leg counts only when its `cheqdate` is within ±31 days (cheqsno repeats across
     years), in the fetch and in the SELECT (`DATEDIFF`, re-checked in Python). A bank-side row is the
-    mirror only when its box partner (same branch, `tf_cheqsno` = its cheqsno, `tf_bankcode` = its
-    bankcode, ±31 days) exists — in the fetch or by one read-only SELECT (`sql_bank_transfer_partners`);
+    mirror only when its box partner exists — the bank row points at it (live 100/16119 → 100/16118;
+    the box leg has no `tf_cheqsno`): same branch, partner `cheqsno` = its `tf_cheqsno`, partner
+    `bankcode` = its `tf_bankcode`, partner `tf_bankcode` = its `bankcode`, ±31 days — — in the fetch or by one read-only SELECT (`sql_bank_transfer_partners`);
     otherwise it is `transfer_unpaired` (exception), never a silent skip.
   - **P31**: -181 legs are classified by both banktypes — own `banktype` and `tf_type` (banktype of
     `tf_bankcode`, outer join `c.tf_bankcode *= tb.bankcode` in `sql_cheques`). box(0)→bank(1) =

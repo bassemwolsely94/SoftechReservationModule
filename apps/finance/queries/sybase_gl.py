@@ -137,14 +137,16 @@ def sql_transfer_legs_pointing_at(legs) -> str:
 
 
 def sql_bank_transfer_partners(legs) -> str:
-    """Ruling P30: box-side legs of -181 box<->bank transfers for bank-side rows: same branch,
-    tf_cheqsno = the bank row's cheqsno, tf_bankcode = the bank row's bankcode, dated within
-    TRANSFER_PAIR_DAYS, own box a cash box (banktype 0, Ruling P31).
-    ``legs`` = [(branchcode, cheqsno, bankcode, cheqdate)]; same guards."""
+    """Ruling P30: box-side legs of -181 box<->bank transfers for bank-side rows. The bank-side row
+    points at its box leg (live SOFTECH: 100/16119 -> 100/16118; the box leg has no tf_cheqsno):
+    same branch, cheqsno = the bank row's tf_cheqsno, bankcode = its tf_bankcode, tf_bankcode = its
+    bankcode, dated within TRANSFER_PAIR_DAYS, own box a cash box (banktype 0, Ruling P31).
+    ``legs`` = [(branchcode, tf_cheqsno, tf_bankcode, bankcode, cheqdate)]; same guards."""
     conds = [f"(CONVERT(varchar(10), c.branchcode) = '{_digits(b)}' "
-             f"AND CONVERT(varchar(20), c.tf_cheqsno) = '{_digits(sno)}' "
+             f"AND CONVERT(varchar(20), c.cheqsno) = '{_digits(tf_sno)}' "
+             f"AND CONVERT(varchar(10), c.bankcode) = '{_digits(tf_bank)}' "
              f"AND CONVERT(varchar(10), c.tf_bankcode) = '{_digits(bank)}' AND {_near(d)})"
-             for b, sno, bank, d in sorted(set(legs))]
+             for b, tf_sno, tf_bank, bank, d in sorted(set(legs))]
     if not conds:
         raise ValueError('no legs')
     return (

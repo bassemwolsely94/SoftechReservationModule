@@ -176,6 +176,10 @@ class SeedTests(TestCase):
         ex = SourceException.objects.select_related('source_doc').get()
         self.assertEqual((ex.source_doc.source_key, ex.kind), ('chq:140:4', 'unmapped_party'))
 
+    def _map_bank_02(self):
+        R.save_map(user=self.user, kind='bank', source_value='02', account_code='1310',
+                   branch_id=Branch.objects.get(softech_branch_id='100').pk)
+
     def _transfer_rows(self):
         from datetime import datetime
         base = dict(ptcode='-1', personcode='-180', financialdoccode='10', cheqdate=datetime(2026, 6, 10),
@@ -194,10 +198,11 @@ class SeedTests(TestCase):
             r(branchcode='100', cheqsno='1', cheqtype='20', bankcode='10', tf_branchcode='150',
               financialdoccode='90', cheqvalue=Dec('20000000')),
             # box 10 -> bank 04 at HQ, both legs present: posted once
-            r(branchcode='100', cheqsno='600', cheqtype='20', bankcode='10', personcode='-181', tf_type='1',
-              tf_bankcode='04', tf_cheqsno='601', cheqvalue=Dec('1000000')),
-            r(branchcode='100', cheqsno='601', cheqtype='10', bankcode='04', personcode='-181', banktype='1', tf_type='0',
-              tf_bankcode='10', tf_cheqsno='600', cheqvalue=Dec('1000000')),
+            # live pair: box 10 -> bank 02; the bank leg 16119 points at the box leg 16118 (no tf_cheqsno)
+            r(branchcode='100', cheqsno='16118', cheqtype='20', bankcode='10', personcode='-181', tf_type='1',
+              tf_bankcode='02', tf_cheqsno=None, cheqvalue=Dec('31500')),
+            r(branchcode='100', cheqsno='16119', cheqtype='10', bankcode='02', personcode='-181', banktype='1',
+              tf_type='0', tf_bankcode='10', tf_cheqsno='16118', cheqvalue=Dec('31500')),
             # HQ leg nobody points at (P28) and a branch<->branch pair (P29): exceptions, never 1320
             r(branchcode='100', cheqsno='700', cheqtype='20', bankcode='10', cheqvalue=Dec('5')),
             r(branchcode='150', cheqsno='8', cheqtype='20', bankcode='60', tf_branchcode='160', tf_cheqsno='9',
@@ -209,6 +214,7 @@ class SeedTests(TestCase):
         from decimal import Decimal
         from apps.finance.models import LedgerEntry, SourceException
         seed.seed_gl_drafting(user=self.user)
+        self._map_bank_02()   # bank 02 of the live pair (not in the seed maps)
         rows = self._transfer_rows()
         day = D(2026, 6, 10)
         run = drafting.start_run(triggered_by='t', date_from=day, date_to=day, source_types=['treasury_other'])
@@ -223,11 +229,11 @@ class SeedTests(TestCase):
             return [(ln.account.code, ln.debit, ln.credit, ln.branch_id)
                     for ln in e.lines.select_related('account').order_by('line_no')]
         keys = set(LedgerEntry.objects.values_list('source_key', flat=True))
-        self.assertEqual(keys, {'chq:100:501', 'chq:160:77', 'chq:100:600'})
-        hq_key, br_key, bank_key = 'chq:100:501', 'chq:160:77', 'chq:100:600'
+        self.assertEqual(keys, {'chq:100:501', 'chq:160:77', 'chq:100:16118'})
+        hq_key, br_key, bank_key = 'chq:100:501', 'chq:160:77', 'chq:100:16118'
         self.assertEqual(lines(hq_key), [('2406', Decimal('100000.00'), z, hq), ('1301', z, Decimal('100000.00'), hq)])
         self.assertEqual(lines(br_key), [('1302', Decimal('100000.00'), z, b160), ('2404', z, Decimal('100000.00'), b160)])
-        self.assertEqual(lines(bank_key), [('1310', Decimal('1000000.00'), z, hq), ('1301', z, Decimal('1000000.00'), hq)])
+        self.assertEqual(lines(bank_key), [('1310', Decimal('31500.00'), z, hq), ('1301', z, Decimal('31500.00'), hq)])
         ex = list(SourceException.objects.values_list('source_doc__source_key', 'kind'))
         self.assertEqual(sorted(ex), [('chq:100:1', 'no_rule'), ('chq:100:700', 'no_rule'), ('chq:150:8', 'no_rule')])
         self.assertEqual(LedgerEntry.objects.get(source_key=bank_key).description,
@@ -239,7 +245,8 @@ class SeedTests(TestCase):
         from datetime import datetime
         from apps.finance.models import LedgerEntry
         seed.seed_gl_drafting(user=self.user)
-        rows = [r for r in self._transfer_rows() if r['cheqsno'] in ('600', '601')]
+        self._map_bank_02()   # bank 02 of the live pair (not in the seed maps)
+        rows = [r for r in self._transfer_rows() if r['cheqsno'] in ('16118', '16119')]
         rows[1] = {**rows[1], 'cheqdate': datetime(2026, 6, 11), 'cheqregisterdate': datetime(2026, 6, 11)}
         for d1, d2, fetched in ((D(2026, 6, 10), D(2026, 6, 11), rows), (D(2026, 6, 11), D(2026, 6, 11), rows[1:])):
             run = drafting.start_run(triggered_by='t', date_from=d1, date_to=d2, source_types=['treasury_other'])
@@ -248,7 +255,7 @@ class SeedTests(TestCase):
                                        fetch=lambda sql, f=fetched: list(rows if 'DATEDIFF(day, c.cheqdate' in sql else f))
             self.assertEqual(run.status, 'success', run.detail)
             self.assertEqual(list(LedgerEntry.objects.filter(status__in=['draft', 'approved'])
-                                  .values_list('source_key', flat=True)), ['chq:100:600'])
+                                  .values_list('source_key', flat=True)), ['chq:100:16118'])
 
     def test_seeded_rule_table(self):
         seed.seed_gl_drafting(user=self.user)
