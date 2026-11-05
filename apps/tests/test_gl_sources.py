@@ -146,13 +146,68 @@ class PurchaseTests(TestCase):
         self.mk('100', '120', '9', value='-40.005')
         self.mk('100', '10', '77', party=self.cust)                  # customer: excluded
         self.mk('100', '10', '78', d=date(2026, 5, 1))               # out of range
-        docs = {d.source_key: d for d in READERS['purchases'](date(2026, 3, 1), date(2026, 3, 31), None)}
+        docs = {d.source_key: d for d in READERS['purchases'](date(2026, 3, 1), date(2026, 3, 31), fake([]))}
         self.assertEqual(set(docs), {'ap:100:10:55:2026-03-05', 'ap:130:10:55:2026-03-05', 'ap:100:120:9:2026-03-05'})
         d = docs['ap:130:10:55:2026-03-05']
-        self.assertEqual((d.kind, d.personcode, d.amounts), ('invoice', '5001', {'value': D('100.00')}))
-        self.assertEqual(d.attrs, {'doccode': '10', 'docnumber': '55', 'docnumber2': 'X1', 'due_date': '2026-04-01'})
+        self.assertEqual((d.kind, d.personcode, d.amounts),
+                         ('invoice', '5001', {'value': D('100.00'), 'vat': D('0.00'), 'net': D('100.00')}))
+        self.assertEqual(d.attrs, {'doccode': '10', 'docnumber': '55', 'docnumber2': 'X1', 'due_date': '2026-04-01',
+                                   'vat_missing': True})
         r = docs['ap:100:120:9:2026-03-05']
-        self.assertEqual((r.kind, r.amounts), ('return', {'value': D('40.01')}))
+        self.assertEqual((r.kind, r.amounts['value']), ('return', D('40.01')))
+
+    # ── Ruling P32: SOFTECH invoice VAT (stktransm.docvalue3) split from the purchase value ──
+    def vat_row(self, branch='100', doccode='10', num='55.0', d=datetime(2026, 3, 5), vat='14.005', value='114'):
+        return {'branchcode': branch, 'doccode': doccode, 'docno': num, 'docdate': d,
+                'docvalue3': D(vat), 'docvalue': D(value)}
+
+    def test_vat_enriched_from_softech_header(self):
+        self.mk('100', '10', '55', value='114')
+        f = fake([self.vat_row()])
+        (doc,) = READERS['purchases'](date(2026, 3, 1), date(2026, 3, 31), f)
+        self.assertEqual(doc.amounts, {'value': D('114.00'), 'vat': D('14.01'), 'net': D('99.99')})
+        self.assertNotIn('vat_missing', doc.attrs)
+        self.assertEqual(len(f.calls), 1)
+        self.assertIn("doccode IN ('10','120')", f.calls[0])
+
+    def test_vat_row_must_match_branch_doccode_number_and_date(self):
+        self.mk('100', '10', '55', value='114')
+        rows = [self.vat_row(branch='130'), self.vat_row(doccode='120'), self.vat_row(num='56'),
+                self.vat_row(d=datetime(2026, 3, 6))]
+        (doc,) = READERS['purchases'](date(2026, 3, 1), date(2026, 3, 31), fake(rows))
+        self.assertEqual(doc.amounts, {'value': D('114.00'), 'vat': D('0.00'), 'net': D('114.00')})
+        self.assertTrue(doc.attrs['vat_missing'])
+
+    def test_return_vat_keeps_the_invoice_sign(self):
+        self.mk('100', '120', '9', value='-57')
+        (doc,) = READERS['purchases'](date(2026, 3, 1), date(2026, 3, 31),
+                                      fake([self.vat_row(doccode='120', num='9', vat='-7', value='-57')]))
+        self.assertEqual(doc.amounts, {'value': D('57.00'), 'vat': D('7.00'), 'net': D('50.00')})
+
+    def test_vat_with_opposite_sign_to_the_invoice_is_negative(self):
+        self.mk('100', '10', '55', value='100')
+        (doc,) = READERS['purchases'](date(2026, 3, 1), date(2026, 3, 31),
+                                      fake([self.vat_row(vat='-2', value='100')]))
+        self.assertEqual(doc.amounts, {'value': D('100.00'), 'vat': D('-2.00'), 'net': D('102.00')})
+
+    def test_one_vat_query_per_month_with_invoices_and_none_without(self):
+        self.mk('100', '10', '55', d=date(2026, 3, 5))
+        self.mk('100', '10', '56', d=date(2026, 5, 5))
+        f = fake([])
+        list(READERS['purchases'](date(2026, 3, 1), date(2026, 5, 31), f))
+        self.assertEqual(len(f.calls), 2)   # April has no invoice: no query
+        self.assertIn("'2026-03-01'", f.calls[0])
+        self.assertIn("'2026-05-01'", f.calls[1])
+        f2 = fake([])
+        self.assertEqual(list(READERS['purchases'](date(2026, 6, 1), date(2026, 6, 30), f2)), [])
+        self.assertEqual(f2.calls, [])
+
+    def test_vat_sql_shape(self):
+        sql = sybase_gl.sql_purchase_vat(date(2026, 3, 1), date(2026, 3, 31))
+        self.assertTrue(sql.lstrip().upper().startswith('SELECT'))
+        self.assertIn('CONVERT(varchar(20), docnumber) docno', sql)
+        self.assertIn('docvalue3', sql)
+        self.assertIn("docdate >= '2026-03-01' AND docdate < '2026-04-01'", sql)
 
 
 class HashTests(SimpleTestCase):
