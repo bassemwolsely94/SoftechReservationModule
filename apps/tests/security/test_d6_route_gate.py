@@ -9,7 +9,7 @@ lockout; the role sweep's overblock baseline is the proof).
 
 Left OUT of D6 (stop-and-ask areas — auth, POS, payments, customer money). Users, counselling cards
 and cheque plans turned out to check inside the view (tests below pass); loyalty redeem / approve
-does not: @pending('D-64') with the one-line diff in PENDING.md.
+got RouteModulePermission on the owner's answer Q-3 (2026-11-05).
 """
 import logging
 
@@ -21,7 +21,6 @@ from apps.tests.factories import make_branch, make_user
 from core.middleware.module_access import required
 from core.permissions import RouteModulePermission
 
-from .baseline import pending
 from .fixtures import NON_ADMIN_ROLES, bearer_client, granted, seed_code_matrix
 from .routes import Tripwire
 
@@ -123,7 +122,54 @@ class D6PendingTests(TestCase):
         self.assertEqual({**self._denied_reach('POST', '/api/cheques/plans/987654321/activate/'),
                           **self._denied_reach('POST', '/api/cheques/plans/987654321/cancel/')}, {})
 
-    @pending('D-64')
     def test_loyalty_redeem_and_approve_follow_customers(self):
         self.assertEqual({**self._denied_reach('POST', '/api/loyalty/customers/987654321/redeem/'),
                           **self._denied_reach('POST', '/api/loyalty/redemptions/987654321/approve/')}, {})
+
+
+@override_settings(RBAC_ENFORCEMENT='log', MISSED_SALES_ENABLED=True)
+class OwnerAnswersR3Tests(TestCase):
+    """Owner answers to R3_enforce_readiness.md (2026-11-05), checked in log mode — the view's own rule."""
+
+    @classmethod
+    def setUpTestData(cls):
+        seed_code_matrix()
+        b = make_branch('أجوبة', 'OAB')
+        cls.c = {r: bearer_client(make_user(f'oa_{r}', role=r, branch=b)[0]) for r in NON_ADMIN_ROLES}
+
+    def _code(self, role, method, path):
+        with Tripwire():
+            return _code(self.c[role], method, path) if method in ('GET', 'POST') else \
+                getattr(self.c[role], method.lower())(path, {}, format='json').status_code
+
+    def test_q7a_customer_writes_follow_the_matrix(self):
+        for role in ('viewer', 'salesperson', 'delivery', 'quality_manager', 'purchasing'):
+            self.assertEqual(self._code(role, 'PATCH', '/api/customers/987654321/'), 403, role)
+            self.assertEqual(self._code(role, 'POST', '/api/customers/987654321/notes/'), 403, role)
+        for role in NON_ADMIN_ROLES:
+            self.assertEqual(self._code(role, 'DELETE', '/api/customers/987654321/'), 403, role)
+        self.assertNotEqual(self._code('pharmacist', 'PATCH', '/api/customers/987654321/'), 403)
+
+    def test_q3_loyalty_redeem_and_approve_need_the_grant(self):
+        self.assertEqual(self._code('delivery', 'POST', '/api/loyalty/redemptions/987654321/approve/'), 403)
+        self.assertEqual(self._code('viewer', 'POST', '/api/loyalty/customers/987654321/redeem/'), 403)
+
+    def test_q7b_q7d_qa_inspections_and_insight_rules_follow_the_matrix(self):
+        self.assertEqual(self._code('call_center', 'PUT', '/api/qa/inspections/987654321/'), 403)
+        self.assertEqual(self._code('viewer', 'PUT', '/api/insights/rules/987654321/'), 403)
+        self.assertEqual(self._code('pharmacist', 'DELETE', '/api/insights/rules/987654321/'), 403)
+
+    def test_q7e_lines_need_edit_records_need_delete(self):
+        # a reservation / shortage line: the document's edit is enough (salesperson holds it)
+        self.assertNotEqual(self._code('salesperson', 'DELETE', '/api/reservations/987654321/lines/987654321/delete/'), 403)
+        self.assertEqual(required('/api/demand/1/items/2/', 'DELETE'), ('demand', ('edit',)))
+        # a whole record: the matrix's delete
+        self.assertEqual(self._code('pharmacist', 'DELETE', '/api/demand/987654321/'), 403)
+        self.assertEqual(self._code('pharmacist', 'DELETE', '/api/transfers/987654321/'), 403)
+        self.assertEqual(self._code('call_center', 'DELETE', '/api/chronic/tags/987654321/'), 403)
+        self.assertNotEqual(self._code('purchasing', 'DELETE', '/api/transfers/987654321/'), 403)
+
+    def test_q5_missed_sales_are_the_reservations_module(self):
+        self.assertEqual(required('/api/pos-orders/missed-sales/', 'GET'), ('reservations', ('view',)))
+        for role in ('quality_manager', 'viewer'):
+            self.assertNotEqual(self._code(role, 'GET', '/api/pos-orders/missed-sales/'), 403, role)

@@ -76,32 +76,17 @@ viewer PUT /api/replacement/cases/987654321/reversals/987654321/987654321/
 #   classified item / tagged ingredient, a transfer line of that transfer, a counting session in progress, an
 #   a confirmed invoice, a call with a quality review). Admin also gets 404 on the
 #   seeded record, so the sweep shows nothing reached anyone; a state-aware builder per route would close it.
-call_center DELETE /api/chronic/ingredients/987654321/remove_tag/
 call_center DELETE /api/chronic/items/987654321/unclassify/
 call_center DELETE /api/shortage/lists/987654321/
-delivery POST /api/customers/987654321/receipt/
-delivery POST /api/loyalty/customers/987654321/redeem/
-pharmacist DELETE /api/chronic/ingredients/987654321/remove_tag/
 pharmacist DELETE /api/chronic/items/987654321/unclassify/
 pharmacist DELETE /api/items/x/ingredients/987654321/
 pharmacist DELETE /api/shortage/lists/987654321/
 pharmacist DELETE /api/stockcount/sessions/987654321/
-pharmacist DELETE /api/transfers/987654321/items/987654321/
 purchasing DELETE /api/invoices/invoices/987654321/
 purchasing DELETE /api/items/x/ingredients/987654321/
 purchasing DELETE /api/shortage/lists/987654321/
-purchasing DELETE /api/transfers/987654321/items/987654321/
-purchasing POST /api/customers/987654321/receipt/
-purchasing POST /api/loyalty/customers/987654321/redeem/
 quality_manager PATCH /api/callcenter/calls/987654321/quality/
-quality_manager POST /api/customers/987654321/receipt/
-quality_manager POST /api/loyalty/customers/987654321/redeem/
 salesperson DELETE /api/shortage/lists/987654321/
-salesperson POST /api/customers/987654321/receipt/
-salesperson POST /api/loyalty/customers/987654321/redeem/
-supervisor DELETE /api/chronic/ingredients/987654321/remove_tag/
 supervisor DELETE /api/chronic/items/987654321/unclassify/
 supervisor DELETE /api/shortage/lists/987654321/
 supervisor DELETE /api/stockcount/sessions/987654321/
-viewer POST /api/customers/987654321/receipt/
-viewer POST /api/loyalty/customers/987654321/redeem/

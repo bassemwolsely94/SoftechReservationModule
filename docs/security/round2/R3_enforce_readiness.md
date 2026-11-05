@@ -4,6 +4,29 @@ Batch R3 of [the round-2 plan](../2026-11-05-full-project-test-plan.md) §7. Mea
 (`WRITER_INSTANCE=False`, `SOFTECH_READ_ONLY=True`, worktree without `.env`), `manage.py test`, own
 `TEST_DB_NAME`. Branch `claude/round2-r3r4-access-803ed1`.
 
+## 0. Owner answers (2026-11-05) — applied in PR 75
+
+The owner answered §6 in chat on 2026-11-05 (relayed by the Full Testing session); the permission
+grants were confirmed again by the owner directly in this session.
+
+| # | Answer | Applied |
+|---|---|---|
+| Q-1 | Trusted networks and zone policy stay admin only | recorded as an owner line in `role_overblocks.txt` |
+| Q-2 | Counselling curation lists open to view holders — keep | as applied |
+| Q-3 | "Yes, add the check" | `RouteModulePermission` on `RedeemRewardView` / `ApproveRedemptionView`; PENDING D-64 closed |
+| Q-4 | Forecast results scoped to the caller's branches — keep | as applied |
+| Q-5 | "Reservations" | `module_access.required()` maps `/api/pos-orders/missed-sales/` to `reservations` (view: view, writes: create) — the middleware now agrees with the view; quality manager and viewer keep reading |
+| Q-6 | No phone masking inside the server log | nothing to change |
+| Q-7a/b/d | "Yes, follow the matrix" | `RouteModulePermission` on `CustomerViewSet`, `QAInspectionViewSet`, `InsightRuleViewSet` |
+| Q-7c | Grant analytics edit / delete to supervisor and purchasing | `seed_permissions` + migration `users.0052` + `PERMISSION_MATRIX.md` |
+| Q-7e | Grant `delete` where a role really removes lines, else follow the matrix | (1) removing a LINE of a document asks what a PATCH of it asks (the document's edit — `module_access._LINE_REMOVAL`), so no module-wide `delete` opens whole records or the delete-gated demand actions; (2) `delete` granted where the role is the module's operator: purchasing on purchasing and transfers, purchasing + quality manager on incentives (`users.0052`); (3) every other whole-record delete follows the matrix (`RouteModuleDeletePermission` on demand, call-center calls / cases, chronic, delivery locations, catalog bundles / variant groups, cheque plans, bank statements, transfers) |
+| Q-8 | Keep the SOFTECH ERP-match role lists | recorded as an owner line in `role_overblocks.txt` |
+
+Tests: `test_d6_route_gate.OwnerAnswersR3Tests`. Help updated: customers, insight rules, QA visits,
+loyalty (plus the earlier counselling, forecast scenarios and missed sales). Sections 2–9 below are
+the report as written before the answers; the baseline numbers in §4 are superseded by the PR's
+final table.
+
 ## 1. Verdict
 
 **Enforce-ready.** Switching `RBAC_ENFORCEMENT` to `enforce` changes the answer for exactly two

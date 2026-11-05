@@ -240,6 +240,7 @@ class AdjustPointsView(APIView):
 
 
 from apps.customers import access as _cust_access   # Batch 5b
+from core.permissions import RouteModulePermission  # round 2, owner answers 2026-11-05
 
 
 class SoftechBalanceView(APIView):
@@ -341,7 +342,7 @@ class RedemptionListView(generics.ListAPIView):
 
 
 class RedeemRewardView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
 
     def post(self, request, customer_id):
         reward_id = request.data.get('reward_id')
@@ -372,7 +373,7 @@ class RedeemRewardView(APIView):
 
 
 class ApproveRedemptionView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
 
     def post(self, request, pk):
         try:

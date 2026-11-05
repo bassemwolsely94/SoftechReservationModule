@@ -32,6 +32,7 @@ from .serializers import (
     PlanPreviewItemSerializer,
 )
 from core.permissions import RouteModulePermission  # round 2, D6
+from core.permissions import RouteModuleDeletePermission  # round 2, owner answers 2026-11-05
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +127,7 @@ class PlanListCreateView(branch_scope.BranchScopedMixin, generics.ListCreateAPIV
 
 
 class PlanDetailView(branch_scope.BranchScopedMixin, generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [IsAuthenticated, MatrixPermission]
+    permission_classes = [IsAuthenticated, MatrixPermission, RouteModuleDeletePermission]
     rbac_module = 'cheques'
     rbac_delete = ('edit', 'delete')     # only draft / cancelled plans can be deleted
 

@@ -218,9 +218,13 @@ class RouteModulePermission(BasePermission):
     middleware does not check (exempt prefixes, open reads, own-gated sub-apps) pass."""
     message = 'ليس لديك صلاحية على هذه الوحدة'
 
+    methods = None                           # None = every method; a set limits the check to those
+
     def has_permission(self, request, view):
         from core.middleware.module_access import required
         m = request.method
+        if self.methods is not None and m not in self.methods:
+            return True
         if view is not None and not hasattr(view, m.lower()):
             return True                      # no handler: DRF answers 405
         need = required(request.path_info, m)
@@ -231,3 +235,9 @@ class RouteModulePermission(BasePermission):
         if profile is None:                  # profile-less superuser (the middleware passes it too)
             return bool(getattr(request.user, 'is_superuser', False))
         return matrix_allows(profile, module, *actions)
+
+
+class RouteModuleDeletePermission(RouteModulePermission):
+    """RouteModulePermission for DELETE only (round 2, owner answer Q-7e 2026-11-05: deleting a whole
+    record follows the matrix's `delete`). For views whose other methods keep their own finer rules."""
+    methods = {'DELETE'}

@@ -49,6 +49,7 @@ def _profile(request):
 
 
 from core.permissions import matrix_permission                     # noqa: E402
+from core.permissions import RouteModuleDeletePermission  # round 2, owner answers 2026-11-05
 
 # Lost demand = the `demand` matrix module (Batch 4, Z-8c — was any logged-in user): records need
 # view; capture and follow-up need create / edit / approve / finalize (the per-action deny_unless
@@ -104,7 +105,7 @@ class DemandViewSet(viewsets.ModelViewSet):
         erp_lookup          GET  /erp-lookup/?phone=X&phcode=Y
     """
 
-    permission_classes = [IsAuthenticated, DEMAND]
+    permission_classes = [IsAuthenticated, DEMAND, RouteModuleDeletePermission]
     filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, NullsLastOrderingFilter]
     filterset_fields   = ['status', 'priority', 'branch', 'source', 'assigned_to']
     search_fields      = [

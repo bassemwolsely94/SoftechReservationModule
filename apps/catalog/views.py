@@ -9,6 +9,7 @@ from .serializers import CategorySerializer, ItemSerializer, ItemStockSerializer
 from .wildcard import WildcardSearchFilter
 from core.errors import public_error
 from core.permissions import RouteModulePermission  # round 2, D6
+from core.permissions import RouteModuleDeletePermission  # round 2, owner answers 2026-11-05
 
 # ── Static filter option lists (reused by both ItemViewSet and purchasing.filter_options) ──
 
@@ -769,7 +770,7 @@ class VariantGroupListCreateView(generics.ListCreateAPIView):
 
 class VariantGroupDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class   = VariantGroupSerializer
-    permission_classes = [IsAuthenticated, CATALOG_EDIT]
+    permission_classes = [IsAuthenticated, CATALOG_EDIT, RouteModuleDeletePermission]
     queryset = CatalogVariantGroup.objects.prefetch_related('members__item')
 
 
@@ -823,7 +824,7 @@ class ProductBundleListCreateView(generics.ListCreateAPIView):
 
 class ProductBundleDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class   = ProductBundleSerializer
-    permission_classes = [IsAuthenticated, CATALOG_EDIT]
+    permission_classes = [IsAuthenticated, CATALOG_EDIT, RouteModuleDeletePermission]
     queryset = ProductBundle.objects.prefetch_related('items__item')
 
 

@@ -540,7 +540,7 @@ pharmacist GET /api/finance/cash-view/lines/x/
 pharmacist GET /api/finance/cash-view/opening-balance/
 quality_manager GET /api/finance/cash-view/export/
 
-# reason: security N1 — the trusted-network list decides who counts as "inside the company"; it is
+# reason: owner answer Q-1 (2026-11-05): trusted networks and the zone-policy grid stay admin only. Security N1 — the trusted-network list decides who counts as "inside the company"; it is
 #   admin only (IsAdminRole) like the rest of the access settings, even for roles that can open settings.
 pharmacist GET /api/access/networks/
 pharmacist GET /api/access/networks/987654321/
@@ -553,7 +553,7 @@ pharmacist GET /api/access/devices/
 pharmacist GET /api/access/devices/987654321/
 purchasing GET /api/access/devices/
 purchasing GET /api/access/devices/987654321/
-# reason: security N3 — the zone policy grid (role x zone) is admin only (IsAdminRole, same as the device
+# reason: owner answer Q-1 (2026-11-05), security N3 — the zone policy grid (role x zone) is admin only (IsAdminRole, same as the device
 #   registry), even for roles that can open settings.
 pharmacist GET /api/access/zone-policies/
 pharmacist GET /api/access/zone-policies/987654321/
@@ -644,8 +644,8 @@ supervisor GET /api/pricing-approvals/987654321/replication/
 viewer GET /api/pricing-approvals/987654321/replication/
 
 # reason: round 2 R3, seeded record — the SOFTECH ERP match has hard-coded role lists (reservations: admin / pharmacist /
-#   purchasing, so call center is refused; transfers: admin / purchasing, so pharmacist is refused). No owner line
-#   behind them: owner question Q-8 in docs/security/round2/R3_enforce_readiness.md (default: keep, it reads SOFTECH).
+#   purchasing, so call center is refused; transfers: admin / purchasing, so pharmacist is refused). Owner answer
+#   Q-8 (2026-11-05): keep these role lists (the match reads SOFTECH).
 call_center POST /api/reservations/987654321/check-erp-match/
 pharmacist POST /api/transfers/987654321/check-erp-match/
 salesperson POST /api/reservations/987654321/check-erp-match/
@@ -659,3 +659,16 @@ viewer POST /api/callcenter/calls/987654321/quality/
 
 # reason: round 2 R3, seeded record — Z-11c: the supplier-invoice SOFTECH probe is admin only.
 purchasing POST /api/invoices/invoices/987654321/probe/
+
+# reason: owner answers Q-7c / Q-7e (2026-11-05) made the matrix grant these, and the views keep their own
+#   stricter rule — none of these roles could do them before either (no lockout): product content (media,
+#   relations) is for content managers (IsContentManager, Z-12); procurement supplier categories and
+#   classification rules are admin configuration (Z-11c / Z-12); a transfer chat message is deleted only
+#   by its author or admin; alert (insight) rules are edited and deleted by admin / supervisor only.
+pharmacist DELETE /api/products/x/media/987654321/
+pharmacist DELETE /api/products/x/related/987654321/remove/
+purchasing DELETE /api/insights/rules/987654321/
+purchasing DELETE /api/procurement/categories/987654321/
+purchasing DELETE /api/procurement/classification-rules/987654321/
+purchasing DELETE /api/transfers/987654321/messages/987654321/
+purchasing PATCH /api/insights/rules/987654321/

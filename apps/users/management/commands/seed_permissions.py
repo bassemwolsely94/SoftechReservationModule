@@ -58,7 +58,7 @@ RW  = {'view', 'create', 'edit'}    # Standard read-write (no delete/approve)
 # Incentives payroll (owner 2026-11-03): admin, quality_manager and purchasing — view, export,
 # create programs / rules / adjustments, run the calculation, approve, finalize settlements.
 # The views also require one of those roles with all-branch access (apps/incentives/permissions.py).
-INCENTIVES_PAYROLL = {'view', 'create', 'edit', 'approve', 'export', 'finalize'}
+INCENTIVES_PAYROLL = {'view', 'create', 'edit', 'approve', 'export', 'finalize', 'delete'}  # delete: owner Q-7e 2026-11-05
 
 
 PERMISSIONS = {
@@ -156,11 +156,11 @@ PERMISSIONS = {
     'purchasing': {
         'dashboard':    RO,
         'catalog':      {'view', 'edit', 'export', 'approve'},
-        'transfers':    {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
+        'transfers':    {'view', 'create', 'edit', 'approve', 'export', 'finalize', 'delete'},   # delete: owner Q-7e 2026-11-05 (transit pick config, Z-7c)
         'shortage':     {'view', 'create', 'edit', 'approve', 'export'},
         'offers':       {'view', 'create', 'edit', 'delete'},   # manage offers (Z-5)
         'stockcount':   RE,
-        'purchasing':   {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
+        'purchasing':   {'view', 'create', 'edit', 'approve', 'export', 'finalize', 'delete'},   # delete: owner Q-7e 2026-11-05 (supply availability)
         'invoices':     {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
         'incentives':   INCENTIVES_PAYROLL,  # owner 2026-11-03: admin + QM + purchasing, all-branch
         'cheques':      {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
@@ -171,7 +171,7 @@ PERMISSIONS = {
         'campaigns':    {'view', 'create', 'edit', 'approve', 'export'},
         'vouchers':     {'view', 'create', 'edit', 'assign', 'export'},
         'customers':    RE,
-        'analytics':    RE,
+        'analytics':    {'view', 'export', 'edit', 'delete'},   # owner Q-7c 2026-11-05: forecasting / targets (Z-7b, Z-9a)
         'chronic':      RO,
         'delivery':     RE,
         'settings':     RO,
@@ -241,7 +241,7 @@ PERMISSIONS = {
         'offers':       {'view', 'create', 'edit', 'delete'},   # manage offers (Z-5)
         'callcenter':   {'view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize'},
         'campaigns':    {'view', 'create', 'edit', 'approve', 'export'},
-        'analytics':    RE,
+        'analytics':    {'view', 'export', 'edit', 'delete'},   # owner Q-7c 2026-11-05: forecasting / targets (Z-7b, Z-9a)
         'delivery':     {'view', 'create', 'edit', 'approve', 'export', 'assign'},
         'users':        RO,   # can view staff list; cannot create/edit
         'audit':        RE,

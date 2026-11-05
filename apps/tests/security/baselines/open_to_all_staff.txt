@@ -94,11 +94,6 @@ GET /api/users/staff/  [-]
 POST /api/audit/screen-view/  [-]
 
 # reason: matrix-consistent: every role but the accountant holds customers / hr / catalog view (seed_permissions), and the accountant is enforced by the middleware in every mode (RBAC_ENFORCED_ROLES). Includes DRF router roots (/api/hr/, /api/qa/, /api/enrichment/ — a list of endpoint links, no data).
-GET /api/customers/  [customers]
-GET /api/customers/address-suggest/  [customers]
-GET /api/customers/churn-at-risk/  [customers]
-GET /api/customers/recognize/  [customers]
-GET /api/customers/segmentation-config/  [customers]
 GET /api/enrichment/  [catalog]
 GET /api/hr/  [hr]
 GET /api/hr/shift-assignments/  [hr]

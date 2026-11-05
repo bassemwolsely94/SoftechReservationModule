@@ -916,6 +916,7 @@ SCREENS = [
     {
         'key': 'analytics.insights',
         'routes': ['/insights'],
+        'tips': [T('تعديل قواعد التنبيه وحذفها للإدارة والمشرفين فقط.', 'Editing or deleting alert rules is for management and supervisors only.')],
         'title': T('التقارير السردية', 'Narrative reports'),
         'summary': T('تقارير مكتوبة بلغة واضحة بالعربي والإنجليزي (يومي، أسبوعي، حتى تاريخه، شهري) تلخص المبيعات والخصومات والمقارنات والإنجازات والتنبيهات (حرج/تنبيه/معلومة) — للمديرين غير التقنيين، وتُنسخ لواتساب.',
                      'Plain-language reports in Arabic and English (daily, weekly, month-to-date, monthly) summarising sales, discounts, comparisons, achievements and alerts (critical/warning/info) — for non-technical directors, copyable to WhatsApp.'),
@@ -1009,7 +1010,7 @@ SCREENS = [
              'text': T('في أنهي تقارير القاعدة دي تشتغل. الحفظ بـ «حفظ» جنبها.', 'Which reports this rule runs in. Save with "Save" beside it.'),
              'open_hint': T('في «⚙️ القواعد والحدود».', 'In "⚙️ Rules and thresholds".')},
         ],
-        'updated': '2026-11-01',
+        'updated': '2026-11-05',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

@@ -193,7 +193,7 @@ NEW_MATRIX_PREFIXES = {'counselling', 'tasks', 'pos-orders'}    # pos-orders car
 
 class NewModuleRoleSweepTests(TestCase):
     """Counselling (Project 4), tasks (own module since 2026-11-03) and missed sales (Project 3,
-    module `pos`): every role × route × method, with their feature flags ON and real records behind
+    module `reservations` — owner answer Q-5, 2026-11-05): every role × route × method, with their feature flags ON and real records behind
     the detail routes, in both middleware modes. Unlike the whole-project sweep these modules start
     clean: no leak, no crash, no unproven detail route without a reason."""
     maxDiff = None
@@ -233,20 +233,8 @@ class NewModuleRoleSweepTests(TestCase):
         for part in ('/api/pos-orders/missed-sales/', '/api/counselling/content/', '/api/tasks/'):
             self.assertTrue(any(p.startswith(part) for p in routes), part)
 
-    # Owner question Q-5 (R3_enforce_readiness.md): missed sales live under /api/pos-orders/ (the
-    # middleware maps it to `pos`) but the view checks `reservations` (suggestions are confirmed INTO
-    # reservations, Project 3). Quality manager and viewer hold reservations view, not pos view, so in
-    # log mode the view lets them read the list. Kept until the owner picks the module.
-    MISSED_SALES_MODULE_QUESTION = {
-        'quality_manager GET /api/pos-orders/missed-sales/',
-        'quality_manager GET /api/pos-orders/missed-sales/987654321/',
-        'viewer GET /api/pos-orders/missed-sales/',
-        'viewer GET /api/pos-orders/missed-sales/987654321/',
-    }
-
     def test_no_leak_in_either_mode(self):
-        self.assertEqual(sorted(self.enforce.leaks), [])
-        self.assertEqual(sorted(self.log.leaks - self.MISSED_SALES_MODULE_QUESTION), [])
+        self.assertEqual(sorted(self.log.leaks | self.enforce.leaks), [])
 
     def test_no_crash(self):
         self.assertEqual(sorted(self.log.crashes | self.enforce.crashes), [])

@@ -196,6 +196,7 @@ class DriverDetailView(generics.RetrieveUpdateAPIView):
 
 from core.permissions import matrix_permission                     # noqa: E402
 from core.permissions import RouteModulePermission  # round 2, D6
+from core.permissions import RouteModuleDeletePermission  # round 2, owner answers 2026-11-05
 
 # Customer delivery locations = the `delivery` module (Batch 4, Z-9c — viewer could add them):
 # reads need view, adding / editing create or edit, removing edit or delete.
@@ -220,7 +221,7 @@ class CustomerLocationListView(generics.ListCreateAPIView):
 
 class CustomerLocationDetailView(generics.RetrieveUpdateDestroyAPIView):
     """GET/PATCH/DELETE /api/delivery/locations/{id}/"""
-    permission_classes = [IsAuthenticated, LOCATIONS]
+    permission_classes = [IsAuthenticated, LOCATIONS, RouteModuleDeletePermission]
     serializer_class   = CustomerLocationSerializer
     queryset = CustomerLocation.objects.all()
 
