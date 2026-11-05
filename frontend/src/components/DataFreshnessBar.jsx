@@ -113,12 +113,16 @@ function daysBehind(dateStr) {
   return Math.max(0, Math.round((today - d) / 86400000) - 1)
 }
 
-export default function DataFreshnessBar({ domains, compact, dataThrough, daysElapsed, daysTotal, canEdit, invalidateKeys = [], onRefresh }) {
+export default function DataFreshnessBar({ domains, compact, onRefresh, ...rest }) {
   // NEW per-domain freshness mode (modules pass `domains`); falls through to the
   // legacy KPI/MTD mode when `domains` is absent. `compact` renders a tiny inline
-  // chip for dense screens (e.g. POS header).
-  if (domains && domains.length) return <DomainFreshness domains={domains} canEdit={canEdit} compact={compact} onRefresh={onRefresh} />
+  // chip for dense screens (e.g. POS header). Two components, so each keeps its own
+  // hooks in a fixed order (rules of hooks).
+  if (domains && domains.length) return <DomainFreshness domains={domains} canEdit={rest.canEdit} compact={compact} onRefresh={onRefresh} />
+  return <KpiFreshness {...rest} />
+}
 
+function KpiFreshness({ dataThrough, daysElapsed, daysTotal, canEdit, invalidateKeys = [] }) {
   const qc = useQueryClient()
   const [refreshing, setRefreshing] = useState(false)
   const { data: sync } = useQuery({

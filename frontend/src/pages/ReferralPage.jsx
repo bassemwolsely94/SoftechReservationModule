@@ -300,9 +300,12 @@ function MyCodeTab() {
       <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm" data-tour="loyalty-referral-mycode">
         {/* QR SVG */}
         {data.qr_code && (
-          <div
+          // The server sends the QR as a data:image/png URI: it is an image, not HTML
+          // (as innerHTML it showed as text; an <img> also never runs script).
+          <img
             className="w-48 h-48 mx-auto mb-4"
-            dangerouslySetInnerHTML={{ __html: data.qr_code }}
+            alt={data.code || 'QR'}
+            src={data.qr_code}
           />
         )}
         <p className="text-2xl font-mono font-bold text-gray-800 mb-2 tracking-widest">{data.code}</p>
