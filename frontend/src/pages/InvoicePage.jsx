@@ -591,7 +591,6 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
         setPreview(p.data.plan)
         setDupInfo(p.data.duplicates || null)
         setPreviewVal(v?.data || null)
-        setAckWarnings(false)
       } else {
         showToast('تعذّر بناء المعاينة', 'error')
       }

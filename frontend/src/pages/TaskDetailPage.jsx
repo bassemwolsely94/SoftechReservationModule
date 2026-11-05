@@ -696,7 +696,7 @@ export default function TaskDetailPage() {
             ) : (
               <dl className="space-y-2 text-sm">
                 {[
-                  ['الحالة',       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${s.color}`}>{s.label}</span>],
+                  ['الحالة',       <span key="status" className={`px-2 py-0.5 rounded-full text-xs font-medium ${s.color}`}>{s.label}</span>],
                   ['الأولوية',     PRIORITY_LABELS[task.priority] || '—'],
                   ['النوع',        TYPE_LABELS[task.task_type] || '—'],
                   ['الفرع',        task.branch_name || '—'],

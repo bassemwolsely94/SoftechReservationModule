@@ -592,8 +592,17 @@ export default function PurchasingPage() {
   const navigate = useNavigate()
   const [days, setDays] = useState(30)
 
-  // Role guard
-  if (user && !['admin', 'purchasing'].includes(user.role)) {
+  const denied = !!user && !['admin', 'purchasing'].includes(user.role)
+  // Hooks before the guard's early return (rules of hooks); a denied user sends no request.
+  const { data, isLoading, isFetching, isError, refetch } = useQuery({
+    queryKey: ['purchasing-dashboard', days],
+    queryFn: () => purchasingApi.dashboard(days).then(r => r.data),
+    refetchInterval: 120_000,
+    enabled: !denied,
+  })
+
+  // Role guard (display only; the API refuses other roles itself)
+  if (denied) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-8 text-center" dir="rtl">
         <div className="text-5xl mb-4">🔒</div>
@@ -608,11 +617,6 @@ export default function PurchasingPage() {
     )
   }
 
-  const { data, isLoading, isFetching, isError, refetch } = useQuery({
-    queryKey: ['purchasing-dashboard', days],
-    queryFn: () => purchasingApi.dashboard(days).then(r => r.data),
-    refetchInterval: 120_000,
-  })
 
   const kpis = data?.kpis || {}
 
