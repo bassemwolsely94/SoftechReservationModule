@@ -188,7 +188,8 @@ class HelpContentCoverageTests(SimpleTestCase):
         anchors = set()
         for f in list(src.rglob('*.jsx')) + list(src.rglob('*.js')):
             anchors.update(re.findall(r'data-tour="([a-z0-9-]+)"', f.read_text(encoding='utf-8')))
-        layout = (src / 'components' / 'Layout.jsx').read_text(encoding='utf-8')
+        # the menu data lives in navGroups.js (Layout.jsx imports it and renders it)
+        layout = (src / 'components' / 'navGroups.js').read_text(encoding='utf-8')
         nav_block = layout[layout.index('const NAV_GROUPS'):]
         nav_block = nav_block[:nav_block.index('\n]\n')]
         self.nav_paths = set(re.findall(r"\bto:\s*'([^']+)'", nav_block))

@@ -61,6 +61,12 @@ def _qualifies(offer, line, cache):
     # manual exclusion wins over everything ("keep some, leave out some")
     if item is not None and cache['exclude_ids'] and item.id in cache['exclude_ids']:
         return False
+    # Pharmacy safety beats sales (CLAUDE.md rule 4; owner, 2026-11-05, M-1): an item whose
+    # safety flag blocks the sale (sale stopped / archived / inactive) never gets an offer.
+    if item is not None:
+        from apps.catalog.safety import blocks_sale
+        if blocks_sale(item):
+            return False
 
     matched = False
     if offer.target_all:

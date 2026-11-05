@@ -57,17 +57,20 @@ WRITE_SITES = {
         audit='PointsRemoval + AuditLog customer_points_removed',
         trigger='cmd remove_from_points --commit'),
     # ── pricing (discount_approvals) ────────────────────────────────────────────
-    'apps/discount_approvals/alignment.py::apply_classification_changes': WriteSite(
+    'apps/discount_approvals/alignment.py::_apply_classification_locked': WriteSite(
         tables=('items',), flag='PRICING_SOFTECH_WRITE_ENABLED', dry_run_default=False,
-        idempotency=None, audit='AuditLog softech_item_class_written (who, before → after) — P-16',
+        idempotency='lock 7_301_011 + item already at target skipped (no UPDATE) — round-2 R1 Q2',
+        audit='AuditLog softech_item_class_written (who, before → after) — P-16',
         trigger='POST /api/pricing-approvals/alignment/apply/ (admin in view)'),
     'apps/discount_approvals/alignment.py::create_new_tier': WriteSite(
         tables=('itemsorigin', 'custdiscpclassif'), flag='PRICING_SOFTECH_WRITE_ENABLED', dry_run_default=False,
         idempotency='code-exists check (MAX+1 race)', audit='AuditLog softech_tier_created (who, before → after) — P-16',
         trigger='POST /api/pricing-approvals/alignment/tier-create/ (admin in view)'),
-    'apps/discount_approvals/replication.py::force_replication': WriteSite(
+    'apps/discount_approvals/replication.py::_force_replication_locked': WriteSite(
         tables=('items',), flag='REPLICATION_REPAIR_ENABLED', dry_run_default=False,
-        idempotency=None, audit='ReplicationGap.repaired_by (repair_gaps view only); else logger',
+        idempotency='lock 7_301_012 + same item refused within 10 min (force_replication) — round-2 R1 Q2',
+        audit='AuditLog softech_replication_forced on every repair (who, item, mode, result) — round-2 D4; '
+              'ReplicationGap.repaired_by (repair_gaps view)',
         trigger='POST pricing-approvals <pk>/force-replication/ + replication/repair/ (IsAdminRole); '
                 'jobs pricing_replication_audit / _full_audit (policy auto_repair); cmd audit_replication --repair'),
     'apps/discount_approvals/services.py::execute_price_change': WriteSite(
@@ -119,8 +122,16 @@ WRITE_SITES = {
         trigger='POST insurance claims <pk>/softech-date/plan/<id>/apply|runs/<id>/revert/ (insurance edit; softech_guard.check_date)'),
     'apps/insurance/date_service.py::_set_motalba_docdate': WriteSite(
         tables=('motalba',), flag='INSURANCE_SOFTECH_WRITE_ENABLED', dry_run_default=True,
-        idempotency=None, audit='SoftechDateEditRun + InsuranceAuditEvent (motalba before-value not kept)',
+        idempotency='runs only inside _apply_locked: LOCK_DATE_EDIT 7_301_008 + open applied-run refusal '
+                    '+ expected_old re-check (DateEditTests) — was None until round-2 R1',
+        audit='SoftechDateEditRun (motalba_old_dates, read before the UPDATE — round-2 Q1) + InsuranceAuditEvent',
         trigger='POST insurance claims <pk>/softech-date/plan/<id>/apply/'),
+    'apps/insurance/date_service.py::_revert_locked': WriteSite(
+        tables=('motalba',), flag='INSURANCE_SOFTECH_WRITE_ENABLED', dry_run_default=False,
+        idempotency='LOCK_DATE_EDIT 7_301_008 + run re-read; only an APPLIED run reverts (→ REVERTED); '
+                    'one UPDATE per recorded motalbano — round-2 Q1 follow-up (owner 2026-11-05)',
+        audit='SoftechDateEditRun status/reverted_at + motalba_old_dates it restores',
+        trigger='POST insurance claims <pk>/softech-date/runs/<id>/revert/ (insurance edit)'),
     'apps/insurance/management/commands/backfill_bonusqty.py::Command.handle': WriteSite(
         tables=('stktrans',), flag='INSURANCE_SOFTECH_WRITE_ENABLED', dry_run_default=True,
         idempotency='writes only drifted lines', audit='SoftechRepriceRun/Edit (no user)',

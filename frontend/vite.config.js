@@ -1,6 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// The Django server behind /api, /media and /ws. The browser tests (e2e/) point it at their own
+// e2e server (config.settings_e2e) so they never touch the dev backend.
+const API = process.env.VITE_API_TARGET || 'http://localhost:8000'
+
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -11,16 +15,16 @@ export default defineConfig({
     watch: { usePolling: true, interval: 300 },
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: API,
         changeOrigin: true,
       },
       // relative /media/… URLs (POS search thumbnails) — Nginx serves these in production
       '/media': {
-        target: 'http://localhost:8000',
+        target: API,
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://localhost:8000',
+        target: API.replace(/^http/, 'ws'),
         ws: true,
         changeOrigin: true,
       },

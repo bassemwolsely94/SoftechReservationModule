@@ -44,7 +44,9 @@ def build_attach_plan(basket, *, customer=None, branch_id=None, channel=None, ma
         isp = _d(raw.get('unit_price', 0))
         qty = _d(raw.get('qty', 0))
         gross = _r2(isp * qty)
-        eng_disc = _r2(eng_by_index.get(i, Decimal('0')))
+        # Stacked offers never take a line below zero (owner, 2026-11-05, M-2): the same per-line
+        # gross cap evaluate_offers applies to its total also bounds the cust_discp written here.
+        eng_disc = min(_r2(eng_by_index.get(i, Decimal('0'))), gross)
         cd = cust_discp_for(eng_disc, gross)
         c = pricing.compute_line(item_sale_price=isp, sale_tax_pct=0, qty=qty, cust_discp=cd)
         softech_disc = _r2(c['line_gross'] - c['trans_price_total'])
@@ -60,7 +62,7 @@ def build_attach_plan(basket, *, customer=None, branch_id=None, channel=None, ma
             'delta': _r2(eng_disc - softech_disc),
         })
 
-    eng_total = _r2(sum(eng_by_index.values(), Decimal('0')))
+    eng_total = _r2(sum((l['engine_discount'] for l in lines), Decimal('0')))   # capped, = plan total
     soft_total = _r2(sum((l['softech_discount'] for l in lines), Decimal('0')))
     max_delta = max((abs(l['delta']) for l in lines), default=Decimal('0.00'))
 

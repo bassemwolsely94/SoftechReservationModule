@@ -168,7 +168,9 @@ class InsurancePaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model  = InsurancePayment
         fields = '__all__'
-        read_only_fields = ['recorded_at']
+        # claim comes from the URL (the payments action saves it); the screen never sends it
+        # (I-1, owner OK 2026-11-05).
+        read_only_fields = ['recorded_at', 'claim']
 
 
 class InsuranceDeductionSerializer(serializers.ModelSerializer):

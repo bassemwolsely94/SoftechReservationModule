@@ -1,8 +1,2 @@
 # Owner: Batch 7. Requests that answered 500 or raised, for some role, with SOFTECH and the internet offline.
-
-admin POST /api/pricing-approvals/replication/scan/
-admin POST /api/vouchers/documents/x/mark-used/
-call_center POST /api/vouchers/documents/x/mark-used/
-pharmacist POST /api/vouchers/documents/x/mark-used/
-salesperson POST /api/vouchers/documents/x/mark-used/
-supervisor POST /api/vouchers/documents/x/mark-used/
+# R7 (2026-11-05): empty — replication scan answers 503, voucher mark-used fixed (V-1).

@@ -92,7 +92,7 @@ function cleanOcrLines(rawText) {
   return rawText
     .split('\n')
     .map(l => l
-      .replace(/[|_\[\]{}\\^~`]+/g, '')  // strip common OCR artifacts
+      .replace(/[|_[\]{}\\^~`]+/g, '')  // strip common OCR artifacts
       .replace(/\s{2,}/g, ' ')
       .trim()
     )
