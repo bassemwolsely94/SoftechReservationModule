@@ -9,6 +9,7 @@ from django.utils import timezone
 
 import config.sybase as sy
 from apps.batches.models import StockExpirySyncRun
+from apps.tests.test_sales_customer_link import FakeConn as _SalesConn, _sale
 
 
 class CursorColumnTypeTests(SimpleTestCase):
@@ -231,7 +232,6 @@ class RawStatementSitesTests(SimpleTestCase):
 # The fast lane re-reads today + yesterday every tick and the 03:45 catch-up re-reads 7 days;
 # both upsert by softech_invoice_id and replace an invoice's lines, so the next run after a
 # failure IS the resume point: nothing is lost inside the window and nothing is doubled.
-from apps.tests.test_sales_customer_link import FakeConn as _SalesConn, _sale  # noqa: E402
 
 
 class _DroppedConn(_SalesConn):

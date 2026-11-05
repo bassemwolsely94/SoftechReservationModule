@@ -3,7 +3,7 @@ Round 2, R5 step 3 — SQL injection: the Finance GL filters (apps/finance/gl, b
 
 The GL screens filter PostgreSQL through the ORM, and the drafting engine reads SOFTECH through
 `apps/finance/queries/sybase_gl.py`, whose four builders interpolate only `date.isoformat()` and
-module constants (the reason given for their `# nosec B608`). This pushes the Batch-1 payload set
+module constants (the reason given for their bandit B608 suppressions). This pushes the Batch-1 payload set
 through every GL query parameter and proves:
 
   • no filter answers 500, and none reaches SOFTECH;
@@ -106,7 +106,7 @@ class GLFilterInjectionTests(TestCase):
 
 
 class SybaseGlBuilderTests(SimpleTestCase):
-    """The `# nosec B608` reason, re-checked (R5 step 7): only real dates reach the SQL text."""
+    """The bandit B608 suppression reason, re-checked (R5 step 7): only real dates reach the SQL text."""
 
     BUILDERS = (sybase_gl.sql_branchesales, sybase_gl.sql_credit_docs, sybase_gl.sql_cheques,
                 sybase_gl.sql_expenses)
