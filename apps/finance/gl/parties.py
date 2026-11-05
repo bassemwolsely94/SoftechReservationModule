@@ -18,6 +18,14 @@ from .names import normalize_ar
 STOP_WORDS = {'شركه', 'شركة', 'ش', 'للادويه', 'لتجاره', 'الادويه', 'ادويه', 'فرع', 'و', 'ال'}
 _SKIP = {'total', 'grand total', normalize_ar('الرصيد الافتتاحى')}
 _HEADERS = {'suppliar code': 'supplier', 'customer code': 'customer'}
+# Ruling P26: finance's 2020 master sheets - (code header, name header) pairs, normalised
+_MASTER_HEADERS = {(normalize_ar('الكود'), normalize_ar('اسم المورد')): 'supplier',
+                   (normalize_ar('كود الموظف'), 'name in arabic'): 'employee',
+                   (normalize_ar('كود العميل'), normalize_ar('اسم العميل')): 'customer'}
+
+
+def _hdr(v) -> str:
+    return normalize_ar(v).lower()
 
 
 @dataclass(frozen=True)
@@ -25,6 +33,8 @@ class PartyRow:
     party_type: str
     code: str
     name: str
+    master: bool = False   # from a 2020 master sheet (Ruling P26): imported only in create_only mode
+    sheet: str = ''
 
 
 def _audit(action, *, user, obj, old_data=None, new_data=None, extra=None):
@@ -77,8 +87,10 @@ def _name(v):
 
 
 def parse_party_sheets(path) -> list[PartyRow]:
-    """Read sub-ledger pivots by header ('suppliar code' / 'customer code'), not position.
-    The name is the cell right of the code. Duplicate (type, code) keep the first name."""
+    """Read sub-ledger pivots by header ('suppliar code' / 'customer code') and the 2020 master
+    sheets by their (code, name) header pair (Ruling P26), never by position. The name is the cell
+    right of the code. Duplicate (type, code) keep the first name (master rows are deduplicated
+    separately, so a skipped master sheet never hides a sub-ledger row)."""
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     seen, out = set(), []
     for ws in wb.worksheets:
@@ -86,15 +98,18 @@ def parse_party_sheets(path) -> list[PartyRow]:
         hdr = None
         for i, r in enumerate(rows):
             for j, c in enumerate(r):
-                t = _HEADERS.get(str(c or '').strip().lower())
+                t, master = _HEADERS.get(_hdr(c)), False
+                if not t and j + 1 < len(r):
+                    t = _MASTER_HEADERS.get((_hdr(c), _hdr(r[j + 1])))
+                    master = bool(t)
                 if t:
-                    hdr = (i, j, t)
+                    hdr = (i, j, t, master)
                     break
             if hdr:
                 break
         if not hdr:
             continue
-        i0, j, ptype = hdr
+        i0, j, ptype, master = hdr
         for r in rows[i0 + 1:]:
             if j >= len(r):
                 continue
@@ -104,29 +119,39 @@ def parse_party_sheets(path) -> list[PartyRow]:
             name = _name(r[j + 1]) if j + 1 < len(r) else None
             if not name:
                 continue
-            if (ptype, code) in seen:
+            if (master, ptype, code) in seen:
                 continue
-            seen.add((ptype, code))
-            out.append(PartyRow(ptype, code, name))
+            seen.add((master, ptype, code))
+            out.append(PartyRow(ptype, code, name, master, ws.title))
     wb.close()
     return out
 
 
-def import_parties(rows, *, user) -> dict:
+def import_parties(rows, *, user, create_only=False) -> dict:
+    """Create missing parties; rename existing ones unless `create_only` (Ruling P26: the 2020
+    master sheets only add codes - the 2026 sub-ledger names stay authoritative). Master-sheet rows
+    are imported only in `create_only` mode; otherwise they are skipped and reported."""
     created = updated = 0
+    skipped = [r for r in rows if r.master and not create_only]
+    master_sheets = sorted({r.sheet for r in skipped})
     with transaction.atomic():
         for r in rows:
+            if r.master and not create_only:
+                continue
             obj, was_new = GLParty.objects.get_or_create(
                 party_type=r.party_type, code=r.code, defaults={'name': r.name[:200]})
             if was_new:
                 created += 1
-            elif r.name and obj.name != r.name[:200]:
+            elif not create_only and r.name and obj.name != r.name[:200]:
                 obj.name = r.name[:200]
                 obj.save(update_fields=['name'])
                 updated += 1
         _audit('gl_parties_imported', user=user, obj=None,
-               extra={'created': created, 'updated': updated, 'rows': len(rows)})
-    return {'created': created, 'updated': updated}
+               extra={'created': created, 'updated': updated, 'rows': len(rows),
+                      'create_only': bool(create_only), 'master_skipped': len(skipped),
+                      'master_sheets': master_sheets})
+    return {'created': created, 'updated': updated, 'master_skipped': len(skipped),
+            'master_sheets': master_sheets}
 
 
 def _tokens(name) -> frozenset:
@@ -219,3 +244,104 @@ def resolve_party(party_type: str, personcode: str):
     """Confirmed + active only; proposals never resolve."""
     return GLParty.objects.filter(party_type=party_type, softech_personcode=str(personcode),
                                   status='confirmed', is_active=True).first()
+
+
+# ── bulk confirm from the reviewed suggestions sheet ─────────────────────────
+# Header labels of the «مقترحات الربط» sheet; matched after Arabic normalisation, by "starts with".
+_CONFIRM_COLS = {'type': 'النوع', 'code': 'كود المالية', 'personcode': 'الكود المعتمد'}
+_TYPE_WORDS = {'عميل': 'customer', 'customer': 'customer', 'مورد': 'supplier', 'دائن': 'supplier',
+               'supplier': 'supplier'}
+
+
+@dataclass(frozen=True)
+class ConfirmRow:
+    row: int            # Excel row number, for messages
+    party_type: str
+    code: str
+    personcode: str
+
+
+def _party_type(v):
+    s = normalize_ar(str(v or '')).strip().lower()
+    for word, ptype in _TYPE_WORDS.items():
+        if s.startswith(normalize_ar(word)):
+            return ptype
+    return None
+
+
+def parse_confirm_sheet(path) -> tuple[list[ConfirmRow], list[dict]]:
+    """Rows of the first sheet that has the three headers; rows with an empty approved code are
+    left out (not reviewed yet). Returns (rows, problems) — a problem is {row, detail}."""
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    try:
+        for ws in wb.worksheets:
+            it = ws.iter_rows(values_only=True)
+            for hdr_no, hdr in enumerate(it, start=1):
+                if hdr_no > 5:
+                    break
+                labels = [normalize_ar(str(c or '')).strip() for c in hdr]
+                cols = {}
+                for key, label in _CONFIRM_COLS.items():
+                    want = normalize_ar(label)
+                    cols[key] = next((i for i, t in enumerate(labels) if t.startswith(want)), None)
+                if None in cols.values():
+                    continue
+                rows, problems = [], []
+                for n, r in enumerate(it, start=hdr_no + 1):
+                    cell = lambda k: r[cols[k]] if cols[k] < len(r) else None   # noqa: E731
+                    raw_pc = cell('personcode')
+                    if raw_pc is None or not str(raw_pc).strip():
+                        continue
+                    pc = _code(raw_pc)
+                    ptype, code = _party_type(cell('type')), _code(cell('code'))
+                    if not ptype or not code:
+                        problems.append({'row': n, 'detail': 'النوع أو كود المالية غير مفهوم'})
+                    elif not pc:
+                        problems.append({'row': n, 'detail': f'الكود المعتمد «{raw_pc}» ليس رقماً'})
+                    else:
+                        rows.append(ConfirmRow(n, ptype, code, pc))
+                return rows, problems
+        raise ValueError('لم أجد أعمدة «النوع» و«كود المالية» و«الكود المعتمد» في الملف')
+    finally:
+        wb.close()
+
+
+def bulk_confirm(rows, problems, *, user, apply: bool) -> dict:
+    """Preview (apply=False, nothing saved) or confirm every valid row through ``confirm_party``
+    (audited per party). Each row stands alone: a refused row never blocks the others.
+    Result: {results: [{row, party_type, code, name, personcode, outcome, detail}], counts}."""
+    results = [{'row': p['row'], 'outcome': 'error', 'detail': p['detail']} for p in problems]
+    seen = {}
+    for r in rows:
+        key = (r.party_type, r.personcode)
+        if key in seen:
+            results.append({'row': r.row, 'party_type': r.party_type, 'code': r.code, 'personcode': r.personcode,
+                            'outcome': 'error',
+                            'detail': f'كود SOFTECH {r.personcode} مكرر في الملف (السطر {seen[key]})'})
+            continue
+        seen[key] = r.row
+        out = {'row': r.row, 'party_type': r.party_type, 'code': r.code, 'personcode': r.personcode}
+        g = GLParty.objects.filter(party_type=r.party_type, code=r.code).first()
+        if g is None:
+            results.append({**out, 'outcome': 'error', 'detail': 'الطرف غير موجود — استورد أطراف الحسابات أولاً'})
+            continue
+        out['name'] = g.name
+        if g.status == 'confirmed' and g.softech_personcode == r.personcode:
+            results.append({**out, 'outcome': 'unchanged', 'detail': 'مؤكد بالفعل'})
+            continue
+        try:
+            with transaction.atomic():
+                confirm_party(g.pk, user=user, personcode=r.personcode)
+                if not apply:
+                    transaction.set_rollback(True)
+        except ValueError as e:
+            results.append({**out, 'outcome': 'error', 'detail': str(e)})
+            continue
+        results.append({**out, 'outcome': 'confirmed' if apply else 'will_confirm'})
+    results.sort(key=lambda x: x['row'])
+    counts = {}
+    for x in results:
+        counts[x['outcome']] = counts.get(x['outcome'], 0) + 1
+    if apply:
+        _audit('gl_parties_bulk_confirmed', user=user, obj=None, extra={'counts': counts, 'rows': len(results)})
+    return {'results': results, 'counts': counts, 'applied': apply}

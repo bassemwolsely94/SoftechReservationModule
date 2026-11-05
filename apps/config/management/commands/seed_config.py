@@ -23,6 +23,13 @@ DEFAULT_SETTINGS = [
          description='تُعد المكالمة محوّلة لبيع إذا تلاها شراء خلال هذه الأيام',
          value='7', value_type='integer', category='general', is_public=False),
 
+    # ━━ Payment audit (apps/payments/audit_service.py) ━━━━━━━━━━━━━━━━━━━━━━━
+    dict(key='payments.exception_checks_enabled', label='فحص استثناءات المدفوعات تلقائياً',
+         description='كل ليلة يفحص الدفعات الخارجية المسجّلة آخر 7 أيام: تكرار محتمل، انتظار أكثر من 3 أيام، '
+                     'فرع مختلف عن فرع المستخدم، ومبلغ غير معتاد (ويرفع إشارة مراجعة على الموظف). '
+                     'ينشئ استثناءات فقط — لا يغيّر أي دفعة ولا SOFTECH.',
+         value='false', value_type='boolean', category='general', is_public=False),
+
     # ━━ Delivery geofencing ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     dict(key='delivery_geofence_enabled', label='تفعيل التحقق الجغرافي للتوصيل',
          description='يلزم السائق بأن يكون داخل نطاق الفرع عند الاستلام وعند عنوان العميل عند التسليم',

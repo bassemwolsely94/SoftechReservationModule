@@ -125,6 +125,66 @@ class PartyTests(Base):
         self.assertEqual(GLParty.objects.get(code='101').status, 'proposed')
         self.assertEqual(self.admin.post(BASE + 'parties/import/').status_code, 400)
 
+    def _confirm_sheet(self, rows):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['النوع', 'كود المالية', 'اسم المالية', 'مقترح 1 كود سوفتيك', 'الكود المعتمد (تملؤه المالية)'])
+        for r in rows:
+            ws.append(r)
+        buf = io.BytesIO()
+        wb.save(buf)
+        return SimpleUploadedFile('s.xlsx', buf.getvalue())
+
+    def test_confirm_upload_previews_then_confirms_valid_rows(self):
+        GLParty.objects.create(party_type='supplier', code='29', name='فارما اوفرسيز')
+        GLParty.objects.create(party_type='customer', code='99', name='جنوب القاهرة')
+        GLParty.objects.create(party_type='supplier', code='16', name='رامكو', status='confirmed',
+                               softech_personcode='30')
+        rows = [['مورد / دائن', 29, 'x', 565, 565],
+                ['عميل', 99, 'x', 4227, 4227.0],
+                ['مورد / دائن', 16, 'x', 30, 30],          # already confirmed to 30
+                ['مورد / دائن', 55, 'x', 1, 1],            # finance code never imported
+                ['مورد / دائن', 29, 'x', None, None],      # not reviewed -> left out
+                ['عميل', 7, 'x', 4227, 4227],              # same SOFTECH customer twice in the file
+                ['مورد / دائن', 40, 'x', 'abc', 'abc']]    # not a number
+        r = self.acct.post(BASE + 'parties/confirm-upload/', {'file': self._confirm_sheet(rows)}, format='multipart')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertFalse(r.data['applied'])
+        self.assertEqual(r.data['counts'], {'will_confirm': 2, 'unchanged': 1, 'error': 3})
+        self.assertEqual(GLParty.objects.filter(status='confirmed').count(), 1)   # preview saved nothing
+        self.assertFalse(AuditLog.objects.filter(action='gl_party_confirmed').exists())
+        r = self.acct.post(BASE + 'parties/confirm-upload/', {'file': self._confirm_sheet(rows), 'dry_run': 'false'},
+                           format='multipart')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data['counts'], {'confirmed': 2, 'unchanged': 1, 'error': 3})
+        self.assertEqual(GLParty.objects.get(code='29').softech_personcode, '565')
+        self.assertEqual(GLParty.objects.get(party_type='customer', code='99').status, 'confirmed')
+        self.assertEqual(AuditLog.objects.filter(action='gl_party_confirmed').count(), 2)
+        self.assertTrue(AuditLog.objects.filter(action='gl_parties_bulk_confirmed').exists())
+        by_row = {x['row']: x for x in r.data['results']}
+        self.assertIn('مكرر', by_row[7]['detail'])
+        self.assertIn('استورد', by_row[5]['detail'])
+
+    def test_confirm_upload_refuses_a_different_code_and_bad_files(self):
+        GLParty.objects.create(party_type='supplier', code='16', name='رامكو', status='confirmed',
+                               softech_personcode='30')
+        r = self.acct.post(BASE + 'parties/confirm-upload/',
+                           {'file': self._confirm_sheet([['مورد', 16, 'x', 31, 31]]), 'dry_run': 'false'},
+                           format='multipart')
+        self.assertEqual(r.data['counts'], {'error': 1})
+        self.assertEqual(GLParty.objects.get(code='16').softech_personcode, '30')
+        wb = openpyxl.Workbook()
+        wb.active.append(['a', 'b'])
+        buf = io.BytesIO()
+        wb.save(buf)
+        r = self.acct.post(BASE + 'parties/confirm-upload/', {'file': SimpleUploadedFile('n.xlsx', buf.getvalue())},
+                           format='multipart')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('الكود المعتمد', r.data['detail'])
+        _, _, viewer = make_user('t8_view3', role='viewer', access_all=True)
+        r = viewer.post(BASE + 'parties/confirm-upload/', {'file': self._confirm_sheet([])}, format='multipart')
+        self.assertEqual(r.status_code, 403)
+
     def test_reject_and_create(self):
         p = GLParty.objects.create(party_type='supplier', code='1', name='x')
         self.assertEqual(self.acct.post(f'{BASE}parties/{p.pk}/reject/').status_code, 200)
@@ -178,6 +238,14 @@ class MapTests(Base):
         r = self.admin.put(BASE + 'maps/card_clearing/130/',
                            {'account_code': '1310', 'branch_id': self.branch.pk}, format='json')
         self.assertEqual(r.status_code, 200, r.content)
+
+    def test_intercompany_map_requires_branch(self):   # Ruling P24: branch = HQ
+        r = self.admin.put(BASE + 'maps/intercompany/160/', {'account_code': '1310'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        r = self.admin.put(BASE + 'maps/intercompany/160/',
+                           {'account_code': '1310', 'branch_id': self.branch.pk}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(GLSourceMap.objects.get(kind='intercompany', source_value='160').account.code, '1310')
 
 
 class RuleTests(Base):
@@ -369,7 +437,8 @@ class RoutingTests(TestCase):
         for path, act in (
                 ('rules/', 'edit'), ('maps/bank/40/', 'edit'), ('parties/import/', 'edit'),
                 ('parties/propose/', 'edit'), ('parties/', 'approve'), ('parties/5/confirm/', 'approve'),
-                ('parties/5/reject/', 'approve'), ('exceptions/5/ignore/', 'create'),
+                ('parties/5/reject/', 'approve'), ('parties/confirm-upload/', 'approve'),
+                ('exceptions/5/ignore/', 'create'),
                 ('exceptions/redraft/', 'create'), ('drafting/run/', 'create')):
             method = 'PUT' if path.startswith('maps/') else 'POST'
             self.assertEqual(req('/api/finance/gl/' + path, method), ('ledger', (act,)), path)
@@ -388,6 +457,12 @@ class MetaEndpointTests(Base):
         self.assertEqual(d['condition_keys']['paymenttype_in'], ['sales_tenders'])
         self.assertEqual(sorted(d['bank_branch_sources']), sorted(R.BANK_BRANCH_SOURCES))
         self.assertEqual(d['map_key_for_kind']['card_clearing'], 'branch_code')
+        # Ruling P24
+        self.assertIn('intercompany', d['map_kinds'])
+        self.assertEqual(d['map_key_for_kind']['intercompany'], 'counterpart_branch')
+        self.assertIn('counterpart_branch', d['map_keys'])
+        self.assertIn('tf_bankcode', d['map_keys'])
+        self.assertIn('note', d['placeholders'])
         self.assertIn('hq', d['branch_modes'])
         self.assertIn('cheqno', d['placeholders'])
         self.assertEqual(self.pharm.get(BASE + 'rules/meta/').status_code, 403)

@@ -728,7 +728,9 @@ SCREENS = [
             {'key': 'exceptions', 'title': T('الاستثناءات', 'Exceptions'),
              'body': T('مستندات SOFTECH اللي ما اترحلتش لقيد، مجمّعة بالنوع، وكل نوع له علاجه في الصف ثم «إعادة الترحيل».\n'
                        '• طرف غير مربوط: المستند لمورد/عميل لسه مش مؤكد في «الأطراف» — أكّده أو أنشئ طرفاً.\n'
-                       '• حساب غير مربوط: خزينة/بنك أو كود مصروف أو تسوية بطاقات مالهاش حساب في جداول الربط — اربطها بحساب وفرع.\n'
+                       '• حساب غير مربوط: خزينة/بنك أو كود مصروف أو تسوية بطاقات أو فرع تحويل (شركة شقيقة) مالهاش حساب في جداول الربط — اربطها بحساب وفرع.\n'
+                       '• المشتريات النقدية بتظهر على مرحلتين (5100 ← 2341 للمورد، و2341 للمورد ← الخزينة)؛ مورد مش مؤكد بيعمل «طرف غير مربوط» لسنده بس وباقي اليوم بيترحل.\n'
+                       '• تحويلات «قيد تسوية» 1/1/2026 بين المركز والفروع، وتحويل من المركز مالوش طرف في فرع، والتحويل بين فرعين، بتفضل «لا توجد قاعدة» عن قصد — تتسجل يدوياً. وتسليم نقدية الفروع اليومي للمركز (1302 ↔ 1301)، وزيادة/عجز الوردية 1303، والكوبونات 2354، وتسوية البطاقات للبنك مش موجودين في SOFTECH فبيتسجلوا يدوياً.\n'
                        '• لا توجد قاعدة: مفيش قاعدة بتنطبق على المستند — أضف قاعدة أو وسّع شروط موجودة.\n'
                        '• قاعدتان متعارضتان: قاعدتان بنفس الأولوية بينطبقوا على نفس المستند — فرّق بالأولوية أو الشروط.\n'
                        '• قاعدة غير متوازنة: أسطر القاعدة مبتديش مدين = دائن لهذا المستند — صحّح الأسطر.\n'
@@ -744,7 +746,9 @@ SCREENS = [
                        'الاستثناء المعالج بيتحل لوحده عند إعادة الترحيل؛ «تجاهل» بسبب لما المستند ميتسجلش عن قصد.',
                        'SOFTECH documents that did not become an entry, grouped by kind; each kind has its fix in the row, then "Redraft".\n'
                        '• Unmapped party: the document is for a supplier/customer not yet confirmed in "Parties" — confirm it or create one.\n'
-                       '• Unmapped account: a cash box/bank, expense code or card clearing with no account in the maps — map it to an account and branch.\n'
+                       '• Unmapped account: a cash box/bank, expense code, card clearing or transfer branch (sister company) with no account in the maps — map it to an account and branch.\n'
+                       '• Cash purchases show in two legs (5100 → 2341 for the supplier, and 2341 for the supplier → the cash box); an unconfirmed supplier makes "Unmapped party" for its voucher only and the rest of the day drafts.\n'
+                       '• The 1-1-2026 «قيد تسوية» transfers between head office and branches, a head-office transfer with no branch leg, and a transfer between two branches stay "No rule" on purpose — key them by hand. Daily branch cash handovers to head office (1302 ↔ 1301), shift over/short 1303, coupons 2354 and card settlement to the bank are not in SOFTECH, so they are keyed by hand.\n'
                        '• No rule: no rule matches the document — add a rule or widen an existing one.\n'
                        '• Ambiguous rule: two rules with the same priority match the same document — separate them by priority or conditions.\n'
                        '• Unbalanced rule: the rule lines do not give debit = credit for this document — fix the lines.\n'
@@ -792,7 +796,7 @@ SCREENS = [
              'open_hint': T('افتح قيداً أو «+ قيد يدوي».', 'Open an entry or "+ Manual entry".')},
         ],
         'updated': '2026-11-05',
-        'change_note': T('القيود: قيد عدّله محاسب وغيّره SOFTECH — قارن النسختين واختار «اعتماد نسخة سوفتيك» أو «إبقاء تعديلي»', 'Journal: an accountant-edited entry SOFTECH changed — compare both versions and choose "Accept the SOFTECH version" or "Keep my edit"'),
+        'change_note': T('القيود: تحويلات النقدية بين المركز والفروع والمشتريات النقدية على مرحلتين عبر 2341، وقيد عدّله محاسب وغيّره SOFTECH — «اعتماد نسخة سوفتيك» أو «إبقاء تعديلي»', 'Journal: cash transfers between head office and branches and two-leg cash purchases through 2341, and an accountant-edited entry SOFTECH changed — "Accept the SOFTECH version" or "Keep my edit"'),
     },
     {
         'key': 'finance.gl_parties',
@@ -804,17 +808,23 @@ SCREENS = [
         'tour': [
             {'target': 'finance-gl-parties-propose', 'label': T('استيراد · اقتراح المطابقة', 'Import · Propose matches'),
              'text': T('ارفع ملف أطراف الحسابات (Excel) ثم «اقتراح المطابقة» يقترح لكل طرف شخص SOFTECH بنفس الاسم.', 'Upload the party Excel from the accounts file, then "Propose matches" suggests a SOFTECH person with the same name for each party.'),
-             'more': T('• المطابقة بالاسم العربي بعد التوحيد (همزات، ياء/ألف مقصورة، مسافات): «تطابق تام» أو «تطابق كلمات».\n• ده اقتراح بس — مفيش طرف بيبقى مؤكد من غير ضغطتك.\n• الاستيراد يضيف ويحدّث ومبيمسحش، وإعادة تشغيله آمنة.\n• الزرّان لمن له صلاحية التعديل (ledger.edit).',
-                       '• Matching is on the normalised Arabic name (hamza, alef/yeh variants, spaces): "exact" or "word match".\n• It is a proposal only — no party becomes confirmed without your click.\n• Import adds and updates and never deletes; running it again is safe.\n• Both buttons are for users allowed to edit (ledger.edit).'),
+             'more': T('• المطابقة بالاسم العربي بعد التوحيد (همزات، ياء/ألف مقصورة، مسافات): «تطابق تام» أو «تطابق كلمات».\n• ده اقتراح بس — مفيش طرف بيبقى مؤكد من غير ضغطتك.\n• الاستيراد يضيف ويحدّث ومبيمسحش، وإعادة تشغيله آمنة.\n• شيتات 2020 الرئيسية (الموردين/الموظفين/العملاء) بتتخطى هنا ويتقال عددها — بتتستورد بأمر import_gl_parties --create-only بس، ومبتغيّرش اسم طرف موجود.\n• الزرّان لمن له صلاحية التعديل (ledger.edit).',
+                       '• Matching is on the normalised Arabic name (hamza, alef/yeh variants, spaces): "exact" or "word match".\n• It is a proposal only — no party becomes confirmed without your click.\n• Import adds and updates and never deletes; running it again is safe.\n• The 2020 master sheets (suppliers/employees/customers) are skipped here and counted — they are imported only by the import_gl_parties --create-only command, which never renames an existing party.\n• Both buttons are for users allowed to edit (ledger.edit).'),
              'open_hint': T('لمن له صلاحية التعديل (ledger.edit).', 'For users allowed to edit (ledger.edit).')},
+            {'target': 'finance-gl-parties-confirm-upload', 'label': T('تأكيد من ملف المراجعة', 'Confirm from the review sheet'),
+             'text': T('ارفع ملف المقترحات بعد ما تملا «الكود المعتمد»: «معاينة» تعرض اللي هيتأكد واللي مرفوض، و«تأكيد» يأكد الصفوف السليمة بس.', 'Upload the suggestions sheet once «الكود المعتمد» is filled: "Preview" shows what will be confirmed and what is refused; "Confirm" confirms only valid rows.'),
+             'more': T('• الأعمدة المطلوبة: «النوع» (عميل / مورد) و«كود المالية» و«الكود المعتمد».\n• صف «الكود المعتمد» فيه فاضي = لسه متراجعش، وبيتجاهل.\n• المعاينة مبتسجلش حاجة.\n• مرفوض لو: الطرف مش مستورد، أو مؤكد على كود SOFTECH تاني، أو نفس الكود متكرر في الملف أو مربوط بطرف تاني.\n• كل تأكيد بيتسجل لوحده (من/إمتى) زي التأكيد اليدوي.',
+                       '• Required columns: «النوع» (customer / supplier), «كود المالية» and «الكود المعتمد».\n• A row with an empty «الكود المعتمد» is not reviewed yet and is skipped.\n• Preview saves nothing.\n• Refused when: the party was never imported, it is confirmed to another SOFTECH code, or the code repeats in the file or belongs to another party.\n• Each confirmation is logged on its own (who, when), like a manual one.'),
+             'warn': T('التأكيد بيحدد على أي حساب طرف هيتسجل كل مستند مستقبلي — راجع الصفوف الضعيفة قبل الرفع.', 'Confirming decides which party account every future document posts to — review the weak rows before uploading.'),
+             'open_hint': T('لمن له صلاحية الاعتماد (ledger.approve).', 'For users allowed to approve (ledger.approve).')},
             {'target': 'finance-gl-parties-grid', 'label': T('جدول الأطراف', 'Parties table'),
              'text': T('كل طرف بنوعه وكوده واسمه وحالته (غير مربوط · مقترح · مؤكد · مرفوض). Enter يؤكد المقترح، و«رفض» يرفضه.', 'Each party with its type, code, name and status (unmapped · proposed · confirmed · rejected). Enter confirms the proposal and "Reject" rejects it.'),
              'more': T('• الفلاتر: النوع (مورد/عميل/موظف/شريك/أخرى) والحالة والبحث.\n• المقترح بيظهر معاه شخص SOFTECH وأساس الاقتراح — راجع الاسم قبل التأكيد.\n• بعد التأكيد، «إعادة الترحيل» في تبويب الاستثناءات بالقيود بيحوّل مستندات «طرف غير مربوط» لمسودات.\n• طرف مؤكد بكود SOFTECH معيّن مبيتأكدش لشخص تاني.\n• كل تأكيد/رفض/تعديل اسم بيتسجل (من/إمتى).',
                        '• Filters: type (supplier/customer/employee/partner/other), status and search.\n• A proposal shows the SOFTECH person and the basis — check the name before confirming.\n• After confirming, "Redraft" in the Journal exceptions tab turns "unmapped party" documents into drafts.\n• A party confirmed to one SOFTECH code cannot be confirmed to another person.\n• Every confirm / reject / rename is logged (who, when).'),
              'warn': T('التأكيد بيحدد على أي حساب طرف هيتسجل كل مستند مستقبلي — تأكد من الاسم.', 'Confirming decides which party account every future document posts to — check the name.')},
         ],
-        'updated': '2026-11-04',
-        'change_note': T('شاشة جديدة: الأطراف (ربط أطراف دفتر الأستاذ بـ SOFTECH)', 'New screen: Parties (link ledger parties to SOFTECH)'),
+        'updated': '2026-11-05',
+        'change_note': T('الأطراف: تأكيد أطراف كتير مرة واحدة من ملف المراجعة (معاينة ثم تأكيد)، وشيتات 2020 الرئيسية بتتخطى في الاستيراد العادي', 'Parties: confirm many parties at once from the review sheet (preview, then confirm); the 2020 master sheets are skipped by the normal import'),
     },
     {
         'key': 'finance.gl_rules',
@@ -825,11 +835,17 @@ SCREENS = [
         'audience': T('المدير المالي (تعديل: ledger.edit) والمحاسبون (عرض).', 'The finance manager (edit: ledger.edit) and accountants (view).'),
         'tabs': [
             {'key': 'rules', 'title': T('القواعد', 'Rules'),
-             'body': T('قاعدة لكل نوع مستند: الشروط (فرع، نوع، دفع…)، التجميع (مستند · فرع/يوم · طرف/يوم)، الدفتر، الأولوية، والأسطر (مدين/دائن، الحساب، الفرع، الطرف، المبلغ من حقل مسموح). «تجربة» تعرض القيود اللي كانت هتتعمل لفترة من غير ما تسجّل حاجة.',
-                       'One rule per document type: conditions (branch, kind, payment…), grouping (document · branch/day · party/day), book, priority and lines (debit/credit, account, branch, party, amount from an allowed field). "Test" shows the entries that would be made for a range without saving anything.')},
+             'body': T('قاعدة لكل نوع مستند: الشروط (فرع، نوع، دفع…)، التجميع (مستند · فرع/يوم · طرف/يوم)، الدفتر، الأولوية، والأسطر (مدين/دائن، الحساب، الفرع، الطرف، المبلغ من حقل مسموح). «تجربة» تعرض القيود اللي كانت هتتعمل لفترة من غير ما تسجّل حاجة.\n'
+                       '• المشتريات النقدية (supplier.cash) بتتسجل على مرحلتين زي دفتر النقدية: من 5100 إلى 2341 للمورد، ثم من 2341 للمورد إلى الخزينة — فحساب 2341 بيبيّن كل مورد نقدي، سطرين لكل مورد في الفرع/اليوم، والبيان فيه المورد وملاحظة السند (غالباً رقم الفاتورة).\n'
+                       '• تحويلات النقدية بين المركز والفروع: في الفرع من/إلى 2404 قصاد خزينته، وفي المركز من/إلى حساب الشركة الشقيقة للفرع (ربط «شركة شقيقة») قصاد خزينة المركز. تحويل خزينة ↔ بنك بيتسجل قصاد ربط البنك للطرف التاني، والطرف المسجل على البنك نفسه بيتجاهل دايماً عشان ميتسجلش مرتين. تحويل من المركز مالوش طرف في أي فرع، والتحويل بين فرعين، بيظهروا استثناءات «لا توجد قاعدة» تتسجل يدوياً. تحويلات «قيد تسوية» 1/1/2026 بتفضل استثناءات.\n'
+                       '• قاعدة بيانات اتعمل لها seed قبل 5/11/2026 بتفضل على قاعدة المشتريات النقدية القديمة (سطرين) لحد ما المالية تعدّلها هنا.',
+                       'One rule per document type: conditions (branch, kind, payment…), grouping (document · branch/day · party/day), book, priority and lines (debit/credit, account, branch, party, amount from an allowed field). "Test" shows the entries that would be made for a range without saving anything.\n'
+                       '• Cash purchases (supplier.cash) post in two legs like the finance cash book: Dr 5100 / Cr 2341 for the supplier, then Dr 2341 for the supplier / Cr the cash box — so 2341 shows every cash supplier, a pair of lines per supplier per branch/day, described with the supplier and the voucher note (usually the invoice no.).\n'
+                       '• Cash transfers between head office and branches: at the branch Dr/Cr 2404 against its box; at head office Dr/Cr the branch\'s sister-company account ("Sister company" map) against the head-office box. A box ↔ bank transfer posts against the bank map of the other side; the leg recorded on the bank itself is always skipped so it is never posted twice. A head-office transfer with no branch leg, and a transfer between two branches, show as "No rule" exceptions to key by hand. The 1-1-2026 «قيد تسوية» transfers stay exceptions.\n'
+                       '• A database seeded before 5-11-2026 keeps the old two-line cash purchase rule until finance edits it here.')},
             {'key': 'maps', 'title': T('جداول الربط', 'Maps'),
-             'body': T('خزينة/بنك SOFTECH ← حساب المالية والفرع (فرع الخزينة هو فرع القيد)، أكواد المصروف ← حساب، وتسوية البطاقات. أي قيمة من SOFTECH من غير ربط بتتحول لاستثناء «حساب غير مربوط». كل تعديل بيتسجل بالقبل والبعد.',
-                       'SOFTECH cash box / bank → finance account and branch (the box branch is the entry branch), expense codes → account, and card clearing. Any SOFTECH value without a map becomes an "unmapped account" exception. Every change is logged with before and after.')},
+             'body': T('خزينة/بنك SOFTECH ← حساب المالية والفرع (فرع الخزينة هو فرع القيد)، أكواد المصروف ← حساب، تسوية البطاقات، و«شركة شقيقة»: كود فرع SOFTECH ← حساب الشركة الشقيقة في المالية (130 علياء 2408، 140 الجيزة 2413، 150 عين شمس 2405، 160 باب الحديد 2406، 170 محسن 2417) على المركز الرئيسي، للتحويلات النقدية بين المركز والفروع. أي قيمة من SOFTECH من غير ربط بتتحول لاستثناء «حساب غير مربوط». كل تعديل بيتسجل بالقبل والبعد.',
+                       'SOFTECH cash box / bank → finance account and branch (the box branch is the entry branch), expense codes → account, card clearing, and "Sister company": SOFTECH branch code → the finance sister-company account (130 Aliaa 2408, 140 Giza 2413, 150 Ain Shams 2405, 160 Bab El Hadid 2406, 170 Mohsen 2417) at head office, for cash transfers between head office and branches. Any SOFTECH value without a map becomes an "unmapped account" exception. Every change is logged with before and after.')},
         ],
         'tour': [
             {'target': 'finance-gl-rules-grid', 'label': T('جدول القواعد', 'Rules table'),
@@ -849,12 +865,12 @@ SCREENS = [
              'open_hint': T('داخل محرر القاعدة.', 'Inside the rule editor.')},
             {'target': 'finance-gl-maps-grid', 'label': T('جداول الربط', 'Maps table'),
              'text': T('كل قيمة من SOFTECH (خزينة/بنك، كود مصروف، تسوية بطاقات) مع حساب المالية والفرع. عدّل في الصف.', 'Each SOFTECH value (cash box/bank, expense code, card clearing) with its finance account and branch. Edit in the row.'),
-             'more': T('• خزائن الفروع بتاخد فرعها؛ حسابات البنوك بتتسجّل على المركز الرئيسي (شركة الرزيقي).\n• خريطة بنك/بطاقات من غير فرع بتترفض (مفيش فرع فاضي في سطر القيد).\n• قيم SOFTECH الناقصة اللي جايبة استثناءات بتظهر مظللة.\n• التعديل بيتسجل بالقبل والبعد، ثم «إعادة الترحيل» تطبقه.',
-                       '• Branch cash boxes take their own branch; bank accounts post to head office (the company).\n• A bank/card map without a branch is refused (no empty branch on an entry line).\n• SOFTECH values missing a map that cause exceptions are highlighted.\n• The edit is logged with before and after; then "Redraft" applies it.'),
+             'more': T('• خزائن الفروع بتاخد فرعها؛ حسابات البنوك بتتسجّل على المركز الرئيسي (شركة الرزيقي).\n• خريطة بنك/بطاقات/شركة شقيقة من غير فرع بتترفض (مفيش فرع فاضي في سطر القيد)؛ الشركة الشقيقة فرعها المركز الرئيسي.\n• قيم SOFTECH الناقصة اللي جايبة استثناءات بتظهر مظللة.\n• التعديل بيتسجل بالقبل والبعد، ثم «إعادة الترحيل» تطبقه.',
+                       '• Branch cash boxes take their own branch; bank accounts post to head office (the company).\n• A bank/card/sister-company map without a branch is refused (no empty branch on an entry line); a sister company takes head office.\n• SOFTECH values missing a map that cause exceptions are highlighted.\n• The edit is logged with before and after; then "Redraft" applies it.'),
              'open_hint': T('تبويب «جداول الربط».', 'The "Maps" tab.')},
         ],
-        'updated': '2026-11-04',
-        'change_note': T('شاشة جديدة: قواعد الترحيل وجداول الربط', 'New screen: Posting rules and maps'),
+        'updated': '2026-11-05',
+        'change_note': T('تحويلات النقدية بين المركز والفروع (ربط «شركة شقيقة») والمشتريات النقدية على مرحلتين عبر 2341', 'Cash transfers between head office and branches ("Sister company" map) and two-leg cash purchases through 2341'),
     },
     {
         'key': 'finance.gl_trial_balance',
@@ -1256,19 +1272,21 @@ SCREENS = [
         'summary': T('رفع كشف الحساب البنكي (CSV/Excel) ومطابقته تلقائياً بالمدفوعات المسجّلة، ومعالجة الاستثناءات.', 'Upload the bank statement (CSV/Excel) and match it automatically to recorded payments, then handle exceptions.'),
         'audience': T('المالية.', 'Finance.'),
         'tabs': [
-            {'key': 'exceptions', 'title': T('⚠️ الاستثناءات', '⚠️ Exceptions'), 'body': T('حركات تحتاج قراراً: دفعة مفقودة من الكشف، حركة بنكية غير مسجّلة، مكررة، دفع جزئي، فرع أو مبلغ أو كاشير خاطئ، تسوية متأخرة، شذوذ / إشارة احتيال. «معالجة» ← ملاحظة التسوية ← «حل الاستثناء» أو «تجاهل».', 'Lines that need a decision: payment missing from the statement, unrecorded bank line, duplicate, partial payment, wrong branch, amount or cashier, late settlement, anomaly / fraud signal. "Handle" → settlement note → "Resolve" or "Ignore".')},
-            {'key': 'statements', 'title': T('🏦 الكشوف البنكية', '🏦 Bank statements'), 'body': T('الكشوف المرفوعة: البنك ورقم الحساب، عدد السطور والمطابق ونسبة المطابقة والحالة؛ «رفع كشف حساب» و«تشغيل المطابقة».', 'Uploaded statements: bank and account number, line count, matched, match rate and status; "Upload statement" and "Run matching".')},
+            {'key': 'exceptions', 'title': T('⚠️ الاستثناءات', '⚠️ Exceptions'), 'body': T('حركات تحتاج قراراً: دفعة مفقودة من الكشف، حركة بنكية غير مسجّلة، مكررة، دفع جزئي، فرع أو مبلغ أو كاشير خاطئ، تسوية متأخرة، شذوذ / إشارة احتيال. «معالجة» ← ملاحظة التسوية ← «حل الاستثناء» أو «تجاهل».\n• الفحص التلقائي الليلي (مقفول لحد ما الأدمن يفعّل إعداد «فحص استثناءات المدفوعات تلقائياً»): بيعلّم الدفعة المكررة (نفس المستخدم والمبلغ وطريقة الدفع في نفس اليوم، ونفس رقم المرجع أو بدون مرجع — مرجعين مختلفين يعني دفعتين مختلفتين)، والدفعة «في الانتظار» من 3 أيام أو أكثر، والدفعة المسجّلة لفرع غير فرع المستخدم (ماعدا الكول سنتر والإدارة)، والمبلغ غير المعتاد لنفس المستخدم وطريقة الدفع (لازم يبعد عن معدله 100 جنيه على الأقل و20% على الأقل). المبلغ غير المعتاد بيرفع كمان إشارة «دفعة غير معتادة» على الموظف للمراجعة. الفحص بيسجّل استثناءات بس — ما بيغيّرش أي دفعة.', 'Lines that need a decision: payment missing from the statement, unrecorded bank line, duplicate, partial payment, wrong branch, amount or cashier, late settlement, anomaly / fraud signal. "Handle" → settlement note → "Resolve" or "Ignore".\n• The nightly automatic check (off until an admin enables the setting «فحص استثناءات المدفوعات تلقائياً», automatic payment exception checks) flags a duplicate (same user, amount, method and day, with the same reference or none — two different references are two different payments), a payment "pending" for 3 days or more, a payment recorded for a branch other than the user\'s own (call center and HQ excepted), and an unusual amount for that user and method (at least 100 EGP and at least 20% away from their average). An unusual amount also raises a "payment anomaly" abuse flag on the staff member for review. The check only records exceptions — it never changes a payment.')},
+            {'key': 'statements', 'title': T('🏦 الكشوف البنكية', '🏦 Bank statements'), 'body': T('الكشوف المرفوعة: البنك ورقم الحساب، عدد السطور والمطابق ونسبة المطابقة والحالة؛ «رفع كشف حساب» و«تشغيل المطابقة». الكشف اللي ملفه ما اتقراش بيظهر «فشل» ومعاه السبب — صلّح الملف وارفعه تاني.', 'Uploaded statements: bank and account number, line count, matched, match rate and status; "Upload statement" and "Run matching". A statement whose file could not be read shows "failed" with the reason — fix the file and upload it again.')},
         ],
         'related': ['finance.payments'],
         'tour': [
-            {'target': 'finance-payment-audit-upload', 'text': T('«+ رفع كشف حساب» لرفع كشف بنكي (CSV/Excel) مع مرجع اختياري.',
-                                              '«+ رفع كشف حساب» (Upload statement) uploads a bank statement (CSV/Excel) with an optional reference.'),
-             'more': T('بتختار الملف من البنك وتكتب المرجع البنكي لو حابب، وتضغط رفع.\n'
-                       '• الكشف بيظهر في «🏦 الكشوف البنكية» بحالة معلّقة.\n'
-                       '• المطابقة مش بتشتغل لوحدها — شغّلها من زر «تشغيل المطابقة».',
-                       'You choose the file from the bank, add the bank reference if you like, and upload.\n'
-                       '• The statement appears in "🏦 Bank statements" as pending.\n'
-                       '• Matching does not start by itself — run it with "Run matching".'),
+            {'target': 'finance-payment-audit-upload', 'text': T('«+ رفع كشف حساب» لرفع كشف بنكي (CSV/Excel) للفرع والفترة.',
+                                              '«+ رفع كشف حساب» (Upload statement) uploads a bank statement (CSV/Excel) for a branch and period.'),
+             'more': T('بتختار الفرع والبنك وطريقة الدفع والفترة (من / إلى) والملف، وتضغط «رفع».\n'
+                       '• السيرفر بيقرا الملف ويحفظ كل حركة كسطر، والكشف بيظهر في «🏦 الكشوف البنكية» بعدد سطوره وحالة «في الانتظار».\n'
+                       '• المطابقة مش بتشتغل لوحدها — شغّلها من زر «تشغيل المطابقة».\n'
+                       '• الرفع بيتسجّل في سجل المراجعة باسمك واسم الملف وعدد السطور.',
+                       'You pick the branch, bank, payment method, period (from / to) and the file, then press "Upload".\n'
+                       '• The server reads the file and saves every transaction as a line; the statement appears in "🏦 Bank statements" with its line count, as pending.\n'
+                       '• Matching does not start by itself — run it with "Run matching".\n'
+                       '• The upload is recorded in the audit log with your name, the file name and the line count.'),
              'label': T('+ رفع كشف حساب', '+ Upload statement')},
             {'target': 'finance-payment-audit-tabs', 'text': T('«⚠️ الاستثناءات» المفتوحة بعددها، و«🏦 الكشوف البنكية».',
                                               '«⚠️ الاستثناءات» (Exceptions) with their open count, and «🏦 الكشوف البنكية» (Bank statements).'),
@@ -1315,14 +1333,51 @@ SCREENS = [
              'label': T('تشغيل المطابقة', 'Run matching'),
              'when': T('بعد الرفع مباشرة. لا يكتب في SOFTECH.', 'Right after uploading. It does not write to SOFTECH.'),
              'open_hint': T('على كشف بحالة pending في تبويب الكشوف.', 'On a pending statement in the statements tab.')},
+            {'target': 'finance-payment-audit-upload-branch',
+             'label': T('الفرع', 'Branch'),
+             'text': T('الفرع اللي الكشف بتاعه — بتشوف فروعك بس، وفرعك متختار لوحده.', 'The branch the statement belongs to — you only see your branches, and yours is preselected.'),
+             'open_hint': T('اضغط «+ رفع كشف حساب».', 'Press "+ Upload statement".')},
+            {'target': 'finance-payment-audit-upload-bank',
+             'label': T('اسم البنك / المحفظة', 'Bank / wallet name'),
+             'text': T('اكتب اسم البنك أو المحفظة، أو اختاره من الأسماء اللي اتكتبت قبل كده. رقم الحساب اختياري.', 'Type the bank or wallet name, or pick one used before. The account number is optional.'),
+             'open_hint': T('اضغط «+ رفع كشف حساب».', 'Press "+ Upload statement".')},
+            {'target': 'finance-payment-audit-upload-method',
+             'label': T('طريقة الدفع', 'Payment method'),
+             'text': T('طريقة الدفع اللي الكشف بيغطيها (تحويل بنكي، إنستاباي، فودافون كاش…) — المطابقة بتدوّر في الدفعات المسجلة بنفس الطريقة ونفس الفرع.', 'The payment method the statement covers (bank transfer, InstaPay, Vodafone Cash…) — matching looks at payments recorded with the same method and branch.'),
+             'open_hint': T('اضغط «+ رفع كشف حساب».', 'Press "+ Upload statement".')},
+            {'target': 'finance-payment-audit-upload-period',
+             'label': T('من تاريخ / إلى تاريخ', 'From / to date'),
+             'text': T('فترة الكشف؛ «إلى» لازم تكون بعد «من» أو نفس اليوم.', 'The statement period; "to" must be on or after "from".'),
+             'when': T('الحركة اللي تاريخها برة الفترة بتتحفظ برضه، بس بيظهر تنبيه بعددها.', 'A line dated outside the period is still saved, but a warning shows how many there are.'),
+             'open_hint': T('اضغط «+ رفع كشف حساب».', 'Press "+ Upload statement".')},
             {'target': 'finance-payment-audit-upload-file',
              'label': T('الملف (CSV / Excel)', 'File (CSV / Excel)'),
-             'text': T('اختر ملف الكشف، واكتب المرجع البنكي لو موجود.', 'Pick the statement file, and type the bank reference if you have one.'),
+             'text': T('ملف csv أو xlsx (لحد 10 ميجا) فيه عمود التاريخ، ومعاه «مدين» و«دائن» أو عمود «المبلغ».', 'A csv or xlsx file (up to 10 MB) with a date column, plus "Debit" and "Credit" or one "Amount" column.'),
+             'more': T('العناوين اللي بنفهمها:\n'
+                       '• التاريخ: التاريخ، تاريخ الحركة، تاريخ العملية، Date، Transaction Date، Txn Date، Posting Date.\n'
+                       '• مدين / سحب / منه / Debit / Withdrawal / Dr — ودائن / إيداع / له / Credit / Deposit / Cr.\n'
+                       '• أو عمود واحد «المبلغ» / Amount: الموجب إيداع والسالب سحب.\n'
+                       '• اختياري: المرجع / رقم المرجع / رقم العملية / Reference / Ref / Ref No / Transaction ID / Cheque No، البيان / الوصف / التفاصيل / Description / Details / Narrative / Remarks، الرصيد / Balance، تاريخ القيمة / Value Date.',
+                       'Headers we understand:\n'
+                       '• Date: Date, Transaction Date, Txn Date, Posting Date (or التاريخ، تاريخ الحركة، تاريخ العملية).\n'
+                       '• Debit / Withdrawal / Dr (مدين، سحب، منه) — and Credit / Deposit / Cr (دائن، إيداع، له).\n'
+                       '• Or one Amount column (المبلغ): positive is a deposit, negative a withdrawal.\n'
+                       '• Optional: Reference / Ref / Ref No / Transaction ID / Cheque No, Description / Details / Narrative / Remarks, Balance, Value Date.'),
              'open_hint': T('اضغط «+ رفع كشف حساب».', 'Press "+ Upload statement".')},
             {'target': 'finance-payment-audit-upload-save',
              'label': T('رفع', 'Upload'),
-             'text': T('يحفظ الكشف بحالة pending في تبويب «🏦 الكشوف البنكية».', 'Saves the statement as pending in the "🏦 Bank statements" tab.'),
+             'text': T('يقرا الملف ويحفظ سطوره، والكشف يظهر «في الانتظار» في تبويب «🏦 الكشوف البنكية». لو فيه مشكلة في خانة بتظهر تحتها.', 'Reads the file and saves its lines; the statement shows as pending in the "🏦 Bank statements" tab. A problem with a field shows right under it.'),
              'when': T('المطابقة لا تبدأ وحدها — شغّلها من التبويب.', 'Matching does not start by itself — run it from the tab.'),
+             'more': T('• عادي يكون فوق العناوين سطور عنوان (اسم البنك، رقم الحساب) — بندوّر على العناوين في أول 15 سطر.\n'
+                       '• التاريخ يوم/شهر/سنة أو سنة-شهر-يوم؛ المبالغ ممكن تكون بفواصل أو «ج.م» أو أرقام عربية، والسالب بين قوسين.\n'
+                       '• سطور الإجمالي والرصيد الافتتاحي والختامي بتتشال لوحدها.\n'
+                       '• ملف xls القديم: احفظه xlsx أو csv الأول.\n'
+                       '• لو العناوين مش مفهومة أو فيه سطر تاريخه أو مبلغه مش مفهوم، مفيش ولا سطر بيتحفظ: الكشف بيظهر «فشل» والرسالة بتقول السبب.',
+                       '• Title rows above the headers (bank name, account number) are fine — we look for the headers in the first 15 rows.\n'
+                       '• Dates are day/month/year or year-month-day; amounts may carry thousands separators, "EGP" / «ج.م» or Arabic digits, and a negative may be in brackets.\n'
+                       '• Total, opening and closing balance rows are dropped by themselves.\n'
+                       '• An old xls file: save it as xlsx or csv first.\n'
+                       '• If the headers are not understood, or a row has an unreadable date or amount, no line is saved: the statement shows "failed" with the reason.'),
              'open_hint': T('داخل نافذة الرفع، بعد اختيار الملف.', 'Inside the upload box, after picking the file.')},
             {'target': 'finance-payment-audit-note',
              'label': T('ملاحظة التسوية', 'Settlement note'),
@@ -1344,8 +1399,8 @@ SCREENS = [
               'Every action is checked on the server (Permissions Matrix, finance module): viewing needs "view", "Resolve" and "Ignore" need "approve", assigning needs "assign" or "approve", and uploading a statement needs "create".'),
         ],
 
-        'updated': '2026-11-04',
-        'change_note': T('أسماء أنواع الاستثناءات وحالاتها من السيرفر، عمود «البنك / الحساب»، نسبة مطابقة صحيحة، وملاحظة التسوية بتتحفظ', 'Exception type and status names come from the server, a "Bank / account" column, a correct match rate, and the settlement note is now saved'),
+        'updated': '2026-11-05',
+        'change_note': T('فحص تلقائي ليلي للاستثناءات (مكرر، متأخر، فرع مختلف، مبلغ غير معتاد) — مقفول لحد ما الأدمن يفعّله', 'Nightly automatic exception check (duplicate, delayed, other branch, unusual amount) — off until an admin enables it'),
     },
     {
         'key': 'finance.reconciliation',

@@ -450,10 +450,9 @@ def _parse_csv(file_bytes: bytes) -> list:
     else:
         raise ValueError('تعذّر قراءة الملف — تأكد من أن الترميز UTF-8 أو cp1256')
 
+    # Keep the DictReader itself: its .fieldnames are read below; capped_rows wraps only the row loop
+    # (wrapping the reader made every CSV upload fail on «'generator' object has no attribute 'fieldnames'»).
     reader = csv.DictReader(io.StringIO(text))
-    # MAX_IMPORT_ROWS (Batch 6, W-8). Round 2 R5: the cap wraps the ROWS, not the reader — wrapping
-    # the reader hid .fieldnames and every CSV count sheet failed with a read error.
-    rows = capped_rows(reader)
 
     # Normalise header names
     fieldnames = [f.strip().lower() for f in (reader.fieldnames or [])]
@@ -474,7 +473,7 @@ def _parse_csv(file_bytes: bytes) -> list:
     orig_qty    = orig_fields[qty_col]
 
     results = []
-    for row in rows:
+    for row in capped_rows(reader):                               # MAX_IMPORT_ROWS (Batch 6, W-8)
         code    = str(row.get(orig_item, '')).strip()
         raw_qty = row.get(orig_qty, '')
         if not code:

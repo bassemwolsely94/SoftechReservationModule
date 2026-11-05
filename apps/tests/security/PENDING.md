@@ -19,3 +19,12 @@ and quality manager are all-branch roles (`core/branch_scope.ALL_BRANCH_ROLES`).
 - S-1: a counselling card can go to any mobile the till types (or with no customer at all), not only the number on the customer's record. Restricting it changes the Project 4 till flow, so it waits for the owner. Held by `test_send_limits.CounselCardLimitTests.test_card_goes_only_to_the_number_on_the_customer_record`.
 - S-2: the supplier-invoice write batch (`apps/invoices/writer.py`) and the supplier-code mapping batch (`apps/invoices/supplier_items.py::inject_mapping`) open a raw jConnect statement, so no query timeout is armed and a stalled HQ link can hold the job. Adding one changes a SOFTECH write path (a timeout mid-batch must roll back cleanly), so it waits for the owner. Held by `test_sybase_deadline.RawStatementSitesTests.test_softech_write_batches_have_a_query_timeout`.
 - S-3: `pos_cancel_write` (SOFTECH `pos_cancel` INSERT) claims its events with an unconditional `filter(id__in=ids).update(softech_written_at=now)` — no `softech_written_at__isnull=True` filter and no row-count check — so two scheduler processes that read the same events both INSERT, and a failed run's un-claim can clear the other run's claim. Fix (claim only rows still unclaimed, write only those) changes a SOFTECH write path, so it waits for the owner. Held by `test_pos_cancel_writer.ConcurrentRunTests`.
+
+## Round 2 / R2 money — awaiting the owner (2026-11-05)
+
+Stop-and-ask (offer discounts, insurance billing totals). Tests in `apps/tests/test_money_offers_incentives.py`
+and `apps/tests/test_money_insurance_replacement.py`; proposed diffs in the R2 PR description.
+- M-1: the offers engine discounts an item whose safety flag blocks the sale (sale stopped / archived / inactive) — `offers/engine._qualifies` never calls `catalog.safety.blocks_sale`
+- M-2: stacked offers can push a POS line past 100% — `offers/attach.build_attach_plan` sums the per-offer amounts without the engine's per-line gross cap (10% + 60% + fixed → cust_discp 170%, negative line total)
+- M-3: a prescription's net_override never reaches the claim total — `insurance/importer.recalculate_claim_final_totals` (and the invoice export) rebuild the net from the summed splits
+- M-4: the claim net can differ by cents from the sum of the printed row nets (rows rounded each, claim rounded once) — keep Power-Query parity or sum the rows?

@@ -162,6 +162,109 @@ class PartyTests(TestCase):
         self.assertEqual(g.softech_personcode, '111')
 
 
+def _master_workbook(path):
+    """Synthetic copy of the shape of finance's 2020 master sheets (Ruling P26)."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'الموردين '
+    ws.append(['دليل الموردين', None, None])
+    ws.append(['الكود', 'اسم المورد ', 'التليفون '])          # header on row 2, trailing spaces
+    ws.append([92, 'فارما اوفرسيز - اسم 2020', '0100'])
+    ws.append([501.0, 'مورد نقدي جديد', None])
+    ws.append([None, None, None])
+    ws.append(['x', 'ليس كوداً', None])
+    ws.append([502, 12345, None])                             # numeric name -> skipped
+    ws2 = wb.create_sheet('الموظفين')
+    ws2.append(['كود الموظف ', 'Name in Arabic', 'الفرع '])
+    ws2.append([7, 'أحمد محمد', 'عين شمس'])
+    ws2.append([8, '   ', 'الجيزة'])                          # blank name -> skipped
+    ws3 = wb.create_sheet('العملاء')
+    ws3.append(['كود العميل', 'اسم العميل', 'الرصيد'])
+    ws3.append([3001, 'شركة تأمين', 5])
+    ws4 = wb.create_sheet('لا شيء')
+    ws4.append(['الكود', 'بيان'])                              # 'الكود' alone is not a master header
+    ws4.append([1, 'سطر'])
+    wb.save(path)
+
+
+class MasterSheetP26Tests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create(username='fin26')
+        cls.staff, _ = StaffProfile.objects.get_or_create(user=cls.user)
+
+    def _rows(self):
+        p = os.path.join(tempfile.mkdtemp(), 'm.xlsx')
+        _master_workbook(p)
+        return P.parse_party_sheets(p)
+
+    def test_master_headers_recognised(self):
+        got = {(r.party_type, r.code, r.name) for r in self._rows()}
+        self.assertEqual(got, {('supplier', '92', 'فارما اوفرسيز - اسم 2020'),
+                               ('supplier', '501', 'مورد نقدي جديد'),
+                               ('employee', '7', 'أحمد محمد'),
+                               ('customer', '3001', 'شركة تأمين')})
+
+    def test_create_only_never_renames_existing(self):
+        GLParty.objects.create(party_type='supplier', code='92', name='فارما اوفرسيز', status='confirmed',
+                               softech_personcode='5001')
+        res = P.import_parties(self._rows(), user=self.staff, create_only=True)
+        self.assertEqual((res['created'], res['updated']), (3, 0))
+        g = GLParty.objects.get(party_type='supplier', code='92')
+        self.assertEqual((g.name, g.status, g.softech_personcode), ('فارما اوفرسيز', 'confirmed', '5001'))
+        self.assertEqual(GLParty.objects.get(party_type='employee', code='7').status, 'unmapped')
+        log = AuditLog.objects.filter(action='gl_parties_imported').latest('id')
+        self.assertTrue(log.extra['create_only'])
+
+    def test_default_mode_skips_and_reports_master_sheets(self):
+        """Review minor 8: master sheets only count in create_only mode."""
+        GLParty.objects.create(party_type='supplier', code='92', name='فارما اوفرسيز')
+        rows = self._rows()
+        self.assertTrue(all(r.master for r in rows))
+        res = P.import_parties(rows, user=self.staff)
+        self.assertEqual((res['created'], res['updated'], res['master_skipped']), (0, 0, 4))
+        self.assertEqual(res['master_sheets'], ['العملاء', 'الموردين ', 'الموظفين'])
+        self.assertEqual(GLParty.objects.get(party_type='supplier', code='92').name, 'فارما اوفرسيز')
+        self.assertEqual(GLParty.objects.count(), 1)
+
+    def test_master_row_never_hides_a_sub_ledger_row(self):
+        p = os.path.join(tempfile.mkdtemp(), 'mix.xlsx')
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'الموردين '
+        ws.append(['الكود', 'اسم المورد '])
+        ws.append([92, 'اسم 2020'])
+        ws2 = wb.create_sheet('pivot')
+        ws2.append(['suppliar code', 'Suppliar name'])
+        ws2.append([92, 'اسم 2026'])
+        wb.save(p)
+        res = P.import_parties(P.parse_party_sheets(p), user=self.staff)
+        self.assertEqual((res['created'], res['master_skipped']), (1, 1))
+        self.assertEqual(GLParty.objects.get(party_type='supplier', code='92').name, 'اسم 2026')
+
+    def test_command_default_mode_reports_skipped_master_sheets(self):
+        from io import StringIO
+        from django.core.management import call_command
+        p = os.path.join(tempfile.mkdtemp(), 'm.xlsx')
+        _master_workbook(p)
+        out = StringIO()
+        call_command('import_gl_parties', p, stdout=out)
+        self.assertIn('created=0 updated=0', out.getvalue())
+        self.assertIn('skipped 4 master-sheet rows', out.getvalue())
+        self.assertFalse(GLParty.objects.exists())
+
+    def test_command_create_only(self):
+        from io import StringIO
+        from django.core.management import call_command
+        GLParty.objects.create(party_type='supplier', code='92', name='اسم 2026')
+        p = os.path.join(tempfile.mkdtemp(), 'm.xlsx')
+        _master_workbook(p)
+        out = StringIO()
+        call_command('import_gl_parties', p, '--create-only', stdout=out)
+        self.assertIn('created=3 updated=0', out.getvalue())
+        self.assertEqual(GLParty.objects.get(party_type='supplier', code='92').name, 'اسم 2026')
+
+
 class CodeCellTests(TestCase):
     def test_non_finite_numbers_are_skipped_never_raise(self):
         for v in ('nan', 'NaN', 'inf', '-inf', 'Infinity', float('nan'), float('inf')):
