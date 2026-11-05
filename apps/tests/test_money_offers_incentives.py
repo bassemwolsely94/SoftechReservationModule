@@ -31,7 +31,6 @@ from apps.offers.models import Offer, OfferApplication
 from apps.pos_orders.models import SoftechSalesOrder, SoftechSalesOrderLine
 
 from .factories import make_branch, make_item, make_user
-from .security.baseline import pending
 
 D = Decimal
 
@@ -68,11 +67,10 @@ class OfferSafetyTests(TestCase):
         return it
 
     def test_a_safe_item_in_the_same_basket_is_discounted(self):
-        # Control for the pending test below: the offer itself works.
+        # Control for the test below: the offer itself works.
         plan = evaluate_offers([_line(self.ok, 1, 100)], offers=[_offer()])
         self.assertEqual(plan['total_discount'], D('10.00'))
 
-    @pending('M-1')
     def test_an_item_with_a_blocking_safety_flag_never_receives_an_offer_discount(self):
         for n, (label, changes) in enumerate(BLOCKING):
             with self.subTest(label):
@@ -102,11 +100,10 @@ class OfferAppliesOnceTests(TestCase):
         self.assertEqual(plan['total_discount'], plan['basket_total'])
         self.assertEqual(plan['net_total'], D('0.00'))
 
-    @pending('M-2')
     def test_stacked_offers_never_take_a_line_below_zero_when_attached(self):
-        # attach.build_attach_plan turns the plan into the cust_discp written to the POS line. It sums the
-        # per-offer line amounts WITHOUT the engine's per-line gross cap, so 10% + 60% + a fixed offer
-        # covering the whole subtotal gives cust_discp 170% and a negative SOFTECH line total.
+        # M-2 (owner, 2026-11-05): attach.build_attach_plan turns the plan into the cust_discp written to
+        # the POS line. 10% + 60% + a fixed offer covering the whole subtotal used to give cust_discp 170%
+        # and a negative SOFTECH line total; the line is now capped at its gross like the engine total.
         from apps.offers.attach import build_attach_plan
         offers = [_offer(name='p10', value=D('10')), _offer(name='p60', value=D('60')),
                   _offer(name='fixed', offer_type='fixed', value=D('500'))]

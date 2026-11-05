@@ -55,6 +55,10 @@ from .models import (
 )
 
 
+# Totals fields a net_override (تجاوز مباشر) moves away from the Power-Query figure.
+_OVERRIDE_FIELDS = ('local_discount', 'imported_discount', 'tarsia_discount', 'total_discount', 'net_after')
+
+
 def _zero_totals():
     return {
         'rx_count':       0,
@@ -67,6 +71,8 @@ def _zero_totals():
         'tarsia_discount': Decimal('0'),
         'total_discount': Decimal('0'),
         'net_after':      Decimal('0'),
+        # Σ (override − Power-Query) per field, from rows with a net_override (M-3)
+        '_override_delta': {f: Decimal('0') for f in _OVERRIDE_FIELDS},
     }
 
 
@@ -75,6 +81,8 @@ def _add_to_totals(totals: dict, row: dict):
                   'local_discount', 'imported_discount', 'tarsia_discount',
                   'total_discount', 'net_after'):
         totals[field] += Decimal(str(row.get(field) or 0))
+    for field, delta in (row.get('_override_delta') or {}).items():
+        totals['_override_delta'][field] += delta
     totals['rx_count'] += 1
 
 
@@ -103,7 +111,12 @@ def _float_totals(totals: dict, claim: InsuranceClaim = None) -> dict:
         totals['tarsia_discount']   = t['tarsia_discount']
         totals['total_discount']    = t['total_discount']
         totals['net_after']         = t['net_after']
-    return {k: (float(v) if isinstance(v, Decimal) else v) for k, v in totals.items()}
+        # A net_override is the agreed net for its prescription (owner, 2026-11-05, M-3): re-apply
+        # what the overrides moved, so the totals equal Σ the printed rows for those prescriptions.
+        for field, delta in (totals.get('_override_delta') or {}).items():
+            totals[field] = totals[field] + delta
+    return {k: (float(v) if isinstance(v, Decimal) else v) for k, v in totals.items()
+            if not k.startswith('_')}
 
 
 def _effective_rx_values(rx: InsuranceClaimPrescription, claim: InsuranceClaim) -> dict:
@@ -121,6 +134,7 @@ def _effective_rx_values(rx: InsuranceClaimPrescription, claim: InsuranceClaim) 
     tarsia_disc   = claim.applied_tarsia_disc_pct
 
     softech_net = rx.softech_net
+    override_delta = None
 
     try:
         adj = rx.adjustment
@@ -135,6 +149,16 @@ def _effective_rx_values(rx: InsuranceClaimPrescription, claim: InsuranceClaim) 
             ld   = disc * Decimal(str(lb)) / gb if gb else Decimal('0')
             id_  = disc * Decimal(str(ib)) / gb if gb else Decimal('0')
             td   = disc - ld - id_
+            # what this override moves away from the Power-Query figures for the same splits
+            pq = powerquery_totals_from_splits(lb, ib, tb, local_disc, imported_disc, tarsia_disc)
+            d_net = net - pq['net_after']
+            d_l = (ld - pq['local_discount']).quantize(Decimal('0.01'))
+            d_i = (id_ - pq['imported_discount']).quantize(Decimal('0.01'))
+            override_delta = {
+                'net_after': d_net, 'total_discount': -d_net,
+                'local_discount': d_l, 'imported_discount': d_i,
+                'tarsia_discount': -d_net - d_l - d_i,
+            }
         else:
             t   = powerquery_totals_from_splits(lb, ib, tb, local_disc, imported_disc, tarsia_disc)
             lb, ib, tb = t['local_before'], t['imported_before'], t['tarsia_before']
@@ -179,6 +203,7 @@ def _effective_rx_values(rx: InsuranceClaimPrescription, claim: InsuranceClaim) 
         'docnumber':        rx.softech_docnumber,
         'is_manual':        False,
         'is_adjusted':      is_adjusted,
+        '_override_delta':  override_delta,
     }
 
 
@@ -509,5 +534,5 @@ def _float_row(row: dict) -> dict:
     """Convert all Decimal values in a row to float for JSON serialization."""
     return {
         k: float(v) if isinstance(v, Decimal) else v
-        for k, v in row.items()
+        for k, v in row.items() if not k.startswith('_')
     }
