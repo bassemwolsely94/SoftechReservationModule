@@ -7,6 +7,7 @@ PaymentExceptionViewSet     — triage exceptions
 """
 import logging
 
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -27,6 +28,7 @@ from .audit_serializers import (
     PaymentExceptionSerializer,
 )
 from .audit_service import PaymentAuditService
+from .statement_parser import StatementParseError, parse_statement
 from .models import BankStatementImport, BankStatementLine, ExternalPayment, PaymentException
 
 logger = logging.getLogger('elrezeiky')
@@ -65,9 +67,65 @@ class BankStatementImportViewSet(StableOrderingMixin, viewsets.ModelViewSet):
             qs = qs.filter(branch_id=branch)
         return qs
 
+    def create(self, request, *args, **kwargs):
+        """Save the import, then read its file into lines (all or none). A file that cannot be
+        read keeps the import as «فشل» with its message and answers 400 with that message."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        stmt = serializer.instance
+        data = {**self.get_serializer(stmt).data, 'warnings': getattr(stmt, '_parse_warnings', [])}
+        if stmt.status == BankStatementImport.STATUS_FAILED:
+            return Response({**data, 'detail': stmt.error_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(data, status=status.HTTP_201_CREATED)
+
     def perform_create(self, serializer):
+        from apps.audit.models import AuditLog
+
         branch_scope.check_branch_value(self.request.user, serializer)
-        serializer.save(imported_by=_staff(self.request))
+        stmt = serializer.save(imported_by=_staff(self.request))
+        file_name = serializer.validated_data['raw_file'].name
+        warnings = []
+        try:
+            with transaction.atomic():
+                with stmt.raw_file.open('rb') as fh:
+                    lines, warnings = parse_statement(fh, file_name, stmt.statement_from, stmt.statement_to)
+                BankStatementLine.objects.bulk_create(
+                    [BankStatementLine(statement_import=stmt, **ln) for ln in lines], batch_size=1000)
+                stmt.total_lines     = len(lines)
+                stmt.unmatched_lines = len(lines)
+                stmt.save(update_fields=['total_lines', 'unmatched_lines'])
+        except StatementParseError as exc:
+            stmt.status        = BankStatementImport.STATUS_FAILED
+            stmt.error_message = str(exc)
+            stmt.save(update_fields=['status', 'error_message'])
+        stmt._parse_warnings = warnings
+        AuditLog.log('bank_statement_uploaded', user=_staff(self.request), obj=stmt, request=self.request,
+                     note=f'{file_name} — {stmt.total_lines} سطر'[:255],
+                     extra={'file_name': file_name, 'lines': stmt.total_lines, 'status': stmt.status,
+                            'branch_id': stmt.branch_id, 'bank_name': stmt.bank_name,
+                            'payment_method': stmt.payment_method,
+                            'statement_from': str(stmt.statement_from), 'statement_to': str(stmt.statement_to),
+                            'warnings': warnings, 'error': stmt.error_message})
+
+    @action(detail=False, methods=['get'], url_path='form-options')
+    def form_options(self, request):
+        """What the upload form offers: the user's branches, payment methods, bank names used."""
+        from apps.branches.models import Branch
+
+        branches = branch_scope.scope(Branch.objects.filter(is_active=True), request.user, 'id').order_by('name')
+        rows = [{'id': b.pk, 'name': b.name_ar or b.name} for b in branches]
+        ids = {r['id'] for r in rows}
+        home = getattr(_staff(request), 'branch_id', None)
+        default = home if home in ids else (rows[0]['id'] if len(rows) == 1 else None)
+        banks = (self.get_queryset().order_by().exclude(bank_name='')
+                 .values_list('bank_name', flat=True).distinct())
+        return Response({
+            'branches':        rows,
+            'default_branch':  default,
+            'payment_methods': [{'value': v, 'label': l} for v, l in ExternalPayment.METHOD_CHOICES],
+            'bank_names':      sorted(set(banks)),
+        })
 
     @action(detail=True, methods=['post'], url_path='run-matching')
     def run_matching(self, request, pk=None):
@@ -76,6 +134,9 @@ class BankStatementImportViewSet(StableOrderingMixin, viewsets.ModelViewSet):
             return Response({'detail': 'غير مصرح'}, status=status.HTTP_403_FORBIDDEN)
 
         stmt = self.get_object()
+        if not stmt.lines.exists():
+            return Response({'detail': 'لا توجد سطور في هذا الكشف — ارفع الملف مرة أخرى.'},
+                            status=status.HTTP_400_BAD_REQUEST)
         try:
             result = PaymentAuditService.match_statement_to_payments(stmt.pk)
             return Response({'detail': 'تمت المطابقة', **result})

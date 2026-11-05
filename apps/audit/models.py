@@ -192,6 +192,9 @@ class AuditLog(models.Model):
         ('counsel_card_sent',            'إرشاد استخدام — إرسال للعميل'),
         ('counsel_card_opt_out',         'إرشاد استخدام — إيقاف الرسائل'),
 
+        # Payment audit — bank statement upload (apps/payments/audit_views.py)
+        ('bank_statement_uploaded',      'مراجعة المدفوعات — رفع كشف حساب بنكي'),
+
     ]
 
     # ── Who ───────────────────────────────────────────────────────────────────
