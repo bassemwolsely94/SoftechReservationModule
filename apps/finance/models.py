@@ -34,6 +34,10 @@ from .gl.models import (  # noqa: E402,F401
     GLAccountGroup, GLAccount, LedgerEntry, LedgerLine, GLSequence,
     GLParty, GLSourceMap, PostingRule, GLSourceDoc, SourceException, GLDraftRun,
 )
+# GL close and SOFTECH comparison (Plan 3).
+from .gl.close_models import (  # noqa: E402,F401
+    ClosingStockSnapshot, ClosingStockStore, GLSoftechCheck, GLComparisonLine,
+)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -169,6 +173,9 @@ class FinancialPeriod(models.Model):
         'users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
         related_name='+', verbose_name='أقفلها')
     closed_at    = models.DateTimeField(null=True, blank=True, verbose_name='وقت الإقفال')
+    closing_stock = models.ForeignKey(
+        'finance.ClosingStockSnapshot', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='+', verbose_name='مخزون آخر المدة')
     created_at   = models.DateTimeField(auto_now_add=True)
 
     class Meta:

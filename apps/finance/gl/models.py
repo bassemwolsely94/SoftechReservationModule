@@ -42,6 +42,11 @@ class GLAccount(models.Model):
     party_type      = models.CharField(max_length=10, choices=PARTY_CHOICES, default='none',
                                        verbose_name='نوع الطرف')
     requires_party  = models.BooleanField(default=False, verbose_name='يتطلب طرفاً')
+    # auto = derived from the posting rules / source map; the others are finance's override
+    FEED_CHOICES = [('auto', 'تلقائي'), ('softech', 'من SOFTECH'), ('manual', 'يدوي'),
+                    ('both', 'الاثنان')]
+    feed            = models.CharField(max_length=8, choices=FEED_CHOICES, default='auto',
+                                       verbose_name='مصدر التغذية')
 
     class Meta:
         app_label = 'finance'
@@ -77,6 +82,9 @@ class LedgerEntry(models.Model):
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name='وقت الاعتماد')
     reverses    = models.ForeignKey('self', null=True, blank=True, on_delete=models.PROTECT,
                                     related_name='reversals', verbose_name='يعكس')
+    # a late-correction entry points at the closed-month entry it corrects
+    corrects    = models.ForeignKey('self', null=True, blank=True, on_delete=models.PROTECT,
+                                    related_name='corrections', verbose_name='يصحح')
     notes       = models.TextField(blank=True, verbose_name='ملاحظات')
 
     class Meta:

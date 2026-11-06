@@ -37,7 +37,7 @@ MAX_NOTES = 4000
 MAX_TEXT = 500           # LedgerEntry / LedgerLine description — refused above, never truncated
 MAX_SHORT = 40           # cheque_no / party_code
 MANUAL_BOOKS = ('general', 'cash', 'credit')
-ACCOUNT_EDITABLE = ('name', 'statement_line', 'is_active', 'requires_branch', 'party_type')
+ACCOUNT_EDITABLE = ('name', 'statement_line', 'is_active', 'requires_branch', 'party_type', 'feed')
 
 
 class AllBranchOnly(BasePermission):
@@ -148,7 +148,7 @@ def _account(a):
             'account_type': a.account_type, 'statement_line': a.statement_line,
             'is_posting': a.is_posting, 'is_active': a.is_active, 'is_system': a.is_system,
             'requires_branch': a.requires_branch, 'requires_party': a.requires_party,
-            'party_type': a.party_type}
+            'party_type': a.party_type, 'feed': a.feed}
 
 
 @api_view(['GET'])
@@ -214,6 +214,10 @@ def _apply_account_patch(acc, data, profile):
         if data['party_type'] not in dict(GLAccount.PARTY_CHOICES):
             return _bad('bad_party_type', 'نوع الطرف غير صحيح')
         acc.party_type = data['party_type']
+    if 'feed' in data:
+        if data['feed'] not in dict(GLAccount.FEED_CHOICES):
+            return _bad('bad_feed', 'مصدر التغذية غير صحيح')
+        acc.feed = data['feed']
     after = _account(acc)
     if after == before:
         return None
