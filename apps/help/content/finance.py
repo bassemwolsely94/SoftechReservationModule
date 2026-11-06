@@ -786,7 +786,9 @@ SCREENS = [
         ],
         'hints': [
             {'target': 'finance-gl-entry-source', 'label': T('مصدر القيد', 'Entry source'),
-             'text': T('للقيود المرحّلة من SOFTECH: المستندات اللي اتجمعت في القيد (مفتاح SOFTECH، التاريخ، الفرع، المبالغ، النسخة) والقاعدة اللي بنته. فاتورة مشتريات ملهاش رأس في SOFTECH مكتوب عليها «ضريبة ناقصة».', 'For entries drafted from SOFTECH: the documents grouped into the entry (SOFTECH key, date, branch, amounts, version) and the rule that built it. A purchase invoice with no SOFTECH header is marked "VAT missing".'),
+             'text': T('للقيود المرحّلة من SOFTECH: المستندات اللي اتجمعت في القيد (مفتاح SOFTECH، التاريخ، الفرع، المبالغ، النسخة) والقاعدة اللي بنته.', 'For entries drafted from SOFTECH: the documents grouped into the entry (SOFTECH key, date, branch, amounts, version) and the rule that built it.'),
+             'warn': T('فاتورة مشتريات ملهاش رأس في SOFTECH مكتوب عليها «ضريبة ناقصة».',
+                       'A purchase invoice with no SOFTECH header is marked "VAT missing".'),
              'open_hint': T('افتح قيداً مرحّلاً من SOFTECH.', 'Open an entry drafted from SOFTECH.')},
             {'target': 'finance-gl-entry-lines', 'label': T('أسطر القيد', 'Entry lines'),
              'text': T('كل سطر في جانب واحد (مدين أو دائن). اكتب كود أو اسم الحساب واختار. لو الحساب محتاج فرع أو طرف هتظهر ملاحظة.', 'Each line is on one side (debit or credit). Type an account code or name and pick. A note shows if the account needs a branch or a party.'),
