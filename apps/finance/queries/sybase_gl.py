@@ -189,3 +189,49 @@ def open_fetch():
         yield fetch
     finally:
         conn.close()
+
+
+# ── Stock at cost (Plan 3, Task 3): SOFTECH's own "stock at date" report tables ───────────────────────
+STOCK_TIMEOUT = 600   # one deadline over the whole read; storebal_date has ~one row per product per store
+
+
+def _select(sql: str, params: tuple = ()) -> list[dict]:
+    """One SELECT on a fresh HQ connection with the stock timeout; same guard as ``open_fetch``."""
+    if not isinstance(sql, str) or not _SELECT_ONLY.match(sql) or ';' in sql or _INTO.search(sql):
+        raise ValueError('GL readers may only run a single SELECT statement')
+    conn = get_sybase_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(sql, list(params), timeout=STOCK_TIMEOUT)
+        cols = [d[0] for d in cur.description] if cur.description else []
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def storebal_rows(as_of: date) -> list[dict]:
+    """(storecode, nowqty, nowcostprice) of every product line SOFTECH's stock-at-date report holds for ``as_of``."""
+    return _select(
+        f"SELECT storecode, nowqty, nowcostprice FROM {DB}.storebal_date WHERE storebaldate = ?",  # nosec B608 - only module constants are interpolated
+        (as_of.isoformat(),))
+
+
+def storebal_snapshots(d1: date | None = None, d2: date | None = None) -> list[dict]:
+    """(storebaldate, storecode) pairs of ``storebal_datem``: the stores the report was run for, per date.
+    Both bounds optional (inclusive)."""
+    sql = f"SELECT storebaldate, storecode FROM {DB}.storebal_datem"  # nosec B608 - only module constants are interpolated
+    conds, params = [], []
+    if d1 is not None:
+        conds.append("storebaldate >= ?")
+        params.append(d1.isoformat())
+    if d2 is not None:
+        conds.append("storebaldate <= ?")
+        params.append(d2.isoformat())
+    if conds:
+        sql += " WHERE " + " AND ".join(conds)
+    return _select(sql, tuple(params))
+
+
+def store_names() -> list[dict]:
+    """(storecode, storename) from the SOFTECH ``stores`` master."""
+    return _select(f"SELECT storecode, storename FROM {DB}.stores")  # nosec B608 - only module constants are interpolated
