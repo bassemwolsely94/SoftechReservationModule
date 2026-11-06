@@ -3,12 +3,12 @@
 Rules (deterministic, auditable, idempotent):
   * a draft may be unbalanced; approval requires Σdebit == Σcredit > 0;
   * amounts are ≥ 0, at most 2 decimals, exactly one side > 0 per line;
-  * approval needs an open period and entry_date >= OPENING_DATE;
+  * approval needs an open period and entry_date >= OPENING_DATE (only the close service posts
+    into a period in status 'closing');
   * the number comes from a locked GLSequence row per year → JV-{year}-{n:06d};
   * an approved entry is never edited — it is reversed by an approved mirror entry.
 Every call writes an AuditLog row (who / what / before-after).
 """
-import calendar
 import datetime
 from decimal import Decimal, InvalidOperation
 
@@ -20,8 +20,9 @@ from apps.branches.models import Branch
 from apps.finance.models import FinancialPeriod
 
 from .models import GLAccount, GLSequence, LedgerEntry, LedgerLine
+from .periods import OPENING_DATE, first_open_period_after, month_period
 
-OPENING_DATE = datetime.date(2026, 1, 1)
+_period_for = month_period
 
 _CENT = Decimal('0.01')
 _MAX_AMOUNT = Decimal('1e16')  # LedgerLine.debit/credit: max_digits=18, decimal_places=2
@@ -44,6 +45,16 @@ MESSAGES = {
     'source_conflict':     'فيه قيد تاني شغال مربوط بنفس المصدر.',
     'bad_branch':          'الفرع المحدد في السطر غير موجود.',
     'reverse_before_original': 'تاريخ القيد العكسي مينفعش يكون قبل تاريخ القيد الأصلي.',
+    'period_closing':      'الفترة قيد الإقفال',
+    'period_open':         'فترة القيد لسه مفتوحة — عدّل بإعادة الترحيل مش بقيد تصحيح.',
+    'nothing_to_correct':  'مفيش فرق يتصحح: الأسطر الجديدة مطابقة للقيد بعد تصحيحاته.',
+    'correction_pending':  'فيه قيد تصحيح مسودة لنفس القيد — اعتمده أو احذفه الأول.',
+    'original_is_draft':   'القيد ده لسه مسودة، عدّله هو مش محتاج تصحيح.',
+    'is_correction':       'القيد ده قيد تصحيح — صحّح القيد الأصلي.',
+    'exception_not_open':  'الاستثناء ده مش مفتوح.',
+    'exception_has_draft': 'للمجموعة دي مسودة لسه — راجعها أو احذفها الأول',
+    'exception_has_original': 'الاستثناء ده على قيد معتمد — استخدم قيد التصحيح.',
+    'exception_mismatch':  'الاستثناء ده مش تبع القيد المحدد.',
 }
 
 
@@ -88,15 +99,6 @@ def _amount(value, line_no: int) -> Decimal:
     return d.quantize(_CENT)
 
 
-def _period_for(day: datetime.date) -> FinancialPeriod:
-    """Get or create the month FinancialPeriod for `day` (safe against a concurrent create)."""
-    last = calendar.monthrange(day.year, day.month)[1]
-    period, _ = FinancialPeriod.objects.get_or_create(
-        year=day.year, month=day.month, period_type='month',
-        defaults={'period_start': day.replace(day=1), 'period_end': day.replace(day=last)})
-    return period
-
-
 def _check_account(account: GLAccount | None, line_no: int):
     if account is None or not account.is_active:
         raise LedgerError('inactive_account', {'line_no': line_no})
@@ -120,6 +122,7 @@ def _snapshot(entry: LedgerEntry) -> dict:
         'approved_by': entry.approved_by_id,
         'approved_at': entry.approved_at.isoformat() if entry.approved_at else None,
         'reverses': entry.reverses_id,
+        'corrects': entry.corrects_id,
         'lines': [
             {'line_no': ln.line_no, 'account': ln.account.code, 'branch_id': ln.branch_id,
              'party_code': ln.party_code, 'debit': str(ln.debit), 'credit': str(ln.credit),
@@ -149,14 +152,18 @@ def _lock_open_period(day: datetime.date) -> FinancialPeriod:
 
 def save_draft(*, user, entry_date, description, lines, book='general', branch=None,
                source_type='', source_key='', entry: LedgerEntry | None = None,
-               notes: str | None = None, _allow_before_opening: bool = False) -> LedgerEntry:
+               notes: str | None = None, corrects: LedgerEntry | None = None,
+               _allow_before_opening: bool = False) -> LedgerEntry:
     """Create a draft, or replace the header + lines of an existing draft.
 
     A date before OPENING_DATE is refused (`before_opening`) — no FinancialPeriod is created for
     it. `_allow_before_opening` is for gl_reproduce_workbook only (rolled back).
 
     `notes`: None keeps the draft's notes unchanged ('' on a new draft); a string replaces them —
-    inside the same transaction and audit row as the rest of the draft."""
+    inside the same transaction and audit row as the rest of the draft.
+
+    `corrects`: the closed-month entry this draft corrects (`corrections.post_late_correction`);
+    None keeps an existing draft's link, so an accountant's edit does not drop it."""
     if entry_date < OPENING_DATE and not _allow_before_opening:
         raise LedgerError('before_opening')
     # validate lines before touching the DB
@@ -206,6 +213,8 @@ def save_draft(*, user, entry_date, description, lines, book='general', branch=N
         entry.source_key = source_key or ''
         if notes is not None:
             entry.notes = notes
+        if corrects is not None:
+            entry.corrects = corrects
         try:
             with transaction.atomic():
                 entry.save()
@@ -220,8 +229,10 @@ def save_draft(*, user, entry_date, description, lines, book='general', branch=N
     return entry
 
 
-def approve(entry_id: int, *, user, _allow_before_opening: bool = False) -> LedgerEntry:
-    """Approve a draft. `_allow_before_opening` is for gl_reproduce_workbook only (rolled back)."""
+def approve(entry_id: int, *, user, _allow_before_opening: bool = False,
+            _close_service: bool = False) -> LedgerEntry:
+    """Approve a draft. `_allow_before_opening` is for gl_reproduce_workbook only (rolled back);
+    `_close_service` is for gl/close.py only (its own entries, into the month it is closing)."""
     with transaction.atomic():
         entry = LedgerEntry.objects.select_for_update().get(pk=entry_id)
         if entry.status != 'draft':
@@ -242,7 +253,10 @@ def approve(entry_id: int, *, user, _allow_before_opening: bool = False) -> Ledg
             if ln.account.requires_branch and not ln.branch_id:
                 raise LedgerError('branch_required', {'line_no': ln.line_no})
         period = FinancialPeriod.objects.select_for_update().get(pk=entry.period_id)
-        if period.status != 'open':
+        if period.status == 'closing':
+            if not _close_service:
+                raise LedgerError('period_closing', {'period': str(period)})
+        elif period.status != 'open':
             raise LedgerError('closed_period', {'period': str(period)})
 
         old = _snapshot(entry)
@@ -258,7 +272,10 @@ def approve(entry_id: int, *, user, _allow_before_opening: bool = False) -> Ledg
 
 def reverse(entry_id: int, *, user, reason: str,
             entry_date: datetime.date | None = None) -> LedgerEntry:
-    """Reverse an approved entry with an approved mirror entry (debit↔credit)."""
+    """Reverse an approved entry with an approved mirror entry (debit↔credit).
+
+    The original's month no longer open: the mirror points back at it (`corrects`) and, without
+    an explicit date, is dated the first day of the first open month after it."""
     with transaction.atomic():
         original = LedgerEntry.objects.select_for_update().get(pk=entry_id)
         if original.status == 'reversed':
@@ -267,7 +284,10 @@ def reverse(entry_id: int, *, user, reason: str,
             raise LedgerError('not_approved')
         if original.reverses_id:
             raise LedgerError('is_reversal')
+        late = FinancialPeriod.objects.get(pk=original.period_id).status != 'open'
         day = entry_date or original.entry_date
+        if late and entry_date is None:
+            day = first_open_period_after(original.entry_date).period_start
         if day < original.entry_date:
             raise LedgerError('reverse_before_original')
         if day < OPENING_DATE:
@@ -280,7 +300,8 @@ def reverse(entry_id: int, *, user, reason: str,
             entry_date=day, period=period, book=original.book, branch_id=original.branch_id,
             description=f'عكس قيد {original.number}'[:500], status='approved',
             source_type='reversal', source_key='', created_by=user, approved_by=user,
-            approved_at=timezone.now(), reverses=original, notes=reason or '',
+            approved_at=timezone.now(), reverses=original, corrects=original if late else None,
+            notes=reason or '',
             number=_next_number(day.year))
         LedgerLine.objects.bulk_create([
             LedgerLine(entry=mirror, line_no=ln.line_no, account_id=ln.account_id,

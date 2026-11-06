@@ -26,22 +26,16 @@ from django.utils import timezone
 from apps.audit.models import AuditLog
 from apps.branches.models import Branch
 from apps.finance.models import (
-    FinancialPeriod, GLDraftRun, GLSourceDoc, LedgerEntry, PostingRule, SourceException,
+    GLDraftRun, GLSourceDoc, LedgerEntry, PostingRule, SourceException,
 )
 from apps.users.models import StaffProfile
 
 from . import ledger
 from .ledger import LedgerError
+from .periods import accepts_postings
 from .rules import SOURCE_FIELDS, RuleMiss, build_lines, select_rule
 from .sources import READERS, SourceDoc, _canon, content_hash
 from .sources import expenses, purchases, sales, treasury  # noqa: F401  (register the readers)
-
-try:   # Plan 3 Task 2
-    from apps.finance.gl.periods import accepts_postings
-except ImportError:   # same contract until Plan 3 lands
-    def accepts_postings(d) -> bool:
-        p = FinancialPeriod.objects.filter(year=d.year, month=d.month, period_type='month').first()
-        return p is None or p.status == 'open'
 
 logger = logging.getLogger(__name__)
 
@@ -578,17 +572,22 @@ class _Engine:
         row = (SourceException.objects.select_for_update()
                .filter(status='open', kind='closed_period_change', detail__group_key=gk).order_by('pk').first())
         if row is None:
-            # the first member that does not already hold another group's open change (one open
-            # row per doc and kind); the lowest member otherwise (that row then follows this group)
+            # one open row per doc and kind: a member holding another group's open change is never
+            # taken over. A member still in this group first, then any free one. All busy: no row;
+            # each of them has an open row, so the next run retries (mark_exception_resolved
+            # releases a member that moved here once the row it holds resolves).
             busy = set(SourceException.objects.filter(
                 status='open', kind='closed_period_change', source_doc_id__in=list(docs))
                 .values_list('source_doc_id', flat=True))
-            holder = next((sd for sd in members if sd.pk not in busy), members[0] if members else None)
+            free = [sd for sd in members if sd.pk not in busy]
+            holder = next((sd for sd in free if sd.group_key == gk), free[0] if free else None)
             if holder is not None:
-                SourceException.objects.update_or_create(
+                SourceException.objects.create(
                     source_doc=holder, kind='closed_period_change', status='open',
-                    defaults={'source_date': holder.doc_date, **fields})
+                    source_date=holder.doc_date, **fields)
                 self.counts['exceptions'] += 1
+            elif members:
+                self.group_errors[gk] = 'holder_busy'
         else:
             for k, v in fields.items():
                 setattr(row, k, v)

@@ -109,7 +109,7 @@ class SystemTests(Base):
     def test_system_user_is_gl_drafting(self):
         self.assertEqual(DR.system_user().user.username, 'gl-drafting')
 
-    def test_accepts_postings_fallback(self):
+    def test_accepts_postings_follows_the_period(self):
         self.assertTrue(DR.accepts_postings(MAR10))
         self.close_month(MAR10, 'closing')
         self.assertFalse(DR.accepts_postings(MAR10))
@@ -544,6 +544,74 @@ class LateChangeSafetyTests(Base):
                 self.assertEqual(LedgerEntry.objects.count(), n)
                 for k in ('created', 'replaced', 'reversed', 'deleted'):
                     self.assertEqual(run.counts[k], 0, k)
+
+    def _two_closed_groups(self):
+        """t1+t2 approved in A (closed); t1 changes (A's row sits on t1), then moves to closed B."""
+        self.rule(granularity='branch_day')
+        A, B = 'cash:130:2026-03-10', 'cash:130:2026-03-11'
+        self.docs['sales_tenders'] = [tender('t1', '100.00'), tender('t2', '50.00', pt='40')]
+        self.run_engine()
+        a = self.live(A).get()
+        approve(a.id, user=self.staff)
+        self.close_month(MAR10)
+        self.docs['sales_tenders'][0] = tender('t1', '90.00')
+        self.run_engine()
+        ex = SourceException.objects.get(kind='closed_period_change', status='open')
+        self.assertEqual((ex.source_doc.source_key, ex.detail['group_key']), ('t1', A))
+        self.docs['sales_tenders'][0] = tender('t1', '90.00', date=datetime.date(2026, 3, 11))
+        return A, B, a, ex
+
+    def test_closed_group_holder_prefers_member_still_in_group(self):
+        """t1 (lowest key) left A for closed B: A's new row sits on t2, so B's row has t1 free."""
+        self.rule(granularity='branch_day')
+        A, B = 'cash:130:2026-03-10', 'cash:130:2026-03-11'
+        self.docs['sales_tenders'] = [tender('t1', '100.00'), tender('t2', '50.00', pt='40')]
+        self.run_engine()
+        a = self.live(A).get()
+        approve(a.id, user=self.staff)
+        self.close_month(MAR10)
+        self.docs['sales_tenders'][0] = tender('t1', '100.00', date=datetime.date(2026, 3, 11))
+        run = self.run_engine()
+        self.assertEqual(run.status, 'success')
+        rows = {r.detail['group_key']: r for r in SourceException.objects.filter(
+            kind='closed_period_change', status='open')}
+        self.assertEqual(set(rows), {A, B})
+        self.assertEqual(rows[A].source_doc.source_key, 't2')
+        self.assertEqual(rows[A].original_entry_id, a.id)
+        self.assertEqual(rows[B].source_doc.source_key, 't1')
+        self.assertIsNone(rows[B].original_entry_id)
+
+    def test_closed_group_holder_collision_reported_not_overwritten(self):
+        A, B, a, ex = self._two_closed_groups()
+        for _ in range(2):   # every run retries, and stays partial until the holder is free
+            run = self.run_engine()
+            self.assertEqual(run.status, 'partial')
+            self.assertEqual(run.detail['group_errors'], {B: 'holder_busy'})
+            row = SourceException.objects.get(kind='closed_period_change', status='open')
+            self.assertEqual((row.pk, row.detail['group_key'], row.original_entry_id), (ex.pk, A, a.id))
+            sd = GLSourceDoc.objects.get(source_key='t1')
+            self.assertEqual((sd.status, sd.group_key), ('exception', B))
+
+    def test_holder_collision_retried_once_the_correction_frees_the_holder(self):
+        """Resolving A leaves t1 no open row, which the engine reads as "finance decided";
+        resolving releases a member that moved to another group so B's change is not lost."""
+        from apps.finance.gl.corrections import post_late_correction
+        A, B, a, ex = self._two_closed_groups()
+        self.run_engine()
+        ex.refresh_from_db()
+        fix = post_late_correction(a.id, ex.proposed_lines, user=self.staff, reason='x', exception_id=ex.id)
+        self.assertEqual(GLSourceDoc.objects.get(source_key='t1').status, 'new')
+        t2 = GLSourceDoc.objects.get(source_key='t2')
+        self.assertEqual((t2.status, t2.group_key), ('exception', A))   # still in A: stays as it is
+        run = self.run_engine()
+        self.assertEqual(run.status, 'success')
+        row = SourceException.objects.get(kind='closed_period_change', status='open')
+        self.assertEqual((row.detail['group_key'], row.source_doc.source_key, row.original_entry_id), (B, 't1', None))
+        # the corrected group A is not raised again, and nothing was reversed or replaced
+        self.assertFalse(SourceException.objects.filter(status='open', detail__group_key=A).exists())
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'approved')
+        self.assertEqual(LedgerEntry.objects.get(pk=fix.pk).status, 'draft')
 
     def test_crash_between_upsert_and_classify_is_repaired(self):
         from unittest import mock
