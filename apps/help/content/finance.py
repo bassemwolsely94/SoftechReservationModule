@@ -737,6 +737,7 @@ SCREENS = [
                        '• تغيير في فترة مغلقة: مستند اتغيّر في SOFTECH بعد ما شهره اتقفل — مفيش حاجة اتسجلت، والتصحيح يدوي في شهر مفتوح. بيظهر سطر واحد للقيد كله (على أول مستند فيه) ومعاه قائمة مستنداته.\n'
                        '• مفتاح مصدر مكرر: نفس مستند SOFTECH ظهر مرتين — راجع المصدر قبل أي ترحيل.\n'
                        '• قيد يدوي مختلط: قيد من يومية المالية فيه حسابات يدوية وحسابات بتيجي من SOFTECH، ومستني قرار المحاسب. إعادة الترحيل مبتلمسوش، والشهر مش هيتقفل غير لما يتضم بكل أسطره (في مرحلة الاستيراد) أو يتجاهل بسبب.\n'
+                       '   الأزواج اللي المالية بتسجلها بإيدها رغم إنها على حسابات مربوطة (زي 1302↔1301) بتتستورد كقيود يدوية من قائمة المالية نفسها (الإعداد gl_import_manual_account_sets) — المالية هي اللي بتحدد القائمة دي. ولو قيد اتغير في ملف جديد بعد ما اتستورد، مش بيتكرر: اعكس أو امسح القيد القديم وبعدين استورد تاني.\n'
                        '• خطأ في الدفتر: رفض الدفتر القيد (حساب موقوف، تاريخ قبل 1/1/2026…) — اقرأ الرسالة وصحّحها.\n'
                        '• قيد عدّله محاسب: لو محاسب عدّل مسودة بإيده وبعدين المستند اتغيّر في SOFTECH، الترحيل مبيلمسش تعديله — بيظهر «خطأ في الدفتر». اضغط «معالجة» تشوف جنب بعض «القيد بعد تعديلك» و«نسخة سوفتيك الجديدة» والفروق متظللة، واختار:\n'
                        '   – «اعتماد نسخة سوفتيك»: القيد بيترحّل تاني من SOFTECH فوراً (المسودة تتستبدل؛ المعتمد في شهر مفتوح يتعكس وتتعمل مسودة جديدة). تعديلك القديم مبقاش يحميه، لكن أي تعديل جديد بعدها محمي تاني.\n'
@@ -756,6 +757,7 @@ SCREENS = [
                        '• Closed-period change: a SOFTECH document changed after its month was closed — nothing was posted; correct it by hand in an open month. One row covers the whole entry (on its first document) and lists its documents.\n'
                        '• Duplicate source key: the same SOFTECH document appeared twice — check the source before drafting.\n'
                        '• Mixed manual entry: an entry from finance\'s journal on both manual accounts and accounts SOFTECH feeds, waiting for an accountant. "Redraft" leaves it alone, and the month cannot close until it is included with all its lines (at import) or ignored with a reason.\n'
+                       '   Pairs finance keys by hand although their accounts are mapped (such as 1302↔1301) import as manual entries from finance\'s own list (the setting gl_import_manual_account_sets) — finance owns that list. If an entry changed in a newer file after it was imported, it is not doubled: reverse or delete the old entry, then import again.\n'
                        '• Ledger error: the ledger refused the entry (stopped account, date before 1-1-2026…) — read the message and fix it.\n'
                        '• Entry edited by an accountant: if someone edited a draft by hand and the SOFTECH document then changed, drafting leaves the edit alone — a "Ledger error" appears. Press "Handle" to see "The entry after your edit" next to "The new SOFTECH version", differences highlighted, and choose:\n'
                        '   – "Accept the SOFTECH version": the entry is redrafted from SOFTECH at once (a draft is replaced; an approved entry in an open month is reversed and a new draft made). Your old edit no longer protects it, but any new edit after that is protected again.\n'
@@ -797,8 +799,8 @@ SCREENS = [
              'text': T('للمتابعة وإنت بتكتب. الاعتماد بيرفض أي قيد مش متزن، والسيرفر هو اللي بيحسب.', 'For checking as you type. Approval refuses any unbalanced entry; the server does the sums.'),
              'open_hint': T('افتح قيداً أو «+ قيد يدوي».', 'Open an entry or "+ Manual entry".')},
         ],
-        'updated': '2026-11-06',
-        'change_note': T('القيود: تحويلات النقدية بين المركز والفروع والمشتريات النقدية على مرحلتين عبر 2341، وقيد عدّله محاسب وغيّره SOFTECH — «اعتماد نسخة سوفتيك» أو «إبقاء تعديلي»', 'Journal: cash transfers between head office and branches and two-leg cash purchases through 2341, and an accountant-edited entry SOFTECH changed — "Accept the SOFTECH version" or "Keep my edit"'),
+        'updated': '2026-11-07',
+        'change_note': T('القيود: استيراد يومية المالية (القيد اليدوي المختلط وقائمة أزواج المالية)، بعد تحويلات النقدية بين المركز والفروع والمشتريات النقدية على مرحلتين عبر 2341، وقيد عدّله محاسب وغيّره SOFTECH — «اعتماد نسخة سوفتيك» أو «إبقاء تعديلي»', 'Journal: finance\'s journal import (mixed manual entry and finance\'s list of pairs), after cash transfers between head office and branches and two-leg cash purchases through 2341, and an accountant-edited entry SOFTECH changed — "Accept the SOFTECH version" or "Keep my edit"'),
     },
     {
         'key': 'finance.gl_parties',

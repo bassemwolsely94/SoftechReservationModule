@@ -162,16 +162,19 @@ def parked_manual_keys() -> set:
     return set(GLSourceDoc.objects.filter(source_type=MANUAL_IMPORT_SOURCE).values_list('source_key', flat=True))
 
 
-def park_mixed_manual_entry(*, key, entry_date, branch_code, book, description, lines, user) -> bool:
+def park_mixed_manual_entry(*, key, entry_date, branch_code, book, description, lines, user) -> str:
     """A mixed group of finance's journal waits in the exceptions inbox, and so blocks its month's
-    close. -> False when it was parked before: a group finance ignored or included is not raised again."""
+    close. -> 'created', or the status of the row it already has: a group finance ignored or included
+    is not raised again."""
     with transaction.atomic():
         doc, _ = GLSourceDoc.objects.get_or_create(source_key=key, defaults={
             'source_type': MANUAL_IMPORT_SOURCE, 'doc_date': entry_date, 'branch_code': branch_code,
             'amounts': {}, 'attrs': {'book': book, 'description': description},
             'content_hash': hashlib.sha256(key.encode('utf-8')).hexdigest(), 'status': 'exception'})
-        if SourceException.objects.filter(source_doc=doc, kind=MIXED_MANUAL_KIND).exists():
-            return False
+        existing = (SourceException.objects.filter(source_doc=doc, kind=MIXED_MANUAL_KIND)
+                    .values_list('status', flat=True).first())
+        if existing:
+            return existing
         message = f'{MIXED_MANUAL_MESSAGE}: {description}' if description else MIXED_MANUAL_MESSAGE
         exc = SourceException.objects.create(
             source_doc=doc, kind=MIXED_MANUAL_KIND, source_date=entry_date, message=message[:500],
@@ -179,7 +182,7 @@ def park_mixed_manual_entry(*, key, entry_date, branch_code, book, description, 
         _audit('gl_manual_entry_parked', user=user, obj=exc,
                new_data={'status': 'open', 'source_key': key, 'date': entry_date.isoformat(),
                          'lines': lines})
-    return True
+    return 'created'
 
 
 def settle_parked_manual_entry(key, *, entry, user):

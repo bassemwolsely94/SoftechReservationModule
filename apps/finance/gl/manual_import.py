@@ -67,11 +67,17 @@ _RETURN_ACCOUNTS = frozenset({'5101', '5102', '5105', '5106', '5121', '5122', '2
 _SUPPLIERS = '2341'
 MERGED_BY_DATE_BRANCH = 'date_branch'
 
-STATUSES = ('manual', 'softech', 'mixed', 'unbalanced', 'unknown_account', 'unknown_branch', 'before_opening')
-NOT_IMPORTABLE = ('unbalanced', 'unknown_account', 'unknown_branch', 'before_opening')
+STATUSES = ('manual', 'softech', 'mixed', 'unbalanced', 'unknown_account', 'unknown_branch', 'before_opening',
+            'changed_since_import')
+NOT_IMPORTABLE = ('unbalanced', 'unknown_account', 'unknown_branch', 'before_opening', 'changed_since_import')
 _PARTY_FIELD = {'supplier': 'supplier_code', 'customer': 'customer_code', 'employee': 'employee_code'}
 
 DEFAULT_LINK_ACCOUNTS = ('2354',)   # finance's cross-book clearing account: nets to ~0, not a creditor
+# Finance's own list: SOFTECH-mapped accounts, but these pairs are keyed by hand (daily cash handovers)
+DEFAULT_MANUAL_ACCOUNT_SETS = (('1301', '1302'), ('1302', '2404'), ('1301', '2405'), ('1301', '2406'),
+                               ('1301', '2408'), ('1301', '2413'), ('1301', '2417'))
+MAX_PARTY_CODE = 40   # LedgerLine.party_code
+MAX_CHEQUE_NO = 40    # LedgerLine.cheque_no
 DEFAULT_BRANCH_ALIASES = {   # finance's branch names -> SOFTECH branch
     'شركة الرزيقي': '100', 'صيدلية د علياء النزهة2': '130', 'صيدلية د بليغ الجيزة': '140',
     'صيدلية الرزيقى عين شمس': '150', 'صيدلية باب الحديد': '160', 'صيدلية د  محسن عباسية': '170',
@@ -112,10 +118,6 @@ class JournalRow:
     cheque_no: str
     due_date: datetime.date | None
 
-    @property
-    def branch_key(self) -> str:
-        return self.branch_code or normalize_ar(self.branch_name)
-
 
 @dataclass
 class ParsedJournal:
@@ -124,12 +126,13 @@ class ParsedJournal:
     book: str              # cash | credit | mixed (a file holding both)
     warnings: list
     skipped_zero: int = 0
-    rejected: set = field(default_factory=set)   # keys of the groups that lost a reported row
+    # (date, book, branch name, branch code, normalised description) of the groups that lost a reported row
+    rejected: set = field(default_factory=set)
 
 
 @dataclass
 class JournalGroup:
-    key: str               # the entry's source_key; stable across imports of the same lines
+    key: str               # the entry's source_key: manual_import:<lines hash>:<group identity>
     date: datetime.date
     book: str
     branch: str
@@ -140,6 +143,8 @@ class JournalGroup:
     feeds: set = field(default_factory=set)
     status: str = ''
     target_branch: Branch | None = None
+    manual_set: bool = False        # its accounts are on finance's list: manual whatever the feeds say
+    existing_entry: LedgerEntry | None = None   # changed_since_import: the live entry in the way
 
     @property
     def debit(self) -> Decimal:
@@ -289,6 +294,17 @@ def _cell(cells, pos):
     return cells[pos] if pos is not None and pos < len(cells) else None
 
 
+def _cheque_pair(values, first_due, second_due):
+    """The payment pair when it has a cheque, else the received pair; with no cheque at all, the
+    due date that is there. A stray first date never hides a filled received cheque."""
+    paid, received = _code(values.get('pay_cheque')), _code(values.get('recv_cheque'))
+    if paid:
+        return paid, first_due
+    if received:
+        return received, second_due
+    return '', first_due or second_due
+
+
 def _read_rows(ws, header_row, cols, default_book, max_rows) -> ParsedJournal:
     rows, skipped, rejected, books = [], [], set(), set()
     zero = seen = 0
@@ -302,41 +318,40 @@ def _read_rows(ws, header_row, cols, default_book, max_rows) -> ParsedJournal:
         seen += 1
         if max_rows is not None and seen > max_rows:
             raise ParseError('too_many_rows')
-        if _label(v.get('condition')) == _NOTHING:
-            zero += 1
-            continue
 
-        reason = ''
+        reason, side, amount = '', '', _ZERO
         try:
             side, amount = _side_amount(v, cols)
         except ValueError as e:
             reason = str(e)
-        else:
-            if not side:
-                zero += 1
-                continue
+        if _label(v.get('condition')) == _NOTHING and (side or reason == 'bad_condition'):
+            reason = 'nothing_with_amount'   # says nothing, holds a figure: not ours to pick
+        if not reason and not side:
+            zero += 1
+            continue
         day, account = _date(v.get('date')), _code(v.get('account'))
         cell_book = _text(v.get('book'))
         row_book = _book_in(cell_book) if cell_book else default_book
+        cheque, due = _cheque_pair(v, _date(_cell(cells, due_1)), _date(_cell(cells, due_2)))
+        parties = (_code(v.get('customer')), _code(v.get('supplier')), _code(v.get('employee')))
         reason = reason or ('no_date' if not day else 'no_account' if not account else
+                            'party_too_long' if any(len(c) > MAX_PARTY_CODE for c in parties) else
+                            'cheque_too_long' if len(cheque) > MAX_CHEQUE_NO else
                             '' if row_book else 'bad_book' if cell_book else 'no_book')
         desc = _text(v.get('description'))
         branch_code, branch_name = _code(v.get('branch_code')), _text(v.get('branch_name'))
         if reason:
             skipped.append({'row': row_no, 'reason': reason})
             if day and row_book:   # its group is short of this row: it can't be trusted to balance
-                rejected.add((day, row_book, branch_code or normalize_ar(branch_name), normalize_ar(desc)))
+                rejected.add((day, row_book, branch_name, branch_code, normalize_ar(desc)))
             continue
 
         books.add(row_book)
-        cheque, due = _code(v.get('pay_cheque')), _date(_cell(cells, due_1))
-        if not (cheque or due):   # the payment pair, else the received pair
-            cheque, due = _code(v.get('recv_cheque')), _date(_cell(cells, due_2))
         rows.append(JournalRow(
             row_no=row_no, date=day, book=row_book, account_code=account, branch_code=branch_code,
             branch_name=branch_name, description=desc, shift=_code(v.get('shift')), side=side, amount=amount,
-            customer_code=_code(v.get('customer')), supplier_code=_code(v.get('supplier')),
-            employee_code=_code(v.get('employee')), cheque_no=cheque, due_date=due))
+            customer_code=parties[0], supplier_code=parties[1], employee_code=parties[2],
+            cheque_no=cheque, due_date=due))
 
     warnings = [f'{len(skipped)} صف مش هيتسجل: راجع قائمة الصفوف المرفوضة.'] if skipped else []
     the_book = 'mixed' if len(books) > 1 else (next(iter(books)) if books else default_book)
@@ -352,6 +367,17 @@ def _link_accounts() -> set:
         logger.warning('[GLManualImport] gl_import_link_accounts is not a list — using the default')
         value = DEFAULT_LINK_ACCOUNTS
     return {str(c) for c in value}
+
+
+def _manual_account_sets() -> list:
+    value = SystemSetting.get('gl_import_manual_account_sets', DEFAULT_MANUAL_ACCOUNT_SETS)
+    try:
+        if isinstance(value, (str, dict)) or any(isinstance(s, (str, dict)) for s in value):
+            raise TypeError('not a list of lists')
+        return [frozenset(str(c) for c in s) for s in value]
+    except TypeError:
+        logger.warning('[GLManualImport] gl_import_manual_account_sets is not a list of lists — using the default')
+        return [frozenset(s) for s in DEFAULT_MANUAL_ACCOUNT_SETS]
 
 
 def _branch_index() -> dict:
@@ -389,6 +415,33 @@ def effective_feed(account, _fed=None) -> str:
     return 'softech' if account.code in fed else 'manual'
 
 
+def _sha(raw: str, size: int) -> str:
+    return hashlib.sha1(raw.encode('utf-8'), usedforsecurity=False).hexdigest()[:size]
+
+
+def _source_key(day, book, branch, rows, merged) -> str:
+    """manual_import:<lines>:<identity>. <lines> changes with any figure; the description is in each
+    line, so two groups with the same figures that day stay two entries. <identity> is which group
+    of the journal this is: it survives a re-export and an accountant's edit of the draft."""
+    lines = sorted(f'{r.account_code}:{r.side}:{r.amount}:{r.customer_code}:{r.supplier_code}:{r.employee_code}:'
+                   f'{r.cheque_no}:{normalize_ar(r.description)}' for r in rows)
+    head = [day.isoformat(), book, branch]
+    identity = MERGED_BY_DATE_BRANCH if merged else normalize_ar(rows[0].description)
+    return f"{SOURCE_TYPE}:{_sha('|'.join(head + lines), 20)}:{_sha('|'.join(head + [identity]), 12)}"
+
+
+def _identity(source_key: str) -> str:
+    parts = source_key.split(':')
+    return parts[2] if len(parts) == 3 else ''
+
+
+def _live_imports_by_identity() -> dict:
+    out = defaultdict(list)
+    for e in LedgerEntry.objects.filter(source_key__startswith=f'{SOURCE_TYPE}:', status__in=('draft', 'approved')):
+        out[_identity(e.source_key)].append(e)
+    return out
+
+
 class _Lookups:
     """Everything one import reads from the database: once, whatever the size of the file."""
 
@@ -398,6 +451,21 @@ class _Lookups:
         self.fed = plan2_adapter.softech_fed_account_codes()
         self.links = _link_accounts()
         self.branches = _branch_index()
+        self.manual_sets = _manual_account_sets()
+        self.live_by_identity = _live_imports_by_identity()
+        self._tokens = {}
+
+    def branch_token(self, name, code) -> str:
+        """The resolved branch, so a re-export gaining the code column keeps its groups and keys;
+        an unknown branch stays apart under what the file says."""
+        if (name, code) not in self._tokens:
+            b = resolve_branch(name, code, _index=self.branches)
+            self._tokens[(name, code)] = b.softech_branch_id if b else (code or normalize_ar(name))
+        return self._tokens[(name, code)]
+
+    def in_manual_set(self, codes) -> bool:
+        others = set(codes) - self.links
+        return bool(others) and any(others <= s for s in self.manual_sets)
 
     def usable(self, code) -> bool:
         a = self.accounts.get(code)
@@ -408,14 +476,6 @@ class _Lookups:
 
 
 # ── grouping ─────────────────────────────────────────────────────────────────
-
-def _source_key(day, book, branch, rows) -> str:
-    # the description is in the line: two groups with the same figures that day stay two entries
-    lines = sorted(f'{r.account_code}:{r.side}:{r.amount}:{r.customer_code}:{r.supplier_code}:{r.employee_code}:'
-                   f'{r.cheque_no}:{normalize_ar(r.description)}' for r in rows)
-    raw = '|'.join([day.isoformat(), book, branch, *lines])
-    return f'{SOURCE_TYPE}:' + hashlib.sha1(raw.encode('utf-8'), usedforsecurity=False).hexdigest()[:20]
-
 
 def _is_balanced(rows) -> bool:
     debit = sum((r.amount for r in rows if r.side == 'debit'), _ZERO)
@@ -444,42 +504,48 @@ def _merge_returns(buckets, rejected) -> list:
     return out
 
 
-def _status(group, usable) -> str:
+def _status(group, usable, lookups) -> str:
     if group.date < OPENING_DATE:
         return 'before_opening'
     if not usable:
         return 'unknown_account'
-    others = group.feeds - {'link'}
+    others = {'manual'} if group.manual_set else group.feeds - {'link'}
     if others and 'manual' not in others:   # no manual line: a group we skip needs no one's attention
         return 'softech'
     if group.target_branch is None:
         return 'unknown_branch'
     if not group.balanced:
         return 'unbalanced'
+    live = lookups.live_by_identity.get(_identity(group.key), ())
+    if live and group.key not in {e.source_key for e in live}:
+        group.existing_entry = live[0]
+        return 'changed_since_import'   # the accountant reverses or deletes the old one, then re-imports
     return 'mixed' if others - {'manual'} else 'manual'
 
 
 def group_entries(rows, rejected=(), lookups=None) -> list:
     """`rejected`: `ParsedJournal.rejected`. A group that lost a reported row is never balanced."""
     lookups = lookups or _Lookups(rows)
-    rejected = set(rejected)
+    rejected = {(d, b, lookups.branch_token(name, code), desc) for d, b, name, code, desc in rejected}
     buckets = {}
     for r in rows:
-        buckets.setdefault((r.date, r.book, r.branch_key, normalize_ar(r.description)), []).append(r)
+        token = lookups.branch_token(r.branch_name, r.branch_code)
+        buckets.setdefault((r.date, r.book, token, normalize_ar(r.description)), []).append(r)
     out = []
     for group_rows, description, merged_by in _merge_returns(buckets, rejected):
         first = group_rows[0]
-        branch = resolve_branch(first.branch_name, first.branch_code, _index=lookups.branches)
+        token = lookups.branch_token(first.branch_name, first.branch_code)
         g = JournalGroup(
-            key=_source_key(first.date, first.book, first.branch_key, group_rows), date=first.date, book=first.book,
-            branch=first.branch_key, description=description, rows=group_rows, merged_by=merged_by,
-            target_branch=branch)
-        g.balanced = _is_balanced(group_rows) and (first.date, first.book, first.branch_key,
+            key=_source_key(first.date, first.book, token, group_rows, merged_by), date=first.date, book=first.book,
+            branch=token, description=description, rows=group_rows, merged_by=merged_by,
+            target_branch=resolve_branch(first.branch_name, first.branch_code, _index=lookups.branches))
+        g.balanced = _is_balanced(group_rows) and (first.date, first.book, token,
                                                    normalize_ar(first.description)) not in rejected
         codes = {r.account_code for r in group_rows}
         usable = all(lookups.usable(c) for c in codes)
         g.feeds = {lookups.feed(c) for c in codes if c in lookups.accounts}
-        g.status = _status(g, usable)
+        g.manual_set = lookups.in_manual_set(codes)
+        g.status = _status(g, usable, lookups)
         out.append(g)
     out.sort(key=lambda g: g.rows[0].row_no)
     return out
@@ -495,9 +561,9 @@ def _lines(group, lookups) -> list:
             'debit': r.amount if r.side == 'debit' else _ZERO,
             'credit': r.amount if r.side == 'credit' else _ZERO,
             'branch_id': group.target_branch.pk,
-            'party_code': getattr(r, field_name)[:40] if field_name else '',
+            'party_code': getattr(r, field_name) if field_name else '',
             'description': r.description[:500],
-            'cheque_no': r.cheque_no[:40],
+            'cheque_no': r.cheque_no,
             'due_date': r.due_date,
         })
     return lines
@@ -508,7 +574,9 @@ def _group_json(g) -> dict:
             'branch_id': g.target_branch.pk if g.target_branch else None,
             'description': g.description, 'lines': len(g.rows), 'debit': g.debit, 'credit': g.credit,
             'accounts': sorted({r.account_code for r in g.rows}), 'balanced': g.balanced,
-            'merged_by': g.merged_by, 'feeds': sorted(g.feeds), 'status': g.status}
+            'merged_by': g.merged_by, 'feeds': sorted(g.feeds), 'manual_set': g.manual_set, 'status': g.status,
+            'existing_entry_id': g.existing_entry.pk if g.existing_entry else None,
+            'existing_entry_number': g.existing_entry.number if g.existing_entry else None}
 
 
 # ── preview ──────────────────────────────────────────────────────────────────
@@ -521,6 +589,32 @@ def _link_totals(rows, links) -> list:
     return [{'code': code, 'debit': d, 'credit': c, 'net': d - c} for code, (d, c) in sorted(totals.items())]
 
 
+def _softech_summary(groups) -> list:
+    """What is being dropped because SOFTECH feeds it, per account set: finance checks this list."""
+    sets = {}
+    for g in groups:
+        if g.status == 'softech':
+            row = sets.setdefault(frozenset(r.account_code for r in g.rows), [0, _ZERO, _ZERO])
+            row[0] += 1
+            row[1] += g.debit
+            row[2] += g.credit
+    return [{'accounts': sorted(codes), 'groups': n, 'debit': d, 'credit': c}
+            for codes, (n, d, c) in sorted(sets.items(), key=lambda kv: (-kv[1][0], sorted(kv[0])))]
+
+
+def _party_missing(groups, lookups) -> int:
+    """Lines of importable groups approval would refuse: blank party on a requires_party account."""
+    n = 0
+    for g in groups:
+        if g.status in ('manual', 'mixed'):
+            for r in g.rows:
+                account = lookups.accounts[r.account_code]
+                field_name = _PARTY_FIELD.get(account.party_type)
+                if account.requires_party and not (getattr(r, field_name) if field_name else ''):
+                    n += 1
+    return n
+
+
 def preview(path, sheet_name=None, book=None, max_rows=None) -> dict:
     """What an import would do. Saves nothing."""
     parsed = parse_journal(path, sheet_name=sheet_name, book=book, max_rows=max_rows)
@@ -531,6 +625,9 @@ def preview(path, sheet_name=None, book=None, max_rows=None) -> dict:
     warnings = list(parsed.warnings)
     if parsed.book == 'mixed':   # with one book, the other half of every link entry is in the other file
         warnings += [f'حساب الوسيط {ln["code"]}: الصافي مش صفر في ملف فيه الدفترين.' for ln in links if ln['net']]
+    party_missing = _party_missing(groups, lookups)
+    if party_missing:
+        warnings.append(f'{party_missing} سطر من غير كود طرف على حساب بيطلبه: الاعتماد هيرفضه لحد ما يتكمل.')
     counts = dict.fromkeys(STATUSES, 0)
     for g in groups:
         counts[g.status] += 1
@@ -544,6 +641,8 @@ def preview(path, sheet_name=None, book=None, max_rows=None) -> dict:
         'skipped_zero': parsed.skipped_zero,
         'skipped': parsed.skipped,
         'link_accounts': links,
+        'softech_summary': _softech_summary(groups),
+        'party_missing': party_missing,
         'warnings': warnings,
         'totals': {'rows': len(parsed.rows), 'groups': len(groups),
                    'debit': sum((g.debit for g in groups), _ZERO),
@@ -605,11 +704,12 @@ def import_entries(path, *, user, include_mixed=(), sheet_name=None, book=None, 
                 else:
                     failed.append({'key': g.key, 'code': e.code})
         else:
-            created = plan2_adapter.park_mixed_manual_entry(
+            state = plan2_adapter.park_mixed_manual_entry(
                 key=g.key, entry_date=g.date, branch_code=g.target_branch.softech_branch_id, book=g.book,
                 description=g.description, lines=_canon(_lines(g, lookups)), user=user)
-            counts['parked' if created else 'parked_existing'] += 1
-            parked_keys.append(g.key)
+            counts['parked' if state == 'created' else 'parked_existing'] += 1
+            if state in ('created', 'open'):
+                parked_keys.append(g.key)
 
     mixed_keys = {g.key for g in groups if g.status == 'mixed'}
     summary = {**counts, 'failed': len(failed), 'skipped_zero': parsed.skipped_zero, 'skipped': len(parsed.skipped)}
@@ -618,4 +718,5 @@ def import_entries(path, *, user, include_mixed=(), sheet_name=None, book=None, 
            note='import of finance manual journal entries')
     return {**counts, 'book': parsed.book, 'skipped_zero': parsed.skipped_zero, 'skipped': parsed.skipped,
             'warnings': parsed.warnings, 'parked_keys': parked_keys, 'not_imported': dict(not_imported),
-            'failed': failed, 'include_unmatched': sorted(include - mixed_keys)}
+            'failed': failed, 'include_unmatched': sorted(include - mixed_keys),
+            'softech_summary': _softech_summary(groups), 'party_missing': _party_missing(groups, lookups)}

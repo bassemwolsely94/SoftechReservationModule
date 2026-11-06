@@ -6,6 +6,7 @@ columns, trailing spaces in labels, two «due date» columns. No finance data he
 import contextlib
 import datetime
 import io
+import json
 import os
 import shutil
 import tempfile
@@ -20,7 +21,7 @@ from apps.audit.models import AuditLog
 from apps.branches.models import Branch
 from apps.config.models import SystemSetting
 from apps.finance.gl import drafting, manual_import as mi
-from apps.finance.gl.ledger import save_draft
+from apps.finance.gl.ledger import approve, reverse, save_draft
 from apps.finance.gl.plan2_adapter import open_exception_count
 from apps.finance.models import (
     GLAccount, GLAccountGroup, GLDraftRun, GLSourceDoc, GLSourceMap, LedgerEntry, PostingRule,
@@ -97,7 +98,7 @@ class GLManualBase(WorkbookMixin, TestCase):
         def acc(code, party='none', **kw):
             mk(code=code, name=f'حساب {code}', group=g, nature='debit', account_type='asset',
                party_type=party, **kw)
-        for c in ('3280', '1296', '5105', '5106', '5121', '5122', '5101', '5102', '2354', '6002', '1302', '1999'):
+        for c in ('3280', '1296', '5105', '5106', '5121', '5122', '5101', '5102', '2354', '6002', '1302', '1301', '1999'):
             acc(c)
         acc('2341', party='supplier')
         acc('1341', party='customer')
@@ -163,12 +164,21 @@ class ParseTests(GLManualBase):
 
     def test_condition_nothing_and_zero_rows_skipped_and_counted(self):
         parsed = mi.parse_journal(self.xlsx([
-            row('3280', debit=10), row('3280', condition='Nothing', debit=5), row('1296', debit=0, credit=0),
+            row('3280', debit=10), row('3280', condition='Nothing'), row('1296', debit=0, credit=0),
             {},   # a blank row is no row at all
         ]))
         self.assertEqual(len(parsed.rows), 1)
         self.assertEqual(parsed.skipped_zero, 2)
         self.assertEqual(parsed.skipped, [])
+
+    def test_nothing_row_with_an_amount_is_reported_not_counted_as_zero(self):
+        parsed = mi.parse_journal(self.xlsx([row('3280', condition='Nothing', debit=5)]))
+        self.assertEqual((parsed.rows, parsed.skipped_zero), ([], 0))
+        self.assertEqual(parsed.skipped, [{'row': 3, 'reason': 'nothing_with_amount'}])
+        parsed = mi.parse_journal(self.xlsx([row('3280', condition='Nothing', balanc=5)], drop=('مدين', 'credit')))
+        self.assertEqual(parsed.skipped, [{'row': 3, 'reason': 'nothing_with_amount'}])
+        gs = self.groups(self.manual_rows() + [row('3280', condition='Nothing', debit=1, desc='اهلاك الفترة')])
+        self.assertEqual(gs[0].status, 'unbalanced')   # its group is short of that row
 
     def test_amount_from_condition_and_balance_when_columns_missing(self):
         parsed = mi.parse_journal(self.xlsx([
@@ -205,9 +215,22 @@ class ParseTests(GLManualBase):
             row('2341', credit=10, **{'Payment cheque num.': 'P1', 'due1': d1}),
             row('1341', debit=10, **{'Received cheque num.': 'R1', 'due2': d2}),
             row('1341', debit=10, **{'Payment cheque num.': 'P2', 'due1': d1, 'Received cheque num.': 'R2', 'due2': d2}),
+            row('1341', debit=10, **{'due1': d1, 'Received cheque num.': 'R3', 'due2': d2}),   # a stray first date
+            row('1341', debit=10, **{'due2': d2}),
         ]))
         self.assertEqual([(r.cheque_no, r.due_date) for r in parsed.rows],
-                         [('P1', d1.date()), ('R1', d2.date()), ('P2', d1.date())])
+                         [('P1', d1.date()), ('R1', d2.date()), ('P2', d1.date()), ('R3', d2.date()), ('', d2.date())])
+
+    def test_party_or_cheque_code_too_long_is_reported_not_cut(self):
+        long_code = 'x' * 41
+        parsed = mi.parse_journal(self.xlsx([
+            row('2341', credit=5, **{'suppliar code': long_code}),
+            row('2341', credit=5, **{'Payment cheque num.': long_code}),
+            row('2341', credit=5, **{'suppliar code': 'x' * 40}),
+        ]))
+        self.assertEqual(parsed.skipped, [{'row': 3, 'reason': 'party_too_long'},
+                                          {'row': 4, 'reason': 'cheque_too_long'}])
+        self.assertEqual(parsed.rows[0].supplier_code, 'x' * 40)
 
     def test_excel_number_codes_are_text(self):
         parsed = mi.parse_journal(self.xlsx([
@@ -282,10 +305,30 @@ class GroupingTests(GLManualBase):
         self.assertTrue(gs['غير معروف'].balanced)
         self.assertEqual(gs['مختلط'].feeds, {'manual', 'softech'})
 
+    def test_unbalanced_group_on_softech_accounts_is_softech(self):
+        gs = self.groups([row('6002', debit=5, desc='ناقص')])
+        self.assertEqual((gs[0].status, gs[0].balanced), ('softech', False))
+
+    def test_key_unchanged_under_shuffled_rows_and_a_float_artefact(self):
+        rows = [row('3280', debit=70.1, desc='ق'), row('3280', debit=29.9, desc='ق'), row('1296', credit=100, desc='ق')]
+        key = self.groups(rows)[0].key
+        self.assertEqual(self.groups(list(reversed(rows)))[0].key, key)
+        noisy = [row('3280', debit=70.1000000001, desc='ق')] + rows[1:]
+        self.assertEqual(self.groups(noisy)[0].key, key)
+
+    def test_key_uses_the_resolved_branch(self):
+        rows = self.manual_rows(**{'رقم الفرع': 'B81'})
+        key = self.groups(self.manual_rows())[0].key
+        self.assertEqual(self.groups(rows)[0].key, key)      # a re-export gaining the code column
+        half = [self.manual_rows()[0], rows[1]]
+        self.assertEqual([g.balanced for g in self.groups(half)], [True])   # one group, not two
+
 
 class FeedTests(GLManualBase):
     def test_effective_feed_auto_from_rules_and_maps_and_override(self):
-        get = lambda c: GLAccount.objects.get(code=c)   # noqa: E731
+        def get(code):
+            return GLAccount.objects.get(code=code)
+
         self.assertEqual(mi.effective_feed(get('6002')), 'softech')   # rule line
         self.assertEqual(mi.effective_feed(get('1302')), 'softech')   # source map
         self.assertEqual(mi.effective_feed(get('3280')), 'manual')
@@ -337,12 +380,13 @@ class PreviewTests(GLManualBase):
         res = mi.preview(self.xlsx(
             self.manual_rows() + [row('6002', debit=5, desc='س'), row('1302', credit=5, desc='س')]
             + [row('5105', credit=7, desc='م'), row('2341', debit=7, desc='9')]
-            + [row('3280', condition='Nothing', debit=1)] + [row('3280', debit=1, date=None)]))
+            + [row('3280', condition='Nothing')] + [row('3280', debit=1, date=None)]))
         self.assertEqual(res['book'], 'cash')
         self.assertEqual([a['code'] for a in res['manual_accounts']], ['1296', '2341', '3280', '5105'])
         self.assertEqual(res['manual_accounts'][0]['name'], 'حساب 1296')
         self.assertEqual(res['counts'], {'manual': 2, 'softech': 1, 'mixed': 0, 'unbalanced': 0,
-                                         'unknown_account': 0, 'unknown_branch': 0, 'before_opening': 0})
+                                         'unknown_account': 0, 'unknown_branch': 0, 'before_opening': 0,
+                                         'changed_since_import': 0})
         self.assertEqual((res['merged_count'], res['balanced_count'], res['skipped_zero']), (1, 3, 1))
         self.assertEqual(res['skipped'], [{'row': 10, 'reason': 'no_date'}])
         self.assertEqual(res['totals']['debit'], _d('112.00'))
@@ -355,6 +399,118 @@ class PreviewTests(GLManualBase):
         self.assertEqual(res['counts']['mixed'], 1)
         self.assertEqual(res['groups'][0]['key'][:14], 'manual_import:')
         self.assertFalse(GLSourceDoc.objects.exists() or SourceException.objects.exists())
+
+
+class ManualSetTests(GLManualBase):
+    def setUp(self):
+        GLAccount.objects.filter(code='1301').update(feed='softech')
+
+    def test_listed_account_set_is_manual_whatever_the_feed(self):
+        rows = [row('1301', debit=30, desc='تحويل داخلي'), row('1302', credit=30, desc='تحويل داخلي')]
+        g = self.groups(rows)[0]
+        self.assertEqual((g.status, g.manual_set, g.feeds), ('manual', True, {'softech'}))
+        self.assertEqual(self.run_import(rows)['imported'], 1)
+
+    def test_link_account_is_ignored_in_the_comparison(self):
+        gs = self.groups([row('1301', debit=30), row('2354', credit=15), row('1302', credit=15)])
+        self.assertEqual(gs[0].status, 'manual')
+
+    def test_a_group_beyond_the_listed_set_is_not_covered(self):
+        g = self.groups([row('1301', debit=30), row('1302', credit=15), row('6002', credit=15)])[0]
+        self.assertEqual((g.status, g.manual_set), ('softech', False))
+
+    def test_still_needs_to_balance_and_a_branch(self):
+        self.assertEqual(self.groups([row('1301', debit=30), row('1302', credit=20)])[0].status, 'unbalanced')
+        gs = self.groups([row('1301', debit=30, branch='غريب'), row('1302', credit=30, branch='غريب')])
+        self.assertEqual(gs[0].status, 'unknown_branch')
+
+    def test_setting_replaces_the_default_and_a_bad_one_is_ignored(self):
+        setting = SystemSetting.objects.create(key='gl_import_manual_account_sets', label='x', value_type='json',
+                                               value='[["6002", "1302"]]')
+        self.assertEqual(self.groups([row('6002', debit=5), row('1302', credit=5)])[0].status, 'manual')
+        setting.value = '["6002"]'
+        setting.save()
+        with self.assertLogs('apps.finance.gl.manual_import', 'WARNING'):
+            self.assertEqual(self.groups([row('6002', debit=5), row('1302', credit=5)])[0].status, 'softech')
+
+    def test_softech_groups_summarised_by_account_set(self):
+        rows = ([row('6002', debit=5, desc='ا'), row('1302', credit=5, desc='ا')]
+                + [row('1302', debit=7, desc='ب'), row('6002', credit=7, desc='ب')]
+                + self.manual_rows())
+        expected = [{'accounts': ['1302', '6002'], 'groups': 2, 'debit': _d('12.00'), 'credit': _d('12.00')}]
+        self.assertEqual(mi.preview(self.xlsx(rows))['softech_summary'], expected)
+        self.assertEqual(self.run_import(rows)['softech_summary'], expected)
+
+    def test_party_missing_counted_for_importable_groups(self):
+        GLAccount.objects.filter(code='2341').update(requires_party=True)
+        res = mi.preview(self.xlsx(
+            [row('3280', debit=5, desc='ا'), row('2341', credit=5, desc='ا')]
+            + [row('3280', debit=6, desc='ب'), row('2341', credit=6, desc='ب', **{'suppliar code': 'S1'})]
+            + [row('3280', debit=7, desc='ج', date=OLD), row('2341', credit=7, desc='ج', date=OLD)]))
+        self.assertEqual(res['party_missing'], 1)
+        self.assertEqual(len(res['warnings']), 1)
+
+
+class ChangedSinceImportTests(GLManualBase):
+    def test_row_added(self):
+        self.run_import(self.manual_rows())
+        entry = LedgerEntry.objects.get()
+        rows = [row('3280', debit=100, desc='اهلاك الفترة'), row('3280', debit=5, desc='اهلاك الفترة'),
+                row('1296', credit=105, desc='اهلاك الفترة')]
+        res = self.run_import(rows)
+        self.assertEqual((res['imported'], res['changed_since_import']), (0, 1))
+        self.assertEqual(res['not_imported']['changed_since_import'][0]['existing_entry_id'], entry.pk)
+        self.assertEqual(LedgerEntry.objects.count(), 1)
+
+    def test_figure_corrected_shows_the_number_of_an_approved_entry(self):
+        self.run_import(self.manual_rows(amount=100))
+        entry = approve(LedgerEntry.objects.get().pk, user=self.staff)
+        res = mi.preview(self.xlsx(self.manual_rows(amount=101)))
+        self.assertEqual(res['counts']['changed_since_import'], 1)
+        g = res['groups'][0]
+        self.assertEqual((g['existing_entry_id'], g['existing_entry_number']), (entry.pk, entry.number))
+
+    def test_merged(self):
+        self.run_import([row('5105', credit=60, desc='م تالف'), row('2341', debit=60, desc='رقم 1')], book='الاجل')
+        self.assertEqual(LedgerEntry.objects.count(), 1)
+        # another description, another figure: still that day's merged entry
+        res = self.run_import([row('5106', credit=70, desc='جبر كسور'), row('2341', debit=70, desc='رقم 2')],
+                              book='الاجل')
+        self.assertEqual(res['changed_since_import'], 1)
+        self.assertEqual(LedgerEntry.objects.count(), 1)
+
+    def test_same_lines_are_still_already_imported(self):
+        self.run_import(self.manual_rows())
+        res = self.run_import(self.manual_rows())
+        self.assertEqual((res['already_imported'], res['changed_since_import']), (1, 0))
+
+    def test_another_description_or_date_is_a_new_group(self):
+        self.run_import(self.manual_rows())
+        self.assertEqual(self.run_import(self.manual_rows(amount=9, desc='غيره'))['imported'], 1)
+        self.assertEqual(self.run_import(self.manual_rows(amount=9, date=D2))['imported'], 1)
+
+    def test_reimports_once_the_old_entry_is_deleted_or_reversed(self):
+        self.run_import(self.manual_rows(amount=100))
+        LedgerEntry.objects.get().delete()
+        self.assertEqual(self.run_import(self.manual_rows(amount=101))['imported'], 1)
+        approved = approve(LedgerEntry.objects.get().pk, user=self.staff)
+        reverse(approved.pk, user=self.staff, reason='تصحيح')
+        self.assertEqual(self.run_import(self.manual_rows(amount=102))['imported'], 1)
+
+    def test_a_changed_mixed_group_is_not_parked_or_includable(self):
+        key = mi.group_entries(mi.parse_journal(self.xlsx(self.mixed_rows())).rows)[0].key
+        self.run_import(self.mixed_rows(), include=[key])
+        rows = [row('1302', debit=51, desc='مختلط'), row('3280', credit=51, desc='مختلط')]
+        new_key = mi.group_entries(mi.parse_journal(self.xlsx(rows)).rows)[0].key
+        res = self.run_import(rows, include=[new_key])
+        self.assertEqual((res['included'], res['parked'], res['changed_since_import']), (0, 0, 1))
+        self.assertEqual(res['include_unmatched'], [new_key])
+        self.assertFalse(SourceException.objects.exists())
+
+    def test_edited_description_does_not_hide_the_group(self):
+        self.run_import(self.manual_rows())
+        LedgerEntry.objects.update(description='عدّله محاسب')
+        self.assertEqual(self.run_import(self.manual_rows(amount=101))['changed_since_import'], 1)
 
 
 class LinkAccountTests(GLManualBase):
@@ -408,7 +564,7 @@ class ImportTests(GLManualBase):
         self.assertEqual((e.status, e.book, e.branch_id, e.source_type, e.entry_date, e.created_by_id),
                          ('draft', 'credit', self.branch.pk, 'manual_import', D.date(), self.staff.pk))
         self.assertTrue(e.source_key.startswith('manual_import:'))
-        self.assertEqual(len(e.source_key), 34)
+        self.assertRegex(e.source_key, r'^manual_import:[0-9a-f]{20}:[0-9a-f]{12}$')
         lines = list(e.lines.order_by('line_no').select_related('account'))
         self.assertEqual([(ln.account.code, ln.debit, ln.credit, ln.branch_id) for ln in lines], [
             ('3280', _d('100.00'), _d('0'), self.branch.pk), ('2341', _d('0'), _d('100.00'), self.branch.pk)])
@@ -485,10 +641,20 @@ class ImportTests(GLManualBase):
         self.assertEqual([f['code'] for f in res['failed']], ['bad_amount'])
 
     def test_audit_holds_no_figures_from_the_file(self):
-        self.run_import(self.manual_rows())
+        self.run_import(self.manual_rows(amount=98765.43, desc='بيان سري') + [row('3280', debit=11.111, desc='ب')])
         log = AuditLog.objects.filter(action='gl_manual_import').latest('id')
         self.assertEqual(log.new_data['imported'], 1)
         self.assertEqual(log.user_name, self.staff.full_name)
+        written = json.dumps([log.new_data, log.extra, log.note], ensure_ascii=False)
+        for secret in ('98765', '11.111', 'بيان سري'):
+            self.assertNotIn(secret, written)
+
+    def test_an_imported_draft_can_be_approved(self):
+        self.run_import(self.manual_rows())
+        entry = approve(LedgerEntry.objects.get().pk, user=self.staff)
+        self.assertEqual(entry.status, 'approved')
+        self.assertTrue(entry.number.startswith('JV-2026-'))
+        self.assertEqual(self.run_import(self.manual_rows())['already_imported'], 1)
 
 
 class MixedTests(GLManualBase):
@@ -552,8 +718,13 @@ class MixedTests(GLManualBase):
         exc.status = 'ignored'
         exc.save(update_fields=['status'])
         res = self.run_import(self.mixed_rows())
-        self.assertEqual((res['parked'], res['parked_existing']), (0, 1))
+        self.assertEqual((res['parked'], res['parked_existing'], res['parked_keys']), (0, 1, []))
         self.assertEqual(SourceException.objects.filter(status='open').count(), 0)
+
+    def test_still_open_parked_group_is_listed_again(self):
+        _, exc = self.park()
+        res = self.run_import(self.mixed_rows())
+        self.assertEqual((res['parked_existing'], res['parked_keys']), (1, [exc.source_doc.source_key]))
 
     def test_parked_group_that_became_manual_resolves_on_import(self):
         _, exc = self.park()
@@ -645,8 +816,26 @@ class CommandTests(GLManualBase):
         key = GLSourceDoc.objects.get().source_key
         self.assertIn(key, out)
         self.assertEqual(LedgerEntry.objects.get().created_by_id, self.staff.pk)
-        out = self.call(path, '--include-mixed', key)
+        with self.assertRaises(CommandError):
+            self.call(path, '--include-mixed', key)
+        out = self.call(path, '--include-mixed', key, '--user', self.staff.user.username)
         self.assertIn('included=1', out)
+        self.assertNotIn(f'parked {key}', out)
+
+    def test_output_lists_skipped_rows_groups_not_imported_and_softech_dropped(self):
+        path = self.xlsx([row('3280', debit=5, desc='ناقص'), row('3280', debit=1, date=None),
+                          row('6002', debit=5, desc='س'), row('1302', credit=5, desc='س')])
+        for args in (['--preview'], []):
+            out = self.call(path, *args)
+            self.assertIn('skipped no_date (1): rows 4', out)
+            self.assertIn('unbalanced manual_import:', out)
+            self.assertIn('softech dropped accounts=1302,6002 groups=1', out)
+
+    def test_ignored_group_prints_no_parked_key(self):
+        path = self.xlsx(self.mixed_rows())
+        self.call(path)
+        SourceException.objects.update(status='ignored')
+        self.assertNotIn('parked manual_import:', self.call(path))
 
     def test_book_and_sheet_arguments(self):
         path = self.xlsx(self.manual_rows(), book=None)
