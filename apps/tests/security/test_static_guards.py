@@ -14,7 +14,7 @@ import ast
 import textwrap
 
 from django.conf import settings
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 
 from . import static_scan
 from .baseline import assert_matches_baseline
@@ -560,3 +560,96 @@ class StaticGuardTests(SimpleTestCase):
             elif s and not s.startswith('#') and header is None:
                 unexplained.append(s)
         self.assertEqual(unexplained, [], 'unexplained export sites:\n' + '\n'.join(unexplained))
+
+
+class EveryViewGatedTests(TestCase):
+    """Round 2, R3 step 3 — test_every_api_prefix_is_classified, down to the VIEW.
+
+    The prefix test proves the middleware knows every /api/ prefix. This one proves each VIEW is
+    gated on its own (the owner's rule: safe in RBAC_ENFORCEMENT=log, today's production mode).
+    A viewer whose every matrix row is switched off — "a signed-in staff member with no grants" —
+    calls every protected route with every method the view implements. Whatever still answers
+    (anything but 401 / 403 / 405, 404 on a real denial, 301 / 503) is open to ALL staff, and must
+    be listed in baselines/open_to_all_staff.txt under a '# reason:'.
+
+    Detail routes use the sweep's unreachable id (a 404 there is not counted as open): the role
+    sweep's seeded records cover their checks.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        import logging
+
+        from django.db import transaction
+        from django.test import override_settings
+
+        from apps.tests.factories import make_branch, make_user
+        from apps.users.models import RoleModuleAccess
+        from core.middleware import module_access
+        from core.middleware.module_access import required
+
+        from .fixtures import bearer_client, seed_code_matrix
+        from .routes import Tripwire, handles
+        from .sweep import FEATURE_FLAGS_ON, METHODS, protected_routes
+
+        seed_code_matrix()
+        RoleModuleAccess.objects.filter(role='viewer').update(is_allowed=False)
+        module_access.clear_cache()
+        branch = make_branch('بوابة', 'GTE')
+        nogrant, _, _ = make_user('gate_nogrant', role='viewer', branch=branch)
+        c = bearer_client(nogrant)
+
+        def call(client, method, path):
+            try:
+                with transaction.atomic():
+                    if method == 'GET':
+                        r = client.get(path)
+                    elif method == 'DELETE':
+                        r = client.delete(path)
+                    else:
+                        r = getattr(client, method.lower())(path, {}, format='json')
+                    transaction.set_rollback(True)
+                return r.status_code
+            except Exception as exc:          # noqa: BLE001
+                return f'raised {type(exc).__name__}'
+
+        cls.open, cls.checked = set(), 0
+        previous = logging.root.manager.disable
+        logging.disable(logging.CRITICAL)
+        try:
+            with override_settings(RBAC_ENFORCEMENT='log', **FEATURE_FLAGS_ON), Tripwire():
+                for path in protected_routes():
+                    for m in METHODS:
+                        if not handles(path, m):
+                            continue
+                        cls.checked += 1
+                        code = call(c, m, path)
+                        # refused / switched off / crashed (the role sweep's business) / 404 —
+                        # a deny-by-404 or nothing behind the id: not open either way
+                        if code in (401, 403, 404, 405, 301, 503, 500) or isinstance(code, str):
+                            continue
+                        mod = (required(path, m) or ('-',))[0]
+                        cls.open.add(f'{m} {path}  [{mod}]')
+        finally:
+            logging.disable(previous)
+            module_access.clear_cache()
+            from django.core.cache import cache
+            cache.clear()
+
+    def test_sweep_is_not_empty(self):
+        self.assertGreater(self.checked, 1500)
+
+    def test_every_view_is_gated_or_listed(self):
+        assert_matches_baseline(self, 'open_to_all_staff', self.open)
+
+    def test_open_to_all_staff_lines_are_all_explained(self):
+        from .baseline import BASELINE_DIR
+        header, unexplained = None, []
+        f = BASELINE_DIR / 'open_to_all_staff.txt'
+        for ln in (f.read_text(encoding='utf-8').splitlines() if f.exists() else []):
+            s = ln.strip()
+            if s.startswith('# reason:'):
+                header = s
+            elif s and not s.startswith('#') and header is None:
+                unexplained.append(s)
+        self.assertEqual(unexplained, [], 'open views without a reason:\n' + '\n'.join(unexplained))

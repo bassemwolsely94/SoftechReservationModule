@@ -1,0 +1,10 @@
+# Round 2, R4 step 1: branch-linked models the canary Planter could not build generically, so the
+# canary sweep never planted them. Each needs a '# reason:' (or a builder fix that makes it STALE).
+
+# reason: TrustedNetwork needs a valid CIDR in `cidr` (the generic text value is refused by the field
+#   validator). It holds no branch data: an admin-only network list (N1); its branch link is a label.
+access.TrustedNetwork
+# reason: StaffProfile is one-to-one with User, and the planter's own users already hold that row; a
+#   second profile for the same user is refused. Staff records per branch are covered by the role sweep
+#   and test_branch_isolation (users list / detail scoping).
+users.StaffProfile

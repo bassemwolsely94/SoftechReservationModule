@@ -11,6 +11,7 @@ from rest_framework.response import Response
 
 from .models import Branch, BranchSettings
 from .serializers import BranchSerializer, BranchSettingsSerializer
+from core.permissions import RouteModulePermission  # round 2, D6
 
 
 class BranchViewSet(viewsets.ModelViewSet):
@@ -19,7 +20,7 @@ class BranchViewSet(viewsets.ModelViewSet):
     GET  /api/branches/?all=1   → all branches including inactive (admin only)
     PATCH /api/branches/{id}/   → update branch fields (admin only)
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
     serializer_class   = BranchSerializer
     pagination_class   = None  # Small lookup table — always return full list
 
@@ -72,7 +73,7 @@ class BranchViewSet(viewsets.ModelViewSet):
 
 
 @api_view(['GET', 'PATCH'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def branch_settings(request, branch_id):
     """
     GET  /api/branches/{id}/settings/  → current settings

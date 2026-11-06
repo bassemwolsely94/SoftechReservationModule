@@ -755,6 +755,7 @@ SCREENS = [
                      'Generate targets from factors instead of guesses: create a scenario for a month, tune per-metric factors (growth goal, YoY benchmark, month weights, seasonality), then "Save & calculate" (saves your edits first) with two models (A: target growth, B: weighted blend) and their average — the call center is included (sales, profit, beauty, orders, customer count (PIC) and calls; the PIC customer count is generated for the call center only). "📐 Apply references" applies the history-derived reference values (seasonality and benchmark) plus Egypt inflation onto the scenario factors. Review results by branch then the total, then "Commit targets" so they show on the KPI board (the commit is written to the audit log). A "backtest" compares both models and picks the better one. A top bar shows the last sync with a refresh button.'),
         'audience': T('الإدارة والمشرفون والمشتريات.', 'Management, supervisors and purchasing.'),
         'tips': [T('اضبط العوامل ثم اضغط «حفظ واحسب التنبؤ» — تغيير العامل أو النموذج لا يظهر في الأرقام إلا بعد الحساب.', 'Edit the factors then click "Save & calculate" — a factor or model change only reflects in the numbers after calculating.'),
+                 T('مستخدم الفرع يشوف نتائج فرعه (وفروعه المسموحة) والإجمالي فقط — مش أرقام الفروع التانية.', 'A branch user sees results for their own (allowed) branches and the chain total only — not other branches’ figures.'),
                  T('القيم المرجعية (موسمية/نمو مرجعي) محسوبة من كل الأشهر المكتملة المتاحة وبتتحدّث تلقائياً لما شهر يكتمل؛ حدّث معدل التضخم شهرياً من لوحة القيم المرجعية.', 'The reference values (seasonality/benchmark) are computed from every complete month available and refresh automatically when a month closes; refresh the inflation rate monthly from the references panel.')],
         'related': ['analytics.kpi_board', 'incentives.programs'],
         'tour': [
@@ -908,13 +909,14 @@ SCREENS = [
              'when': T('الشهر الجاري نفسه مش بيطلّع التنبيه ده لأنه بيتغيّر طول الوقت.', 'The running month itself never raises this, since it changes all the time.'),
              'open_hint': T('افتح سيناريو محسوب (مش معتمد).', 'Open a calculated (not committed) scenario.')},
         ],
-        'updated': '2026-11-03',
+        'updated': '2026-11-05',
         'change_note': T('كل سيناريو بيختار الموسمية بنفسه (بدون / السلسلة / كل فرع)؛ شهر السيناريو ومداه تحت الاسم؛ «تطبيق المرجعية» بيكتب الشهر اللي بيطبّق عليه',
                          'Each scenario chooses its own seasonality (none / chain / per branch); the scenario month and horizon under its name; "Apply references" shows the month it applies to'),
     },
     {
         'key': 'analytics.insights',
         'routes': ['/insights'],
+        'tips': [T('تعديل قواعد التنبيه وحذفها للإدارة والمشرفين فقط.', 'Editing or deleting alert rules is for management and supervisors only.')],
         'title': T('التقارير السردية', 'Narrative reports'),
         'summary': T('تقارير مكتوبة بلغة واضحة بالعربي والإنجليزي (يومي، أسبوعي، حتى تاريخه، شهري) تلخص المبيعات والخصومات والمقارنات والإنجازات والتنبيهات (حرج/تنبيه/معلومة) — للمديرين غير التقنيين، وتُنسخ لواتساب.',
                      'Plain-language reports in Arabic and English (daily, weekly, month-to-date, monthly) summarising sales, discounts, comparisons, achievements and alerts (critical/warning/info) — for non-technical directors, copyable to WhatsApp.'),
@@ -1008,7 +1010,7 @@ SCREENS = [
              'text': T('في أنهي تقارير القاعدة دي تشتغل. الحفظ بـ «حفظ» جنبها.', 'Which reports this rule runs in. Save with "Save" beside it.'),
              'open_hint': T('في «⚙️ القواعد والحدود».', 'In "⚙️ Rules and thresholds".')},
         ],
-        'updated': '2026-11-01',
+        'updated': '2026-11-05',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

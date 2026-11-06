@@ -14,13 +14,14 @@ from apps.referral.serializers import (
 )
 from apps.referral.fraud import FraudEngine, AUTO_REJECT_THRESHOLD
 from core.sort_ordering import NullsLastOrderingFilter
+from core.permissions import RouteModulePermission  # round 2, D6
 
 logger = logging.getLogger('elrezeiky.referral')
 
 
 class MyReferralCodeView(APIView):
     """GET /api/referral/my-code/ — get or create the calling user's referral code."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
 
     def get(self, request):
         try:
@@ -35,7 +36,7 @@ class MyReferralCodeView(APIView):
 class CustomerReferralCodeView(generics.RetrieveAPIView):
     """GET /api/referral/customers/<customer_id>/code/"""
     serializer_class   = ReferralCodeSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
 
     def get_object(self):
         from django.shortcuts import get_object_or_404
@@ -46,7 +47,7 @@ class CustomerReferralCodeView(generics.RetrieveAPIView):
 
 class SubmitLeadView(APIView):
     """POST /api/referral/customers/<customer_id>/leads/ — submit a referral lead."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
 
     def post(self, request, customer_id):
         from apps.customers.models import Customer
@@ -93,7 +94,7 @@ class SubmitLeadView(APIView):
 
 class LeadListView(generics.ListAPIView):
     serializer_class   = ReferralLeadSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
     # sortable grid headers (lead_phone is masked — never an ordering field); default stays -created_at
     filter_backends    = [NullsLastOrderingFilter]
     ordering_fields    = ['lead_name', 'referrer__name', 'status', 'fraud_score', 'created_at']
@@ -112,13 +113,13 @@ class LeadListView(generics.ListAPIView):
 
 class LeadDetailView(generics.RetrieveAPIView):
     serializer_class   = ReferralLeadSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
     queryset           = ReferralLead.objects.select_related('referrer', 'referral_code')
 
 
 class LeadEventListView(generics.ListAPIView):
     serializer_class   = ReferralEventSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
 
     def get_queryset(self):
         return ReferralEvent.objects.filter(
@@ -134,7 +135,7 @@ class InviteLeadView(APIView):
     Non-blocking — if WhatsApp is not configured the endpoint still returns 200
     with sent_via='manual'.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
 
     def post(self, request, pk):
         try:
@@ -181,7 +182,7 @@ class InviteLeadView(APIView):
 
 class ValidateLeadView(APIView):
     """POST /api/referral/leads/<pk>/validate/ — staff validates a registered lead."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
 
     def post(self, request, pk):
         try:

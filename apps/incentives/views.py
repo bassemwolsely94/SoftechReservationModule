@@ -65,6 +65,7 @@ from .serializers import (
     AdjustmentEntrySerializer,
     IncentiveCalculationLogSerializer,
 )
+from core.permissions import RouteModulePermission  # round 2, D6
 
 logger = logging.getLogger('elrezeiky.incentives')
 
@@ -1438,7 +1439,7 @@ class MyProgressView(APIView):
     across all active programs that cover today.
     Silent simulation — does NOT write to IncentiveCalculationLog.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
 
     def get(self, request):
         profile = getattr(request.user, 'staff_profile', None)

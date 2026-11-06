@@ -11,6 +11,7 @@ from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
 from .models import OcrSample
+from core.permissions import RouteModulePermission  # round 2, D6
 
 
 def _staff(user):
@@ -18,7 +19,7 @@ def _staff(user):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def corpus_stats(request):
     """Corpus size, module / engine mix, media split, and label rate."""
     sp = _staff(request.user)
@@ -51,7 +52,7 @@ def corpus_stats(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def corpus_accuracy(request):
     """
     In-house vs Gemini: over recent LABELLED samples that ran engines in parallel, how

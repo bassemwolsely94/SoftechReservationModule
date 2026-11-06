@@ -19,15 +19,37 @@ matrix DENIES that still got as far as a SOFTECH connection attempt, or tried to
 start a thread / HTTP call / socket / subprocess, is recorded separately —
 permission was checked too late, or not at all.
 
-Known gap (Batch 4): PUT / PATCH / DELETE are not swept yet.
+Round 2, R3: detail routes are sent to a REAL record (sweep.seed_detail_paths plants one per
+route through the canary Planter), so a denied role's 404 there is a real refusal, not an id
+nobody created. Baseline lines keep the canonical 987654321 path.
 """
+import logging
+
 from django.test import TestCase
 
 from core.middleware import module_access
 
 from .baseline import assert_matches_baseline
+from apps.tests.factories import make_branch
+from apps.users.models import StaffProfile
+
+from .canary import Planter
 from .fixtures import role_clients, seed_code_matrix
-from .sweep import sweep
+from .routes import Tripwire
+from .sweep import protected_routes, seed_detail_paths, sweep
+
+
+def seeded_paths(clients, branch):
+    """Plant one record per unreachable detail route (as admin, in the sweep users' branch)."""
+    admin = StaffProfile.objects.select_related('user').get(user__username='sec_admin')
+    previous = logging.root.manager.disable
+    logging.disable(logging.CRITICAL)
+    try:
+        with Tripwire():
+            planter = Planter(branch, admin.user, admin)
+            return seed_detail_paths(clients['admin'], planter, list(protected_routes()))
+    finally:
+        logging.disable(previous)
 
 
 class RoleSweepTests(TestCase):
@@ -35,9 +57,11 @@ class RoleSweepTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         seed_code_matrix()
-        clients = role_clients()
-        cls.enforce = sweep('enforce', clients)
-        cls.log = sweep('log', clients)
+        branch = make_branch()
+        clients = role_clients(branch)
+        cls.seeded = seeded_paths(clients, branch)
+        cls.enforce = sweep('enforce', clients, seeded=cls.seeded)
+        cls.log = sweep('log', clients, seeded=cls.seeded)
 
     @classmethod
     def tearDownClass(cls):
@@ -46,6 +70,10 @@ class RoleSweepTests(TestCase):
 
     def test_sweep_is_not_empty(self):
         self.assertGreater(self.enforce.classified, 2000)
+
+    def test_detail_routes_get_real_records(self):
+        """R3: most detail routes admin could not reach now carry a planted record."""
+        self.assertGreater(len(self.seeded), 50)
 
     def test_enforce_mode_leaks(self):
         assert_matches_baseline(self, 'role_leaks_enforce', self.enforce.leaks)
