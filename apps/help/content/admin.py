@@ -712,6 +712,8 @@ SCREENS = [
             T('لو ظهر «المجدول متوقف — المهام لا تعمل» فالمهام التلقائية (المتابعات، التنبيهات، المزامنة الدورية) متوقفة — أعد تشغيل خدمة الخادم.', 'If "scheduler stopped — jobs not running" appears, automatic jobs (follow-ups, alerts, periodic sync) are stopped — restart the server service.'),
         ],
         'tips': [
+            T('مجدول واحد بس يشتغل: لو اتشغّل مجدول تاني (خدمة اتعاد تشغيلها والقديمة لسه شغالة، أو جهاز تاني على نفس قاعدة البيانات) بيقف من غير ما يبدأ أي مهمة، والمدير بيوصله إشعار «محاولة تشغيل مجدول ثانٍ» مرة في اليوم — علشان الرسائل والمزامنة ما تتكررش.',
+              'Only one scheduler runs: if a second one starts (a restarted service while the old one is still alive, or another machine on the same database) it stops without starting any job, and admins get a "second scheduler" notice once a day — so messages and syncs are never doubled.'),
             T('«🔐 مفاتيح الكتابة في SOFTECH»: كل مفتاح كتابة وقيمته في الإعدادات وهل بيكتب فعلاً. سيرفر واحد بس (الإنتاج، WRITER_INSTANCE=True) هو اللي يكتب؛ أي سيرفر تاني مقفول حتى لو المفتاح شغال — علشان مفيش مستند يترحّل مرتين. السيرفر مش بيشتغل لو مفتاح متكرر في ملف .env.',
               '"🔐 SOFTECH writer switches": every writer switch, its setting and whether it really writes. Only one server (production, WRITER_INSTANCE=True) writes; any other server is locked even with the switch on — so no document is ever posted twice. The server refuses to start if a key is repeated in the .env file.'),
             T('مزامنة شغالة أكتر من ساعة بتتعلّم «فشلت» تلقائياً (العملية وقفت)، ولو نفس المزامنة فشلت ٣ مرات ورا بعض المدير بيوصله إشعار واحد في اليوم. أي انقطاع في الاتصال بيتعاد مرة واحدة قبل ما المزامنة تفشل.',
@@ -792,7 +794,7 @@ SCREENS = [
                  'Each run: success or failure, start and end time, record count and duration, and the error if it failed.\nBelow it the record count per table — useful to see which part (items, customers, sales) was updated.'),
          },
         ],
-        'updated': '2026-11-01',
+        'updated': '2026-11-05',
         'change_note': T('«حمل SOFTECH» يفرّق الشاشات حسب الشبكة والدور؛ مفاتيح الكتابة، تنظيف يومي، تنبيه الفشل المتكرر، وأبطأ الطلبات', '"SOFTECH load" splits screens by network and role; writer switches, daily clean-up, repeated-failure alert, slowest requests'),
     },
     {

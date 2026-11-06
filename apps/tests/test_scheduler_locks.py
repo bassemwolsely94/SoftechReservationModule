@@ -23,7 +23,9 @@ import importlib
 import inspect
 from unittest import mock
 
-from django.test import SimpleTestCase
+from django.core.management import call_command
+from django.core.management.base import CommandError
+from django.test import SimpleTestCase, TestCase
 
 from apps.sync import tasks
 
@@ -117,8 +119,8 @@ SCHEDULER_JOB_GUARDS = {
         'conditional UPDATE claim to PUSHING before any SOFTECH write (P-11); WRITES SOFTECH'),
     'pos_orders_reconcile': ('idempotent_upsert', 'apps.pos_orders.reconcile.reconcile_order', 'order.status = SoftechSalesOrder.STATUS_SETTLED',
         'reads branch DBs, flips pushed->settled from the same facts; never writes SOFTECH'),
-    'pos_cancel_write': ('none', 'apps.pos_orders.pos_cancel_writer.write_pos_cancel_batch', "PosSelectionEvent.objects.filter(id__in=ids).update(softech_written_at=now, write_error='')",
-        'the "claim" is NOT conditional (no softech_written_at__isnull=True, no row count check): two runs that read the same events both claim and both INSERT into SOFTECH pos_cancel; a failing run\'s un-claim can also clear the other run\'s claim; WRITES SOFTECH'),
+    'pos_cancel_write': ('row_lock', 'apps.pos_orders.pos_cancel_writer.write_pos_cancel_batch', 'softech_written_at__isnull=True',
+        'claims only still-unclaimed events under a per-run token and inserts only what it won; a second scheduler process claims and inserts nothing (S-3 fix, owner OK 2026-11-05); WRITES SOFTECH'),
     'coverage_topup': ('once_per_period_check', 'apps.purchasing.coverage_writer.topup_due', "qs.filter(status='success').exists()",
         'checks a successful CoverageTopUp for the run, then writes, no lock (racy); the write is an absolute SET of stkbal.maxnowqtymonths/maxnowqty so a duplicate lands the same values, but doubles branch writes and audit rows; WRITES SOFTECH'),
     'pricing_replication_audit': ('advisory_lock', 'apps.discount_approvals.replication.force_replication', 'with pg_lock(LOCK_REPLICATION) as got:',
@@ -185,7 +187,6 @@ KINDS = {'advisory_lock', 'row_lock', 'unique_key', 'idempotent_upsert', 'once_p
 # Jobs whose duplicate run could double a WhatsApp / SMS or a SOFTECH write, with no lock today.
 # Each says where it is tracked. Remove a line when its job gains a lock.
 KNOWN_GAPS = {
-    'pos_cancel_write': 'S-3 in PENDING.md (SOFTECH write: owner OK needed)',
     'morning_brief': 'racy once-a-day check; backstopped by send_limits.claim (10 min, R5)',
     'expiry_worklists': 'racy once-a-week check; backstopped by send_limits.claim (R5)',
     'pbx_cdr_sync': 'overdue call-back alerts: racy check; backstopped by send_limits.claim (R5)',
@@ -276,3 +277,50 @@ class SchedulerLockRegistryTests(SimpleTestCase):
 
     def test_campaign_drain_claims_each_message_once(self):
         self.assertEqual(SCHEDULER_JOB_GUARDS['wa_campaign_drain'][0], 'row_lock')
+
+
+# ── Only one scheduler process (owner OK 2026-11-05) ──────────────────────────────────────
+
+
+class SingleSchedulerLockTests(TestCase):
+
+    def tearDown(self):
+        from apps.sync import scheduler_lock
+        scheduler_lock.release()
+
+    def test_a_second_process_cannot_take_the_lock(self):
+        from apps.sync import scheduler_lock as L
+        self.assertTrue(L.acquire())
+        self.assertTrue(L.acquire())                         # same process: idempotent
+        other = L._raw_connection()                          # stands in for a second process
+        try:
+            with other.cursor() as cur:
+                cur.execute('SELECT pg_try_advisory_lock(%s)', [L.SCHEDULER_LOCK_KEY])
+                self.assertFalse(cur.fetchone()[0])
+            L.release()
+            with other.cursor() as cur:
+                cur.execute('SELECT pg_try_advisory_lock(%s)', [L.SCHEDULER_LOCK_KEY])
+                self.assertTrue(cur.fetchone()[0])
+                cur.execute('SELECT pg_advisory_unlock(%s)', [L.SCHEDULER_LOCK_KEY])
+        finally:
+            other.close()
+
+    def test_holder_is_recorded_for_the_status_api(self):
+        from apps.sync import scheduler_lock as L
+        L.acquire()
+        self.assertIn('pid', L.current_owner())
+
+    def test_second_scheduler_starts_no_jobs_and_alerts_admins(self):
+        from apps.notifications.models import Notification
+        from apps.tests.factories import make_admin
+        make_admin('sched_admin')
+        with mock.patch('apps.sync.scheduler_lock.acquire', return_value=False), \
+                mock.patch('apps.sync.tasks.start_scheduler') as start, \
+                mock.patch('config.writers.run_startup_checks'):
+            with self.assertRaises(CommandError) as ctx:
+                call_command('run_scheduler')
+            with self.assertRaises(CommandError):
+                call_command('run_scheduler')                # same day, same host: one alert only
+        start.assert_not_called()
+        self.assertEqual(ctx.exception.returncode, 2)
+        self.assertEqual(Notification.objects.filter(title__contains='مجدول ثانٍ').count(), 1)
