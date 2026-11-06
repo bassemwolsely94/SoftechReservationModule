@@ -312,7 +312,12 @@ def planted_detail_paths(client, planter, routes, marker) -> dict:
                 continue
             cls = getattr(match.func, 'cls', None) or getattr(match.func, 'view_class', None)
             for model in _candidates(path, match, kws[-1]):
+                # the model's own planted row, else the neutral parent of one (a push whose marked
+                # lines are planted). Without this the next candidate's id was used on this route,
+                # which only worked when the two ids happened to match.
                 pk = planter.planted.get(model._meta.label)
+                if pk is None:
+                    pk = getattr(planter.neutral.get(model), 'pk', None)
                 if pk is None:
                     continue
                 obj = django_apps.get_model(model._meta.label).objects.filter(pk=pk).first()
