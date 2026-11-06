@@ -908,8 +908,8 @@ class BranchCostHookP33Tests(Base):
             if 'docvalue2' in sql:
                 if fail:
                     raise RuntimeError('SOFTECH slow')
-                return [{'branchcode': '130', 'doccode': '115', 'cost': DEC('70')},
-                        {'branchcode': '130', 'doccode': '30', 'cost': DEC('5')}]
+                return [{'branchcode': '130', 'doccode': '115', 'cost': DEC('70'), 'docval': DEC('100')},
+                        {'branchcode': '130', 'doccode': '30', 'cost': DEC('5'), 'docval': DEC('8')}]
             return []
         fetch.calls = calls
         return fetch
@@ -926,6 +926,7 @@ class BranchCostHookP33Tests(Base):
         self.assertEqual(run.detail['branch_cost_rows'], 1)
         row = GLBranchCost.objects.get()
         self.assertEqual((row.year, row.month, row.branch_code, row.net_cost), (2026, 3, '130', DEC('65.00')))
+        self.assertEqual((row.sales_value, row.return_value, row.net_value), (DEC('100.00'), DEC('8.00'), DEC('92.00')))
 
     def test_branch_cost_failure_never_fails_the_run(self):
         run = self.go(self.cost_fetch(fail=True))

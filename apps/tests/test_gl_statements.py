@@ -326,34 +326,39 @@ class StatementsTests(TestCase):
 
     # ── SOFTECH branch cost of sales (Ruling P33) ────────────────────────────
 
-    def _cost(self, year, month, code, net):
+    def _cost(self, year, month, code, net, sales=0):
         from apps.finance.models import GLBranchCost
         from django.utils import timezone
         GLBranchCost.objects.create(year=year, month=month, branch_code=code, sales_cost=_d(net),
-                                    return_cost=Z, net_cost=_d(net), synced_at=timezone.now())
+                                    return_cost=Z, net_cost=_d(net), sales_value=_d(sales),
+                                    return_value=Z, net_value=_d(sales), synced_at=timezone.now())
 
-    def test_branch_pl_softech_cost_and_gross_profit(self):
+    def _by(self, cols):
+        return {('hq' if c['is_hq'] else 'total' if c['is_total'] else c['branch_id']): c for c in cols}
+
+    def test_branch_pl_softech_lines_use_softech_sales(self):
+        """Ruling P34: SOFTECH sales - SOFTECH cost, whatever the ledger holds for that branch."""
         self._entry(D(2026, 8, 3), [('1301', 1000, self.b1), ('6001', -1000, self.b1)])
         self._entry(D(2026, 8, 3), [('1301', 500, self.b2), ('6001', -500, self.b2)])
         self._entry(D(2026, 8, 3), [('1301', 10, None), ('6001', -10, None)])
-        self._cost(2026, 8, '972', 600)
-        self._cost(2026, 8, '973', 300)
-        self._cost(2026, 8, '971', 5)
-        self._cost(2026, 8, '999', 7)     # a branch with no ledger column: only in the total
-        self._cost(2026, 9, '972', 1000)  # outside the range
+        self._cost(2026, 8, '972', 600, sales=1140)
+        self._cost(2026, 8, '973', 300, sales=400)
+        self._cost(2026, 8, '971', 5, sales=20)
+        self._cost(2026, 9, '972', 1000, sales=2000)  # outside the range
         cols = branch_pl(D(2026, 7, 1), D(2026, 8, 31))
-        by = {('hq' if c['is_hq'] else 'total' if c['is_total'] else c['branch_id']): c for c in cols}
-        self.assertEqual((by[self.b1.id]['softech_cost'], by[self.b1.id]['softech_gross_profit']),
-                         (_d(600), _d(400)))
-        self.assertEqual((by[self.b2.id]['softech_cost'], by[self.b2.id]['softech_gross_profit']),
-                         (_d(300), _d(200)))
-        self.assertEqual((by['hq']['softech_cost'], by['hq']['softech_gross_profit']), (_d(5), _d(5)))
-        self.assertEqual((by['total']['softech_cost'], by['total']['softech_gross_profit']),
-                         (_d(912), _d(598)))
+        by = self._by(cols)
+
+        def got(c):
+            return (c['softech_sales'], c['softech_cost'], c['softech_gross_profit'])
+        self.assertEqual(got(by[self.b1.id]), (_d(1140), _d(600), _d(540)))
+        self.assertEqual(got(by[self.b2.id]), (_d(400), _d(300), _d(100)))
+        self.assertEqual(got(by['hq']), (_d(20), _d(5), _d(15)))
+        self.assertEqual(got(by['total']), (_d(1560), _d(905), _d(655)))
         for c in cols:
             self.assertEqual(c['softech_cost_months_missing'], ['2026-07'])
         self.assertTrue(any('2026-07' in w for w in by['total']['warnings']))
         # the ledger-based lines are unchanged
+        self.assertEqual(by[self.b1.id]['net_sales'], _d(1000))
         self.assertEqual(by[self.b1.id]['gross_profit'], _d(1000))
 
     def test_branch_pl_no_missing_months_no_warning(self):
@@ -362,14 +367,64 @@ class StatementsTests(TestCase):
         cols = branch_pl(D(2026, 8, 1), D(2026, 8, 31))
         total = next(c for c in cols if c['is_total'])
         self.assertEqual(total['softech_cost_months_missing'], [])
+        self.assertFalse(total['softech_partial_months'])
         self.assertFalse(any('سوفتيك' in w for w in total['warnings']))
+
+    def test_branch_pl_part_of_a_month_warns(self):
+        """Important 2: the SOFTECH lines stay whole-month and the screen says so."""
+        self._cost(2026, 2, '972', 60, sales=90)
+        for d1, d2, partial in ((D(2026, 2, 2), D(2026, 2, 28), True), (D(2026, 2, 1), D(2026, 2, 27), True),
+                                (D(2026, 2, 1), D(2026, 2, 28), False)):
+            total = self._by(branch_pl(d1, d2))['total']
+            self.assertEqual(total['softech_partial_months'], partial, (d1, d2))
+            self.assertEqual(total['softech_sales'], _d(90))
+            self.assertEqual('الفترة أجزاء من شهور — أرقام سوفتيك للشهور كاملة' in total['warnings'], partial)
+
+    def test_branch_pl_future_months_are_not_missing(self):
+        """Important 4: only months that have started can be missing."""
+        self._cost(2026, 8, '972', 60)
+        cols = branch_pl(D(2026, 7, 1), D(2026, 10, 31), today=D(2026, 8, 15))
+        self.assertEqual(cols[-1]['softech_cost_months_missing'], ['2026-07'])
+        cols = branch_pl(D(2026, 7, 1), D(2026, 10, 31), today=D(2026, 9, 1))
+        self.assertEqual(cols[-1]['softech_cost_months_missing'], ['2026-07', '2026-09'])
+        cols = branch_pl(D(2026, 12, 1), D(2026, 12, 31), today=D(2026, 8, 15))
+        self.assertEqual(cols[-1]['softech_cost_months_missing'], [])
+        self.assertFalse(any('سوفتيك' in w for w in cols[-1]['warnings']))
+
+    def test_branch_pl_columns_sum_to_the_softech_total(self):
+        """M6: a branch with SOFTECH figures but no ledger line gets a column; HQ takes every
+        HQ-kind code; a code no Branch knows is stated on the total."""
+        hq2 = Branch.objects.create(softech_branch_id='975', name='HQ store', kind=Branch.KIND_HQ)
+        self._entry(D(2026, 8, 3), [('1301', 100, self.b1), ('6001', -100, self.b1)])
+        self._cost(2026, 8, '972', 60, sales=100)
+        self._cost(2026, 8, '974', 30, sales=50)   # b3: no ledger line in the range
+        self._cost(2026, 8, '971', 5, sales=20)
+        self._cost(2026, 8, hq2.softech_branch_id, 7, sales=9)
+        self._cost(2026, 8, '999', 11, sales=13)   # no Branch at all
+        cols = branch_pl(D(2026, 8, 1), D(2026, 8, 31))
+        by = self._by(cols)
+        self.assertEqual((by[self.b3.id]['softech_cost'], by[self.b3.id]['net_sales']), (_d(30), Z))
+        self.assertEqual(by[self.b3.id]['allocation']['general_expenses'], Z)
+        self.assertEqual((by['hq']['softech_sales'], by['hq']['softech_cost']), (_d(29), _d(12)))
+        total = by['total']
+        self.assertEqual(total['softech_unassigned'], {'codes': ['999'], 'sales': _d(13), 'cost': _d(11)})
+        self.assertTrue(any('999' in w for w in total['warnings']))
+        columns = [c for c in cols if not c['is_total']]
+        for key, extra in (('softech_cost', _d(11)), ('softech_sales', _d(13))):
+            self.assertEqual(sum((c[key] for c in columns), Z) + extra, total[key])
+        self.assertNotIn(hq2.pk, by)   # an HQ-kind branch never gets its own column
+
+    def test_branch_pl_every_softech_code_known_states_nothing(self):
+        self._cost(2026, 8, '972', 60, sales=100)
+        total = self._by(branch_pl(D(2026, 8, 1), D(2026, 8, 31)))['total']
+        self.assertEqual(total['softech_unassigned'], {'codes': [], 'sales': Z, 'cost': Z})
 
     def test_sync_branch_cost_whole_months_idempotent_returns_subtract(self):
         from apps.finance.gl.branch_cost import sync_branch_cost
         from apps.finance.models import GLBranchCost
-        rows = [{'branchcode': '972', 'doccode': '115', 'cost': _d('1000.004')},
-                {'branchcode': '972', 'doccode': '30.0', 'cost': _d('100')},
-                {'branchcode': '973.0', 'doccode': '115', 'cost': _d('50')}]
+        rows = [{'branchcode': '972', 'doccode': '115', 'cost': _d('1000.004'), 'docval': _d('1500.004')},
+                {'branchcode': '972', 'doccode': '30.0', 'cost': _d('100'), 'docval': _d('150')},
+                {'branchcode': '973.0', 'doccode': '115', 'cost': _d('50'), 'docval': _d('70')}]
         calls = []
 
         def fetch(sql):
@@ -382,7 +437,9 @@ class StatementsTests(TestCase):
         r = GLBranchCost.objects.get(branch_code='972')
         self.assertEqual((r.year, r.month, r.sales_cost, r.return_cost, r.net_cost),
                          (2026, 8, _d('1000.00'), _d('100.00'), _d('900.00')))
-        rows[0] = {'branchcode': '972', 'doccode': '115', 'cost': _d('1200')}
+        self.assertEqual((r.sales_value, r.return_value, r.net_value), (_d('1500.00'), _d('150.00'), _d('1350.00')))
+        self.assertIn('SUM(docvalue) docval', calls[0])
+        rows[0] = {'branchcode': '972', 'doccode': '115', 'cost': _d('1200'), 'docval': _d('1600')}
         rows.pop()   # 973 no longer has sales in August: its row goes
         self.assertEqual(sync_branch_cost(D(2026, 8, 1), D(2026, 8, 31), fetch=fetch), 1)
         self.assertEqual(list(GLBranchCost.objects.values_list('branch_code', 'net_cost')),
@@ -546,7 +603,7 @@ class BranchCostCommandTests(TestCase):
 
         @contextmanager
         def fake_open():
-            yield lambda sql: [{'branchcode': '130', 'doccode': '115', 'cost': Decimal('9')}]
+            yield lambda sql: [{'branchcode': '130', 'doccode': '115', 'cost': Decimal('9'), 'docval': Decimal('12')}]
         out = StringIO()
         with mock.patch('apps.finance.queries.sybase_gl.open_fetch', fake_open):
             call_command('gl_sync_branch_cost', '--from', '2026-08-01', '--to', '2026-08-31', stdout=out)

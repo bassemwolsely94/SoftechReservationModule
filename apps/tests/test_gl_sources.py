@@ -146,7 +146,8 @@ class PurchaseTests(TestCase):
         self.mk('100', '120', '9', value='-40.005')
         self.mk('100', '10', '77', party=self.cust)                  # customer: excluded
         self.mk('100', '10', '78', d=date(2026, 5, 1))               # out of range
-        docs = {d.source_key: d for d in READERS['purchases'](date(2026, 3, 1), date(2026, 3, 31), fake([]))}
+        other = self.vat_row(branch='999', num='0')   # SOFTECH answered, but has none of these headers
+        docs = {d.source_key: d for d in READERS['purchases'](date(2026, 3, 1), date(2026, 3, 31), fake([other]))}
         self.assertEqual(set(docs), {'ap:100:10:55:2026-03-05', 'ap:130:10:55:2026-03-05', 'ap:100:120:9:2026-03-05'})
         d = docs['ap:130:10:55:2026-03-05']
         self.assertEqual((d.kind, d.personcode, d.amounts),
@@ -167,6 +168,7 @@ class PurchaseTests(TestCase):
         (doc,) = READERS['purchases'](date(2026, 3, 1), date(2026, 3, 31), f)
         self.assertEqual(doc.amounts, {'value': D('114.00'), 'vat': D('14.01'), 'net': D('99.99')})
         self.assertNotIn('vat_missing', doc.attrs)
+        self.assertNotIn('vat_value_drift', doc.attrs)   # M2: normal docs carry no extra attr
         self.assertEqual(len(f.calls), 1)
         self.assertIn("doccode IN ('10','120')", f.calls[0])
 
@@ -193,7 +195,7 @@ class PurchaseTests(TestCase):
     def test_one_vat_query_per_month_with_invoices_and_none_without(self):
         self.mk('100', '10', '55', d=date(2026, 3, 5))
         self.mk('100', '10', '56', d=date(2026, 5, 5))
-        f = fake([])
+        f = fake([self.vat_row(num='0')])
         list(READERS['purchases'](date(2026, 3, 1), date(2026, 5, 31), f))
         self.assertEqual(len(f.calls), 2)   # April has no invoice: no query
         self.assertIn("'2026-03-01'", f.calls[0])
@@ -201,6 +203,42 @@ class PurchaseTests(TestCase):
         f2 = fake([])
         self.assertEqual(list(READERS['purchases'](date(2026, 6, 1), date(2026, 6, 30), f2)), [])
         self.assertEqual(f2.calls, [])
+
+    def test_month_with_invoices_but_no_softech_rows_is_a_read_error(self):
+        """Important 3: a silent / empty read must never post every invoice without VAT."""
+        self.mk('100', '10', '55')
+        with self.assertRaisesMessage(RuntimeError, '2026-03'):
+            list(READERS['purchases'](date(2026, 3, 1), date(2026, 3, 31), fake([])))
+
+    def test_vat_join_normalises_the_docnumber(self):
+        """M7: CONVERT(varchar) of a numeric may come back with any decimals."""
+        self.mk('100', '10', '55', value='114')
+        (doc,) = READERS['purchases'](date(2026, 3, 1), date(2026, 3, 31), fake([self.vat_row(num='55.000')]))
+        self.assertEqual(doc.amounts['vat'], D('14.01'))
+        self.assertNotIn('vat_missing', doc.attrs)
+
+    def test_vat_value_drift_flag(self):
+        """M2: only when the SOFTECH header disagrees with the mirror, or VAT exceeds the invoice."""
+        self.mk('100', '10', '55', value='114')
+        (doc,) = READERS['purchases'](date(2026, 3, 1), date(2026, 3, 31), fake([self.vat_row(value='120')]))
+        self.assertTrue(doc.attrs['vat_value_drift'])
+        self.assertEqual(doc.amounts['value'], D('114.00'))
+        self.mk('100', '10', '56', value='100')
+        self.mk('100', '120', '9', value='-57')   # a return: docvalue compared by size
+        rows = [self.vat_row(num='56', vat='120', value='100'), self.vat_row(num='55', vat='14', value='114'),
+                self.vat_row(doccode='120', num='9', vat='-7', value='-57')]
+        docs = {d.attrs['docnumber']: d for d in READERS['purchases'](date(2026, 3, 1), date(2026, 3, 31), fake(rows))}
+        self.assertTrue(docs['56'].attrs['vat_value_drift'])
+        self.assertEqual(docs['56'].amounts['net'], D('-20.00'))
+        self.assertNotIn('vat_value_drift', docs['55'].attrs)
+        self.assertNotIn('vat_value_drift', docs['9'].attrs)
+
+    def test_check_sources_shows_the_whole_invoice(self):
+        """M1: value ahead of net, so a purchase's display amount stays the invoice total."""
+        from apps.finance.management.commands.gl_check_sources import _amount
+        self.mk('100', '10', '55', value='114')
+        (doc,) = READERS['purchases'](date(2026, 3, 1), date(2026, 3, 31), fake([self.vat_row()]))
+        self.assertEqual(_amount(doc), D('114.00'))
 
     def test_vat_sql_shape(self):
         sql = sybase_gl.sql_purchase_vat(date(2026, 3, 1), date(2026, 3, 31))

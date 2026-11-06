@@ -162,14 +162,15 @@ function Position({ data }) {
   )
 }
 
-// Ruling P33: SOFTECH cost of sales (report-time, from the server) beside the ledger figures
-const SOFTECH_ROWS = [['softech_cost', 'تكلفة المبيعات بنسبة سوفتيك'], ['softech_gross_profit', 'مجمل الربح بسوفتيك']]
+// Ruling P34: SOFTECH's own figures on one basis (report-time, from the server), separate from the ledger lines
+const SOFTECH_ROWS = [['softech_sales', 'مبيعات سوفتيك'], ['softech_cost', 'تكلفة المبيعات بنسبة سوفتيك'], ['softech_gross_profit', 'مجمل الربح بسوفتيك']]
 const EXPENSE_KEYS = ['general_expenses', 'selling_expenses', 'depreciation', 'operating_expenses', 'financing_expenses']
 
 /**
  * Branch P&L: the server sends one column per branch (HQ first, total last), each with the
  * trading/P&L figures before allocation, `allocation` (line → HQ share moved in) and `after`,
- * plus softech_cost / softech_gross_profit (missing months come as a total-column warning).
+ * plus softech_sales / softech_cost / softech_gross_profit (missing months, parts of months and
+ * unknown branch codes come as total-column warnings).
  */
 function Branches({ data }) {
   const cols = data?.columns || []
@@ -194,6 +195,11 @@ function Branches({ data }) {
                 <td className="px-3 py-1.5 whitespace-nowrap">{l.label}</td>
                 {cols.map((c, i) => <td key={i} className={cell} dir="ltr">{money(c[l.keys[0]], { blankZero: true })}</td>)}
               </tr>
+              {l.keys[0] === 'gross_profit' && (
+                <tr className="border-t border-gray-100 bg-sky-50/50 text-sky-700 text-xs">
+                  <td className="px-3 py-1" colSpan={cols.length + 1}>أرقام سوفتيك نفسها (شاملة الضريبة) — منفصلة عن بنود القيود</td>
+                </tr>
+              )}
               {l.keys[0] === 'gross_profit' && SOFTECH_ROWS.map(([k, label]) => (
                 <tr key={k} className="border-t border-gray-100 bg-sky-50/50 text-sky-900">
                   <td className="px-3 py-1.5 whitespace-nowrap">{label}</td>

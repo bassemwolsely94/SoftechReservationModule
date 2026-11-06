@@ -228,6 +228,9 @@ class _Engine:
             self.reader_errors[t] = f'{type(exc).__name__}: {exc}'[:500]
             return
         self.counts['read'] += len(docs)
+        vat_missing = sum(1 for d in docs if d.attrs.get('vat_missing'))
+        if vat_missing:   # Ruling P32: posted without VAT, so the run says how many
+            self.detail['vat_missing'] = self.detail.get('vat_missing', 0) + vat_missing
         groups = defaultdict(set)        # group_key -> trigger doc pks
         self.old_of = defaultdict(set)   # doc pk -> groups it may still sit in (rebuilt first)
         with transaction.atomic():

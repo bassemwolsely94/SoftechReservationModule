@@ -343,14 +343,18 @@ class SourceException(models.Model):
 
 
 class GLBranchCost(models.Model):
-    """Ruling P33: SOFTECH cost of sales per branch-month (stktransm.docvalue2 of doccode 115 minus
-    doccode 30), synced read-only for the branch P&L. Report-time only: nothing is posted from it."""
+    """Rulings P33 / P34: SOFTECH cost of sales and sale value per branch-month (stktransm.docvalue2
+    and docvalue of doccode 115 minus doccode 30), synced read-only for the branch P&L. Report-time
+    only: nothing is posted from it. Sale values are as SOFTECH holds them (VAT-inclusive)."""
     year        = models.PositiveSmallIntegerField(verbose_name='السنة')
     month       = models.PositiveSmallIntegerField(verbose_name='الشهر')
     branch_code = models.CharField(max_length=5, verbose_name='كود فرع سوفتيك')
     sales_cost  = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='تكلفة المبيعات')
     return_cost = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='تكلفة المرتجعات')
     net_cost    = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='صافي التكلفة')
+    sales_value  = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='قيمة المبيعات')
+    return_value = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='قيمة المرتجعات')
+    net_value    = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='صافي القيمة')
     synced_at   = models.DateTimeField(verbose_name='وقت المزامنة')
 
     class Meta:

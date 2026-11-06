@@ -74,10 +74,10 @@ def sql_purchase_vat(d1: date, d2: date) -> str:
 
 
 def sql_branch_cost(d1: date, d2: date) -> str:
-    """Ruling P33: SOFTECH cost of sales per branch and doccode (115 sale, 30 return):
-    docvalue2 = sum of qty x newcostprice of the document."""
+    """Rulings P33 / P34: SOFTECH cost of sales and sale value per branch and doccode (115 sale,
+    30 return): docvalue2 = sum of qty x newcostprice of the document, docvalue = its value."""
     return (
-        "SELECT branchcode, doccode, SUM(docvalue2) cost "  # nosec B608 - only date.isoformat() values and module constants are interpolated
+        "SELECT branchcode, doccode, SUM(docvalue2) cost, SUM(docvalue) docval "  # nosec B608 - only date.isoformat() values and module constants are interpolated
         f"FROM {DB}.stktransm "
         f"WHERE doccode IN ('115','30') AND {_bounds('docdate', d1, d2)} "
         "GROUP BY branchcode, doccode"

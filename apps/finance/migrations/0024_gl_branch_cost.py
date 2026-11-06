@@ -20,6 +20,9 @@ class Migration(migrations.Migration):
                 ('sales_cost', models.DecimalField(decimal_places=2, default=0, max_digits=18, verbose_name='تكلفة المبيعات')),
                 ('return_cost', models.DecimalField(decimal_places=2, default=0, max_digits=18, verbose_name='تكلفة المرتجعات')),
                 ('net_cost', models.DecimalField(decimal_places=2, default=0, max_digits=18, verbose_name='صافي التكلفة')),
+                ('sales_value', models.DecimalField(decimal_places=2, default=0, max_digits=18, verbose_name='قيمة المبيعات')),
+                ('return_value', models.DecimalField(decimal_places=2, default=0, max_digits=18, verbose_name='قيمة المرتجعات')),
+                ('net_value', models.DecimalField(decimal_places=2, default=0, max_digits=18, verbose_name='صافي القيمة')),
                 ('synced_at', models.DateTimeField(verbose_name='وقت المزامنة')),
             ],
             options={

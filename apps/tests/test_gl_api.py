@@ -285,21 +285,35 @@ class GLApiTests(TestCase):
         from apps.finance.models import GLBranchCost
         self._draft(date='2026-08-03')
         GLBranchCost.objects.create(year=2026, month=8, branch_code='100', sales_cost='40', return_cost='0',
-                                    net_cost='40', synced_at=timezone.now())
+                                    net_cost='40', sales_value='50', return_value='0', net_value='50',
+                                    synced_at=timezone.now())
         params = {'from': '2026-07-01', 'to': '2026-08-31'}
         r = self.c.get(BASE + 'reports/branch-pl/', params)
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual(r.data['softech_cost_months_missing'], ['2026-07'])
         total = r.data['columns'][-1]
         self.assertTrue(total['is_total'])
-        self.assertEqual((total['softech_cost'], total['softech_gross_profit']), ('40.00', '-40.00'))
+        self.assertEqual((total['softech_sales'], total['softech_cost'], total['softech_gross_profit']),
+                         ('50.00', '40.00', '10.00'))
+        self.assertFalse(r.data['softech_partial_months'])
         r = self.c.get(BASE + 'reports/branch-pl/', {**params, 'format': 'xlsx'})
         self.assertEqual(r.status_code, 200)
         ws = openpyxl.load_workbook(io.BytesIO(r.content)).active
         labels = [row[0] for row in ws.iter_rows(values_only=True)]
+        self.assertIn('مبيعات سوفتيك', labels)
         self.assertIn('تكلفة المبيعات بنسبة سوفتيك', labels)
         self.assertIn('مجمل الربح بسوفتيك', labels)
         self.assertTrue(str(ws.cell(row=3, column=1).value).startswith('⚠'))
+        # Important 2: part of a month -> the flag, and the warning on the screen and in the Excel
+        partial = {'from': '2026-08-05', 'to': '2026-08-20'}
+        r = self.c.get(BASE + 'reports/branch-pl/', partial)
+        self.assertTrue(r.data['softech_partial_months'])
+        self.assertIn('الفترة أجزاء من شهور — أرقام سوفتيك للشهور كاملة', r.data['columns'][-1]['warnings'])
+        self.assertEqual(r.data['columns'][-1]['softech_cost'], '40.00')   # still the whole month
+        r = self.c.get(BASE + 'reports/branch-pl/', {**partial, 'format': 'xlsx'})
+        ws = openpyxl.load_workbook(io.BytesIO(r.content)).active
+        cells = [str(row[0]) for row in ws.iter_rows(values_only=True)]
+        self.assertTrue(any('أجزاء من شهور' in c for c in cells), cells)
 
     def test_xlsx_permission_checked_before_report(self):
         # the viewer is refused before the (invalid) range is even parsed
