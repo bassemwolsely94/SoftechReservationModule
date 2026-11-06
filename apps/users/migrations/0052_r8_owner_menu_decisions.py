@@ -16,8 +16,9 @@ REVOKE = [('viewer', 'callcenter', 'view'), ('viewer', 'approvals', 'view')]
 def _set(RMA, rows, allowed):
     for role, module, action in rows:
         # only a matrix already seeded for the module (see 0032): on a fresh install seed_permissions
-        # writes the full code matrix, these changes included
-        if not RMA.objects.filter(module=module).exclude(role=role).exists():
+        # writes the full code matrix, these changes included. The accountant's 0051 deny rows do not
+        # count as seeded (R17), and one row here would lock every other role out of the module.
+        if not RMA.objects.filter(module=module).exclude(role__in=[role, 'accountant']).exists():
             continue
         RMA.objects.update_or_create(role=role, module=module, action=action, defaults={'is_allowed': allowed})
 
