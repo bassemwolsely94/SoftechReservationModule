@@ -24,14 +24,14 @@ class Command(BaseCommand):
                             help='for a file without an «اليومية» column and without the book in its name')
         parser.add_argument('--preview', action='store_true', help='counts and the account list; saves nothing')
         parser.add_argument('--include-mixed', nargs='+', default=[], metavar='KEY',
-                            help='import these parked groups with all their lines (needs --user)')
+                            help='import these mixed or possible_duplicate groups with all their lines (needs --user)')
         parser.add_argument('--user', default=None,
                             help='username the drafts are created by (default: the drafting system user; '
                                  'required with --include-mixed: an accountant decides those)')
 
     def handle(self, *args, **opts):
         if opts['include_mixed'] and not opts['preview'] and not opts['user']:
-            raise CommandError('--include-mixed needs --user: an accountant decides on a mixed entry')
+            raise CommandError('--include-mixed needs --user: an accountant decides on these entries')
         try:
             if opts['preview']:
                 self.show_preview(preview(opts['xlsx'], sheet_name=opts['sheet'], book=opts['book']))
@@ -100,7 +100,7 @@ class Command(BaseCommand):
         for key in res['parked_keys']:
             self.stdout.write(f'parked {key}')
         for key in res['include_unmatched']:
-            self.stdout.write(self.style.WARNING(f'--include-mixed: not a mixed group in this file: {key}'))
+            self.stdout.write(self.style.WARNING(f'--include-mixed: not a mixed or possible_duplicate group in this file: {key}'))
         for f in res['failed']:
             self.stdout.write(self.style.ERROR(f"refused {f['key']}: {f['code']}"))
         for w in res['warnings']:

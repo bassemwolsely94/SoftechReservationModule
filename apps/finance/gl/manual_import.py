@@ -28,7 +28,7 @@ from apps.config.models import SystemSetting
 
 from . import plan2_adapter
 from .ledger import _MAX_AMOUNT, LedgerError, _audit, save_draft
-from .models import GLAccount, LedgerEntry
+from .models import GLAccount, LedgerEntry, LedgerLine
 from .names import normalize_ar
 from .periods import OPENING_DATE
 from .sources import _canon
@@ -68,8 +68,10 @@ _SUPPLIERS = '2341'
 MERGED_BY_DATE_BRANCH = 'date_branch'
 
 STATUSES = ('manual', 'softech', 'mixed', 'unbalanced', 'unknown_account', 'unknown_branch', 'before_opening',
-            'changed_since_import')
-NOT_IMPORTABLE = ('unbalanced', 'unknown_account', 'unknown_branch', 'before_opening', 'changed_since_import')
+            'changed_since_import', 'possible_duplicate')
+NOT_IMPORTABLE = ('unbalanced', 'unknown_account', 'unknown_branch', 'before_opening', 'changed_since_import',
+                  'possible_duplicate')
+INCLUDABLE = ('mixed', 'possible_duplicate')   # an accountant's decision: `include_mixed`
 _PARTY_FIELD = {'supplier': 'supplier_code', 'customer': 'customer_code', 'employee': 'employee_code'}
 
 DEFAULT_LINK_ACCOUNTS = ('2354',)   # finance's cross-book clearing account: nets to ~0, not a creditor
@@ -144,7 +146,7 @@ class JournalGroup:
     status: str = ''
     target_branch: Branch | None = None
     manual_set: bool = False        # its accounts are on finance's list: manual whatever the feeds say
-    existing_entry: LedgerEntry | None = None   # changed_since_import: the live entry in the way
+    existing_entry: LedgerEntry | None = None   # changed_since_import, possible_duplicate: the live entry
 
     @property
     def debit(self) -> Decimal:
@@ -523,6 +525,46 @@ def _status(group, usable, lookups) -> str:
     return 'mixed' if others - {'manual'} else 'manual'
 
 
+def _account_totals(rows, skip=()) -> dict:
+    totals = defaultdict(lambda: [_ZERO, _ZERO])
+    for r in rows:
+        if r.account_code not in skip:
+            totals[r.account_code][0 if r.side == 'debit' else 1] += r.amount
+    return {code: tuple(t) for code, t in totals.items()}
+
+
+def _flag_possible_duplicates(groups, lookups):
+    """A group manual only through finance's list may be a transfer the engine already drafted from
+    a SOFTECH voucher (Ruling P24): a live entry from any other source, same date and branch, with the
+    same debit and credit on each of the group's accounts (link accounts aside) stops it until an
+    accountant includes it. One query, over the file's date range and those accounts."""
+    suspects = [g for g in groups if g.status == 'manual' and g.manual_set and g.feeds - {'manual', 'link'}
+                and g.key not in {e.source_key for e in lookups.live_by_identity.get(_identity(g.key), ())}]
+    if not suspects:
+        return
+    codes = {r.account_code for g in suspects for r in g.rows} - lookups.links
+    lines = (LedgerLine.objects.select_related('entry', 'account')
+             .filter(entry__status__in=('draft', 'approved'), entry__reverses__isnull=True,
+                     entry__entry_date__gte=min(g.date for g in suspects),
+                     entry__entry_date__lte=max(g.date for g in suspects), account__code__in=codes)
+             .exclude(entry__source_type=SOURCE_TYPE))
+    entries, totals, on_branch = {}, defaultdict(lambda: defaultdict(lambda: [_ZERO, _ZERO])), defaultdict(set)
+    for ln in lines:
+        entries[ln.entry_id] = ln.entry
+        t = totals[ln.entry_id][ln.account.code]
+        t[0] += ln.debit
+        t[1] += ln.credit
+        for branch_id in (ln.entry.branch_id, ln.branch_id):
+            if branch_id:
+                on_branch[(ln.entry.entry_date, branch_id)].add(ln.entry_id)
+    for g in suspects:
+        wanted = _account_totals(g.rows, skip=lookups.links)
+        for entry_id in sorted(on_branch.get((g.date, g.target_branch.pk), ())):
+            if all(tuple(totals[entry_id].get(c, (None, None))) == t for c, t in wanted.items()):
+                g.status, g.existing_entry = 'possible_duplicate', entries[entry_id]
+                break
+
+
 def group_entries(rows, rejected=(), lookups=None) -> list:
     """`rejected`: `ParsedJournal.rejected`. A group that lost a reported row is never balanced."""
     lookups = lookups or _Lookups(rows)
@@ -547,6 +589,7 @@ def group_entries(rows, rejected=(), lookups=None) -> list:
         g.manual_set = lookups.in_manual_set(codes)
         g.status = _status(g, usable, lookups)
         out.append(g)
+    _flag_possible_duplicates(out, lookups)
     out.sort(key=lambda g: g.rows[0].row_no)
     return out
 
@@ -606,7 +649,7 @@ def _party_missing(groups, lookups) -> int:
     """Lines of importable groups approval would refuse: blank party on a requires_party account."""
     n = 0
     for g in groups:
-        if g.status in ('manual', 'mixed'):
+        if g.status in ('manual', *INCLUDABLE):
             for r in g.rows:
                 account = lookups.accounts[r.account_code]
                 field_name = _PARTY_FIELD.get(account.party_type)
@@ -672,13 +715,14 @@ def _draft(group, lines, user, parked) -> LedgerEntry:
 
 
 def import_entries(path, *, user, include_mixed=(), sheet_name=None, book=None, max_rows=None) -> dict:
-    """One draft per importable group; `include_mixed` keys are imported with all their lines. A
-    mixed group not included is parked once. Importing the same group again creates nothing."""
+    """One draft per importable group; `include_mixed` keys (mixed or possible_duplicate groups) are
+    imported with all their lines. A mixed group not included is parked once. Importing the same group
+    again creates nothing."""
     parsed = parse_journal(path, sheet_name=sheet_name, book=book, max_rows=max_rows)
     lookups = _Lookups(parsed.rows)
     groups = group_entries(parsed.rows, parsed.rejected, lookups=lookups)
     include = set(include_mixed)
-    live = _live_keys(g.key for g in groups if g.status in ('manual', 'mixed'))
+    live = _live_keys(g.key for g in groups if g.status in ('manual', *INCLUDABLE))
     parked = plan2_adapter.parked_manual_keys()
 
     counts = dict.fromkeys(('imported', 'included', 'already_imported', 'parked', 'parked_existing', 'softech',
@@ -686,10 +730,10 @@ def import_entries(path, *, user, include_mixed=(), sheet_name=None, book=None, 
     parked_keys, failed = [], []
     not_imported = defaultdict(list)
     for g in groups:
-        included = g.status == 'mixed' and g.key in include
+        included = g.status in INCLUDABLE and g.key in include
         if g.status == 'softech':
             counts['softech'] += 1
-        elif g.status in NOT_IMPORTABLE:
+        elif g.status in NOT_IMPORTABLE and not included:
             counts[g.status] += 1
             not_imported[g.status].append(_group_json(g))
         elif g.key in live:
@@ -711,7 +755,7 @@ def import_entries(path, *, user, include_mixed=(), sheet_name=None, book=None, 
             if state in ('created', 'open'):
                 parked_keys.append(g.key)
 
-    mixed_keys = {g.key for g in groups if g.status == 'mixed'}
+    mixed_keys = {g.key for g in groups if g.status in INCLUDABLE}
     summary = {**counts, 'failed': len(failed), 'skipped_zero': parsed.skipped_zero, 'skipped': len(parsed.skipped)}
     _audit('gl_manual_import', user=user, obj=None, new_data=summary,
            extra={'file': os.path.basename(str(path)), 'book': parsed.book, 'include_mixed': sorted(include)},

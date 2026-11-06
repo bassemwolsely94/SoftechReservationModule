@@ -15,7 +15,9 @@ from unittest import mock
 
 import openpyxl
 from django.core.management import CommandError, call_command
+from django.db import connection
 from django.test import SimpleTestCase, TestCase
+from django.test.utils import CaptureQueriesContext
 
 from apps.audit.models import AuditLog
 from apps.branches.models import Branch
@@ -386,7 +388,7 @@ class PreviewTests(GLManualBase):
         self.assertEqual(res['manual_accounts'][0]['name'], 'حساب 1296')
         self.assertEqual(res['counts'], {'manual': 2, 'softech': 1, 'mixed': 0, 'unbalanced': 0,
                                          'unknown_account': 0, 'unknown_branch': 0, 'before_opening': 0,
-                                         'changed_since_import': 0})
+                                         'changed_since_import': 0, 'possible_duplicate': 0})
         self.assertEqual((res['merged_count'], res['balanced_count'], res['skipped_zero']), (1, 3, 1))
         self.assertEqual(res['skipped'], [{'row': 10, 'reason': 'no_date'}])
         self.assertEqual(res['totals']['debit'], _d('112.00'))
@@ -511,6 +513,102 @@ class ChangedSinceImportTests(GLManualBase):
         self.run_import(self.manual_rows())
         LedgerEntry.objects.update(description='عدّله محاسب')
         self.assertEqual(self.run_import(self.manual_rows(amount=101))['changed_since_import'], 1)
+
+
+class PossibleDuplicateTests(GLManualBase):
+    def setUp(self):
+        GLAccount.objects.filter(code='1301').update(feed='softech')
+
+    def drafted(self, amount=30, day=D, branch=None, source_type='treasury_other', key='t8:voucher:1', **kw):
+        return save_draft(
+            user=self.staff, entry_date=day.date(), description='سند تحويل', branch=branch or self.branch,
+            source_type=source_type, source_key=key, lines=[
+                {'account_code': '1301', 'debit': _d(amount), 'credit': _d(0)},
+                {'account_code': '1302', 'debit': _d(0), 'credit': _d(amount)}], **kw)
+
+    def keyed(self, amount=30, **kw):
+        return [row('1301', debit=amount, desc='تحويل داخلي', **kw), row('1302', credit=amount, desc='تحويل داخلي', **kw)]
+
+    def test_drafted_transfer_and_the_same_keyed_group_is_possible_duplicate(self):
+        entry = approve(self.drafted().pk, user=self.staff)
+        res = mi.preview(self.xlsx(self.keyed()))
+        self.assertEqual(res['counts']['possible_duplicate'], 1)
+        g = res['groups'][0]
+        self.assertEqual((g['status'], g['existing_entry_id'], g['existing_entry_number']),
+                         ('possible_duplicate', entry.pk, entry.number))
+        res = self.run_import(self.keyed())
+        self.assertEqual((res['imported'], res['possible_duplicate']), (0, 1))
+        self.assertEqual(res['not_imported']['possible_duplicate'][0]['existing_entry_id'], entry.pk)
+        self.assertFalse(LedgerEntry.objects.filter(source_type='manual_import').exists())
+        self.assertFalse(SourceException.objects.exists())
+
+    def test_different_total_is_manual(self):
+        self.drafted(amount=31)
+        self.assertEqual(self.groups(self.keyed())[0].status, 'manual')
+
+    def test_included_is_imported_and_stays_imported(self):
+        self.drafted()
+        path = self.xlsx(self.keyed())
+        key = mi.group_entries(mi.parse_journal(path).rows)[0].key
+        res = mi.import_entries(path, user=self.staff, include_mixed=[key])
+        self.assertEqual((res['included'], res['possible_duplicate'], res['include_unmatched']), (1, 0, []))
+        self.assertEqual(LedgerEntry.objects.get(source_key=key).status, 'draft')
+        res = mi.import_entries(path, user=self.staff)
+        self.assertEqual((res['already_imported'], res['possible_duplicate']), (1, 0))
+
+    def test_another_date_branch_or_direction_is_manual(self):
+        self.drafted(day=D2)
+        other, _ = Branch.objects.update_or_create(softech_branch_id='B82', defaults={'name': 'فرع تاني'})
+        self.drafted(branch=other, key='t8:voucher:2')
+        save_draft(user=self.staff, entry_date=D.date(), description='عكس الاتجاه', branch=self.branch,
+                   source_type='treasury_other', source_key='t8:voucher:3', lines=[
+                       {'account_code': '1302', 'debit': _d(30), 'credit': _d(0)},
+                       {'account_code': '1301', 'debit': _d(0), 'credit': _d(30)}])
+        self.assertEqual(self.groups(self.keyed())[0].status, 'manual')
+
+    def test_a_line_on_the_branch_counts_when_the_entry_has_none(self):
+        save_draft(user=self.staff, entry_date=D.date(), description='س', source_type='treasury_other',
+                   source_key='t8:voucher:4', lines=[
+                       {'account_code': '1301', 'debit': _d(30), 'credit': _d(0), 'branch_id': self.branch.pk},
+                       {'account_code': '1302', 'debit': _d(0), 'credit': _d(30)}])
+        self.assertEqual(self.groups(self.keyed())[0].status, 'possible_duplicate')
+
+    def test_reversed_entries_and_their_mirrors_do_not_count(self):
+        reverse(approve(self.drafted().pk, user=self.staff).pk, user=self.staff, reason='خطأ')
+        self.assertEqual(self.groups(self.keyed())[0].status, 'manual')
+
+    def test_a_manual_import_entry_does_not_count(self):
+        self.run_import(self.keyed())
+        rows = [row('1301', debit=30, desc='تحويل تاني'), row('1302', credit=30, desc='تحويل تاني')]
+        self.assertEqual(self.groups(rows)[0].status, 'manual')
+
+    def test_only_groups_manual_through_the_list(self):
+        GLAccount.objects.filter(code__in=('1301', '1302')).update(feed='manual')
+        self.drafted()
+        self.assertEqual(self.groups(self.keyed())[0].status, 'manual')
+
+    def test_link_lines_are_left_out_of_the_comparison(self):
+        self.drafted()
+        rows = [row('1301', debit=30, desc='ر'), row('1302', credit=30, desc='ر'),
+                row('2354', debit=5, desc='ر'), row('2354', credit=5, desc='ر')]
+        self.assertEqual(self.groups(rows)[0].status, 'possible_duplicate')
+
+    def _line_queries(self, rows):
+        parsed = mi.parse_journal(self.xlsx(rows))
+        lookups = mi._Lookups(parsed.rows)
+        with CaptureQueriesContext(connection) as ctx:
+            mi.group_entries(parsed.rows, lookups=lookups)
+        return [q for q in ctx.captured_queries if 'finance_ledgerline' in q['sql']]
+
+    def test_one_query_over_the_date_range(self):
+        self.drafted()
+        rows = self.keyed() + self.keyed(date=D2) + [
+            row('1301', debit=9, desc='ب', date=D2), row('1302', credit=9, desc='ب', date=D2)]
+        found = self._line_queries(rows)
+        self.assertEqual(len(found), 1)
+        self.assertIn('2026-03-10', found[0]['sql'])
+        self.assertIn('2026-03-11', found[0]['sql'])
+        self.assertEqual(self._line_queries(self.manual_rows()), [])   # nothing on the list: no query
 
 
 class LinkAccountTests(GLManualBase):
