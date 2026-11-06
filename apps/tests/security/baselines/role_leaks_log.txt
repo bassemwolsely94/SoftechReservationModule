@@ -6,3 +6,15 @@
 # purchasing hold settings view (the sweep counts every POST as a write)
 pharmacist POST /api/config/settings/by_key/
 purchasing POST /api/config/settings/by_key/
+
+# ── Round 2, R3: found once the sweep sent real (seeded) records to detail routes ─────────────────────
+# The 182 lines found there were closed on the owner's answers of 2026-11-05 (Q-3, Q-5, Q-7a–e:
+# RouteModulePermission, the line-removal rule, users.0052 grants). What is left:
+
+# reason: Z-9a (owner decision 2026-10-28) — shift templates are planned by admin / supervisor / purchasing;
+#   those two roles hold hr create (self-service filings), not hr edit. Enforce would refuse them, so this
+#   needs hr edit for supervisor / purchasing in the matrix before RBAC_ENFORCEMENT=enforce (after go-live, D8).
+purchasing PATCH /api/hr/shifts/987654321/
+purchasing PUT /api/hr/shifts/987654321/
+supervisor PATCH /api/hr/shifts/987654321/
+supervisor PUT /api/hr/shifts/987654321/

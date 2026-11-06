@@ -30,7 +30,7 @@ DECIDED = {
 class AccountantMatrixTests(TestCase):
 
     def test_code_matrix_is_the_decided_grant_and_nothing_else(self):
-        # hr view + create: own leave and permit requests (owner 2026-11-06, users 0052)
+        # hr view + create: own leave and permit requests (owner 2026-11-06, users 0053)
         self.assertEqual({m: a for m, a in PERMISSIONS['accountant'].items() if a},
                          {**DECIDED, 'hr': {'view', 'create'}})
 

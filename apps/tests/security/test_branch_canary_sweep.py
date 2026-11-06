@@ -12,6 +12,14 @@ linked to a branch. Then every protected GET route without an id in its path is 
 Routes that show other branches on purpose (network stock, transfers between branches, rebalance
 suggestions…) are listed with a reason in baselines/branch_canary_leaks.txt — the usual ratchet:
 a NEW route fails the test, a STALE line must be removed.
+
+Round 2, R4:
+  • step 1 — models the planter cannot build are ratcheted in baselines/canary_skipped_models.txt,
+    each with a reason (a NEW skipped model fails: give it a builder or a reason);
+  • step 2 — DETAIL routes too: for each GET detail route whose planted record admin sees (marker at
+    that path), branch B's user asks for the same path; a marker there is a cross-branch read
+    (lines start "GET-DETAIL"). Baseline lines keep the canonical 987654321 path;
+  • step 3 — the sweep runs with sweep.FEATURE_FLAGS_ON, so flag-gated screens are really checked.
 """
 import logging
 
@@ -26,7 +34,7 @@ from .baseline import assert_matches_baseline
 from .canary import MARKER, Planter
 from .fixtures import bearer_client, seed_code_matrix
 from .routes import Tripwire, handles
-from .sweep import SWEEP_ID, protected_routes
+from .sweep import FEATURE_FLAGS_ON, SWEEP_ID, planted_detail_paths, protected_routes
 
 
 def _list_routes():
@@ -53,7 +61,7 @@ def _get(client, path):
         return f'raised {type(exc).__name__}', ''
 
 
-@override_settings(RBAC_ENFORCEMENT='enforce')
+@override_settings(RBAC_ENFORCEMENT='enforce', **FEATURE_FLAGS_ON)
 class BranchCanarySweepTests(TestCase):
 
     @classmethod
@@ -80,6 +88,11 @@ class BranchCanarySweepTests(TestCase):
                     code, body = _get(b, path)
                     if code == 200 and MARKER in body:
                         cls.leaks.add(f'GET {path}')
+                cls.details = planted_detail_paths(adm, cls.planter, sorted(protected_routes()), MARKER)
+                for path, real in cls.details.items():
+                    code, body = _get(b, real)
+                    if code == 200 and MARKER in body:
+                        cls.leaks.add(f'GET-DETAIL {path}')
         finally:
             logging.disable(previous)
 
@@ -94,6 +107,24 @@ class BranchCanarySweepTests(TestCase):
     def test_admin_sees_the_canaries(self):
         """Positive control: the marker really reaches list responses."""
         self.assertGreater(len(self.admin_sees), 20)
+
+    def test_admin_sees_planted_detail_records(self):
+        """Positive control for step 2: detail routes really reach planted records."""
+        self.assertGreater(len(self.details), 15)
+
+    def test_skipped_models_are_baselined(self):
+        assert_matches_baseline(self, 'canary_skipped_models', set(self.planter.skipped))
+
+    def test_skipped_models_baseline_lines_are_all_explained(self):
+        from .baseline import BASELINE_DIR
+        header, unexplained = None, []
+        for ln in (BASELINE_DIR / 'canary_skipped_models.txt').read_text(encoding='utf-8').splitlines():
+            s = ln.strip()
+            if s.startswith('# reason:'):
+                header = s
+            elif s and not s.startswith('#') and header is None:
+                unexplained.append(s)
+        self.assertEqual(unexplained, [], 'skipped models without a reason: ' + ', '.join(unexplained))
 
     def test_branch_user_never_sees_another_branchs_records(self):
         assert_matches_baseline(self, 'branch_canary_leaks', self.leaks)

@@ -114,14 +114,14 @@ class MigrationTests(TestCase):
         the module seeded and lock every other role out of it (R17)."""
         from django.apps import apps as django_apps
         from apps.users.models import RoleModuleAccess as RMA
-        mig = importlib.import_module('apps.users.migrations.0052_r8_owner_menu_decisions')
+        mig = importlib.import_module('apps.users.migrations.0053_r8_owner_menu_decisions')
         RMA.objects.all().delete()
         RMA.objects.create(role='accountant', module='purchasing', action='view', is_allowed=False)
         mig.forwards(django_apps, None)
         self.assertEqual(RMA.objects.count(), 1)
 
     def test_migration_matches_the_code_matrix(self):
-        mig = importlib.import_module('apps.users.migrations.0052_r8_owner_menu_decisions')
+        mig = importlib.import_module('apps.users.migrations.0053_r8_owner_menu_decisions')
         for role, module, action in mig.GRANT:
             self.assertIn(action, PERMISSIONS[role][module])
         for role, module, action in mig.REVOKE:

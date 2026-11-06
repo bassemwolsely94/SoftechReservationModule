@@ -4,7 +4,7 @@ Batch 5b — the phone canary sweep (owner decision B-2 outside the customers sc
 A customer of branch A gets a known number, and so does every phone-like field of every record we
 can plant for them (reservations, delivery orders, follow-ups, vouchers, calls, campaign messages,
 leads, conversations…). Every protected GET list route, plus the detail and lookup routes that
-take a customer id or a typed number, is then called by:
+take a customer id or a typed number, is then called (with sweep.FEATURE_FLAGS_ON, round 2 R4) by:
 
   • a branch-B pharmacist holding every module action — another branch's customer: the full number
     must never come back (a typed FULL number may find the customer, masked);
@@ -27,7 +27,7 @@ from .baseline import assert_matches_baseline
 from .canary import Planter
 from .fixtures import bearer_client, seed_code_matrix
 from .routes import Tripwire, handles
-from .sweep import SWEEP_ID, protected_routes
+from .sweep import FEATURE_FLAGS_ON, SWEEP_ID, protected_routes
 
 NUMBER = '01093847561'
 NUMBER_TOKEN = '93847'
@@ -71,7 +71,7 @@ def _extra_routes(cid):
     ]
 
 
-@override_settings(RBAC_ENFORCEMENT='enforce')
+@override_settings(RBAC_ENFORCEMENT='enforce', **FEATURE_FLAGS_ON)
 class PhoneCanarySweepTests(TestCase):
 
     @classmethod
@@ -115,6 +115,16 @@ class PhoneCanarySweepTests(TestCase):
     def test_the_customer_and_phone_records_were_planted(self):
         self.assertIsNotNone(self.planter.customer)
         self.assertGreater(len(self.planter.planted), 40)
+
+    def test_whatsapp_payload_records_are_planted(self):
+        """Round 2, R4 step 6: the records behind WhatsApp payloads staff can see — missed-call
+        call-backs (CDR calls), counselling card sends, WhatsApp conversations / messages, phone
+        alerts — carry the number, so the sweep checks their screens mask it."""
+        # whatsapp.WAMessage is not built generically (its conversation FK + message-id uniqueness); the
+        # number it shows is its conversation's wa_id, planted on WAConversation.
+        want = {'pbx.CdrCall', 'counselling.CounselCardSend', 'whatsapp.WAConversation',
+                'notifications.PhoneAlert'}
+        self.assertEqual(sorted(want - set(self.planter.planted)), [], sorted(self.planter.skipped))
 
     def test_admin_sees_the_number(self):
         """Positive control."""

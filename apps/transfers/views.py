@@ -114,6 +114,7 @@ def _notify(transfer_request, title, body, notif_type, *, branch=None, include_a
 
 
 from core.permissions import matrix_permission                     # noqa: E402
+from core.permissions import RouteModuleDeletePermission  # round 2, owner answers 2026-11-05
 
 # Branch transfers = the `transfers` matrix module (Batch 4, Z-8c — was any logged-in user):
 # reads need view; requesting and working a transfer need create / edit / approve / finalize;
@@ -146,7 +147,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         messages        GET/POST /{id}/messages/
     """
 
-    permission_classes  = [IsAuthenticated, TRANSFERS]
+    permission_classes  = [IsAuthenticated, TRANSFERS, RouteModuleDeletePermission]
     filter_backends     = [DjangoFilterBackend, filters.SearchFilter, NullsLastOrderingFilter]
     filterset_fields    = ['status', 'requesting_branch', 'supplying_branch']
     search_fields       = [
