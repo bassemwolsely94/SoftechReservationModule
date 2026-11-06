@@ -52,6 +52,7 @@ def _is_supervisor_or_admin(profile):
 # ─────────────────────────────────────────────────────────────────────────────
 
 from core.permissions import matrix_permission                     # noqa: E402
+from core.permissions import RouteModuleDeletePermission  # round 2, owner answers 2026-11-05
 
 # Call center = the `callcenter` matrix module (Batch 4, Z-8b — was any logged-in user, branch
 # staff saw their branch's calls and cases): reads need view; writes need create / edit /
@@ -68,7 +69,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
       - call_center / supervisor / admin: full access to all logs
       - branch staff: own logs only
     """
-    permission_classes = [IsAuthenticated, CALLCENTER]
+    permission_classes = [IsAuthenticated, CALLCENTER, RouteModuleDeletePermission]
     filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, NullsLastOrderingFilter]
     filterset_fields   = ['direction', 'status', 'purpose', 'handled_by', 'branch', 'ai_sentiment']
     search_fields      = [
@@ -1009,7 +1010,7 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
     """
     CRUD for CustomerCase with state-machine actions.
     """
-    permission_classes = [IsAuthenticated, CALLCENTER]
+    permission_classes = [IsAuthenticated, CALLCENTER, RouteModuleDeletePermission]
     filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, NullsLastOrderingFilter]
     filterset_fields   = ['status', 'category', 'priority', 'branch', 'assigned_to']
     search_fields      = ['case_number', 'title', 'description', 'customer__name', 'customer__phone']

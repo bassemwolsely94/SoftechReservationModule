@@ -161,13 +161,13 @@ class ReferralFraudTests(TestCase):
 
 class VoucherPhoneTests(TestCase):
 
-    def test_same_phone_keeps_its_last_10_digit_rule(self):
-        # private-voucher eligibility: unchanged pending owner sign-off (last 10 digits, 10 required)
+    def test_same_phone_follows_the_system_wide_rule(self):
+        # private-voucher eligibility: uses core.phones.same_phone (owner sign-off 2026-11-05)
         from apps.vouchers.models import _same_phone
         self.assertTrue(_same_phone(FORMATTED, '', STORED))
         self.assertFalse(_same_phone('', '', STORED))
         self.assertFalse(_same_phone('0010', '0010'))
-        self.assertFalse(_same_phone('24842067', '0224842067'))     # Cairo 8-digit: under 10 digits
+        self.assertTrue(_same_phone('24842067', '0224842067'))      # Cairo landline without its area code
 
 
 class SubmitLeadPhoneTests(TestCase):

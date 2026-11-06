@@ -858,6 +858,7 @@ SCREENS = [
             T('غير ذلك؟ «رفض» واختر السبب.', 'Otherwise? "Reject" and pick the reason.'),
         ],
         'tips': [
+            T('رقم العميل يظهر مُخفى (آخر 3 أرقام) لمن لا يملك صلاحية رؤية أرقام العملاء.', 'The customer number shows masked (last 3 digits) to staff without the see-customer-phones permission.'),
             T('المصدر هو كاشير النظام الجديد فقط، لأن SOFTECH لا يسجل العميل الحقيقي في سجل المبيعات غير المخزنة.',
               'The source is our new POS only, because SOFTECH does not record the real customer in its unsaved-sales log.'),
             T('الصنف اللي اتباع في نفس الفاتورة أو اشتراه العميل بعدها في أي فرع لا يظهر هنا.',
@@ -897,7 +898,7 @@ SCREENS = [
              'warn': T('بعد «تأكيد الرفض» لا يمكن التراجع.', 'After "Confirm reject" it cannot be undone.'),
              'open_hint': T('يظهر بعد الضغط على «رفض».', 'Appears after pressing "Reject".')},
         ],
-        'updated': '2026-11-03',
+        'updated': '2026-11-05',
         'change_note': T('شاشة جديدة: المبيعات الفائتة', 'New screen: missed sales'),
     },
 ]

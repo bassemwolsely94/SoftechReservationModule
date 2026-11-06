@@ -16,6 +16,7 @@ logger = logging.getLogger('elrezeiky')
 ANALYST_ROLES = {'admin', 'supervisor', 'purchasing', 'quality_manager'}
 
 from core.permissions import matrix_permission                     # noqa: E402
+from core.permissions import RouteModulePermission  # round 2, owner answers 2026-11-05
 
 # Narrative reports are the analytics module (Batch 4, Z-9a — was any logged-in user): every
 # call needs analytics view; generating / backfilling / editing rules keep their role checks.
@@ -230,7 +231,7 @@ class InsightRunViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class InsightRuleViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated, INSIGHTS]
+    permission_classes = [IsAuthenticated, INSIGHTS, RouteModulePermission]
     serializer_class = InsightRuleSerializer
 
     def get_queryset(self):
@@ -245,6 +246,11 @@ class InsightRuleViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         self._guard(); serializer.save()
+
+    def perform_destroy(self, instance):
+        # same rule as an edit (round 2 R3): analytics delete now reaches supervisor / purchasing for
+        # forecasting (owner Q-7c); the alert thresholds stay admin / supervisor
+        self._guard(); instance.delete()
 
     def create(self, request, *a, **k):
         from rest_framework.exceptions import MethodNotAllowed

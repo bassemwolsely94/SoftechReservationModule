@@ -30,6 +30,7 @@ from .audit_serializers import (
 from .audit_service import PaymentAuditService
 from .statement_parser import UNREADABLE_FILE, StatementParseError, parse_statement
 from .models import BankStatementImport, BankStatementLine, ExternalPayment, PaymentException
+from core.permissions import RouteModuleDeletePermission  # round 2, owner answers 2026-11-05
 
 logger = logging.getLogger('elrezeiky')
 
@@ -51,7 +52,7 @@ class BankStatementImportViewSet(StableOrderingMixin, viewsets.ModelViewSet):
     """Upload CSV/XLSX bank statements and trigger automatic matching."""
     serializer_class    = BankStatementImportSerializer
     parser_classes      = [MultiPartParser, FormParser]
-    permission_classes  = [IsAuthenticated, MatrixPermission]
+    permission_classes  = [IsAuthenticated, MatrixPermission, RouteModuleDeletePermission]
     rbac_module         = 'finance'
     rbac_actions        = {'run_matching': ('edit',)}
     rbac_delete         = ('delete', 'approve')

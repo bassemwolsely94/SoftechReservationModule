@@ -540,7 +540,7 @@ pharmacist GET /api/finance/cash-view/lines/x/
 pharmacist GET /api/finance/cash-view/opening-balance/
 quality_manager GET /api/finance/cash-view/export/
 
-# reason: security N1 — the trusted-network list decides who counts as "inside the company"; it is
+# reason: owner answer Q-1 (2026-11-05): trusted networks and the zone-policy grid stay admin only. Security N1 — the trusted-network list decides who counts as "inside the company"; it is
 #   admin only (IsAdminRole) like the rest of the access settings, even for roles that can open settings.
 pharmacist GET /api/access/networks/
 pharmacist GET /api/access/networks/987654321/
@@ -553,7 +553,7 @@ pharmacist GET /api/access/devices/
 pharmacist GET /api/access/devices/987654321/
 purchasing GET /api/access/devices/
 purchasing GET /api/access/devices/987654321/
-# reason: security N3 — the zone policy grid (role x zone) is admin only (IsAdminRole, same as the device
+# reason: owner answer Q-1 (2026-11-05), security N3 — the zone policy grid (role x zone) is admin only (IsAdminRole, same as the device
 #   registry), even for roles that can open settings.
 pharmacist GET /api/access/zone-policies/
 pharmacist GET /api/access/zone-policies/987654321/
@@ -572,11 +572,103 @@ viewer POST /api/batches/stock-expiry/disposal/987654321/status/
 
 # reason: Project 4 — the "needs a sheet" queue and similar-item suggestions are curation tools for
 #   counselling → edit holders (pharmacists); view-only roles read approved guidance, not the queue.
-call_center GET /api/counselling/content/987654321/suggest-items/
-call_center GET /api/counselling/content/needs/
-quality_manager GET /api/counselling/content/987654321/suggest-items/
-quality_manager GET /api/counselling/content/needs/
-salesperson GET /api/counselling/content/987654321/suggest-items/
-salesperson GET /api/counselling/content/needs/
-supervisor GET /api/counselling/content/987654321/suggest-items/
-supervisor GET /api/counselling/content/needs/
+
+# reason: round 2 R3, seeded record — a task is edited / deleted only by its creator or assignee (apps/tasks/views.py, owner rules 2026-11-03); the seeded task belongs to admin, so a role holding tasks edit / delete is refused on it. Per-record rule, not a lockout.
+accountant DELETE /api/tasks/987654321/
+accountant PATCH /api/tasks/987654321/
+accountant PUT /api/tasks/987654321/
+call_center DELETE /api/tasks/987654321/
+call_center PATCH /api/tasks/987654321/
+call_center PUT /api/tasks/987654321/
+delivery DELETE /api/tasks/987654321/
+delivery PATCH /api/tasks/987654321/
+delivery PUT /api/tasks/987654321/
+pharmacist DELETE /api/tasks/987654321/
+pharmacist PATCH /api/tasks/987654321/
+pharmacist PUT /api/tasks/987654321/
+purchasing DELETE /api/tasks/987654321/
+purchasing PATCH /api/tasks/987654321/
+purchasing PUT /api/tasks/987654321/
+quality_manager DELETE /api/tasks/987654321/
+quality_manager PATCH /api/tasks/987654321/
+quality_manager PUT /api/tasks/987654321/
+salesperson DELETE /api/tasks/987654321/
+salesperson PATCH /api/tasks/987654321/
+salesperson PUT /api/tasks/987654321/
+viewer DELETE /api/tasks/987654321/
+viewer PATCH /api/tasks/987654321/
+viewer PUT /api/tasks/987654321/
+
+# reason: round 2 R3, seeded record — delivery order actions follow the role lists and the rider rules (Z-11c: assign / dispatch need assign; N0: riders cannot cancel or close; the driver actions need the order's own rider). The seeded order has no rider.
+call_center POST /api/delivery/987654321/accept/
+call_center POST /api/delivery/987654321/cancel/
+call_center POST /api/delivery/987654321/close/
+call_center POST /api/delivery/987654321/collect-cash/
+call_center POST /api/delivery/987654321/complete/
+call_center POST /api/delivery/987654321/dispatch/
+call_center POST /api/delivery/987654321/fail/
+call_center POST /api/delivery/987654321/partial/
+call_center POST /api/delivery/987654321/return/
+call_center POST /api/delivery/987654321/unavailable/
+delivery POST /api/delivery/987654321/cancel/
+delivery POST /api/delivery/987654321/close/
+delivery POST /api/delivery/987654321/collect-cash/
+salesperson POST /api/delivery/987654321/accept/
+salesperson POST /api/delivery/987654321/cancel/
+salesperson POST /api/delivery/987654321/close/
+salesperson POST /api/delivery/987654321/collect-cash/
+salesperson POST /api/delivery/987654321/complete/
+salesperson POST /api/delivery/987654321/dispatch/
+salesperson POST /api/delivery/987654321/fail/
+salesperson POST /api/delivery/987654321/partial/
+salesperson POST /api/delivery/987654321/return/
+salesperson POST /api/delivery/987654321/unavailable/
+
+# reason: round 2 R3, seeded record — replacement case decisions (approve / reject / reopen / decide / prepare-*) are for replacement managers, like grants and rule versions (Z-11c).
+pharmacist POST /api/replacement/cases/987654321/approve/
+pharmacist POST /api/replacement/cases/987654321/exceptions/987654321/decide/
+pharmacist POST /api/replacement/cases/987654321/insurer-rejection/
+pharmacist POST /api/replacement/cases/987654321/links/987654321/decide/
+pharmacist POST /api/replacement/cases/987654321/prepare-contract-sale/
+pharmacist POST /api/replacement/cases/987654321/prepare-product-sale/
+pharmacist POST /api/replacement/cases/987654321/prepare-purchase/
+pharmacist POST /api/replacement/cases/987654321/rebuild/
+pharmacist POST /api/replacement/cases/987654321/reject/
+pharmacist POST /api/replacement/cases/987654321/reopen/
+
+# reason: round 2 R3, seeded record — Z-11c: replication of a price change is admin only (IsAdminRole).
+pharmacist GET /api/pricing-approvals/987654321/replication/
+purchasing GET /api/pricing-approvals/987654321/replication/
+quality_manager GET /api/pricing-approvals/987654321/replication/
+supervisor GET /api/pricing-approvals/987654321/replication/
+viewer GET /api/pricing-approvals/987654321/replication/
+
+# reason: round 2 R3, seeded record — the SOFTECH ERP match has hard-coded role lists (reservations: admin / pharmacist /
+#   purchasing, so call center is refused; transfers: admin / purchasing, so pharmacist is refused). Owner answer
+#   Q-8 (2026-11-05): keep these role lists (the match reads SOFTECH).
+call_center POST /api/reservations/987654321/check-erp-match/
+pharmacist POST /api/transfers/987654321/check-erp-match/
+salesperson POST /api/reservations/987654321/check-erp-match/
+salesperson POST /api/transfers/987654321/check-erp-match/
+supervisor POST /api/reservations/987654321/check-erp-match/
+supervisor POST /api/transfers/987654321/check-erp-match/
+
+# reason: round 2 R3, seeded record — scoring a call's quality is for supervisors and quality managers ("يُسمح فقط للمشرفين
+#   ومدراء الجودة" in the view); the matrix maps it to callcenter view, which viewer holds.
+viewer POST /api/callcenter/calls/987654321/quality/
+
+# reason: round 2 R3, seeded record — Z-11c: the supplier-invoice SOFTECH probe is admin only.
+purchasing POST /api/invoices/invoices/987654321/probe/
+
+# reason: owner answers Q-7c / Q-7e (2026-11-05) made the matrix grant these, and the views keep their own
+#   stricter rule — none of these roles could do them before either (no lockout): product content (media,
+#   relations) is for content managers (IsContentManager, Z-12); procurement supplier categories and
+#   classification rules are admin configuration (Z-11c / Z-12); a transfer chat message is deleted only
+#   by its author or admin; alert (insight) rules are edited and deleted by admin / supervisor only.
+pharmacist DELETE /api/products/x/media/987654321/
+pharmacist DELETE /api/products/x/related/987654321/remove/
+purchasing DELETE /api/insights/rules/987654321/
+purchasing DELETE /api/procurement/categories/987654321/
+purchasing DELETE /api/procurement/classification-rules/987654321/
+purchasing DELETE /api/transfers/987654321/messages/987654321/
+purchasing PATCH /api/insights/rules/987654321/

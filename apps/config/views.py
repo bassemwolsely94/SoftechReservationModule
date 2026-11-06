@@ -10,6 +10,7 @@ from .serializers import (
     SystemSettingSerializer, SystemSettingUpdateSerializer,
     DropdownOptionSerializer, DropdownOptionWriteSerializer,
 )
+from core.permissions import RouteModulePermission  # round 2, D6
 
 
 class SystemSettingViewSet(viewsets.ModelViewSet):
@@ -205,7 +206,7 @@ def theme(request):
 # ── Pharmacy Profile ───────────────────────────────────────────────────────────
 
 @api_view(['GET', 'PATCH'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, RouteModulePermission])
 def pharmacy_profile(request):
     """
     GET  /api/config/pharmacy/ → pharmacy profile + active branches

@@ -479,6 +479,10 @@ LOGGING = {
         },
     },
 }
+# Round 2, R4: every log record is redacted (passwords, API keys, bearer / JWT tokens) before any
+# handler sees it — exception text from drivers can carry them (core/log_redact.py).
+from core.log_redact import install as _install_log_redaction  # noqa: E402
+_install_log_redaction()
 
 # ── SYBASE (read-only, via jConnect JDBC) ─────────────────────────────────────
 SYBASE_HOST     = config('SYBASE_HOST', default='localhost')
