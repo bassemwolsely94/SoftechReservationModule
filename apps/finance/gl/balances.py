@@ -18,6 +18,9 @@ from apps.finance.models import GLAccount, LedgerLine
 
 ZERO = Decimal('0.00')
 COUNTED = ('approved', 'reversed')
+# lines of a year's closing entry and of its reversal on a reopen. The trial balance counts them (a P&L account opens
+# next year at 0); a statement or comparison of movement leaves them out, or the year would read as nil.
+YEAR_END_CLOSING = Q(entry__source_type='year_end') | Q(entry__reverses__source_type='year_end')
 
 
 def _base(branch_id=None, party_code=None, unbranched=False):

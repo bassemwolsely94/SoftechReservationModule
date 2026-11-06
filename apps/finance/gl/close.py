@@ -12,6 +12,10 @@ run that was only slow finds its token gone at step (c) and stops without postin
 
 Months close in order and a reopen takes every later closed month with it, so the closed months are always one
 unbroken run from the first ledger month: an open month never has a closed month after it.
+
+December has no auto-reversal: step (c) runs the year-end close instead, in the same transaction, and a failure there
+undoes the whole step. Balance-sheet balances need no carry-forward entry: `trial_balance` opens with everything
+before its date_from.
 """
 import datetime
 import logging
@@ -19,21 +23,26 @@ from decimal import Decimal
 
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
+from django.db.models import Sum
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from apps.branches.models import Branch
 from apps.finance.models import (ClosingStockSnapshot, ClosingStockStore, FinancialPeriod,
-                                 GLComparisonLine, LedgerEntry)
+                                 GLComparisonLine, LedgerEntry, LedgerLine)
 from core.permissions import matrix_allows
 
 from . import compare, ledger, plan2_adapter, softech_stock
-from .ledger import _audit
+from .balances import COUNTED
+from .ledger import LedgerError, _audit
 from .periods import next_month, previous_month
+from .statements import TRADING_PL_SECTIONS
 
 logger = logging.getLogger('elrezeiky.finance')
 
 ZERO = Decimal('0.00')
 STOCK_ACCOUNT, RESULT_ACCOUNT = '1390', '5302'
+RETAINED_ACCOUNT, OPENING_STOCK_ACCOUNT = '2409', '5301'
 DEFAULT_REOPEN_WINDOW = 3
 CLOSING_TAKEOVER = datetime.timedelta(minutes=30)
 
@@ -48,7 +57,7 @@ MESSAGES = {
     'superseded':       'إقفال أحدث استلم الشهر، والإقفال ده وقف من غير ما يرحّل حاجة.',
     'next_not_open':    'الشهر اللي بعده مش مفتوح.',
     'unknown_branch':   'فيه مخزن عليه رصيد ومش مربوط بفرع.',
-    'year_end_pending': 'إقفال ديسمبر محتاج إقفال السنة، ولسه مش متاح.',
+    'year_end_account': 'إقفال السنة وقف: حساب مطلوب في قيد الإقفال مينفعش يترحل عليه، صلّحه وأعد الإقفال.',
 }
 
 
@@ -194,9 +203,67 @@ def _save_snapshot(period, stock, user) -> ClosingStockSnapshot:
     return snapshot
 
 
-def year_end_close(year: int, *, user):
-    """December's extra step, inside step (c). Until the year-end close lands, a December cannot close."""
-    raise CloseError('year_end_pending', detail={'year': year})
+def _signed_line(code, branch_id, amount, party_code='') -> dict:
+    """A line of `amount`, debit positive: the ledger takes positive amounts only, so a negative one is a credit."""
+    return {'account_code': code, 'branch_id': branch_id, 'party_code': party_code,
+            'debit': max(amount, ZERO), 'credit': max(-amount, ZERO)}
+
+
+def _year_end_lines(year) -> list:
+    """Clears each (account, branch, party) of the trading and P&L sections, nets each branch to 2409. The branch is
+    the line's, else the entry's, as balances.py reads it; a balance with neither stays unbranched on both sides."""
+    rows = (LedgerLine.objects
+            .filter(entry__status__in=COUNTED, account__group__section__in=TRADING_PL_SECTIONS,
+                    entry__entry_date__gte=datetime.date(year, 1, 1), entry__entry_date__lte=datetime.date(year, 12, 31))
+            .annotate(br=Coalesce('branch_id', 'entry__branch_id'))
+            .values('account__code', 'br', 'party_code').annotate(d=Sum('debit'), c=Sum('credit'))
+            .order_by('account__code', 'br', 'party_code'))
+    lines, results = [], {}
+    for r in rows:
+        balance = r['d'] - r['c']
+        if balance:
+            lines.append(_signed_line(r['account__code'], r['br'], -balance, r['party_code']))
+            results[r['br']] = results.get(r['br'], ZERO) + balance
+    lines += [_signed_line(RETAINED_ACCOUNT, br, net)
+              for br, net in sorted(results.items(), key=lambda i: i[0] or 0) if net]
+    return lines
+
+
+def _stock_carry_lines(year) -> list:
+    """Dr 5301 / Cr 1390 per branch for December's closing stock, flipped where that stock was negative."""
+    lines = []
+    for ln in LedgerLine.objects.filter(entry__source_key=f'closing_stock:{year}-12', entry__status='approved',
+                                        account__code=STOCK_ACCOUNT).order_by('line_no'):
+        value = ln.debit - ln.credit
+        lines += [_signed_line(OPENING_STOCK_ACCOUNT, ln.branch_id, value),
+                  _signed_line(STOCK_ACCOUNT, ln.branch_id, -value)]
+    return lines
+
+
+def _post_year_end(lines, **kwargs) -> LedgerEntry | None:
+    """None when there is nothing to post. A line the ledger refuses (a deactivated account with a balance, say) fails
+    the close by the account's code: the accountant fixes that account, the year is not closed around it."""
+    if not lines:
+        return None
+    try:
+        return _post(lines, **kwargs)
+    except LedgerError as exc:
+        line_no = exc.detail.get('line_no')
+        if line_no is None:
+            raise
+        raise CloseError('year_end_account', detail={'account_code': lines[line_no - 1]['account_code'],
+                                                     'code': exc.code}) from exc
+
+
+def year_end_close(year: int, *, user) -> tuple[LedgerEntry | None, LedgerEntry | None]:
+    """December's extra step, inside step (c): the closing entry to retained earnings on 31-12 and next year's opening
+    stock on 1-1 (the month step (c) has locked open). Either is None when it has no lines."""
+    closing = _post_year_end(_year_end_lines(year), user=user, day=datetime.date(year, 12, 31), source_type='year_end',
+                             source_key=f'year_end:{year}', description=f'إقفال سنة {year} في الأرباح المرحلة')
+    stock = _post_year_end(_stock_carry_lines(year), user=user, day=datetime.date(year + 1, 1, 1),
+                           source_type='year_end_stock', source_key=f'year_end_stock:{year + 1}', book='opening',
+                           description=f'مخزون أول المدة {year + 1} من بضاعة آخر المدة {year}-12')
+    return closing, stock
 
 
 def _finish_close(period_id, stock, user, token) -> FinancialPeriod:
@@ -220,8 +287,11 @@ def _finish_close(period_id, stock, user, token) -> FinancialPeriod:
             snapshot.entry = _post(lines, user=user, day=period.period_end, source_type='closing_stock',
                                    source_key=f'closing_stock:{ym}',
                                    description=f'بضاعة آخر المدة {ym} — تقييم سوفتيك')
+        year_end = {}
         if period.month == 12:
-            year_end_close(period.year, user=user)
+            closing, carried = year_end_close(period.year, user=user)
+            year_end = {'year_end_entry_id': closing.pk if closing else None,
+                        'year_end_stock_entry_id': carried.pk if carried else None}
         elif lines:
             mirrored = [{**ln, 'debit': ln['credit'], 'credit': ln['debit']} for ln in lines]
             snapshot.reversal = _post(mirrored, user=user, day=following.period_start,
@@ -238,7 +308,7 @@ def _finish_close(period_id, stock, user, token) -> FinancialPeriod:
                                    'closing_stock'])
         _audit('gl_period_closed', user=user, obj=period, old_data={'status': 'closing'},
                new_data={'status': 'closed', 'closing_stock': snapshot.pk, 'total': str(stock.total),
-                         'entry_id': snapshot.entry_id, 'reversal_id': snapshot.reversal_id},
+                         'entry_id': snapshot.entry_id, 'reversal_id': snapshot.reversal_id, **year_end},
                extra={'carried_stores': list(stock.carried_stores)})
     return period
 
@@ -254,7 +324,8 @@ def _close_failed(period_id, exc, user, token):
             period.save(update_fields=['status', 'is_closed', 'closing_started_at'])
         _audit('gl_period_close_failed', user=user, obj=period, old_data={'status': old},
                new_data={'status': period.status}, note=str(exc),
-               extra={'error': str(exc), 'code': getattr(exc, 'code', type(exc).__name__)})
+               extra={'error': str(exc), 'code': getattr(exc, 'code', type(exc).__name__),
+                      'detail': getattr(exc, 'detail', None)})
 
 
 def _begin_close(period_id, user) -> tuple:

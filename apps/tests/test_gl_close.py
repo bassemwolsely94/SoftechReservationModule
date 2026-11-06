@@ -568,18 +568,6 @@ class CloseTests(CloseBase):
         self.assertFalse(self.close_entries().exists())
         self.assertTrue(AuditLog.objects.filter(action='gl_period_close_failed', object_id=str(period.pk)).exists())
 
-    def test_december_waits_for_year_end_and_posts_nothing(self):
-        dec = month_period(D(2026, 12, 1))
-        FinancialPeriod.objects.filter(pk=month_period(D(2026, 11, 1)).pk).update(status='closed')
-        self.stock[D(2026, 12, 31)] = {'961': _d(100)}
-        self.ready(dec)
-        with self.assertRaises(CloseError) as cm:
-            close_month(dec.pk, user=self.staff)
-        self.assertEqual(cm.exception.code, 'year_end_pending')
-        dec.refresh_from_db()
-        self.assertEqual(dec.status, 'open')
-        self.assertFalse(self.close_entries().exists())
-
     def test_close_and_reopen_require_finalize(self):
         _, accountant, _ = make_user('gl_close_acct', role='accountant')
         period = month_period(JAN)

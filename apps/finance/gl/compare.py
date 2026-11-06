@@ -19,7 +19,7 @@ from apps.finance.models import (GLAccount, GLComparisonLine, GLSoftechCheck, Le
                                  LedgerLine)
 
 from . import softech_checks
-from .balances import COUNTED, account_statement
+from .balances import COUNTED, YEAR_END_CLOSING, account_statement
 from .ledger import LedgerError, _audit
 
 ZERO = Decimal('0.00')
@@ -31,6 +31,7 @@ def _ledger_figures(check, period) -> dict:
     qs = LedgerLine.objects.filter(entry__status__in=COUNTED).filter(accounts)
     if check.kind == 'movement':
         qs = qs.filter(entry__entry_date__gte=period.period_start, entry__entry_date__lte=period.period_end)
+        qs = qs.exclude(YEAR_END_CLOSING)
     else:
         qs = qs.filter(entry__entry_date__lte=period.period_end)
     rows = (qs.annotate(br=Coalesce('branch_id', 'entry__branch_id'))
@@ -143,6 +144,11 @@ def detail(line_id) -> dict:
     check, period = line.softech_check, line.period
     # a movement check reads the month; a balance check opens with the balance carried into it
     start = period.period_start
+    left_out = set()   # as _ledger_figures, so the rows sum to the line
+    if check.kind == 'movement':
+        left_out = set(LedgerLine.objects.filter(YEAR_END_CLOSING, entry__entry_date__gte=start,
+                                                 entry__entry_date__lte=period.period_end)
+                       .values_list('entry_id', flat=True))
     ledger = []
     for code in _accounts(check):
         st = account_statement(
@@ -156,7 +162,8 @@ def detail(line_id) -> dict:
                            'debit': max(ob, ZERO), 'credit': max(-ob, ZERO), 'running_balance': ob,
                            'entry_id': None, 'account': code})
         for r in st['lines']:
-            ledger.append({**r, 'account': code})
+            if r['entry_id'] not in left_out:
+                ledger.append({**r, 'account': code})
     ledger.sort(key=lambda r: (r['date'], not r.get('opening'), r['number'] or '', r['account']))
     code = None if check.per_party else (line.branch.softech_branch_id if line.branch_id else None)
     rows = softech_checks.detail(check.source, period, code, line.party_code)
