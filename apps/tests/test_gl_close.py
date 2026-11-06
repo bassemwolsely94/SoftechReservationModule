@@ -10,15 +10,17 @@ from unittest import mock
 
 from django.core.exceptions import PermissionDenied
 from django.test import TestCase
+from django.utils import timezone
 
 from apps.audit.models import AuditLog
 from apps.branches.models import Branch
 from apps.config.models import SystemSetting
 from apps.finance import recon_labels
-from apps.finance.gl import compare, corrections, softech_checks
+from apps.finance.gl import close as close_service
+from apps.finance.gl import compare, corrections, ledger, softech_checks
 from apps.finance.gl.balances import trial_balance
 from apps.finance.gl.close import CloseError, checklist, close_month, reopen_month
-from apps.finance.gl.ledger import LedgerError, approve, save_draft
+from apps.finance.gl.ledger import LedgerError, approve, reverse, save_draft
 from apps.finance.gl.periods import month_period, next_month
 from apps.finance.gl.softech_stock import Valuation
 from apps.finance.gl.statements import trading_and_pl
@@ -73,7 +75,7 @@ class CloseBase(TestCase):
         # flushes a kept test DB's migration rows
         GLSoftechCheck.objects.update_or_create(key='stock_at_cost', defaults=dict(
             label='المخزون بالتكلفة', kind='balance', account_codes=['1390'], group_names=[],
-            source='stock_at_cost', sign='debit', per_party=False, blocks_close=True))
+            source='stock_at_cost', sign='debit', per_party=False, blocks_close=False))
         GLSoftechCheck.objects.update_or_create(key='supplier_balance', defaults=dict(
             label='أرصدة الموردين', kind='balance', account_codes=['2341'], group_names=[],
             source='supplier_balance', sign='credit', per_party=True, blocks_close=False))
@@ -83,7 +85,7 @@ class CloseBase(TestCase):
         self.addCleanup(recon_labels._cache.__setitem__, 'at', 0)
         self.stock = {JAN: {'961': _d('1000.50'), '962': _d(500)}, FEB: {'961': _d(1200)},
                       MAR: {'961': _d(1300)}, APR: {'961': _d(1400)}}
-        self.softech = {}   # other comparison sources: {source: figures}
+        self.softech = {}   # the other comparison sources: {source: figures}
         self.valuations = {}   # a Valuation to return as it is for a date, instead of self.stock
         self.during_read = None   # called while close_month is reading SOFTECH (the month is 'closing')
         p = mock.patch('apps.finance.gl.softech_stock.valuation', side_effect=self._valuation)
@@ -114,13 +116,17 @@ class CloseBase(TestCase):
         return approve(e.id, user=self.staff)
 
     def ready(self, period):
-        """Comparison computed, and the seeded stock check explained: before the close 1390 is 0 against SOFTECH's
-        whole stock, so that check differs by construction until the closing entry posts."""
+        """Comparison computed, and whatever a blocking check flags explained."""
         compare.compute(period)
         for line in GLComparisonLine.objects.filter(period=period, softech_check__blocks_close=True).select_related(
                 'softech_check'):
             if line.needs_explanation:
                 compare.explain(line.pk, user=self.staff, text='يترحل عند الإقفال')
+
+    def blocking_check(self):
+        """No seeded check blocks the close today, so a test of that item owns one: 5100 against the sales source."""
+        return GLSoftechCheck.objects.create(key='t_blocks', label='فحص يمنع', kind='movement', account_codes=['5100'],
+                                             group_names=[], source='sales', sign='debit', blocks_close=True)
 
     def close(self, day):
         period = month_period(day)
@@ -165,10 +171,12 @@ class ChecklistTests(CloseBase):
     def test_checklist_blocks_on_drafts_exceptions_stale_comparison_unexplained_and_missing_stock(self):
         # stale: nothing computed yet
         self.assertFalse(self.items(JAN)['comparison_fresh']['ok'])
+        self.blocking_check()
+        self.softech['sales'] = {('961', ''): _d(70)}
         compare.compute(month_period(JAN))
         items = self.items(JAN)
         self.assertTrue(items['comparison_fresh']['ok'])
-        self.assertFalse(items['comparison_explained']['ok'])   # the seeded stock check: 1390 is 0, SOFTECH is not
+        self.assertFalse(items['comparison_explained']['ok'])
         self.ready(month_period(JAN))
         items = self.items(JAN)
         self.assertTrue(all(i['ok'] for i in items.values() if i['blocking']), items)
@@ -197,14 +205,34 @@ class ChecklistTests(CloseBase):
         self.assertFalse(item['ok'])
         self.assertIn('2026-01-31', item['detail'])
         self.assertIn('961 · B1', item['detail'])
+        self.assertNotIn('961 (', item['detail'])   # the label alone when the store is its branch
         self.assertIn('شغّل تقرير رصيد المخازن في تاريخ من سوفتيك لهذا التاريخ', item['detail'])
 
+    def test_missing_hq_store_keeps_its_code_beside_the_branch_label(self):
+        Branch.objects.create(softech_branch_id='100', name='HQ')
+        self.valuations[JAN] = Valuation(as_of=JAN, stores=[], missing_stores=['102', '103'])
+        detail = self.items(JAN)['stock_snapshot']['detail']
+        self.assertIn('102 (100 · HQ)', detail)
+        self.assertIn('103 (100 · HQ)', detail)
+
     def test_changed_difference_needs_explaining_again(self):
+        self.blocking_check()
+        self.softech['sales'] = {('961', ''): _d(70)}
         self.ready(month_period(JAN))
         self.assertTrue(self.items(JAN)['comparison_explained']['ok'])
-        self.stock[JAN]['961'] += 10
+        self.softech['sales'] = {('961', ''): _d(80)}
         compare.compute(month_period(JAN))
         self.assertFalse(self.items(JAN)['comparison_explained']['ok'])
+
+    def test_stock_check_does_not_block_and_reads_zero_after_the_close(self):
+        period = month_period(JAN)
+        compare.compute(period)
+        stock_lines = GLComparisonLine.objects.filter(period=period, softech_check__key='stock_at_cost')
+        self.assertEqual(stock_lines.get(branch=self.b1).difference, _d('-1000.50'))   # 1390 is 0 before the close
+        self.assertTrue(self.items(JAN)['comparison_explained']['ok'])
+        self.assertEqual(close_month(period.pk, user=self.staff).status, 'closed')
+        compare.compute(period)
+        self.assertEqual({ln.difference for ln in stock_lines}, {Z})
 
     def test_suppliers_unexplained_does_not_block(self):
         self.post(300, D(2026, 1, 10))   # 2341 on the ledger, nothing on SOFTECH's side
@@ -385,16 +413,117 @@ class CloseTests(CloseBase):
     def test_failure_after_the_closing_entry_leaves_nothing(self):
         period = month_period(JAN)
         self.ready(period)
-        FinancialPeriod.objects.filter(pk=next_month(period).pk).update(status='closed')   # the reversal cannot land
-        with self.assertRaises(LedgerError) as cm:
+        real_post = close_service._post
+
+        def post(lines, **kw):
+            if kw['source_type'] == 'closing_stock_rev':
+                self.assertTrue(self.close_entries().exists())   # the closing entry is in, inside the transaction
+                raise RuntimeError('boom')
+            return real_post(lines, **kw)
+
+        with mock.patch.object(close_service, '_post', side_effect=post), self.assertRaises(RuntimeError):
             close_month(period.pk, user=self.staff)
-        self.assertEqual(cm.exception.code, 'closed_period')
         period.refresh_from_db()
         self.assertEqual(period.status, 'open')
         self.assertIsNone(period.closing_stock)
         self.assertFalse(self.close_entries().exists())
         self.assertFalse(ClosingStockSnapshot.objects.filter(period=period).exists())
         self.assertTrue(AuditLog.objects.filter(action='gl_period_close_failed', object_id=str(period.pk)).exists())
+
+    def test_next_month_must_be_open_before_anything_posts(self):
+        period = month_period(JAN)
+        self.ready(period)
+        for status in ('closing', 'closed'):
+            FinancialPeriod.objects.filter(pk=next_month(period).pk).update(status=status)
+            with self.assertRaises(CloseError) as cm:
+                close_month(period.pk, user=self.staff)
+            self.assertEqual(cm.exception.code, 'next_not_open')
+            self.assertEqual(self.status(JAN), 'open')
+            self.assertFalse(self.close_entries().exists())
+
+    def _closing_since(self, day, minutes):
+        started = timezone.now() - datetime.timedelta(minutes=minutes)
+        FinancialPeriod.objects.filter(pk=month_period(day).pk).update(status='closing', closing_started_at=started)
+        return started
+
+    def test_token_is_set_during_the_close_and_cleared_after(self):
+        period = month_period(JAN)
+        self.ready(period)
+        seen = []
+        self.during_read = lambda: seen.append(FinancialPeriod.objects.get(pk=period.pk).closing_started_at)
+        closed = close_month(period.pk, user=self.staff)
+        self.assertIsNotNone(seen[0])
+        self.assertIsNone(closed.closing_started_at)
+
+    def test_failure_clears_the_token(self):
+        period = month_period(JAN)
+        self.ready(period)
+        with mock.patch('apps.finance.gl.softech_stock.valuation', side_effect=TimeoutError('x')), \
+                self.assertRaises(TimeoutError):
+            close_month(period.pk, user=self.staff)
+        period.refresh_from_db()
+        self.assertIsNone(period.closing_started_at)
+
+    def test_young_closing_is_refused_and_left_closing(self):
+        period = month_period(JAN)
+        self.ready(period)
+        started = self._closing_since(JAN, 29)
+        with self.assertRaises(CloseError) as cm:
+            close_month(period.pk, user=self.staff)
+        self.assertEqual(cm.exception.code, 'close_running')
+        period.refresh_from_db()
+        self.assertEqual((period.status, period.closing_started_at), ('closing', started))
+        self.assertFalse(self.close_entries().exists())
+        self.assertFalse(AuditLog.objects.filter(action='gl_period_close_takeover', object_id=str(period.pk)).exists())
+
+    def test_old_closing_is_taken_over(self):
+        period = month_period(JAN)
+        self.ready(period)
+        started = self._closing_since(JAN, 31)
+        closed = close_month(period.pk, user=self.staff)
+        self.assertEqual(closed.status, 'closed')
+        self.assertIsNone(closed.closing_started_at)
+        self.assertEqual(self.close_entries().count(), 2)
+        row = AuditLog.objects.get(action='gl_period_close_takeover', object_id=str(period.pk))
+        self.assertEqual(row.old_data, {'status': 'closing', 'closing_started_at': started.isoformat()})
+        self.assertEqual(row.new_data['status'], 'closing')
+
+    def test_takeover_with_a_failing_checklist_returns_the_month_to_open(self):
+        period = month_period(JAN)
+        self.ready(period)
+        self._closing_since(JAN, 31)
+        self._draft_during_close()
+        with self.assertRaises(CloseError) as cm:
+            close_month(period.pk, user=self.staff)
+        self.assertEqual(cm.exception.code, 'checklist')
+        period.refresh_from_db()
+        self.assertEqual((period.status, period.closing_started_at), ('open', None))
+        self.assertTrue(AuditLog.objects.filter(action='gl_period_close_takeover', object_id=str(period.pk)).exists())
+
+    def test_superseded_run_aborts_without_posting(self):
+        period = month_period(JAN)
+        self.ready(period)
+        newer = timezone.now() + datetime.timedelta(minutes=31)
+        self.during_read = lambda: FinancialPeriod.objects.filter(pk=period.pk).update(closing_started_at=newer)
+        with self.assertRaises(CloseError) as cm:
+            close_month(period.pk, user=self.staff)
+        self.assertEqual(cm.exception.code, 'superseded')
+        period.refresh_from_db()
+        self.assertEqual((period.status, period.closing_started_at), ('closing', newer))   # the newer run owns it
+        self.assertFalse(self.close_entries().exists())
+        self.assertFalse(ClosingStockSnapshot.objects.filter(period=period).exists())
+        row = AuditLog.objects.get(action='gl_period_close_failed', object_id=str(period.pk))
+        self.assertEqual(row.extra['code'], 'superseded')
+
+    def test_run_whose_month_left_closing_aborts_without_posting(self):
+        period = month_period(JAN)
+        self.ready(period)
+        self.during_read = lambda: FinancialPeriod.objects.filter(pk=period.pk).update(
+            status='open', closing_started_at=None)
+        with self.assertRaises(CloseError) as cm:
+            close_month(period.pk, user=self.staff)
+        self.assertEqual(cm.exception.code, 'superseded')
+        self.assertFalse(self.close_entries().exists())
 
     def _draft_during_close(self):
         return save_draft(user=self.staff, entry_date=D(2026, 1, 20), description='x', lines=[
@@ -563,18 +692,71 @@ class ReopenTests(CloseBase):
         self.assertEqual(self.status(JAN), 'closed')
         self.assertEqual(self.close_entries().filter(status='approved').count(), 2)
 
-    def test_a_correction_on_a_close_entry_refuses_the_whole_reopen(self):
+    def test_close_entries_cannot_be_reversed_outside_a_reopen(self):
+        self.close(JAN)
+        for key in ('closing_stock:2026-01', 'closing_stock_rev:2026-01'):
+            with self.assertRaises(LedgerError) as cm:
+                reverse(self.live(key).pk, user=self.staff, reason='x')
+            self.assertEqual(cm.exception.code, 'close_entry')
+            self.assertEqual(cm.exception.message, 'ده قيد إقفال، إعادة فتح الشهر هي الطريق')
+        self.assertEqual(self.close_entries().filter(status='approved').count(), 2)
+
+    def test_every_close_source_type_is_refused_by_reverse_and_correction(self):
+        for source_type in ('year_end', 'year_end_stock'):
+            draft = save_draft(user=self.staff, entry_date=D(2026, 1, 10), description='x', source_type=source_type,
+                               lines=[{'account_code': '5100', 'debit': _d(5), 'credit': Z, 'branch_id': self.b1.id},
+                                      {'account_code': '2341', 'debit': Z, 'credit': _d(5), 'branch_id': self.b1.id}])
+            entry = approve(draft.pk, user=self.staff)
+            for call in (lambda: reverse(entry.pk, user=self.staff, reason='x'),
+                         lambda: corrections.post_late_correction(entry.pk, [], user=self.staff, reason='x')):
+                with self.assertRaises(LedgerError) as cm:
+                    call()
+                self.assertEqual(cm.exception.code, 'close_entry')
+
+    def test_close_entries_cannot_be_corrected_reopen_is_the_route(self):
         self.close_through(JAN, FEB)
         entry = self.live('closing_stock:2026-02')
-        corrections.post_late_correction(entry.pk, [
-            {'account_code': '1390', 'debit': _d(1250), 'credit': Z, 'branch_id': self.b1.id},
-            {'account_code': '5302', 'debit': Z, 'credit': _d(1250), 'branch_id': self.b1.id},
-        ], user=self.staff, reason='x')
         with self.assertRaises(LedgerError) as cm:
+            corrections.post_late_correction(entry.pk, [
+                {'account_code': '1390', 'debit': _d(1250), 'credit': Z, 'branch_id': self.b1.id},
+                {'account_code': '5302', 'debit': Z, 'credit': _d(1250), 'branch_id': self.b1.id},
+            ], user=self.staff, reason='x')
+        self.assertEqual(cm.exception.code, 'close_entry')
+        self.assertFalse(entry.corrections.exists())
+        self.assertEqual(len(reopen_month(month_period(JAN).pk, user=self.staff, reason='x')), 2)
+
+    def test_reopen_dates_every_mirror_as_its_original(self):
+        self.close_through(JAN, FEB)
+        with mock.patch.object(ledger, 'reverse', wraps=ledger.reverse) as spy:
             reopen_month(month_period(JAN).pk, user=self.staff, reason='x')
-        self.assertEqual(cm.exception.code, 'has_corrections')
-        self.assertEqual([self.status(d) for d in (JAN, FEB)], ['closed', 'closed'])
-        self.assertEqual(self.live('closing_stock:2026-01').status, 'approved')
+        self.assertEqual(spy.call_count, 4)
+        for call in spy.call_args_list:
+            original = LedgerEntry.objects.get(pk=call.args[0])
+            self.assertEqual(call.kwargs['entry_date'], original.entry_date)
+            self.assertTrue(call.kwargs['_close_service'])
+
+    def test_reopen_racing_the_next_months_close_raises_instead_of_moving_a_mirror(self):
+        """The next month turns `closing` under the reopen: the mirror must not slide into a later month."""
+        self.close(JAN)
+        real = ledger.reverse
+
+        def racing(*a, **kw):
+            FinancialPeriod.objects.filter(pk=month_period(FEB).pk).update(status='closing')
+            return real(*a, **kw)
+
+        with mock.patch.object(ledger, 'reverse', side_effect=racing), self.assertRaises(LedgerError) as cm:
+            reopen_month(month_period(JAN).pk, user=self.staff, reason='x')
+        self.assertEqual(cm.exception.code, 'closed_period')
+        self.assertEqual(self.status(JAN), 'closed')
+        self.assertFalse(LedgerEntry.objects.filter(source_type='reversal').exists())
+        self.assertEqual(self.close_entries().filter(status='approved').count(), 2)
+
+    def test_reopen_refused_while_a_later_month_not_next_to_it_is_closing(self):
+        self.close_through(JAN, FEB)
+        FinancialPeriod.objects.filter(pk=month_period(MAR).pk).update(status='closing')
+        with self.assertRaises(CloseError) as cm:
+            reopen_month(month_period(JAN).pk, user=self.staff, reason='x')
+        self.assertEqual(cm.exception.code, 'close_running')
         self.assertEqual(self.close_entries().filter(status='reversed').count(), 0)
 
     def test_reopen_never_leaves_a_closed_correction_on_an_open_original(self):

@@ -26,6 +26,8 @@ _period_for = month_period
 
 _CENT = Decimal('0.01')
 _MAX_AMOUNT = Decimal('1e16')  # LedgerLine.debit/credit: max_digits=18, decimal_places=2
+# posted by gl/close.py: undone only by reopening the month, which needs ledger.finalize
+CLOSE_SOURCE_TYPES = ('closing_stock', 'closing_stock_rev', 'year_end', 'year_end_stock')
 
 MESSAGES = {
     'unbalanced':          'القيد مش متزن: إجمالي المدين لازم يساوي إجمالي الدائن.',
@@ -47,6 +49,7 @@ MESSAGES = {
     'reverse_before_original': 'تاريخ القيد العكسي مينفعش يكون قبل تاريخ القيد الأصلي.',
     'has_corrections':     'القيد ده عليه تصحيحات، اعكس التصحيحات الأول',
     'period_closing':      'الفترة قيد الإقفال',
+    'close_entry':         'ده قيد إقفال، إعادة فتح الشهر هي الطريق',
     'period_open':         'فترة القيد لسه مفتوحة — عدّل بإعادة الترحيل مش بقيد تصحيح.',
     'nothing_to_correct':  'مفيش فرق يتصحح: الأسطر الجديدة مطابقة للقيد بعد تصحيحاته.',
     'correction_pending':  'فيه قيد تصحيح مسودة لنفس القيد — اعتمده أو احذفه الأول.',
@@ -271,12 +274,13 @@ def approve(entry_id: int, *, user, _allow_before_opening: bool = False,
     return entry
 
 
-def reverse(entry_id: int, *, user, reason: str,
-            entry_date: datetime.date | None = None) -> LedgerEntry:
+def reverse(entry_id: int, *, user, reason: str, entry_date: datetime.date | None = None,
+            _close_service: bool = False) -> LedgerEntry:
     """Reverse an approved entry with an approved mirror entry (debit↔credit).
 
     The original's month no longer open: the mirror points back at it (`corrects`) and, without
-    an explicit date, is dated the first day of the first open month after it."""
+    an explicit date, is dated the first day of the first open month after it.
+    `_close_service` is for gl/close.py only: nothing else may reverse a close entry."""
     with transaction.atomic():
         original = LedgerEntry.objects.select_for_update().get(pk=entry_id)
         if original.status == 'reversed':
@@ -285,6 +289,8 @@ def reverse(entry_id: int, *, user, reason: str,
             raise LedgerError('not_approved')
         if original.reverses_id:
             raise LedgerError('is_reversal')
+        if original.source_type in CLOSE_SOURCE_TYPES and not _close_service:
+            raise LedgerError('close_entry')
         # a reversed correction is already netted out; a live one would outlive the original
         if original.corrections.filter(status__in=('draft', 'approved')).exists():
             raise LedgerError('has_corrections')

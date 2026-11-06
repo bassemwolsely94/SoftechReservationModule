@@ -149,6 +149,14 @@ class GLApiTests(TestCase):
         again = self.c.post(f'{BASE}entries/{d["id"]}/reverse/', {'reason': 'x'}, format='json')
         self.assertEqual(again.status_code, 409)
 
+    def test_reverse_refused_on_a_close_entry(self):
+        d = self._draft()
+        self.c.post(f'{BASE}entries/{d["id"]}/approve/', {}, format='json')
+        LedgerEntry.objects.filter(pk=d['id']).update(source_type='closing_stock')
+        r = self.c.post(f'{BASE}entries/{d["id"]}/reverse/', {'reason': 'x'}, format='json')
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.data['code'], 'close_entry')
+
     def test_reverse_refused_while_corrections_are_live(self):
         from apps.finance.gl.corrections import post_late_correction
         from apps.finance.models import FinancialPeriod

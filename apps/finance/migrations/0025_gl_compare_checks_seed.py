@@ -4,7 +4,8 @@ from django.db import migrations
 
 # blocks_close=False where finance's own figure is not reproduced from SOFTECH (doc 35, Source verification):
 # sales (card tender), purchases (returns), expenses (dailyexpenses is petty cash only, not the expense groups);
-# supplier balances never block (spec §11a).
+# supplier balances never block (spec §11a). Stock does not block either: before a close 1390 is 0 by design, a
+# missing snapshot is blocked by the close checklist's own stock item, and after the close the line reads ~0.
 CHECKS = [
     dict(key='sales', label='المبيعات', kind='movement', account_codes=[], group_names=['المبيعات'],
          source='sales', sign='credit', per_party=False, blocks_close=False, order=10),
@@ -12,7 +13,7 @@ CHECKS = [
          group_names=['تكلفة المبيعات'], source='purchases', sign='debit', per_party=False,
          blocks_close=False, order=20),
     dict(key='stock_at_cost', label='المخزون بالتكلفة', kind='balance', account_codes=['1390'],
-         group_names=[], source='stock_at_cost', sign='debit', per_party=False, blocks_close=True,
+         group_names=[], source='stock_at_cost', sign='debit', per_party=False, blocks_close=False,
          order=30),
     dict(key='expenses', label='المصروفات', kind='movement', account_codes=[],
          group_names=['المصروفات العموميه', 'مصروفات بيع وتوزيع', 'مصروفات التشغيل'],

@@ -87,6 +87,8 @@ def post_late_correction(original_id: int, new_lines: list, *, user, reason: str
             raise LedgerError('is_reversal')
         if original.corrects_id:
             raise LedgerError('is_correction')
+        if original.source_type in ledger.CLOSE_SOURCE_TYPES:
+            raise LedgerError('close_entry')
         if original.period.status == 'open':
             raise LedgerError('period_open', {'period': str(original.period)})
         change = None

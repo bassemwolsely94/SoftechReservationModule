@@ -173,6 +173,8 @@ class FinancialPeriod(models.Model):
         'users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
         related_name='+', verbose_name='أقفلها')
     closed_at    = models.DateTimeField(null=True, blank=True, verbose_name='وقت الإقفال')
+    # set while status is 'closing': when this close run started, and the run's token (gl/close.py)
+    closing_started_at = models.DateTimeField(null=True, blank=True, verbose_name='بداية الإقفال')
     closing_stock = models.ForeignKey(
         'finance.ClosingStockSnapshot', null=True, blank=True, on_delete=models.SET_NULL,
         related_name='+', verbose_name='مخزون آخر المدة')

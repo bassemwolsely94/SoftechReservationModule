@@ -290,4 +290,5 @@ class SeedTests(TestCase):
         self.assertEqual(set(keys), {'sales', 'purchases', 'stock_at_cost', 'expenses', 'supplier_balance'})
         self.assertTrue(keys['supplier_balance'].per_party)
         self.assertFalse(keys['supplier_balance'].blocks_close)
+        self.assertFalse(keys['stock_at_cost'].blocks_close)
         self.assertEqual(keys['stock_at_cost'].account_codes, ['1390'])

@@ -2,15 +2,18 @@
 
 A close runs in three steps so the slow SOFTECH read holds no lock:
   (a) one transaction: the month is open, its database items pass, status becomes `closing` (approvals into it now
-      get `period_closing`; `ledger.approve` takes the same row lock);
+      get `period_closing`; `ledger.approve` takes the same row lock) and `closing_started_at` is this run's token;
   (b) no transaction: SOFTECH's stock at month end;
   (c) one transaction: the items again (a draft may have landed meanwhile), snapshot, closing-stock entry, its
       auto-reversal on the 1st of the next month, status `closed`.
 Any failure in (b) or (c) returns the month to `open`, with nothing of step (c) left, and audits it.
+A run that died (restart) leaves `closing` behind: after CLOSING_TAKEOVER a new close takes the month over, and a
+run that was only slow finds its token gone at step (c) and stops without posting.
 
 Months close in order and a reopen takes every later closed month with it, so the closed months are always one
 unbroken run from the first ledger month: an open month never has a closed month after it.
 """
+import datetime
 import logging
 from decimal import Decimal
 
@@ -32,6 +35,7 @@ logger = logging.getLogger('elrezeiky.finance')
 ZERO = Decimal('0.00')
 STOCK_ACCOUNT, RESULT_ACCOUNT = '1390', '5302'
 DEFAULT_REOPEN_WINDOW = 3
+CLOSING_TAKEOVER = datetime.timedelta(minutes=30)
 
 MESSAGES = {
     'not_open':         'الشهر مش مفتوح، مينفعش يتقفل.',
@@ -40,7 +44,9 @@ MESSAGES = {
     'not_closed':       'الشهر مش مقفول، مفيش حاجة تتفتح.',
     'snapshot_missing': 'لقطة المخزون من سوفتيك ناقصة لتاريخ آخر الشهر.',
     'reason_required':  'لازم تكتب سبب إعادة الفتح.',
-    'close_running':    'فيه إقفال شغال على شهر بعده، استنى لما يخلص.',
+    'close_running':    'فيه إقفال شغال، استنى لما يخلص.',
+    'superseded':       'إقفال أحدث استلم الشهر، والإقفال ده وقف من غير ما يرحّل حاجة.',
+    'next_not_open':    'الشهر اللي بعده مش مفتوح.',
     'unknown_branch':   'فيه مخزن عليه رصيد ومش مربوط بفرع.',
     'year_end_pending': 'إقفال ديسمبر محتاج إقفال السنة، ولسه مش متاح.',
 }
@@ -119,7 +125,9 @@ def _stock_item(period, stock) -> dict:
     parts = []
     if stock.missing_stores:
         labels = softech_stock.store_map(stock.missing_stores)
-        names = '، '.join(f'{code} ({labels[code].label})' for code in stock.missing_stores)
+        # a store that is its branch: the label says it all; an HQ store: the label is the branch, so keep the code
+        names = '، '.join(labels[code].label if labels[code].branch_code == code else f'{code} ({labels[code].label})'
+                         for code in stock.missing_stores)
         parts.append(f'لقطة {period.period_end.isoformat()} ناقصة للمخازن: {names}. '
                      'شغّل تقرير رصيد المخازن في تاريخ من سوفتيك لهذا التاريخ')
     for s in stock.stores:
@@ -191,12 +199,16 @@ def year_end_close(year: int, *, user):
     raise CloseError('year_end_pending', detail={'year': year})
 
 
-def _finish_close(period_id, stock, user) -> FinancialPeriod:
+def _finish_close(period_id, stock, user, token) -> FinancialPeriod:
     """Step (c): one transaction, all of it or none of it."""
     with transaction.atomic():
         period = FinancialPeriod.objects.select_for_update().get(pk=period_id)
-        if period.status != 'closing':
-            raise CloseError('not_open')
+        if period.status != 'closing' or period.closing_started_at != token:
+            raise CloseError('superseded')
+        # locked first, in month order: the auto-reversal lands here, and _close_service would pass a closing month
+        following = FinancialPeriod.objects.select_for_update().get(pk=next_month(period).pk)
+        if following.status != 'open':
+            raise CloseError('next_not_open')
         items = _database_items(period) + [_stock_item(period, stock)]
         if _blocked(items):
             raise CloseError('checklist', items)
@@ -212,7 +224,7 @@ def _finish_close(period_id, stock, user) -> FinancialPeriod:
             year_end_close(period.year, user=user)
         elif lines:
             mirrored = [{**ln, 'debit': ln['credit'], 'credit': ln['debit']} for ln in lines]
-            snapshot.reversal = _post(mirrored, user=user, day=next_month(period).period_start,
+            snapshot.reversal = _post(mirrored, user=user, day=following.period_start,
                                       source_type='closing_stock_rev', source_key=f'closing_stock_rev:{ym}',
                                       description=f'عكس تلقائي لبضاعة آخر المدة {ym}')
         snapshot.save(update_fields=['entry', 'reversal'])
@@ -220,8 +232,10 @@ def _finish_close(period_id, stock, user) -> FinancialPeriod:
         period.status = 'closed'
         period.closed_by = user
         period.closed_at = timezone.now()
+        period.closing_started_at = None
         period.closing_stock = snapshot
-        period.save(update_fields=['status', 'is_closed', 'closed_by', 'closed_at', 'closing_stock'])
+        period.save(update_fields=['status', 'is_closed', 'closed_by', 'closed_at', 'closing_started_at',
+                                   'closing_stock'])
         _audit('gl_period_closed', user=user, obj=period, old_data={'status': 'closing'},
                new_data={'status': 'closed', 'closing_stock': snapshot.pk, 'total': str(stock.total),
                          'entry_id': snapshot.entry_id, 'reversal_id': snapshot.reversal_id},
@@ -229,38 +243,60 @@ def _finish_close(period_id, stock, user) -> FinancialPeriod:
     return period
 
 
-def _close_failed(period_id, exc, user):
+def _close_failed(period_id, exc, user, token):
+    """Back to open, unless a newer run owns the month by now: then only the audit row."""
     with transaction.atomic():
         period = FinancialPeriod.objects.select_for_update().get(pk=period_id)
         old = period.status
-        if old == 'closing':
+        if old == 'closing' and period.closing_started_at == token:
             period.status = 'open'
-            period.save(update_fields=['status', 'is_closed'])
+            period.closing_started_at = None
+            period.save(update_fields=['status', 'is_closed', 'closing_started_at'])
         _audit('gl_period_close_failed', user=user, obj=period, old_data={'status': old},
                new_data={'status': period.status}, note=str(exc),
                extra={'error': str(exc), 'code': getattr(exc, 'code', type(exc).__name__)})
 
 
-def close_month(period_id, *, user) -> FinancialPeriod:
-    _require_finalize(user)
+def _begin_close(period_id, user) -> tuple:
+    """Step (a), committed on return: (period, the run's token). A takeover whose items do not pass returns the month
+    to open, so what blocks it can be fixed: approvals are refused while it stays `closing`."""
     with transaction.atomic():
         period = FinancialPeriod.objects.select_for_update().get(pk=period_id)
-        if period.status != 'open' or period.period_type != 'month':
+        if period.period_type != 'month':
+            raise CloseError('not_open')
+        started = period.closing_started_at
+        old = {'status': period.status, 'closing_started_at': started.isoformat() if started else None}
+        takeover = period.status == 'closing'
+        if takeover:
+            if started and timezone.now() - started <= CLOSING_TAKEOVER:
+                raise CloseError('close_running')
+        elif period.status != 'open':
             raise CloseError('not_open')
         items = _database_items(period)
-        if _blocked(items):
-            raise CloseError('checklist', items)
-        period.status = 'closing'
-        period.save(update_fields=['status', 'is_closed'])
-        _audit('gl_period_closing', user=user, obj=period, old_data={'status': 'open'},
-               new_data={'status': 'closing'})
+        blocked = _blocked(items)
+        token = None if blocked else timezone.now()
+        if takeover or not blocked:
+            period.status = 'open' if blocked else 'closing'
+            period.closing_started_at = token
+            period.save(update_fields=['status', 'is_closed', 'closing_started_at'])
+            _audit('gl_period_close_takeover' if takeover else 'gl_period_closing', user=user, obj=period,
+                   old_data=old, new_data={'status': period.status,
+                                           'closing_started_at': token.isoformat() if token else None})
+    if blocked:
+        raise CloseError('checklist', items)
+    return period, token
+
+
+def close_month(period_id, *, user) -> FinancialPeriod:
+    _require_finalize(user)
+    period, token = _begin_close(period_id, user)
     try:
         stock = softech_stock.valuation(period.period_end)
         if stock.missing_stores:
             raise CloseError('snapshot_missing', _database_items(period) + [_stock_item(period, stock)])
-        return _finish_close(period_id, stock, user)
+        return _finish_close(period_id, stock, user, token)
     except Exception as exc:
-        _close_failed(period_id, exc, user)
+        _close_failed(period_id, exc, user, token)
         raise
 
 
@@ -302,11 +338,16 @@ def reopen_month(period_id, *, user, reason: str) -> list:
         latest = list(closed.order_by('-period_start').values_list('pk', flat=True)[:_reopen_window()])
         if target.pk not in latest:
             raise CloseError('outside_window')
-        later = FinancialPeriod.objects.select_for_update().filter(
-            period_type='month', period_start__gt=target.period_start, status__in=('closed', 'closing'))
-        months = [target, *later.order_by('period_start')]
-        if any(m.status == 'closing' for m in months):
+        # every later month, whatever its status: a status filter would miss a row another run is setting to closing
+        later = list(FinancialPeriod.objects.select_for_update().filter(
+            period_type='month', period_start__gt=target.period_start).order_by('period_start'))
+        if any(m.status == 'closing' for m in later):
             raise CloseError('close_running')
+        months = [target, *(m for m in later if m.status == 'closed')]
+        # the last month's auto-reversal is dated here (next_month may have just created the row)
+        after = FinancialPeriod.objects.select_for_update().get(pk=next_month(months[-1]).pk)
+        if after.status != 'open':
+            raise CloseError('next_not_open')
 
         old = {_ym(m): {'status': m.status, 'closed_by': m.closed_by_id, 'closing_stock': m.closing_stock_id,
                         'closed_at': m.closed_at.isoformat() if m.closed_at else None} for m in months}
@@ -320,7 +361,9 @@ def reopen_month(period_id, *, user, reason: str) -> list:
         for m in months:
             entries = LedgerEntry.objects.filter(source_key__in=_close_keys(m), status='approved').order_by('pk')
             for entry in entries:
-                ledger.reverse(entry.pk, user=user, reason=reason)
+                # an explicit date: anything unexpected raises closed_period instead of moving the mirror
+                ledger.reverse(entry.pk, user=user, reason=reason, entry_date=entry.entry_date,
+                               _close_service=True)
                 reversed_ids.append(entry.pk)
         _audit('gl_period_reopened', user=user, obj=target, old_data={'months': old}, note=reason,
                new_data={'months': {_ym(m): {'status': 'open'} for m in months}},
