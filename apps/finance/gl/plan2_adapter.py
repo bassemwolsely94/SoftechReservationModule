@@ -2,14 +2,23 @@
 
 Everything else in the close code asks these functions, so a Plan 2 change lands here.
 """
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import GLDraftRun, GLParty, GLSourceDoc, LedgerEntry, SourceException
+from .ledger import _audit
+from .models import (GLDraftRun, GLParty, GLSourceDoc, GLSourceMap, LedgerEntry, PostingRule,
+                     SourceException)
+
+MANUAL_IMPORT_SOURCE = 'manual_import'
+MIXED_MANUAL_KIND = 'mixed_manual_entry'
+MIXED_MANUAL_MESSAGE = 'قيد من يومية المالية على حسابات يدوية وحسابات من سوفتيك — يتضم بكل أسطره أو يتجاهل بسبب'
+MIXED_MANUAL_RESOLVED = 'اتضم من يومية المالية بكل أسطره'
 
 
 @dataclass
@@ -138,6 +147,53 @@ def mark_exception_resolved(exception_id, *, user, entry):
     exc.resolution_note = (f'قيد التصحيح {entry.number or "#%s" % entry.pk}' if entry else '')[:500]
     exc.save(update_fields=['status', 'resolved_by', 'resolved_at', 'resolution_note'])
     return exc
+
+
+def softech_fed_account_codes() -> set:
+    """Accounts the drafting engine posts to: static lines of active posting rules + every source map
+    (a rule's mapped line lands on an account of a map)."""
+    codes = set(GLSourceMap.objects.values_list('account__code', flat=True))
+    for lines in PostingRule.objects.filter(is_active=True, action='post').values_list('lines', flat=True):
+        codes.update(str(ln['account']) for ln in lines or () if ln.get('account'))
+    return codes
+
+
+def parked_manual_keys() -> set:
+    return set(GLSourceDoc.objects.filter(source_type=MANUAL_IMPORT_SOURCE).values_list('source_key', flat=True))
+
+
+def park_mixed_manual_entry(*, key, entry_date, branch_code, book, description, lines, user) -> bool:
+    """A mixed group of finance's journal waits in the exceptions inbox, and so blocks its month's
+    close. -> False when it was parked before: a group finance ignored or included is not raised again."""
+    with transaction.atomic():
+        doc, _ = GLSourceDoc.objects.get_or_create(source_key=key, defaults={
+            'source_type': MANUAL_IMPORT_SOURCE, 'doc_date': entry_date, 'branch_code': branch_code,
+            'amounts': {}, 'attrs': {'book': book, 'description': description},
+            'content_hash': hashlib.sha256(key.encode('utf-8')).hexdigest(), 'status': 'exception'})
+        if SourceException.objects.filter(source_doc=doc, kind=MIXED_MANUAL_KIND).exists():
+            return False
+        message = f'{MIXED_MANUAL_MESSAGE}: {description}' if description else MIXED_MANUAL_MESSAGE
+        exc = SourceException.objects.create(
+            source_doc=doc, kind=MIXED_MANUAL_KIND, source_date=entry_date, message=message[:500],
+            proposed_lines=lines, detail={'group_key': key})
+        _audit('gl_manual_entry_parked', user=user, obj=exc,
+               new_data={'status': 'open', 'source_key': key, 'date': entry_date.isoformat(),
+                         'lines': lines})
+    return True
+
+
+def settle_parked_manual_entry(key, *, entry, user):
+    """The group now has its draft: the doc sits on it and an open exception resolves. An ignored
+    one keeps finance's decision on record."""
+    doc = GLSourceDoc.objects.select_for_update().get(source_key=key)
+    GLSourceDoc.objects.filter(pk=doc.pk).update(status='drafted', entry=entry)
+    rows = SourceException.objects.select_for_update().filter(source_doc=doc, kind=MIXED_MANUAL_KIND, status='open')
+    for exc in rows:
+        exc.status, exc.resolved_by, exc.resolved_at = 'resolved', user, timezone.now()
+        exc.resolution_note = MIXED_MANUAL_RESOLVED
+        exc.save(update_fields=['status', 'resolved_by', 'resolved_at', 'resolution_note'])
+        _audit('gl_manual_exception_resolved', user=user, obj=exc, old_data={'status': 'open'},
+               new_data={'status': 'resolved', 'source_key': key, 'entry_id': entry.pk})
 
 
 def last_draft_run_through(period) -> Optional[datetime]:

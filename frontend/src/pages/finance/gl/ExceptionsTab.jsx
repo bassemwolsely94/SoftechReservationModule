@@ -30,8 +30,12 @@ export const KIND_LABEL = {
   unmapped_party: 'طرف غير مربوط', unmapped_account: 'حساب غير مربوط', no_rule: 'لا توجد قاعدة',
   ambiguous_rule: 'قاعدتان متعارضتان', unbalanced_rule: 'قاعدة غير متوازنة',
   closed_period_change: 'تغيير في فترة مغلقة', duplicate_source_key: 'مفتاح مصدر مكرر', ledger_error: 'خطأ في الدفتر',
+  mixed_manual_entry: 'قيد يدوي مختلط',
 }
 const KIND_ORDER = Object.keys(KIND_LABEL)
+// no SOFTECH document to redraft: read-only here, or finance's journal entry that an accountant decides on
+const NOT_REDRAFTABLE = new Set(['closed_period_change', 'mixed_manual_entry'])
+const sourceLabel = (t) => (t === 'manual_import' ? 'يومية المالية' : SOURCE_TYPES[t] || t)
 const CUSTOMER_SOURCES = new Set(['credit_sales', 'customer_collections'])
 const MAIN_AMOUNT = ['net', 'amount', 'value', 'sales', 'credit']
 
@@ -320,6 +324,17 @@ function RowActions({ ex, perms, onDone, onOpenRule, onRunStarted, onBusy }) {
         {ex.original_entry && <> القيد الأصلي: <Link className="text-green-700 hover:underline" to={`/finance/journal?entry=${ex.original_entry}&tab=entries`}>#{ex.original_entry}</Link></>}
       </div>
     )
+  } else if (kind === 'mixed_manual_entry') {
+    fix = (
+      <div className="text-sm text-gray-700 space-y-1">
+        <div>{doc.attrs?.description} — قيد من يومية المالية فيه حسابات يدوية وحسابات من SOFTECH، ومستني قرار المحاسب. الشهر مش هيتقفل غير لما يتضم بكل أسطره أو يتجاهل بسبب.</div>
+        <div className="text-xs text-gray-600" dir="ltr">
+          {(ex.proposed_lines || []).map((ln, i) => (
+            <div key={i} className="font-mono">{ln.account_code} · {money(ln.debit)} · {money(ln.credit)}</div>
+          ))}
+        </div>
+      </div>
+    )
   } else if (kind === 'unbalanced_rule') {
     fix = <div className="text-xs text-gray-600">مدين {detail?.debit} ≠ دائن {detail?.credit} — راجع أسطر القاعدة في «قواعد الترحيل».</div>
   } else {
@@ -360,7 +375,7 @@ export default function ExceptionsTab({ filters, perms, onRunStarted, onBusy }) 
   })
   const rows = useMemo(() => (listQ.data?.pages || []).flatMap(listOf).map(e => ({
     ...e, _date: e.source_date, _branch: branchName(e.doc?.branch_code),
-    _source: SOURCE_TYPES[e.doc?.source_type] || e.doc?.source_type,
+    _source: sourceLabel(e.doc?.source_type),
     _ref: refOf(e.doc), _amount: mainAmount(e.doc?.amounts),
   })), [listQ.data, branches]) // eslint-disable-line react-hooks/exhaustive-deps
   const { sorted, headerProps } = useSortableRows(rows, {
@@ -368,7 +383,7 @@ export default function ExceptionsTab({ filters, perms, onRunStarted, onBusy }) 
   })
   const groups = useMemo(() => KIND_ORDER.map(k => ({ kind: k, items: sorted.filter(r => r.kind === k) })).filter(g => g.items.length), [sorted])
   const flat = useMemo(() => groups.flatMap(g => g.items), [groups])
-  const selectable = useMemo(() => flat.filter(r => r.kind !== 'closed_period_change'), [flat])
+  const selectable = useMemo(() => flat.filter(r => !NOT_REDRAFTABLE.has(r.kind)), [flat])
   const countsQ = useQuery({
     queryKey: ['gl', 'exceptions', 'counts', filters.source_type || 'all'],
     queryFn: () => glApi.exceptionsCounts({ source_type: filters.source_type || undefined }).then(r => r.data),
@@ -385,7 +400,7 @@ export default function ExceptionsTab({ filters, perms, onRunStarted, onBusy }) 
     })
   }, [selectable])
   const refresh = () => { qc.invalidateQueries({ queryKey: ['gl', 'exceptions'] }) }
-  const toggle = (r) => r.kind !== 'closed_period_change' && setSelected(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n })
+  const toggle = (r) => !NOT_REDRAFTABLE.has(r.kind) && setSelected(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n })
   const selectAll = () => setSelected(s => (s.size === selectable.length ? new Set() : new Set(selectable.map(r => r.id))))
   const kb = useGridKeyboard({
     rows: flat, getKey: r => r.id, onToggle: toggle, onSelectAll: selectAll,
@@ -455,7 +470,7 @@ export default function ExceptionsTab({ filters, perms, onRunStarted, onBusy }) 
                       <Fragment key={r.id}>
                         <tr {...kbp} className={`border-t border-gray-100 cursor-pointer hover:bg-gray-50 ${selected.has(r.id) ? 'bg-green-50/60' : ''} ${isOpen ? 'bg-blue-50/60' : ''} ${kbp.className}`}
                             onClick={() => setOpenRow(isOpen ? null : r.id)}>
-                          {canSelect && <td className="px-2 py-1.5" onClick={e => e.stopPropagation()}><input type="checkbox" disabled={r.kind === 'closed_period_change'} checked={selected.has(r.id)} onChange={() => toggle(r)} /></td>}
+                          {canSelect && <td className="px-2 py-1.5" onClick={e => e.stopPropagation()}><input type="checkbox" disabled={NOT_REDRAFTABLE.has(r.kind)} checked={selected.has(r.id)} onChange={() => toggle(r)} /></td>}
                           <td className="px-3 py-1.5 whitespace-nowrap">{r._date}</td>
                           <td className="px-3 py-1.5">{r._branch}</td>
                           <td className="px-3 py-1.5">{r._source}</td>

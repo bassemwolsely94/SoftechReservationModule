@@ -274,7 +274,21 @@ with the A/P mirror (live check, 2026: diff 0 for all months, expenses 6802 docs
 | `duplicate_source_key` | the same key appeared twice in one read | check the source |
 | `ledger_error` | `save_draft` refused (inactive account, before opening…), or `edited_by_user` (P21) | read the message, fix, redraft; for `edited_by_user` compare «القيد بعد تعديلك» / «نسخة سوفتيك الجديدة» and choose «اعتماد نسخة سوفتيك» or «إبقاء تعديلي» (P23) |
 
+| `mixed_manual_entry` | a group of finance's journal (Plan 3 importer) on both manual and SOFTECH-fed accounts; `source_type='manual_import'`, no SOFTECH reader | parked, blocks the month's close: `import_gl_manual_entries --include-mixed KEY` imports it with all its lines (resolved in the same transaction), or «تجاهل» with a reason. `exceptions/redraft/` leaves it alone |
+
 An exception resolves itself on redraft; «تجاهل» needs a reason and keeps the doc status `exception`.
+
+### Finance's manual-only entries (Plan 3, Task 8)
+
+`gl/manual_import.py` + `import_gl_manual_entries <xlsx> [--sheet NAME] [--book cash|credit] [--preview] [--include-mixed KEY ...] [--user USERNAME]`. Built on the 2020 layout; finance's 2026 journal is the input still needed (a renamed header is one more alias in `_COLUMNS`).
+
+- **Header** found by labels with `normalize_ar`, in the first sheet holding them. **Book**: the «اليومية» column, else `--book`, else the file name, else `book_required`.
+- **Rows**: «Nothing» / zero rows are counted (`skipped_zero`). Reported with their row number, never guessed: `no_date`, `no_account`, `bad_amount` (negative, text, or more than 2 decimals), `both_sides`, `bad_condition`, `bad_book`, `no_book`. A float within 1e-6 of 2 decimals is Excel's noise and is taken. A group that lost a reported row is never treated as balanced.
+- **Groups**: (date, book, branch, description); fallback for returns and discounts on 5101/5102/5105/5106/5121/5122/2341, merged per (date, book, branch) when the union balances (`merged_by='date_branch'`).
+- **Status**, first match wins: `before_opening` → `unknown_account` (missing, inactive or non-posting) → `softech` (no manual line) → `unknown_branch` → `unbalanced` → `mixed` → `manual`. Only `manual` is imported on its own. `GLAccount.feed` decides, and `auto` = SOFTECH-fed when an active posting rule line or a source map names the account. `both` is not a manual line.
+- **Link accounts**: SystemSetting `gl_import_link_accounts` (default `["2354"]`). Their lines never decide a status and stay on the entry; preview reports debit / credit / net, and warns on a non-zero net in a file holding both books. A SOFTECH line beside a link line is `softech`, so that side of the cross-book entry is skipped.
+- **Branches**: `resolve_branch(name, code)`: name match, then SystemSetting `gl_branch_aliases` added to finance's six names.
+- **Idempotent**: `source_key='manual_import:' + sha1(date|book|branch|sorted lines)[:20]`, and the description is part of each line. Plan 1's live-source-key constraint makes a re-import `already_imported`; a parked group is raised once. Drafts only; audited `gl_manual_import`, `gl_manual_entry_parked`, `gl_manual_exception_resolved`.
 
 ## Journal gaps from finance's 2020 cash book (2026-11-05, Rulings P24–P26)
 

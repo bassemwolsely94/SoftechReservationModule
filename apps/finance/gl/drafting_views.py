@@ -495,9 +495,13 @@ def exceptions_redraft(request):
         return _err(['اختر استثناءات لإعادة الترحيل'])
     if SourceException.objects.filter(pk__in=ids, status='open').count() != len(set(ids)):
         return _err(['بعض الاستثناءات غير موجودة أو ليست مفتوحة'])
-    docs = GLSourceDoc.objects.filter(exceptions__pk__in=ids).distinct()
+    # finance's parked journal groups have no SOFTECH reader: they end by inclusion or «تجاهل»
+    docs = (GLSourceDoc.objects.filter(exceptions__pk__in=ids)
+            .exclude(source_type=plan2_adapter.MANUAL_IMPORT_SOURCE).distinct())
     agg = docs.aggregate(lo=Min('doc_date'), hi=Max('doc_date'))
     d1, d2 = agg['lo'], agg['hi']
+    if d1 is None:
+        return _err(['قيود يومية المالية مبتتعادش ترحيلها: تتضم بكل أسطرها أو تتجاهل بسبب'])
     if d1 < OPENING_DATE:
         return _err([BEFORE_OPENING])
     if (d2 - d1).days > MAX_SPAN_DAYS:

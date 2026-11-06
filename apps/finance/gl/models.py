@@ -320,6 +320,7 @@ class SourceException(models.Model):
         ('no_rule', 'لا توجد قاعدة'), ('ambiguous_rule', 'قاعدتان متعارضتان'),
         ('unbalanced_rule', 'قاعدة غير متوازنة'), ('closed_period_change', 'تغيير في فترة مغلقة'),
         ('duplicate_source_key', 'مفتاح مصدر مكرر'), ('ledger_error', 'خطأ في الدفتر'),
+        ('mixed_manual_entry', 'قيد يدوي مختلط'),   # Plan 3: a group of finance's journal, parked
     ]
     STATUS_CHOICES = [('open', 'مفتوح'), ('resolved', 'تم الحل'), ('ignored', 'متجاهل')]
     source_doc     = models.ForeignKey(GLSourceDoc, on_delete=models.CASCADE, related_name='exceptions',
