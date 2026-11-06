@@ -21,12 +21,17 @@ NEW = {(r, m, a) for r, mods in GRANTS.items() for m, acts in mods.items() for a
 
 def grant(apps, schema_editor):
     RMA = apps.get_model('users', 'RoleModuleAccess')
+    # Only a matrix already seeded for the module (see 0032). "Seeded" is what module_access.seeded_modules()
+    # means: a row of a role outside RBAC_ENFORCED_ROLES (the accountant's deny rows from 0051 do not count).
+    # On an unseeded module a grant row would end every other role's fail-open and lock them out;
+    # seed_permissions writes the full code matrix (these grants included) there instead.
+    # Read once, before any write, so one grant here never counts as seeding for the next.
+    from core.middleware.module_access import enforced_roles
+    enforced = enforced_roles()
+    seeded = set(RMA.objects.exclude(role__in=enforced).values_list('module', flat=True).distinct())
     for role, module, action in sorted(NEW):
-        # only a matrix already seeded for the module (see 0032): on a fresh install seed_permissions
-        # writes the full code matrix, these grants included
-        if not RMA.objects.filter(module=module).exclude(role=role).exists():
-            continue
-        RMA.objects.update_or_create(role=role, module=module, action=action, defaults={'is_allowed': True})
+        if module in seeded:
+            RMA.objects.update_or_create(role=role, module=module, action=action, defaults={'is_allowed': True})
 
 
 def revoke(apps, schema_editor):

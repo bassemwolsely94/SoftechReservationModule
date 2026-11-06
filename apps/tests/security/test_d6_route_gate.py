@@ -173,3 +173,30 @@ class OwnerAnswersR3Tests(TestCase):
         self.assertEqual(required('/api/pos-orders/missed-sales/', 'GET'), ('reservations', ('view',)))
         for role in ('quality_manager', 'viewer'):
             self.assertNotEqual(self._code(role, 'GET', '/api/pos-orders/missed-sales/'), 403, role)
+
+
+class Migration0052SeedingTests(TestCase):
+    """users.0052 must not end fail-open on a module nobody seeded (CI on PR 75: transfers and supply
+    answered 403 to everyone on a fresh database, because the accountant's deny rows looked like seeding)."""
+
+    def _grant(self):
+        import importlib
+
+        from django.apps import apps
+        importlib.import_module('apps.users.migrations.0052_round2_owner_grants_delete_analytics').grant(apps, None)
+
+    def setUp(self):
+        from apps.users.models import RoleModuleAccess
+        self.RMA = RoleModuleAccess
+        RoleModuleAccess.objects.all().delete()
+
+    def test_accountant_rows_alone_are_not_seeding(self):
+        self.RMA.objects.create(role='accountant', module='transfers', action='view', is_allowed=False)
+        self._grant()
+        self.assertFalse(self.RMA.objects.filter(role='purchasing', module='transfers').exists())
+
+    def test_seeded_module_gets_the_grant(self):
+        self.RMA.objects.create(role='pharmacist', module='transfers', action='view', is_allowed=True)
+        self._grant()
+        self.assertTrue(self.RMA.objects.get(role='purchasing', module='transfers', action='delete').is_allowed)
+        self.assertFalse(self.RMA.objects.filter(role='purchasing', module='incentives').exists())
