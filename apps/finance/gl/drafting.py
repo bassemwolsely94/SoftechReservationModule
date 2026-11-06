@@ -31,6 +31,7 @@ from apps.finance.models import (
 from apps.users.models import StaffProfile
 
 from . import ledger
+from .corrections import effective_lines, net_lines
 from .ledger import LedgerError
 from .periods import accepts_postings
 from .rules import SOURCE_FIELDS, RuleMiss, build_lines, select_rule
@@ -462,7 +463,8 @@ class _Engine:
         good_pks = [sd.pk for sd in good]
 
         if not lines:   # nothing to post: an empty or zero group
-            if live is not None and not self._remove(live, gk, targets, pending_ok, {'held_out': len(bad)}):
+            if (live is not None and not self._corrected_to(live, lines)
+                    and not self._remove(live, gk, targets, pending_ok, {'held_out': len(bad)})):
                 return
             if good:
                 self._set(good_pks, status='skipped', entry=None)
@@ -475,12 +477,15 @@ class _Engine:
         desc = (lines[0].get('description') or rule.description or gk)[:500]
         branch_ids = {ln['branch_id'] for ln in lines if ln.get('branch_id')}
         branch = Branch.objects.get(pk=branch_ids.pop()) if len(branch_ids) == 1 else None
-        if live is not None and self._same(live, entry_date, rule.book, desc, branch, good[0].source_type, lines):
+        if live is not None and (
+                self._corrected_to(live, lines) if self._live_corrections(live).exists()
+                else self._same(live, entry_date, rule.book, desc, branch, good[0].source_type, lines)):
             self._set(good_pks, status='drafted', entry=live)
             self.counts['drafted'] += len(pending_ok)
             self._settled(gk, live, live, good_pks, targets)
             return
-        if not accepts_postings(entry_date) or (live is not None and not accepts_postings(live.entry_date)):
+        if (not accepts_postings(entry_date)
+                or (live is not None and not self._can_reverse(live))):
             self._closed(gk, live, targets, pending_ok, lines)
             return
         if live is not None and self._edited_by_user(live):
@@ -499,7 +504,7 @@ class _Engine:
                     entry = ledger.save_draft(entry=live, **kw)
                     counts = ('replaced',)
                 else:
-                    ledger.reverse(live.pk, user=self.user, reason=REVERSE_REASON)
+                    self._reverse_live(live)
                     entry = ledger.save_draft(**kw)
                     counts = ('reversed', 'created')
         except LedgerError as err:
@@ -513,7 +518,7 @@ class _Engine:
 
     def _remove(self, live, gk, targets, pending_ok, edited_extra=None) -> bool:
         """Delete a draft / reverse an approved entry whose group has nothing left to post."""
-        if not accepts_postings(live.entry_date):
+        if not self._can_reverse(live):
             self._closed(gk, live, targets, pending_ok, [])
             return False
         if self._edited_by_user(live):
@@ -521,18 +526,45 @@ class _Engine:
             return False
         try:
             with transaction.atomic():
-                if live.status == 'draft':   # Ruling P4: same as the Plan 1 DELETE view
-                    ledger._audit('gl_entry_draft_deleted', user=self.user, obj=live,
-                                  old_data=ledger._snapshot(live), note=REVERSE_REASON)
-                    live.delete()
+                if live.status == 'draft':
+                    self._delete_draft(live)
                     self.counts['deleted'] += 1
                 else:
-                    ledger.reverse(live.pk, user=self.user, reason=REVERSE_REASON)
+                    self._reverse_live(live)
                     self.counts['reversed'] += 1
         except LedgerError as err:
             self._ledger_error(gk, err, targets, pending_ok)
             return False
         return True
+
+    def _live_corrections(self, live):
+        return live.corrections.filter(status__in=LIVE)
+
+    def _corrected_to(self, live, lines) -> bool:
+        """The entry has corrections, and with them it already says what the group proposes."""
+        return (self._live_corrections(live).exists()
+                and net_lines(lines) == effective_lines(live, include_drafts=True))
+
+    def _can_reverse(self, live) -> bool:
+        """The entry and every live correction of it sit in months that take postings."""
+        return accepts_postings(live.entry_date) and all(
+            accepts_postings(day) for day in self._live_corrections(live).values_list('entry_date', flat=True))
+
+    def _reverse_live(self, live):
+        """Reverse an approved entry in its own month, its corrections with it (the redraft carries
+        the whole figure). The date is explicit: a month closing mid-run must raise, not post a
+        mirror into a later month. Runs inside the caller's transaction."""
+        for fix in self._live_corrections(live).select_for_update():
+            if fix.status == 'draft':
+                self._delete_draft(fix)
+            else:
+                ledger.reverse(fix.pk, user=self.user, reason=REVERSE_REASON, entry_date=fix.entry_date)
+        ledger.reverse(live.pk, user=self.user, reason=REVERSE_REASON, entry_date=live.entry_date)
+
+    def _delete_draft(self, draft):   # Ruling P4: same as the Plan 1 DELETE view
+        ledger._audit('gl_entry_draft_deleted', user=self.user, obj=draft,
+                      old_data=ledger._snapshot(draft), note=REVERSE_REASON)
+        draft.delete()
 
     def _same(self, live, entry_date, book, desc, branch, source_type, lines) -> bool:
         if (live.entry_date, live.book, live.description, live.branch_id, live.source_type) != (

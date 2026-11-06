@@ -62,16 +62,33 @@ def closed_period_change(exception_id, *, for_update=False):
         source_type=exc.source_doc.source_type, book=rule.book if rule else 'general')
 
 
-def mark_exception_resolved(exception_id, *, user, entry):
-    """Close the exception once its correction exists. A member that moved to another group and
+def release_held_movers(exc):
+    """`exc` (a closed_period_change) is ending. A listed member that moved to another group and
     was held there (holder_busy) has no open row left, which the engine reads as "finance
     decided": it goes back to 'new', unlinked from this group's entry, so the next run covering
-    its date raises its own group. The members still in this group stay as they are."""
-    exc = SourceException.objects.get(pk=exception_id)
+    its date raises its own group. holder_busy means that group never got a row, so a group with
+    a row in any status is not touched: it already has its own decision."""
     detail = exc.detail or {}
+    movers = GLSourceDoc.objects.filter(
+        source_key__in=list(detail.get('member_source_keys') or []), status='exception',
+    ).exclude(group_key__in=['', detail.get('group_key') or ''])
+    for doc in movers:
+        if not SourceException.objects.filter(kind='closed_period_change',
+                                              detail__group_key=doc.group_key).exists():
+            GLSourceDoc.objects.filter(pk=doc.pk).update(status='new', entry=None)
+
+
+def mark_exception_resolved(exception_id, *, user, entry):
+    """Close the exception once its correction exists. The members still in the group go back to
+    'drafted' on the group's entry (the original, or the late document itself): the next rebuild
+    must count them, or a second change would propose only the doc that changed."""
+    exc = SourceException.objects.select_related('original_entry').get(pk=exception_id)
+    detail = exc.detail or {}
+    release_held_movers(exc)
     GLSourceDoc.objects.filter(
         source_key__in=list(detail.get('member_source_keys') or []), status='exception',
-    ).exclude(group_key__in=['', detail.get('group_key') or '']).update(status='new', entry=None)
+        group_key=detail.get('group_key') or '',
+    ).exclude(group_key='').update(status='drafted', entry=exc.original_entry or entry)
     exc.status = 'resolved'
     exc.resolved_by = user
     exc.resolved_at = timezone.now()

@@ -27,7 +27,7 @@ from apps.finance.models import (
 from core.threads import start_thread
 from core.upload_safety import capped_rows, max_upload_bytes
 
-from . import drafting, parties, rules
+from . import drafting, parties, plan2_adapter, rules
 from .ledger import OPENING_DATE
 from .drafting_serializers import (
     exception_json, map_json, party_json, rule_json, source_doc_json,
@@ -477,6 +477,8 @@ def exception_ignore(request, pk):
         e.status, e.resolved_by, e.resolved_at, e.resolution_note = 'ignored', profile, timezone.now(), note
         e.save(update_fields=['status', 'resolved_by', 'resolved_at', 'resolution_note'])
         # the doc stays 'exception' on purpose: the engine only retries new/changed docs
+        if e.kind == 'closed_period_change':   # but a doc held out of its new group by this row is freed
+            plan2_adapter.release_held_movers(e)
         parties._audit('gl_exception_ignored', user=profile, obj=e,
                        old_data={'status': 'open'},
                        new_data={'status': 'ignored', 'kind': e.kind, 'note': note,

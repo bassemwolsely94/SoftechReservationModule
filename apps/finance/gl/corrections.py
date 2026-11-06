@@ -17,15 +17,19 @@ from .models import LedgerEntry, LedgerLine
 from .periods import accepts_postings, first_open_period_after
 
 
-def effective_lines(original: LedgerEntry) -> dict:
+def effective_lines(original: LedgerEntry, *, include_drafts: bool = False) -> dict:
     """(account_code, branch_id, party_code) -> signed net (debit − credit) of the original plus its
     approved corrections. A reversed correction drops out by its status (its mirror never points at
     the original). The original's own mirror counts even when it has no `corrects` link: it was
-    reversed while its month was still open. Zero nets are left out."""
+    reversed while its month was still open. Zero nets are left out.
+
+    `include_drafts`: also the draft corrections, i.e. what the entry will say once they are
+    approved. The engine compares with this, so a pending draft cannot hide a difference."""
     nets = defaultdict(Decimal)
+    statuses = ('approved', 'draft') if include_drafts else ('approved',)
     rows = LedgerLine.objects.filter(
         Q(entry=original)
-        | Q(entry__status='approved') & (Q(entry__corrects=original) | Q(entry__reverses=original))
+        | Q(entry__status__in=statuses) & (Q(entry__corrects=original) | Q(entry__reverses=original))
     ).values_list('account__code', 'branch_id', 'party_code', 'debit', 'credit')
     for code, branch_id, party_code, debit, credit in rows:
         nets[(code, branch_id, party_code)] += debit - credit
@@ -44,6 +48,11 @@ def _aggregate(lines) -> dict:
         key = (str(ln.get('account_code') or ''), branch_id, (ln.get('party_code') or '').strip())
         nets[key] += ledger._amount(ln.get('debit'), i) - ledger._amount(ln.get('credit'), i)
     return nets
+
+
+def net_lines(lines) -> dict:
+    """Proposed lines in the shape of `effective_lines`."""
+    return {key: net for key, net in _aggregate(lines).items() if net}
 
 
 def _difference_lines(new_lines, current) -> list:

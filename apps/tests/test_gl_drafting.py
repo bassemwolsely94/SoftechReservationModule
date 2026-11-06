@@ -513,6 +513,7 @@ class CommandTests(Base):
 class LateChangeSafetyTests(Base):
     MAR31 = datetime.date(2026, 3, 31)
     APR1 = datetime.date(2026, 4, 1)
+    GRP = 'cash:130:2026-03-10'
 
     def test_move_out_of_closed_group_keeps_exception_open(self):
         """C1: closed-month group A keeps its exception; the doc drafts in open group B; no auto-resolve."""
@@ -602,7 +603,7 @@ class LateChangeSafetyTests(Base):
         fix = post_late_correction(a.id, ex.proposed_lines, user=self.staff, reason='x', exception_id=ex.id)
         self.assertEqual(GLSourceDoc.objects.get(source_key='t1').status, 'new')
         t2 = GLSourceDoc.objects.get(source_key='t2')
-        self.assertEqual((t2.status, t2.group_key), ('exception', A))   # still in A: stays as it is
+        self.assertEqual((t2.status, t2.group_key, t2.entry_id), ('drafted', A, a.id))
         run = self.run_engine()
         self.assertEqual(run.status, 'success')
         row = SourceException.objects.get(kind='closed_period_change', status='open')
@@ -612,6 +613,231 @@ class LateChangeSafetyTests(Base):
         a.refresh_from_db()
         self.assertEqual(a.status, 'approved')
         self.assertEqual(LedgerEntry.objects.get(pk=fix.pk).status, 'draft')
+
+    # ── a group that already has a correction (Plan 3) ────────────────────────
+
+    def _corrected_group(self, runs=1):
+        """t1=100 + t2=50 approved, month closed, t1 -> 90, correction approved (effective 140)."""
+        from apps.finance.gl.corrections import post_late_correction
+        self.rule(granularity='branch_day')
+        self.docs['sales_tenders'] = [tender('t1', '100.00'), tender('t2', '50.00', pt='40')]
+        self.run_engine()
+        a = self.live(self.GRP).get()
+        approve(a.id, user=self.staff)
+        self.close_month(MAR10)
+        self.docs['sales_tenders'][0] = tender('t1', '90.00')
+        for _ in range(runs):
+            self.run_engine()
+        ex = SourceException.objects.get(kind='closed_period_change', status='open')
+        fix = post_late_correction(a.id, ex.proposed_lines, user=self.staff, reason='x', exception_id=ex.id)
+        return a, approve(fix.id, user=self.staff)
+
+    def effective_cash(self, entry):
+        from apps.finance.gl.corrections import effective_lines
+        return effective_lines(entry)[('1302', self.b130.pk, '')]
+
+    def ledger_cash(self):
+        """1302 net of every posted entry in the ledger."""
+        total = DEC('0')
+        for e in LedgerEntry.objects.filter(status__in=['approved', 'reversed']):
+            for ln in e.lines.select_related('account').filter(account__code='1302'):
+                total += ln.debit - ln.credit
+        return total
+
+    def test_resolve_puts_group_members_back_on_the_entry(self):
+        a, _ = self._corrected_group(runs=2)   # the second run holds t2 in 'exception' too
+        for key in ('t1', 't2'):
+            sd = GLSourceDoc.objects.get(source_key=key)
+            self.assertEqual((sd.status, sd.entry_id), ('drafted', a.id), key)
+        run = self.run_engine()   # quiet: nothing to raise
+        self.assertEqual(run.status, 'success')
+        self.assertFalse(SourceException.objects.filter(status='open').exists())
+
+    def test_second_change_after_correction_proposes_the_whole_group(self):
+        from apps.finance.gl.corrections import post_late_correction
+        a, _ = self._corrected_group(runs=2)
+        self.docs['sales_tenders'][0] = tender('t1', '80.00')   # the source group is now 130
+        self.run_engine()
+        ex = SourceException.objects.get(kind='closed_period_change', status='open')
+        self.assertEqual(ex.detail['member_source_keys'], ['t1', 't2'])
+        self.assertEqual(DEC(ex.proposed_lines[0]['debit']), DEC('130.00'))
+        fix = post_late_correction(a.id, ex.proposed_lines, user=self.staff, reason='y', exception_id=ex.id)
+        self.assertEqual(self.amounts(fix), [('6002', DEC('10.00'), DEC('0.00')),
+                                             ('1302', DEC('0.00'), DEC('10.00'))])
+        approve(fix.id, user=self.staff)
+        self.assertEqual(self.effective_cash(a), DEC('130.00'))
+
+    def test_source_back_at_original_value_raises_a_row(self):
+        from apps.finance.gl.corrections import post_late_correction
+        a, _ = self._corrected_group()
+        self.docs['sales_tenders'][0] = tender('t1', '100.00')   # back to 150; effective is 140
+        run = self.run_engine()
+        ex = SourceException.objects.get(kind='closed_period_change', status='open')
+        self.assertEqual(run.counts['exceptions'], 1)
+        fix = post_late_correction(a.id, ex.proposed_lines, user=self.staff, reason='y', exception_id=ex.id)
+        approve(fix.id, user=self.staff)
+        self.assertEqual(self.effective_cash(a), DEC('150.00'))
+
+    def test_lines_equal_to_the_effective_figures_raise_no_row(self):
+        a, _ = self._corrected_group()
+        # a change that does not move the group's lines: t1 -> 80, t2 -> 60, still 140
+        self.docs['sales_tenders'] = [tender('t1', '80.00'), tender('t2', '60.00', pt='40')]
+        run = self.run_engine()
+        self.assertEqual(run.status, 'success')
+        self.assertFalse(SourceException.objects.filter(status='open').exists())
+        self.assertEqual(set(GLSourceDoc.objects.values_list('status', flat=True)), {'drafted'})
+
+    def test_pending_draft_correction_counts_in_the_comparison(self):
+        """Effective alone says 150 with a draft to 140 waiting: back at 150 must not settle."""
+        from apps.finance.gl.corrections import effective_lines, post_late_correction
+        self.rule(granularity='branch_day')
+        self.docs['sales_tenders'] = [tender('t1', '100.00'), tender('t2', '50.00', pt='40')]
+        self.run_engine()
+        a = self.live(self.GRP).get()
+        approve(a.id, user=self.staff)
+        self.close_month(MAR10)
+        self.docs['sales_tenders'][0] = tender('t1', '90.00')
+        self.run_engine()
+        ex = SourceException.objects.get(kind='closed_period_change', status='open')
+        post_late_correction(a.id, ex.proposed_lines, user=self.staff, reason='x', exception_id=ex.id)
+        self.assertEqual(effective_lines(a)[('1302', self.b130.pk, '')], DEC('150.00'))
+        self.docs['sales_tenders'][0] = tender('t1', '100.00')
+        self.run_engine()
+        self.assertTrue(SourceException.objects.filter(kind='closed_period_change', status='open').exists())
+
+    def test_reopened_month_reverses_corrections_with_the_original(self):
+        a, fix = self._corrected_group()
+        self.close_month(MAR10, 'open')
+        self.docs['sales_tenders'][0] = tender('t1', '80.00')   # the source group is now 130
+        run = self.run_engine()
+        self.assertEqual(run.status, 'success')
+        a.refresh_from_db()
+        fix.refresh_from_db()
+        self.assertEqual((a.status, fix.status), ('reversed', 'reversed'))
+        new = self.live(self.GRP).get()
+        approve(new.id, user=self.staff)
+        self.assertEqual(self.ledger_cash(), DEC('130.00'))
+        self.assertEqual(fix.reversals.get().entry_date, fix.entry_date)
+
+    def test_reopened_month_removes_a_draft_correction_audited(self):
+        from apps.audit.models import AuditLog
+        from apps.finance.gl.corrections import post_late_correction
+        self.rule(granularity='branch_day')
+        self.docs['sales_tenders'] = [tender('t1', '100.00'), tender('t2', '50.00', pt='40')]
+        self.run_engine()
+        a = self.live(self.GRP).get()
+        approve(a.id, user=self.staff)
+        self.close_month(MAR10)
+        self.docs['sales_tenders'][0] = tender('t1', '90.00')
+        self.run_engine()
+        ex = SourceException.objects.get(kind='closed_period_change', status='open')
+        fix = post_late_correction(a.id, ex.proposed_lines, user=self.staff, reason='x', exception_id=ex.id)
+        self.close_month(MAR10, 'open')
+        self.docs['sales_tenders'][0] = tender('t1', '80.00')
+        self.assertEqual(self.run_engine().status, 'success')
+        self.assertFalse(LedgerEntry.objects.filter(pk=fix.pk).exists())
+        self.assertTrue(AuditLog.objects.filter(action='gl_entry_draft_deleted', object_id=str(fix.pk)).exists())
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'reversed')
+        approve(self.live(self.GRP).get().id, user=self.staff)
+        self.assertEqual(self.ledger_cash(), DEC('130.00'))
+
+    def test_correction_in_a_closed_month_blocks_the_reversal(self):
+        a, fix = self._corrected_group()
+        self.close_month(fix.entry_date)
+        self.close_month(MAR10, 'open')
+        self.docs['sales_tenders'][0] = tender('t1', '80.00')
+        run = self.run_engine()
+        a.refresh_from_db()
+        fix.refresh_from_db()
+        self.assertEqual((a.status, fix.status), ('approved', 'approved'))
+        self.assertEqual(run.counts['reversed'], 0)
+        ex = SourceException.objects.get(kind='closed_period_change', status='open')
+        self.assertEqual(ex.original_entry_id, a.id)
+
+    def test_vanished_group_in_reopened_month_reverses_corrections_too(self):
+        a, fix = self._corrected_group()
+        self.close_month(MAR10, 'open')
+        self.docs['sales_tenders'] = []
+        self.assertEqual(self.run_engine().status, 'success')
+        a.refresh_from_db()
+        fix.refresh_from_db()
+        self.assertEqual((a.status, fix.status), ('reversed', 'reversed'))
+        self.assertEqual(self.ledger_cash(), DEC('0'))
+
+    def test_group_corrected_to_nothing_raises_no_row_when_it_vanishes(self):
+        from apps.finance.gl.corrections import post_late_correction
+        self.rule(granularity='branch_day')
+        self.docs['sales_tenders'] = [tender('t1', '100.00'), tender('t2', '50.00', pt='40')]
+        self.run_engine()
+        a = self.live(self.GRP).get()
+        approve(a.id, user=self.staff)
+        self.close_month(MAR10)
+        self.docs['sales_tenders'] = []
+        self.run_engine(allow_mass_vanish=True)
+        ex = SourceException.objects.get(kind='closed_period_change', status='open')
+        fix = post_late_correction(a.id, [], user=self.staff, reason='x', exception_id=ex.id)
+        approve(fix.id, user=self.staff)
+        self.assertEqual(self.run_engine(allow_mass_vanish=True).status, 'success')
+        self.assertFalse(SourceException.objects.filter(status='open').exists())
+
+    def test_month_closing_mid_run_raises_instead_of_posting_into_a_later_month(self):
+        """Minor 6: the engine's reversal stays in the entry's own month."""
+        from unittest import mock
+        self.rule(granularity='branch_day')
+        self.docs['sales_tenders'] = [tender('t1', '100.00'), tender('t2', '50.00', pt='40')]
+        self.run_engine()
+        a = self.live(self.GRP).get()
+        approve(a.id, user=self.staff)
+        self.docs['sales_tenders'][0] = tender('t1', '90.00')
+        self.close_month(MAR10)
+        with mock.patch.object(DR, 'accepts_postings', return_value=True):   # passed the check, then closed
+            self.run_engine()
+        a.refresh_from_db()
+        self.assertEqual(a.status, 'approved')
+        self.assertFalse(a.reversals.exists())
+        ex = SourceException.objects.get(kind='ledger_error', status='open')
+        self.assertEqual(ex.detail['code'], 'closed_period')
+
+    def test_resolve_order_does_not_release_a_member_already_posted(self):
+        """Important 4: t1 moved A -> B; B's late document first, then A's correction."""
+        from apps.finance.gl.corrections import post_late_correction, post_late_document
+        self.rule(granularity='branch_day')
+        A, B = self.GRP, 'cash:130:2026-03-11'
+        self.docs['sales_tenders'] = [tender('t1', '100.00'), tender('t2', '50.00', pt='40')]
+        self.run_engine()
+        a = self.live(A).get()
+        approve(a.id, user=self.staff)
+        self.close_month(MAR10)
+        self.docs['sales_tenders'][0] = tender('t1', '100.00', date=datetime.date(2026, 3, 11))
+        self.run_engine()
+        rows = {r.detail['group_key']: r for r in SourceException.objects.filter(
+            kind='closed_period_change', status='open')}
+        late = post_late_document(rows[B].id, user=self.staff)
+        post_late_correction(a.id, rows[A].proposed_lines, user=self.staff, reason='x', exception_id=rows[A].id)
+        t1 = GLSourceDoc.objects.get(source_key='t1')
+        self.assertEqual((t1.status, t1.group_key, t1.entry_id), ('drafted', B, late.pk))
+        self.assertEqual(self.run_engine().status, 'success')
+        self.assertFalse(SourceException.objects.filter(status='open').exists())
+
+    def test_resolve_a_first_does_not_release_a_member_with_its_own_open_row(self):
+        from apps.finance.gl.corrections import post_late_correction, post_late_document
+        self.rule(granularity='branch_day')
+        A, B = self.GRP, 'cash:130:2026-03-11'
+        self.docs['sales_tenders'] = [tender('t1', '100.00'), tender('t2', '50.00', pt='40')]
+        self.run_engine()
+        a = self.live(A).get()
+        approve(a.id, user=self.staff)
+        self.close_month(MAR10)
+        self.docs['sales_tenders'][0] = tender('t1', '100.00', date=datetime.date(2026, 3, 11))
+        self.run_engine()
+        rows = {r.detail['group_key']: r for r in SourceException.objects.filter(
+            kind='closed_period_change', status='open')}
+        post_late_correction(a.id, rows[A].proposed_lines, user=self.staff, reason='x', exception_id=rows[A].id)
+        self.assertEqual(GLSourceDoc.objects.get(source_key='t1').status, 'exception')
+        late = post_late_document(rows[B].id, user=self.staff)
+        t1 = GLSourceDoc.objects.get(source_key='t1')
+        self.assertEqual((t1.status, t1.entry_id), ('drafted', late.pk))
 
     def test_crash_between_upsert_and_classify_is_repaired(self):
         from unittest import mock
