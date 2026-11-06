@@ -49,12 +49,24 @@ from apps.insurance.classifier import (
 )
 from apps.insurance.discrepancy import line_variance_map, _sync_snapshot_to_final
 from apps.insurance.importer import (
-    _get_connection, _to_qty, _to_decimal, _safe, recalculate_claim_final_totals,
+    _get_connection, _to_date, _to_qty, _to_decimal, _safe, recalculate_claim_final_totals,
 )
-from apps.insurance.sybase_queries import QUERY_PRESCRIPTION_LINES_CLASSIFIED
+from apps.insurance.sybase_queries import (
+    QUERY_PRESCRIPTION_HEADER_BY_DOCNO_BRANCH, QUERY_PRESCRIPTION_LINES_CLASSIFIED,
+)
 from apps.insurance.audit import record_audit
 
 _Q = Decimal('0.01')
+
+
+def _receipt_doccode(cur, rx):
+    """The SOFTECH doccode of a saved prescription (not stored on it): the only sale/return
+    with its number + branch, else the one on its date. None when that can't tell them apart."""
+    cur.execute(QUERY_PRESCRIPTION_HEADER_BY_DOCNO_BRANCH, [rx.softech_docnumber, rx.softech_branchcode])
+    rows = cur.fetchall() or []
+    if len(rows) > 1:
+        rows = [r for r in rows if _to_date(r[3]) == rx.softech_docdate]
+    return rows[0][1] if len(rows) == 1 else None
 
 
 class Command(BaseCommand):
@@ -142,7 +154,12 @@ class Command(BaseCommand):
             rx = rx_map[rx_id]
             docno, branch = rx.softech_docnumber, rx.softech_branchcode
             try:
-                cur.execute(QUERY_PRESCRIPTION_LINES_CLASSIFIED, [docno, branch])
+                doccode = _receipt_doccode(cur, rx)
+                if doccode is None:
+                    for ln in rx_lines:
+                        skipped.append((ln, 'doccode_unknown', None))
+                    continue
+                cur.execute(QUERY_PRESCRIPTION_LINES_CLASSIFIED, [docno, branch, doccode])
                 rows = cur.fetchall()
             except Exception as e:
                 self.stdout.write(self.style.ERROR(
