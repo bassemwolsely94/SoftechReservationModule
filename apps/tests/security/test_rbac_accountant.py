@@ -30,7 +30,9 @@ DECIDED = {
 class AccountantMatrixTests(TestCase):
 
     def test_code_matrix_is_the_decided_grant_and_nothing_else(self):
-        self.assertEqual({m: a for m, a in PERMISSIONS['accountant'].items() if a}, DECIDED)
+        # hr view + create: own leave and permit requests (owner 2026-11-06, users 0052)
+        self.assertEqual({m: a for m, a in PERMISSIONS['accountant'].items() if a},
+                         {**DECIDED, 'hr': {'view', 'create'}})
 
     def test_only_admin_and_accountant_hold_ledger(self):
         holders = {r for r, mods in PERMISSIONS.items() if mods.get('ledger')}
@@ -58,7 +60,7 @@ class AccountantEnforcedInLogModeTests(TestCase):
             return self.client.get(path)
 
     def test_modules_without_a_grant_are_refused(self):
-        for path in ('/api/hr/', '/api/customers/', '/api/qa/', '/api/enrichment/', '/api/products/',
+        for path in ('/api/qa/inspections/', '/api/customers/', '/api/qa/templates/', '/api/enrichment/', '/api/products/',
                      '/api/referral/', '/api/loyalty/customers/'):
             with self.subTest(path=path):
                 self.assertEqual(self._get(path).status_code, 403)

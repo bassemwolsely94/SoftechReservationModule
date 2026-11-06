@@ -127,7 +127,6 @@ MODULE = {
             'title': T('جولة في موديول المهام التشغيلية', 'A tour of the operational tasks module'),
             'summary': T('إزاي تسند مهمة وتتابعها لحد ما تتقفل، وإزاي تشوف الصورة العامة في لوحة التحكم وتخلّي المهام المتكررة تتعمل لوحدها بالجداول التلقائية.',
                          'How to assign a task and follow it until it is closed, how to see the big picture on the dashboard, and how to let recurring tasks create themselves with automatic schedules.'),
-            'roles': ['admin', 'call_center', 'pharmacist', 'supervisor'],
             'steps': [
                 {'target': 'nav-tasks', 'nav': '/tasks',
                  'text': T('«العمليات» ← «المهام التشغيلية».', '"Operations" → "Operational tasks".'),
@@ -296,8 +295,8 @@ SCREENS = [
         'tips': [T('بتشوف مهام فرعك ومهام «جميع الفروع» وأي مهمة إنت عاملها أو متكلّف بيها حتى لو في فرع تاني.', 'You see your branch\'s tasks, "all branches" tasks, and any task you created or are assigned to, even in another branch.'),
                  T('يعدّل المهمة أو يلغيها منشئها والمكلَّفون بها والمشرف والمدير فقط.',
                    'Only the task creator, its assignees, supervisors and admins can change or cancel a task.')],
-        'updated': '2026-11-03',
-        'change_note': T('«المهام» صارت صلاحية مستقلة يتحكم فيها المدير لكل دور', '"Tasks" is now its own permission the admin controls per role'),
+        'updated': '2026-11-06',
+        'change_note': T('المهام التشغيلية بقت في القائمة لكل دور عنده صلاحية المهام.', 'Operational tasks are now in the menu for every role that holds the tasks permission.'),
     },
     {
         'key': 'tasks.detail',

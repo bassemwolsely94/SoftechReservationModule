@@ -214,9 +214,9 @@ PERMISSIONS = {
         'analytics':    RO,
         'purchasing':   RO,
         'delivery':     RO,
-        'callcenter':   RO,
+        # callcenter and approvals removed (owner 2026-11-06): viewer is refused on customer
+        # conversations and on the approval / pricing screens.
         'hr':           RO,
-        'approvals':    RO,
     },
 
     # ─────────────────────────────────────────────────────────────────────
@@ -242,6 +242,7 @@ PERMISSIONS = {
         'callcenter':   {'view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize'},
         'campaigns':    {'view', 'create', 'edit', 'approve', 'export'},
         'analytics':    RE,
+        'purchasing':   RO,   # opens /supply, already in the menu (owner 2026-11-06)
         'delivery':     {'view', 'create', 'edit', 'approve', 'export', 'assign'},
         'users':        RO,   # can view staff list; cannot create/edit
         'audit':        RE,
@@ -297,6 +298,7 @@ PERMISSIONS = {
         'ledger':       {'view', 'create', 'approve', 'export'},
         'finance':      RE,
         'cheques':      RO,
+        'hr':           {'view', 'create'},   # own leave and permit requests (owner 2026-11-06)
     },
 }
 

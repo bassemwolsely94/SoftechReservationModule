@@ -1,24 +1,17 @@
-// Hidden-from-the-menu screens whose API still answers this role (not 403). Each entry is an
-// OPEN QUESTION for the owner (test plan R8 report), not a decision: either the menu should show
-// the item, or the API should refuse the role. Key: '<role> <menu path>'. Remove an entry as soon
-// as the owner decides and the code follows.
-// Found by the first run on 2026-11-05 (R8): 125 pairs on 45 screens. Default per test plan
-// Q5 is "the matrix wins", but these are menu-vs-API, so each still needs the owner's word.
+// Hidden-from-the-menu screens whose API still answers this role (not 403). The owner accepted
+// these as lower-risk on 2026-11-06 (R8 report): the menu stays as it is and so does the server.
+// Key: '<role> <menu path>'. A pair the code stops serving fails the spec until it is removed
+// here, and any new hidden-but-served pair fails until the owner has seen it.
 export const KNOWN_GAPS = {
   'call_center /analytics': 'the role matrix gives this role analytics:view, wider than the menu',
-  'viewer /approvals': 'CanViewApprovals lets this role read pending approvals',
   'call_center /batches': 'the role matrix gives this role catalog:view, wider than the menu',
   'delivery /batches': 'the role matrix gives this role catalog:view, wider than the menu',
   'salesperson /batches': 'the role matrix gives this role catalog:view, wider than the menu',
   'viewer /batches': 'the role matrix gives this role catalog:view, wider than the menu',
-  'quality_manager /callcenter': 'the role matrix gives this role callcenter:view, wider than the menu',
-  'viewer /callcenter': 'the role matrix gives this role callcenter:view, wider than the menu',
   'call_center /callcenter/analytics': 'the role matrix gives this role callcenter:view, wider than the menu',
-  'viewer /callcenter/analytics': 'the role matrix gives this role callcenter:view, wider than the menu',
   'pharmacist /campaigns': 'the role matrix gives this role campaigns:view, wider than the menu',
   'quality_manager /campaigns': 'the role matrix gives this role campaigns:view, wider than the menu',
   'call_center /cash-optimization': 'the role matrix gives this role analytics:view, wider than the menu',
-  'viewer /cash-optimization': 'the role matrix gives this role analytics:view, wider than the menu',
   'call_center /catalog-intelligence': 'the role matrix gives this role catalog:view, wider than the menu',
   'delivery /catalog-intelligence': 'the role matrix gives this role catalog:view, wider than the menu',
   'quality_manager /catalog-intelligence': 'the role matrix gives this role catalog:view, wider than the menu',
@@ -41,10 +34,6 @@ export const KNOWN_GAPS = {
   'purchasing /delivery/dispatch': 'shares /api/delivery/ with /delivery; the API cannot tell dispatch roles apart',
   'salesperson /delivery/dispatch': 'shares /api/delivery/ with /delivery; the API cannot tell dispatch roles apart',
   'viewer /delivery/dispatch': 'shares /api/delivery/ with /delivery; the API cannot tell dispatch roles apart',
-  'purchasing /demand': 'the role matrix gives this role analytics:view, wider than the menu',
-  'quality_manager /discount-alignment': 'the role matrix gives this role approvals:view, wider than the menu',
-  'supervisor /discount-alignment': 'the role matrix gives this role approvals:view, wider than the menu',
-  'viewer /discount-alignment': 'the role matrix gives this role approvals:view, wider than the menu',
   'viewer /followups': 'the role matrix gives this role followups:view, wider than the menu',
   'pharmacist /followups/reminders': 'CanViewReminders also admits any followups:view role',
   'salesperson /followups/reminders': 'CanViewReminders also admits any followups:view role',
@@ -74,24 +63,11 @@ export const KNOWN_GAPS = {
   'quality_manager /loyalty': 'the API is open to every signed-in user (IsAuthenticated only)',
   'viewer /loyalty': 'the API is open to every signed-in user (IsAuthenticated only)',
   'call_center /omni/accounts': 'the role matrix gives this role callcenter:view, wider than the menu',
-  'quality_manager /omni/accounts': 'the role matrix gives this role callcenter:view, wider than the menu',
-  'viewer /omni/accounts': 'the role matrix gives this role callcenter:view, wider than the menu',
-  'quality_manager /omni/inbox': 'the role matrix gives this role callcenter:view, wider than the menu',
-  'viewer /omni/inbox': 'the role matrix gives this role callcenter:view, wider than the menu',
-  'accountant /payment-audit': 'the role matrix gives this role finance:view, wider than the menu',
-  'quality_manager /payment-audit': 'the role matrix gives this role finance:view, wider than the menu',
-  'quality_manager /pbx/live': 'the role matrix gives this role callcenter:view, wider than the menu',
-  'viewer /pbx/live': 'the role matrix gives this role callcenter:view, wider than the menu',
   'call_center /phantom-sales': 'the role matrix gives this role analytics:view, wider than the menu',
-  'viewer /phantom-sales': 'the role matrix gives this role analytics:view, wider than the menu',
   'call_center /pos/exceptions': 'any pos:view role (the menu and RequireRole allow admin/supervisor/pharmacist only)',
   'salesperson /pos/exceptions': 'any pos:view role (the menu and RequireRole allow admin/supervisor/pharmacist only)',
-  'quality_manager /pricing-approvals': 'the role matrix gives this role approvals:view, wider than the menu',
-  'supervisor /pricing-approvals': 'the role matrix gives this role approvals:view, wider than the menu',
-  'viewer /pricing-approvals': 'the role matrix gives this role approvals:view, wider than the menu',
   'viewer /procurement': 'the role matrix gives this role purchasing:view, wider than the menu',
   'delivery /products': 'the API is open to every signed-in user (IsAuthenticated only)',
-  'quality_manager /reconciliation': 'CompanyFinance admits this role (finance matrix + all-branch)',
   'delivery /referral': 'the API is open to every signed-in user (IsAuthenticated only)',
   'pharmacist /referral': 'the API is open to every signed-in user (IsAuthenticated only)',
   'purchasing /referral': 'the API is open to every signed-in user (IsAuthenticated only)',
@@ -113,12 +89,6 @@ export const KNOWN_GAPS = {
   'viewer /stock-count': 'the role matrix gives this role stockcount:view, wider than the menu',
   'viewer /supply': 'the role matrix gives this role purchasing:view, wider than the menu',
   'call_center /targets': 'the role matrix gives this role analytics:view, wider than the menu',
-  'accountant /tasks': 'the role matrix gives this role tasks:view, wider than the menu',
-  'delivery /tasks': 'the role matrix gives this role tasks:view, wider than the menu',
-  'purchasing /tasks': 'the role matrix gives this role tasks:view, wider than the menu',
-  'quality_manager /tasks': 'the role matrix gives this role tasks:view, wider than the menu',
-  'salesperson /tasks': 'the role matrix gives this role tasks:view, wider than the menu',
-  'viewer /tasks': 'the role matrix gives this role tasks:view, wider than the menu',
   'accountant /users': 'the staff list is a picker open to every signed-in user (only retrieve/write are guarded)',
   'call_center /users': 'the staff list is a picker open to every signed-in user (only retrieve/write are guarded)',
   'delivery /users': 'the staff list is a picker open to every signed-in user (only retrieve/write are guarded)',
@@ -128,6 +98,8 @@ export const KNOWN_GAPS = {
   'salesperson /users': 'the staff list is a picker open to every signed-in user (only retrieve/write are guarded)',
   'viewer /users': 'the staff list is a picker open to every signed-in user (only retrieve/write are guarded)',
   'viewer /vouchers': 'the role matrix gives this role vouchers:view, wider than the menu',
-  'quality_manager /whatsapp/inbox': 'the role matrix gives this role callcenter:view, wider than the menu',
-  'viewer /whatsapp/inbox': 'the role matrix gives this role callcenter:view, wider than the menu',
+  // Follow from granting supervisor purchasing:view for /supply. The owner accepted the wider
+  // read access on 2026-11-06; the menu stays as it is.
+  'supervisor /procurement': 'purchasing:view, granted for /supply, also opens this API',
+  'supervisor /purchasing': 'purchasing:view, granted for /supply, also opens this API',
 }

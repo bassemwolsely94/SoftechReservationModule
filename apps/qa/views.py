@@ -18,7 +18,9 @@ from core.permissions import matrix_permission                     # noqa: E402
 # need view; writes need a grant beyond view, export included, because the quality manager —
 # whose screen this is — holds hr view + export (viewer, view only, could create inspections).
 _QA_WRITE = ('create', 'edit', 'approve', 'finalize', 'export')
-QA = matrix_permission('hr', post=_QA_WRITE, edit=_QA_WRITE, delete=('edit', 'delete'))
+# The accountant's hr grant is self-service only (owner 2026-11-06), not QA inspections.
+QA = matrix_permission('hr', post=_QA_WRITE, edit=_QA_WRITE, delete=('edit', 'delete'),
+                       exclude_roles=('accountant',))
 
 
 def _profile(request):

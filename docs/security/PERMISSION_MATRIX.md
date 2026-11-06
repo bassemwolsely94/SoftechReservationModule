@@ -28,7 +28,7 @@ All-branch roles: admin, call_center, purchasing, supervisor, quality_manager, a
 | `stockcount` | all | — | VCEXF | — | VX | — | V | VCE | VX | — | own — sessions by SOFTECH branch code (scope_code); create / spawn own only |
 | `shortage` | all | VCE | VCEAX | VCE | VCEAX | — | V | VCEAX | VX | — | own — lists, items, exports, aggregate; stock-check shows other branches (transfers) |
 | `offers` | all | — | — | — | VCED | — | — | VCED | — | — | all — offers are chain config; apply-to-order and evaluate own (part 2) |
-| `purchasing` | all | — | — | — | VCEAXF | — | V | — | — | — | all — HQ module; supply cases / decisions own + network (viewer role) |
+| `purchasing` | all | — | — | — | VCEAXF | — | V | V | — | — | all — HQ module; supply cases / decisions own + network (viewer role) |
 | `invoices` | all | — | — | — | VCEAXF | — | — | — | — | — | open — HQ module; branch roles have no grant |
 | `incentives` | all | — | — | — | VCEAXF | — | — | — | VCEAXF | — | all-branch admins, quality managers and purchasing only (owner 2026-11-03, apps/incentives/permissions.py); own progress open; sales targets (analytics view) own branch |
 | `cheques` | all | — | V | — | VCEAXF | — | — | — | — | V | own — plans, instalments, treasury dashboard |
@@ -36,9 +36,9 @@ All-branch roles: admin, call_center, purchasing, supervisor, quality_manager, a
 | `insurance` | all | — | — | — | VCEDAXF | — | — | — | — | — | open — HQ claims module; claims portfolio report all-branch users only (owner 2026-11-02) |
 | `commerce` | all | — | — | — | VCEDAXF | — | — | — | — | — | all — no branch field (feature-flag gated) |
 | `replacement` | all | — | VC | — | VX | — | — | VCEAXF | VX | — | own — scoped_cases + authz.require (accessible_branch_ids = branch_scope) |
-| `callcenter` | all | VCEXS | — | — | — | — | V | VCEDAXSF | VX | — | own — calls, cases (+ assigned to me), dashboards, converts; omni inbox own + assigned (branch_scope) |
-| `hr` | all | VC | VC | VC | VC | VC | V | VCAX | VX | — | role — own records; managers see all |
-| `approvals` | all | — | VA | — | VA | — | V | VA | VA | — | n/a — scoped by requester / approver |
+| `callcenter` | all | VCEXS | — | — | — | — | — | VCEDAXSF | VX | — | own — calls, cases (+ assigned to me), dashboards, converts; omni inbox own + assigned (branch_scope) |
+| `hr` | all | VC | VC | VC | VC | VC | V | VCAX | VX | VC | role — own records; managers see all |
+| `approvals` | all | — | VA | — | VA | — | — | VA | VA | — | n/a — scoped by requester / approver |
 | `analytics` | all | V | V | — | VX | — | V | VX | VX | — | own — sales, performance, customers, churn, inventory; cross-branch P&L / capital boards all-branch roles (B-1); customer search B-2 |
 | `dashboard` | all | V | V | V | V | V | V | V | V | V | own — reservation + sales KPIs (?branch only narrows) |
 | `audit` | all | — | — | — | — | — | — | VX | VX | — | all — HQ module |

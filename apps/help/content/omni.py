@@ -394,8 +394,8 @@ SCREENS = [
              'when': T('بعد ما توصل رسائل جديدة من العميل.', 'After new messages arrive from the customer.'),
              'open_hint': T('بعد أول تحليل في «✨ مساعد الذكاء الاصطناعي».', 'After the first analysis in "✨ AI assistant".')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-06',
+        'change_note': T('«مدير الجودة» بقى يشوف الشاشة دي في القائمة؛ دور «مشاهد» ماعادش يقدر يفتحها.', 'Quality managers now see this screen in the menu; the viewer role can no longer open it.'),
     },
     {
         'key': 'omni.accounts',
@@ -481,8 +481,8 @@ SCREENS = [
                  '«✏️ تعديل» بيفتح نفس النموذج؛ القناة مبتتغيرش، ولو سبت التوكن فاضي بيفضل القديم.\n• «🩺 فحص الاتصال» بيسأل واتساب حالاً وبيعرض النتيجة في شريط فوق (✅ متصل مع الجودة، أو ❌ والسبب).\n• من التعديل تقدر تشيل علامة «نشط» عشان توقف الحساب.',
                  '"✏️ Edit" opens the same form; the channel cannot change, and an empty token keeps the old one.\n• "🩺 Check connection" asks WhatsApp right now and shows the result in a bar at the top (✅ connected with quality, or ❌ and the reason).\n• From Edit you can untick "Active" to stop the account.')},
         ],
-        'updated': '2026-10-26',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-06',
+        'change_note': T('«مدير الجودة» بقى يشوف الشاشة دي في القائمة؛ دور «مشاهد» ماعادش يقدر يفتحها.', 'Quality managers now see this screen in the menu; the viewer role can no longer open it.'),
     },
     {
         'key': 'omni.wallboard',
@@ -727,8 +727,8 @@ SCREENS = [
              'warn': T('القالب بيوصل للعميل فوراً وممكن يتحسب بتكلفة. اتأكد من القالب والعميل.', 'The template reaches the customer at once and may be charged. Check the template and the customer.'),
              'open_hint': T('اضغط 📋 أو «إرسال قالب» في الشريط الأصفر.', 'Click 📋 or "Send template" in the yellow bar.')},
         ],
-        'updated': '2026-10-26',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-06',
+        'change_note': T('«مدير الجودة» بقى يشوف الشاشة دي في القائمة؛ دور «مشاهد» ماعادش يقدر يفتحها.', 'Quality managers now see this screen in the menu; the viewer role can no longer open it.'),
     },
     {
         'key': 'omni.campaigns',

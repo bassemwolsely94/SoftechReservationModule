@@ -411,9 +411,9 @@ SCREENS = [
                        'Cancelling is instant with no confirmation — the request will not come back; you submit a new one.'),
              'open_hint': T('يظهر بس على الطلبات اللي لسه ما اتقررتش.', 'Shown only on requests not decided yet.')},
         ],
-        'updated': '2026-10-30',
+        'updated': '2026-11-06',
     
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'change_note': T('«المحاسب» بقى يقدر يفتح الشاشة دي ويقدّم طلباته الشخصية.', 'Accountants can now open this screen and file their own requests.'),
     },
     {
         'key': 'hr.approvals',

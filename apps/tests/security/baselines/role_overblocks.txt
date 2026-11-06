@@ -64,12 +64,6 @@ supervisor POST /api/pricing-approvals/alignment/tier-create/
 supervisor POST /api/pricing-approvals/policy/
 supervisor POST /api/pricing-approvals/replication/repair/
 supervisor POST /api/pricing-approvals/replication/scan/
-viewer GET /api/pricing-approvals/branch-health/
-viewer GET /api/pricing-approvals/discount-impact/
-viewer GET /api/pricing-approvals/policy/
-viewer GET /api/pricing-approvals/replication/scans/
-viewer GET /api/pricing-approvals/replication/scans/987654321/
-viewer GET /api/pricing-approvals/who-changed-what/
 
 # reason: Z-11c — the gift-coupon tab is management / purchasing / quality (CanViewCoupons); push /
 #   probe / verify / sync write or read SOFTECH (CanManageCoupons).
@@ -282,14 +276,6 @@ quality_manager GET /api/omni/automations/
 quality_manager GET /api/omni/automations/987654321/
 quality_manager GET /api/pbx/extensions/status/
 quality_manager GET /api/pbx/staff-choices/
-viewer GET /api/callcenter/whisper/
-viewer GET /api/omni/analytics/
-viewer GET /api/omni/automation-runs/
-viewer GET /api/omni/automations/
-viewer GET /api/omni/automations/987654321/
-viewer GET /api/omni/wallboard/
-viewer GET /api/pbx/extensions/status/
-viewer GET /api/pbx/staff-choices/
 
 # reason: Z-11c — the purchasing and supply dashboards are the purchasing / supply-group home screens.
 accountant GET /api/dashboard/purchasing/
@@ -305,7 +291,6 @@ quality_manager GET /api/dashboard/supply/
 salesperson GET /api/dashboard/purchasing/
 salesperson GET /api/dashboard/supply/
 supervisor GET /api/dashboard/purchasing/
-supervisor GET /api/dashboard/supply/
 viewer GET /api/dashboard/purchasing/
 
 # reason: Z-11c — OCR corpus statistics are internals for admin / supervisor / purchasing / pharmacist.
@@ -429,7 +414,6 @@ supervisor POST /api/batches/purchase-expiry/request-markdown/
 
 # reason: Z-11a — transcript correction is the quality team's tool (CanCorrect: admin / supervisor /
 #   quality manager / call center); viewer holds callcenter view only and the POST now maps to view.
-viewer POST /api/callcenter/transcripts/987654321/correct/
 
 # reason: merge of Batch 4 with the consolidation line — the shortage Excel export keeps its own
 #   `export` grant (SHORTAGE_EXPORT); roles holding shortage view only read the lists on screen.
@@ -580,3 +564,30 @@ salesperson GET /api/counselling/content/987654321/suggest-items/
 salesperson GET /api/counselling/content/needs/
 supervisor GET /api/counselling/content/987654321/suggest-items/
 supervisor GET /api/counselling/content/needs/
+
+# reason: owner 2026-11-06 — the accountant's hr grant is self-service (own requests). QA inspections
+#   share the hr module but stay refused, and shifts are planned by managers only (_ManagerWrites).
+accountant GET /api/qa/inspections/
+accountant GET /api/qa/inspections/987654321/
+accountant GET /api/qa/templates/
+accountant POST /api/hr/shift-assignments/
+accountant POST /api/hr/shifts/
+accountant POST /api/qa/inspections/
+accountant POST /api/qa/inspections/987654321/submit/
+
+# reason: owner 2026-11-06 — the supervisor's purchasing view is for /supply. These ISR views keep
+#   their own stricter role checks, unchanged by that grant.
+supervisor GET /api/purchasing/isr/branch-requests/
+supervisor GET /api/purchasing/isr/branch-requests/987654321/
+supervisor GET /api/purchasing/isr/branch-requests/987654321/lines/987654321/search/
+supervisor GET /api/purchasing/isr/fulfilment/recent/
+
+# reason: owner 2026-11-06 — the viewer keeps analytics view for its report screens but is refused on
+#   phantom sales and cash optimization, on their own routes (exclude_roles).
+viewer GET /api/purchasing/phantom/candidates/
+viewer GET /api/purchasing/phantom/excluded/
+viewer GET /api/purchasing/phantom/med-types/
+viewer GET /api/purchasing/phantom/summary/
+viewer GET /api/purchasing/spike/candidates/
+viewer GET /api/purchasing/spike/med-types/
+viewer GET /api/purchasing/spike/summary/

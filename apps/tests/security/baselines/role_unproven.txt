@@ -47,8 +47,6 @@ supervisor POST /api/enrichment/x
 supervisor POST /api/products/x/track/
 viewer GET /api/replacement/cases/987654321/operations/987654321/post/
 viewer GET /api/replacement/cases/987654321/reversals/987654321/987654321/
-viewer POST /api/approvals/requests/987654321/cancel/
-viewer POST /api/approvals/requests/987654321/decide/
 viewer POST /api/config/x
 viewer POST /api/customers/987654321/notes/
 viewer POST /api/customers/987654321/receipt/
@@ -448,7 +446,6 @@ viewer DELETE /api/insights/rules/987654321/
 viewer DELETE /api/qa/x
 viewer DELETE /api/replacement/cases/987654321/operations/987654321/post/
 viewer DELETE /api/replacement/cases/987654321/reversals/987654321/987654321/
-viewer PATCH /api/callcenter/calls/987654321/quality/
 viewer PATCH /api/config/x
 viewer PATCH /api/customers/987654321/
 viewer PATCH /api/customers/987654321/health-profile/
