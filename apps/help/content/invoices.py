@@ -74,7 +74,7 @@ MODULE = {
             {'key': 'queued', 'label': T('بانتظار الترحيل', 'Queued for posting'), 'desc': T('تنتظر الترحيل لـ SOFTECH.', 'Waiting to be posted to SOFTECH.'), 'next': ['pushing']},
             {'key': 'pushing', 'label': T('جارٍ الترحيل', 'Posting'), 'desc': T('تُكتب الآن في SOFTECH.', 'Being written to SOFTECH.'), 'next': ['finalized', 'push_failed']},
             {'key': 'finalized', 'label': T('مُرحَّلة إلى ERP', 'Posted to ERP'), 'desc': T('أصبحت مستند شراء في SOFTECH برقم مستند. «تم التحقق» يؤكد وجوده.', 'It is now a purchase document in SOFTECH with a number. "Verified" confirms it exists.')},
-            {'key': 'push_failed', 'label': T('فشل الترحيل', 'Posting failed'), 'desc': T('لم يكتمل — راجع السبب ثم أعد المحاولة.', 'Did not complete — check the reason and retry.'), 'next': ['pushing']},
+            {'key': 'push_failed', 'label': T('فشل الترحيل', 'Posting failed'), 'desc': T('لم يكتمل — راجع السبب ثم أعد المحاولة. لو السبب انقطاع الاتصال أثناء الترحيل (timeout-unknown) فالمستند ممكن يكون اتحفظ في SOFTECH: فاتورة المشتريات يتم التحقق منها تلقائياً عند إعادة الترحيل، أما المرتجع فلا يُعاد ترحيله إلا بعد مراجعة SOFTECH ثم «تجاوز التحذيرات».', 'Did not complete — check the reason and retry. If the reason is a dropped connection mid-post (timeout-unknown) the document may already be in SOFTECH: a purchase is checked automatically on retry, a return is posted again only after checking SOFTECH and choosing "override warnings".'), 'next': ['pushing']},
         ],
     }],
     'journeys': [
@@ -521,7 +521,7 @@ SCREENS = [
              'warn': T('القالب بيأثر على كل فواتير المورد ده الجاية — قالب غلط يبوّظ قراءتها كلها.', "The template affects all this supplier's future invoices — a wrong one spoils them all."),
              'open_hint': T('اضغط «⚙ قالب المورد» الأول.', 'Press "⚙ Supplier template" first.')},
         ],
-        'updated': '2026-11-02',
+        'updated': '2026-11-05',
         'change_note': T('الترحيل: سبب مكتوب للتحذيرات وللتكرار، حد للكميات غير المعتادة، وعدد الفواتير لتأكيد الدفعة؛ و«ترحيل المحدد» من مكان لا يسمح بالكتابة في SOFTECH يُرفض قبل تغيير أي فاتورة', 'Posting: a written reason for warnings and duplicates, limits on unusual quantities, and the invoice count to confirm a batch; "Post selected" from a place that may not write to SOFTECH is refused before any invoice changes'),
     },
 ]

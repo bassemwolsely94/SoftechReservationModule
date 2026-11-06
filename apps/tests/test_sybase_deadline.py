@@ -100,7 +100,6 @@ import types as _types
 from django.conf import settings as _settings
 from django.test import override_settings as _override
 
-from apps.tests.security.baseline import pending as _pending
 
 _REPO = _pathlib.Path(__file__).resolve().parents[2]
 
@@ -199,8 +198,8 @@ _RAW_STATEMENT_SITES = {
     'apps/invoices/management/commands/diag_purchase3.py': 'manual diagnostic',
     'apps/sync/management/commands/capture_dbcc_sqltext.py': 'manual diagnostic',
 }
-# SOFTECH write batches (one T-SQL batch in its own transaction) — a timeout there is a
-# stop-and-ask change to a write path, held as S-2 in PENDING.md.
+# SOFTECH write batches (one T-SQL batch in its own transaction). A timeout there was a
+# owner-approved 2026-11-05 (S-2): each arms config.sybase.apply_write_batch_timeout.
 _RAW_STATEMENT_WRITERS = {'apps/invoices/writer.py', 'apps/invoices/supplier_items.py'}
 
 
@@ -223,9 +222,17 @@ class RawStatementSitesTests(SimpleTestCase):
         self.assertEqual(_raw_statement_files() - set(_RAW_STATEMENT_SITES) - _RAW_STATEMENT_WRITERS,
                          set())
 
-    @_pending('S-2')
     def test_softech_write_batches_have_a_query_timeout(self):
-        self.assertEqual(_raw_statement_files() & _RAW_STATEMENT_WRITERS, set())
+        for rel in sorted(_RAW_STATEMENT_WRITERS):
+            text = (_REPO / rel).read_text(encoding='utf-8')
+            self.assertEqual(text.count('.createStatement('), text.count('apply_write_batch_timeout(jst)'), rel)
+
+    def test_write_batch_timeout_is_armed_on_the_statement(self):
+        stmt = mock.Mock()
+        sy.apply_write_batch_timeout(stmt)
+        stmt.setQueryTimeout.assert_called_once_with(sy.SOFTECH_WRITE_BATCH_TIMEOUT_SECONDS)
+        self.assertTrue(sy.is_timeout_error(RuntimeError('JZ0T3: Read operation timed out')))
+        self.assertFalse(sy.is_timeout_error(RuntimeError('Arithmetic overflow')))
 
 
 # ── Round 2, R6 step 3: the sales syncs pick up again after a mid-run failure ──────────────
@@ -313,3 +320,28 @@ class SalesSyncResumeTests(TestCase):
         from apps.sync.sybase_queries import QUERY_CUSTOMER_SALES_LINES_RECENT
         self.assertIn('days=7', str(inspect.signature(tasks._run_sales_history_catchup)))
         self.assertRegex(QUERY_CUSTOMER_SALES_LINES_RECENT.lower(), r'dateadd|getdate')
+
+
+class WriteTimeoutOutcomeTests(SimpleTestCase):
+    """S-2: a write batch that timed out may have committed. A return (no SOFTECH duplicate check
+    on retry) is refused until someone checks SOFTECH and pushes with force."""
+
+    def _inv(self, kind):
+        from apps.invoices import writer as W
+        return mock.Mock(pk=7, softech_docnumber=None, status='push_failed', doc_kind=kind,
+                         erp_error=W.TIMEOUT_UNKNOWN + 'JZ0T3: Read operation timed out')
+
+    def test_timed_out_return_is_held(self):
+        from apps.invoices import writer as W
+        res = W.push_final(self._inv('return'), dry_run=False)
+        self.assertEqual(res['mode'], 'timeout_unknown')
+        self.assertFalse(res['wrote_to_softech'])
+
+    def test_timed_out_purchase_and_forced_return_are_not_held_by_this_check(self):
+        from apps.invoices import writer as W
+        for inv, force in ((self._inv('purchase'), False), (self._inv('return'), True)):
+            try:
+                res = W.push_final(inv, dry_run=False, force=force)
+            except Exception:
+                continue                                   # stopped further on (stand-in object)
+            self.assertNotEqual(res.get('mode'), 'timeout_unknown')
