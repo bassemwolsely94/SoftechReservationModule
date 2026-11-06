@@ -413,8 +413,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-06',
+        'change_note': T('«مشرف مركز الاتصال» و«مدير الجودة» بقوا يشوفوا الشاشة دي في القائمة؛ دور «مشاهد» ماعادش يقدر يفتحها.', 'Call-center supervisors and quality managers now see this screen in the menu; the viewer role can no longer open it.'),
     },
     {
         'key': 'pricing.alignment',
@@ -514,7 +514,7 @@ SCREENS = [
                  '• «✨ تطبيق المقترح لكل صنف» بيدّي كل صنف المنشأ/تصنيف الخصم المناسب لفئته ونسبته.\n• أو «تعيين موحّد»: اختار منشأ و/أو تصنيف خصم جديد ثم «✔ تطبيق على SOFTECH» لكل الأصناف المحددة.\n• الاتنين بيكتبوا فعلاً في SOFTECH على الرئيسي باسم مستخدم SOFTECH بتاعك وبعد تأكيد، والتغيير بينتشر للفروع (الرسالة بتقول حوالي 30 دقيقة). للمدير بس.',
                  '• "✨ Apply each item\'s suggestion" gives each item the origin/discount class that fits its category and rate.\n• Or a uniform assignment: pick a new origin and/or discount class, then "✔ Apply to SOFTECH" for all selected items.\n• Both really write to SOFTECH on HQ under your SOFTECH user after a confirmation, and the change spreads to branches (the message says about 30 minutes). Admins only.')},
         ],
-        'updated': '2026-10-26',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-06',
+        'change_note': T('«مشرف مركز الاتصال» و«مدير الجودة» بقوا يشوفوا الشاشة دي في القائمة؛ دور «مشاهد» ماعادش يقدر يفتحها.', 'Call-center supervisors and quality managers now see this screen in the menu; the viewer role can no longer open it.'),
     },
 ]

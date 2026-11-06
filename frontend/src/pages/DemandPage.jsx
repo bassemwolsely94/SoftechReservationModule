@@ -9,6 +9,7 @@ import { demandApi, branchesApi, usersApi } from '../api/client'
 import BranchSelect from '../components/BranchSelect'
 import useAuthStore from '../store/authStore'
 import CanDo from '../components/CanDo'
+import { usePermission } from '../hooks/usePermission'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import CustomerSearchWidget from '../components/CustomerSearchWidget'
 import ModuleNotificationBell from '../components/ModuleNotificationBell'
@@ -546,8 +547,11 @@ useEffect(() => {
   })
 
   // Open back-in-stock recovery opportunities (badge on the recovery tab)
+  // The dashboard is an analytics page: a role without analytics view gets the list without it.
+  const canSeeDashboard = usePermission('analytics', 'view')
   const { data: recKpis } = useQuery({
     queryKey: ['demand-dashboard-kpis'],
+    enabled: canSeeDashboard,
     queryFn: () => demandApi.dashboard().then(r => r.data?.kpis || {}),
     refetchInterval: 120_000,
   })
@@ -652,11 +656,13 @@ useEffect(() => {
                 </span>
               )}
             </button>
-            <button
-              onClick={() => navigate('/demand/dashboard')}
-              className="btn-secondary text-sm" data-tour="demand-list-dashboard">
-              📊 لوحة الطلب الضائع
-            </button>
+            {canSeeDashboard && (
+              <button
+                onClick={() => navigate('/demand/dashboard')}
+                className="btn-secondary text-sm" data-tour="demand-list-dashboard">
+                📊 لوحة الطلب الضائع
+              </button>
+            )}
             <CanDo module="demand" action="create">
               <button onClick={() => setShowCreate(true)} className="btn-primary text-sm" data-tour="demand-list-new">
                 + تسجيل طلب جديد

@@ -163,7 +163,7 @@ class MatrixPermission(BasePermission):
 
 
 def matrix_permission(module: str, *, get=('view',), post=('create',), edit=('edit',), delete=('delete',),
-                      actions=None):
+                      actions=None, exclude_roles=()):
     """MatrixPermission for views that don't carry `rbac_module` (function views mostly):
 
         FINANCE = matrix_permission('finance')                     # GET view · POST create
@@ -171,8 +171,8 @@ def matrix_permission(module: str, *, get=('view',), post=('create',), edit=('ed
 
     PUT/PATCH need `edit`, DELETE `delete` (both overridable, e.g. delete=('edit',) where the
     editors remove lines). `actions` maps a viewset action to its own tuple, whatever the method
-    (e.g. {'quality': ('view',)} where the view's role check decides). Same checks as matrix_allows
-    (Batch 4)."""
+    (e.g. {'quality': ('view',)} where the view's role check decides). `exclude_roles` refuses roles
+    that hold the module for its other screens. Same checks as matrix_allows (Batch 4)."""
     class _ModuleMatrix(BasePermission):
         message = MatrixPermission.message
 
@@ -185,7 +185,10 @@ def matrix_permission(module: str, *, get=('view',), post=('create',), edit=('ed
             if needed is None:
                 needed = (get if m in SAFE_METHODS else post if m == 'POST'
                           else edit if m in ('PUT', 'PATCH') else delete)
-            return matrix_allows(_get_profile(request), module, *needed)
+            profile = _get_profile(request)
+            if exclude_roles and profile and profile.role in exclude_roles:
+                return False
+            return matrix_allows(profile, module, *needed)
 
     _ModuleMatrix.__name__ = _ModuleMatrix.__qualname__ = f'Matrix_{module}'
     return _ModuleMatrix

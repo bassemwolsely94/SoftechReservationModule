@@ -152,6 +152,31 @@ not the menu against the API, so each line below needs the owner's answer.
 | `/vouchers` | viewer | the role matrix gives this role vouchers:view, wider than the menu |
 | `/whatsapp/inbox` | quality_manager, viewer | the role matrix gives this role callcenter:view, wider than the menu |
 
+### Owner decisions (2026-11-06)
+
+The table above is the first run. The owner then decided all of it:
+
+1. **Customer conversations: "QM sees, viewer refused".** `/callcenter`, `/omni/inbox`,
+   `/omni/accounts`, `/pbx/live` and `/whatsapp/inbox` are in the quality manager's menu.
+   `viewer` lost `callcenter` view.
+2. **Money screens: "Show auditors, refuse viewer".** `/payment-audit` and `/reconciliation` are in
+   the menu for the quality manager and accountant; `/pricing-approvals` and `/discount-alignment`
+   for the supervisor and quality manager. `viewer` lost `approvals` view. It keeps `analytics` view
+   for its report screens, so `/cash-optimization` and `/phantom-sales` refuse it on their own routes.
+3. **Lower-risk pairs: "Accept + show Tasks".** The rest stay as they are and `knownGaps.js` records
+   them as accepted. Tasks is in the desktop and mobile menus for every role holding `tasks`. The
+   delivery role lives in the rider shell only, so it does not reach that menu.
+4. **The 4 refused screens: "Apply all four".** `/reconciliation` left the pharmacist's menu.
+   The accountant got `hr` view + create; its `hr` grant does not open QA inspections, which share
+   the module. The supervisor got `purchasing` view. `/demand` shows without the dashboard for roles
+   lacking `analytics` view.
+5. **Supervisor side effect: "Accept the wider access".** `purchasing` view also opens the
+   `/procurement` and `/purchasing` APIs to the supervisor. Both pairs are accepted; the menu stays
+   as it is.
+
+After these, on 480 hidden checks: 360 answer 403, 97 answer 200 (all listed in `knownGaps.js`),
+23 are inconclusive, and no screen is visible but refused.
+
 ## 4. CI (`.github/workflows/ci.yml`)
 
 - `frontend-quality`: `npm ci`, `npm run lint`, `npm test`. Blocking.
