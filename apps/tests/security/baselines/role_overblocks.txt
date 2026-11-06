@@ -64,12 +64,6 @@ supervisor POST /api/pricing-approvals/alignment/tier-create/
 supervisor POST /api/pricing-approvals/policy/
 supervisor POST /api/pricing-approvals/replication/repair/
 supervisor POST /api/pricing-approvals/replication/scan/
-viewer GET /api/pricing-approvals/branch-health/
-viewer GET /api/pricing-approvals/discount-impact/
-viewer GET /api/pricing-approvals/policy/
-viewer GET /api/pricing-approvals/replication/scans/
-viewer GET /api/pricing-approvals/replication/scans/987654321/
-viewer GET /api/pricing-approvals/who-changed-what/
 
 # reason: Z-11c — the gift-coupon tab is management / purchasing / quality (CanViewCoupons); push /
 #   probe / verify / sync write or read SOFTECH (CanManageCoupons).
@@ -282,14 +276,6 @@ quality_manager GET /api/omni/automations/
 quality_manager GET /api/omni/automations/987654321/
 quality_manager GET /api/pbx/extensions/status/
 quality_manager GET /api/pbx/staff-choices/
-viewer GET /api/callcenter/whisper/
-viewer GET /api/omni/analytics/
-viewer GET /api/omni/automation-runs/
-viewer GET /api/omni/automations/
-viewer GET /api/omni/automations/987654321/
-viewer GET /api/omni/wallboard/
-viewer GET /api/pbx/extensions/status/
-viewer GET /api/pbx/staff-choices/
 
 # reason: Z-11c — the purchasing and supply dashboards are the purchasing / supply-group home screens.
 accountant GET /api/dashboard/purchasing/
@@ -305,7 +291,6 @@ quality_manager GET /api/dashboard/supply/
 salesperson GET /api/dashboard/purchasing/
 salesperson GET /api/dashboard/supply/
 supervisor GET /api/dashboard/purchasing/
-supervisor GET /api/dashboard/supply/
 viewer GET /api/dashboard/purchasing/
 
 # reason: Z-11c — OCR corpus statistics are internals for admin / supervisor / purchasing / pharmacist.
@@ -429,7 +414,6 @@ supervisor POST /api/batches/purchase-expiry/request-markdown/
 
 # reason: Z-11a — transcript correction is the quality team's tool (CanCorrect: admin / supervisor /
 #   quality manager / call center); viewer holds callcenter view only and the POST now maps to view.
-viewer POST /api/callcenter/transcripts/987654321/correct/
 
 # reason: merge of Batch 4 with the consolidation line — the shortage Excel export keeps its own
 #   `export` grant (SHORTAGE_EXPORT); roles holding shortage view only read the lists on screen.
@@ -641,7 +625,6 @@ pharmacist GET /api/pricing-approvals/987654321/replication/
 purchasing GET /api/pricing-approvals/987654321/replication/
 quality_manager GET /api/pricing-approvals/987654321/replication/
 supervisor GET /api/pricing-approvals/987654321/replication/
-viewer GET /api/pricing-approvals/987654321/replication/
 
 # reason: round 2 R3, seeded record — the SOFTECH ERP match has hard-coded role lists (reservations: admin / pharmacist /
 #   purchasing, so call center is refused; transfers: admin / purchasing, so pharmacist is refused). Owner answer
@@ -655,7 +638,6 @@ supervisor POST /api/transfers/987654321/check-erp-match/
 
 # reason: round 2 R3, seeded record — scoring a call's quality is for supervisors and quality managers ("يُسمح فقط للمشرفين
 #   ومدراء الجودة" in the view); the matrix maps it to callcenter view, which viewer holds.
-viewer POST /api/callcenter/calls/987654321/quality/
 
 # reason: round 2 R3, seeded record — Z-11c: the supplier-invoice SOFTECH probe is admin only.
 purchasing POST /api/invoices/invoices/987654321/probe/
