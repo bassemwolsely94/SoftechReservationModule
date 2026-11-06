@@ -8,8 +8,11 @@ the snapshot). ``branch_code=None`` in ``detail`` means the codes that map to no
 SOFTECH is reached only through ``sybase_gl`` / ``sybase_accounting`` (SELECT-only), imported lazily: nothing
 under ``gl/`` imports ``config.sybase`` at load.
 """
+import logging
 from datetime import date, datetime
 from decimal import Decimal
+
+logger = logging.getLogger('elrezeiky.finance')
 
 ZERO = Decimal('0.00')
 
@@ -123,7 +126,8 @@ def stock_at_cost_detail(period, branch_code, party_code='') -> list:
 def expenses(period) -> dict:
     rows = _sybase_accounting().get_dailyexpenses_by_branch_month(period.year, period.month)
     if any('_error' in r for r in rows):
-        raise RuntimeError(rows[0]['_error'])
+        logger.error('dailyexpenses read failed: %s', rows[0]['_error'])
+        raise RuntimeError('تعذرت قراءة المصروفات من SOFTECH')
     return _sum_by_branch(rows, 'branchcode', 'total_expenses')
 
 
@@ -180,9 +184,26 @@ def supplier_balance_detail(period, branch_code, party_code='') -> list:
     return sorted(rows, key=lambda r: r['date'])
 
 
+# explicit: the source key is a database value (editable with ledger.edit); late-bound so tests can patch
+SOURCES = {
+    'sales': (lambda p: sales(p), lambda *a: sales_detail(*a)),
+    'purchases': (lambda p: purchases(p), lambda *a: purchases_detail(*a)),
+    'stock_at_cost': (lambda p: stock_at_cost(p), lambda *a: stock_at_cost_detail(*a)),
+    'expenses': (lambda p: expenses(p), lambda *a: expenses_detail(*a)),
+    'supplier_balance': (lambda p: supplier_balance(p), lambda *a: supplier_balance_detail(*a)),
+}
+
+
+def _source(key):
+    try:
+        return SOURCES[key]
+    except KeyError:
+        raise ValueError(f'مصدر مقارنة غير معروف: {key}') from None
+
+
 def figures(source: str, period) -> dict:
-    return globals()[source](period)
+    return _source(source)[0](period)
 
 
 def detail(source: str, period, branch_code, party_code='') -> list:
-    return globals()[source + '_detail'](period, branch_code, party_code)
+    return _source(source)[1](period, branch_code, party_code)

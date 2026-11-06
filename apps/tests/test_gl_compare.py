@@ -175,6 +175,9 @@ class ExplainTests(CompareBase):
 
 
 class StaleTests(CompareBase):
+    def setUp(self):
+        GLSoftechCheck.objects.exclude(key='t_sales').update(is_active=False)
+
     def test_is_stale_after_new_approval(self):
         self.assertTrue(compare.is_stale(self.period))       # no lines yet
         self.post(100, D(2026, 3, 5), branch=self.b1)
@@ -188,6 +191,57 @@ class StaleTests(CompareBase):
         self.assertFalse(compare.is_stale(self.period))
         reverse(later.id, user=self.staff, reason='r')       # its reversal is newer than the lines
         self.assertTrue(compare.is_stale(self.period))
+
+
+class StaleRulingTests(CompareBase):
+    def setUp(self):
+        GLSoftechCheck.objects.exclude(key__in=['t_sales', 't_stock']).update(is_active=False)
+
+    def test_partial_compute_is_stale_and_all_zero_compute_is_fresh(self):
+        with mock.patch.object(softech_checks, 'sales', return_value={}):
+            compare.compute(self.period, check_keys=['t_sales'])
+        self.assertTrue(compare.is_stale(self.period))      # t_stock never computed
+        self.assertEqual(self.line(self.sales).difference, Z)   # zero/zero check still left its line
+        with mock.patch.object(softech_checks, 'sales', return_value={}),                 mock.patch.object(softech_checks, 'stock_at_cost', return_value={}):
+            compare.compute(self.period)
+        self.assertFalse(compare.is_stale(self.period))
+        self.assertEqual(GLComparisonLine.objects.filter(period=self.period).count(), 2)
+
+    def test_earlier_dated_late_approval_stales_balance_checks_only(self):
+        with mock.patch.object(softech_checks, 'sales', return_value={}),                 mock.patch.object(softech_checks, 'stock_at_cost', return_value={}):
+            compare.compute(self.period)
+            self.post(10, D(2026, 2, 3), debit='9103', credit='9100')
+            self.assertTrue(compare.is_stale(self.period))
+            compare.compute(self.period)
+            GLSoftechCheck.objects.filter(key='t_stock').update(is_active=False)
+            compare.compute(self.period)
+            self.post(10, D(2026, 2, 4), debit='9103', credit='9100')
+            self.assertFalse(compare.is_stale(self.period))   # movement-only: February is not its month
+
+    def test_unknown_source_refused(self):
+        with self.assertRaises(ValueError):
+            softech_checks.figures('globals', self.period)
+        with self.assertRaises(ValueError):
+            softech_checks.detail('__import__', self.period, None)
+
+    def test_expense_error_text_not_leaked(self):
+        err = [{'_error': 'java.sql.SQLException: host 10.1.2.3 refused'}]
+        with mock.patch('apps.finance.queries.sybase_accounting.get_dailyexpenses_by_branch_month',
+                        return_value=err), self.assertLogs('elrezeiky.finance', 'ERROR'):
+            with self.assertRaises(RuntimeError) as cm:
+                softech_checks.expenses(self.period)
+        self.assertNotIn('10.1.2.3', str(cm.exception))
+
+    def test_reversal_pair_inside_month_nets_to_zero(self):
+        e = self.post(100, D(2026, 3, 5), branch=self.b1)
+        reverse(e.id, user=self.staff, reason='r')
+        with mock.patch.object(softech_checks, 'sales', return_value={}),                 mock.patch.object(softech_checks, 'sales_detail', return_value=[]):
+            compare.compute(self.period, check_keys=['t_sales'])
+            self.assertEqual(GLComparisonLine.objects.filter(softech_check=self.sales).count(), 1)
+            self.assertEqual(self.line(self.sales).ledger_amount, Z)
+            # the branch-1 figures: both halves counted, netting to zero
+            from apps.finance.gl.compare import _ledger_figures
+            self.assertEqual(_ledger_figures(self.sales, self.period), {(self.b1.id, ''): Z})
 
 
 class DetailTests(CompareBase):
@@ -209,6 +263,16 @@ class DetailTests(CompareBase):
         self.assertEqual(sum(r['difference'] for r in out['by_day']), ln.difference)
         self.assertEqual([r['date'] for r in out['by_day']], [D(2026, 3, 5), D(2026, 3, 9), D(2026, 3, 11)])
 
+    def test_balance_detail_opens_with_carried_balance(self):
+        self.post(500, D(2026, 2, 10), debit='9103', credit='9100', branch=self.b1)
+        self.post(200, D(2026, 3, 10), debit='9103', credit='9100', branch=self.b1)
+        with mock.patch.object(softech_checks, 'stock_at_cost', return_value={('961', ''): _d(700)}),                 mock.patch.object(softech_checks, 'stock_at_cost_detail', return_value=[]):
+            compare.compute(self.period, check_keys=['t_stock'])
+            ln = self.line(self.stock, self.b1)
+            out = compare.detail(ln.id)
+        self.assertTrue(out['ledger'][0]['opening'])
+        self.assertEqual(sum(r['debit'] - r['credit'] for r in out['ledger']), ln.ledger_amount)
+
     def test_balance_check_has_no_by_day(self):
         self.post(500, D(2026, 3, 10), debit='9103', credit='9100', branch=self.b1)
         with mock.patch.object(softech_checks, 'stock_at_cost', return_value={('961', ''): _d(500)}), \
@@ -216,7 +280,7 @@ class DetailTests(CompareBase):
             compare.compute(self.period, check_keys=['t_stock'])
             out = compare.detail(self.line(self.stock, self.b1).id)
         self.assertNotIn('by_day', out)
-        self.assertEqual(len(out['ledger']), 1)
+        self.assertEqual(len(out['ledger']), 1)   # no balance carried in: no opening row
 
 
 class SeedTests(TestCase):

@@ -67,10 +67,11 @@ def compute(period, *, check_keys=None, user=None) -> list:
             ledger = _ledger_figures(check, period)
             softech = _softech_figures(check, period, branch_ids)
             seen = set()
-            for key in sorted(set(ledger) | set(softech), key=lambda k: (k[0] or 0, k[1])):
+            keys = [k for k in set(ledger) | set(softech)
+                    if ledger.get(k, ZERO) != 0 or softech.get(k, ZERO) != 0]
+            # a check always leaves a line (zero/zero on the no-branch key), so "computed" is visible
+            for key in sorted(keys or [(None, '')], key=lambda k: (k[0] or 0, k[1])):
                 led, sof = ledger.get(key, ZERO), softech.get(key, ZERO)
-                if led == 0 and sof == 0:
-                    continue
                 seen.add(key)
                 line, _ = GLComparisonLine.objects.update_or_create(
                     period=period, softech_check=check, branch_id=key[0], party_code=key[1],
@@ -115,15 +116,20 @@ def _str(v):
 
 
 def is_stale(period) -> bool:
-    """True when no lines exist, or an entry dated in the period (or its reversal) was approved after the oldest
-    computation of the period's lines."""
-    stamps = list(GLComparisonLine.objects.filter(period=period).values_list('computed_at', flat=True))
-    if not stamps:
+    """True when an active check has no line for the period, or an entry (or its reversal) was approved after
+    the oldest computation. Movement checks read the month's entries; balance checks read every entry up to
+    the period end, so an earlier-dated late entry counts too."""
+    lines = GLComparisonLine.objects.filter(period=period)
+    computed = set(lines.values_list('softech_check_id', flat=True))
+    active = list(GLSoftechCheck.objects.filter(is_active=True).values_list('id', 'kind'))
+    if not active or any(cid not in computed for cid, _ in active):
         return True
-    oldest = min(stamps)
-    return LedgerEntry.objects.filter(
-        status__in=COUNTED, entry_date__gte=period.period_start, entry_date__lte=period.period_end,
-    ).filter(Q(approved_at__gt=oldest) | Q(reversals__approved_at__gt=oldest)).exists()
+    oldest = lines.order_by('computed_at').values_list('computed_at', flat=True).first()
+    changed = Q(approved_at__gt=oldest) | Q(reversals__approved_at__gt=oldest)
+    entries = LedgerEntry.objects.filter(status__in=COUNTED, entry_date__lte=period.period_end)
+    if not any(kind == 'balance' for _, kind in active):
+        entries = entries.filter(entry_date__gte=period.period_start)
+    return entries.filter(changed).exists()
 
 
 def _accounts(check):
@@ -135,7 +141,7 @@ def _accounts(check):
 def detail(line_id) -> dict:
     line = GLComparisonLine.objects.select_related('softech_check', 'branch').get(pk=line_id)
     check, period = line.softech_check, line.period
-    # a movement check reads the month; a balance check also shows what led to the closing figure
+    # a movement check reads the month; a balance check opens with the balance carried into it
     start = period.period_start
     ledger = []
     for code in _accounts(check):
@@ -144,9 +150,14 @@ def detail(line_id) -> dict:
             branch_id=None if check.per_party else line.branch_id,
             party_code=line.party_code or None,
             unbranched=not check.per_party and line.branch_id is None)
+        if check.kind == 'balance' and st['opening_balance']:
+            ob = st['opening_balance']   # what stood on the books before the month; makes the rows sum to the line
+            ledger.append({'date': start, 'number': None, 'description': 'رصيد أول الشهر', 'opening': True,
+                           'debit': max(ob, ZERO), 'credit': max(-ob, ZERO), 'running_balance': ob,
+                           'entry_id': None, 'account': code})
         for r in st['lines']:
             ledger.append({**r, 'account': code})
-    ledger.sort(key=lambda r: (r['date'], r['number'] or '', r['account']))
+    ledger.sort(key=lambda r: (r['date'], not r.get('opening'), r['number'] or '', r['account']))
     code = None if check.per_party else (line.branch.softech_branch_id if line.branch_id else None)
     rows = softech_checks.detail(check.source, period, code, line.party_code)
     out = {'ledger': ledger, 'softech': rows}
