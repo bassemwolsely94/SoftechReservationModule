@@ -3,10 +3,13 @@ import datetime
 from decimal import Decimal
 
 from django.contrib.auth.models import User
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from apps.finance.gl.ledger import approve, reverse, save_draft
 from apps.finance.gl.subledgers import SUBLEDGERS, subledger, supplier_vs_ap
+from apps.finance.recon_balances import ap_balance_as_of, ap_balances_as_of
 from apps.finance.models import GLAccount, GLAccountGroup, GLParty, ReconParty
 from apps.finance.recon_models import APInvoice, Payment
 from apps.users.models import StaffProfile
@@ -199,3 +202,39 @@ class SupplierVsApTests(SubledgerBase):
         self.assertEqual((rows['S1']['gl_balance'], rows['S1']['ap_balance'], rows['S1']['difference']),
                          (Z, _d(1000), _d(-1000)))
         self.assertNotIn('S2', rows)   # unlinked and empty: nothing to compare
+
+    def _extra_parties(self, n, start=0):
+        for i in range(start, start + n):
+            rp = ReconParty.objects.create(party_type='supplier', softech_personcode=f'88{i:03d}',
+                                           name='x', opening_balance=_d(10 + i),
+                                           opening_balance_date=D(2026, 1, 1))
+            GLParty.objects.create(party_type='supplier', code=f'X{i}', name=f'x{i}',
+                                   softech_personcode=rp.softech_personcode, status='confirmed',
+                                   recon_party=rp)
+            APInvoice.objects.create(party=rp, branchcode='100', doccode='10', docnumber=f'a{i}',
+                                     docdate=D(2026, 2, 1), doc_value=_d(100 + i), party_type='supplier')
+            APInvoice.objects.create(party=rp, branchcode='100', doccode='120', docnumber=f'r{i}',
+                                     docdate=D(2026, 2, 2), doc_value=_d(7), is_return=True,
+                                     party_type='supplier')
+            Payment.objects.create(party=rp, branchcode='100', cheqsno=900 + i, direction='out',
+                                   party_type='supplier', voucher_date=D(2026, 2, 3), amount=_d(30))
+            APInvoice.objects.create(party=rp, branchcode='100', doccode='10', docnumber=f'l{i}',
+                                     docdate=D(2026, 5, 1), doc_value=_d(5), party_type='supplier')
+
+    def test_bulk_balances_equal_one_party_form(self):
+        self._extra_parties(4)
+        parties = list(ReconParty.objects.all())
+        for as_of in (D(2026, 3, 31), D(2026, 12, 31), D(2025, 12, 31)):
+            bulk = ap_balances_as_of(parties, as_of)
+            for p in parties:
+                self.assertEqual(bulk[p.pk], ap_balance_as_of(p, as_of))
+
+    def test_supplier_vs_ap_query_count_does_not_grow_with_parties(self):
+        def count():
+            with CaptureQueriesContext(connection) as ctx:
+                supplier_vs_ap(D(2026, 3, 31))
+            return len(ctx)
+        self._extra_parties(1)
+        few = count()
+        self._extra_parties(6, start=1)
+        self.assertEqual(count(), few)

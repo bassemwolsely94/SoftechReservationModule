@@ -10,7 +10,7 @@ under ``gl/`` imports ``config.sybase`` at load.
 """
 import logging
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 logger = logging.getLogger('elrezeiky.finance')
 
@@ -148,17 +148,18 @@ def _recon_party(personcode):
 
 def supplier_balance(period) -> dict:
     from apps.finance.models import ReconParty
-    from apps.finance.recon_balances import ap_balance_as_of
+    from apps.finance.recon_balances import ap_balances_as_of
     from . import plan2_adapter
     codes = plan2_adapter.all_party_personcodes('supplier')
     parties = {p.softech_personcode: p
                for p in ReconParty.objects.filter(softech_personcode__in=list(codes.values()))}
+    balances = ap_balances_as_of(parties.values(), period.period_end)
     out: dict = {}
     for gl_code, personcode in codes.items():
         party = parties.get(personcode)
-        bal = ap_balance_as_of(party, period.period_end) if party else None
+        bal = balances.get(party.pk) if party else None
         if bal is not None:
-            out[(None, gl_code)] = bal.quantize(Decimal('0.01'))
+            out[(None, gl_code)] = bal.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     return out
 
 

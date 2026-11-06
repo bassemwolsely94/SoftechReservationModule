@@ -159,6 +159,32 @@ def ap_balance_as_of(party: ReconParty, as_of: datetime.date):
     return (party.opening_balance or Decimal('0')) + purchases - returns - paid
 
 
+def ap_balances_as_of(parties, as_of: datetime.date) -> dict:
+    """`ap_balance_as_of` for many parties in two grouped queries: {party.pk: balance or None}.
+    Same rules: invoices docdate <= as_of (returns subtracted), payments voucher_date <= as_of,
+    None when the opening is dated after `as_of`."""
+    from django.db.models import Q, Sum
+    from .recon_models import APInvoice, Payment
+    parties = list(parties)
+    ids = [p.pk for p in parties]
+    bought, returned, paid = {}, {}, {}
+    for r in (APInvoice.objects.filter(party_id__in=ids, docdate__lte=as_of).values('party_id')
+              .annotate(p=Sum('doc_value', filter=Q(is_return=False)),
+                        r=Sum('doc_value', filter=Q(is_return=True)))):
+        bought[r['party_id']], returned[r['party_id']] = r['p'] or 0, r['r'] or 0
+    for r in (Payment.objects.filter(party_id__in=ids, voucher_date__lte=as_of).values('party_id')
+              .annotate(a=Sum('amount'))):
+        paid[r['party_id']] = r['a'] or 0
+    out = {}
+    for p in parties:
+        if p.opening_balance_date and p.opening_balance_date > as_of:
+            out[p.pk] = None
+        else:
+            out[p.pk] = ((p.opening_balance or Decimal('0')) + Decimal(bought.get(p.pk, 0))
+                         - Decimal(returned.get(p.pk, 0)) - Decimal(paid.get(p.pk, 0)))
+    return out
+
+
 def build_ledger_timeline(party: ReconParty) -> dict:
     """
     Chronological حصر ledger: every invoice (+purchase / −return) and payment

@@ -153,7 +153,7 @@ def supplier_vs_ap(as_of: datetime.date) -> list[dict]:
     difference, reason}`; `ap_balance`/`difference` are None with the reason when there is no
     figure to compare. Covers every party with a 2341 balance plus every party linked to a
     reconciliation party (an A/P balance with nothing in the ledger is a difference too)."""
-    from apps.finance.recon_balances import ap_balance_as_of
+    from apps.finance.recon_balances import ap_balances_as_of
 
     gl = {r['party_code']: (r['c'] or ZERO) - (r['d'] or ZERO)
           for r in (LedgerLine.objects
@@ -164,6 +164,7 @@ def supplier_vs_ap(as_of: datetime.date) -> list[dict]:
     codes = {c for c, v in gl.items() if v != 0} | set(plan2_adapter.party_codes_with_recon('supplier'))
     recon = plan2_adapter.party_recon_parties(codes, 'supplier')
     names = plan2_adapter.party_names(codes, 'supplier')
+    balances = ap_balances_as_of(recon.values(), as_of)
     out = []
     for code in codes:
         gl_bal = gl.get(code, ZERO)
@@ -172,7 +173,7 @@ def supplier_vs_ap(as_of: datetime.date) -> list[dict]:
         if rp is None:
             reason = NO_LINK
         else:
-            ap = ap_balance_as_of(rp, as_of)
+            ap = balances[rp.pk]
             if ap is None:
                 reason = OPENING_AFTER
         if rp is not None and ap is not None and gl_bal == 0 and ap == 0:
