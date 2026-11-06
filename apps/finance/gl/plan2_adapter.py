@@ -26,19 +26,40 @@ class ClosedPeriodChange:
     book: str = 'general'
 
 
-def party_names(codes):
-    """GL party code -> name (any status)."""
+def party_names(codes, party_type=None):
+    """GL party code -> name (any status). Codes are only unique per type: pass `party_type`
+    whenever the caller knows it."""
     if not codes:
         return {}
-    return dict(GLParty.objects.filter(code__in=list(codes)).values_list('code', 'name'))
+    qs = GLParty.objects.filter(code__in=list(codes))
+    if party_type:
+        qs = qs.filter(party_type=party_type)
+    return dict(qs.values_list('code', 'name'))
 
 
-def party_personcodes(codes):
+def party_personcodes(codes, party_type=None):
     """GL party code -> SOFTECH personcode; confirmed parties only."""
     if not codes:
         return {}
-    return dict(GLParty.objects.filter(code__in=list(codes), status='confirmed')
-                .exclude(softech_personcode='').values_list('code', 'softech_personcode'))
+    qs = GLParty.objects.filter(code__in=list(codes), status='confirmed').exclude(softech_personcode='')
+    if party_type:
+        qs = qs.filter(party_type=party_type)
+    return dict(qs.values_list('code', 'softech_personcode'))
+
+
+def party_recon_parties(codes, party_type):
+    """GL party code -> its linked ReconParty (parties with a link only)."""
+    if not codes:
+        return {}
+    return {p.code: p.recon_party for p in GLParty.objects
+            .filter(code__in=list(codes), party_type=party_type, recon_party__isnull=False)
+            .select_related('recon_party')}
+
+
+def party_codes_with_recon(party_type):
+    """Codes of every party of one type that has a ReconParty link."""
+    return list(GLParty.objects.filter(party_type=party_type, recon_party__isnull=False)
+                .values_list('code', flat=True))
 
 
 def all_party_personcodes(party_type):
