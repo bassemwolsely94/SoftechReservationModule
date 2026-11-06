@@ -838,11 +838,13 @@ SCREENS = [
              'body': T('قاعدة لكل نوع مستند: الشروط (فرع، نوع، دفع…)، التجميع (مستند · فرع/يوم · طرف/يوم)، الدفتر، الأولوية، والأسطر (مدين/دائن، الحساب، الفرع، الطرف، المبلغ من حقل مسموح). «تجربة» تعرض القيود اللي كانت هتتعمل لفترة من غير ما تسجّل حاجة.\n'
                        '• المشتريات النقدية (supplier.cash) بتتسجل على مرحلتين زي دفتر النقدية: من 5100 إلى 2341 للمورد، ثم من 2341 للمورد إلى الخزينة — فحساب 2341 بيبيّن كل مورد نقدي، سطرين لكل مورد في الفرع/اليوم، والبيان فيه المورد وملاحظة السند (غالباً رقم الفاتورة).\n'
                        '• تحويلات النقدية بين المركز والفروع: في الفرع من/إلى 2404 قصاد خزينته، وفي المركز من/إلى حساب الشركة الشقيقة للفرع (ربط «شركة شقيقة») قصاد خزينة المركز. تحويل خزينة ↔ بنك بيتسجل قصاد ربط البنك للطرف التاني، والطرف المسجل على البنك نفسه بيتجاهل دايماً عشان ميتسجلش مرتين. تحويل من المركز مالوش طرف في أي فرع، والتحويل بين فرعين، بيظهروا استثناءات «لا توجد قاعدة» تتسجل يدوياً. تحويلات «قيد تسوية» 1/1/2026 بتفضل استثناءات.\n'
-                       '• قاعدة بيانات اتعمل لها seed قبل 5/11/2026 بتفضل على قاعدة المشتريات النقدية القديمة (سطرين) لحد ما المالية تعدّلها هنا.',
+                       '• فواتير موردي المركز (purchases.hq): من 5104 بالصافي ومن 2363 بضريبة الفاتورة في SOFTECH، إلى 2341 للمورد بإجمالي الفاتورة. فاتورة من غير ضريبة مالهاش سطر 2363، وفاتورة ملهاش رأس في SOFTECH بتتسجل كلها على 5104 ومكتوب عليها «ضريبة ناقصة» في المصدر. مرتجعات المشتريات زي ما هي (من 2341 إلى 5105 بالقيمة كلها).\n'
+                       '• قاعدة بيانات اتعمل لها seed قبل 5/11/2026 بتفضل على القواعد القديمة (المشتريات النقدية سطرين، وفواتير المركز من غير ضريبة) لحد ما المالية تعدّلها هنا؛ حقلي «net» و«vat» متاحين في المحرر.',
                        'One rule per document type: conditions (branch, kind, payment…), grouping (document · branch/day · party/day), book, priority and lines (debit/credit, account, branch, party, amount from an allowed field). "Test" shows the entries that would be made for a range without saving anything.\n'
                        '• Cash purchases (supplier.cash) post in two legs like the finance cash book: Dr 5100 / Cr 2341 for the supplier, then Dr 2341 for the supplier / Cr the cash box — so 2341 shows every cash supplier, a pair of lines per supplier per branch/day, described with the supplier and the voucher note (usually the invoice no.).\n'
                        '• Cash transfers between head office and branches: at the branch Dr/Cr 2404 against its box; at head office Dr/Cr the branch\'s sister-company account ("Sister company" map) against the head-office box. A box ↔ bank transfer posts against the bank map of the other side; the leg recorded on the bank itself is always skipped so it is never posted twice. A head-office transfer with no branch leg, and a transfer between two branches, show as "No rule" exceptions to key by hand. The 1-1-2026 «قيد تسوية» transfers stay exceptions.\n'
-                       '• A database seeded before 5-11-2026 keeps the old two-line cash purchase rule until finance edits it here.')},
+                       '• Head-office supplier invoices (purchases.hq): Dr 5104 with the net and Dr 2363 with the SOFTECH invoice VAT, Cr 2341 for the supplier with the whole invoice. An invoice without VAT has no 2363 line; an invoice with no SOFTECH header posts everything to 5104 and is flagged "VAT missing" in its source. Purchase returns are unchanged (Dr 2341 / Cr 5105 with the full value).\n'
+                       '• A database seeded before 5-11-2026 keeps the old rules (two-line cash purchases, head-office invoices without VAT) until finance edits them here; the "net" and "vat" fields are offered in the editor.')},
             {'key': 'maps', 'title': T('جداول الربط', 'Maps'),
              'body': T('خزينة/بنك SOFTECH ← حساب المالية والفرع (فرع الخزينة هو فرع القيد)، أكواد المصروف ← حساب، تسوية البطاقات، و«شركة شقيقة»: كود فرع SOFTECH ← حساب الشركة الشقيقة في المالية (130 علياء 2408، 140 الجيزة 2413، 150 عين شمس 2405، 160 باب الحديد 2406، 170 محسن 2417) على المركز الرئيسي، للتحويلات النقدية بين المركز والفروع. أي قيمة من SOFTECH من غير ربط بتتحول لاستثناء «حساب غير مربوط». كل تعديل بيتسجل بالقبل والبعد.',
                        'SOFTECH cash box / bank → finance account and branch (the box branch is the entry branch), expense codes → account, card clearing, and "Sister company": SOFTECH branch code → the finance sister-company account (130 Aliaa 2408, 140 Giza 2413, 150 Ain Shams 2405, 160 Bab El Hadid 2406, 170 Mohsen 2417) at head office, for cash transfers between head office and branches. Any SOFTECH value without a map becomes an "unmapped account" exception. Every change is logged with before and after.')},
@@ -870,7 +872,7 @@ SCREENS = [
              'open_hint': T('تبويب «جداول الربط».', 'The "Maps" tab.')},
         ],
         'updated': '2026-11-05',
-        'change_note': T('تحويلات النقدية بين المركز والفروع (ربط «شركة شقيقة») والمشتريات النقدية على مرحلتين عبر 2341', 'Cash transfers between head office and branches ("Sister company" map) and two-leg cash purchases through 2341'),
+        'change_note': T('ضريبة فواتير الموردين من SOFTECH على 2363، وتحويلات النقدية بين المركز والفروع، والمشتريات النقدية على مرحلتين عبر 2341', 'SOFTECH supplier-invoice VAT on 2363, cash transfers between head office and branches, and two-leg cash purchases through 2341'),
     },
     {
         'key': 'finance.gl_trial_balance',
@@ -919,8 +921,12 @@ SCREENS = [
              'body': T('الأصول الثابتة والمتداولة، الخصوم المتداولة، رأس المال العامل، وحقوق الملكية في تاريخ. البنك اللي رصيده دائن بيروح «سحب على المكشوف». لو الإجمالي مش متساوي هيظهر الفرق بالأحمر.',
                        'Fixed and current assets, current liabilities, working capital and equity at a date. A bank with a credit balance moves to "overdraft". If the totals differ, the difference shows in red.')},
             {'key': 'branches', 'title': T('أرباح الفروع', 'Branch P&L'),
-             'body': T('عمود لكل فرع والمركز والإجمالي. مصروفات المركز بتتوزع على الفروع بنسبة المبيعات (صفوف «توزيع»)، وصافي الربح بعد التوزيع تحت. التوزيع للعرض بس — مبيتسجلش قيد.',
-                       'A column per branch, head office and total. Head-office expenses are allocated by sales share ("allocation" rows), with net profit after allocation below. Report only — no entry is posted.')},
+             'body': T('عمود لكل فرع والمركز والإجمالي. مصروفات المركز بتتوزع على الفروع بنسبة المبيعات (صفوف «توزيع»)، وصافي الربح بعد التوزيع تحت. التوزيع للعرض بس — مبيتسجلش قيد.\n'
+                       '• «تكلفة المبيعات بنسبة سوفتيك»: تكلفة الأصناف اللي اتباعت في كل فرع من SOFTECH (المبيعات ناقص المرتجعات بسعر التكلفة) للشهور اللي الفترة بتلمسها، و«مجمل الربح بسوفتيك» = صافي المبيعات ناقص التكلفة دي. للعرض بس، والصفوف التانية من القيود زي ما هي.\n'
+                       '• بتتحدث مع كل ترحيل للمبيعات. لو شهر مالوش تكلفة هيظهر تنبيه أصفر باسم الشهر — شغّل الترحيل للشهر ده.',
+                       'A column per branch, head office and total. Head-office expenses are allocated by sales share ("allocation" rows), with net profit after allocation below. Report only — no entry is posted.\n'
+                       '• "SOFTECH cost of sales": the cost of what each branch sold, from SOFTECH (sales minus returns at cost) for the months the period touches, and "SOFTECH gross profit" = net sales minus that cost. Report only; the other rows still come from the entries.\n'
+                       '• Refreshed with every sales drafting run. A month with no cost shows a yellow warning naming it — run the drafting for that month.')},
             {'key': 'comparison', 'title': T('مقارنة السنوات', 'Year comparison'),
              'body': T('كل بند لكل سنة بالقيمة ونسبته من صافي المبيعات. سنة من غير قيود مكتوب جنبها «لا قيود».',
                        'Each line per year as a value and its share of net sales. A year with no entries is marked "no entries".')},
@@ -940,9 +946,9 @@ SCREENS = [
              'text': T('علامة ✓ لما إجمالي الاستثمار = حقوق الملكية، وفرق بالأحمر لو مش متساويين.', 'A ✓ when total investment = equity, and the difference in red when they differ.'),
              'open_hint': T('تبويب «المركز المالي».', 'The "Financial position" tab.')},
         ],
-        'updated': '2026-11-04',
-        'change_note': T('مخزون آخر المدة اختياري في المتاجرة والمركز المالي، وتنبيهات الفروع والمقارنة',
-                         'Optional closing stock on trading and position; warnings on branches and comparison'),
+        'updated': '2026-11-05',
+        'change_note': T('أرباح الفروع: تكلفة المبيعات ومجمل الربح بسوفتيك، وتنبيه للشهور الناقصة',
+                         'Branch P&L: SOFTECH cost of sales and gross profit, with a warning for missing months'),
     },
     {
         'key': 'finance.schema',

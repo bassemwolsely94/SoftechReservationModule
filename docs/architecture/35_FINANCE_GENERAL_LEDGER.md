@@ -344,6 +344,56 @@ An exception resolves itself on redraft; «تجاهل» needs a reason and keeps
   reports `master_skipped` / `master_sheets` (command: «skipped N master-sheet rows …»). Master rows are
   deduplicated separately, so a skipped master sheet never hides a sub-ledger row.
 
+## 2020 Q3 findings — purchase VAT and SOFTECH branch cost (2026-11-05, Rulings P32–P33)
+
+Owner decisions 2026-11-05: VAT → «Split SOFTECH VAT»; accessories 5120–5122 → «No, keep 5104».
+
+- **P32 — purchase VAT split.** A SOFTECH supplier-invoice header (`stktransm` doccode 10) has
+  `docvalue` = Σ `stktrans.transprice_total` (line costs, already net of line discounts) + `docvalue3`
+  (invoice VAT); Aug 2026 HQ 5,143,571.22 = 5,030,085.22 + 113,485.87. The `purchases` reader keeps the
+  APInvoice mirror unchanged (A/P recon is out of scope) and enriches each invoice with one read-only
+  SELECT per month that has invoices (`sybase_gl.sql_purchase_vat`: `branchcode, doccode,
+  CONVERT(varchar(20), docnumber) docno, docdate, docvalue, docvalue3`, doccode 10/120), joined in Python
+  on (branch, doccode, docnumber normalised, date). Amounts: `value` (whole invoice), `vat` (docvalue3,
+  quantised once, positive when it has the invoice's sign) and `net` = value − vat. No SOFTECH header →
+  vat 0 and `attrs.vat_missing = true` (visible in the entry's source panel; never guessed).
+  `purchases.hq` is now Dr 5104 `net` (hq) + Dr 2363 `vat` (hq) / Cr 2341 `value` (party, hq); a zero-VAT
+  invoice has no 2363 line (zero lines are dropped). `purchases.hq_return` is unchanged — finance does not
+  reverse input VAT on returns (2364 unused in 2020), so returns keep their full value Dr 2341 / Cr 5105.
+  **The seed is create-only**: a database seeded before this batch keeps the old two-line `purchases.hq`
+  until finance edits it in «قواعد الترحيل» (the new source fields `net` / `vat` are offered there). Every
+  existing purchase source doc changes hash once (new amounts), so the first run after deploy redrafts
+  open-month purchase drafts. Jan–Aug 2026 docvalue3: HQ 684,185.47, branches 19,451.87; doccode 120 HQ
+  16,244.27. Finance's 2363 for Jan–Aug is 1,225,493.04 — the 0.52M gap is for finance to explain against
+  SOFTECH, not closed here.
+- **P33 — SOFTECH branch cost of sales (report-time only, posts nothing).** `stktransm.docvalue2` on
+  doccode 115 / 30 = Σ qty × newcostprice (Giza Aug 1–7: 270,010.03 vs 270,021.66 from lines; returns
+  6,236.60 vs 6,210.88). `GLBranchCost(year, month, branch_code, sales_cost, return_cost, net_cost,
+  synced_at)` (migration 0024, unique per branch-month) holds Σ docvalue2(115) − Σ docvalue2(30) per
+  branch-month, filled by `branch_cost.sync_branch_cost` (`sybase_gl.sql_branch_cost`, one GROUP BY
+  SELECT per whole month covering the range; upsert; a branch missing from a non-empty month read is
+  removed; an empty month read changes nothing). `gl_sync_branch_cost --from --to` runs it by hand, and
+  a drafting run that drafts `sales_tenders` refreshes its months best-effort (an error lands in
+  `run.detail.branch_cost_error`, the run is not failed; `detail.branch_cost_rows` = rows written).
+  `statements.branch_pl` adds per column `softech_cost` (Σ net_cost of the months the range touches;
+  branch via `Branch.softech_branch_id`, HQ column = the HQ branch, total = every row incl. branches with
+  no ledger column), `softech_gross_profit` = ledger net sales − softech_cost and
+  `softech_cost_months_missing` (months with no row at all; also top-level in the API, and a warning on
+  the total column → the screen and the Excel). Ledger-based lines are unchanged. «الفروع» tab and the
+  Excel show «تكلفة المبيعات بنسبة سوفتيك» and «مجمل الربح بسوفتيك» under «مجمل الربح».
+
+### Q3 items not built (with reasons)
+
+- **Accessory split 5120–5122** — owner: no; 2026 books keep everything on 5104.
+- **Invoice-level purchase discounts** — none on SOFTECH headers (custdiscp / specialdiscp all zero; the
+  line additionaldiscp is already inside the line cost). Finance's 5106 is payment rounding / rebates →
+  booked by hand.
+- **Credit-sale co-payment reclass** — not needed: SOFTECH splits the patient's cash and the company's
+  credit per document, and the engine posts only the company share to 6003.
+- **Coupons** — 2026 SOFTECH coupons are HQ store issues (expcode 43, doccode 170, 400 each, no till);
+  finance's 2020 Dr 6020 / Cr till pattern has no 2026 SOFTECH cash source → owner / finance decision.
+- **Card settlement** — no settlement-batch data in SOFTECH → manual, or a bank-statement import later.
+
 ### Not drafted from SOFTECH (finance keeps booking these by hand)
 
 - Daily branch→HQ cash handovers and 1302↔1301 transfers — not in SOFTECH (branch boxes are never emptied there).
@@ -400,6 +450,7 @@ python manage.py seed_gl_drafting                      # rules + maps from the v
 python manage.py import_gl_parties <xlsx> [--create-only] [--propose]  # finance parties (P26); --propose runs name matching
 python manage.py gl_draft --from YYYY-MM-DD --to YYYY-MM-DD [--source TYPE]... [--dry-run] [--allow-mass-vanish]
 python manage.py gl_check_sources --from … --to … [--source all]   # readers vs the A/P mirror (read-only)
+python manage.py gl_sync_branch_cost --from YYYY-MM-DD --to YYYY-MM-DD   # SOFTECH branch cost of sales, whole months (P33)
 ```
 
 Cutover order: import COA → `seed_gl_drafting` → import parties + propose → finance confirms parties →
@@ -410,7 +461,7 @@ maps for bank boxes / expense codes → `gl_draft --dry-run` → first real run 
 Purchases split (branch invoices booked at payment vs HQ credit); cash purchase returns 5101 (3.11M, not
 from SOFTECH returns); card sales (4.09M vs 3.02M; processor per branch) — card tenders stay exceptions
 until answered; credit-sales presentation (6003 gross / 6021 discount vs net) and credit returns (6018
-vs netting); VAT source (docvalue3 ≠ 2362 / 2363, no VAT lines seeded); cheque maturity posted on the
+vs netting); VAT: purchase VAT split onto 2363 since P32 (finance's 2363 is 0.52M above SOFTECH Jan–Aug — finance to explain); sales VAT not posted; cheque maturity posted on the
 due date (SOFTECH never records clearing); bank movements / card settlements stay manual (`bankstrans`
 empty; box↔bank transfer vouchers are drafted since P24); the 36M of 1-1-2026 transfers (financialdoc 90,
 left as exceptions by P24); expense code 43; supplier-invoice dating
