@@ -40,7 +40,7 @@ MODULE = {
             'title': T('رسالة الإرشادات للعميل', 'The customer guidance message'),
             'model': 'counselling.CounselCardSend', 'field': 'status',
             'states': [
-                {'key': 'queued', 'label': T('قيد الإرسال', 'Sending'), 'desc': T('تم الحفظ وجارٍ الإرسال لواتساب.', 'Saved and being sent to WhatsApp.'),
+                {'key': 'queued', 'label': T('قيد الإرسال', 'Sending'), 'desc': T('تم الحفظ وجارٍ الإرسال لواتساب. رسالة واحدة على الأكثر لنفس الرقم كل 10 دقائق، حتى مع «إعادة الإرسال». تُرسل فقط لرقم مسجّل على العميل (واتساب أو الموبايل أو الرقم الإضافي) — لو الرقم مختلف حدّث بيانات العميل أولاً.', 'Saved and being sent to WhatsApp. At most one message to the same number every 10 minutes, even with "Resend". Sent only to a number on the customer\'s record (WhatsApp, mobile or alternate) — if the number differs, update the customer first.'),
                  'next': ['sent', 'failed']},
                 {'key': 'sent', 'label': T('أُرسلت', 'Sent'), 'desc': T('وصلت لواتساب برابط خاص صالح 90 يوماً.', 'Delivered to WhatsApp with a private link valid for 90 days.')},
                 {'key': 'failed', 'label': T('فشل الإرسال', 'Failed'),

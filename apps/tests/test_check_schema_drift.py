@@ -38,6 +38,20 @@ class SchemaDriftTests(TestCase):
             cur.execute('ALTER TABLE users_useractivitylog ALTER COLUMN note DROP NOT NULL')
         self.assertIn(('nullability', 'note'), self._kinds('users_useractivitylog'))
 
+    def test_repair_migration_fixes_the_office_drift(self):
+        # the office database had these two NOT NULL (2026-11-05); customers 0032 makes them nullable
+        import importlib
+        repair = importlib.import_module('apps.customers.migrations.0032_repair_drifted_not_null')
+        with connection.cursor() as cur:
+            for table, column in repair.REPAIRS:
+                cur.execute(f'DELETE FROM "{table}"')
+                cur.execute(f'ALTER TABLE "{table}" ALTER COLUMN "{column}" SET NOT NULL')
+        self.assertTrue({('nullability', 'target_user_id'), ('nullability', 'invoice_date')}
+                        <= {(d['kind'], d['column']) for d in collect_drift()})
+        repair.forwards(None, connection.schema_editor())
+        repair.forwards(None, connection.schema_editor())            # idempotent
+        self.assertEqual(collect_drift(), [])
+
     def test_command_exits_1_and_prints_json_when_drift_found(self):
         with connection.cursor() as cur:
             cur.execute('ALTER TABLE users_useractivitylog DROP COLUMN ip_address')

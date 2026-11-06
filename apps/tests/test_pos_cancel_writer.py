@@ -152,3 +152,53 @@ class LiveWritePathTests(TestCase):
         e.refresh_from_db()
         self.assertIsNone(e.softech_written_at)                  # UN-claimed → retried, no dup
         self.assertIn('ASE down', e.write_error)
+
+
+@override_settings(POS_CANCEL_WRITE_ENABLED=True)
+class ConcurrentRunTests(TestCase):
+    """Round 2, R6 step 1 / S-3 (owner OK 2026-11-05): two scheduler processes. Run B claims the
+    same events after run A read them but before A's claim; A must then insert nothing."""
+
+    def test_events_claimed_by_another_run_are_not_inserted_again(self):
+        br = make_branch()
+        e = _evt(br, code='77777')
+        real = PCW._sold_codes_by_cart
+
+        def other_run_claims_first(tokens):
+            PosSelectionEvent.objects.filter(pk=e.pk).update(softech_written_at=timezone.now())
+            return real(tokens)
+        inserts = []
+        with patch.object(PCW, '_sold_codes_by_cart', side_effect=other_run_claims_first), \
+             patch('config.sybase.get_branch_connection', return_value=MagicMock()), \
+             patch('apps.pos_orders.writer._exec_insert',
+                   side_effect=lambda conn, table, row: inserts.append(row)):
+            PCW.write_pos_cancel_batch(dry_run=False, min_age_minutes=0)
+        self.assertEqual(inserts, [])
+
+    def test_a_failed_run_unclaims_only_its_own_rows(self):
+        br = make_branch()
+        mine, theirs = _evt(br, code='11111'), _evt(br, code='22222')
+        real = PCW._sold_codes_by_cart
+
+        def other_run_claims_one(tokens):
+            PosSelectionEvent.objects.filter(pk=theirs.pk).update(softech_written_at=timezone.now(),
+                                                                   write_error='claim:other')
+            return real(tokens)
+        with patch.object(PCW, '_sold_codes_by_cart', side_effect=other_run_claims_one), \
+             patch('config.sybase.get_branch_connection', return_value=MagicMock()), \
+             patch('apps.pos_orders.writer._exec_insert', side_effect=RuntimeError('ASE down')):
+            PCW.write_pos_cancel_batch(dry_run=False, min_age_minutes=0)
+        mine.refresh_from_db(); theirs.refresh_from_db()
+        self.assertIsNone(mine.softech_written_at)                 # ours: un-claimed, retried later
+        self.assertIsNotNone(theirs.softech_written_at)            # the other run's claim stands
+        self.assertEqual(theirs.write_error, 'claim:other')
+
+    def test_success_clears_the_claim_token(self):
+        br = make_branch()
+        e = _evt(br, code='33333')
+        with patch('config.sybase.get_branch_connection', return_value=MagicMock()), \
+             patch('apps.pos_orders.writer._exec_insert'):
+            PCW.write_pos_cancel_batch(dry_run=False, min_age_minutes=0)
+        e.refresh_from_db()
+        self.assertIsNotNone(e.softech_written_at)
+        self.assertEqual(e.write_error, '')

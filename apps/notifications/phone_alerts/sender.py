@@ -1,7 +1,8 @@
 """
 Deliver one PhoneAlert: WhatsApp template from the staff ChannelAccount, SMS as fallback.
 
-``deliver`` never raises: every outcome is recorded as a PhoneAlertAttempt. With the send
+``deliver`` never raises: every outcome is recorded as a PhoneAlertAttempt. A number that got
+the same event within SEND_MIN_INTERVAL_SECONDS is not sent to again (``throttled``). With the send
 switch off, or no (active) staff account configured, it records ``dry_run`` and the alert
 still moves to ``sent`` so the reminder clock and the log behave exactly as in production.
 """
@@ -161,6 +162,14 @@ def _deliver(alert, reminder, template, variables, payloads):
         _mark_sent(alert)
         return att
 
+    # owner question 6 (round 2, R5): 1 real message per number per type per
+    # SEND_MIN_INTERVAL_SECONDS. Not marked sent: an alert's reminder clock retries it later; a
+    # brief has its own once-a-day guard. A send that reached nobody gives the slot back.
+    from apps.notifications import send_limits
+    kind, claimed_at = f'phone_alert:{alert.event}', timezone.now()
+    if not send_limits.claim(kind, alert.phone, now=claimed_at):
+        return _attempt(alert, 'whatsapp', 'throttled')
+
     try:
         from apps.whatsapp.sender import WhatsAppSender
         wa = WhatsAppSender(account=account)
@@ -175,6 +184,7 @@ def _deliver(alert, reminder, template, variables, payloads):
         if sms is not None and sms.result == 'sent':
             _mark_sent(alert)
             return sms
+        send_limits.release(kind, alert.phone, claimed_at)
         if alert.status in ('queued', 'failed'):
             PhoneAlert.objects.filter(pk=alert.pk).update(status='failed')
             alert.status = 'failed'

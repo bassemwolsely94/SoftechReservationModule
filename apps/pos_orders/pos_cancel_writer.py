@@ -23,6 +23,7 @@ Safety:
     an unreachable branch is skipped and retried next run.
 """
 import logging
+import uuid
 
 from django.conf import settings
 from config.writers import writer_allowed
@@ -109,8 +110,8 @@ def write_pos_cancel_batch(*, dry_run=None, limit=2000, min_age_minutes=360):
 
     now = timezone.now()
     if skip_ids and not dry_run:                       # sold → processed, never inserted (no dup risk)
-        PosSelectionEvent.objects.filter(id__in=skip_ids).update(softech_written_at=now,
-                                                                 write_error='skip:sold')
+        PosSelectionEvent.objects.filter(id__in=skip_ids, softech_written_at__isnull=True).update(
+            softech_written_at=now, write_error='skip:sold')
 
     by_branch = {}
     for e in to_write:
@@ -123,9 +124,19 @@ def write_pos_cancel_batch(*, dry_run=None, limit=2000, min_age_minutes=360):
             summary['branches'][bc] = {'would_write': len(rows), 'sample': rows[:3]}
             continue
 
-        ids = [e.id for e in evs]
-        # CLAIM before the write so a crash can only under-post, never double-post.
-        PosSelectionEvent.objects.filter(id__in=ids).update(softech_written_at=now, write_error='')
+        # CLAIM before the write so a crash can only under-post, never double-post. Round 2 (S-3,
+        # owner OK 2026-11-05): claim only rows still unclaimed, under this run's own token, and
+        # write only what this run won — a second scheduler process that read the same events
+        # claims nothing and inserts nothing; an un-claim touches only this run's rows.
+        token = f'claim:{uuid.uuid4().hex[:16]}'
+        PosSelectionEvent.objects.filter(id__in=[e.id for e in evs], softech_written_at__isnull=True
+                                         ).update(softech_written_at=now, write_error=token)
+        ids = set(PosSelectionEvent.objects.filter(id__in=[e.id for e in evs], write_error=token)
+                  .values_list('id', flat=True))
+        if not ids:
+            summary['branches'][bc] = {'claimed_elsewhere': len(evs)}
+            continue
+        rows = [_row_from_event(e) for e in evs if e.id in ids]
         conn = None
         try:
             conn = get_branch_connection(branch.effective_db_host, branch.effective_db_port,
@@ -140,9 +151,9 @@ def write_pos_cancel_batch(*, dry_run=None, limit=2000, min_age_minutes=360):
                     conn.rollback()
                 except Exception:
                     pass
-            # UN-CLAIM → retried next run (branch unreachable, or a write error)
-            PosSelectionEvent.objects.filter(id__in=ids).update(softech_written_at=None,
-                                                                write_error=str(exc)[:200])
+            # UN-CLAIM (only this run's claim) → retried next run (branch unreachable, or a write error)
+            PosSelectionEvent.objects.filter(id__in=ids, write_error=token).update(
+                softech_written_at=None, write_error=str(exc)[:200])
             summary['branches'][bc] = {'error': str(exc)[:200], 'attempted': len(rows)}
             logger.warning('[pos_cancel_writer] branch %s write failed (un-claimed): %s', bc, exc)
             continue
@@ -152,6 +163,7 @@ def write_pos_cancel_batch(*, dry_run=None, limit=2000, min_age_minutes=360):
                     conn.close()
                 except Exception:
                     pass
+        PosSelectionEvent.objects.filter(id__in=ids, write_error=token).update(write_error='')
         summary['written'] += len(rows)
         summary['branches'][bc] = {'written': len(rows)}
         logger.info('[pos_cancel_writer] branch %s wrote %d pos_cancel rows', bc, len(rows))

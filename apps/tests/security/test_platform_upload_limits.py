@@ -72,3 +72,77 @@ class ImportRowCapTests(SimpleTestCase):
         rows, err = _parse_import_file(_xlsx([['code', 'pct']] + [[i, 5] for i in range(20)]))
         self.assertIsNone(rows)
         self.assertIn('10', err)
+
+
+class StockCountUploadResultsTests(TestCase):
+    """Round 2, R5 step 5: the only stock-count upload — POST sessions/{id}/upload-results/.
+    The sheet is read in memory and never stored, so a file name can't pick a path; its type,
+    size (MAX_UPLOAD_FILE_SIZE) and row count (MAX_IMPORT_ROWS) are what's checked here.
+    (Camera scanning on the daily count makes no upload.)"""
+
+    def setUp(self):
+        from decimal import Decimal
+        from apps.stockcount.models import StockCountSession, StockCountSnapshot
+        root = tempfile.mkdtemp()
+        self.media = root
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        o = override_settings(MEDIA_ROOT=root)
+        o.enable()
+        self.addCleanup(o.disable)
+        _, _, self.c = make_admin('r5_count_admin')
+        self.s = StockCountSession.objects.create(name='جرد', branch_code='B01', status='snapshot_taken')
+        StockCountSnapshot.objects.create(session=self.s, item_code='IT001', item_name='X',
+                                          branch_code='B01', expected_qty=Decimal('5'))
+
+    def _post(self, f):
+        return self.c.post(f'/api/stockcount/sessions/{self.s.pk}/upload-results/', {'file': f},
+                           format='multipart')
+
+    def _counted(self):
+        from apps.stockcount.models import StockCountSnapshot
+        return StockCountSnapshot.objects.get(session=self.s, item_code='IT001').counted_qty
+
+    def _stored_files(self):
+        import os
+        return [f for _, _, files in os.walk(self.media) for f in files]
+
+    def test_a_good_sheet_is_taken_and_nothing_is_stored(self):
+        r = self._post(_xlsx([['item_code', 'counted_qty'], ['IT001', 4]]))
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(int(self._counted()), 4)
+        self.assertEqual(self._stored_files(), [])
+
+    def test_wrong_type_is_refused(self):
+        for name, data in (('x.exe', b'MZ\x90\x00' + bytes(range(256)) * 4),
+                           ('x.pdf', b'%PDF-1.4\n%\xe2\xe3\xcf\xd3\n'),
+                           ('x.xlsx', b'not really a workbook')):
+            with self.subTest(name=name):
+                r = self._post(SimpleUploadedFile(name, data))
+                self.assertEqual(r.status_code, 400, r.content)
+        self.assertIsNone(self._counted())
+
+    @override_settings(MAX_UPLOAD_FILE_SIZE=200_000)
+    def test_a_file_over_the_size_cap_is_refused(self):
+        body = 'item_code,counted_qty\nIT001,4\n' + ('IT999,1\n' * 30_000)
+        r = self._post(SimpleUploadedFile('big.csv', body.encode()))
+        self.assertEqual(r.status_code, 400)
+        self.assertIsNone(self._counted())
+
+    @override_settings(MAX_IMPORT_ROWS=10)
+    def test_rows_over_the_cap_are_refused(self):
+        rows = [['item_code', 'counted_qty'], ['IT001', 4]] + [[f'Z{i}', 1] for i in range(20)]
+        for f in (_xlsx(rows), SimpleUploadedFile(
+                'rows.csv', '\n'.join(','.join(map(str, r)) for r in rows).encode())):
+            with self.subTest(name=f.name):
+                r = self._post(f)
+                self.assertEqual(r.status_code, 400, r.content)
+        self.assertIsNone(self._counted())
+
+    def test_path_names_are_never_used(self):
+        for name in ('../../../etc/passwd.csv', '..\..\windows\win.ini.csv', '/abs/x.csv',
+                     'con.csv', 'a\x00b.csv'):
+            with self.subTest(name=name):
+                f = SimpleUploadedFile(name, b'item_code,counted_qty\nIT001,3\n')
+                r = self._post(f)
+                self.assertIn(r.status_code, (200, 400), r.content)
+        self.assertEqual(self._stored_files(), [])

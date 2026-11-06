@@ -235,8 +235,11 @@ def drain_queue():
 
         sent = failed = 0
         for item in pending:
+            # Round 2, R6: claim the row atomically — a second drain (another scheduler process)
+            # that read the same pending row gets 0 rows here and skips it, so it is sent once.
+            if not WAMessageQueue.objects.filter(pk=item.pk, status='pending').update(status='processing'):
+                continue
             item.status = 'processing'
-            item.save(update_fields=['status'])
 
             try:
                 result = sender.send_text(

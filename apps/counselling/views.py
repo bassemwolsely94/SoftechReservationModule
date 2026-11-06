@@ -233,7 +233,8 @@ class CardPreview(_CardBase):
     def post(self, request):
         from .cards import plan_card
         return Response(plan_card(customer=self._customer(request), phone=request.data.get('phone', ''),
-                                  item_ids=request.data.get('item_ids') or []))
+                                  item_ids=request.data.get('item_ids') or [],
+                                  phone_index=request.data.get('phone_index')))
 
 
 class CardSend(_CardBase):
@@ -249,7 +250,8 @@ class CardSend(_CardBase):
                          item_ids=request.data.get('item_ids') or [], actor=_profile(request), branch=branch,
                          source=request.data.get('source', 'pos'),
                          idempotency_key=request.data.get('idempotency_key', ''),
-                         resend=bool(request.data.get('resend')))
+                         resend=bool(request.data.get('resend')),
+                         phone_index=request.data.get('phone_index'))
         return Response({'id': send.pk, 'status': send.status, 'status_label': send.get_status_display(),
                          'fail_reason': send.fail_reason, 'phone': send.phone_masked,
                          'items': send.lines.count()},

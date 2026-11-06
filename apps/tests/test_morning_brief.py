@@ -383,6 +383,9 @@ class OtherJobsTests(_Base):
         run = self._run()
         self.assertEqual(self._insight_send(run), ['201022222222'])
 
+    # two separate scenarios sent back to back; the 10-minute limit (round 2, R5) would hold the
+    # second, and it is tested in security/test_send_limits.py
+    @override_settings(SEND_MIN_INTERVAL_SECONDS=0)
     def test_insights_0730_switch_off_or_no_account_keeps_recipient(self):
         self._recipients()
         run = self._run()

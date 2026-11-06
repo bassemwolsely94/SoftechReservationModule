@@ -16,6 +16,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.purchasing import isr_fulfillment as F
+from core.export_safety import neutralise_formulas
 
 
 class Command(BaseCommand):
@@ -41,7 +42,7 @@ class Command(BaseCommand):
         out_dir = os.path.join(settings.MEDIA_ROOT, 'reports')
         os.makedirs(out_dir, exist_ok=True)
         path = os.path.join(out_dir, F.workbook_filename(snap))
-        wb.save(path)
+        neutralise_formulas(wb, keep_safe_formulas=True).save(path)
 
         self.stdout.write(self.style.MIGRATE_HEADING('\n═══ ISR fulfilment plan ═══'))
         for r in plan['isrs']:

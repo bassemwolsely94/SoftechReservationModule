@@ -27,6 +27,7 @@ from .service import ForecastService
 from .engine import ForecastEngine
 from .backtest import BacktestService
 from core.threads import start_thread
+from core.export_safety import neutralise_formulas
 from django.db.models import Value
 from django.db.models.functions import Coalesce, Concat, NullIf, Trim
 from core.sort_ordering import NullsLastOrderingFilter as NullsLastOrdering
@@ -375,7 +376,7 @@ class KpiSheetExportView(APIView):
                 incentive_threshold=_dec('threshold', '0.90'),
                 benchmark_growth=_dec('benchmark', '0.30'))
             buf = io.BytesIO()
-            wb.save(buf)
+            neutralise_formulas(wb, keep_safe_formulas=True).save(buf)
             buf.seek(0)
         except Exception:
             logger.exception('KPI sheet export failed for %s-%s', year, month)
@@ -496,7 +497,7 @@ class ForecastScenarioViewSet(viewsets.ModelViewSet):
         from .kpi_export import build_scenario_workbook
         try:
             wb = build_scenario_workbook(scenario)
-            buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+            buf = io.BytesIO(); neutralise_formulas(wb, keep_safe_formulas=True).save(buf); buf.seek(0)
         except Exception:
             logger.exception('Scenario export failed for %s', scenario.pk)
             return Response({'detail': 'فشل تصدير الملف'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

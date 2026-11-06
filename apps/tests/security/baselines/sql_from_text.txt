@@ -41,7 +41,7 @@ apps/purchasing/coverage_writer.py::probe_coverage_write._set
 apps/purchasing/rate_writer.py::probe_write
 apps/purchasing/shortage_writer.py::_write_softech
 
-# reason: internal-only — dates from _parse_date/isoformat; supplier codes from SupplierSegmentation (engine-written from SOFTECH); admin-triggered (triage 2026-10-26)
+# reason: only month-window ISO dates (_month_chunks) are formatted in; supplier codes — incl. P-29 return-policy codes typed on screen — are bound '?' params since round 2 R5 (2026-11-05)
 apps/batches/expiry_audit.py::run_backfill
 
 # reason: internal-only — DB / FLAGS / EDITOR column constants; pic bound (triage 2026-10-26)

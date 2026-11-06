@@ -16,21 +16,30 @@ Usage (run alongside the web server, e.g. in a second terminal / service):
     python manage.py run_scheduler
 
 Stop with Ctrl+C (SIGINT) or SIGTERM — the scheduler shuts down cleanly.
+
+Only ONE scheduler may run against a database (apps/sync/scheduler_lock.py): a second one starts
+no jobs, alerts the admins in the app and exits with status 2.
 """
 import signal
 import threading
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
 
 class Command(BaseCommand):
     help = 'Run the background sync/jobs scheduler in a dedicated process.'
 
     def handle(self, *args, **options):
+        from apps.sync import scheduler_lock
         from apps.sync.tasks import start_scheduler, stop_scheduler
         from config.writers import run_startup_checks
 
         run_startup_checks()     # P-54: duplicated .env key / writer + read-only → refuse to start
+        if not scheduler_lock.acquire():
+            scheduler_lock.alert_second_scheduler()
+            raise CommandError(
+                f'Another scheduler is already running ({scheduler_lock.current_owner() or "unknown"}). '
+                'This one started no jobs. Stop the other one first if it is stuck.', returncode=2)
         start_scheduler()
         self.stdout.write(self.style.SUCCESS(
             '✓ Scheduler running in dedicated process. Press Ctrl+C to stop.'
@@ -54,4 +63,5 @@ class Command(BaseCommand):
         stop_event.wait()
 
         stop_scheduler()
+        scheduler_lock.release()
         self.stdout.write(self.style.SUCCESS('Scheduler stopped cleanly.'))

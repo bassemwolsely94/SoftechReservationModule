@@ -14,6 +14,11 @@ masked; call center and all-branch roles edit anyone (`apps/customers/access.py`
 and quality manager are all-branch roles (`core/branch_scope.ALL_BRANCH_ROLES`).
 - W-1: voucher generate-otp hands the plain code to the staff member (wa.me text + QR)
 
+## Round 2, R5/R6 — decided 2026-11-05 (owner), all fixed
+
+S-1 fixed: a counselling card goes only to a mobile on the customer's record (WhatsApp number, phone, alternate) and needs a customer; the drawer picks from those numbers (`counselling/cards.pick_phone`). S-2 fixed: the supplier-invoice and supplier-mapping SOFTECH write batches arm `config.sybase.apply_write_batch_timeout` (`SOFTECH_WRITE_BATCH_TIMEOUT`, 120 s); a timed-out return is held until SOFTECH is checked (`writer.TIMEOUT_UNKNOWN`). S-3 fixed: `pos_cancel_write` claims only unclaimed events under a per-run token and writes only those. Also built: only one scheduler process may run (`apps/sync/scheduler_lock.py`); a second one starts no jobs and alerts the admins.
+
+
 ## Round 2 / R2 money — decided 2026-11-05 (owner)
 
 M-1 fixed: offers skip any item that `catalog.safety.blocks_sale` refuses (`offers/engine._qualifies`).

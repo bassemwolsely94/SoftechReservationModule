@@ -107,6 +107,9 @@ class WorklistWhatsAppTests(TestCase):
         self.assertEqual(PhoneAlert.objects.filter(event='expiry_worklist').count(), 1)
         # last ISO week's heads-up does not block this week's
         PhoneAlert.objects.update(created_at=timezone.now() - timedelta(days=7))
+        # a week has passed for the 10-minute send limit too (round 2, R5)
+        from apps.notifications.phone_alerts.models import SendThrottle
+        SendThrottle.objects.update(last_sent_at=timezone.now() - timedelta(days=7))
         with _conf(), mock.patch(SEND_TPL, return_value={}) as send:
             self._run()
         self.assertEqual(send.call_count, 1)
