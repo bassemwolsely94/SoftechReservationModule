@@ -78,17 +78,33 @@ def release_held_movers(exc):
             GLSourceDoc.objects.filter(pk=doc.pk).update(status='new', entry=None)
 
 
-def mark_exception_resolved(exception_id, *, user, entry):
-    """Close the exception once its correction exists. The members still in the group go back to
-    'drafted' on the group's entry (the original, or the late document itself): the next rebuild
-    must count them, or a second change would propose only the doc that changed."""
-    exc = SourceException.objects.select_related('original_entry').get(pk=exception_id)
+def _settle_members(exc, entry):
+    """`exc` is ending: the listed members still in its group become group members again, so the
+    next rebuild counts them; a second change must not propose only the doc that changed.
+    With no entry to sit on they are 'skipped': 'drafted' without a live entry would be retried at
+    once, 'skipped' keeps its group_key, stays quiet and still counts in the rebuild."""
     detail = exc.detail or {}
-    release_held_movers(exc)
     GLSourceDoc.objects.filter(
         source_key__in=list(detail.get('member_source_keys') or []), status='exception',
         group_key=detail.get('group_key') or '',
-    ).exclude(group_key='').update(status='drafted', entry=exc.original_entry or entry)
+    ).exclude(group_key='').update(status='drafted' if entry else 'skipped', entry=entry)
+
+
+def closed_change_ignored(exc):
+    """«تجاهل» on a closed_period_change: finance accepts the old figure until the next change.
+    Quiet until then: a member back on a live entry with an unchanged hash is not retried."""
+    gk = (exc.detail or {}).get('group_key') or ''
+    release_held_movers(exc)
+    _settle_members(exc, LedgerEntry.objects.filter(source_key=gk, status__in=('draft', 'approved')).first()
+                    if gk else None)
+
+
+def mark_exception_resolved(exception_id, *, user, entry):
+    """Close the exception once its correction exists; the members sit on the group's entry (the
+    original, or the late document itself)."""
+    exc = SourceException.objects.select_related('original_entry').get(pk=exception_id)
+    release_held_movers(exc)
+    _settle_members(exc, exc.original_entry or entry)
     exc.status = 'resolved'
     exc.resolved_by = user
     exc.resolved_at = timezone.now()

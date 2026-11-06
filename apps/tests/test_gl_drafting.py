@@ -9,7 +9,8 @@ from django.utils import timezone
 from apps.branches.models import Branch
 from apps.finance.gl import drafting as DR
 from apps.finance.gl import rules as R
-from apps.finance.gl.ledger import approve
+from apps.finance.gl.ledger import LedgerError, approve
+from apps.finance.gl.ledger import reverse as ledger_reverse
 from apps.finance.gl.sources import SourceDoc
 from apps.finance.models import (
     FinancialPeriod, GLAccount, GLAccountGroup, GLDraftRun, GLParty, GLSourceDoc, LedgerEntry,
@@ -838,6 +839,80 @@ class LateChangeSafetyTests(Base):
         late = post_late_document(rows[B].id, user=self.staff)
         t1 = GLSourceDoc.objects.get(source_key='t1')
         self.assertEqual((t1.status, t1.entry_id), ('drafted', late.pk))
+
+    def _ignored_group(self, ignore_runs=2):
+        """t1=100 + t2=50 approved, month closed, t1 -> 90, row ignored through the service."""
+        from apps.finance.gl import plan2_adapter
+        self.rule(granularity='branch_day')
+        self.docs['sales_tenders'] = [tender('t1', '100.00'), tender('t2', '50.00', pt='40')]
+        self.run_engine()
+        a = self.live(self.GRP).get()
+        approve(a.id, user=self.staff)
+        self.close_month(MAR10)
+        self.docs['sales_tenders'][0] = tender('t1', '90.00')
+        for _ in range(ignore_runs):
+            self.run_engine()
+        ex = SourceException.objects.get(kind='closed_period_change', status='open')
+        ex.status = 'ignored'
+        ex.save(update_fields=['status'])
+        plan2_adapter.closed_change_ignored(ex)
+        return a
+
+    def test_ignored_change_is_not_raised_again_while_the_source_stands(self):
+        a = self._ignored_group()
+        for key in ('t1', 't2'):
+            sd = GLSourceDoc.objects.get(source_key=key)
+            self.assertEqual((sd.status, sd.entry_id), ('drafted', a.id), key)
+        for _ in range(2):
+            run = self.run_engine()
+            self.assertEqual(run.status, 'success')
+            self.assertEqual(run.counts['exceptions'], 0)
+            self.assertFalse(SourceException.objects.filter(status='open').exists())
+
+    def test_change_after_an_ignore_proposes_the_whole_group(self):
+        from apps.finance.gl.corrections import post_late_correction
+        a = self._ignored_group()
+        self.docs['sales_tenders'][0] = tender('t1', '80.00')   # the source group is now 130
+        self.run_engine()
+        ex = SourceException.objects.get(kind='closed_period_change', status='open')
+        self.assertEqual(ex.detail['member_source_keys'], ['t1', 't2'])
+        self.assertEqual(DEC(ex.proposed_lines[0]['debit']), DEC('130.00'))
+        fix = post_late_correction(a.id, ex.proposed_lines, user=self.staff, reason='y', exception_id=ex.id)
+        approve(fix.id, user=self.staff)
+        self.assertEqual(self.effective_cash(a), DEC('130.00'))
+
+    def test_ignored_new_group_stays_quiet_and_a_change_proposes_all_of_it(self):
+        """No live entry to sit on: the members are 'skipped', still counted in the rebuild."""
+        from apps.finance.gl import plan2_adapter
+        self.rule(granularity='branch_day')
+        self.close_month(MAR10)
+        self.docs['sales_tenders'] = [tender('t1', '100.00'), tender('t2', '50.00', pt='40')]
+        self.run_engine()
+        self.run_engine()
+        ex = SourceException.objects.get(kind='closed_period_change', status='open')
+        ex.status = 'ignored'
+        ex.save(update_fields=['status'])
+        plan2_adapter.closed_change_ignored(ex)
+        self.assertEqual(set(GLSourceDoc.objects.values_list('status', flat=True)), {'skipped'})
+        run = self.run_engine()
+        self.assertEqual((run.status, run.counts['exceptions']), ('success', 0))
+        self.assertFalse(SourceException.objects.filter(status='open').exists())
+        self.docs['sales_tenders'][0] = tender('t1', '90.00')
+        self.run_engine()
+        ex = SourceException.objects.get(kind='closed_period_change', status='open')
+        self.assertEqual(ex.detail['member_source_keys'], ['t1', 't2'])
+        self.assertEqual(DEC(ex.proposed_lines[0]['debit']), DEC('140.00'))
+
+    def test_engine_reverse_path_still_handles_corrections_first(self):
+        a, fix = self._corrected_group()
+        with self.assertRaises(LedgerError):   # a person cannot, the engine's order can
+            ledger_reverse(a.id, user=self.staff, reason='x')
+        self.close_month(MAR10, 'open')
+        self.docs['sales_tenders'][0] = tender('t1', '80.00')
+        self.assertEqual(self.run_engine().status, 'success')
+        a.refresh_from_db()
+        fix.refresh_from_db()
+        self.assertEqual((a.status, fix.status), ('reversed', 'reversed'))
 
     def test_crash_between_upsert_and_classify_is_repaired(self):
         from unittest import mock

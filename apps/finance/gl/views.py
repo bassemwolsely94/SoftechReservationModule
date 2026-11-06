@@ -31,7 +31,8 @@ from core.upload_safety import capped_rows, max_upload_bytes
 from . import balances, exports, ledger, statements
 from .coa_import import import_coa, parse_trial_balance_sheet_with_warnings
 
-CONFLICT_CODES = {'not_draft', 'not_approved', 'already_reversed', 'is_reversal', 'source_conflict'}
+CONFLICT_CODES = {'not_draft', 'not_approved', 'already_reversed', 'is_reversal', 'source_conflict',
+                  'has_corrections'}
 MAX_BULK = 500
 MAX_NOTES = 4000
 MAX_TEXT = 500           # LedgerEntry / LedgerLine description — refused above, never truncated

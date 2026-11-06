@@ -149,6 +149,25 @@ class GLApiTests(TestCase):
         again = self.c.post(f'{BASE}entries/{d["id"]}/reverse/', {'reason': 'x'}, format='json')
         self.assertEqual(again.status_code, 409)
 
+    def test_reverse_refused_while_corrections_are_live(self):
+        from apps.finance.gl.corrections import post_late_correction
+        from apps.finance.models import FinancialPeriod
+        d = self._draft()
+        self.c.post(f'{BASE}entries/{d["id"]}/approve/')
+        FinancialPeriod.objects.filter(year=2026, month=3, period_type='month').update(status='closed')
+        lines = _body(debit='150.00', credit='150.00')['lines']
+        fix = post_late_correction(d['id'], lines, user=self.acct, reason='x')
+        r = self.c.post(f'{BASE}entries/{d["id"]}/reverse/', {'reason': 'خطأ'}, format='json')
+        self.assertEqual((r.status_code, r.data['code']), (409, 'has_corrections'))   # draft correction
+        self.assertEqual(self.c.post(f'{BASE}entries/{fix.pk}/approve/').status_code, 200)
+        r = self.c.post(f'{BASE}entries/{d["id"]}/reverse/', {'reason': 'خطأ'}, format='json')
+        self.assertEqual((r.status_code, r.data['code']), (409, 'has_corrections'))   # approved one
+        self.assertEqual(r.data['detail'], MESSAGES['has_corrections'])
+        r = self.c.post(f'{BASE}entries/{fix.pk}/reverse/', {'reason': 'خطأ'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        r = self.c.post(f'{BASE}entries/{d["id"]}/reverse/', {'reason': 'خطأ'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+
     def test_trial_balance_and_statement(self):
         d = self._draft()
         self.c.post(f'{BASE}entries/{d["id"]}/approve/')

@@ -170,6 +170,30 @@ class ReverseClosedMonthTests(Base):
         self.assertEqual((mirror.entry_date, mirror.corrects_id), (orig.entry_date, None))
 
 
+class ReverseWithCorrectionsTests(Base):
+    def test_refused_with_an_approved_correction_then_allowed_after_reversing_it(self):
+        orig = self.original()
+        fix = approve(self.correct(orig, '1100.00').id, user=self.staff)
+        with self.assertRaises(LedgerError) as cm:
+            reverse(orig.id, user=self.staff, reason='خطأ')
+        self.assertEqual(cm.exception.code, 'has_corrections')
+        self.assertEqual(cm.exception.message, 'القيد ده عليه تصحيحات، اعكس التصحيحات الأول')
+        orig.refresh_from_db()
+        self.assertEqual(orig.status, 'approved')
+        reverse(fix.id, user=self.staff, reason='خطأ')
+        self.assertEqual(reverse(orig.id, user=self.staff, reason='خطأ').reverses_id, orig.id)
+        orig.refresh_from_db()
+        self.assertEqual(orig.status, 'reversed')
+        self.assertEqual(effective_lines(orig), {})
+
+    def test_refused_with_a_draft_correction(self):
+        orig = self.original()
+        self.correct(orig, '1100.00')
+        with self.assertRaises(LedgerError) as cm:
+            reverse(orig.id, user=self.staff, reason='خطأ')
+        self.assertEqual(cm.exception.code, 'has_corrections')
+
+
 class EffectiveLinesTests(Base):
     KEY_DR, KEY_CR = (EXPENSE, None, ''), (PAYABLE, None, '')
 
@@ -284,10 +308,10 @@ class LateCorrectionTests(Base):
 
     def test_correction_refused_for_draft_reversal_and_correction_originals(self):
         draft = save_draft(user=self.staff, entry_date=D(2026, 2, 10), description='x', lines=_lines('5.00'))
-        orig = self.original()
+        orig = self.original(close=False)
+        other = self.original(source_key='doc-2')
         fix = approve(self.correct(orig, '1100.00').id, user=self.staff)
-        _set_status(fix.entry_date, 'closed')
-        mirror = reverse(orig.id, user=self.staff, reason='x')
+        mirror = reverse(other.id, user=self.staff, reason='x')
         for entry, code in ((draft, 'original_is_draft'), (mirror, 'is_reversal'), (fix, 'is_correction')):
             with self.assertRaises(LedgerError) as cm:
                 self.correct(entry, '1.00')

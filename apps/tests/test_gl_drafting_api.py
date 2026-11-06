@@ -360,6 +360,21 @@ class ExceptionTests(Base):
         moved.refresh_from_db()
         self.assertEqual((moved.status, moved.entry_id), ('new', None))
 
+    def test_ignoring_a_closed_change_returns_group_members_to_the_live_entry(self):
+        entry = LedgerEntry.objects.create(
+            entry_date=D, period=FinancialPeriod.objects.create(
+                year=D.year, month=D.month, period_type='month', period_start=D.replace(day=1),
+                period_end=D.replace(day=28), status='closed'),
+            book='cash', status='approved', source_key='grp-a', created_by=self.acct_p, number='JV-T-1')
+        one, two = self.doc('m1', group_key='grp-a'), self.doc('m2', group_key='grp-a')
+        row = self.exc(one, kind='closed_period_change', original_entry=entry,
+                       detail={'group_key': 'grp-a', 'member_source_keys': ['m1', 'm2']})
+        r = self.acct.post(f'{BASE}exceptions/{row.pk}/ignore/', {'note': 'مقصود'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        for doc in (one, two):
+            doc.refresh_from_db()
+            self.assertEqual((doc.status, doc.entry_id), ('drafted', entry.pk))
+
     def test_filter_and_ignore_audited(self):
         d1 = self.doc('a')
         d2 = self.doc('b', source_type='credit_sales', doc_date=datetime.date(2026, 4, 2))

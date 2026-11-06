@@ -45,6 +45,7 @@ MESSAGES = {
     'source_conflict':     'فيه قيد تاني شغال مربوط بنفس المصدر.',
     'bad_branch':          'الفرع المحدد في السطر غير موجود.',
     'reverse_before_original': 'تاريخ القيد العكسي مينفعش يكون قبل تاريخ القيد الأصلي.',
+    'has_corrections':     'القيد ده عليه تصحيحات، اعكس التصحيحات الأول',
     'period_closing':      'الفترة قيد الإقفال',
     'period_open':         'فترة القيد لسه مفتوحة — عدّل بإعادة الترحيل مش بقيد تصحيح.',
     'nothing_to_correct':  'مفيش فرق يتصحح: الأسطر الجديدة مطابقة للقيد بعد تصحيحاته.',
@@ -284,6 +285,9 @@ def reverse(entry_id: int, *, user, reason: str,
             raise LedgerError('not_approved')
         if original.reverses_id:
             raise LedgerError('is_reversal')
+        # a reversed correction is already netted out; a live one would outlive the original
+        if original.corrections.filter(status__in=('draft', 'approved')).exists():
+            raise LedgerError('has_corrections')
         late = FinancialPeriod.objects.get(pk=original.period_id).status != 'open'
         day = entry_date or original.entry_date
         if late and entry_date is None:

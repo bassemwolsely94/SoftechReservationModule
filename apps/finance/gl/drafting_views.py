@@ -477,8 +477,8 @@ def exception_ignore(request, pk):
         e.status, e.resolved_by, e.resolved_at, e.resolution_note = 'ignored', profile, timezone.now(), note
         e.save(update_fields=['status', 'resolved_by', 'resolved_at', 'resolution_note'])
         # the doc stays 'exception' on purpose: the engine only retries new/changed docs
-        if e.kind == 'closed_period_change':   # but a doc held out of its new group by this row is freed
-            plan2_adapter.release_held_movers(e)
+        if e.kind == 'closed_period_change':   # except here: the old figure stands until the next change
+            plan2_adapter.closed_change_ignored(e)
         parties._audit('gl_exception_ignored', user=profile, obj=e,
                        old_data={'status': 'open'},
                        new_data={'status': 'ignored', 'kind': e.kind, 'note': note,
