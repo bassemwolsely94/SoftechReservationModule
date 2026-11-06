@@ -163,9 +163,20 @@ if @done = 1 and @others = 0 {final}
 else rollback tran
 select @done as done, @others as others
 """
+    from config.sybase import apply_write_batch_timeout, is_timeout_error
     jst = conn._conn.createStatement()
+    apply_write_batch_timeout(jst)                       # S-2: a stalled link can't hold the job
     try:
         row = _run_batch_lastrow(jst, batch)
+    except Exception as exc:
+        if commit and is_timeout_error(exc):            # may have committed: keep the who/what trail
+            from core.softech_audit import audit_softech_write
+            audit_softech_write('softech_supplier_mapping_written', actor=actor,
+                                before={'suppitemcode': current, 'on_other_items': others},
+                                after={'suppitemcode': code}, suppcode=supp, itemcode=item,
+                                link_action=action, approved=bool(approved),
+                                outcome='unknown: timed out mid-batch, re-run to confirm')
+        raise
     finally:
         try:
             jst.close()

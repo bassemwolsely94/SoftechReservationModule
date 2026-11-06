@@ -1142,7 +1142,9 @@ else rollback tran
 select @dn as docnumber, @hdr as hdr, @lines as lines, isnull(@err,0) as err,
        case when @hdr=1 and @lines={n} and @after={after_expected} then 1 else 0 end as verified
 """
+    from config.sybase import apply_write_batch_timeout
     jst = conn._conn.createStatement()
+    apply_write_batch_timeout(jst)                       # S-2: a stalled link can't hold the push
     full_header, full_lines, full_balance = None, [], None
     try:
         if capture:
@@ -1183,6 +1185,10 @@ select @dn as docnumber, @hdr as hdr, @lines as lines, isnull(@err,0) as err,
     return res
 
 
+# erp_error prefix: the last push timed out mid-batch, so SOFTECH may hold the document (S-2)
+TIMEOUT_UNKNOWN = 'timeout-unknown: '
+
+
 # ── 3. PUSH — guarded; dry-run plan unless gate on + dry_run=False ─────────────
 def push_final(invoice: SupplierInvoice, *, dry_run=True, force=False, usercode=None,
                header_extra=None, line_extra=None):
@@ -1198,6 +1204,12 @@ def push_final(invoice: SupplierInvoice, *, dry_run=True, force=False, usercode=
     if invoice.softech_docnumber and invoice.status == 'finalized':
         return {'mode': 'idempotent', 'wrote_to_softech': False, 'already_finalized': True,
                 'invoice_id': invoice.pk, 'docnumber': int(invoice.softech_docnumber)}
+    if (str(getattr(invoice, 'erp_error', '') or '').startswith(TIMEOUT_UNKNOWN)
+            and invoice.doc_kind != 'purchase' and not force):
+        return {'mode': 'timeout_unknown', 'wrote_to_softech': False, 'ok': False, 'blocked': True,
+                'invoice_id': invoice.pk,
+                'detail': 'انقطع الاتصال أثناء الترحيل السابق وقد يكون المستند محفوظاً في SOFTECH — '
+                          'راجع SOFTECH أولاً، ثم أعد الترحيل مع «تجاوز التحذيرات» لو لم يُحفظ.'}
     if invoice.status == 'pushing':
         raise ValueError('الفاتورة قيد الترحيل بالفعل.')
 
@@ -1285,8 +1297,14 @@ def push_final(invoice: SupplierInvoice, *, dry_run=True, force=False, usercode=
             invoice.save(update_fields=['status', 'erp_error', 'updated_at'])
             return {'mode': 'queued', 'wrote_to_softech': False, 'ok': False,
                     'queued': True, 'invoice_id': invoice.pk}
+        from config.sybase import is_timeout_error
         invoice.status = 'push_failed'
         invoice.erp_error = str(exc)
+        if conn is not None and is_timeout_error(exc):
+            # S-2: the batch may have committed before the link dropped. A purchase is safe to
+            # retry (SOFTECH's supplier + invoice-number check above finds it); a return is not,
+            # so push_final refuses it until someone checks SOFTECH and pushes with force.
+            invoice.erp_error = f'{TIMEOUT_UNKNOWN}{exc}'
         invoice.save(update_fields=['status', 'erp_error', 'updated_at'])
         logger.error('[invoices] invoice=%s push EXCEPTION (rolled back): %s', invoice.pk, exc)
         raise

@@ -152,7 +152,14 @@ def scheduler_status(request):
         'last_heartbeat': last_iso,
         'seconds_ago':    int(seconds_ago) if seconds_ago is not None else None,
         'threshold':      THRESHOLD_SECONDS,
+        # the one scheduler holding the single-scheduler lock (host, pid, since) — apps/sync/scheduler_lock
+        'owner':          _scheduler_owner(),
     })
+
+
+def _scheduler_owner():
+    from apps.sync.scheduler_lock import current_owner
+    return current_owner() or None
 
 
 @api_view(['GET'])

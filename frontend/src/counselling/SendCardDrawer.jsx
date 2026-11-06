@@ -16,15 +16,16 @@ const newKey = () => (globalThis.crypto?.randomUUID?.() || `k${Date.now()}${Math
 
 export default function SendCardDrawer({ customerId, itemIds, branchId, source = 'pos', onClose }) {
   const { cards } = useCounsellingStatus()
-  const [phone, setPhone] = useState('')
+  const [phoneIndex, setPhoneIndex] = useState(0)      // which of the customer's numbers on record
   const [resend, setResend] = useState(false)
   const [picked, setPicked] = useState(null)          // null = server's default (all with guidance)
   const [key] = useState(newKey)
   const ids = useMemo(() => [...new Set((itemIds || []).filter(Boolean))], [itemIds])
 
   const preview = useQuery({
-    queryKey: ['counsel-card-preview', customerId || null, ids.join(','), phone],
-    queryFn: () => counsellingApi.previewCard({ customer_id: customerId, item_ids: ids, phone }).then(r => r.data),
+    queryKey: ['counsel-card-preview', customerId || null, ids.join(','), phoneIndex],
+    queryFn: () => counsellingApi.previewCard({ customer_id: customerId, item_ids: ids, phone_index: phoneIndex })
+      .then(r => r.data),
     enabled: ids.length > 0,
     staleTime: 30_000,
   })
@@ -34,7 +35,7 @@ export default function SendCardDrawer({ customerId, itemIds, branchId, source =
 
   const send = useMutation({
     mutationFn: () => counsellingApi.sendCard({
-      customer_id: customerId, item_ids: chosen, branch_id: branchId, phone, source,
+      customer_id: customerId, item_ids: chosen, branch_id: branchId, phone_index: phoneIndex, source,
       idempotency_key: key, resend,
     }).then(r => r.data),
   })
@@ -62,10 +63,18 @@ export default function SendCardDrawer({ customerId, itemIds, branchId, source =
         {p && (
           <>
             <label className="block">
-              <span className="text-[11px] text-gray-500">رقم واتساب العميل</span>
-              <input value={phone} onChange={e => setPhone(e.target.value)} placeholder={p.phone || '01xxxxxxxxx'}
-                     inputMode="tel" className="mt-0.5 w-full rounded-lg border border-gray-300 px-2 py-1.5" dir="ltr" />
-              {p.blocked_reason === 'bad_phone' && <span className="text-xs text-red-600">أدخل رقم موبايل مصري صحيح</span>}
+              <span className="text-[11px] text-gray-500">رقم واتساب العميل (من بيانات العميل)</span>
+              {p.phones?.length > 1 ? (
+                <select value={phoneIndex} onChange={e => setPhoneIndex(Number(e.target.value))}
+                        className="mt-0.5 w-full rounded-lg border border-gray-300 px-2 py-1.5" dir="ltr">
+                  {p.phones.map(o => <option key={o.index} value={o.index}>{o.label}</option>)}
+                </select>
+              ) : (
+                <div className="mt-0.5 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5" dir="ltr">{p.phone || '—'}</div>
+              )}
+              {p.blocked_reason === 'no_customer' && <span className="text-xs text-red-600">اختر العميل أولاً — الإرشادات تُرسل لرقم مسجّل على العميل فقط</span>}
+              {(p.blocked_reason === 'no_phone' || p.blocked_reason === 'bad_phone') && <span className="text-xs text-red-600">لا يوجد موبايل مصري مسجّل على العميل — أضفه في بيانات العميل أولاً</span>}
+              {p.blocked_reason === 'not_on_record' && <span className="text-xs text-red-600">الرقم غير مسجّل على هذا العميل</span>}
               {p.blocked_reason === 'opted_out' && <span className="text-xs text-red-600">العميل أوقف رسائل الإرشادات</span>}
             </label>
 
