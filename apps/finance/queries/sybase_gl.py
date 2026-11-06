@@ -235,3 +235,23 @@ def storebal_snapshots(d1: date | None = None, d2: date | None = None) -> list[d
 def store_names() -> list[dict]:
     """(storecode, storename) from the SOFTECH ``stores`` master."""
     return _select(f"SELECT storecode, storename FROM {DB}.stores")  # nosec B608 - only module constants are interpolated
+
+
+# ── Ledger-vs-SOFTECH comparison (Plan 3, Task 4) ─────────────────────────────────────────────────────
+def sales_net_by_day(d1: date, d2: date) -> list[dict]:
+    """(branchcode, docdate, net): Σ paymentvalue of sales (doccode 115) minus returns (30) per branch and day,
+    every tender except 60 (change discount, which the ledger books as a pair that nets to nothing in the sales
+    group). Aggregated in SOFTECH: the plain month read of ``branchesales`` is ~100K rows and times out."""
+    return _select(
+        "SELECT branchcode, docdate, "  # nosec B608 - only date.isoformat() values and module constants are interpolated
+        "SUM(CASE WHEN doccode = '30' THEN -paymentvalue ELSE paymentvalue END) net "
+        f"FROM {DB}.branchesales "
+        f"WHERE doccode IN ('115','30') AND paymenttype <> '60' AND {_bounds('docdate', d1, d2)} "
+        "GROUP BY branchcode, docdate")
+
+
+def expense_rows(d1: date, d2: date) -> list[dict]:
+    """(branchcode, expensedate, expcode, expvalue, expcomment) of every ``dailyexpenses`` row in [d1, d2]."""
+    return _select(
+        "SELECT branchcode, expensedate, expcode, expvalue, expcomment "  # nosec B608 - only date.isoformat() values and module constants are interpolated
+        f"FROM {DB}.dailyexpenses WHERE {_bounds('expensedate', d1, d2)}")

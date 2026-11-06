@@ -41,6 +41,12 @@ def party_personcodes(codes):
                 .exclude(softech_personcode='').values_list('code', 'softech_personcode'))
 
 
+def all_party_personcodes(party_type):
+    """GL party code -> SOFTECH personcode for every confirmed party of one type."""
+    return dict(GLParty.objects.filter(party_type=party_type, status='confirmed')
+                .exclude(softech_personcode='').values_list('code', 'softech_personcode'))
+
+
 def open_exception_count(date_from, date_to):
     return SourceException.objects.filter(
         status='open', source_date__gte=date_from, source_date__lte=date_to).count()

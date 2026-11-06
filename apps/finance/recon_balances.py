@@ -142,6 +142,23 @@ def reconciliation_equation(party: ReconParty) -> dict:
     return eq
 
 
+def ap_balance_as_of(party: ReconParty, as_of: datetime.date):
+    """Owed balance on `as_of` (OWED convention, the terms of ``reconciliation_equation``):
+    Opening + Σ invoices (docdate ≤ as_of, not return) − Σ returns − Σ payments (voucher_date ≤ as_of).
+    None when the opening balance is dated after `as_of` (there is no figure to start from)."""
+    if party.opening_balance_date and party.opening_balance_date > as_of:
+        return None
+    purchases = returns = paid = Decimal('0')
+    for i in party.invoices.filter(docdate__lte=as_of):
+        if i.is_return:
+            returns += i.doc_value
+        else:
+            purchases += i.doc_value
+    for p in party.payments.filter(voucher_date__lte=as_of):
+        paid += p.amount
+    return (party.opening_balance or Decimal('0')) + purchases - returns - paid
+
+
 def build_ledger_timeline(party: ReconParty) -> dict:
     """
     Chronological حصر ledger: every invoice (+purchase / −return) and payment
