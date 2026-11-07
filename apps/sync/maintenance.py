@@ -16,9 +16,10 @@ Everything here deletes or marks rows in OUR Postgres only — nothing touches S
   mark_stale_runs()     SyncRun rows 'running' for > 60 min → failed (process died).
   alert_failing_lanes() 3 failed runs in a row of one lane → one admin alert per lane per day
                         (P-55 Part B).
-  run_daily_retention() all of the above as one logged SyncRun (lane 'retention'). Guarded by a
-                        Postgres advisory lock (RETENTION_LOCK_KEY): returns None, creating no
-                        run row, when another process is already running it.
+  run_daily_retention() all of the above, then the data lifecycle rules and the held-file purge
+                        (apps/data_lifecycle/runner.py), as one logged SyncRun (lane 'retention').
+                        Guarded by a Postgres advisory lock (RETENTION_LOCK_KEY): returns None,
+                        creating no run row, when another process is already running it.
   retention_catchup_due() / run_retention_catchup()
                         safety net for a missed daily slot: due when no success in the last
                         OVERDUE_HOURS, nothing is running, and the last failed attempt is older
@@ -225,6 +226,17 @@ def retention_watch():
         logger.exception('[retention] missed-run alert failed')
 
 
+def _run_lifecycle_rules():
+    # Imported here: the lifecycle app imports this module, and an import failure stays one failed step.
+    from apps.data_lifecycle.runner import run_lifecycle_rules
+    return run_lifecycle_rules()
+
+
+def _purge_held_files():
+    from apps.data_lifecycle.runner import purge_held_files
+    return purge_held_files()
+
+
 def run_daily_retention():
     """One SyncRun (lane 'retention') with a SyncLog per table. A failing step is
     logged and the others still run. Returns None (no run row) when another
@@ -237,6 +249,8 @@ def run_daily_retention():
         ('retention:audit_log', prune_audit_log),
         ('retention:slow_requests', prune_slow_requests),
         ('retention:screen_views', prune_screen_views),
+        ('retention:lifecycle', _run_lifecycle_rules),
+        ('retention:purge_held', _purge_held_files),
     ]
     with pg_lock(RETENTION_LOCK_KEY) as got:
         if not got:
