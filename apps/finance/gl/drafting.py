@@ -167,6 +167,24 @@ def _to_doc(sd: GLSourceDoc) -> SourceDoc:
                      {k: Decimal(str(v)) for k, v in (sd.amounts or {}).items()}, dict(sd.attrs or {}))
 
 
+def group_proposal(gk):
+    """(canonical lines, member keys): what a rebuild of the group proposes from the amounts its docs last read, with
+    no SOFTECH read. Lines None when they no longer build (a rule or map changed): a redraft reports why."""
+    members = list(GLSourceDoc.objects.filter(group_key=gk, status__in=(*MEMBER_STATUSES, 'exception'))
+                   .select_related('rule').order_by('doc_date', 'source_key', 'pk')) if gk else []
+    keys = [sd.source_key for sd in members]
+    if not members:
+        return [], keys
+    rule = next((sd.rule for sd in members if sd.status == 'new' and sd.rule_id), None) or members[0].rule
+    hq = Branch.objects.filter(softech_branch_id='100').first()
+    if rule is None or (hq is None and any(ln.get('branch') == 'hq' for ln in rule.lines)):
+        return None, keys
+    try:
+        return _canon(build_lines(rule, [_to_doc(sd) for sd in members], hq_branch_id=hq.pk if hq else None)), keys
+    except RuleMiss:
+        return None, keys
+
+
 def _line_tuple(ln: dict):
     return (str(ln['account_code']), Decimal(ln['debit']), Decimal(ln['credit']), ln.get('branch_id'),
             ln.get('party_code') or '', ln.get('description') or '', ln.get('cheque_no') or '',

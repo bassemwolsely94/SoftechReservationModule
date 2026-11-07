@@ -59,7 +59,7 @@ MESSAGES = {
     'exception_has_draft': 'للمجموعة دي مسودة لسه — راجعها أو احذفها الأول',
     'exception_has_original': 'الاستثناء ده على قيد معتمد — استخدم قيد التصحيح.',
     'original_reversed':   'القيد الأصلي اتعكس: المجموعة تترحل كمستند متأخر، مش تصحيح.',
-    'original_reversed':   'القيد الأصلي اتعكس: المجموعة تترحل كمستند متأخر، مش تصحيح.',
+    'lines_stale':         'تعذر حساب أسطر المجموعة من مستنداتها — أعد الترحيل الأول.',
     'exception_mismatch':  'الاستثناء ده مش تبع القيد المحدد.',
     'explanation_required': 'لازم تكتب التفسير.',
 }
@@ -277,21 +277,23 @@ def approve(entry_id: int, *, user, _allow_before_opening: bool = False,
     return entry
 
 
-def _correction_undone(entry: LedgerEntry, user):
+def _posting_undone(entry_id: int, source_key: str, user):
     from . import plan2_adapter   # it imports this module
-    plan2_adapter.correction_undone(entry, user=user)
+    plan2_adapter.late_posting_undone(entry_id, source_key, user=user)
 
 
 def delete_draft(entry_id: int, *, user) -> None:
-    """Delete a draft, with its audit row. A correction drafted from an exception reopens that exception in the same
-    transaction: the SOFTECH change it carried is unposted again. (The engine deletes its own drafts in drafting.py.)"""
+    """Delete a draft, with its audit row. A correction or late document drafted from an exception reopens that
+    exception in the same transaction: the SOFTECH change it carried is unposted again. (The engine deletes its own
+    drafts in drafting.py.)"""
     with transaction.atomic():
         entry = LedgerEntry.objects.select_for_update().get(pk=entry_id)
         if entry.status != 'draft':
             raise LedgerError('not_draft')
         _audit('gl_entry_draft_deleted', user=user, obj=entry, old_data=_snapshot(entry))
-        _correction_undone(entry, user)
+        source_key = entry.source_key
         entry.delete()
+        _posting_undone(entry_id, source_key, user)
 
 
 def reverse(entry_id: int, *, user, reason: str, entry_date: datetime.date | None = None,
@@ -302,7 +304,7 @@ def reverse(entry_id: int, *, user, reason: str, entry_date: datetime.date | Non
     an explicit date, is dated the first day of the first open month after it.
     A month still `closing` refuses (`period_closing`): the mirror would land next month while the month closes with
     the entry in it. `_close_service` is for gl/close.py only: nothing else may reverse a close entry, or reverse inside
-    a closing month. A reversed correction reopens its exception, unless `_from_engine`: the engine is about to redraft
+    a closing month. A reversed correction or late document reopens its exception, unless `_from_engine`: the engine is about to redraft
     the whole figure."""
     with transaction.atomic():
         original = LedgerEntry.objects.select_for_update().get(pk=entry_id)
@@ -357,5 +359,5 @@ def reverse(entry_id: int, *, user, reason: str, entry_date: datetime.date | Non
                extra={'reverses_id': original.id, 'reverses_number': original.number,
                       'reason': reason or ''}, note=reason or '')
         if not _from_engine:
-            _correction_undone(original, user)
+            _posting_undone(original.pk, original.source_key, user)
     return mirror

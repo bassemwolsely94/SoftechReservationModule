@@ -12,6 +12,8 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from apps.audit.models import AuditLog
+
 from .ledger import _audit
 from .models import (GLDraftRun, GLParty, GLSourceDoc, GLSourceMap, LedgerEntry, PostingRule,
                      SourceException)
@@ -20,6 +22,8 @@ MANUAL_IMPORT_SOURCE = 'manual_import'
 MIXED_MANUAL_KIND = 'mixed_manual_entry'
 MIXED_MANUAL_MESSAGE = 'قيد من يومية المالية على حسابات يدوية وحسابات من سوفتيك — يتضم بكل أسطره أو يتجاهل بسبب'
 MIXED_MANUAL_RESOLVED = 'اتضم من يومية المالية بكل أسطره'
+LATE_DOCUMENT_DRAFTED = 'gl_late_document_drafted'   # corrections.post_late_document
+NOTHING_TO_CORRECT = 'مفيش فرق يتصحح بعد إلغاء التصحيح'
 CORRECTION_KEY = re.compile(r'#corr:exc(\d+)$')   # corrections.post_late_correction, from an exception
 
 
@@ -35,6 +39,7 @@ class ClosedPeriodChange:
     proposed_lines: list = field(default_factory=list)
     source_type: str = ''
     book: str = 'general'
+    lines_stale: bool = False
 
 
 def party_names(codes, party_type=None):
@@ -103,7 +108,8 @@ def closed_period_change(exception_id, *, for_update=False):
         group_key=detail.get('group_key') or '',
         member_source_keys=list(detail.get('member_source_keys') or []),
         proposed_lines=list(exc.proposed_lines or []),
-        source_type=exc.source_doc.source_type, book=rule.book if rule else 'general')
+        source_type=exc.source_doc.source_type, book=rule.book if rule else 'general',
+        lines_stale=bool(detail.get('lines_stale')))
 
 
 def release_held_movers(exc):
@@ -158,37 +164,72 @@ def mark_exception_resolved(exception_id, *, user, entry):
     return exc
 
 
-def correction_undone(entry, *, user):
-    """`entry` is going away outside the engine (a draft deleted, an approved one reversed). If it is the correction
-    of an exception, the SOFTECH change is unposted again and nothing else remembers it: the members look settled, so
-    no run would raise it. The row reopens in the caller's transaction, visible at once and blocking its month like
-    any open row, and posting from it again nets against what the ledger says now, so it cannot double. Not when the
-    group has another open row (the engine raised it again: that one carries the change). If the holder doc is busy
-    with another group's row, the members go back to 'new' and the next run covering them raises the group."""
-    found = CORRECTION_KEY.search(entry.source_key or '')
-    if found is None or not entry.corrects_id:
+def _undone_exception_id(entry_id, source_key):
+    """The exception this entry was posted from: a correction says so in its key, a late document in its audit row."""
+    found = CORRECTION_KEY.search(source_key or '')
+    if found:
+        return int(found[1])
+    row = (AuditLog.objects.filter(action=LATE_DOCUMENT_DRAFTED, model_name='LedgerEntry', object_id=str(entry_id))
+           .order_by('-id').first())
+    return (row.extra or {}).get('exception_id') if row else None
+
+
+def late_posting_undone(entry_id, source_key, *, user):
+    """A correction or late document is gone outside the engine (a draft deleted, an approved one reversed), called
+    once its entry no longer counts. The SOFTECH change is unposted again and nothing else remembers it: the members
+    look settled, and the scheduled window never covers a closed month. So in the caller's transaction the group gets
+    its open row back, proposing what its documents say now (each keeps the amounts last read): a row's own lines may
+    be older than a later correction. A group whose ledger already says that has nothing to correct and gets no row.
+    A group with an open row keeps that one. A holder doc busy with another group's row sends the members back to
+    'new', for the next run covering them. Lines that no longer build leave the row refusing to post until a redraft."""
+    exception_id = _undone_exception_id(entry_id, source_key)
+    if exception_id is None:
         return None
     exc = (SourceException.objects.select_for_update()
-           .filter(pk=int(found[1]), kind='closed_period_change', status='resolved').first())
+           .filter(pk=exception_id, kind='closed_period_change', status='resolved').first())
     if exc is None:
         return None
+    from . import drafting   # these two import this module
+    from .corrections import effective_lines, net_lines
+
     detail = exc.detail or {}
     gk = detail.get('group_key') or ''
+    lines, keys = drafting.group_proposal(gk)
+    live = LedgerEntry.objects.filter(source_key=gk, status__in=('draft', 'approved')).first()
+    settled = lines is not None and net_lines(lines) == (effective_lines(live, include_drafts=True) if live else {})
     rows = SourceException.objects.filter(status='open', kind='closed_period_change')
-    if rows.filter(detail__group_key=gk).exists():
-        return None
-    members = GLSourceDoc.objects.filter(source_key__in=list(detail.get('member_source_keys') or []), group_key=gk,
-                                         status__in=('drafted', 'skipped')).exclude(group_key='')
-    reopened = not rows.filter(source_doc_id=exc.source_doc_id).exists()
-    members.update(status='exception' if reopened else 'new')
-    old = {'status': exc.status, 'resolved_by': exc.resolved_by_id, 'resolution_note': exc.resolution_note}
-    if reopened:
-        exc.status, exc.resolved_by, exc.resolved_at, exc.resolution_note = 'open', None, None, ''
-        exc.save(update_fields=['status', 'resolved_by', 'resolved_at', 'resolution_note'])
-    _audit('gl_late_change_reopened', user=user, obj=exc, old_data=old,
-           new_data={'status': exc.status, 'members': 'exception' if reopened else 'new'},
-           extra={'correction_id': entry.pk, 'correction_status': entry.status, 'group_key': gk})
-    return exc
+    current = rows.filter(detail__group_key=gk).order_by('pk').first()
+    members = GLSourceDoc.objects.filter(source_key__in=keys or list(detail.get('member_source_keys') or []),
+                                         group_key=gk).exclude(group_key='').exclude(status='vanished')
+    row, state = current or exc, 'kept' if current else 'reopened'
+    old = {'status': row.status, 'resolved_by': row.resolved_by_id, 'resolution_note': row.resolution_note}
+    if settled:
+        state = 'nothing_to_correct'
+        members.update(status='drafted' if live else 'skipped', entry=live)
+        if current is not None:
+            current.status, current.resolved_by, current.resolved_at = 'resolved', user, timezone.now()
+            current.resolution_note = NOTHING_TO_CORRECT
+            current.save(update_fields=['status', 'resolved_by', 'resolved_at', 'resolution_note'])
+    elif current is None and rows.filter(source_doc_id=exc.source_doc_id).exists():
+        state = 'members_new'
+        members.update(status='new')
+    else:
+        row_detail = {key: value for key, value in (row.detail or {}).items() if key != 'lines_stale'}
+        if lines is None:
+            row_detail['lines_stale'] = True
+        else:
+            row.proposed_lines = lines
+            row_detail['member_source_keys'] = keys
+        row.detail = row_detail
+        row.source_date = row.source_doc.doc_date
+        row.status, row.resolved_by, row.resolved_at, row.resolution_note = 'open', None, None, ''
+        row.save(update_fields=['status', 'resolved_by', 'resolved_at', 'resolution_note', 'detail', 'proposed_lines',
+                                'source_date'])
+        members.exclude(status='exception').update(status='exception')
+    _audit('gl_late_change_reopened', user=user, obj=row, old_data=old,
+           new_data={'status': row.status, 'state': state, 'proposed_lines': row.proposed_lines},
+           extra={'undone_entry_id': entry_id, 'exception_id': exc.pk, 'group_key': gk})
+    return row
 
 
 def softech_fed_account_codes() -> set:

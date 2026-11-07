@@ -71,6 +71,8 @@ def _lock_open_change(exception_id):
     change = plan2_adapter.closed_period_change(exception_id, for_update=True)
     if change.status != 'open':
         raise LedgerError('exception_not_open', {'exception_id': exception_id})
+    if change.lines_stale:
+        raise LedgerError('lines_stale', {'exception_id': exception_id})
     return change
 
 
@@ -140,18 +142,26 @@ def post_late_correction(original_id: int, new_lines: list, *, user, reason: str
 
 
 def late_change_action(row) -> tuple:
-    """What the inbox offers on a closed_period_change row: ('post', None), ('redraft', None) when its
-    month takes postings again, or ('draft_pending', entry) while a draft of the group stands in the way."""
+    """What the inbox offers on a closed_period_change row, as (action, draft in the way, the date a post lands on):
+    'post'; 'redraft' when its month takes postings again or its lines must be rebuilt; 'draft_pending'."""
     original = row.original_entry
     draft_id = (row.detail or {}).get('entry_id')
     draft = LedgerEntry.objects.filter(pk=draft_id, status='draft').first() if draft_id else None
     if draft is None and original is not None:
         draft = original.corrections.filter(status='draft').first()
     if draft is not None:
-        return 'draft_pending', draft
-    if original is not None and original.status == 'approved' and not accepts_postings(original.entry_date):
-        return 'post', None
-    return ('redraft' if accepts_postings(row.source_date) else 'post'), None
+        return 'draft_pending', draft, None
+    if (row.detail or {}).get('lines_stale'):
+        return 'redraft', None, None
+    if original is not None and original.status == 'approved':
+        if not accepts_postings(original.entry_date):
+            return 'post', None, first_open_period_after(original.entry_date).period_start
+        if not accepts_postings(row.source_date):   # a late document changed again: beside it, in its month
+            return 'post', None, original.entry_date
+        return 'redraft', None, None
+    if accepts_postings(row.source_date):
+        return 'redraft', None, None
+    return 'post', None, first_open_period_after(row.source_date).period_start
 
 
 def post_from_exception(exception_id: int, *, user, reason: str) -> LedgerEntry:

@@ -57,7 +57,7 @@ def exception_json(e):
         out['original_entry_number'] = e.original_entry.number if e.original_entry_id else None
         out['original_entry_status'] = e.original_entry.status if e.original_entry_id else None
         out['live_entry'] = _entry_ref((e.detail or {}).get('entry_id'))
-        out['late_action'], draft = late_change_action(e)
+        out['late_action'], draft, out['late_post_date'] = late_change_action(e)
         out['pending_draft'] = _entry_ref(draft.pk) if draft else None
     return _j(out)
 

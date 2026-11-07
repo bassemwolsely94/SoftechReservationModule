@@ -1385,6 +1385,144 @@ class LateChangeReviewTests(Base):
         self.assertFalse(SourceException.objects.filter(status='open').exists())
         self.assertFalse(AuditLog.objects.filter(action='gl_late_change_reopened').exists())
 
+    # N1
+    def two_corrections(self, second):
+        """100 → first correction to 90 → SOFTECH says `second` → second correction, both approved."""
+        entry, r1 = self.closed_change()
+        c1 = approve(post_from_exception(r1.id, user=self.staff, reason='1').id, user=self.staff)
+        self.docs['sales_tenders'][0] = tender('t1', second)
+        self.run_engine()
+        r2 = self.open_rows().get()
+        c2 = approve(post_from_exception(r2.id, user=self.staff, reason='2').id, user=self.staff)
+        return entry, r1, r2, c1, c2
+
+    def test_older_correction_reversed_reopens_with_what_the_documents_say_now(self):
+        _, r1, _, c1, _ = self.two_corrections('95.00')
+        ledger_reverse(c1.id, user=self.staff, reason='خطأ')
+        self.assertEqual(self.net_6002(), DEC('105.00'))
+        r1.refresh_from_db()
+        self.assertEqual(r1.status, 'open')
+        self.assertEqual(DEC(r1.proposed_lines[0]['debit']), DEC('95.00'))
+        approve(post_from_exception(r1.id, user=self.staff, reason='تاني').id, user=self.staff)
+        self.assertEqual(self.net_6002(), DEC('95.00'))
+        self.run_engine()
+        self.assertFalse(self.open_rows().exists())
+        self.assertEqual(self.net_6002(), DEC('95.00'))
+
+    def test_older_correction_reversed_with_a_run_first(self):
+        _, r1, _, c1, _ = self.two_corrections('95.00')
+        ledger_reverse(c1.id, user=self.staff, reason='خطأ')
+        self.run_engine()
+        r1.refresh_from_db()
+        approve(post_from_exception(r1.id, user=self.staff, reason='تاني').id, user=self.staff)
+        self.run_engine()
+        self.assertFalse(self.open_rows().exists())
+        self.assertEqual(self.net_6002(), DEC('95.00'))
+
+    def test_older_correction_reversed_when_the_second_went_the_same_way(self):
+        _, r1, _, c1, _ = self.two_corrections('80.00')
+        ledger_reverse(c1.id, user=self.staff, reason='خطأ')
+        self.assertEqual(self.net_6002(), DEC('90.00'))
+        approve(post_from_exception(r1.id, user=self.staff, reason='تاني').id, user=self.staff)
+        self.assertEqual(self.net_6002(), DEC('80.00'))
+
+    def test_undo_with_nothing_left_to_correct_leaves_no_row(self):
+        entry, row = self.closed_change()
+        fix = approve(post_from_exception(row.id, user=self.staff, reason='تغير').id, user=self.staff)
+        GLSourceDoc.objects.filter(source_key='t1').update(amounts={'net': '100.00', 'sales': '100.00', 'returns': '0'})
+        ledger_reverse(fix.id, user=self.staff, reason='خطأ')
+        row.refresh_from_db()
+        self.assertEqual(row.status, 'resolved')
+        self.assertFalse(self.open_rows().exists())
+        sd = GLSourceDoc.objects.get(source_key='t1')
+        self.assertEqual((sd.status, sd.entry_id), ('drafted', entry.id))
+        self.assertEqual(AuditLog.objects.get(action='gl_late_change_reopened').new_data['state'], 'nothing_to_correct')
+
+    def test_undo_with_nothing_left_also_ends_an_open_row(self):
+        _, row = self.closed_change()
+        fix = approve(post_from_exception(row.id, user=self.staff, reason='تغير').id, user=self.staff)
+        self.docs['sales_tenders'][0] = tender('t1', '100.00')
+        self.run_engine()   # 100 against 90 in the ledger: a new row
+        newer = self.open_rows().get()
+        ledger_reverse(fix.id, user=self.staff, reason='خطأ')
+        self.assertFalse(self.open_rows().exists())
+        newer.refresh_from_db()
+        self.assertEqual(newer.status, 'resolved')
+        self.assertEqual(self.net_6002(), DEC('100.00'))
+
+    def test_lines_that_no_longer_build_refuse_to_post_until_a_redraft(self):
+        entry, row = self.closed_change()
+        fix = approve(post_from_exception(row.id, user=self.staff, reason='تغير').id, user=self.staff)
+        GLAccount.objects.filter(code='6002').update(is_active=False)
+        ledger_reverse(fix.id, user=self.staff, reason='خطأ')
+        row.refresh_from_db()
+        self.assertEqual((row.status, row.detail['lines_stale']), ('open', True))
+        self.assertEqual(exception_json(row)['late_action'], 'redraft')
+        with self.assertRaises(LedgerError) as cm:
+            post_from_exception(row.id, user=self.staff, reason='تاني')
+        self.assertEqual(cm.exception.code, 'lines_stale')
+        self.assertEqual(self.net_6002(), DEC('100.00'))
+        GLAccount.objects.filter(code='6002').update(is_active=True)
+        self.run_engine()   # the run rewrites the row, and with it the flag
+        row.refresh_from_db()
+        self.assertNotIn('lines_stale', row.detail)
+        approve(post_from_exception(row.id, user=self.staff, reason='تاني').id, user=self.staff)
+        self.assertEqual(self.net_6002(), DEC('90.00'))
+
+    # N2
+    def assert_late_document_comes_back(self, row_id):
+        row = SourceException.objects.get(pk=row_id)
+        self.assertEqual(row.status, 'open')
+        self.assertEqual(DEC(row.proposed_lines[0]['debit']), DEC('100.00'))
+        self.assertEqual(self.net_6002(), DEC('0'))
+        self.run_engine(d1=datetime.date(2026, 4, 1), d2=datetime.date(2026, 4, 28))   # the scheduled window
+        self.assertEqual(self.open_rows().get().pk, row_id)
+        again = post_from_exception(row_id, user=self.staff, reason='تاني')
+        self.assertEqual(again.source_key, self.GRP)
+        approve(again.id, user=self.staff)
+        self.assertEqual(self.net_6002(), DEC('100.00'))
+        self.run_engine()
+        self.assertFalse(self.open_rows().exists())
+        self.assertEqual(self.net_6002(), DEC('100.00'))
+
+    def test_deleted_late_document_draft_reopens_its_row(self):
+        self.rule(granularity='branch_day')
+        self.close_month(MAR10)
+        self.docs['sales_tenders'] = [tender('t1', '100.00')]
+        self.run_engine()
+        row = self.open_rows().get()
+        doc = post_late_document(row.pk, user=self.staff, reason='جديد')
+        delete_draft(doc.id, user=self.staff)
+        self.assert_late_document_comes_back(row.pk)
+
+    def test_reversed_late_document_reopens_its_row(self):
+        doc = self.late_document()
+        row_id = AuditLog.objects.get(action='gl_late_document_drafted', object_id=str(doc.id)).extra['exception_id']
+        ledger_reverse(doc.id, user=self.staff, reason='خطأ')
+        self.assert_late_document_comes_back(row_id)
+
+    def test_deleting_an_ordinary_draft_reopens_nothing(self):
+        self.rule(granularity='branch_day')
+        self.docs['sales_tenders'] = [tender('t1', '100.00')]
+        self.run_engine()
+        delete_draft(self.live(self.GRP).get().id, user=self.staff)
+        self.assertFalse(AuditLog.objects.filter(action='gl_late_change_reopened').exists())
+
+    # button wording
+    def test_the_row_says_where_a_post_lands(self):
+        _, row = self.closed_change()
+        self.assertEqual(exception_json(row)['late_post_date'], '2026-04-01')
+        self.close_month(datetime.date(2026, 4, 1))
+        self.assertEqual(exception_json(row)['late_post_date'], '2026-05-01')
+
+    def test_a_late_document_changed_again_says_its_own_month(self):
+        doc = self.late_document()
+        self.close_month(datetime.date(2026, 4, 1), 'open')
+        self.docs['sales_tenders'][0] = tender('t1', '90.00')
+        self.run_engine()
+        out = exception_json(self.open_rows().get())
+        self.assertEqual((out['late_action'], out['late_post_date']), ('post', doc.entry_date.isoformat()))
+
     # I4
     def test_late_document_changed_again_corrects_in_its_own_open_month(self):
         doc = self.late_document()
@@ -1405,9 +1543,11 @@ class LateChangeReviewTests(Base):
     def test_closed_month_rebuild_with_unchanged_nets_raises_no_row(self):
         lines = [{**CASH[0], 'description': 'نقدية {docnumber}'}, CASH[1]]
         self.rule(lines=lines)
-        doc = lambda number: SourceDoc('sales_tenders', 't1', MAR10, '130', 'cash', '',  # noqa: E731
-                                       {'net': DEC('100.00'), 'sales': DEC('100.00'), 'returns': DEC('0')},
-                                       {'paymenttype': '30', 'docnumber': number})
+
+        def doc(number):
+            return SourceDoc('sales_tenders', 't1', MAR10, '130', 'cash', '',
+                             {'net': DEC('100.00'), 'sales': DEC('100.00'), 'returns': DEC('0')},
+                             {'paymenttype': '30', 'docnumber': number})
         self.docs['sales_tenders'] = [doc('A')]
         self.run_engine()
         entry = self.live('t1').get()

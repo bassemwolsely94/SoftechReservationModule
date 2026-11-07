@@ -348,7 +348,7 @@ function LateCorrection({ ex, perms, onDone }) {
   return (
     <div className="space-y-2 text-sm text-gray-700">
       <div className="text-xs text-gray-600">
-        تغيّر مستند في شهر مغلق ({docs} مستند(ات) في المجموعة). الشهر المغلق لا يُلمس: يُرحَّل الفرق في أول شهر مفتوح كمسودة.
+        تغيّر مستند في شهر مغلق ({docs} مستند(ات) في المجموعة). الشهر المغلق لا يُلمس: يُرحَّل الفرق كمسودة{ex.late_post_date ? ` بتاريخ ${ex.late_post_date}` : ''}.
         {ex.original_entry && <> القيد الأصلي: {entryLink(ex.original_entry, `#${ex.original_entry_number || ex.original_entry}`)}</>}
         {ex.original_entry && !originalLive && ' (اتعكس، فالمجموعة تترحل كاملة)'}
       </div>
@@ -362,12 +362,14 @@ function LateCorrection({ ex, perms, onDone }) {
         </div>
       ) : action === 'redraft' ? (
         <div className="text-xs bg-amber-50 border border-amber-200 rounded px-2 py-1">
-          الشهر ده مفتوح دلوقتي، فمفيش تصحيح: حدد الصف واضغط «إعادة الترحيل» فوق، والقيد يتبني من جديد في شهره.
+          {d.lines_stale
+            ? 'أسطر المجموعة محتاجة تتحسب من تاني (قاعدة أو ربط اتغيّر): حدد الصف واضغط «إعادة الترحيل» فوق، والسبب هيظهر لو لسه فيه مشكلة.'
+            : 'الشهر ده مفتوح دلوقتي، فمفيش تصحيح: حدد الصف واضغط «إعادة الترحيل» فوق، والقيد يتبني من جديد في شهره.'}
         </div>
       ) : perms.create ? (
         <div className="flex flex-wrap items-center gap-2">
           <input className={`${inputCls} flex-1 max-w-md`} placeholder="سبب التصحيح (مطلوب)" value={reason} onChange={e => setReason(e.target.value)} />
-          <button type="button" className={btnPrimary} disabled={!reason.trim() || post.isPending} onClick={() => post.mutate()}>ترحيل التصحيح في أول شهر مفتوح</button>
+          <button type="button" className={btnPrimary} disabled={!reason.trim() || post.isPending} onClick={() => post.mutate()}>ترحيل التصحيح بتاريخ {ex.late_post_date}</button>
         </div>
       ) : <div className="text-xs text-gray-500">ترحيل التصحيح يحتاج صلاحية الإنشاء</div>}
       <ErrorBox>{err}</ErrorBox>

@@ -31,7 +31,7 @@ from apps.finance.gl.ledger import approve, reverse, save_draft
 from apps.finance.gl.periods import month_period
 from apps.finance.gl.softech_stock import Valuation
 from apps.finance.models import (ClosingStockSnapshot, FinancialPeriod, GLAccount, GLAccountGroup, GLComparisonLine, GLSoftechCheck,
-                                 GLSourceDoc, LedgerEntry, SourceException)
+                                 GLSourceDoc, LedgerEntry, PostingRule, SourceException)
 from apps.tests.factories import make_user
 from apps.tests.security.fixtures import seed_code_matrix
 from apps.users.models import RoleModuleAccess
@@ -917,6 +917,10 @@ class FromExceptionFixTests(CorrectionBase):
     def test_deleting_the_correction_draft_from_the_journal_reopens_its_row(self):
         e = self.closed_original()
         exc = self.exception(original=e, entry_id=e.pk)
+        rule = PostingRule.objects.create(code='t-api', source_type='expenses', effective_from=D(2026, 1, 1), lines=[
+            {'side': 'debit', 'account': '9901', 'amount': 'net', 'branch': 'source'},
+            {'side': 'credit', 'account': '9902', 'amount': 'net', 'branch': 'source'}])
+        GLSourceDoc.objects.filter(group_key='grp').update(rule=rule, branch_code='961', amounts={'net': '110.00'})
         draft = self._post(exc)
         exc.refresh_from_db()
         self.assertEqual(exc.status, 'resolved')
