@@ -221,6 +221,8 @@ class TaxDocument(models.Model):
 
     # Exactly what was read from the claim on first import. Never rewritten.
     source_snapshot = models.JSONField(default=dict)
+    # After a deliberate refresh of a draft: the claim's content the lines now follow.
+    source_snapshot_current = models.JSONField(default=dict, blank=True)
     source_hash = models.CharField(max_length=64, blank=True)
     source_refreshed_at = models.DateTimeField(null=True, blank=True)
     source_claim_total = models.DecimalField(max_digits=14, decimal_places=2, default=0)
@@ -571,6 +573,3 @@ class TaxReceiptLine(models.Model):
     class Meta:
         ordering = ['id']
 
-    @property
-    def softech_itemcode_value(self):
-        return self.itemcode

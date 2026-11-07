@@ -190,8 +190,12 @@ def _totals(lines):
 
 def _original_of(receipt):
     doccode, docnumber, docdate = receipt.original_ref[0]
+    # On SOFTECH returns r_doccode is mostly '0' or blank and means the sale (mirror, 2026-11: 17,817 of
+    # 17,864 returns). Anything else (50, -30) is not a sale document, so it does not match here.
+    if doccode not in ('', '0', '115'):
+        return None
     day = _parse_day(docdate)
-    return TaxReceipt.objects.filter(softech_branchcode=receipt.softech_branchcode, doccode=doccode or '115',
+    return TaxReceipt.objects.filter(softech_branchcode=receipt.softech_branchcode, doccode='115',
                                      docnumber=docnumber, docdate=day).exclude(uuid='').first()
 
 

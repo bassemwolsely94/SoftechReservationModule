@@ -39,7 +39,7 @@ FIELDS = {
     'vat_rate': 'نسبة الضريبة في الملف',
     'vat_code': 'كود الضريبة في الملف',
 }
-ISSUE_LIMIT = 300
+ISSUES_PER_KIND = 50
 
 
 def cell_text(value):
@@ -273,8 +273,14 @@ def preview(fileobj, raw_options):
     by_code = {}
     for i in issues:
         by_code[i['code']] = by_code.get(i['code'], 0) + 1
-    return {'dry_run': True, 'counts': counts, 'issue_counts': by_code, 'issues': issues[:ISSUE_LIMIT],
-            'issues_truncated': len(issues) > ISSUE_LIMIT, 'preview_hash': _hash(_read_all(fileobj), opts),
+    # A limit per kind: a common warning must not hide a rare problem.
+    shown, seen = [], {}
+    for i in issues:
+        seen[i['code']] = seen.get(i['code'], 0) + 1
+        if seen[i['code']] <= ISSUES_PER_KIND:
+            shown.append(i)
+    return {'dry_run': True, 'counts': counts, 'issue_counts': by_code, 'issues': shown,
+            'issues_truncated': len(shown) < len(issues), 'preview_hash': _hash(_read_all(fileobj), opts),
             'sample': [{**r, 'active_from': str(r['active_from'] or ''), 'active_to': str(r['active_to'] or ''),
                         'vat_rate': None if r['vat_rate'] is None else str(r['vat_rate'])} for r in parsed[:25]]}
 
