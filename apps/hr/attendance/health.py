@@ -25,6 +25,14 @@ NOTIFICATION_TYPE = 'attendance_alert'
 MACHINE_SILENT = _dt.timedelta(hours=24)
 AGENT_SILENT = _dt.timedelta(hours=3)
 DRIFT_WARNING_SECONDS = 300
+SPOOL_WAITING = _dt.timedelta(hours=3)
+
+
+def _spool_waiting(run):
+    """Files the agent still had waiting to upload at the end of this run, or None when the run
+    doesn't say (an older agent). CollectionRun.spool_waiting is added by the ingest branch; read
+    defensively so this works before and after it merges."""
+    return getattr(run, 'spool_waiting', None)
 
 
 def _device_label(device):
@@ -40,19 +48,21 @@ def _alerts_for(now):
 
     for dev in AttendanceDevice.objects.filter(is_active=True):
         label = _device_label(dev)
-        if dev.last_contact_at and now - dev.last_contact_at > MACHINE_SILENT:
+        silent = bool(dev.last_contact_at and now - dev.last_contact_at > MACHINE_SILENT)
+        if silent:
             hours = int((now - dev.last_contact_at).total_seconds() // 3600)
             found.append({
                 'kind': 'silent_device', 'key': f'silent_device:{dev.pk}:{day}',
                 'title': f'ماكينة البصمة صامتة: {dev.name}',
                 'body': f'لم تصل بصمات أو اتصال من {label} منذ حوالي {hours} ساعة.',
             })
-        if dev.last_drift_seconds is not None and abs(dev.last_drift_seconds) > DRIFT_WARNING_SECONDS:
+        # A silent machine keeps its last drift reading; repeating it daily would be noise.
+        if not silent and dev.last_drift_seconds is not None and abs(dev.last_drift_seconds) > DRIFT_WARNING_SECONDS:
             minutes = round(abs(dev.last_drift_seconds) / 60)
             found.append({
                 'kind': 'drift', 'key': f'drift:{dev.pk}:{day}',
                 'title': f'ساعة الماكينة غير مضبوطة: {dev.name}',
-                'body': f'ساعة {label} تختلف عن ساعة الجهاز بحوالي {minutes} دقيقة.',
+                'body': f'ساعة {label} تختلف عن ساعة السيرفر بحوالي {minutes} دقيقة.',
             })
         # Last two SUCCESSFUL runs that read a count; a failed run says nothing about the log.
         last_two = list(CollectionRun.objects.filter(
@@ -67,6 +77,22 @@ def _alerts_for(now):
                 'title': f'انخفض عدد سجلات البصمة: {dev.name}',
                 'body': (f'عدد السجلات في {label} كان {before.device_log_count} وأصبح '
                          f'{now_run.device_log_count}. قد يكون السجل قد مُسح من الماكينة.'),
+            })
+
+        # A file the ERP refuses stays in the agent's spool while every run looks healthy: alert
+        # when the newest runs have all reported files waiting, going back 3 hours or more.
+        streak_start = None
+        for run in CollectionRun.objects.filter(device=dev).order_by('-started_at', '-pk')[:30]:
+            waiting = _spool_waiting(run)
+            if not waiting:          # 0 = cleared, None = not reported: either ends the streak
+                break
+            streak_start = run.started_at
+        if streak_start is not None and now - streak_start >= SPOOL_WAITING:
+            found.append({
+                'kind': 'spool_waiting', 'key': f'spool_waiting:{dev.pk}:{day}',
+                'title': f'بصمات لم تصل السيرفر: {dev.name}',
+                'body': (f'برنامج التجميع يحتفظ بملفات بصمات من {label} لم يقبلها السيرفر منذ '
+                         f'أكثر من 3 ساعات. راجع سجل البرنامج على الجهاز.'),
             })
 
     for agent in AttendanceAgent.objects.filter(revoked_at__isnull=True, last_seen_at__isnull=False):

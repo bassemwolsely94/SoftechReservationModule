@@ -7,6 +7,8 @@ quiet, a clock drifts, or a machine's log count falls (evidence that logs were c
 import datetime as _dt
 import hashlib
 
+from unittest import mock
+
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
@@ -102,6 +104,13 @@ class DriftTests(HealthBase):
         self.dev.save()
         health.check_attendance_health(now=NOW)
         self.assertEqual(self.alerts(self.admin_p).count(), 1)
+
+    def test_silent_machine_does_not_repeat_its_stale_drift(self):
+        self.dev.last_drift_seconds = 900
+        self.dev.last_contact_at = ago(days=2)
+        self.dev.save()
+        result = health.check_attendance_health(now=NOW)
+        self.assertEqual([a['kind'] for a in result['alerts']], ['silent_device'])
 
     def test_drift_not_at_300_seconds_exactly(self):
         self.dev.last_drift_seconds = 300
@@ -202,3 +211,47 @@ class DeliveryTests(HealthBase):
         self.dev.save()
         result = health.check_attendance_health(now=NOW)
         self.assertEqual([a['kind'] for a in result['alerts']], ['drift'])
+
+
+class SpoolWaitingTests(HealthBase):
+    """The agent reports files still waiting to upload (CollectionRun.spool_waiting, added by the
+    ingest branch). A file the ERP refuses can sit there while every run looks healthy. The field
+    is read through health._spool_waiting, so these tests supply it per run."""
+
+    def check(self, waiting_by_run):
+        with mock.patch.object(health, '_spool_waiting', lambda run: waiting_by_run.get(run.pk)):
+            return health.check_attendance_health(now=NOW)
+
+    def test_waiting_for_3_hours_alerts(self):
+        old = self.run_rec(100, started_at=ago(hours=3, minutes=5))
+        mid = self.run_rec(100, started_at=ago(hours=2))
+        new = self.run_rec(100, started_at=ago(hours=1))
+        self.check({old.pk: 2, mid.pk: 2, new.pk: 2})
+        self.assertEqual(self.alerts(self.admin_p).count(), 1)
+
+    def test_waiting_for_under_3_hours_no_alert(self):
+        old = self.run_rec(100, started_at=ago(hours=2, minutes=50))
+        new = self.run_rec(100, started_at=ago(hours=1))
+        self.check({old.pk: 2, new.pk: 2})
+        self.assertEqual(self.alerts().count(), 0)
+
+    def test_cleared_spool_breaks_the_streak(self):
+        a = self.run_rec(100, started_at=ago(hours=5))
+        b = self.run_rec(100, started_at=ago(hours=4))
+        c = self.run_rec(100, started_at=ago(hours=1))
+        self.check({a.pk: 3, b.pk: 0, c.pk: 3})
+        self.assertEqual(self.alerts().count(), 0)
+
+    def test_agent_not_reporting_the_field_is_not_an_alarm(self):
+        self.run_rec(100, started_at=ago(hours=5))
+        self.run_rec(100, started_at=ago(hours=1))
+        health.check_attendance_health(now=NOW)   # no spool_waiting field/value at all
+        self.assertEqual(self.alerts().count(), 0)
+
+    def test_inactive_device_spool_no_alert(self):
+        self.dev.is_active = False
+        self.dev.save()
+        old = self.run_rec(100, started_at=ago(hours=5))
+        new = self.run_rec(100, started_at=ago(hours=1))
+        self.check({old.pk: 2, new.pk: 2})
+        self.assertEqual(self.alerts().count(), 0)
