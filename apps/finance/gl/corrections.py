@@ -131,7 +131,7 @@ def post_late_correction(original_id: int, new_lines: list, *, user, reason: str
     return entry
 
 
-def post_late_document(exception_id: int, *, user) -> LedgerEntry:
+def post_late_document(exception_id: int, *, user, reason: str = '') -> LedgerEntry:
     """A brand-new SOFTECH group in a closed month: its proposed lines as they are, drafted once
     (source_key = the group key) in the first open month, and the exception resolved with it."""
     with transaction.atomic():
@@ -160,5 +160,6 @@ def post_late_document(exception_id: int, *, user) -> LedgerEntry:
                       new_data={**ledger._snapshot(entry), 'exception_status': 'resolved'},
                       extra={'exception_id': exception_id, 'group_key': change.group_key,
                              'member_source_keys': change.member_source_keys,
-                             'source_date': change.source_date.isoformat()})
+                             'source_date': change.source_date.isoformat(), 'reason': reason},
+                      note=reason)
     return entry

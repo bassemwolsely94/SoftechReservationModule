@@ -7,13 +7,15 @@ difference = ledger − SOFTECH. A line's explanation survives a recompute; if t
 ``GLComparisonLine.needs_explanation`` is true again.
 """
 from collections import defaultdict
+from contextlib import contextmanager
 from decimal import Decimal
 
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Q, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
+from apps.audit.models import AuditLog
 from apps.branches.models import Branch
 from apps.finance.models import (GLAccount, GLComparisonLine, GLSoftechCheck, LedgerEntry,
                                  LedgerLine)
@@ -23,6 +25,43 @@ from .balances import COUNTED, YEAR_END_CLOSING, account_statement
 from .ledger import LedgerError, _audit
 
 ZERO = Decimal('0.00')
+CHECK_UPDATED = 'gl_softech_check_updated'   # extra.figures_changed: the check's lines no longer say what it asks
+REFRESH_LOCK = 7_302_001   # a manual refresh and the nightly job never overlap, across processes
+
+
+class RefreshBusy(Exception):
+    pass
+
+
+@contextmanager
+def refresh_lock():
+    """Non-blocking PostgreSQL session lock: ``with refresh_lock() as got``. A dead run's connection releases it."""
+    with connection.cursor() as cur:
+        cur.execute('SELECT pg_try_advisory_lock(%s)', [REFRESH_LOCK])
+        got = bool(cur.fetchone()[0])
+    try:
+        yield got
+    finally:
+        if got:
+            with connection.cursor() as cur:
+                cur.execute('SELECT pg_advisory_unlock(%s)', [REFRESH_LOCK])
+
+
+def refresh_running() -> bool:
+    """Is a refresh holding the lock? Reads pg_locks, so asking never makes a starting run lose it."""
+    with connection.cursor() as cur:
+        cur.execute("SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND granted AND classid = 0 AND objsubid = 1 "
+                    'AND objid = %s AND database = (SELECT oid FROM pg_database WHERE datname = current_database())',
+                    [REFRESH_LOCK])
+        return cur.fetchone() is not None
+
+
+def refresh(period, *, check_keys=None, user=None) -> list:
+    """`compute` under the lock; RefreshBusy when another refresh holds it."""
+    with refresh_lock() as got:
+        if not got:
+            raise RefreshBusy()
+        return compute(period, check_keys=check_keys, user=user)
 
 
 def _ledger_figures(check, period) -> dict:
@@ -117,16 +156,18 @@ def _str(v):
 
 
 def is_stale(period) -> bool:
-    """True when an active check has no line for the period, or an entry (or its reversal) was approved after
-    the oldest computation. Movement checks read the month's entries; balance checks read every entry up to
-    the period end, so an earlier-dated late entry counts too."""
+    """True when an active check has no line for the period, a check's accounts or activity were edited after the
+    oldest computation, or an entry (or its reversal) was approved after it. Movement checks read the month's
+    entries; balance checks read every entry up to the period end, so an earlier-dated late entry counts too."""
     lines = GLComparisonLine.objects.filter(period=period)
     computed = set(lines.values_list('softech_check_id', flat=True))
     active = list(GLSoftechCheck.objects.filter(is_active=True).values_list('id', 'kind'))
     if not active or any(cid not in computed for cid, _ in active):
         return True
     oldest = lines.order_by('computed_at').values_list('computed_at', flat=True).first()
-    changed = Q(approved_at__gt=oldest) | Q(reversals__approved_at__gt=oldest)
+    if AuditLog.objects.filter(action=CHECK_UPDATED, created_at__gt=oldest, extra__figures_changed=True).exists():
+        return True
+    changed =Q(approved_at__gt=oldest) | Q(reversals__approved_at__gt=oldest)
     entries = LedgerEntry.objects.filter(status__in=COUNTED, entry_date__lte=period.period_end)
     if not any(kind == 'balance' for _, kind in active):
         entries = entries.filter(entry_date__gte=period.period_start)

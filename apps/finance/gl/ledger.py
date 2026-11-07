@@ -59,6 +59,7 @@ MESSAGES = {
     'exception_has_draft': 'للمجموعة دي مسودة لسه — راجعها أو احذفها الأول',
     'exception_has_original': 'الاستثناء ده على قيد معتمد — استخدم قيد التصحيح.',
     'exception_mismatch':  'الاستثناء ده مش تبع القيد المحدد.',
+    'explanation_required': 'لازم تكتب التفسير.',
 }
 
 

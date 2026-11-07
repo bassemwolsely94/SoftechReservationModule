@@ -85,6 +85,16 @@ def snapshot_stores(as_of: date) -> set:
     return {_code(r['storecode']) for r in _sybase_gl().storebal_snapshots(as_of, as_of)}
 
 
+def valid_store_entry(store, entry) -> bool:
+    """One `gl_closing_stock_stores` entry as the reader accepts it (the API writes only what passes this)."""
+    branch = entry.get('branch') if isinstance(entry, dict) else None
+    included = entry.get('included') if isinstance(entry, dict) else None
+    return bool(isinstance(store, str) and store.strip() and isinstance(entry, dict)
+                and set(entry) <= {'branch', 'included'} and entry
+                and (branch is None or (isinstance(branch, str) and branch.strip()))
+                and (included is None or isinstance(included, bool)))
+
+
 def _setting_overrides() -> dict:
     """``gl_closing_stock_stores`` -> {store: {'branch'?: str, 'included'?: bool}}; invalid entries logged and dropped."""
     try:
@@ -99,13 +109,7 @@ def _setting_overrides() -> dict:
         return {}
     out = {}
     for store, entry in custom.items():
-        branch = entry.get('branch') if isinstance(entry, dict) else None
-        included = entry.get('included') if isinstance(entry, dict) else None
-        ok = (isinstance(store, str) and store.strip() and isinstance(entry, dict)
-              and set(entry) <= {'branch', 'included'} and entry
-              and (branch is None or (isinstance(branch, str) and branch.strip()))
-              and (included is None or isinstance(included, bool)))
-        if not ok:
+        if not valid_store_entry(store, entry):
             logger.warning('[GLStock] ignored gl_closing_stock_stores entry %r → %r', store, entry)
             continue
         out[store.strip()] = {k: (v.strip() if isinstance(v, str) else v) for k, v in entry.items()}

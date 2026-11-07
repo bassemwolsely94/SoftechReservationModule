@@ -32,7 +32,9 @@ from . import balances, exports, ledger, statements
 from .coa_import import import_coa, parse_trial_balance_sheet_with_warnings
 
 CONFLICT_CODES = {'not_draft', 'not_approved', 'already_reversed', 'is_reversal', 'source_conflict',
-                  'has_corrections', 'close_entry'}
+                  'has_corrections', 'close_entry', 'period_closing', 'period_open', 'correction_pending',
+                  'original_is_draft', 'is_correction', 'exception_not_open', 'exception_has_draft',
+                  'exception_has_original'}
 MAX_BULK = 500
 MAX_NOTES = 4000
 MAX_TEXT = 500           # LedgerEntry / LedgerLine description — refused above, never truncated

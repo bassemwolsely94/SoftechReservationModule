@@ -358,9 +358,21 @@ def _begin_close(period_id, user) -> tuple:
     return period, token
 
 
-def close_month(period_id, *, user) -> FinancialPeriod:
+def begin_close(period_id, *, user) -> tuple:
+    """Step (a), for a caller that runs the rest elsewhere: refusals reach it here, and the month is `closing` from
+    the moment this returns. -> what `run_close` takes."""
     _require_finalize(user)
-    period, token = _begin_close(period_id, user)
+    return _begin_close(period_id, user)
+
+
+def close_month(period_id, *, user) -> FinancialPeriod:
+    period, token = begin_close(period_id, user=user)
+    return run_close(period, token, user=user)
+
+
+def run_close(period, token, *, user) -> FinancialPeriod:
+    """Steps (b) and (c) of a run `begin_close` started."""
+    period_id = period.pk
     try:
         stock = softech_stock.valuation(period.period_end)
         if stock.missing_stores:
