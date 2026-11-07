@@ -396,7 +396,7 @@ Every module in the platform is registered here with its purpose, status, and de
 | product_experience | `/api/products/` | COMPLETE | Product content admin + item intelligence + catalog intelligence |
 | whatsapp | `/api/whatsapp/` | COMPLETE | WhatsApp Cloud API: campaigns + inbox (underpins Omni) |
 | pbx | `/api/pbx/` | COMPLETE | Issabel AMI bridge: extensions + live calls (`run_ami_bridge`, `sync_pbx_extensions`) — underpins Omni wallboard |
-| hr | `/api/hr/` | COMPLETE (mobile) | Geofenced attendance (GPS clock in/out vs branch coords) |
+| hr | `/api/hr/` | COMPLETE (mobile) + fingerprint attendance Stage 1 BUILT (switch `HR_ATTENDANCE_ENABLED`, OFF) | Geofenced attendance (GPS clock in/out vs branch coords). Stage 1 adds `/api/hr/attendance/`: ZK punch collection by an office agent (`attendance_agent/`, read-only, stdlib), screen `/hr/attendance` (month, days, issues, employees, machines, admin access), access grants, health alerts. No lateness/penalties/salaries (Stages 2–3). Runbook `docs/deploy/2026-11-attendance-agent-go-live.md` |
 | qa | `/api/qa/` | COMPLETE (mobile) | Branch QA inspections (templates + pass/fail/na + score) |
 | erp | — | INTERNAL | SOFTECH connector helpers + ERP permission model (`/erp-permissions`) |
 | dashboard | `/api/dashboard/` | PARTIAL | Home dashboard aggregations |
