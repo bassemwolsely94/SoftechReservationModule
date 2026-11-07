@@ -17,8 +17,10 @@ import { SOURCE_TYPES } from './RuleEditor'
 const DOC_STATUS = { new: 'جديد', drafted: 'مرحّل', skipped: 'مُتجاوز', exception: 'استثناء', vanished: 'اختفى', changed: 'تغيّر' }
 
 const fmtTs = (t) => (t ? t.replace('T', ' ').slice(0, 16) : '—')
+// Ruling P32: flags the reader puts on a purchase, in words
+const ATTR_FLAGS = { vat_missing: 'ضريبة ناقصة', vat_value_drift: 'قيمة الفاتورة تختلف عن رأس SOFTECH' }
 function attrsText(attrs) {
-  const e = Object.entries(attrs || {})
+  const e = Object.entries(attrs || {}).filter(([k]) => !ATTR_FLAGS[k])
   return e.length ? e.map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(',') : (typeof v === 'object' && v ? JSON.stringify(v) : v)}`).join(' · ') : '—'
 }
 
@@ -86,7 +88,12 @@ export default function SourcePanel({ entryId }) {
                       <td className="px-2 py-1 whitespace-nowrap">{d.doc_date}</td>
                       <td className="px-2 py-1">{d._branch}</td>
                       <td className="px-2 py-1 font-mono tabular-nums" dir="ltr">{d._amounts}</td>
-                      <td className="px-2 py-1 text-gray-600 max-w-xs break-words" dir="ltr">{attrsText(d.attrs)}</td>
+                      <td className="px-2 py-1 text-gray-600 max-w-xs break-words">
+                        {Object.keys(ATTR_FLAGS).filter(k => d.attrs?.[k]).map(k => (
+                          <span key={k} className="inline-block me-1 mb-0.5 rounded bg-amber-100 text-amber-800 px-1.5">{ATTR_FLAGS[k]}</span>
+                        ))}
+                        <span dir="ltr">{attrsText(d.attrs)}</span>
+                      </td>
                       <td className="px-2 py-1 whitespace-nowrap" title={`بصمة ${d.content_hash || ''}`}>
                         {d.version}
                         <div className="text-[10px] text-gray-400">أول ظهور {fmtTs(d.first_seen)}<br />آخر ظهور {fmtTs(d.last_seen)}</div>

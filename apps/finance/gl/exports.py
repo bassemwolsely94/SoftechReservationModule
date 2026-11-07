@@ -23,6 +23,7 @@ WARN_FONT = Font(bold=True, color='B45309')
 TRADING_ROWS = ['net_sales', 'opening_stock', 'net_purchases', 'closing_stock', 'cost_of_sales',
                 'gross_profit', 'other_revenue', 'capital_gains', *EXPENSE_LINES, 'total_expenses',
                 'unclassified', 'net_profit']
+SOFTECH_ROWS = ('softech_sales', 'softech_cost', 'softech_gross_profit')
 RATIO_ROWS = [('gross_margin', 'هامش مجمل الربح'), ('net_margin', 'هامش صافى الربح'),
               ('expense_ratio', 'نسبة المصاريف لصافى المبيعات')]
 POSITION_ROWS = [
@@ -160,12 +161,17 @@ def position(d):
 
 def branch_pl(d):
     cols = d['columns']
+    total = next((c for c in cols if c.get('is_total')), {})
     wb, ws = _book('الختامية فروع بالتوزيع', f'من {d["from"]} إلى {d["to"]}',
-                   ['البند'] + [c['label'] for c in cols], [34] + [18] * len(cols))
+                   ['البند'] + [c['label'] for c in cols], [34] + [18] * len(cols),
+                   warnings=total.get('warnings'))
     for k in TRADING_ROWS:
         if k == 'unclassified' and not any(c.get(k) for c in cols):
             continue
         ws.append([LABELS.get(k, k)] + [_num(c.get(k)) for c in cols])
+        if k == 'gross_profit':   # Ruling P34: SOFTECH's own figures, beside the ledger figures
+            for sk in SOFTECH_ROWS:
+                ws.append([LABELS[sk]] + [_num(c.get(sk)) for c in cols])
     for k in EXPENSE_LINES:
         ws.append([f'توزيع {LABELS.get(k, k)}'] + [_num(c['allocation'].get(k)) for c in cols])
     ws.append(['صافى الربح بعد التوزيع'] + [_num(c['after']['net_profit']) for c in cols])
