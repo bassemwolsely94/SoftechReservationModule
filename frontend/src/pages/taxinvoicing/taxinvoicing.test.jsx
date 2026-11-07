@@ -49,7 +49,11 @@ function doc(overrides = {}) {
   }
 }
 
-const ME = { can_create: true, can_edit: true, can_approve: true, can_view_all_lines: true, can_finalize: true, submit_enabled: false }
+const ME = {
+  can_create: true, can_edit: true, can_approve: true, can_view_all_lines: true, can_finalize: true, submit_enabled: false,
+  receipt_submit_enabled: false,
+  line_statuses: [['approved', 'معتمد'], ['exempt', 'معفى'], ['uncoded', 'غير مُرمَّز'], ['pending', 'قيد المراجعة'], ['excluded', 'مستبعد']].map(([key, label]) => ({ key, label })),
+}
 
 function show(ui) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })

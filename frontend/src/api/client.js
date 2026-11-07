@@ -3144,6 +3144,7 @@ export const taxInvoicingApi = {
   receiptConfigs:  ()             => api.get('/tax-invoicing/receipts/configs/'),
   saveReceiptConfig: (data)       => api.post('/tax-invoicing/receipts/configs/', data),
   channelRules:    ()             => api.get('/tax-invoicing/receipts/channels/'),
+  channelsSeen:    ()             => api.get('/tax-invoicing/receipts/channels/seen/'),
   saveChannelRule: (data)         => api.post('/tax-invoicing/receipts/channels/', data),
 }
 

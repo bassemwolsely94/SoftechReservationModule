@@ -4,10 +4,6 @@ import { taxInvoicingApi } from '../../api/client'
 import DocumentDetail from './DocumentDetail'
 import { Badge, DOC_STATUS_TONE, Failed, Field, fmt, fmtTime, Grid, INPUT, Loading } from './ui'
 
-const STATUSES = [
-  ['draft', 'مسودة'], ['approved', 'معتمدة'], ['submitting', 'جارٍ الإرسال'], ['uncertain', 'نتيجة غير مؤكدة'],
-  ['submitted', 'مُرسلة'], ['valid', 'مقبولة'], ['invalid', 'غير صالحة'], ['rejected', 'مرفوضة عند الإرسال'],
-]
 const TYPES = [['i', 'فاتورة'], ['c', 'إشعار دائن'], ['d', 'إشعار مدين']]
 
 const COLUMNS = [
@@ -42,7 +38,7 @@ export default function DocumentsTab({ me, docId, go }) {
         <Field label="الحالة">
           <select value={f.status} onChange={e => set('status', e.target.value)} className={INPUT}>
             <option value="">الكل</option>
-            {STATUSES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            {me.document_statuses.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
         </Field>
         <Field label="النوع">

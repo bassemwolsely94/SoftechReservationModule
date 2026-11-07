@@ -66,9 +66,13 @@ export default function TaxInvoicingPage() {
           فواتير مصلحة الضرائب للمطالبات المقفلة، وإيصالات مبيعات الفروع. البند المحجوز يوقف المستند كله.
         </p>
       </div>
-      {!access.submit_enabled && (
+      {!(access.submit_enabled && access.receipt_submit_enabled) && (
         <div className="mb-3 text-xs text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-2 no-print" data-tour="tax-invoicing-main-sending-off">
-          🔕 الإرسال الفعلي للمصلحة مغلق. كل ما هنا مراجعة ومعاينة، ولا يخرج شيء للمصلحة.
+          {!access.submit_enabled && !access.receipt_submit_enabled
+            ? '🔕 الإرسال الفعلي للمصلحة مغلق. كل ما هنا مراجعة ومعاينة، ولا يخرج شيء للمصلحة.'
+            : !access.submit_enabled
+              ? '🔕 إرسال الفواتير والإشعارات للمصلحة مغلق.'
+              : '🔕 إرسال الإيصالات للمصلحة مغلق.'}
         </div>
       )}
       <div className="flex flex-wrap gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-4 no-print" data-tour="tax-invoicing-main-tabs">

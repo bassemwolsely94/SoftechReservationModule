@@ -18,7 +18,6 @@ const CONFIG_FIELDS = [
   ['preshared_key_env', 'اسم متغير المفتاح'], ['activity_code', 'كود النشاط'], ['governate', 'المحافظة'],
   ['region_city', 'المدينة'], ['street', 'الشارع'], ['building_number', 'رقم المبنى'], ['payment_method', 'طريقة الدفع'],
 ]
-const LINE_STATUS = { approved: 'معتمد', exempt: 'معفى', uncoded: 'غير مُرمَّز', pending: 'قيد المراجعة', excluded: 'مستبعد' }
 const CHANNEL_MODES = [['receipt', 'إيصال إلكتروني'], ['invoice', 'فاتورة على مطالبة'], ['undecided', 'لم يتحدد']]
 
 function BranchActions({ branch, me }) {
@@ -82,8 +81,7 @@ function ReceiptDetail({ id }) {
         { key: 'total', label: 'الإجمالي', type: 'number', render: l => fmt(l.total) },
         { key: 'source_vat_rate', label: 'ضريبة SOFTECH %', type: 'number', render: l => fmt(l.source_vat_rate) },
         { key: 'vat_rate', label: 'الضريبة المؤكدة %', type: 'number', render: l => fmt(l.vat_rate) },
-        { key: 'status', label: 'الحالة', value: l => LINE_STATUS[l.status] || l.status, render: l => (
-          <Badge tone={LINE_STATUS_TONE[l.status]}>{LINE_STATUS[l.status] || l.status}</Badge>) },
+        { key: 'status_label', label: 'الحالة', render: l => <Badge tone={LINE_STATUS_TONE[l.status]}>{l.status_label}</Badge> },
         { key: 'reason', label: 'السبب', render: l => l.reason || '—' },
       ]} />
     </div>
@@ -91,14 +89,14 @@ function ReceiptDetail({ id }) {
 }
 
 function ReceiptsList({ initialStatus, statuses, bl }) {
-  const [f, setF] = useState({ branch: '', status: initialStatus, channel: '' })
+  const [f, setF] = useState({ branch: '', status: initialStatus, channel: '', from: '', to: '' })
   const [open, setOpen] = useState(null)
   const set = (k, v) => setF(p => ({ ...p, [k]: v }))
   const branches = useBranchOptions()
   const params = Object.fromEntries(Object.entries(f).filter(([, v]) => v.trim()))
   const { data, isLoading, error } = useQuery({
     queryKey: ['tax-invoicing', 'receipts', params],
-    queryFn: () => taxInvoicingApi.receipts(params).then(r => r.data),
+    queryFn: () => taxInvoicingApi.receipts(params).then(r => ({ rows: r.data, total: Number(r.headers?.['x-total-count'] ?? r.data.length) })),
     placeholderData: prev => prev,
   })
   const columns = [
@@ -112,7 +110,7 @@ function ReceiptsList({ initialStatus, statuses, bl }) {
     { key: 'hold', label: 'أسباب الحجز', value: r => r.hold_reasons?.length || 0, type: 'number', render: r => (r.hold_reasons?.length ? fmtInt(r.hold_reasons.length) : '—') },
   ]
   return (
-    <Section title="الإيصالات" hint="أحدث 300 إيصال بهذه الفلاتر." data-tour="tax-invoicing-main-receipts-list">
+    <Section title="الإيصالات" hint={data ? `معروض ${fmtInt(data.rows.length)} من ${fmtInt(data.total)} بهذه الفلاتر.` : ''} data-tour="tax-invoicing-main-receipts-list">
       <div className="flex flex-wrap items-end gap-2 mb-3">
         <Field label="الفرع">
           <select value={f.branch} onChange={e => set('branch', e.target.value)} className={INPUT}>
@@ -129,9 +127,11 @@ function ReceiptsList({ initialStatus, statuses, bl }) {
         <Field label="القناة">
           <input value={f.channel} onChange={e => set('channel', e.target.value)} className={`${INPUT} w-24`} />
         </Field>
+        <Field label="من"><input type="date" value={f.from} onChange={e => set('from', e.target.value)} className={INPUT} /></Field>
+        <Field label="إلى"><input type="date" value={f.to} onChange={e => set('to', e.target.value)} className={INPUT} /></Field>
       </div>
       {isLoading ? <Loading /> : error ? <Failed error={error} /> : (
-        <Grid columns={columns} rows={data} empty="لا توجد إيصالات بهذه الفلاتر"
+        <Grid columns={columns} rows={data.rows} empty="لا توجد إيصالات بهذه الفلاتر"
           onOpen={r => setOpen(o => (o === r.id ? null : r.id))} openKey={open} renderOpen={r => <ReceiptDetail id={r.id} />} />
       )}
     </Section>
@@ -231,14 +231,14 @@ function Configs({ me, bl }) {
   )
 }
 
-function ChannelEditor({ row, onDone }) {
+function ChannelEditor({ row, code = '', onDone }) {
   const act = useAction()
-  const [f, setF] = useState({ ptclassifcode: row?.ptclassifcode || '', mode: row?.mode || 'undecided', label: row?.label || '', note: row?.note || '' })
+  const [f, setF] = useState({ ptclassifcode: row?.ptclassifcode || code, mode: row?.mode || 'undecided', label: row?.label || '', note: row?.note || '' })
   const set = (k, v) => setF(p => ({ ...p, [k]: v }))
   return (
     <div className="flex flex-wrap items-end gap-2">
       {!row && (
-        <Field label="كود القناة"><input dir="ltr" value={f.ptclassifcode} onChange={e => set('ptclassifcode', e.target.value)} className={`${INPUT} w-24`} /></Field>
+        <Field label="كود القناة"><input dir="ltr" value={f.ptclassifcode} readOnly={!!code} onChange={e => set('ptclassifcode', e.target.value)} className={`${INPUT} w-24`} /></Field>
       )}
       <Field label="القرار">
         <select value={f.mode} onChange={e => set('mode', e.target.value)} className={INPUT}>
@@ -256,14 +256,35 @@ function ChannelEditor({ row, onDone }) {
 
 function Channels({ me }) {
   const [open, setOpen] = useState(null)
+  const [openSeen, setOpenSeen] = useState(null)
   const { data, isLoading, error } = useQuery({
     queryKey: ['tax-invoicing', 'channels'],
     queryFn: () => taxInvoicingApi.channelRules().then(r => r.data),
   })
+  const seen = useQuery({
+    queryKey: ['tax-invoicing', 'channels-seen'],
+    queryFn: () => taxInvoicingApi.channelsSeen().then(r => r.data),
+  })
   if (isLoading) return <Loading />
   if (error) return <Failed error={error} />
+  // Channels on imported sales with no rule yet: their receipts are held until someone decides.
+  const known = new Set(data.map(r => r.ptclassifcode))
+  const undecided = (seen.data || []).filter(s => s.channel && !known.has(s.channel))
   return (
     <Section title="قواعد القنوات" hint="قناة بلا قرار تُحجز إيصالاتها ولا تُحذف. افتح القناة واحفظ لتأكيد قرارها." data-tour="tax-invoicing-main-receipts-channels">
+      {undecided.length > 0 && (
+        <div className="mb-3" data-tour="tax-invoicing-main-receipts-channels-seen">
+          <div className="text-sm font-bold text-gray-800 mb-1">قنوات في المبيعات بلا قاعدة</div>
+          <Grid getKey={s => s.channel} rows={undecided} defaultSort={{ key: 'documents', dir: 'desc', type: 'number' }}
+            onOpen={me.can_approve ? s => setOpenSeen(o => (o === s.channel ? null : s.channel)) : undefined} openKey={openSeen}
+            renderOpen={s => <ChannelEditor key={s.channel} code={s.channel} onDone={() => setOpenSeen(null)} />}
+            columns={[
+              { key: 'channel', label: 'القناة' },
+              { key: 'documents', label: 'إيصالات', type: 'number', render: s => fmtInt(s.documents) },
+              { key: 'value', label: 'القيمة', type: 'number', render: s => fmt(s.value) },
+            ]} />
+        </div>
+      )}
       {me.can_approve && <div className="mb-3"><ChannelEditor /></div>}
       <Grid getKey={r => r.ptclassifcode} rows={data} empty="لا توجد قواعد بعد"
         onOpen={me.can_approve ? r => setOpen(o => (o === r.ptclassifcode ? null : r.ptclassifcode)) : undefined} openKey={open}

@@ -13,9 +13,6 @@ import {
   Loading, Notice, Section, useAction,
 } from './ui'
 
-const COUNT_CELLS = [
-  ['approved', 'معتمد'], ['exempt', 'معفى'], ['uncoded', 'غير مُرمَّز'], ['pending', 'قيد المراجعة'], ['excluded', 'مستبعد'],
-]
 const REVIEW_CATEGORIES = [
   ['coding', 'مشكلة ترميز مؤقتة'], ['exempt', 'صنف معفى'], ['include', 'يُدرج في الفاتورة'], ['exclusion', 'طلب استبعاد من المستند'],
 ]
@@ -333,7 +330,7 @@ export default function DocumentDetail({ id, me, go }) {
           </div>
         </div>
         <div className="flex flex-wrap gap-x-5 gap-y-2 mt-3 pt-3 border-t border-gray-100" data-tour="tax-invoicing-main-doc-counts">
-          {COUNT_CELLS.map(([k, l]) => (
+          {me.line_statuses.map(({ key: k, label: l }) => (
             <Stat key={k} label={l} value={fmtInt(c[k])}
               tone={c[k] > 0 && (k === 'uncoded' || k === 'pending') ? 'text-red-700' : k === 'excluded' && c[k] > 0 ? 'text-amber-800' : 'text-gray-900'} />
           ))}
@@ -393,7 +390,7 @@ export default function DocumentDetail({ id, me, go }) {
             columns={[
               { key: 'itemcode', label: 'الكود' },
               { key: 'item_name', label: 'الصنف', render: r => r.item_name || '—' },
-              { key: 'status', label: 'الحالة', render: r => <Badge tone={LINE_STATUS_TONE[r.status]}>{COUNT_CELLS.find(([k]) => k === r.status)?.[1] || r.status}</Badge> },
+              { key: 'status', label: 'الحالة', render: r => <Badge tone={LINE_STATUS_TONE[r.status]}>{me.line_statuses.find(s => s.key === r.status)?.label || r.status}</Badge> },
               { key: 'reason', label: 'السبب', className: 'max-w-[280px]' },
               { key: 'lines', label: 'بنود', type: 'number' },
               { key: 'net', label: 'الصافي', type: 'number', render: r => fmt(r.net) },

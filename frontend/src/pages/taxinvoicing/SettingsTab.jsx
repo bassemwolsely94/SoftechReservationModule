@@ -101,13 +101,18 @@ function BuyerEditor({ buyer, me, zeroBases, onDone }) {
     presentation_mode: buyer.presentation_mode || 'summary',
     ...Object.fromEntries(BUYER_FIELDS.map(([k]) => [k, buyer[k] || ''])),
   })
-  // '' = leave as it is. The list does not say which basis is recorded on the buyer.
-  const [zero, setZero] = useState('')
+  const recorded = buyer.zero_vat_basis_id ? String(buyer.zero_vat_basis_id) : ''
+  const [zero, setZero] = useState(recorded)
   const set = (k, v) => setF(p => ({ ...p, [k]: v }))
+  // Sent only when it changes: changing it needs `finalize`, saving the rest of the buyer does not.
   const body = () => ({
     client_id: buyer.client_id, ...f,
-    ...(zero === '' ? {} : { zero_vat_basis_id: zero === 'none' ? null : Number(zero) }),
+    ...(zero === recorded ? {} : { zero_vat_basis_id: zero ? Number(zero) : null }),
   })
+  // A recorded basis may have been stopped since, so it is no longer among the active options.
+  const options = recorded && !zeroBases.some(b => String(b.id) === recorded)
+    ? [{ id: recorded, label: `${buyer.zero_vat_basis} (موقوف)` }, ...zeroBases]
+    : zeroBases
   return (
     <div className="space-y-2">
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -122,9 +127,8 @@ function BuyerEditor({ buyer, me, zeroBases, onDone }) {
         {me.can_finalize && (
           <Field label="عدم استحقاق ضريبة" hint="يحتاج أساساً موثقاً من نوع «عدم استحقاق ضريبة».">
             <select value={zero} onChange={e => setZero(e.target.value)} className={INPUT}>
-              <option value="">بدون تغيير</option>
-              <option value="none">إلغاء الأساس</option>
-              {zeroBases.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
+              <option value="">لا يوجد: الضريبة تتبع كل صنف</option>
+              {options.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
             </select>
           </Field>
         )}
@@ -153,6 +157,7 @@ function Buyers({ me }) {
             { key: 'legal_name', label: 'الاسم القانوني', render: b => b.legal_name || <span className="text-red-600 text-xs">ناقص</span> },
             { key: 'tax_id', label: 'الرقم الضريبي', render: b => b.tax_id || <span className="text-red-600 text-xs">ناقص</span> },
             { key: 'presentation_mode', label: 'طريقة العرض', value: b => MODES.find(([k]) => k === b.presentation_mode)?.[1], render: b => MODES.find(([k]) => k === b.presentation_mode)?.[1] },
+            { key: 'zero_vat_basis', label: 'عدم استحقاق ضريبة', render: b => b.zero_vat_basis || '—' },
           ]} />
       )}
     </Section>

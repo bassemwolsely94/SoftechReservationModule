@@ -87,6 +87,11 @@ function ItemEditor({ item, isNew, me, onCreated }) {
         <Field label="المرجع" hint="مطلوب للمعفى والنسبة الصفرية.">
           <input value={vat.treatment_reference} disabled={!me.can_approve} onChange={e => setV('treatment_reference', e.target.value)} className={INPUT} />
         </Field>
+        {item.source_vat_code || item.source_vat_rate != null ? (
+          <p className="text-[11px] text-gray-500">
+            في الملف، للمراجعة فقط: كود {item.source_vat_code || '—'} · نسبة {item.source_vat_rate != null ? `${Number(item.source_vat_rate)}%` : '—'}
+          </p>
+        ) : null}
         <p className="text-[11px] text-gray-500">
           {item.treatment_confirmed_at ? `أكده ${item.treatment_confirmed_by || '—'} · ${fmtTime(item.treatment_confirmed_at)}` : 'لم يؤكده المحاسب بعد'}
         </p>
@@ -105,15 +110,18 @@ function ItemEditor({ item, isNew, me, onCreated }) {
   )
 }
 
-function ConfirmVat() {
+function ConfirmVat({ rows }) {
   const act = useAction()
+  // Suggestions from the items on screen; the server applies the code to every unconfirmed item.
+  const codes = [...new Set(rows.filter(r => !r.treatment_confirmed_at && r.source_vat_code).map(r => r.source_vat_code))]
   const [f, setF] = useState({ vat_code: '', tax_treatment: 'taxable', treatment_reference: '' })
   const set = (k, v) => setF(p => ({ ...p, [k]: v }))
   return (
     <Section title="تأكيد الضريبة بكود الضريبة" hint="يؤكد المعاملة لكل الأصناف التي يحمل ملفها هذا الكود ولم تُؤكد بعد." data-tour="tax-invoicing-main-items-confirm-vat">
       <div className="flex flex-wrap items-end gap-2">
         <Field label="كود الضريبة في الملف">
-          <input dir="ltr" value={f.vat_code} onChange={e => set('vat_code', e.target.value)} className={INPUT} />
+          <input dir="ltr" list="tax-vat-codes" value={f.vat_code} onChange={e => set('vat_code', e.target.value)} className={INPUT} />
+          <datalist id="tax-vat-codes">{codes.map(c => <option key={c} value={c} />)}</datalist>
         </Field>
         <Field label="المعاملة">
           <select value={f.tax_treatment} onChange={e => set('tax_treatment', e.target.value)} className={INPUT}>
@@ -153,7 +161,9 @@ export default function ItemsTab({ me, initialQ = '', newCode = '', go }) {
         <div dir="ltr" className="text-[11px] text-gray-500 mt-0.5 text-right">{[r.code_type, r.eta_code].filter(Boolean).join(' ') || '—'}</div></>) },
     { key: 'vat', label: 'التصنيف الضريبي', value: r => r.tax_treatment_label, render: r => (
       <>{r.tax_treatment_label}{r.tax_treatment === 'taxable' && ` ${Number(r.vat_rate)}%`}
-        <div className="text-[11px] text-gray-500">{r.treatment_confirmed_at ? 'مؤكد' : 'غير مؤكد'}</div></>) },
+        <div className="text-[11px] text-gray-500">
+          {r.treatment_confirmed_at ? 'مؤكد' : 'غير مؤكد'}{r.source_vat_code ? ` · كود الملف ${r.source_vat_code}` : ''}
+        </div></>) },
     { key: 'disposition_label', label: 'قرار الإدراج' },
     { key: 'list_status_label', label: 'القائمة', render: r => (
       <>{r.list_status_label}{r.listed_reason && <div className="text-[11px] text-gray-500 max-w-[180px] truncate">{r.listed_reason}</div>}</>) },
@@ -199,7 +209,7 @@ export default function ItemsTab({ me, initialQ = '', newCode = '', go }) {
           renderOpen={r => <ItemEditor key={r.id} item={r} me={me} />} />
       )}
 
-      {me.can_approve && <ConfirmVat />}
+      {me.can_approve && <ConfirmVat rows={data || []} />}
     </div>
   )
 }
