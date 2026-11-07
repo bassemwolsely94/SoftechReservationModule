@@ -1,8 +1,14 @@
 """Grant RBAC module `tax_invoicing` (doc 36) to the accountant. Only these rows are created.
-`finalize` (send to ETA, issuer settings, exclusion bases) stays admin-only until granted by name."""
+`finalize` (send to ETA, issuer settings, exclusion bases) stays admin-only until granted by name.
+
+The admin rows matter: a module with rows only for RBAC_ENFORCED_ROLES (accountant is one) counts as
+never seeded, and core.permissions.matrix_allows then fails open for every other role."""
 from django.db import migrations
 
-GRANTS = {'accountant': ['view', 'create', 'edit', 'approve']}
+GRANTS = {
+    'accountant': ['view', 'create', 'edit', 'approve'],
+    'admin': ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize'],
+}
 
 
 def grant(apps, schema_editor):

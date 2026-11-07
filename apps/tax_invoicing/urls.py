@@ -41,6 +41,7 @@ urlpatterns = [
     path('receipts/import/', views.receipts_import),
     path('receipts/configs/', views.receipt_configs),
     path('receipts/channels/', views.channel_rules),
+    path('receipts/channels/seen/', views.channels_seen),
     path('receipts/<int:pk>/', views.receipt_detail),
     path('receipts/branch/<str:branch>/issue/', views.receipts_issue),
     path('receipts/branch/<str:branch>/submit/', views.receipts_submit),
