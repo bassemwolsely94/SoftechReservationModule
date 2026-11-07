@@ -24,6 +24,7 @@ Company-level by nature, no branch scoping; see models.py. No SOFTECH reads or w
 import logging
 import traceback
 
+from django.db import connection
 from django.db.models import Max
 from django.utils import timezone
 
@@ -31,7 +32,7 @@ from apps.sync.maintenance import _alert_admins, _batched_delete
 from core.errors import redact
 
 from . import holding
-from .models import MODE_OFF, MODE_PREVIEW, LifecycleRun, LifecycleRunLine
+from .models import MODE_OFF, MODE_PREVIEW, LifecycleRun, LifecycleRunLine, TableSizeSnapshot
 from .policy import get_mode
 from .references import build_reference_index, partition
 from .register import KIND_FILE, KIND_P56, RULES
@@ -40,6 +41,7 @@ from .rules_files import missing_references, too_many_missing
 logger = logging.getLogger('elrezeiky.sync')
 
 ERROR_MAX = 1000
+TABLE_SIZE_MIN_BYTES = 20 * 1024 * 1024
 
 
 class FileRulesStopped(Exception):
@@ -106,6 +108,31 @@ def move_file_candidates(rule, candidates, line):
     if failures:
         line.error = redact(f'{len(failures)} لم تُنقل: ' + '; '.join(failures))[:ERROR_MAX]
     return moved
+
+
+def snapshot_table_sizes(min_bytes=TABLE_SIZE_MIN_BYTES):
+    """The retention:table_sizes step. One TableSizeSnapshot row per table of the current schema that is at least
+    min_bytes (20 MB), so growth history exists before the data health screen. Returns the rows written.
+    Reads PostgreSQL's catalog only; it never raises, because a missing size row must not fail the daily run."""
+    try:
+        with connection.cursor() as cur:
+            cur.execute(
+                """SELECT c.relname, pg_total_relation_size(c.oid), pg_relation_size(c.oid),
+                          pg_indexes_size(c.oid), GREATEST(c.reltuples, 0)::bigint
+                   FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                   WHERE c.relkind = 'r' AND n.nspname = current_schema()
+                     AND pg_total_relation_size(c.oid) >= %s
+                   ORDER BY 1""", [min_bytes])
+            rows = cur.fetchall()
+        now = timezone.now()
+        TableSizeSnapshot.objects.bulk_create([
+            TableSizeSnapshot(taken_at=now, table=name, total_bytes=total, heap_bytes=heap,
+                              index_bytes=index, row_estimate=estimate)
+            for name, total, heap, index, estimate in rows])
+        return len(rows)
+    except Exception:
+        logger.exception('[lifecycle] table size snapshot failed')
+        return 0
 
 
 def purge_held_files():

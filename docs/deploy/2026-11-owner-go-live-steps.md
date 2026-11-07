@@ -210,9 +210,11 @@ Schedule it (`sudo -u elrezeiky crontab -e`, choose nano, paste at the end, save
 # 02:30 nightly DB dump, keep 14 days (log in backup.log)
 30 2 * * * pg_dump -h localhost -U elrezeiky -Fc -Z 6 elrezeiky_db -f /opt/elrezeiky/backups/db_$(date +\%F).dump >> /opt/elrezeiky/backups/backup.log 2>&1 && find /opt/elrezeiky/backups -name 'db_*.dump' -mtime +14 -delete
 # 03:15 every Friday: media (uploads), keep 4
-15 3 * * 5 tar czf /opt/elrezeiky/backups/media_$(date +\%F).tgz -C /opt/elrezeiky/app media >> /opt/elrezeiky/backups/backup.log 2>&1 && find /opt/elrezeiky/backups -name 'media_*.tgz' -mtime +28 -delete
+15 3 * * 5 tar czf /opt/elrezeiky/backups/media_$(date +\%F).tgz -C /opt/elrezeiky/app media media_hold >> /opt/elrezeiky/backups/backup.log 2>&1 && find /opt/elrezeiky/backups -name 'media_*.tgz' -mtime +28 -delete
 ```
 The `\%` is required in crontab. Without the backslash, cron cuts the line at the `%`.
+
+**Data lifecycle: the holding folder.** Files the lifecycle file rules remove wait 30 days in `media_hold`, outside `media/`. The Friday media `tar` must include it (the command above does). In the VPS `.env`, set `LIFECYCLE_HOLD_ROOT=/opt/elrezeiky/app/media_hold` (the same disk as `media/`, so a move is one rename). Set `LIFECYCLE_FILE_RULES_ENABLED=True` only after the media copy is verified; until then every file rule stays in preview. Rules are switched on one by one, after reading their preview (`docs/architecture/36_DATA_LIFECYCLE.md`).
 
 **Check the next morning:** `ls -lh /opt/elrezeiky/backups/` shows `db_<today>.dump`, and `backup.log` is empty or has no errors. Disk: 14 dumps × ~3 GB ≈ 40 GB of the 300 GB. Check with `df -h /`.
 

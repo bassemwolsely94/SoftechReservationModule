@@ -19,7 +19,8 @@ Everything here deletes or marks rows in OUR Postgres only — nothing touches S
   mark_stale_runs()     SyncRun rows 'running' for > 60 min → failed (process died).
   alert_failing_lanes() 3 failed runs in a row of one lane → one admin alert per lane per day
                         (P-55 Part B).
-  run_daily_retention() all of the above, then the data lifecycle rules and the held-file purge
+  run_daily_retention() all of the above, then a table-size snapshot (retention:table_sizes, rows written
+                        are counted in its log line, nothing is deleted), the data lifecycle rules and the held-file purge
                         (apps/data_lifecycle/runner.py), as one logged SyncRun (lane 'retention').
                         Guarded by a Postgres advisory lock (RETENTION_LOCK_KEY): returns None,
                         creating no run row, when another process is already running it.
@@ -279,6 +280,11 @@ def _run_lifecycle_rules():
     return run_lifecycle_rules()
 
 
+def _snapshot_table_sizes():
+    from apps.data_lifecycle.runner import snapshot_table_sizes
+    return snapshot_table_sizes()
+
+
 def _purge_held_files():
     from apps.data_lifecycle.runner import purge_held_files
     return purge_held_files()
@@ -300,6 +306,7 @@ def run_daily_retention():
         ('retention:audit_log', prune_audit_log),
         ('retention:slow_requests', prune_slow_requests),
         ('retention:screen_views', prune_screen_views),
+        ('retention:table_sizes', _snapshot_table_sizes),
         ('retention:lifecycle', _run_lifecycle_rules),
         ('retention:purge_held', _purge_held_files),
     ]

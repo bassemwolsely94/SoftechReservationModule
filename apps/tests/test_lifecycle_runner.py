@@ -473,3 +473,35 @@ class CommandTests(TestCase):
         with self.assertRaises(CommandError):
             self._call('set', 'prescriptions', '--mode', 'off', '--user', 'cmd_admin', '--reason', 'x')
         self.assertFalse(LifecycleRulePolicy.objects.exists())
+
+
+class TableSizeSnapshotTests(TestCase):
+    def test_one_row_per_table_over_the_threshold(self):
+        from apps.data_lifecycle.models import TableSizeSnapshot
+        from apps.data_lifecycle.runner import snapshot_table_sizes
+        written = snapshot_table_sizes(min_bytes=0)
+        self.assertGreater(written, 0)
+        tables = list(TableSizeSnapshot.objects.values_list('table', flat=True))
+        self.assertEqual(len(tables), len(set(tables)))
+        self.assertEqual(len(tables), written)
+        self.assertIn('data_lifecycle_lifecyclerun', tables)
+        row = TableSizeSnapshot.objects.get(table='data_lifecycle_lifecyclerun')
+        self.assertGreaterEqual(row.total_bytes, row.heap_bytes)
+        self.assertGreater(row.total_bytes, 0)
+
+    def test_default_threshold_is_20_mb_so_a_test_database_writes_nothing(self):
+        from apps.data_lifecycle.models import TableSizeSnapshot
+        from apps.data_lifecycle.runner import TABLE_SIZE_MIN_BYTES, snapshot_table_sizes
+        self.assertEqual(TABLE_SIZE_MIN_BYTES, 20 * 1024 * 1024)
+        self.assertEqual(snapshot_table_sizes(), 0)
+        self.assertFalse(TableSizeSnapshot.objects.exists())
+
+    def test_the_step_never_raises(self):
+        from apps.data_lifecycle.runner import snapshot_table_sizes
+        with mock.patch('apps.data_lifecycle.runner.connection') as conn:
+            conn.cursor.side_effect = RuntimeError('db gone')
+            self.assertEqual(snapshot_table_sizes(), 0)
+
+    def test_retention_runs_the_snapshot_step(self):
+        run = run_daily_retention()
+        self.assertTrue(SyncLog.objects.filter(sync_run=run, table_name='retention:table_sizes').exists())

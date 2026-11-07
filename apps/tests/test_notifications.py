@@ -18,7 +18,7 @@ Tests covering:
   - Chatter: message too long → 400
   - Chatter: all endpoints require auth
 """
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 from datetime import timedelta
@@ -465,3 +465,61 @@ class ChatterPostTests(TestCase):
             format='multipart',
         )
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class WebsocketMarkReadTests(TransactionTestCase):
+    """(Transactional: the consumer closes old DB connections, which would end a TestCase transaction.)
+    The bell's read click goes over the websocket (consumers.py _mark_read). Does it write both tables?"""
+
+    def setUp(self):
+        self.branch = make_branch()
+        _, self.prof, _ = make_pharmacist('ws_reader', branch=self.branch)
+
+    def _mark_read_over_socket(self, notif_id):
+        import json
+        from unittest import mock
+        from asgiref.sync import async_to_sync
+        from channels.testing import WebsocketCommunicator
+        from apps.notifications.consumers import NotificationConsumer
+
+        async def go():
+            comm = WebsocketCommunicator(NotificationConsumer.as_asgi(), '/ws/notifications/')
+            comm.scope['user'] = self.prof.user
+            connected, _ = await comm.connect()
+            self.assertTrue(connected)
+            await comm.send_to(text_data=json.dumps({'action': 'mark_read', 'id': notif_id}))
+            reply = json.loads(await comm.receive_from())
+            while reply.get('event') != 'marked_read':  # unread ones are pushed first on connect
+                reply = json.loads(await comm.receive_from())
+            await comm.disconnect()
+            return reply
+
+        # The zone guard (network, device) is tested on its own; here it admits everyone.
+        async def admit(self_):
+            return True
+
+        async def noop(self_):
+            return None
+
+        with mock.patch('apps.access.ws.ZoneGuardMixin.zone_admit', admit),                 mock.patch('apps.access.ws.ZoneGuardMixin.zone_start', noop),                 mock.patch('apps.access.ws.ZoneGuardMixin.zone_stop', noop):
+            return async_to_sync(go)()
+
+    def test_ws_mark_read_updates_row_and_log(self):
+        n = _make_notif(self.prof)
+        NotificationLog.objects.get_or_create(notification=n, recipient=self.prof)
+        reply = self._mark_read_over_socket(n.pk)
+        self.assertEqual(reply, {'event': 'marked_read', 'id': n.pk, 'updated': 1})
+        n.refresh_from_db()
+        self.assertTrue(n.is_read)
+        log = NotificationLog.objects.get(notification=n, recipient=self.prof)
+        self.assertIsNotNone(log.read_at)
+
+    def test_ws_mark_read_ignores_someone_elses_notification(self):
+        _, other, _ = make_pharmacist('ws_other', branch=self.branch)
+        n = _make_notif(other)
+        NotificationLog.objects.get_or_create(notification=n, recipient=other)
+        reply = self._mark_read_over_socket(n.pk)
+        self.assertEqual(reply['updated'], 0)
+        n.refresh_from_db()
+        self.assertFalse(n.is_read)
+        self.assertIsNone(NotificationLog.objects.get(notification=n).read_at)
