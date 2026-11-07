@@ -140,6 +140,9 @@ class RegisterValueTests(SimpleTestCase):
         for key, rule in RULES.items():
             if key == 'rate_runs':      # filled; apps/tests/test_lifecycle_rate_rule.py
                 continue
+            if key in ('transit_alert_notes', 'transit_audit_events'):   # filled; test_lifecycle_transit_rule.py
+                self.assertIsNone(rule.apply, key)
+                continue
             self.assertIsNone(rule.apply, key)
             if rule.kind == 'p56':
                 self.assertIsNone(rule.candidates, key)

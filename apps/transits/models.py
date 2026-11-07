@@ -738,6 +738,10 @@ class InTransitAuditEvent(models.Model):
     """
     Immutable audit trail for every action performed on an in-transit transfer.
     Every row is append-only — never modified after creation.
+
+    Data lifecycle: the automatic alert (`alert_sent` with detail `level=...`) and `synced` rows age out 90 days
+    after the transfer closes, and an open transfer keeps only the latest of each level. Every other action,
+    and `erp_mismatch:` alerts, stay.
     """
 
     ACTION_CHOICES = [

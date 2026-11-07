@@ -18,7 +18,9 @@ from apps.sync.maintenance import (
     AUDIT_NOISE_DAYS, NOTIF_UNREAD_DAYS, PBX_EVENT_DAYS, SLOW_REQUEST_DAYS,
 )
 
-from .rules_rows import rate_runs_apply, rate_runs_candidates
+from .rules_rows import (
+    rate_runs_apply, rate_runs_candidates, transit_alert_notes_candidates, transit_audit_events_candidates,
+)
 
 KIND_ROW = 'row'
 KIND_FILE = 'file'
@@ -100,7 +102,7 @@ _ROW_AND_FILE_RULES = (
         kind=KIND_ROW, floor_days=None, default_days=90,
         reason='التنبيهات التلقائية فقط، بعد 90 يومًا من إغلاق التحويل. تنبيهات عدم التطابق مع ERP '
                'والملاحظات اليدوية تبقى دائمًا.',
-        margin=2_000, ceiling=200_000, candidates=_no_candidates_yet,
+        margin=2_000, ceiling=200_000, candidates=transit_alert_notes_candidates,
         targets=('transits.InTransitNote',),
     ),
     Rule(
@@ -108,7 +110,7 @@ _ROW_AND_FILE_RULES = (
         kind=KIND_ROW, floor_days=None, default_days=90,
         reason='حدث alert_sent التلقائي وحدث synced فقط، بعد 90 يومًا من إغلاق التحويل. '
                'باقي أحداث المراجعة تبقى دائمًا.',
-        margin=5_000, ceiling=300_000, candidates=_no_candidates_yet,
+        margin=5_000, ceiling=300_000, candidates=transit_audit_events_candidates,
         targets=('transits.InTransitAuditEvent',),
     ),
 
