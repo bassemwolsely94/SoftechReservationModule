@@ -650,7 +650,8 @@ class AttendancePunch(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=['device', 'user_code', 'raw_stamp', 'state'],
                                                name='uniq_punch_device_user_stamp_state')]
-        indexes = [models.Index(fields=['employee', 'punch_date'])]
+        indexes = [models.Index(fields=['employee', 'punch_date']),
+                   models.Index(fields=['user_code'])]   # resolve.py re-links one ID across machines
 
     def save(self, *args, **kwargs):
         if not self._state.adding:
@@ -669,17 +670,22 @@ class CollectionRun(models.Model):
     started_at   = models.DateTimeField()
     finished_at  = models.DateTimeField(null=True, blank=True)
     records_read    = models.PositiveIntegerField(default=0)
-    new_count       = models.PositiveIntegerField(default=0)
-    duplicate_count = models.PositiveIntegerField(default=0)
+    # Null = not known: a run report doesn't say which punch answers belong to it.
+    new_count       = models.PositiveIntegerField(null=True, blank=True)
+    duplicate_count = models.PositiveIntegerField(null=True, blank=True)
     oldest_date  = models.DateField(null=True, blank=True)
     newest_date  = models.DateField(null=True, blank=True)
     drift_seconds    = models.IntegerField(null=True, blank=True)
     device_log_count = models.PositiveIntegerField(null=True, blank=True)
+    spool_waiting    = models.PositiveIntegerField(null=True, blank=True)   # files still waiting on the agent
     status = models.CharField(max_length=8, choices=STATUS_CHOICES, default='success')
     error  = models.CharField(max_length=255, blank=True)
 
     class Meta:
         ordering = ['-started_at']
+        # The agent can send a run twice (a lost answer); the second must not count as another run.
+        constraints = [models.UniqueConstraint(fields=['device', 'started_at'],
+                                               name='uniq_collection_run_device_started')]
 
 
 class AttendanceAccess(models.Model):

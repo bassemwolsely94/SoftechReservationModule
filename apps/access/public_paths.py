@@ -37,6 +37,8 @@ PUBLIC_PREFIXES = (
     '/api/social/webhook/tiktok/',
     # apps.whatsapp.views.WebhookView (csrf_exempt; hub verify token + X-Hub-Signature-256)
     '/api/whatsapp/webhook/',
+    # apps.hr.attendance.agent_views (no staff user; per-agent secret, hashed, constant-time)
+    '/api/hr-attendance/agent/',
 )
 
 # Allowed for GET / HEAD / OPTIONS only; any other method needs a signed-in user.
