@@ -85,5 +85,6 @@ def inspect_signature(der, content):
     except InvalidSignature as exc:
         raise SignatureInvalid('the signature does not verify') from exc
     return {'subject': loaded.subject.rfc4514_string(), 'issuer': loaded.issuer.rfc4514_string(),
-            'thumbprint': hashlib.sha1(cert.dump()).hexdigest().upper(),  # nosec B324 - Windows certificate thumbprint
+            # The Windows certificate thumbprint, an identifier and not a security check.
+            'thumbprint': hashlib.sha1(cert.dump(), usedforsecurity=False).hexdigest().upper(),
             'not_after': loaded.not_valid_after_utc.isoformat()}

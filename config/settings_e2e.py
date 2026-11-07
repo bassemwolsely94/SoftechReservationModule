@@ -101,6 +101,10 @@ E2E_ROLES = ['admin', 'call_center', 'pharmacist', 'salesperson', 'purchasing', 
 E2E_USERS = {role: f'e2e_{role}' for role in E2E_ROLES}
 # Minimal fixtures for the flows (reservation, transfer, POS): two operational test branches
 # (the users sit in the first) and two catalog items. Codes that no real SOFTECH row uses.
+E2E_GL_ACCOUNTS = [
+    ('E2E النقدية', 'balance_sheet', '9901', 'E2E الخزينة', 'debit', 'asset'),
+    ('E2E الايرادات', 'pl', '9902', 'E2E المبيعات', 'credit', 'revenue'),
+]
 E2E_BRANCHES = [
     {'softech_branch_id': '991', 'code': 'E91', 'name': 'فرع الاختبار ١'},
     {'softech_branch_id': '992', 'code': 'E92', 'name': 'فرع الاختبار ٢'},

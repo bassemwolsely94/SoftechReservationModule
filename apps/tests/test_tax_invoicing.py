@@ -1164,6 +1164,61 @@ class ReceiptTests(Fixture, TestCase):
         self.assertTrue(r.data['dry_run'])
 
 
+class AgentAccessTests(Fixture, TestCase):
+    """No anonymous path: the agent signs in with a dedicated account and also presents the token."""
+    TOKEN = 't' * 40
+
+    def setUp(self):
+        self.build()
+
+    def post(self, client, token=None):
+        headers = {'HTTP_X_TAX_AGENT_TOKEN': token} if token else {}
+        return client.post('/api/tax-invoicing/signing-agent/next/', {}, format='json', **headers)
+
+    def test_anonymous_is_refused_even_with_the_token(self):
+        with override_settings(TAX_SIGNING_AGENT_TOKEN=self.TOKEN):
+            self.assertIn(self.post(APIClient(), self.TOKEN).status_code, (401, 403))
+
+    def test_account_without_finalize_is_refused(self):
+        with override_settings(TAX_SIGNING_AGENT_TOKEN=self.TOKEN):
+            self.assertEqual(self.post(api(self.accountant), self.TOKEN).status_code, 403)
+
+    def test_account_with_finalize_still_needs_the_token(self):
+        with override_settings(TAX_SIGNING_AGENT_TOKEN=self.TOKEN):
+            self.assertEqual(self.post(api(self.admin)).status_code, 403)
+            self.assertEqual(self.post(api(self.admin), 'wrong').status_code, 403)
+            ok = self.post(api(self.admin), self.TOKEN)
+        self.assertEqual((ok.status_code, ok.data['job']), (200, None))
+
+    def test_short_or_empty_server_token_never_matches(self):
+        for value in ('', 'short'):
+            with override_settings(TAX_SIGNING_AGENT_TOKEN=value):
+                self.assertEqual(self.post(api(self.admin), value or 'x').status_code, 403)
+
+
+class ReceiptBranchScopeTests(Fixture, TestCase):
+    def setUp(self):
+        self.build()
+        from apps.users.models import RoleModuleAccess
+        for action in ('view', 'create'):
+            RoleModuleAccess.objects.get_or_create(role='pharmacist', module='tax_invoicing', action=action, defaults={'is_allowed': True})
+        TaxChannelRule.objects.update_or_create(ptclassifcode='91', defaults={'mode': 'receipt'})
+        receipts.import_rows([row(1, branch='OTHER'), row(2, branch=self.branch.softech_branch_id or 'T')])
+
+    def test_branch_user_sees_only_their_branch(self):
+        c = api(self.pharmacist)
+        listed = c.get('/api/tax-invoicing/receipts/').data
+        self.assertEqual({r['branch'] for r in listed}, {self.branch.softech_branch_id})
+        summary = c.get('/api/tax-invoicing/receipts/summary/').data['branches']
+        self.assertNotIn('OTHER', {r['branch'] for r in summary})
+        other = TaxReceipt.objects.get(softech_branchcode='OTHER')
+        self.assertEqual(c.get(f'/api/tax-invoicing/receipts/{other.pk}/').status_code, 404)
+        self.assertEqual(c.post('/api/tax-invoicing/receipts/import/', {'branch': 'OTHER', 'date': '2026-11-01'}, format='json').status_code, 403)
+
+    def test_all_branch_role_sees_everything(self):
+        self.assertEqual(len(api(self.accountant).get('/api/tax-invoicing/receipts/').data), 2)
+
+
 class ReceiptGateTests(Fixture, TestCase):
     def test_flag_off_by_default_nothing_goes_out(self):
         self.build()

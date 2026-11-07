@@ -26,13 +26,14 @@ from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.decorators import api_view, authentication_classes, parser_classes, permission_classes
+from rest_framework.decorators import api_view, parser_classes, permission_classes
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.insurance.models import InsuranceClaim, InsuranceClient
 from config.writers import writer_allowed
+from core.branch_scope import allows_code, branch_codes, scope_code
 from core.errors import public_error
 from core.permissions import _get_profile, matrix_allows, matrix_permission
 
@@ -750,9 +751,11 @@ def _agent_allowed(request):
     return signing.agent_token_ok(request.headers.get('X-Tax-Agent-Token', ''))
 
 
+AGENT = matrix_permission(MODULE, post=('finalize',))   # a dedicated account granted `finalize`, plus the token
+
+
 @api_view(['POST'])
-@authentication_classes([])
-@permission_classes([AllowAny])  # gate: shared agent token, checked below; the agent has no user session
+@permission_classes([IsAuthenticated, AGENT])
 def agent_next_job(request):
     if not _agent_allowed(request):
         return Response({'detail': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
@@ -766,8 +769,7 @@ def agent_next_job(request):
 
 
 @api_view(['POST'])
-@authentication_classes([])
-@permission_classes([AllowAny])  # gate: shared agent token, checked below
+@permission_classes([IsAuthenticated, AGENT])
 def agent_job_result(request, pk):
     if not _agent_allowed(request):
         return Response({'detail': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
@@ -801,14 +803,16 @@ def _receipt_row(r):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, VIEWER])
 def receipts_summary(request):
-    return Response({'branches': receipts.summary_by_branch(),
+    allowed = branch_codes(request.user)
+    rows = receipts.summary_by_branch()
+    return Response({'branches': rows if allowed is None else [r for r in rows if r['branch'] in allowed],
                      'statuses': [{'key': k, 'label': v} for k, v in TaxReceipt.STATUS_CHOICES]})
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, VIEWER])
 def receipts_list(request):
-    qs = TaxReceipt.objects.all()
+    qs = scope_code(TaxReceipt.objects.all(), request.user, 'softech_branchcode')
     for param, field in (('branch', 'softech_branchcode'), ('status', 'status'), ('channel', 'channel'),
                          ('from', 'docdate__gte'), ('to', 'docdate__lte')):
         if request.query_params.get(param):
@@ -824,7 +828,7 @@ def receipts_list(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, VIEWER])
 def receipt_detail(request, pk):
-    r = get_object_or_404(TaxReceipt, pk=pk)
+    r = get_object_or_404(scope_code(TaxReceipt.objects.all(), request.user, 'softech_branchcode'), pk=pk)
     return Response({**_receipt_row(r), 'previous_uuid': r.previous_uuid, 'payload_text': r.payload_text, 'lines': [
         {'itemcode': l.itemcode, 'item_name': l.item_name, 'quantity': str(l.quantity), 'total': str(l.total),
          'source_vat_rate': str(l.source_vat_rate), 'vat_rate': str(l.vat_rate), 'status': l.status,
@@ -839,6 +843,8 @@ def receipts_import(request):
         day = dt.date.fromisoformat(str(request.data.get('date')))
     except ValueError:
         return Response({'detail': 'تاريخ غير صحيح'}, status=status.HTTP_400_BAD_REQUEST)
+    if not allows_code(request.user, str(request.data.get('branch') or '')):
+        return Response({'detail': 'هذا الفرع خارج نطاقك'}, status=status.HTTP_403_FORBIDDEN)
     try:
         return Response(receipts.import_branch_day(str(request.data.get('branch') or ''), day, request.user))
     except services.TaxRuleError as exc:
@@ -847,7 +853,9 @@ def receipts_import(request):
         return Response({'detail': public_error(request, exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
 
-def _branch_action(fn):
+def _branch_action(request, branch, fn):
+    if not allows_code(request.user, branch):
+        return Response({'detail': 'هذا الفرع خارج نطاقك'}, status=status.HTTP_403_FORBIDDEN)
     try:
         return Response(fn())
     except services.TaxRuleError as exc:
@@ -857,7 +865,7 @@ def _branch_action(fn):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, APPROVER])
 def receipts_issue(request, branch):
-    return _branch_action(lambda: receipts.issue_next(branch, request.user))
+    return _branch_action(request, branch, lambda: receipts.issue_next(branch, request.user))
 
 
 @api_view(['POST'])
@@ -865,14 +873,14 @@ def receipts_issue(request, branch):
 def receipts_submit(request, branch):
     """Dry run unless dry_run is explicitly false."""
     if request.data.get('dry_run', True) is not False:
-        return Response(receipts.preview_batch(branch))
-    return _branch_action(lambda: receipts.submit_branch(branch, request.user, request.data.get('confirm') or ''))
+        return _branch_action(request, branch, lambda: receipts.preview_batch(branch))
+    return _branch_action(request, branch, lambda: receipts.submit_branch(branch, request.user, request.data.get('confirm') or ''))
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, SENDER])
 def receipts_reconcile(request, branch):
-    return _branch_action(lambda: receipts.reconcile_branch(branch, request.user))
+    return _branch_action(request, branch, lambda: receipts.reconcile_branch(branch, request.user))
 
 
 _CONFIG_TEXT = ('seller_branch_code', 'device_serial', 'pos_os_version', 'pos_model_framework', 'client_id', 'secret_env',
@@ -888,8 +896,11 @@ def _config_row(c):
 @permission_classes([IsAuthenticated, matrix_permission(MODULE, get=('view',), post=('finalize',))])
 def receipt_configs(request):
     if request.method == 'GET':
-        return Response([_config_row(c) for c in TaxReceiptBranchConfig.objects.all()])
+        return Response([_config_row(c) for c in
+                         scope_code(TaxReceiptBranchConfig.objects.all(), request.user, 'softech_branchcode')])
     code = str(request.data.get('branch') or '').strip()
+    if code and not allows_code(request.user, code):
+        return Response({'detail': 'هذا الفرع خارج نطاقك'}, status=status.HTTP_403_FORBIDDEN)
     if not code or len(code) > 5:
         return Response({'detail': 'كود الفرع مطلوب'}, status=status.HTTP_400_BAD_REQUEST)
     c = TaxReceiptBranchConfig.objects.filter(softech_branchcode=code).first() or TaxReceiptBranchConfig(softech_branchcode=code)

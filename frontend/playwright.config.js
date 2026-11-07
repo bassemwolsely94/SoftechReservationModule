@@ -7,8 +7,8 @@
 import { defineConfig, devices } from '@playwright/test'
 
 const PY = process.env.E2E_PYTHON || 'python'
-const API_PORT = 8100
-const WEB_PORT = 5190
+const API_PORT = Number(process.env.E2E_API_PORT || 8100)   // override to run beside another session's e2e servers
+const WEB_PORT = Number(process.env.E2E_WEB_PORT || 5190)
 const CI = !!process.env.CI
 
 export default defineConfig({
@@ -32,7 +32,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: `${PY} manage.py runserver 127.0.0.1:${API_PORT} --noreload`,
+      command: `"${PY}" manage.py runserver 127.0.0.1:${API_PORT} --noreload`,
       cwd: '..',
       url: `http://127.0.0.1:${API_PORT}/api/auth/me/`,
       env: { ...process.env, DJANGO_SETTINGS_MODULE: 'config.settings_e2e', PYTHONIOENCODING: 'utf-8' },
