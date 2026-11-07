@@ -71,6 +71,7 @@ function RunProgress({ runId, onFinished }) {
       {ok ? 'اكتمل الترحيل' : run.status === 'partial' ? 'اكتمل جزئياً' : 'فشل الترحيل'} — {msg}
       {run.detail?.error && <span> · {String(run.detail.error)}</span>}
       {!!run.detail?.vat_missing && <span> · {run.detail.vat_missing} فاتورة بضريبة ناقصة</span>}
+      {!!run.detail?.reader_errors && <span> · تعذّرت قراءة: {Object.keys(run.detail.reader_errors).map(k => SOURCE_TYPES[k] || k).join('، ')}</span>}
     </div>
   )
 }

@@ -290,6 +290,15 @@ class RuleTests(Base):
         body['date_to'] = '2026-02-01'
         self.assertEqual(self.acct.post(BASE + 'rules/preview/', body, format='json').status_code, 400)
 
+    def test_preview_softech_failure_is_503_not_500(self):
+        def down(a, b, f):
+            raise RuntimeError('SOFTECH returned no purchase headers')
+        body = {'rule': _rule(), 'date_from': '2026-03-01', 'date_to': '2026-03-31'}
+        with mock.patch.dict('apps.finance.gl.sources.READERS', {'sales_tenders': down}):
+            r = self.acct.post(BASE + 'rules/preview/', body, format='json')
+        self.assertEqual(r.status_code, 503, r.content)
+        self.assertTrue(r.data['detail'])
+
     def test_preview_saves_nothing_and_stringifies(self):
         from apps.finance.gl.sources import SourceDoc
         doc = SourceDoc('sales_tenders', 'p1', D, '130', 'cash', '',
