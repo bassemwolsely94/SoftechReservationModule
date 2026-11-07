@@ -513,3 +513,6 @@ thead th {
 @media (prefers-reduced-motion: reduce) {
   .tour-spot, .tour-card { animation: none; }
 }
+
+/* A full-height side panel whose footer buttons sit under the «جديد هنا؟» chip: hide the chip while it is open. */
+body:has([data-hides-tour-offer]) [data-tour="general-help-center-offer"] { display: none; }

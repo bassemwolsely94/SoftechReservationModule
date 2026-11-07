@@ -140,10 +140,10 @@ class PartyTests(Base):
         GLParty.objects.create(party_type='customer', code='99', name='جنوب القاهرة')
         GLParty.objects.create(party_type='supplier', code='16', name='رامكو', status='confirmed',
                                softech_personcode='30')
-        rows = [['مورد / دائن', 29, 'x', 565, 565],
-                ['عميل', 99, 'x', 4227, 4227.0],
-                ['مورد / دائن', 16, 'x', 30, 30],          # already confirmed to 30
-                ['مورد / دائن', 55, 'x', 1, 1],            # finance code never imported
+        rows = [['مورد / دائن', 29, 'فارما اوفرسيز', 565, 565],
+                ['عميل', 99, 'جنوب القاهرة', 4227, 4227.0],
+                ['مورد / دائن', 16, 'رامكو', 30, 30],      # already confirmed to 30
+                ['مورد / دائن', 55, None, 1, 1],           # never imported, no name to add it under
                 ['مورد / دائن', 29, 'x', None, None],      # not reviewed -> left out
                 ['عميل', 7, 'x', 4227, 4227],              # same SOFTECH customer twice in the file
                 ['مورد / دائن', 40, 'x', 'abc', 'abc']]    # not a number
@@ -165,11 +165,33 @@ class PartyTests(Base):
         self.assertIn('مكرر', by_row[7]['detail'])
         self.assertIn('استورد', by_row[5]['detail'])
 
+    def test_confirm_upload_adds_new_codes_and_holds_name_conflicts(self):
+        GLParty.objects.create(party_type='supplier', code='1179', name='ممدوح هنرى فهمى عطية')
+        GLParty.objects.create(party_type='supplier', code='442', name='بارك فيل')
+        GLParty.objects.create(party_type='supplier', code='100', name='د/ راتب')
+        rows = [['عميل', 100, 'شركة جنوب القاهرة لتوزيع الكهرباء', 4288, 4288],   # new: the code is another type
+                ['مورد / دائن', 1179, 'شركة يو بى فارما', 900, 900],              # another party's name
+                ['مورد / دائن', 442, 'شركة بارك فيل مصر للادوية', 3226, 3226]]    # same party, longer name
+        url = BASE + 'parties/confirm-upload/'
+        r = self.acct.post(url, {'file': self._confirm_sheet(rows)}, format='multipart')
+        self.assertEqual(r.data['counts'], {'will_create': 1, 'name_conflict': 1, 'will_confirm': 1})
+        self.assertFalse(GLParty.objects.filter(party_type='customer', code='100').exists())
+        r = self.acct.post(url, {'file': self._confirm_sheet(rows), 'dry_run': 'false'}, format='multipart')
+        self.assertEqual(r.data['counts'], {'created': 1, 'name_conflict': 1, 'confirmed': 1})
+        new = GLParty.objects.get(party_type='customer', code='100')
+        self.assertEqual((new.name, new.status, new.softech_personcode),
+                         ('شركة جنوب القاهرة لتوزيع الكهرباء', 'confirmed', '4288'))
+        held = GLParty.objects.get(code='1179')
+        self.assertEqual((held.name, held.status, held.softech_personcode), ('ممدوح هنرى فهمى عطية', 'unmapped', ''))
+        kept = GLParty.objects.get(code='442')
+        self.assertEqual((kept.name, kept.status), ('بارك فيل', 'confirmed'))   # never renamed
+        self.assertEqual(GLParty.objects.get(party_type='supplier', code='100').status, 'unmapped')
+
     def test_confirm_upload_refuses_a_different_code_and_bad_files(self):
         GLParty.objects.create(party_type='supplier', code='16', name='رامكو', status='confirmed',
                                softech_personcode='30')
         r = self.acct.post(BASE + 'parties/confirm-upload/',
-                           {'file': self._confirm_sheet([['مورد', 16, 'x', 31, 31]]), 'dry_run': 'false'},
+                           {'file': self._confirm_sheet([['مورد', 16, 'رامكو', 31, 31]]), 'dry_run': 'false'},
                            format='multipart')
         self.assertEqual(r.data['counts'], {'error': 1})
         self.assertEqual(GLParty.objects.get(code='16').softech_personcode, '30')

@@ -33,7 +33,7 @@ export const KIND_LABEL = {
 }
 const KIND_ORDER = Object.keys(KIND_LABEL)
 const CUSTOMER_SOURCES = new Set(['credit_sales', 'customer_collections'])
-const MAIN_AMOUNT = ['net', 'amount', 'value', 'sales', 'credit']
+const MAIN_AMOUNT = ['value', 'net', 'amount', 'sales', 'credit']
 
 const mainAmount = (a) => { const k = MAIN_AMOUNT.find(x => a?.[x] !== undefined); return k ? a[k] : null }
 const refOf = (d) => [d.attrs?.docnumber, d.attrs?.cheqno, d.attrs?.cheqsno].filter(Boolean).join(' / ') || d.source_key

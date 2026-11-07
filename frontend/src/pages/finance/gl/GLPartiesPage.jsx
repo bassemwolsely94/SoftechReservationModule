@@ -116,6 +116,9 @@ function ImportBar({ onDone }) {
 const OUTCOMES = {
   will_confirm: { label: 'سيتأكد', cls: 'text-green-700' },
   confirmed:    { label: 'تأكد', cls: 'text-green-700' },
+  will_create:  { label: 'سيُضاف ويتأكد', cls: 'text-green-700' },
+  created:      { label: 'أُضيف وتأكد', cls: 'text-green-700' },
+  name_conflict: { label: 'اسم مختلف', cls: 'text-amber-700' },
   unchanged:    { label: 'بدون تغيير', cls: 'text-gray-500' },
   error:        { label: 'مرفوض', cls: 'text-red-600' },
 }
@@ -137,7 +140,8 @@ function ConfirmUploadBar({ onDone }) {
   })
   const shown = preview || done
   const c = shown?.counts || {}
-  const toConfirm = c.will_confirm || 0
+  const toConfirm = (c.will_confirm || 0) + (c.will_create || 0)
+  const held = (shown?.results || []).filter(r => r.outcome === 'error' || r.outcome === 'name_conflict')
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-3 space-y-2" data-tour="finance-gl-parties-confirm-upload">
       <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -155,7 +159,7 @@ function ConfirmUploadBar({ onDone }) {
         {preview && <button type="button" className={btnPlain} onClick={reset}>إلغاء</button>}
       </div>
       <div className="text-xs text-gray-500">
-        الملف فيه أعمدة «النوع» و«كود المالية» و«الكود المعتمد». الصفوف اللي «الكود المعتمد» فيها فاضي بتتجاهل.
+        الملف فيه أعمدة «النوع» و«كود المالية» و«الكود المعتمد». الصفوف اللي «الكود المعتمد» فيها فاضي بتتجاهل، والكود الجديد بيتضاف باسمه من الملف.
       </div>
       {shown && (
         <div className="text-sm">
@@ -165,17 +169,17 @@ function ConfirmUploadBar({ onDone }) {
           ))}
         </div>
       )}
-      {shown && shown.results?.some(r => r.outcome === 'error') && (
+      {held.length > 0 && (
         <div className="max-h-48 overflow-y-auto border border-red-100 rounded-lg">
           <table className="w-full text-xs">
             <tbody>
-              {shown.results.filter(r => r.outcome === 'error').map(r => (
+              {held.map(r => (
                 <tr key={r.row} className="border-t border-red-50">
                   <td className="px-2 py-1 text-gray-500 whitespace-nowrap">سطر {r.row}</td>
                   <td className="px-2 py-1 font-mono">{r.code ?? ''}</td>
                   <td className="px-2 py-1">{r.name ?? ''}</td>
                   <td className="px-2 py-1 font-mono">{r.personcode ?? ''}</td>
-                  <td className="px-2 py-1 text-red-600">{r.detail}</td>
+                  <td className={`px-2 py-1 ${OUTCOMES[r.outcome].cls}`}>{r.detail}</td>
                 </tr>
               ))}
             </tbody>
