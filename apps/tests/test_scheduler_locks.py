@@ -53,6 +53,8 @@ SCHEDULER_JOB_GUARDS = {
         'already-mirrored batch lines skipped by the unique key'),
     'stock_expiry_sync': ('idempotent_upsert', 'apps.batches.stock_expiry.sync_stock_expiry_all', 'StockExpiryBalance.objects.filter(branch_code=bc).delete()',
         'per-branch delete+insert in one transaction'),
+    'attendance_health': ('unique_key', 'apps.hr.attendance.health._notify', 'dedup_once=True',
+        'in-app alerts only (no WhatsApp/SMS, no SOFTECH, no machine access); dedup_key carries kind, device/agent and day, so a second run adds nothing'),
     'stock_ledger_sync': ('idempotent_upsert', 'apps.stock_audit.ledger.sync_ledger', 'StockLedgerLine.objects.filter(docdate__gte=d1, docdate__lt=d2).delete()',
         'day-replace of the HQ stktrans mirror in one transaction; audit checks recompute'),
     'stock_ledger_catchup': ('idempotent_upsert', 'apps.stock_audit.ledger.sync_ledger', 'StockLedgerLine.objects.filter(docdate__gte=d1, docdate__lt=d2).delete()',
