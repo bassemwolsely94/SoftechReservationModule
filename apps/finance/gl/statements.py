@@ -15,6 +15,7 @@ import datetime
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.db.models import Sum
+from django.utils import timezone
 
 from apps.branches.models import Branch
 
@@ -46,6 +47,8 @@ LABELS = {
     'financing_expenses': 'المصاريف التمويلية', 'other_revenue': 'ايرادات',
     'capital_gains': 'ارباح راسمالية بيع اصول', 'net_profit': 'صافى الارباح',
     'total_expenses': 'اجمالى المصاريف', 'unclassified': 'حسابات بدون بند',
+    'softech_sales': 'مبيعات سوفتيك', 'softech_cost': 'تكلفة المبيعات بنسبة سوفتيك',
+    'softech_gross_profit': 'مجمل الربح بسوفتيك',
 }
 
 
@@ -257,7 +260,7 @@ def _allocate(amount: Decimal, shares: dict[int, Decimal]) -> dict[int, Decimal]
 
 
 def branch_pl(date_from: datetime.date, date_to: datetime.date, *,
-              allocation_basis: str = 'sales') -> list[dict]:
+              allocation_basis: str = 'sales', today: datetime.date | None = None) -> list[dict]:
     """One column per branch (HQ first) + total; report-time HQ allocation, posts nothing.
 
     HQ = lines with no branch (line or entry header) or whose branch is kind HQ.  HQ expense
@@ -266,7 +269,9 @@ def branch_pl(date_from: datetime.date, date_to: datetime.date, *,
     it a negative share.  HQ's own sales, cost of sales and revenue stay in the HQ column.  Each
     column carries the figures before allocation at top level, `allocation` (line → amount; on
     HQ = its own share − the HQ amount, so the allocations sum to 0) and `after`.  With zero
-    total sales nothing is allocated.
+    total sales nothing is allocated.  The softech_* lines are SOFTECH's own figures, separate from
+    the ledger (Ruling P34, _softech_lines); a branch with SOFTECH figures and no ledger line still
+    gets a column.  `today` decides which months have started (tests inject it).
     """
     if allocation_basis != 'sales':
         raise ValueError(f'unknown allocation basis {allocation_basis!r}')
@@ -288,6 +293,16 @@ def branch_pl(date_from: datetime.date, date_to: datetime.date, *,
         slot = per.setdefault(key, {})
         slot[line] = slot.get(line, ZERO) + (r['d'] or ZERO) - (r['c'] or ZERO)
     per.setdefault(None, {})
+    per_code, missing = _softech_rows(date_from, date_to, today or timezone.localdate())
+    by_code = {(b.softech_branch_id or '').strip(): b for b in Branch.objects.all()}
+    hq_codes = {c for c, b in by_code.items() if b.kind == Branch.KIND_HQ}
+    if not hq_codes and HQ_CODE not in by_code:
+        hq_codes = {HQ_CODE}
+    for softech_code in per_code:
+        b = by_code.get(softech_code)
+        if b is not None and b.kind != Branch.KIND_HQ:
+            branches.setdefault(b.pk, b)
+            per.setdefault(b.pk, {})
     months = _months(date_from, date_to)
 
     def order(k):
@@ -328,7 +343,76 @@ def branch_pl(date_from: datetime.date, date_to: datetime.date, *,
                  **consolidated,
                  'allocation': {ln: ZERO for ln in EXPENSE_LINES},
                  'after': consolidated})
+    _softech_lines(cols, date_from, date_to, per_code, missing,
+                   {k: (branches[k].softech_branch_id or '').strip() for k in branch_keys}, hq_codes)
     return cols
+
+
+HQ_CODE = '100'
+WARN_SOFTECH_MISSING = ('لا توجد أرقام سوفتيك لشهور: {months} — شغّل ترحيل المبيعات لها أو '
+                        'gl_sync_branch_cost.')
+WARN_SOFTECH_PARTIAL = 'الفترة أجزاء من شهور — أرقام سوفتيك للشهور كاملة'
+WARN_SOFTECH_UNASSIGNED = ('أرقام سوفتيك لأكواد فروع غير معرّفة ({codes}) داخلة في عمود الإجمالي فقط: '
+                           'مبيعات {sales:,.2f}، تكلفة {cost:,.2f}.')
+
+
+def _softech_rows(date_from, date_to, today):
+    """-> ({branch code: {'sales', 'cost'}} summed over the months the range touches,
+    months that have started and have no GLBranchCost row at all)."""
+    from apps.finance.models import GLBranchCost
+    from .branch_cost import month_keys
+    months = month_keys(date_from, date_to)
+    per_code: dict[str, dict[str, Decimal]] = {}
+    have = set()
+    for r in GLBranchCost.objects.filter(year__gte=months[0][0], year__lte=months[-1][0]).values(
+            'year', 'month', 'branch_code', 'net_cost', 'net_value'):
+        if (r['year'], r['month']) not in months:
+            continue
+        have.add((r['year'], r['month']))
+        slot = per_code.setdefault(r['branch_code'], {'sales': ZERO, 'cost': ZERO})
+        slot['sales'] += r['net_value']
+        slot['cost'] += r['net_cost']
+    missing = [f'{y}-{m:02d}' for y, m in months
+               if (y, m) not in have and datetime.date(y, m, 1) <= today]
+    return per_code, missing
+
+
+def _softech_lines(cols, date_from, date_to, per_code, missing, codes: dict, hq_codes: set) -> None:
+    """Ruling P34: SOFTECH's own figures on one basis, separate from the ledger lines: per column
+    ``softech_sales``, ``softech_cost`` and ``softech_gross_profit`` = the two's difference, for the
+    whole months the range touches. ``softech_cost_months_missing`` and ``softech_partial_months``
+    (the range cuts a month) on every column; the total also carries ``softech_unassigned`` (codes no
+    column shows, so the columns + it = the total) and the warnings. Report-time only."""
+    partial = date_from.day != 1 or (date_to + datetime.timedelta(days=1)).day != 1
+    shown = hq_codes | set(codes.values())
+    orphans = sorted(k for k in per_code if k not in shown)
+
+    def total_of(wanted, key):
+        return sum((per_code[k][key] for k in wanted if k in per_code), ZERO)
+
+    for c in cols:
+        if c['is_total']:
+            wanted = list(per_code)
+        else:
+            wanted = hq_codes if c['is_hq'] else [codes.get(c['branch_id'], '')]
+        c['softech_sales'] = total_of(wanted, 'sales')
+        c['softech_cost'] = total_of(wanted, 'cost')
+        c['softech_gross_profit'] = c['softech_sales'] - c['softech_cost']
+        c['softech_cost_months_missing'] = missing
+        c['softech_partial_months'] = partial
+        if not c['is_total']:
+            continue
+        c['softech_unassigned'] = {'codes': orphans, 'sales': total_of(orphans, 'sales'),
+                                   'cost': total_of(orphans, 'cost')}
+        warnings = list(c.get('warnings', []))
+        if missing:
+            warnings.append(WARN_SOFTECH_MISSING.format(months='، '.join(missing)))
+        if partial:
+            warnings.append(WARN_SOFTECH_PARTIAL)
+        if orphans:
+            warnings.append(WARN_SOFTECH_UNASSIGNED.format(
+                codes='، '.join(orphans), sales=total_of(orphans, 'sales'), cost=total_of(orphans, 'cost')))
+        c['warnings'] = warnings
 
 
 PCT_KEYS = ('opening_stock', 'net_purchases', 'closing_stock', 'net_sales', 'cost_of_sales',

@@ -16,7 +16,13 @@ Everything here deletes or marks rows in OUR Postgres only — nothing touches S
   mark_stale_runs()     SyncRun rows 'running' for > 60 min → failed (process died).
   alert_failing_lanes() 3 failed runs in a row of one lane → one admin alert per lane per day
                         (P-55 Part B).
-  run_daily_retention() all of the above as one logged SyncRun (lane 'retention').
+  run_daily_retention() all of the above as one logged SyncRun (lane 'retention'). Guarded by a
+                        Postgres advisory lock (RETENTION_LOCK_KEY): returns None, creating no
+                        run row, when another process is already running it.
+  retention_catchup_due() / run_retention_catchup()
+                        safety net for a missed daily slot: due when no success in the last
+                        OVERDUE_HOURS, nothing is running, and the last failed attempt is older
+                        than RETENTION_RETRY_HOURS. Logged as 'retention:catchup'.
 """
 import datetime
 import logging
@@ -46,6 +52,10 @@ PBX_EVENT_DAYS = 90
 NOTIF_READ_DAYS = 30
 NOTIF_UNREAD_DAYS = 90
 SLOW_REQUEST_DAYS = 30
+
+RETENTION_LOCK_KEY = 7_301_102     # advisory lock: one retention run at a time
+OVERDUE_HOURS = 26                 # no success for this long -> catch-up is due
+RETENTION_RETRY_HOURS = 6          # wait this long after a failed attempt before retrying
 
 
 def _batched_delete(qs, batch=BATCH):
@@ -146,9 +156,7 @@ def alert_failing_lanes(in_a_row=FAILURES_IN_A_ROW):
     """One notification to admins for every lane whose last `in_a_row` finished runs all
     failed. Deduped per lane per day, so the heartbeat can call this every minute.
     Returns the lanes alerted."""
-    from apps.notifications.models import Notification
     from apps.sync.models import SyncRun
-    from apps.users.models import StaffProfile
     lanes = (SyncRun.objects.exclude(lane='').exclude(status='running')
              .values_list('lane', flat=True).distinct())
     today = timezone.localdate().isoformat()
@@ -161,19 +169,67 @@ def alert_failing_lanes(in_a_row=FAILURES_IN_A_ROW):
         label = LANE_LABELS.get(lane, lane)
         body = (f'آخر {in_a_row} تشغيلات لمزامنة «{label}» فشلت. آخر خطأ: '
                 f'{(last[0][1] or "—")[:300]} — راجع صفحة المزامنة.')
-        for staff in StaffProfile.objects.filter(role='admin', is_active=True).select_related('branch'):
-            Notification.send_to_user(staff, 'sync_failure', f'🔴 فشل متكرر في مزامنة «{label}»', body,
-                                      dedup_key=f'sync_failure_{lane}_{today}', dedup_once=True,
-                                      bypass_role_gate=True)
+        _alert_admins(f'🔴 فشل متكرر في مزامنة «{label}»', body, f'sync_failure_{lane}_{today}')
         alerted.append(lane)
     return alerted
 
 
+def _alert_admins(title, body, dedup_key):
+    """Send one sync_failure notification to every active admin (deduped once per key)."""
+    from apps.notifications.models import Notification
+    from apps.users.models import StaffProfile
+    for staff in StaffProfile.objects.filter(role='admin', is_active=True).select_related('branch'):
+        Notification.send_to_user(staff, 'sync_failure', title, body,
+                                  dedup_key=dedup_key, dedup_once=True, bypass_role_gate=True)
+
+
+MISSED_RUN_LANES = ('retention', 'morning_chain')
+
+
+def alert_missed_runs(now=None):
+    """Admin alert for every daily lane with no success for OVERDUE_HOURS (or, when it
+    never succeeded, whose first attempt is that old). Skips lanes with no rows or a run in
+    progress. Deduped per lane per day. Returns the lanes alerted."""
+    from apps.sync.models import SyncRun
+    now = now or timezone.now()
+    cutoff = now - datetime.timedelta(hours=OVERDUE_HOURS)
+    today = timezone.localdate().isoformat()
+    alerted = []
+    for lane in MISSED_RUN_LANES:
+        runs = SyncRun.objects.filter(lane=lane)
+        if not runs.exists() or runs.filter(status='running').exists():
+            continue
+        ref = (runs.filter(status='success').aggregate(m=Max('started_at'))['m']
+               or runs.order_by('started_at').values_list('started_at', flat=True).first())
+        if ref >= cutoff:
+            continue
+        label = LANE_LABELS[lane]
+        _alert_admins(f'🟠 لم تكتمل مهمة «{label}»',
+                      f'لم تنجح مهمة «{label}» منذ أكثر من {OVERDUE_HOURS} ساعة. غالباً كان المجدول '
+                      f'أو الجهاز متوقفاً، أو أن المهمة فشلت — راجع صفحة المزامنة.',
+                      f'missed_run_{lane}_{today}')
+        alerted.append(lane)
+    return alerted
+
+
+def retention_watch():
+    """Every 15 min: run the retention catch-up if due, then raise the missed-run alert.
+    Never raises; the morning chain is only alerted on, never run, from here."""
+    try:
+        run_retention_catchup()
+    except Exception:
+        logger.exception('[retention] catch-up failed')
+    try:
+        alert_missed_runs()
+    except Exception:
+        logger.exception('[retention] missed-run alert failed')
+
+
 def run_daily_retention():
     """One SyncRun (lane 'retention') with a SyncLog per table. A failing step is
-    logged and the others still run."""
-    from apps.sync.models import SyncLog, SyncRun
-    run = SyncRun.objects.create(status='running', lane='retention')
+    logged and the others still run. Returns None (no run row) when another
+    process holds the retention lock."""
+    from apps.vouchers.coupon_dashboard import pg_lock
     steps = [
         ('retention:engine_runs', lambda: sum(prune_engine_runs().values())),
         ('retention:notifications', prune_notifications),
@@ -182,6 +238,16 @@ def run_daily_retention():
         ('retention:slow_requests', prune_slow_requests),
         ('retention:screen_views', prune_screen_views),
     ]
+    with pg_lock(RETENTION_LOCK_KEY) as got:
+        if not got:
+            logger.warning('[retention] another run holds the lock; skipping')
+            return None
+        return _run_retention_steps(steps)
+
+
+def _run_retention_steps(steps):
+    from apps.sync.models import SyncLog, SyncRun
+    run = SyncRun.objects.create(status='running', lane='retention')
     errors, total = [], 0
     for name, fn in steps:
         try:
@@ -197,4 +263,34 @@ def run_daily_retention():
     run.completed_at = timezone.now()
     run.save()
     logger.info('[retention] deleted %s rows%s', total, f' ({len(errors)} step(s) failed)' if errors else '')
+    return run
+
+
+def retention_catchup_due(now=None):
+    """True when the daily retention slot was missed: nothing running, no success within
+    OVERDUE_HOURS, and the latest attempt is not a failure younger than RETENTION_RETRY_HOURS."""
+    from apps.sync.models import SyncRun
+    now = now or timezone.now()
+    runs = SyncRun.objects.filter(lane='retention')
+    if runs.filter(status='running').exists():
+        return False
+    last_ok = runs.filter(status='success').order_by('-started_at').first()
+    if last_ok and last_ok.started_at > now - datetime.timedelta(hours=OVERDUE_HOURS):
+        return False
+    last = runs.order_by('-started_at').first()
+    if (last and last.status == 'failed'
+            and last.started_at > now - datetime.timedelta(hours=RETENTION_RETRY_HOURS)):
+        return False
+    return True
+
+
+def run_retention_catchup():
+    """Run the daily retention now when it is overdue. Returns the SyncRun or None."""
+    if not retention_catchup_due():
+        return None
+    run = run_daily_retention()
+    if run is None:
+        return None
+    from apps.sync.models import SyncLog
+    SyncLog.objects.create(sync_run=run, table_name='retention:catchup', records_processed=1)
     return run

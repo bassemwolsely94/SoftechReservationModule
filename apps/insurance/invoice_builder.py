@@ -479,6 +479,12 @@ def build_invoice_dataset(claim: InsuranceClaim, billing_group=None) -> dict:
     cover_local_disc      = round(cover_local_before    * local_disc_pct    / 100, 2)
     cover_imported_disc   = round(cover_imported_before * imported_disc_pct / 100, 2)
     cover_tarsia_disc     = round(cover_tarsia_before   * tarsia_disc_pct   / 100, 2)
+    # Net overrides (M-3): the category rows carry what the overrides moved, so they add up to the
+    # cover total (which already includes them) instead of the contract-rate figure alone.
+    _ovr = claim_totals['_override_delta']
+    cover_local_disc      = round(cover_local_disc    + float(_ovr['local_discount']), 2)
+    cover_imported_disc   = round(cover_imported_disc + float(_ovr['imported_discount']), 2)
+    cover_tarsia_disc     = round(cover_tarsia_disc   + float(_ovr['tarsia_discount']), 2)
 
     return {
         'claim': {
