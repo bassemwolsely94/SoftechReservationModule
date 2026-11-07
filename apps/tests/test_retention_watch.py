@@ -1,12 +1,17 @@
 """Retention job dependability (data lifecycle stage 1): overlap lock + catch-up."""
 from datetime import timedelta
 
+from unittest import mock
+
 from django.test import TestCase
 from django.utils import timezone
 
-from apps.sync.maintenance import (RETENTION_LOCK_KEY, retention_catchup_due,
-                                   run_daily_retention, run_retention_catchup)
+from apps.notifications.models import Notification
+from apps.sync.maintenance import (RETENTION_LOCK_KEY, alert_missed_runs, retention_catchup_due,
+                                   retention_watch, run_daily_retention, run_retention_catchup)
 from apps.sync.models import SyncLog, SyncRun
+
+from .factories import make_admin
 
 
 class RetentionCatchupTests(TestCase):
@@ -57,3 +62,64 @@ class RetentionCatchupTests(TestCase):
         before = SyncRun.objects.filter(lane='retention').count()
         self.assertIsNone(run_daily_retention())
         self.assertEqual(SyncRun.objects.filter(lane='retention').count(), before)
+
+
+class MissedRunAlertTests(TestCase):
+    def setUp(self):
+        _, self.admin, _ = make_admin('mr_admin')
+
+    def _run(self, status, hours_ago, lane='retention'):
+        run = SyncRun.objects.create(status=status, lane=lane)
+        SyncRun.objects.filter(pk=run.pk).update(
+            started_at=timezone.now() - timedelta(hours=hours_ago))
+        return run
+
+    def _alerts(self):
+        return Notification.objects.filter(notification_type='sync_failure',
+                                           title__contains='لم تكتمل').count()
+
+    def test_missed_morning_chain_alerts_once_a_day(self):
+        self._run('success', 27, lane='morning_chain')
+        self.assertEqual(alert_missed_runs(), ['morning_chain'])
+        alert_missed_runs()
+        self.assertEqual(self._alerts(), 1)
+
+    def test_recent_success_does_not_alert(self):
+        self._run('success', 25, lane='morning_chain')
+        self.assertEqual(alert_missed_runs(), [])
+
+    def test_running_lane_does_not_alert(self):
+        self._run('success', 27, lane='morning_chain')
+        self._run('running', 0, lane='morning_chain')
+        self.assertEqual(alert_missed_runs(), [])
+
+    def test_lane_that_never_ran_does_not_alert(self):
+        self.assertEqual(alert_missed_runs(), [])
+
+    def test_only_failures_count_from_the_first_attempt(self):
+        self._run('failed', 27, lane='morning_chain')
+        self.assertEqual(alert_missed_runs(), ['morning_chain'])
+
+    def test_late_wake_successful_catchup_does_not_alert(self):
+        self._run('success', 50)                    # retention lane
+        retention_watch()
+        self.assertEqual(self._alerts(), 0)
+        self.assertEqual(SyncRun.objects.filter(lane='retention', status='success').count(), 2)
+
+    def test_failed_catchup_alerts(self):
+        self._run('success', 50)
+        with mock.patch('apps.sync.maintenance.prune_notifications', side_effect=RuntimeError('x')):
+            retention_watch()
+        self.assertEqual(self._alerts(), 1)
+
+    def test_watch_alerts_even_if_catchup_raises(self):
+        self._run('success', 27, lane='morning_chain')
+        with mock.patch('apps.sync.maintenance.run_retention_catchup', side_effect=RuntimeError('x')):
+            retention_watch()                       # must not raise
+        self.assertEqual(self._alerts(), 1)
+
+    def test_morning_chain_is_never_run_by_the_watch(self):
+        self._run('success', 27, lane='morning_chain')
+        with mock.patch('apps.sync.tasks._run_morning_chain') as chain:
+            retention_watch()
+        chain.assert_not_called()

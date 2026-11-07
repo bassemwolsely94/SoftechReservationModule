@@ -156,9 +156,7 @@ def alert_failing_lanes(in_a_row=FAILURES_IN_A_ROW):
     """One notification to admins for every lane whose last `in_a_row` finished runs all
     failed. Deduped per lane per day, so the heartbeat can call this every minute.
     Returns the lanes alerted."""
-    from apps.notifications.models import Notification
     from apps.sync.models import SyncRun
-    from apps.users.models import StaffProfile
     lanes = (SyncRun.objects.exclude(lane='').exclude(status='running')
              .values_list('lane', flat=True).distinct())
     today = timezone.localdate().isoformat()
@@ -171,12 +169,60 @@ def alert_failing_lanes(in_a_row=FAILURES_IN_A_ROW):
         label = LANE_LABELS.get(lane, lane)
         body = (f'آخر {in_a_row} تشغيلات لمزامنة «{label}» فشلت. آخر خطأ: '
                 f'{(last[0][1] or "—")[:300]} — راجع صفحة المزامنة.')
-        for staff in StaffProfile.objects.filter(role='admin', is_active=True).select_related('branch'):
-            Notification.send_to_user(staff, 'sync_failure', f'🔴 فشل متكرر في مزامنة «{label}»', body,
-                                      dedup_key=f'sync_failure_{lane}_{today}', dedup_once=True,
-                                      bypass_role_gate=True)
+        _alert_admins(f'🔴 فشل متكرر في مزامنة «{label}»', body, f'sync_failure_{lane}_{today}')
         alerted.append(lane)
     return alerted
+
+
+def _alert_admins(title, body, dedup_key):
+    """Send one sync_failure notification to every active admin (deduped once per key)."""
+    from apps.notifications.models import Notification
+    from apps.users.models import StaffProfile
+    for staff in StaffProfile.objects.filter(role='admin', is_active=True).select_related('branch'):
+        Notification.send_to_user(staff, 'sync_failure', title, body,
+                                  dedup_key=dedup_key, dedup_once=True, bypass_role_gate=True)
+
+
+MISSED_RUN_LANES = ('retention', 'morning_chain')
+
+
+def alert_missed_runs(now=None):
+    """Admin alert for every daily lane with no success for OVERDUE_HOURS (or, when it
+    never succeeded, whose first attempt is that old). Skips lanes with no rows or a run in
+    progress. Deduped per lane per day. Returns the lanes alerted."""
+    from apps.sync.models import SyncRun
+    now = now or timezone.now()
+    cutoff = now - datetime.timedelta(hours=OVERDUE_HOURS)
+    today = timezone.localdate().isoformat()
+    alerted = []
+    for lane in MISSED_RUN_LANES:
+        runs = SyncRun.objects.filter(lane=lane)
+        if not runs.exists() or runs.filter(status='running').exists():
+            continue
+        ref = (runs.filter(status='success').aggregate(m=Max('started_at'))['m']
+               or runs.order_by('started_at').values_list('started_at', flat=True).first())
+        if ref >= cutoff:
+            continue
+        label = LANE_LABELS[lane]
+        _alert_admins(f'🟠 لم تكتمل مهمة «{label}»',
+                      f'لم تنجح مهمة «{label}» منذ أكثر من {OVERDUE_HOURS} ساعة. غالباً كان المجدول '
+                      f'أو الجهاز متوقفاً، أو أن المهمة فشلت — راجع صفحة المزامنة.',
+                      f'missed_run_{lane}_{today}')
+        alerted.append(lane)
+    return alerted
+
+
+def retention_watch():
+    """Every 15 min: run the retention catch-up if due, then raise the missed-run alert.
+    Never raises; the morning chain is only alerted on, never run, from here."""
+    try:
+        run_retention_catchup()
+    except Exception:
+        logger.exception('[retention] catch-up failed')
+    try:
+        alert_missed_runs()
+    except Exception:
+        logger.exception('[retention] missed-run alert failed')
 
 
 def run_daily_retention():
