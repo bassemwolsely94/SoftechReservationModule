@@ -405,7 +405,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # VPS, because MEDIA_ROOT is inside OneDrive here and its version history would keep "removed" prescriptions.
 LIFECYCLE_FILE_RULES_ENABLED = config('LIFECYCLE_FILE_RULES_ENABLED', default=False, cast=bool)
 # Removed files wait here for 30 days. Outside MEDIA_ROOT, so never reachable by URL.
-LIFECYCLE_HOLD_ROOT = config('LIFECYCLE_HOLD_ROOT', default=BASE_DIR / 'media_hold')
+LIFECYCLE_HOLD_ROOT = config('LIFECYCLE_HOLD_ROOT', default=BASE_DIR / 'media_hold', cast=Path)
 # Uploaded files get signed, expiring URLs (core/storage.py); /media/ is served by
 # core.media.serve_media, which checks the signature. Product images stay public.
 STORAGES = {
