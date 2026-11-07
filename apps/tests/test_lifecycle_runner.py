@@ -281,6 +281,54 @@ class ErrorTests(TestCase):
             self.assertEqual(run_lifecycle_rules(), 0)
         self.assertIn('boom', _last_line().error)
 
+    def test_apply_returning_a_non_integer_is_on_the_line_and_others_run(self):
+        """prune_engine_runs returns a dict; a None or dict must not lose the record of what just ran."""
+        for value in (None, {'metrics': 3}, True):
+            with self.subTest(value=value):
+                LifecycleRunLine.objects.all().delete()
+                LifecycleRun.objects.all().delete()
+                LifecycleRulePolicy.objects.all().delete()
+                _add_rows(5, 'b')
+                _turn_on('fake_a', 'fake_b')
+                with _only(_rule('fake_a', apply=mock.Mock(return_value=value)), _rule('fake_b', path='b')):
+                    self.assertEqual(run_lifecycle_rules(), 5)
+                line = _last_line('fake_a')
+                self.assertIn('integer', line.error)
+                self.assertEqual(line.count, 0)
+                self.assertEqual(_last_line('fake_b').count, 5)
+                self.assertEqual(_rows('b').count(), 0)
+                self.assertIsNotNone(LifecycleRun.objects.get().finished_at)
+
+    def test_mode_read_failure_does_not_stop_others(self):
+        _add_rows(5, 'b')
+        _turn_on('fake_b')
+        real_get_mode = runner.get_mode
+
+        def get_mode(key):
+            if key == 'fake_a':
+                raise RuntimeError('boom')
+            return real_get_mode(key)
+
+        with _only(_rule('fake_a'), _rule('fake_b', path='b')), mock.patch.object(runner, 'get_mode', get_mode):
+            self.assertEqual(run_lifecycle_rules(), 5)
+        self.assertIsNotNone(LifecycleRun.objects.get().finished_at)
+
+    def test_line_save_failure_does_not_stop_others(self):
+        _add_rows(5, 'b')
+        _turn_on('fake_a', 'fake_b')
+        real_save = LifecycleRunLine.save
+
+        def save(line, *args, **kwargs):
+            if line.rule_key == 'fake_a':
+                raise RuntimeError('boom')
+            return real_save(line, *args, **kwargs)
+
+        with _only(_rule('fake_a', apply=mock.Mock(return_value=0)), _rule('fake_b', path='b')), \
+                mock.patch.object(LifecycleRunLine, 'save', save):
+            self.assertEqual(run_lifecycle_rules(), 5)
+        self.assertEqual(_rows('b').count(), 0)
+        self.assertIsNotNone(LifecycleRun.objects.get().finished_at)
+
     def test_error_text_hides_secrets(self):
         _turn_on('fake_a')
         with _only(_rule(candidates=mock.Mock(side_effect=RuntimeError('password=hunter22')))):

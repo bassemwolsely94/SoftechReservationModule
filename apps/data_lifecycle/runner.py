@@ -83,6 +83,15 @@ def _alert_breaker(rule, count, limit):
                   f'lifecycle_breaker_{rule.key}_{timezone.localdate().isoformat()}')
 
 
+def _removed_count(value):
+    """What `apply` or the file hook reported. The removal has already happened by now, so a wrong type must
+    become an error on the rule's line, not a failed save that leaves no record of the run."""
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TypeError(f'expected the count removed as an integer, got {type(value).__name__}; '
+                        f'the removal may already have happened')
+    return value
+
+
 def _preview_line(run, rule):
     line = LifecycleRunLine(run=run, rule_key=rule.key, is_preview=True)
     try:
@@ -105,9 +114,9 @@ def _real_line(run, rule):
             line.stopped_by_breaker = True
             _alert_breaker(rule, count, limit)
         elif rule.apply is not None:
-            line.count = rule.apply()
+            line.count = _removed_count(rule.apply())
         elif rule.kind == KIND_FILE:
-            line.count = move_file_candidates(rule, candidates)
+            line.count = _removed_count(move_file_candidates(rule, candidates))
         else:
             for qs in candidates:
                 line.count += _batched_delete(qs)
@@ -135,19 +144,22 @@ def preview_rule(key):
 
 
 def run_lifecycle_rules():
-    """One daily pass over every rule. A rule's failure goes on its line and the others still run.
-    Returns the total removed."""
+    """One daily pass over every rule. A rule's failure goes on its line and the others still run. If even
+    the line cannot be written or the mode read, that rule is only logged. Returns the total removed."""
     run = LifecycleRun.objects.create(is_preview=False)
     total = 0
     for key, rule in RULES.items():
         if rule.kind == KIND_P56:
             continue
-        mode = get_mode(key)
-        if mode == MODE_OFF:
-            continue
-        if mode == MODE_PREVIEW:
-            _preview_line(run, rule)
-        else:
-            total += _real_line(run, rule).count
+        try:
+            mode = get_mode(key)
+            if mode == MODE_OFF:
+                continue
+            if mode == MODE_PREVIEW:
+                _preview_line(run, rule)
+            else:
+                total += _real_line(run, rule).count
+        except Exception as exc:
+            _error_text(key, exc)
     _finish(run)
     return total
