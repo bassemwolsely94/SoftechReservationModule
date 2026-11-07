@@ -9,6 +9,7 @@ Business rules live here, so the views and the screen cannot differ from them:
 import json
 from decimal import Decimal
 
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
@@ -34,9 +35,13 @@ class TaxBlocked(TaxRuleError):
         super().__init__('المستند محجوب: ' + '؛ '.join(i['message'] for i in issues))
 
 
+def _json_ready(value):
+    return json.loads(json.dumps(value or {}, cls=DjangoJSONEncoder))
+
+
 def audit(action, *, document=None, actor=None, reason='', before=None, after=None, entity='document', entity_id=''):
     return TaxAuditEvent.objects.create(
-        document=document, action=action, actor=actor, reason=reason, before=before or {}, after=after or {},
+        document=document, action=action, actor=actor, reason=reason, before=_json_ready(before), after=_json_ready(after),
         entity=entity, entity_id=str(entity_id or (document.pk if document else '')))
 
 
@@ -59,7 +64,8 @@ def next_internal_id(doc_type, year):
 # ── Source snapshot ────────────────────────────────────────────────────────────────────────────
 
 def _money(v):
-    return str(v if v is not None else ZERO)
+    # One form for one value: 314 and 314.00 must hash the same.
+    return format(Decimal(str(v if v is not None else ZERO)).quantize(Decimal('0.001')), 'f')
 
 
 def build_snapshot(claim):
@@ -170,13 +176,17 @@ def refresh_source(doc, actor, reason):
         raise TaxRuleError('يمكن تحديث المصدر في المسودة فقط')
     if not (reason or '').strip():
         raise TaxRuleError('اكتب سبب تحديث المصدر')
-    snapshot = build_snapshot(doc.claim)
+    claim = InsuranceClaim.objects.get(pk=doc.claim_id)   # the claim as it is now, not as first loaded
+    doc.claim = claim
+    snapshot = build_snapshot(claim)
     new_hash = snapshot_hash(snapshot)
     with transaction.atomic():
         before = {'source_hash': doc.source_hash, 'claim_total': str(doc.source_claim_total)}
         _apply_lines(doc, snapshot)
         doc.source_hash = new_hash
-        doc.source_claim_total = doc.claim.final_net_after
+        doc.source_claim_total = claim.final_net_after
+        # Reconciliation reads this one; `source_snapshot` keeps the first import untouched.
+        doc.source_snapshot_current = snapshot
         doc.source_refreshed_at = timezone.now()
         doc.save()
         audit('source_refreshed', document=doc, actor=actor, reason=reason, before=before,
@@ -316,7 +326,7 @@ def reconciliation(doc, issuer=None):
     if doc.doc_type != TaxDocument.TYPE_INVOICE:
         return {'source_total': None, 'proposed_total': str(doc.total_amount), 'difference': '0', 'rows': [],
                 'unexplained': '0', 'within_tolerance': True}
-    snap = doc.source_snapshot
+    snap = doc.source_snapshot_current or doc.source_snapshot
     rows = []
 
     def add(kind, label, amount, ref='', reason=''):
@@ -424,7 +434,7 @@ def blockers(doc, issuer=None):
     if doc.doc_type == TaxDocument.TYPE_INVOICE:
         if doc.claim.status not in FINALIZED_CLAIM_STATUSES:
             out.append(_issue('claim_status', 'المطالبة لم تعد مقفلة في التأمين'))
-        if snapshot_hash(build_snapshot(doc.claim)) != doc.source_hash:
+        if snapshot_hash(build_snapshot(InsuranceClaim.objects.get(pk=doc.claim_id))) != doc.source_hash:
             out.append(_issue('source_changed', 'المطالبة تغيرت بعد الاستيراد؛ حدّث المصدر وراجع الفرق'))
         rec = reconciliation(doc, issuer)
         if not rec['within_tolerance']:
@@ -534,7 +544,7 @@ def decide_review(review_id, actor, accept, note=''):
     """Accepting an exclusion needs a reason, an active documented basis and a second person.
     If any is missing it refuses, so the line stays unresolved and the draft stays blocked."""
     with transaction.atomic():
-        review = TaxLineReview.objects.select_for_update().select_related('document', 'line', 'basis').get(pk=review_id)
+        review = TaxLineReview.objects.select_for_update(of=('self',)).select_related('document', 'line', 'basis').get(pk=review_id)
         doc = review.document
         if review.state != TaxLineReview.OPEN:
             raise TaxRuleError('تم البت في هذه المراجعة')

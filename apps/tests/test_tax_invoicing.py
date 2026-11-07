@@ -12,7 +12,7 @@ from unittest import mock
 import openpyxl
 import requests
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, connection, connections, transaction
+from django.db import IntegrityError, connections, transaction
 from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -20,18 +20,22 @@ from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.insurance.models import (InsuranceClaim, InsuranceClaimLine, InsuranceClaimManualRx,
                                    InsuranceClaimPrescription, InsuranceClient, InsuranceSubClient)
-from apps.tax_invoicing import eta_client, fiscal, services, submission
-from apps.tax_invoicing.models import (TaxBuyerProfile, TaxDocument, TaxDocumentLine, TaxExclusionBasis,
-                                       TaxIssuerProfile, TaxItemProfile, TaxLineReview, TaxSubmissionAttempt)
+from apps.tax_invoicing import eta_client, fiscal, item_import, receipts, services, signing, submission
+from apps.tax_invoicing.models import (TaxBuyerProfile, TaxChannelRule, TaxDocument, TaxDocumentLine,
+                                       TaxExclusionBasis, TaxIssuerProfile, TaxItemProfile, TaxLineReview, TaxReceipt,
+                                       TaxReceiptBranchConfig, TaxSubmissionAttempt)
 from apps.tests.factories import make_branch, make_user
 
-LIVE = dict(TAX_ETA_SUBMIT_ENABLED=True, WRITER_INSTANCE=True,
-            TAX_SIGNER_CLASS='apps.tests.test_tax_invoicing.FakeSigner')
+LIVE = dict(TAX_ETA_SUBMIT_ENABLED=True, WRITER_INSTANCE=True, TAX_ALLOW_MOCK_SIGNER=True,
+            TAX_ERECEIPT_SUBMIT_ENABLED=True, TAX_SIGNER_CLASS='apps.tests.test_tax_invoicing.FakeSigner')
 ACCEPTED = {'submissionUUID': 'SUB1', 'acceptedDocuments': [{'uuid': 'UUID1', 'longId': 'LONG1', 'internalId': None}],
             'rejectedDocuments': []}
 
 
 class FakeSigner:
+    is_mock = True
+    needs_certification = False
+
     def sign(self, canonical_text):
         return 'U0lH'
 
@@ -51,10 +55,17 @@ def api(user):
 class Fixture:
     def build(self, tag='a'):
         self.branch = make_branch(softech_id=f'T{tag}')
-        self.accountant, _, _ = make_user(f'acct_{tag}', role='accountant', branch=self.branch)
-        self.accountant2, _, _ = make_user(f'acct2_{tag}', role='accountant', branch=self.branch)
-        self.admin, _, _ = make_user(f'tadmin_{tag}', role='admin', branch=self.branch)
-        self.pharmacist, _, _ = make_user(f'ph_{tag}', role='pharmacist', branch=self.branch)
+        from core.middleware import module_access
+        module_access.clear_cache()
+        from apps.users.models import RoleModuleAccess
+        for action in ('view', 'create', 'edit', 'approve'):   # same rows as the seed; a kept test DB may be flushed
+            RoleModuleAccess.objects.get_or_create(role='accountant', module='tax_invoicing', action=action,
+                                                   defaults={'is_allowed': True})
+        with override_settings(PASSWORD_HASHERS=['django.contrib.auth.hashers.MD5PasswordHasher']):
+            self.accountant, _, _ = make_user(f'acct_{tag}', role='accountant', branch=self.branch)
+            self.accountant2, _, _ = make_user(f'acct2_{tag}', role='accountant', branch=self.branch)
+            self.admin, _, _ = make_user(f'tadmin_{tag}', role='admin', branch=self.branch)
+            self.pharmacist, _, _ = make_user(f'ph_{tag}', role='pharmacist', branch=self.branch)
         self.client_row = InsuranceClient.objects.create(name=f'شركة {tag}')
         self.sub = InsuranceSubClient.objects.create(client=self.client_row, name='فئة')
         i = TaxIssuerProfile.load()
@@ -286,29 +297,6 @@ class ThreeFieldsAndListTests(Fixture, TestCase):
             services.approve(doc.pk, self.accountant)
         self.assertEqual(doc.lines.count(), 2)
 
-    def test_sheet_cannot_confirm_a_tax_treatment_and_preview_writes_nothing(self):
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.append(['كود الصنف', 'كود المصلحة', 'القائمة', 'السبب', 'exempt'])
-        ws.append(['X1', 'EG-1-X1', 'سوداء', 'مقيد', 'yes'])
-        ws.append(['X2', 'EG-1-X2', 'بيضاء', '', 'yes'])
-        buf = io.BytesIO()
-        wb.save(buf)
-        c = api(self.accountant)
-        buf.seek(0)
-        buf.name = 'codes.xlsx'
-        r = c.post('/api/tax-invoicing/items/import/', {'file': buf}, format='multipart')
-        self.assertEqual(r.status_code, 200, r.data)
-        self.assertEqual((r.data['rows'], r.data['commit'], r.data['listed']), (2, False, 1))
-        self.assertFalse(TaxItemProfile.objects.filter(softech_itemcode='X1').exists())
-        buf.seek(0)
-        r = c.post('/api/tax-invoicing/items/import/', {'file': buf, 'commit': '1'}, format='multipart')
-        self.assertEqual(r.status_code, 200, r.data)
-        x1, x2 = TaxItemProfile.objects.get(softech_itemcode='X1'), TaxItemProfile.objects.get(softech_itemcode='X2')
-        self.assertEqual((x1.list_status, x1.disposition, x1.tax_treatment), ('black', 'review', 'unclassified'))
-        self.assertEqual((x2.list_status, x2.disposition, x2.tax_treatment), ('white', 'include', 'unclassified'))
-        self.assertEqual(x1.coding_status, 'pending')   # on the sheet is not the same as ETA-approved
-
 
 class ExclusionTests(Fixture, TestCase):
     def setUp(self):
@@ -383,8 +371,10 @@ class ReviewViewTests(Fixture, TestCase):
         c = api(self.accountant)
         narrow = c.get(f'/api/tax-invoicing/documents/{doc.pk}/')
         wide = c.get(f'/api/tax-invoicing/documents/{doc.pk}/?view=all')
-        self.assertEqual({l['status'] for l in narrow.data['lines']}, {'approved', 'exempt'})
+        self.assertEqual({l['status'] for l in narrow.data['lines']}, {'approved'})
         self.assertEqual({l['status'] for l in wide.data['lines']}, {'approved', 'exempt', 'pending', 'uncoded'})
+        self.assertEqual(len(wide.data['lines']), 4)   # every original SOFTECH line
+        self.assertEqual(narrow.data['counts']['exempt'], 1)
         self.assertTrue(all(l['reason'] for l in wide.data['lines'] if l['status'] in ('pending', 'uncoded')))
         for key in ('counts', 'totals', 'reconciliation', 'blockers'):
             self.assertEqual(narrow.data[key], wide.data[key], key)
@@ -776,5 +766,355 @@ class EtaClientTests(SimpleTestCase):
         self.assertEqual(post.call_count, 1)  # only the login was attempted, no document
 
 
-def _unused():  # keep imports honest for tooling that scans this module
-    return connection
+class ZeroVatBasisTests(Fixture, TestCase):
+    def setUp(self):
+        self.build()
+
+    def test_claim_level_zero_vat_only_with_a_documented_basis(self):
+        doc = self.ready_doc()
+        self.assertEqual(doc.vat_amount, Decimal('14.00000'))
+        wrong = TaxExclusionBasis.objects.create(title='x', reference_number='E', issued_by='y', applies_to='z')
+        c = api(self.admin)
+        r = c.post('/api/tax-invoicing/buyers/', {'client_id': self.client_row.pk, 'zero_vat_basis_id': wrong.pk}, format='json')
+        self.assertEqual(r.status_code, 400)   # an exclusion basis is not a VAT determination
+        right = TaxExclusionBasis.objects.create(kind='zero_vat', title='x', reference_number='Z', issued_by='y', applies_to='z')
+        r = c.post('/api/tax-invoicing/buyers/', {'client_id': self.client_row.pk, 'zero_vat_basis_id': right.pk}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        doc = TaxDocument.objects.get(pk=doc.pk)
+        self.assertEqual(doc.vat_amount, 0)
+        self.assertEqual(doc.total_amount, Decimal('314.00000'))
+        self.assertEqual(json.loads(services.approve(doc.pk, self.accountant).payload_text)['invoiceLines'][0]['taxableItems'][0]['subType'], 'VZ')
+
+    def test_accountant_cannot_set_it(self):
+        right = TaxExclusionBasis.objects.create(kind='zero_vat', title='x', reference_number='Z', issued_by='y', applies_to='z')
+        r = api(self.accountant).post('/api/tax-invoicing/buyers/', {'client_id': self.client_row.pk, 'zero_vat_basis_id': right.pk}, format='json')
+        self.assertEqual(r.status_code, 403)
+
+
+def workbook(rows, header=('Item', 'Code', 'Type', 'Black', 'Rate', 'VatCode')):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'DataEntry'
+    ws.append(list(header))
+    for r in rows:
+        ws.append(list(r))
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    buf.name = 'codes.xlsx'
+    return buf
+
+
+OPTIONS = {'sheet': 'DataEntry', 'mapping': {'itemcode': 0, 'eta_code': 1, 'code_type': 2, 'list_flag': 3, 'vat_rate': 4, 'vat_code': 5},
+           'black_values': ['1'], 'white_values': ['0']}
+
+
+class ImportMappingTests(Fixture, TestCase):
+    def setUp(self):
+        self.build()
+
+    def test_inspect_shows_the_real_headers_and_guesses_nothing(self):
+        out = item_import.inspect_workbook(workbook([('1', 'EG-1-1', 'EGS', '0', 0, 'v003')]))
+        self.assertEqual([c['header'] for c in out['sheets'][0]['columns']][:2], ['Item', 'Code'])
+        with self.assertRaises(services.TaxRuleError):
+            item_import.preview(workbook([]), {'sheet': 'DataEntry', 'mapping': {}})
+
+    def test_preview_writes_nothing_and_reports_row_problems(self):
+        out = item_import.preview(workbook([
+            ('X1', 'EG-1-X1', 'EGS', '0', 0.14, 'v009'),
+            ('X2', 'EG-1-X2', 'BAD', '0', 0, 'v003'),
+            ('X3', 'EG-1-X3', 'EGS', '?', 0, 'v003'),
+            ('X4', 'EG-1-DUP', 'EGS', '0', 0, 'v003'),
+            ('X5', 'EG-1-DUP', 'EGS', '0', 0, 'v003'),
+            ('X6', 'EG-1-X6', 'EGS', '0', 0, 'v003'),
+            ('X6', 'EG-1-X6B', 'EGS', '0', 0, 'v003'),
+            ('X7', 'EG-1-X7', 'EGS', '0', 200, 'v003'),
+            ('X8', 'EG-1-OTHER', 'EGS', '1', 0, 'v003'),
+        ]), OPTIONS)
+        codes = out['issue_counts']
+        for expected in ('bad_code_type', 'bad_list_flag', 'duplicate_eta_code', 'duplicate_item', 'bad_vat', 'code_mismatch', 'black_but_coded', 'not_in_catalog'):
+            self.assertIn(expected, codes)
+        self.assertTrue(out['dry_run'])
+        self.assertEqual(TaxItemProfile.objects.count(), 0)
+        self.assertEqual(out['sample'][0]['vat_rate'], '14.00')   # 0.14 in the sheet is 14%
+
+    def test_leading_zeros_stay_and_numeric_codes_are_flagged(self):
+        out = item_import.preview(workbook([('0123', '06224002879073', 'GS1', '0', 0, 'v003'), (45, 6224002879097, 'GS1', '0', 0, 'v003')]), OPTIONS)
+        self.assertEqual(out['sample'][0]['itemcode'], '0123')
+        self.assertEqual(out['sample'][0]['eta_code'], '06224002879073')
+        self.assertEqual(out['sample'][1]['eta_code'], '6224002879097')
+        self.assertIn('numeric_code', out['issue_counts'])
+
+    def test_apply_needs_the_previewed_hash_and_loads_inputs_not_decisions(self):
+        file = workbook([('X1', 'EG-1-X1', 'EGS', '0', 0.14, 'v009'), ('X2', 'EG-1-X2', '', '1', 0, 'v003'), ('X3', '', '', '1', 0, 'v003')])
+        with self.assertRaises(services.TaxRuleError):
+            item_import.apply(file, OPTIONS, self.accountant, 'wrong')
+        h = item_import.preview(file, OPTIONS)['preview_hash']
+        self.assertEqual(item_import.apply(file, OPTIONS, self.accountant, h)['written'], 3)
+        x1, x2 = TaxItemProfile.objects.get(softech_itemcode='X1'), TaxItemProfile.objects.get(softech_itemcode='X2')
+        self.assertEqual((x1.coding_status, x1.list_status, x1.disposition, x1.tax_treatment, x1.source_vat_rate, x1.source_vat_code),
+                         ('pending', 'white', 'include', 'unclassified', Decimal('14.00'), 'v009'))
+        self.assertIsNone(x1.treatment_confirmed_at)
+        self.assertEqual((x2.coding_status, x2.list_status, x2.disposition), ('missing', 'black', 'review'))
+
+    def test_changed_mapping_or_file_needs_a_new_preview(self):
+        file = workbook([('X1', 'EG-1-X1', 'EGS', '0', 0, 'v003')])
+        h = item_import.preview(file, OPTIONS)['preview_hash']
+        with self.assertRaises(services.TaxRuleError):
+            item_import.apply(file, {**OPTIONS, 'coded_status': 'approved'}, self.accountant, h)
+        with self.assertRaises(services.TaxRuleError):
+            item_import.apply(workbook([('X9', 'EG-1-X9', 'EGS', '0', 0, 'v003')]), OPTIONS, self.accountant, h)
+
+    def test_conflicts_are_reported_and_kept_unless_overwritten(self):
+        self.coded('X1')
+        file = workbook([('X1', 'EG-1-NEW', 'EGS', '0', 0, 'v003')])
+        out = item_import.preview(file, OPTIONS)
+        self.assertEqual(out['counts']['conflicts'], 1)
+        result = item_import.apply(file, OPTIONS, self.accountant, out['preview_hash'])
+        self.assertEqual(result['conflicts_skipped'], 1)
+        self.assertEqual(TaxItemProfile.objects.get(softech_itemcode='X1').eta_code, 'EG-100200300-X1')
+        over = {**OPTIONS, 'overwrite_conflicts': True}
+        item_import.apply(file, over, self.accountant, out['preview_hash'])
+        self.assertEqual(TaxItemProfile.objects.get(softech_itemcode='X1').eta_code, 'EG-1-NEW')
+
+    def test_apply_is_for_approvers_preview_for_editors(self):
+        from apps.users.models import RoleModuleAccess
+        RoleModuleAccess.objects.get_or_create(role='pharmacist', module='tax_invoicing', action='edit', defaults={'is_allowed': True})
+        file = workbook([('X1', 'EG-1-X1', 'EGS', '0', 0, 'v003')])
+        c = api(self.pharmacist)
+        r = c.post('/api/tax-invoicing/items/import/preview/', {'file': file, 'options': json.dumps(OPTIONS)}, format='multipart')
+        self.assertEqual(r.status_code, 200, r.data)
+        file.seek(0)
+        r2 = c.post('/api/tax-invoicing/items/import/apply/', {'file': file, 'options': json.dumps(OPTIONS), 'preview_hash': r.data['preview_hash']}, format='multipart')
+        self.assertEqual(r2.status_code, 403)
+
+    def test_accountant_confirms_vat_by_code(self):
+        file = workbook([('X1', 'EG-1-X1', 'EGS', '0', 0.14, 'v009'), ('X2', 'EG-1-X2', 'EGS', '0', 0, 'v003')])
+        item_import.apply(file, OPTIONS, self.accountant, item_import.preview(file, OPTIONS)['preview_hash'])
+        r = api(self.accountant).post('/api/tax-invoicing/items/confirm-vat/',
+                                      {'vat_code': 'v009', 'tax_treatment': 'taxable', 'treatment_reference': 'REF'}, format='json')
+        self.assertEqual(r.data['confirmed'], 1)
+        x1 = TaxItemProfile.objects.get(softech_itemcode='X1')
+        self.assertEqual((x1.tax_treatment, x1.vat_rate), ('taxable', Decimal('14.00')))
+        self.assertIsNone(TaxItemProfile.objects.get(softech_itemcode='X2').treatment_confirmed_at)
+
+
+def row(number, item='T1', total='114', channel='91', doccode='115', vat='14', qty='1', ref=None, day=dt.datetime(2026, 11, 1), branch='150'):
+    return (branch, doccode, number, day, channel, total, item, f'صنف {item}', qty, total, total, vat,
+            dt.datetime(2026, 11, 1, 10, 30), ref[0] if ref else None, ref[1] if ref else None, ref[2] if ref else None)
+
+
+@override_settings(**LIVE)
+class ReceiptTests(Fixture, TestCase):
+    def setUp(self):
+        self.build()
+        self.coded('T1')
+        self.coded('E1', 'exempt')
+        TaxChannelRule.objects.update_or_create(ptclassifcode='91', defaults={'mode': 'receipt'})
+        TaxChannelRule.objects.update_or_create(ptclassifcode='10', defaults={'mode': 'invoice'})
+        TaxChannelRule.objects.filter(ptclassifcode='77').delete()
+        self.config = TaxReceiptBranchConfig.objects.create(
+            softech_branchcode='150', is_enabled=True, seller_branch_code='0', device_serial='POS1', activity_code='4772',
+            governate='القاهرة', region_city='عين شمس', street='شارع', building_number='1', payment_method='C', client_id='c',
+            secret_env='X_SECRET', preshared_key_env='X_PSK')
+
+    def one(self, number='7'):
+        return TaxReceipt.objects.get(docnumber=number)
+
+    def test_import_is_idempotent_on_the_document_key(self):
+        rows = [row(7), row(7, item='E1', total='50', vat='0')]
+        self.assertEqual(receipts.import_rows(rows)['created'], 1)
+        self.assertEqual(receipts.import_rows(rows)['created'], 0)
+        self.assertEqual(TaxReceipt.objects.count(), 1)
+        self.assertEqual(self.one().lines.count(), 2)
+
+    def test_same_number_on_another_date_is_another_document(self):
+        receipts.import_rows([row(7), row(7, day=dt.datetime(2026, 11, 2))])
+        self.assertEqual(TaxReceipt.objects.filter(docnumber='7').count(), 2)
+
+    def test_database_refuses_a_second_receipt_for_one_document(self):
+        receipts.import_rows([row(7)])
+        r = self.one()
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            TaxReceipt.objects.create(softech_branchcode=r.softech_branchcode, doccode=r.doccode, docnumber=r.docnumber,
+                                      docdate=r.docdate, sold_at=r.sold_at)
+
+    def test_channel_rules_decide_and_unknown_is_held_not_dropped(self):
+        receipts.import_rows([row(1), row(2, channel='10'), row(3, channel='77')])
+        self.assertEqual(self.one('1').status, TaxReceipt.READY)
+        self.assertEqual(self.one('2').status, TaxReceipt.BY_INVOICE)
+        self.assertEqual(self.one('3').status, TaxReceipt.HELD)
+        self.assertEqual(self.one('3').hold_reasons[0]['code'], 'no_channel_rule')
+
+    def test_uncoded_item_holds_the_whole_sale_with_no_partial_receipt(self):
+        receipts.import_rows([row(7), row(7, item='NEW', total='10', vat='0')])
+        self.assertEqual(self.one().status, TaxReceipt.HELD)
+        self.assertEqual(receipts.issue_next('150', self.accountant)['issued'], 0)
+        self.assertEqual(self.one().payload_text, '')
+        api(self.accountant).post('/api/tax-invoicing/items/', {
+            'itemcode': 'NEW', 'eta_code': 'EG-1-NEW', 'code_type': 'EGS', 'coding_status': 'approved',
+            'tax_treatment': 'exempt', 'treatment_reference': 'R'}, format='json')
+        self.assertEqual(self.one().status, TaxReceipt.READY)
+
+    def test_blacklisted_item_holds_the_sale(self):
+        self.coded('B1', list_status='black', disposition='review', listed_reason='مقيد')
+        receipts.import_rows([row(7), row(7, item='B1', total='10')])
+        receipt = self.one()
+        self.assertEqual(receipt.status, TaxReceipt.HELD)
+        self.assertEqual(receipt.lines.count(), 2)
+        self.assertTrue(any('مقيد' in i['message'] for i in receipt.hold_reasons))
+
+    def test_softech_vat_differs_from_confirmed_is_held(self):
+        receipts.import_rows([row(7, vat='10')])
+        self.assertEqual(self.one().status, TaxReceipt.HELD)
+
+    def test_chain_links_receipts_oldest_first_and_uuid_is_reproducible(self):
+        receipts.import_rows([row(1), row(2, total='228')])
+        self.assertEqual(receipts.issue_next('150', self.accountant)['issued'], 2)
+        a, b = TaxReceipt.objects.order_by('issued_at', 'id')
+        self.assertEqual(a.previous_uuid, '')
+        self.assertEqual(b.previous_uuid, a.uuid)
+        body = json.loads(b.payload_text, parse_float=Decimal)
+        self.assertEqual(body['header']['previousUUID'], a.uuid)
+        self.assertEqual(body['seller']['deviceSerialNumber'], 'POS1')
+        self.assertEqual(body['documentType'], {'receiptType': 's', 'typeVersion': '1.2'})
+        again = json.loads(b.payload_text)
+        again['header']['uuid'] = ''
+        self.assertEqual(len(b.uuid), 64)
+        # Same text with the uuid blanked gives the same hash.
+        blanked = b.payload_text.replace(b.uuid, '', 1)
+        self.assertEqual(fiscal.sha256_hex(fiscal.canonical(blanked)), b.uuid)
+        self.assertEqual(TaxReceiptBranchConfig.objects.get(pk=self.config.pk).last_uuid, b.uuid)
+
+    def test_each_branch_has_its_own_chain_and_config(self):
+        TaxReceiptBranchConfig.objects.create(softech_branchcode='160', is_enabled=True, seller_branch_code='1', device_serial='POS2',
+                                              activity_code='4772', governate='g', region_city='r', street='s', building_number='1', payment_method='C')
+        receipts.import_rows([row(1), row(2, branch='160')])
+        receipts.issue_next('150', self.accountant)
+        receipts.issue_next('160', self.accountant)
+        self.assertEqual(TaxReceipt.objects.get(softech_branchcode='160').previous_uuid, '')
+        self.assertIn('POS2', TaxReceipt.objects.get(softech_branchcode='160').payload_text)
+
+    def test_disabled_branch_cannot_issue(self):
+        TaxReceiptBranchConfig.objects.filter(pk=self.config.pk).update(is_enabled=False)
+        with self.assertRaises(services.TaxRuleError):
+            receipts.issue_next('150', self.accountant)
+
+    def test_return_needs_its_original_issued_here(self):
+        receipts.import_rows([row(9, doccode='30', ref=('115', 1, dt.datetime(2026, 11, 1)))])
+        self.assertEqual(self.one('9').status, TaxReceipt.HELD)
+        receipts.import_rows([row(1)])
+        receipts.issue_next('150', self.accountant)
+        original = self.one('1')
+        receipts.evaluate(self.one('9'))
+        self.assertEqual(self.one('9').status, TaxReceipt.READY)
+        receipts.issue_next('150', self.accountant)
+        body = json.loads(self.one('9').payload_text)
+        self.assertEqual(body['documentType']['receiptType'], 'r')
+        self.assertEqual(body['header']['referenceUUID'], original.uuid)
+
+    def test_return_with_softech_blank_or_zero_reference_type_matches_the_sale(self):
+        receipts.import_rows([row(1)])
+        receipts.issue_next('150', self.accountant)
+        for number, kind in ((8, '0'), (9, '')):
+            receipts.import_rows([row(number, doccode='30', ref=(kind, 1, dt.datetime(2026, 11, 1)))])
+        # blank type with a number is still a reference
+        self.assertEqual(self.one('8').status, TaxReceipt.READY)
+        self.assertEqual(self.one('9').status, TaxReceipt.READY)
+        receipts.import_rows([row(10, doccode='30', ref=('50', 1, dt.datetime(2026, 11, 1)))])
+        self.assertEqual(self.one('10').status, TaxReceipt.HELD)
+
+    def test_submit_and_status_flow(self):
+        receipts.import_rows([row(1), row(2), row(3)])
+        receipts.issue_next('150', self.accountant)
+        ids = {r.docnumber: r.uuid for r in TaxReceipt.objects.all()}
+        answer = (202, {'submissionId': 'SUB', 'acceptedDocuments': [{'uuid': ids['1']}, {'uuid': ids['2']}],
+                        'rejectedDocuments': [{'uuid': ids['3'], 'error': {'code': 'X'}}]})
+        with mock.patch.object(eta_client, 'submit_receipts', return_value=answer) as sent:
+            result = receipts.submit_branch('150', self.admin, '150')
+        self.assertEqual(result['count'], 3)
+        order = sent.call_args[0][1]
+        self.assertEqual(ids['1'] in order[0], True)
+        self.assertEqual(self.one('1').status, TaxReceipt.SUBMITTED)
+        self.assertEqual(self.one('3').status, TaxReceipt.REJECTED)
+        with mock.patch.object(eta_client, 'get_receipt_status', return_value={'status': 'Valid'}):
+            receipts.reconcile_branch('150', self.admin)
+        self.assertEqual(self.one('1').status, TaxReceipt.ACCEPTED)
+
+    def test_timeout_stops_the_branch_until_reconciled_and_never_resends_blind(self):
+        receipts.import_rows([row(1)])
+        receipts.issue_next('150', self.accountant)
+        uuid_before = self.one('1').uuid
+        with mock.patch.object(eta_client, 'submit_receipts', side_effect=eta_client.EtaUncertain('timeout')):
+            self.assertEqual(receipts.submit_branch('150', self.admin, '150')['status'], 'uncertain')
+        self.assertEqual(self.one('1').status, TaxReceipt.UNCERTAIN)
+        with mock.patch.object(eta_client, 'submit_receipts') as sent:
+            with self.assertRaises(services.TaxRuleError):
+                receipts.submit_branch('150', self.admin, '150')
+        sent.assert_not_called()
+        with mock.patch.object(eta_client, 'get_receipt_status', return_value=None):
+            receipts.reconcile_branch('150', self.admin)
+        self.assertEqual(self.one('1').status, TaxReceipt.UNCERTAIN)   # inside the wait
+        from apps.tax_invoicing.models import TaxReceiptAttempt
+        TaxReceiptAttempt.objects.update(started_at=timezone.now() - dt.timedelta(hours=1))
+        with mock.patch.object(eta_client, 'get_receipt_status', return_value=None):
+            receipts.reconcile_branch('150', self.admin)
+        self.assertEqual(self.one('1').status, TaxReceipt.ISSUED)
+        self.assertEqual(self.one('1').uuid, uuid_before)
+
+    def test_could_not_ask_changes_nothing(self):
+        receipts.import_rows([row(1)])
+        receipts.issue_next('150', self.accountant)
+        with mock.patch.object(eta_client, 'submit_receipts', side_effect=eta_client.EtaUncertain('timeout')):
+            receipts.submit_branch('150', self.admin, '150')
+        with mock.patch.object(eta_client, 'get_receipt_status', side_effect=eta_client.EtaUncertain('down')):
+            with self.assertRaises(services.TaxRuleError):
+                receipts.reconcile_branch('150', self.admin)
+        self.assertEqual(self.one('1').status, TaxReceipt.UNCERTAIN)
+
+    def test_summary_is_by_branch(self):
+        receipts.import_rows([row(1), row(2, channel='77'), row(3, branch='160', channel='10')])
+        by = {r['branch']: r for r in api(self.accountant).get('/api/tax-invoicing/receipts/summary/').data['branches']}
+        self.assertEqual(by['150']['by_status'], {'ready': 1, 'held': 1})
+        self.assertEqual(by['160']['by_status'], {'by_invoice': 1})
+
+    def test_permissions(self):
+        self.assertEqual(api(self.pharmacist).get('/api/tax-invoicing/receipts/summary/').status_code, 403)
+        self.assertEqual(api(self.accountant).post('/api/tax-invoicing/receipts/branch/150/submit/', {}, format='json').status_code, 403)
+        r = api(self.admin).post('/api/tax-invoicing/receipts/branch/150/submit/', {}, format='json')
+        self.assertTrue(r.data['dry_run'])
+
+
+class ReceiptGateTests(Fixture, TestCase):
+    def test_flag_off_by_default_nothing_goes_out(self):
+        self.build()
+        with mock.patch('requests.post') as post:
+            with self.assertRaises(services.TaxRuleError):
+                receipts.submit_branch('150', self.admin, '150')
+        post.assert_not_called()
+
+    def test_seeded_channels_are_what_the_owner_stated_and_unconfirmed(self):
+        rules = {r.ptclassifcode: r for r in TaxChannelRule.objects.all()}
+        for code in ('91', '90', '12', '16'):
+            self.assertEqual(rules[code].mode, 'receipt')
+        self.assertEqual(rules['10'].mode, 'invoice')
+        self.assertTrue(all(r.confirmed_at is None for r in rules.values()))
+
+
+class SigningGateTests(TestCase):
+    def test_default_signer_refuses(self):
+        with self.assertRaises(signing.SigningUnavailable):
+            signing.get_signer().sign('x')
+        with self.assertRaises(signing.SigningUnavailable):
+            signing.assert_ready_for_live()
+
+    @override_settings(TAX_SIGNER_CLASS='apps.tax_invoicing.signing.MockSigner')
+    def test_mock_signer_is_refused_outside_test_mode(self):
+        with self.assertRaises(signing.SigningUnavailable):
+            signing.assert_ready_for_live()
+
+    @override_settings(TAX_SIGNER_CLASS='apps.tax_invoicing.signing.MockSigner', TAX_ALLOW_MOCK_SIGNER=True,
+                       TAX_ETA_API_BASE_URL='https://api.invoicing.eta.gov.eg')
+    def test_mock_signer_can_never_reach_production(self):
+        with self.assertRaises(signing.SigningUnavailable):
+            signing.assert_ready_for_live()
