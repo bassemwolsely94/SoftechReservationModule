@@ -12,7 +12,7 @@ from dateutil.relativedelta import relativedelta
 from django.utils import timezone
 
 from apps.sync.maintenance import (
-    COMPLETED_RUN_STATUSES, engine_run_rows, last_run_of_each_month, prune_engine_runs,
+    COMPLETED_RUN_STATUSES, engine_run_bound, engine_run_rows, last_run_of_each_month, prune_engine_runs,
 )
 
 KEEP_RECENT_RUNS = 3
@@ -57,7 +57,8 @@ def tight_runs_to_keep(now=None):
 
 def rate_runs_candidates():
     """The same querysets rate_runs_apply deletes, so a preview counts what a real run removes."""
-    return list(engine_run_rows(tight_runs_to_keep()).values())
+    bound = engine_run_bound()      # before the keep set: a run created after it is never a candidate
+    return list(engine_run_rows(tight_runs_to_keep(), bound).values())
 
 
 CLOSED_TRANSIT_STATUSES = ('received', 'cancelled', 'force_closed')
@@ -122,4 +123,5 @@ def transit_audit_events_candidates(now=None):
 
 def rate_runs_apply():
     """prune_engine_runs stays the only code that deletes these rows. Returns the count removed."""
-    return sum(prune_engine_runs(keep=tight_runs_to_keep()).values())
+    bound = engine_run_bound()      # before the keep set, see rate_runs_candidates
+    return sum(prune_engine_runs(keep=tight_runs_to_keep(), max_run_id=bound).values())

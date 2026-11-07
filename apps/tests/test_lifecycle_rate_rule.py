@@ -228,6 +228,90 @@ class TransferRecommendationTests(RateRuleTestBase):
         self.assertNotIn(old_pending.pk, left)
 
 
+class PruneRaceTests(RateRuleTestBase):
+    """A run created after the keep set was computed is not in it, so its rows must not be deletable."""
+
+    def _create_late_run(self):
+        self.late = self._run(NOW)
+
+    def _late_survives(self):
+        self.assertIn(self.late.pk, self._with_rows())
+        self.assertTrue(ItemDemandAggregated.objects.filter(run=self.late).exists())
+
+    def test_run_created_during_prune_keeps_its_rows(self):
+        from apps.data_lifecycle import rules_rows
+        from apps.data_lifecycle.rules_rows import rate_runs_apply
+        self._fifteen()
+        real = rules_rows.tight_runs_to_keep
+
+        def keep_then_late_run(*args, **kwargs):
+            keep = real(*args, **kwargs)
+            self._create_late_run()
+            return keep
+        with mock.patch.object(rules_rows, 'tight_runs_to_keep', keep_then_late_run):
+            rate_runs_apply()
+        self._late_survives()
+
+    def test_run_created_during_old_path_prune_keeps_its_rows(self):
+        self._fifteen(timezone.now())
+        real = maintenance.engine_runs_to_keep
+
+        def keep_then_late_run():
+            keep = real()
+            self._create_late_run()
+            return keep
+        with mock.patch.object(maintenance, 'engine_runs_to_keep', keep_then_late_run):
+            prune_engine_runs()
+        self._late_survives()
+
+    def test_late_run_pending_recommendation_survives(self):
+        from apps.data_lifecycle import rules_rows
+        from apps.data_lifecycle.rules_rows import rate_runs_apply
+        self._newest_three()
+        real = rules_rows.tight_runs_to_keep
+
+        def keep_then_late_run(*args, **kwargs):
+            keep = real(*args, **kwargs)
+            self._create_late_run()
+            rec_run = TransferRecommendationRun.objects.create(demand_run=self.late, status='success')
+            self.rec = TransferRecommendation.objects.create(
+                run=rec_run, status='pending', item=make_item('LATE', 'LATE'), from_branch=self.branch,
+                to_branch=make_branch2(), quantity=1)
+            return keep
+        with mock.patch.object(rules_rows, 'tight_runs_to_keep', keep_then_late_run):
+            rate_runs_apply()
+        self.assertTrue(TransferRecommendation.objects.filter(pk=self.rec.pk).exists())
+
+    def test_preview_equals_removal_with_the_bound(self):
+        from apps.data_lifecycle.rules_rows import rate_runs_apply, rate_runs_candidates
+        self._fifteen()
+        previewed = sum(qs.count() for qs in rate_runs_candidates())
+        self.assertEqual(rate_runs_apply(), previewed)
+
+
+class LockTimeoutTests(TestCase):
+    def test_batched_delete_sets_lock_timeout(self):
+        from django.db import connection
+        from django.db.models.signals import pre_delete
+        from apps.sync.models import SlowRequest
+        seen = []
+
+        def record(sender, **kwargs):
+            with connection.cursor() as cur:
+                cur.execute('SHOW lock_timeout')
+                seen.append(cur.fetchone()[0])
+        row = SlowRequest.objects.create(path='/x', method='GET', status_code=200, duration_ms=1)
+        SlowRequest.objects.filter(pk=row.pk).update(at=timezone.now() - datetime.timedelta(days=90))
+        pre_delete.connect(record, sender=SlowRequest)
+        try:
+            maintenance.prune_slow_requests()
+        finally:
+            pre_delete.disconnect(record, sender=SlowRequest)
+        self.assertTrue(seen)
+        self.assertEqual(seen[0], f'{maintenance.LOCK_TIMEOUT_SECONDS}s')
+        self.assertEqual(maintenance.LOCK_TIMEOUT_SECONDS, 30)
+
+
 class SwitchTests(RateRuleTestBase):
     """Which code deletes: the P-56 step until the rule is on, then only the rule behind its breaker."""
 

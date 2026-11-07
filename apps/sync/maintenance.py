@@ -31,6 +31,7 @@ Everything here deletes or marks rows in OUR Postgres only — nothing touches S
 import datetime
 import logging
 
+from django.db import connection, transaction
 from django.db.models import Max
 from django.db.models.functions import TruncMonth
 from django.utils import timezone
@@ -58,19 +59,26 @@ NOTIF_READ_DAYS = 30
 NOTIF_UNREAD_DAYS = 90
 SLOW_REQUEST_DAYS = 30
 
+LOCK_TIMEOUT_SECONDS = 30          # a delete batch waiting longer than this for a row lock fails its step
+
 RETENTION_LOCK_KEY = 7_301_102     # advisory lock: one retention run at a time
 OVERDUE_HOURS = 26                 # no success for this long -> catch-up is due
 RETENTION_RETRY_HOURS = 6          # wait this long after a failed attempt before retrying
 
 
 def _batched_delete(qs, batch=BATCH):
-    """Delete in primary-key batches so no single statement holds a long lock."""
+    """Delete in primary-key batches so no single statement holds a long lock. Each batch is its own
+    transaction with a lock timeout, so a row held by an idle-in-transaction session fails the step
+    (the caller records it) instead of hanging the job."""
     total = 0
     while True:
-        ids = list(qs.values_list('pk', flat=True)[:batch])
-        if not ids:
-            return total
-        n, _ = qs.model.objects.filter(pk__in=ids).delete()
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT_SECONDS}s'")
+            ids = list(qs.values_list('pk', flat=True)[:batch])
+            if not ids:
+                return total
+            n, _ = qs.model.objects.filter(pk__in=ids).delete()
         total += n
 
 
@@ -92,23 +100,38 @@ def engine_runs_to_keep():
     return keep
 
 
-def engine_run_rows(keep):
-    """The detail rows of every run not in `keep`, by name. Pending recommendations only."""
+def engine_run_bound():
+    """The highest DemandCalculationRun pk now. Read it BEFORE computing a keep set and pass it to
+    engine_run_rows: a run created afterwards is in no keep set, so only the bound protects its rows."""
+    from apps.purchasing.models import DemandCalculationRun
+    return DemandCalculationRun.objects.aggregate(m=Max('pk'))['m'] or 0
+
+
+def engine_run_rows(keep, max_run_id=None):
+    """The detail rows of every run not in `keep` and not newer than `max_run_id`, by name.
+    Pending recommendations only. None reads the bound now (callers that compute `keep` first should
+    read it earlier, see engine_run_bound)."""
     from apps.purchasing.models import (ItemDemandAggregated, ItemDemandMetrics,
                                         TransferRecommendation)
+    if max_run_id is None:
+        max_run_id = engine_run_bound()
     return {
-        'metrics': ItemDemandMetrics.objects.exclude(run_id__in=keep),
-        'aggregated': ItemDemandAggregated.objects.exclude(run_id__in=keep),
+        'metrics': ItemDemandMetrics.objects.filter(run_id__lte=max_run_id).exclude(run_id__in=keep),
+        'aggregated': ItemDemandAggregated.objects.filter(run_id__lte=max_run_id).exclude(run_id__in=keep),
         'transfer_recs': (TransferRecommendation.objects.filter(status='pending')
+                          .filter(run__demand_run_id__lte=max_run_id)
                           .exclude(run__demand_run_id__in=keep)),
     }
 
 
-def prune_engine_runs(keep=None):
-    """`keep` is a set of run ids; None means engine_runs_to_keep()."""
+def prune_engine_runs(keep=None, max_run_id=None):
+    """`keep` is a set of run ids; None means engine_runs_to_keep(). `max_run_id` is the bound from
+    engine_run_bound(), read before `keep` was computed; None reads it first here when `keep` is None."""
+    if max_run_id is None:
+        max_run_id = engine_run_bound()
     if keep is None:
         keep = engine_runs_to_keep()
-    return {name: _batched_delete(rows) for name, rows in engine_run_rows(keep).items()}
+    return {name: _batched_delete(rows) for name, rows in engine_run_rows(keep, max_run_id).items()}
 
 
 def _prune_engine_runs_step():
@@ -264,7 +287,11 @@ def _purge_held_files():
 def run_daily_retention():
     """One SyncRun (lane 'retention') with a SyncLog per table. A failing step is
     logged and the others still run. Returns None (no run row) when another
-    process holds the retention lock."""
+    process holds the retention lock.
+
+    RULE: the lock is a session lock on this thread's Django connection. No step, and nothing a step
+    calls, may call close_old_connections() or connections.close_all(): that drops the lock silently
+    and a second run could start."""
     from apps.vouchers.coupon_dashboard import pg_lock
     steps = [
         ('retention:engine_runs', _prune_engine_runs_step),
