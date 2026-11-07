@@ -44,9 +44,21 @@ def conflicting_user_codes() -> set[str]:
     return {code for code, found in names.items() if len(found) > 1}
 
 
-def _is_conflicting(code) -> bool:
+def current_names(code) -> set:
+    """The normalised real names the machines hold for this ID right now."""
     rows = DeviceUser.objects.filter(user_code=code).values_list('user_code', 'device_name')
-    return len(_real_names(rows)[code]) > 1
+    return _real_names(rows)[code]
+
+
+def _is_conflicting(code) -> bool:
+    return len(current_names(code)) > 1
+
+
+def confirmation_valid(confirmation) -> bool:
+    """A confirmation holds only while every current real name was among those it confirmed, and
+    the confirmed employee still holds the ID."""
+    return (confirmation.employee.hr_number == confirmation.user_code
+            and current_names(confirmation.user_code) <= set(confirmation.names))
 
 
 def _employee_for(code):
@@ -56,9 +68,10 @@ def _employee_for(code):
     if employee is None:
         return None
     # A name conflict keeps the ID unresolved until the HR head confirms this employee for it.
-    if _is_conflicting(code) and not ConflictConfirmation.objects.filter(
-            user_code=code, employee=employee).exists():
-        return None
+    if _is_conflicting(code):
+        conf = ConflictConfirmation.objects.filter(user_code=code, employee=employee).first()
+        if conf is None or not confirmation_valid(conf):
+            return None
     return employee
 
 

@@ -16,7 +16,7 @@ from django.utils import timezone
 from apps.audit.models import AuditLog
 from apps.hr.attendance import agent_auth, employee_import, ingest, issues, links, resolve
 from apps.hr.attendance.urls import urlpatterns
-from apps.hr.models import (AttendanceAccess, AttendanceAgent, AttendanceDevice, AttendancePunch,
+from apps.hr.models import (AttendanceAccess, AttendanceAgent, AttendanceDevice, AttendancePunch, CollectionRun,
                             ConflictConfirmation, DeviceUser, Employee, EmployeeLinkRejection,
                             GenericLogin, LeaveRequest, LeaveType, UnknownIdDecision)
 from apps.tests.factories import make_branch, make_user
@@ -104,6 +104,7 @@ class GateTests(Base):
             'employees/<int:pk>/unlink/': (['POST'], 'manage', f'employees/{e}/unlink/'),
             'employees/<int:pk>/hold/': (['POST'], 'manage', f'employees/{e}/hold/'),
             'generic-login/': (['POST'], 'manage', 'generic-login/'),
+            'not-generic-login/': (['POST'], 'manage', 'not-generic-login/'),
             'unknown-ids/<str:code>/create-employee/': (['POST'], 'manage', 'unknown-ids/555/create-employee/'),
             'unknown-ids/<str:code>/ignore/': (['POST'], 'manage', 'unknown-ids/555/ignore/'),
             'conflicts/<str:code>/confirm/': (['POST'], 'manage', 'conflicts/555/confirm/'),
@@ -218,6 +219,35 @@ class LinkTests(Base):
         self.assertEqual(self.post(self.mgr, f'employees/{emp.pk}/link/', {'staff': marked.pk}).status_code, 400)
         self.assertIsNone(Employee.objects.get(pk=emp.pk).staff)
         self.assertTrue(self.audited('hr_attendance_generic_login').exists())
+
+    def test_not_generic_override_allows_linking_and_generic_blocks_again(self):
+        emp = self.employee('1001', 'سامر سامي')
+        tester = self.staff('hv_t1', 'Tester', 'سامي')       # "test" in the name: regex hit
+        self.assertTrue(links.is_generic_login(tester))
+        self.assertEqual(self.post(self.mgr, f'employees/{emp.pk}/link/', {'staff': tester.pk}).status_code, 400)
+        # reason is required
+        self.assertEqual(self.post(self.mgr, 'not-generic-login/', {'staff': tester.pk}).status_code, 400)
+        self.assertEqual(self.viewer.post(URL + 'not-generic-login/', {'staff': tester.pk}, format='json')
+                         .status_code, 403)
+        r = self.post(self.mgr, 'not-generic-login/', {'staff': tester.pk, 'reason': 'موظف حقيقي اسمه Tester'})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertFalse(links.is_generic_login(tester))
+        self.assertTrue(self.audited('hr_attendance_not_generic_login').exists())
+        self.assertEqual(self.post(self.mgr, f'employees/{emp.pk}/link/', {'staff': tester.pk}).status_code, 200)
+        self.post(self.mgr, f'employees/{emp.pk}/unlink/')
+        # marking generic after the override blocks linking again
+        self.assertEqual(self.post(self.mgr, 'generic-login/', {'staff': tester.pk}).status_code, 200)
+        self.assertTrue(links.is_generic_login(tester))
+        self.assertEqual(self.post(self.mgr, f'employees/{emp.pk}/link/', {'staff': tester.pk}).status_code, 400)
+
+    def test_not_generic_clears_a_mistaken_generic_mark(self):
+        emp = self.employee('1001', 'سامر سامي')
+        staff = self.staff('hv_s1', 'سامر', 'سامي')
+        self.post(self.mgr, 'generic-login/', {'staff': staff.pk})
+        self.assertTrue(links.is_generic_login(staff))
+        self.post(self.mgr, 'not-generic-login/', {'staff': staff.pk, 'reason': 'ضغطة بالخطأ'})
+        self.assertFalse(links.is_generic_login(staff))
+        self.assertEqual([s['staff_id'] for s in links.suggest(emp)], [staff.pk])
 
     def test_generic_names_are_matched_in_arabic_and_english(self):
         for username in ('Cash2', 'TEST_user', 'branch5', 'x_كاشير', 'فرع المعادي'):
@@ -516,6 +546,26 @@ class ConflictTests(Base):
         later.refresh_from_db()
         self.assertEqual(later.employee, self.emp)
 
+    def test_a_third_name_after_confirm_reopens_the_conflict(self):
+        self.post(self.mgr, 'conflicts/7/confirm/', {'employee': self.emp.pk, 'reason': 'نفس الشخص'})
+        self.assertEqual(ConflictConfirmation.objects.get().names, ['samer', 'samersami'])
+        DeviceUser.objects.create(device=AttendanceDevice.objects.create(serial='SN3', name='جهاز ٣'),
+                                  user_code='7', device_name='MohamedAli')
+        late = self.punch('7', 2)
+        resolve.resolve_user_code('7')
+        late.refresh_from_db()
+        self.p.refresh_from_db()
+        self.assertIsNone(late.employee)
+        self.assertIsNone(self.p.employee)
+        rows = self.viewer.get(URL + 'issues/').json()['rows']
+        self.assertEqual([r['user_code'] for r in rows if r['kind'] == 'conflict'], ['7'])
+        row = [r for r in self.viewer.get(URL + 'employees/').json()['rows'] if r['id'] == self.emp.pk][0]
+        self.assertFalse(row['conflict_confirmed'])
+        # confirming again covers the new name
+        self.post(self.mgr, 'conflicts/7/confirm/', {'employee': self.emp.pk, 'reason': 'ثلاثة أسماء لشخص واحد'})
+        late.refresh_from_db()
+        self.assertEqual(late.employee, self.emp)
+
     def test_confirming_a_non_conflict_is_400(self):
         emp = self.employee('9')
         r = self.post(self.mgr, 'conflicts/9/confirm/', {'employee': emp.pk, 'reason': 'x'})
@@ -630,6 +680,15 @@ class AdminTests(Base):
         self.assertNotIn('ip', body['rows'][0])
         self.assertEqual(body['rows'][0]['serial'], 'SN1')
         self.assertIn('ip', self.admin.get(URL + 'devices/').json()['rows'][0])
+
+    def test_run_error_text_is_for_admins_only(self):
+        CollectionRun.objects.create(device=self.device, started_at=timezone.now(), status='failed',
+                                     error='timeout reaching 192.168.3.15')
+        seen = self.viewer.get(URL + 'devices/').json()['rows'][0]['last_run']
+        self.assertEqual(seen['status'], 'failed')
+        self.assertNotIn('error', seen)
+        self.assertNotIn('192.168', json.dumps(self.mgr.get(URL + 'devices/').json()))
+        self.assertIn('192.168.3.15', self.admin.get(URL + 'devices/').json()['rows'][0]['last_run']['error'])
 
     def test_device_edit_by_admin_is_audited_and_serial_is_fixed(self):
         agent = AttendanceAgent.objects.create(name='a', token_hash='h' * 64)

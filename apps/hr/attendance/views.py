@@ -140,7 +140,8 @@ def _employee_rows(employees, with_suggestions=True):
         if resolve.is_real_name(name, code):
             names.setdefault(code, set()).add(name)
     conflicts = resolve.conflicting_user_codes()
-    confirmed = set(ConflictConfirmation.objects.filter(user_code__in=codes).values_list('user_code', flat=True))
+    confirmed = {c.user_code for c in ConflictConfirmation.objects.filter(user_code__in=codes)
+                 .select_related('employee') if resolve.confirmation_valid(c)}
     pool = links.pool_for_review() if with_suggestions and any(not e.staff_id for e in employees) else []
     rows = []
     for e in employees:
@@ -312,10 +313,12 @@ def devices(request, acc):
             'last_run': None if run is None else {
                 'status': run.status, 'started_at': run.started_at, 'finished_at': run.finished_at,
                 'records_read': run.records_read, 'new_count': run.new_count,
-                'spool_waiting': run.spool_waiting, 'error': run.error},
+                'spool_waiting': run.spool_waiting},
         }
-        if acc.can_admin:                  # network details are for the admin who sets machines up
+        if acc.can_admin:      # network details (the error text may name an IP) are for the admin
             row.update({'ip': dev.ip, 'port': dev.port})
+            if run is not None:
+                row['last_run']['error'] = run.error
         rows.append(row)
     agents = AttendanceAgent.objects.filter(revoked_at__isnull=True).order_by('name')
     return Response({'rows': rows, 'agents': [
@@ -437,6 +440,17 @@ def generic_login(request, acc):
     return Response({'staff': staff.pk, 'generic': True})
 
 
+@api_view(['POST'])
+@gate('manage')
+def not_generic_login(request, acc):
+    """The login is one person after all (or a generic mark was a mistake). Reason required."""
+    body = _body(request)
+    staff = _staff_from(body)
+    reason = _text(body, 'reason', 255, required=True, label='السبب')
+    _link_call(links.mark_not_generic, staff, acc.profile, reason)
+    return Response({'staff': staff.pk, 'generic': False})
+
+
 def _seen_code(code) -> bool:
     from apps.hr.models import AttendancePunch
     return (AttendancePunch.objects.filter(user_code=code).exists()
@@ -497,7 +511,8 @@ def conflict_confirm(request, acc, code):
         raise ValidationError({'detail': 'لا يوجد تعارض أسماء على هذا الرقم'})
     with transaction.atomic():
         ConflictConfirmation.objects.update_or_create(
-            user_code=code, defaults={'employee': emp, 'reason': reason, 'decided_by': acc.profile})
+            user_code=code, defaults={'employee': emp, 'reason': reason, 'decided_by': acc.profile,
+                                      'names': sorted(resolve.current_names(code))})
         resolve.resolve_user_code(code)
     AuditLog.log('hr_attendance_conflict_confirm', user=acc.profile, obj=emp, request=request, note=reason,
                  extra={'user_code': code})

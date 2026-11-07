@@ -18,6 +18,7 @@ urlpatterns = [
     path('employees/<int:pk>/unlink/', views.employee_unlink, name='hr-attendance-employee-unlink'),
     path('employees/<int:pk>/hold/', views.employee_hold, name='hr-attendance-employee-hold'),
     path('generic-login/', views.generic_login, name='hr-attendance-generic-login'),
+    path('not-generic-login/', views.not_generic_login, name='hr-attendance-not-generic-login'),
     path('unknown-ids/<str:code>/create-employee/', views.unknown_create_employee,
          name='hr-attendance-unknown-create'),
     path('unknown-ids/<str:code>/ignore/', views.unknown_ignore, name='hr-attendance-unknown-ignore'),

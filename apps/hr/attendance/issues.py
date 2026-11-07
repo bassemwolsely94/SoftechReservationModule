@@ -58,7 +58,7 @@ def ignored_ids() -> list[dict]:
 
 def _conflicts() -> list[dict]:
     confirmed = {c.user_code for c in ConflictConfirmation.objects.select_related('employee')
-                 if c.employee.hr_number == c.user_code}
+                 if resolve.confirmation_valid(c)}
     codes = sorted(resolve.conflicting_user_codes() - confirmed)
     if not codes:
         return []

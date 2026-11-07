@@ -41,7 +41,10 @@ def _generic_by_name(staff) -> bool:
 
 def is_generic_login(staff) -> bool:
     """A shared login (cashier, test, branch account): a GenericLogin row, or a telltale name."""
-    return GenericLogin.objects.filter(staff=staff).exists() or _generic_by_name(staff)
+    row = GenericLogin.objects.filter(staff=staff).first()
+    if row is not None:          # a person's decision beats the name check, both ways
+        return row.generic
+    return _generic_by_name(staff)
 
 
 def _match_reason(emp_tokens, staff_tokens):
@@ -60,10 +63,10 @@ def _candidates(exclude_employee=None):
     taken = Employee.objects.filter(staff__isnull=False)
     if exclude_employee is not None:
         taken = taken.exclude(pk=exclude_employee.pk)
-    generic = set(GenericLogin.objects.values_list('staff_id', flat=True))
+    marks = dict(GenericLogin.objects.values_list('staff_id', 'generic'))
     pool = (StaffProfile.objects.filter(is_active=True, alerts_only=False)
             .exclude(pk__in=taken.values('staff_id')).select_related('user'))
-    return [s for s in pool if s.pk not in generic and not _generic_by_name(s)]
+    return [s for s in pool if not marks.get(s.pk, _generic_by_name(s))]
 
 
 def suggest(employee, pool=None) -> list[dict]:
@@ -132,9 +135,20 @@ def mark_generic(staff, user):
     if Employee.objects.filter(staff=staff).exists():
         raise LinkError('الحساب مرتبط بموظف، فُك الربط أولاً')
     row, created = GenericLogin.objects.get_or_create(staff=staff, defaults={'marked_by': user})
-    if created:
+    if created or not row.generic:
+        row.generic, row.reason, row.marked_by = True, '', user
+        row.save(update_fields=['generic', 'reason', 'marked_by'])
         AuditLog.log('hr_attendance_generic_login', user=user, obj=staff,
                      note='Login marked as shared (never linked to one employee)')
+    return row
+
+
+def mark_not_generic(staff, user, reason):
+    """Override the name check: this login is one person. Also clears a mistaken generic mark."""
+    row, _ = GenericLogin.objects.update_or_create(
+        staff=staff, defaults={'generic': False, 'reason': reason, 'marked_by': user})
+    AuditLog.log('hr_attendance_not_generic_login', user=user, obj=staff, note=reason,
+                 extra={'staff': staff.pk})
     return row
 
 
