@@ -130,7 +130,7 @@ SOFTECH SELECT ──reader──▶ SourceDoc ──upsert──▶ GLSourceDoc
 | `sources/sales.py` · `purchases.py` · `treasury.py` · `expenses.py` | readers (below) |
 | `queries/sybase_gl.py` | SELECT-only SQL, run through `_fetch` / `_conn_ctx` of `sybase_accounting.py` |
 | `rules.py` | `SOURCE_FIELDS` (amount whitelist per source), `CONDITION_KEYS`, `validate_rule`, versioned save, `select_rule`, `build_lines`, `preview_rule` |
-| `parties.py` | finance party import, name-match proposals, confirm / reject, bulk confirm from the reviewed suggestions sheet (`parse_confirm_sheet` + `bulk_confirm`, `POST parties/confirm-upload/` with `dry_run`, ledger.approve), `resolve_party` |
+| `parties.py` | finance party import, name-match proposals, confirm / reject, bulk confirm from the reviewed suggestions sheet (`parse_confirm_sheet` + `bulk_confirm`, `POST parties/confirm-upload/` with `dry_run`, ledger.approve; a new code is added under the sheet name, a name sharing no word is held as `name_conflict`), `resolve_party` |
 | `seed.py` + `seed_gl_drafting` | seed rules and maps from the verification table |
 | `drafting.py` | the engine: `start_run`, `draft_range`, grouping, late changes, `system_user()` |
 | `drafting_views.py` / `drafting_serializers.py` | API for parties, maps, rules, runs, exceptions, source drill-down |
