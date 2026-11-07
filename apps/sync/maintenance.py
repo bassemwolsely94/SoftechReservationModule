@@ -8,6 +8,9 @@ Everything here deletes or marks rows in OUR Postgres only — nothing touches S
                         + the last completed run of each calendar month; delete the rest.
                         Run headers stay (history, FKs). Reviewed transfer recommendations
                         (approved / rejected / executed) are decisions and are never deleted.
+                        Takes another keep set from the lifecycle rule `rate_runs`. Once that
+                        rule is on, the daily step here does nothing and the rule does the
+                        delete, so its circuit breaker stands in front of it.
   prune_audit_log()     only actions in DELETABLE_AUDIT_ACTIONS age out (365 days). Money,
                         SOFTECH writes, permissions and approvals are never deleted (Rule 8).
   prune_pbx_events()    raw AMI events older than 90 days.
@@ -35,6 +38,7 @@ from django.utils import timezone
 logger = logging.getLogger('elrezeiky.sync')
 
 KEEP_LAST_RUNS = 10
+COMPLETED_RUN_STATUSES = ('success', 'partial')
 BATCH = 10_000
 
 STALE_RUN_MINUTES = 60
@@ -70,31 +74,51 @@ def _batched_delete(qs, batch=BATCH):
         total += n
 
 
+def last_run_of_each_month(runs):
+    """Ids of the last run of each calendar month in this queryset of runs."""
+    last_per_month = (runs.annotate(month=TruncMonth('started_at'))
+                      .values('month').annotate(last=Max('started_at')).values_list('last', flat=True))
+    return set(runs.filter(started_at__in=list(last_per_month)).values_list('pk', flat=True))
+
+
 def engine_runs_to_keep():
     """Ids of DemandCalculationRuns whose detail rows are kept."""
     from apps.purchasing.models import DemandCalculationRun
-    completed = DemandCalculationRun.objects.filter(status__in=['success', 'partial'])
+    completed = DemandCalculationRun.objects.filter(status__in=COMPLETED_RUN_STATUSES)
     keep = set(completed.order_by('-started_at').values_list('pk', flat=True)[:KEEP_LAST_RUNS])
-    last_per_month = (completed.annotate(month=TruncMonth('started_at'))
-                      .values('month').annotate(last=Max('started_at')).values_list('last', flat=True))
-    keep |= set(completed.filter(started_at__in=list(last_per_month)).values_list('pk', flat=True))
+    keep |= last_run_of_each_month(completed)
     # never touch a run that is still being written
     keep |= set(DemandCalculationRun.objects.filter(status='running').values_list('pk', flat=True))
     return keep
 
 
-def prune_engine_runs():
+def engine_run_rows(keep):
+    """The detail rows of every run not in `keep`, by name. Pending recommendations only."""
     from apps.purchasing.models import (ItemDemandAggregated, ItemDemandMetrics,
                                         TransferRecommendation)
-    keep = engine_runs_to_keep()
-    out = {
-        'metrics': _batched_delete(ItemDemandMetrics.objects.exclude(run_id__in=keep)),
-        'aggregated': _batched_delete(ItemDemandAggregated.objects.exclude(run_id__in=keep)),
-        'transfer_recs': _batched_delete(
-            TransferRecommendation.objects.filter(status='pending')
-            .exclude(run__demand_run_id__in=keep)),
+    return {
+        'metrics': ItemDemandMetrics.objects.exclude(run_id__in=keep),
+        'aggregated': ItemDemandAggregated.objects.exclude(run_id__in=keep),
+        'transfer_recs': (TransferRecommendation.objects.filter(status='pending')
+                          .exclude(run__demand_run_id__in=keep)),
     }
-    return out
+
+
+def prune_engine_runs(keep=None):
+    """`keep` is a set of run ids; None means engine_runs_to_keep()."""
+    if keep is None:
+        keep = engine_runs_to_keep()
+    return {name: _batched_delete(rows) for name, rows in engine_run_rows(keep).items()}
+
+
+def _prune_engine_runs_step():
+    """The P-56 step. Once the lifecycle rule rate_runs is on, it does the delete behind its circuit
+    breaker; deleting here first would go round the breaker and drop runs the rule keeps."""
+    from apps.data_lifecycle.models import MODE_ON
+    from apps.data_lifecycle.policy import get_mode
+    if get_mode('rate_runs') == MODE_ON:
+        return 0
+    return sum(prune_engine_runs().values())
 
 
 def prune_audit_log(days=AUDIT_NOISE_DAYS):
@@ -243,7 +267,7 @@ def run_daily_retention():
     process holds the retention lock."""
     from apps.vouchers.coupon_dashboard import pg_lock
     steps = [
-        ('retention:engine_runs', lambda: sum(prune_engine_runs().values())),
+        ('retention:engine_runs', _prune_engine_runs_step),
         ('retention:notifications', prune_notifications),
         ('retention:pbx_events', prune_pbx_events),
         ('retention:audit_log', prune_audit_log),

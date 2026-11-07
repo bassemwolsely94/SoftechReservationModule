@@ -23,7 +23,7 @@ from apps.tests.factories import make_user
 P56_KEYS = {'p56_engine', 'p56_notifications', 'p56_pbx', 'p56_audit', 'p56_slow', 'p56_screen_views'}
 
 
-class ClassificationTests(SimpleTestCase):
+class ClassificationTests(TestCase):      # row rules' candidates() query the database
     def test_every_filefield_is_classified(self):
         self.assertEqual(register.unclassified_file_fields(), [],
                          'new FileField: add it to a rule\'s targets or to KEEP_FOREVER with a reason')
@@ -138,6 +138,8 @@ class RegisterValueTests(SimpleTestCase):
 
     def test_apply_defaults_to_none_and_candidates_are_stubs(self):
         for key, rule in RULES.items():
+            if key == 'rate_runs':      # filled; apps/tests/test_lifecycle_rate_rule.py
+                continue
             self.assertIsNone(rule.apply, key)
             if rule.kind == 'p56':
                 self.assertIsNone(rule.candidates, key)

@@ -18,6 +18,8 @@ from apps.sync.maintenance import (
     AUDIT_NOISE_DAYS, NOTIF_UNREAD_DAYS, PBX_EVENT_DAYS, SLOW_REQUEST_DAYS,
 )
 
+from .rules_rows import rate_runs_apply, rate_runs_candidates
+
 KIND_ROW = 'row'
 KIND_FILE = 'file'
 KIND_P56 = 'p56'
@@ -77,7 +79,7 @@ class Rule:
 
 
 def _no_candidates_yet():
-    """Stub until the rule's task fills it (Tasks 5, 6 and 9 of the Stage 3 plan). Selects nothing."""
+    """Stub until the rule's task fills it (Tasks 6 and 9 of the Stage 3 plan). Selects nothing."""
     return []
 
 
@@ -88,9 +90,10 @@ _ROW_AND_FILE_RULES = (
         kind=KIND_ROW, floor_days=None, default_days=None,
         reason='آخر 3 تشغيلات مكتملة + آخر تشغيل من كل شهر لمدة 24 شهرًا + أي تشغيل ما زال مستخدمًا. '
                'رؤوس التشغيلات تبقى، وتوصيات التحويل المراجَعة لا تُحذف.',
-        margin=150_000, ceiling=1_500_000, candidates=_no_candidates_yet,
+        margin=150_000, ceiling=1_500_000, candidates=rate_runs_candidates,
         targets=('purchasing.ItemDemandMetrics', 'purchasing.ItemDemandAggregated',
                  'purchasing.TransferRecommendation'),
+        apply=rate_runs_apply,
     ),
     Rule(
         key='transit_alert_notes', label_ar='ملاحظات تنبيهات التحويلات المتأخرة', label_en='Transit alert notes',
