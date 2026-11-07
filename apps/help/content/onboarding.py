@@ -69,6 +69,7 @@ ROLE_PATHS = {
     ] + _SELF,
     'accountant': _START + [
         'finance.dashboard', 'finance.pnl', 'finance.expenses', 'finance.cash', 'finance.reconciliation',
+        'tax_invoicing.main',
     ] + _SELF,
     'admin': _START + [
         'admin.users', 'admin.permissions', 'admin.erp_permissions', 'admin.settings', 'admin.sync',
@@ -357,6 +358,20 @@ QUIZZES = {
         Q(T('تاريخ شيك يقع في إجازة. ماذا يحدث؟', 'A cheque date falls on a holiday. What happens?'),
           [T('يُرحَّل تلقائياً لأقرب يوم عمل ويظهر الأصلي', 'It shifts to the nearest working day and shows the original'), T('يُلغى', 'It is cancelled')],
           0, T('مع مراعاة أيام العمل البنكية في مصر.', 'Egyptian banking days are respected.')),
+    ],
+    'tax_invoicing': [
+        Q(T('مستند فيه بند واحد غير مُرمَّز والباقي سليم. ماذا يحدث عند الاعتماد؟', 'A document has one uncoded line and the rest are fine. What happens on approval?'),
+          [T('يتوقف المستند كله حتى يُحل البند', 'The whole document stops until the line is resolved'), T('يُرفع السليم ويُترك البند', 'The good lines go up and that line is left out')],
+          0, T('لا يوجد رفع جزئي: البند غير المحسوم يوقف المستند كله.', 'There is no partial upload: an unresolved line blocks the whole document.')),
+        Q(T('هل يغير «عرض كل بنود المصدر» إجمالي الفاتورة؟', 'Does "Show all source lines" change the invoice total?'),
+          [T('لا، يغير المعروض فقط', 'No, it changes only the display'), T('نعم، يضيف البنود للفاتورة', 'Yes, it adds the lines to the invoice')],
+          0, T('الفلتر لا يغير الإجماليات ولا ما يُرسل للمصلحة.', 'The filter changes neither the totals nor what is sent to the Authority.')),
+        Q(T('صنف في القائمة السوداء. ماذا يحدث لبنوده؟', 'An item is on the blacklist. What happens to its lines?'),
+          [T('تنتظر قرار المحاسب', "They wait for the accountant's decision"), T('تُحذف من الفاتورة تلقائياً', 'They are removed from the invoice automatically')],
+          0, T('القائمة مدخل لقرار المحاسب، ولا تحذف أي بند من تلقاء نفسها.', "The list is an input to the accountant's decision and never removes a line by itself.")),
+        Q(T('قبلت المصلحة الفاتورة ثم ظهر خطأ في مبلغ. كيف يُصحح؟', 'ETA accepted the invoice and then an amount turns out wrong. How is it corrected?'),
+          [T('بإشعار دائن أو مدين', 'With a credit or debit note'), T('بإعادة فتح الفاتورة وتعديلها', 'By reopening and editing the invoice')],
+          0, T('المستند المقبول لا يتغير؛ التصحيح بمستند جديد يشير إليه.', 'An accepted document never changes; the correction is a new document that refers to it.')),
     ],
     'insurance': [
         Q(T('هل اسم المريض المعدّل في المطالبة يؤثر على الإجماليات؟', 'Does editing a patient name in a claim change the totals?'),

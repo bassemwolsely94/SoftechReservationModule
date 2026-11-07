@@ -1,5 +1,7 @@
 // The owner's display rules for the review screen: the server's numbers are shown as they are, the
 // "all lines" switch is only for approvers and only changes the query, and live sending shows as off.
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -98,6 +100,14 @@ describe('document review', () => {
 })
 
 describe('printed invoice', () => {
+  // jsdom applies no print CSS, so this is the only unit-level guard: a plain `.tax-print-sheet` rule
+  // loses to the `body:has(...) *` rule that hides the shell, and the page prints blank.
+  it('keeps the sheet rules as specific as the rule that hides the shell', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf-8')
+    expect(css).toContain('body:has(.tax-print-sheet) * { visibility: hidden; }')
+    expect(css).toMatch(/body:has\(\.tax-print-sheet\) \.tax-print-sheet,\s+body:has\(\.tax-print-sheet\) \.tax-print-sheet \* \{ visibility: visible; \}/)
+  })
+
   it('shows one summary row, no VAT column and a clear statement when no VAT is due', async () => {
     api.documents.mockResolvedValue({ data: [] })
     api.print.mockResolvedValue({ data: {

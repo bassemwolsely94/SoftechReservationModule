@@ -13,6 +13,13 @@ const COUNT_LABELS = [
   ['rows', 'صفوف'], ['valid', 'صالحة'], ['errors', 'أخطاء'], ['warnings', 'تحذيرات'], ['new', 'جديد'], ['updated', 'تحديث'],
   ['conflicts', 'تعارضات'], ['duplicates', 'مكررات'], ['coded', 'مرمز'], ['not_coded', 'غير مرمز'], ['black', 'أسود'], ['white', 'أبيض'], ['unlisted', 'غير مدرج'],
 ]
+const ISSUE_LABELS = {
+  no_itemcode: 'بدون كود صنف', long_itemcode: 'كود صنف طويل', duplicate_item: 'كود صنف مكرر', duplicate_eta_code: 'كود مصلحة مكرر',
+  long_eta_code: 'كود مصلحة طويل', bad_code_type: 'نوع كود غير معروف', egs_format: 'صيغة EGS', code_mismatch: 'الكود لا يطابق الصنف',
+  not_in_catalog: 'ليس في الكتالوج', numeric_code: 'كود مخزن كرقم', numeric_itemcode: 'كود صنف رقمي', bad_list_flag: 'قيمة قائمة غير معروفة',
+  bad_date: 'تاريخ غير صحيح', bad_vat: 'نسبة ضريبة غير صحيحة', code_without_type: 'كود بدون نوع', black_but_coded: 'أسود ومرمز',
+  white_not_coded: 'أبيض وغير مرمز', no_gpc: 'بدون GPC', conflict: 'تعارض مع المسجل',
+}
 const FIELD_LABELS = { eta_code: 'كود المصلحة', code_type: 'نوع الكود', list_status: 'القائمة', source_vat_code: 'كود الضريبة' }
 
 const columnLetter = i => {
@@ -37,7 +44,7 @@ const ISSUE_COLUMNS = [
   { key: 'row', label: 'الصف', type: 'number' },
   { key: 'level', label: 'المستوى', render: r => (r.level === 'error' ? <span className="text-red-700 font-bold">خطأ</span> : <span className="text-amber-800">تحذير</span>) },
   { key: 'itemcode', label: 'الصنف', render: r => r.itemcode || '—' },
-  { key: 'code', label: 'النوع' },
+  { key: 'code', label: 'النوع', value: r => ISSUE_LABELS[r.code] || r.code, render: r => ISSUE_LABELS[r.code] || r.code },
   { key: 'message', label: 'التفاصيل' },
 ]
 
@@ -163,11 +170,11 @@ export default function ImportTab({ me }) {
           {Object.keys(shownPreview.issue_counts).length > 0 && (
             <div className="flex flex-wrap gap-1 mb-3">
               {Object.entries(shownPreview.issue_counts).map(([k, n]) => (
-                <span key={k} className="px-2 py-0.5 rounded-full border border-gray-200 text-[11px] text-gray-700">{k}: {fmtInt(n)}</span>
+                <span key={k} className="px-2 py-0.5 rounded-full border border-gray-200 text-[11px] text-gray-700">{ISSUE_LABELS[k] || k}: {fmtInt(n)}</span>
               ))}
             </div>
           )}
-          {shownPreview.issues_truncated && <p className="text-xs text-amber-800 mb-2">عُرضت أول 300 ملاحظة فقط.</p>}
+          {shownPreview.issues_truncated && <p className="text-xs text-amber-800 mb-2">عُرض جزء من الملاحظات الكثيرة من كل نوع؛ الأعداد أعلاه كاملة.</p>}
           <Grid columns={ISSUE_COLUMNS} rows={shownPreview.issues} getKey={r => `${r.row}|${r.code}|${r.message}`} empty="✅ لا توجد ملاحظات على الصفوف" />
 
           {shownPreview.sample.some(r => r.conflicts?.length) && (

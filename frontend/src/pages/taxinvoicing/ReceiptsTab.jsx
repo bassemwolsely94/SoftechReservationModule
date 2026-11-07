@@ -263,7 +263,7 @@ function Channels({ me }) {
   if (isLoading) return <Loading />
   if (error) return <Failed error={error} />
   return (
-    <Section title="قواعد القنوات" hint="قناة بلا قرار تُحجز إيصالاتها ولا تُحذف." data-tour="tax-invoicing-main-receipts-channels">
+    <Section title="قواعد القنوات" hint="قناة بلا قرار تُحجز إيصالاتها ولا تُحذف. افتح القناة واحفظ لتأكيد قرارها." data-tour="tax-invoicing-main-receipts-channels">
       {me.can_approve && <div className="mb-3"><ChannelEditor /></div>}
       <Grid getKey={r => r.ptclassifcode} rows={data} empty="لا توجد قواعد بعد"
         onOpen={me.can_approve ? r => setOpen(o => (o === r.ptclassifcode ? null : r.ptclassifcode)) : undefined} openKey={open}
@@ -273,7 +273,9 @@ function Channels({ me }) {
           { key: 'label', label: 'الاسم', render: r => r.label || '—' },
           { key: 'mode_label', label: 'القرار' },
           { key: 'note', label: 'ملاحظة', render: r => r.note || '—' },
-          { key: 'confirmed_by', label: 'حدده', render: r => (r.confirmed_by ? <>{r.confirmed_by} <span className="text-[11px] text-gray-400">{fmtTime(r.confirmed_at)}</span></> : '—') },
+          { key: 'confirmed_by', label: 'أكده', render: r => (r.confirmed_at
+            ? <>{r.confirmed_by || '—'} <span className="text-[11px] text-gray-400">{fmtTime(r.confirmed_at)}</span></>
+            : <Badge tone={RECEIPT_STATUS_TONE.held}>بانتظار تأكيد المحاسب</Badge>) },
         ]} />
     </Section>
   )

@@ -499,8 +499,10 @@ thead th {
 @media print {
   @page { size: A4; margin: 12mm; }
   body:has(.tax-print-sheet) * { visibility: hidden; }
-  .tax-print-sheet, .tax-print-sheet * { visibility: visible; }
-  .tax-print-sheet { position: absolute; inset: 0 0 auto 0; border: 0 !important; box-shadow: none !important; }
+  /* Same :has() as the rule above, or that rule's higher specificity hides the sheet as well. */
+  body:has(.tax-print-sheet) .tax-print-sheet,
+  body:has(.tax-print-sheet) .tax-print-sheet * { visibility: visible; }
+  body:has(.tax-print-sheet) .tax-print-sheet { position: absolute; inset: 0 0 auto 0; border: 0 !important; box-shadow: none !important; }
 }
 
 /* ─── «اعرض لي» tour: zoom into each highlighted area, then a soft pulse ───── */
