@@ -42,6 +42,7 @@ DOMAINS = {
     'expiry':    {'label_ar': 'صلاحية المخزون',   'source': 'expiry',    'cadence_min': 1440, 'kind': 'snapshot'},
     'purchases': {'label_ar': 'المشتريات والوارد', 'source': 'purchases', 'cadence_min': 1440, 'kind': 'snapshot'},
     'purchase_expiry': {'label_ar': 'صلاحيات الشراء', 'source': 'purchase_expiry', 'cadence_min': 1440, 'kind': 'snapshot'},
+    'attendance': {'label_ar': 'الحضور والبصمة', 'source': 'attendance', 'cadence_min': 60, 'kind': 'snapshot'},
     'stock_audit': {'label_ar': 'حركات المخزون (التدقيق)', 'source': 'stock_audit', 'cadence_min': 120, 'kind': 'snapshot'},
     'gl_drafting': {'label_ar': 'ترحيل القيود من سوفتيك', 'source': 'gl_drafting', 'cadence_min': 1440, 'kind': 'snapshot'},
     # Finance mirror (P-43): P&L snapshots refresh with the slow lane; journal and
@@ -114,6 +115,19 @@ def _source_stock_audit():
     ok = (StockLedgerSyncRun.objects.filter(status__in=['success', 'partial'])
           .order_by('-started_at').first())
     last = StockLedgerSyncRun.objects.order_by('-started_at').first()
+    return {
+        'last_success_at': (ok.finished_at or ok.started_at) if ok else None,
+        'last_attempt_at': (last.finished_at or last.started_at) if last else None,
+        'last_run_failed': bool(last and last.status == 'failed'),
+    }
+
+
+def _source_attendance():
+    """HR attendance (stage 1) - hr.CollectionRun, one row per agent visit to a machine. A failed
+    run is not a success; 'last_run_failed' reflects the newest visit."""
+    from apps.hr.models import CollectionRun
+    ok = CollectionRun.objects.filter(status='success').order_by('-started_at').first()
+    last = CollectionRun.objects.order_by('-started_at').first()
     return {
         'last_success_at': (ok.finished_at or ok.started_at) if ok else None,
         'last_attempt_at': (last.finished_at or last.started_at) if last else None,
@@ -197,7 +211,7 @@ def _source_ap_reconciliation():
 
 _SOURCES = {'expiry': _source_expiry, 'ap_reconciliation': _source_ap_reconciliation, 'purchases': _source_purchases,
             'ar_contracts': _source_ar_contracts, 'calls': _source_calls,
-            'stock_audit': _source_stock_audit, 'purchase_expiry': _source_purchase_expiry,
+            'stock_audit': _source_stock_audit, 'attendance': _source_attendance, 'purchase_expiry': _source_purchase_expiry,
             'finance_pl': _source_finance_pl, 'gl_drafting': _source_gl_drafting,
             'finance_expenses': lambda: _finance_run_source('expense_records'),
             'finance_journal': lambda: _finance_run_source('journal_entries')}
