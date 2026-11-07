@@ -10,6 +10,7 @@ The index walks every FileField of every model, not only the classified ones, so
 its files before anyone writes a rule for it. Reads our own database only. Company-level, no branch scoping; no
 SOFTECH reads or writes.
 """
+import posixpath
 from dataclasses import dataclass, field
 from typing import NamedTuple
 from urllib.parse import unquote, urlsplit
@@ -53,11 +54,14 @@ def media_path_from_url(url):
     if not url:
         return None
     path = unquote(urlsplit(str(url).strip()).path)
+    if not path.startswith('/'):
+        path = '/' + path          # a relative `media/x.jpg` still points into media
+    path = posixpath.normpath(path)  # collapses `..`; a path that climbs out of media no longer matches
     prefix = '/' + settings.MEDIA_URL.strip('/') + '/'
     if not path.startswith(prefix):
         return None
     rest = path[len(prefix):]
-    if not rest or '..' in rest.split('/'):
+    if not rest:
         return None
     return rest
 

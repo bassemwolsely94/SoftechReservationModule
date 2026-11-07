@@ -36,6 +36,10 @@ class UrlFormsCase(TestCase):
         self.assertIsNone(media_path_from_url('http://elsewhere.example/images/x.jpg'))
         self.assertIsNone(media_path_from_url('/media/'))
         self.assertIsNone(media_path_from_url('/media/../secret.jpg'))
+        self.assertEqual(media_path_from_url('media/image_candidates/x.jpg'), 'image_candidates/x.jpg')
+        self.assertEqual(media_path_from_url('/media/image_candidates/../products/x.jpg'), 'products/x.jpg')
+        self.assertIsNone(media_path_from_url('/media/../../etc/x.jpg'))
+        self.assertIsNone(media_path_from_url('other/media/x.jpg'))
         self.assertIsNone(media_path_from_url(''))
         self.assertIsNone(media_path_from_url(None))
 
@@ -99,3 +103,17 @@ class InvoiceImageCase(TestCase):
         both = FileCandidate(name, [ref_of(invoice, 'source_image'), ref_of(sample, 'image')])
         movable, skipped = partition([both], index)
         self.assertEqual((len(movable), skipped), (1, []))
+
+
+class ArabicNameCase(TestCase):
+    def test_quoted_arabic_url_matches_stored_name(self):
+        item = make_item()
+        stored = 'image_candidates/اختبار.jpg'
+        job = ImageSearchJob.objects.create(item=item)
+        candidate = ImageCandidate.objects.create(job=job, item=item, source_url='http://x.example/a.jpg',
+                                                  local_file=stored)
+        ItemEnrichment.objects.create(item=item, image_url='/media/image_candidates/%D8%A7%D8%AE%D8%AA%D8%A8%D8%A7%D8%B1.jpg')
+        index = build_reference_index()
+        self.assertEqual({r.model for r in index[stored]}, {'images.ImageCandidate', 'enrichment.ItemEnrichment'})
+        movable, skipped = partition([FileCandidate(stored, [ref_of(candidate, 'local_file')])], index)
+        self.assertEqual((movable, len(skipped)), ([], 1))
