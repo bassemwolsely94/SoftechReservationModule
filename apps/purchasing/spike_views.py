@@ -30,7 +30,8 @@ from core.permissions import deny_unless, matrix_permission
 
 # Batch 4, Z-7b: the list is a report (`analytics` view); confirm / unconfirm keep their
 # `purchasing` edit / approve check.
-SPIKE_READ   = matrix_permission('analytics')
+# viewer keeps analytics view for its report screens but is refused here (owner 2026-11-06).
+SPIKE_READ   = matrix_permission('analytics', exclude_roles=('viewer',))
 SPIKE_REVIEW = matrix_permission('purchasing', post=('edit', 'approve'))
 
 logger = logging.getLogger(__name__)

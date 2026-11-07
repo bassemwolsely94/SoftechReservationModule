@@ -64,6 +64,9 @@ def _render(pattern_str, id_value='1'):
         if re.search(r'[()\[\]*+?|\\]', s):
             return None
         return s
+    if 'drf_format_suffix' in s:
+        return None                             # DRF api-root ".json" duplicate (round 2, R3): it
+                                                # rendered as /api/<prefix>/x — no such endpoint
     conv = dict(_CONVERTERS, int=id_value)
     s = re.sub(r'<(?:(\w+):)?\w+>', lambda m: conv.get(m.group(1) or 'str', 'x'), s)
     return s

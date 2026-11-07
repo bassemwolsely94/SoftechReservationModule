@@ -34,6 +34,7 @@ from .services import (
 )
 from .selectors import search_products, autocomplete_products, get_recommendations, get_popular_products
 from core.export_safety import neutralise_formulas
+from core.permissions import RouteModulePermission  # round 2, D6
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────
@@ -50,7 +51,7 @@ def _get_item_any(softech_id: str) -> Item:
 # ── Product List ──────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def product_list(request):
     """
     Paginated product list with search + filter.
@@ -125,7 +126,7 @@ def product_list(request):
 # ── Product Search (autocomplete) ─────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def product_search(request):
     """
     Fast autocomplete search. Returns minimal fields.
@@ -140,7 +141,7 @@ def product_search(request):
 # ── Product Detail ────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def product_detail(request, softech_id):
     """
     Full product detail — all nested data.
@@ -158,7 +159,7 @@ def product_detail(request, softech_id):
 # ── Product Card (lightweight, for embedding) ─────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def product_card(request, softech_id):
     """
     Lightweight product card — used by reservations, call center.
@@ -172,7 +173,7 @@ def product_card(request, softech_id):
 # ── Availability ──────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def product_availability(request, softech_id):
     """
     Availability per branch.
@@ -199,7 +200,7 @@ def product_availability(request, softech_id):
 # ── Media ─────────────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def product_media_list(request, softech_id):
     """List all approved media for a product."""
     item = _get_item(softech_id)
@@ -338,7 +339,7 @@ def product_seo(request, softech_id):
 # ── Relations ─────────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def product_related(request, softech_id):
     """Get related products by type."""
     item = _get_item(softech_id)
@@ -375,7 +376,7 @@ def product_remove_relation(request, softech_id, relation_pk):
 # ── Recommendations ───────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def product_recommend(request, softech_id):
     """Get personalized recommendations for a product."""
     item = _get_item(softech_id)
@@ -385,7 +386,7 @@ def product_recommend(request, softech_id):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def popular_products(request):
     """Top products by popularity score."""
     limit = min(int(request.query_params.get('limit', 20)), 50)
@@ -396,7 +397,7 @@ def popular_products(request):
 # ── Interaction tracking ──────────────────────────────────────────────────────
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def product_track(request, softech_id):
     """
     Track a product interaction.
@@ -414,7 +415,7 @@ def product_track(request, softech_id):
 # ── Share card ────────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def product_share(request, softech_id):
     """
     Generate share card data for WhatsApp / social media.
@@ -429,7 +430,7 @@ def product_share(request, softech_id):
 # ── Lookup by slug ────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def product_by_slug(request, slug):
     """Get product detail by SEO slug."""
     seo  = get_object_or_404(ProductSEO, slug=slug)
@@ -442,7 +443,7 @@ def product_by_slug(request, slug):
 # ── Lookup by barcode ─────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def product_by_barcode(request, barcode):
     """Get product by barcode scan."""
     item = get_object_or_404(Item, barcode=barcode, is_active=True)
@@ -452,7 +453,7 @@ def product_by_barcode(request, barcode):
 # ── Filter options ────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def product_filter_options(request):
     """
     Return available filter values for the catalog filter panel.
@@ -534,7 +535,7 @@ def bulk_initialize(request):
 # ── Similar items (same therapeutic class) ────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def product_similar(request, softech_id):
     """
     GET /api/products/{softech_id}/similar/
@@ -579,7 +580,7 @@ def product_similar(request, softech_id):
 # ── Demand crosslink ──────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def product_demand(request, softech_id):
     """
     GET /api/products/{softech_id}/demand/
@@ -643,7 +644,7 @@ def product_demand(request, softech_id):
 # ── Price list export (Excel) ─────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def product_export(request):
     """
     GET /api/products/export/

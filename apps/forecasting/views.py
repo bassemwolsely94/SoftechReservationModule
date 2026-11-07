@@ -460,6 +460,13 @@ class ForecastScenarioViewSet(viewsets.ModelViewSet):
     def results(self, request, pk=None):
         scenario = self.get_object()
         qs = ForecastResult.objects.filter(scenario=scenario).select_related('branch')
+        # Branch rows follow the caller's branches (owner decisions 3 / B-1: branch roles keep their
+        # own-branch analytics; round 2 R4 detail canary). Chain-level rows (no branch) stay.
+        from django.db.models import Q
+        from core.branch_scope import branch_ids
+        ids = branch_ids(request.user)
+        if ids is not None:
+            qs = qs.filter(Q(branch__isnull=True) | Q(branch_id__in=ids))
         metric = request.query_params.get('metric')
         if metric:
             qs = qs.filter(metric=metric)

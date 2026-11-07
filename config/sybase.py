@@ -141,6 +141,23 @@ def _apply_query_timeout(stmt, timeout=None):
 SYBASE_FETCH_TIMEOUT_SECONDS = int(getattr(settings, 'SYBASE_FETCH_TIMEOUT', 600))
 
 
+# A raw write batch (begin tran … commit, one statement) that stalls on a dropped HQ / branch link
+# would otherwise hold the job forever. Round 2 S-2 (owner OK 2026-11-05): the batch gets this
+# budget; when it fires the caller's finally closes the connection, which rolls back an open
+# transaction. A timeout AFTER the server committed reads as an error — callers treat it as
+# "outcome unknown", never as "not written".
+SOFTECH_WRITE_BATCH_TIMEOUT_SECONDS = int(getattr(settings, 'SOFTECH_WRITE_BATCH_TIMEOUT', 120))
+
+
+def apply_write_batch_timeout(stmt):
+    _apply_query_timeout(stmt, SOFTECH_WRITE_BATCH_TIMEOUT_SECONDS)
+
+
+def is_timeout_error(exc) -> bool:
+    msg = str(exc).lower()
+    return 'jz0t3' in msg or 'timed out' in msg or 'timeout' in msg
+
+
 def _apply_fetch_timeout(stmt, timeout=None):
     secs = SYBASE_QUERY_TIMEOUT_SECONDS if timeout is None else int(timeout)
     _apply_query_timeout(stmt, max(secs, SYBASE_FETCH_TIMEOUT_SECONDS))

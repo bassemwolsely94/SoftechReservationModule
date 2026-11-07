@@ -557,8 +557,8 @@ SCREENS = [
             T('في «مخزون راكد» موظف الفرع بيشوف فرعه بس. الاستبعاد والاحتفاظ الاستراتيجي محتاجين «تعديل» أو «اعتماد» في المشتريات.',
               'In «Dead stock» branch staff see only their branch. Exclude and strategic hold need "edit" or "approve" on purchasing.'),
         ],
-        'updated': '2026-11-01',
-        'change_note': T('تبويب جديد: «🧊 مخزون راكد»', 'New tab: «🧊 Dead stock»'),
+        'updated': '2026-11-06',
+        'change_note': T('دور «مشاهد» ماعادش يقدر يفتح الشاشة دي.', 'The viewer role can no longer open this screen.'),
     },
     {
         'key': 'purchasing.supply',
@@ -996,8 +996,8 @@ SCREENS = [
              'text': T('يجهّز رسالة بالتفاصيل ويفتح واتساب — على رقم العميل لو معروف، وإلا تختار المحادثة.', "Builds a message with the details and opens WhatsApp — to the customer's number when known, else you pick the chat."),
              'when': T('الرسالة مش بتتبعت لوحدها: راجعها واضغط إرسال في واتساب.', 'Nothing is sent by itself: review it and press send in WhatsApp.')},
         ],
-        'updated': '2026-11-02',
-        'change_note': T('ترحيل ISR بمراجعة من سوفتك الآن وتأكيد بعدد الأسطر وسبب للملاحظات', 'ISR push with a review from SOFTECH now, the line count to confirm and a reason for notes'),
+        'updated': '2026-11-06',
+        'change_note': T('«مشرف مركز الاتصال» بقى يقدر يفتح الشاشة دي للقراءة.', 'Call-center supervisors can now open this screen to read it.'),
     },
     {
         'key': 'purchasing.overview',

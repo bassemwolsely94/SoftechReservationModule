@@ -1,9 +1,8 @@
 // "Hidden means forbidden": for every side-menu item a role does NOT see, the API behind that
 // screen must answer 403 for that role. The menu only hides; the server is the guard.
 //
-// Cases where the code disagrees are NOT decided here: they are listed in KNOWN_GAPS with the
-// question for the owner (test plan §3 rule 5), shown as annotations, and the spec stays green
-// only for exactly those. Any NEW hidden-but-allowed pair fails the run. Visible-but-403 pairs
+// Cases where the code disagrees are NOT decided here: KNOWN_GAPS lists the ones the owner has
+// accepted (2026-11-06), shown as annotations, and the spec stays green only for exactly those. Any NEW hidden-but-allowed pair fails the run. Visible-but-403 pairs
 // (the menu shows a screen the server refuses) are reported as annotations too.
 import fs from 'node:fs'
 import path from 'node:path'
@@ -41,7 +40,7 @@ for (const role of ROLES) {
         if (r.status >= 500 && r.status !== 503) {
           unexpected.push(`${r.api} crashed for ${role} (${r.status})`)
         } else if (!r.visible && r.status >= 200 && r.status < 300) {
-          if (gap) info.annotations.push({ type: 'owner question', description: `${r.to} hidden from ${role} but ${r.api} → ${r.status}: ${gap}` })
+          if (gap) info.annotations.push({ type: 'owner accepted', description: `${r.to} hidden from ${role} but ${r.api} → ${r.status}: ${gap}` })
           else unexpected.push(`${r.to} is hidden from ${role} but ${r.api} answered ${r.status}`)
         } else if (!r.visible && ![401, 403].includes(r.status)) {
           info.annotations.push({ type: 'inconclusive', description: `${r.to} hidden from ${role}: ${r.api} → ${r.status}` })

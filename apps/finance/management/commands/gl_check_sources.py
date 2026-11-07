@@ -25,7 +25,8 @@ MIRROR = {'supplier_payments': ('supplier', 'out', 'in'), 'customer_collections'
 
 
 def _amount(doc):
-    return doc.amounts.get('amount', doc.amounts.get('net', doc.amounts.get('credit', doc.amounts.get('value', Decimal(0)))))
+    # 'value' ahead of 'net': a purchase's total is the whole invoice, its net is before VAT (P32)
+    return doc.amounts.get('amount', doc.amounts.get('value', doc.amounts.get('net', doc.amounts.get('credit', Decimal(0)))))
 
 
 class Command(BaseCommand):

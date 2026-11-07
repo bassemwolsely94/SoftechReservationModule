@@ -54,8 +54,10 @@ def collect_drift():
                 continue
             db_nullable = cols[f.column][0]
             if db_nullable != f.null and not f.primary_key:
+                risk = ('BREAKS INSERTS — the database refuses an empty value the code may save'
+                        if f.null else 'harmless — the database is looser than the code')
                 found.append({'kind': 'nullability', 'table': table, 'column': f.column,
-                              'detail': f'model null={f.null}, database null={db_nullable}'})
+                              'detail': f'model null={f.null}, database null={db_nullable} ({risk})'})
         for column, (nullable, default) in cols.items():
             if column not in known and not nullable and default is None:
                 found.append({'kind': 'legacy_not_null', 'table': table, 'column': column,

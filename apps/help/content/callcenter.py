@@ -504,8 +504,8 @@ SCREENS = [
              'text': T('يستخدم الرقم ده كـ «عميل غير مسجل» في الشاشة دي — مش بيضيف عميل جديد لقائمة العملاء.', 'Uses this number as an "unregistered customer" on this screen — it does not add a customer to the list.'),
              'warn': T('راجع الرقم كويس: التواصل والرسايل بتروح على الرقم ده.', 'Check the number carefully: calls and messages go to it.')},
         ],
-        'updated': '2026-11-03',
-        'change_note': T('شرح لكل أزرار الشاشة في «💡 تلميحات الأزرار»', 'Every button on the screen explained in "💡 Button hints"'),
+        'updated': '2026-11-06',
+        'change_note': T('«مدير الجودة» بقى يشوف الشاشة دي في القائمة؛ دور «مشاهد» ماعادش يقدر يفتحها.', 'Quality managers now see this screen in the menu; the viewer role can no longer open it.'),
     },
     {
         'key': 'callcenter.cases',
@@ -693,8 +693,8 @@ SCREENS = [
                  '• الغرض: حجز، توصيل، شكوى، إلخ.\n• الحالة: تمت، لا رد، مشغول، بريد صوتي، معاودة.\n• الاتجاه: واردة، صادرة، واتساب.\nمثلاً: «شكوى» + «لا رد» يوريك شكاوى محتاجة رجوع.',
                  '• Purpose: reservation, delivery, complaint, etc.\n• Status: answered, no answer, busy, voicemail, call back.\n• Direction: inbound, outbound, WhatsApp.\nE.g. "Complaint" + "No answer" shows complaints that need a callback.')},
         ],
-        'updated': '2026-10-26',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-06',
+        'change_note': T('دور «مشاهد» ماعادش يقدر يفتح الشاشة دي.', 'The viewer role can no longer open this screen.'),
     },
     {
         'key': 'callcenter.callbacks',
@@ -861,7 +861,7 @@ SCREENS = [
                        'A call in progress and its duration. If the caller is a known customer, clicking opens the customer card.'),
              'open_hint': T('في «مكالمات نشطة» أثناء وجود مكالمة.', 'Under "Active calls" while a call is in progress.')},
         ],
-        'updated': '2026-11-03',
-        'change_note': T('شرح لكل أزرار الشاشة في «💡 تلميحات الأزرار»', 'Every button on the screen explained in "💡 Button hints"'),
+        'updated': '2026-11-06',
+        'change_note': T('«مدير الجودة» بقى يشوف الشاشة دي في القائمة؛ دور «مشاهد» ماعادش يقدر يفتحها.', 'Quality managers now see this screen in the menu; the viewer role can no longer open it.'),
     },
 ]

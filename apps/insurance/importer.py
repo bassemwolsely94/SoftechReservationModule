@@ -41,6 +41,8 @@ from .sybase_queries import (
     QUERY_MOTALBA_LINES_BY_NO,
     QUERY_MOTALBA_LINES_BY_PERSONCODE_DATERANGE,
     QUERY_PRESCRIPTION_LINES_CLASSIFIED,
+    QUERY_PRESCRIPTION_LINES_BATCH_TEMPLATE,
+    RECEIPT_KEY_FILTER,
     QUERY_ALL_MOTALBA_LINES_CLASSIFIED,
     QUERY_PATIENT_NAME_BY_PHCODE,
     QUERY_PATIENT_NAME_FROM_PERSONSDATA,
@@ -246,158 +248,13 @@ def resolve_patient_name(cursor, ppersoncode: str) -> str:
     return name
 
 
-# ── Fast batch line-fetch (50 docnumbers per query, no stktransm join) ─────────
-
-BATCH_SIZE = 50  # docnumbers per Sybase query
-
-
-def _zero_totals_dict() -> dict:
-    z = Decimal('0')
-    return {
-        'local_before': z, 'imported_before': z, 'tarsia_before': z,
-        'gross_before': z, 'local_discount': z, 'imported_discount': z,
-        'tarsia_discount': z, 'total_discount': z, 'net_after': z,
-    }
-
-
-def _fetch_lines_batch(
-    conn,
-    prescriptions: list[tuple[str, str, Decimal]],  # [(docnumber, branchcode_raw, dgt), ...]
-    local_disc: Decimal,
-    imported_disc: Decimal,
-    tarsia_disc: Decimal,
-    tarsia_classif_codes: set | None,
-) -> dict[str, tuple[list[dict], dict, str]]:
-    """
-    Fetch item lines for up to BATCH_SIZE prescriptions in one Sybase query.
-    stktrans + stktransm (for sm.branchcustname) + items + itemsorigin + custdiscpclassif.
-    No localcustomers — patient name comes from stktransm.branchcustname directly.
-    Branchcode NOT in WHERE (prevents index use) — filtered in Python instead.
-    Retries with a fresh connection if the passed one is dead.
-    """
-    from collections import defaultdict
-    from .sybase_queries import QUERY_ITEM_LINES_DOCNOS_TEMPLATE
-
-    if not prescriptions:
-        return {}
-
-    docno_filter = ' OR '.join(
-        'st.docnumber = CONVERT(numeric(6), ?)'
-        for _ in prescriptions
-    )
-    sql    = QUERY_ITEM_LINES_DOCNOS_TEMPLATE.format(docno_filter=docno_filter)
-    params = [docno for docno, _, _dgt in prescriptions]
-    branch_map = {docno: branch.strip() for docno, branch, _dgt in prescriptions}
-    dgt_map    = {docno: dgt           for docno, _branch, dgt in prescriptions}
-
-    result: dict[str, tuple[list[dict], dict, str]] = {}
-
-    # Attempt with passed connection, then retry with fresh one if it's dead
-    rows = None
-    for attempt, use_conn in enumerate([conn, None]):
-        try:
-            if use_conn is None:
-                use_conn = _get_connection()
-            cursor = use_conn.cursor()
-            cursor.execute(sql, params)
-            rows = cursor.fetchall()
-            break
-        except Exception as e:
-            if attempt == 0:
-                logger.warning('Batch attempt 1 failed, retrying with fresh connection: %s', e)
-            else:
-                logger.warning('Batch line fetch failed after retry (%d prescriptions): %s',
-                               len(prescriptions), e)
-                for docno, _, _dgt in prescriptions:
-                    result[docno] = ([], _zero_totals_dict(), '')
-                return result
-
-    grouped: dict[str, list] = defaultdict(list)
-    for row in rows or []:
-        doc_key    = str(_to_int(row[0])) if row[0] else ''
-        row_branch = _safe(row[1])
-        expected   = branch_map.get(doc_key, '')
-        if doc_key and (not expected or row_branch == expected):
-            grouped[doc_key].append(row)
-
-    overrides = load_classification_overrides()
-    for docno, _, dgt in prescriptions:
-        result[docno] = _classify_lean_rows(
-            grouped.get(docno, []),
-            local_disc, imported_disc, tarsia_disc, tarsia_classif_codes,
-            docvalue_grandtotal=dgt,
-            overrides=overrides,
-        )
-    return result
-
-
-def _classify_lean_rows(
-    rows: list,
-    local_disc: Decimal,
-    imported_disc: Decimal,
-    tarsia_disc: Decimal,
-    tarsia_classif_codes: set | None,
-    docvalue_grandtotal: Decimal | None = None,
-    overrides: dict | None = None,
-) -> tuple[list[dict], dict, str]:
-    """
-    Classify rows from QUERY_ITEM_LINES_DOCNOS_TEMPLATE.
-    Columns: [0]=docnumber, [1]=branchcode, [2]=itemcode, [3]=itemname,
-             [4]=transqty, [5]=transprice (insurance unit), [6]=transprice_total (insurance),
-             [7]=importedorigin, [8]=itemstoreclassif, [9]=itemorigincode,
-             [10]=custdiscpdescr, [11]=itemsaleprice (PUBLIC unit price),
-             [12]=lc.branchcustname (patient name — present for ~66% of prescriptions)
-
-    line_total = itemsaleprice × transqty = PUBLIC price (سعر الجمهور before discount).
-    Patient name: from localcustomers.branchcustname via stktransm.phcode.
-    """
-    if overrides is None:
-        overrides = load_classification_overrides()
-    patient_name = ''
-    classified_lines = []
-    for lr in rows:
-        imported_origin  = _safe(lr[7])
-        store_classif    = _safe(lr[8])
-        transqty         = _to_qty(lr[4])
-        itemsaleprice    = _to_decimal(lr[11])
-        line_total_public = (itemsaleprice * transqty).quantize(Decimal('0.01'))
-
-        # Patient name from localcustomers.branchcustname (first non-empty)
-        if not patient_name and len(lr) > 12 and lr[12]:
-            patient_name = _safe(lr[12])
-
-        category = classify_item(
-            imported_origin=imported_origin,
-            store_classif=store_classif,
-            tarsia_codes=tarsia_classif_codes,
-            item_code=_safe(lr[2]),
-            overrides=overrides,
-        )
-        classified_lines.append({
-            'itemcode':      _safe(lr[2]),
-            'item_name':     _safe(lr[3]),
-            'quantity':      transqty,
-            'unit_price':    itemsaleprice,
-            'line_total':    line_total_public,
-            'category':      category,
-            'origin_code':   _safe(lr[9]),
-            'imported_flag': imported_origin == '1',
-            'store_classif': store_classif,
-        })
-
-    totals = aggregate_prescription_totals(
-        classified_lines, local_disc, imported_disc, tarsia_disc,
-        docvalue_grandtotal=docvalue_grandtotal,
-    )
-    return classified_lines, totals, patient_name
-
-
 # ── Core line-fetch + classify ─────────────────────────────────────────────────
 
 def _fetch_and_classify_lines(
     cursor,
     docnumber: str,
     branchcode: str,
+    doccode: str,
     local_disc: Decimal,
     imported_disc: Decimal,
     tarsia_disc: Decimal,
@@ -419,7 +276,7 @@ def _fetch_and_classify_lines(
     if overrides is None:
         overrides = load_classification_overrides()
     try:
-        cursor.execute(QUERY_PRESCRIPTION_LINES_CLASSIFIED, [docnumber, branchcode])
+        cursor.execute(QUERY_PRESCRIPTION_LINES_CLASSIFIED, [docnumber, branchcode, doccode])
         line_rows = cursor.fetchall()
     except Exception as e:
         # A dead/closed connection must PROPAGATE so the caller can reconnect and
@@ -431,6 +288,28 @@ def _fetch_and_classify_lines(
             raise
         logger.warning('Could not fetch lines for docnumber=%s branch=%s: %s', docnumber, branchcode, e)
         line_rows = []
+
+    return _classify_line_rows(
+        line_rows, local_disc, imported_disc, tarsia_disc, tarsia_classif_codes,
+        docvalue_grandtotal=docvalue_grandtotal, docvalue_required=docvalue_required,
+        overrides=overrides,
+    )
+
+
+def _classify_line_rows(
+    line_rows: list,
+    local_disc: Decimal,
+    imported_disc: Decimal,
+    tarsia_disc: Decimal,
+    tarsia_classif_codes: set | None,
+    docvalue_grandtotal: Decimal | None = None,
+    docvalue_required: Decimal | None = None,
+    overrides: dict | None = None,
+) -> tuple[list[dict], dict, str]:
+    """Classify one prescription's QUERY_PRESCRIPTION_LINES_CLASSIFIED rows (also the
+    batch query's rows minus their 3 key columns). Returns (lines, totals, patient_name)."""
+    if overrides is None:
+        overrides = load_classification_overrides()
 
     # QUERY_PRESCRIPTION_LINES_CLASSIFIED column layout:
     # [0]=itemcode, [1]=itemname, [2]=transqty, [3]=transprice (insurance unit),
@@ -476,6 +355,48 @@ def _fetch_and_classify_lines(
         docvalue_required=docvalue_required,
     )
     return classified_lines, totals, patient_name
+
+
+LINE_BATCH_SIZE = 50   # receipts per stktrans query (3 params each)
+
+
+def _receipt_key(docnumber, branchcode, doccode) -> tuple[str, str, str]:
+    return (str(_to_int(docnumber)), _safe(branchcode), _safe(doccode))
+
+
+def _fetch_receipt_lines(conn, receipts: list[tuple]) -> tuple[dict, object]:
+    """Fetch the stktrans lines of many receipts, LINE_BATCH_SIZE per query, matched on
+    (branchcode, doccode, docnumber). `receipts` = [(docnumber, branchcode, doccode), …]
+    as SOFTECH returned them (raw values are bound as-is). Returns
+    ({_receipt_key: [QUERY_PRESCRIPTION_LINES_CLASSIFIED-shaped rows]}, conn) — conn may
+    be a fresh connection. A failed query is retried once on a fresh connection; a second
+    failure raises InsuranceImportError (never empty lines: that would silently corrupt
+    the claim)."""
+    unique = list({_receipt_key(*r): r for r in receipts if r[0]}.values())
+    grouped: dict[tuple, list] = {_receipt_key(*r): [] for r in unique}
+    for start in range(0, len(unique), LINE_BATCH_SIZE):
+        chunk = unique[start:start + LINE_BATCH_SIZE]
+        sql = QUERY_PRESCRIPTION_LINES_BATCH_TEMPLATE.format(
+            receipt_filter=' OR '.join([RECEIPT_KEY_FILTER] * len(chunk)))
+        params = []
+        for docnumber, branchcode, doccode in chunk:
+            params += [branchcode, doccode, str(_to_int(docnumber))]
+        for attempt in (1, 2):
+            try:
+                cursor = conn.cursor()
+                cursor.execute(sql, params)
+                rows = cursor.fetchall()
+                break
+            except Exception as e:
+                if attempt == 2:
+                    raise InsuranceImportError(
+                        f'انقطع الاتصال بسوفتك أثناء جلب بنود الروشتات — أعد المحاولة: {e}') from e
+                logger.warning('Line batch failed (%d receipts), retrying on a fresh connection: %s',
+                               len(chunk), e)
+                conn = _get_connection()
+        for row in rows:
+            grouped.setdefault(_receipt_key(row[0], row[1], row[2]), []).append(tuple(row[3:]))
+    return grouped, conn
 
 
 def _classify_prefetched_lines(
@@ -621,12 +542,11 @@ def import_claim_by_motalbano_batch(
     """
     Import a Softech motalba into a frozen InsuranceClaim snapshot.
 
-    Strategy (two Sybase round-trips per prescription):
+    Strategy:
       1. QUERY_MOTALBA_HEADER_FROM_DETAIL  → period dates, rx count
       2. QUERY_MOTALBA_LINES_BY_NO         → list of (docnumber, branchcode, date …)
-      3. For each prescription:
-           QUERY_PRESCRIPTION_LINES_CLASSIFIED → item lines, patient name
-           (uses docnumber+branchcode index → fast per-Rx query)
+      3. _fetch_receipt_lines              → item lines + patient name for LINE_BATCH_SIZE
+           receipts per query, on the full stktrans_x key (branchcode, doccode, docnumber)
 
     This avoids the massive 5-table JOIN in QUERY_ALL_MOTALBA_LINES_CLASSIFIED
     which causes full table scans on stktrans (~millions of rows) and hangs.
@@ -690,6 +610,11 @@ def import_claim_by_motalbano_batch(
     imported_disc = auto_imported if auto_imported > 0 else Decimal(str(claim.applied_imported_disc_pct or 0))
     tarsia_disc   = auto_tarsia   if auto_tarsia   > 0 else Decimal(str(claim.applied_tarsia_disc_pct   or 0))
 
+    # All receipts' lines up front, LINE_BATCH_SIZE per query (was one query per receipt).
+    lines_by_receipt, conn = _fetch_receipt_lines(
+        conn, [(r[3], r[2], r[5]) for r in prescription_rows])
+    overrides = load_classification_overrides()
+
     with transaction.atomic():
         InsuranceClaimPrescription.objects.filter(claim=claim).delete()
 
@@ -713,16 +638,7 @@ def import_claim_by_motalbano_batch(
         # motalbasdate/motalbafdate boundaries.
         receipt_min = receipt_max = None
 
-        for _i, prx_row in enumerate(prescription_rows):
-            # Proactively refresh the Sybase connection every 100 prescriptions —
-            # a single connection processing thousands of line queries gets dropped
-            # by the server mid-run (SybConnectionDeadException) on large motalbas.
-            if _i and _i % 100 == 0:
-                try:
-                    conn = _get_connection()
-                except Exception as _re:
-                    logger.warning('Periodic reconnect failed at #%d: %s', _i, _re)
-
+        for prx_row in prescription_rows:
             branchcode_raw = prx_row[2] if prx_row[2] is not None else ''
             branchcode     = branchcode_raw.strip() if isinstance(branchcode_raw, str) else str(branchcode_raw)
             docnumber      = str(_to_int(prx_row[3])) if prx_row[3] else ''
@@ -744,39 +660,11 @@ def import_claim_by_motalbano_batch(
             # prx_row[11] = docvaluerequired    (net after contract discount)
             dgt, dvr = _signed_dgt(prx_row[7], prx_row[11], doccode)
 
-            try:
-                line_cursor = conn.cursor()
-                classified_lines, totals, patient_name = _fetch_and_classify_lines(
-                    line_cursor, docnumber, branchcode_raw,
-                    local_disc, imported_disc, tarsia_disc, tarsia_classif_codes,
-                    docvalue_grandtotal=dgt,
-                    docvalue_required=dvr,
-                )
-            except Exception as e:
-                logger.warning('Line fetch failed docnumber=%s, retrying with fresh conn: %s',
-                               docnumber, e)
-                try:
-                    conn = _get_connection()
-                    line_cursor = conn.cursor()
-                    classified_lines, totals, patient_name = _fetch_and_classify_lines(
-                        line_cursor, docnumber, branchcode_raw,
-                        local_disc, imported_disc, tarsia_disc, tarsia_classif_codes,
-                        docvalue_grandtotal=dgt,
-                        docvalue_required=dvr,
-                    )
-                except Exception as e2:
-                    # If the connection is STILL dead after a reconnect+retry, fail
-                    # the whole claim rather than silently corrupting it with empty
-                    # lines (the reimport command marks it failed, not FIXED).
-                    msg2 = str(e2)
-                    if ('Connection is already closed' in msg2 or 'ConnectionDead' in msg2
-                            or 'JZ0C0' in msg2 or 'JZ006' in msg2):
-                        raise InsuranceImportError(
-                            f'انقطع الاتصال بسوفتك أثناء استيراد الفاتورة {docnumber} — '
-                            f'أعد المحاولة: {e2}'
-                        ) from e2
-                    logger.warning('Line fetch failed after retry docnumber=%s: %s', docnumber, e2)
-                    classified_lines, totals, patient_name = [], _zero_totals_dict(), ''
+            classified_lines, totals, patient_name = _classify_line_rows(
+                lines_by_receipt.get(_receipt_key(prx_row[3], branchcode_raw, prx_row[5]), []),
+                local_disc, imported_disc, tarsia_disc, tarsia_classif_codes,
+                docvalue_grandtotal=dgt, docvalue_required=dvr, overrides=overrides,
+            )
 
             rx_count += 1
             _write_prescription_snapshot(
@@ -914,6 +802,12 @@ def import_claim_from_softech(
 
     logger.info('Insurance import by personcode: found %d prescriptions', len(all_lines))
 
+    lines_by_receipt, conn = _fetch_receipt_lines(
+        conn, [(r[3], r[2], r[5]) for r in all_lines
+               if not branchcodes or _safe(r[2]) in branchcodes])
+    cursor = conn.cursor()
+    overrides = load_classification_overrides()
+
     with transaction.atomic():
         InsuranceClaimPrescription.objects.filter(claim=claim).delete()
 
@@ -936,11 +830,10 @@ def import_claim_from_softech(
             if branchcodes and branchcode not in branchcodes:
                 continue
 
-            classified_lines, totals, patient_name = _fetch_and_classify_lines(
-                cursor, docnumber, branchcode,
+            classified_lines, totals, patient_name = _classify_line_rows(
+                lines_by_receipt.get(_receipt_key(line_row[3], line_row[2], line_row[5]), []),
                 local_disc, imported_disc, tarsia_disc, tarsia_classif_codes,
-                docvalue_grandtotal=dgt,
-                docvalue_required=dvr,
+                docvalue_grandtotal=dgt, docvalue_required=dvr, overrides=overrides,
             )
             if not patient_name and ppersoncode:
                 patient_name = resolve_patient_name(cursor, ppersoncode)
@@ -1098,14 +991,10 @@ def fetch_single_rx_from_softech(docnumber: str, claim: InsuranceClaim,
     if not header_rows:
         raise InsuranceImportError(f'لم يتم العثور على الفاتورة رقم {docnumber} في سوفتك')
 
-    # Pick the row matching the resolved branch; else fall back to the first.
-    header = None
-    if target_branch:
-        for hr in header_rows:
-            if _safe(hr[0]) == target_branch:
-                header = hr
-                break
-    header = header or header_rows[0]
+    # Rows of the resolved branch if any, else all. A sale (115) and a return (30) can share
+    # a number in one branch — years apart — so take the newest document.
+    candidates = [hr for hr in header_rows if _safe(hr[0]) == target_branch] or header_rows
+    header = max(candidates, key=lambda hr: _to_date(hr[3]) or date.min)
 
     branchcode = _safe(header[0])
     docdate    = _to_date(header[3]) or claim.period_from
@@ -1116,7 +1005,7 @@ def fetch_single_rx_from_softech(docnumber: str, claim: InsuranceClaim,
     tarsia_disc   = Decimal(str(claim.applied_tarsia_disc_pct   or 0))
 
     classified_lines, totals, patient_name = _fetch_and_classify_lines(
-        cursor, docnumber, branchcode,
+        cursor, docnumber, branchcode, header[1],
         local_disc, imported_disc, tarsia_disc, None,
     )
     # Fallback to phcode-based lookup if not found in lines

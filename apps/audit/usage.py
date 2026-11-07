@@ -24,6 +24,7 @@ from rest_framework.response import Response
 from core import branch_scope
 
 from .models import ScreenView
+from core.permissions import RouteModulePermission  # round 2, D6
 
 DEDUP_SECONDS = 30
 ZERO_USE_DAYS = 60
@@ -61,7 +62,7 @@ def _module(route):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def screen_view(request):
     profile = _profile(request)
     if not request.data.get('route'):
@@ -78,7 +79,7 @@ def screen_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def usage_report(request):
     profile = _profile(request)
     people = _sees_people(profile)

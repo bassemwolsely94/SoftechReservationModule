@@ -17,6 +17,7 @@ from .serializers import (
     CustomerCreateSerializer, CustomerUpdateSerializer,
     CustomerNoteSerializer, PurchaseHistorySerializer,
 )
+from core.permissions import RouteModulePermission  # round 2, owner answers 2026-11-05
 
 # who may delete someone else's customer note (the author always may delete their own)
 NOTE_DELETE_ROLES = ('admin', 'supervisor', 'quality_manager')
@@ -39,7 +40,7 @@ class _CreateNeedsEdit(BasePermission):
 
 
 class CustomerViewSet(viewsets.ModelViewSet):
-    permission_classes  = [IsAuthenticated, _CreateNeedsEdit]
+    permission_classes  = [IsAuthenticated, _CreateNeedsEdit, RouteModulePermission]
     # search after ordering: exact text first, the chosen sort within each rank
     filter_backends     = [DjangoFilterBackend, NullsLastOrderingFilter, WildcardSearchFilter]
     filterset_fields    = ['softech_ptclassifcode', 'preferred_branch', 'segment', 'churn_segment']

@@ -40,7 +40,7 @@ MODULE = {
             'title': T('رسالة الإرشادات للعميل', 'The customer guidance message'),
             'model': 'counselling.CounselCardSend', 'field': 'status',
             'states': [
-                {'key': 'queued', 'label': T('قيد الإرسال', 'Sending'), 'desc': T('تم الحفظ وجارٍ الإرسال لواتساب. رسالة واحدة على الأكثر لنفس الرقم كل 10 دقائق، حتى مع «إعادة الإرسال».', 'Saved and being sent to WhatsApp. At most one message to the same number every 10 minutes, even with "Resend".'),
+                {'key': 'queued', 'label': T('قيد الإرسال', 'Sending'), 'desc': T('تم الحفظ وجارٍ الإرسال لواتساب. رسالة واحدة على الأكثر لنفس الرقم كل 10 دقائق، حتى مع «إعادة الإرسال». تُرسل فقط لرقم مسجّل على العميل (واتساب أو الموبايل أو الرقم الإضافي) — لو الرقم مختلف حدّث بيانات العميل أولاً.', 'Saved and being sent to WhatsApp. At most one message to the same number every 10 minutes, even with "Resend". Sent only to a number on the customer\'s record (WhatsApp, mobile or alternate) — if the number differs, update the customer first.'),
                  'next': ['sent', 'failed']},
                 {'key': 'sent', 'label': T('أُرسلت', 'Sent'), 'desc': T('وصلت لواتساب برابط خاص صالح 90 يوماً.', 'Delivered to WhatsApp with a private link valid for 90 days.')},
                 {'key': 'failed', 'label': T('فشل الإرسال', 'Failed'),
@@ -114,7 +114,7 @@ SCREENS = [
               '"Approve" saves a new version that reaches customers. "Withdraw" with a reason stops it at once.'),
         ],
         'tabs': [
-            {'key': 'needs', 'title': T('يحتاج محتوى', 'Needs content'), 'body': T('أصناف مباعة بدون إرشاد.', 'Sold items with no sheet.')},
+            {'key': 'needs', 'title': T('يحتاج محتوى', 'Needs content'), 'body': T('أصناف مباعة بدون إرشاد. يراها كل من يفتح الشاشة؛ الكتابة والربط للصيادلة فقط.', 'Sold items with no sheet. Everyone who opens the screen sees it; writing and linking are for pharmacists only.')},
             {'key': 'draft', 'title': T('مسودات', 'Drafts'), 'body': T('مسودات يدوية أو آلية وتعديلات لم تُعتمد.', 'Hand or AI drafts and unapproved edits.')},
             {'key': 'pending_review', 'title': T('بانتظار الاعتماد', 'Pending approval'), 'body': T('أُرسلت للاعتماد.', 'Sent for approval.')},
             {'key': 'approved', 'title': T('معتمد', 'Approved'), 'body': T('تصل للعملاء الآن.', 'Reaching customers now.')},

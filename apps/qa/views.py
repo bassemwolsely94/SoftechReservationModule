@@ -13,12 +13,15 @@ from .serializers import (
 
 from core import branch_scope                                     # noqa: E402
 from core.permissions import matrix_permission                     # noqa: E402
+from core.permissions import RouteModulePermission  # round 2, owner answers 2026-11-05
 
 # QA inspections sit in the `hr` module (as the middleware maps /api/qa/) — Batch 4, Z-9c: reads
 # need view; writes need a grant beyond view, export included, because the quality manager —
 # whose screen this is — holds hr view + export (viewer, view only, could create inspections).
 _QA_WRITE = ('create', 'edit', 'approve', 'finalize', 'export')
-QA = matrix_permission('hr', post=_QA_WRITE, edit=_QA_WRITE, delete=('edit', 'delete'))
+# The accountant's hr grant is self-service only (owner 2026-11-06), not QA inspections.
+QA = matrix_permission('hr', post=_QA_WRITE, edit=_QA_WRITE, delete=('edit', 'delete'),
+                       exclude_roles=('accountant',))
 
 
 def _profile(request):
@@ -34,7 +37,7 @@ class QATemplateListView(generics.ListAPIView):
 
 class QAInspectionViewSet(viewsets.ModelViewSet):
     """CRUD + submit for branch QA inspections."""
-    permission_classes = [IsAuthenticated, QA]
+    permission_classes = [IsAuthenticated, QA, RouteModulePermission]
 
     def get_queryset(self):
         qs = QAInspection.objects.select_related('template', 'branch', 'inspector__user')

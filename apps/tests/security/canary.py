@@ -174,6 +174,15 @@ class Planter:
             (self.planted if obj is not None else self.skipped)[model._meta.label] = getattr(obj, 'pk', 'skip')
         return self
 
+    def instance(self, model):
+        """One neutral row of `model`, reused (round 2, R3: real records for detail routes)."""
+        if model not in self.neutral:
+            obj = self.build(model, marked=False)
+            if obj is None:
+                return None
+            self.neutral[model] = obj
+        return self.neutral[model]
+
     def plant_all(self):
         for model, _, _ in branch_linked_models():
             label = model._meta.label

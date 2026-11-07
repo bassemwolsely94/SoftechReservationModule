@@ -37,6 +37,7 @@ def _get_profile(request):
 
 
 from core.permissions import matrix_permission                     # noqa: E402
+from core.permissions import RouteModuleDeletePermission  # round 2, owner answers 2026-11-05
 
 # Chronic classification = the `chronic` matrix module (Batch 4, Z-8a): reads need view; every
 # write — tags, ingredients, protocols, item classification, task generation — needs edit.
@@ -54,7 +55,7 @@ class StandardPagination(PageNumberPagination):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class MedicationTagViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated, CHRONIC]
+    permission_classes = [IsAuthenticated, CHRONIC, RouteModuleDeletePermission]
     serializer_class   = MedicationTagSerializer
     queryset           = MedicationTag.objects.all().order_by('tag_type', 'name')
 
@@ -79,7 +80,7 @@ class MedicationTagViewSet(viewsets.ModelViewSet):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class ActiveIngredientViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated, CHRONIC]
+    permission_classes = [IsAuthenticated, CHRONIC, RouteModuleDeletePermission]
     queryset = ActiveIngredient.objects.prefetch_related(
         'ingredient_tags__tag', 'item_maps', 'followup_protocols'
     ).all()
@@ -167,7 +168,7 @@ class ActiveIngredientViewSet(viewsets.ModelViewSet):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class FollowUpProtocolViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated, CHRONIC]
+    permission_classes = [IsAuthenticated, CHRONIC, RouteModuleDeletePermission]
     serializer_class   = FollowUpProtocolSerializer
     queryset = FollowUpProtocol.objects.select_related(
         'active_ingredient', 'created_by__user'
@@ -191,7 +192,7 @@ class FollowUpProtocolViewSet(viewsets.ModelViewSet):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class ItemIngredientMapViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated, CHRONIC]
+    permission_classes = [IsAuthenticated, CHRONIC, RouteModuleDeletePermission]
     serializer_class   = ItemIngredientMapSerializer
     queryset = ItemIngredientMap.objects.select_related(
         'item', 'active_ingredient', 'mapped_by__user'

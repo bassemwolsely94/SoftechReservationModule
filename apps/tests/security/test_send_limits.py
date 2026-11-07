@@ -11,7 +11,7 @@ Recipients: a staff alert goes only to a number held on the configured records â
 staff member's phone (`StaffProfile.phone`, `phone_alerts_enabled`), the branch shared mobile
 (`BranchSettings.alert_mobile`) or a brief recipient (`InsightRecipient.wa_number`) â€” and leaves
 from the staff account named by SystemSetting `phone_alerts_channel_account`. A counselling card
-goes to the customer's own number on record; a typed number is the open item S-1 (PENDING.md).
+goes only to a number on the customer's own record (S-1, owner OK 2026-11-05).
 
 No real message is sent: WhatsApp and SMS are mocked.
 """
@@ -27,7 +27,6 @@ from apps.notifications import send_limits
 from apps.notifications.phone_alerts import sender
 from apps.notifications.phone_alerts.models import PhoneAlert, SendThrottle
 
-from .baseline import pending
 
 SEND_TPL = 'apps.whatsapp.sender.WhatsAppSender.send_template'
 SEND_TXT = 'apps.whatsapp.sender.WhatsAppSender.send_text'
@@ -245,10 +244,8 @@ class CounselCardLimitTests(TestCase):
         self.assertEqual(self._send().status, 'sent')
         self.assertEqual(CounselCardSend.objects.filter(status='sent').count(), 1)
 
-    @pending('S-1')
     def test_card_goes_only_to_the_number_on_the_customer_record(self):
-        # Project 4 lets the till type any mobile (and send with no customer at all). Restricting
-        # it to the record is a product decision for the owner, so the hole is held here.
+        # S-1 (owner OK 2026-11-05): the till can no longer type an outside number
         from rest_framework.exceptions import ValidationError
         with self.assertRaises(ValidationError):
             self._send(phone='01099998888')

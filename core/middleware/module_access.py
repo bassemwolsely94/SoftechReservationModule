@@ -27,6 +27,7 @@ the middleware logs an error and falls back to log mode instead of locking
 everyone but admins out.
 """
 import logging
+import re
 import time
 
 from django.conf import settings
@@ -211,6 +212,21 @@ def _analytics_write(method):
     return _EXPORT_POST
 
 
+_LINE_REMOVAL = re.compile(r'^/api/(?:'
+    r'reservations/\d+/(?:lines|images)/\d+/delete/'
+    r'|shortage/lists/\d+/items/\d+/delete/'
+    r'|demand/\d+/items/\d+/'
+    r'|supply/availability/\d+/lines/\d+/delete/'
+    r'|invoices/invoices/\d+/lines/\d+/delete/'
+    r'|items/bundles/\d+/items/\d+/'
+    r'|items/variant-groups/\d+/members/\d+/'
+    r'|products/[^/]+/(?:media/\d+|related/\d+/remove)/'
+    r'|images/products/\d+/images/\d+/'
+    r'|callcenter/calls/\d+/(?:items|attachments)/\d+/'
+    r'|incentives/rules/\d+/(?:remove-item|clear-items)/'
+    r')$')
+
+
 def required(path, method):
     """(module, allowed_actions) the request needs, or None when not checked."""
     parts = path.split('/')
@@ -225,6 +241,16 @@ def required(path, method):
     if prefix == 'stockcount' and parts[3:4] == ['daily']:
         return None
     method = method.upper()
+    # Owner answer Q-7e (2026-11-05): removing a LINE from a document (reservation line / image, shortage
+    # list item, demand item, availability line, invoice line, bundle item, variant member, product media /
+    # relation / image, call item / attachment, incentive rule item) is editing that document: it asks what
+    # a PATCH of the same path asks (the module's edit), not a module-wide `delete`.
+    if method == 'DELETE' and _LINE_REMOVAL.match(path):
+        return required(path, 'PATCH')
+    # Owner answer Q-5 (2026-11-05): missed sales belong to the reservations module (suggestions are
+    # confirmed into reservations, Project 3) — the view checks reservations too.
+    if prefix == 'pos-orders' and parts[3:4] == ['missed-sales']:
+        return 'reservations', (('view',) if method in ('GET', 'HEAD', 'OPTIONS') else ('create',))
     # Project 4: the switches are read by every staff screen; the drug assistant and the counselling
     # card are counter (POS) actions; approving / retiring a sheet needs counselling approve
     if prefix == 'counselling' and parts[3:4] == ['status']:

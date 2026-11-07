@@ -98,6 +98,37 @@ class PrivateVoucherPhoneTests(TestCase):
         self.assertEqual(self._generate('01098765432').status_code, 200)
 
 
+class PrivateVoucherSamePhoneRuleTests(TestCase):
+    """Owner 2026-11-05: a private voucher matches its customer's phone by the system-wide rule
+    (core.phones.same_phone) — still only the customer's own number. Synthetic numbers."""
+
+    def setUp(self):
+        _, self.admin, _ = make_admin('w2b_admin')
+        self.branch = make_branch()
+
+    def _ok(self, on_file, typed, alt=''):
+        customer = make_customer(phone=on_file)
+        customer.phone_alt = alt
+        customer.save()
+        v = _voucher(self.branch, self.admin, voucher_category='private', customer=customer)
+        return v.check_customer_eligibility(typed)[0]
+
+    def test_formats_of_the_same_mobile_match(self):
+        self.assertTrue(self._ok('01098760001', '+20 109 876 0001'))
+        self.assertTrue(self._ok('01098760002', '1098760002'))
+
+    def test_landline_saved_without_area_code_matches(self):
+        self.assertTrue(self._ok('23450003', '0223450003'))
+
+    def test_alternate_phone_matches(self):
+        self.assertTrue(self._ok('01098760004', '01198760004', alt='01198760004'))
+
+    def test_other_or_short_numbers_never_match(self):
+        self.assertFalse(self._ok('01098760005', '01098760006'))
+        self.assertFalse(self._ok('01098760007', '123'))
+        self.assertFalse(self._ok('01098760008', ''))
+
+
 class OtpAdminTests(TestCase):
     """W-11: the code hash is an HMAC keyed only by its salt — showing both lets anyone with admin
     access recover the 6-digit code offline in seconds. Django admin must show neither."""
