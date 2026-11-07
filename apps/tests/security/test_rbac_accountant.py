@@ -40,7 +40,9 @@ class AccountantMatrixTests(TestCase):
 
     def test_migration_seeds_an_explicit_row_for_every_module(self):
         mig = importlib.import_module('apps.users.migrations.0051_accountant_explicit_denials')
-        self.assertEqual(set(mig.MODULES), set(ALL_MODULES))
+        # 0051's list is frozen at 2026-11-04; modules added since get their explicit rows from
+        # seed_permissions (hr_attendance: admin only, named grants, 2026-11-07).
+        self.assertEqual(set(mig.MODULES) | {'hr_attendance'}, set(ALL_MODULES))
         self.assertEqual(mig.ACTIONS, ALL_ACTIONS)
         self.assertEqual(mig.GRANTED, DECIDED)
 
