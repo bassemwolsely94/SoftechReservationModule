@@ -254,6 +254,7 @@ def _fetch_and_classify_lines(
     cursor,
     docnumber: str,
     branchcode: str,
+    doccode: str,
     local_disc: Decimal,
     imported_disc: Decimal,
     tarsia_disc: Decimal,
@@ -275,7 +276,7 @@ def _fetch_and_classify_lines(
     if overrides is None:
         overrides = load_classification_overrides()
     try:
-        cursor.execute(QUERY_PRESCRIPTION_LINES_CLASSIFIED, [docnumber, branchcode])
+        cursor.execute(QUERY_PRESCRIPTION_LINES_CLASSIFIED, [docnumber, branchcode, doccode])
         line_rows = cursor.fetchall()
     except Exception as e:
         # A dead/closed connection must PROPAGATE so the caller can reconnect and
@@ -990,14 +991,10 @@ def fetch_single_rx_from_softech(docnumber: str, claim: InsuranceClaim,
     if not header_rows:
         raise InsuranceImportError(f'لم يتم العثور على الفاتورة رقم {docnumber} في سوفتك')
 
-    # Pick the row matching the resolved branch; else fall back to the first.
-    header = None
-    if target_branch:
-        for hr in header_rows:
-            if _safe(hr[0]) == target_branch:
-                header = hr
-                break
-    header = header or header_rows[0]
+    # Rows of the resolved branch if any, else all. A sale (115) and a return (30) can share
+    # a number in one branch — years apart — so take the newest document.
+    candidates = [hr for hr in header_rows if _safe(hr[0]) == target_branch] or header_rows
+    header = max(candidates, key=lambda hr: _to_date(hr[3]) or date.min)
 
     branchcode = _safe(header[0])
     docdate    = _to_date(header[3]) or claim.period_from
@@ -1008,7 +1005,7 @@ def fetch_single_rx_from_softech(docnumber: str, claim: InsuranceClaim,
     tarsia_disc   = Decimal(str(claim.applied_tarsia_disc_pct   or 0))
 
     classified_lines, totals, patient_name = _fetch_and_classify_lines(
-        cursor, docnumber, branchcode,
+        cursor, docnumber, branchcode, header[1],
         local_disc, imported_disc, tarsia_disc, None,
     )
     # Fallback to phcode-based lookup if not found in lines
