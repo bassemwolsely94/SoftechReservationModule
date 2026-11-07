@@ -98,6 +98,9 @@ export default function JournalPage() {
   const [creating, setCreating] = useState(false)
   // the panel remounts only when the user opens another entry, not when a new draft gets its id
   const [editorKey, setEditorKey] = useState('')
+  // «creating» ends only once the URL carries the new id: dropping it first would unmount the panel
+  // for one render and lose its «saved» message
+  useEffect(() => { if (openId) setCreating(false) }, [openId])
 
   const setF = (patch) => { setFilters(f => ({ ...f, ...patch })); setSelected(new Set()); setRowResult({}) }
   const apiParams = useMemo(() => {
@@ -335,7 +338,7 @@ export default function JournalPage() {
 
       {(openId || creating) && (
         <EntryEditor key={editorKey || openId} entryId={openId} onClose={close}
-                     onChanged={(d) => { if (d?.id && creating) { setCreating(false); setEntryParam(d.id) } }} />
+                     onChanged={(d) => { if (d?.id && creating) setEntryParam(d.id) }} />
       )}
     </div>
   )
