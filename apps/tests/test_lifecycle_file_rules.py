@@ -592,15 +592,26 @@ class UnreferencedTests(FileRuleCase):
         self.assertEqual(self._paths('unreferenced'), [])
 
     def test_orphan_prescription_needs_three_years(self):
+        # The last three are conversation folders: they may hold prescriptions, so they take the same period.
         for folder in ('reservations', 'pos_orders/prescriptions', 'usage_print/prescriptions',
-                       'callcenter/prescriptions', 'vision/ocr'):
+                       'callcenter/prescriptions', 'vision/ocr',
+                       'whatsapp/media', 'callcenter/attachments', 'callcenter/case_events'):
             self._put(f'{folder}/young.jpg', age_days=THREE_YEARS - 30)
             self._put(f'{folder}/old.jpg', age_days=THREE_YEARS + 30)
         refresh_unreferenced_seen(now=days_ago(40))
         refresh_unreferenced_seen()
         paths = self._paths('unreferenced')
-        self.assertEqual(len(paths), 5)
+        self.assertEqual(len(paths), 8)
         self.assertTrue(all(path.endswith('old.jpg') for path in paths), paths)
+
+    def test_orphan_conversation_file_follows_the_conversations_period(self):
+        self._put('whatsapp/media/old.jpg', age_days=THREE_YEARS + 30)
+        refresh_unreferenced_seen(now=days_ago(40))
+        refresh_unreferenced_seen()
+        self.assertEqual(self._paths('unreferenced'), ['whatsapp/media/old.jpg'])
+        _, admin, _ = make_admin('conversation_admin')
+        set_policy('conversations', keep_days=THREE_YEARS + 60, user=admin, reason='x')
+        self.assertEqual(self._paths('unreferenced'), [])
 
     def test_orphan_financial_document_needs_five_years(self):
         for folder in ('invoice_images', 'invoice_bundles', 'payments/screenshots', 'hr/receipts'):
@@ -776,6 +787,95 @@ class RunnerTests(FileRuleCase):
         with override_settings(LIFECYCLE_FILE_RULES_ENABLED=True), self._on('images_obsolete'):
             self.assertEqual(run_lifecycle_rules(), 0)
         self.assertIsNotNone(ObsoleteItemSeen.objects.get(item=item).cleared_at)
+
+
+class RestoreSticksTests(FileRuleCase):
+    """An admin who restores a file has decided it stays. The next nightly run must not take it again."""
+
+    def setUp(self):
+        super().setUp()
+        _, self.admin, _ = make_admin('restore_admin')
+
+    def _run(self, key, expected):
+        with override_settings(LIFECYCLE_FILE_RULES_ENABLED=True), self._on(key):
+            self.assertEqual(run_lifecycle_rules(), expected)
+
+    def _restore(self, key):
+        restore(HeldFile.objects.get(rule_key=key).pk, self.admin)
+
+    def test_restored_row_file_stays_and_its_row_stays_filled(self):
+        name = 'image_candidates/a.jpg'
+        row = self._candidate(name, status='rejected')
+        self._age(row, 'created_at', 60)
+        self._run('images_rejected', 1)
+        self.assertFalse((self.media / name).exists())
+
+        self._restore('images_rejected')
+        self._run('images_rejected', 0)
+        self._run('images_rejected', 0)
+
+        self.assertTrue((self.media / name).exists())
+        row.refresh_from_db()
+        self.assertEqual(row.local_file.name, name)
+        self.assertEqual(HeldFile.objects.filter(rule_key='images_rejected').count(), 1)
+        self.assertEqual(self._paths('images_rejected'), [])
+        self.assertEqual(preview_rule('images_rejected').count, 0)
+
+    def test_restored_unreferenced_file_stays(self):
+        name = 'junk/a.bin'
+        self._put(name, age_days=500)
+        UnreferencedFileSeen.objects.create(path=name, first_seen_at=days_ago(40))
+        self._run('unreferenced', 1)
+        self._restore('unreferenced')
+
+        self._run('unreferenced', 0)
+        self.assertTrue((self.media / name).exists())
+        UnreferencedFileSeen.objects.update(first_seen_at=days_ago(40))    # even with the two scans satisfied
+        self._run('unreferenced', 0)
+        self.assertTrue((self.media / name).exists())
+        self.assertEqual(HeldFile.objects.filter(rule_key='unreferenced').count(), 1)
+
+    def test_restored_bundle_page_stays(self):
+        batch = InvoiceBatch.objects.create(branch=self.branch, status='failed')
+        InvoiceBatch.objects.filter(pk=batch.pk).update(updated_at=days_ago(60))
+        name = f'invoice_bundles/pages/batch_{batch.pk}/page_0.png'
+        self._put(name, age_days=60)
+        self._run('bundle_pages', 1)
+        self._restore('bundle_pages')
+        # The restored page keeps its old date, so only the restore record can hold it back.
+        self._run('bundle_pages', 0)
+        self.assertTrue((self.media / name).exists())
+
+    def test_restore_under_one_rule_holds_under_every_other(self):
+        item = self._obsolete_item(first_seen_days=100)
+        name = 'image_candidates/a.jpg'
+        row = self._candidate(name, status='rejected', item=item)
+        self._age(row, 'created_at', 60)
+        self._run('images_rejected', 1)
+        self._restore('images_rejected')
+        self._run('images_obsolete', 0)
+        self.assertTrue((self.media / name).exists())
+
+    def test_held_but_not_restored_or_purged_path_does_not_block(self):
+        """Only a restore holds a path. A new file at a path that was purged is an ordinary file."""
+        name = 'image_candidates/a.jpg'
+        row = self._candidate(name, status='rejected')
+        self._age(row, 'created_at', 60)
+        HeldFile.objects.create(original_path=name, hold_path='x.jpg', rule_key='images_rejected', sha256='0' * 64,
+                                purge_after=timezone.now(), purged_at=timezone.now())
+        self.assertEqual(self._paths('images_rejected'), [name])
+
+    def test_skipped_restored_files_are_counted_in_the_log(self):
+        name = 'image_candidates/secret_name.jpg'
+        row = self._candidate(name, status='rejected')
+        self._age(row, 'created_at', 60)
+        self._run('images_rejected', 1)
+        self._restore('images_rejected')
+        with self.assertLogs('elrezeiky.sync', logging.INFO) as logs:
+            self.assertEqual(self._paths('images_rejected'), [])
+        output = '\n'.join(logs.output)
+        self.assertIn('images_rejected: 1 ', output)
+        self.assertNotIn('secret_name', output)
 
 
 class WrongFolderGuardTests(FileRuleCase):

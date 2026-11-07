@@ -9,7 +9,8 @@ Reads only: a candidates function changes nothing and moves nothing. The two ref
 "first seen" tables, and the runner calls them only in a daily run of a rule that is not `off`.
 
 A row whose file is not on disk is not a candidate: nothing is moved or counted for it, and only the number of such
-rows is logged. Logs carry ids and counts only, never a file name (§7).
+rows is logged. A path an admin has restored is never a candidate again, under any rule: a restore is a decision that
+the file stays. Logs carry ids and counts only, never a file name (§7).
 
 register.py imports this module, so register and policy are imported inside functions, as in rules_rows.py.
 
@@ -26,7 +27,7 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from . import holding
-from .models import ObsoleteItemSeen, UnreferencedFileSeen
+from .models import HeldFile, ObsoleteItemSeen, UnreferencedFileSeen
 from .references import FileCandidate, Ref, build_reference_index, media_path_from_url, normalise
 
 logger = logging.getLogger('elrezeiky.sync')
@@ -51,6 +52,7 @@ UNREFERENCED_EXCLUDED = ('reports/', 'invoice_bundles/pages/')
 # (§2 anti-goal), and the same for a financial document. These wait for the file's own age as well.
 PRESCRIPTION_FOLDERS = ('reservations/', 'pos_orders/prescriptions/', 'usage_print/prescriptions/',
                         'callcenter/prescriptions/', 'vision/ocr/')
+CONVERSATION_FOLDERS = ('whatsapp/media/', 'callcenter/attachments/', 'callcenter/case_events/')
 FINANCIAL_FOLDERS = ('invoice_images/', 'invoice_bundles/', 'payments/', 'hr/receipts/')
 
 
@@ -85,6 +87,15 @@ def _refs(queryset, field):
         yield normalise(value), Ref(label, pk, field, value)
 
 
+def _without_restored(key, candidates):
+    """Drop every path an admin has restored, and log how many."""
+    restored = set(HeldFile.objects.filter(restored_at__isnull=False).values_list('original_path', flat=True))
+    kept = [candidate for candidate in candidates if normalise(candidate.path) not in restored]
+    if len(kept) != len(candidates):
+        logger.info('[lifecycle] %s: %s restored file(s) stay', key, len(candidates) - len(kept))
+    return kept
+
+
 def _candidates(key, refs):
     """One FileCandidate per path, so all the rows on one file move and restore together."""
     by_path = {}
@@ -99,7 +110,7 @@ def _candidates(key, refs):
             out.append(FileCandidate(path, rows, stat.st_size))
     if missing_rows:
         logger.warning('[lifecycle] %s: %s row(s) point at a file that is not on disk', key, missing_rows)
-    return out
+    return _without_restored(key, out)
 
 
 def _aged_by_field(key, **only):
@@ -245,7 +256,7 @@ def bundle_pages_candidates():
             dates.append(batch.last_invoice_at)
         if max(dates) <= cutoff:
             out.extend(FileCandidate(f'{folder}/{name}', [], stat.st_size) for name, stat in files)
-    return out
+    return _without_restored('bundle_pages', out)
 
 
 # ── Files no record uses ─────────────────────────────────────────────────────
@@ -282,6 +293,8 @@ def _orphan_minimum_days(path):
     from .policy import keep_days
     if path.startswith(PRESCRIPTION_FOLDERS):
         return keep_days('prescriptions')
+    if path.startswith(CONVERSATION_FOLDERS):
+        return keep_days('conversations')
     if path.startswith(FINANCIAL_FOLDERS):
         return keep_days('financial_docs')
     return 0
@@ -305,4 +318,4 @@ def unreferenced_candidates():
             out.append(FileCandidate(path, [], stat.st_size))
     if missing:
         logger.warning('[lifecycle] unreferenced: %s listed file(s) are no longer on disk', missing)
-    return out
+    return _without_restored('unreferenced', out)

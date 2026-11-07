@@ -293,9 +293,12 @@ def review_candidate(request, pk):
         return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
     if ser.validated_data['action'] == 'approve':
-        from .pipeline import approve_candidate
-        approve_candidate(candidate, user=request.user,
-                          set_as_primary=ser.validated_data['set_primary'])
+        from .pipeline import CandidateHasNoFile, approve_candidate
+        try:
+            approve_candidate(candidate, user=request.user,
+                              set_as_primary=ser.validated_data['set_primary'])
+        except CandidateHasNoFile as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response({'status': 'approved'})
 
     candidate.status      = 'rejected'

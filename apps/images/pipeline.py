@@ -429,8 +429,16 @@ def run_job(job: ImageSearchJob) -> None:
 
 # ── Approval ───────────────────────────────────────────────────────────────────
 
+class CandidateHasNoFile(Exception):
+    """The candidate's file is gone (the data lifecycle keeps the row). The message is Arabic and safe to show."""
+
+
 def approve_candidate(candidate: ImageCandidate, user=None, set_as_primary: bool = True) -> None:
     from apps.product_experience.models import ProductMedia
+
+    # Before anything changes: an approval with no file would take the primary slot from a real image.
+    if not candidate.local_file:
+        raise CandidateHasNoFile('لا يمكن اعتماد هذه الصورة لأن ملفها لم يعد موجودًا. أعد تنزيلها أولًا أو ارفضها.')
 
     item = candidate.item
     if set_as_primary:
