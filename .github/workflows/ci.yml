@@ -115,7 +115,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # Vitest 5 needs Node 22.12 or newer; 24 is what the VPS runs (runbook section 6).
+          node-version: '24'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
