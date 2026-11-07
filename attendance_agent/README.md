@@ -13,7 +13,7 @@ users, or reading fingerprint templates. `ZkClient._send` enforces this list.
 
 ### Install
 
-1. Install Python 3.11 or newer on the office PC.
+1. Install Python 3.12 or newer on the office PC.
 2. Copy the `attendance_agent` folder to the PC, for example to `C:\ElRezeiky\agent\attendance_agent`.
 
 3. Copy `agent.ini.example` to `agent.ini` outside the program folder and fill in the ERP
@@ -58,10 +58,10 @@ The state folder (`agent_state` next to `agent.ini`, unless `state_dir` is set) 
 | `devices.json` | Last known machine list. |
 | `agent.log` | Counts and serials only, no names, codes or secrets. |
 
-If uploads stop while the machines stay readable, files keep building up in `spool\`,
-about one full copy of each machine's log per hour (roughly 60 MB a day at today's log
-sizes). This takes months to fill a disk, but there is no limit: once the disk is full, new
-reads can't be saved, so watch free space during a long outage.
+If uploads stop while the machines stay readable, files keep building up in `spool\`, but
+only new punches are added, plus a small roster and run file per machine each hour. There
+is no limit: if the disk fills, new reads can't be saved, so watch free space during a very
+long outage. Each run tells the ERP how many files are waiting.
 
 If the ERP refuses one file (for example, a machine is no longer assigned to this agent),
 that file stays in `spool\` and is tried again every 15 minutes, while other files keep going.
@@ -99,7 +99,7 @@ only, never in the ERP.
 
 ### التثبيت
 
-1. ثبّت Python 3.11 أو أحدث على الجهاز المكتبي.
+1. ثبّت Python 3.12 أو أحدث على الجهاز المكتبي.
 2. انسخ مجلد `attendance_agent` إلى الجهاز، مثلًا إلى `C:\ElRezeiky\agent\attendance_agent`.
 
 3. انسخ `agent.ini.example` إلى `agent.ini` خارج مجلد البرنامج، واكتب فيه عنوان النظام والرمز
@@ -143,9 +143,10 @@ python -m attendance_agent C:\ElRezeiky\agent\agent.ini
 | `devices.json` | آخر قائمة أجهزة معروفة. |
 | `agent.log` | أعداد وأرقام أجهزة فقط، بلا أسماء أو أكواد أو أسرار. |
 
-إذا توقف الإرسال وظلت الأجهزة تُقرأ، تتراكم الملفات في `spool\` بمعدل نسخة كاملة تقريبًا من سجل
-كل جهاز كل ساعة (نحو 60 ميجابايت يوميًا بأحجام السجلات الحالية). يستغرق امتلاء القرص شهورًا، لكن
-لا يوجد حد: وعند امتلائه لا يمكن حفظ القراءات الجديدة، لذا راقب المساحة الخالية أثناء الانقطاع الطويل.
+إذا توقف الإرسال وظلت الأجهزة تُقرأ، تتراكم الملفات في `spool\`، لكن لا يضاف إليها سوى البصمات
+الجديدة، مع ملف صغير لقائمة المستخدمين وآخر للتشغيل لكل جهاز كل ساعة. لا يوجد حد: وعند امتلاء القرص
+لا يمكن حفظ القراءات الجديدة، لذا راقب المساحة الخالية أثناء الانقطاع الطويل جدًا. ويُبلغ كل تشغيل
+النظام بعدد الملفات المنتظرة.
 
 إذا رفض النظام ملفًا واحدًا (مثلًا لأن جهاز البصمة لم يعد مخصصًا لهذا البرنامج)، يبقى الملف في
 `spool\` ويُعاد إرساله كل 15 دقيقة، بينما تستمر بقية الملفات. يعرض `agent.log` السبب في سطر `upload:`.

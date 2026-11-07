@@ -43,7 +43,7 @@ COMM_KEY = '987123'
 NOW = datetime(2026, 11, 7, 10, 0, 0)
 RUN_KEYS = {
     'device_serial', 'started_at', 'finished_at', 'records_read', 'oldest_date',
-    'newest_date', 'drift_seconds', 'device_log_count', 'status', 'error',
+    'newest_date', 'drift_seconds', 'device_log_count', 'status', 'error', 'spool_waiting',
 }
 
 
@@ -398,6 +398,64 @@ class CollectDeviceTests(TempDirTestCase):
         punches = [p for kind, p in files if kind == 'punches'][0]['punches']
         self.assertEqual(len(punches), 3)
         self.assertEqual(self.run_payload(files)['records_read'], 4)
+
+    def spooled_stamps(self, files):
+        return [
+            punch['raw_stamp'] for kind, payload in files if kind == 'punches'
+            for punch in payload['punches']
+        ]
+
+    def test_punches_already_waiting_on_disk_are_not_spooled_again(self):
+        # Each hourly read holds the whole log, so an outage would otherwise store a
+        # full copy per hour. New punches must still go.
+        logs = [log_row(i) for i in range(3)]
+        self.collect(FakeClient(logs=logs))
+        files = self.collect(FakeClient(logs=logs + [log_row(3)]))
+        self.assertEqual(sorted(self.spooled_stamps(files)), [1000, 1001, 1002, 1003])
+        self.assertEqual(len([1 for kind, _p in files if kind == 'punches']), 2)
+        self.assertEqual(self.run_payload(files[-1:])['records_read'], 4)
+
+    def test_unchanged_log_spools_no_new_punch_file(self):
+        logs = [log_row(i) for i in range(3)]
+        self.collect(FakeClient(logs=logs))
+        files = self.collect(FakeClient(logs=logs))
+        self.assertEqual(len([1 for kind, _p in files if kind == 'punches']), 1)
+
+    def test_delivered_punches_are_spooled_in_full_again(self):
+        # The ERP's uniqueness handles repeats, and the resend is what closes any gap
+        # (for example after the switch-over to the VPS).
+        logs = [log_row(i) for i in range(3)]
+        self.collect(FakeClient(logs=logs))
+        for path in self.spool.pending():
+            self.spool.ack(path)
+        files = self.collect(FakeClient(logs=logs))
+        self.assertEqual(sorted(self.spooled_stamps(files)), [1000, 1001, 1002])
+
+    def test_another_machines_waiting_punches_do_not_count(self):
+        logs = [log_row(0)]
+        self.collect(FakeClient(serial='A', logs=logs), target=device('A'))
+        files = self.collect(FakeClient(serial='B', logs=logs), target=device('B'))
+        delivered = [p for kind, p in files if kind == 'punches']
+        self.assertEqual([p['device_serial'] for p in delivered], ['A', 'B'])
+
+    def test_damaged_waiting_file_does_not_hide_its_punches(self):
+        logs = [log_row(0)]
+        self.collect(FakeClient(logs=logs))
+        damaged = [p for p in self.spool.pending() if '-punches-' in p.name][0]
+        damaged.write_bytes(b'{half')
+        collect_device(device(), lambda d: FakeClient(logs=logs), self.spool, lambda: NOW)
+        readable = []
+        for path in self.spool.pending():
+            if path != damaged:
+                readable.append(self.spool.read(path))
+        self.assertEqual(self.spooled_stamps(readable), [1000])
+
+    def test_run_reports_how_many_files_are_waiting(self):
+        files = self.collect(FakeClient())
+        self.assertEqual(self.run_payload(files)['spool_waiting'], 2)
+        again = self.collect(FakeClient())
+        self.assertEqual(self.spool.read(self.spool.pending()[-1])[1]['spool_waiting'], 4)
+        self.assertEqual(self.run_payload(again[-1:])['spool_waiting'], 4)
 
     def test_punch_payload_matches_the_contract(self):
         files = self.collect(FakeClient())

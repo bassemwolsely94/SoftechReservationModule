@@ -112,10 +112,15 @@ def _punch_payload(row):
     }
 
 
-def _unique_rows(logs):
-    """One row per punch identity. The database holds no more than that, and the
-    ERP's accepted + duplicate must add up to what was sent."""
-    seen = set()
+def _rows_to_spool(logs, waiting):
+    """One row per punch identity, skipping any already waiting on disk.
+
+    The database holds one row per identity, and the ERP's accepted + duplicate must add
+    up to what was sent. Each read holds the whole log, so without the `waiting` check an
+    outage would store a full copy per hour. Once a file has been delivered its punches
+    are sent again by the next read, and the ERP's uniqueness makes that safe.
+    """
+    seen = set(waiting)
     rows = []
     for row in logs:
         identity = (row.user_code, row.raw_stamp, row.state)
@@ -123,6 +128,24 @@ def _unique_rows(logs):
             seen.add(identity)
             rows.append(row)
     return rows
+
+
+def _waiting_identities(serial, spool):
+    """Punch identities for this machine in files not yet delivered. An unreadable file
+    counts for nothing, so its punches are spooled again."""
+    waiting = set()
+    for path in spool.pending():
+        if '-punches-' not in path.name:
+            continue
+        try:
+            _kind, payload = spool.read(path)
+            if payload['device_serial'] == serial:
+                waiting.update(
+                    (p['user_code'], p['raw_stamp'], p['state']) for p in payload['punches']
+                )
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    return waiting
 
 
 def _check_serial(client, serial):
@@ -185,7 +208,7 @@ def _spool_results(serial, users, logs, spool, run):
                 for u in users
             ],
         })
-    rows = _unique_rows(logs)
+    rows = _rows_to_spool(logs, _waiting_identities(serial, spool))
     batches = 0
     for start in range(0, len(rows), BATCH_SIZE):
         spool.put('punches', {
@@ -216,6 +239,7 @@ def collect_device(device, client_factory, spool, now, collect_done=False) -> No
         'device_serial': serial, 'started_at': now().isoformat(), 'finished_at': None,
         'records_read': 0, 'oldest_date': None, 'newest_date': None,
         'drift_seconds': None, 'device_log_count': None, 'status': 'success', 'error': '',
+        'spool_waiting': 0,
     }
     if collect_done:
         run['collect_done'] = True
@@ -232,12 +256,14 @@ def collect_device(device, client_factory, spool, now, collect_done=False) -> No
         if logs is not None:
             _spool_results(serial, users, logs, spool, run)
         run['finished_at'] = now().isoformat()
+        run['spool_waiting'] = len(spool.pending())
         spool.put('runs', run)
     except OSError as exc:
         run['status'] = 'failed'
         run['error'] = f'could not save to disk: {_safe_error(exc)}'
         run['finished_at'] = now().isoformat()
         try:
+            run['spool_waiting'] = len(spool.pending())
             spool.put('runs', run)
         except OSError:
             pass  # the same disk problem; the raise below is what gets logged
