@@ -7,6 +7,7 @@ Privacy: the workbook also holds salaries and other payroll data. Only the colum
 IMPORT_COLUMNS are ever read; nothing else is loaded, kept, logged or printed. Error messages name
 a row number and an HR code, never a value from any other column.
 """
+import re
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 
@@ -40,13 +41,21 @@ class ImportPreview:
     errors: list = field(default_factory=list)    # strings naming row and code only
 
 
+_CODE_TRANSLATE = {ord(c): None for c in '\xa0​‌‍‎‏⁠﻿'}
+_CODE_TRANSLATE.update({0x0660 + i: ord(str(i)) for i in range(10)})   # Arabic-Indic digits
+_CODE_TRANSLATE.update({0x06F0 + i: ord(str(i)) for i in range(10)})   # Eastern Arabic-Indic digits
+_FLOAT_TEXT = re.compile(r'^(\d+)\.0+$')
+
+
 def normalise_code(value) -> str:
-    """1001.0 / ' 1001' / '1001' / 1001 -> '1001'."""
+    """1001.0 / ' 1001' / '1001' / '1001.0' / 1001 -> '1001'."""
     if value is None:
         return ''
     if isinstance(value, float) and value.is_integer():
         value = int(value)
-    return str(value).strip()
+    text = str(value).translate(_CODE_TRANSLATE).strip()
+    m = _FLOAT_TEXT.match(text)
+    return m.group(1) if m else text
 
 
 def _text(value) -> str:

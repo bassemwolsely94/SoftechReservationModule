@@ -62,6 +62,19 @@ class ImportTests(Base):
             self.assertEqual(imp.normalise_code(v), '1001')
         self.assertEqual(imp.normalise_code(None), '')
 
+    def test_normalise_code_text_float_and_odd_characters(self):
+        for v in ('1001.0', ' 1001.0 ', '1001.00', '\xa01001​', '١٠٠١', '١٠٠١.٠'):
+            self.assertEqual(imp.normalise_code(v), '1001', repr(v))
+        self.assertEqual(imp.normalise_code('1001.5'), '1001.5')
+
+    def test_float_and_text_forms_of_same_code_are_duplicates(self):
+        p = self.preview([fake_row(1, hr_number=1001.0), fake_row(2, hr_number=' 1001')])
+        self.assertEqual(len(p.rows), 1)
+        self.assertEqual(len(p.errors), 1)
+        self.assertIn('duplicate', p.errors[0])
+        p = self.preview([fake_row(1, hr_number='1001.0'), fake_row(2, hr_number=' 1001')])
+        self.assertEqual(len(p.errors), 1)
+
     def test_reads_only_allowed_columns(self):
         p = self.preview([fake_row(1), fake_row(2)])
         self.assertNotIn('SECRET', repr(p.rows) + repr(p.errors))
