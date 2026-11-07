@@ -75,7 +75,7 @@ Task 8 makes the mover refuse any file that a row outside the rule's own candida
 | 76 | 213 MB | Bundle pages | Their own rule |
 | About 386 | Under 1 MB | `invoice_bundles/bundle*.pdf` test fixtures | Test runs are writing into the real media folder; Task 9 stops that at the source |
 | About 240 | About 8 MB | Other fixtures: `chatter/…/photo.png`, `chatter_voices/…/note.webm`, `vision/voice/…/voice.webm`, 13 byte-identical `reservations/…/2021-10-01*.png` | As above |
-| 20 | 25 MB | **Real** invoice page images in `invoice_images/`, plus a real PDF and photos | Probably left when `reprocess` deletes invoices (`views.py:1176`) without their files. Stage 4's "files follow their record" stops this. The 5-year age limit below covers these |
+| 20 | 25 MB | **Real** invoice page images in `invoice_images/`, plus a real PDF and photos | Probably left when `reprocess` deletes invoices (`views.py:1177`) without their files. Stage 4's "files follow their record" stops this. The 5-year age limit below covers these |
 | 43 | Under 1 MB | Replaced thumbnails in `products/…/thumbs/` | Normal rule |
 | 5 | 2 MB | `media/reports/`: command output with no `FileField` | Excluded from the rule |
 
