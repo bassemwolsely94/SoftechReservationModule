@@ -11,12 +11,19 @@ GRANTS = {
 }
 
 
+ALL_ACTIONS = GRANTS['admin']
+
+
 def grant(apps, schema_editor):
     RoleModuleAccess = apps.get_model('users', 'RoleModuleAccess')
     for role, actions in GRANTS.items():
         for action in actions:
             RoleModuleAccess.objects.get_or_create(role=role, module='tax_invoicing', action=action,
                                                    defaults={'is_allowed': True})
+    # The accountant's matrix is explicit: every action has a row, allowed or denied (users 0051).
+    for action in ALL_ACTIONS:
+        RoleModuleAccess.objects.get_or_create(role='accountant', module='tax_invoicing', action=action,
+                                               defaults={'is_allowed': action in GRANTS['accountant']})
 
 
 def ungrant(apps, schema_editor):
