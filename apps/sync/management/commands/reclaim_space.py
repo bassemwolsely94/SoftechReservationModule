@@ -22,10 +22,10 @@ from apps.purchasing.models import DemandCalculationRun
 
 logger = logging.getLogger(__name__)
 
-# --apply is allowed from 01:00 up to 07:00 Cairo time, ending before the 07:30 morning chain. This
-# is the builder's choice of business hours, so the owner can move it. Nightly jobs still fall inside
-# it: they wait while the table is locked, and LOCK_TIMEOUT_MS stops this command queueing behind a
-# running one, which would hold up everyone else as well.
+# --apply is allowed from 01:00 up to 07:00 Cairo time (owner decision, 2026-11-07), ending before
+# the 07:30 morning chain. Nightly jobs still fall inside it: they wait while the table is locked,
+# and LOCK_TIMEOUT_MS stops this command queueing behind a running one, which would hold up everyone
+# else as well.
 WINDOW_START_HOUR = 1
 WINDOW_END_HOUR = 7
 LOCK_TIMEOUT_MS = 30_000
