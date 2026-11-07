@@ -53,9 +53,10 @@ function itemLink(item, period) {
     case 'no_exceptions': return { to: '/finance/journal?tab=exceptions', label: 'افتح الاستثناءات' }
     case 'drafting_ran': return { to: '/finance/journal', label: 'افتح القيود' }
     case 'comparison_fresh':
+      return { to: `/finance/softech-compare?period=${period.id}`, label: 'افتح المقارنة' }
     case 'comparison_explained':
     case 'suppliers_explained':
-      return { to: `/finance/statements?tab=comparison&period=${period.id}`, label: 'افتح المقارنة' }
+      return { to: `/finance/softech-compare?period=${period.id}&unexplained=1`, label: 'افتح المقارنة' }
     case 'stock_snapshot': return { to: `/finance/close?tab=stock&month=${period.id}`, label: 'بضاعة آخر المدة' }
     default: return null
   }

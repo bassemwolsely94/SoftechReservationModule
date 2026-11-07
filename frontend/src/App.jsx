@@ -158,6 +158,8 @@ const GLAccountStatementPage = lazy(() => import('./pages/finance/gl/AccountStat
 const GLPartiesPage = lazy(() => import('./pages/finance/gl/GLPartiesPage'))
 const PostingRulesPage = lazy(() => import('./pages/finance/gl/PostingRulesPage'))
 const PeriodClosePage = lazy(() => import('./pages/finance/gl/PeriodClosePage'))
+const GLSubledgersPage = lazy(() => import('./pages/finance/gl/SubledgersPage'))
+const GLSoftechComparePage = lazy(() => import('./pages/finance/gl/SoftechComparePage'))
 const ProfitLossPage = lazy(() => import('./pages/ProfitLossPage'))
 const CashViewPage = lazy(() => import('./pages/CashViewPage'))   // P-40 — replaces the retired cash-flow page (P-43)
 const ExpenseAnalyticsPage = lazy(() => import('./pages/ExpenseAnalyticsPage'))
@@ -521,6 +523,8 @@ export default function App() {
               <Route path="parties"   element={<GLPartiesPage />} />
               <Route path="rules"     element={<PostingRulesPage />} />
               <Route path="close"     element={<PeriodClosePage />} />
+              <Route path="subledgers" element={<GLSubledgersPage />} />
+              <Route path="softech-compare" element={<GLSoftechComparePage />} />
               <Route path="pnl"       element={<ProfitLossPage />} />
               {/* P-40: the 13-week cash view replaces the retired cash-flow page; the old URL redirects. */}
               <Route path="cash"      element={<CashViewPage />} />
