@@ -12,9 +12,11 @@ Display only: no key here carries pay, deductions or penalties. Every change is 
 import datetime
 import re
 from functools import wraps
+from io import BytesIO
 
 from django.db import IntegrityError, transaction
 from django.db.models import Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import serializers
@@ -30,7 +32,7 @@ from core.sort_ordering import explicit_order_by
 
 from . import days as day_engine
 from . import issues as issue_list
-from . import links, resolve
+from . import export, links, resolve
 from .access import Access
 from .agent_auth import issue_agent
 from .employee_import import normalise_code
@@ -201,11 +203,8 @@ def month(request, acc):
     if request.query_params.get('status') in ('active', 'left'):
         employees = employees.filter(status=request.query_params['status'])
     employees = list(employees.order_by('hr_number')[:MAX_ROWS])
-    punches = day_engine.punches_for_month([e.pk for e in employees], year, mon)
     rows = []
-    for e in employees:
-        totals = day_engine.month_totals(
-            day_engine.build_days(punches.get(e.pk, []), e.day_boundary, e.daily_hours, year, mon))
+    for e, _days, totals in day_engine.month_rows(employees, year, mon):
         rows.append({
             'id': e.pk, 'hr_number': e.hr_number, 'name_ar': e.name_ar, 'department': e.department,
             'job_title': e.job_title, 'branch_name': _branch_name(e.branch), 'status': e.status,
@@ -225,6 +224,26 @@ def month(request, acc):
     elif key == 'hr_number' and desc:
         rows.reverse()
     return Response({'month': f'{year:04d}-{mon:02d}', 'rows': rows})
+
+
+@api_view(['GET'])
+def month_export(request):
+    """The month as an Excel file (summary, day by day, items to review); audited."""
+    acc = Access(request)
+    if not acc.can_export:
+        return Response(_DENIED, status=403)
+    year, mon = _month(request)
+    status = request.query_params.get('status')
+    wb = export.build_workbook(year, mon, status if status in ('active', 'left') else None)
+    buf = BytesIO()
+    wb.save(buf)
+    AuditLog.log('hr_attendance_export', user=acc.profile, request=request,
+                 extra={'month': f'{year:04d}-{mon:02d}'}, note='Monthly attendance export')
+    resp = HttpResponse(
+        buf.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resp['Content-Disposition'] = f'attachment; filename="attendance-{year:04d}-{mon:02d}.xlsx"'
+    return resp
 
 
 @api_view(['GET'])

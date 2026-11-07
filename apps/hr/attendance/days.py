@@ -159,6 +159,18 @@ def punches_for_month(employee_ids, year, month) -> dict:
     return out
 
 
+def month_rows(employees, year, month):
+    """[(employee, [DayRow], MonthTotals)] — the one place the month screen and the Excel export
+    take their day and total figures from, so the two cannot disagree."""
+    employees = list(employees)
+    punches = punches_for_month([e.pk for e in employees], year, month)
+    out = []
+    for e in employees:
+        rows = build_days(punches.get(e.pk, []), e.day_boundary, e.daily_hours, year, month)
+        out.append((e, rows, month_totals(rows)))
+    return out
+
+
 def leave_info(employees, year, month) -> dict:
     """{employee_id: {date: [info]}} for APPROVED leave and permits in the month, matched to the
     employee by linked login (``staff``) or by HR code. Information only; pending, draft, rejected

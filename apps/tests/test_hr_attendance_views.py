@@ -93,6 +93,7 @@ class GateTests(Base):
         return {
             'me/': (['GET'], 'view', 'me/'),
             'month/': (['GET'], 'view', 'month/'),
+            'month/export/': (['GET'], 'view', 'month/export/'),
             'employees/': (['GET'], 'view', 'employees/'),
             'employees/<int:pk>/days/': (['GET'], 'view', f'employees/{e}/days/'),
             'issues/': (['GET'], 'view', 'issues/'),
