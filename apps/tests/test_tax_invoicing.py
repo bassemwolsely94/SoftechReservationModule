@@ -13,6 +13,7 @@ import openpyxl
 import requests
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connections, transaction
+from django.db.models import F
 from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -154,6 +155,62 @@ class ImportAndUniquenessTests(Fixture, TestCase):
         r = api(self.admin).get(f'/api/insurance/claims/{doc.claim_id}/fiscal-status/')
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data['documents'][0]['internal_id'], doc.internal_id)
+
+
+class ClaimReturnTests(Fixture, TestCase):
+    """Real claims: a return prescription has negative totals over positive item lines."""
+
+    def setUp(self):
+        self.build()
+        self.coded('T1')
+        self.coded('E1', 'exempt')
+
+    def claim_with_return(self, returned=('T1', 57), number='MT-R'):
+        claim = self.make_claim(number)
+        code, amount = returned
+        rx = InsuranceClaimPrescription.objects.create(
+            claim=claim, softech_docnumber=f'{number}-RET', softech_docdate=dt.date(2026, 10, 5), softech_branchcode='150',
+            gross_before=-amount, net_after=-amount)
+        # A part of the pack back: 57 of 114 is half the quantity.
+        InsuranceClaimLine.objects.create(prescription=rx, softech_itemcode=code, item_name=f'صنف {code}',
+                                          quantity=Decimal(amount) / 114, unit_price=114, line_total=amount, net_amount=amount)
+        InsuranceClaim.objects.filter(pk=claim.pk).update(final_net_after=F('final_net_after') - amount)
+        return InsuranceClaim.objects.get(pk=claim.pk)
+
+    def test_return_lines_subtract_and_the_claim_reconciles(self):
+        doc, _ = services.open_or_create_invoice(self.claim_with_return(), self.accountant)
+        rec = services.reconciliation(doc)
+        self.assertEqual(Decimal(rec['source_total']), Decimal('257'))
+        self.assertEqual(Decimal(rec['proposed_total']), Decimal('257.00000'))
+        self.assertTrue(rec['within_tolerance'])
+        self.assertEqual(doc.lines.count(), 3)   # the source stays complete, return line included
+        self.assertEqual(doc.lines.filter(quantity__lt=0).count(), 1)
+
+    def test_item_with_a_return_goes_to_eta_as_one_positive_line(self):
+        doc, _ = services.open_or_create_invoice(self.claim_with_return(), self.accountant)
+        body = json.loads(services.approve(doc.pk, self.accountant).payload_text)
+        by_code = {l['internalCode']: l for l in body['invoiceLines']}
+        self.assertEqual(by_code['T1']['netTotal'], 50.0)
+        self.assertEqual(by_code['T1']['taxableItems'][0]['amount'], 7.0)
+        self.assertEqual(body['totalAmount'], 257.0)
+        self.assertTrue(all(l['quantity'] > 0 for l in body['invoiceLines']))
+
+    def test_fully_returned_item_leaves_no_line(self):
+        doc, _ = services.open_or_create_invoice(self.claim_with_return(('T1', 114), 'MT-F'), self.accountant)
+        body = json.loads(services.approve(doc.pk, self.accountant).payload_text)
+        self.assertEqual([l['internalCode'] for l in body['invoiceLines']], ['E1'])
+
+    def test_more_returned_than_sold_blocks(self):
+        claim = self.make_claim('MT-X')
+        for i in (1, 2):
+            rx = InsuranceClaimPrescription.objects.create(
+                claim=claim, softech_docnumber=f'RET{i}', softech_docdate=dt.date(2026, 10, 5), gross_before=-114, net_after=-114)
+            InsuranceClaimLine.objects.create(prescription=rx, softech_itemcode='T1', quantity=1, unit_price=114, line_total=114, net_amount=114)
+        InsuranceClaim.objects.filter(pk=claim.pk).update(final_net_after=86)
+        doc, _ = services.open_or_create_invoice(InsuranceClaim.objects.get(pk=claim.pk), self.accountant)
+        with self.assertRaises(services.TaxBlocked) as caught:
+            services.approve(doc.pk, self.accountant)
+        self.assertIn('quantity', [i['code'] for i in caught.exception.issues])
 
 
 class ConcurrentCreationTests(Fixture, TransactionTestCase):
@@ -485,6 +542,14 @@ class SubmissionGateTests(Fixture, TestCase):
         self.assertEqual(api(self.accountant).get(url).status_code, 200)
         self.assertEqual(api(self.accountant).post(url + 'submit/', {}, format='json').status_code, 403)
         self.assertEqual(api(self.accountant).post(url + 'reconcile/', {}, format='json').status_code, 403)
+
+    def test_module_is_enforced_for_other_roles_from_the_migration_alone(self):
+        """Rows of an enforced role alone would make the matrix fail open for everyone else."""
+        from apps.users.models import RoleModuleAccess
+        from core.middleware import module_access
+        self.assertTrue(RoleModuleAccess.objects.filter(role='admin', module='tax_invoicing', action='finalize').exists())
+        module_access.clear_cache()
+        self.assertIn('tax_invoicing', module_access.seeded_modules())
 
     def test_only_admin_may_record_an_exclusion_basis(self):
         body = {'title': 'x', 'reference_number': 'y', 'issued_by': 'z', 'applies_to': 'w'}
@@ -1071,6 +1136,20 @@ class ReceiptTests(Fixture, TestCase):
             with self.assertRaises(services.TaxRuleError):
                 receipts.reconcile_branch('150', self.admin)
         self.assertEqual(self.one('1').status, TaxReceipt.UNCERTAIN)
+
+    def test_list_filters_by_date_and_reports_the_total(self):
+        receipts.import_rows([row(1), row(2, day=dt.datetime(2026, 11, 2))])
+        c = api(self.accountant)
+        r = c.get('/api/tax-invoicing/receipts/?from=2026-11-02')
+        self.assertEqual([x['docnumber'] for x in r.data], ['2'])
+        self.assertEqual(r['X-Total-Count'], '1')
+        self.assertEqual(c.get('/api/tax-invoicing/receipts/?from=nonsense').status_code, 400)
+
+    def test_channels_seen_lists_what_arrived_with_its_rule(self):
+        receipts.import_rows([row(1), row(2, channel='77')])
+        by = {r['channel']: r for r in api(self.accountant).get('/api/tax-invoicing/receipts/channels/seen/').data}
+        self.assertEqual((by['91']['mode'], by['91']['documents']), ('receipt', 1))
+        self.assertEqual(by['77']['mode'], 'undecided')
 
     def test_summary_is_by_branch(self):
         receipts.import_rows([row(1), row(2, channel='77'), row(3, branch='160', channel='10')])
