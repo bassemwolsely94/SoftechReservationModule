@@ -231,6 +231,7 @@ INSTALLED_APPS = [
     'apps.usage_print',    # Usage-instructions receipt slip (Project 5) — read-only vs SOFTECH, flag below
     'apps.access',         # Trusted networks + request network label (security N1, log only)
     'apps.trace',          # P-58 EDA track-and-trace foundation — dormant (TRACK_TRACE_ENABLED)
+    'apps.data_lifecycle', # Data lifecycle — rule register, policies, holding folder; our data only
 ]
 
 MIDDLEWARE = [
@@ -400,6 +401,11 @@ STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+# Data lifecycle (apps.data_lifecycle). File rules stay in preview unless this is True: set it only on the
+# VPS, because MEDIA_ROOT is inside OneDrive here and its version history would keep "removed" prescriptions.
+LIFECYCLE_FILE_RULES_ENABLED = config('LIFECYCLE_FILE_RULES_ENABLED', default=False, cast=bool)
+# Removed files wait here for 30 days. Outside MEDIA_ROOT, so never reachable by URL.
+LIFECYCLE_HOLD_ROOT = config('LIFECYCLE_HOLD_ROOT', default=BASE_DIR / 'media_hold')
 # Uploaded files get signed, expiring URLs (core/storage.py); /media/ is served by
 # core.media.serve_media, which checks the signature. Product images stay public.
 STORAGES = {
