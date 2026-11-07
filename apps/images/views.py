@@ -779,8 +779,9 @@ def filter_meta(request):
     # ABC class counts from latest demand run
     abc_counts = {}
     try:
-        from apps.purchasing.models import DemandCalculationRun, ItemDemandAggregated
-        run = DemandCalculationRun.objects.filter(status='success').order_by('-calc_date').first()
+        from apps.purchasing.models import ItemDemandAggregated
+        from apps.purchasing.shortage import _latest_run
+        run = _latest_run(None)
         if run:
             for row in (ItemDemandAggregated.objects.filter(run=run)
                         .values('abc_class').annotate(count=Count('id'))):

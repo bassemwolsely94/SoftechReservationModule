@@ -214,8 +214,9 @@ def sales_coverage(ranks: dict | None = None) -> dict:
 def _filter_by_abc(qs: QuerySet, abc: str) -> QuerySet:
     """Filter items by ABC class from the latest demand run."""
     try:
-        from apps.purchasing.models import DemandCalculationRun, ItemDemandAggregated
-        run = DemandCalculationRun.objects.filter(status='success').order_by('-calc_date').first()
+        from apps.purchasing.models import ItemDemandAggregated
+        from apps.purchasing.shortage import _latest_run
+        run = _latest_run(None)
         if not run:
             return qs
         item_ids = (
