@@ -407,6 +407,26 @@ class ExceptionTests(Base):
                                         format='json').status_code, 409)
         self.assertEqual(len(self.acct.get(BASE + 'exceptions/').data['results']), 1)   # default open
 
+    def test_closed_period_change_row_carries_what_the_correction_needs(self):
+        period, _ = FinancialPeriod.objects.get_or_create(
+            year=2026, month=3, period_type='month',
+            defaults={'period_start': datetime.date(2026, 3, 1), 'period_end': datetime.date(2026, 3, 31)})
+        orig = LedgerEntry.objects.create(entry_date=D, book='cash', status='approved', created_by=self.acct_p,
+                                          period=period, source_type='sales_tenders', source_key='g1', number='JV-9')
+        lines = [{'account_code': '1302', 'branch_id': None, 'party_code': '', 'debit': '10.00', 'credit': '0.00'}]
+        detail = {'group_key': 'g1', 'entry_id': orig.pk, 'member_source_keys': ['a', 'b']}
+        withorig = self.exc(self.doc('a'), 'closed_period_change', detail=detail, original_entry=orig,
+                            proposed_lines=lines)
+        late = self.exc(self.doc('c'), 'closed_period_change', detail={'group_key': 'g2', 'member_source_keys': ['c']})
+        plain = self.exc(self.doc('d'), 'no_rule')
+        rows = {x['id']: x for x in self.acct.get(BASE + 'exceptions/').data['results']}
+        row = rows[withorig.pk]
+        self.assertEqual((row['original_entry_number'], row['proposed_lines'], row['detail']['member_source_keys']),
+                         ('JV-9', lines, ['a', 'b']))
+        self.assertEqual(row['live_entry'], {'id': orig.pk, 'number': 'JV-9', 'status': 'approved'})
+        self.assertEqual((rows[late.pk]['original_entry_number'], rows[late.pk]['live_entry']), (None, None))
+        self.assertNotIn('live_entry', rows[plain.pk])
+
     def test_redraft_runs_over_selected_docs(self):
         e1 = self.exc(self.doc('a'))
         e2 = self.exc(self.doc('b', source_type='credit_sales', doc_date=datetime.date(2026, 4, 2)))

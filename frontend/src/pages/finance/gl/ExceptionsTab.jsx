@@ -5,7 +5,8 @@
  * Grouped by kind; each row offers the fix for ITS kind inline (confirm/create the party, map the
  * value, open the rule editor prefilled, or just ignore with a note). «إعادة الترحيل» re-runs the
  * engine for the selected documents. Nothing is decided here — the server resolves every fix.
- * closed_period_change is read-only in Plan 2 (the correction button arrives with the period close).
+ * closed_period_change shows what will post and drafts the late correction in the first open month
+ * (corrections/from-exception/); mixed_manual_entry points to the cutover import, or «تجاهل».
  * An accountant-edited entry SOFTECH changed (ledger_error / edited_by_user, Ruling P23) shows both
  * versions side by side with «اعتماد نسخة سوفتيك» / «إبقاء تعديلي» (ledger.approve).
  */
@@ -293,6 +294,80 @@ function EditDecision({ ex, perms, onDone, onRunStarted, onBusy }) {
   )
 }
 
+// ── closed_period_change / mixed_manual_entry: the lines that would post ─────
+function ProposedLines({ lines }) {
+  const { labelOf } = useGlBranches()
+  if (!lines?.length) return <div className="text-xs text-gray-600">لا أسطر</div>
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs bg-white border border-gray-200 rounded">
+        <thead className="bg-gray-50 text-gray-500">
+          <tr>
+            <th className="text-right px-2 py-1">الحساب</th><th className="text-right px-2 py-1">الفرع</th>
+            <th className="text-right px-2 py-1">الطرف</th>
+            <th className="text-left px-2 py-1">مدين</th><th className="text-left px-2 py-1">دائن</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lines.map((l, i) => (
+            <tr key={i} className="border-t border-gray-100">
+              <td className="px-2 py-1"><span className="font-mono">{l.account_code}</span> {l.account_name || ''}</td>
+              <td className="px-2 py-1">{(l.branch_id ? labelOf(l.branch_id, l.branch_name) : '') || '—'}</td>
+              <td className="px-2 py-1 font-mono">{l.party_code || '—'}</td>
+              <td className="px-2 py-1 text-left font-mono tabular-nums" dir="ltr">{money(l.debit, { blankZero: true })}</td>
+              <td className="px-2 py-1 text-left font-mono tabular-nums" dir="ltr">{money(l.credit, { blankZero: true })}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+const entryLink = (id, text) => <Link className="text-green-700 hover:underline" to={`/finance/journal?entry=${id}&tab=entries`}>{text}</Link>
+
+// A closed month is never touched: the difference (or the whole late document) is drafted in the first open month.
+function LateCorrection({ ex, perms, onDone }) {
+  const [reason, setReason] = useState('')
+  const [err, setErr] = useState('')
+  const [made, setMade] = useState(null)
+  const d = ex.detail || {}
+  const docs = (d.member_source_keys || []).length || 1
+  const live = ex.live_entry
+  const hasDraft = live?.status === 'draft'
+  const post = useMutation({
+    mutationFn: () => glApi.correctionFromException(ex.id, reason.trim()).then(r => r.data),
+    onSuccess: (r) => {   // the row resolves and leaves the list: the top message keeps the link
+      setErr(''); setMade(r)
+      onDone(<>تم تجهيز مسودة التصحيح {entryLink(r.id, `#${r.number || r.id}`)} — راجعها واعتمدها من اليومية</>)
+    },
+    onError: (e) => { setErr(errOf(e, 'تعذّر ترحيل التصحيح')) },
+  })
+  return (
+    <div className="space-y-2 text-sm text-gray-700">
+      <div className="text-xs text-gray-600">
+        تغيّر مستند في شهر مغلق ({docs} مستند(ات) في المجموعة). الشهر المغلق لا يُلمس: يُرحَّل الفرق في أول شهر مفتوح كمسودة.
+        {ex.original_entry && <> القيد الأصلي: {entryLink(ex.original_entry, `#${ex.original_entry_number || ex.original_entry}`)}</>}
+      </div>
+      <div className="text-xs font-bold text-gray-700">{ex.original_entry ? 'الأسطر الجديدة للمجموعة (الفرق عن القيد يُحسب عند الترحيل)' : 'ما سيُرحَّل'}</div>
+      <ProposedLines lines={ex.proposed_lines} />
+      {made ? (
+        <div className="text-xs text-green-700">المسودة {entryLink(made.id, `#${made.number || made.id}`)} في اليومية</div>
+      ) : hasDraft ? (
+        <div className="text-xs bg-amber-50 border border-amber-200 rounded px-2 py-1">
+          للمجموعة مسودة قائمة {entryLink(live.id, `#${live.number || live.id}`)} — راجعها أو احذفها من اليومية أولاً ثم ارجع هنا.
+        </div>
+      ) : perms.create ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <input className={`${inputCls} flex-1 max-w-md`} placeholder="سبب التصحيح (مطلوب)" value={reason} onChange={e => setReason(e.target.value)} />
+          <button type="button" className={btnPrimary} disabled={!reason.trim() || post.isPending} onClick={() => post.mutate()}>ترحيل التصحيح في أول شهر مفتوح</button>
+        </div>
+      ) : <div className="text-xs text-gray-500">ترحيل التصحيح يحتاج صلاحية الإنشاء</div>}
+      <ErrorBox>{err}</ErrorBox>
+    </div>
+  )
+}
+
 function RowActions({ ex, perms, onDone, onOpenRule, onRunStarted, onBusy }) {
   const { kind, doc, detail } = ex
   let fix
@@ -318,20 +393,14 @@ function RowActions({ ex, perms, onDone, onOpenRule, onRunStarted, onBusy }) {
       </div>
     )
   } else if (kind === 'closed_period_change') {
-    fix = (
-      <div className="text-sm text-gray-700">
-        يُصحح في أول شهر مفتوح.
-        {ex.original_entry && <> القيد الأصلي: <Link className="text-green-700 hover:underline" to={`/finance/journal?entry=${ex.original_entry}&tab=entries`}>#{ex.original_entry}</Link></>}
-      </div>
-    )
+    fix = <LateCorrection ex={ex} perms={perms} onDone={onDone} />
   } else if (kind === 'mixed_manual_entry') {
     fix = (
-      <div className="text-sm text-gray-700 space-y-1">
+      <div className="text-sm text-gray-700 space-y-2">
         <div>{doc.attrs?.description} — قيد من يومية المالية فيه حسابات يدوية وحسابات من SOFTECH، ومستني قرار المحاسب. الشهر مش هيتقفل غير لما يتضم بكل أسطره أو يتجاهل بسبب.</div>
-        <div className="text-xs text-gray-600" dir="ltr">
-          {(ex.proposed_lines || []).map((ln, i) => (
-            <div key={i} className="font-mono">{ln.account_code} · {money(ln.debit)} · {money(ln.credit)}</div>
-          ))}
+        <ProposedLines lines={ex.proposed_lines} />
+        <div className="text-xs text-gray-600">
+          يُضم بكل أسطره من <Link className="text-green-700 hover:underline" to="/finance/close?tab=cutover">«إقفال الفترة» › «الاستيراد والمطابقة»</Link> عند إعادة رفع الملف، أو تجاهله بسبب من الأسفل.
         </div>
       </div>
     )

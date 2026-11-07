@@ -2211,6 +2211,7 @@ export const glApi = {
   exceptionAcceptSoftech: (id, body) => api.post(`/finance/gl/exceptions/${id}/accept-softech/`, body),   // {note, version}
   exceptionKeepEdit: (id, body)    => api.post(`/finance/gl/exceptions/${id}/keep-edit/`, body),          // {note, version}
   entrySource:     (id)            => api.get(`/finance/gl/entries/${id}/source/`),
+  correctionFromException: (exception_id, reason) => api.post('/finance/gl/corrections/from-exception/', { exception_id, reason }),
   // ── period close and cutover (Plan 3) ──
   periods:         (year)          => api.get('/finance/gl/periods/', { params: { year } }),
   period:          (id)            => api.get(`/finance/gl/periods/${id}/`),               // polled while closing: no SOFTECH read

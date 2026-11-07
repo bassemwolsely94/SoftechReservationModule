@@ -424,7 +424,7 @@ def rule_preview(request):
 @permission_classes(VIEW)
 def exceptions_list(request):
     p = request.query_params
-    qs = SourceException.objects.select_related('source_doc')
+    qs = SourceException.objects.select_related('source_doc', 'original_entry')
     qs = qs.filter(status=p.get('status') or 'open')
     if p.get('kind'):
         qs = qs.filter(kind=p['kind'])

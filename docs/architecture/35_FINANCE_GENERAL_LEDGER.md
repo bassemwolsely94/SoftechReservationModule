@@ -2,8 +2,7 @@
 
 Status: ✅ Plan 1 (ledger foundation), ✅ Plan 2 (drafting engine, second part of this document) and ✅ Plan 3 (close and
 reconcile, third part) BUILT. Plan 3 BUILT 2026-11-07 on `claude/finance-gl-close`; plan:
-`docs/superpowers/plans/2026-11-04-finance-gl-close.md`. Not yet done: a screen button for late corrections (API only), and
-finance's 2026 journal file for the importer (see the open questions at the end).
+`docs/superpowers/plans/2026-11-04-finance-gl-close.md`. Not yet done: finance's 2026 journal file for the importer (see the open questions at the end).
 Spec: `docs/superpowers/specs/2026-11-04-finance-general-ledger-design.md`.
 
 Finance keeps its own double-entry ledger on its own 4-digit chart of accounts, so its Excel journal
@@ -272,7 +271,7 @@ with the A/P mirror (live check, 2026: diff 0 for all months, expenses 6802 docs
 | `no_rule` | no active rule matches | add / widen a rule (editor opens with the doc's conditions) |
 | `ambiguous_rule` | two rules, same priority | change priority or conditions |
 | `unbalanced_rule` | the rule's lines don't balance for the doc | fix the rule lines |
-| `closed_period_change` | doc changed after its month stopped accepting postings | read-only in the inbox; corrected by a late correction drafted into the first open month (`corrections/from-exception/`, one per exception = per group; a brand-new document is drafted whole, dated that month), see Plan 3 |
+| `closed_period_change` | doc changed after its month stopped accepting postings | corrected from the inbox by a late correction drafted into the first open month (`corrections/from-exception/`, one per exception = per group; a brand-new document is drafted whole, dated that month), see Plan 3 |
 | `duplicate_source_key` | the same key appeared twice in one read | check the source |
 | `ledger_error` | `save_draft` refused (inactive account, before opening…), or `edited_by_user` (P21) | read the message, fix, redraft; for `edited_by_user` compare «القيد بعد تعديلك» / «نسخة سوفتيك الجديدة» and choose «اعتماد نسخة سوفتيك» or «إبقاء تعديلي» (P23) |
 | `mixed_manual_entry` | a group of finance's journal (Plan 3 importer) on both manual and SOFTECH-fed accounts; `source_type='manual_import'`, no SOFTECH reader | parked, blocks the month's close: `import_gl_manual_entries --include-mixed KEY` imports it with all its lines (resolved in the same transaction), or «تجاهل» with a reason. `exceptions/redraft/` leaves it alone |
@@ -546,7 +545,7 @@ A closed month is never touched. A SOFTECH change that lands in one raises one `
 - The drafting engine nets a group against its approved corrections, so a second change in the same closed month corrects against original + first correction, never the old amount twice.
 - `ledger.reverse` of a closed-month entry dates the mirror in the first open month and sets `corrects`.
 - Audited `gl_late_correction_drafted`, `gl_late_document_drafted`.
-- **Not built:** a button for this in the exceptions inbox. The routes are live (`corrections/`, `corrections/from-exception/`); the screen still shows the row read-only.
+- The exceptions inbox posts it: a `closed_period_change` row shows the lines that will post, the documents count and the original entry's number, takes a required reason and calls `corrections/from-exception/`. A group whose live entry is still a draft gets no button (review or delete the draft first); the server's Arabic 409 message is shown as is. `exception_json` adds `original_entry_number` and `live_entry` ({id, number, status}) to these rows.
 
 ## Year-end
 
@@ -667,5 +666,4 @@ Decisions taken while building, in plain words (the working notes are deleted af
 - Which comparison checks should block a close, and when: turn `blocks_close` on once a source reproduces finance's figure.
 - Finance runs SOFTECH's stock-at-date report on every month-end from November 2026 (earlier gaps are carried forward).
 - The opening-stock figure for the production import; the 2354 coupons account; the 2409 view per branch for 2026.
-- A button for late corrections in the inbox (API only today).
 - Whether the nightly comparison and drafting schedules are switched on (`GL_DRAFTING_SCHEDULE_ENABLED`).
