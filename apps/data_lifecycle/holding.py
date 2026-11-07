@@ -11,7 +11,8 @@ A failure must never lose a document, so:
   FileStranded plus a critical log line say where.
 - Nothing is recorded as purged unless the file really was deleted.
 
-Call hold_file and restore outside a transaction: a caller's later rollback could not move the file back.
+hold_file and restore refuse to run inside a caller's transaction (durable=True): a later rollback would revert
+the rows and the HeldFile but could not move the file back.
 
 Logs and error messages carry ids only, never filenames (§7). An OSError or a database error can quote a
 path, so every failure leaves here as a HoldError naming only the error's type.
@@ -95,13 +96,13 @@ def _move(source, target):
 
 
 def _after_failure(exc, moved, ref):
-    """Inside an `except`: put a moved file back, then raise. `moved` is (where it is now, where it belongs)."""
+    """Inside an `except`: put a moved file back, then raise. `moved` is (where it is now, where it belongs).
+    `ref` says where a file that cannot go back really is and what it belongs to: ids and hashes, no filename."""
     if moved:
         try:
             _move(*moved)
         except Exception as back_exc:
-            logger.critical('[lifecycle] a file could not go back; it is still at %s (%s)',
-                            ref, type(back_exc).__name__)
+            logger.critical('[lifecycle] a file could not go back: %s (%s)', ref, type(back_exc).__name__)
             raise FileStranded(f'تعذر إرجاع الملف إلى مكانه، وهو سليم ({ref}). راجع السجل فورًا.') from None
     if isinstance(exc, HoldError) or not isinstance(exc, Exception):
         raise exc
@@ -134,8 +135,7 @@ def hold_file(path, rows, rule_key):
     `rows` is a list of {model: 'app.Model', pk, field, value}, value being the field's exact current content.
     A file no record uses has rows=[]. Returns the HeldFile. Raises HoldError; the file is then back in place,
     unless it is FileStranded."""
-    moved = None
-    hold_name = uuid.uuid4().hex
+    moved, ref = None, ''
     try:
         root, media = _hold_root(), _media_root()
         source = _inside(media, path)
@@ -143,15 +143,19 @@ def hold_file(path, rows, rule_key):
             raise HoldError('الملف غير موجود.')
         for row in rows:
             _check_row(row)
-        hold_name += source.suffix
+        hold_name = uuid.uuid4().hex + source.suffix
         target = root / hold_name
         size, sha256 = source.stat().st_size, _sha256(source)
+        first = rows[0] if rows else {}
+        # The HeldFile insert rolls back in the case this is for, so this line is all that says what the file is.
+        ref = (f'it is in the holding folder as {hold_name}; rule_key={rule_key} '
+               f'primary_model={first.get("model", "")} primary_pk={first.get("pk", "")} '
+               f'primary_field={first.get("field", "")} sha256={sha256}')
         _move(source, target)
         moved = (target, source)
-        with transaction.atomic():
+        with transaction.atomic(durable=True):
             for row in rows:
                 _clear_row(row)
-            first = rows[0] if rows else {}
             now = timezone.now()
             return HeldFile.objects.create(
                 original_path=source.relative_to(media).as_posix(), hold_path=hold_name, rule_key=rule_key,
@@ -159,7 +163,7 @@ def hold_file(path, rows, rule_key):
                 primary_model=first.get('model', ''), primary_pk=str(first.get('pk', '')),
                 primary_field=first.get('field', ''), rows=rows)
     except BaseException as exc:
-        _after_failure(exc, moved, hold_name)
+        _after_failure(exc, moved, ref)
 
 
 def restore(held_id, user):
@@ -171,7 +175,7 @@ def restore(held_id, user):
         if user is None:
             raise HoldError('يجب تحديد المستخدم الذي يسترجع الملف.')
         root, media = _hold_root(), _media_root()
-        with transaction.atomic():
+        with transaction.atomic(durable=True):
             held = HeldFile.objects.select_for_update().filter(pk=held_id).first()
             if held is None:
                 raise HoldError('الملف المحجوز غير موجود.')
@@ -195,7 +199,8 @@ def restore(held_id, user):
                                    'primary_pk': held.primary_pk, 'primary_field': held.primary_field}) is None:
                 raise HoldError('تعذر تسجيل الاسترجاع في سجل المراجعة، فلم يُسترجع الملف.')
     except BaseException as exc:
-        _after_failure(exc, moved, f'held {held_id}')
+        _after_failure(exc, moved, f'held {held_id}: it is at the original_path of that record, not in the holding '
+                                   f'folder, and the record still says held')
     return held
 
 

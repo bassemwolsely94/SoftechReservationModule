@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest import mock
 
 from django.core.management import CommandError, call_command
+from django.db import transaction
 from django.http import Http404
 from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
@@ -211,8 +212,23 @@ class HoldTests(HoldingCase):
         self.assertEqual(self.file.read_bytes(), b'new upload')
         stranded = self._hold_files()
         self.assertEqual([p.read_bytes() for p in stranded], [BYTES])     # not lost, and the log says where
-        self.assertIn(stranded[0].name, logs.output[0])
-        self.assertNotIn('secret_name', logs.output[0])
+        line = logs.output[0]
+        self.assertIn(stranded[0].name, line)
+        for part in ('rule_key=prescriptions', f'primary_model={POLICY}', f'primary_pk={record.pk}',
+                     'primary_field=reason', f'sha256={SHA}'):
+            self.assertIn(part, line)
+        self.assertNotIn('secret_name', line)
+
+    def test_hold_is_refused_inside_a_callers_transaction(self):
+        record = self._record()
+        with transaction.atomic():
+            with self.assertRaises(HoldError):
+                hold_file(NAME, [self._row(record)], 'prescriptions')
+        self.assertEqual(self.file.read_bytes(), BYTES)
+        self.assertEqual(self._hold_files(), [])
+        record.refresh_from_db()
+        self.assertEqual(record.reason, NAME)
+        self.assertFalse(HeldFile.objects.exists())
 
     def test_path_outside_media_is_refused(self):
         outside = self.tmp / 'outside.jpg'
@@ -345,6 +361,35 @@ class RestoreTests(HoldingCase):
         held.refresh_from_db()
         self.assertIsNone(held.restored_at)
         self.assertFalse(AuditLog.objects.filter(action=AUDIT_ACTION).exists())
+
+    def test_restore_is_refused_inside_a_callers_transaction(self):
+        held, record = self._held()
+        with transaction.atomic():
+            with self.assertRaises(HoldError):
+                restore(held.pk, self.admin)
+        self._assert_still_held(held, record)
+
+    def test_stranded_restore_logs_where_the_file_really_is(self):
+        held, record = self._held()
+        hold_copy = self.hold / held.hold_path
+
+        def something_takes_the_hold_name(*args, **kwargs):
+            hold_copy.write_bytes(b'in the way')
+            raise RuntimeError('db down')
+
+        with mock.patch.object(holding.AuditLog, 'log', side_effect=something_takes_the_hold_name):
+            with self.assertLogs('elrezeiky.sync', level=logging.CRITICAL) as logs:
+                with self.assertRaises(FileStranded):
+                    restore(held.pk, self.admin)
+        self.assertEqual(self.file.read_bytes(), BYTES)         # it is at the original path, and intact
+        self.assertEqual(hold_copy.read_bytes(), b'in the way')
+        line = logs.output[0]
+        self.assertIn(f'held {held.pk}: it is at the original_path of that record', line)
+        self.assertNotIn('secret_name', line)
+        record.refresh_from_db()
+        self.assertEqual(record.reason, '')
+        held.refresh_from_db()
+        self.assertIsNone(held.restored_at)
 
     def test_restore_refused_when_row_has_new_file(self):
         held, record = self._held()
