@@ -13,6 +13,7 @@ Live sending also needs `assert_ready_for_live`: a passed smoke test against the
 """
 import base64
 import hashlib
+import re
 import secrets
 import time
 
@@ -59,13 +60,31 @@ class AgentSigner:
         while time.monotonic() < deadline:
             job.refresh_from_db()
             if job.status == TaxSigningJob.SIGNED:
-                return job.signature
+                return _checked_document_signature(job)
             if job.status == TaxSigningJob.FAILED:
                 raise SigningUnavailable(f'فشل التوقيع على جهاز الختم: {job.error}')
             time.sleep(1)
         TaxSigningJob.objects.filter(pk=job.pk, status__in=[TaxSigningJob.PENDING, TaxSigningJob.CLAIMED]).update(
             status=TaxSigningJob.EXPIRED, finished_at=timezone.now())
         raise SigningUnavailable('جهاز الختم لم يرد في الوقت المحدد؛ تأكد أنه يعمل وأن الفلاشة موصلة')
+
+
+def _expected_thumbprint():
+    """Hex digits only: Windows' certificate dialog adds spaces and an invisible mark when copied."""
+    return re.sub(r'[^0-9A-F]', '', str(getattr(settings, 'TAX_SIGNING_CERT_THUMBPRINT', '') or '').upper())
+
+
+def _checked_document_signature(job):
+    """A wrong or foreign signature stops here, on the server, rather than going to ETA."""
+    from . import cades
+    try:
+        details = cades.inspect_signature(base64.b64decode(job.signature), job.canonical_text.encode('utf-8'))
+    except (cades.SignatureInvalid, ValueError) as exc:
+        raise SigningUnavailable(f'توقيع جهاز الختم غير صالح: {str(exc)[:200]}') from exc
+    expected = _expected_thumbprint()
+    if expected and details['thumbprint'] != expected:
+        raise SigningUnavailable('المستند موقّع بشهادة غير المسجلة في TAX_SIGNING_CERT_THUMBPRINT')
+    return job.signature
 
 
 def get_signer():
@@ -90,7 +109,7 @@ def assert_ready_for_live(signer=None):
     cert = latest_certification()
     if cert is None or not cert.passed:
         raise SigningUnavailable('لم ينجح اختبار الختم الفعلي بعد؛ الإرسال موقوف')
-    expected = str(getattr(settings, 'TAX_SIGNING_CERT_THUMBPRINT', '') or '').replace(' ', '').upper()
+    expected = _expected_thumbprint()
     if not expected or cert.thumbprint != expected:
         raise SigningUnavailable('بصمة شهادة الختم لا تطابق الإعداد TAX_SIGNING_CERT_THUMBPRINT')
     if cert.not_after and cert.not_after <= timezone.now():
