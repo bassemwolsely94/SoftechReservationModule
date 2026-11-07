@@ -495,6 +495,14 @@ thead th {
   .overflow-y-auto:has(> table) { max-height: none; }
 }
 
+/* Tax invoice sheet: only the sheet prints, whatever shell surrounds it (TaxInvoicingPage). */
+@media print {
+  @page { size: A4; margin: 12mm; }
+  body:has(.tax-print-sheet) * { visibility: hidden; }
+  .tax-print-sheet, .tax-print-sheet * { visibility: visible; }
+  .tax-print-sheet { position: absolute; inset: 0 0 auto 0; border: 0 !important; box-shadow: none !important; }
+}
+
 /* ─── «اعرض لي» tour: zoom into each highlighted area, then a soft pulse ───── */
 @keyframes tour-zoom {
   from { transform: scale(1.6); opacity: 0; }

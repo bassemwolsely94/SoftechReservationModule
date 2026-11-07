@@ -3081,6 +3081,72 @@ export const picAnalyticsApi = {
   exclusionSuggestions: (params = {}) => api.get('/pic-analytics/exclusions/suggestions/', { params }),
 }
 
+// Tax Invoicing (doc 36): ETA e-invoices for finalized insurance claims, e-receipts for branch sales.
+// The server decides everything; `options` on the import steps is the explicit column mapping.
+const _taxWorkbook = (url, file, fields = {}) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  Object.entries(fields).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) fd.append(k, typeof v === 'string' ? v : JSON.stringify(v))
+  })
+  return api.post(url, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+}
+
+export const taxInvoicingApi = {
+  me:              ()             => api.get('/tax-invoicing/me/'),
+  // Claims
+  claims:          (params = {})  => api.get('/tax-invoicing/claims/', { params }),
+  openInvoice:     (claimId)      => api.post(`/tax-invoicing/claims/${claimId}/invoice/`),
+  claimFiscalStatus: (claimId)    => api.get(`/insurance/claims/${claimId}/fiscal-status/`),
+  // Documents
+  documents:       (params = {})  => api.get('/tax-invoicing/documents/', { params }),
+  document:        (id, params = {}) => api.get(`/tax-invoicing/documents/${id}/`, { params }),
+  print:           (id)           => api.get(`/tax-invoicing/documents/${id}/print/`),
+  revalidate:      (id)           => api.post(`/tax-invoicing/documents/${id}/revalidate/`),
+  refreshSource:   (id, reason)   => api.post(`/tax-invoicing/documents/${id}/refresh-source/`, { reason }),
+  presentation:    (id, mode)     => api.post(`/tax-invoicing/documents/${id}/presentation/`, { mode }),
+  approve:         (id)           => api.post(`/tax-invoicing/documents/${id}/approve/`),
+  reopen:          (id, reason)   => api.post(`/tax-invoicing/documents/${id}/reopen/`, { reason }),
+  preview:         (id)           => api.post(`/tax-invoicing/documents/${id}/preview/`),
+  submit:          (id, confirm)  => api.post(`/tax-invoicing/documents/${id}/submit/`, { dry_run: false, confirm }),
+  reconcile:       (id)           => api.post(`/tax-invoicing/documents/${id}/reconcile/`),
+  createNote:      (id, data)     => api.post(`/tax-invoicing/documents/${id}/notes/`, data),
+  requestReview:   (id, lineId, data) => api.post(`/tax-invoicing/documents/${id}/lines/${lineId}/review/`, data),
+  decideReview:    (reviewId, data) => api.post(`/tax-invoicing/reviews/${reviewId}/decide/`, data),
+  // Exceptions and items
+  exceptions:      ()             => api.get('/tax-invoicing/exceptions/'),
+  items:           (params = {})  => api.get('/tax-invoicing/items/', { params }),
+  createItem:      (data)         => api.post('/tax-invoicing/items/', data),
+  updateItem:      (id, data)     => api.patch(`/tax-invoicing/items/${id}/`, data),
+  confirmVat:      (data)         => api.post('/tax-invoicing/items/confirm-vat/', data),
+  importInspect:   (file, headerRow) => _taxWorkbook('/tax-invoicing/items/import/inspect/', file, { header_row: String(headerRow) }),
+  importPreview:   (file, options) => _taxWorkbook('/tax-invoicing/items/import/preview/', file, { options }),
+  importApply:     (file, options, previewHash) => _taxWorkbook('/tax-invoicing/items/import/apply/', file, { options, preview_hash: previewHash }),
+  // Settings
+  bases:           ()             => api.get('/tax-invoicing/bases/'),
+  basisOptions:    ()             => api.get('/tax-invoicing/bases/options/'),
+  createBasis:     (data)         => api.post('/tax-invoicing/bases/', data),
+  deactivateBasis: (id, reason)   => api.post(`/tax-invoicing/bases/${id}/deactivate/`, { reason }),
+  issuer:          ()             => api.get('/tax-invoicing/issuer/'),
+  updateIssuer:    (data)         => api.patch('/tax-invoicing/issuer/', data),
+  buyers:          ()             => api.get('/tax-invoicing/buyers/'),
+  saveBuyer:       (data)         => api.post('/tax-invoicing/buyers/', data),
+  signingStatus:   ()             => api.get('/tax-invoicing/signing/status/'),
+  signingSmokeTest: ()            => api.post('/tax-invoicing/signing/smoke-test/'),
+  // E-receipts
+  receipts:        (params = {})  => api.get('/tax-invoicing/receipts/', { params }),
+  receiptsSummary: ()             => api.get('/tax-invoicing/receipts/summary/'),
+  receipt:         (id)           => api.get(`/tax-invoicing/receipts/${id}/`),
+  importReceipts:  (data)         => api.post('/tax-invoicing/receipts/import/', data),
+  issueReceipts:   (branch)       => api.post(`/tax-invoicing/receipts/branch/${encodeURIComponent(branch)}/issue/`),
+  previewReceipts: (branch)       => api.post(`/tax-invoicing/receipts/branch/${encodeURIComponent(branch)}/submit/`, { dry_run: true }),
+  reconcileReceipts: (branch)     => api.post(`/tax-invoicing/receipts/branch/${encodeURIComponent(branch)}/reconcile/`),
+  receiptConfigs:  ()             => api.get('/tax-invoicing/receipts/configs/'),
+  saveReceiptConfig: (data)       => api.post('/tax-invoicing/receipts/configs/', data),
+  channelRules:    ()             => api.get('/tax-invoicing/receipts/channels/'),
+  saveChannelRule: (data)         => api.post('/tax-invoicing/receipts/channels/', data),
+}
+
 // Contract (تعاقد) fast-entry assist — read-only PG history (POS Speed Wave §5). `customer` = the
 // contract account's personcode (SoftechSalesOrder.cust_branch_code).
 export const posApi = {
