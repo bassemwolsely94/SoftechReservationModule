@@ -20,7 +20,7 @@ from .sources import READERS, SourceDoc
 SOURCE_FIELDS = {
     'sales_tenders': ('net', 'sales', 'returns'),
     'credit_sales': ('credit', 'gross_share', 'discount_share', 'tax_share'),
-    'purchases': ('value',),
+    'purchases': ('value', 'net', 'vat'),   # Ruling P32: net = value - SOFTECH invoice VAT
     'supplier_payments': ('amount',),
     'cheque_maturity': ('amount',),
     'customer_collections': ('amount',),

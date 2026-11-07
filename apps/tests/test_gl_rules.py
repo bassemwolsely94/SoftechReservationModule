@@ -430,3 +430,8 @@ class ContentHashTests(SimpleTestCase):
         self.assertNotEqual(content_hash(a), content_hash(doc('k1', amounts={'a': DEC('1.01'), 'b': DEC('2')},
                                                                 attrs={'x': 1, 'y': 2})))
         self.assertEqual(len(content_hash(a)), 64)
+
+
+class PurchaseFieldsP32Tests(SimpleTestCase):
+    def test_purchases_offer_value_net_and_vat(self):
+        self.assertEqual(R.SOURCE_FIELDS['purchases'], ('value', 'net', 'vat'))

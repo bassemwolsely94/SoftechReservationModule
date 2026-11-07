@@ -70,6 +70,7 @@ function RunProgress({ runId, onFinished }) {
     <div className={`text-sm rounded-lg border px-3 py-2 ${ok ? 'bg-green-50 border-green-200 text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
       {ok ? 'اكتمل الترحيل' : run.status === 'partial' ? 'اكتمل جزئياً' : 'فشل الترحيل'} — {msg}
       {run.detail?.error && <span> · {String(run.detail.error)}</span>}
+      {!!run.detail?.vat_missing && <span> · {run.detail.vat_missing} فاتورة بضريبة ناقصة</span>}
     </div>
   )
 }

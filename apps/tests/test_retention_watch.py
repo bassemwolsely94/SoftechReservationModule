@@ -123,3 +123,84 @@ class MissedRunAlertTests(TestCase):
         with mock.patch('apps.sync.tasks._run_morning_chain') as chain:
             retention_watch()
         chain.assert_not_called()
+
+
+class RetentionLockReleaseTests(TestCase):
+    def test_lock_is_released_after_a_normal_run(self):
+        # PG advisory locks are re-entrant, so a same-session check can't see a leak;
+        # probe from a second connection.
+        from apps.sync.scheduler_lock import _raw_connection
+        run = run_daily_retention()
+        self.assertIsNotNone(run)
+        conn = _raw_connection()
+        self.addCleanup(conn.close)
+        with conn.cursor() as cur:
+            cur.execute('SELECT pg_try_advisory_lock(%s)', [RETENTION_LOCK_KEY])
+            self.assertTrue(cur.fetchone()[0])
+            cur.execute('SELECT pg_advisory_unlock(%s)', [RETENTION_LOCK_KEY])
+
+
+class StaleFlipTests(TestCase):
+    def test_stale_flipped_row_is_not_due_until_six_hours(self):
+        from apps.sync.maintenance import mark_stale_runs
+        run = SyncRun.objects.create(status='running', lane='retention')
+        SyncRun.objects.filter(pk=run.pk).update(
+            started_at=timezone.now() - timedelta(minutes=60))
+        self.assertEqual(mark_stale_runs(), 1)
+        self.assertEqual(SyncRun.objects.get(pk=run.pk).status, 'failed')
+        self.assertFalse(retention_catchup_due())     # failed 60 min ago: waits
+        SyncRun.objects.filter(pk=run.pk).update(
+            started_at=timezone.now() - timedelta(hours=6, minutes=1))
+        self.assertTrue(retention_catchup_due())
+
+    def test_run_flipped_to_failed_while_working_ends_as_success(self):
+        from apps.sync.maintenance import _run_retention_steps
+
+        def flip():
+            SyncRun.objects.filter(lane='retention', status='running').update(status='failed')
+            return 3
+
+        run = _run_retention_steps([('retention:flip', flip)])
+        self.assertEqual(SyncRun.objects.get(pk=run.pk).status, 'success')
+
+
+class RetentionRowNotASyncInFlightTests(TestCase):
+    def _admin(self):
+        from .factories import make_admin
+        user, _profile, client = make_admin('inflight_admin')
+        user.is_staff = True
+        user.save()
+        client.force_authenticate(user)
+        return client
+
+    def _running(self, lane):
+        return SyncRun.objects.create(status='running', lane=lane)
+
+    def test_manual_sync_not_blocked_by_retention_row(self):
+        self._running('retention')
+        with mock.patch('apps.sync.views.start_thread') as st:
+            r = self._admin().post('/api/sync/trigger/', {'lane': 'fast'}, format='json')
+        self.assertEqual(r.status_code, 202)
+        self.assertEqual(r.data['detail'], 'sync started')
+        st.assert_called_once()
+
+    def test_manual_sync_still_blocked_by_other_running_row(self):
+        self._running('fast')
+        with mock.patch('apps.sync.views.start_thread') as st:
+            r = self._admin().post('/api/sync/trigger/', {'lane': 'fast'}, format='json')
+        self.assertEqual(r.data['detail'], 'sync already in progress')
+        st.assert_not_called()
+
+    def test_supply_refresh_not_blocked_by_retention_row(self):
+        self._running('retention')
+        with mock.patch('apps.supply.views.start_thread') as st:
+            r = self._admin().post('/api/supply/freshness/sync-stock/', {}, format='json')
+        self.assertEqual(r.status_code, 202, r.data)
+        st.assert_called_once()
+
+    def test_supply_refresh_still_blocked_by_other_running_row(self):
+        self._running('slow')
+        with mock.patch('apps.supply.views.start_thread') as st:
+            r = self._admin().post('/api/supply/freshness/sync-stock/', {}, format='json')
+        self.assertEqual(r.status_code, 202, r.data)
+        st.assert_not_called()
