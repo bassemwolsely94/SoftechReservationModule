@@ -144,10 +144,11 @@ def punches_for_month(employee_ids, year, month) -> dict:
     Callers pass each list to ``build_days``, which drops anything outside the month."""
     from apps.hr.models import AttendancePunch
 
+    employee_ids = list(employee_ids)
     first = datetime.date(year, month, 1)
     last = datetime.date(year, month, calendar.monthrange(year, month)[1])
     qs = (AttendancePunch.objects
-          .filter(employee_id__in=list(employee_ids), flag='',
+          .filter(employee_id__in=employee_ids, flag='',
                   punch_date__gte=first, punch_date__lte=last + datetime.timedelta(days=1),
                   punch_time__isnull=False)
           .select_related('device')

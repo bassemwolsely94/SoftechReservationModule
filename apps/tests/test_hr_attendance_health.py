@@ -229,6 +229,17 @@ class SpoolWaitingTests(HealthBase):
         self.check({old.pk: 2, mid.pk: 2, new.pk: 2})
         self.assertEqual(self.alerts(self.admin_p).count(), 1)
 
+    def test_real_spool_waiting_field_alerts(self):
+        # no patching: the stored CollectionRun.spool_waiting column is what the check reads
+        self.run_rec(100, started_at=ago(hours=3, minutes=5), spool_waiting=2)
+        self.run_rec(100, started_at=ago(hours=1), spool_waiting=2)
+        health.check_attendance_health(now=NOW)
+        self.assertEqual(self.alerts(self.admin_p).count(), 1)
+        CollectionRun.objects.update(spool_waiting=0)
+        Notification.objects.all().delete()
+        health.check_attendance_health(now=NOW)
+        self.assertEqual(self.alerts().count(), 0)
+
     def test_waiting_for_under_3_hours_no_alert(self):
         old = self.run_rec(100, started_at=ago(hours=2, minutes=50))
         new = self.run_rec(100, started_at=ago(hours=1))

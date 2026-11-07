@@ -6,11 +6,12 @@ number, unless a guard stops it. resolve_user_code recalculates from the current
 can also become unresolved again. Only AttendancePunch.employee changes here, and only through
 queryset.update(): the punch's own data is never touched.
 """
+import datetime
 from collections import defaultdict
 
 from django.db.models import Q
 
-from apps.hr.models import AttendancePunch, DeviceUser, Employee
+from apps.hr.models import AttendancePunch, ConflictConfirmation, DeviceUser, Employee
 
 # A machine's internal slot, sent when its log holds no clean ID (8-byte logs). It means something
 # only on that machine, so it is never an employee and two machines' same slot is no conflict.
@@ -49,18 +50,31 @@ def _is_conflicting(code) -> bool:
 
 
 def _employee_for(code):
-    if code.startswith(UID_PREFIX) or _is_conflicting(code):
+    if code.startswith(UID_PREFIX):
         return None
-    return Employee.objects.filter(hr_number=code, hold_resolution=False).first()
+    employee = Employee.objects.filter(hr_number=code, hold_resolution=False).first()
+    if employee is None:
+        return None
+    # A name conflict keeps the ID unresolved until the HR head confirms this employee for it.
+    if _is_conflicting(code) and not ConflictConfirmation.objects.filter(
+            user_code=code, employee=employee).exists():
+        return None
+    return employee
 
 
 def _eligible(employee) -> Q:
+    """Which punches may belong to this employee. Employment dates are compared with the WORK date
+    (days.work_date_for): a punch before the day boundary belongs to the previous calendar day, so
+    02:00 the morning after end_date is still end_date's, and 02:00 on start_date is not."""
     # A flagged punch has no date to trust, so the employment-date guard can't be checked.
-    rule = Q(flag='', punch_date__isnull=False)
+    rule = Q(flag='', punch_date__isnull=False, punch_time__isnull=False)
+    early = Q(punch_time__lt=employee.day_boundary)     # work date = punch date - 1 day
     if employee.start_date:
-        rule &= Q(punch_date__gte=employee.start_date)
+        rule &= (~early & Q(punch_date__gte=employee.start_date)) | (
+            early & Q(punch_date__gt=employee.start_date))
     if employee.end_date:
-        rule &= Q(punch_date__lte=employee.end_date)
+        rule &= (~early & Q(punch_date__lte=employee.end_date)) | (
+            early & Q(punch_date__lte=employee.end_date + datetime.timedelta(days=1)))
     return rule
 
 

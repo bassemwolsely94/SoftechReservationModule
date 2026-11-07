@@ -30,9 +30,8 @@ SPOOL_WAITING = _dt.timedelta(hours=3)
 
 def _spool_waiting(run):
     """Files the agent still had waiting to upload at the end of this run, or None when the run
-    doesn't say (an older agent). CollectionRun.spool_waiting is added by the ingest branch; read
-    defensively so this works before and after it merges."""
-    return getattr(run, 'spool_waiting', None)
+    doesn't say (an older agent)."""
+    return run.spool_waiting
 
 
 def _device_label(device):

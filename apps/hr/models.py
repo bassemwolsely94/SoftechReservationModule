@@ -632,6 +632,17 @@ class UnknownIdDecision(models.Model):
     decided_at = models.DateTimeField(auto_now_add=True)
 
 
+class ConflictConfirmation(models.Model):
+    """The HR head's decision that a fingerprint ID whose machines hold different real names really
+    is this employee (resolve.py keeps a conflicted ID unresolved until this exists). It names the
+    employee, who must hold the ID as their HR number, and says why."""
+    user_code  = models.CharField(max_length=30, unique=True)
+    employee   = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='conflict_confirmations')
+    reason     = models.CharField(max_length=255)
+    decided_by = models.ForeignKey('users.StaffProfile', null=True, on_delete=models.SET_NULL, related_name='+')
+    decided_at = models.DateTimeField(auto_now_add=True)
+
+
 class AttendancePunch(models.Model):
     """One fingerprint punch exactly as the machine recorded it. APPEND-ONLY: an existing row can
     never be saved again or deleted (raw_stamp is the machine's own number, kept for audit)."""

@@ -305,6 +305,22 @@ class ResolveTests(IngestBase):
                    punch(raw_stamp=3, date='2026-09-30'), punch(raw_stamp=4, date='2026-10-01')])
         self.assertEqual({p.raw_stamp for p in AttendancePunch.objects.filter(employee=emp)}, {2, 3})
 
+    def test_employment_end_uses_the_work_date(self):
+        # 02:00 the morning after end_date still belongs to end_date's work day
+        emp = self.employee(end_date=_dt.date(2026, 9, 30))
+        self.send([punch(raw_stamp=1, date='2026-10-01', time='02:00:00'),
+                   punch(raw_stamp=2, date='2026-10-01', time='09:00:00'),
+                   punch(raw_stamp=3, date='2026-10-02', time='02:00:00')])
+        self.assertEqual({p.raw_stamp for p in AttendancePunch.objects.filter(employee=emp)}, {1})
+
+    def test_employment_start_uses_the_work_date(self):
+        # 02:00 on start_date belongs to the day before, so it stays unresolved
+        emp = self.employee(start_date=_dt.date(2026, 9, 15))
+        self.send([punch(raw_stamp=1, date='2026-09-15', time='02:00:00'),
+                   punch(raw_stamp=2, date='2026-09-15', time='09:00:00'),
+                   punch(raw_stamp=3, date='2026-09-16', time='02:00:00')])
+        self.assertEqual({p.raw_stamp for p in AttendancePunch.objects.filter(employee=emp)}, {2, 3})
+
     def test_changed_dates_unlink_on_the_next_resolve(self):
         emp = self.employee()
         self.send([punch()])
