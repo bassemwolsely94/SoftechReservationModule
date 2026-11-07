@@ -10,6 +10,7 @@
  *   Statement   /finance/ledger     (GL account statement)
  *   Parties     /finance/parties    (GL party mapping)
  *   Rules       /finance/rules      (GL posting rules + source maps)
+ *   Close       /finance/close      (GL period close + cutover tools)
  *   P&L         /finance/pnl
  *   Cash view   /finance/cash       (P-40; /finance/cashflow redirects here)
  *   Expenses    /finance/expenses
@@ -27,7 +28,7 @@ import { usePermissions } from '../hooks/usePermission'
 const FINANCE_DOMAINS = ['finance_pl', 'finance_expenses', 'finance_journal']
 
 // General-ledger screens: finance's own book, not mirrored from SOFTECH.
-const GL_PATHS = ['/finance/coa', '/finance/journal', '/finance/trial-balance', '/finance/statements', '/finance/ledger', '/finance/parties', '/finance/rules']
+const GL_PATHS = ['/finance/coa', '/finance/journal', '/finance/trial-balance', '/finance/statements', '/finance/ledger', '/finance/parties', '/finance/rules', '/finance/close']
 
 // GL tabs (`module: 'ledger'`) show only to users with ledger.view — the server refuses the rest anyway.
 const TABS = [
@@ -38,6 +39,7 @@ const TABS = [
   { to: '/finance/ledger',    label: 'كشف حساب',         icon: '📄', module: 'ledger' },
   { to: '/finance/parties',   label: 'الأطراف',          icon: '👥', module: 'ledger' },
   { to: '/finance/rules',     label: 'قواعد الترحيل',    icon: '⚙️', module: 'ledger' },
+  { to: '/finance/close',     label: 'إقفال الفترة',     icon: '🔒', module: 'ledger' },
   { to: '/finance/pnl',       label: 'الأرباح والخسائر', icon: '📊' },
   { to: '/finance/expenses',  label: 'المصروفات',        icon: '💸' },
   { to: '/finance/cash',      label: 'النقدية ١٣ أسبوع', icon: '💵' },

@@ -80,7 +80,7 @@ export default function JournalPage() {
   const { branches, labelOf } = useGlBranches()
   const [params, setParams] = useSearchParams()
   const [filters, setFilters] = useState({
-    status: params.get('status') ?? 'draft', book: '', date_from: '', date_to: '', branch: '',
+    status: params.get('status') ?? 'draft', book: '', date_from: params.get('date_from') || '', date_to: params.get('date_to') || '', branch: '',
     account: params.get('account') || '', q: '', source: '',
   })
   const tab = params.get('tab') === 'exceptions' ? 'exceptions' : 'entries'   // follows the URL
