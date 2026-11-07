@@ -18,6 +18,7 @@ import useAuthStore from '../store/authStore'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import useHelpTab from '../help/useHelpTab'
+import RemovedFileNote from '../components/RemovedFileNote'
 
 const toLatinDigits = s =>
   s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -575,6 +576,7 @@ function CaseChatPanel({ caseId, onClose }) {
                               : part
                           )}
                         </div>
+                        {!ev.attachment_url && <RemovedFileNote date={ev.retention_removed?.attachment} className="mt-1.5" />}
                         {ev.attachment_url && ev.attachment_type === 'image' && (
                           <a href={ev.attachment_url} target="_blank" rel="noopener noreferrer">
                             <img src={ev.attachment_url} alt=""

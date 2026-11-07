@@ -15,6 +15,7 @@ from .models import (
 
 
 from apps.customers.phone_mask import RecordPhoneMask, CustomerPhoneMask  # Batch 5b
+from apps.data_lifecycle.display import RetentionNoteMixin
 
 class DeliveryDriverSerializer(serializers.ModelSerializer):
     branch_name       = serializers.CharField(source='branch.name', read_only=True)
@@ -203,7 +204,8 @@ class DeliveryOrderListSerializer(RecordPhoneMask, serializers.ModelSerializer):
         return None
 
 
-class DeliveryOrderSerializer(RecordPhoneMask, serializers.ModelSerializer):
+class DeliveryOrderSerializer(RetentionNoteMixin, RecordPhoneMask, serializers.ModelSerializer):
+    retention_fields = ('pod_photo',)
     """Full read serializer with all nested data."""
     phone_mask_fields = ('customer_phone', 'customer_phone_alt')
     branch_name        = serializers.CharField(source='branch.name', read_only=True)

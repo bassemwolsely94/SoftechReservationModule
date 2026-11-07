@@ -1,9 +1,11 @@
 from rest_framework import serializers
 from .models import BankStatementImport, BankStatementLine, PaymentException
 from .statement_parser import ALLOWED_EXTENSIONS, MAX_STATEMENT_BYTES, file_extension
+from apps.data_lifecycle.display import RetentionNoteMixin
 
 
-class BankStatementImportSerializer(serializers.ModelSerializer):
+class BankStatementImportSerializer(RetentionNoteMixin, serializers.ModelSerializer):
+    retention_fields = ('raw_file',)
     imported_by_name = serializers.CharField(source='imported_by.full_name', read_only=True, default='')
     branch_name      = serializers.CharField(source='branch.name',           read_only=True)
     status_label     = serializers.CharField(source='get_status_display',    read_only=True)
