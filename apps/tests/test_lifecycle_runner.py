@@ -412,7 +412,7 @@ class RetentionWiringTests(TestCase):
         self.assertEqual(run.status, 'failed')
         self.assertTrue(SyncLog.objects.filter(sync_run=run, table_name='retention:purge_held').exists())
 
-    def test_purge_held_is_a_no_op_for_now(self):
+    def test_purge_held_counts_nothing_when_nothing_is_held(self):
         self.assertEqual(runner.purge_held_files(), 0)
 
 

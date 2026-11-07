@@ -25,6 +25,7 @@ from django.utils import timezone
 from apps.sync.maintenance import _alert_admins, _batched_delete
 from core.errors import redact
 
+from . import holding
 from .models import MODE_OFF, MODE_PREVIEW, LifecycleRun, LifecycleRunLine
 from .policy import get_mode
 from .register import KIND_FILE, KIND_P56, RULES
@@ -46,8 +47,8 @@ def move_file_candidates(rule, candidates):
 
 
 def purge_held_files():
-    """The retention:purge_held step. Task 7 replaces this with the real purge."""
-    return 0
+    """The retention:purge_held step."""
+    return holding.purge_expired()
 
 
 def _measure(rule, candidates):
