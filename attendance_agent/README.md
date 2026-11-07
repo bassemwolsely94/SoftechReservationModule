@@ -64,7 +64,7 @@ sizes). This takes months to fill a disk, but there is no limit: once the disk i
 reads can't be saved, so watch free space during a long outage.
 
 If the ERP refuses one file (for example, a machine is no longer assigned to this agent),
-that file stays in `spool\` and is tried again every pass, while other files keep going.
+that file stays in `spool\` and is tried again every 15 minutes, while other files keep going.
 `agent.log` shows the reason on an `upload:` line. Files that stay for long mean the ERP needs
 attention: fix the cause there, and the file goes by itself.
 
@@ -84,8 +84,8 @@ scheduled run, on one reachable machine:
 ### Comm key
 
 Machines probed so far need no comm key. If a machine answers that it needs one, the run
-reports `CommKeyRequired`. The key then goes in the agent's local configuration only,
-never in the ERP.
+fails with "this machine needs a comm key". The key then goes in `[comm_keys]` in `agent.ini`
+only, never in the ERP.
 
 ## العربية
 
@@ -148,7 +148,7 @@ python -m attendance_agent C:\ElRezeiky\agent\agent.ini
 لا يوجد حد: وعند امتلائه لا يمكن حفظ القراءات الجديدة، لذا راقب المساحة الخالية أثناء الانقطاع الطويل.
 
 إذا رفض النظام ملفًا واحدًا (مثلًا لأن جهاز البصمة لم يعد مخصصًا لهذا البرنامج)، يبقى الملف في
-`spool\` ويُعاد إرساله في كل دورة، بينما تستمر بقية الملفات. يعرض `agent.log` السبب في سطر `upload:`.
+`spool\` ويُعاد إرساله كل 15 دقيقة، بينما تستمر بقية الملفات. يعرض `agent.log` السبب في سطر `upload:`.
 وبقاء الملفات مدة طويلة يعني أن النظام يحتاج إلى مراجعة: عالج السبب هناك وسيُرسل الملف تلقائيًا.
 
 ### التشغيل الأول: اختبر جهاز بصمة واحدًا قبل الباقي
@@ -165,6 +165,6 @@ python -m attendance_agent C:\ElRezeiky\agent\agent.ini
 
 ### مفتاح الاتصال (Comm key)
 
-الأجهزة التي فُحصت حتى الآن لا تحتاج إلى مفتاح. إذا طلب أحد الأجهزة مفتاحًا فسيعرض التشغيل
-الخطأ `CommKeyRequired`، ويوضع المفتاح حينها في إعدادات البرنامج المحلية فقط، ولا يوضع في
-النظام أبدًا.
+الأجهزة التي فُحصت حتى الآن لا تحتاج إلى مفتاح. إذا طلب أحد الأجهزة مفتاحًا فسيفشل التشغيل
+بالرسالة "this machine needs a comm key"، ويوضع المفتاح حينها في `[comm_keys]` داخل `agent.ini`
+فقط، ولا يوضع في النظام أبدًا.

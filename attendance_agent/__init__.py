@@ -1,5 +1,6 @@
 """Standalone attendance collection agent. Standard library only, no Django."""
 import logging
 
-# The agent logs to its rotating file (collector.configure_logging), never the console.
+# Handlers are added by collector.configure_logging: its rotating file, and the console
+# only for --once. Without this, warnings would reach stderr by default.
 logging.getLogger('attendance_agent').addHandler(logging.NullHandler())

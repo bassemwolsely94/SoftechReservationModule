@@ -64,6 +64,10 @@ class ZkError(Exception):
     """Base class for anything this client refuses or can't understand."""
 
 
+class BadCommKey(ZkError, ValueError):
+    """The configured comm key isn't a number. The value is never repeated."""
+
+
 class ForbiddenCommand(ZkError):
     """A command outside the allow-list. Raised before any socket write."""
 
@@ -253,7 +257,7 @@ class ZkClient:
             try:
                 self._comm_key = int(comm_key)
             except (TypeError, ValueError):
-                raise ValueError('comm_key must be a number') from None
+                raise BadCommKey('comm_key must be a number') from None
         self._allowed = ALLOWED_COMMANDS
         if self._comm_key is not None:
             self._allowed = ALLOWED_COMMANDS | {CMD_AUTH}
@@ -391,28 +395,37 @@ class ZkClient:
         return self._read_counted(_LOG_TABLE_REQUEST, 'records', parse_logs, True)
 
     def _read_counted(self, request, count_field, parse, keep_raw):
-        """Read a table whose size stayed still, so its count can be matched exactly.
+        """Read a table and match it exactly against its stated count.
 
-        Staff keep punching during a read. If the count moved, or a read fails to
-        decode, read again; the machine's log is unchanged by reading.
+        Staff keep punching during a read, so if the count rose, read again. If the
+        count fell, the log was cleared after this table was read, and the table may
+        be the last copy, so it is used as it stands. Every failure carries the last
+        table when `keep_raw` is set, so an attendance log can be kept.
         """
         error = None
         table = None
-        for _attempt in range(_READ_ATTEMPTS):
-            count = getattr(self.read_sizes(), count_field)
-            if count == 0:
-                return []
-            try:
-                table = self._read_table(request)
-                if getattr(self.read_sizes(), count_field) != count:
-                    error = ZkProtocolError('the count changed during every read')
-                    continue
-                return parse(table, count)
-            except ZkProtocolError as exc:
-                error = exc
-        if keep_raw:
-            error.raw_table = table
-        raise error
+        table_count = 0
+        try:
+            for _attempt in range(_READ_ATTEMPTS):
+                count = getattr(self.read_sizes(), count_field)
+                if count < table_count:
+                    raise ZkProtocolError('the log shrank between reads')
+                if count == 0:
+                    return []
+                try:
+                    table = self._read_table(request)
+                    table_count = count
+                    if getattr(self.read_sizes(), count_field) > count:
+                        error = ZkProtocolError('the count kept rising during the read')
+                        continue
+                    return parse(table, count)
+                except ZkProtocolError as exc:
+                    error = exc
+            raise error
+        except (ZkProtocolError, OSError) as exc:
+            if keep_raw and table is not None:
+                exc.raw_table = table
+            raise
 
     def _read_table(self, request):
         code, data = self._exchange(CMD_PREPARE_BUFFER, request)

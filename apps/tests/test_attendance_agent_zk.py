@@ -240,7 +240,7 @@ class AllowListTests(SimpleTestCase):
                 self.assertNotIn(word, name.lower(), name)
 
     def test_comm_key_error_does_not_echo_the_key(self):
-        with self.assertRaises(ValueError) as caught:
+        with self.assertRaises(zk_client.ZkError) as caught:
             ZkClient('192.0.2.1', comm_key='not-a-number')
         self.assertNotIn('not-a-number', str(caught.exception))
 
@@ -570,6 +570,65 @@ class OverSocketTests(SimpleTestCase):
         with connected_to(Race()), ZkClient('192.0.2.1') as client:
             rows = client.read_logs()
         self.assertEqual([r.user_code for r in rows], ['uid-5', 'uid-6'])
+
+    def scripted_counts(self, counts, tables, base=None):
+        """A machine whose stated count and table follow a script, one entry per read."""
+        class Scripted(FakeDevice):
+            def _respond(self, code, data, reply):
+                if code == 50:
+                    stated = counts.pop(0) if counts else 0
+                    self.stream += frame(ACK_OK, sizes_payload(0, stated), reply=reply)
+                elif code == 1503:
+                    self.current = tables.pop(0)
+                    self.requests.append(data.hex())
+                    self.stream += frame(
+                        ACK_OK, b'\0' + struct.pack('<I', len(self.current)), reply=reply,
+                    )
+                else:
+                    super()._respond(code, data, reply)
+
+        return Scripted()
+
+    def test_log_cleared_during_the_read_keeps_the_table_in_hand(self):
+        # The table may be the last copy. The count falls to 0 after a whole read.
+        whole = table([log_40(1, b'1001', 100 + i) for i in range(3)])
+        device = self.scripted_counts([3, 0], [whole])
+        with connected_to(device), ZkClient('192.0.2.1') as client:
+            rows = client.read_logs()
+        self.assertEqual([r.raw_stamp for r in rows], [100, 101, 102])
+        self.assertEqual(len(device.requests), 1)
+
+    def test_log_cleared_then_one_new_punch_keeps_the_table_in_hand(self):
+        whole = table([log_40(1, b'1001', 100 + i) for i in range(3)])
+        device = self.scripted_counts([3, 1], [whole])
+        with connected_to(device), ZkClient('192.0.2.1') as client:
+            self.assertEqual(len(client.read_logs()), 3)
+
+    def test_log_cleared_between_attempts_keeps_the_earlier_table(self):
+        # Attempt 1 is whole but the count grew, so it re-reads; then the log is gone.
+        whole = table([log_40(1, b'1001', 100 + i) for i in range(3)])
+        device = self.scripted_counts([3, 4, 0], [whole])
+        with connected_to(device), ZkClient('192.0.2.1') as client:
+            with self.assertRaises(ZkProtocolError) as caught:
+                client.read_logs()
+        self.assertEqual(caught.exception.raw_table, whole)
+
+    def test_undecodable_table_kept_when_the_retry_loses_the_connection(self):
+        class Drops(FakeDevice):
+            size_reads = 0
+
+            def _respond(self, code, data, reply):
+                if code == 50:
+                    self.size_reads += 1
+                    if self.size_reads == 3:
+                        return  # recv then raises TimeoutError
+                super()._respond(code, data, reply)
+
+        device = Drops(tables={13: self.undecodable()})
+        with connected_to(device), ZkClient('192.0.2.1') as client:
+            with self.assertRaises(TimeoutError) as caught:
+                client.read_logs()
+        self.assertEqual(caught.exception.raw_table, self.undecodable())
 
     def undecodable(self):
         return struct.pack('<I', 64) + b'\xAB' * 64  # 32-byte records, count 2

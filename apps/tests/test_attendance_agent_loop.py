@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import shutil
+import socket
 import tempfile
 import threading
 from datetime import date, datetime, time, timedelta
@@ -44,6 +45,12 @@ RUN_KEYS = {
     'device_serial', 'started_at', 'finished_at', 'records_read', 'oldest_date',
     'newest_date', 'drift_seconds', 'device_log_count', 'status', 'error',
 }
+
+
+def closed_port_url():
+    with socket.socket() as probe:
+        probe.bind(('127.0.0.1', 0))
+        return f'http://127.0.0.1:{probe.getsockname()[1]}'
 
 
 def device(serial='SN1', ip='192.0.2.1'):
@@ -121,7 +128,7 @@ class FakeUploader:
 
     def get_config(self):
         if self.config_down:
-            raise UploadError('sever unreachable')
+            raise UploadError('unreachable')
         return {'agent': 'office', 'collect_now': self.collect_now, 'devices': self.devices}
 
     def send(self, kind, payload):
@@ -305,6 +312,37 @@ class DrainTests(TempDirTestCase):
             drain(self.spool, uploader)
         self.assertEqual(uploader.of_kind('punches'), [{'n': 1}])
         self.assertEqual(self.spool.pending(), [damaged])
+
+    def test_refused_file_waits_and_does_not_starve_newer_files(self):
+        now = [0]
+        held = {}
+        refused = [self.spool.put('punches', {'n': 0}) for _ in range(3)]
+        uploader = self.refusing(0)
+        with self.assertLogs('attendance_agent', level='WARNING'):
+            drain(self.spool, uploader, clock=lambda: now[0], held=held)
+        calls = []
+        real_send = uploader.send
+        uploader.send = lambda kind, payload: (calls.append(payload['n']), real_send(kind, payload))
+        self.spool.put('punches', {'n': 1})
+        now[0] = 60
+        drain(self.spool, uploader, clock=lambda: now[0], held=held)
+        self.assertEqual(calls, [1])
+        self.assertEqual(self.spool.pending(), refused)
+        now[0] = collector.REFUSED_RETRY_SECONDS
+        with self.assertLogs('attendance_agent', level='WARNING'):
+            drain(self.spool, uploader, clock=lambda: now[0], held=held)
+        self.assertEqual(calls, [1, 0, 0, 0])
+
+    def test_held_file_goes_when_the_erp_accepts_it_later(self):
+        now = [0]
+        held = {}
+        self.spool.put('punches', {'n': 0})
+        with self.assertLogs('attendance_agent', level='WARNING'):
+            drain(self.spool, self.refusing(0), clock=lambda: now[0], held=held)
+        now[0] = collector.REFUSED_RETRY_SECONDS
+        drain(self.spool, FakeUploader(), clock=lambda: now[0], held=held)
+        self.assertEqual(self.spool.pending(), [])
+        self.assertEqual(held, {})
 
     def test_long_backlog_stops_at_the_time_budget(self):
         # Reading machines must not wait hours behind a large upload backlog.
@@ -651,6 +689,74 @@ class LoopTests(TempDirTestCase):
         self.assertEqual(len(self.collected), 1)
         self.assertEqual(uploader.of_kind('runs')[-1].get('collect_done'), None)
 
+    def test_unserved_collect_now_does_not_keep_re_reading(self):
+        # The ERP answers config but its uploads fail, so the request never clears.
+        uploader = FakeUploader(collect_now=True)
+        uploader.send = mock.Mock(side_effect=UploadError('HTTP 500'))
+        loop = self.make_loop(uploader)
+        with self.assertLogs('attendance_agent', level='WARNING'):
+            for minute in range(0, 60):
+                self.clock_value = minute * 60
+                loop.tick()
+        self.assertEqual(len(self.collected), 1)
+
+    def test_collect_now_works_again_after_the_earlier_one_was_delivered(self):
+        uploader = FakeUploader(collect_now=True)
+        loop = self.make_loop(uploader)
+        loop.tick()
+        self.clock_value = 300
+        loop.tick()
+        self.assertEqual(len(self.collected), 2)
+
+    def test_gap_is_measured_from_the_end_of_the_read(self):
+        uploader = FakeUploader()
+
+        def slow_factory(target):
+            self.clock_value = 290
+            self.collected.append(target['serial'])
+            return FakeClient(serial=target['serial'])
+
+        loop = self.make_loop(uploader, slow_factory)
+        loop.tick()
+        self.clock_value = 300
+        uploader.collect_now = True
+        loop.tick()
+        self.assertEqual(len(self.collected), 1)
+
+    def test_only_serial_never_clears_the_collect_request(self):
+        uploader = FakeUploader(devices=[device('A'), device('B')], collect_now=True)
+        loop = self.make_loop(uploader)
+        loop._only_serial = 'B'
+        loop.tick()
+        self.assertEqual(self.collected, ['B'])
+        self.assertNotIn('collect_done', uploader.of_kind('runs')[0])
+
+    def test_only_serial_not_assigned_says_so(self):
+        uploader = FakeUploader(devices=[device('A')])
+        loop = self.make_loop(uploader)
+        loop._only_serial = 'TYPO'
+        with self.assertLogs('attendance_agent', level='ERROR') as captured:
+            loop.tick()
+        self.assertEqual(self.collected, [])
+        self.assertIn('TYPO', '\n'.join(captured.output))
+
+    def test_refused_run_file_is_held_across_ticks(self):
+        uploader = FakeUploader()
+        calls = []
+
+        def send(kind, payload):
+            calls.append(kind)
+            raise UploadError('HTTP 400', permanent=True)
+
+        uploader.send = send
+        loop = self.make_loop(uploader)
+        with self.assertLogs('attendance_agent', level='WARNING'):
+            loop.tick()
+        first = len(calls)
+        self.clock_value = 60
+        loop.tick()
+        self.assertEqual(len(calls), first)
+
     def test_collect_now_with_a_failing_spool_does_not_hammer_machines(self):
         uploader = FakeUploader(collect_now=True)
         loop = self.make_loop(uploader)
@@ -799,7 +905,7 @@ class LoopTests(TempDirTestCase):
 
 class PrivacyTests(TempDirTestCase):
     def test_secret_never_logged(self):
-        uploader = Uploader('http://127.0.0.1:9', SECRET)
+        uploader = Uploader(closed_port_url(), SECRET)
         client = FakeClient(logs_error=OSError(f'boom {SECRET} {COMM_KEY}'))
         with self.assertLogs('attendance_agent', level='DEBUG') as captured:
             logging.getLogger('attendance_agent').debug('start')
@@ -927,7 +1033,7 @@ class UploaderTests(SimpleTestCase):
 
     def test_unreachable_is_not_permanent(self):
         with self.assertRaises(UploadError) as caught:
-            Uploader('http://127.0.0.1:9', SECRET).send('runs', {})
+            Uploader(closed_port_url(), SECRET).send('runs', {})
         self.assertFalse(caught.exception.permanent)
 
     def test_counts_that_do_not_add_up_are_not_an_acknowledgement(self):
@@ -944,7 +1050,7 @@ class UploaderTests(SimpleTestCase):
         self.assertEqual(len(self.server.requests), 1)
 
     def test_unreachable_erp_raises_upload_error(self):
-        dead = Uploader('http://127.0.0.1:9', SECRET)
+        dead = Uploader(closed_port_url(), SECRET)
         with self.assertRaises(UploadError):
             dead.send('runs', {})
 
@@ -1117,12 +1223,14 @@ class RunForeverTests(TempDirTestCase):
         self.assertNotIn('not-a-number', '\n'.join(captured.output))
         run = self.spool.read(self.spool.pending()[0])[1]
         self.assertEqual(run['status'], 'failed')
+        self.assertIn('comm_key must be a number', run['error'])
 
     def test_log_file_rotates(self):
         config = self.config()
         logger = logging.getLogger('attendance_agent')
         before = list(logger.handlers)
         self.addCleanup(lambda: setattr(logger, 'handlers', before))
+        self.addCleanup(logger.setLevel, logger.level)
         collector.configure_logging(config)
         added = [h for h in logger.handlers if h not in before]
         self.addCleanup(lambda: [h.close() for h in added])

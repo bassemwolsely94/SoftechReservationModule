@@ -21,10 +21,12 @@ logger = logging.getLogger('attendance_agent')
 BATCH_SIZE = 2000  # the ERP refuses more than this per request
 POLL_SECONDS = 60
 COLLECT_EVERY_SECONDS = 3600
-# No machine is read more often than this, whatever is asked or goes wrong. These are
-# old machines, and the ZK program may be connected at the same time.
+# While the agent runs, no machine is read more often than this, however often it's asked
+# or a read fails. These are old machines, and the ZK program may be connected at the same
+# time. Measured from the end of the last read.
 MIN_READ_GAP_SECONDS = 300
 DRAIN_BUDGET_SECONDS = 300  # a long backlog must not keep machines waiting
+REFUSED_RETRY_SECONDS = 900  # a file the ERP refused waits, so newer files go first
 LOG_MAX_BYTES = 5 * 1024 * 1024
 LOG_BACKUPS = 5
 
@@ -242,34 +244,43 @@ def collect_device(device, client_factory, spool, now, collect_done=False) -> No
         raise
 
 
-def drain(spool, uploader, budget_seconds=DRAIN_BUDGET_SECONDS, clock=time.monotonic) -> None:
+def drain(spool, uploader, budget_seconds=DRAIN_BUDGET_SECONDS, clock=time.monotonic,
+          held=None) -> None:
     """Send oldest first. A file is removed only after the ERP has accepted it, and
     resending is safe.
 
     If the ERP or the network is the problem, stop until the next pass. If the ERP
-    refuses one file, or it can't be read, the file stays and is tried again next
-    pass, while the rest go on: one machine's problem must not hold back the others.
+    refuses one file, or it can't be read, the file stays and waits in `held` (path to
+    next try) before being tried again. The rest go on, so one machine's problem can't
+    hold back the others.
     """
+    held = {} if held is None else held
     started = clock()
     sent = kept = 0
     reason = ''
     stopped = False
     for path in spool.pending():
-        if clock() - started >= budget_seconds:
+        now = clock()
+        if now - started >= budget_seconds:
             break
+        if held.get(path, now) > now:
+            continue
         try:
             kind, payload = spool.read(path)
             uploader.send(kind, payload)
             spool.ack(path)
+            held.pop(path, None)
             sent += 1
         except UploadError as exc:
             reason = _safe_error(exc)
             if not exc.permanent:
                 stopped = True
                 break
+            held[path] = now + REFUSED_RETRY_SECONDS
             kept += 1
         except (OSError, ValueError, KeyError, TypeError) as exc:
             reason = _safe_error(exc)
+            held[path] = now + REFUSED_RETRY_SECONDS
             kept += 1
     if reason:
         logger.warning(
@@ -302,19 +313,20 @@ class AgentLoop:
         self._last_read = {}
         self._next_due = {}
         self._saved_devices = None
+        self._held = {}
+        self._collect_done_file = None
 
     def tick(self) -> None:
         devices, collect_now = self._fetch_config()
         if self._only_serial is not None:
             devices = [d for d in devices if d['serial'] == self._only_serial]
+            if not devices:
+                logger.error('machine %s is not assigned to this agent', self._only_serial)
         clock = self._clock()
-        # A collect-now request stays set until collect_done reaches the ERP, so the
-        # minimum gap is what stops it re-reading every machine each minute.
-        run_all = collect_now and all(self._gap_passed(d, clock) for d in devices)
+        run_all = self._should_run_all(devices, collect_now, clock)
         targets = devices if run_all else [d for d in devices if self._is_due(d, clock)]
         for index, device in enumerate(targets):
             serial = device['serial']
-            self._last_read[serial] = clock
             try:
                 collect_device(
                     device, self._client_factory, self._spool, self._now,
@@ -324,7 +336,22 @@ class AgentLoop:
             except Exception as exc:  # e.g. disk full: the next machine still gets its turn
                 logger.error('device %s run failed: %s', serial, _safe_error(exc))
                 self._next_due[serial] = clock + MIN_READ_GAP_SECONDS
-        drain(self._spool, self._uploader)
+            self._last_read[serial] = self._clock()
+        if run_all and targets:
+            pending = self._spool.pending()
+            self._collect_done_file = pending[-1] if pending else None
+        drain(self._spool, self._uploader, clock=self._clock, held=self._held)
+
+    def _should_run_all(self, devices, collect_now, clock):
+        """A collect-now request stays set until collect_done reaches the ERP. So once
+        this cycle has spooled it, don't read again until that file has gone, and the
+        minimum gap covers a run that couldn't even spool it. Reading one machine by
+        hand must never answer a request meant for all of them."""
+        if not collect_now or self._only_serial is not None:
+            return False
+        if self._collect_done_file is not None and self._collect_done_file.exists():
+            return False
+        return all(self._gap_passed(d, clock) for d in devices)
 
     def _gap_passed(self, device, clock):
         last = self._last_read.get(device['serial'])
