@@ -183,6 +183,11 @@ class ClaimTotalsTests(TestCase):
         self.assertEqual(cats, D(str(ct['total_discount'])))
         day_nets = sum(D(str(d['day_totals']['net_after'])) for d in data['days'])
         self.assertEqual(day_nets, self.claim.final_net_after)
+        # the cover page's category rows add up to its total too
+        cv = data['cover']
+        self.assertEqual(D(str(cv['net_after'])), self.claim.final_net_after)
+        self.assertEqual(sum(D(str(cv[k])) for k in ('local_net', 'imported_net', 'tarsia_net')),
+                         self.claim.final_net_after)
 
     def test_claim_net_keeps_the_power_query_formula_over_the_summed_splits(self):
         # M-4, owner-accepted 2026-11-05 ("keep current method"): the claim net is the Power-Query formula
