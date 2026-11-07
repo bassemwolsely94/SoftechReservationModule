@@ -59,3 +59,7 @@ docs/architecture/softech_gift_vouchers_docs.txt
 ocr_tessdata/
 # superpowers plan workspaces (ledgers, briefs)
 .superpowers/
+
+# Attendance agent, filled settings (secret) and local state (names)
+agent.ini
+agent_state/
