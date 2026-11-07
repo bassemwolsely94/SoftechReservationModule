@@ -19,6 +19,13 @@ KIND_LABEL = {
 }
 
 
+STATUS_LABEL = {'active': 'على رأس العمل', 'left': 'ترك العمل'}
+
+
+def _leave_text(info):
+    return '، '.join(i['label'] for i in info if i.get('label'))
+
+
 def _branch(emp):
     return (emp.branch.name_ar or emp.branch.name) if emp.branch else ''
 
@@ -68,7 +75,8 @@ def build_workbook(year, month, status=None) -> Workbook:
     qs = Employee.objects.select_related('branch')
     if status in ('active', 'left'):
         qs = qs.filter(status=status)
-    results = day_engine.month_rows(qs.order_by('hr_number'), year, month)
+    # deliberately uncapped (the month screen caps at 1000 rows): the file must not hide anyone
+    results = day_engine.month_rows(qs.order_by('hr_number'), year, month, with_leave=True)
 
     wb = Workbook()
     wb.remove(wb.active)
@@ -77,18 +85,19 @@ def build_workbook(year, month, status=None) -> Workbook:
         'رقم الموظف', 'الاسم', 'القسم', 'الوظيفة', 'الفرع', 'الحالة', 'أيام بها بصمات', 'ساعات العمل',
         'الساعات المتوقعة', 'أيام تحتاج مراجعة', 'بدون بصمات'])
     for e, _rows, t in results:
-        ws.append([e.hr_number, e.name_ar, e.department, e.job_title, _branch(e), e.status,
+        ws.append([e.hr_number, e.name_ar, e.department, e.job_title, _branch(e), STATUS_LABEL.get(e.status, e.status),
                    t.days_with_punches, _num(t.worked_hours), _num(t.expected_hours),
                    t.days_needing_review, t.days_no_punches])
 
     ws = _sheet(wb, DAILY, [
         'رقم الموظف', 'الاسم', 'الفرع', 'التاريخ', 'أول بصمة', 'آخر بصمة', 'دقائق العمل',
-        'عدد البصمات', 'الأجهزة', 'الحالة'])
+        'عدد البصمات', 'الأجهزة', 'الحالة', 'إجازة / إذن'])
     for e, rows, _t in results:
         for d in rows:
             state = 'بدون بصمات' if d.no_punches else ('يحتاج مراجعة' if d.needs_review else '')
             ws.append([e.hr_number, e.name_ar, _branch(e), d.work_date, _hhmm(d.first_in),
-                       _hhmm(d.last_out), d.worked_minutes, d.punch_count, '، '.join(d.machines), state])
+                       _hhmm(d.last_out), d.worked_minutes, d.punch_count, '، '.join(d.machines), state,
+                       _leave_text(d.info)])
     for row in ws.iter_rows(min_row=2, min_col=4, max_col=4):
         row[0].number_format = 'yyyy-mm-dd'
 

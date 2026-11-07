@@ -12,7 +12,8 @@ from openpyxl import load_workbook
 
 from apps.audit.models import AuditLog
 from apps.hr.attendance import export
-from apps.hr.models import AttendanceAccess, AttendanceDevice, AttendancePunch, Employee
+from apps.hr.models import (AttendanceAccess, AttendanceDevice, AttendancePunch, Employee, LeaveRequest,
+                            LeaveType)
 from apps.tests.factories import make_branch, make_user
 
 URL = '/api/hr-attendance/'
@@ -127,12 +128,33 @@ class ExportTests(TestCase):
         nov = cells(export.build_workbook(2026, 11)[SHEETS[1]])
         self.assertEqual(nov[1][ci], 0)
 
+    def test_leave_listed_pending_not_and_totals_unchanged(self):
+        self.fixture()
+        lt = LeaveType.objects.create(code='annual', name='Annual', name_ar='سنوية')
+        before = cells(export.build_workbook(2026, 10)[SHEETS[0]])
+        for status, day in (('approved', _dt.date(2026, 10, 5)), ('pending', _dt.date(2026, 10, 6))):
+            LeaveRequest.objects.create(leave_type=lt, start_date=day, end_date=day, days_requested=1,
+                                        status=status, employee_hr_code='1001')
+        wb = export.build_workbook(2026, 10)
+        rows = cells(wb[SHEETS[1]])
+        head = rows[0]
+        di, li = head.index('التاريخ'), head.index('إجازة / إذن')
+        by_date = {str(r[di])[:10]: r for r in rows[1:]}
+        self.assertEqual(by_date['2026-10-05'][li], 'سنوية')
+        self.assertFalse(by_date['2026-10-06'][li])
+        self.assertEqual(cells(wb[SHEETS[0]]), before)
+
+    def test_status_is_arabic(self):
+        rows = cells(export.build_workbook(2026, 10)[SHEETS[0]])
+        self.assertEqual(rows[1][rows[0].index('الحالة')], 'على رأس العمل')
+
     def test_export_is_audited(self):
         self.book()
         log = AuditLog.objects.filter(action='hr_attendance_export').first()
         self.assertIsNotNone(log)
+        self.assertEqual(log.extra['month'], '2026-10')
 
-    def test_view_without_export_403(self):
+    def test_outsider_refused_and_view_grant_may_export(self):
         self.assertEqual(self.outsider.get(URL + 'month/export/?month=2026-10').status_code, 403)
         self.assertEqual(self.viewer.get(URL + 'month/export/?month=2026-10').status_code, 200)
 

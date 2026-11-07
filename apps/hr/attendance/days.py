@@ -159,14 +159,17 @@ def punches_for_month(employee_ids, year, month) -> dict:
     return out
 
 
-def month_rows(employees, year, month):
+def month_rows(employees, year, month, with_leave=False):
     """[(employee, [DayRow], MonthTotals)] — the one place the month screen and the Excel export
-    take their day and total figures from, so the two cannot disagree."""
+    take their day and total figures from, so the two cannot disagree. ``with_leave`` fills each
+    day's ``info`` with approved leave / permits (display only; totals never change)."""
     employees = list(employees)
     punches = punches_for_month([e.pk for e in employees], year, month)
+    info = leave_info(employees, year, month) if with_leave else {}
     out = []
     for e in employees:
-        rows = build_days(punches.get(e.pk, []), e.day_boundary, e.daily_hours, year, month)
+        rows = build_days(punches.get(e.pk, []), e.day_boundary, e.daily_hours, year, month,
+                          info.get(e.pk))
         out.append((e, rows, month_totals(rows)))
     return out
 
