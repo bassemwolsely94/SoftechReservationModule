@@ -133,6 +133,7 @@ export const NAV_GROUPS = [
     id: 'hr', label: 'الموارد البشرية', section: 'الموارد البشرية',
     items: [
       { to: '/hr',        icon: '👨‍💼', label: 'الإجازات والطلبات', roles: null },
+      { to: '/hr/attendance', icon: '🖐️', label: 'الحضور والبصمة', roles: [], cap: 'can_hr_attendance' },
       { to: '/approvals', icon: '✔️', label: 'صندوق الموافقات',    roles: ['admin','supervisor','pharmacist','quality_manager','purchasing'] },
     ],
   },

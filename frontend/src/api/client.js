@@ -3046,6 +3046,33 @@ export const stockAuditApi = {
   runs:         ()              => api.get('/stock-audit/runs/'),
 }
 
+// HR attendance (stage 1) — fingerprint machines → days. Every route is gated on the server by level
+// (view / manage / admin); the page only hides controls. Display only: no pay, no deductions.
+export const hrAttendanceApi = {
+  me:             ()                => api.get('/hr-attendance/me/'),
+  month:          (params = {})     => api.get('/hr-attendance/month/', { params }),
+  exportMonth:    (params = {})     => api.get('/hr-attendance/month/export/', { params, responseType: 'blob' }),
+  employees:      (params = {})     => api.get('/hr-attendance/employees/', { params }),
+  employeeDays:   (id, params = {}) => api.get(`/hr-attendance/employees/${id}/days/`, { params }),
+  issues:         ()                => api.get('/hr-attendance/issues/'),
+  unknownIds:     ()                => api.get('/hr-attendance/unknown-ids/'),
+  devices:        ()                => api.get('/hr-attendance/devices/'),
+  editEmployee:   (id, data)        => api.patch(`/hr-attendance/employees/${id}/`, data),
+  link:           (id, staff)       => api.post(`/hr-attendance/employees/${id}/link/`, { staff }),
+  rejectLink:     (id, staff)       => api.post(`/hr-attendance/employees/${id}/reject-link/`, { staff }),
+  unlink:         (id)              => api.post(`/hr-attendance/employees/${id}/unlink/`),
+  hold:           (id, data)        => api.post(`/hr-attendance/employees/${id}/hold/`, data),
+  genericLogin:   (staff)           => api.post('/hr-attendance/generic-login/', { staff }),
+  notGenericLogin:(data)            => api.post('/hr-attendance/not-generic-login/', data),
+  createEmployee: (code, data = {}) => api.post(`/hr-attendance/unknown-ids/${encodeURIComponent(code)}/create-employee/`, data),
+  ignoreUnknown:  (code, reason)    => api.post(`/hr-attendance/unknown-ids/${encodeURIComponent(code)}/ignore/`, { reason }),
+  confirmConflict:(code, data)      => api.post(`/hr-attendance/conflicts/${encodeURIComponent(code)}/confirm/`, data),
+  collectNow:     ()                => api.post('/hr-attendance/collect-now/'),
+  agents:         ()                => api.get('/hr-attendance/agents/'),
+  issueAgent:     (name)            => api.post('/hr-attendance/agents/issue/', { name }),
+  revokeAgent:    (id)              => api.post(`/hr-attendance/agents/${id}/revoke/`),
+}
+
 // PIC Analytics (doc 33) — every read takes the filter bar as query params (from, to, branch, …).
 export const picAnalyticsApi = {
   access:     ()                => api.get('/pic-analytics/access/'),
