@@ -114,7 +114,7 @@ SCREENS = [
               '"Approve" saves a new version that reaches customers. "Withdraw" with a reason stops it at once.'),
         ],
         'tabs': [
-            {'key': 'needs', 'title': T('يحتاج محتوى', 'Needs content'), 'body': T('أصناف مباعة بدون إرشاد.', 'Sold items with no sheet.')},
+            {'key': 'needs', 'title': T('يحتاج محتوى', 'Needs content'), 'body': T('أصناف مباعة بدون إرشاد. يراها كل من يفتح الشاشة؛ الكتابة والربط للصيادلة فقط.', 'Sold items with no sheet. Everyone who opens the screen sees it; writing and linking are for pharmacists only.')},
             {'key': 'draft', 'title': T('مسودات', 'Drafts'), 'body': T('مسودات يدوية أو آلية وتعديلات لم تُعتمد.', 'Hand or AI drafts and unapproved edits.')},
             {'key': 'pending_review', 'title': T('بانتظار الاعتماد', 'Pending approval'), 'body': T('أُرسلت للاعتماد.', 'Sent for approval.')},
             {'key': 'approved', 'title': T('معتمد', 'Approved'), 'body': T('تصل للعملاء الآن.', 'Reaching customers now.')},

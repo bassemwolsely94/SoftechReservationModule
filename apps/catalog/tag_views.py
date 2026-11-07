@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from .models import Category, Item, ItemTag
+from core.permissions import RouteModulePermission  # round 2, D6
 
 
 def _can_edit(request):
@@ -33,7 +34,7 @@ def _tag_dict(t):
 
 
 @api_view(['GET', 'POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def tags_list_create(request):
     if request.method == 'GET':
         from django.db.models import Count
@@ -61,7 +62,7 @@ def tags_list_create(request):
 
 
 @api_view(['PATCH', 'DELETE'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def tag_detail(request, tag_id):
     if not _can_edit(request):
         return Response({'detail': 'غير مصرح'}, status=status.HTTP_403_FORBIDDEN)
@@ -79,7 +80,7 @@ def tag_detail(request, tag_id):
 
 
 @api_view(['POST', 'DELETE'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def item_tag_assign(request, item_id, tag_id=None):
     if not _can_edit(request):
         return Response({'detail': 'غير مصرح'}, status=status.HTTP_403_FORBIDDEN)
@@ -94,7 +95,7 @@ def item_tag_assign(request, item_id, tag_id=None):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def quick_sell(request):
     """Per-branch top-sellers for the POS Quick-Sell grid. ?branch=&days=&limit="""
     from .quicksell import top_sellers, DEFAULT_DAYS, DEFAULT_LIMIT
@@ -114,7 +115,7 @@ def quick_sell(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def category_tree(request):
     """Two-level category tree (roots + their subcategories)."""
     cats = list(Category.objects.select_related('parent').all())

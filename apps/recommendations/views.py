@@ -17,6 +17,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from .models import RecommendationEngineRun, FrequentlyBoughtTogether, CustomerRecommendation
 from .serializers import EngineRunSerializer, FBTPairSerializer, CustomerRecSerializer
 from core.threads import start_thread
+from core.permissions import RouteModulePermission  # round 2, D6
 
 
 def _profile(request):
@@ -25,7 +26,7 @@ def _profile(request):
 
 # ── Basket intelligence / Sales opportunities ──────────────────────────────────
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def basket_intel(request):
     """GET ?items=code1,code2&customer=<id>&branch=<id>&limit=6 — ranked opportunities."""
     from .basket_intelligence import basket_intelligence
@@ -48,7 +49,7 @@ def basket_intel(request):
 # ── Latest run ────────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def latest_run(request):
     """GET /api/recommendations/run/ — latest engine run metadata."""
     run = RecommendationEngineRun.objects.order_by('-started_at').first()
@@ -60,7 +61,7 @@ def latest_run(request):
 # ── Trigger ───────────────────────────────────────────────────────────────────
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def trigger_engine(request):
     """
     POST /api/recommendations/trigger/
@@ -107,7 +108,7 @@ class FBTPairListView(generics.ListAPIView):
     GET /api/recommendations/fbt/
     Params: item_a (filter), search (item name), ordering
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
     serializer_class   = FBTPairSerializer
     filter_backends    = [DjangoFilterBackend, filters.SearchFilter, StableOrderingFilter]
     filterset_fields   = ['item_a', 'item_b']
@@ -128,7 +129,7 @@ class FBTPairListView(generics.ListAPIView):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def fbt_for_item(request):
     """
     GET /api/recommendations/fbt/for-item/?item_id=X[&limit=6]
@@ -152,7 +153,7 @@ def fbt_for_item(request):
 # ── Customer recommendations ──────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def customer_recs(request):
     """
     GET /api/recommendations/customer/?customer_id=X[&limit=8]
@@ -177,6 +178,6 @@ def customer_recs(request):
 
 class EngineRunListView(generics.ListAPIView):
     """GET /api/recommendations/runs/ — list all engine runs."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RouteModulePermission]
     serializer_class   = EngineRunSerializer
     queryset           = RecommendationEngineRun.objects.all()

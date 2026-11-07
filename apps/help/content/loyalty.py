@@ -182,7 +182,7 @@ SCREENS = [
               '"Adjust SOFTECH points": a positive number to add or negative to deduct (e.g. 100 or -50) with a required reason → "Apply in SOFTECH". It affects the balance in all branches.'),
             T('يمين الصفحة: كتالوج المكافآت ودرجات الولاء (للعرض فقط).', 'On the side: the reward catalog and loyalty tiers (display only).'),
         ],
-        'tips': [T('العميل بدون PIC لا يملك رصيداً في SOFTECH — اربطه بكوده أولاً.', 'A customer without a PIC has no SOFTECH balance — link their code first.'),
+        'tips': [T('استبدال المكافآت واعتمادها لمن يملك صلاحية العملاء المناسبة فقط.', 'Redeeming and approving rewards need the matching customers permission.'), T('العميل بدون PIC لا يملك رصيداً في SOFTECH — اربطه بكوده أولاً.', 'A customer without a PIC has no SOFTECH balance — link their code first.'),
                  T('أقصى تعديل 1000 نقطة في المرة. نفس التعديل (نفس العميل والنقاط والسبب) يُرفض لمدة دقيقتين حتى لا تتسجل النقاط مرتين — راجع «سجل تعديلات SOFTECH» قبل الإعادة.',
                    'At most 1000 points per adjustment. The same adjustment (same customer, points and reason) is refused for two minutes so points are never posted twice — check the "SOFTECH adjustment log" before retrying.')],
         'workflows': [],
@@ -260,7 +260,7 @@ SCREENS = [
              'text': T('يستخدم الرقم ده كـ «عميل غير مسجل» في الشاشة دي — مش بيضيف عميل جديد لقائمة العملاء.', 'Uses this number as an "unregistered customer" on this screen — it does not add a customer to the list.'),
              'warn': T('راجع الرقم كويس: التواصل والرسايل بتروح على الرقم ده.', 'Check the number carefully: calls and messages go to it.')},
         ],
-        'updated': '2026-11-01',
+        'updated': '2026-11-05',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

@@ -18,6 +18,7 @@ from apps.reservations.models import Reservation
 from apps.customers.models import Customer, PurchaseHistory
 from apps.catalog.models import ItemStock, EXCLUDED_STORE_CODES
 from apps.sync.models import SyncRun
+from core.permissions import RouteModulePermission  # round 2, D6
 
 
 def _profile(request):
@@ -38,7 +39,7 @@ def _scope_reservations(qs, user, branch_id=None):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def dashboard_summary(request):
     today      = date.today()
     week_start = today - timedelta(days=today.weekday())
@@ -214,7 +215,7 @@ def dashboard_summary(request):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def followups_today(request):
     """
     Full list of reservations with follow_up_date = today,
@@ -256,7 +257,7 @@ def followups_today(request):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def purchasing_dashboard(request):
     """
     Transfer-request analytics. Roles: admin, purchasing only.
@@ -461,7 +462,7 @@ def purchasing_dashboard(request):
 # ── Demand & Supply control-tower KPIs (doc 24 Phase 7) ──────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RouteModulePermission])
 def supply_dashboard(request):
     """KPIs for the supply orchestration module: open queue, time to resolve, sourcing mix
     (internal vs external), cash avoided by internal transfers, supplier fill rate, catalog

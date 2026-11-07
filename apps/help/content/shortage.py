@@ -647,8 +647,8 @@ SCREENS = [
                  '• «تأكيد»: الحالة تبقى «مؤكَّد» والتخفيض يفضل مطبّق.\n• «ليست وهمية»: بيسألك عن سبب (اختياري) وينقله للمستبعدة.\n• «إرجاع للتلقائي»: يلغي قرارك ويرجّع الحكم للمحرك.',
                  '• "Confirm": the status becomes "Confirmed" and the reduction stays applied.\n• "Not phantom": asks for an (optional) reason and moves it to Excluded.\n• "Back to automatic": cancels your decision and hands it back to the engine.')},
         ],
-        'updated': '2026-10-26',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-06',
+        'change_note': T('دور «مشاهد» ماعادش يقدر يفتح الشاشة دي.', 'The viewer role can no longer open this screen.'),
     },
     {
         'key': 'shortage.mobile',

@@ -2706,6 +2706,10 @@ class InsuranceCacheSyncView(APIView):
         from .sync import sync_insurance_cache
         try:
             result = sync_insurance_cache()
+            if result.get('status') == 'error':
+                # The sync returns the driver's error text; it can carry SOFTECH hosts and connection
+                # details — only a reference (admin: the redacted text) reaches the browser (round 2 R4).
+                result = {**result, 'error': public_error(request, RuntimeError(result.get('error') or ''))}
             return Response(result, status=status.HTTP_200_OK)
         except Exception as exc:
             return Response({'status': 'error', 'error': public_error(request, exc)},

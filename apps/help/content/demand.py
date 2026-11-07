@@ -691,8 +691,8 @@ SCREENS = [
              'when': T('بعد ما تراجعها — بعدها مش هتظهر كجديدة.', 'After you have gone through them — they will no longer show as new.'),
              'open_hint': T('جوه قائمة جرس الإشعارات، لما يكون فيه غير مقروء.', 'Inside the bell list, when there are unread ones.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-06',
+        'change_note': T('لوحة الطلب الضائع بتظهر بس للي عنده صلاحية التحليلات؛ الباقي بيشتغل على القائمة من غيرها.', 'The lost-demand dashboard shows only for roles with analytics access; other roles work the list without it.'),
     },
     {
         'key': 'demand.detail',

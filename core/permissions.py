@@ -163,7 +163,7 @@ class MatrixPermission(BasePermission):
 
 
 def matrix_permission(module: str, *, get=('view',), post=('create',), edit=('edit',), delete=('delete',),
-                      actions=None):
+                      actions=None, exclude_roles=()):
     """MatrixPermission for views that don't carry `rbac_module` (function views mostly):
 
         FINANCE = matrix_permission('finance')                     # GET view · POST create
@@ -171,8 +171,8 @@ def matrix_permission(module: str, *, get=('view',), post=('create',), edit=('ed
 
     PUT/PATCH need `edit`, DELETE `delete` (both overridable, e.g. delete=('edit',) where the
     editors remove lines). `actions` maps a viewset action to its own tuple, whatever the method
-    (e.g. {'quality': ('view',)} where the view's role check decides). Same checks as matrix_allows
-    (Batch 4)."""
+    (e.g. {'quality': ('view',)} where the view's role check decides). `exclude_roles` refuses roles
+    that hold the module for its other screens. Same checks as matrix_allows (Batch 4)."""
     class _ModuleMatrix(BasePermission):
         message = MatrixPermission.message
 
@@ -185,7 +185,10 @@ def matrix_permission(module: str, *, get=('view',), post=('create',), edit=('ed
             if needed is None:
                 needed = (get if m in SAFE_METHODS else post if m == 'POST'
                           else edit if m in ('PUT', 'PATCH') else delete)
-            return matrix_allows(_get_profile(request), module, *needed)
+            profile = _get_profile(request)
+            if exclude_roles and profile and profile.role in exclude_roles:
+                return False
+            return matrix_allows(profile, module, *needed)
 
     _ModuleMatrix.__name__ = _ModuleMatrix.__qualname__ = f'Matrix_{module}'
     return _ModuleMatrix
@@ -206,3 +209,38 @@ def enforced_role_allows(user, module: str, *actions) -> bool:
     if not module_access.matrix_enforced_for(user):
         return True
     return matrix_allows(getattr(user, 'staff_profile', None), module, *(actions or ('view',)))
+
+
+class RouteModulePermission(BasePermission):
+    """The view-level twin of ModuleAccessMiddleware (round 2, owner decision D6).
+
+    Production runs RBAC_ENFORCEMENT=log, so a view that checks only IsAuthenticated is open to
+    every signed-in staff member whatever the matrix says. This class asks the SAME question the
+    middleware asks — module_access.required(path, method) → (module, actions), then the matrix —
+    so it refuses exactly what `enforce` would refuse and nothing more (no new lockout). Paths the
+    middleware does not check (exempt prefixes, open reads, own-gated sub-apps) pass."""
+    message = 'ليس لديك صلاحية على هذه الوحدة'
+
+    methods = None                           # None = every method; a set limits the check to those
+
+    def has_permission(self, request, view):
+        from core.middleware.module_access import required
+        m = request.method
+        if self.methods is not None and m not in self.methods:
+            return True
+        if view is not None and not hasattr(view, m.lower()):
+            return True                      # no handler: DRF answers 405
+        need = required(request.path_info, m)
+        if need is None:
+            return True
+        module, actions = need
+        profile = _get_profile(request)
+        if profile is None:                  # profile-less superuser (the middleware passes it too)
+            return bool(getattr(request.user, 'is_superuser', False))
+        return matrix_allows(profile, module, *actions)
+
+
+class RouteModuleDeletePermission(RouteModulePermission):
+    """RouteModulePermission for DELETE only (round 2, owner answer Q-7e 2026-11-05: deleting a whole
+    record follows the matrix's `delete`). For views whose other methods keep their own finer rules."""
+    methods = {'DELETE'}

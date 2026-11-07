@@ -231,7 +231,7 @@ const MOBILE_TABS = [
   { to: '/m/items',        label: 'الأصناف',   icon: '🔎' },
   { to: '/m/customers',    label: 'العملاء',   icon: '👥', roles: ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor', 'quality_manager'] },
   { to: '/m/vouchers',     label: 'القسائم',   icon: '🎫', roles: ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor', 'quality_manager'] },
-  { to: '/m/tasks',        label: 'المهام',    icon: '✅', roles: ['admin', 'call_center', 'pharmacist', 'supervisor'] },
+  { to: '/m/tasks',        label: 'المهام',    icon: '✅', module: 'tasks' },
   { to: '/m/daily-count',  label: 'جردي اليوم', icon: '🧮', feature: 'daily_count' },
   { to: '/m/stock-count',  label: 'الجرد',     icon: '📦', roles: ['admin', 'pharmacist', 'supervisor', 'quality_manager'] },
   { to: '/m/qa',           label: 'مراجعة الجودة', icon: '🧹', roles: ['admin', 'quality_manager', 'supervisor', 'pharmacist'] },
@@ -581,8 +581,8 @@ export default function App() {
             <Route path="approvals"     element={<RequireRole roles={['admin','supervisor','pharmacist','quality_manager','purchasing']}><ApprovalsPage /></RequireRole>} />
             <Route path="batches"       element={<BatchesPage />} />
             <Route path="hr"            element={<HRPage />} />
-            <Route path="payment-audit" element={<RequireRole roles={['admin','purchasing','pharmacist']}><PaymentAuditPage /></RequireRole>} />
-            <Route path="reconciliation" element={<RequireRole roles={['admin','purchasing','pharmacist','accountant']}><ReconciliationPage /></RequireRole>} />
+            <Route path="payment-audit" element={<RequireRole roles={['admin','purchasing','pharmacist','quality_manager','accountant']}><PaymentAuditPage /></RequireRole>} />
+            <Route path="reconciliation" element={<RequireRole roles={['admin','purchasing','quality_manager','accountant']}><ReconciliationPage /></RequireRole>} />
             <Route path="forecasting"   element={<RequireRole roles={['admin','purchasing','pharmacist','quality_manager']}><ForecastingPage /></RequireRole>} />
 
           </Route>

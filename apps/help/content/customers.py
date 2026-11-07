@@ -273,7 +273,7 @@ SCREENS = [
             T('صفِّ بخطر الانقطاع (حرج / مرتفع / متوسط / مستقر) لاستهداف من يحتاج تواصلاً.', 'Filter by churn risk (critical / high / medium / stable) to target who needs contact.'),
             T('اضغط العميل لفتح ملفه الكامل.', 'Click a customer to open their full profile.'),
         ],
-        'tips': [T('«خطر الانقطاع» يُحسب يومياً من انتظام مشتريات العميل؛ «حرج» = غاب أطول بكثير من عادته.', '"Churn risk" is calculated daily from the customer\'s buying pattern; "critical" = absent much longer than usual.'),
+        'tips': [T('تعديل بيانات العميل وملفه الصحي وإضافة الملاحظات لمن يملك صلاحية «تعديل» العملاء فقط، والحذف للإدارة فقط.', 'Editing a customer, their health profile and adding notes need the customers «edit» permission; deleting a customer is for management only.'), T('«خطر الانقطاع» يُحسب يومياً من انتظام مشتريات العميل؛ «حرج» = غاب أطول بكثير من عادته.', '"Churn risk" is calculated daily from the customer\'s buying pattern; "critical" = absent much longer than usual.'),
                  T('القائمة وبحث الاسم بيعرضوا عملاء فرعك بس. تعديل بيانات عميل فرع تاني لفرعه أو لمركز الاتصال — والأرقام بتظهر مخفية عشان بيانات العملاء ما تتسرّبش.',
                    'The list and name search show your branch\'s customers only. Another branch\'s customer is edited by their branch or the call center — and their numbers show masked so customer data cannot leak.'),
                  T('مشتريات العميل = الفواتير اللي عليها الـPIC بتاعه. فواتير من غير PIC بتتسجّل على «حساب البيع» (زي Walk-In أو التعاقد) — '
@@ -345,7 +345,7 @@ SCREENS = [
              'text': T('يفضّي خانة البحث ويرجع القائمة كاملة.', 'Empties the search box and brings the full list back.'),
              'open_hint': T('يظهر لما البحث مايلاقيش أي عميل.', 'Shows when the search finds no customer.')},
         ],
-        'updated': '2026-11-01',
+        'updated': '2026-11-05',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

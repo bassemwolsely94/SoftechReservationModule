@@ -411,9 +411,9 @@ SCREENS = [
                        'Cancelling is instant with no confirmation — the request will not come back; you submit a new one.'),
              'open_hint': T('يظهر بس على الطلبات اللي لسه ما اتقررتش.', 'Shown only on requests not decided yet.')},
         ],
-        'updated': '2026-10-30',
+        'updated': '2026-11-06',
     
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'change_note': T('«المحاسب» بقى يقدر يفتح الشاشة دي ويقدّم طلباته الشخصية.', 'Accountants can now open this screen and file their own requests.'),
     },
     {
         'key': 'hr.approvals',
@@ -648,6 +648,7 @@ SCREENS = [
     {
         'key': 'hr.qa',
         'routes': ['/m/qa', '/m/qa/:id'],
+        'tips': [T('تعديل زيارة الجودة بعد حفظها لمن يملك صلاحية «تعديل» في الموارد البشرية.', 'Editing a saved quality visit needs the HR «edit» permission.')],
         'title': T('مراجعات الجودة للفروع', 'Branch quality inspections'),
         'summary': T('جولة جودة في الفرع من الموبايل: «مراجعة جديدة» باختيار القالب والفرع ← لكل بند: مطابق / مخالفة (مع ملاحظة) / لا ينطبق ← «حفظ كمسودة» أو «إرسال» فتُحسب الدرجة.',
                      'A quality walk-through at the branch on the phone: "New inspection" with a template and branch → per item: compliant / violation (with a note) / not applicable → "Save draft" or "Submit" to compute the score.'),
@@ -738,7 +739,7 @@ SCREENS = [
              'warn': T('بعد الإرسال مش ممكن تعدّل. ولازم بند واحد على الأقل متقيّم.', 'No edits after submitting. At least one item must be graded.'),
              'open_hint': _QA_OPEN},
         ],
-        'updated': '2026-10-30',
+        'updated': '2026-11-05',
     
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },

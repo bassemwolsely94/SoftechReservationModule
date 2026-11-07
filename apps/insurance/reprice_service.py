@@ -599,7 +599,7 @@ def list_receipt_lines(docno, branch, doccode=_DOCCODE):
     from .sybase_queries import QUERY_PRESCRIPTION_LINES_CLASSIFIED
     hq = _get_connection(); cur = hq.cursor()
     try:
-        cur.execute(QUERY_PRESCRIPTION_LINES_CLASSIFIED, [str(docno), str(branch)])
+        cur.execute(QUERY_PRESCRIPTION_LINES_CLASSIFIED, [str(docno), str(branch), doccode])
         out = []
         for r in cur.fetchall():
             out.append({
