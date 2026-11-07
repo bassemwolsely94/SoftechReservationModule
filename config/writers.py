@@ -27,6 +27,8 @@ logger = logging.getLogger('elrezeiky.writers')
 
 # flag → what it protects (shown on /sync and in the signed-off switch table)
 WRITER_FLAGS = {
+    'TAX_ETA_SUBMIT_ENABLED':              {'protects': 'إرسال الفواتير الضريبية إلى مصلحة الضرائب'},
+    'TAX_ERECEIPT_SUBMIT_ENABLED':         {'protects': 'إرسال الإيصالات الإلكترونية إلى مصلحة الضرائب'},
     'ISR_WRITER_ENABLED':                  {'protects': 'طلبات التوريد ISR (stockisrm / stockisr)'},
     'SALES_RATE_WRITER_ENABLED':           {'protects': 'معدل البيع stkbal.monthlyqty'},
     'COVERAGE_WRITER_ENABLED':             {'protects': 'التغطية stkbal.maxnowqtymonths'},

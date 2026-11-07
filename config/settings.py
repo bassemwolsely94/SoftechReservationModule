@@ -226,6 +226,7 @@ INSTALLED_APPS = [
     'apps.help',           # In-app help (دليل الاستخدام) — repo content + trainer edits
     'apps.personal',       # Personal dashboard — per-user SOFTECH identity claims + configurable widgets
     'apps.gamification',   # Gamification — points, levels/titles, badges, streaks, rankings (recognition only)
+    'apps.tax_invoicing',  # Tax invoices to ETA (doc 36) — drafts, review, gated submission
     'apps.stock_audit',    # Stock Transactions Audit (doc 32) — read-only stktrans mirror + checks
     'apps.pic_analytics',  # PIC Analytics (doc 33) — customer dashboard + report, read-only
     'apps.usage_print',    # Usage-instructions receipt slip (Project 5) — read-only vs SOFTECH, flag below
@@ -848,6 +849,21 @@ POINTS_REMOVAL_BATCH_MAX     = config('POINTS_REMOVAL_BATCH_MAX', default=50, ca
 # B7 duplicate-code merge queue (apps/customers/duplicates.py) — weekly READ-ONLY rebuild; review roles
 # (maker-checker: the one who marks a pair cannot approve it).
 CUSTOMER_MERGE_QUEUE_ENABLED = config('CUSTOMER_MERGE_QUEUE_ENABLED', default=True, cast=bool)
+
+# Tax Invoicing (apps/tax_invoicing, doc 36). Sending to ETA is OFF and goes through writer_allowed.
+# Addresses and credentials have no default, so an unconfigured server cannot reach ETA.
+TAX_ETA_SUBMIT_ENABLED = config('TAX_ETA_SUBMIT_ENABLED', default=False, cast=bool)
+TAX_ETA_API_BASE_URL = config('TAX_ETA_API_BASE_URL', default='')
+TAX_ETA_ID_BASE_URL = config('TAX_ETA_ID_BASE_URL', default='')
+TAX_ETA_CLIENT_ID = config('TAX_ETA_CLIENT_ID', default='')
+TAX_ETA_CLIENT_SECRET = config('TAX_ETA_CLIENT_SECRET', default='')
+TAX_SIGNER_CLASS = config('TAX_SIGNER_CLASS', default='apps.tax_invoicing.signing.NotConfiguredSigner')
+TAX_RECONCILE_WAIT_MINUTES = config('TAX_RECONCILE_WAIT_MINUTES', default=15, cast=int)
+TAX_ERECEIPT_SUBMIT_ENABLED = config('TAX_ERECEIPT_SUBMIT_ENABLED', default=False, cast=bool)
+TAX_ALLOW_MOCK_SIGNER = config('TAX_ALLOW_MOCK_SIGNER', default=False, cast=bool)
+TAX_SIGNING_AGENT_TOKEN = config('TAX_SIGNING_AGENT_TOKEN', default='')
+TAX_SIGNING_CERT_THUMBPRINT = config('TAX_SIGNING_CERT_THUMBPRINT', default='')
+TAX_SIGNING_WAIT_SECONDS = config('TAX_SIGNING_WAIT_SECONDS', default=60, cast=int)
 
 # Stock Transactions Audit (apps/stock_audit, doc 32). Read-only stktrans mirror from HQ:
 # every 2 h replaces the last 3 docdate days; 03:15 catch-up replaces 7 days and prunes.

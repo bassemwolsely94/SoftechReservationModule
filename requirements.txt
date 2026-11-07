@@ -43,6 +43,7 @@ JPype1>=1.5.0              # SOFTECH JDBC bridge (config/sybase.py) — needs a 
 # ── Security floors for transitive packages (pip-audit, Batch 6 — 2026-10-31) ──
 # Not imported directly; listed so the resolver can't pick a version with a known advisory.
 cryptography>=50.0.2          # pyjwt / pywebpush
+asn1crypto>=1.5.1             # tax invoicing: verify the seal's CAdES-BES signature
 sqlparse>=0.6.0               # Django
 urllib3>=2.8.0
 certifi>=2026.10.18

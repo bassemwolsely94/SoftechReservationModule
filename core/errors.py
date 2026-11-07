@@ -35,7 +35,7 @@ _SECRET_PAIR = re.compile(r"""(?i)\b(password|passwd|pwd|secret|api[_-]?key|acce
 _BEARER = re.compile(r'(?i)\bbearer\s+[A-Za-z0-9._~+/-]+=*')
 _JWT = re.compile(r'\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*')
 _SECRET_SETTINGS = ('SYBASE_PASSWORD', 'SECRET_KEY', 'PG_PASSWORD', 'WHATSAPP_TOKEN', 'META_ACCESS_TOKEN',
-                    'SMS_API_KEY', 'GEMINI_API_KEY', 'COUNSEL_PHONE_HASH_KEY')
+                    'SMS_API_KEY', 'GEMINI_API_KEY', 'COUNSEL_PHONE_HASH_KEY', 'TAX_ETA_CLIENT_SECRET', 'TAX_SIGNING_AGENT_TOKEN')
 
 
 def redact(text) -> str:

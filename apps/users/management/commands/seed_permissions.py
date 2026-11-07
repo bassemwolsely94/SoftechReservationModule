@@ -38,6 +38,7 @@ ALL_MODULES = [
     'pic_analytics', # doc 33: 'view' = all branches + cost/GP + calls tabs, 'export' = Excel (branch managers = named grants)
     'tasks',         # المهام: own module since 2026-11-03 (owner); every role keeps its access by default
     'ledger',        # الحسابات العامة (finance GL): view/create drafts/approve/export = accountant; edit (COA, rules) + finalize (period close) = admin or named grant
+    'tax_invoicing', # الفواتير الضريبية (doc 36): view · create drafts · edit item mapping · approve review + documents = accountant; finalize (send to ETA, issuer settings, exclusion bases) = admin or named grant
     'counselling',   # إرشادات الاستخدام (Project 4): 'edit' = write / AI-draft / link items, 'approve' = make customer-facing
     'usage_print',   # طباعة طريقة الاستخدام: 'view' open, 'create' confirm + print, 'edit' presets + slip settings
 ]
@@ -296,6 +297,7 @@ PERMISSIONS = {
     'accountant': {
         'dashboard':    RO,
         'ledger':       {'view', 'create', 'approve', 'export'},
+        'tax_invoicing': {'view', 'create', 'edit', 'approve'},   # doc 36: finalize stays admin
         'finance':      RE,
         'cheques':      RO,
         'hr':           {'view', 'create'},   # own leave and permit requests (owner 2026-11-06)

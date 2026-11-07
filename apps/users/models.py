@@ -63,6 +63,7 @@ MODULE_CHOICES = [
     ('pic_analytics', 'تحليلات العملاء'),
     ('tasks',        'المهام'),
     ('ledger',       'الحسابات العامة'),
+    ('tax_invoicing', 'الفواتير الضريبية'),
     ('counselling',  'إرشادات الاستخدام'),
     ('usage_print',  'طباعة طريقة الاستخدام'),
 ]

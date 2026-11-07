@@ -52,6 +52,7 @@ All-branch roles: admin, call_center, purchasing, supervisor, quality_manager, a
 | `pic_analytics` | all | — | — | — | — | — | — | VX | — | — | own — named branch managers see their branches (branch_scope); management all |
 | `tasks` | all | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | VCEDSF | own + «جميع الفروع» + created / assigned to me; all-branch schedules read-only for branch roles |
 | `ledger` | all | — | — | — | — | — | — | — | — | VCAX | all — finance GL is company-level: every /api/finance/gl/ endpoint refuses branch-scoped users (B-1) |
+| `tax_invoicing` | all | — | — | — | — | — | — | — | — | VCEA | all — fiscal documents belong to the taxpayer and a claim spans branches; RBAC module only (accountant, admin) |
 | `counselling` | all | V | VCEA | V | — | — | — | V | V | — | all — usage sheets are chain content; card sends record the sending branch (own POS branch_scope on the assistant) |
 | `usage_print` | all | — | VC | VC | — | — | — | VCE | — | — | own — invoice lookup (403 before any SOFTECH read), sheets, lines, print, prescription (branch_scope); presets + slip settings chain-wide |
 
