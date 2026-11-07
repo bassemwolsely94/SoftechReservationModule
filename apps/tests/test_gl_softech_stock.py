@@ -217,6 +217,28 @@ class ValuationTests(TestCase):
             v = ss.valuation(D(2026, 1, 1))
         self.assertEqual(v.missing_stores, ['100', '105', '130'])
 
+    def test_carry_forward_skips_an_empty_earlier_snapshot(self):
+        """The latest earlier date with lines, not the latest earlier date: a carried 0 would understate the stock."""
+        snaps = {self.JAN: {'130': [(10, 100.0)]}, D(2026, 2, 28): {'130': []}}
+        with FakeSoftech(snaps):
+            v = ss.valuation(self.MAR)
+        self.assertEqual(v.carried_stores, ['130'])
+        row = next(s for s in v.stores if s['store_code'] == '130')
+        self.assertEqual((row['value'], row['snapshot_date']), (Decimal('1000.00'), self.JAN))
+
+    def test_only_empty_earlier_snapshots_is_missing(self):
+        snaps = {D(2026, 2, 28): {'130': []}, D(2026, 4, 30): {'130': [(10, 100.0)]}}
+        with FakeSoftech(snaps):
+            v = ss.valuation(self.MAR)
+        self.assertEqual((v.carried_stores, v.missing_stores), ([], ['130']))
+
+    def test_a_line_with_no_quantity_or_cost_names_its_store(self):
+        for line in ((None, 1.5), (1, None)):
+            with FakeSoftech({self.MAR: {'130': [line]}}), self.assertRaises(ss.BadStockRow) as cm:
+                ss.read_storebal(self.MAR)
+            self.assertEqual((cm.exception.code, cm.exception.detail['store_code']), ('bad_stock_row', '130'))
+            self.assertIn('130', str(cm.exception))
+
     def test_store_that_ran_with_no_lines_is_present_not_missing(self):
         snaps = self.snaps()
         snaps[self.MAR]['130'] = []

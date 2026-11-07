@@ -6,11 +6,14 @@ start. `start_thread` is patched, and where a test needs the run's outcome it ru
 import datetime
 import io
 import json
+import re
 import zipfile
 from decimal import Decimal
+from pathlib import Path
 from unittest import mock
 
 import openpyxl
+from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -24,7 +27,7 @@ from apps.finance import recon_labels
 from apps.finance.gl import close as close_service
 from apps.finance.gl import close_views, compare, plan2_adapter, softech_checks, softech_stock
 from apps.finance.gl.close import CloseError
-from apps.finance.gl.ledger import approve, save_draft
+from apps.finance.gl.ledger import approve, reverse, save_draft
 from apps.finance.gl.periods import month_period
 from apps.finance.gl.softech_stock import Valuation
 from apps.finance.models import (ClosingStockSnapshot, FinancialPeriod, GLAccount, GLAccountGroup, GLComparisonLine, GLSoftechCheck,
@@ -894,6 +897,104 @@ class FromExceptionFixTests(CorrectionBase):
             r = self._post(exc)
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(r.data['total_debit'], '20.00')
+
+    def test_a_reversed_original_posts_the_whole_group_under_its_key(self):
+        e = self.closed_original()
+        exc = self.exception(original=e, entry_id=e.pk)
+        reverse(e.pk, user=self.admin_staff, reason='خطأ')
+        r = self._post(exc)
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.data['total_debit'], '110.00')
+        self.assertEqual(LedgerEntry.objects.get(pk=r.data['id']).source_key, 'grp')
+
+    def test_correction_of_a_reversed_original_answers_409(self):
+        e = self.closed_original()
+        reverse(e.pk, user=self.admin_staff, reason='خطأ')
+        r = self.acct.post(BASE + 'corrections/', {'original_id': e.pk, 'lines': self.lines('110.00'), 'reason': 'س'},
+                           format='json')
+        self.assertEqual((r.status_code, r.data['code']), (409, 'original_reversed'))
+
+    def test_deleting_the_correction_draft_from_the_journal_reopens_its_row(self):
+        e = self.closed_original()
+        exc = self.exception(original=e, entry_id=e.pk)
+        draft = self._post(exc)
+        exc.refresh_from_db()
+        self.assertEqual(exc.status, 'resolved')
+        self.assertEqual(self.admin.delete(BASE + f'entries/{draft.data["id"]}/').status_code, 204)
+        exc.refresh_from_db()
+        self.assertEqual(exc.status, 'open')
+        self.assertEqual(self._post(exc).status_code, 201)
+
+    def test_reversing_the_correction_from_the_journal_reopens_its_row(self):
+        e = self.closed_original()
+        exc = self.exception(original=e, entry_id=e.pk)
+        fix = approve(self._post(exc).data['id'], user=self.admin_staff)
+        r = self.admin.post(BASE + f'entries/{fix.pk}/reverse/', {'reason': 'خطأ'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        exc.refresh_from_db()
+        self.assertEqual(exc.status, 'open')
+
+    def test_reverse_in_a_closing_month_answers_409(self):
+        e = self.posted()
+        self.set_status(MAR, 'closing')
+        r = self.admin.post(BASE + f'entries/{e.pk}/reverse/', {'reason': 'خطأ'}, format='json')
+        self.assertEqual((r.status_code, r.data['code']), (409, 'period_closing'))
+        self.assertEqual(LedgerEntry.objects.get(pk=e.pk).status, 'approved')
+
+    def test_the_inbox_row_says_what_can_be_done(self):
+        e = self.closed_original()
+        exc = self.exception(original=e, entry_id=e.pk)
+        row = self.acct.get(BASE + 'exceptions/?kind=closed_period_change').data['results'][0]
+        self.assertEqual(row['late_action'], 'post')
+        self.set_status(MAR, 'open')
+        row = self.acct.get(BASE + 'exceptions/?kind=closed_period_change').data['results'][0]
+        self.assertEqual((row['id'], row['late_action']), (exc.pk, 'redraft'))
+
+
+class FinalReviewTests(ApiBase):
+    def test_compare_line_shows_the_ledger_side_when_softech_is_down(self):
+        self.posted(day=D(2026, 1, 10))
+        compare.compute(self.jan)
+        line = GLComparisonLine.objects.get(period=self.jan, softech_check=self.check_row, branch=self.branch)
+        with mock.patch.object(softech_checks, 'detail', side_effect=TimeoutError('sybase host 10.9.9.9')), \
+                self.assertLogs(LOGGER, level='ERROR'):
+            r = self.acct.get(BASE + f'compare/lines/{line.pk}/')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data['line']['id'], line.pk)
+        self.assertEqual(len(r.data['ledger']), 1)
+        self.assertTrue(r.data['softech_error'])
+        self.assertNotIn('10.9.9.9', r.content.decode())
+
+    def test_period_payload_carries_the_reopen_window(self):
+        self.assertEqual(self.acct.get(BASE + f'periods/{self.jan.pk}/').data['gl_reopen_window_months'], 3)
+        SystemSetting.objects.update_or_create(key='gl_reopen_window_months', defaults=dict(
+            label='x', value='5', value_type='int'))
+        self.assertEqual(self.acct.get(BASE + f'periods/{self.jan.pk}/').data['gl_reopen_window_months'], 5)
+
+    def test_preview_with_a_bad_stock_line_names_the_store(self):
+        self.valuation.side_effect = softech_stock.BadStockRow('961')
+        r = self.acct.get(BASE + f'periods/{self.jan.pk}/closing-stock/?preview=1')
+        self.assertEqual((r.status_code, r.data['code']), (409, 'bad_stock_row'))
+        self.assertIn('961', r.data['detail'])
+
+    def test_a_close_stopped_by_a_bad_stock_line_says_which_store(self):
+        close_service._close_failed(self.jan.pk, softech_stock.BadStockRow('961'), self.admin_staff, None)
+        failure = self.acct.get(BASE + f'periods/{self.jan.pk}/').data['last_close_failure']
+        self.assertEqual(failure['code'], 'bad_stock_row')
+        self.assertIn('961', failure['detail'])
+
+    def test_every_softech_backed_route_has_the_long_nginx_timeout(self):
+        conf = (Path(settings.BASE_DIR) / 'deploy' / 'nginx.conf').read_text(encoding='utf-8')
+        found = re.search(r'location ~ (\^/api/finance/gl/\S+) \{(.*?)\}', conf, re.S)
+        self.assertIsNotNone(found)
+        self.assertIn('proxy_read_timeout 600s;', found[2])
+        self.assertIn('proxy_pass http://django_backend;', found[2])
+        self.assertIn('limit_req zone=api', found[2])
+        for path in ('compare/lines/7/', 'periods/7/checklist/', 'periods/7/closing-stock/', 'validation/',
+                     'manual-import/', 'manual-import/preview/'):
+            self.assertRegex(f'/api/finance/gl/{path}', found[1])
+        for path in ('compare/', 'compare/lines/7/explain/', 'periods/7/', 'periods/7/close/'):
+            self.assertNotRegex(f'/api/finance/gl/{path}', found[1])
 
 
 class FuzzyInt(int):

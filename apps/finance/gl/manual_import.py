@@ -26,6 +26,7 @@ from openpyxl.utils.exceptions import InvalidFileException
 
 from apps.branches.models import Branch
 from apps.config.models import SystemSetting
+from apps.finance.models import FinancialPeriod
 
 from . import plan2_adapter
 from .ledger import _MAX_AMOUNT, LedgerError, _audit, save_draft
@@ -71,9 +72,9 @@ _SUPPLIERS = '2341'
 MERGED_BY_DATE_BRANCH = 'date_branch'
 
 STATUSES = ('manual', 'softech', 'mixed', 'unbalanced', 'unknown_account', 'unknown_branch', 'before_opening',
-            'changed_since_import', 'possible_duplicate')
+            'changed_since_import', 'possible_duplicate', 'closed_period')
 NOT_IMPORTABLE = ('unbalanced', 'unknown_account', 'unknown_branch', 'before_opening', 'changed_since_import',
-                  'possible_duplicate')
+                  'possible_duplicate', 'closed_period')
 INCLUDABLE = ('mixed', 'possible_duplicate')   # an accountant's decision: `include_mixed`
 _PARTY_FIELD = {'supplier': 'supplier_code', 'customer': 'customer_code', 'employee': 'employee_code'}
 
@@ -466,6 +467,8 @@ class _Lookups:
         self.branches = _branch_index()
         self.manual_sets = _manual_account_sets()
         self.live_by_identity = _live_imports_by_identity()
+        self.not_open_months = set(FinancialPeriod.objects.filter(period_type='month').exclude(status='open')
+                                   .values_list('year', 'month'))
         self._tokens = {}
 
     def branch_token(self, name, code) -> str:
@@ -533,6 +536,9 @@ def _status(group, usable, lookups) -> str:
     if live and group.key not in {e.source_key for e in live}:
         group.existing_entry = live[0]
         return 'changed_since_import'   # the accountant reverses or deletes the old one, then re-imports
+    # a draft there could never be approved; one imported before the close still reads `already_imported`
+    if (group.date.year, group.date.month) in lookups.not_open_months and not live:
+        return 'closed_period'
     return 'mixed' if others - {'manual'} else 'manual'
 
 

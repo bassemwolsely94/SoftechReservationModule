@@ -50,7 +50,11 @@ function itemLink(item, period) {
     return { to: `/finance/journal?${q}`, label: 'افتح المسودات' }
   }
   switch (item.key) {
-    case 'no_exceptions': return { to: '/finance/journal?tab=exceptions', label: 'افتح الاستثناءات' }
+    case 'no_exceptions':
+    case 'late_changes': {
+      const q = new URLSearchParams(Object.entries({ tab: 'exceptions', ...item.link }).filter(([, v]) => v))
+      return { to: `/finance/journal?${q}`, label: 'افتح الاستثناءات' }
+    }
     case 'drafting_ran': return { to: '/finance/journal', label: 'افتح القيود' }
     case 'comparison_fresh':
       return { to: `/finance/softech-compare?period=${period.id}`, label: 'افتح المقارنة' }
@@ -239,7 +243,9 @@ function Checklist({ period, perms, onChanged }) {
         </div>
       )}
       {p.status === 'closed' && !p.can_reopen && (
-        <div className="text-xs text-gray-500">إعادة الفتح متاحة لآخر ٣ شهور مقفولة بس.</div>
+        <div className="text-xs text-gray-500">
+          إعادة الفتح متاحة لآخر {Number(p.gl_reopen_window_months).toLocaleString('ar-EG')} شهور مقفولة بس.
+        </div>
       )}
     </div>
   )
@@ -468,9 +474,10 @@ const IMPORT_STATUS = {
   before_opening:       'قبل تاريخ الافتتاح',
   changed_since_import: 'اتغيّر من آخر استيراد',
   possible_duplicate:   'تكرار محتمل',
+  closed_period:        'شهره مقفول — مش هيتستورد',
 }
 const STATUS_ORDER = ['manual', 'mixed', 'possible_duplicate', 'unbalanced', 'unknown_account', 'unknown_branch',
-  'before_opening', 'changed_since_import', 'softech']
+  'before_opening', 'closed_period', 'changed_since_import', 'softech']
 const SELECTABLE = ['mixed', 'possible_duplicate']
 const SHOW_LIMIT = 200
 const BOOK_CHOICES = [['cash', 'نقدية'], ['credit', 'آجل']]
@@ -581,6 +588,8 @@ function ImportSection({ perms }) {
   }, [preview])
   const netLinks = (preview?.link_accounts || []).filter(l => Number(l.net) !== 0)
   const importable = (preview?.counts?.manual || 0) + selected.size
+  // a mixed group nobody ticked is parked by the import: a file of only those still has work to do
+  const toPark = (byStatus.mixed || []).filter(g => !selected.has(g.key)).length
   const onFile = (f) => { setFile(f); setPreview(null); setResult(null); setErr(''); setNeedBook(false) }
 
   return (
@@ -665,11 +674,14 @@ function ImportSection({ perms }) {
 
           {perms.create && (
             <div className="flex items-center gap-3">
-              <button type="button" className={btnPrimary} disabled={!importable || doImport.isPending}
+              <button type="button" className={btnPrimary} disabled={(!importable && !toPark) || doImport.isPending}
                       onClick={() => doImport.mutate()}>
                 {doImport.isPending ? 'جارٍ الاستيراد…' : `استيراد (${importable})`}
               </button>
-              <span className="text-xs text-gray-500">بيتعمل مسودات بس، والاعتماد من القيود. الاستيراد مرتين مبيكررش.</span>
+              <span className="text-xs text-gray-500">
+                بيتعمل مسودات بس، والاعتماد من القيود. الاستيراد مرتين مبيكررش.
+                {toPark > 0 && ` ${toPark} مختلط مش متحدد هيتعلّق في الاستثناءات لحد قرار المحاسب.`}
+              </span>
             </div>
           )}
         </div>
@@ -681,7 +693,14 @@ function ImportSection({ perms }) {
             تم الاستيراد — {RESULT_LABELS.filter(([k]) => result[k]).map(([k, l]) => `${l}: ${result[k]}`).join(' · ') || 'مفيش جديد'}
           </div>
           {(Array.isArray(result.failed) ? result.failed.length : result.failed) > 0 && (
-            <ErrorBox>{Array.isArray(result.failed) ? result.failed.length : result.failed} قيد اترفض أثناء الحفظ.</ErrorBox>
+            <ErrorBox>
+              {Array.isArray(result.failed) ? result.failed.length : result.failed} قيد اترفض أثناء الحفظ.
+              {Array.isArray(result.failed) && (
+                <ul className="mt-1 text-xs font-mono" dir="ltr">
+                  {result.failed.map(f => <li key={f.key}>{f.key}: {f.code}</li>)}
+                </ul>
+              )}
+            </ErrorBox>
           )}
           {!!result.include_unmatched?.length && (
             <div className="text-amber-700">{result.include_unmatched.length} اختيار مطابقش أي قيد مختلط في الملف.</div>

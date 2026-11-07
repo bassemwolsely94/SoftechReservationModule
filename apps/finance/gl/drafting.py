@@ -486,6 +486,12 @@ class _Engine:
             return
         if (not accepts_postings(entry_date)
                 or (live is not None and not self._can_reverse(live))):
+            if live is not None and net_lines(lines) == effective_lines(live, include_drafts=True):
+                # a description or attribute only: the ledger already says this, nothing to correct
+                self._set(good_pks, status='drafted', entry=live)
+                self.counts['drafted'] += len(pending_ok)
+                self._settled(gk, live, live, good_pks, targets)
+                return
             self._closed(gk, live, targets, pending_ok, lines)
             return
         if live is not None and self._edited_by_user(live):
@@ -558,8 +564,9 @@ class _Engine:
             if fix.status == 'draft':
                 self._delete_draft(fix)
             else:
-                ledger.reverse(fix.pk, user=self.user, reason=REVERSE_REASON, entry_date=fix.entry_date)
-        ledger.reverse(live.pk, user=self.user, reason=REVERSE_REASON, entry_date=live.entry_date)
+                ledger.reverse(fix.pk, user=self.user, reason=REVERSE_REASON, entry_date=fix.entry_date,
+                               _from_engine=True)
+        ledger.reverse(live.pk, user=self.user, reason=REVERSE_REASON, entry_date=live.entry_date, _from_engine=True)
 
     def _delete_draft(self, draft):   # Ruling P4: same as the Plan 1 DELETE view
         ledger._audit('gl_entry_draft_deleted', user=self.user, obj=draft,
@@ -621,6 +628,8 @@ class _Engine:
             elif members:
                 self.group_errors[gk] = 'holder_busy'
         else:
+            if row.source_doc_id in docs:   # its date can move (a document-granularity group's key has none)
+                fields['source_date'] = docs[row.source_doc_id].doc_date
             for k, v in fields.items():
                 setattr(row, k, v)
             row.save(update_fields=list(fields))
@@ -670,6 +679,7 @@ EDIT_RELEASED = 'gl_entry_edit_released'   # accept SOFTECH: earlier edits no lo
 EDIT_KEPT = 'gl_entry_edit_kept'           # keep my edit: nothing happens until the next change
 ACCEPT_NOTE = 'اعتُمدت نسخة سوفتيك'
 KEEP_NOTE = 'أُبقي تعديل المحاسب'
+LATE_POSTED = ('gl_late_document_drafted', 'gl_late_correction_drafted')   # corrections.py
 
 
 class DecisionError(Exception):
@@ -682,10 +692,12 @@ class DecisionError(Exception):
 
 def edited_by_user(live, *, system=None) -> bool:
     """Ruling P21 + P23: an accountant (anyone but the drafting user) saved this entry after the
-    latest «اعتماد نسخة سوفتيك» on it. AuditLog ids are monotonic, so "newer" = higher id."""
+    latest «اعتماد نسخة سوفتيك» on it. AuditLog ids are monotonic, so "newer" = higher id.
+    A late document or correction is saved under the accountant who posted it, with its own audit
+    row right after: that save is the system's lines, not an edit."""
     system = system or system_user()
     rows = AuditLog.objects.filter(model_name='LedgerEntry', object_id=str(live.pk))
-    released = (rows.filter(action=EDIT_RELEASED).order_by('-id')
+    released = (rows.filter(action__in=(EDIT_RELEASED, *LATE_POSTED)).order_by('-id')
                 .values_list('id', flat=True).first())
     edits = rows.filter(action='gl_entry_draft_saved').exclude(user_id=system.pk)
     if released:

@@ -4,6 +4,7 @@ from decimal import Decimal
 from unittest import mock
 
 from django.contrib.auth.models import User
+from django.db import connection
 from django.test import TestCase
 
 from apps.branches.models import Branch
@@ -281,6 +282,64 @@ class DetailTests(CompareBase):
             out = compare.detail(self.line(self.stock, self.b1).id)
         self.assertNotIn('by_day', out)
         self.assertEqual(len(out['ledger']), 1)   # no balance carried in: no opening row
+
+
+class FinalReviewTests(CompareBase):
+    def setUp(self):
+        p = mock.patch.object(softech_checks, 'figures', return_value={})
+        self.figures = p.start()
+        self.addCleanup(p.stop)
+
+    # I2
+    def test_deactivating_a_check_does_not_keep_the_month_stale_after_a_refresh(self):
+        compare.compute(self.period)
+        self.assertFalse(compare.is_stale(self.period))
+        GLSoftechCheck.objects.filter(pk=self.sales.pk).update(is_active=False)
+        compare._audit(compare.CHECK_UPDATED, user=self.staff, obj=self.sales, extra={'figures_changed': True})
+        self.assertTrue(compare.is_stale(self.period))
+        compare.compute(self.period)
+        self.assertFalse(compare.is_stale(self.period))
+
+    def test_no_active_check_is_not_stale(self):
+        GLSoftechCheck.objects.update(is_active=False)
+        self.assertFalse(compare.is_stale(self.period))
+
+    # M2
+    def test_softech_is_read_outside_the_write_transaction(self):
+        depth = len(connection.savepoint_ids)
+        seen = []
+        self.figures.side_effect = lambda source, period: seen.append(len(connection.savepoint_ids)) or {}
+        compare.compute(self.period)
+        self.assertTrue(seen)
+        self.assertEqual(set(seen), {depth})
+
+    def test_a_failed_read_writes_nothing(self):
+        self.figures.side_effect = TimeoutError('down')
+        with self.assertRaises(TimeoutError):
+            compare.compute(self.period)
+        self.assertFalse(GLComparisonLine.objects.filter(period=self.period).exists())
+
+    # M3
+    def test_the_softech_side_is_rounded_half_up_once_before_the_difference(self):
+        self.post(100, D(2026, 3, 5), branch=self.b1)
+        self.figures.side_effect = lambda source, period: {('961', ''): _d('10.005')} if source == 'sales' else {}
+        compare.compute(self.period, check_keys=['t_sales'])
+        ln = self.line(self.sales, self.b1)
+        self.assertEqual((ln.softech_amount, ln.difference), (_d('10.01'), _d('89.99')))
+        self.assertEqual(ln.ledger_amount - ln.softech_amount, ln.difference)
+
+    # I7
+    def test_detail_keeps_the_ledger_side_when_softech_fails(self):
+        self.post(100, D(2026, 3, 5), branch=self.b1)
+        compare.compute(self.period, check_keys=['t_sales'])
+        with mock.patch.object(softech_checks, 'detail', side_effect=TimeoutError('sybase 10.9.9.9')), \
+                self.assertLogs('elrezeiky.finance', level='ERROR'):
+            out = compare.detail(self.line(self.sales, self.b1).pk)
+        self.assertEqual(len(out['ledger']), 1)
+        self.assertEqual(out['softech'], [])
+        self.assertNotIn('by_day', out)
+        self.assertIn('سوفتيك', out['softech_error'])
+        self.assertNotIn('10.9.9.9', out['softech_error'])
 
 
 class SeedTests(TestCase):

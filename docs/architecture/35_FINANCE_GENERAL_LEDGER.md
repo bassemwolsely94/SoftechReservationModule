@@ -285,7 +285,7 @@ An exception resolves itself on redraft; «تجاهل» needs a reason and keeps
 - **Header** found by labels with `normalize_ar`, in the first sheet holding them. **Book**: the «اليومية» column, else `--book`, else the file name, else `book_required`.
 - **Rows**: «Nothing» / zero rows are counted (`skipped_zero`). Reported with their row number, never guessed: `no_date`, `no_account`, `bad_amount` (negative, text, or more than 2 decimals), `both_sides`, `bad_condition`, `nothing_with_amount` (condition «Nothing» with a figure), `party_too_long`, `cheque_too_long` (over 40 characters: never cut), `bad_book`, `no_book`. A float within 1e-6 of 2 decimals is Excel's noise and is taken. A group that lost a reported row is never treated as balanced.
 - **Groups**: (date, book, resolved branch, description); fallback for returns and discounts on 5101/5102/5105/5106/5121/5122/2341, merged per (date, book, branch) when the union balances (`merged_by='date_branch'`).
-- **Status**, first match wins: `before_opening` → `unknown_account` (missing, inactive or non-posting) → `softech` (no manual line) → `unknown_branch` → `unbalanced` → `changed_since_import` → `mixed` → `manual`, then `possible_duplicate` below. Only `manual` is imported on its own. `GLAccount.feed` decides, and `auto` = SOFTECH-fed when an active posting rule line or a source map names the account. `both` is not a manual line.
+- **Status**, first match wins: `before_opening` → `unknown_account` (missing, inactive or non-posting) → `softech` (no manual line) → `unknown_branch` → `unbalanced` → `changed_since_import` → `closed_period` → `mixed` → `manual`, then `possible_duplicate` below. Only `manual` is imported on its own. `GLAccount.feed` decides, and `auto` = SOFTECH-fed when an active posting rule line or a source map names the account. `both` is not a manual line.
 - **Finance's manual account sets**: SystemSetting `gl_import_manual_account_sets`, default `[["1301","1302"],["1302","2404"],["1301","2405"],["1301","2406"],["1301","2408"],["1301","2413"],["1301","2417"]]`; finance owns this list. A group whose accounts (link accounts aside) fit inside one listed set is `manual` whatever the feeds say: mapped boxes, but daily handovers and 1302↔1301 are not in SOFTECH and finance keys them. `softech` groups are summarised by account set with counts and totals (`softech_summary`), so finance sees what is dropped. `party_missing` counts importable lines approval would refuse.
 - **`possible_duplicate`**: a group `manual` only through that list, when a live entry from any other source (reversal mirrors aside) exists on the same date and branch (the entry's or a line's) with the same debit and credit on each of the group's accounts, link accounts aside: the engine may already have drafted that transfer from a SOFTECH voucher (P24). Not imported; reported with the other entry's id and number. `--include-mixed KEY` imports it anyway. One query per preview, over the file's date range and those accounts.
 - **Link accounts**: SystemSetting `gl_import_link_accounts` (default `["2354"]`). Their lines never decide a status and stay on the entry; preview reports debit / credit / net, and warns on a non-zero net in a file holding both books. A SOFTECH line beside a link line is `softech`, so that side of the cross-book entry is skipped.
@@ -472,7 +472,7 @@ corrects; `GLAccount.feed` (`auto|softech|manual|both`).
 A month closes in three steps so the slow SOFTECH read holds no database lock (`gl/close.py`):
 
 1. **One transaction**: the month is `open`, its database checklist items pass, status becomes `closing` and
-   `closing_started_at` is this run's token. From now on an approval into the month is refused with `period_closing` (409).
+   `closing_started_at` is this run's token. From now on an approval into the month, or a reversal of an entry in it, is refused with `period_closing` (409).
 2. **No transaction**: SOFTECH's stock at the month-end date (`softech_stock.valuation`).
 3. **One transaction** (all of it or none): the items are checked again (a draft may have landed meanwhile), the
    snapshot is saved, the closing-stock entry is posted and approved, its auto-reversal is dated the 1st of the next month, and
@@ -482,7 +482,7 @@ Any failure in step 2 or 3 returns the month to `open` with nothing of step 3 le
 Audit rows: `gl_period_closing`, `gl_period_closed`, `gl_period_close_takeover`, `gl_period_reopened`.
 
 - **Checklist** (`close.checklist`), in this order: `previous_closed`, `no_drafts`, `no_exceptions` (open Plan 2 exceptions in the
-  month, including parked `mixed_manual_entry`), `comparison_fresh`, `comparison_explained` (only checks with `blocks_close`),
+  month, including parked `mixed_manual_entry`), `late_changes` (never blocks: open `closed_period_change` rows dated before the month, linking to them in the inbox), `comparison_fresh`, `comparison_explained` (only checks with `blocks_close`),
   `suppliers_explained` (never blocks), `drafting_ran` (never blocks, tells when drafting last covered the whole month), and `stock_snapshot`
   (the SOFTECH read; a failed read fails only that item). Months close in order from January 2026, so closed months are always one
   unbroken run and an open month never has a closed month after it.
@@ -513,7 +513,8 @@ stock nets negative has the sides flipped; a branch at exactly zero posts no lin
 - **Missing snapshots.** From the November 2026 month-end finance runs SOFTECH's stock-at-date report every month-end, and a store with no snapshot
   that normally reports blocks the close (`stock_snapshot`, `snapshot_missing`). For month-ends up to `gl_stock_carry_forward_until`
   (default 2026-10-31) such a store takes its latest earlier snapshot, shown as carried («محمول من <date>»); quarters stay exact, the monthly
-  split inside a quarter shows the whole stock change in the month that has a snapshot.
+  split inside a quarter shows the whole stock change in the month that has a snapshot. The carry takes the latest earlier date where the store has lines (an empty report in between would carry a false 0); none means missing.
+- A report line with no quantity or cost raises `BadStockRow`, naming the store: the checklist's stock item, the preview (409 `bad_stock_row`) and a failed close all show it. Finance fixes the line in SOFTECH.
 - Note on 2409 per branch: the 2026 opening-stock line carries no branch, so the per-branch 2409 figure of 2026 is not a meaningful branch result.
 
 ## Comparison checks (ledger vs SOFTECH)
@@ -528,7 +529,9 @@ item already blocks a missing snapshot). Finance turns `blocks_close` on for a c
 Supplier-balance differences never block.
 
 - A manual refresh is allowed on a closed month (it only rewrites the comparison lines and keeps explanations; audited) and refused on a `closing` month.
-- `is_stale(period)`: an active check has no line, a check's accounts were edited after the oldest computation, or an entry was approved or reversed after it.
+- `is_stale(period)`: an active check has no line, a check's accounts were edited after the oldest computation, or an entry was approved or reversed after it. Only active checks' lines count, and with no active check a month is not stale.
+- `compute` reads every SOFTECH figure first, then writes in one short transaction. The SOFTECH side is rounded once, ROUND_HALF_UP to 2 decimals, before the difference.
+- `compare/lines/{id}/` still answers when SOFTECH is down: the ledger side and the explanation box, with `softech_error` in place of the SOFTECH rows.
 - Editing a check (`PATCH compare/checks/`, `ledger.edit`): tolerance, accounts, groups, `blocks_close`, `is_active`; accounts and groups must exist.
 
 ## Corrections and late documents
@@ -539,13 +542,19 @@ A closed month is never touched. A SOFTECH change that lands in one raises one `
 - `post_late_correction(original_id, new_lines, user, reason, exception_id=None)`: drafts the difference between the group's new lines and what the original
   effectively says now (original plus its approved corrections), dated the first open month, `corrects` = the original, source key
   `<group_key>#corr:exc<id>` (from an exception) or `<source_key>#corr:<yyyy-mm>:<n>`; description starts «تصحيح قيد <number>». With `exception_id` the
-  exception resolves in the same transaction. Refused: `original_is_draft`, `is_reversal`, `is_correction`, `close_entry`, `period_open` (use redraft),
+  exception resolves in the same transaction. Refused: `original_is_draft`, `original_reversed`, `is_reversal`, `is_correction`, `close_entry`, `period_open` (use redraft),
   `correction_pending` (a draft correction exists), `nothing_to_correct`, `exception_not_open`, `exception_mismatch`, `exception_has_draft`.
 - `post_late_document(exception_id, ...)`: a brand-new SOFTECH group in a closed month: its proposed lines as they are, drafted once, dated the first open month, source key = the group key.
+- `post_from_exception` picks between them. **A reversed original goes the late-document way**: a correction keyed `#corr:exc` beside a dead entry would leave the group looking empty, the next run would raise it again, and it would post twice. Keyed on the group, the engine finds it.
+- **A late document that changes again** has its original in a month still open while its document's month is closed. The engine cannot rebuild it, so the correction is allowed and dated inside the original's own month.
+- **A closed-month rebuild whose nets are unchanged** (a description or an attribute only) raises no row, and ends an open one.
+- **Undoing a correction outside the engine** (`ledger.delete_draft` of a `#corr:exc<id>` draft, `ledger.reverse` of an approved one) reopens exception `<id>` in the same transaction, audited `gl_late_change_reopened`. It cannot be lost (the row is open at once, whatever window the next run reads) and cannot double (posting again nets against what the ledger says now). The row keeps the lines it had until the next run covering it rewrites them. If the group already has another open row, that row carries the change. If the holder doc holds another group's row, the members go back to `new` and the next run raises the group. The engine's own reversals (`_from_engine`) reopen nothing: it redrafts the whole figure.
+- **A late change left open in an already-closed month does not stop later closes** (owner may prefer blocking): `late_changes` shows the count and links to the inbox's `closed_period_change` filter.
+- A late document or correction saved under the accountant is not an edit for `edited_by_user`; a later save by the accountant is.
 - The drafting engine nets a group against its approved corrections, so a second change in the same closed month corrects against original + first correction, never the old amount twice.
 - `ledger.reverse` of a closed-month entry dates the mirror in the first open month and sets `corrects`.
 - Audited `gl_late_correction_drafted`, `gl_late_document_drafted`.
-- The exceptions inbox posts it: a `closed_period_change` row shows the lines that will post, the documents count and the original entry's number, takes a required reason and calls `corrections/from-exception/`. A group whose live entry is still a draft gets no button (review or delete the draft first); the server's Arabic 409 message is shown as is. `exception_json` adds `original_entry_number` and `live_entry` ({id, number, status}) to these rows.
+- The exceptions inbox posts it: a `closed_period_change` row shows the lines that will post, the documents count and the original entry's number, takes a required reason and calls `corrections/from-exception/`. The button follows `late_action` from the server: `post`; `draft_pending` (a draft of the group stands in the way: review or delete it, `pending_draft` links it); `redraft` (the month takes postings again: select the row and press «إعادة الترحيل», which is what clears it; while the month is still closed the engine raises it again). The server's Arabic 409 message is shown as is. `exception_json` adds `original_entry_number`, `original_entry_status`, `live_entry` ({id, number, status}), `late_action` and `pending_draft` to these rows.
 
 ## Year-end
 
@@ -563,7 +572,7 @@ December's step 3 posts, instead of the auto-reversal (`close.year_end_close`):
 `subledgers.subledger(kind, from, to)` → opening, debit, credit, closing per party for any period, from approved and reversed lines:
 `suppliers` (2341), `creditors` (2351), `notes_payable` (2343, by due-date month), `customers` (1341), `employees` (1351), `partners` (group «جارى الشركاء», one row per account).
 Rows with no party are one «بدون طرف» row, included in the total. 2354 is finance's cross-book clearing account, never a creditor.
-A confirmed `GLParty` links to its SOFTECH counterpart (supplier → A/P reconciliation, customer → receivables). `supplier_vs_ap(as_of)` sets the 2341 balance beside the A/P reconciliation balance (bulk, one query).
+A confirmed `GLParty` links to its SOFTECH counterpart (supplier → A/P reconciliation, customer → receivables). `supplier_vs_ap(as_of)` sets the 2341 balance beside the A/P reconciliation balance (in bulk: no query per supplier).
 
 ## Cutover commands
 
@@ -574,7 +583,7 @@ python manage.py gl_reproduce_workbook <xlsx> --year 2025 --closing-stock <figur
 ```
 
 The importer groups finance's journal rows into entries and gives each group one status (first match wins): `before_opening`, `unknown_account`,
-`softech` (skipped: drafting replaces it), `unknown_branch`, `unbalanced`, `changed_since_import`, `mixed`, `manual`, then `possible_duplicate`. Only `manual` is imported
+`softech` (skipped: drafting replaces it), `unknown_branch`, `unbalanced`, `changed_since_import`, `closed_period` (dated in a closed or closing month: its draft could never be approved; a group already imported still reads `already_imported`), `mixed`, `manual`, then `possible_duplicate`. Only `manual` is imported
 on its own, as a draft; `mixed` is parked as a `mixed_manual_entry` exception on a `manual_import` source doc; re-importing the same file is `already_imported`.
 Full rules (header, books, link accounts, the manual account sets, idempotency key) are in "Finance's manual-only entries" in Plan 2's part. The API takes `.xlsx` only (`.xls` gets a clear message).
 `gl_validate_workbook` compares ledger and workbook per account and branch, per month, and per supplier / creditor / customer / employee; only differences are listed; the workbook's float noise is read to the cent once (ROUND_HALF_UP).
@@ -593,16 +602,16 @@ Cutover order: import COA and opening (Plan 1) → drafting (Plan 2) → `import
 | `GET compare/?period=&check=` | view | lines, `stale`, refresh state |
 | `POST compare/refresh/ {period, checks?}` | view | 202, background; 409 `compare_running`; `period_closing` on a closing month |
 | `GET compare/checks/` · `PATCH compare/checks/ {key, ...}` | view · edit | check settings, audited `gl_softech_check_updated` |
-| `GET compare/lines/{id}/` · `POST compare/lines/{id}/explain/ {text}` | view · approve | drill-down by day with ledger and SOFTECH lines; explanation |
+| `GET compare/lines/{id}/` · `POST compare/lines/{id}/explain/ {text}` | view · approve | drill-down by day with ledger and SOFTECH lines; explanation. nginx gives the routes that read SOFTECH on the request (this drill-down, `checklist`, `closing-stock`, `validation`, `manual-import`) `proxy_read_timeout 600s` |
 | `GET subledgers/{kind}/?from=&to=` · `GET subledgers/suppliers-vs-ap/?as_of=` | view | `?format=xlsx` needs `ledger.export` |
 | `POST corrections/ {original_id, lines, reason, exception_id?}` | create | 201 with the draft |
-| `POST corrections/from-exception/ {exception_id, reason}` | create | one per exception = per group; a correction if the group has an original entry, else a late document |
+| `POST corrections/from-exception/ {exception_id, reason}` | create | one per exception = per group; a correction if the group's original entry stands, else a late document |
 | `POST manual-import/preview/` · `POST manual-import/` | create | multipart `file`, `sheet`, `book`; import also `include_mixed` (list of keys); drafts only; rows over the screen limit → `too_many_rows` (use the command) |
 | `POST validation/` | export (+ view) | multipart `file`, `through`; returns the differences as an xlsx with headers `X-GL-Validation-Differences` and `X-GL-Validation-Difference-Total` |
 | `GET closing-stock-stores/` · `PATCH closing-stock-stores/ {stores: {code: {branch?, included?} or null}}` | view · edit | the store map with overrides; null restores the default |
 
 LedgerError states that answer 409: `not_draft`, `not_approved`, `already_reversed`, `is_reversal`, `source_conflict`, `has_corrections`, `close_entry`, `period_closing`,
-`period_open`, `correction_pending`, `original_is_draft`, `is_correction`, `exception_not_open`, `exception_has_draft`, `exception_has_original`. RBAC: `core/middleware/module_access.py`
+`period_open`, `correction_pending`, `original_is_draft`, `original_reversed`, `is_correction`, `exception_not_open`, `exception_has_draft`, `exception_has_original`. RBAC: `core/middleware/module_access.py`
 maps each route above to its exact action (tested in `test_rbac_accountant`).
 
 ## Screens added (hub `/finance`)
@@ -644,6 +653,7 @@ Decisions taken while building, in plain words (the working notes are deleted af
 - **Link account.** Imported history keeps its 2354 lines; the preview warns when their net is not zero. Finance's question on 2354 is open.
 - **Workbook format.** `.xlsx` only; a `.xls` gets a clear message. Finance saves as xlsx.
 - **Seeded comparison checks.** None blocks a close (see Comparison checks). Stock reads about zero before a close by design, so a blocking stock check would demand explaining the whole stock every month.
+- **Late change in a closed month** does not block a later close: a warning with a count and a link. The owner may prefer blocking.
 - **Correction vs reversal.** Reversing an entry that has corrections reverses its approved corrections and deletes its draft ones in the same transaction, or fails with `closed_period_change` if a correction's month is closed. This avoids counting twice after a reopen. A manual `ledger.reverse` refuses an entry with live corrections (`has_corrections`).
 - **Ignoring a closed-month change** means "accept the old figure until the next change": the group's members go back to drafted. A brand-new group that is ignored keeps its group key and its members are skipped; the next change proposes everything.
 - **Stuck close.** A close stuck in `closing` is taken over by a new close after 30 minutes (same idea as Plan 2's run takeover), audited. A real close over 30 minutes would be superseded; none is expected.

@@ -57,6 +57,7 @@ MESSAGES = {
     'superseded':       'إقفال أحدث استلم الشهر، والإقفال ده وقف من غير ما يرحّل حاجة.',
     'next_not_open':    'الشهر اللي بعده مش مفتوح.',
     'unknown_branch':   'فيه مخزن عليه رصيد ومش مربوط بفرع.',
+    'bad_stock_row':    'تقرير رصيد المخازن في سوفتيك فيه صنف من غير كمية أو تكلفة، صلّحه وأعد الإقفال.',
     'year_end_account': 'إقفال السنة وقف: حساب مطلوب في قيد الإقفال مينفعش يترحل عليه، صلّحه وأعد الإقفال.',
 }
 
@@ -107,7 +108,14 @@ def _database_items(period) -> list:
 
     open_exc = plan2_adapter.open_exception_count(start, end)
     items.append(_item('no_exceptions', 'مفيش استثناءات مفتوحة', open_exc == 0,
-                       detail=f'{open_exc} استثناء مفتوح' if open_exc else ''))
+                       detail=f'{open_exc} استثناء مفتوح' if open_exc else '',
+                       link={'date_from': start.isoformat(), 'date_to': end.isoformat()}))
+
+    late = plan2_adapter.open_late_change_count(start)
+    items.append(_item('late_changes', 'تغييرات متأخرة لسه مش متصححة', late == 0, blocking=False,
+                       detail=f'{late} تغيير من شهور مقفولة مستني التصحيح' if late else '',
+                       link={'kind': 'closed_period_change',
+                             'date_to': (start - datetime.timedelta(days=1)).isoformat()}))
 
     stale = compare.is_stale(period)
     items.append(_item('comparison_fresh', 'مقارنة سوفتيك محدّثة', not stale,
@@ -150,6 +158,8 @@ def checklist(period) -> list:
     """The close checklist, in order. A failed SOFTECH read fails the stock item, not the list."""
     try:
         stock_item = _stock_item(period, softech_stock.valuation(period.period_end))
+    except softech_stock.BadStockRow as exc:
+        stock_item = _item('stock_snapshot', 'لقطة مخزون آخر الشهر من سوفتيك', False, detail=str(exc))
     except Exception:
         logger.exception('[GLClose] stock read failed for %s', _ym(period))
         stock_item = _item('stock_snapshot', 'لقطة مخزون آخر الشهر من سوفتيك', False,

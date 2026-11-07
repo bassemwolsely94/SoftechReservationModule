@@ -34,7 +34,7 @@ from .coa_import import import_coa, parse_trial_balance_sheet_with_warnings
 CONFLICT_CODES = {'not_draft', 'not_approved', 'already_reversed', 'is_reversal', 'source_conflict',
                   'has_corrections', 'close_entry', 'period_closing', 'period_open', 'correction_pending',
                   'original_is_draft', 'is_correction', 'exception_not_open', 'exception_has_draft',
-                  'exception_has_original'}
+                  'exception_has_original', 'original_reversed'}
 MAX_BULK = 500
 MAX_NOTES = 4000
 MAX_TEXT = 500           # LedgerEntry / LedgerLine description — refused above, never truncated
@@ -434,13 +434,10 @@ def entry(request, pk):
     profile = _profile(request)
     if profile is None:
         return _no_profile()
-    with transaction.atomic():
-        locked = LedgerEntry.objects.select_for_update().get(pk=pk)
-        if locked.status != 'draft':
-            return _ledger_error(ledger.LedgerError('not_draft'))
-        snapshot = ledger._snapshot(locked)
-        ledger._audit('gl_entry_draft_deleted', user=profile, obj=locked, old_data=snapshot)
-        locked.delete()
+    try:
+        ledger.delete_draft(pk, user=profile)
+    except ledger.LedgerError as err:
+        return _ledger_error(err)
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 

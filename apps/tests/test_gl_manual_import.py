@@ -24,9 +24,10 @@ from apps.branches.models import Branch
 from apps.config.models import SystemSetting
 from apps.finance.gl import drafting, manual_import as mi
 from apps.finance.gl.ledger import approve, reverse, save_draft
+from apps.finance.gl.periods import month_period
 from apps.finance.gl.plan2_adapter import open_exception_count
 from apps.finance.models import (
-    GLAccount, GLAccountGroup, GLDraftRun, GLSourceDoc, GLSourceMap, LedgerEntry, PostingRule,
+    FinancialPeriod, GLAccount, GLAccountGroup, GLDraftRun, GLSourceDoc, GLSourceMap, LedgerEntry, PostingRule,
     SourceException,
 )
 from apps.tests.factories import make_user
@@ -388,7 +389,7 @@ class PreviewTests(GLManualBase):
         self.assertEqual(res['manual_accounts'][0]['name'], 'حساب 1296')
         self.assertEqual(res['counts'], {'manual': 2, 'softech': 1, 'mixed': 0, 'unbalanced': 0,
                                          'unknown_account': 0, 'unknown_branch': 0, 'before_opening': 0,
-                                         'changed_since_import': 0, 'possible_duplicate': 0})
+                                         'changed_since_import': 0, 'possible_duplicate': 0, 'closed_period': 0})
         self.assertEqual((res['merged_count'], res['balanced_count'], res['skipped_zero']), (1, 3, 1))
         self.assertEqual(res['skipped'], [{'row': 10, 'reason': 'no_date'}])
         self.assertEqual(res['totals']['debit'], _d('112.00'))
@@ -957,3 +958,51 @@ class MoneyTests(SimpleTestCase):
         for bad in (12.3451, '12.341', 'x', float('nan'), float('inf'), True, 1e17):
             with self.assertRaises(ValueError, msg=repr(bad)):
                 mi._money(bad)
+
+
+class ClosedPeriodTests(GLManualBase):
+    """A draft dated in a closed month could never be approved: it would only stay in the journal forever."""
+
+    def close_march(self, status='closed'):
+        FinancialPeriod.objects.filter(pk=month_period(D.date()).pk).update(status=status)
+
+    def test_group_in_a_closed_or_closing_month_is_not_importable(self):
+        for status in ('closed', 'closing'):
+            self.close_march(status)
+            g = self.groups(self.manual_rows())[0]
+            self.assertEqual(g.status, 'closed_period')
+        result = self.run_import(self.manual_rows())
+        self.assertEqual((result['imported'], result['closed_period']), (0, 1))
+        self.assertEqual(result['not_imported']['closed_period'][0]['status'], 'closed_period')
+        self.assertFalse(LedgerEntry.objects.filter(source_type=mi.SOURCE_TYPE).exists())
+
+    def test_preview_counts_it(self):
+        self.close_march()
+        out = mi.preview(self.xlsx(self.manual_rows()))
+        self.assertEqual((out['counts']['manual'], out['counts']['closed_period']), (0, 1))
+
+    def test_a_mixed_group_in_a_closed_month_is_not_parked(self):
+        self.close_march()
+        result = self.run_import(self.mixed_rows())
+        self.assertEqual((result['parked'], result['closed_period']), (0, 1))
+        self.assertFalse(SourceException.objects.filter(kind='mixed_manual_entry').exists())
+
+    def test_softech_only_group_stays_softech(self):
+        self.close_march()
+        g = self.groups([row('1302', debit=9, desc='س'), row('6002', credit=9, desc='س')])[0]
+        self.assertEqual(g.status, 'softech')
+
+    def test_an_already_imported_group_still_says_so_after_the_close(self):
+        rows = self.manual_rows()
+        self.run_import(rows)
+        self.close_march()
+        result = self.run_import(rows)
+        self.assertEqual((result['already_imported'], result['closed_period']), (1, 0))
+
+    def test_reading_the_months_is_one_query_whatever_the_file(self):
+        self.close_march()
+        parsed = mi.parse_journal(self.xlsx(self.manual_rows() + self.manual_rows(desc='قيد تاني')))
+        lookups = mi._Lookups(parsed.rows)
+        with CaptureQueriesContext(connection) as ctx:
+            mi.group_entries(parsed.rows, parsed.rejected, lookups=lookups)
+        self.assertFalse([q for q in ctx.captured_queries if 'financialperiod' in q['sql'].lower()])

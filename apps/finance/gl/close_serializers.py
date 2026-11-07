@@ -36,6 +36,7 @@ def period_json(p, reopen=None) -> dict:
         'closing_stock_total': snapshot.total if snapshot else None,
         'closes_year': p.month == 12,
         'can_reopen': p.pk in info, 'reopens_with': info.get(p.pk, []),
+        'gl_reopen_window_months': close._reopen_window(),
     })
 
 
@@ -60,6 +61,8 @@ def close_failure_json(p) -> dict | None:
     if code == 'year_end_account' and detail.get('account_code'):
         out['account_code'] = str(detail['account_code'])
         message = f'{message} (حساب {out["account_code"]})'
+    if code == 'bad_stock_row' and detail.get('store_code'):
+        message = f'{message} (مخزن {softech_stock.store_label(detail["store_code"])})'
     return {**out, 'code': code, 'detail': message}
 
 

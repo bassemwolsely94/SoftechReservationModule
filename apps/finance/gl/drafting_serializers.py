@@ -1,6 +1,7 @@
 """JSON shapes for the drafting API (Plan 2 / Task 8). Decimals leave as strings, dates as ISO."""
 from apps.finance.models import LedgerEntry
 
+from .corrections import late_change_action
 from .drafting import proposal_version
 from .views import _j
 
@@ -54,7 +55,10 @@ def exception_json(e):
            'doc': doc_json(e.source_doc)}
     if e.kind == 'closed_period_change':   # the late-correction decision needs both entries' numbers
         out['original_entry_number'] = e.original_entry.number if e.original_entry_id else None
+        out['original_entry_status'] = e.original_entry.status if e.original_entry_id else None
         out['live_entry'] = _entry_ref((e.detail or {}).get('entry_id'))
+        out['late_action'], draft = late_change_action(e)
+        out['pending_draft'] = _entry_ref(draft.pk) if draft else None
     return _j(out)
 
 

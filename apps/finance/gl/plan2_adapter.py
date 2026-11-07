@@ -3,6 +3,7 @@
 Everything else in the close code asks these functions, so a Plan 2 change lands here.
 """
 import hashlib
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
@@ -19,6 +20,7 @@ MANUAL_IMPORT_SOURCE = 'manual_import'
 MIXED_MANUAL_KIND = 'mixed_manual_entry'
 MIXED_MANUAL_MESSAGE = 'قيد من يومية المالية على حسابات يدوية وحسابات من سوفتيك — يتضم بكل أسطره أو يتجاهل بسبب'
 MIXED_MANUAL_RESOLVED = 'اتضم من يومية المالية بكل أسطره'
+CORRECTION_KEY = re.compile(r'#corr:exc(\d+)$')   # corrections.post_late_correction, from an exception
 
 
 @dataclass
@@ -82,6 +84,12 @@ def open_exception_count(date_from, date_to):
         status='open', source_date__gte=date_from, source_date__lte=date_to).count()
 
 
+def open_late_change_count(before) -> int:
+    """Open closed_period_change rows dated before `before`: their month closed already, so its checklist can no
+    longer stop on them."""
+    return SourceException.objects.filter(status='open', kind='closed_period_change', source_date__lt=before).count()
+
+
 def closed_period_change(exception_id, *, for_update=False):
     rows = SourceException.objects.select_related('original_entry', 'source_doc__rule')
     if for_update:   # the row only: the joined FKs are nullable
@@ -137,15 +145,49 @@ def closed_change_ignored(exc):
 
 def mark_exception_resolved(exception_id, *, user, entry):
     """Close the exception once its correction exists; the members sit on the group's entry (the
-    original, or the late document itself)."""
+    original while it stands, else the late document itself)."""
     exc = SourceException.objects.select_related('original_entry').get(pk=exception_id)
     release_held_movers(exc)
-    _settle_members(exc, exc.original_entry or entry)
+    original = exc.original_entry
+    _settle_members(exc, original if original is not None and original.status == 'approved' else entry)
     exc.status = 'resolved'
     exc.resolved_by = user
     exc.resolved_at = timezone.now()
     exc.resolution_note = (f'قيد التصحيح {entry.number or "#%s" % entry.pk}' if entry else '')[:500]
     exc.save(update_fields=['status', 'resolved_by', 'resolved_at', 'resolution_note'])
+    return exc
+
+
+def correction_undone(entry, *, user):
+    """`entry` is going away outside the engine (a draft deleted, an approved one reversed). If it is the correction
+    of an exception, the SOFTECH change is unposted again and nothing else remembers it: the members look settled, so
+    no run would raise it. The row reopens in the caller's transaction, visible at once and blocking its month like
+    any open row, and posting from it again nets against what the ledger says now, so it cannot double. Not when the
+    group has another open row (the engine raised it again: that one carries the change). If the holder doc is busy
+    with another group's row, the members go back to 'new' and the next run covering them raises the group."""
+    found = CORRECTION_KEY.search(entry.source_key or '')
+    if found is None or not entry.corrects_id:
+        return None
+    exc = (SourceException.objects.select_for_update()
+           .filter(pk=int(found[1]), kind='closed_period_change', status='resolved').first())
+    if exc is None:
+        return None
+    detail = exc.detail or {}
+    gk = detail.get('group_key') or ''
+    rows = SourceException.objects.filter(status='open', kind='closed_period_change')
+    if rows.filter(detail__group_key=gk).exists():
+        return None
+    members = GLSourceDoc.objects.filter(source_key__in=list(detail.get('member_source_keys') or []), group_key=gk,
+                                         status__in=('drafted', 'skipped')).exclude(group_key='')
+    reopened = not rows.filter(source_doc_id=exc.source_doc_id).exists()
+    members.update(status='exception' if reopened else 'new')
+    old = {'status': exc.status, 'resolved_by': exc.resolved_by_id, 'resolution_note': exc.resolution_note}
+    if reopened:
+        exc.status, exc.resolved_by, exc.resolved_at, exc.resolution_note = 'open', None, None, ''
+        exc.save(update_fields=['status', 'resolved_by', 'resolved_at', 'resolution_note'])
+    _audit('gl_late_change_reopened', user=user, obj=exc, old_data=old,
+           new_data={'status': exc.status, 'members': 'exception' if reopened else 'new'},
+           extra={'correction_id': entry.pk, 'correction_status': entry.status, 'group_key': gk})
     return exc
 
 

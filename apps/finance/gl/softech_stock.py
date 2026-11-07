@@ -24,6 +24,15 @@ STORE_BRANCH = {**{s: HQ_BRANCH for s in HQ_STORES}, '152': '150'}
 DEFAULT_CARRY_FORWARD_UNTIL = date(2026, 10, 31)
 
 
+class BadStockRow(Exception):
+    """A line of SOFTECH's stock-at-date report has no quantity or cost: finance fixes it in SOFTECH."""
+    code = 'bad_stock_row'
+
+    def __init__(self, store_code: str):
+        self.detail = {'store_code': store_code}
+        super().__init__(f'تقرير رصيد المخازن في سوفتيك فيه صنف من غير كمية أو تكلفة في مخزن {store_label(store_code)}')
+
+
 @dataclass(frozen=True)
 class StoreRow:
     store_code: str
@@ -70,6 +79,8 @@ def _sum_stores(raw) -> list:
     sums, counts = {}, {}
     for r in raw:
         code = _code(r['storecode'])
+        if r['nowqty'] is None or r['nowcostprice'] is None:
+            raise BadStockRow(code)
         sums[code] = sums.get(code, Decimal(0)) + Decimal(str(r['nowqty'])) * Decimal(str(r['nowcostprice']))
         counts[code] = counts.get(code, 0) + 1
     return [StoreRow(c, counts[c], sums[c].quantize(CENT, rounding=ROUND_HALF_UP)) for c in sorted(sums)]
@@ -135,6 +146,12 @@ def store_map(extra_stores=()) -> dict:
         included = o['included'] if 'included' in o else role(branch, store) != CLOSED
         out[store] = StoreRule(branch, included, branch_label(branch))
     return out
+
+
+def store_label(code: str) -> str:
+    """A store that is its branch: the branch label says it all; an HQ store: the label is the branch, so keep the code."""
+    rule = store_map([code])[code]
+    return rule.label if rule.branch_code == code else f'{code} ({rule.label})'
 
 
 class _Snapshots:
@@ -215,9 +232,10 @@ def valuation(as_of: date) -> Valuation:
         entries[store] = (StoreRow(store, 0, Decimal('0.00')), as_of, False)
     for store in sorted(expected - ran):
         earlier = [d for d in snaps.dates_by_store().get(store, ()) if d < as_of]
-        if carry_ok and earlier:
-            day = max(earlier)
-            entries[store] = (snaps.rows_on(day).get(store) or StoreRow(store, 0, Decimal('0.00')), day, True)
+        # the latest date the store has lines on: an empty report in between would carry a false 0
+        day = next((d for d in sorted(earlier, reverse=True) if store in snaps.rows_on(d)), None) if carry_ok else None
+        if day is not None:
+            entries[store] = (snaps.rows_on(day)[store], day, True)
             v.carried_stores.append(store)
         else:
             v.missing_stores.append(store)

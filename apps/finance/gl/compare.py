@@ -6,9 +6,10 @@ branch, else the entry's), or per GL party when ``per_party``. SOFTECH side: ``s
 difference = ledger − SOFTECH. A line's explanation survives a recompute; if the difference then moves,
 ``GLComparisonLine.needs_explanation`` is true again.
 """
+import logging
 from collections import defaultdict
 from contextlib import contextmanager
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.db import connection, transaction
 from django.db.models import Q, Sum
@@ -24,7 +25,11 @@ from . import softech_checks
 from .balances import COUNTED, YEAR_END_CLOSING, account_statement
 from .ledger import LedgerError, _audit
 
+logger = logging.getLogger('elrezeiky.finance')
+
 ZERO = Decimal('0.00')
+CENT = Decimal('0.01')
+SOFTECH_DOWN = 'تعذرت القراءة من سوفتيك، جرّب تاني.'
 CHECK_UPDATED = 'gl_softech_check_updated'   # extra.figures_changed: the check's lines no longer say what it asks
 REFRESH_LOCK = 7_302_001   # a manual refresh and the nightly job never overlap, across processes
 
@@ -92,7 +97,8 @@ def _softech_figures(check, period, branch_ids: dict) -> dict:
     for (code, party), amount in softech_checks.figures(check.source, period).items():
         key = (None, party) if check.per_party else (branch_ids.get(code), '')
         out[key] += amount
-    return dict(out)
+    # the one rounding of this side, before the difference: a stored line always sums
+    return {key: amount.quantize(CENT, rounding=ROUND_HALF_UP) for key, amount in out.items()}
 
 
 def compute(period, *, check_keys=None, user=None) -> list:
@@ -103,10 +109,11 @@ def compute(period, *, check_keys=None, user=None) -> list:
     branch_ids = dict(Branch.objects.values_list('softech_branch_id', 'id'))
     now = timezone.now()
     lines = []
+    # SOFTECH first (a sales read takes minutes): the write transaction stays short and holds no lock meanwhile
+    softech_side = [_softech_figures(check, period, branch_ids) for check in checks]
     with transaction.atomic():
-        for check in checks:
+        for check, softech in zip(checks, softech_side):
             ledger = _ledger_figures(check, period)
-            softech = _softech_figures(check, period, branch_ids)
             seen = set()
             keys = [k for k in set(ledger) | set(softech)
                     if ledger.get(k, ZERO) != 0 or softech.get(k, ZERO) != 0]
@@ -159,11 +166,14 @@ def _str(v):
 def is_stale(period) -> bool:
     """True when an active check has no line for the period, a check's accounts or activity were edited after the
     oldest computation, or an entry (or its reversal) was approved after it. Movement checks read the month's
-    entries; balance checks read every entry up to the period end, so an earlier-dated late entry counts too."""
-    lines = GLComparisonLine.objects.filter(period=period)
+    entries; balance checks read every entry up to the period end, so an earlier-dated late entry counts too.
+    Only active checks' lines count: a refresh never touches an inactive check's. No active check, nothing to refresh."""
+    lines = GLComparisonLine.objects.filter(period=period, softech_check__is_active=True)
     computed = set(lines.values_list('softech_check_id', flat=True))
     active = list(GLSoftechCheck.objects.filter(is_active=True).values_list('id', 'kind'))
-    if not active or any(cid not in computed for cid, _ in active):
+    if not active:
+        return False
+    if any(cid not in computed for cid, _ in active):
         return True
     oldest = lines.order_by('computed_at').values_list('computed_at', flat=True).first()
     if AuditLog.objects.filter(action=CHECK_UPDATED, created_at__gt=oldest, extra__figures_changed=True).exists():
@@ -208,7 +218,11 @@ def detail(line_id) -> dict:
                 ledger.append({**r, 'account': code})
     ledger.sort(key=lambda r: (r['date'], not r.get('opening'), r['number'] or '', r['account']))
     code = None if check.per_party else (line.branch.softech_branch_id if line.branch_id else None)
-    rows = softech_checks.detail(check.source, period, code, line.party_code)
+    try:
+        rows = softech_checks.detail(check.source, period, code, line.party_code)
+    except Exception:   # the ledger side and the explanation box stay usable
+        logger.exception('[GLCompare] SOFTECH detail of line %s failed', line_id)
+        return {'ledger': ledger, 'softech': [], 'softech_error': SOFTECH_DOWN}
     out = {'ledger': ledger, 'softech': rows}
     if check.kind == 'movement':
         days: dict = defaultdict(lambda: {'ledger': ZERO, 'softech': ZERO})

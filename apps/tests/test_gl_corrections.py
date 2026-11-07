@@ -138,6 +138,19 @@ class ClosingGuardTests(Base):
             approve(entry.id, user=self.staff, _close_service=True)
         self.assertEqual(cm.exception.code, 'closed_period')
 
+    def test_reverse_of_an_entry_in_a_closing_month_refused_unless_close_service(self):
+        """Without this the mirror lands next month while the month closes with the entry in it."""
+        orig = self.original(day=D(2026, 3, 10), close=False)
+        _set_status(D(2026, 3, 10), 'closing')
+        for day in (None, D(2026, 4, 5)):
+            with self.assertRaises(LedgerError) as cm:
+                reverse(orig.id, user=self.staff, reason='خطأ', entry_date=day)
+            self.assertEqual(cm.exception.code, 'period_closing')
+        orig.refresh_from_db()
+        self.assertEqual(orig.status, 'approved')
+        mirror = reverse(orig.id, user=self.staff, reason='خطأ', entry_date=D(2026, 4, 5), _close_service=True)
+        self.assertEqual(mirror.reverses_id, orig.id)
+
 
 class ReverseClosedMonthTests(Base):
     def test_reverse_of_closed_month_entry_lands_in_first_open_month(self):
@@ -299,12 +312,14 @@ class LateCorrectionTests(Base):
         self.assertEqual(self.amounts(fix), [(EXPENSE, DEC('100.00'), DEC('0.00')),
                                              (PAYABLE, DEC('0.00'), DEC('100.00'))])
 
-    def test_correction_of_a_reversed_original_posts_the_whole_lines(self):
+    def test_correction_of_a_reversed_original_is_refused(self):
+        """Keyed on the correction, it would hide from the engine, which then raises the group again."""
         orig = self.original()
         reverse(orig.id, user=self.staff, reason='خطأ')
-        fix = self.correct(orig, '900.00')
-        self.assertEqual(self.amounts(fix), [(EXPENSE, DEC('900.00'), DEC('0.00')),
-                                             (PAYABLE, DEC('0.00'), DEC('900.00'))])
+        with self.assertRaises(LedgerError) as cm:
+            self.correct(orig, '900.00')
+        self.assertEqual(cm.exception.code, 'original_reversed')
+        self.assertFalse(orig.corrections.exclude(reverses=orig).exists())
 
     def test_correction_refused_for_draft_reversal_and_correction_originals(self):
         draft = save_draft(user=self.staff, entry_date=D(2026, 2, 10), description='x', lines=_lines('5.00'))
@@ -444,6 +459,16 @@ class LateDocumentTests(Base):
         with self.assertRaises(LedgerError) as cm:
             post_late_document(exc2.id, user=self.staff)
         self.assertEqual(cm.exception.code, 'exception_has_draft')
+
+    def test_reversed_original_takes_the_late_document_route(self):
+        orig = self.original()
+        reverse(orig.id, user=self.staff, reason='خطأ')
+        exc = self.exception(original=orig, entry_id=orig.id)
+        entry = corrections.post_from_exception(exc.id, user=self.staff, reason='تغير')
+        self.assertEqual((entry.source_key, entry.corrects_id), (exc.detail['group_key'], None))
+        self.assertEqual(self.amounts(entry)[0], (EXPENSE, DEC('1100.00'), DEC('0.00')))
+        doc = GLSourceDoc.objects.get(source_key='t1')
+        self.assertEqual((doc.status, doc.entry_id), ('drafted', entry.id))
 
     def test_refused_when_the_month_is_open_again(self):
         exc = self.exception()

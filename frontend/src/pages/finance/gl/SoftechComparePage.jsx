@@ -174,6 +174,12 @@ function ComparePanel({ lineId, perms, onClose, onChanged }) {
             </table>
           </DetailTable>
 
+          {d.softech_error ? (
+            <div className="space-y-1">
+              <div className="text-sm font-medium text-gray-700">سطور سوفتيك</div>
+              <ErrorBox>{d.softech_error}</ErrorBox>
+            </div>
+          ) : (
           <DetailTable title="سطور سوفتيك">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-600 text-xs"><tr>
@@ -192,6 +198,7 @@ function ComparePanel({ lineId, perms, onClose, onChanged }) {
               </tbody>
             </table>
           </DetailTable>
+          )}
         </div>
       )}
     </div>

@@ -11,7 +11,7 @@
  * versions side by side with «اعتماد نسخة سوفتيك» / «إبقاء تعديلي» (ledger.approve).
  */
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { glApi } from '../../../api/client'
 import useSortableRows from '../../../hooks/useSortableRows'
@@ -34,8 +34,9 @@ export const KIND_LABEL = {
   mixed_manual_entry: 'قيد يدوي مختلط',
 }
 const KIND_ORDER = Object.keys(KIND_LABEL)
-// no SOFTECH document to redraft: read-only here, or finance's journal entry that an accountant decides on
-const NOT_REDRAFTABLE = new Set(['closed_period_change', 'mixed_manual_entry'])
+// finance's journal entry has no SOFTECH document to redraft: an accountant decides on it. A closed_period_change can
+// be redrafted: after a reopen that clears it, and while its month is still closed the engine raises it again.
+const NOT_REDRAFTABLE = new Set(['mixed_manual_entry'])
 const sourceLabel = (t) => (t === 'manual_import' ? 'يومية المالية' : SOURCE_TYPES[t] || t)
 const CUSTOMER_SOURCES = new Set(['credit_sales', 'customer_collections'])
 const MAIN_AMOUNT = ['net', 'amount', 'value', 'sales', 'credit']
@@ -333,8 +334,9 @@ function LateCorrection({ ex, perms, onDone }) {
   const [made, setMade] = useState(null)
   const d = ex.detail || {}
   const docs = (d.member_source_keys || []).length || 1
-  const live = ex.live_entry
-  const hasDraft = live?.status === 'draft'
+  const action = ex.late_action   // the server decides what can work on this row
+  const pending = ex.pending_draft
+  const originalLive = ex.original_entry && ex.original_entry_status === 'approved'
   const post = useMutation({
     mutationFn: () => glApi.correctionFromException(ex.id, reason.trim()).then(r => r.data),
     onSuccess: (r) => {   // the row resolves and leaves the list: the top message keeps the link
@@ -348,14 +350,19 @@ function LateCorrection({ ex, perms, onDone }) {
       <div className="text-xs text-gray-600">
         تغيّر مستند في شهر مغلق ({docs} مستند(ات) في المجموعة). الشهر المغلق لا يُلمس: يُرحَّل الفرق في أول شهر مفتوح كمسودة.
         {ex.original_entry && <> القيد الأصلي: {entryLink(ex.original_entry, `#${ex.original_entry_number || ex.original_entry}`)}</>}
+        {ex.original_entry && !originalLive && ' (اتعكس، فالمجموعة تترحل كاملة)'}
       </div>
-      <div className="text-xs font-bold text-gray-700">{ex.original_entry ? 'الأسطر الجديدة للمجموعة (الفرق عن القيد يُحسب عند الترحيل)' : 'ما سيُرحَّل'}</div>
+      <div className="text-xs font-bold text-gray-700">{originalLive ? 'الأسطر الجديدة للمجموعة (الفرق عن القيد يُحسب عند الترحيل)' : 'ما سيُرحَّل'}</div>
       <ProposedLines lines={ex.proposed_lines} />
       {made ? (
         <div className="text-xs text-green-700">المسودة {entryLink(made.id, `#${made.number || made.id}`)} في اليومية</div>
-      ) : hasDraft ? (
+      ) : action === 'draft_pending' ? (
         <div className="text-xs bg-amber-50 border border-amber-200 rounded px-2 py-1">
-          للمجموعة مسودة قائمة {entryLink(live.id, `#${live.number || live.id}`)} — راجعها أو احذفها من اليومية أولاً ثم ارجع هنا.
+          للمجموعة مسودة قائمة {pending && entryLink(pending.id, `#${pending.number || pending.id}`)} — راجعها أو احذفها من اليومية أولاً ثم ارجع هنا.
+        </div>
+      ) : action === 'redraft' ? (
+        <div className="text-xs bg-amber-50 border border-amber-200 rounded px-2 py-1">
+          الشهر ده مفتوح دلوقتي، فمفيش تصحيح: حدد الصف واضغط «إعادة الترحيل» فوق، والقيد يتبني من جديد في شهره.
         </div>
       ) : perms.create ? (
         <div className="flex flex-wrap items-center gap-2">
@@ -425,7 +432,8 @@ export default function ExceptionsTab({ filters, perms, onRunStarted, onBusy }) 
     const b = branches.find(x => String(x.softech_branch_id) === String(code))
     return b ? labelOf(b.id) : '—'
   }
-  const [kindFilter, setKindFilter] = useState('')
+  const [searchParams] = useSearchParams()
+  const [kindFilter, setKindFilter] = useState(() => searchParams.get('kind') || '')   // the close checklist links here
   const [selected, setSelected] = useState(() => new Set())
   const [openRow, setOpenRow] = useState(null)
   const [ruleFor, setRuleFor] = useState(null)

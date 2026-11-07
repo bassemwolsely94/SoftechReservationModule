@@ -6,14 +6,17 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.utils import timezone
 
+from apps.audit.models import AuditLog
 from apps.branches.models import Branch
 from apps.finance.gl import drafting as DR
 from apps.finance.gl import rules as R
-from apps.finance.gl.ledger import LedgerError, approve
+from apps.finance.gl.corrections import post_from_exception, post_late_correction, post_late_document
+from apps.finance.gl.drafting_serializers import exception_json
+from apps.finance.gl.ledger import LedgerError, approve, delete_draft, save_draft
 from apps.finance.gl.ledger import reverse as ledger_reverse
 from apps.finance.gl.sources import SourceDoc
 from apps.finance.models import (
-    FinancialPeriod, GLAccount, GLAccountGroup, GLDraftRun, GLParty, GLSourceDoc, LedgerEntry,
+    FinancialPeriod, GLAccount, GLAccountGroup, GLDraftRun, GLParty, GLSourceDoc, LedgerEntry, LedgerLine,
     SourceException,
 )
 from apps.users.models import StaffProfile
@@ -1263,3 +1266,225 @@ class EditDecisionP23Tests(Base):
         e, ex = self.edited_exception()
         self.assertEqual((ex.detail['proposed_entry_date'], ex.detail['held_out']), ('2026-03-10', 0))
         self.assertEqual(ex.detail['proposed_description'], 'نقدية b130 2026-03-10')
+
+
+class LateChangeReviewTests(Base):
+    """Plan 3 final review: a closed-month change is never lost and never counted twice."""
+    GRP = 'cash:130:2026-03-10'
+
+    def net_6002(self):
+        """What the books say on 6002 (credit positive): every counted entry."""
+        total = DEC('0')
+        for ln in LedgerLine.objects.filter(account__code='6002', entry__status__in=('approved', 'reversed')):
+            total += ln.credit - ln.debit
+        return total
+
+    def open_rows(self):
+        return SourceException.objects.filter(kind='closed_period_change', status='open')
+
+    def closed_change(self, old='100.00', new='90.00'):
+        """An approved group in a closed month, then SOFTECH changes it. -> (the entry, its open row)."""
+        self.rule(granularity='branch_day')
+        self.docs['sales_tenders'] = [tender('t1', old)]
+        self.run_engine()
+        entry = self.live(self.GRP).get()
+        approve(entry.id, user=self.staff)
+        self.close_month(MAR10)
+        self.docs['sales_tenders'][0] = tender('t1', new)
+        self.run_engine()
+        return entry, self.open_rows().get()
+
+    def late_document(self):
+        """A brand-new group in a closed month, posted and approved in the first open month."""
+        self.rule(granularity='branch_day')
+        self.close_month(MAR10)
+        self.docs['sales_tenders'] = [tender('t1', '100.00')]
+        self.run_engine()
+        return approve(post_late_document(self.open_rows().get().pk, user=self.staff, reason='جديد').id,
+                       user=self.staff)
+
+    # C1
+    def test_reversed_original_then_posting_from_the_open_row_cannot_double(self):
+        entry, row = self.closed_change()
+        self.assertEqual(row.original_entry_id, entry.id)
+        ledger_reverse(entry.id, user=self.staff, reason='خطأ')
+        fix = post_from_exception(row.id, user=self.staff, reason='تغير')
+        self.assertEqual((fix.source_key, fix.corrects_id), (self.GRP, None))
+        approve(fix.id, user=self.staff)
+        self.assertEqual(self.net_6002(), DEC('90.00'))
+        self.assertEqual(GLSourceDoc.objects.get(source_key='t1').entry_id, fix.id)
+        self.run_engine()
+        self.assertFalse(self.open_rows().exists())
+        self.assertEqual(self.net_6002(), DEC('90.00'))
+
+    # I3
+    def test_deleted_correction_draft_reopens_its_row_and_posts_once(self):
+        entry, row = self.closed_change()
+        fix = post_late_correction(entry.id, None, user=self.staff, reason='تغير', exception_id=row.id)
+        delete_draft(fix.id, user=self.staff)
+        row.refresh_from_db()
+        self.assertEqual((row.status, row.resolved_by, row.resolved_at, row.resolution_note), ('open', None, None, ''))
+        self.assertEqual(GLSourceDoc.objects.get(source_key='t1').status, 'exception')
+        self.assertTrue(AuditLog.objects.filter(action='gl_late_change_reopened', object_id=str(row.id)).exists())
+        self.run_engine()   # stays open, one row: the change is still not in the books
+        self.assertEqual(self.open_rows().get().pk, row.pk)
+        self.assertEqual(self.net_6002(), DEC('100.00'))
+        again = post_late_correction(entry.id, None, user=self.staff, reason='تغير', exception_id=row.id)
+        approve(again.id, user=self.staff)
+        self.run_engine()
+        self.assertFalse(self.open_rows().exists())
+        self.assertEqual(self.net_6002(), DEC('90.00'))
+
+    def test_reversed_correction_reopens_its_row_and_posts_once(self):
+        entry, row = self.closed_change()
+        fix = post_late_correction(entry.id, None, user=self.staff, reason='تغير', exception_id=row.id)
+        approve(fix.id, user=self.staff)
+        self.assertEqual(self.net_6002(), DEC('90.00'))
+        ledger_reverse(fix.id, user=self.staff, reason='خطأ')
+        self.assertEqual(self.open_rows().get().pk, row.pk)
+        self.assertEqual(self.net_6002(), DEC('100.00'))
+        again = post_late_correction(entry.id, None, user=self.staff, reason='تغير', exception_id=row.id)
+        self.assertEqual(again.source_key, fix.source_key)   # the reversed one holds the key no more
+        approve(again.id, user=self.staff)
+        self.run_engine()
+        self.assertFalse(self.open_rows().exists())
+        self.assertEqual(self.net_6002(), DEC('90.00'))
+
+    def test_undoing_a_correction_beside_a_newer_open_row_adds_no_row(self):
+        entry, row = self.closed_change()
+        fix = post_late_correction(entry.id, None, user=self.staff, reason='تغير', exception_id=row.id)
+        self.docs['sales_tenders'][0] = tender('t1', '80.00')
+        self.run_engine()   # the draft no longer says what SOFTECH says: a new row for the group
+        newer = self.open_rows().get()
+        self.assertNotEqual(newer.pk, row.pk)
+        delete_draft(fix.id, user=self.staff)
+        self.assertEqual(self.open_rows().get().pk, newer.pk)
+        row.refresh_from_db()
+        self.assertEqual(row.status, 'resolved')
+
+    def test_holder_busy_with_another_group_sends_the_members_back_to_the_engine(self):
+        entry, row = self.closed_change()
+        fix = post_late_correction(entry.id, None, user=self.staff, reason='تغير', exception_id=row.id)
+        approve(fix.id, user=self.staff)
+        SourceException.objects.create(source_doc=row.source_doc, kind='closed_period_change',
+                                       source_date=MAR10, detail={'group_key': 'another'})
+        ledger_reverse(fix.id, user=self.staff, reason='خطأ')
+        row.refresh_from_db()
+        self.assertEqual(row.status, 'resolved')
+        self.assertEqual(GLSourceDoc.objects.get(source_key='t1').status, 'new')
+
+    def test_the_engine_undoing_a_correction_reopens_nothing(self):
+        entry, row = self.closed_change()
+        fix = post_late_correction(entry.id, None, user=self.staff, reason='تغير', exception_id=row.id)
+        approve(fix.id, user=self.staff)
+        self.close_month(MAR10, 'open')
+        self.docs['sales_tenders'][0] = tender('t1', '80.00')
+        self.run_engine()   # the month reopened: the engine reverses both and redrafts the whole figure
+        fix.refresh_from_db()
+        self.assertEqual(fix.status, 'reversed')
+        self.assertFalse(SourceException.objects.filter(status='open').exists())
+        self.assertFalse(AuditLog.objects.filter(action='gl_late_change_reopened').exists())
+
+    # I4
+    def test_late_document_changed_again_corrects_in_its_own_open_month(self):
+        doc = self.late_document()
+        self.assertEqual(doc.entry_date, datetime.date(2026, 4, 1))
+        self.run_engine()   # unchanged: quiet
+        self.assertFalse(self.open_rows().exists())
+        self.docs['sales_tenders'][0] = tender('t1', '90.00')
+        self.run_engine()
+        row = self.open_rows().get()
+        self.assertEqual(row.original_entry_id, doc.id)
+        fix = post_from_exception(row.id, user=self.staff, reason='تغير')
+        self.assertEqual((fix.entry_date, fix.corrects_id), (doc.entry_date, doc.id))
+        approve(fix.id, user=self.staff)
+        self.run_engine()
+        self.assertFalse(self.open_rows().exists())
+        self.assertEqual(self.net_6002(), DEC('90.00'))
+
+    def test_closed_month_rebuild_with_unchanged_nets_raises_no_row(self):
+        lines = [{**CASH[0], 'description': 'نقدية {docnumber}'}, CASH[1]]
+        self.rule(lines=lines)
+        doc = lambda number: SourceDoc('sales_tenders', 't1', MAR10, '130', 'cash', '',  # noqa: E731
+                                       {'net': DEC('100.00'), 'sales': DEC('100.00'), 'returns': DEC('0')},
+                                       {'paymenttype': '30', 'docnumber': number})
+        self.docs['sales_tenders'] = [doc('A')]
+        self.run_engine()
+        entry = self.live('t1').get()
+        approve(entry.id, user=self.staff)
+        self.close_month(MAR10)
+        self.docs['sales_tenders'] = [doc('B')]
+        run = self.run_engine()
+        self.assertEqual(run.counts['changed'], 1)
+        self.assertFalse(self.open_rows().exists())
+        sd = GLSourceDoc.objects.get(source_key='t1')
+        self.assertEqual((sd.status, sd.entry_id), ('drafted', entry.id))
+        self.assertEqual(self.live('t1').get().pk, entry.id)
+
+    def test_unchanged_nets_end_an_open_row_too(self):
+        _, row = self.closed_change()
+        self.docs['sales_tenders'][0] = tender('t1', '100.00')
+        self.run_engine()   # SOFTECH went back to what the books say
+        row.refresh_from_db()
+        self.assertEqual(row.status, 'resolved')
+
+    # I5
+    def test_the_row_says_what_can_be_done_with_it(self):
+        entry, row = self.closed_change()
+        self.assertEqual(exception_json(row)['late_action'], 'post')
+        self.assertEqual(exception_json(row)['original_entry_status'], 'approved')
+        fix = post_late_correction(entry.id, None, user=self.staff, reason='تغير', exception_id=row.id)
+        self.docs['sales_tenders'][0] = tender('t1', '80.00')
+        self.run_engine()
+        newer = self.open_rows().get()
+        out = exception_json(newer)
+        self.assertEqual((out['late_action'], out['pending_draft']['id']), ('draft_pending', fix.id))
+        self.close_month(MAR10, 'open')
+        delete_draft(fix.id, user=self.staff)
+        self.assertEqual(exception_json(newer)['late_action'], 'redraft')
+
+    def test_after_a_reopen_the_redraft_clears_the_row(self):
+        _, row = self.closed_change()
+        self.close_month(MAR10, 'open')
+        with self.assertRaises(LedgerError) as cm:
+            post_from_exception(row.id, user=self.staff, reason='تغير')
+        self.assertEqual(cm.exception.code, 'period_open')
+        self.run_engine()
+        row.refresh_from_db()
+        self.assertEqual(row.status, 'resolved')
+        self.assertEqual(self.live(self.GRP).get().status, 'draft')
+
+    # M4
+    def test_a_late_document_saved_by_the_accountant_is_not_an_edit(self):
+        self.rule(granularity='branch_day')
+        self.close_month(MAR10)
+        self.docs['sales_tenders'] = [tender('t1', '100.00')]
+        self.run_engine()
+        doc = post_late_document(self.open_rows().get().pk, user=self.staff, reason='جديد')
+        self.assertFalse(DR.edited_by_user(doc))
+        save_draft(user=self.staff, entry=doc, entry_date=doc.entry_date, description='عدلها', book=doc.book,
+                   source_type=doc.source_type, source_key=doc.source_key,
+                   lines=[{'account_code': '1302', 'debit': DEC('100.00'), 'credit': DEC('0')},
+                          {'account_code': '6002', 'debit': DEC('0'), 'credit': DEC('100.00')}])
+        self.assertTrue(DR.edited_by_user(doc))
+
+    def test_a_correction_saved_by_the_accountant_is_not_an_edit(self):
+        entry, row = self.closed_change()
+        fix = post_late_correction(entry.id, None, user=self.staff, reason='تغير', exception_id=row.id)
+        self.assertFalse(DR.edited_by_user(fix))
+
+    # Task 2
+    def test_an_existing_row_follows_its_holder_doc_date(self):
+        self.rule()   # document granularity: the group key has no date in it
+        self.docs['sales_tenders'] = [tender('t1', '100.00')]
+        self.run_engine()
+        approve(self.live('t1').get().id, user=self.staff)
+        self.close_month(MAR10)
+        self.docs['sales_tenders'][0] = tender('t1', '90.00')
+        self.run_engine()
+        row = self.open_rows().get()
+        self.assertEqual(row.source_date, MAR10)
+        self.docs['sales_tenders'][0] = tender('t1', '80.00', date=datetime.date(2026, 3, 12))
+        self.run_engine()
+        row.refresh_from_db()
+        self.assertEqual(row.source_date, datetime.date(2026, 3, 12))

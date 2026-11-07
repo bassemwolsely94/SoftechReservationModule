@@ -77,21 +77,22 @@ def _lock_open_change(exception_id):
 def post_late_correction(original_id: int, new_lines: list, *, user, reason: str,
                          exception_id: int | None = None) -> LedgerEntry:
     """Draft the difference between `new_lines` and what `original` effectively says now, in the
-    first open month after it. With `exception_id`, `new_lines` are the group's whole proposed
+    first open month after it (or, for an exception on a closed-month document whose original sits
+    in a month still open, in that month). With `exception_id`, `new_lines` are the group's whole proposed
     lines and the exception resolves in the same transaction; `new_lines=None` takes them from the
     exception, read under its lock (the engine may rewrite them until then)."""
     with transaction.atomic():
         original = LedgerEntry.objects.select_for_update().select_related('period').get(pk=original_id)
         if original.status == 'draft':
             raise LedgerError('original_is_draft')
+        if original.status != 'approved':   # a correction would hide the group from the engine: late document
+            raise LedgerError('original_reversed', {'entry_id': original.pk})
         if original.reverses_id:
             raise LedgerError('is_reversal')
         if original.corrects_id:
             raise LedgerError('is_correction')
         if original.source_type in ledger.CLOSE_SOURCE_TYPES:
             raise LedgerError('close_entry')
-        if original.period.status == 'open':
-            raise LedgerError('period_open', {'period': str(original.period)})
         change = None
         if exception_id is not None:
             change = _lock_open_change(exception_id)
@@ -100,6 +101,11 @@ def post_late_correction(original_id: int, new_lines: list, *, user, reason: str
             if (change.draft_entry_id
                     and LedgerEntry.objects.filter(pk=change.draft_entry_id, status='draft').exists()):
                 raise LedgerError('exception_has_draft', {'entry_id': change.draft_entry_id})
+        own_month_open = original.period.status == 'open'
+        # an open original takes a redraft, unless its document's month is closed (a late document changed again):
+        # the engine cannot rebuild that one, so the correction goes beside it, in the original's own month
+        if own_month_open and (change is None or accepts_postings(change.source_date)):
+            raise LedgerError('period_open', {'period': str(original.period)})
         # only approved corrections net: a second one beside a draft would count the difference twice
         if original.corrections.filter(status='draft').exists():
             raise LedgerError('correction_pending')
@@ -108,7 +114,7 @@ def post_late_correction(original_id: int, new_lines: list, *, user, reason: str
         if not lines:
             raise LedgerError('nothing_to_correct')
 
-        period = first_open_period_after(original.entry_date)
+        period = original.period if own_month_open else first_open_period_after(original.entry_date)
         if change is not None:
             source_key = f'{change.group_key}#corr:exc{exception_id}'
         else:
@@ -117,8 +123,8 @@ def post_late_correction(original_id: int, new_lines: list, *, user, reason: str
             base = original.source_key or f'entry:{original.pk}'
             source_key = f'{base}#corr:{period.period_start:%Y-%m}:{n}'
         entry = ledger.save_draft(
-            user=user, entry_date=period.period_start, lines=lines, book=original.book,
-            branch=original.branch, source_type=original.source_type, source_key=source_key,
+            user=user, entry_date=original.entry_date if own_month_open else period.period_start,
+            lines=lines, book=original.book, branch=original.branch, source_type=original.source_type, source_key=source_key,
             description=f'تصحيح قيد {original.number} — {reason}'[:500], corrects=original)
         old_data, new_data = None, ledger._snapshot(entry)
         if change is not None:
@@ -133,12 +139,39 @@ def post_late_correction(original_id: int, new_lines: list, *, user, reason: str
     return entry
 
 
+def late_change_action(row) -> tuple:
+    """What the inbox offers on a closed_period_change row: ('post', None), ('redraft', None) when its
+    month takes postings again, or ('draft_pending', entry) while a draft of the group stands in the way."""
+    original = row.original_entry
+    draft_id = (row.detail or {}).get('entry_id')
+    draft = LedgerEntry.objects.filter(pk=draft_id, status='draft').first() if draft_id else None
+    if draft is None and original is not None:
+        draft = original.corrections.filter(status='draft').first()
+    if draft is not None:
+        return 'draft_pending', draft
+    if original is not None and original.status == 'approved' and not accepts_postings(original.entry_date):
+        return 'post', None
+    return ('redraft' if accepts_postings(row.source_date) else 'post'), None
+
+
+def post_from_exception(exception_id: int, *, user, reason: str) -> LedgerEntry:
+    """One call per exception = per group (ruling P19). The services check its state under its lock.
+    A reversed original has nothing left to correct: the group posts whole, keyed on the group, so
+    the engine finds it. A correction beside the dead entry would leave the group looking empty, and
+    the next run would raise it again."""
+    change = plan2_adapter.closed_period_change(exception_id)
+    if change.original_entry is not None and change.original_entry.status == 'approved':
+        return post_late_correction(change.original_entry.pk, None, user=user, reason=reason,
+                                    exception_id=exception_id)
+    return post_late_document(exception_id, user=user, reason=reason)
+
+
 def post_late_document(exception_id: int, *, user, reason: str = '') -> LedgerEntry:
     """A brand-new SOFTECH group in a closed month: its proposed lines as they are, drafted once
     (source_key = the group key) in the first open month, and the exception resolved with it."""
     with transaction.atomic():
         change = _lock_open_change(exception_id)
-        if change.original_entry is not None:
+        if change.original_entry is not None and change.original_entry.status == 'approved':
             raise LedgerError('exception_has_original', {'exception_id': exception_id})
         # 'approved': the month reopened and the draft was approved; posting again would double it
         if (change.draft_entry_id and LedgerEntry.objects.filter(

@@ -202,6 +202,8 @@ def period_closing_stock(request, pk):
     if request.query_params.get('preview') == '1':
         try:
             return Response(ser.valuation_json(softech_stock.valuation(period.period_end)))
+        except softech_stock.BadStockRow as e:
+            return _bad(e.code, str(e), status.HTTP_409_CONFLICT)
         except Exception as exc:
             return _softech_down(request, exc)
     snapshot = period.closing_stock
@@ -295,11 +297,7 @@ def compare_line(request, pk):
     line = _line(pk)
     if line is None:
         return _missing('line')
-    try:
-        detail = compare.detail(pk)
-    except Exception as exc:   # the SOFTECH side of the drill-down
-        return _softech_down(request, exc)
-    return Response(_j({**detail, 'line': ser.line_json(line, _party_names([line]))}))
+    return Response(_j({**compare.detail(pk), 'line': ser.line_json(line, _party_names([line]))}))
 
 
 @api_view(['POST'])
@@ -482,12 +480,7 @@ def corrections_from_exception(request):
     except ValueError as e:
         return _bad('bad_input', str(e))
     try:
-        change = plan2_adapter.closed_period_change(exception_id)
-        if change.original_entry is not None:
-            entry = corrections.post_late_correction(change.original_entry.pk, None, user=profile, reason=reason,
-                                                     exception_id=exception_id)
-        else:
-            entry = corrections.post_late_document(exception_id, user=profile, reason=reason)
+        entry = corrections.post_from_exception(exception_id, user=profile, reason=reason)
     except SourceException.DoesNotExist:
         return _missing('exception')
     except ledger.LedgerError as e:

@@ -17,7 +17,7 @@ from apps.branches.models import Branch
 from apps.config.models import SystemSetting
 from apps.finance import recon_labels
 from apps.finance.gl import close as close_service
-from apps.finance.gl import compare, corrections, ledger, softech_checks
+from apps.finance.gl import compare, corrections, ledger, softech_checks, softech_stock
 from apps.finance.gl.balances import trial_balance
 from apps.finance.gl.close import CloseError, checklist, close_month, reopen_month
 from apps.finance.gl.ledger import LedgerError, approve, reverse, save_draft
@@ -162,11 +162,45 @@ class ChecklistTests(CloseBase):
     def test_item_order_and_shape(self):
         items = checklist(month_period(JAN))
         self.assertEqual([i['key'] for i in items], [
-            'previous_closed', 'no_drafts', 'no_exceptions', 'comparison_fresh', 'comparison_explained',
+            'previous_closed', 'no_drafts', 'no_exceptions', 'late_changes', 'comparison_fresh', 'comparison_explained',
             'suppliers_explained', 'drafting_ran', 'stock_snapshot'])
-        self.assertEqual([i['key'] for i in items if not i['blocking']], ['suppliers_explained', 'drafting_ran'])
+        self.assertEqual([i['key'] for i in items if not i['blocking']],
+                         ['late_changes', 'suppliers_explained', 'drafting_ran'])
         for i in items:
             self.assertLessEqual({'key', 'label_ar', 'ok', 'blocking', 'detail'}, set(i))
+
+    def late_change(self, day, *, kind='closed_period_change', status='open', key='l1'):
+        doc = GLSourceDoc.objects.create(source_type='expenses', source_key=key, doc_date=day, content_hash='h',
+                                         status='exception', group_key=key)
+        return SourceException.objects.create(source_doc=doc, kind=kind, source_date=day, status=status,
+                                              detail={'group_key': key})
+
+    def test_open_late_change_before_the_month_warns_without_blocking(self):
+        self.assertTrue(self.items(FEB)['late_changes']['ok'])
+        self.late_change(D(2026, 1, 10))
+        self.late_change(D(2026, 1, 11), status='resolved', key='l2')
+        self.late_change(D(2026, 1, 12), kind='no_rule', key='l3')
+        self.late_change(D(2026, 2, 12), key='l4')   # in the month itself: `no_exceptions` has it
+        item = self.items(FEB)['late_changes']
+        self.assertEqual((item['ok'], item['blocking']), (False, False))
+        self.assertIn('1', item['detail'])
+        self.assertEqual(item['link'], {'kind': 'closed_period_change', 'date_to': '2026-01-31'})
+        self.assertTrue(self.items(JAN)['late_changes']['ok'])
+        self.assertEqual(self.items(FEB)['no_exceptions']['detail'], '1 استثناء مفتوح')
+
+    def test_a_late_change_does_not_stop_the_close(self):
+        self.close(JAN)
+        self.late_change(D(2026, 1, 10))
+        self.assertEqual(self.close(FEB).status, 'closed')
+
+    def test_no_exceptions_link_carries_the_month(self):
+        self.assertEqual(self.items(FEB)['no_exceptions']['link'], {'date_from': '2026-02-01', 'date_to': '2026-02-28'})
+
+    def test_a_bad_stock_line_names_its_store_in_the_checklist(self):
+        with mock.patch('apps.finance.gl.softech_stock.valuation', side_effect=softech_stock.BadStockRow('961')):
+            item = self.items(JAN)['stock_snapshot']
+        self.assertFalse(item['ok'])
+        self.assertIn('961', item['detail'])
 
     def test_checklist_blocks_on_drafts_exceptions_stale_comparison_unexplained_and_missing_stock(self):
         # stale: nothing computed yet
