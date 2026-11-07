@@ -61,8 +61,12 @@ class PurchasingReadTests(TestCase):
     def test_delivery_cannot_read_isr_pushes(self):
         self.assertEqual(self._get('delivery', '/api/purchasing/isr/pushes/').status_code, 403)
 
-    def test_supervisor_cannot_read_engine_results(self):
-        self.assertEqual(self._get('supervisor', '/api/purchasing/summary/').status_code, 403)
+    def test_supervisor_reads_purchasing_but_cannot_run_the_engine(self):
+        # owner 2026-11-06: supervisor holds purchasing view for /supply and accepted the wider read
+        self.assertNotEqual(self._get('supervisor', '/api/purchasing/summary/').status_code, 403)
+        user = make_user('z7a_supervisor_write', role='supervisor')[0]
+        with Tripwire():
+            self.assertEqual(bearer_client(user).post('/api/purchasing/trigger/').status_code, 403)
 
     def test_delivery_cannot_read_the_vendor_list(self):
         self.assertEqual(self._get('delivery', '/api/invoices/vendors/main/').status_code, 403)

@@ -390,7 +390,8 @@ QUERY_PRESCRIPTION_PATIENT_NAME = """
 # Joins stktransm for phcode, localcustomers for name,
 #       items → itemsorigin → custdiscpclassif for classification.
 #
-# Params: docnumber, branchcode
+# Params: docnumber, branchcode, doccode (each doc type is numbered separately per branch,
+# so docnumber + branch alone can match another document's lines)
 #
 # Columns:
 #  [0]  st.itemcode
@@ -435,6 +436,7 @@ QUERY_PRESCRIPTION_LINES_CLASSIFIED = """
         AND ci.doccode    = st.doccode
     WHERE st.docnumber  = CONVERT(numeric(6), ?)
       AND st.branchcode = ?
+      AND st.doccode    = ?
     ORDER BY st.itemcode
 """
 

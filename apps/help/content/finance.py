@@ -1411,8 +1411,8 @@ SCREENS = [
               'Every action is checked on the server (Permissions Matrix, finance module): viewing needs "view", "Resolve" and "Ignore" need "approve", assigning needs "assign" or "approve", and uploading a statement needs "create".'),
         ],
 
-        'updated': '2026-11-05',
-        'change_note': T('فحص تلقائي ليلي للاستثناءات (مكرر، متأخر، فرع مختلف، مبلغ غير معتاد) — مقفول لحد ما الأدمن يفعّله', 'Nightly automatic exception check (duplicate, delayed, other branch, unusual amount) — off until an admin enables it'),
+        'updated': '2026-11-06',
+        'change_note': T('«مدير الجودة» و«المحاسب» بقوا يشوفوا الشاشة دي في القائمة.', 'Quality managers and accountants now see this screen in the menu.'),
     },
     {
         'key': 'finance.reconciliation',
@@ -1612,7 +1612,7 @@ SCREENS = [
              'when': T('قبل مطالبة المورد بمرتجع أو مراجعة سند اتصحّح.', 'Before claiming a return from a supplier or reviewing a corrected voucher.'),
              'open_hint': T('تبويب «غير المسددة (للمالية)».', 'The "Unpaid (for finance)" tab.')},
         ],
-        'updated': '2026-11-04',
-        'change_note': T('جانب التعاقدات للقراءة فقط، والمستحقات في شاشتها', 'Contract side read-only; receivables have their own screen'),
+        'updated': '2026-11-06',
+        'change_note': T('«مدير الجودة» بقى يشوف الشاشة دي في القائمة؛ الصيدلي ماعادش بيشوفها لأنها تقارير على مستوى الشركة.', 'Quality managers now see this screen in the menu; pharmacists no longer do, because these are company-level reports.'),
     },
 ]

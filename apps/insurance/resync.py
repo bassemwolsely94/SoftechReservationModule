@@ -242,7 +242,7 @@ def _import_one(claim, docnumber, branch, docdate, doccode, gross, net, pc,
     from django.db.models import Max
     cur = conn.cursor()
     classified_lines, totals, patient_name = _fetch_and_classify_lines(
-        cur, docnumber, branch, local_disc, imported_disc, tarsia_disc, tarsia_codes,
+        cur, docnumber, branch, doccode, local_disc, imported_disc, tarsia_disc, tarsia_codes,
         docvalue_grandtotal=gross, docvalue_required=net)
     seq = (claim.prescriptions.aggregate(m=Max('sequence'))['m'] or 0) + 1
     return _write_prescription_snapshot(

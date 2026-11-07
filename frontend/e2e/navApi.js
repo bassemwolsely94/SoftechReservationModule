@@ -14,7 +14,7 @@ export const NAV_API = {
   '/missed-sales': '/api/pos-orders/missed-sales/',
   '/transfers': '/api/transfers/',
   '/transits': '/api/transits/',
-  '/demand': '/api/demand/dashboard/',
+  '/demand': '/api/demand/',
   '/followups': '/api/followups/tasks/',
   '/followups/reminders': '/api/followups/refill-reminders/',
   '/delivery': '/api/delivery/',

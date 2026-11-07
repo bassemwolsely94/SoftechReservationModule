@@ -27,7 +27,8 @@ from core.permissions import matrix_permission
 
 # Batch 4, Z-7b: the review list is a report (`analytics` view); confirming / excluding /
 # resetting a flag changes the engine's input — the Market Shortage reviewers (`shortage` approve).
-PHANTOM_READ   = matrix_permission('analytics')
+# viewer keeps analytics view for its report screens but is refused here (owner 2026-11-06).
+PHANTOM_READ   = matrix_permission('analytics', exclude_roles=('viewer',))
 PHANTOM_REVIEW = matrix_permission('shortage', post=('approve',))
 
 logger = logging.getLogger(__name__)

@@ -9,6 +9,7 @@ import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tansta
 import { demandApi } from '../api/client'
 import { tint } from '../theme/theme'
 import CanDo from '../components/CanDo'
+import { usePermission } from '../hooks/usePermission'
 import { formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import SortTh from '../components/SortTh'
@@ -189,8 +190,11 @@ export default function DemandRecoveryPage() {
   const qc = useQueryClient()
   const [modal, setModal] = useState(null)   // { type, row }
 
+  // The dashboard is an analytics page: a role without analytics view works the queue without it.
+  const canSeeDashboard = usePermission('analytics', 'view')
   const { data: kpis } = useQuery({
     queryKey: ['demand-dashboard-kpis'],
+    enabled: canSeeDashboard,
     queryFn: () => demandApi.dashboard().then(r => r.data?.kpis || {}),
     refetchInterval: 120_000,
   })
@@ -254,9 +258,11 @@ export default function DemandRecoveryPage() {
               عملاء طلبوا أصنافاً نفدت ثم عادت للمخزون — تواصل معهم لاسترداد البيعة
             </p>
           </div>
-          <button onClick={() => navigate('/demand/dashboard')} className="btn-secondary text-sm" data-tour="demand-recovery-dashboard">
-            📊 لوحة الطلب الضائع
-          </button>
+          {canSeeDashboard && (
+            <button onClick={() => navigate('/demand/dashboard')} className="btn-secondary text-sm" data-tour="demand-recovery-dashboard">
+              📊 لوحة الطلب الضائع
+            </button>
+          )}
         </div>
       </div>
 
