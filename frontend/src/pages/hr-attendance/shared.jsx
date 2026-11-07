@@ -3,8 +3,49 @@
  * (who may see or change what, which punches count, what a day is).
  */
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { branchesApi } from '../../api/client'
 
-export const errText = e => {
+/** Branches for BranchSelect (same query key as useBranchLabels, so one fetch). */
+export function useBranchList() {
+  const q = useQuery({
+    queryKey: ['branch-labels'],
+    queryFn: () => branchesApi.list({ page_size: 500 }).then(r => r.data),
+    staleTime: 30 * 60 * 1000,
+  })
+  const d = q.data
+  return Array.isArray(d) ? d : (d?.results || [])
+}
+
+/** The text of an error whose body is a Blob (a failed file download): read it, then parse the JSON. */
+export async function blobErrText(e) {
+  const data = e?.response?.data
+  if (data && typeof data.text === 'function') {
+    try {
+      const parsed = JSON.parse(await data.text())
+      return errText({ response: { data: parsed } })
+    } catch { /* not JSON */ }
+  }
+  return errText(e)
+}
+
+/** Only the fields that changed: '' becomes null for the nullable ones. */
+export function changedFields(form, original, nullable = []) {
+  const out = {}
+  Object.keys(form).forEach(k => {
+    const cur = form[k] ?? ''
+    const was = original[k] ?? ''
+    if (String(cur) !== String(was)) out[k] = cur === '' && nullable.includes(k) ? null : cur
+  })
+  return out
+}
+
+export const inputCls = 'mt-0.5 w-full border border-gray-200 rounded-md px-2 py-1 text-sm bg-white'
+export function Field({ label, children }) {
+  return <label className="flex flex-col text-xs text-gray-500">{label}{children}</label>
+}
+
+export function errText(e) {
   const d = e?.response?.data
   if (!d) return 'حدث خطأ — حاول مرة أخرى'
   if (typeof d === 'string') return d

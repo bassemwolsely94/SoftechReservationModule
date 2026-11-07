@@ -14,6 +14,7 @@ import { hrAttendanceApi } from '../api/client'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import useHelpTab from '../help/useHelpTab'
 import DaysTab from './hr-attendance/DaysTab'
+import AccessTab from './hr-attendance/AccessTab'
 import DevicesTab from './hr-attendance/DevicesTab'
 import EmployeesTab from './hr-attendance/EmployeesTab'
 import IssuesTab from './hr-attendance/IssuesTab'
@@ -26,6 +27,7 @@ const TABS = [
   { key: 'issues',    label: '⚠️ مشاكل' },
   { key: 'employees', label: '👥 الموظفون' },
   { key: 'devices',   label: '🖐️ الماكينات' },
+  { key: 'access',    label: '🔑 الصلاحيات', admin: true },
 ]
 
 export default function HRAttendancePage() {
@@ -46,6 +48,15 @@ export default function HRAttendancePage() {
   }).data?.rows?.length
 
   if (me.isLoading) return <div className="p-6 text-gray-400" dir="rtl">جاري التحميل…</div>
+  if (me.isError && me.error?.response?.status !== 403) {
+    return (
+      <div className="p-6 max-w-3xl mx-auto text-center" dir="rtl">
+        <p className="text-red-600 mb-3">تعذّر تحميل الشاشة — تحقق من الاتصال وحاول مرة أخرى.</p>
+        <button type="button" onClick={() => me.refetch()}
+          className="px-3 py-1.5 rounded-md bg-primary text-white text-sm font-bold">إعادة المحاولة</button>
+      </div>
+    )
+  }
   if (!access?.can_view) {
     return (
       <div className="p-6 max-w-3xl mx-auto text-center" dir="rtl">
@@ -66,7 +77,7 @@ export default function HRAttendancePage() {
       </div>
       <DataFreshnessBar domains={['attendance']} />
       <div className="flex flex-wrap gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-4" data-tour="hr-attendance-tabs">
-        {TABS.map(t => (
+        {TABS.filter(t => !t.admin || access.can_admin).map(t => (
           <button key={t.key} type="button" onClick={() => setTab(t.key)}
             className={`px-4 py-2 rounded-md text-sm font-medium transition ${tab === t.key ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
             {t.label}
@@ -80,6 +91,7 @@ export default function HRAttendancePage() {
       {tab === 'issues' && <IssuesTab access={access} />}
       {tab === 'employees' && <EmployeesTab access={access} onOpenDays={openDays} />}
       {tab === 'devices' && <DevicesTab access={access} />}
+      {tab === 'access' && access.can_admin && <AccessTab />}
     </div>
   )
 }

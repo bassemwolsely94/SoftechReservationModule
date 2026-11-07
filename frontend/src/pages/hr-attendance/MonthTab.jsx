@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query'
 import { hrAttendanceApi } from '../../api/client'
 import SortTh from '../../components/SortTh'
 import useServerSort from '../../hooks/useServerSort'
-import { BTN, Empty, Notice, TH, download, errText, hours } from './shared'
+import { BTN, Empty, Notice, TH, blobErrText, download, errText, hours } from './shared'
 
 const SORT_KEYS = ['hr_number', 'name_ar', 'department', 'days_with_punches', 'worked_hours',
                    'expected_hours', 'days_needing_review', 'days_no_punches']
@@ -30,7 +30,7 @@ export default function MonthTab({ month, setMonth, access, onOpen }) {
     try {
       const res = await hrAttendanceApi.exportMonth({ month, status })
       download(res, `attendance-${month}.xlsx`)
-    } catch (e) { setExportErr(errText(e)) }
+    } catch (e) { setExportErr(await blobErrText(e)) }
     setExporting(false)
   }
 

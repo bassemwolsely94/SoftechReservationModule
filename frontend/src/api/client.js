@@ -3071,6 +3071,10 @@ export const hrAttendanceApi = {
   agents:         ()                => api.get('/hr-attendance/agents/'),
   issueAgent:     (name)            => api.post('/hr-attendance/agents/issue/', { name }),
   revokeAgent:    (id)              => api.post(`/hr-attendance/agents/${id}/revoke/`),
+  editDevice:     (id, data)        => api.patch(`/hr-attendance/devices/${id}/`, data),
+  grants:         (params = {})     => api.get('/hr-attendance/grants/', { params }),
+  grant:          (data)            => api.post('/hr-attendance/grants/', data),
+  revokeGrant:    (id)              => api.post(`/hr-attendance/grants/${id}/revoke/`),
 }
 
 // PIC Analytics (doc 33) — every read takes the filter bar as query params (from, to, branch, …).

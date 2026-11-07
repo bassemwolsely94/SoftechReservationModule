@@ -6,18 +6,18 @@
  * An agent's secret is shown ONCE, right after it is issued, held in this component's memory only
  * (never in browser storage) and gone when dismissed or when the page is left.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { hrAttendanceApi } from '../../api/client'
+import BranchSelect from '../../components/BranchSelect'
 import ProgressBar from '../../components/ProgressBar'
 import SortTh from '../../components/SortTh'
 import useSortableRows from '../../hooks/useSortableRows'
-import { BTN, Empty, Notice, TH, errText, stamp } from './shared'
+import { BTN, Empty, Field, Notice, TH, changedFields, errText, inputCls, stamp, useBranchList } from './shared'
 
 const KEYS = ['name', 'location_label', 'branch_name', 'last_contact_at', 'last_drift_seconds']
 const DRIFT_WARN = 300
-const COLLECT_WAIT_MS = 10 * 60 * 1000
-const SLACK_MS = 60 * 1000          // this PC's clock vs the server's
+const COLLECT_WAIT_MS = 10 * 60 * 1000     // browser-side timeout only; never compared with server times
 
 const getValue = (r, key) => r[key]
 
@@ -43,18 +43,34 @@ function RunCell({ run, admin }) {
   )
 }
 
-function CollectNow({ rows, onStart, onEnd }) {
+/**
+ * «تجميع الآن». Progress uses only what the server stamps: each program (agent) has
+ * `collect_requested_at`, set by the request and cleared by the server when the program reports the
+ * collect finished. A machine counts as finished when its program's request is cleared. (A run's own
+ * started_at comes from the program's PC, so it is not used.) The browser clock only times out the wait.
+ */
+function CollectNow({ rows, agents, onStart, onEnd }) {
   const [since, setSince] = useState(null)
+  const [, tick] = useState(0)
   const qc = useQueryClient()
   const assigned = rows.filter(r => r.is_active && r.agent)
-  const finished = since == null ? 0 : assigned.filter(r =>
-    r.last_run?.started_at && Date.parse(r.last_run.started_at) >= since - SLACK_MS).length
+  const pending = new Set((agents || []).filter(a => a.collect_requested_at).map(a => a.id))
+  const finished = since == null ? 0 : assigned.filter(r => !pending.has(r.agent)).length
   const waiting = since != null && finished < assigned.length && Date.now() - since < COLLECT_WAIT_MS
   const start = useMutation({
-    mutationFn: () => hrAttendanceApi.collectNow(),
-    onSuccess: () => { setSince(Date.now()); onStart(); qc.invalidateQueries({ queryKey: ['hr-attendance', 'devices'] }) },
+    mutationFn: async () => {
+      await hrAttendanceApi.collectNow()
+      await qc.refetchQueries({ queryKey: ['hr-attendance', 'devices'] })    // see the request before judging progress
+    },
+    onSuccess: () => { setSince(Date.now()); onStart() },
   })
-  useEffect(() => { if (since != null && !waiting) onEnd() }, [since, waiting, onEnd])
+  useEffect(() => {
+    if (since == null) return undefined
+    if (!waiting) { onEnd(); return undefined }
+    const t = setInterval(() => tick(n => n + 1), 5000)     // re-check the timeout between refetches
+    return () => clearInterval(t)
+  }, [since, waiting, onEnd])
+  const timedOut = since != null && !waiting && finished < assigned.length
   return (
     <div className="mb-3" data-tour="hr-attendance-collect">
       <div className="flex flex-wrap items-center gap-2">
@@ -63,11 +79,65 @@ function CollectNow({ rows, onStart, onEnd }) {
           {waiting ? '⏳ جارٍ التجميع…' : '🔄 تجميع الآن'}</button>
         <span className="text-xs text-gray-500">يبدأ التجميع عند أول اتصال لبرنامج التجميع، وقد يستغرق دقائق.</span>
         <Notice>{start.isError ? errText(start.error) : ''}</Notice>
+        {timedOut && <span className="text-xs text-amber-700">لم ينتهِ التجميع خلال 10 دقائق — تأكد أن برنامج التجميع يعمل.</span>}
       </div>
       {since != null && (
         <ProgressBar className="mt-2 max-w-md" pct={assigned.length ? (finished / assigned.length) * 100 : 0}
           label="تجميع البصمات" message={`${finished} من ${assigned.length} ماكينة`} since={waiting ? since : undefined} />
       )}
+    </div>
+  )
+}
+
+const DEVICE_FIELDS = ['name', 'ip', 'port', 'model_name', 'location_label', 'branch', 'agent', 'is_active']
+const DEVICE_NULLABLE = ['branch', 'agent']
+
+/** Inline machine edit (admin). Only changed fields are sent; the server validates. */
+function DeviceEdit({ d, agents, onClose }) {
+  const qc = useQueryClient()
+  const branches = useBranchList()
+  const [f, setF] = useState(() => Object.fromEntries(DEVICE_FIELDS.map(k => [k, d[k] ?? ''])))
+  const set = (k, v) => setF(p => ({ ...p, [k]: v }))
+  const save = useMutation({
+    mutationFn: data => hrAttendanceApi.editDevice(d.id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['hr-attendance'] }); onClose() },
+  })
+  const diff = changedFields(f, d, DEVICE_NULLABLE)
+  const text = (k, label, type = 'text') => (
+    <Field label={label}>
+      <input type={type} value={f[k]} onChange={e => set(k, e.target.value)} className={inputCls}
+        dir={k === 'ip' || k === 'port' ? 'ltr' : undefined} />
+    </Field>
+  )
+  return (
+    <div data-tour="hr-attendance-device-edit">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        {text('name', 'اسم الماكينة')}
+        {text('ip', 'عنوان IP')}
+        {text('port', 'المنفذ', 'number')}
+        {text('model_name', 'الطراز')}
+        {text('location_label', 'المكان')}
+        <Field label="الفرع">
+          <BranchSelect size="sm" value={f.branch} branches={branches} allLabel="بدون فرع"
+            onChange={v => set('branch', v)} />
+        </Field>
+        <Field label="برنامج التجميع">
+          <select value={f.agent} onChange={e => set('agent', e.target.value)} className={inputCls}>
+            <option value="">بدون</option>
+            {(agents || []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        </Field>
+        <label className="flex items-center gap-2 text-xs text-gray-700 mt-4">
+          <input type="checkbox" checked={!!f.is_active} onChange={e => set('is_active', e.target.checked)} />
+          الماكينة فعّالة
+        </label>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+        <button type="button" disabled={save.isPending || !Object.keys(diff).length || !String(f.name).trim()}
+          onClick={() => save.mutate(diff)} className={`${BTN} bg-primary text-white`}>حفظ</button>
+        <button type="button" onClick={onClose} className="px-2 py-1 rounded-md text-gray-500 hover:bg-gray-100">إلغاء</button>
+        <Notice>{save.isError ? errText(save.error) : ''}</Notice>
+      </div>
     </div>
   )
 }
@@ -142,6 +212,7 @@ function Agents() {
 
 export default function DevicesTab({ access }) {
   const [collecting, setCollecting] = useState(false)
+  const [editing, setEditing] = useState(null)
   const { data, isLoading, error } = useQuery({
     queryKey: ['hr-attendance', 'devices'],
     queryFn: () => hrAttendanceApi.devices().then(r => r.data),
@@ -156,7 +227,7 @@ export default function DevicesTab({ access }) {
   return (
     <div>
       {access.can_manage && (
-        <CollectNow rows={rows} onStart={() => setCollecting(true)} onEnd={stopCollecting} />
+        <CollectNow rows={rows} agents={data?.agents} onStart={() => setCollecting(true)} onEnd={stopCollecting} />
       )}
       <div data-tour="hr-attendance-devices-grid" className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <table className="w-full text-sm">
@@ -170,11 +241,13 @@ export default function DevicesTab({ access }) {
               <th className={TH}>آخر تجميع</th>
               {admin && <th className={TH}>العنوان</th>}
               {admin && <th className={TH}>البرنامج</th>}
+              {admin && <th className={TH}></th>}
             </tr>
           </thead>
           <tbody>
             {sorted.map(d => (
-              <tr key={d.id} className={`border-b border-gray-100 align-top ${d.is_active ? '' : 'opacity-50'}`}>
+              <Fragment key={d.id}>
+              <tr className={`border-b border-gray-100 align-top ${d.is_active ? '' : 'opacity-50'}`}>
                 <td className="px-3 py-2 font-medium">{d.name}
                   {!d.is_active && <span className="ms-1 text-xs text-gray-400">متوقفة</span>}
                   {d.model_name && <div className="text-xs text-gray-400">{d.model_name}</div>}</td>
@@ -186,7 +259,21 @@ export default function DevicesTab({ access }) {
                 <td className="px-3 py-2"><RunCell run={d.last_run} admin={admin} /></td>
                 {admin && <td className="px-3 py-2 tabular-nums text-xs" dir="ltr">{d.ip ? `${d.ip}:${d.port}` : '—'}</td>}
                 {admin && <td className="px-3 py-2 text-gray-600 text-xs">{d.agent_name || '—'}</td>}
+                {admin && (
+                  <td className="px-3 py-2">
+                    <button type="button" onClick={() => setEditing(editing === d.id ? null : d.id)}
+                      className={`${BTN} bg-white border border-gray-200 hover:bg-gray-50`}>تعديل…</button>
+                  </td>
+                )}
               </tr>
+              {admin && editing === d.id && (
+                <tr className="bg-gray-50/70 border-b border-gray-100">
+                  <td colSpan={9} className="px-3 py-3">
+                    <DeviceEdit d={d} agents={data?.agents} onClose={() => setEditing(null)} />
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             ))}
           </tbody>
         </table>
