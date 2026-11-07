@@ -80,3 +80,19 @@
 - Sync failure rate (baseline 9%).
 - Stuck runs (baseline 9).
 - p95 of the top 10 endpoints, after 2 weeks in production.
+
+## 5. Reclaiming space (data lifecycle Stage 2, 2026-11-07)
+
+Retention frees rows, but the files stay large. Stage 2 of the data lifecycle design adds two things:
+
+- **Per-table autovacuum settings** on the engine output tables and the two notification tables, so freed space is
+  reused sooner (`purchasing/0044`, `notifications/0044`).
+- **`manage.py reclaim_space`**, run by hand only. By default it changes nothing and prints each large table's size,
+  real data size and expected gain. `--apply --table X` runs `VACUUM FULL` on that table, which blocks all use of the
+  table until it ends. It is refused outside 01:00–07:00 Cairo time, while a demand engine run is marked running, or
+  when free disk cannot hold a copy of the table plus 1 GB. If the database account cannot read `data_directory`, or
+  the server is on another machine, pass `--data-dir` with a folder on the database disk.
+
+At cutover, restoring the dump already compacts every table, so measure on the VPS first and use `--apply` only if
+needed. Do not use it on the office database just before cutover. Unused indexes are not dropped here: that waits for
+30 days of VPS data including a month-end, then owner approval of the list.
