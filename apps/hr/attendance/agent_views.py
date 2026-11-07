@@ -58,7 +58,7 @@ class AgentView(APIView):
         """The named machine, only if it is assigned to this agent. An inactive machine still
         counts, so punches already waiting on the agent's disk aren't refused."""
         serial = self.body(request).get('device_serial')
-        if not isinstance(serial, str):
+        if not ingest.is_storable_text(serial):
             raise ParseError('طلب غير صالح')
         device = AttendanceDevice.objects.filter(serial=serial, agent=request.auth).first()
         if device is None:
@@ -98,7 +98,11 @@ class AgentPunchesView(AgentView):
 class AgentRosterView(AgentView):
 
     def post(self, request):
-        return Response({'stored': ingest.store_roster(self.device(request), self.rows(request, 'users'))})
+        users = self.rows(request, 'users')
+        if len(users) > ingest.MAX_ROSTER_USERS:
+            return Response({'detail': 'عدد المستخدمين أكبر من المسموح'},
+                            status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+        return Response({'stored': ingest.store_roster(self.device(request), users)})
 
 
 class AgentRunsView(AgentView):

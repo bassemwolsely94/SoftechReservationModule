@@ -21,6 +21,7 @@ from . import resolve
 logger = logging.getLogger('elrezeiky.hr_attendance')
 
 MAX_PUNCHES_PER_REQUEST = 2000
+MAX_ROSTER_USERS = 20000   # far above any machine's capacity; the agent sends a roster in one request
 FLAG_BAD_DATE = 'bad_date'
 EARLIEST_GOOD_DATE = _dt.date(2015, 1, 1)
 MAX_FUTURE_DAYS = 1
@@ -42,6 +43,21 @@ def is_bad_date(d, today) -> bool:
     if d is None:
         return True
     return d < EARLIEST_GOOD_DATE or d > today + _dt.timedelta(days=MAX_FUTURE_DAYS)
+
+
+def is_storable_text(value) -> bool:
+    """PostgreSQL refuses NUL and text that isn't valid UTF-8 (a lone surrogate from JSON)."""
+    if not isinstance(value, str) or chr(0) in value:
+        return False
+    try:
+        value.encode('utf-8')
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+def _storable(text) -> str:
+    return text.replace(chr(0), '').encode('utf-8', 'ignore').decode('utf-8')
 
 
 def _is_int(value) -> bool:
@@ -69,7 +85,7 @@ def _parse_time(value):
 
 
 def _clean_code(value) -> str:
-    if not isinstance(value, str) or len(value) > _MAX_CODE or '\x00' in value:
+    if not is_storable_text(value) or len(value) > _MAX_CODE:
         raise Malformed('user_code')
     return value
 
@@ -94,12 +110,12 @@ def _punch_from_row(device, row, today):
 def _resolve_all(codes) -> None:
     """Resolution is derived and is recalculated on the next resend, so its failure must never
     refuse punches that are already safely stored."""
-    try:
-        for code in codes:
+    for code in codes:
+        try:
             with transaction.atomic():
                 resolve.resolve_user_code(code)
-    except Exception as exc:  # the punches are stored; see the docstring
-        logger.error('attendance resolve failed: %s', type(exc).__name__)
+        except Exception as exc:  # the punches are stored; see the docstring
+            logger.error('attendance resolve failed: %s', type(exc).__name__)
 
 
 def store_punches(device, rows, today=None) -> tuple[int, int]:
@@ -129,7 +145,7 @@ def store_roster(device, users) -> int:
         if not isinstance(user, dict):
             raise Malformed('roster row')
         name = user.get('name')
-        name = name.replace('\x00', '')[:_MAX_NAME] if isinstance(name, str) else ''
+        name = _storable(name)[:_MAX_NAME] if isinstance(name, str) else ''
         clean.append((_clean_code(user.get('user_code')), name, bool(user.get('is_admin'))))
     now = timezone.now()
     changed = set()
@@ -175,15 +191,16 @@ def _drift(value):
 
 
 def _update_device(device, run, finished_at, now) -> None:
-    """Device state follows the newest run. Only a success counts as contact, so a machine that
-    keeps failing still looks silent to the health check."""
+    """Device state follows the latest report to arrive. Comparing started_at would trust the
+    agent PC's clock, and one wrong date would freeze this state. Only a success counts as contact,
+    so a machine that keeps failing still looks silent to the health check. On a success the drift
+    is written even when null: an unknown clock must not keep showing the last good value."""
     fields = {'last_status': run.status}
     if run.status == 'success':
         contact = min(finished_at or run.started_at, now)
         if device.last_contact_at is None or contact > device.last_contact_at:
             fields['last_contact_at'] = contact
-        if run.drift_seconds is not None:
-            fields['last_drift_seconds'] = run.drift_seconds
+        fields['last_drift_seconds'] = run.drift_seconds
         if run.device_log_count is not None:
             fields['last_log_count'] = run.device_log_count
     AttendanceDevice.objects.filter(pk=device.pk).update(**fields)
@@ -197,13 +214,12 @@ def store_run(agent, device, body, today=None) -> bool:
     status = body.get('status')
     if started_at is None:
         raise Malformed('started_at')
-    if status not in dict(CollectionRun.STATUS_CHOICES):
+    if not isinstance(status, str) or status not in dict(CollectionRun.STATUS_CHOICES):
         raise Malformed('status')
     finished_at = _parse_moment(body.get('finished_at'))
     error = body.get('error')
     with transaction.atomic():
         locked = AttendanceDevice.objects.select_for_update().get(pk=device.pk)
-        newer_exists = CollectionRun.objects.filter(device=device, started_at__gt=started_at).exists()
         run, created = CollectionRun.objects.get_or_create(
             device=device, started_at=started_at,
             defaults={
@@ -213,11 +229,11 @@ def store_run(agent, device, body, today=None) -> bool:
                 'newest_date': _range_date(body.get('newest_date'), today),
                 'drift_seconds': _drift(body.get('drift_seconds')),
                 'device_log_count': _count_or_none(body.get('device_log_count')),
-                'error': redact(error).replace('\x00', '')[:_MAX_ERROR] if isinstance(error, str) else '',
+                'spool_waiting': _count_or_none(body.get('spool_waiting')),
+                'error': _storable(redact(error))[:_MAX_ERROR] if isinstance(error, str) else '',
             })
         if created:
-            if not newer_exists:
-                _update_device(locked, run, finished_at, timezone.now())
+            _update_device(locked, run, finished_at, timezone.now())
             if body.get('collect_done') is True:
                 type(agent).objects.filter(pk=agent.pk).update(collect_requested_at=None)
     return created

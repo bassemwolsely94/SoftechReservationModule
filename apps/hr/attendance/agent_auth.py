@@ -33,6 +33,7 @@ def agent_for_secret(secret):
     """The active agent holding this secret, or None."""
     if not secret:
         return None
+    # The lookup is on the hash, never the secret, so its timing tells nothing about the secret.
     digest = hash_secret(secret)
     agent = AttendanceAgent.objects.filter(token_hash=digest, revoked_at__isnull=True).first()
     if agent is None or not hmac.compare_digest(_as_bytes(agent.token_hash), _as_bytes(digest)):

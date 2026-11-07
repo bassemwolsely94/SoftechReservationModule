@@ -10,7 +10,9 @@ from io import StringIO
 from unittest import mock
 
 from django.core.management import call_command
+from django.db import connection
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -41,7 +43,8 @@ class IngestBase(TestCase):
         self.api.credentials(**{HEADER: SECRET})
 
     def post(self, endpoint, body, client=None):
-        return (client or self.api).post(f'{PREFIX}{endpoint}/', body, format='json')
+        # json.dumps, as the agent does: its ASCII escapes can carry text no client encoder would send
+        return (client or self.api).post(f'{PREFIX}{endpoint}/', json.dumps(body), content_type='application/json')
 
     def send(self, rows, serial='SN1'):
         return self.post('punches', {'device_serial': serial, 'punches': rows})
@@ -197,7 +200,7 @@ class PunchTests(IngestBase):
                      [punch(raw_stamp=1), punch(raw_stamp=-1)], [punch(raw_stamp=True)],
                      [punch(raw_stamp=2 ** 63)], [punch(user_code=5)], [punch(user_code='x' * 31)],
                      [punch(user_code='a\x00b')], [punch(state='in')], [punch(state=70000)],
-                     [punch(verify_mode=None)]):
+                     [punch(verify_mode=None)], [punch(user_code='a' + chr(0xD800))]):
             resp = self.send(rows)
             self.assertEqual(resp.status_code, 400, rows)
             self.assertIsInstance(resp.json(), dict)
@@ -209,6 +212,26 @@ class PunchTests(IngestBase):
         self.assertIsInstance(resp.json(), dict)
         resp = self.api.post(f'{PREFIX}punches/', '[1]', content_type='application/json')
         self.assertEqual(resp.status_code, 400)
+
+    def test_resend_with_different_data_never_changes_the_stored_punch(self):
+        self.send([punch(date='2026-10-01', time='09:00:00', verify_mode=1)])
+        before = AttendancePunch.objects.values().get()
+        body = self.send([punch(date='2026-10-02', time='17:00:00', verify_mode=9)]).json()
+        self.assertEqual(body, {'accepted': 0, 'duplicate': 1})
+        self.assertEqual(AttendancePunch.objects.values().get(), before)
+
+    def test_batch_holds_the_device_lock(self):
+        # The counts are true only while no other batch for this machine can insert in between.
+        with CaptureQueriesContext(connection) as ctx:
+            ingest.store_punches(self.device, [punch()])
+        self.assertTrue(any('FOR UPDATE' in q['sql'] and 'hr_attendancedevice' in q['sql']
+                            for q in ctx.captured_queries))
+
+    def test_agents_cannot_edit_or_delete(self):
+        for endpoint in ('config', 'punches', 'roster', 'runs'):
+            url = f'{PREFIX}{endpoint}/'
+            for call in (self.api.put, self.api.patch, self.api.delete):
+                self.assertEqual(call(url, {}, format='json').status_code, 405, (endpoint, call))
 
     def test_inactive_device_still_stores_its_punches(self):
         self.device.is_active = False
@@ -233,6 +256,13 @@ class PunchTests(IngestBase):
         self.assertEqual(body, {'accepted': 1, 'duplicate': 0})
         self.assertEqual(AttendancePunch.objects.count(), 1)
         self.assertNotIn('1001', ''.join(logs.output))
+
+    def test_one_failing_code_does_not_stop_the_others(self):
+        with mock.patch('apps.hr.attendance.ingest.resolve.resolve_user_code',
+                        side_effect=RuntimeError('boom')) as resolving:
+            with self.assertLogs('elrezeiky.hr_attendance', 'ERROR'):
+                self.send([punch(user_code='1', raw_stamp=1), punch(user_code='2', raw_stamp=2)])
+        self.assertEqual(resolving.call_count, 2)
 
 
 class IsBadDateTests(TestCase):
@@ -365,9 +395,19 @@ class RosterTests(IngestBase):
         self.assertEqual(self.roster([{'user_code': '7', 'name': 'n' * 300 + '\x00', 'is_admin': False}]).status_code, 200)
         self.assertEqual(DeviceUser.objects.get().device_name, 'n' * 120)
 
+    def test_unstorable_name_text_is_cleaned_not_refused(self):
+        self.assertEqual(self.roster([{'user_code': '7', 'name': 'Sa' + chr(0xD800) + 'mer', 'is_admin': False}]).status_code, 200)
+        self.assertEqual(DeviceUser.objects.get().device_name, 'Samer')
+
+    def test_oversized_roster_is_413(self):
+        users = [{'user_code': str(i), 'name': '', 'is_admin': False}
+                 for i in range(ingest.MAX_ROSTER_USERS + 1)]
+        self.assertEqual(self.roster(users).status_code, 413)
+        self.assertEqual(DeviceUser.objects.count(), 0)
+
     def test_malformed_roster_is_400(self):
         for users in ('x', None, ['x'], [{'name': 'A'}], [{'user_code': 5, 'name': 'A'}],
-                      [{'user_code': 'x' * 31, 'name': 'A'}]):
+                      [{'user_code': 'x' * 31, 'name': 'A'}], [{'user_code': 'a' + chr(0xD800), 'name': 'A'}]):
             self.assertEqual(self.roster(users).status_code, 400, users)
         self.assertEqual(DeviceUser.objects.count(), 0)
 
@@ -406,6 +446,14 @@ class RunTests(IngestBase):
         self.assertIsNone(run.new_count)
         self.assertIsNone(run.duplicate_count)
 
+    def test_spool_waiting_is_stored_and_optional(self):
+        self.post('runs', self.run_body(spool_waiting=12, unknown_key='ignored'))
+        self.assertEqual(CollectionRun.objects.get().spool_waiting, 12)
+        body = self.run_body(started_at='2026-10-01T11:00:00')
+        del body['spool_waiting']
+        self.assertEqual(self.post('runs', body).status_code, 200)
+        self.assertIsNone(CollectionRun.objects.order_by('-started_at').first().spool_waiting)
+
     def test_failed_run_keeps_last_contact(self):
         self.post('runs', self.run_body())
         self.device.refresh_from_db()
@@ -416,6 +464,14 @@ class RunTests(IngestBase):
         self.device.refresh_from_db()
         self.assertEqual((self.device.last_status, self.device.last_contact_at), ('failed', contact))
         self.assertEqual((self.device.last_drift_seconds, self.device.last_log_count), (-180, 3906))
+
+    def test_success_with_unknown_clock_does_not_show_the_old_drift(self):
+        self.post('runs', self.run_body())
+        self.post('runs', self.run_body(started_at='2026-10-01T11:00:00', finished_at='2026-10-01T11:00:30',
+                                        drift_seconds=None, device_log_count=None))
+        self.device.refresh_from_db()
+        self.assertIsNone(self.device.last_drift_seconds)
+        self.assertEqual(self.device.last_log_count, 3906)
 
     def test_null_fields_are_kept_null_on_a_success_run(self):
         resp = self.post('runs', self.run_body(drift_seconds=None, device_log_count=None, oldest_date=None,
@@ -470,12 +526,20 @@ class RunTests(IngestBase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(CollectionRun.objects.get().drift_seconds, 2_147_483_647)
 
-    def test_older_run_does_not_overwrite_the_device_state(self):
-        self.post('runs', self.run_body(started_at='2026-10-01T12:00:00', finished_at='2026-10-01T12:01:00',
-                                        status='failed'))
-        self.post('runs', self.run_body())
+    def test_pc_clock_set_ahead_once_does_not_freeze_the_device_state(self):
+        ahead = (timezone.localtime() + _dt.timedelta(days=1500)).replace(tzinfo=None).isoformat()
+        self.post('runs', self.run_body(started_at=ahead, finished_at=ahead))
+        self.post('runs', self.run_body(status='failed', drift_seconds=None))
         self.device.refresh_from_db()
         self.assertEqual(self.device.last_status, 'failed')
+
+    def test_older_run_arriving_late_does_not_move_last_contact_back(self):
+        self.post('runs', self.run_body(started_at='2026-10-01T12:00:00', finished_at='2026-10-01T12:01:00'))
+        self.device.refresh_from_db()
+        contact = self.device.last_contact_at
+        self.post('runs', self.run_body())
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.last_contact_at, contact)
         self.assertEqual(CollectionRun.objects.count(), 2)
 
     def test_last_contact_never_passes_the_server_clock(self):
@@ -488,7 +552,8 @@ class RunTests(IngestBase):
 
     def test_malformed_run_is_400(self):
         for over in ({'started_at': None}, {'started_at': 'junk'}, {'started_at': '2026-13-45T00:00:00'},
-                     {'status': 'maybe'}, {'device_serial': 5}):
+                     {'status': 'maybe'}, {'status': []}, {'device_serial': 5},
+                     {'device_serial': 'a\x00b'}):
             self.assertEqual(self.post('runs', self.run_body(**over)).status_code, 400, over)
         self.assertEqual(CollectionRun.objects.count(), 0)
 

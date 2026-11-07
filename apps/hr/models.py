@@ -677,6 +677,7 @@ class CollectionRun(models.Model):
     newest_date  = models.DateField(null=True, blank=True)
     drift_seconds    = models.IntegerField(null=True, blank=True)
     device_log_count = models.PositiveIntegerField(null=True, blank=True)
+    spool_waiting    = models.PositiveIntegerField(null=True, blank=True)   # files still waiting on the agent
     status = models.CharField(max_length=8, choices=STATUS_CHOICES, default='success')
     error  = models.CharField(max_length=255, blank=True)
 
