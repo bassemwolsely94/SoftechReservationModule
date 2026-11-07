@@ -11,8 +11,6 @@ import json
 import logging
 import os
 import tempfile
-import xml.etree.ElementTree as ET
-import zipfile
 from contextlib import contextmanager
 from decimal import Decimal, InvalidOperation
 
@@ -52,8 +50,6 @@ CONFLICT_CLOSE_CODES = {'not_open', 'close_running', 'superseded', 'next_not_ope
 STORES_SETTING = 'gl_closing_stock_stores'
 MAX_STORE_CODE = 10   # ClosingStockStore.store_code
 XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-# what openpyxl raises on a file that is a zip but not a sound workbook
-_BAD_WORKBOOK = (zipfile.BadZipFile, KeyError, ValueError, ET.ParseError, EOFError)
 NOT_FOUND = {'period': 'الشهر غير موجود', 'line': 'سطر المقارنة غير موجود', 'entry': 'القيد غير موجود',
              'exception': 'الاستثناء غير موجود', 'check': 'الفحص غير موجود', 'kind': 'الأستاذ المساعد غير معروف'}
 
@@ -62,6 +58,14 @@ NOT_FOUND = {'period': 'الشهر غير موجود', 'line': 'سطر المق�
 
 def _missing(what):
     return _bad('not_found', NOT_FOUND[what], status.HTTP_404_NOT_FOUND)
+
+
+def _strict_id(value):
+    """An id from a request body: an int or its digits, else ValueError."""
+    pk = value if isinstance(value, int) and not isinstance(value, bool) else _int(value) if isinstance(value, str) else None
+    if pk is None:
+        raise ValueError('رقم غير صحيح')
+    return pk
 
 
 def _body(request) -> dict:
@@ -258,9 +262,9 @@ def compare_refresh(request):
     if profile is None:
         return _no_profile()
     data = _body(request)
-    raw = data.get('period')
-    pk = raw if isinstance(raw, int) else _int(raw) if isinstance(raw, str) else None
-    if pk is None:
+    try:
+        pk = _strict_id(data.get('period'))
+    except ValueError:
         return _bad('bad_input', 'اختر الشهر')
     period = _period(pk)
     if period is None:
@@ -434,14 +438,6 @@ def _correction_lines(raw) -> list:
     return out
 
 
-def _strict_id(value):
-    """An id from a JSON body: an int or its digits, else ValueError."""
-    pk = value if isinstance(value, int) and not isinstance(value, bool) else _int(value) if isinstance(value, str) else None
-    if pk is None:
-        raise ValueError('رقم غير صحيح')
-    return pk
-
-
 def _posted(entry):
     return Response(_entry_detail(_entries_qs().get(pk=entry.pk)), status=status.HTTP_201_CREATED)
 
@@ -488,8 +484,8 @@ def corrections_from_exception(request):
     try:
         change = plan2_adapter.closed_period_change(exception_id)
         if change.original_entry is not None:
-            entry = corrections.post_late_correction(change.original_entry.pk, change.proposed_lines, user=profile,
-                                                     reason=reason, exception_id=exception_id)
+            entry = corrections.post_late_correction(change.original_entry.pk, None, user=profile, reason=reason,
+                                                     exception_id=exception_id)
         else:
             entry = corrections.post_late_document(exception_id, user=profile, reason=reason)
     except SourceException.DoesNotExist:
@@ -535,6 +531,8 @@ def _parse_refusal(e: manual_import.ParseError):
 def _include_mixed(request) -> list:
     """Multipart: repeated fields, or one field holding a JSON list."""
     raw = request.data.getlist('include_mixed') if hasattr(request.data, 'getlist') else []
+    if not all(isinstance(k, str) for k in raw):   # sent as a file
+        raise ValueError('قائمة المجموعات غير صحيحة')
     if len(raw) == 1 and raw[0].lstrip()[:1] in ('[', '{'):
         try:
             raw = json.loads(raw[0])
@@ -556,10 +554,6 @@ def _journal(request, run):
                                    book=request.data.get('book') or None, max_rows=max_import_rows())))
     except manual_import.ParseError as e:
         return _parse_refusal(e)
-    except ledger.LedgerError as e:
-        return _ledger_error(e)
-    except _BAD_WORKBOOK:
-        return _parse_refusal(manual_import.ParseError('unreadable'))
 
 
 @api_view(['POST'])
@@ -604,15 +598,14 @@ def validation_report(request):
         return _bad('bad_input', f'التاريخ قبل {validation.START.isoformat()}')
     try:
         with _saved_upload(request.FILES['file']) as path:
-            result = validation.validate(path, through=through)
+            result = validation.validate(path, through=through, max_rows=max_import_rows())
     except validation.WorkbookError as e:
         return _bad(e.code, e.message)
-    except _BAD_WORKBOOK:
-        return _bad('unreadable', validation.MESSAGES['unreadable'])
     resp = HttpResponse(validation.export_validation(result), content_type=XLSX_CONTENT_TYPE)
     resp['Content-Disposition'] = f'attachment; filename="gl_validation_{through.isoformat()}.xlsx"'
     resp['X-GL-Validation-Differences'] = str(result['totals']['differences'])
-    resp['Access-Control-Expose-Headers'] = 'X-GL-Validation-Differences'
+    resp['X-GL-Validation-Difference-Total'] = str(result['totals']['difference_total'])
+    resp['Access-Control-Expose-Headers'] = 'X-GL-Validation-Differences, X-GL-Validation-Difference-Total'
     return resp
 
 

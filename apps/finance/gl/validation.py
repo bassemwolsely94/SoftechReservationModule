@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import datetime
 import math
-import zipfile
 from collections import defaultdict
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
@@ -31,7 +30,7 @@ from apps.finance.models import GLAccount, GLParty
 
 from .balances import COUNTED, YEAR_END_CLOSING, _base
 from .exports import HEAD_FILL, MONEY, _bold_row, _num
-from .manual_import import _branch_index, resolve_branch
+from .manual_import import READ_ERRORS, _branch_index, resolve_branch
 from .names import normalize_ar
 
 START = datetime.date(2026, 1, 1)
@@ -60,6 +59,7 @@ MESSAGES = {
     'unreadable': 'تعذّر قراءة الملف — تأكد أنه ملف Excel بصيغة .xlsx سليم.',
     'sheet_not_found': 'الشيت المطلوب غير موجود في الملف',
     'header_not_found': 'لم يتم العثور على صف العناوين في الشيت',
+    'too_many_rows': 'الملف أكبر من حد الشاشة — شغّل المراجعة من السيرفر بأمر gl_validate_workbook.',
 }
 
 
@@ -98,7 +98,7 @@ def _open(path):
         raise WorkbookError('xls_not_supported')
     try:
         return openpyxl.load_workbook(path, read_only=True, data_only=True)
-    except (InvalidFileException, zipfile.BadZipFile, OSError, KeyError, ValueError):
+    except (InvalidFileException, OSError, *READ_ERRORS):
         raise WorkbookError('unreadable')
 
 
@@ -115,9 +115,21 @@ def _norm_cell(v) -> str:
     return normalize_ar(v) if isinstance(v, str) else ''
 
 
-def _rows_after_header(ws, labels):
+def _sheet_rows(ws, max_rows):
+    """The sheet's rows, up to `max_rows` (the API's cap, header included). A failed read is an unreadable file; only
+    the read: an error in the caller's code stays a bug."""
+    try:
+        for n, cells in enumerate(ws.iter_rows(values_only=True), start=1):
+            if max_rows is not None and n > max_rows:
+                raise WorkbookError('too_many_rows')
+            yield cells
+    except READ_ERRORS:
+        raise WorkbookError('unreadable')
+
+
+def _rows_after_header(ws, labels, max_rows=None):
     """-> (header cells, data rows) of the first row within the scan that holds one of `labels`."""
-    rows = ws.iter_rows(values_only=True)
+    rows = _sheet_rows(ws, max_rows)
     for i, cells in enumerate(rows):
         if i >= HEADER_SCAN_ROWS:
             break
@@ -162,10 +174,10 @@ def _is_total(*cells) -> bool:
     return any(isinstance(c, str) and c.strip().lower().endswith('total') for c in cells)
 
 
-def _pivot_rows(ws):
+def _pivot_rows(ws, max_rows=None):
     """Account rows of a `رقم العملية` pivot -> (header cells, [(code, name, cells)]). The group sits
     only on its first row and the `Total` / `Grand Total` rows are skipped."""
-    header, rows = _rows_after_header(ws, {_CODE_LABEL})
+    header, rows = _rows_after_header(ws, {_CODE_LABEL}, max_rows)
     norm = [_norm_cell(c) for c in header]
     code_i, name_i = norm.index(_CODE_LABEL), (norm.index(_NAME_LABEL) if _NAME_LABEL in norm else None)
     out = []
@@ -180,14 +192,14 @@ def _pivot_rows(ws):
     return header, norm, out, (name_i if name_i is not None else code_i)
 
 
-def parse_branch_trial_balance(path, sheet_name=BRANCH_SHEET) -> list[BranchTBRow]:
+def parse_branch_trial_balance(path, sheet_name=BRANCH_SHEET, max_rows=None) -> list[BranchTBRow]:
     """«ميزان الفروع»: one column per finance branch name, between `Trans. Name` and `Grand Total`."""
     wb = _open(path)
     try:
         ws = _sheet(wb, sheet_name)
         if ws is None:
             raise WorkbookError('sheet_not_found', sheet_name)
-        header, norm, rows, name_i = _pivot_rows(ws)
+        header, norm, rows, name_i = _pivot_rows(ws, max_rows)
         branch_cols = []
         for pos in range(name_i + 1, len(header)):
             label = header[pos]
@@ -212,14 +224,14 @@ def _month(v):
     return v if isinstance(v, int) and 1 <= v <= 12 else None
 
 
-def parse_monthly_sheet(path, sheet_name=MONTHLY_SHEET) -> list[MonthRow]:
+def parse_monthly_sheet(path, sheet_name=MONTHLY_SHEET, max_rows=None) -> list[MonthRow]:
     """«المشتريات والمبيعات»: integer month headers (1..12)."""
     wb = _open(path)
     try:
         ws = _sheet(wb, sheet_name)
         if ws is None:
             raise WorkbookError('sheet_not_found', sheet_name)
-        header, _norm, rows, name_i = _pivot_rows(ws)
+        header, _norm, rows, name_i = _pivot_rows(ws, max_rows)
         months = [(pos, _month(label)) for pos, label in enumerate(header) if pos > name_i and _month(label)]
         return [MonthRow(code, month, _amount(_cell(cells, pos)))
                 for code, _name, cells in rows for pos, month in months
@@ -228,14 +240,14 @@ def parse_monthly_sheet(path, sheet_name=MONTHLY_SHEET) -> list[MonthRow]:
         wb.close()
 
 
-def parse_party_sheet(path, sheet_name) -> list[PartyRow]:
+def parse_party_sheet(path, sheet_name, max_rows=None) -> list[PartyRow]:
     """A party pivot: the code column is found by its label, the name is the cell to its right."""
     wb = _open(path)
     try:
         ws = _sheet(wb, sheet_name)
         if ws is None:
             raise WorkbookError('sheet_not_found', sheet_name)
-        header, rows = _rows_after_header(ws, _PARTY_LABELS)
+        header, rows = _rows_after_header(ws, _PARTY_LABELS, max_rows)
         norm = [_norm_cell(c) for c in header]
         code_i = next(i for i, n in enumerate(norm) if n in _PARTY_LABELS)
         pos = {n: i for i, n in enumerate(norm) if n}
@@ -298,13 +310,13 @@ def _account_totals(rows, names):
     return sorted(acc.values(), key=lambda t: t['code'])
 
 
-def _ytd(path, through, names, unmapped):
+def _ytd(path, through, names, unmapped, max_rows=None):
     """Per account and branch. Totals compare an account's ledger total with the sum of every branch
     column of the workbook, so a branch that could not be mapped still shows."""
     idx = _branch_index()
     branches = {b.pk: b for b in Branch.objects.all()}
     workbook, wb_total = defaultdict(lambda: _ZERO), defaultdict(lambda: _ZERO)
-    for r in parse_branch_trial_balance(path):
+    for r in parse_branch_trial_balance(path, max_rows=max_rows):
         b = resolve_branch(r.branch_label, _index=idx)
         wb_total[r.code] += r.balance
         if b is None:
@@ -331,10 +343,10 @@ def _ytd(path, through, names, unmapped):
     return rows, totals
 
 
-def _monthly(path, through, names):
+def _monthly(path, through, names, max_rows=None):
     end = min(through, datetime.date(2026, 12, 31))
     workbook = defaultdict(lambda: _ZERO)
-    for r in parse_monthly_sheet(path):
+    for r in parse_monthly_sheet(path, max_rows=max_rows):
         if r.month <= end.month:
             workbook[(r.code, r.month)] += r.amount
     codes = {c for c, _m in workbook}
@@ -349,7 +361,7 @@ def _monthly(path, through, names):
     return rows, _account_totals(rows, names)
 
 
-def _parties(path, through):
+def _parties(path, through, max_rows=None):
     rows, totals, missing, unmapped = [], [], [], []
     wb = _open(path)
     try:
@@ -361,7 +373,7 @@ def _parties(path, through):
             missing.append(sheet)
             continue
         workbook, names = defaultdict(lambda: _ZERO), {}
-        for r in parse_party_sheet(path, sheet):
+        for r in parse_party_sheet(path, sheet, max_rows=max_rows):
             workbook[r.party_code] += r.balance
             names.setdefault(r.party_code, r.name)
         ledger = _net(_ledger_lines(START, through).filter(account__code=account), 'party_code')
@@ -380,13 +392,14 @@ def _parties(path, through):
     return rows, totals, missing, unmapped
 
 
-def validate(path, *, through: datetime.date = DEFAULT_THROUGH) -> dict:
+def validate(path, *, through: datetime.date = DEFAULT_THROUGH, max_rows=None) -> dict:
     names = dict(GLAccount.objects.values_list('code', 'name'))
     unmapped = []
-    ytd, ytd_totals = _ytd(path, through, names, unmapped)
-    monthly, monthly_totals = _monthly(path, through, names)
-    parties, party_totals, missing, unmapped_parties = _parties(path, through)
-    wb_codes = {r.code for r in parse_branch_trial_balance(path)} | {r.code for r in parse_monthly_sheet(path)}
+    ytd, ytd_totals = _ytd(path, through, names, unmapped, max_rows)
+    monthly, monthly_totals = _monthly(path, through, names, max_rows)
+    parties, party_totals, missing, unmapped_parties = _parties(path, through, max_rows)
+    wb_codes = ({r.code for r in parse_branch_trial_balance(path, max_rows=max_rows)}
+                | {r.code for r in parse_monthly_sheet(path, max_rows=max_rows)})
     unknown = sorted(c for c in wb_codes if c not in names)
     return {
         'through': through.isoformat(),
@@ -394,7 +407,9 @@ def validate(path, *, through: datetime.date = DEFAULT_THROUGH) -> dict:
         'unmapped_branches': unmapped, 'unknown_accounts': unknown,
         'unmapped_parties': unmapped_parties, 'missing_sheets': missing,
         'totals': {'ytd': ytd_totals, 'monthly': monthly_totals, 'parties': party_totals,
-                   'differences': len(ytd) + len(monthly) + len(parties)},
+                   'differences': len(ytd) + len(monthly) + len(parties),
+                   # absolute, over the rows `differences` counts: the three views can show one difference twice
+                   'difference_total': sum((abs(r['difference']) for r in (*ytd, *monthly, *parties)), _ZERO)},
     }
 
 

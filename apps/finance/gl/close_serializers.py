@@ -5,7 +5,7 @@ from apps.audit.models import AuditLog
 from apps.finance.models import FinancialPeriod
 from apps.finance.recon_labels import branch_label
 
-from . import close, ledger
+from . import close, ledger, softech_stock
 from .views import _branch_label, _j
 
 GENERIC_CLOSE_FAILURE = 'الإقفال وقف بسبب خطأ غير متوقع، جرّب تاني أو بلّغ الدعم (مرجع: {ref}).'
@@ -70,6 +70,12 @@ def period_detail_json(p) -> dict:
                                 and timezone.now() - p.closing_started_at > close.CLOSING_TAKEOVER)}
 
 
+def _missing_stores_json(codes) -> list:
+    """Each missing store with its branch's label (an HQ store's own code is no branch)."""
+    rules = softech_stock.store_map(codes) if codes else {}
+    return [{'store_code': c, 'branch_label': branch_label(rules[c].branch_code)} for c in codes]
+
+
 def store_json(s) -> dict:
     """A ClosingStockStore row."""
     return _j({'store_code': s.store_code, 'store_name': s.store_name, 'branch_id': s.branch_id,
@@ -80,14 +86,14 @@ def store_json(s) -> dict:
 def snapshot_json(s) -> dict:
     return _j({'id': s.pk, 'as_of': s.as_of, 'read_at': s.read_at,
                'read_by_name': s.read_by.full_name if s.read_by_id else '', 'total': s.total,
-               'excluded_total': s.excluded_total, 'missing_stores': s.missing_stores,
+               'excluded_total': s.excluded_total, 'missing_stores': _missing_stores_json(s.missing_stores),
                'entry_id': s.entry_id, 'reversal_id': s.reversal_id})
 
 
 def valuation_json(v) -> dict:
     """A live preview of `softech_stock.valuation`: same store row as a saved snapshot."""
     return _j({'as_of': v.as_of, 'total': v.total, 'excluded_total': v.excluded_total,
-               'missing_stores': [{'store_code': s, 'branch_label': branch_label(s)} for s in v.missing_stores],
+               'missing_stores': _missing_stores_json(v.missing_stores),
                'carried_stores': v.carried_stores,
                'stores': [{'store_code': s['store_code'], 'store_name': s['store_name'],
                            'branch_label': branch_label(s['branch_code']), 'included': s['included'],

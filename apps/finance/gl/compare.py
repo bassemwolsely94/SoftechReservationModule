@@ -35,7 +35,8 @@ class RefreshBusy(Exception):
 
 @contextmanager
 def refresh_lock():
-    """Non-blocking PostgreSQL session lock: ``with refresh_lock() as got``. A dead run's connection releases it."""
+    """Non-blocking PostgreSQL session lock: ``with refresh_lock() as got``. A dead run's connection releases it.
+    Assumes one server session per connection: under transaction pooling (PgBouncer) a session lock would not hold."""
     with connection.cursor() as cur:
         cur.execute('SELECT pg_try_advisory_lock(%s)', [REFRESH_LOCK])
         got = bool(cur.fetchone()[0])
@@ -167,7 +168,7 @@ def is_stale(period) -> bool:
     oldest = lines.order_by('computed_at').values_list('computed_at', flat=True).first()
     if AuditLog.objects.filter(action=CHECK_UPDATED, created_at__gt=oldest, extra__figures_changed=True).exists():
         return True
-    changed =Q(approved_at__gt=oldest) | Q(reversals__approved_at__gt=oldest)
+    changed = Q(approved_at__gt=oldest) | Q(reversals__approved_at__gt=oldest)
     entries = LedgerEntry.objects.filter(status__in=COUNTED, entry_date__lte=period.period_end)
     if not any(kind == 'balance' for _, kind in active):
         entries = entries.filter(entry_date__gte=period.period_start)

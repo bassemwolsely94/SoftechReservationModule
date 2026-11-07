@@ -15,6 +15,7 @@ import hashlib
 import logging
 import os
 import zipfile
+import zlib
 from collections import defaultdict
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
@@ -40,6 +41,8 @@ _CENT = Decimal('0.01')
 _ZERO = Decimal('0.00')
 _FLOAT_NOISE = Decimal('0.000001')
 HEADER_SCAN_ROWS = 20
+# what openpyxl raises on a file that is a zip but not a sound workbook (XML parse errors are SyntaxErrors)
+READ_ERRORS = (zipfile.BadZipFile, KeyError, ValueError, SyntaxError, EOFError, zlib.error)
 
 # column -> finance's header labels; a renamed header in the 2026 file is one more alias here
 _COLUMNS = {
@@ -214,6 +217,14 @@ def _book_in(text) -> str:
 
 # ── parsing ──────────────────────────────────────────────────────────────────
 
+def _sheet_rows(ws, **kw):
+    """The sheet's rows; a failed read is an unreadable file. Only the read: an error in the caller's code stays a bug."""
+    try:
+        yield from ws.iter_rows(values_only=True, **kw)
+    except READ_ERRORS:
+        raise ParseError('unreadable')
+
+
 def _columns(cells) -> dict:
     cols = {}
     for pos, value in enumerate(cells):
@@ -233,7 +244,7 @@ def _is_header(cols) -> bool:
 
 
 def _find_header(ws):
-    for row_no, cells in enumerate(ws.iter_rows(max_row=HEADER_SCAN_ROWS, values_only=True), start=1):
+    for row_no, cells in enumerate(_sheet_rows(ws, max_row=HEADER_SCAN_ROWS), start=1):
         cols = _columns(cells)
         if _is_header(cols):
             return row_no, cols
@@ -280,7 +291,7 @@ def parse_journal(path, sheet_name=None, book=None, max_rows=None) -> ParsedJour
         raise ParseError('bad_book')
     try:
         wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-    except (InvalidFileException, zipfile.BadZipFile, OSError, KeyError, ValueError):
+    except (InvalidFileException, OSError, *READ_ERRORS):
         raise ParseError('unreadable')
     try:
         ws, header_row, cols = _journal_sheet(wb, sheet_name)
@@ -313,7 +324,7 @@ def _read_rows(ws, header_row, cols, default_book, max_rows) -> ParsedJournal:
     named = [(col, pos) for col, pos in cols.items() if col != 'due']
     due_1, due_2 = (cols.get('due', []) + [None, None])[:2]
 
-    for row_no, cells in enumerate(ws.iter_rows(min_row=header_row + 1, values_only=True), start=header_row + 1):
+    for row_no, cells in enumerate(_sheet_rows(ws, min_row=header_row + 1), start=header_row + 1):
         v = {col: _cell(cells, pos) for col, pos in named}
         if all(v.get(c) in (None, '') for c in _VALUE_COLUMNS):
             continue   # a blank row is no row at all

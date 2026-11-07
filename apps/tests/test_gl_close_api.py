@@ -6,6 +6,7 @@ start. `start_thread` is patched, and where a test needs the run's outcome it ru
 import datetime
 import io
 import json
+import zipfile
 from decimal import Decimal
 from unittest import mock
 
@@ -21,12 +22,12 @@ from apps.branches.models import Branch
 from apps.config.models import SystemSetting
 from apps.finance import recon_labels
 from apps.finance.gl import close as close_service
-from apps.finance.gl import compare, softech_checks, softech_stock
+from apps.finance.gl import close_views, compare, plan2_adapter, softech_checks, softech_stock
 from apps.finance.gl.close import CloseError
 from apps.finance.gl.ledger import approve, save_draft
 from apps.finance.gl.periods import month_period
 from apps.finance.gl.softech_stock import Valuation
-from apps.finance.models import (FinancialPeriod, GLAccount, GLAccountGroup, GLComparisonLine, GLSoftechCheck,
+from apps.finance.models import (ClosingStockSnapshot, FinancialPeriod, GLAccount, GLAccountGroup, GLComparisonLine, GLSoftechCheck,
                                  GLSourceDoc, LedgerEntry, SourceException)
 from apps.tests.factories import make_user
 from apps.tests.security.fixtures import seed_code_matrix
@@ -542,7 +543,7 @@ class SubledgerTests(ApiBase):
         self.assertEqual(self.acct.get(BASE + 'subledgers/suppliers-vs-ap/').status_code, 400)
 
 
-class CorrectionTests(ApiBase):
+class CorrectionBase(ApiBase):
     def lines(self, amount):
         return [{'account_code': '9901', 'debit': amount, 'credit': '0', 'branch_id': self.branch.pk},
                 {'account_code': '9902', 'debit': '0', 'credit': amount, 'branch_id': self.branch.pk}]
@@ -560,6 +561,8 @@ class CorrectionTests(ApiBase):
             proposed_lines=lines if lines is not None else self.lines('110.00'),
             detail={'group_key': 'grp', 'entry_id': entry_id, 'member_source_keys': [doc.source_key]})
 
+
+class CorrectionTests(CorrectionBase):
     def test_correction_drafts_the_difference_in_the_next_open_month(self):
         e = self.closed_original()
         r = self.acct.post(BASE + 'corrections/', {'original_id': e.pk, 'lines': self.lines('110.00'),
@@ -756,6 +759,141 @@ class ClosingStockStoresTests(ApiBase):
             r = self.admin.patch(self.URL, {'stores': stores}, format='json')
             self.assertEqual(r.status_code, 400, stores)
         self.assertFalse(SystemSetting.objects.filter(key='gl_closing_stock_stores').exists())
+
+
+def _broken(upload):
+    """The same workbook with its sheets' XML cut short: it opens, and fails when a sheet is read."""
+    out = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(upload.read())) as src, zipfile.ZipFile(out, 'w') as dst:
+        for name in src.namelist():
+            data = src.read(name)
+            dst.writestr(name, data[:len(data) // 2] if name.startswith('xl/worksheets/') else data)
+    return SimpleUploadedFile(upload.name, out.getvalue(), content_type=XLSX)
+
+
+class FixRoundTests(ApiBase):
+    """Read errors only become `unreadable`; everything else is a logged 500. Row cap on validation."""
+    ROWS = ManualImportTests.ROWS
+
+    def multipart(self, path, **data):
+        return self.acct.post(BASE + path, data, format='multipart')
+
+    @override_settings(MAX_IMPORT_ROWS=1)
+    def test_validation_over_the_row_cap_points_at_the_command(self):
+        r = self.multipart('validation/', file=_workbook())
+        self.assertEqual((r.status_code, r.data['code']), (400, 'too_many_rows'))
+        self.assertIn('gl_validate_workbook', r.data['detail'])
+
+    def test_a_sheet_that_fails_to_read_is_unreadable(self):
+        r = self.multipart('manual-import/preview/', file=_broken(_journal(self.ROWS)))
+        self.assertEqual((r.status_code, r.data['code']), (400, 'unreadable'))
+        r = self.multipart('manual-import/', file=_broken(_journal(self.ROWS)))
+        self.assertEqual((r.status_code, r.data['code']), (400, 'unreadable'))
+        r = self.multipart('validation/', file=_broken(_workbook()))
+        self.assertEqual((r.status_code, r.data['code']), (400, 'unreadable'))
+        r = self.multipart('validation/', file=SimpleUploadedFile('f.xlsx', b'not a zip'))
+        self.assertEqual((r.status_code, r.data['code']), (400, 'unreadable'))
+
+    def _is_logged_500(self, patcher, path, upload):
+        self.acct.raise_request_exception = False
+        with patcher, self.assertLogs('django.request', level='ERROR'):
+            r = self.multipart(path, file=upload)
+        self.assertEqual(r.status_code, 500)
+        self.assertNotIn(b'unreadable', r.content)
+
+    def test_a_bug_mid_import_is_a_logged_500_not_an_unreadable_file(self):
+        for bug in (KeyError('bug'), ValueError('bug')):
+            with self.subTest(bug=bug):
+                self._is_logged_500(mock.patch('apps.finance.gl.manual_import.save_draft', side_effect=bug),
+                                    'manual-import/', _journal(self.ROWS))
+
+    def test_a_bug_in_validation_is_a_logged_500_not_an_unreadable_file(self):
+        for bug in (KeyError('bug'), ValueError('bug')):
+            with self.subTest(bug=bug):
+                self._is_logged_500(mock.patch('apps.finance.gl.validation._ytd', side_effect=bug),
+                                    'validation/', _workbook())
+
+    def test_validation_reports_the_differences_total(self):
+        self.posted(branch=self.giza)
+        r = self.multipart('validation/', file=_workbook())
+        self.assertEqual(r.status_code, 200, r.content[:200])
+        self.assertEqual(r['X-GL-Validation-Difference-Total'], '130.00')   # 100 - 70 on 9901, 100 on 9902
+        self.assertIn('X-GL-Validation-Difference-Total', r['Access-Control-Expose-Headers'])
+
+    def test_include_mixed_sent_as_a_file_is_refused(self):
+        r = self.multipart('manual-import/', file=_journal(self.ROWS),
+                           include_mixed=SimpleUploadedFile('keys.txt', b'x'))
+        self.assertEqual(r.status_code, 400)
+
+    def test_snapshot_labels_its_missing_stores_by_branch(self):
+        hq = Branch.objects.filter(softech_branch_id='100').first() or Branch.objects.create(
+            softech_branch_id='100', name='الرئيسي')
+        compare.compute(self.jan)
+        self.inline_threads()
+        self.admin.post(BASE + f'periods/{self.jan.pk}/close/')
+        snapshot = FinancialPeriod.objects.get(pk=self.jan.pk).closing_stock
+        ClosingStockSnapshot.objects.filter(pk=snapshot.pk).update(missing_stores=['102'])
+        recon_labels._cache['at'] = 0
+        got = self.acct.get(BASE + f'periods/{self.jan.pk}/closing-stock/').data['snapshot']['missing_stores']
+        self.assertEqual(got[0]['store_code'], '102')
+        self.assertEqual(got[0]['branch_label'], f'100 · {hq.name_ar or hq.name}')
+
+    def test_refresh_period_must_be_a_real_id(self):
+        r = self.acct.post(BASE + 'compare/refresh/', {'period': True}, format='json')
+        self.assertEqual(r.status_code, 400)
+
+    def test_refresh_of_a_closed_month_is_accepted(self):
+        self.set_status(JAN, 'closed')
+        with mock.patch(f'{VIEWS}.start_thread') as start:
+            r = self.acct.post(BASE + 'compare/refresh/', {'period': self.jan.pk}, format='json')
+        self.assertEqual(r.status_code, 202, r.content)
+        start.assert_called_once()
+
+    def test_refresh_that_loses_the_race_records_it(self):
+        with mock.patch.object(compare, 'refresh', side_effect=compare.RefreshBusy()):
+            close_views._run_refresh(self.jan, None, self.acct_staff)
+        last = self.acct.get(BASE + f'compare/?period={self.jan.pk}').data['refresh']['last_run']
+        self.assertEqual((last['ok'], last['code']), (False, 'compare_running'))
+        self.assertTrue(last['detail'])
+
+
+class FromExceptionFixTests(CorrectionBase):
+    def _deleted_draft_id(self):
+        draft = self.draft(day=D(2026, 4, 5))
+        pk = draft.pk
+        draft.delete()
+        return pk
+
+    def _post(self, exc):
+        return self.acct.post(BASE + 'corrections/from-exception/', {'exception_id': exc.pk, 'reason': 'س'},
+                              format='json')
+
+    def test_a_deleted_draft_lets_the_correction_through(self):
+        e = self.closed_original()
+        r = self._post(self.exception(original=e, entry_id=self._deleted_draft_id()))
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.data['total_debit'], '10.00')
+
+    def test_a_deleted_draft_lets_the_late_document_through(self):
+        self.set_status(MAR, 'closed')
+        r = self._post(self.exception(entry_id=self._deleted_draft_id()))
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.data['total_debit'], '110.00')
+
+    def test_the_correction_uses_the_lines_read_under_the_lock(self):
+        e = self.closed_original()
+        exc = self.exception(original=e, entry_id=e.pk)
+        real = plan2_adapter.closed_period_change
+
+        def rewritten_after_the_views_read(pk, **kw):
+            change = real(pk, **kw)
+            if not kw.get('for_update'):   # the engine rewrites the group right after the view has read it
+                SourceException.objects.filter(pk=pk).update(proposed_lines=self.lines('120.00'))
+            return change
+        with mock.patch.object(plan2_adapter, 'closed_period_change', side_effect=rewritten_after_the_views_read):
+            r = self._post(exc)
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.data['total_debit'], '20.00')
 
 
 class FuzzyInt(int):

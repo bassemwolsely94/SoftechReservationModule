@@ -78,7 +78,8 @@ def post_late_correction(original_id: int, new_lines: list, *, user, reason: str
                          exception_id: int | None = None) -> LedgerEntry:
     """Draft the difference between `new_lines` and what `original` effectively says now, in the
     first open month after it. With `exception_id`, `new_lines` are the group's whole proposed
-    lines and the exception resolves in the same transaction."""
+    lines and the exception resolves in the same transaction; `new_lines=None` takes them from the
+    exception, read under its lock (the engine may rewrite them until then)."""
     with transaction.atomic():
         original = LedgerEntry.objects.select_for_update().select_related('period').get(pk=original_id)
         if original.status == 'draft':
@@ -102,7 +103,8 @@ def post_late_correction(original_id: int, new_lines: list, *, user, reason: str
         # only approved corrections net: a second one beside a draft would count the difference twice
         if original.corrections.filter(status='draft').exists():
             raise LedgerError('correction_pending')
-        lines = _difference_lines(new_lines, effective_lines(original))
+        lines = _difference_lines(change.proposed_lines if new_lines is None else new_lines,
+                                  effective_lines(original))
         if not lines:
             raise LedgerError('nothing_to_correct')
 
