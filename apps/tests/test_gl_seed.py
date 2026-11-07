@@ -176,6 +176,76 @@ class SeedTests(TestCase):
         ex = SourceException.objects.select_related('source_doc').get()
         self.assertEqual((ex.source_doc.source_key, ex.kind), ('chq:140:4', 'unmapped_party'))
 
+    def test_purchase_vat_split_three_lines_zero_vat_two(self):
+        """Ruling P32: Dr 5104 net + Dr 2363 VAT / Cr 2341 whole invoice, through the real reader;
+        a zero-VAT invoice has no 2363 line; a missing SOFTECH header posts everything to 5104."""
+        from datetime import datetime
+        from decimal import Decimal
+        from apps.finance.models import GLParty, LedgerEntry
+        from apps.finance.recon_models import APInvoice, ReconParty
+        seed.seed_gl_drafting(user=self.user)
+        GLParty.objects.create(party_type='supplier', code='92', name='s', softech_personcode='5001',
+                               status='confirmed')
+        sup = ReconParty.objects.create(party_type='supplier', softech_personcode='5001', name='S')
+        day = D(2026, 8, 3)
+        for num, value in (('11', '1140'), ('12', '200'), ('13', '50')):
+            APInvoice.objects.create(party=sup, branchcode='100', doccode='10', docnumber=num, docdate=day,
+                                     doc_value=Decimal(value), party_type='supplier')
+        rows = [{'branchcode': '100', 'doccode': '10', 'docno': n, 'docdate': datetime(2026, 8, 3),
+                 'docvalue': Decimal(v), 'docvalue3': Decimal(t)} for n, v, t in (('11', '1140', '140'),
+                                                                                  ('12', '200', '0'))]
+        run = drafting.start_run(triggered_by='t', date_from=day, date_to=day, source_types=['purchases'])
+        run = drafting.draft_range(day, day, source_types=['purchases'], run=run, fetch=lambda sql: list(rows))
+        self.assertEqual(run.status, 'success', run.detail)
+        z = Decimal('0')
+
+        def lines(num):
+            e = LedgerEntry.objects.get(source_key=f'ap:100:10:{num}:2026-08-03')
+            return [(ln.account.code, ln.debit, ln.credit, ln.party_code)
+                    for ln in e.lines.select_related('account').order_by('line_no')]
+        self.assertEqual(lines('11'), [('5104', Decimal('1000.00'), z, ''), ('2363', Decimal('140.00'), z, ''),
+                                       ('2341', z, Decimal('1140.00'), '92')])
+        self.assertEqual(lines('12'), [('5104', Decimal('200.00'), z, ''), ('2341', z, Decimal('200.00'), '92')])
+        self.assertEqual(lines('13'), [('5104', Decimal('50.00'), z, ''), ('2341', z, Decimal('50.00'), '92')])
+        from apps.finance.models import GLSourceDoc
+        self.assertTrue(GLSourceDoc.objects.get(source_key='ap:100:10:13:2026-08-03').attrs['vat_missing'])
+        self.assertEqual(run.detail['vat_missing'], 1)   # Important 3: visible on the run
+
+        # Important 3: SOFTECH answers nothing for a month with invoices -> reader error, nothing moves
+        before = list(LedgerEntry.objects.order_by('pk').values_list('pk', 'status'))
+        run2 = drafting.start_run(triggered_by='t', date_from=day, date_to=day, source_types=['purchases'])
+        run2 = drafting.draft_range(day, day, source_types=['purchases'], run=run2, fetch=lambda sql: [])
+        self.assertEqual(run2.status, 'partial', run2.detail)
+        self.assertIn('2026-08', run2.detail['reader_errors']['purchases'])
+        self.assertEqual(list(LedgerEntry.objects.order_by('pk').values_list('pk', 'status')), before)
+        self.assertFalse(GLSourceDoc.objects.filter(source_type='purchases', status='vanished').exists())
+        self.assertEqual(lines('11')[1], ('2363', Decimal('140.00'), z, ''))
+
+    def test_purchase_vat_above_the_invoice_still_balances(self):
+        """M2: a negative net flips 5104 to the credit side; the entry balances and carries the flag."""
+        from datetime import datetime
+        from decimal import Decimal
+        from apps.finance.models import GLParty, GLSourceDoc, LedgerEntry
+        from apps.finance.recon_models import APInvoice, ReconParty
+        seed.seed_gl_drafting(user=self.user)
+        GLParty.objects.create(party_type='supplier', code='92', name='s', softech_personcode='5001',
+                               status='confirmed')
+        sup = ReconParty.objects.create(party_type='supplier', softech_personcode='5001', name='S')
+        day = D(2026, 8, 3)
+        APInvoice.objects.create(party=sup, branchcode='100', doccode='10', docnumber='14', docdate=day,
+                                 doc_value=Decimal('100'), party_type='supplier')
+        rows = [{'branchcode': '100', 'doccode': '10', 'docno': '14', 'docdate': datetime(2026, 8, 3),
+                 'docvalue': Decimal('100'), 'docvalue3': Decimal('120')}]
+        run = drafting.start_run(triggered_by='t', date_from=day, date_to=day, source_types=['purchases'])
+        run = drafting.draft_range(day, day, source_types=['purchases'], run=run, fetch=lambda sql: list(rows))
+        self.assertEqual(run.status, 'success', run.detail)
+        z = Decimal('0')
+        e = LedgerEntry.objects.get(source_key='ap:100:10:14:2026-08-03')
+        got = {ln.account.code: (ln.debit, ln.credit) for ln in e.lines.select_related('account')}
+        self.assertEqual(got, {'5104': (z, Decimal('20.00')), '2363': (Decimal('120.00'), z),
+                               '2341': (z, Decimal('100.00'))})
+        self.assertTrue(GLSourceDoc.objects.get(source_key='ap:100:10:14:2026-08-03').attrs['vat_value_drift'])
+
     def _map_bank_02(self):
         R.save_map(user=self.user, kind='bank', source_value='02', account_code='1310',
                    branch_id=Branch.objects.get(softech_branch_id='100').pk)
@@ -293,7 +363,8 @@ class SeedTests(TestCase):
                               ('credit', '6003', 'discount_share', H, '', False)]),
             'purchases.hq': ('purchases', 'document', 'credit', 'post',
                              {'branch_in': ['100'], 'kind_in': ['invoice']},
-                             [('debit', '5104', 'value', H, '', False),
+                             [('debit', '5104', 'net', H, '', False),
+                              ('debit', '2363', 'vat', H, '', False),
                               ('credit', '2341', 'value', H, 'source', False)]),
             'purchases.hq_return': ('purchases', 'document', 'credit', 'post',
                                     {'branch_in': ['100'], 'kind_in': ['return']},
