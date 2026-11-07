@@ -20,7 +20,7 @@ from django.conf import settings
 from django.db import models
 
 # Text fields that hold a media URL rather than a file: ('app.Model', field).
-TEXT_PATH_FIELDS = [('enrichment.ItemEnrichment', 'image_url')]
+TEXT_PATH_FIELDS = [('enrichment.ItemEnrichment', 'image_url'), ('enrichment.ItemEnrichment', 'image_secondary_url')]
 
 ITERATOR_CHUNK = 2000
 

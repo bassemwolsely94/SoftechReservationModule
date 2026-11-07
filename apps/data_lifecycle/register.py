@@ -18,6 +18,12 @@ from apps.sync.maintenance import (
     AUDIT_NOISE_DAYS, NOTIF_UNREAD_DAYS, PBX_EVENT_DAYS, SLOW_REQUEST_DAYS,
 )
 
+from .rules_files import (
+    bundle_pages_candidates, conversations_candidates, delivery_proof_candidates, financial_docs_candidates,
+    images_obsolete_candidates, images_rejected_candidates, images_unreviewed_candidates, ocr_pos_rx_candidates,
+    prescriptions_candidates, refresh_obsolete_seen, refresh_unreferenced_seen, staff_messages_candidates,
+    unreferenced_candidates,
+)
 from .rules_rows import (
     rate_runs_apply, rate_runs_candidates, transit_alert_notes_candidates, transit_audit_events_candidates,
 )
@@ -64,6 +70,8 @@ class Rule:
                   target model because the names differ. None for a rule that ages some other way.
     apply         When set, the runner calls it for a real run instead of deleting the candidates. The
                   rate rule needs this: prune_engine_runs stays the only code that deletes those rows.
+    refresh       When set, a daily run of a rule that is not `off` calls it with the run's reference index
+                  before selecting, so a "first seen" clock runs even while the rule only previews.
     """
     key: str
     label_ar: str
@@ -78,11 +86,7 @@ class Rule:
     targets: tuple
     age_field: Optional[Mapping[str, str]] = None
     apply: Optional[Callable] = None
-
-
-def _no_candidates_yet():
-    """Stub until the rule's task fills it (Tasks 6 and 9 of the Stage 3 plan). Selects nothing."""
-    return []
+    refresh: Optional[Callable] = None
 
 
 _ROW_AND_FILE_RULES = (
@@ -119,7 +123,7 @@ _ROW_AND_FILE_RULES = (
         key='prescriptions', label_ar='صور الروشتات', label_en='Prescription images',
         kind=KIND_FILE, floor_days=1095, default_days=1095,
         reason='قرار المالك: 3 سنوات كحد أدنى، وتتبقى المراجعة القانونية. يُحذف الملف ويبقى السجل.',
-        margin=200, ceiling=5_000, candidates=_no_candidates_yet,
+        margin=200, ceiling=5_000, candidates=prescriptions_candidates,
         targets=('pos_orders.SoftechSalesOrder.prescription_image', 'usage_print.UsageSheet.prescription_image',
                  'callcenter.CallLog.prescription_image', 'reservations.Reservation.image',
                  'reservations.ReservationImage.image'),
@@ -132,7 +136,7 @@ _ROW_AND_FILE_RULES = (
         kind=KIND_FILE, floor_days=1095, default_days=1095,
         reason='قرار المالك: 3 سنوات كحد أدنى. وحدة pos_rx فقط؛ تُحذف الصورة وتبقى القراءات النصية للتعلم. '
                'باقي الوحدات تبقى دائمًا.',
-        margin=200, ceiling=5_000, candidates=_no_candidates_yet,
+        margin=200, ceiling=5_000, candidates=ocr_pos_rx_candidates,
         targets=('vision.OcrSample.image',),
         age_field={'vision.OcrSample': 'created_at'},
     ),
@@ -140,7 +144,7 @@ _ROW_AND_FILE_RULES = (
         key='conversations', label_ar='مرفقات محادثات العملاء', label_en='Customer conversation files',
         kind=KIND_FILE, floor_days=None, default_days=1095,
         reason='قد تحتوي على روشتات، فتأخذ مدة الروشتات. يُحذف الملف ويبقى السجل.',
-        margin=200, ceiling=5_000, candidates=_no_candidates_yet,
+        margin=200, ceiling=5_000, candidates=conversations_candidates,
         targets=('whatsapp.WAMediaFile.local_file', 'callcenter.CallLogAttachment.file',
                  'callcenter.CaseEvent.attachment'),
         age_field={'whatsapp.WAMediaFile': 'created_at', 'callcenter.CallLogAttachment': 'uploaded_at',
@@ -150,7 +154,7 @@ _ROW_AND_FILE_RULES = (
         key='financial_docs', label_ar='المستندات المالية', label_en='Financial documents',
         kind=KIND_FILE, floor_days=1825, default_days=1825,
         reason='5 سنوات كحد أدنى، في انتظار تأكيد المحاسب. يُحذف الملف ويبقى السجل المالي كما هو.',
-        margin=100, ceiling=2_000, candidates=_no_candidates_yet,
+        margin=100, ceiling=2_000, candidates=financial_docs_candidates,
         targets=('invoices.SupplierInvoice.source_image', 'invoices.InvoiceBatch.source_file',
                  'payments.ExternalPayment.screenshot', 'payments.BankStatementImport.raw_file',
                  'hr.ExpenseClaim.receipt'),
@@ -163,22 +167,21 @@ _ROW_AND_FILE_RULES = (
         kind=KIND_FILE, floor_days=None, default_days=30,
         reason='المجلد invoice_bundles/pages/batch_<id>/ بعد 30 يومًا من آخر فاتورة في الحزمة صارت معتمدة أو '
                'مرفوضة، أو من فشل الحزمة. ملف PDF الأصلي يبقى.',
-        margin=500, ceiling=5_000, candidates=_no_candidates_yet,
+        margin=500, ceiling=5_000, candidates=bundle_pages_candidates,
         targets=(),
     ),
     Rule(
         key='images_rejected', label_ar='صور الأصناف المرفوضة', label_en='Rejected item images',
         kind=KIND_FILE, floor_days=None, default_days=30,
         reason='يُحذف الملف ويبقى السجل حتى لا تُنزَّل الصورة مرة أخرى.',
-        margin=100, ceiling=3_000, candidates=_no_candidates_yet,
-        targets=('images.ImageCandidate.local_file',),
-        age_field={'images.ImageCandidate': 'created_at'},
+        margin=100, ceiling=3_000, candidates=images_rejected_candidates,
+        targets=('images.ImageCandidate.local_file',),   # ages from reviewed_at, or created_at if there is none
     ),
     Rule(
         key='images_unreviewed', label_ar='صور الأصناف غير المراجَعة', label_en='Unreviewed item images',
         kind=KIND_FILE, floor_days=None, default_days=180,
         reason='يُحذف الملف ويبقى السجل حتى لا تُنزَّل الصورة مرة أخرى.',
-        margin=100, ceiling=3_000, candidates=_no_candidates_yet,
+        margin=100, ceiling=3_000, candidates=images_unreviewed_candidates,
         targets=('images.ImageCandidate.local_file',),
         age_field={'images.ImageCandidate': 'created_at'},
     ),
@@ -186,15 +189,16 @@ _ROW_AND_FILE_RULES = (
         key='images_obsolete', label_ar='صور الأصناف المتوقفة', label_en='Images of obsolete items',
         kind=KIND_FILE, floor_days=None, default_days=90,
         reason='بعد 90 يومًا من أول مرة رأينا الصنف متوقفًا. يتوقف العد إذا عاد الصنف للاستخدام.',
-        margin=100, ceiling=1_000, candidates=_no_candidates_yet,
+        margin=100, ceiling=1_000, candidates=images_obsolete_candidates,
         targets=('images.ImageCandidate.local_file', 'product_experience.ProductMedia.file',
                  'product_experience.ProductMedia.thumbnail'),
+        refresh=lambda _index: refresh_obsolete_seen(),
     ),
     Rule(
         key='delivery_proof', label_ar='صور إثبات التوصيل', label_en='Delivery proof',
         kind=KIND_FILE, floor_days=None, default_days=365,
         reason='يُحذف الملف ويبقى طلب التوصيل.',
-        margin=200, ceiling=5_000, candidates=_no_candidates_yet,
+        margin=200, ceiling=5_000, candidates=delivery_proof_candidates,
         targets=('delivery.DeliveryOrder.pod_photo',),
         age_field={'delivery.DeliveryOrder': 'created_at'},
     ),
@@ -202,7 +206,7 @@ _ROW_AND_FILE_RULES = (
         key='staff_messages', label_ar='مرفقات رسائل الموظفين', label_en='Staff messages and attachments',
         kind=KIND_FILE, floor_days=None, default_days=365,
         reason='يُحذف الملف ويبقى السجل.',
-        margin=500, ceiling=5_000, candidates=_no_candidates_yet,
+        margin=500, ceiling=5_000, candidates=staff_messages_candidates,
         targets=('notifications.ChatterMessage.attachment', 'notifications.ChatterMessage.voice_note',
                  'reservations.ReservationActivity.attachment', 'reservations.ReservationActivity.voice_note',
                  'transfers.TransferRequestMessage.attachment', 'transfers.TransferRequestMessage.voice_note',
@@ -216,8 +220,9 @@ _ROW_AND_FILE_RULES = (
         key='unreferenced', label_ar='ملفات لا يستخدمها أي سجل', label_en='Files no record uses',
         kind=KIND_FILE, floor_days=None, default_days=30,
         reason='ملف تحت media/ بلا أي سجل يشير إليه، ظهر في فحصين بينهما 30 يومًا.',
-        margin=100, ceiling=1_000, candidates=_no_candidates_yet,
+        margin=100, ceiling=1_000, candidates=unreferenced_candidates,
         targets=(),
+        refresh=refresh_unreferenced_seen,
     ),
 )
 

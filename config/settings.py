@@ -2,8 +2,11 @@
 ElRezeiky Pharmacy Operations Platform — Django Settings
 Production configuration for Windows Server deployment
 """
+import atexit
 import os
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
@@ -401,6 +404,9 @@ STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+if _RUNNING_TESTS:      # tests must never write to the real media folder
+    MEDIA_ROOT = Path(tempfile.mkdtemp(prefix='elrezeiky_test_media_'))
+    atexit.register(shutil.rmtree, MEDIA_ROOT, ignore_errors=True)
 # Data lifecycle (apps.data_lifecycle). File rules stay in preview unless this is True: set it only on the
 # VPS, because MEDIA_ROOT is inside OneDrive here and its version history would keep "removed" prescriptions.
 LIFECYCLE_FILE_RULES_ENABLED = config('LIFECYCLE_FILE_RULES_ENABLED', default=False, cast=bool)

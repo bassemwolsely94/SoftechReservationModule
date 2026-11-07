@@ -14,6 +14,11 @@ Every real line consumes the preview before it, stopped or failed ones included.
 cleanup needs its own preview, every later day is held to the margin (the rule's normal volume), and
 after a stop a person has to preview again before the rule can pass.
 
+File rules: one reference index per run, split by references.partition, so a preview counts exactly what a real
+run would move and a file used by anything else never moves. If too many referenced files are missing from disk
+the folder is probably wrong, so every file rule stops for the run and admins get one alert. hold_file refuses to
+run inside a transaction, so nothing here may wrap a rule in one.
+
 Company-level by nature, no branch scoping; see models.py. No SOFTECH reads or writes.
 """
 import logging
@@ -28,22 +33,79 @@ from core.errors import redact
 from . import holding
 from .models import MODE_OFF, MODE_PREVIEW, LifecycleRun, LifecycleRunLine
 from .policy import get_mode
+from .references import build_reference_index, partition
 from .register import KIND_FILE, KIND_P56, RULES
+from .rules_files import missing_references, too_many_missing
 
 logger = logging.getLogger('elrezeiky.sync')
 
 ERROR_MAX = 1000
 
 
+class FileRulesStopped(Exception):
+    """Too many referenced files are missing from disk. The message holds counts only and is safe to show."""
+
+
+class _FileRun:
+    """What the file rules of one run share: one reference index and one check of the media folder."""
+
+    def __init__(self):
+        self._index = None
+        self._stopped = None
+
+    def index(self):
+        if self._stopped:
+            raise FileRulesStopped(self._stopped)
+        if self._index is None:
+            index = build_reference_index()
+            missing, total = missing_references(index)
+            if too_many_missing(missing, total):
+                self._stopped = f'توقفت قواعد الملفات: {missing:,} من {total:,} ملف مستخدم غير موجود على القرص.'
+                _alert_wrong_folder(missing, total)
+                raise FileRulesStopped(self._stopped)
+            self._index = index
+        return self._index
+
+
+def _alert_wrong_folder(missing, total):
+    logger.error('[lifecycle] file rules stopped: %s of %s referenced files are missing from disk', missing, total)
+    _alert_admins('🔴 توقفت قواعد الملفات',
+                  f'{missing:,} من {total:,} ملف تشير إليه السجلات غير موجود في مجلد الملفات، وقد يكون المجلد خطأ أو '
+                  f'الاسترجاع غير مكتمل. لم يُنقل أي ملف في هذا التشغيل. راجع MEDIA_ROOT.',
+                  f'lifecycle_wrong_folder_{timezone.localdate().isoformat()}')
+
+
 def file_candidate_size(candidate):
-    """Bytes of one file candidate. Task 9 of the Stage 3 plan supplies the candidates."""
+    """Bytes of one file candidate."""
     return candidate.size
 
 
-def move_file_candidates(rule, candidates):
-    """HOOK for Task 9: move a `file` rule's candidates to the holding folder and return how many moved.
-    Moves nothing until then, even for a rule that is `on` with LIFECYCLE_FILE_RULES_ENABLED."""
-    return 0
+def _candidate_id(candidate):
+    """Which candidate, for a log or an error: a record id. Never the path, which is a file name."""
+    if not candidate.rows:
+        return 'a file with no record'
+    first = candidate.rows[0]
+    return f'{first.model}#{first.pk}.{first.field}'
+
+
+def move_file_candidates(rule, candidates, line):
+    """Move a `file` rule's movable candidates to the holding folder and return how many moved. A file that fails
+    is logged and put on the line's error by id, and the rule carries on with the next. A FileStranded has already
+    written its critical log line. Adds the bytes moved to the line; the caller saves it."""
+    moved, failures = 0, []
+    for candidate in candidates:
+        try:
+            holding.hold_file(candidate.path, [row._asdict() for row in candidate.rows], rule.key)
+        except holding.HoldError as exc:
+            failure = f'{_candidate_id(candidate)}: {type(exc).__name__}'
+            logger.error('[lifecycle] %s: %s', rule.key, failure)
+            failures.append(failure)
+        else:
+            moved += 1
+            line.bytes += file_candidate_size(candidate)
+    if failures:
+        line.error = redact(f'{len(failures)} لم تُنقل: ' + '; '.join(failures))[:ERROR_MAX]
+    return moved
 
 
 def purge_held_files():
@@ -93,22 +155,41 @@ def _removed_count(value):
     return value
 
 
-def _preview_line(run, rule):
+def _select_files(rule, files, refresh):
+    """(movable, skipped because something else uses them)."""
+    index = files.index()
+    if refresh and rule.refresh is not None:
+        rule.refresh(index)
+    return partition(rule.candidates(), index)
+
+
+def _preview_line(run, rule, files, refresh=False):
     line = LifecycleRunLine(run=run, rule_key=rule.key, is_preview=True)
     try:
-        line.count, line.bytes = _measure(rule, rule.candidates())
+        if rule.kind == KIND_FILE:
+            movable, skipped = _select_files(rule, files, refresh)
+            line.skipped_shared = len(skipped)
+            line.count, line.bytes = _measure(rule, movable)
+        else:
+            line.count, line.bytes = _measure(rule, rule.candidates())
+    except FileRulesStopped as exc:
+        line.error = str(exc)
     except Exception as exc:
         line.error = _error_text(rule.key, exc)
     line.save()
     return line
 
 
-def _real_line(run, rule):
+def _real_line(run, rule, files):
     """`count` is what was actually removed. Rows are deleted in committed batches, so when a delete fails
     part way the batches already done in that queryset are gone but not counted; the error is on the line."""
     line = LifecycleRunLine(run=run, rule_key=rule.key)
     try:
-        candidates = rule.candidates()
+        if rule.kind == KIND_FILE:
+            candidates, skipped = _select_files(rule, files, refresh=True)
+            line.skipped_shared = len(skipped)
+        else:
+            candidates = rule.candidates()
         count, _ = _measure(rule, candidates)
         limit = breaker_limit(rule)
         if count > limit:
@@ -117,10 +198,12 @@ def _real_line(run, rule):
         elif rule.apply is not None:
             line.count = _removed_count(rule.apply())
         elif rule.kind == KIND_FILE:
-            line.count = _removed_count(move_file_candidates(rule, candidates))
+            line.count = _removed_count(move_file_candidates(rule, candidates, line))
         else:
             for qs in candidates:
                 line.count += _batched_delete(qs)
+    except FileRulesStopped as exc:
+        line.error = str(exc)
     except Exception as exc:
         line.error = _error_text(rule.key, exc)
     line.save()
@@ -134,12 +217,13 @@ def _finish(run):
 
 def preview_rule(key):
     """Preview one rule, whatever its mode. Changes nothing but its own run and line. A failure of the rule
-    is on the returned line; an unknown or p56 rule raises ValueError."""
+    is on the returned line; an unknown or p56 rule raises ValueError. The "first seen" clocks are not
+    touched: they only move in a daily run."""
     rule = RULES.get(key)
     if rule is None or rule.kind == KIND_P56:
         raise ValueError(f'لا يمكن معاينة القاعدة «{key}».')
     run = LifecycleRun.objects.create(is_preview=True)
-    line = _preview_line(run, rule)
+    line = _preview_line(run, rule, _FileRun())
     _finish(run)
     return line
 
@@ -148,6 +232,7 @@ def run_lifecycle_rules():
     """One daily pass over every rule. A rule's failure goes on its line and the others still run. If even
     the line cannot be written or the mode read, that rule is only logged. Returns the total removed."""
     run = LifecycleRun.objects.create(is_preview=False)
+    files = _FileRun()
     total = 0
     for key, rule in RULES.items():
         if rule.kind == KIND_P56:
@@ -157,9 +242,9 @@ def run_lifecycle_rules():
             if mode == MODE_OFF:
                 continue
             if mode == MODE_PREVIEW:
-                _preview_line(run, rule)
+                _preview_line(run, rule, files, refresh=True)
             else:
-                total += _real_line(run, rule).count
+                total += _real_line(run, rule, files).count
         except Exception as exc:
             _error_text(key, exc)
     _finish(run)

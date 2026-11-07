@@ -136,18 +136,14 @@ class RegisterValueTests(SimpleTestCase):
         self.assertFalse(set(register.IMAGE_APPROVED_STATUSES)
                          & {*register.IMAGE_REJECTED_STATUSES, *register.IMAGE_UNREVIEWED_STATUSES})
 
-    def test_apply_defaults_to_none_and_candidates_are_stubs(self):
+    def test_apply_defaults_to_none_and_p56_has_no_candidates(self):
         for key, rule in RULES.items():
-            if key == 'rate_runs':      # filled; apps/tests/test_lifecycle_rate_rule.py
-                continue
-            if key in ('transit_alert_notes', 'transit_audit_events'):   # filled; test_lifecycle_transit_rule.py
+            if key != 'rate_runs':      # rate_runs: apps/tests/test_lifecycle_rate_rule.py
                 self.assertIsNone(rule.apply, key)
-                continue
-            self.assertIsNone(rule.apply, key)
             if rule.kind == 'p56':
                 self.assertIsNone(rule.candidates, key)
             else:
-                self.assertEqual(rule.candidates(), [], key)
+                self.assertTrue(callable(rule.candidates), key)
 
 
 class PolicyTestBase(TestCase):

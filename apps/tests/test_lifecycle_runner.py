@@ -5,7 +5,6 @@ two steps added to the daily retention job (design §6 Stage 3). No SOFTECH invo
 The fake rules select SlowRequest rows, a table with no rule of its own in these tests.
 """
 from io import StringIO
-from types import SimpleNamespace
 from unittest import mock
 
 from django.core.management import CommandError, call_command
@@ -15,6 +14,7 @@ from apps.audit.models import AuditLog
 from apps.data_lifecycle import runner
 from apps.data_lifecycle.models import LifecycleRulePolicy, LifecycleRun, LifecycleRunLine
 from apps.data_lifecycle.policy import AUDIT_ACTION, has_fresh_preview
+from apps.data_lifecycle.references import FileCandidate
 from apps.data_lifecycle.register import KIND_FILE, KIND_P56, KIND_ROW, RULES, Rule
 from apps.data_lifecycle.runner import breaker_limit, preview_rule, run_lifecycle_rules
 from apps.notifications.models import Notification
@@ -338,7 +338,7 @@ class ErrorTests(TestCase):
 
 class FileRuleTests(TestCase):
     def _file_rule(self, **kwargs):
-        files = [SimpleNamespace(size=10), SimpleNamespace(size=32)]
+        files = [FileCandidate('a.bin', [], 10), FileCandidate('b.bin', [], 32)]
         return _rule(kind=KIND_FILE, candidates=lambda: files, **kwargs)
 
     def test_preview_reports_count_and_bytes(self):
@@ -357,14 +357,15 @@ class FileRuleTests(TestCase):
         self.assertEqual((line.count, line.bytes), (2, 42))
 
     @override_settings(LIFECYCLE_FILE_RULES_ENABLED=True)
-    def test_on_uses_the_hook_and_moves_nothing_yet(self):
+    def test_on_holds_each_candidate(self):
         _turn_on('fake_a')
-        with _only(self._file_rule()):
-            self.assertEqual(run_lifecycle_rules(), 0)
+        with _only(self._file_rule()), mock.patch.object(runner.holding, 'hold_file') as hold:
+            self.assertEqual(run_lifecycle_rules(), 2)
+        self.assertEqual([call.args for call in hold.call_args_list],
+                         [('a.bin', [], 'fake_a'), ('b.bin', [], 'fake_a')])
         line = _last_line()
         self.assertFalse(line.is_preview)
-        self.assertEqual(line.count, 0)
-        self.assertEqual(line.error, '')
+        self.assertEqual((line.count, line.bytes, line.error), (2, 42, ''))
 
     @override_settings(LIFECYCLE_FILE_RULES_ENABLED=True)
     def test_breaker_counts_files(self):
