@@ -19,6 +19,8 @@ const api = vi.hoisted(() => ({
   preview: vi.fn(),
   items: vi.fn(),
   updateItem: vi.fn(),
+  previewReceipts: vi.fn(),
+  submitReceipts: vi.fn(),
 }))
 
 vi.mock('../../api/client', () => ({
@@ -30,6 +32,7 @@ const { default: DocumentDetail } = await import('./DocumentDetail')
 const { default: PrintTab } = await import('./PrintTab')
 const { default: ImportTab, buildOptions } = await import('./ImportTab')
 const { default: ItemsTab } = await import('./ItemsTab')
+const { BranchActions } = await import('./ReceiptsTab')
 
 const line = (id, status) => ({
   id, docnumber: '55', docdate: '2026-10-01', branch: '170', itemcode: `I${id}`, item_name: `صنف ${id}`, quantity: '1',
@@ -126,6 +129,70 @@ describe('printed invoice', () => {
     expect(screen.getByText(/لا توجد ضريبة قيمة مضافة مستحقة/)).toBeTruthy()
     expect(screen.getByText(/نسخة غير رسمية/)).toBeTruthy()
     expect(screen.queryByRole('columnheader', { name: 'الضريبة' })).toBeNull()
+  })
+})
+
+describe('sending receipts', () => {
+  const dryRun = over => ({ data: { dry_run: true, count: 2, submit_enabled: false, receipts: [], ...over } })
+  const sendButton = () => screen.queryByRole('button', { name: 'إرسال الدفعة للمصلحة' })
+
+  async function preview() {
+    fireEvent.click(screen.getByRole('button', { name: 'معاينة الإرسال' }))
+    await screen.findByText(/معاينة فقط/)
+  }
+
+  it('offers no send before the dry run', () => {
+    show(<BranchActions branch="170" label="170 · الجيش" me={ME} />)
+    expect(sendButton()).toBeNull()
+  })
+
+  it('stays disabled while the server says sending is off, even with the code typed', async () => {
+    api.previewReceipts.mockResolvedValue(dryRun())
+    show(<BranchActions branch="170" label="170 · الجيش" me={ME} />)
+    await preview()
+    fireEvent.change(screen.getByLabelText(/اكتب كود الفرع/), { target: { value: '170' } })
+    expect(sendButton().disabled).toBe(true)
+    expect(screen.getByText('معطل طالما الإرسال الفعلي مغلق.')).toBeTruthy()
+  })
+
+  it('is not offered without finalize', () => {
+    show(<BranchActions branch="170" label="170" me={{ ...ME, can_finalize: false }} />)
+    expect(screen.queryByRole('button', { name: 'معاينة الإرسال' })).toBeNull()
+    expect(sendButton()).toBeNull()
+  })
+
+  it('needs something to send and the typed code, then sends that code once', async () => {
+    api.previewReceipts.mockResolvedValue(dryRun({ submit_enabled: true }))
+    api.submitReceipts.mockResolvedValue({ data: { status: 'submitted', count: 2 } })
+    show(<BranchActions branch="170" label="170 · الجيش" me={ME} />)
+    await preview()
+    expect(sendButton().disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText(/اكتب كود الفرع/), { target: { value: '170' } })
+    fireEvent.click(sendButton())
+    await screen.findByText(/أُرسلت دفعة من 2 إيصال/)
+    expect(api.submitReceipts).toHaveBeenCalledTimes(1)
+    expect(api.submitReceipts).toHaveBeenCalledWith('170', '170')
+    expect(sendButton()).toBeNull()   // the next batch needs a new dry run
+  })
+
+  it('stops at an uncertain result and says to ask the Authority first', async () => {
+    api.previewReceipts.mockResolvedValue(dryRun({ submit_enabled: true }))
+    api.submitReceipts.mockResolvedValue({ data: { status: 'uncertain', count: 2 } })
+    show(<BranchActions branch="170" label="170" me={ME} />)
+    await preview()
+    fireEvent.change(screen.getByLabelText(/اكتب كود الفرع/), { target: { value: '170' } })
+    fireEvent.click(sendButton())
+    await screen.findByText(/نتيجة غير مؤكدة لـ 2 إيصال/)
+  })
+
+  it('shows the server refusal', async () => {
+    api.previewReceipts.mockResolvedValue(dryRun({ submit_enabled: true }))
+    api.submitReceipts.mockRejectedValue({ response: { data: { detail: 'اكتب كود الفرع للتأكيد' } } })
+    show(<BranchActions branch="170" label="170" me={ME} />)
+    await preview()
+    fireEvent.change(screen.getByLabelText(/اكتب كود الفرع/), { target: { value: '999' } })
+    fireEvent.click(sendButton())
+    await screen.findByText('اكتب كود الفرع للتأكيد')
   })
 })
 

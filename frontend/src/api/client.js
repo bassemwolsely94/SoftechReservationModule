@@ -3147,6 +3147,7 @@ export const taxInvoicingApi = {
   importReceipts:  (data)         => api.post('/tax-invoicing/receipts/import/', data),
   issueReceipts:   (branch)       => api.post(`/tax-invoicing/receipts/branch/${encodeURIComponent(branch)}/issue/`),
   previewReceipts: (branch)       => api.post(`/tax-invoicing/receipts/branch/${encodeURIComponent(branch)}/submit/`, { dry_run: true }),
+  submitReceipts:  (branch, confirm) => api.post(`/tax-invoicing/receipts/branch/${encodeURIComponent(branch)}/submit/`, { dry_run: false, confirm }),
   reconcileReceipts: (branch)     => api.post(`/tax-invoicing/receipts/branch/${encodeURIComponent(branch)}/reconcile/`),
   receiptConfigs:  ()             => api.get('/tax-invoicing/receipts/configs/'),
   saveReceiptConfig: (data)       => api.post('/tax-invoicing/receipts/configs/', data),
