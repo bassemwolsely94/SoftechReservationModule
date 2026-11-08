@@ -70,6 +70,8 @@ function RunProgress({ runId, onFinished }) {
     <div className={`text-sm rounded-lg border px-3 py-2 ${ok ? 'bg-green-50 border-green-200 text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
       {ok ? 'اكتمل الترحيل' : run.status === 'partial' ? 'اكتمل جزئياً' : 'فشل الترحيل'} — {msg}
       {run.detail?.error && <span> · {String(run.detail.error)}</span>}
+      {!!run.detail?.vat_missing && <span> · {run.detail.vat_missing} فاتورة بضريبة ناقصة</span>}
+      {!!run.detail?.reader_errors && <span> · تعذّرت قراءة: {Object.keys(run.detail.reader_errors).map(k => SOURCE_TYPES[k] || k).join('، ')}</span>}
     </div>
   )
 }
@@ -97,6 +99,9 @@ export default function JournalPage() {
   const [creating, setCreating] = useState(false)
   // the panel remounts only when the user opens another entry, not when a new draft gets its id
   const [editorKey, setEditorKey] = useState('')
+  // «creating» ends only once the URL carries the new id: dropping it first would unmount the panel
+  // for one render and lose its «saved» message
+  useEffect(() => { if (openId) setCreating(false) }, [openId])
 
   const setF = (patch) => { setFilters(f => ({ ...f, ...patch })); setSelected(new Set()); setRowResult({}) }
   const apiParams = useMemo(() => {
@@ -334,7 +339,7 @@ export default function JournalPage() {
 
       {(openId || creating) && (
         <EntryEditor key={editorKey || openId} entryId={openId} onClose={close}
-                     onChanged={(d) => { if (d?.id && creating) { setCreating(false); setEntryParam(d.id) } }} />
+                     onChanged={(d) => { if (d?.id && creating) setEntryParam(d.id) }} />
       )}
     </div>
   )

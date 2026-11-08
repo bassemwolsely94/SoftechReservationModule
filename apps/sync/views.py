@@ -72,7 +72,9 @@ def trigger_sync(request):
     # fast/slow lanes also create 'running' rows but finish in seconds/minutes; a
     # row older than 15 min is treated as stale (crashed process) and ignored.
     cutoff = timezone.now() - timedelta(minutes=15)
-    inflight = SyncRun.objects.filter(status='running', started_at__gte=cutoff).first()
+    # A retention catch-up (lane='retention') is housekeeping, not a data sync.
+    inflight = (SyncRun.objects.filter(status='running', started_at__gte=cutoff)
+                .exclude(lane='retention').first())
     if inflight:
         return Response(
             {**SyncRunSerializer(inflight).data, 'detail': 'sync already in progress'},

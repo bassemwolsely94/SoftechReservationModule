@@ -24,6 +24,7 @@ from apps.finance.models import (
     GLDraftRun, GLParty, GLSourceDoc, GLSourceMap, LedgerEntry, PostingRule, ReconParty,
     SourceException,
 )
+from core.errors import public_error
 from core.threads import start_thread
 from core.upload_safety import capped_rows, max_upload_bytes
 
@@ -415,6 +416,8 @@ def rule_preview(request):
         return _err([str(e)])
     except rules.RuleError as e:
         return _err(e.errors)
+    except Exception as exc:   # a failed SOFTECH read: a clear answer in the rule editor, not a 500
+        return _err([public_error(request, exc)], http=status.HTTP_503_SERVICE_UNAVAILABLE)
     return Response(_j(res))
 
 

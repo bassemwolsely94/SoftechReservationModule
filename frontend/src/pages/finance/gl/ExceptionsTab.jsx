@@ -39,7 +39,7 @@ const KIND_ORDER = Object.keys(KIND_LABEL)
 const NOT_REDRAFTABLE = new Set(['mixed_manual_entry'])
 const sourceLabel = (t) => (t === 'manual_import' ? 'يومية المالية' : SOURCE_TYPES[t] || t)
 const CUSTOMER_SOURCES = new Set(['credit_sales', 'customer_collections'])
-const MAIN_AMOUNT = ['net', 'amount', 'value', 'sales', 'credit']
+const MAIN_AMOUNT = ['value', 'net', 'amount', 'sales', 'credit']
 
 const mainAmount = (a) => { const k = MAIN_AMOUNT.find(x => a?.[x] !== undefined); return k ? a[k] : null }
 const refOf = (d) => [d.attrs?.docnumber, d.attrs?.cheqno, d.attrs?.cheqsno].filter(Boolean).join(' / ') || d.source_key

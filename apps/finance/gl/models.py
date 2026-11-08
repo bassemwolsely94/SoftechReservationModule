@@ -349,3 +349,31 @@ class SourceException(models.Model):
             models.UniqueConstraint(fields=['source_doc', 'kind'], condition=Q(status='open'),
                                     name='gl_one_open_exception_per_kind'),
         ]
+
+
+class GLBranchCost(models.Model):
+    """Rulings P33 / P34: SOFTECH cost of sales and sale value per branch-month (stktransm.docvalue2
+    and docvalue of doccode 115 minus doccode 30), synced read-only for the branch P&L. Report-time
+    only: nothing is posted from it. Sale values are as SOFTECH holds them (VAT-inclusive)."""
+    year        = models.PositiveSmallIntegerField(verbose_name='السنة')
+    month       = models.PositiveSmallIntegerField(verbose_name='الشهر')
+    branch_code = models.CharField(max_length=5, verbose_name='كود فرع سوفتيك')
+    sales_cost  = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='تكلفة المبيعات')
+    return_cost = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='تكلفة المرتجعات')
+    net_cost    = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='صافي التكلفة')
+    sales_value  = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='قيمة المبيعات')
+    return_value = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='قيمة المرتجعات')
+    net_value    = models.DecimalField(max_digits=18, decimal_places=2, default=0, verbose_name='صافي القيمة')
+    synced_at   = models.DateTimeField(verbose_name='وقت المزامنة')
+
+    class Meta:
+        app_label = 'finance'
+        ordering = ['year', 'month', 'branch_code']
+        verbose_name = 'تكلفة مبيعات فرع (سوفتيك)'
+        verbose_name_plural = 'تكلفة مبيعات الفروع (سوفتيك)'
+        constraints = [
+            models.UniqueConstraint(fields=['year', 'month', 'branch_code'], name='gl_branch_cost_unique'),
+        ]
+
+    def __str__(self):
+        return f'{self.branch_code} {self.year}-{self.month:02d}'

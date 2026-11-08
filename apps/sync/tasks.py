@@ -2227,6 +2227,14 @@ def _run_daily_retention():
         logger.error('[APScheduler] daily retention failed: %s', exc)
 
 
+def _run_retention_watch():
+    try:
+        from apps.sync.maintenance import retention_watch
+        retention_watch()
+    except Exception as exc:
+        logger.error('[APScheduler] retention watch failed: %s', exc)
+
+
 def _run_segment_customers():
     """Wrapper for APScheduler — calls segment_customers management command."""
     try:
@@ -3795,6 +3803,12 @@ def start_scheduler():
     _scheduler.add_job(
         _run_daily_retention, 'cron', hour=4, minute=45, id='daily_retention',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Retention watch: catch-up when the 04:45 slot was missed (PC off), plus the missed-run alert.
+    _scheduler.add_job(
+        _run_retention_watch, 'interval', minutes=15, id='retention_watch',
+        replace_existing=True, max_instances=1, misfire_grace_time=300,
+        next_run_time=timezone.now(),
     )
     # Weekly per-branch near-expiry worklist → branch managers (Sunday 08:00, D4).
     _scheduler.add_job(

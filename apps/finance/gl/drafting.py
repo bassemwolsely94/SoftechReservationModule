@@ -113,7 +113,8 @@ def draft_range(date_from, date_to, *, source_types=None, run: GLDraftRun, fetch
     readers = READERS if readers is None else readers
     types = list(source_types) if source_types else [t for t in SOURCE_ORDER if t in readers]
     with ExitStack() as stack:
-        if fetch is None:
+        lazy = fetch is None
+        if lazy:
             fetch = _lazy_fetch(stack)
         engine = _Engine(run, fetch, readers, allow_mass_vanish=allow_mass_vanish)
         try:
@@ -131,6 +132,10 @@ def draft_range(date_from, date_to, *, source_types=None, run: GLDraftRun, fetch
             logger.exception('gl drafting run %s failed', run.pk)
             run.status = 'failed'
             engine.detail['error'] = f'{type(exc).__name__}: {exc}'[:1000]
+        # Ruling P33: refresh the SOFTECH branch cost of the run's months, best-effort. With the
+        # lazy fetch only when a reader really opened SOFTECH (a test reader never does).
+        if run.status != 'failed' and 'sales_tenders' in types and (not lazy or fetch.opened()):
+            _sync_branch_cost(engine, date_from, date_to, fetch)
     run.counts = engine.counts
     run.detail = {**(run.detail or {}), **engine.detail}
     if engine.reader_errors:
@@ -151,7 +156,17 @@ def _lazy_fetch(stack):
             from apps.finance.queries.sybase_gl import open_fetch
             holder['f'] = stack.enter_context(open_fetch())
         return holder['f'](sql)
+    fetch.opened = lambda: 'f' in holder
     return fetch
+
+
+def _sync_branch_cost(engine, date_from, date_to, fetch):
+    from .branch_cost import sync_branch_cost
+    try:
+        engine.detail['branch_cost_rows'] = sync_branch_cost(date_from, date_to, fetch=fetch)
+    except Exception as exc:   # never fails the run: the branch P&L warns about missing months
+        logger.exception('gl branch cost sync failed')
+        engine.detail['branch_cost_error'] = f'{type(exc).__name__}: {exc}'[:500]
 
 
 def _group_key(rule, doc) -> str:
@@ -226,6 +241,9 @@ class _Engine:
             self.reader_errors[t] = f'{type(exc).__name__}: {exc}'[:500]
             return
         self.counts['read'] += len(docs)
+        vat_missing = sum(1 for d in docs if d.attrs.get('vat_missing'))
+        if vat_missing:   # Ruling P32: posted without VAT, so the run says how many
+            self.detail['vat_missing'] = self.detail.get('vat_missing', 0) + vat_missing
         groups = defaultdict(set)        # group_key -> trigger doc pks
         self.old_of = defaultdict(set)   # doc pk -> groups it may still sit in (rebuilt first)
         with transaction.atomic():
