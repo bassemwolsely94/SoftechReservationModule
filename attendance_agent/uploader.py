@@ -4,6 +4,7 @@
 then deletes its spool file. Anything less raises UploadError, and the file stays.
 """
 import http.client
+import ipaddress
 import json
 import urllib.error
 import urllib.parse
@@ -28,6 +29,22 @@ class UploadError(Exception):
         self.permanent = permanent
 
 
+_LOCAL_SUFFIXES = ('.local', '.lan', '.internal', '.home.arpa')
+
+
+def _is_local_host(host) -> bool:
+    """A private, loopback or link-local address, `localhost`, or a one-word / local-suffix
+    name (an office server name). Nothing is looked up, so this never touches the network."""
+    if not host:
+        return False
+    host = host.lower().rstrip('.')
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return host == 'localhost' or '.' not in host or host.endswith(_LOCAL_SUFFIXES)
+    return address.is_private or address.is_loopback or address.is_link_local
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     """Refuse redirects. urllib would turn a redirected POST into a GET that answers
     200, which looks like an ack, and would carry the secret to the new address."""
@@ -38,9 +55,12 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 class Uploader:
     def __init__(self, base_url, secret):
-        scheme = urllib.parse.urlsplit(base_url).scheme
-        if scheme not in ('http', 'https'):
+        parts = urllib.parse.urlsplit(base_url)
+        if parts.scheme not in ('http', 'https'):
             raise ValueError('the ERP address must start with http or https')
+        if parts.scheme == 'http' and not _is_local_host(parts.hostname):
+            # The secret and the punches would cross the public internet in clear text.
+            raise ValueError('an http ERP address must be on this network; use https')
         self._base_url = base_url.rstrip('/')
         self._secret = secret
         # An empty ProxyHandler ignores any system proxy: the secret and the punches

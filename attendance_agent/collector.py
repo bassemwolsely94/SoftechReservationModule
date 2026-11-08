@@ -9,7 +9,7 @@ import logging.handlers
 import os
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from .spool import Spool
@@ -148,9 +148,30 @@ def _waiting_identities(serial, spool):
     return waiting
 
 
-def _check_serial(client, serial):
+def _note(run, text):
+    """Add a short, secret-free sentence to the run's error. A run can carry several."""
+    run['error'] = f"{run['error']}; {text}" if run['error'] else text
+
+
+def _waiting_file_count(serial, spool):
+    """Files for this machine already on disk, not yet delivered. Taken before this pass spools
+    anything, so a healthy run (everything from the last pass was delivered) reports 0. Another
+    machine's files don't count, and a file that can't be read can't be attributed to one."""
+    count = 0
+    for path in spool.pending():
+        try:
+            _kind, payload = spool.read(path)
+            if payload['device_serial'] == serial:
+                count += 1
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    return count
+
+
+def _check_serial(client, serial, run):
     reported = client.read_serial()
     if reported is None:
+        _note(run, 'identity not confirmed')
         logger.warning('device %s: serial not answered, cannot confirm identity', serial)
     elif reported != serial:
         raise SerialMismatch(f'this address answered as machine {reported}')
@@ -170,7 +191,7 @@ def _read_drift(client, serial, now):
 def _read_machine(device, client_factory, run, now):
     serial = device['serial']
     with client_factory(device) as client:
-        _check_serial(client, serial)
+        _check_serial(client, serial, run)
         run['drift_seconds'] = _read_drift(client, serial, now)
         run['device_log_count'] = client.read_sizes().records
         try:
@@ -178,25 +199,27 @@ def _read_machine(device, client_factory, run, now):
         except (ZkError, OSError) as exc:
             # The roster is a convenience and the log is the evidence, so one can't
             # block the other.
-            run['error'] = f'roster not read: {_safe_error(exc)}'
-            logger.warning('device %s: %s', serial, run['error'])
+            _note(run, f'roster not read: {_safe_error(exc)}')
+            logger.warning('device %s: roster not read: %s', serial, _safe_error(exc))
         else:
             return users, client.read_logs()
     # After a failed read the session may be out of step, so use a new connection.
     with client_factory(device) as client:
-        _check_serial(client, serial)
+        _check_serial(client, serial, run)
         return None, client.read_logs()
 
 
 def _quarantine_raw_log(exc, serial, spool):
     raw = getattr(exc, 'raw_table', None)
     if raw is None:
-        return
+        return False
     try:
         spool.quarantine(serial, raw)
         logger.error('device %s: undecoded log of %d bytes kept', serial, len(raw))
+        return True
     except OSError as disk_error:
         logger.error('device %s: could not keep the log: %s', serial, _safe_error(disk_error))
+        return False
 
 
 def _spool_results(serial, users, logs, spool, run):
@@ -226,9 +249,11 @@ def _spool_results(serial, users, logs, spool, run):
     )
 
 
-def collect_device(device, client_factory, spool, now, collect_done=False) -> None:
+def collect_device(device, client_factory, spool, now, collect_done=False, pc_offset=None) -> None:
     """Read one machine, disconnect, then spool. `now` is called, not a fixed time,
     because earlier machines may have taken minutes and drift must stay accurate.
+    When the loop knows how far this PC's clock is from the ERP's, `now` is already
+    corrected and `pc_offset` (seconds) is reported with the run.
 
     A failed read spools only a failed run, so a part-read log is never reported as
     complete. The machine still holds its log for the next run. A failed save raises,
@@ -239,8 +264,11 @@ def collect_device(device, client_factory, spool, now, collect_done=False) -> No
         'device_serial': serial, 'started_at': now().isoformat(), 'finished_at': None,
         'records_read': 0, 'oldest_date': None, 'newest_date': None,
         'drift_seconds': None, 'device_log_count': None, 'status': 'success', 'error': '',
-        'spool_waiting': 0,
+        # Counted before this pass spools anything, so it means files left behind.
+        'spool_waiting': _waiting_file_count(serial, spool),
     }
+    if pc_offset is not None:
+        run['pc_offset_seconds'] = pc_offset
     if collect_done:
         run['collect_done'] = True
     users = logs = None
@@ -248,22 +276,21 @@ def collect_device(device, client_factory, spool, now, collect_done=False) -> No
         users, logs = _read_machine(device, client_factory, run, now)
     except Exception as exc:  # any machine failure is reported, and must not stop others
         run['status'] = 'failed'
-        run['error'] = _safe_error(exc)
-        logger.warning('device %s failed: %s', serial, run['error'])
-        _quarantine_raw_log(exc, serial, spool)
+        _note(run, _safe_error(exc))
+        logger.warning('device %s failed: %s', serial, _safe_error(exc))
+        if _quarantine_raw_log(exc, serial, spool):
+            _note(run, 'undecoded log kept')
 
     try:
         if logs is not None:
             _spool_results(serial, users, logs, spool, run)
         run['finished_at'] = now().isoformat()
-        run['spool_waiting'] = len(spool.pending())
         spool.put('runs', run)
     except OSError as exc:
         run['status'] = 'failed'
-        run['error'] = f'could not save to disk: {_safe_error(exc)}'
+        _note(run, f'could not save to disk: {_safe_error(exc)}')
         run['finished_at'] = now().isoformat()
         try:
-            run['spool_waiting'] = len(spool.pending())
             spool.put('runs', run)
         except OSError:
             pass  # the same disk problem; the raise below is what gets logged
@@ -341,6 +368,25 @@ class AgentLoop:
         self._saved_devices = None
         self._held = {}
         self._collect_done_file = None
+        self._pc_offset = None   # seconds the ERP's clock is ahead of this PC's; None = unknown
+
+    def _corrected_now(self):
+        """This PC's time moved onto the ERP's clock, when the ERP has told us its time."""
+        now = self._now()
+        return now if self._pc_offset is None else now + timedelta(seconds=self._pc_offset)
+
+    def _learn_offset(self, server_time):
+        """ERP time minus PC time, in whole seconds, or None when the ERP didn't say or the
+        value isn't a usable time (then we behave as before)."""
+        if not isinstance(server_time, str):
+            return None
+        try:
+            moment = datetime.fromisoformat(server_time.strip().replace('Z', '+00:00'))
+            if moment.tzinfo is None:
+                return None
+            return round(moment.timestamp() - self._now().timestamp())
+        except (ValueError, OverflowError, OSError):
+            return None
 
     def tick(self) -> None:
         devices, collect_now = self._fetch_config()
@@ -355,8 +401,9 @@ class AgentLoop:
             serial = device['serial']
             try:
                 collect_device(
-                    device, self._client_factory, self._spool, self._now,
+                    device, self._client_factory, self._spool, self._corrected_now,
                     collect_done=run_all and index == len(targets) - 1,
+                    pc_offset=self._pc_offset,
                 )
                 self._next_due[serial] = clock + COLLECT_EVERY_SECONDS
             except Exception as exc:  # e.g. disk full: the next machine still gets its turn
@@ -393,7 +440,9 @@ class AgentLoop:
         except UploadError as exc:
             # The ERP being down must not stop collection, even after a PC restart.
             logger.warning('ERP config unavailable: %s', _safe_error(exc))
+            self._pc_offset = None
             return self._load_devices(), False
+        self._pc_offset = self._learn_offset(config.get('server_time'))
         devices = _valid_devices(config['devices'])
         self._save_devices(devices)
         return devices, bool(config.get('collect_now'))

@@ -230,6 +230,7 @@ def store_run(agent, device, body, today=None) -> bool:
                 'drift_seconds': _drift(body.get('drift_seconds')),
                 'device_log_count': _count_or_none(body.get('device_log_count')),
                 'spool_waiting': _count_or_none(body.get('spool_waiting')),
+                'pc_offset_seconds': _drift(body.get('pc_offset_seconds')),
                 'error': _storable(redact(error))[:_MAX_ERROR] if isinstance(error, str) else '',
             })
         if created:

@@ -117,7 +117,9 @@ class FakeClient:
 class FakeUploader:
     """Plays the ERP: records what arrived, and can refuse at a chosen send."""
 
-    def __init__(self, devices=None, collect_now=False, fail_on=None, on_send=None):
+    def __init__(self, devices=None, collect_now=False, fail_on=None, on_send=None,
+                 server_time=None):
+        self.server_time = server_time
         self.devices = devices if devices is not None else [device()]
         self.collect_now = collect_now
         self.config_down = False
@@ -129,7 +131,10 @@ class FakeUploader:
     def get_config(self):
         if self.config_down:
             raise UploadError('unreachable')
-        return {'agent': 'office', 'collect_now': self.collect_now, 'devices': self.devices}
+        config = {'agent': 'office', 'collect_now': self.collect_now, 'devices': self.devices}
+        if self.server_time is not None:
+            config['server_time'] = self.server_time
+        return config
 
     def send(self, kind, payload):
         if self.on_send:
@@ -450,12 +455,66 @@ class CollectDeviceTests(TempDirTestCase):
                 readable.append(self.spool.read(path))
         self.assertEqual(self.spooled_stamps(readable), [1000])
 
-    def test_run_reports_how_many_files_are_waiting(self):
+    def waiting_after(self, files):
+        return self.run_payload(files[-1:])['spool_waiting']
+
+    def test_a_first_read_reports_nothing_waiting(self):
+        # its own roster, punch and run files are not "left behind"
         files = self.collect(FakeClient())
-        self.assertEqual(self.run_payload(files)['spool_waiting'], 2)
+        self.assertEqual(self.run_payload(files)['spool_waiting'], 0)
+
+    def test_clean_drain_then_a_new_read_reports_zero(self):
+        self.collect(FakeClient())
+        drain(self.spool, FakeUploader())
+        self.assertEqual(self.spool.pending(), [])
+        files = self.collect(FakeClient())
+        self.assertEqual(self.waiting_after(files), 0)
+
+    def test_files_left_for_this_machine_are_counted(self):
+        self.collect(FakeClient())           # 3 files: roster, punches, run
         again = self.collect(FakeClient())
-        self.assertEqual(self.spool.read(self.spool.pending()[-1])[1]['spool_waiting'], 4)
-        self.assertEqual(self.run_payload(again[-1:])['spool_waiting'], 4)
+        self.assertEqual(self.waiting_after(again), 3)
+
+    def test_another_machines_stuck_files_do_not_count(self):
+        self.collect(FakeClient(serial='A'), target=device('A'))
+        files = self.collect(FakeClient(serial='B'), target=device('B'))
+        self.assertEqual(self.waiting_after(files), 0)
+
+    def test_an_unreadable_file_is_not_attributed_to_a_machine(self):
+        self.collect(FakeClient())
+        for path in self.spool.pending():
+            path.write_bytes(b'{half')
+        collect_device(device(), lambda d: FakeClient(), self.spool, lambda: NOW)
+        self.assertEqual(self.spool.read(self.spool.pending()[-1])[1]['spool_waiting'], 0)
+
+    def test_identity_not_confirmed_is_said_in_the_run(self):
+        files = self.collect(FakeClient(device_serial=None))
+        run = self.run_payload(files)
+        self.assertEqual(run['status'], 'success')
+        self.assertIn('identity not confirmed', run['error'])
+
+    def test_a_kept_undecoded_log_is_said_in_the_run(self):
+        files = self.collect(FakeClient(logs_error=self.undecodable_error(b'\x01\x02\x03\x04')))
+        run = self.run_payload(files)
+        self.assertEqual(run['status'], 'failed')
+        self.assertIn('undecoded log kept', run['error'])
+
+    def test_corrected_clock_is_used_for_stamps_and_drift(self):
+        # The PC is 1 hour slow; the loop hands over a corrected clock and its offset.
+        corrected = lambda: NOW + timedelta(seconds=3600)
+        files = []
+        collect_device(device(), lambda d: FakeClient(clock=NOW + timedelta(seconds=3600 + 42)),
+                       self.spool, corrected, pc_offset=3600)
+        files = [self.spool.read(p) for p in self.spool.pending()]
+        run = self.run_payload(files)
+        self.assertEqual(run['pc_offset_seconds'], 3600)
+        self.assertEqual(run['drift_seconds'], 42)
+        self.assertEqual(run['started_at'], (NOW + timedelta(seconds=3600)).isoformat())
+        self.assertEqual(run['finished_at'], (NOW + timedelta(seconds=3600)).isoformat())
+
+    def test_no_offset_key_when_the_erp_didnt_say(self):
+        files = self.collect(FakeClient())
+        self.assertNotIn('pc_offset_seconds', self.run_payload(files))
 
     def test_punch_payload_matches_the_contract(self):
         files = self.collect(FakeClient())
@@ -670,6 +729,52 @@ class LoopTests(TempDirTestCase):
         self.assertEqual(self.collected, ['SN1'])
         self.assertEqual(self.spool.pending(), [])
         self.assertEqual([kind for kind, _p in uploader.sent], ['roster', 'punches', 'runs'])
+
+    def server_clock_ahead(self, seconds):
+        """What the ERP would send when its clock is `seconds` ahead of this PC's NOW."""
+        return (NOW.astimezone() + timedelta(seconds=seconds)).isoformat()
+
+    def test_pc_clock_offset_corrects_stamps_and_drift(self):
+        # PC 2 hours slow. The machine's clock is right (server time), so its drift is ~0
+        # against the corrected clock, not 2 hours.
+        uploader = FakeUploader(server_time=self.server_clock_ahead(7200))
+        loop = self.make_loop(uploader, lambda t: FakeClient(
+            serial=t['serial'], clock=NOW + timedelta(seconds=7200 + 3)))
+        loop.tick()
+        run = uploader.of_kind('runs')[0]
+        self.assertEqual(run['pc_offset_seconds'], 7200)
+        self.assertEqual(run['drift_seconds'], 3)
+        self.assertEqual(run['started_at'], (NOW + timedelta(seconds=7200)).isoformat())
+
+    def test_a_correct_pc_clock_reports_a_zero_offset(self):
+        uploader = FakeUploader(server_time=self.server_clock_ahead(0))
+        self.make_loop(uploader).tick()
+        run = uploader.of_kind('runs')[0]
+        self.assertEqual(run['pc_offset_seconds'], 0)
+        self.assertEqual(run['started_at'], NOW.isoformat())
+
+    def test_no_server_time_behaves_as_before(self):
+        uploader = FakeUploader()
+        self.make_loop(uploader).tick()
+        run = uploader.of_kind('runs')[0]
+        self.assertNotIn('pc_offset_seconds', run)
+        self.assertEqual(run['started_at'], NOW.isoformat())
+
+    def test_unusable_server_time_behaves_as_before(self):
+        for junk in ('yesterday', 12345, '2026-11-07T10:00:00'):    # junk, not text, no zone
+            with self.subTest(junk=junk):
+                uploader = FakeUploader(server_time=junk)
+                self.make_loop(uploader).tick()
+                self.assertNotIn('pc_offset_seconds', uploader.of_kind('runs')[-1])
+
+    def test_config_unreachable_behaves_as_before(self):
+        uploader = FakeUploader(server_time=self.server_clock_ahead(7200))
+        loop = self.make_loop(uploader)
+        loop.tick()
+        uploader.config_down = True
+        self.clock_value += 7200
+        loop.tick()
+        self.assertNotIn('pc_offset_seconds', uploader.of_kind('runs')[-1])
 
     def test_one_bad_machine_does_not_stop_others(self):
         uploader = FakeUploader(devices=[device('BAD'), device('GOOD')])
@@ -1120,6 +1225,23 @@ class UploaderTests(SimpleTestCase):
     def test_only_http_and_https_are_accepted(self):
         with self.assertRaises(ValueError):
             Uploader('file:///c:/windows/win.ini', SECRET)
+
+    def test_plain_http_is_refused_for_a_public_address(self):
+        for url in ('http://elrezeikyerp.dawalvry.com', 'http://41.33.10.9:8000',
+                    'http://8.8.8.8', 'http://example.com/', 'http:///nohost'):
+            with self.subTest(url=url):
+                with self.assertRaises(ValueError):
+                    Uploader(url, SECRET)
+
+    def test_plain_http_is_accepted_for_private_and_local_addresses(self):
+        for url in ('http://192.168.1.201:8000', 'http://10.0.0.5', 'http://172.16.4.2',
+                    'http://127.0.0.1:8000', 'http://localhost:8000', 'http://[::1]:8000',
+                    'http://elrezeikyerp', 'http://erp.local', 'http://169.254.1.1'):
+            with self.subTest(url=url):
+                Uploader(url, SECRET)
+
+    def test_https_is_accepted_for_a_public_address(self):
+        Uploader('https://elrezeikyerp.dawalvry.com', SECRET)
 
     def test_system_proxy_is_not_used(self):
         with mock.patch.dict('os.environ', {'HTTP_PROXY': 'http://127.0.0.1:9',

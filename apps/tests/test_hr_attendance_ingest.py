@@ -121,8 +121,13 @@ class ConfigTests(IngestBase):
         AttendanceDevice.objects.create(serial='SN2', name='٢', agent=other)
         AttendanceDevice.objects.create(serial='SN3', name='٣', agent=self.agent, is_active=False)
         body = self.api.get(f'{PREFIX}config/').json()
+        server_time = body.pop('server_time')
         self.assertEqual(body, {'agent': 'office', 'collect_now': False, 'devices': [
             {'serial': 'SN1', 'name': 'جهاز ١', 'ip': '192.168.3.15', 'port': 4370}]})
+        # an aware ISO time within a minute of now, which the agent measures its PC clock against
+        moment = _dt.datetime.fromisoformat(server_time)
+        self.assertIsNotNone(moment.tzinfo)
+        self.assertLess(abs((timezone.now() - moment).total_seconds()), 60)
 
     def test_collect_now_and_last_seen(self):
         self.agent.collect_requested_at = timezone.now()
@@ -535,6 +540,23 @@ class RunTests(IngestBase):
         run = CollectionRun.objects.get()
         self.assertNotIn('hunter2', run.error)
         self.assertEqual(len(run.error), 255)
+
+    def test_pc_offset_is_stored_and_optional(self):
+        self.post('runs', self.run_body(pc_offset_seconds=-3601))
+        self.assertEqual(CollectionRun.objects.get().pc_offset_seconds, -3601)
+        older = self.run_body(started_at='2026-10-01T11:00:00')
+        self.assertEqual(self.post('runs', older).status_code, 200)
+        self.assertIsNone(CollectionRun.objects.order_by('-started_at').first().pc_offset_seconds)
+
+    def test_junk_pc_offset_is_stored_as_none_not_refused(self):
+        for day, junk in enumerate(('late', 1.5, True, None, [1]), start=2):
+            body = self.run_body(started_at=f'2026-10-0{day}T10:00:00', pc_offset_seconds=junk)
+            self.assertEqual(self.post('runs', body).status_code, 200, junk)
+        self.assertFalse(CollectionRun.objects.filter(pc_offset_seconds__isnull=False).exists())
+
+    def test_pc_offset_decades_off_is_clamped(self):
+        self.post('runs', self.run_body(pc_offset_seconds=9_000_000_000))
+        self.assertEqual(CollectionRun.objects.get().pc_offset_seconds, 2_147_483_647)
 
     def test_clock_decades_off_does_not_refuse_the_run(self):
         # A machine stuck in 2133 reports a drift larger than an int column holds.

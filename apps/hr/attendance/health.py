@@ -1,14 +1,18 @@
 """
 apps/hr/attendance/health.py — alerts for the HR head about the fingerprint collection itself.
 
-Four checks, all on our own tables (CollectionRun and the device / agent rows the ingest keeps
+Checks, all on our own tables (CollectionRun and the device / agent rows the ingest keeps
 current). Nothing here talks to a machine or to SOFTECH:
 
-  • a machine silent for more than 24 hours          (kind 'silent_device')
+  • a machine with no successful collection for more than 24 hours (kind 'silent_device'); one
+    that never succeeded counts from its oldest run
   • the collection agent silent for more than 3 hours (kind 'silent_agent')
-  • a machine clock off by more than 5 minutes        (kind 'drift')
-  • a machine's log count FELL since the last good run (kind 'log_fall'): the machine holds
-    its whole log, so a fall is evidence that logs were cleared.
+  • a machine clock off by more than 5 minutes from the server, as the agent measured it
+    against the server's time                          (kind 'drift')
+  • the agent PC's own clock off by more than 5 minutes (kind 'pc_clock')
+  • a machine's log count FELL between successive good runs (kind 'log_fall'): the machine
+    holds its whole log, so a fall is evidence that logs were cleared.
+  • files left behind on the agent for 3 hours or more (kind 'spool_waiting')
 
 Only admins and 'manage' grantees are told (access.manager_recipients). Alert text names the
 machine, its place and the agent, never an employee. Alerts are in-app only.
@@ -28,10 +32,7 @@ DRIFT_WARNING_SECONDS = 300
 SPOOL_WAITING = _dt.timedelta(hours=3)
 
 
-def _spool_waiting(run):
-    """Files the agent still had waiting to upload at the end of this run, or None when the run
-    doesn't say (an older agent)."""
-    return run.spool_waiting
+LOG_FALL_LOOKBACK = 30   # successful runs examined for a fall; after an outage many arrive at once
 
 
 def _device_label(device):
@@ -47,13 +48,23 @@ def _alerts_for(now):
 
     for dev in AttendanceDevice.objects.filter(is_active=True):
         label = _device_label(dev)
-        silent = bool(dev.last_contact_at and now - dev.last_contact_at > MACHINE_SILENT)
+        # No success since this moment. A machine that has never succeeded counts from its
+        # oldest run, so one failing hourly from day one is caught; one with no agent assigned,
+        # or no run at all, stays quiet.
+        never_succeeded = dev.last_contact_at is None
+        since = dev.last_contact_at
+        if never_succeeded and dev.agent_id:
+            since = (CollectionRun.objects.filter(device=dev).order_by('started_at')
+                     .values_list('started_at', flat=True).first())
+        silent = bool(since and now - since > MACHINE_SILENT)
         if silent:
-            hours = int((now - dev.last_contact_at).total_seconds() // 3600)
+            hours = int((now - since).total_seconds() // 3600)
+            body = (f'لم ينجح أي تجميع للبصمات من {label} منذ حوالي {hours} ساعة.' if never_succeeded
+                    else f'لم تصل بصمات أو اتصال من {label} منذ حوالي {hours} ساعة.')
             found.append({
                 'kind': 'silent_device', 'key': f'silent_device:{dev.pk}:{day}',
                 'title': f'ماكينة البصمة صامتة: {dev.name}',
-                'body': f'لم تصل بصمات أو اتصال من {label} منذ حوالي {hours} ساعة.',
+                'body': body,
             })
         # A silent machine keeps its last drift reading; repeating it daily would be noise.
         if not silent and dev.last_drift_seconds is not None and abs(dev.last_drift_seconds) > DRIFT_WARNING_SECONDS:
@@ -63,27 +74,28 @@ def _alerts_for(now):
                 'title': f'ساعة الماكينة غير مضبوطة: {dev.name}',
                 'body': f'ساعة {label} تختلف عن ساعة السيرفر بحوالي {minutes} دقيقة.',
             })
-        # Last two SUCCESSFUL runs that read a count; a failed run says nothing about the log.
-        last_two = list(CollectionRun.objects.filter(
+        # Recent SUCCESSFUL runs that read a count (a failed run says nothing about the log),
+        # newest first. Every adjacent fall alerts, because after an outage hours of runs arrive
+        # together and the fall may be in the middle.
+        recent = list(CollectionRun.objects.filter(
             device=dev, status='success', device_log_count__isnull=False,
-        ).order_by('-started_at', '-pk')[:2])
-        if len(last_two) == 2 and last_two[0].device_log_count < last_two[1].device_log_count:
-            now_run, before = last_two
-            found.append({
-                # One alert per fall (the run), not per day: the pair stays the latest until the
-                # next good run, and repeating it daily would say nothing new.
-                'kind': 'log_fall', 'key': f'log_fall:{dev.pk}:{now_run.pk}',
-                'title': f'انخفض عدد سجلات البصمة: {dev.name}',
-                'body': (f'عدد السجلات في {label} كان {before.device_log_count} وأصبح '
-                         f'{now_run.device_log_count}. قد يكون السجل قد مُسح من الماكينة.'),
-            })
+        ).order_by('-started_at', '-pk')[:LOG_FALL_LOOKBACK])
+        for now_run, before in zip(recent, recent[1:]):
+            if now_run.device_log_count < before.device_log_count:
+                found.append({
+                    # One alert per fall (the run), not per day: repeating it daily would say
+                    # nothing new.
+                    'kind': 'log_fall', 'key': f'log_fall:{dev.pk}:{now_run.pk}',
+                    'title': f'انخفض عدد سجلات البصمة: {dev.name}',
+                    'body': (f'عدد السجلات في {label} كان {before.device_log_count} وأصبح '
+                             f'{now_run.device_log_count}. قد يكون السجل قد مُسح من الماكينة.'),
+                })
 
         # A file the ERP refuses stays in the agent's spool while every run looks healthy: alert
         # when the newest runs have all reported files waiting, going back 3 hours or more.
         streak_start = None
         for run in CollectionRun.objects.filter(device=dev).order_by('-started_at', '-pk')[:30]:
-            waiting = _spool_waiting(run)
-            if not waiting:          # 0 = cleared, None = not reported: either ends the streak
+            if not run.spool_waiting:         # 0 = cleared, None = not reported: either ends the streak
                 break
             streak_start = run.started_at
         if streak_start is not None and now - streak_start >= SPOOL_WAITING:
@@ -101,6 +113,18 @@ def _alerts_for(now):
                 'kind': 'silent_agent', 'key': f'silent_agent:{agent.pk}:{day}',
                 'title': f'برنامج تجميع البصمات صامت: {agent.name}',
                 'body': f'لم يتصل «{agent.name}» بالسيرفر منذ حوالي {hours} ساعة، فلا تُجمع البصمات.',
+            })
+            continue    # its last clock reading is stale; the silence alert says what matters
+        # The PC's own clock, as the agent measured it against the server at its last visit.
+        offset = (CollectionRun.objects.filter(agent=agent, pc_offset_seconds__isnull=False)
+                  .order_by('-pk').values_list('pc_offset_seconds', flat=True).first())
+        if offset is not None and abs(offset) > DRIFT_WARNING_SECONDS:
+            minutes = round(abs(offset) / 60)
+            found.append({
+                'kind': 'pc_clock', 'key': f'pc_clock:{agent.pk}:{day}',
+                'title': f'ساعة جهاز برنامج التجميع غير مضبوطة: {agent.name}',
+                'body': (f'ساعة الجهاز الذي يعمل عليه «{agent.name}» تختلف عن ساعة السيرفر بحوالي '
+                         f'{minutes} دقيقة. اضبط التاريخ والوقت على ذلك الجهاز.'),
             })
     return found
 

@@ -49,6 +49,21 @@ It asks the ERP for its machines every 60 seconds, and reads each machine hourly
 removed only after the ERP accepts it. If the ERP is down, collection continues from the
 saved machine list and everything is sent when it returns.
 
+**The PC's clock.** Each time the agent asks the ERP for its machines, the ERP also answers
+with its own time (`server_time`). The agent works out how far this PC's clock is from it
+(`pc_offset_seconds`, reported with every run), stamps `started_at` and `finished_at` with the
+corrected time, and measures each machine's clock drift against the corrected time, so the drift
+means "the machine differs from the server". It never changes the PC's clock. If the ERP can't
+be reached, or doesn't send its time, the agent uses the PC's clock as it is and reports no offset.
+The ERP alerts the HR managers when the PC is off by more than 5 minutes.
+
+**The ERP address.** `http` is accepted only for a private or local address (an office network or
+VPN address such as `192.168.x.x` or `10.x.x.x`, `localhost`, or a one-word/`.local` name).
+Anything on the public internet must be `https`; the agent refuses to start otherwise.
+
+**Files waiting.** Each run reports `spool_waiting`: the files for that machine that were still
+on disk when the run began, that is, left over from earlier passes. A healthy agent reports 0.
+
 The state folder (`agent_state` next to `agent.ini`, unless `state_dir` is set) holds:
 
 | Item | Meaning |
@@ -133,6 +148,20 @@ python -m attendance_agent C:\ElRezeiky\agent\agent.ini
 يسأل النظام عن أجهزته كل 60 ثانية، ويقرأ كل جهاز كل ساعة أو عند الضغط على "جمع الآن". تُحفظ كل
 قراءة على القرص قبل إرسال أي شيء، ولا يُحذف الملف إلا بعد قبول النظام له. وإذا توقف النظام
 يستمر الجمع من قائمة الأجهزة المحفوظة، ويُرسل كل شيء عند عودته.
+
+**ساعة الجهاز المكتبي.** في كل مرة يسأل البرنامج النظام عن أجهزته يرد النظام بوقته (`server_time`).
+يحسب البرنامج الفرق بين ساعة هذا الجهاز وساعة النظام (`pc_offset_seconds` ويُرسل مع كل تشغيل)،
+ويختم `started_at` و`finished_at` بالوقت المصحَّح، ويقيس انحراف ساعة كل ماكينة على الوقت المصحَّح،
+فيعني الانحراف أن الماكينة تختلف عن النظام. لا يغيّر البرنامج ساعة الجهاز أبدًا. وإذا تعذّر الوصول
+إلى النظام يستخدم ساعة الجهاز كما هي دون إرسال فرق. ينبّه النظام مسؤولي الموارد البشرية إذا زاد
+فرق ساعة الجهاز عن 5 دقائق.
+
+**عنوان النظام.** يُقبل `http` فقط لعنوان خاص أو محلي (شبكة المكتب أو VPN مثل `192.168.x.x` أو
+`10.x.x.x` أو `localhost` أو اسم من كلمة واحدة أو `.local`). أي عنوان على الإنترنت العام يجب أن
+يكون `https` وإلا يرفض البرنامج العمل.
+
+**الملفات المنتظرة.** يُبلغ كل تشغيل بعدد `spool_waiting`: ملفات هذه الماكينة التي كانت على القرص
+عند بدء التشغيل، أي المتبقية من مرات سابقة. البرنامج السليم يُبلغ بصفر.
 
 يحتوي مجلد الحالة (`agent_state` بجوار `agent.ini`، ما لم يُحدَّد `state_dir`) على:
 

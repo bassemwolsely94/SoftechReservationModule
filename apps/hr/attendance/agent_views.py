@@ -80,6 +80,9 @@ class AgentConfigView(AgentView):
         return Response({
             'agent': agent.name,
             'collect_now': agent.collect_requested_at is not None,
+            # The agent measures its own PC clock against this and reports machine drift
+            # against the corrected time.
+            'server_time': timezone.now().isoformat(),
             'devices': [{'serial': d.serial, 'name': d.name, 'ip': d.ip, 'port': d.port} for d in devices],
         })
 

@@ -7,8 +7,6 @@ quiet, a clock drifts, or a machine's log count falls (evidence that logs were c
 import datetime as _dt
 import hashlib
 
-from unittest import mock
-
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
@@ -214,55 +212,155 @@ class DeliveryTests(HealthBase):
 
 
 class SpoolWaitingTests(HealthBase):
-    """The agent reports files still waiting to upload (CollectionRun.spool_waiting, added by the
-    ingest branch). A file the ERP refuses can sit there while every run looks healthy. The field
-    is read through health._spool_waiting, so these tests supply it per run."""
+    """The agent reports files left behind on its disk (CollectionRun.spool_waiting). A file the
+    ERP refuses can sit there while every run looks healthy. The stored field is read as it is."""
 
-    def check(self, waiting_by_run):
-        with mock.patch.object(health, '_spool_waiting', lambda run: waiting_by_run.get(run.pk)):
-            return health.check_attendance_health(now=NOW)
+    def kinds(self):
+        return [a['kind'] for a in health.check_attendance_health(now=NOW)['alerts']]
 
     def test_waiting_for_3_hours_alerts(self):
-        old = self.run_rec(100, started_at=ago(hours=3, minutes=5))
-        mid = self.run_rec(100, started_at=ago(hours=2))
-        new = self.run_rec(100, started_at=ago(hours=1))
-        self.check({old.pk: 2, mid.pk: 2, new.pk: 2})
+        self.run_rec(100, started_at=ago(hours=3, minutes=5), spool_waiting=2)
+        self.run_rec(100, started_at=ago(hours=2), spool_waiting=2)
+        self.run_rec(100, started_at=ago(hours=1), spool_waiting=2)
+        self.assertEqual(self.kinds(), ['spool_waiting'])
         self.assertEqual(self.alerts(self.admin_p).count(), 1)
 
-    def test_real_spool_waiting_field_alerts(self):
-        # no patching: the stored CollectionRun.spool_waiting column is what the check reads
+    def test_cleared_field_clears_the_alert(self):
         self.run_rec(100, started_at=ago(hours=3, minutes=5), spool_waiting=2)
         self.run_rec(100, started_at=ago(hours=1), spool_waiting=2)
-        health.check_attendance_health(now=NOW)
-        self.assertEqual(self.alerts(self.admin_p).count(), 1)
+        self.assertEqual(self.kinds(), ['spool_waiting'])
         CollectionRun.objects.update(spool_waiting=0)
-        Notification.objects.all().delete()
-        health.check_attendance_health(now=NOW)
-        self.assertEqual(self.alerts().count(), 0)
+        self.assertEqual(self.kinds(), [])
 
     def test_waiting_for_under_3_hours_no_alert(self):
-        old = self.run_rec(100, started_at=ago(hours=2, minutes=50))
-        new = self.run_rec(100, started_at=ago(hours=1))
-        self.check({old.pk: 2, new.pk: 2})
-        self.assertEqual(self.alerts().count(), 0)
+        self.run_rec(100, started_at=ago(hours=2, minutes=50), spool_waiting=2)
+        self.run_rec(100, started_at=ago(hours=1), spool_waiting=2)
+        self.assertEqual(self.kinds(), [])
 
     def test_cleared_spool_breaks_the_streak(self):
-        a = self.run_rec(100, started_at=ago(hours=5))
-        b = self.run_rec(100, started_at=ago(hours=4))
-        c = self.run_rec(100, started_at=ago(hours=1))
-        self.check({a.pk: 3, b.pk: 0, c.pk: 3})
-        self.assertEqual(self.alerts().count(), 0)
+        self.run_rec(100, started_at=ago(hours=5), spool_waiting=3)
+        self.run_rec(100, started_at=ago(hours=4), spool_waiting=0)
+        self.run_rec(100, started_at=ago(hours=1), spool_waiting=3)
+        self.assertEqual(self.kinds(), [])
 
     def test_agent_not_reporting_the_field_is_not_an_alarm(self):
         self.run_rec(100, started_at=ago(hours=5))
         self.run_rec(100, started_at=ago(hours=1))
-        health.check_attendance_health(now=NOW)   # no spool_waiting field/value at all
-        self.assertEqual(self.alerts().count(), 0)
+        self.assertEqual(self.kinds(), [])
 
     def test_inactive_device_spool_no_alert(self):
         self.dev.is_active = False
         self.dev.save()
-        old = self.run_rec(100, started_at=ago(hours=5))
-        new = self.run_rec(100, started_at=ago(hours=1))
-        self.check({old.pk: 2, new.pk: 2})
-        self.assertEqual(self.alerts().count(), 0)
+        self.run_rec(100, started_at=ago(hours=5), spool_waiting=2)
+        self.run_rec(100, started_at=ago(hours=1), spool_waiting=2)
+        self.assertEqual(self.kinds(), [])
+
+    def test_healthy_hourly_runs_report_zero_and_never_alert(self):
+        for hours in (6, 5, 4, 3, 2, 1):
+            self.run_rec(100, started_at=ago(hours=hours), spool_waiting=0)
+        self.assertEqual(self.kinds(), [])
+
+
+class NeverSucceededTests(HealthBase):
+    """A machine that never had a successful collection counts from its oldest run."""
+
+    def setUp(self):
+        super().setUp()
+        self.dev.last_contact_at = None
+        self.dev.save()
+
+    def kinds(self):
+        return [a['kind'] for a in health.check_attendance_health(now=NOW)['alerts']]
+
+    def test_failing_for_over_24_hours_from_day_one_alerts(self):
+        self.run_rec(None, status='failed', started_at=ago(hours=25))
+        self.run_rec(None, status='failed', started_at=ago(hours=1))
+        self.assertEqual(self.kinds(), ['silent_device'])
+        self.assertEqual(self.alerts(self.admin_p).count(), 1)
+        self.assertIn('لم ينجح أي تجميع', self.alerts(self.admin_p).get().body)
+
+    def test_failing_for_under_24_hours_is_quiet(self):
+        self.run_rec(None, status='failed', started_at=ago(hours=23))
+        self.assertEqual(self.kinds(), [])
+
+    def test_no_run_at_all_stays_quiet(self):
+        self.assertEqual(self.kinds(), [])
+
+    def test_unassigned_machine_stays_quiet(self):
+        self.run_rec(None, status='failed', started_at=ago(hours=30))
+        AttendanceDevice.objects.filter(pk=self.dev.pk).update(agent=None)
+        self.assertEqual(self.kinds(), [])
+
+    def test_inactive_machine_stays_quiet(self):
+        self.run_rec(None, status='failed', started_at=ago(hours=30))
+        AttendanceDevice.objects.filter(pk=self.dev.pk).update(is_active=False)
+        self.assertEqual(self.kinds(), [])
+
+    def test_once_it_succeeds_the_contact_time_governs(self):
+        self.run_rec(None, status='failed', started_at=ago(hours=30))
+        AttendanceDevice.objects.filter(pk=self.dev.pk).update(last_contact_at=ago(minutes=10))
+        self.assertEqual(self.kinds(), [])
+
+
+class LogFallBacklogTests(HealthBase):
+
+    def test_a_fall_in_the_middle_of_a_backlog_is_seen(self):
+        # after an outage, hours of runs arrive together: 100, 100, 5 (cleared), 8, 12
+        for hours, count in ((5, 100), (4, 100), (3, 5), (2, 8), (1, 12)):
+            self.run_rec(count, started_at=ago(hours=hours))
+        result = health.check_attendance_health(now=NOW)
+        self.assertEqual([a['kind'] for a in result['alerts']], ['log_fall'])
+        self.assertEqual(self.alerts(self.admin_p).count(), 1)
+
+    def test_every_fall_alerts_once(self):
+        for hours, count in ((6, 100), (5, 50), (4, 60), (3, 20), (2, 25), (1, 25)):
+            self.run_rec(count, started_at=ago(hours=hours))
+        health.check_attendance_health(now=NOW)
+        health.check_attendance_health(now=NOW + _dt.timedelta(hours=2))
+        self.assertEqual(self.alerts(self.admin_p).count(), 2)
+
+    def test_only_the_last_30_successful_runs_are_examined(self):
+        self.run_rec(100, started_at=ago(hours=40))
+        self.run_rec(1, started_at=ago(hours=39))     # a fall, but beyond the window
+        for hours in range(30, 0, -1):
+            self.run_rec(1, started_at=ago(hours=hours))
+        self.assertEqual(health.check_attendance_health(now=NOW)['alerts'], [])
+
+
+class PcClockTests(HealthBase):
+
+    def kinds(self):
+        return [a['kind'] for a in health.check_attendance_health(now=NOW)['alerts']]
+
+    def test_pc_off_by_more_than_5_minutes_alerts_the_managers(self):
+        self.run_rec(100, pc_offset_seconds=-3600)
+        self.assertEqual(self.kinds(), ['pc_clock'])
+        self.assertEqual(self.alerts(self.admin_p).count(), 1)
+        self.assertEqual(self.alerts(self.mgr_p).count(), 1)
+        self.assertEqual(self.alerts(self.viewer_p).count(), 0)
+        self.assertIn(self.agent.name, self.alerts(self.admin_p).get().title)
+
+    def test_pc_offset_of_5_minutes_exactly_is_fine(self):
+        self.run_rec(100, pc_offset_seconds=300)
+        self.assertEqual(self.kinds(), [])
+
+    def test_runs_without_an_offset_say_nothing(self):
+        self.run_rec(100)
+        self.assertEqual(self.kinds(), [])
+
+    def test_the_newest_report_decides(self):
+        self.run_rec(100, started_at=ago(hours=3), pc_offset_seconds=-3600)
+        self.run_rec(100, started_at=ago(hours=1), pc_offset_seconds=2)
+        self.assertEqual(self.kinds(), [])
+
+    def test_alert_repeats_daily_not_hourly(self):
+        self.run_rec(100, pc_offset_seconds=900)
+        health.check_attendance_health(now=NOW)
+        health.check_attendance_health(now=NOW + _dt.timedelta(hours=1))
+        self.assertEqual(self.alerts(self.admin_p).count(), 1)
+
+    def test_silent_agent_reports_only_the_silence(self):
+        self.run_rec(100, pc_offset_seconds=900)
+        self.agent.last_seen_at = ago(hours=5)
+        self.agent.save()
+        self.assertEqual(self.kinds(), ['silent_agent'])
