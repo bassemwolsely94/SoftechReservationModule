@@ -64,8 +64,8 @@ def sql_branchesales(d1: date, d2: date) -> str:
 
 
 def sql_purchase_vat(d1: date, d2: date) -> str:
-    """Ruling P32: supplier invoice / return headers with their invoice VAT (docvalue3). docvalue is
-    read only for the sign. Aliases only on expressions (jConnect drops them on plain columns)."""
+    """Ruling P32: supplier invoice / return headers with their invoice VAT (docvalue3). docvalue gives
+    the sign and is compared with the mirror (vat_value_drift). Aliases only on expressions (jConnect drops them on plain columns)."""
     return (
         "SELECT branchcode, doccode, CONVERT(varchar(20), docnumber) docno, docdate, docvalue, docvalue3 "  # nosec B608 - only date.isoformat() values and module constants are interpolated
         f"FROM {DB}.stktransm "

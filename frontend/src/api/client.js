@@ -11,6 +11,13 @@ const api = axios.create({
   withCredentials: true,
 })
 
+// The JSON default above would make axios serialise a FormData body to JSON (the server answers
+// 415 and the file is lost), so every upload goes as multipart whether or not its call says so.
+api.interceptors.request.use((config) => {
+  if (config.data instanceof FormData) config.headers.setContentType('multipart/form-data')
+  return config
+})
+
 // One refresh at a time, shared by every request that hit a 401 meanwhile.
 let refreshing = null
 // Exported for the live sockets: a socket closed with 4002 (access token expired, N5)

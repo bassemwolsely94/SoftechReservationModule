@@ -844,6 +844,7 @@ def freshness(request):
     from datetime import timedelta
     from django.utils import timezone
     live_sync = (SyncRun.objects.filter(status='running', started_at__gte=timezone.now() - timedelta(minutes=15))
+                 .exclude(lane='retention')
                  .order_by('-started_at').first())
     syncing = live_sync is not None
     from apps.procurement import refresh as purchases_refresh
@@ -890,7 +891,8 @@ def freshness_sync_stock(request):
     from apps.sync.models import SyncRun
     if not can_supply_write(request.user):
         return Response({'detail': 'غير مصرح'}, status=status.HTTP_403_FORBIDDEN)
-    if SyncRun.objects.filter(status='running', started_at__gte=timezone.now() - timedelta(minutes=15)).exists():
+    if (SyncRun.objects.filter(status='running', started_at__gte=timezone.now() - timedelta(minutes=15))
+            .exclude(lane='retention').exists()):
         return Response({'detail': 'توجد مزامنة جارية بالفعل.', 'running': True},
                         status=status.HTTP_202_ACCEPTED)
 
