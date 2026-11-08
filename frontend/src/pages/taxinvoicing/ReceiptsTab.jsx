@@ -1,7 +1,8 @@
 /**
  * E-receipts for branch POS sales: per-branch summary and actions, the list with hold reasons, reading
  * a branch's day from SOFTECH (read only), and each branch's POS setup and the channel rules. Issuing
- * freezes receipts into the branch's chain; nothing here sends to ETA, the send step is a dry run.
+ * freezes receipts into the branch's chain. A real send comes only after a dry run, needs `finalize`
+ * and the typed branch code, and is off while the server's switch is off.
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -20,9 +21,15 @@ const CONFIG_FIELDS = [
 ]
 const CHANNEL_MODES = [['receipt', 'إيصال إلكتروني'], ['invoice', 'فاتورة على مطالبة'], ['undecided', 'لم يتحدد']]
 
-function BranchActions({ branch, me }) {
+// What the server answered about a real send: an uncertain batch stops the branch until it is asked.
+const sentMessage = d => (d.status === 'uncertain'
+  ? `نتيجة غير مؤكدة لـ ${fmtInt(d.count)} إيصال. لن يُرسل شيء من هذا الفرع قبل «استعلام من المصلحة».`
+  : `أُرسلت دفعة من ${fmtInt(d.count)} إيصال. راجع حالاتها، واستعلم من المصلحة عن قرارها.`)
+
+export function BranchActions({ branch, label, me }) {
   const act = useAction()
   const [dry, setDry] = useState(null)
+  const [confirm, setConfirm] = useState('')
   return (
     <div className="space-y-2" data-tour="tax-invoicing-main-receipts-branch-actions">
       <div className="flex flex-wrap items-center gap-2">
@@ -47,6 +54,20 @@ function BranchActions({ branch, me }) {
             </ul>
           )}
         </Notice>
+      )}
+      {dry && me.can_finalize && (
+        <div className="flex flex-wrap items-end gap-2" data-tour="tax-invoicing-main-receipts-send">
+          <Field label={`للإرسال الفعلي اكتب كود الفرع: ${label || branch}`}>
+            <input dir="ltr" autoComplete="off" value={confirm} onChange={e => setConfirm(e.target.value)} className={`${INPUT} w-32`} />
+          </Field>
+          <Btn variant="danger" disabled={act.pending || !dry.submit_enabled || !dry.count || !confirm.trim()}
+            onClick={() => act.run(() => taxInvoicingApi.submitReceipts(branch, confirm.trim()), sentMessage, () => { setConfirm(''); setDry(null) })}>
+            إرسال الدفعة للمصلحة
+          </Btn>
+          <span className="text-[11px] text-gray-500">
+            {!dry.submit_enabled ? 'معطل طالما الإرسال الفعلي مغلق.' : !dry.count ? 'لا توجد إيصالات صادرة للإرسال.' : 'ما يُرسل لا يُسحب.'}
+          </span>
+        </div>
       )}
     </div>
   )
@@ -326,7 +347,7 @@ export default function ReceiptsTab({ me, initialStatus = '' }) {
       <Section title="ملخص الفروع" hint="اضغط الفرع لإصدار الجاهز أو معاينة الإرسال أو الاستعلام." data-tour="tax-invoicing-main-receipts-summary">
         <Grid columns={columns} rows={data.branches} getKey={r => r.branch} empty="لم تُستورد إيصالات بعد"
           onOpen={r => setOpen(o => (o === r.branch ? null : r.branch))} openKey={open}
-          renderOpen={r => <BranchActions branch={r.branch} me={me} />} />
+          renderOpen={r => <BranchActions branch={r.branch} label={bl(r.branch)} me={me} />} />
       </Section>
       {me.can_create && <ImportDay />}
       <ReceiptsList initialStatus={initialStatus} statuses={data.statuses} bl={bl} />
