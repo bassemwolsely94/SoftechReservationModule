@@ -47,6 +47,12 @@ class Command(BaseCommand):
                 k: v for k, v in it.items() if k != 'softech_id'})
             item.search_name = search_name_for(item)
             item.save(update_fields=['search_name'])
+        # A tiny chart of accounts for the finance ledger flow (codes finance does not use).
+        from apps.finance.models import GLAccount, GLAccountGroup
+        for name, section, code, acc_name, nature, acc_type in settings.E2E_GL_ACCOUNTS:
+            group, _ = GLAccountGroup.objects.get_or_create(name=name, defaults={'section': section})
+            GLAccount.objects.update_or_create(code=code, defaults={
+                'name': acc_name, 'group': group, 'nature': nature, 'account_type': acc_type})
         for role, username in settings.E2E_USERS.items():
             user, _ = User.objects.get_or_create(username=username)
             user.first_name = 'E2E'

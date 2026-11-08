@@ -76,7 +76,9 @@ if _RUNNING_TESTS and not config('SOFTECH_TESTS_ALLOW_LIVE', default=False, cast
             return cast(value) if (cast and isinstance(value, str)) else value
         return _env_config(key, *args, **kwargs)
 
-if not SECRET_KEY or SECRET_KEY.startswith('change-me'):
+# 'change' covers the placeholders in deploy/*.env.example (CHANGE, CHANGE-to-a-long-random-value) as well as
+# change-me. `check --deploy` only warns about them, so without this a copied template would pass release.sh.
+if not SECRET_KEY or SECRET_KEY.lower().startswith('change'):
     if DEBUG or _RUNNING_TESTS:
         SECRET_KEY = SECRET_KEY or 'dev-only-insecure-' + os.urandom(16).hex()
     else:
