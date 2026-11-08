@@ -16,8 +16,10 @@ import hashlib
 import re
 import secrets
 import time
+from datetime import timedelta
 
 from django.conf import settings
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.module_loading import import_string
 
@@ -25,6 +27,8 @@ from . import fiscal
 from .models import TaxSigningCertification, TaxSigningJob
 
 PRODUCTION_HOST = 'api.invoicing.eta.gov.eg'
+STALE_DOCUMENT_GRACE_SECONDS = 60   # past AgentSigner's own wait, which normally expires the job first
+STALE_SMOKE_MINUTES = 15            # long enough for someone to walk over and start the agent
 
 
 class SigningUnavailable(Exception):
@@ -114,6 +118,18 @@ def assert_ready_for_live(signer=None):
         raise SigningUnavailable('بصمة شهادة الختم لا تطابق الإعداد TAX_SIGNING_CERT_THUMBPRINT')
     if cert.not_after and cert.not_after <= timezone.now():
         raise SigningUnavailable('شهادة الختم منتهية')
+
+
+def expire_stale_jobs():
+    """Close jobs left open when the agent or a web process died: the screen stops waiting for them, and
+    the agent never seals a document nobody is waiting for. An unanswered smoke test records no
+    certification, because silence from the agent says nothing about the token."""
+    now = timezone.now()
+    document_limit = int(getattr(settings, 'TAX_SIGNING_WAIT_SECONDS', 60)) + STALE_DOCUMENT_GRACE_SECONDS
+    return TaxSigningJob.objects.filter(status__in=[TaxSigningJob.PENDING, TaxSigningJob.CLAIMED]).filter(
+        Q(kind=TaxSigningJob.KIND_DOCUMENT, created_at__lt=now - timedelta(seconds=document_limit))
+        | Q(kind=TaxSigningJob.KIND_SMOKE, created_at__lt=now - timedelta(minutes=STALE_SMOKE_MINUTES)),
+    ).update(status=TaxSigningJob.EXPIRED, finished_at=now)
 
 
 def start_smoke_test(actor):

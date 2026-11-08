@@ -24,7 +24,7 @@ real token. Full owner steps: [docs/deploy/2026-11-tax-signing-workstation.md](.
 | 2 | **Stopped on purpose:** PIN refused, wrong or expired certificate, no usable mechanism | **No.** A restart could use up PIN attempts |
 | 3 | `--once`: no token present | Yes |
 | 4 | Configuration problem | No |
-| 5 | The server refused the agent (401, 403, redirect, wrong address) | No |
+| 5 | The server refused the agent: wrong password, 2FA, locked account, 401/403, redirect, wrong address | **No.** A restart with a wrong password counts toward the account lock |
 | 6 | `--once`: server unreachable | Yes |
 
 `run` without `--once` waits by itself for a missing token or an unreachable server. It only exits on
@@ -43,13 +43,17 @@ registry, so anyone with administrator rights on this PC can read it. This PC is
 database server. To do it, in an administrator PowerShell:
 
 1. Create a dedicated local user, for example `taxagent`, with a strong password.
-2. Log in as that user once. In its own PowerShell, run the two commands below. They ask for the values
-   without showing them, and store them for that user only:
+2. Log in as that user once. In its own PowerShell, run the three commands below. They ask for the
+   values without showing them, and store them for that user only. The second is the password of the
+   agent's staff account in the app (`tax_signing_agent`), not of this Windows user:
 
    ```powershell
    [Environment]::SetEnvironmentVariable('TAX_TOKEN_PIN', [Net.NetworkCredential]::new('', (Read-Host -AsSecureString 'PIN')).Password, 'User')
+   [Environment]::SetEnvironmentVariable('TAX_AGENT_PASSWORD', [Net.NetworkCredential]::new('', (Read-Host -AsSecureString 'Agent account password')).Password, 'User')
    [Environment]::SetEnvironmentVariable('TAX_SIGNING_AGENT_TOKEN', [Net.NetworkCredential]::new('', (Read-Host -AsSecureString 'Agent token')).Password, 'User')
    ```
+
+   When the account's password is rotated, run the second command again, then restart the task.
 
 3. Create a task that starts at boot, as that user, with no restart on failure (see exit code 2):
 

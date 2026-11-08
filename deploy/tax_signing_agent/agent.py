@@ -7,7 +7,9 @@ deploy/tax_signing_agent/agent.py — the signing agent on the PC that holds the
     python agent.py run [--once]                       pulls jobs from the server, signs, returns them
 
 The agent only makes outbound HTTPS calls; nothing connects to it. The PIN comes from a prompt or
-TAX_TOKEN_PIN, stays in this process, and is never logged, written or sent. Steps for the owner:
+TAX_TOKEN_PIN, stays in this process, and is never logged, written or sent. The agent signs in to the
+server with its own staff account (TAX_AGENT_PASSWORD, prompt) and sends the agent token as well; a
+refused password stops it, like a refused PIN. Steps for the owner:
 docs/deploy/2026-11-tax-signing-workstation.md.
 
 Lock safety: a token locks after a few wrong PINs, so a refused PIN stops the agent at once and is
@@ -38,6 +40,10 @@ EXIT_OK, EXIT_FAILED, EXIT_FATAL, EXIT_NO_TOKEN, EXIT_CONFIG, EXIT_SERVER_REFUSE
 
 ENV_PIN = 'TAX_TOKEN_PIN'
 ENV_AGENT_TOKEN = 'TAX_SIGNING_AGENT_TOKEN'   # same name as the server setting
+ENV_USERNAME = 'TAX_AGENT_USERNAME'
+ENV_PASSWORD = 'TAX_AGENT_PASSWORD'
+API_LOGIN = '/api/auth/login/'
+API_REFRESH = '/api/auth/refresh/'
 API_NEXT = '/api/tax-invoicing/signing-agent/next/'
 API_RESULT = '/api/tax-invoicing/signing-agent/jobs/{id}/result/'
 SECRET_CONFIG_KEYS = {'pin', 'token_pin', 'agent_token', 'password', 'secret'}
@@ -338,19 +344,26 @@ def _bits():
 class Server:
     """The two agent endpoints. Refuses plain HTTP and redirects, so the agent token cannot leak."""
 
-    def __init__(self, base_url, agent_token, *, ca_bundle='', http=None, timeout=20):
+    def __init__(self, base_url, agent_token, *, username='', password='', ca_bundle='', http=None, timeout=20):
         if not str(base_url).lower().startswith('https://'):
             raise ConfigError('[server] url must start with https://')
         if not agent_token:
             raise ConfigError(f'{ENV_AGENT_TOKEN} is not set')
+        if not username or not password:
+            raise ConfigError(f'the agent signs in with its own staff account: set [server] username '
+                              f'(or {ENV_USERNAME}) and {ENV_PASSWORD}')
         self.base_url = base_url.rstrip('/')
-        self._headers = {'X-Tax-Agent-Token': agent_token}
+        self.username = username
+        self._password = password
+        self._agent_token = agent_token
+        self._access = ''
+        self._refresh = ''
         self.verify = ca_bundle or True
         self.timeout = timeout
         self.http = http or self._session()
 
     def __repr__(self):
-        return f'<Server {self.base_url}>'
+        return f'<Server {self.base_url} as {self.username}>'
 
     @staticmethod
     def _session():
@@ -359,18 +372,74 @@ class Server:
         session.trust_env = False   # no proxy or .netrc from the machine's environment
         return session
 
-    def _post(self, path, body):
+    def _send(self, path, body, headers):
+        """One request. The sign-in cookies the server also sets are dropped: the agent sends its token
+        in the Authorization header only, and never X-Requested-With (that is the browser's mark)."""
         try:
-            response = self.http.post(self.base_url + path, headers=self._headers, json=body, timeout=self.timeout,
+            response = self.http.post(self.base_url + path, headers=headers, json=body, timeout=self.timeout,
                                       allow_redirects=False, verify=self.verify)
         except OSError as exc:      # requests' errors are OSError, TLS failures included
             raise ServerUnreachable(f'cannot reach the server: {type(exc).__name__}') from exc
-        status = response.status_code
-        if status in (401, 403):
-            raise ServerRefused(f'the server refused the agent ({status}); check {ENV_AGENT_TOKEN} here and on the server')
-        if 300 <= status < 400:
-            raise ServerRefused(f'the server answered with a redirect ({status}); check [server] url')
+        jar = getattr(self.http, 'cookies', None)
+        if jar is not None:
+            jar.clear()
+        if 300 <= response.status_code < 400:
+            raise ServerRefused(f'the server answered with a redirect ({response.status_code}); check [server] url')
+        if response.status_code >= 500:
+            raise ServerUnreachable(f'the server answered {response.status_code}')
         return response
+
+    def sign_in(self):
+        """Username and password, once. A refusal stops the agent, as a wrong PIN does: repeating it
+        would only lock the account."""
+        response = self._send(API_LOGIN, {'username': self.username, 'password': self._password}, {})
+        body = self._json(response) if response.status_code in (200, 403, 429) else {}
+        if response.status_code == 200 and body.get('access') and body.get('refresh'):
+            self._access, self._refresh = body['access'], body['refresh']
+            log.info('signed in as %s', self.username)
+            return
+        if response.status_code == 200 and (body.get('mfa_required') or body.get('mfa_setup_required')):
+            raise ServerRefused(f'the account {self.username} asks for two-factor sign-in, which the agent cannot '
+                                'answer. Use an account whose role does not require it, with 2FA off.')
+        if response.status_code == 401:
+            raise ServerRefused(f'the server refused the username or password for {self.username}. The agent '
+                                'stopped and will not try again, so the account does not lock.')
+        if response.status_code == 429:
+            raise ServerRefused(f'sign-in for {self.username} is locked or throttled. Wait, or ask an admin to '
+                                'lift the lock, after checking the password.')
+        if response.status_code == 403:
+            reason = str(body.get('error') or body.get('detail') or '')[:200]
+            raise ServerRefused(f'the server refused sign-in for {self.username} (403): {reason}')
+        raise ServerUnreachable(f'sign-in answered {response.status_code}')
+
+    def _renew(self):
+        """A fresh access token from the refresh token; a full sign-in when that is refused."""
+        if self._refresh:
+            response = self._send(API_REFRESH, {'refresh': self._refresh}, {})
+            body = self._json(response) if response.status_code == 200 else {}
+            if response.status_code == 200 and body.get('access'):
+                self._access = body['access']
+                self._refresh = body.get('refresh') or self._refresh   # rotated: the old one is now void
+                return
+            if response.status_code not in (400, 401, 403):
+                raise ServerUnreachable(f'token refresh answered {response.status_code}')
+        self._access = self._refresh = ''
+        self.sign_in()
+
+    def _post(self, path, body):
+        if not self._access:
+            self.sign_in()
+        for attempt in (1, 2):
+            headers = {'Authorization': f'Bearer {self._access}', 'X-Tax-Agent-Token': self._agent_token}
+            response = self._send(path, body, headers)
+            if response.status_code == 401 and attempt == 1:
+                self._renew()      # access tokens last an hour; the server answers 401 once one runs out
+                continue
+            if response.status_code in (401, 403):
+                raise ServerRefused(
+                    f'the server refused the agent ({response.status_code}). Check {ENV_AGENT_TOKEN} here and on the '
+                    f'server, that the role of {self.username} holds tax_invoicing finalize, and the zone policy.')
+            return response
 
     @staticmethod
     def _json(response):
@@ -645,8 +714,13 @@ def main(argv=None, *, p11=None, http=None, env=None, prompt=None, out=None, sle
         server = None
         if args.command == 'run':
             section = config['server'] if config.has_section('server') else {}
+            username = (env.pop(ENV_USERNAME, '') or section.get('username', '')).strip()
+            if not username:
+                raise ConfigError(f'set [server] username (or {ENV_USERNAME}): the agent signs in with its own account')
             server = Server(section.get('url', '').strip(),
                             read_secret(ENV_AGENT_TOKEN, 'Agent token', env=env, prompt=prompt),
+                            username=username,
+                            password=read_secret(ENV_PASSWORD, f'Password for {username}', env=env, prompt=prompt),
                             ca_bundle=section.get('ca_bundle', '').strip(), http=http)
         pin = read_secret(ENV_PIN, 'Token PIN', env=env, prompt=prompt)
         token = Token(p11, module, label=label, thumbprint=token_section.get('thumbprint', ''),

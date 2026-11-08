@@ -8,7 +8,7 @@ The Egyptian Tax Authority (ETA) requires each document to carry a CAdES-BES sig
 > - A smoke test signs a harmless random text. It never goes to ETA.
 
 > **Golden rules**
-> - **Never paste the PIN or the agent token into a chat, a file in the repo, or `config.ini`.** The agent refuses to start if `config.ini` holds them.
+> - **Never paste the PIN, the agent account's password or the agent token into a chat, a file in the repo, or `config.ini`.** The agent refuses to start if `config.ini` holds them.
 > - **Find out how many wrong PINs lock this token before you type it anywhere.** The token may lock after only a few. Ask the issuer, or check the vendor tool.
 > - **If the agent says the PIN was refused, stop.** Don't restart it until you have confirmed the PIN. It stops itself so the token doesn't lock.
 > - Don't unplug the token or touch the outside program during its working hours until step 7 is done.
@@ -154,7 +154,30 @@ Invoke-WebRequest -UseBasicParsing https://elrezeikyapp.dawalvry.com/api/public/
 
 ## Step 5: Set up the server
 
-**Check the code first.** The release on the VPS must include the entry for `/api/tax-invoicing/signing-agent/` in `apps/access/public_paths.py`. Without it, once `PUBLIC_API_ENFORCEMENT=enforce`, the agent is refused with 401 before its token is even looked at. **This entry was still missing when this page was written.**
+**Check the code first.** The release on the VPS must include this signing work, which is not on `main` yet. An older release has no agent address (404), or does not accept the agent's sign-in.
+
+The agent needs two things from the server, and both are checked on every request: **its own staff account**, and **the agent token**. Neither one alone is enough.
+
+### 5.1 The agent's own account
+
+> **Read this first: `finalize` is also the permission to send.** The agent needs `tax_invoicing` → `finalize` to collect documents for signing. The same permission lets its holder submit documents to the Tax Authority once sending is switched on. **Whoever knows this account's password can send.** Treat it like the seal's PIN.
+
+1. **Pick the role. This is a decision for you.** Permissions in this system belong to a role, not to one person, and there are ten fixed roles. **There is no role that only this account holds.** Whatever role gets `finalize`, every account with that role can also sign and send. Two choices:
+   - **Recommended:** ask the developers for a dedicated role, for example «جهاز التوقيع», held by this account only. That is a small code change: a new role, a migration and a permission seed.
+   - **Until then:** use a role that **no person holds today**, and keep it that way. Check the user list first; `viewer` is a candidate if nobody uses it. Do not use `admin`, `supervisor` or `purchasing`. Those roles need two-factor sign-in once it is enforced, and the agent cannot answer a 2FA code. Do not use `accountant`, because that would give every accountant the right to send.
+2. **Create the account** in the app's user management, as an admin. Use the username `tax_signing_agent`, the role from step 1, and a long random password from your password manager. Leave two-factor sign-in **off** for this account. It is not a person's account: nobody logs in with it.
+3. **Grant `finalize` to that role only.** In the roles and permissions screen, set module «الفواتير الضريبية» (`tax_invoicing`), action `finalize`, for that role. It needs nothing else.
+4. **If zone policy is in use for that role:** the agent comes from inside the network, as an unapproved device (zone Z2), because it is not a browser. That role's Z2 row, if it has one, must allow tax invoicing. From outside the network the agent is refused once the zone policy is enforced, which is why step 4 routes it through the tunnel.
+
+**Rotating the password** every 90 days, and whenever someone who knew it leaves:
+
+1. Stop the agent on the PC (close its window, or stop the task).
+2. Change the password in the app. This also ends the account's current sessions.
+3. Start the agent again and give it the new password. If you leave the agent running, its next renewal is refused. It then stops with `the server refused the username or password … will not try again`. That is expected; start it with the new password.
+
+The agent never retries a refused password, so a mistake costs one attempt, not a locked account.
+
+### 5.2 The agent token and the settings
 
 **Create the agent token on the VPS:**
 
@@ -176,29 +199,31 @@ Leave `TAX_ETA_SUBMIT_ENABLED`, `TAX_ERECEIPT_SUBMIT_ENABLED` and `TAX_ALLOW_MOC
 sudo systemctl restart elrezeiky-web
 ```
 
-**On the PC,** start the agent in a PowerShell window that stays open. It prompts for the agent token and the PIN:
+### 5.3 Start the agent
+
+**On the PC,** set `username = tax_signing_agent` under `[server]` in `config.ini`. Then start the agent in a PowerShell window that stays open. It prompts for the agent token, the account's password and the PIN, and shows none of them:
 
 ```powershell
 cd C:\ElRezeikyTaxAgent
 .\venv\Scripts\python.exe agent.py run
 ```
 
-**Pass looks like:** `agent started`, then silence. No news is good: it polls every 5 seconds and logs only when something happens. It does not use the PIN until a job arrives.
+**Pass looks like:** `agent started`, then `signed in as tax_signing_agent`, then silence. No news is good: it polls every 5 seconds and logs only when something happens. It renews its sign-in by itself every hour. It does not use the PIN until a job arrives.
 
 ## Step 6: The smoke test
 
 This is the proof that the real token, the real path and the server work together. Live sending can only be switched on after a pass.
 
-**Start it** with the seal test button on the tax invoicing screen, once that screen has shipped. Until then, while logged in as an admin, use the browser's developer console on the app's page (F12, then Console):
+**Start it** with the «اختبار الختم» button: open `/tax-invoicing`, then the Settings tab, section «التوقيع الإلكتروني». That screen is on its own branch and is not on `main` yet. Until it ships, log in as an admin and use the browser's developer console on the app's page (F12, then Console):
 
 ```js
 fetch('/api/tax-invoicing/signing/smoke-test/', {method: 'POST', credentials: 'include',
-  headers: {'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''}}).then(r => r.json()).then(console.log)
+  headers: {'X-Requested-With': 'XMLHttpRequest'}}).then(r => r.json()).then(console.log)
 ```
 
-It answers with a `job_id`. Within seconds the agent's window shows `job=<id> kind=smoke sha256=… signed=yes delivered=yes`.
+It answers with a `job_id`. Within seconds the agent's window shows `job=<id> kind=smoke sha256=… signed=yes delivered=yes`. A smoke test nobody answers closes by itself after 15 minutes. It leaves the last result as it was, so press the button again once the agent is running.
 
-**Read the result** at `https://elrezeikyapp.dawalvry.com/api/tax-invoicing/signing/status/`.
+**Read the result** in the same section of the screen, or at `https://elrezeikyapp.dawalvry.com/api/tax-invoicing/signing/status/`. The screen shows the main facts; the address also shows the thumbprint.
 
 **Pass looks like:**
 
@@ -263,11 +288,16 @@ Both the outside program and the agent need the same token. We don't know how th
 | `the token is busy` | The outside program is using it | Occasional is fine: it retries. Constant: see step 7. |
 | `cannot reach the server` | Tunnel, route or DNS | Repeat the checks in step 4. The agent backs off by itself, up to every 5 minutes. |
 | `cannot reach the server: SSLError` | PC clock wrong, or the name resolves to something else | Check the clock and step 4.3. |
-| `the server refused the agent (401)` | The `public_paths.py` entry is not in this release | See step 5. Update the release. |
-| `the server refused the agent (403)` | The agent token differs between PC and server, or is under 32 characters | Set it again on both sides, and restart the web process. |
+| `the server refused the username or password … will not try again` | Wrong password, or it was rotated (step 5.1) | **Do not restart blindly.** Check the password in your password manager, then start it once. |
+| `asks for two-factor sign-in` | 2FA is on for the account, or its role requires it | Use a role outside `admin` / `supervisor` / `purchasing`, with 2FA off for this account (step 5.1). |
+| `sign-in … is locked or throttled` | Too many wrong passwords, from anywhere | Find out who tried. An admin can lift the lock, after the password is confirmed. |
+| `the server refused sign-in … (403)` | Account disabled, or its role is blocked in this zone | The reason is in the message. Check the account and step 5.1 point 4. |
+| `set [server] username` | `config.ini` has no username | Add `username = tax_signing_agent` under `[server]`. |
+| `the server refused the agent (401)` | Signed in, but refused even after renewing: the release is older than this work | See step 5. Update the release. |
+| `the server refused the agent (403)` | The agent token differs between PC and server or is under 32 characters, or the account's role lacks `finalize` | Check the role's grant (step 5.1). Then set it again on both sides, and restart the web process. |
 | `the server answered with a redirect` | `url` in `config.ini` is wrong, or not https | Use exactly `https://elrezeikyapp.dawalvry.com`. |
 | `canonical text does not match its SHA-256` | The text changed on its way, or a bug on our side | The agent refused to sign. Send us the job id. |
-| Document error: `جهاز الختم لم يرد في الوقت المحدد` | Agent not running, or token busy for over 60 seconds | Start the agent. Pending jobs that timed out are not signed later. |
+| Document error: `جهاز الختم لم يرد في الوقت المحدد` | Agent not running, or token busy for over 60 seconds | Start the agent. Jobs that timed out are never signed later; send the document again. |
 | Document error: `بصمة شهادة الختم لا تطابق` | `TAX_SIGNING_CERT_THUMBPRINT` differs from the last smoke test | Fix the setting, or repeat the smoke test. |
 | Document error: `المستند موقّع بشهادة غير المسجلة` | The agent signed with another certificate | Check which token is plugged in. |
 | `smoke test: does not verify`, `does not cover` | A real problem in the signature | Send us `certification.detail`. |
