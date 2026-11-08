@@ -371,8 +371,10 @@ Owner decisions 2026-11-05: VAT → «Split SOFTECH VAT»; accessories 5120–51
   rule still active the rebuilt lines are identical, so no entry changes. Once the split rule is active — a
   fresh seed, or finance editing an old seeded rule to it — the next run over those dates rebuilds every
   purchase group in the range: drafts are replaced, **approved entries in open months are reversed and
-  redrafted (back to draft, to approve again)**, and **closed months raise `closed_period_change`** (one per
-  group, corrected in the first open month). Run it over a range finance expects, not by surprise. Jan–Aug 2026 docvalue3: HQ 684,185.47, branches 19,451.87; doccode 120 HQ
+  redrafted (back to draft, to approve again)**, an accountant-edited entry is not rebuilt but asks in the
+  inbox (P23: accept SOFTECH's version or keep the edit), and **closed months raise `closed_period_change`**
+  (one per group; the correcting entry in the first open month arrives with Plan 3, until then finance posts
+  it by hand). Run it over a range finance expects, not by surprise. Jan–Aug 2026 docvalue3: HQ 684,185.47, branches 19,451.87; doccode 120 HQ
   16,244.27. Finance's 2363 for Jan–Aug is 1,225,493.04 — the 0.52M gap is for finance to explain against
   SOFTECH, not closed here.
 - **P33 + P34 — SOFTECH branch figures (report-time only, posts nothing).** `stktransm.docvalue2` on

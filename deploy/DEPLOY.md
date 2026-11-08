@@ -57,20 +57,32 @@ sudo -u elrezeiky nano .env
 Critical settings for production:
 ```env
 DEBUG=False
-ALLOWED_HOSTS=yourdomain.com,YOUR_VPS_IP   # required — '*' is no longer the default
-SCHEDULER_AUTOSTART=False          # MUST be False — scheduler runs separately
-SECRET_KEY=<generate a long random key>     # REQUIRED — the app refuses to start without it
-BEHIND_HTTPS_PROXY=True            # Nginx terminates TLS (sets X-Forwarded-Proto)
-NETWORK_HEADER_TRUSTED=True              # ONLY when our nginx + elrezeiky-proxy-headers.conf is the sole way in (N1 network label)
-NETWORK_UNTRUSTED_ZONE=external            # zone assumed if the header is not trusted; never internal on a server
-NETWORK_POLICY_ENFORCEMENT=log             # off | log | enforce (N3)
-NETWORK_PROXY_KEY=<openssl rand -hex 32>   # N3: same value as in /etc/nginx/elrezeiky-proxy-key.conf; required to enforce
+# required — '*' is no longer the default
+ALLOWED_HOSTS=yourdomain.com,YOUR_VPS_IP
+# MUST be False — scheduler runs separately
+SCHEDULER_AUTOSTART=False
+# REQUIRED — the app refuses to start without it
+SECRET_KEY=<generate a long random key>
+# Nginx terminates TLS (sets X-Forwarded-Proto)
+BEHIND_HTTPS_PROXY=True
+# ONLY when our nginx + elrezeiky-proxy-headers.conf is the sole way in (N1 network label)
+NETWORK_HEADER_TRUSTED=True
+# zone assumed if the header is not trusted; never internal on a server
+NETWORK_UNTRUSTED_ZONE=external
+# off | log | enforce (N3)
+NETWORK_POLICY_ENFORCEMENT=log
+# N3: same value as in /etc/nginx/elrezeiky-proxy-key.conf; required to enforce
+NETWORK_PROXY_KEY=<openssl rand -hex 32>
 # N3: nginx-proxy-headers.conf now includes /etc/nginx/elrezeiky-proxy-key.conf - create it (runbook, Batch N3 step 1) BEFORE reloading nginx or `nginx -t` fails.
-NUM_PROXIES=1                      # nginx appends the client to X-Forwarded-For (throttles + audit IP)
+# nginx appends the client to X-Forwarded-For (throttles + audit IP)
+NUM_PROXIES=1
 CSRF_TRUSTED_ORIGINS=https://yourdomain.com
-RBAC_ENFORCEMENT=log               # then 'enforce' once the rbac log is clean
-RBAC_ENFORCED_ROLES=accountant     # comma list: roles refused outside their grants even in log mode (not when off)
-MEDIA_ACCEL_REDIRECT=True          # uploads: Django checks the signed link, Nginx sends the file
+# then 'enforce' once the rbac log is clean
+RBAC_ENFORCEMENT=log
+# comma list: roles refused outside their grants even in log mode (not when off)
+RBAC_ENFORCED_ROLES=accountant
+# uploads: Django checks the signed link, Nginx sends the file
+MEDIA_ACCEL_REDIRECT=True
 # Login cookies get the Secure flag automatically because BEHIND_HTTPS_PROXY=True.
 ```
 

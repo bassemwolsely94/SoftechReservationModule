@@ -837,22 +837,28 @@ chmod 600 .env
 Start from the **production** template (`deploy/production.env.example`): it boots as a reader —
 SOFTECH kill-switch ON, `WRITER_INSTANCE=False` and every writer flag listed and OFF
 (`apps/tests/test_go_live.py` keeps it that way). You flip them only at cutover (section 11).
-The block below is the part to fill in:
+The block below is the part to fill in. Keep comments on their own line: python-decouple
+keeps anything after `=` as the value, so a note beside a value stops the app at boot.
 
 ```env
 DEBUG=False
-DJANGO_ADMIN_ENABLED=False        # Django admin has no 2FA; set True only for a maintenance window, then back to False
+# Django admin has no 2FA; set True only for a maintenance window, then back to False
+DJANGO_ADMIN_ENABLED=False
 SECRET_KEY=<python3 -c "import secrets; print(secrets.token_urlsafe(50))">
 ALLOWED_HOSTS=elrezeikyapp.dawalvry.com,localhost,127.0.0.1
 CSRF_TRUSTED_ORIGINS=https://elrezeikyapp.dawalvry.com
 FRONTEND_BASE_URL=https://elrezeikyapp.dawalvry.com
 BEHIND_HTTPS_PROXY=True
-NETWORK_HEADER_TRUSTED=True         # ONLY because our nginx + elrezeiky-proxy-headers.conf is the sole way in (N1)
-NETWORK_UNTRUSTED_ZONE=external     # if the header is ever untrusted, treat everyone as external
-NETWORK_POLICY_ENFORCEMENT=log      # off | log | enforce (N3)
+# ONLY because our nginx + elrezeiky-proxy-headers.conf is the sole way in (N1)
+NETWORK_HEADER_TRUSTED=True
+# if the header is ever untrusted, treat everyone as external
+NETWORK_UNTRUSTED_ZONE=external
+# off | log | enforce (N3)
+NETWORK_POLICY_ENFORCEMENT=log
 SCHEDULER_AUTOSTART=False
 MEDIA_ACCEL_REDIRECT=True
-RBAC_ENFORCEMENT=log                # same as office today; 'enforce' once the rbac log is quiet
+# same as office today; 'enforce' once the rbac log is quiet
+RBAC_ENFORCEMENT=log
 REDIS_URL=redis://127.0.0.1:6379/0
 
 PG_NAME=elrezeiky_db
@@ -861,27 +867,36 @@ PG_PASSWORD=<prod password from 7.1>
 PG_HOST=localhost
 PG_PORT=5432
 
-SOFTECH_READ_ONLY=True              # ← stays True until cutover step 11.6
-SYBASE_HOST=192.168.1.8             # reached through the VPN
+# ← stays True until cutover step 11.6
+SOFTECH_READ_ONLY=True
+# reached through the VPN
+SYBASE_HOST=192.168.1.8
 SYBASE_PORT=5000
 SYBASE_USER=<from office .env>
 SYBASE_PASSWORD=<from office .env>
 SOFTECH_PROFILE=<from office .env>
-SOFTECH_BRANCH_HOST_OVERRIDE=       # EMPTY in production → real branch hosts from the Branch table
+# EMPTY in production → real branch hosts from the Branch table
+SOFTECH_BRANCH_HOST_OVERRIDE=
 
 OMNI_CREDENTIALS_KEY=<the SAME value as the office — see 1.2>
-WHISPER_ENABLED=False               # RAM budget (True only on a 16 GB plan)
+# RAM budget (True only on a 16 GB plan)
+WHISPER_ENABLED=False
 # WhatsApp / Meta / AMI / Issabel / VAPID: copy from office, but keep WhatsApp/AMI EMPTY until cutover
 
 # ── Local OCR (section 8.4) ──
 TESSERACT_CMD=/usr/bin/tesseract
-TESSERACT_TESSDATA_PREFIX=          # empty → the project's ocr_tessdata/ (copied in 8.4)
-OMP_THREAD_LIMIT=1                  # one CPU per Tesseract page, so OCR can't freeze the screens
+# empty → the project's ocr_tessdata/ (copied in 8.4)
+TESSERACT_TESSDATA_PREFIX=
+# one CPU per Tesseract page, so OCR can't freeze the screens
+OMP_THREAD_LIMIT=1
 PADDLE_OCR_URL=http://127.0.0.1:8077/boxes
-INVOICE_OCR_ENGINE=auto             # local first; Gemini only for pages local OCR reads badly
-#INVOICE_OCR_ENGINE=tesseract       # ← 100% local: no page ever leaves the server
+# local first; Gemini only for pages local OCR reads badly
+INVOICE_OCR_ENGINE=auto
+# ← 100% local: no page ever leaves the server
+#INVOICE_OCR_ENGINE=tesseract
 INVOICE_OCR_ESCALATE_THRESHOLD=0.6
-GEMINI_API_KEY=<from office>        # leave EMPTY to forbid any cloud OCR
+# leave EMPTY to forbid any cloud OCR
+GEMINI_API_KEY=<from office>
 ```
 
 Never copy Windows paths (`C:\…`) from the office `.env` — JVM path, Tesseract path, tessdata
@@ -1994,20 +2009,27 @@ and every external channel empty), then set:
 DEBUG=True
 ALLOWED_HOSTS=localhost,127.0.0.1
 SECRET_KEY=<any random value — not the production one>
-PG_NAME=elrezeiky_db                 # the LIVE database…
-PG_USER=elrezeiky_work               # …through the read-only login
+# the LIVE database…
+PG_NAME=elrezeiky_db
+# …through the read-only login
+PG_USER=elrezeiky_work
 PG_PASSWORD=<workbench password from 7.1>
 PG_HOST=localhost
-REDIS_URL=                           # empty → in-memory; never touch production's Redis
-SOFTECH_READ_ONLY=True               # NEVER change this in the workbench
+# empty → in-memory; never touch production's Redis
+REDIS_URL=
+# NEVER change this in the workbench
+SOFTECH_READ_ONLY=True
 SYBASE_HOST=192.168.1.8
 SYBASE_PORT=5000
 SYBASE_USER=<ideally a SELECT-only SOFTECH login — ask the SOFTECH DBA>
 SYBASE_PASSWORD=<…>
-SOFTECH_BRANCH_HOST_OVERRIDE=        # empty → read the real branch nodes (read-only)
+# empty → read the real branch nodes (read-only)
+SOFTECH_BRANCH_HOST_OVERRIDE=
 TESSERACT_CMD=/usr/bin/tesseract
-PADDLE_OCR_URL=http://127.0.0.1:8077/boxes   # shares the production OCR sidecar (it only reads images)
-GEMINI_API_KEY=                      # empty unless you are testing Gemini on purpose
+# shares the production OCR sidecar (it only reads images)
+PADDLE_OCR_URL=http://127.0.0.1:8077/boxes
+# empty unless you are testing Gemini on purpose
+GEMINI_API_KEY=
 RBAC_ENFORCEMENT=log
 ```
 A **SELECT-only SOFTECH login** for the workbench is the database-level guarantee on top of the
