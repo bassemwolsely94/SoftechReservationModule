@@ -46,7 +46,7 @@ class GLAccount(models.Model):
     FEED_CHOICES = [('auto', 'تلقائي'), ('softech', 'من SOFTECH'), ('manual', 'يدوي'),
                     ('both', 'الاثنان')]
     feed            = models.CharField(max_length=8, choices=FEED_CHOICES, default='auto',
-                                       verbose_name='مصدر التغذية')
+                                       db_default='auto', verbose_name='مصدر التغذية')
 
     class Meta:
         app_label = 'finance'

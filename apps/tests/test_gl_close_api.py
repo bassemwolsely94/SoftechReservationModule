@@ -303,6 +303,14 @@ class PeriodTests(ApiBase):
         self.assertEqual(self.acct.get(BASE + f'periods/{year.pk}/').status_code, 404)
         self.assertEqual(self.admin.post(BASE + f'periods/{year.pk}/close/').status_code, 404)
 
+    def test_month_zero_row_as_a_month_is_404_on_every_period_route(self):
+        odd = FinancialPeriod.objects.create(year=1, month=0, period_type='month', period_start=D(2026, 1, 1),
+                                             period_end=D(2026, 1, 31))
+        for path in ('', 'checklist/', 'closing-stock/'):
+            self.assertEqual(self.admin.get(BASE + f'periods/{odd.pk}/{path}').status_code, 404, path)
+        for path in ('close/', 'reopen/'):
+            self.assertEqual(self.admin.post(BASE + f'periods/{odd.pk}/{path}').status_code, 404, path)
+
     def test_closing_stock_snapshot_and_preview(self):
         r = self.acct.get(BASE + f'periods/{self.jan.pk}/closing-stock/')
         self.assertEqual(r.status_code, 200)

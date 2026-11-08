@@ -40,7 +40,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='glaccount',
             name='feed',
-            field=models.CharField(choices=[('auto', 'تلقائي'), ('softech', 'من SOFTECH'), ('manual', 'يدوي'), ('both', 'الاثنان')], default='auto', max_length=8, verbose_name='مصدر التغذية'),
+            field=models.CharField(choices=[('auto', 'تلقائي'), ('softech', 'من SOFTECH'), ('manual', 'يدوي'), ('both', 'الاثنان')], db_default='auto', default='auto', max_length=8, verbose_name='مصدر التغذية'),
         ),
         migrations.AddField(
             model_name='ledgerentry',

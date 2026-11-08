@@ -83,8 +83,9 @@ def _softech_down(request, exc):
 
 
 def _period(pk):
+    """A real calendar month, or None (so the route answers 404): month 0 is the annual row's number."""
     return (FinancialPeriod.objects.select_related('closed_by__user', 'closing_stock')
-            .filter(pk=pk, period_type='month').first())
+            .filter(pk=pk, period_type='month', month__gte=1, month__lte=12).first())
 
 
 def _background(fn, *args, **kwargs):
