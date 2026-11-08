@@ -479,6 +479,7 @@ class SubmissionGateTests(Fixture, TestCase):
         with self.assertRaises(services.TaxRuleError):
             submission.submit(self.doc.pk, self.admin, 'wrong')
 
+    @override_settings(RBAC_ENFORCEMENT='enforce')   # tests default to off, where the matrix refuses nobody
     def test_permissions_on_the_server(self):
         url = f'/api/tax-invoicing/documents/{self.doc.pk}/'
         self.assertEqual(api(self.pharmacist).get(url).status_code, 403)
@@ -1078,6 +1079,7 @@ class ReceiptTests(Fixture, TestCase):
         self.assertEqual(by['150']['by_status'], {'ready': 1, 'held': 1})
         self.assertEqual(by['160']['by_status'], {'by_invoice': 1})
 
+    @override_settings(RBAC_ENFORCEMENT='enforce')   # tests default to off, where the matrix refuses nobody
     def test_permissions(self):
         self.assertEqual(api(self.pharmacist).get('/api/tax-invoicing/receipts/summary/').status_code, 403)
         self.assertEqual(api(self.accountant).post('/api/tax-invoicing/receipts/branch/150/submit/', {}, format='json').status_code, 403)

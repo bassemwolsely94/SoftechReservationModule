@@ -154,7 +154,7 @@ Invoke-WebRequest -UseBasicParsing https://elrezeikyapp.dawalvry.com/api/public/
 
 ## Step 5: Set up the server
 
-**Check the code first.** The release on the VPS must include the entry for `/api/tax-invoicing/signing-agent/` in `apps/access/public_paths.py`. Without it, once `PUBLIC_API_ENFORCEMENT=enforce`, the agent is refused with 401 before its token is even looked at. **This entry was still missing when this page was written.**
+**Check the code first.** The release on the VPS must include this signing work, which is not on `main` yet. An older release has no agent address (404), or refuses the agent with 401 once `PUBLIC_API_ENFORCEMENT=enforce`.
 
 **Create the agent token on the VPS:**
 
@@ -189,16 +189,16 @@ cd C:\ElRezeikyTaxAgent
 
 This is the proof that the real token, the real path and the server work together. Live sending can only be switched on after a pass.
 
-**Start it** with the seal test button on the tax invoicing screen, once that screen has shipped. Until then, while logged in as an admin, use the browser's developer console on the app's page (F12, then Console):
+**Start it** with the «اختبار الختم» button: open `/tax-invoicing`, then the Settings tab, section «التوقيع الإلكتروني». That screen is on its own branch and is not on `main` yet. Until it ships, log in as an admin and use the browser's developer console on the app's page (F12, then Console):
 
 ```js
 fetch('/api/tax-invoicing/signing/smoke-test/', {method: 'POST', credentials: 'include',
-  headers: {'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''}}).then(r => r.json()).then(console.log)
+  headers: {'X-Requested-With': 'XMLHttpRequest'}}).then(r => r.json()).then(console.log)
 ```
 
-It answers with a `job_id`. Within seconds the agent's window shows `job=<id> kind=smoke sha256=… signed=yes delivered=yes`.
+It answers with a `job_id`. Within seconds the agent's window shows `job=<id> kind=smoke sha256=… signed=yes delivered=yes`. A smoke test nobody answers closes by itself after 15 minutes. It leaves the last result as it was, so press the button again once the agent is running.
 
-**Read the result** at `https://elrezeikyapp.dawalvry.com/api/tax-invoicing/signing/status/`.
+**Read the result** in the same section of the screen, or at `https://elrezeikyapp.dawalvry.com/api/tax-invoicing/signing/status/`. The screen shows the main facts; the address also shows the thumbprint.
 
 **Pass looks like:**
 
@@ -263,11 +263,11 @@ Both the outside program and the agent need the same token. We don't know how th
 | `the token is busy` | The outside program is using it | Occasional is fine: it retries. Constant: see step 7. |
 | `cannot reach the server` | Tunnel, route or DNS | Repeat the checks in step 4. The agent backs off by itself, up to every 5 minutes. |
 | `cannot reach the server: SSLError` | PC clock wrong, or the name resolves to something else | Check the clock and step 4.3. |
-| `the server refused the agent (401)` | The `public_paths.py` entry is not in this release | See step 5. Update the release. |
+| `the server refused the agent (401)` | The release on the VPS is older than this work | See step 5. Update the release. |
 | `the server refused the agent (403)` | The agent token differs between PC and server, or is under 32 characters | Set it again on both sides, and restart the web process. |
 | `the server answered with a redirect` | `url` in `config.ini` is wrong, or not https | Use exactly `https://elrezeikyapp.dawalvry.com`. |
 | `canonical text does not match its SHA-256` | The text changed on its way, or a bug on our side | The agent refused to sign. Send us the job id. |
-| Document error: `جهاز الختم لم يرد في الوقت المحدد` | Agent not running, or token busy for over 60 seconds | Start the agent. Pending jobs that timed out are not signed later. |
+| Document error: `جهاز الختم لم يرد في الوقت المحدد` | Agent not running, or token busy for over 60 seconds | Start the agent. Jobs that timed out are never signed later; send the document again. |
 | Document error: `بصمة شهادة الختم لا تطابق` | `TAX_SIGNING_CERT_THUMBPRINT` differs from the last smoke test | Fix the setting, or repeat the smoke test. |
 | Document error: `المستند موقّع بشهادة غير المسجلة` | The agent signed with another certificate | Check which token is plugged in. |
 | `smoke test: does not verify`, `does not cover` | A real problem in the signature | Send us `certification.detail`. |

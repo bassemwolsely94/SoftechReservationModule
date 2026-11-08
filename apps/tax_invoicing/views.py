@@ -713,6 +713,7 @@ def _cert_row(c):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, matrix_permission(MODULE, get=('finalize',), post=('finalize',))])
 def signing_status(request):
+    signing.expire_stale_jobs()
     signer = signing.get_signer()
     ready, why = True, ''
     try:
@@ -745,6 +746,7 @@ def _agent_allowed(request):
 def agent_next_job(request):
     if not _agent_allowed(request):
         return Response({'detail': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
+    signing.expire_stale_jobs()
     with transaction.atomic():
         job = TaxSigningJob.objects.select_for_update(skip_locked=True).filter(status=TaxSigningJob.PENDING).first()
         if job is None:

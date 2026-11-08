@@ -36,6 +36,7 @@ from apps.access import public_paths
 from apps.tax_invoicing import cades, fiscal, signing
 from apps.tax_invoicing.models import TaxSigningCertification, TaxSigningJob
 from apps.tests.factories import make_branch, make_user
+from core.auth_cookies import ACCESS_COOKIE
 
 AGENT_DIR = Path(settings.BASE_DIR) / 'deploy' / 'tax_signing_agent'
 AGENT_TOKEN = 'a' * 40
@@ -392,20 +393,73 @@ class AgentEndpointTests(TestCase):
         job.refresh_from_db()
         self.assertEqual(job.signature, signature)
 
-    # OPEN: apps/access/public_paths.py needs '/api/tax-invoicing/signing-agent/' in PUBLIC_PREFIXES (another
-    # session's file). Add the entry, then delete this decorator; the test reports an error until you do.
-    @unittest.expectedFailure
     @override_settings(PUBLIC_API_ENFORCEMENT='enforce')
     def test_the_anonymous_gate_lets_the_agent_through_when_enforced(self):
-        """The agent has no user session; its own gate is the token (see 403 above)."""
+        """The agent has no user session; its own gate is the token, which still refuses."""
         self.assertEqual(agent_client().post(NEXT_URL).status_code, 200)
+        self.assertEqual(agent_client('wrong').post(NEXT_URL).status_code, 403)
+        self.assertEqual(agent_client(None).post(result_url(make_job()), {'signature': 'x'}, format='json').status_code, 403)
 
     @override_settings(PUBLIC_API_ENFORCEMENT='enforce')
-    def test_that_entry_is_all_the_gate_needs(self):
-        prefixes = (*public_paths.PUBLIC_PREFIXES, '/api/tax-invoicing/signing-agent/')
-        with mock.patch.object(public_paths, 'PUBLIC_PREFIXES', prefixes):
-            self.assertEqual(agent_client().post(NEXT_URL).status_code, 200)
-            self.assertEqual(agent_client('wrong').post(NEXT_URL).status_code, 403)
+    def test_only_the_agent_paths_were_opened_by_that_entry(self):
+        for path in ('/api/tax-invoicing/signing/status/', '/api/tax-invoicing/signing/smoke-test/'):
+            self.assertFalse(public_paths.is_public(path, 'POST'), path)
+            self.assertEqual(APIClient().post(path).status_code, 401, path)
+
+
+@override_settings(TAX_SIGNING_AGENT_TOKEN=AGENT_TOKEN, TAX_SIGNING_WAIT_SECONDS=60)
+class StaleJobTests(TestCase):
+    """A job left behind when the agent or a web process died must not stay open, or be sealed later."""
+
+    def _aged(self, job, **age):
+        TaxSigningJob.objects.filter(pk=job.pk).update(created_at=timezone.now() - dt.timedelta(**age))
+
+    def test_a_document_nobody_waits_for_is_not_handed_to_the_agent(self):
+        old, fresh = make_job('"OLD"'), make_job('"NEW"')
+        self._aged(old, seconds=121)
+        self.assertEqual(agent_client().post(NEXT_URL).json()['job']['id'], fresh.pk)
+        old.refresh_from_db()
+        self.assertEqual(old.status, TaxSigningJob.EXPIRED)
+        self.assertIsNotNone(old.finished_at)
+        self.assertEqual(old.signature, '')
+
+    def test_a_document_still_inside_the_wait_is_kept(self):
+        job = make_job()
+        self._aged(job, seconds=100)
+        self.assertEqual(agent_client().post(NEXT_URL).json()['job']['id'], job.pk)
+
+    def test_a_claim_abandoned_by_a_crashed_agent_expires_and_a_late_answer_is_refused(self):
+        job = make_job(status=TaxSigningJob.CLAIMED)
+        self._aged(job, minutes=5)
+        agent_client().post(NEXT_URL)
+        job.refresh_from_db()
+        self.assertEqual(job.status, TaxSigningJob.EXPIRED)
+        self.assertEqual(agent_client().post(result_url(job), {'signature': 'x'}, format='json').status_code, 404)
+
+    def test_a_smoke_test_gets_longer_because_someone_may_be_starting_the_agent(self):
+        job = signing.start_smoke_test(None)
+        self._aged(job, minutes=14)
+        signing.expire_stale_jobs()
+        job.refresh_from_db()
+        self.assertEqual(job.status, TaxSigningJob.PENDING)
+        self._aged(job, minutes=16)
+        signing.expire_stale_jobs()
+        job.refresh_from_db()
+        self.assertEqual(job.status, TaxSigningJob.EXPIRED)
+
+    def test_an_unanswered_smoke_test_says_nothing_about_the_token(self):
+        """It expires without a certification, so an earlier pass still stands."""
+        passed = TaxSigningCertification.objects.create(passed=True, thumbprint=SEAL.thumbprint)
+        self._aged(signing.start_smoke_test(None), minutes=16)
+        signing.expire_stale_jobs()
+        self.assertEqual(signing.latest_certification(), passed)
+
+    def test_finished_jobs_are_left_alone(self):
+        job = make_job(status=TaxSigningJob.SIGNED, signature='s')
+        self._aged(job, days=30)
+        signing.expire_stale_jobs()
+        job.refresh_from_db()
+        self.assertEqual((job.status, job.signature), (TaxSigningJob.SIGNED, 's'))
 
 
 @override_settings(TAX_SIGNING_AGENT_TOKEN=AGENT_TOKEN, TAX_SIGNER_CLASS=AGENT_SIGNER, TAX_SIGNING_CERT_THUMBPRINT=SEAL.thumbprint)
@@ -433,6 +487,22 @@ class SmokeTestFlowTests(TestCase):
         with override_settings(RBAC_ENFORCEMENT='enforce'):
             self.assertEqual(self._user_client(self.pharmacist).post('/api/tax-invoicing/signing/smoke-test/').status_code, 403)
         self.assertFalse(TaxSigningJob.objects.exists())
+
+    def test_the_workstation_docs_browser_fallback_works_with_the_login_cookie(self):
+        """The same request the doc's console snippet sends; without the header the cookie is ignored."""
+        url = '/api/tax-invoicing/signing/smoke-test/'
+        client = APIClient()
+        client.cookies[ACCESS_COOKIE] = str(AccessToken.for_user(self.admin))
+        self.assertEqual(client.post(url).status_code, 401)
+        self.assertEqual(client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code, 201)
+        self.assertEqual(client.get('/api/tax-invoicing/signing/status/').status_code, 200)
+
+    def test_status_closes_a_job_the_agent_never_answered(self):
+        """Otherwise pending_jobs stays above zero and the screen polls for ever."""
+        job = signing.start_smoke_test(self.admin)
+        TaxSigningJob.objects.filter(pk=job.pk).update(created_at=timezone.now() - dt.timedelta(minutes=16))
+        body = self._user_client(self.admin).get('/api/tax-invoicing/signing/status/').json()
+        self.assertEqual((body['pending_jobs'], body['last_job_status']), (0, 'expired'))
 
     def test_pass_is_recorded_and_opens_the_gate(self):
         job = self._claimed_smoke()
