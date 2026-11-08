@@ -21,17 +21,19 @@ import logging
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Count, Q
+from django.core.exceptions import ValidationError
+from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.decorators import api_view, authentication_classes, parser_classes, permission_classes
+from rest_framework.decorators import api_view, parser_classes, permission_classes
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.insurance.models import InsuranceClaim, InsuranceClient
 from config.writers import writer_allowed
+from core.branch_scope import allows_code, branch_codes, scope_code
 from core.errors import public_error
 from core.permissions import _get_profile, matrix_allows, matrix_permission
 
@@ -101,6 +103,9 @@ def item_row(p):
             'eta_code': p.eta_code, 'coding_status': p.coding_status, 'coding_status_label': p.get_coding_status_display(),
             'unit_type': p.unit_type, 'tax_treatment': p.tax_treatment, 'tax_treatment_label': p.get_tax_treatment_display(),
             'vat_rate': str(p.vat_rate), 'treatment_reference': p.treatment_reference,
+            'source_vat_code': p.source_vat_code,
+            'source_vat_rate': None if p.source_vat_rate is None else str(p.source_vat_rate),
+            'gpc_code': p.gpc_code, 'item_name_ar': p.item_name_ar, 'active_from': p.active_from,
             'treatment_confirmed_at': p.treatment_confirmed_at, 'treatment_confirmed_by': _stamp(p.treatment_confirmed_by),
             'list_status': p.list_status, 'list_status_label': p.get_list_status_display(),
             'listed_reason': p.listed_reason, 'disposition': p.disposition, 'disposition_label': p.get_disposition_display()}
@@ -113,7 +118,11 @@ def item_row(p):
 def me(request):
     return Response({'can_create': _can(request, 'create'), 'can_edit': _can(request, 'edit'),
                      'can_approve': _can(request, 'approve'), 'can_view_all_lines': _can(request, 'approve'),
-                     'can_finalize': _can(request, 'finalize'), 'submit_enabled': writer_allowed(submission.FLAG)})
+                     'can_finalize': _can(request, 'finalize'), 'submit_enabled': writer_allowed(submission.FLAG),
+                     'receipt_submit_enabled': writer_allowed(receipts.FLAG),
+                     'document_statuses': [{'key': k, 'label': v} for k, v in TaxDocument.STATUS_CHOICES],
+                     'line_statuses': [{'key': k, 'label': v} for k, v in TaxDocumentLine.STATUS_CHOICES],
+                     'receipt_statuses': [{'key': k, 'label': v} for k, v in TaxReceipt.STATUS_CHOICES]})
 
 
 # ── Claims ─────────────────────────────────────────────────────────────────────────────────────
@@ -670,9 +679,12 @@ _BUYER_TEXT = ('receiver_type', 'tax_id', 'legal_name', 'country', 'governate', 
 @permission_classes([IsAuthenticated, EDITOR])
 def buyers(request):
     if request.method == 'GET':
-        rows = {b.client_id: b for b in TaxBuyerProfile.objects.all()}
-        return Response([{'client_id': c.id, 'client': str(c), **({f: getattr(rows[c.id], f) for f in _BUYER_TEXT}
-                                                                  if c.id in rows else {'presentation_mode': 'summary'})}
+        rows = {b.client_id: b for b in TaxBuyerProfile.objects.select_related('zero_vat_basis')}
+        def basis(c):
+            b = rows[c.id].zero_vat_basis if c.id in rows else None
+            return {'zero_vat_basis_id': b.id if b else None, 'zero_vat_basis': str(b) if b else ''}
+        return Response([{'client_id': c.id, 'client': str(c), **basis(c),
+                          **({f: getattr(rows[c.id], f) for f in _BUYER_TEXT} if c.id in rows else {'presentation_mode': 'summary'})}
                          for c in InsuranceClient.objects.filter(is_active=True)[:MAX_LIST]])
     d = request.data
     client = get_object_or_404(InsuranceClient, pk=d.get('client_id'))
@@ -740,9 +752,11 @@ def _agent_allowed(request):
     return signing.agent_token_ok(request.headers.get('X-Tax-Agent-Token', ''))
 
 
+AGENT = matrix_permission(MODULE, post=('finalize',))   # a dedicated account granted `finalize`, plus the token
+
+
 @api_view(['POST'])
-@authentication_classes([])
-@permission_classes([AllowAny])  # gate: shared agent token, checked below; the agent has no user session
+@permission_classes([IsAuthenticated, AGENT])
 def agent_next_job(request):
     if not _agent_allowed(request):
         return Response({'detail': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
@@ -757,8 +771,7 @@ def agent_next_job(request):
 
 
 @api_view(['POST'])
-@authentication_classes([])
-@permission_classes([AllowAny])  # gate: shared agent token, checked below
+@permission_classes([IsAuthenticated, AGENT])
 def agent_job_result(request, pk):
     if not _agent_allowed(request):
         return Response({'detail': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
@@ -792,27 +805,36 @@ def _receipt_row(r):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, VIEWER])
 def receipts_summary(request):
-    return Response({'branches': receipts.summary_by_branch(),
+    allowed = branch_codes(request.user)
+    rows = receipts.summary_by_branch()
+    return Response({'branches': rows if allowed is None else [r for r in rows if r['branch'] in allowed],
                      'statuses': [{'key': k, 'label': v} for k, v in TaxReceipt.STATUS_CHOICES]})
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, VIEWER])
 def receipts_list(request):
-    qs = TaxReceipt.objects.all()
-    for param, field in (('branch', 'softech_branchcode'), ('status', 'status'), ('channel', 'channel')):
+    qs = scope_code(TaxReceipt.objects.all(), request.user, 'softech_branchcode')
+    for param, field in (('branch', 'softech_branchcode'), ('status', 'status'), ('channel', 'channel'),
+                         ('from', 'docdate__gte'), ('to', 'docdate__lte')):
         if request.query_params.get(param):
-            qs = qs.filter(**{field: request.query_params[param]})
-    return Response([_receipt_row(r) for r in qs[:MAX_LIST]])
+            try:
+                qs = qs.filter(**{field: request.query_params[param]})
+            except (ValueError, ValidationError):
+                return Response({'detail': 'تاريخ غير صحيح'}, status=status.HTTP_400_BAD_REQUEST)
+    response = Response([_receipt_row(r) for r in qs[:MAX_LIST]])
+    response['X-Total-Count'] = qs.count()
+    return response
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, VIEWER])
 def receipt_detail(request, pk):
-    r = get_object_or_404(TaxReceipt, pk=pk)
+    r = get_object_or_404(scope_code(TaxReceipt.objects.all(), request.user, 'softech_branchcode'), pk=pk)
     return Response({**_receipt_row(r), 'previous_uuid': r.previous_uuid, 'payload_text': r.payload_text, 'lines': [
         {'itemcode': l.itemcode, 'item_name': l.item_name, 'quantity': str(l.quantity), 'total': str(l.total),
-         'source_vat_rate': str(l.source_vat_rate), 'vat_rate': str(l.vat_rate), 'status': l.status, 'reason': l.status_reason,
+         'source_vat_rate': str(l.source_vat_rate), 'vat_rate': str(l.vat_rate), 'status': l.status,
+         'status_label': dict(TaxDocumentLine.STATUS_CHOICES).get(l.status, l.status), 'reason': l.status_reason,
          'eta_code': l.eta_code, 'net_ex_vat': str(l.net_ex_vat), 'vat_amount': str(l.vat_amount)} for l in r.lines.all()]})
 
 
@@ -823,6 +845,8 @@ def receipts_import(request):
         day = dt.date.fromisoformat(str(request.data.get('date')))
     except ValueError:
         return Response({'detail': 'تاريخ غير صحيح'}, status=status.HTTP_400_BAD_REQUEST)
+    if not allows_code(request.user, str(request.data.get('branch') or '')):
+        return Response({'detail': 'هذا الفرع خارج نطاقك'}, status=status.HTTP_403_FORBIDDEN)
     try:
         return Response(receipts.import_branch_day(str(request.data.get('branch') or ''), day, request.user))
     except services.TaxRuleError as exc:
@@ -831,7 +855,9 @@ def receipts_import(request):
         return Response({'detail': public_error(request, exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
 
-def _branch_action(fn):
+def _branch_action(request, branch, fn):
+    if not allows_code(request.user, branch):
+        return Response({'detail': 'هذا الفرع خارج نطاقك'}, status=status.HTTP_403_FORBIDDEN)
     try:
         return Response(fn())
     except services.TaxRuleError as exc:
@@ -841,7 +867,7 @@ def _branch_action(fn):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, APPROVER])
 def receipts_issue(request, branch):
-    return _branch_action(lambda: receipts.issue_next(branch, request.user))
+    return _branch_action(request, branch, lambda: receipts.issue_next(branch, request.user))
 
 
 @api_view(['POST'])
@@ -849,14 +875,14 @@ def receipts_issue(request, branch):
 def receipts_submit(request, branch):
     """Dry run unless dry_run is explicitly false."""
     if request.data.get('dry_run', True) is not False:
-        return Response(receipts.preview_batch(branch))
-    return _branch_action(lambda: receipts.submit_branch(branch, request.user, request.data.get('confirm') or ''))
+        return _branch_action(request, branch, lambda: receipts.preview_batch(branch))
+    return _branch_action(request, branch, lambda: receipts.submit_branch(branch, request.user, request.data.get('confirm') or ''))
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, SENDER])
 def receipts_reconcile(request, branch):
-    return _branch_action(lambda: receipts.reconcile_branch(branch, request.user))
+    return _branch_action(request, branch, lambda: receipts.reconcile_branch(branch, request.user))
 
 
 _CONFIG_TEXT = ('seller_branch_code', 'device_serial', 'pos_os_version', 'pos_model_framework', 'client_id', 'secret_env',
@@ -872,8 +898,11 @@ def _config_row(c):
 @permission_classes([IsAuthenticated, matrix_permission(MODULE, get=('view',), post=('finalize',))])
 def receipt_configs(request):
     if request.method == 'GET':
-        return Response([_config_row(c) for c in TaxReceiptBranchConfig.objects.all()])
+        return Response([_config_row(c) for c in
+                         scope_code(TaxReceiptBranchConfig.objects.all(), request.user, 'softech_branchcode')])
     code = str(request.data.get('branch') or '').strip()
+    if code and not allows_code(request.user, code):
+        return Response({'detail': 'هذا الفرع خارج نطاقك'}, status=status.HTTP_403_FORBIDDEN)
     if not code or len(code) > 5:
         return Response({'detail': 'كود الفرع مطلوب'}, status=status.HTTP_400_BAD_REQUEST)
     c = TaxReceiptBranchConfig.objects.filter(softech_branchcode=code).first() or TaxReceiptBranchConfig(softech_branchcode=code)
@@ -888,6 +917,17 @@ def receipt_configs(request):
         services.audit('receipt_config_changed', actor=request.user, entity='receipt_branch', entity_id=code,
                        before=before, after=_config_row(c))
     return Response(_config_row(c))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, VIEWER])
+def channels_seen(request):
+    """Channels on imported sales, with their counts and current rule, so no code is typed from memory."""
+    rules = {r.ptclassifcode: r for r in TaxChannelRule.objects.all()}
+    rows = TaxReceipt.objects.values('channel').annotate(documents=Count('id'), value=Sum('source_value')).order_by('-documents')
+    return Response([{'channel': r['channel'], 'documents': r['documents'], 'value': str(r['value'] or 0),
+                      'label': rules[r['channel']].label if r['channel'] in rules else '',
+                      'mode': rules[r['channel']].mode if r['channel'] in rules else TaxChannelRule.MODE_UNDECIDED} for r in rows])
 
 
 def _rule_row(r):

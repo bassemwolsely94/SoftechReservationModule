@@ -87,13 +87,17 @@ def build_snapshot(claim):
                         'gross_before': _money(rx.gross_before), 'total_discount': _money(rx.total_discount),
                         'net_after': _money(rx.net_after), 'net_override': None if override is None else _money(override),
                         'softech_net': None if rx.softech_net is None else _money(rx.softech_net)})
+        # A return in a claim has negative prescription totals over positive line amounts. The line
+        # takes the prescription's sign, or the claim's lines overstate it by twice the returns.
+        sign = -1 if (rx.gross_before < 0 or rx.net_after < 0) else 1
         for l in rx.lines.all():
             line_rows.append({'id': l.id, 'rx': rx.id, 'docnumber': rx.softech_docnumber,
                               'docdate': str(rx.softech_docdate), 'branch': rx.softech_branchcode,
-                              'itemcode': l.softech_itemcode, 'item_name': l.item_name, 'quantity': _money(l.quantity),
-                              'unit_price': _money(l.unit_price), 'gross': _money(l.line_total),
-                              'discount': _money(l.discount_amt), 'net': _money(l.net_amount),
-                              'softech_line_net': None if l.softech_line_net is None else _money(l.softech_line_net)})
+                              'itemcode': l.softech_itemcode, 'item_name': l.item_name, 'is_return': sign < 0,
+                              'quantity': _money(sign * abs(l.quantity)), 'unit_price': _money(l.unit_price),
+                              'gross': _money(sign * abs(l.line_total)), 'discount': _money(sign * abs(l.discount_amt)),
+                              'net': _money(sign * abs(l.net_amount)),
+                              'softech_line_net': None if l.softech_line_net is None else _money(sign * abs(l.softech_line_net))})
     supplements = [{'id': s.id, 'type': s.supplement_type, 'gross_before': _money(s.gross_before),
                     'total_discount': _money(s.total_discount), 'net_after': _money(s.net_after)}
                    for s in claim.supplements.filter(is_excluded=False).exclude(
@@ -301,17 +305,43 @@ def build_fiscal_lines(doc, issuer=None):
     on = [l for l in doc.lines.all() if l.on_invoice]
     common = dict(prices_include_vat=issuer.prices_include_vat, tax_type=issuer.vat_tax_type)
     mode, _ = fiscal_mode(doc, issuer)
-    if mode == 'summary' and on:
+    if mode == 'summary' and on and sum((l.source_net for l in on), ZERO) > 0:
         return [fiscal.fiscal_line(
             description=issuer.summary_description or 'مطالبة مالية', code_type=issuer.summary_code_type,
             eta_code=issuer.summary_item_code, unit_type=issuer.default_unit_type, internal_code=doc.internal_id,
             quantity=1, gross=sum((l.source_gross for l in on), ZERO), net=sum((l.source_net for l in on), ZERO),
             rate=issuer.summary_vat_rate, subtype=_subtype(issuer, issuer.summary_treatment), **common)]
-    return [fiscal.fiscal_line(
-        description=l.item_name or l.softech_itemcode, code_type=l.code_type, eta_code=l.eta_code,
-        unit_type=l.unit_type, internal_code=l.softech_itemcode, quantity=l.quantity,
-        gross=l.source_gross, net=l.source_net, rate=l.vat_rate, subtype=_subtype(issuer, l.tax_treatment), **common)
-        for l in on if l.quantity > 0]
+    out = []
+    for g in _netted(on):
+        if g['quantity'] <= 0 or g['net'] < 0:
+            continue    # `blockers` refuses this; here it must only not produce an invalid line
+        l = g['line']
+        out.append(fiscal.fiscal_line(
+            description=l.item_name or l.softech_itemcode, code_type=l.code_type, eta_code=l.eta_code,
+            unit_type=l.unit_type, internal_code=l.softech_itemcode, quantity=g['quantity'],
+            gross=g['gross'], net=g['net'], rate=l.vat_rate, subtype=_subtype(issuer, l.tax_treatment), **common))
+    return out
+
+
+def _netted(lines):
+    """An ETA line needs a positive quantity. An item with a return in the claim becomes one line, its sales
+    less its returns; every other line stays as it is. The source lines all stay on the document."""
+    returned = {(l.softech_itemcode, l.tax_treatment, l.vat_rate) for l in lines if l.quantity < 0}
+    groups, order = {}, []
+    for l in lines:
+        key = (l.softech_itemcode, l.tax_treatment, l.vat_rate)
+        if key not in returned:
+            order.append({'line': l, 'quantity': l.quantity, 'gross': l.source_gross, 'net': l.source_net})
+            continue
+        if key not in groups:
+            groups[key] = {'line': l, 'quantity': ZERO, 'gross': ZERO, 'net': ZERO, 'netted': True}
+            order.append(groups[key])
+        g = groups[key]
+        g['quantity'] += l.quantity
+        g['gross'] += l.source_gross
+        g['net'] += l.source_net
+    # An item fully returned inside the claim leaves nothing to report on it.
+    return [g for g in order if not (g.get('netted') and g['quantity'] == 0 and g['net'] == 0)]
 
 
 def fiscal_totals(doc, issuer=None):
@@ -415,9 +445,10 @@ def blockers(doc, issuer=None):
     pending = sorted({l.softech_itemcode for l in lines if l.status == TaxDocumentLine.ST_PENDING})
     if pending:
         out.append(_issue('pending', f'{len(pending)} صنف ينتظر مراجعة أو تأكيد المعاملة الضريبية', skus=pending))
-    bad_qty = sorted({l.softech_itemcode for l in lines if l.on_invoice and l.quantity <= 0})
+    bad_qty = sorted({g['line'].softech_itemcode for g in _netted([l for l in lines if l.on_invoice])
+                      if g['quantity'] <= 0 or g['net'] < 0})
     if bad_qty:
-        out.append(_issue('quantity', 'بنود بكمية غير موجبة', skus=bad_qty))
+        out.append(_issue('quantity', 'أصناف مرتجعها أكبر من مبيعها في المطالبة أو كميتها غير موجبة', skus=bad_qty))
     if any(l.get('discount', ZERO) < 0 for l in build_fiscal_lines(doc, issuer)):
         out.append(_issue('negative_discount', 'بند صافيه أكبر من إجماليه، راجع المصدر'))
 

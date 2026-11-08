@@ -237,7 +237,8 @@ class CashApiTests(TestCase):
         r = self.admin.get(self.URL)
         self.assertEqual(r.status_code, 200)
         self.assertEqual(len(r.data['closing']['base']), 13)
-        r = self.admin.get(self.URL + 'lines/supplier_cheques/?week=1')
+        # as_of pinned: without it the view uses today, and the fixture's 10 Nov cheque changes week every Saturday.
+        r = self.admin.get(self.URL + f'lines/supplier_cheques/?week=1&as_of={AS_OF.isoformat()}')
         self.assertEqual(sum(x['amount'] for x in r.data['rows']), 5000)
         r = self.admin.post(self.URL + 'opening-balance/', {'as_of': '2026-10-31', 'amount': '120000',
                                                             'note': 'خزينة + بنك'}, format='json')

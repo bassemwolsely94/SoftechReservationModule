@@ -259,6 +259,13 @@ class ConfirmRow:
     party_type: str
     code: str
     personcode: str
+    name: str = ''      # «اسم المالية», optional
+
+
+def _names_conflict(a, b) -> bool:
+    """True when two names for one finance code share no word: likely two different parties."""
+    ta, tb = _tokens(a), _tokens(b)
+    return bool(ta and tb and not (ta & tb))
 
 
 def _party_type(v):
@@ -286,6 +293,8 @@ def parse_confirm_sheet(path) -> tuple[list[ConfirmRow], list[dict]]:
                     cols[key] = next((i for i, t in enumerate(labels) if t.startswith(want)), None)
                 if None in cols.values():
                     continue
+                want_name = normalize_ar('اسم المالية')
+                name_col = next((i for i, t in enumerate(labels) if t.startswith(want_name)), None)
                 rows, problems = [], []
                 for n, r in enumerate(it, start=hdr_no + 1):
                     cell = lambda k: r[cols[k]] if cols[k] < len(r) else None   # noqa: E731
@@ -299,7 +308,8 @@ def parse_confirm_sheet(path) -> tuple[list[ConfirmRow], list[dict]]:
                     elif not pc:
                         problems.append({'row': n, 'detail': f'الكود المعتمد «{raw_pc}» ليس رقماً'})
                     else:
-                        rows.append(ConfirmRow(n, ptype, code, pc))
+                        raw_name = r[name_col] if name_col is not None and name_col < len(r) else None
+                        rows.append(ConfirmRow(n, ptype, code, pc, str(raw_name or '').strip()))
                 return rows, problems
         raise ValueError('لم أجد أعمدة «النوع» و«كود المالية» و«الكود المعتمد» في الملف')
     finally:
@@ -309,6 +319,9 @@ def parse_confirm_sheet(path) -> tuple[list[ConfirmRow], list[dict]]:
 def bulk_confirm(rows, problems, *, user, apply: bool) -> dict:
     """Preview (apply=False, nothing saved) or confirm every valid row through ``confirm_party``
     (audited per party). Each row stands alone: a refused row never blocks the others.
+    A code not imported yet is added under the sheet's name (``create_party_from_personcode``).
+    A sheet name sharing no word with the party's name is held back as ``name_conflict``: the code
+    may be two parties, so a person decides on the grid; it is never renamed or confirmed here.
     Result: {results: [{row, party_type, code, name, personcode, outcome, detail}], counts}."""
     results = [{'row': p['row'], 'outcome': 'error', 'detail': p['detail']} for p in problems]
     seen = {}
@@ -323,11 +336,28 @@ def bulk_confirm(rows, problems, *, user, apply: bool) -> dict:
         out = {'row': r.row, 'party_type': r.party_type, 'code': r.code, 'personcode': r.personcode}
         g = GLParty.objects.filter(party_type=r.party_type, code=r.code).first()
         if g is None:
-            results.append({**out, 'outcome': 'error', 'detail': 'الطرف غير موجود — استورد أطراف الحسابات أولاً'})
+            if not r.name:
+                results.append({**out, 'outcome': 'error', 'detail': 'الطرف غير موجود — استورد أطراف الحسابات أولاً'})
+                continue
+            out['name'] = r.name
+            try:
+                with transaction.atomic():
+                    create_party_from_personcode(user=user, party_type=r.party_type, code=r.code,
+                                                 personcode=r.personcode, name=r.name)
+                    if not apply:
+                        transaction.set_rollback(True)
+            except ValueError as e:
+                results.append({**out, 'outcome': 'error', 'detail': str(e)})
+                continue
+            results.append({**out, 'outcome': 'created' if apply else 'will_create'})
             continue
         out['name'] = g.name
         if g.status == 'confirmed' and g.softech_personcode == r.personcode:
             results.append({**out, 'outcome': 'unchanged', 'detail': 'مؤكد بالفعل'})
+            continue
+        if r.name and _names_conflict(r.name, g.name):
+            results.append({**out, 'outcome': 'name_conflict',
+                            'detail': f'الاسم في الملف «{r.name}» غير الاسم المسجل — راجعه وأكّده من الجدول'})
             continue
         try:
             with transaction.atomic():

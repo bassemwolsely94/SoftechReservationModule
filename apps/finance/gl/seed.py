@@ -82,7 +82,9 @@ RULES = [
                 _ln('credit', 'discount_share', '6003', branch='hq')]),
     dict(code='purchases.hq', source_type='purchases', granularity='document', book='credit',
          conditions={'branch_in': ['100'], 'kind_in': ['invoice']},
-         lines=[_ln('debit', 'value', '5104', branch='hq', description='مشتريات {docnumber}'),
+         # Ruling P32: SOFTECH invoice VAT (docvalue3) on 2363; a zero-VAT invoice has no 2363 line
+         lines=[_ln('debit', 'net', '5104', branch='hq', description='مشتريات {docnumber}'),
+                _ln('debit', 'vat', '2363', branch='hq'),
                 _ln('credit', 'value', '2341', branch='hq', party='source')]),
     dict(code='purchases.hq_return', source_type='purchases', granularity='document', book='credit',
          conditions={'branch_in': ['100'], 'kind_in': ['return']},

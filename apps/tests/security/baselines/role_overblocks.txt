@@ -681,3 +681,18 @@ viewer GET /api/purchasing/phantom/summary/
 viewer GET /api/purchasing/spike/candidates/
 viewer GET /api/purchasing/spike/med-types/
 viewer GET /api/purchasing/spike/summary/
+
+# reason: doc 36 — the accountant works tax documents, but sending to the tax authority, signing, reconciling, issuer
+#   settings, documented bases and branch POS credentials need `finalize` (admin or a named grant, owner's open decision).
+accountant GET /api/tax-invoicing/signing/status/
+accountant PATCH /api/tax-invoicing/issuer/
+accountant POST /api/tax-invoicing/bases/
+accountant POST /api/tax-invoicing/bases/987654321/deactivate/
+accountant POST /api/tax-invoicing/documents/987654321/reconcile/
+accountant POST /api/tax-invoicing/documents/987654321/submit/
+accountant POST /api/tax-invoicing/receipts/branch/x/reconcile/
+accountant POST /api/tax-invoicing/receipts/branch/x/submit/
+accountant POST /api/tax-invoicing/receipts/configs/
+accountant POST /api/tax-invoicing/signing/smoke-test/
+accountant POST /api/tax-invoicing/signing-agent/next/
+accountant POST /api/tax-invoicing/signing-agent/jobs/987654321/result/

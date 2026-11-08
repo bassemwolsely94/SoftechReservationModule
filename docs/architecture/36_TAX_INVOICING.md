@@ -23,6 +23,7 @@ drafts, review, approval, numbering, payload, submission and notes. A claim show
 - Uncertain result (timeout, 5xx, 422 duplicate): nothing is resent until `reconcile` asks ETA. "Not found" frees
   a retry only after `TAX_RECONCILE_WAIT_MINUTES`; "could not ask" changes nothing.
 - After `valid`, changes are credit or debit notes linked to the original and its ETA UUID.
+- Returns inside a claim: the prescription totals are negative over positive line amounts, so a line takes its prescription's sign. An item with a return becomes one ETA line, sales less returns; all source lines stay on the document. An item with more returned than sold blocks.
 
 ## Item review: three independent fields
 
@@ -82,9 +83,14 @@ passed smoke test against the real token, verified on the server, with the expec
 | Claim is "finalized" at status submitted or later | `services.FINALIZED_CLAIM_STATUSES` | Uses the ERP's `InsuranceClaim.LOCKED_STATUSES` |
 | Exempt lines in the default view | Removed: default shows `approved` only, as specified | Closed |
 
+## Open: real claims that do not reconcile
+
+Measured 2026-11-07 on 119 local claims after the return fix: 115 within EGP 1. Claims 67, 48, 63 and 61 (all draft) differ by EGP 168 to 4,972 and stay blocked, showing the difference by line, until explained.
+
 ## Known limits
 
 - Mocks stand in for ETA. No document has been accepted by ETA or its test environment. Field names `internalID`,
   `signatureType` and the receipt body shape need checking there.
 - `TaxReceipt` type `r` follows the v1.2 return type name as read from the docs; confirm on the test environment.
+- Permissions: migration `0002` also seeds admin rows. Without them the module counts as unseeded and `matrix_allows` fails open for every other role, because the accountant is an enforced role.
 - No scheduler: import, issue, submit and reconcile are buttons until the owner turns it on.

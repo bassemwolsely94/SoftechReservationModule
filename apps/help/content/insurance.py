@@ -414,7 +414,7 @@ SCREENS = [
             T('افتح «الجاهزية للإصدار» حتى لا يبقى خطأ، ثم اطبع من «طباعة وتصدير».', 'Open "Readiness to issue" until no error remains, then print from "Print & export".'),
         ],
         'tips': [T('التعديلات تؤثر على إجمالي المطالبة — الشاشة تطلب تأكيداً، وكلها قابلة للتراجع ومسجّلة.', 'Edits change the claim total — the screen asks for confirmation, and all are reversible and logged.')],
-        'related': ['insurance.print', 'insurance.item_overrides', 'insurance.separation_lists'],
+        'related': ['insurance.print', 'insurance.item_overrides', 'insurance.separation_lists', 'tax_invoicing.main'],
         'tour': [
             {'target': 'insurance-claim-kpis',
              'label': T('ملخص المطالبة', 'Claim summary'),
@@ -620,6 +620,10 @@ SCREENS = [
          },
         ],
         'hints': [
+            {'target': 'insurance-claim-fiscal-status', 'label': T('الوضع الضريبي', 'Tax status'),
+             'text': T('فاتورة المطالبة الضريبية وإشعاراتها وحالة كل منها، للعرض فقط. الرابط يفتح المستند لمن لديه صلاحية الفواتير الضريبية.',
+                       "The claim's tax invoice and notes with their status, read only. The link opens the document for those who hold tax invoicing."),
+             'open_hint': T('تحت اسم الجهة في أعلى المطالبة.', 'Under the payer name at the top of the claim.')},
             {'target': 'insurance-claim-rx-name-edit', 'label': T('✎', '✎'),
              'text': T('يفتح اسم المريض للتعديل من غير ما تفتح قفل البنود.', "Opens the patient name for editing without unlocking the lines."),
              'when': T('لاسم ناقص أو مكتوب غلط. الاسم بيتعدّل عندنا بس، واسم سوفتك محفوظ للاسترجاع.', 'For a short or misspelt name. It changes here only; the SOFTECH name is kept for revert.')},
@@ -845,9 +849,9 @@ SCREENS = [
              'when': T('بعد ما تختار الصفوف والأعمدة.', 'After choosing the rows and columns.'),
              'open_hint': T('تبويب «تحليل البيانات»، بعد ظهور نتيجة.', 'The "Data analysis" tab, once a result shows.')},
         ],
-        'updated': '2026-11-05',
+        'updated': '2026-11-07',
     
-        'change_note': T('الصافى المباشر لروشتة يدخل الآن فى إجمالى المطالبة والطباعة والتصدير؛ واسترجاع تاريخ الإيصال يرجّع تاريخ المطالبة الأصلى كمان', "A prescription's net override now counts in the claim total, print and export; restoring a receipt date also restores the original motalba date"),
+        'change_note': T('الوضع الضريبي للمطالبة يظهر الآن أعلى الشاشة', "The claim's tax status now shows at the top of the screen"),
     },
     {
         'key': 'insurance.print',
