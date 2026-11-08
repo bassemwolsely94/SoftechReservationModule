@@ -81,11 +81,8 @@ class EndToEndBase(TestCase):
     pc_skew = _dt.timedelta(0)      # how far behind the true time the agent PC's clock runs
 
     def setUp(self):
-        # The agent sends naive local time and the server reads it in its current zone, so both
-        # sides use the machine's own zone here; the offset arithmetic is then exact anywhere.
-        timezone.activate(_dt.datetime.now().astimezone().tzinfo)
-        self.addCleanup(timezone.deactivate)
-
+        # The agent sends naive local time and the server reads it as Cairo time, whatever zone
+        # the machine running the tests (or the agent PC) is in.
         self.sim = timezone.now().replace(microsecond=0) - _dt.timedelta(hours=1)
         patch = mock.patch('django.utils.timezone.now', side_effect=lambda: self.sim)
         patch.start()
@@ -114,12 +111,13 @@ class EndToEndBase(TestCase):
             uploader=self.uploader, spool=self.spool, client_factory=self.client_factory,
             now=self.pc_now, clock=lambda: self.monotonic, cache_path=self.root / 'devices.json')
 
-    # the agent PC's naive local clock, as datetime.now() would give it
+    # the agent PC's naive wall clock, as datetime.now() would give it: Cairo time minus its skew.
+    # The PC's own zone doesn't enter into it, only what its clock reads.
     def pc_now(self):
-        return (self.sim - self.pc_skew).astimezone().replace(tzinfo=None)
+        return timezone.localtime(self.sim - self.pc_skew).replace(tzinfo=None)
 
     def true_naive_now(self):
-        return self.sim.astimezone().replace(tzinfo=None)
+        return timezone.localtime(self.sim).replace(tzinfo=None)
 
     def client_factory(self, target):
         return ClockedClient(
@@ -128,7 +126,7 @@ class EndToEndBase(TestCase):
 
     def punch_now(self, code='1001'):
         """The machine records a punch at the simulated time."""
-        local = self.sim.astimezone()
+        local = timezone.localtime(self.sim)
         self.log.append(LogRow(code, int(self.sim.timestamp()), local.date(), local.time().replace(microsecond=0),
                                4, 1))
 
@@ -242,3 +240,28 @@ class PcClockChainTests(EndToEndBase):
         self.device.refresh_from_db()
         self.assertEqual(self.device.last_drift_seconds, 0)
         self.assertEqual(self.kinds(), ['pc_clock'])
+
+
+class PcZoneNotCairoTests(EndToEndBase):
+    """The agent PC's zone is not Cairo's. Only what its wall clock reads matters."""
+
+    def test_a_pc_whose_wall_clock_matches_cairo_raises_no_alert(self):
+        # zone settings wrong, clock face right: nothing to correct, nothing to alert
+        for _ in range(3):
+            self.hour()
+        runs = list(CollectionRun.objects.filter(device=self.device).order_by('started_at'))
+        self.assertEqual([r.pc_offset_seconds for r in runs], [0, 0, 0])
+        self.assertEqual([r.drift_seconds for r in runs], [0, 0, 0])
+        self.assertEqual(self.kinds(), [])
+
+    def test_a_pc_set_to_utc_with_the_utc_clock_face_is_corrected_to_cairo(self):
+        self.pc_now = lambda: (self.sim - self.pc_skew).astimezone(_dt.timezone.utc).replace(tzinfo=None)
+        self.loop._now = self.pc_now
+        for _ in range(2):
+            self.hour()
+        cairo_ahead = int(timezone.localtime(self.sim).utcoffset().total_seconds())
+        runs = list(CollectionRun.objects.filter(device=self.device).order_by('started_at'))
+        self.assertEqual([r.pc_offset_seconds for r in runs], [cairo_ahead] * 2)
+        self.assertEqual([r.drift_seconds for r in runs], [0, 0])
+        self.assertEqual(runs[-1].started_at, self.sim)
+

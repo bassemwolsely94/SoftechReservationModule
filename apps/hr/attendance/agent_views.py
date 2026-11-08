@@ -80,9 +80,10 @@ class AgentConfigView(AgentView):
         return Response({
             'agent': agent.name,
             'collect_now': agent.collect_requested_at is not None,
-            # The agent measures its own PC clock against this and reports machine drift
+            # Cairo local time (the zone the agent's naive stamps are read in). The agent
+            # measures its own PC wall clock against this and reports machine drift
             # against the corrected time.
-            'server_time': timezone.now().isoformat(),
+            'server_time': timezone.localtime().isoformat(),
             'devices': [{'serial': d.serial, 'name': d.name, 'ip': d.ip, 'port': d.port} for d in devices],
         })
 

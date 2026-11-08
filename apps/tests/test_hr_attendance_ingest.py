@@ -128,6 +128,8 @@ class ConfigTests(IngestBase):
         moment = _dt.datetime.fromisoformat(server_time)
         self.assertIsNotNone(moment.tzinfo)
         self.assertLess(abs((timezone.now() - moment).total_seconds()), 60)
+        # and it is Cairo local time: the zone the agent's naive stamps are read in
+        self.assertEqual(moment.utcoffset(), timezone.localtime().utcoffset())
 
     def test_collect_now_and_last_seen(self):
         self.agent.collect_requested_at = timezone.now()

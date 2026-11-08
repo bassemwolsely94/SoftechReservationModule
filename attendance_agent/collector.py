@@ -368,7 +368,7 @@ class AgentLoop:
         self._saved_devices = None
         self._held = {}
         self._collect_done_file = None
-        self._pc_offset = None   # seconds the ERP's clock is ahead of this PC's; None = unknown
+        self._pc_offset = None   # seconds the ERP's (Cairo) wall clock is ahead of this PC's; None = not yet known
 
     def _corrected_now(self):
         """This PC's time moved onto the ERP's clock, when the ERP has told us its time."""
@@ -376,15 +376,18 @@ class AgentLoop:
         return now if self._pc_offset is None else now + timedelta(seconds=self._pc_offset)
 
     def _learn_offset(self, server_time):
-        """ERP time minus PC time, in whole seconds, or None when the ERP didn't say or the
-        value isn't a usable time (then we behave as before)."""
+        """ERP clock time minus PC clock time, in whole seconds, or None when the ERP didn't say
+        or the value isn't a usable time. Both sides are compared as naive wall-clock times:
+        the agent sends naive local time and the ERP reads it as Cairo time, so the zone and
+        DST rules of this PC must not matter."""
         if not isinstance(server_time, str):
             return None
         try:
-            moment = datetime.fromisoformat(server_time.strip().replace('Z', '+00:00'))
-            if moment.tzinfo is None:
-                return None
-            return round(moment.timestamp() - self._now().timestamp())
+            server_clock = datetime.fromisoformat(server_time.strip().replace('Z', '+00:00'))
+            if server_clock.tzinfo is None:
+                return None     # the ERP always sends Cairo time with its offset
+            server_clock = server_clock.replace(tzinfo=None)
+            return round((server_clock - self._now().replace(tzinfo=None)).total_seconds())
         except (ValueError, OverflowError, OSError):
             return None
 
@@ -440,7 +443,7 @@ class AgentLoop:
         except UploadError as exc:
             # The ERP being down must not stop collection, even after a PC restart.
             logger.warning('ERP config unavailable: %s', _safe_error(exc))
-            self._pc_offset = None
+            # The last known offset is kept, so stamps don't flip between corrected and not.
             return self._load_devices(), False
         self._pc_offset = self._learn_offset(config.get('server_time'))
         devices = _valid_devices(config['devices'])

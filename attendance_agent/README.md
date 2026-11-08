@@ -50,11 +50,13 @@ removed only after the ERP accepts it. If the ERP is down, collection continues 
 saved machine list and everything is sent when it returns.
 
 **The PC's clock.** Each time the agent asks the ERP for its machines, the ERP also answers
-with its own time (`server_time`). The agent works out how far this PC's clock is from it
+with its own Cairo clock time (`server_time`). The agent works out how far this PC's wall clock is from it
+(comparing clock readings only, so the PC's time zone and DST rules don't matter)
 (`pc_offset_seconds`, reported with every run), stamps `started_at` and `finished_at` with the
 corrected time, and measures each machine's clock drift against the corrected time, so the drift
 means "the machine differs from the server". It never changes the PC's clock. If the ERP can't
-be reached, or doesn't send its time, the agent uses the PC's clock as it is and reports no offset.
+be reached the agent keeps the last offset it learned; before the first successful answer, or if
+the ERP doesn't send its time, it uses the PC's clock as it is and reports no offset.
 The ERP alerts the HR managers when the PC is off by more than 5 minutes.
 
 **The ERP address.** `http` is accepted only for a private or local address (an office network or
@@ -153,7 +155,8 @@ python -m attendance_agent C:\ElRezeiky\agent\agent.ini
 يحسب البرنامج الفرق بين ساعة هذا الجهاز وساعة النظام (`pc_offset_seconds` ويُرسل مع كل تشغيل)،
 ويختم `started_at` و`finished_at` بالوقت المصحَّح، ويقيس انحراف ساعة كل ماكينة على الوقت المصحَّح،
 فيعني الانحراف أن الماكينة تختلف عن النظام. لا يغيّر البرنامج ساعة الجهاز أبدًا. وإذا تعذّر الوصول
-إلى النظام يستخدم ساعة الجهاز كما هي دون إرسال فرق. ينبّه النظام مسؤولي الموارد البشرية إذا زاد
+إلى النظام يحتفظ بآخر فرق عرفه، وقبل أول رد ناجح يستخدم ساعة الجهاز كما هي دون إرسال فرق.
+المقارنة بين قراءتَي الساعة فقط، فلا تؤثر المنطقة الزمنية للجهاز. ينبّه النظام مسؤولي الموارد البشرية إذا زاد
 فرق ساعة الجهاز عن 5 دقائق.
 
 **عنوان النظام.** يُقبل `http` فقط لعنوان خاص أو محلي (شبكة المكتب أو VPN مثل `192.168.x.x` أو

@@ -10,7 +10,7 @@ import shutil
 import socket
 import tempfile
 import threading
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from unittest import mock
@@ -731,8 +731,48 @@ class LoopTests(TempDirTestCase):
         self.assertEqual([kind for kind, _p in uploader.sent], ['roster', 'punches', 'runs'])
 
     def server_clock_ahead(self, seconds):
-        """What the ERP would send when its clock is `seconds` ahead of this PC's NOW."""
-        return (NOW.astimezone() + timedelta(seconds=seconds)).isoformat()
+        """What the ERP would send (Cairo wall clock with its offset) when that clock reads
+        `seconds` ahead of this PC's naive NOW. The PC's own zone plays no part."""
+        return (NOW + timedelta(seconds=seconds)).replace(tzinfo=timezone(timedelta(hours=2))).isoformat()
+
+    def test_pc_in_another_zone_with_cairo_wall_clock_has_no_offset(self):
+        # Cairo in summer time (+03:00) and in winter time (+02:00): same wall clock, offset 0.
+        for zone_hours in (2, 3):
+            with self.subTest(zone_hours=zone_hours):
+                sent = NOW.replace(tzinfo=timezone(timedelta(hours=zone_hours))).isoformat()
+                uploader = FakeUploader(server_time=sent)
+                self.make_loop(uploader).tick()
+                run = uploader.of_kind('runs')[0]
+                self.assertEqual(run['pc_offset_seconds'], 0)
+                self.assertEqual(run['started_at'], NOW.isoformat())
+
+    def test_pc_two_hours_behind_gets_plus_two_hours_whatever_its_zone(self):
+        for zone_hours in (2, 3):
+            with self.subTest(zone_hours=zone_hours):
+                sent = (NOW + timedelta(hours=2)).replace(
+                    tzinfo=timezone(timedelta(hours=zone_hours))).isoformat()
+                uploader = FakeUploader(server_time=sent)
+                self.make_loop(uploader).tick()
+                run = uploader.of_kind('runs')[0]
+                self.assertEqual(run['pc_offset_seconds'], 7200)
+                self.assertEqual(run['started_at'], (NOW + timedelta(hours=2)).isoformat())
+
+    def test_offset_is_kept_through_a_config_failure(self):
+        uploader = FakeUploader(server_time=self.server_clock_ahead(7200))
+        loop = self.make_loop(uploader)
+        loop.tick()
+        uploader.config_down = True
+        self.clock_value += 7200
+        loop.tick()
+        run = uploader.of_kind('runs')[-1]
+        self.assertEqual(run['pc_offset_seconds'], 7200)
+        self.assertEqual(run['started_at'], (NOW + timedelta(seconds=7200)).isoformat())
+
+    def test_no_offset_when_config_fails_before_the_first_success(self):
+        uploader = FakeUploader(server_time=self.server_clock_ahead(7200))
+        uploader.config_down = True
+        self.make_loop(uploader).tick()     # no cache either: nothing collected, nothing to stamp
+        self.assertEqual(uploader.of_kind('runs'), [])
 
     def test_pc_clock_offset_corrects_stamps_and_drift(self):
         # PC 2 hours slow. The machine's clock is right (server time), so its drift is ~0
@@ -761,20 +801,11 @@ class LoopTests(TempDirTestCase):
         self.assertEqual(run['started_at'], NOW.isoformat())
 
     def test_unusable_server_time_behaves_as_before(self):
-        for junk in ('yesterday', 12345, '2026-11-07T10:00:00'):    # junk, not text, no zone
+        for junk in ('yesterday', 12345, '2026-11-07T10:00:00'):    # junk, not text, no offset
             with self.subTest(junk=junk):
                 uploader = FakeUploader(server_time=junk)
                 self.make_loop(uploader).tick()
                 self.assertNotIn('pc_offset_seconds', uploader.of_kind('runs')[-1])
-
-    def test_config_unreachable_behaves_as_before(self):
-        uploader = FakeUploader(server_time=self.server_clock_ahead(7200))
-        loop = self.make_loop(uploader)
-        loop.tick()
-        uploader.config_down = True
-        self.clock_value += 7200
-        loop.tick()
-        self.assertNotIn('pc_offset_seconds', uploader.of_kind('runs')[-1])
 
     def test_one_bad_machine_does_not_stop_others(self):
         uploader = FakeUploader(devices=[device('BAD'), device('GOOD')])
