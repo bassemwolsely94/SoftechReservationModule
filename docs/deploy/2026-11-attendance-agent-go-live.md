@@ -23,11 +23,12 @@ Facts to keep in mind from the build:
    `elrezeiky_db` to a folder outside the code folder). Check that the file is not empty.
 2. Update the office ERP code to the branch that holds the attendance work, once the owner has
    approved the PR.
-3. Run the migrations: `hr` 0007 to 0010, `users` 0054 and `notifications` 0044. Look at the list
+3. Run the migrations: `hr` 0007 to 0011, `users` 0054 and `notifications` 0044. Look at the list
    with `python manage.py migrate --plan` first; it should show only those. Then run `migrate`.
 4. Restart the ERP web process **and** the scheduler process (both read the settings).
-5. Check that `/hr/attendance` is not shown to anyone yet (the switch is still off and nobody has
-   access).
+5. Check that `/hr/attendance` opens for admins only. Admins always see the screen, even while the
+   switch is off (it is empty, because nothing is collected); nobody else sees it until step 7
+   gives them access.
 
 ## 2. Choose the office PC and test its path to all 8 machines
 
@@ -59,7 +60,7 @@ Facts to keep in mind from the build:
 ## 5. Seed the machines and confirm locations
 
 1. `python manage.py seed_attendance_devices`. It is safe to repeat and never overwrites an edit.
-2. In the ERP, as admin, open `/hr/attendance`, tab "الأجهزة" (Machines). Turn each machine's
+2. In the ERP, as admin, open `/hr/attendance`, tab "الماكينات" (Machines). Turn each machine's
    **active** switch off for now.
 3. Confirm each machine's branch and location label. Set the branch and location for `Alia` and
    `8` once the owner confirms where they stand.
@@ -68,7 +69,7 @@ Facts to keep in mind from the build:
 
 1. On the ERP server: `python manage.py issue_attendance_agent <agent name>`. The secret is shown
    **once**. Copy it straight into `agent.ini`. Do not send it by email or WhatsApp.
-2. In the "الأجهزة" tab, assign the reachable machines to this agent.
+2. In the "الماكينات" tab, assign the reachable machines to this agent.
 3. On the office PC, follow `attendance_agent/README.md`: copy the `attendance_agent` folder, copy
    `agent.ini.example` to `agent.ini` **outside the program folder**, fill in the ERP address and the
    secret.
@@ -78,9 +79,10 @@ Facts to keep in mind from the build:
 
 ## 7. Grant the HR head and the HR team
 
-1. As admin, open `/hr/attendance`, tab "الوصول" (Access). Find the HR head and the team members and
-   give each a level: view, manage or export. The HR head gets manage and export; others only what
-   they need.
+1. As admin, open `/hr/attendance`, tab "الصلاحيات" (Permissions). Find the HR head and the team
+   members and give each a level: **view** or **manage**. Export is not a separate level: anyone
+   who can view can export the month file. The HR head gets manage; others only view. Managers
+   (and admins) are the people who receive the health alerts described at the end.
 2. Access can only be given here. No access means the screen shows a lock message.
 
 ## 8. First-contact test on ONE reachable machine
@@ -90,8 +92,9 @@ present.
 
 1. Pick one machine from step 2 that answered. Turn on `HR_ATTENDANCE_ENABLED`:
    - Add `HR_ATTENDANCE_ENABLED=True` to the office ERP `.env`.
-   - Restart the ERP web process **and** the scheduler process. Without the restart the agent
-     endpoints answer 404.
+   - Restart the ERP web process **and** the scheduler process. Without the restart, or while the
+     switch is off, the agent endpoints answer **503** (switched off), and the agent keeps what
+     it read and tries again.
 2. Make only that machine active and assigned to the agent.
 3. With the **ZK program connected to the same machine at the same time**, run on the office PC from
    the folder that holds `attendance_agent`:
@@ -106,16 +109,22 @@ present.
 
 ## 9. Enable all machines
 
-1. Only after step 8 passed. In the "الأجهزة" tab, make the remaining reachable machines active and
+1. Only after step 8 passed. In the "الماكينات" tab, make the remaining reachable machines active and
    assigned.
 2. Schedule the agent with Windows Task Scheduler as written in `attendance_agent/README.md`
    (at startup, restart on failure, one instance).
 3. After an hour, check each machine's last contact. A machine silent for hours means the agent or
    the machine is down; the HR head also gets a notification.
-4. Handle the "المشاكل" (Issues) tab: link unknown IDs to employees, resolve name conflicts.
-5. If the ERP is down, the agent keeps punches in its spool on the PC and sends them when the ERP
-   returns. During a long outage this is about **60 MB a day** and there is **no enforced limit**, so
-   watch the PC's free disk space. Do not delete spool files by hand.
+4. Handle the "مشاكل" (Issues) tab. For an unknown ID you can **add it as an employee** or
+   **ignore it** with a reason; an ignored ID is listed at the bottom of the same tab with its reason
+   and an "إلغاء التجاهل" (undo) button. Name conflicts are confirmed there. Linking an employee to a
+   system login is done on the "الموظفون" (Employees) tab, not here. The tab also lists an
+   employee's punches that fall outside their start or end date: correct the date on "الموظفون".
+5. If the ERP is down, the agent keeps what it read in its spool on the PC and sends it when the ERP
+   returns. Each hourly read adds only the punches that are new, plus one small roster file and one
+   run file per machine; it does not store the whole log again every hour (see
+   `attendance_agent/README.md`). **Nothing enforces a limit**, so during a long outage watch the PC's
+   free disk space. Do not delete spool files by hand.
 
 ## 10. One-month parallel check
 
@@ -133,8 +142,27 @@ When the ERP moves to the VPS:
    the VPS). Restart the agent.
 2. Punches the agent holds, and any gap, are covered by its resend. The ERP ignores repeats.
 3. Only **one** ERP may receive punches at a time. Turn `HR_ATTENDANCE_ENABLED` off on the office
-   ERP when the VPS takes over, and issue the agent again on the VPS if the secrets are not carried
-   over.
+   ERP when the VPS takes over.
+4. If the VPS database is a **copy** of the office database, nothing else changes: the agent's
+   secret, the machines and their assignment come across with it.
+5. If the VPS **starts fresh**: on the VPS run `python manage.py issue_attendance_agent <agent name>`,
+   put the new secret in `agent.ini` on the office PC, restart the agent, and in the "الماكينات" tab
+   assign the machines to the new agent (and seed the machines and import the employees again).
+
+## Health alerts
+
+While `HR_ATTENDANCE_ENABLED` is on, the ERP checks the collection and sends an in-app notification
+to every admin and every **manage** grantee (view-only people do not get them). Each alert is sent
+once per day, except a fall in a machine's log count, which is sent once per fall.
+
+| Alert | When |
+|---|---|
+| Agent silent | the agent has not contacted the ERP for 3 hours |
+| Machine silent | no successful collection from an active machine for 24 hours. A machine that has never succeeded counts from its first failed attempt |
+| Machine clock | a machine's clock differs from the **server's** by more than 5 minutes |
+| **PC clock** | the office PC's own clock differs from the server's by more than 5 minutes. Fix the date and time on that PC. The agent corrects its own times for the difference in the meantime |
+| Log count fell | a machine holds fewer records than at an earlier good run (the log may have been cleared) |
+| Files left behind | the agent has kept files for a machine that the ERP did not accept for 3 hours or more |
 
 ## Not in this stage
 
