@@ -501,7 +501,9 @@ class WebsocketMarkReadTests(TransactionTestCase):
         async def noop(self_):
             return None
 
-        with mock.patch('apps.access.ws.ZoneGuardMixin.zone_admit', admit),                 mock.patch('apps.access.ws.ZoneGuardMixin.zone_start', noop),                 mock.patch('apps.access.ws.ZoneGuardMixin.zone_stop', noop):
+        with mock.patch('apps.access.ws.ZoneGuardMixin.zone_admit', admit), \
+                mock.patch('apps.access.ws.ZoneGuardMixin.zone_start', noop), \
+                mock.patch('apps.access.ws.ZoneGuardMixin.zone_stop', noop):
             return async_to_sync(go)()
 
     def test_ws_mark_read_updates_row_and_log(self):

@@ -82,11 +82,12 @@ folder come later. Its rows written are counted in the step's log line and are n
 
 ## Findings
 
-- **Notifications: nobody reads them.** The websocket path (`consumers.py _mark_read`) and the REST paths all set both
+- **Notifications: nothing has been marked read.** The websocket path (`consumers.py _mark_read`) and the REST paths all set both
   `Notification.is_read` and `NotificationLog.read_at`; `test_ws_mark_read_updates_row_and_log` passed on the first run.
-  On the office database (2026-11-07): 758,533 notifications, 0 with `is_read`; 758,297 logs, 0 with `read_at`. So
-  marking as read is not shown to be broken; the bell is simply not used for these alerts (the one live click is left
-  for the owner to confirm). The P-56 rule "read after 30 days" therefore never fires; only the 90-day unread rule
+  On the office database (read-only counts, 2026-11-08): 758,692 notifications, 0 with `is_read`; 758,456 logs, 0 with
+  `read_at`. Both read paths work in tests and nothing has been marked read, so the counts alone do not say whether the
+  bell is unused or marking is broken in live use; the owner's one live click settles which it is. Until then, the P-56
+  rule "read after 30 days" never fires; only the 90-day unread rule
   removes anything.
 - **Transit alerts were written daily.** `sync_in_transit` now writes a note and an `alert_sent` event only when the
   level changes (about 148,500 repeat notes and 148,400 repeat events exist from before). The daily digest
