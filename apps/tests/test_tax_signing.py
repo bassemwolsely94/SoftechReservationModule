@@ -27,6 +27,8 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa, utils
 from cryptography.x509.oid import NameOID
 from django.conf import settings
+from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -36,6 +38,7 @@ from apps.access import public_paths
 from apps.tax_invoicing import cades, fiscal, signing
 from apps.tax_invoicing.models import TaxSigningCertification, TaxSigningJob
 from apps.tests.factories import make_branch, make_user
+from apps.users.models import RoleModuleAccess
 from core.auth_cookies import ACCESS_COOKIE
 
 AGENT_DIR = Path(settings.BASE_DIR) / 'deploy' / 'tax_signing_agent'
@@ -44,6 +47,8 @@ NEXT_URL = '/api/tax-invoicing/signing-agent/next/'
 PIN = 'PIN-canary-731946'
 OID_DIGESTED_DATA = '1.2.840.113549.1.7.5'
 AGENT_SIGNER = 'apps.tax_invoicing.signing.AgentSigner'
+AGENT_USERNAME, AGENT_ROLE = 'tax_signing_agent', 'viewer'
+AGENT_PASSWORD = 'Password-canary-55821'
 TEXT = '"ISSUER""ADDRESS""الرزيقي"'
 
 
@@ -314,10 +319,27 @@ class ReadyForLiveTests(TestCase):
 
 # ── Agent endpoints ────────────────────────────────────────────────────────────────────────────
 
-def agent_client(token=AGENT_TOKEN):
-    client = APIClient()
+def agent_account():
+    """The dedicated account the workstation doc sets up: a non-admin role holding tax_invoicing finalize."""
+    user = User.objects.filter(username=AGENT_USERNAME).first()
+    if user is None:
+        user, _, _ = make_user(AGENT_USERNAME, role=AGENT_ROLE, password=AGENT_PASSWORD)
+    RoleModuleAccess.objects.get_or_create(role=AGENT_ROLE, module='tax_invoicing', action='finalize',
+                                           defaults={'is_allowed': True})
+    return user
+
+
+def agent_client(token=AGENT_TOKEN, user='agent'):
+    """Signed in as the agent account (user='agent'), as another user, or anonymous (user=None)."""
+    headers = {}
+    if user == 'agent':
+        user = agent_account()
+    if user is not None:
+        headers['HTTP_AUTHORIZATION'] = f'Bearer {AccessToken.for_user(user)}'
     if token is not None:
-        client.credentials(HTTP_X_TAX_AGENT_TOKEN=token)
+        headers['HTTP_X_TAX_AGENT_TOKEN'] = token
+    client = APIClient()
+    client.credentials(**headers)
     return client
 
 
@@ -393,18 +415,32 @@ class AgentEndpointTests(TestCase):
         job.refresh_from_db()
         self.assertEqual(job.signature, signature)
 
-    @override_settings(PUBLIC_API_ENFORCEMENT='enforce')
-    def test_the_anonymous_gate_lets_the_agent_through_when_enforced(self):
-        """The agent has no user session; its own gate is the token, which still refuses."""
-        self.assertEqual(agent_client().post(NEXT_URL).status_code, 200)
-        self.assertEqual(agent_client('wrong').post(NEXT_URL).status_code, 403)
-        self.assertEqual(agent_client(None).post(result_url(make_job()), {'signature': 'x'}, format='json').status_code, 403)
+    def test_anonymous_is_refused_even_with_the_token(self):
+        job = make_job()
+        for mode in ('log', 'enforce'):
+            with override_settings(PUBLIC_API_ENFORCEMENT=mode):
+                self.assertEqual(agent_client(user=None).post(NEXT_URL).status_code, 401, mode)
+                self.assertEqual(agent_client(user=None).post(result_url(job), {'signature': 'x'}, format='json').status_code,
+                                 401, mode)
+        job.refresh_from_db()
+        self.assertEqual(job.status, TaxSigningJob.PENDING)
 
-    @override_settings(PUBLIC_API_ENFORCEMENT='enforce')
-    def test_only_the_agent_paths_were_opened_by_that_entry(self):
-        for path in ('/api/tax-invoicing/signing/status/', '/api/tax-invoicing/signing/smoke-test/'):
-            self.assertFalse(public_paths.is_public(path, 'POST'), path)
-            self.assertEqual(APIClient().post(path).status_code, 401, path)
+    def test_a_signed_in_account_without_finalize_is_refused(self):
+        """The accountant works on tax documents all day, but only the agent's role holds finalize here."""
+        accountant, _, _ = make_user('tax_sig_acct', role='accountant')
+        self.assertEqual(agent_client(user=accountant).post(NEXT_URL).status_code, 403)
+
+    def test_the_agent_paths_are_not_public(self):
+        for path in (NEXT_URL, '/api/tax-invoicing/signing-agent/jobs/1/result/'):
+            for method in ('GET', 'POST'):
+                self.assertFalse(public_paths.is_public(path, method), (path, method))
+
+    @override_settings(PUBLIC_API_ENFORCEMENT='enforce', RBAC_ENFORCEMENT='enforce')
+    def test_the_signed_in_agent_passes_every_gate_when_enforced(self):
+        job = make_job()
+        self.assertEqual(agent_client().post(NEXT_URL).json()['job']['id'], job.pk)
+        response = agent_client().post(result_url(job), {'signature': SEAL.b64(TEXT)}, format='json')
+        self.assertEqual(response.status_code, 200)
 
 
 @override_settings(TAX_SIGNING_AGENT_TOKEN=AGENT_TOKEN, TAX_SIGNING_WAIT_SECONDS=60)
@@ -738,40 +774,70 @@ class FakeResponse:
 
 
 class FakeHttp:
-    """Answers from a script; a queue entry can be an exception to raise."""
+    """Answers from a script; a queue entry can be an exception to raise. Sign-in and refresh answer with
+    numbered tokens (A1/R1, A2/R2, ...) unless scripted otherwise."""
 
-    def __init__(self, jobs=(), results=()):
+    def __init__(self, jobs=(), results=(), logins=(), refreshes=()):
         self.jobs, self.results = list(jobs), list(results)
+        self.logins, self.refreshes = list(logins), list(refreshes)
         self.calls = []
+        self.issued = 0
+        self.cookies = {'erp_access': 'set by the last answer'}   # the agent must drop these
+
+    def _tokens(self):
+        self.issued += 1
+        return FakeResponse(200, {'access': f'A{self.issued}', 'refresh': f'R{self.issued}', 'user': {}})
 
     def post(self, url, *, headers, json, timeout, allow_redirects, verify):
         self.calls.append({'url': url, 'headers': headers, 'json': json, 'allow_redirects': allow_redirects, 'verify': verify})
-        queue = self.jobs if url.endswith('/next/') else self.results
+        self.cookies['erp_access'] = 'set by the last answer'
+        kind = self.kind(url)
+        queue = {'login': self.logins, 'refresh': self.refreshes, 'next': self.jobs, 'result': self.results}[kind]
         answer = queue.pop(0) if queue else None
         if isinstance(answer, BaseException):
             raise answer
         if isinstance(answer, FakeResponse):
             return answer
-        if url.endswith('/next/'):
+        if kind in ('login', 'refresh'):
+            return self._tokens()
+        if kind == 'next':
             return FakeResponse(200, {'job': answer})
         return FakeResponse(200, {'ok': True})
 
+    @staticmethod
+    def kind(url):
+        for suffix, kind in (('/auth/login/', 'login'), ('/auth/refresh/', 'refresh'), ('/next/', 'next')):
+            if url.endswith(suffix):
+                return kind
+        return 'result'
+
+    def of(self, kind):
+        return [c for c in self.calls if self.kind(c['url']) == kind]
+
     def results_sent(self):
-        return [c['json'] for c in self.calls if not c['url'].endswith('/next/')]
+        return [c['json'] for c in self.of('result')]
 
     def nexts(self):
-        return sum(c['url'].endswith('/next/') for c in self.calls)
+        return len(self.of('next'))
+
+
+def secrets_env():
+    return {agent_module.ENV_PIN: PIN, agent_module.ENV_AGENT_TOKEN: AGENT_TOKEN, agent_module.ENV_PASSWORD: AGENT_PASSWORD}
 
 
 def job_body(text=TEXT, job_id=7, kind='document'):
     return {'id': job_id, 'kind': kind, 'canonical_text': text, 'sha256': hashlib.sha256(text.encode('utf-8')).hexdigest()}
 
 
+def server_for(http, url='https://server.test', **options):
+    return agent_module.Server(url, AGENT_TOKEN, username=AGENT_USERNAME, password=AGENT_PASSWORD, http=http, **options)
+
+
 def build(lib=None, http=None, *, thumbprint='', allow_low=False, pin=PIN):
     lib = lib or FakeLib()
     http = http or FakeHttp()
     token = agent_module.Token(FakeP11(lib), 'fake.dll', thumbprint=thumbprint, allow_low_pin_count=allow_low, pin=pin)
-    server = agent_module.Server('https://server.test', AGENT_TOKEN, http=http)
+    server = server_for(http)
     sleeps = []
     agent = agent_module.Agent(token, server, sleep=sleeps.append, poll_seconds=5)
     return lib, http, token, agent, sleeps
@@ -916,9 +982,11 @@ class AgentRunTests(SimpleTestCase):
         self.assertEqual(len(sent), 1)
         details = cades.inspect_signature(base64.b64decode(sent[0]['signature']), TEXT.encode('utf-8'))
         self.assertEqual(details['thumbprint'], SEAL.thumbprint)
-        self.assertEqual(http.calls[0]['headers'], {'X-Tax-Agent-Token': AGENT_TOKEN})
-        self.assertIs(http.calls[0]['allow_redirects'], False)
-        self.assertIs(http.calls[0]['verify'], True)
+        first = http.of('next')[0]
+        self.assertEqual(first['headers'], {'Authorization': 'Bearer A1', 'X-Tax-Agent-Token': AGENT_TOKEN})
+        for call in http.calls:
+            self.assertIs(call['allow_redirects'], False)
+            self.assertIs(call['verify'], True)
 
     def test_once_with_nothing_to_do(self):
         lib, http, _, agent, _ = build()
@@ -1080,7 +1148,8 @@ class AgentSecretTests(SimpleTestCase):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
         self.config = Path(self.folder.name, 'config.ini')
-        self.config.write_text('[server]\nurl = https://server.test\n[token]\npkcs11_module = fake.dll\n', encoding='utf-8')
+        self.config.write_text(f'[server]\nurl = https://server.test\nusername = {AGENT_USERNAME}\n'
+                               '[token]\npkcs11_module = fake.dll\n', encoding='utf-8')
         previous = logging.getLogger().handlers[:], logging.getLogger().level
         self.addCleanup(self._restore_logging, previous)
 
@@ -1144,11 +1213,12 @@ class AgentSecretTests(SimpleTestCase):
         self.assertEqual(output.count('FAILED'), 1)
 
     def test_the_pin_appears_nowhere(self):
-        """Not in the logs, the console, the requests, or a repr, on success or on refusal."""
+        """Not in the logs, the console, the requests, or a repr, on success or on refusal. The password goes
+        only into the sign-in request's body, and the agent token only into the agent requests' header."""
         for right_pin in (PIN, 'other'):
             logged = io.StringIO()
             http = FakeHttp(jobs=[job_body(), None])
-            env = {agent_module.ENV_PIN: PIN, agent_module.ENV_AGENT_TOKEN: AGENT_TOKEN}
+            env = secrets_env()
             with mock.patch.object(agent_module, 'configure_logging'), \
                     self.assertLogs('tax_agent', level='DEBUG') as captured:
                 handler = logging.StreamHandler(logged)
@@ -1157,17 +1227,33 @@ class AgentSecretTests(SimpleTestCase):
                 agent_module.log.debug('canary so assertLogs always has a record')
                 code, output, lib = self._main('run', '--once', lib=FakeLib(right_pin=right_pin), http=http, env=env)
             self.assertIn(PIN, lib.pins_tried)
-            everything = output + logged.getvalue() + '\n'.join(captured.output) + repr(http.calls)
-            self.assertNotIn(PIN, everything)
-            self.assertNotIn(AGENT_TOKEN, output + logged.getvalue() + '\n'.join(captured.output))
+            printed = output + logged.getvalue() + '\n'.join(captured.output)
+            self.assertNotIn(PIN, printed + repr(http.calls))
+            for secret in (AGENT_TOKEN, AGENT_PASSWORD, 'Bearer'):
+                self.assertNotIn(secret, printed)
+            login = http.of('login')
+            self.assertEqual([c['json'] for c in login], [{'username': AGENT_USERNAME, 'password': AGENT_PASSWORD}])
+            self.assertNotIn(AGENT_TOKEN, repr(login))
+            self.assertNotIn(AGENT_PASSWORD, repr([c for c in http.calls if c not in login]))
             self.assertNotIn(PIN, repr(agent_module.Token(FakeP11(lib), 'fake.dll', pin=PIN)))
-            self.assertNotIn(AGENT_TOKEN, repr(agent_module.Server('https://x.test', AGENT_TOKEN, http=http)))
+            server = server_for(http, url='https://x.test')
+            self.assertNotIn(AGENT_TOKEN, repr(server))
+            self.assertNotIn(AGENT_PASSWORD, repr(server))
             self.assertIn(code, (agent_module.EXIT_OK, agent_module.EXIT_FATAL))
 
     def test_secrets_are_removed_from_the_environment_after_reading(self):
-        env = {agent_module.ENV_PIN: PIN, agent_module.ENV_AGENT_TOKEN: AGENT_TOKEN}
+        env = secrets_env()
+        env[agent_module.ENV_USERNAME] = AGENT_USERNAME
         self._main('run', '--once', http=FakeHttp(), env=env)
         self.assertEqual(env, {})
+
+    def test_no_username_is_a_clear_error_before_anything_is_sent(self):
+        self.config.write_text('[server]\nurl = https://server.test\n[token]\npkcs11_module = fake.dll\n', encoding='utf-8')
+        http = FakeHttp()
+        code, output, _ = self._main('run', '--once', http=http, env=secrets_env())
+        self.assertEqual(code, agent_module.EXIT_CONFIG)
+        self.assertIn('username', output)
+        self.assertEqual(http.calls, [])
 
     def test_no_pin_and_no_console_is_a_clear_error(self):
         lib = FakeLib()
@@ -1185,10 +1271,10 @@ class AgentSecretTests(SimpleTestCase):
         self.assertEqual(lib.pins_tried, [])
 
     def test_plain_http_is_refused(self):
-        self.config.write_text('[server]\nurl = http://server.test\n[token]\npkcs11_module = fake.dll\n', encoding='utf-8')
-        env = {agent_module.ENV_PIN: PIN, agent_module.ENV_AGENT_TOKEN: AGENT_TOKEN}
+        self.config.write_text(f'[server]\nurl = http://server.test\nusername = {AGENT_USERNAME}\n'
+                               '[token]\npkcs11_module = fake.dll\n', encoding='utf-8')
         http = FakeHttp()
-        code, output, _ = self._main('run', '--once', http=http, env=env)
+        code, output, _ = self._main('run', '--once', http=http, env=secrets_env())
         self.assertEqual(code, agent_module.EXIT_CONFIG)
         self.assertIn('https', output)
         self.assertEqual(http.calls, [])
@@ -1204,29 +1290,165 @@ class AgentSecretTests(SimpleTestCase):
 
     def test_ca_bundle_reaches_the_request(self):
         http = FakeHttp()
-        agent_module.Server('https://x.test', AGENT_TOKEN, ca_bundle='ca.pem', http=http).next_job()
-        self.assertEqual(http.calls[0]['verify'], 'ca.pem')
+        server_for(http, ca_bundle='ca.pem').next_job()
+        self.assertEqual({c['verify'] for c in http.calls}, {'ca.pem'})
 
     def test_real_http_session_ignores_the_machines_proxy_settings(self):
-        self.assertIs(agent_module.Server('https://x.test', AGENT_TOKEN).http.trust_env, False)
+        self.assertIs(server_for(None).http.trust_env, False)
+
+
+class AgentSignInTests(SimpleTestCase):
+    """The agent's own staff account: sign in once, renew quietly, stop at the first refusal."""
+
+    def test_signs_in_once_and_reuses_the_token(self):
+        http = FakeHttp()
+        server = server_for(http)
+        server.next_job()
+        server.next_job()
+        self.assertEqual(len(http.of('login')), 1)
+        self.assertEqual({c['headers']['Authorization'] for c in http.of('next')}, {'Bearer A1'})
+
+    def test_never_looks_like_the_browser_and_keeps_no_cookies(self):
+        """X-Requested-With would enrol a device and switch on cookie sign-in for a non-browser client."""
+        http = FakeHttp(jobs=[job_body()])
+        _, _, _, agent, _ = build(http=http)
+        agent.run(once=True)
+        for call in http.calls:
+            self.assertNotIn('X-Requested-With', call['headers'])
+        self.assertEqual(http.cookies, {})
+
+    def test_an_expired_access_token_is_renewed_and_the_request_repeated(self):
+        http = FakeHttp(jobs=[FakeResponse(401, {}), None, FakeResponse(401, {}), None])
+        server = server_for(http)
+        server.next_job()
+        self.assertEqual([c['json'] for c in http.of('refresh')], [{'refresh': 'R1'}])
+        self.assertEqual([c['headers']['Authorization'] for c in http.of('next')], ['Bearer A1', 'Bearer A2'])
+        server.next_job()      # the rotated refresh token is the one used next time
+        self.assertEqual([c['json'] for c in http.of('refresh')], [{'refresh': 'R1'}, {'refresh': 'R2'}])
+        self.assertEqual(len(http.of('login')), 1)
+
+    def test_a_refused_refresh_falls_back_to_one_new_sign_in(self):
+        """Seven days on, after a password change blacklisted it, or past a zone's session cap."""
+        http = FakeHttp(jobs=[FakeResponse(401, {}), None], refreshes=[FakeResponse(401, {'detail': 'x'})])
+        server_for(http).next_job()
+        self.assertEqual(len(http.of('login')), 2)
+        self.assertEqual(http.of('next')[-1]['headers']['Authorization'], 'Bearer A2')
+
+    def test_still_refused_after_renewal_stops_without_looping(self):
+        http = FakeHttp(jobs=[FakeResponse(401, {}), FakeResponse(401, {})])
+        with self.assertRaises(agent_module.ServerRefused):
+            server_for(http).next_job()
+        self.assertEqual((len(http.of('login')), len(http.of('refresh')), http.nexts()), (1, 1, 2))
+
+    def test_a_wrong_password_stops_after_one_attempt(self):
+        http = FakeHttp(logins=[FakeResponse(401, {'error': 'x'})], jobs=[job_body()])
+        lib, _, _, agent, _ = build(http=http)
+        with self.assertRaisesRegex(agent_module.ServerRefused, 'will not try again'):
+            agent.run()
+        self.assertEqual((len(http.of('login')), http.nexts(), lib.pins_tried), (1, 0, []))
+
+    def test_two_factor_is_a_clear_stop(self):
+        for body in ({'mfa_required': True, 'mfa_token': 'x'}, {'mfa_setup_required': True, 'mfa_token': 'x'}):
+            http = FakeHttp(logins=[FakeResponse(200, body)])
+            with self.assertRaisesRegex(agent_module.ServerRefused, 'two-factor'):
+                server_for(http).next_job()
+
+    def test_locked_and_zone_refusals_stop_and_say_why(self):
+        cases = ((FakeResponse(429, {'error': 'locked'}), 'locked or throttled'),
+                 (FakeResponse(403, {'error': 'محظور من هذه المنطقة', 'zone': 'Z4'}), 'محظور من هذه المنطقة'))
+        for answer, text in cases:
+            http = FakeHttp(logins=[answer])
+            with self.assertRaisesRegex(agent_module.ServerRefused, text):
+                server_for(http).next_job()
+            self.assertEqual(len(http.of('login')), 1)
+
+    def test_a_server_that_cannot_be_reached_during_sign_in_is_waited_for(self):
+        http = FakeHttp(logins=[ConnectionError('down'), FakeResponse(502)], jobs=[None])
+        _, _, _, agent, sleeps = build(http=http)
+        self.assertEqual(agent.run(should_stop=Stopper(3)), agent_module.EXIT_OK)
+        self.assertEqual((len(http.of('login')), http.nexts()), (3, 1))
+        self.assertEqual(sleeps[:2], [5, 10])
+
+    def test_missing_finalize_says_so(self):
+        http = FakeHttp(jobs=[FakeResponse(403, {'detail': 'x'})])
+        with self.assertRaisesRegex(agent_module.ServerRefused, 'finalize'):
+            server_for(http).next_job()
+
+    def test_no_account_is_a_configuration_error(self):
+        for username, password in (('', AGENT_PASSWORD), (AGENT_USERNAME, '')):
+            with self.assertRaises(agent_module.ConfigError):
+                agent_module.Server('https://x.test', AGENT_TOKEN, username=username, password=password, http=FakeHttp())
 
 
 class DjangoHttp:
-    """The agent's HTTP calls, sent to the real views through the test client."""
+    """The agent's HTTP calls, sign-in included, sent to the real views through a fresh test client each
+    time (so no cookie carries over), with exactly the headers the agent set."""
+
+    def __init__(self):
+        self.calls = []
 
     def post(self, url, *, headers, json, timeout, allow_redirects, verify):
         path = url.replace('https://server.test', '')
-        response = agent_client(headers['X-Tax-Agent-Token']).post(path, json, format='json')
-        return FakeResponse(response.status_code, response.json())
+        self.calls.append(path)
+        extra = {'HTTP_' + name.upper().replace('-', '_'): value for name, value in headers.items()}
+        response = APIClient().post(path, json, format='json', **extra)
+        try:
+            body = response.json()
+        except ValueError:
+            body = None
+        return FakeResponse(response.status_code, body)
 
 
 @override_settings(TAX_SIGNING_AGENT_TOKEN=AGENT_TOKEN, TAX_SIGNER_CLASS=AGENT_SIGNER, TAX_SIGNING_CERT_THUMBPRINT=SEAL.thumbprint)
 class AgentAgainstRealViewsTests(TestCase):
-    def _agent(self, lib=None, token=AGENT_TOKEN):
+    def setUp(self):
+        cache.clear()          # sign-in throttle and lockout counters live in the cache
+        self.account = agent_account()
+
+    def _agent(self, lib=None, token=AGENT_TOKEN, password=AGENT_PASSWORD):
         lib = lib or FakeLib()
-        server = agent_module.Server('https://server.test', token, http=DjangoHttp())
+        self.http = DjangoHttp()
+        server = agent_module.Server('https://server.test', token, username=AGENT_USERNAME, password=password, http=self.http)
         return lib, agent_module.Agent(agent_module.Token(FakeP11(lib), 'fake.dll', thumbprint=SEAL.thumbprint, pin=PIN),
                                        server, sleep=lambda s: None)
+
+    @override_settings(PUBLIC_API_ENFORCEMENT='enforce', RBAC_ENFORCEMENT='enforce')
+    def test_real_sign_in_then_smoke_test_with_every_gate_enforced(self):
+        signing.start_smoke_test(None)
+        _, agent = self._agent()
+        self.assertEqual(agent.run(once=True), agent_module.EXIT_OK)
+        self.assertEqual(self.http.calls[0], '/api/auth/login/')
+        self.assertTrue(signing.latest_certification().passed)
+
+    def test_an_expired_access_token_is_renewed_through_the_real_refresh(self):
+        _, agent = self._agent()
+        agent.server.next_job()
+        agent.server._access = 'expired-or-garbage'
+        self.assertIsNone(agent.server.next_job())
+        self.assertEqual(self.http.calls, ['/api/auth/login/', NEXT_URL, NEXT_URL, '/api/auth/refresh/', NEXT_URL])
+
+    def test_a_wrong_password_is_tried_once_and_does_not_lock_the_account(self):
+        _, agent = self._agent(password='not-the-password')
+        with self.assertRaisesRegex(agent_module.ServerRefused, 'will not try again'):
+            agent.run(once=True)
+        self.assertEqual(self.http.calls, ['/api/auth/login/'])
+        _, agent = self._agent()
+        self.assertEqual(agent.run(once=True), agent_module.EXIT_OK)
+
+    def test_an_account_with_two_factor_is_refused_clearly(self):
+        profile = self.account.staff_profile
+        profile.mfa_enabled = True
+        profile.save(update_fields=['mfa_enabled'])
+        _, agent = self._agent()
+        with self.assertRaisesRegex(agent_module.ServerRefused, 'two-factor'):
+            agent.run(once=True)
+
+    def test_a_disabled_account_stops_the_agent(self):
+        self.account.is_active = False
+        self.account.save(update_fields=['is_active'])
+        _, agent = self._agent()
+        with self.assertRaises(agent_module.ServerRefused):
+            agent.run(once=True)
 
     def test_smoke_test_end_to_end_certifies(self):
         job = signing.start_smoke_test(None)
