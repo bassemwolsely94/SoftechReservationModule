@@ -108,6 +108,49 @@ class ImportTests(Base):
         imp.apply(p, self.profile)
         self.assertIsNone(Employee.objects.get(hr_number='1001').daily_hours)
 
+    def test_unusable_daily_hours_are_preview_errors(self):
+        for bad in ('NaN', 'nan', 'Infinity', '-Infinity', 'inf', -8, 0, '0', 24.5, 25, 1000, 'abc'):
+            with self.subTest(hours=bad):
+                p = self.preview([fake_row(1, daily_hours=bad)])
+                self.assertEqual(p.rows, [])
+                self.assertEqual(len(p.errors), 1)
+                self.assertIn('1001', p.errors[0])
+                with self.assertRaises(imp.ImportBlocked):
+                    imp.apply(p, self.profile)
+        self.assertEqual(Employee.objects.count(), 0)
+
+    def test_usable_daily_hours_pass(self):
+        for good in (1, 4.5, 8, '8.5', 12, 24):
+            with self.subTest(hours=good):
+                p = self.preview([fake_row(1, daily_hours=good)])
+                self.assertEqual(p.errors, [])
+                self.assertEqual(len(p.rows), 1)
+
+    def test_reapplying_keeps_a_branch_set_by_hand(self):
+        imp.apply(self.preview([fake_row(1, work_location='المخازن')]), self.profile)
+        Employee.objects.filter(hr_number='1001').update(branch=self.branch)
+        imp.apply(self.preview([fake_row(1, work_location='المخازن', job_title='مدير')]), self.profile)
+        emp = Employee.objects.get(hr_number='1001')
+        self.assertEqual(emp.branch, self.branch)
+        self.assertEqual(emp.job_title, 'مدير')
+
+    def test_reapplying_with_a_matching_location_sets_the_branch(self):
+        imp.apply(self.preview([fake_row(1, work_location='المخازن')]), self.profile)
+        imp.apply(self.preview([fake_row(1, work_location='فرع أ')]), self.profile)
+        self.assertEqual(Employee.objects.get(hr_number='1001').branch, self.branch)
+
+    def test_import_after_punches_attaches_them(self):
+        import datetime as dt
+        from apps.hr.models import AttendanceDevice, AttendancePunch
+        dev = AttendanceDevice.objects.create(serial='SNX', name='ماكينة')
+        punch = AttendancePunch.objects.create(
+            device=dev, user_code='1001', raw_stamp=1, punch_date=dt.date(2026, 10, 1),
+            punch_time=dt.time(9, 0))
+        self.assertIsNone(punch.employee)
+        imp.apply(self.preview([fake_row(1)]), self.profile)
+        punch.refresh_from_db()
+        self.assertEqual(punch.employee, Employee.objects.get(hr_number='1001'))
+
     def test_branch_set_only_on_clean_map(self):
         p = self.preview([fake_row(1), fake_row(2, work_location='المخازن')])
         imp.apply(p, self.profile)

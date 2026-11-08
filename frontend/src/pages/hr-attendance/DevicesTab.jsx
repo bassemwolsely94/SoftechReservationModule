@@ -20,6 +20,7 @@ const DRIFT_WARN = 300
 const COLLECT_WAIT_MS = 10 * 60 * 1000     // browser-side timeout only; never compared with server times
 
 const getValue = (r, key) => r[key]
+const STATUS_AR = { success: 'نجح', failed: 'فشل' }
 
 function Drift({ s }) {
   if (s == null) return <span className="text-gray-400">—</span>
@@ -254,7 +255,7 @@ export default function DevicesTab({ access }) {
                 <td className="px-3 py-2 text-gray-600">{d.location_label || '—'}</td>
                 <td className="px-3 py-2 text-gray-600">{d.branch_name || '—'}</td>
                 <td className="px-3 py-2 text-gray-600">{stamp(d.last_contact_at)}
-                  {d.last_status && <div className="text-xs text-gray-400">{d.last_status}</div>}</td>
+                  {d.last_status && <div className="text-xs text-gray-400">{STATUS_AR[d.last_status] || d.last_status}</div>}</td>
                 <td className="px-3 py-2 tabular-nums"><Drift s={d.last_drift_seconds} /></td>
                 <td className="px-3 py-2"><RunCell run={d.last_run} admin={admin} /></td>
                 {admin && <td className="px-3 py-2 tabular-nums text-xs" dir="ltr">{d.ip ? `${d.ip}:${d.port}` : '—'}</td>}

@@ -108,6 +108,7 @@ class GateTests(Base):
             'not-generic-login/': (['POST'], 'manage', 'not-generic-login/'),
             'unknown-ids/<str:code>/create-employee/': (['POST'], 'manage', 'unknown-ids/555/create-employee/'),
             'unknown-ids/<str:code>/ignore/': (['POST'], 'manage', 'unknown-ids/555/ignore/'),
+            'unknown-ids/<str:code>/unignore/': (['POST'], 'manage', 'unknown-ids/555/unignore/'),
             'conflicts/<str:code>/confirm/': (['POST'], 'manage', 'conflicts/555/confirm/'),
             'collect-now/': (['POST'], 'manage', 'collect-now/'),
             'devices/<int:pk>/': (['PATCH'], 'admin', f'devices/{d}/'),
@@ -220,6 +221,19 @@ class LinkTests(Base):
         self.assertEqual(self.post(self.mgr, f'employees/{emp.pk}/link/', {'staff': marked.pk}).status_code, 400)
         self.assertIsNone(Employee.objects.get(pk=emp.pk).staff)
         self.assertTrue(self.audited('hr_attendance_generic_login').exists())
+
+    def test_only_a_shared_login_refusal_carries_the_generic_code(self):
+        emp, other = self.employee('1001'), self.employee('1002', 'أحمد علي')
+        cashier = self.staff('cashier_1')
+        refused = self.post(self.mgr, f'employees/{emp.pk}/link/', {'staff': cashier.pk})
+        self.assertEqual(refused.status_code, 400)
+        self.assertEqual(refused.json()['code'], 'generic_login')
+        # a different refusal (this login already belongs to another employee) has no code
+        person = self.staff('hv_person', 'سامر', 'سامي')
+        self.assertEqual(self.post(self.mgr, f'employees/{other.pk}/link/', {'staff': person.pk}).status_code, 200)
+        taken = self.post(self.mgr, f'employees/{emp.pk}/link/', {'staff': person.pk})
+        self.assertEqual(taken.status_code, 400)
+        self.assertNotIn('code', taken.json())
 
     def test_not_generic_override_allows_linking_and_generic_blocks_again(self):
         emp = self.employee('1001', 'سامر سامي')
@@ -443,6 +457,22 @@ class IssueTests(Base):
         ignored = self.viewer.get(URL + 'unknown-ids/').json()['ignored']
         self.assertEqual([i['user_code'] for i in ignored], ['555'])
 
+    def test_ignored_id_is_listed_on_issues_with_its_reason_and_can_be_undone(self):
+        self.punch('555', 1)
+        self.post(self.mgr, 'unknown-ids/555/ignore/', {'reason': 'زائر قديم'})
+        listed = self.viewer.get(URL + 'issues/').json()
+        self.assertEqual([(i['user_code'], i['reason']) for i in listed['ignored']], [('555', 'زائر قديم')])
+        self.assertEqual(listed['rows'], [])
+        # view level can't undo; manage can, once, and it is audited
+        self.assertEqual(self.post(self.viewer, 'unknown-ids/555/unignore/').status_code, 403)
+        self.assertEqual(self.post(self.mgr, 'unknown-ids/555/unignore/').status_code, 200)
+        self.assertFalse(UnknownIdDecision.objects.filter(user_code='555').exists())
+        log = self.audited('hr_attendance_unknown_unignore').get()
+        self.assertEqual((log.user, log.extra['user_code']), (self.mgr_p, '555'))
+        self.assertEqual(self.viewer.get(URL + 'issues/').json()['ignored'], [])
+        self.assertEqual([r['user_code'] for r in issues.list_issues() if r['kind'] == 'unknown_id'], ['555'])
+        self.assertEqual(self.post(self.mgr, 'unknown-ids/555/unignore/').status_code, 400)
+
     def test_create_employee_from_unknown_id_resolves_old_punches(self):
         p1 = self.punch('555', 1)
         p2 = self.punch('555', 2, flag='bad_date', date=_dt.date(2133, 1, 1))
@@ -489,6 +519,59 @@ class IssueTests(Base):
         conflict = [r for r in found if r['kind'] == 'conflict'][0]
         self.assertEqual(conflict['user_code'], '7')
         self.assertEqual(sorted(conflict['names']), ['AhmedAli', 'SamerSami'])
+
+    def test_punches_outside_the_employment_dates_are_an_issue(self):
+        emp = self.employee('7', start_date=_dt.date(2026, 10, 10), end_date=_dt.date(2026, 10, 20))
+        self.punch('7', 1, _dt.date(2026, 10, 2))      # before the start
+        self.punch('7', 2, _dt.date(2026, 10, 5))      # before the start
+        self.punch('7', 3, _dt.date(2026, 10, 12))     # inside
+        self.punch('7', 4, _dt.date(2026, 10, 28))     # after the end
+        self.punch('7', 5, _dt.date(2133, 1, 1), flag='bad_date')   # a bad date is its own issue
+        resolve.resolve_user_code('7')
+        rows = [r for r in self.viewer.get(URL + 'issues/').json()['rows'] if r['kind'] == 'outside_dates']
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual((row['employee'], row['user_code'], row['count']), (emp.pk, '7', 3))
+        self.assertEqual((row['oldest'], row['newest']), ('2026-10-02', '2026-10-28'))
+        self.assertEqual((row['start_date'], row['end_date']), ('2026-10-10', '2026-10-20'))
+
+    def test_outside_dates_clears_when_the_date_is_corrected(self):
+        emp = self.employee('7', start_date=_dt.date(2026, 11, 1))     # mistyped start
+        self.punch('7', 1, _dt.date(2026, 10, 12))
+        resolve.resolve_user_code('7')
+        self.assertEqual(len([r for r in issues.list_issues() if r['kind'] == 'outside_dates']), 1)
+        self.assertEqual(self.patch(self.mgr, f'employees/{emp.pk}/', {'start_date': '2026-10-01'}).status_code, 200)
+        self.assertEqual([r for r in issues.list_issues() if r['kind'] == 'outside_dates'], [])
+
+    def test_held_or_undated_employee_has_no_outside_dates_row(self):
+        self.employee('7', hold_resolution=True, hold_reason='x', start_date=_dt.date(2026, 11, 1))
+        self.employee('8')
+        self.punch('7', 1, _dt.date(2026, 10, 12))
+        self.punch('8', 2, _dt.date(2026, 10, 12))
+        self.assertEqual([r for r in issues.list_issues() if r['kind'] == 'outside_dates'], [])
+
+    def test_end_date_before_start_date_is_refused(self):
+        emp = self.employee('7', start_date=_dt.date(2026, 10, 10))
+        refused = self.patch(self.mgr, f'employees/{emp.pk}/', {'end_date': '2026-10-01'})
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn('end_date', refused.json())
+        both = self.patch(self.mgr, f'employees/{emp.pk}/', {'start_date': '2026-11-01', 'end_date': '2026-10-01'})
+        self.assertEqual(both.status_code, 400)
+        # moving the start past the stored end is refused too
+        emp.end_date = _dt.date(2026, 10, 20)
+        emp.save()
+        self.assertEqual(self.patch(self.mgr, f'employees/{emp.pk}/', {'start_date': '2026-10-25'}).status_code, 400)
+        ok = self.patch(self.mgr, f'employees/{emp.pk}/', {'end_date': '2026-10-10'})
+        self.assertEqual(ok.status_code, 200)
+        emp.refresh_from_db()
+        self.assertEqual(emp.end_date, _dt.date(2026, 10, 10))
+
+    def test_creating_from_an_unknown_id_refuses_backwards_dates(self):
+        self.punch('555', 1)
+        refused = self.post(self.mgr, 'unknown-ids/555/create-employee/',
+                            {'name_ar': 'س', 'start_date': '2026-10-10', 'end_date': '2026-10-01'})
+        self.assertEqual(refused.status_code, 400)
+        self.assertFalse(Employee.objects.filter(hr_number='555').exists())
 
     def test_held_employee_shows_with_unresolved_punch_count(self):
         emp = self.employee('7', hold_resolution=True, hold_reason='مراجعة')

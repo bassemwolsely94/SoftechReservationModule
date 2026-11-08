@@ -169,7 +169,10 @@ def _link_call(fn, *args):
     try:
         return fn(*args)
     except links.LinkError as exc:
-        raise ValidationError({'detail': str(exc)})
+        body = {'detail': str(exc)}
+        if exc.code:    # a machine-readable reason, so the screen doesn't guess from the text
+            body['code'] = exc.code
+        raise ValidationError(body)
 
 
 def _staff_from(body, key='staff') -> StaffProfile:
@@ -281,7 +284,7 @@ def issues_view(request, acc):
     counts: dict = {}
     for r in rows:
         counts[r['kind']] = counts.get(r['kind'], 0) + 1
-    return Response({'rows': rows, 'counts': counts})
+    return Response({'rows': rows, 'counts': counts, 'ignored': issue_list.ignored_ids()})
 
 
 EMPLOYEE_SORT = {
@@ -347,7 +350,21 @@ def devices(request, acc):
 
 # ── manage level ─────────────────────────────────────────────────────────────────────────────────
 
-class EmployeeEditSerializer(serializers.ModelSerializer):
+class _DatesMixin:
+    """An end date before the start date would put every punch of the employee outside their
+    employment. On a partial edit the other date comes from the stored employee."""
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        current = self.instance
+        start = attrs['start_date'] if 'start_date' in attrs else getattr(current, 'start_date', None)
+        end = attrs['end_date'] if 'end_date' in attrs else getattr(current, 'end_date', None)
+        if start and end and end < start:
+            raise serializers.ValidationError({'end_date': 'تاريخ النهاية قبل تاريخ البداية'})
+        return attrs
+
+
+class EmployeeEditSerializer(_DatesMixin, serializers.ModelSerializer):
     class Meta:
         model = Employee
         fields = ['hr_number', 'name_ar', 'department', 'section', 'job_title', 'work_location',
@@ -361,7 +378,7 @@ class EmployeeEditSerializer(serializers.ModelSerializer):
         return value
 
 
-class EmployeeCreateSerializer(serializers.ModelSerializer):
+class EmployeeCreateSerializer(_DatesMixin, serializers.ModelSerializer):
     class Meta:
         model = Employee
         fields = ['name_ar', 'department', 'section', 'job_title', 'work_location', 'branch',
@@ -514,6 +531,22 @@ def unknown_ignore(request, acc, code):
     AuditLog.log('hr_attendance_unknown_ignore', user=acc.profile, request=request, note=reason,
                  extra={'user_code': code})
     return Response({'user_code': code, 'ignored': True})
+
+
+@api_view(['POST'])
+@gate('manage')
+def unknown_unignore(request, acc, code):
+    """Undo «ignore»: the ID shows again among the unknown IDs. Audited."""
+    code = code.strip()
+    decision = UnknownIdDecision.objects.filter(user_code=code, decision='ignored').first()
+    if decision is None:
+        raise ValidationError({'detail': 'الرقم ليس في قائمة المستبعدين'})
+    reason = decision.reason
+    decision.delete()
+    AuditLog.log('hr_attendance_unknown_unignore', user=acc.profile, request=request,
+                 extra={'user_code': code, 'was_ignored_because': reason},
+                 note='Ignored fingerprint ID restored to the unknown list')
+    return Response({'user_code': code, 'ignored': False})
 
 
 @api_view(['POST'])

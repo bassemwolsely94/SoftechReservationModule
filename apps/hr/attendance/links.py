@@ -23,7 +23,12 @@ _LETTERS = str.maketrans({'أ': 'ا', 'إ': 'ا', 'آ': 'ا',   # alef forms
 
 
 class LinkError(ValueError):
-    """A refused link action. The message is shown to the HR head."""
+    """A refused link action. The message is shown to the HR head; `code` names the reason
+    for the screen when it matters ('generic_login')."""
+
+    def __init__(self, message, code=''):
+        super().__init__(message)
+        self.code = code
 
 
 def _tokens(name) -> list[str]:
@@ -96,7 +101,7 @@ def confirm(employee, staff, user):
         employee = Employee.objects.select_for_update().get(pk=employee.pk)
         staff = StaffProfile.objects.select_for_update().get(pk=staff.pk)
         if is_generic_login(staff):
-            raise LinkError('هذا حساب مشترك ولا يُربط بموظف')
+            raise LinkError('هذا حساب مشترك ولا يُربط بموظف', code='generic_login')
         if employee.staff_id:
             raise LinkError('الموظف مرتبط بحساب بالفعل، فُك الربط أولاً')
         if Employee.objects.filter(staff=staff).exists():

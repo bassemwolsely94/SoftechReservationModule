@@ -36,7 +36,9 @@ export default function EmployeesTab({ access, onOpenDays }) {
   })
   const rows = useMemo(() => data?.rows || [], [data])
   const done = () => qc.invalidateQueries({ queryKey: ['hr-attendance'] })
-  const fail = (id, staff) => e => setMsg(m => ({ ...m, [id]: { text: errText(e), staff } }))
+  // `staff` is kept only when the server said the refusal was «shared login» (code generic_login).
+  const fail = (id, staff) => e => setMsg(m => ({ ...m, [id]: {
+    text: errText(e), staff: e?.response?.data?.code === 'generic_login' ? staff : undefined } }))
   const clear = id => setMsg(m => { const n = { ...m }; delete n[id]; return n })
 
   const link = useMutation({

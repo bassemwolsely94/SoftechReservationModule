@@ -105,6 +105,42 @@ class ExportTests(TestCase):
         self.assertIn('جهاز ١', text)
         self.assertGreaterEqual(len(rows), 3)
 
+    def sheet_text(self):
+        wb, _ = self.book()
+        rows = cells(wb[SHEETS[2]])
+        return rows, ' | '.join(str(v) for row in rows for v in row if v is not None)
+
+    def test_punches_outside_employment_dates_are_listed_not_lost(self):
+        # a mistyped start date: the month would read «بدون بصمات» with no explanation
+        self.emp.start_date = _dt.date(2026, 11, 1)
+        self.emp.save()
+        self.punch(_dt.date(2026, 10, 3), _dt.time(9, 0), employee=None)
+        self.punch(_dt.date(2026, 10, 4), _dt.time(9, 0), employee=None)
+        rows, text = self.sheet_text()
+        self.assertIn('بصمات خارج فترة العمل', text)
+        self.assertIn('1001', text)
+        self.assertIn('2026-10-03', text)
+        self.assertIn('2026-10-04', text)
+
+    def test_ignored_ids_are_counted_on_the_third_sheet(self):
+        from apps.hr.models import UnknownIdDecision
+        UnknownIdDecision.objects.create(user_code='555', reason='زائر')
+        UnknownIdDecision.objects.create(user_code='556', reason='زائر')
+        _, text = self.sheet_text()
+        self.assertIn('أرقام مستبعدة', text)
+        self.assertIn('عدد الأرقام المستبعدة بقرار: 2', text)
+        self.assertNotIn('555', text)         # the count only, no codes
+
+    def test_no_ignored_line_when_nothing_is_ignored(self):
+        _, text = self.sheet_text()
+        self.assertNotIn('أرقام مستبعدة', text)
+
+    def test_an_unknown_issue_kind_does_not_break_the_export(self):
+        from apps.hr.attendance import export
+        row = export._review_row({'kind': 'something_new', 'user_code': 'x'})
+        self.assertEqual(row[0], 'something_new')
+        self.assertEqual(len(row), 5)
+
     def test_no_money_columns(self):
         self.fixture()
         wb, _ = self.book()

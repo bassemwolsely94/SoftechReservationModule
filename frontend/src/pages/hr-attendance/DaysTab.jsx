@@ -56,6 +56,10 @@ export default function DaysTab({ employeeId, month, setMonth, employees, onPick
           <select value={employeeId || ''} onChange={e => onPick(e.target.value ? Number(e.target.value) : null)}
             className="mt-0.5 border border-gray-200 rounded-md px-2 py-1 text-sm bg-white min-w-[14rem]">
             <option value="">اختر موظفاً…</option>
+            {/* the roster lists active employees only; a left employee opened from Month must still show */}
+            {emp && !employees.some(e => e.id === emp.id) && (
+              <option value={emp.id}>{emp.hr_number} · {emp.name_ar}</option>
+            )}
             {employees.map(e => <option key={e.id} value={e.id}>{e.hr_number} · {e.name_ar}</option>)}
           </select>
         </label>

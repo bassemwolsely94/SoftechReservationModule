@@ -75,6 +75,10 @@ def _employee_for(code):
     return employee
 
 
+def eligible_q(employee) -> Q:
+    return _eligible(employee)
+
+
 def _eligible(employee) -> Q:
     """Which punches may belong to this employee. Employment dates are compared with the WORK date
     (days.work_date_for): a punch before the day boundary belongs to the previous calendar day, so

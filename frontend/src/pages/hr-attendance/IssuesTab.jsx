@@ -114,6 +114,25 @@ function UnknownRow({ u, canManage, onDone }) {
   )
 }
 
+function IgnoredRow({ g, canManage, onDone }) {
+  const m = useMutation({
+    mutationFn: () => hrAttendanceApi.unignoreUnknown(g.user_code),
+    onSuccess: onDone,
+  })
+  return (
+    <li className="px-3 py-2 border-b border-gray-100 last:border-0 flex flex-wrap items-center gap-2 text-sm">
+      <span className="tabular-nums font-bold">{g.user_code}</span>
+      <span className="text-xs text-gray-500">{g.reason}</span>
+      <span className="text-xs text-gray-400">{g.decided_at ? g.decided_at.slice(0, 10) : ''}</span>
+      {canManage && (
+        <button type="button" disabled={m.isPending} onClick={() => m.mutate()}
+          className={`${BTN} ms-auto bg-white border border-gray-200 hover:bg-gray-50`}>إلغاء التجاهل</button>
+      )}
+      <Notice>{m.isError ? errText(m.error) : ''}</Notice>
+    </li>
+  )
+}
+
 function HeldRow({ h, canManage, onDone }) {
   const m = useMutation({
     mutationFn: () => hrAttendanceApi.hold(h.employee, { hold: false }),
@@ -144,13 +163,15 @@ export default function IssuesTab({ access }) {
   const rows = data?.rows
   const by = kind => (rows || []).filter(r => r.kind === kind)
   const conflicts = by('conflict'), held = by('held'), bad = by('bad_date'), drift = by('drift')
+  const outside = by('outside_dates')
+  const ignored = data?.ignored || []
   const unknown = useMemo(() => (rows || []).filter(r => r.kind === 'unknown_id'), [rows])
   const { sorted, headerProps } = useSortableRows(unknown, {
     defaultSort: DEFAULT_SORT, persistKey: 'hr-attendance-unknown', keys: KEYS })
 
   if (isLoading) return <Empty>جاري التحميل…</Empty>
   if (error) return <div className="py-10 text-center text-sm text-red-600">{errText(error)}</div>
-  if (!rows.length) return <Empty>✅ لا توجد بنود تحتاج قراراً</Empty>
+  if (!rows.length && !ignored.length) return <Empty>✅ لا توجد بنود تحتاج قراراً</Empty>
 
   return (
     <div>
@@ -186,6 +207,18 @@ export default function IssuesTab({ access }) {
         </ul>
       </Section>
 
+      <Section title="بصمات خارج فترة عمل الموظف (محفوظة وخارج الحساب)" count={outside.length} tour="hr-attendance-issues-outside">
+        <ul className="bg-white rounded-xl border border-gray-200">
+          {outside.map(o => (
+            <li key={o.employee} className="px-3 py-2 border-b border-gray-100 last:border-0 text-sm">
+              <span className="tabular-nums font-bold">{o.user_code}</span> {o.name} · {o.count} بصمة من {o.oldest?.slice(0, 10) || '—'} إلى {o.newest?.slice(0, 10) || '—'}
+              <span className="text-xs text-gray-500"> · فترة العمل المسجلة: {o.start_date || '—'} إلى {o.end_date || '—'}.
+                صحّح تاريخ البداية أو النهاية في تبويب «الموظفون» إن كان خطأ.</span>
+            </li>
+          ))}
+        </ul>
+      </Section>
+
       <Section title="بصمات بتاريخ غير ممكن (محفوظة وخارج الحساب)" count={bad.length} tour="hr-attendance-issues-dates">
         <ul className="bg-white rounded-xl border border-gray-200">
           {bad.map(b => (
@@ -203,6 +236,12 @@ export default function IssuesTab({ access }) {
               {d.machine} · الفرق عن الوقت الصحيح {Math.max(1, Math.round(Math.abs(d.seconds) / 60))} دقيقة
             </li>
           ))}
+        </ul>
+      </Section>
+
+      <Section title="أرقام بصمة مستبعدة بقرار (بصماتها خارج الحساب)" count={ignored.length} tour="hr-attendance-issues-ignored">
+        <ul className="bg-white rounded-xl border border-gray-200">
+          {ignored.map(g => <IgnoredRow key={g.user_code} g={g} canManage={access.can_manage} onDone={done} />)}
         </ul>
       </Section>
     </div>

@@ -7,6 +7,7 @@ Read-only and company-level (see access.py). Each row has a `kind`:
               punches from one visitor don't swamp the tab), minus IDs the HR head set aside
   conflict    an ID whose machines hold different real names, not yet confirmed by the HR head
   held        an employee whose punches are held back on purpose (hold_resolution)
+  outside_dates  a known employee's punches before their start date or after their end date
   bad_date    punches with a date no machine could have written (kept, but left out of totals)
   drift       a machine whose clock is off by more than five minutes
 
@@ -94,6 +95,31 @@ def _bad_dates() -> list[dict]:
              'oldest': _iso(g['oldest']), 'newest': _iso(g['newest'])} for g in groups]
 
 
+def _outside_dates() -> list[dict]:
+    """Punches of a known employee that fall outside their start or end date. They are kept but
+    belong to nobody, so without this row a mistyped date would turn a real month into «بدون
+    بصمات» with no explanation. A held employee is on the «held» list instead."""
+    dated = {e.hr_number: e for e in Employee.objects.filter(hold_resolution=False)
+             .filter(Q(start_date__isnull=False) | Q(end_date__isnull=False))}
+    if not dated:
+        return []
+    candidates = set(AttendancePunch.objects
+                     .filter(flag='', employee__isnull=True, user_code__in=list(dated))
+                     .values_list('user_code', flat=True).distinct())
+    out = []
+    for code in sorted(candidates):
+        emp = dated[code]
+        agg = (AttendancePunch.objects.filter(user_code=code, flag='')
+               .exclude(resolve.eligible_q(emp))
+               .aggregate(count=Count('id'), oldest=Min('punch_date'), newest=Max('punch_date')))
+        if agg['count']:
+            out.append({'kind': 'outside_dates', 'employee': emp.pk, 'user_code': code,
+                        'name': emp.name_ar, 'count': agg['count'],
+                        'oldest': _iso(agg['oldest']), 'newest': _iso(agg['newest']),
+                        'start_date': _iso(emp.start_date), 'end_date': _iso(emp.end_date)})
+    return out
+
+
 def _drift() -> list[dict]:
     out = []
     for dev in AttendanceDevice.objects.filter(is_active=True, last_drift_seconds__isnull=False):
@@ -104,4 +130,4 @@ def _drift() -> list[dict]:
 
 
 def list_issues() -> list[dict]:
-    return [*_conflicts(), *unknown_ids(), *_held(), *_bad_dates(), *_drift()]
+    return [*_conflicts(), *unknown_ids(), *_held(), *_outside_dates(), *_bad_dates(), *_drift()]

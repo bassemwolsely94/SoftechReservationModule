@@ -75,7 +75,9 @@ export default function HRAttendancePage() {
         <p className="text-sm text-gray-500 mt-1">
           بصمات ماكينات الحضور مجمّعة في أيام. للعرض فقط — لا رواتب ولا خصومات، واليوم بلا بصمات يظهر «بدون بصمات» دون حكم.</p>
       </div>
-      <DataFreshnessBar domains={['attendance']} />
+      {/* the refresh button asks every agent to collect now: Manage only (the server checks too) */}
+      <DataFreshnessBar domains={['attendance']} canEdit={!!access.can_manage}
+        onRefresh={() => hrAttendanceApi.collectNow()} />
       <div className="flex flex-wrap gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-4" data-tour="hr-attendance-tabs">
         {TABS.filter(t => !t.admin || access.can_admin).map(t => (
           <button key={t.key} type="button" onClick={() => setTab(t.key)}

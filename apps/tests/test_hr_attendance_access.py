@@ -55,6 +55,27 @@ class AccessTests(Base):
         self.assertFalse(a.can_view or a.can_export or a.can_manage or a.can_admin)
         self.assertFalse(can_open(self.hr_p.user))
 
+    def test_inactive_staff_with_a_grant_is_refused(self):
+        for level in ('view', 'manage'):
+            with self.subTest(level=level):
+                grant = self.grant(self.hr_p, level)
+                self.hr_p.is_active = False
+                self.hr_p.save(update_fields=['is_active'])
+                a = Access(self.hr_p.user)
+                self.assertFalse(a.can_view or a.can_export or a.can_manage or a.can_admin)
+                self.assertFalse(can_open(self.hr_p.user))
+                self.assertNotIn(self.hr_p, manager_recipients())
+                grant.delete()
+                self.hr_p.is_active = True
+                self.hr_p.save(update_fields=['is_active'])
+
+    def test_inactive_admin_is_refused(self):
+        self.admin_p.is_active = False
+        self.admin_p.save(update_fields=['is_active'])
+        a = Access(self.admin_p.user)
+        self.assertFalse(a.can_view or a.can_manage or a.can_admin)
+        self.assertNotIn(self.admin_p, manager_recipients())
+
     def test_branch_manager_gets_403_on_me(self):
         self.assertEqual(self.bm.get('/api/hr-attendance/me/').status_code, 403)
 

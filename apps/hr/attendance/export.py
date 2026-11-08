@@ -16,6 +16,7 @@ SUMMARY, DAILY, REVIEW = 'الملخص الشهري', 'يوم بيوم', 'بنو
 KIND_LABEL = {
     'unknown_id': 'رقم غير معروف', 'conflict': 'تعارض أسماء', 'held': 'موظف موقوف',
     'bad_date': 'تاريخ غير صالح', 'drift': 'انحراف ساعة الجهاز',
+    'outside_dates': 'بصمات خارج فترة العمل', 'ignored_ids': 'أرقام مستبعدة',
 }
 
 
@@ -63,9 +64,15 @@ def _review_row(r):
     elif kind == 'bad_date':
         detail = f"عدد البصمات {r['count']}، من {r['oldest']} إلى {r['newest']}"
         machines, names = r['machine'], ''
-    else:  # drift
+    elif kind == 'outside_dates':
+        detail = (f"عدد البصمات {r['count']}، من {r['oldest']} إلى {r['newest']}، "
+                  f"فترة العمل من {r.get('start_date') or '-'} إلى {r.get('end_date') or '-'}")
+        machines, names = '', r['name']
+    elif kind == 'drift':
         detail = f"فرق الساعة {r['seconds']} ثانية"
         machines, names = r['machine'], ''
+    else:   # a kind this file doesn't know yet still gets a row instead of failing the export
+        detail, machines, names = str(r.get('detail', '')), str(r.get('machine', '')), str(r.get('name', ''))
     return [KIND_LABEL.get(kind, kind), code, names, machines, detail]
 
 
@@ -104,5 +111,9 @@ def build_workbook(year, month, status=None) -> Workbook:
     ws = _sheet(wb, REVIEW, ['النوع', 'الرقم', 'الاسم', 'الأجهزة', 'التفاصيل'])
     for r in issue_list.list_issues():
         ws.append(_review_row(r))
+    ignored = issue_list.ignored_ids()
+    if ignored:    # set aside by a person; their punches are in no total, so the file says so
+        ws.append([KIND_LABEL['ignored_ids'], '', '', '',
+                   f'عدد الأرقام المستبعدة بقرار: {len(ignored)}'])
 
     return neutralise_formulas(wb)

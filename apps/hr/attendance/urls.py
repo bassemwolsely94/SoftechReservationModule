@@ -23,6 +23,7 @@ urlpatterns = [
     path('unknown-ids/<str:code>/create-employee/', views.unknown_create_employee,
          name='hr-attendance-unknown-create'),
     path('unknown-ids/<str:code>/ignore/', views.unknown_ignore, name='hr-attendance-unknown-ignore'),
+    path('unknown-ids/<str:code>/unignore/', views.unknown_unignore, name='hr-attendance-unknown-unignore'),
     path('conflicts/<str:code>/confirm/', views.conflict_confirm, name='hr-attendance-conflict-confirm'),
     path('collect-now/', views.collect_now, name='hr-attendance-collect-now'),
     # admin only
