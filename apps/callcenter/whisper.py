@@ -42,20 +42,45 @@ def enabled() -> bool:
 
 # ── Enqueue ───────────────────────────────────────────────────────────────────
 
-def enqueue(call_log) -> bool:
-    """Queue an answered, recorded, long-enough call. Idempotent."""
+def enqueue_cdr(cdr) -> bool:
+    """
+    Queue one call from Issabel's CDR mirror (pbx.CdrCall) — the authority for
+    call history, so calls are covered even while the AMI bridge is down.
+    Answered, recorded, long enough, not a transfer leg. Idempotent. Links our
+    CallLog for the same call when one exists, so the text shows on the operator screen.
+    """
     from apps.callcenter.models import CallTranscript
-    from apps.callcenter.serializers import call_has_recording
+    from apps.pbx.models import CallSession
 
-    if not enabled() or call_log.status in ('no_answer', 'busy'):
+    if not enabled() or cdr.status != 'answered' or cdr.is_transfer or not cdr.recording_file:
         return False
-    if call_log.duration_seconds < getattr(settings, 'WHISPER_MIN_SECONDS', 20):
+    if (cdr.billable_seconds or 0) < getattr(settings, 'WHISPER_MIN_SECONDS', 20):
         return False
-    # PBX calls: the recording is looked up in Issabel's CDR when the job runs
-    if not call_has_recording(call_log) and getattr(call_log, 'pbx_session', None) is None:
+    if CallTranscript.objects.filter(cdr_call=cdr, engine=ENGINE).exists():
         return False
-    _, created = CallTranscript.objects.get_or_create(call_log=call_log, engine=ENGINE)
+    call_log_id = (CallSession.objects.filter(unique_id=cdr.unique_id, call_log__isnull=False)
+                   .values_list('call_log_id', flat=True).first()) if cdr.unique_id else None
+    if call_log_id:
+        existing = CallTranscript.objects.filter(call_log_id=call_log_id, engine=ENGINE).first()
+        if existing:
+            if existing.cdr_call_id is None:
+                CallTranscript.objects.filter(pk=existing.pk).update(cdr_call=cdr)
+            return False
+    _, created = CallTranscript.objects.get_or_create(
+        cdr_call=cdr, engine=ENGINE, defaults={'call_log_id': call_log_id})
     return created
+
+
+def enqueue_recent_cdr(hours: int = 48) -> int:
+    """Queue eligible CDR calls from the last `hours` that have no Whisper job yet."""
+    from apps.pbx.models import CdrCall
+    if not enabled():
+        return 0
+    since = timezone.now() - timedelta(hours=hours)
+    qs = (CdrCall.objects.filter(call_at__gte=since, status='answered', is_transfer=False,
+                                 billable_seconds__gte=getattr(settings, 'WHISPER_MIN_SECONDS', 20))
+          .exclude(recording_file='').exclude(transcripts__engine=ENGINE))
+    return sum(enqueue_cdr(c) for c in qs.iterator())
 
 
 # ── Learning: vocabulary hints from corrections ──────────────────────────────
@@ -117,6 +142,17 @@ def transcribe_audio(audio: bytes, mime: str, size: str, threads: int, prompt: s
             pass
 
 
+def load_job_audio(job):
+    """CDR recording first (authoritative file name), else our CallLog's sources."""
+    if job.cdr_call_id:
+        from apps.pbx.recordings import load_cdr_audio
+        audio, mime = load_cdr_audio(job.cdr_call)
+        if audio is not None or not job.call_log_id:
+            return audio, mime
+    from apps.omni.transcription import _resolve_call_audio
+    return _resolve_call_audio(job.call_log)
+
+
 def default_threads() -> int:
     return max(1, (os.cpu_count() or 2) // 2)
 
@@ -146,7 +182,6 @@ def run_queue(ignore_window: bool = False, max_items: int | None = None) -> dict
     a crash are returned to the queue first.
     """
     from apps.callcenter.models import CallTranscript, WhisperQueueControl
-    from apps.omni.transcription import _resolve_call_audio
 
     control = WhisperQueueControl.get()
     now = timezone.now()
@@ -177,14 +212,15 @@ def run_queue(ignore_window: bool = False, max_items: int | None = None) -> dict
             break
 
         with transaction.atomic():
-            job = (CallTranscript.objects.select_for_update(skip_locked=True)
+            # of=('self',): both call links are nullable outer joins, which can't be locked
+            job = (CallTranscript.objects.select_for_update(skip_locked=True, of=('self',))
                    .filter(engine=ENGINE, status='pending').exclude(pk__in=tried)
-                   .select_related('call_log').order_by('created_at').first())
+                   .select_related('call_log', 'cdr_call').order_by('created_at').first())
             if job is None:
                 break
             # Don't start a call that can't finish before the window closes
             if deadline is not None:
-                need = timedelta(seconds=(job.call_log.duration_seconds or 60) * REALTIME_FACTOR_GUESS + 30)
+                need = timedelta(seconds=(job.call_seconds or 60) * REALTIME_FACTOR_GUESS + 30)
                 if timezone.now() + need > deadline:
                     stopped = 'window_closed'
                     break
@@ -194,7 +230,7 @@ def run_queue(ignore_window: bool = False, max_items: int | None = None) -> dict
 
         t0 = time.monotonic()
         try:
-            audio, mime = _resolve_call_audio(job.call_log)
+            audio, mime = load_job_audio(job)
             if audio is None:
                 raise FileNotFoundError('لا يوجد ملف تسجيل متاح')
             text, seconds = transcribe_audio(audio, mime, size, threads, prompt)
@@ -203,7 +239,7 @@ def run_queue(ignore_window: bool = False, max_items: int | None = None) -> dict
             job.error = '' if text else 'تسجيل بلا كلام'
             job.model_name = f'faster-whisper-{size}'
         except Exception as exc:
-            logger.warning('whisper: call %s failed (attempt %s): %s', job.call_log_id, job.attempts, exc)
+            logger.warning('whisper: job %s failed (attempt %s): %s', job.pk, job.attempts, exc)
             job.error = f'{type(exc).__name__}: {exc}'[:500]
             job.status = 'failed' if job.attempts >= CallTranscript.MAX_ATTEMPTS else 'pending'
         job.processing_seconds = round(time.monotonic() - t0, 1)
@@ -242,6 +278,7 @@ def maybe_launch_runner() -> bool:
 
     if not enabled():
         return False
+    enqueue_recent_cdr()
     control = WhisperQueueControl.get()
     if control.paused or run_is_active(control) or not in_window(control):
         return False
@@ -261,12 +298,15 @@ def maybe_launch_runner() -> bool:
 
 
 def queue_stats() -> dict:
-    from django.db.models import Avg, Count, Sum
+    from django.db.models import Count, Sum
     from apps.callcenter.models import CallTranscript
     qs = CallTranscript.objects.filter(engine=ENGINE)
     by_status = dict(qs.values_list('status').annotate(n=Count('id')))
-    pending_audio = (qs.filter(status='pending')
-                     .aggregate(s=Sum('call_log__duration_seconds'))['s'] or 0)
+    pending = qs.filter(status='pending')
+    pending_audio = ((pending.filter(cdr_call__isnull=False)
+                      .aggregate(s=Sum('cdr_call__billable_seconds'))['s'] or 0)
+                     + (pending.filter(cdr_call__isnull=True)
+                        .aggregate(s=Sum('call_log__duration_seconds'))['s'] or 0))
     done = qs.filter(status='done', audio_seconds__gt=0)
     speed = done.aggregate(p=Sum('processing_seconds'), a=Sum('audio_seconds'))
     factor = (speed['p'] / speed['a']) if speed['a'] else REALTIME_FACTOR_GUESS

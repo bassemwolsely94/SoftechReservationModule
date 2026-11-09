@@ -10,9 +10,11 @@ from django.utils import timezone
 
 from apps.callcenter import whisper
 from apps.callcenter.models import CallLog, CallTranscript, WhisperQueueControl
+from apps.pbx.models import CallSession, CdrCall
 from .factories import make_admin, make_call_center, make_pharmacist
 
 ON = dict(WHISPER_ENABLED=True, WHISPER_MIN_SECONDS=20)
+_seq = iter(range(1, 100000))
 
 
 def _call(**kw):
@@ -20,6 +22,16 @@ def _call(**kw):
              recording_url='http://issabel/r/a.wav')
     d.update(kw)
     return CallLog.objects.create(**d)
+
+
+def _cdr(**kw):
+    n = next(_seq)
+    d = dict(cdr_key=f'k{n}', unique_id=f'1791792391.{n}', call_at=timezone.now(),
+             direction='inbound', status='answered', customer_number='01012345678',
+             billable_seconds=90, duration_seconds=95,
+             recording_file=f'/var/spool/asterisk/monitor/2026/11/09/exten-{n}.wav')
+    d.update(kw)
+    return CdrCall.objects.create(**d)
 
 
 def _audio(*a, **k):
@@ -30,30 +42,42 @@ def _audio(*a, **k):
 class EnqueueTests(TestCase):
 
     def test_rules(self):
-        self.assertTrue(whisper.enqueue(_call()))
-        self.assertFalse(whisper.enqueue(_call(duration_seconds=5)))
-        self.assertFalse(whisper.enqueue(_call(status='no_answer')))
-        self.assertFalse(whisper.enqueue(_call(recording_url='')))
-        c = _call()
-        whisper.enqueue(c)
-        self.assertFalse(whisper.enqueue(c))       # idempotent
+        self.assertTrue(whisper.enqueue_cdr(_cdr()))
+        self.assertFalse(whisper.enqueue_cdr(_cdr(billable_seconds=5)))
+        self.assertFalse(whisper.enqueue_cdr(_cdr(status='no_answer')))
+        self.assertFalse(whisper.enqueue_cdr(_cdr(recording_file='')))
+        self.assertFalse(whisper.enqueue_cdr(_cdr(is_transfer=True)))
+        c = _cdr()
+        whisper.enqueue_cdr(c)
+        self.assertFalse(whisper.enqueue_cdr(c))       # idempotent
         self.assertEqual(CallTranscript.objects.filter(engine='whisper').count(), 2)
+
+    def test_recent_window_and_call_log_link(self):
+        log = _call()
+        c = _cdr()
+        CallSession.objects.create(unique_id=c.unique_id, caller_number='010', call_log=log,
+                                   started_at=timezone.now())
+        _cdr(call_at=timezone.now() - timedelta(days=5))       # too old for 48h
+        self.assertEqual(whisper.enqueue_recent_cdr(), 1)
+        t = CallTranscript.objects.get(engine='whisper')
+        self.assertEqual((t.cdr_call_id, t.call_log_id), (c.pk, log.pk))
+        self.assertEqual(whisper.enqueue_recent_cdr(), 0)
 
     @override_settings(WHISPER_ENABLED=False)
     def test_disabled(self):
-        self.assertFalse(whisper.enqueue(_call()))
+        self.assertFalse(whisper.enqueue_cdr(_cdr()))
+        self.assertEqual(whisper.enqueue_recent_cdr(), 0)
 
 
 @override_settings(**ON)
 class RunnerTests(TestCase):
 
     def setUp(self):
-        self.calls = [_call() for _ in range(3)]
-        for c in self.calls:
-            whisper.enqueue(c)
+        for _ in range(3):
+            whisper.enqueue_cdr(_cdr())
 
     def _run(self, transcribe=None, **kw):
-        with mock.patch('apps.omni.transcription._resolve_call_audio', side_effect=_audio), \
+        with mock.patch('apps.pbx.recordings.load_cdr_audio', side_effect=_audio), \
              mock.patch.object(whisper, 'transcribe_audio',
                                side_effect=transcribe or (lambda *a: ('نص المكالمة', 60.0))):
             return whisper.run_queue(**kw)
@@ -93,7 +117,7 @@ class RunnerTests(TestCase):
         c.window_start = (now - timedelta(hours=1)).time()
         c.window_end = (now + timedelta(minutes=1)).time()
         c.save()
-        CallLog.objects.update(duration_seconds=3600)
+        CdrCall.objects.update(billable_seconds=3600)
         self.assertEqual(self._run()['stopped'], 'window_closed')
         self.assertEqual(CallTranscript.objects.filter(status='pending').count(), 3)
 
@@ -157,9 +181,13 @@ class ApiTests(TestCase):
     def test_status_and_correction(self):
         _, agent, client = make_call_center('wh_cc')
         t = CallTranscript.objects.create(call_log=_call(), engine='whisper', status='done', text='نص')
+        cdr_only = CallTranscript.objects.create(cdr_call=_cdr(), engine='whisper', status='done',
+                                                 text='من سجل السنترال', finished_at=timezone.now())
         CallTranscript.objects.create(call_log=t.call_log, engine='gemini', status='done', text='نص جيميناي')
-        data = client.get('/api/callcenter/whisper/').data
-        self.assertEqual(data['recent'][0]['gemini_text'], 'نص جيميناي')
+        rows = {r['id']: r for r in client.get('/api/callcenter/whisper/').data['recent']}
+        self.assertEqual(rows[t.pk]['gemini_text'], 'نص جيميناي')
+        self.assertEqual(rows[cdr_only.pk]['whisper_text'], 'من سجل السنترال')
+        self.assertEqual(rows[cdr_only.pk]['duration_seconds'], 90)
 
         r = client.post(f'/api/callcenter/transcripts/{t.pk}/correct/',
                         {'corrected_text': 'النص الصحيح'}, format='json')

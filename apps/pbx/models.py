@@ -522,9 +522,7 @@ class CallSession(models.Model):
                 self.call_log = log
                 self.save(update_fields=['call_log', 'updated_at'])
 
-            from apps.callcenter import whisper
-            whisper.enqueue(log)
-
+            # Whisper queues from Issabel's CDR (whisper.enqueue_recent_cdr), not here
             from django.conf import settings
             # The recording may only appear in the CDR after hangup; the
             # auto-transcriber waits, then looks it up.

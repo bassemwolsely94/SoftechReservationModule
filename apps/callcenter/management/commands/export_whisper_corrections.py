@@ -21,19 +21,19 @@ class Command(BaseCommand):
 
     def handle(self, *args, out_dir, **opts):
         from apps.callcenter.models import CallTranscript
-        from apps.omni.transcription import _resolve_call_audio
+        from apps.callcenter.whisper import load_job_audio
 
         audio_dir = os.path.join(out_dir, 'audio')
         os.makedirs(audio_dir, exist_ok=True)
         written = 0
         with open(os.path.join(out_dir, 'metadata.jsonl'), 'w', encoding='utf-8') as meta:
             for t in (CallTranscript.objects.exclude(corrected_text='')
-                      .select_related('call_log').order_by('pk')):
-                audio, mime = _resolve_call_audio(t.call_log)
+                      .select_related('call_log', 'cdr_call').order_by('pk')):
+                audio, mime = load_job_audio(t)
                 if audio is None:
                     continue
                 ext = mimetypes.guess_extension(mime) or '.wav'
-                name = f'{t.call_log_id}{ext}'
+                name = f'{t.pk}{ext}'
                 with open(os.path.join(audio_dir, name), 'wb') as f:
                     f.write(audio)
                 meta.write(json.dumps({'audio': f'audio/{name}', 'text': t.corrected_text,
