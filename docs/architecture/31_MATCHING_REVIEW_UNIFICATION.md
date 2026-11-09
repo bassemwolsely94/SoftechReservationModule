@@ -1,6 +1,14 @@
 # 31 — One matching and review flow for «طلبات واتساب» and «صندوق الإتاحة»
 
-**Status:** 🟡 DESIGN, waiting for owner approval. Nothing here is built.
+**Status:** 🟢 Phase A BUILT (2026-10-25). Phases B–D (one review grid, one export layout, help) waiting for owner approval.
+- Code: `apps/supply/line_matching.py` — one catalog search read by both engines; strict flags (§4) incl. the new
+  `engines_disagree` and `word_mismatch`; one WhatsApp header reader (`header()`) for both screens. The supplier screen
+  pre-fills its best guess; a branch request never guesses between versions (owner 2026-10-04).
+- Slip fixes: a written number found only as a pack count («100TAB») is a strength mismatch; product-type words
+  («اكسترا / ادفانس / فورت / بلس …») must be in the item name.
+- Check: `python manage.py eval_supply_matching [--max-clean-wrong N]` (memory off). 2026-10-25: clean-but-wrong
+  **6 → 3** of 431, first match right unchanged (supplier 77.4%, WhatsApp 73.0%), flagged 67% (supplier).
+- Cut-offs stay per screen (supplier 0.55, WhatsApp 0.70) — decision 2 still open.
 **Date:** 2026-10-24 (batch 5).
 
 The owner's complaint (2026-10-24): matching WhatsApp branch requests is very different from the

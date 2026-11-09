@@ -18,6 +18,7 @@ import useAuthStore from '../store/authStore'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
 
 const toLatinDigits = s =>
   s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -1286,7 +1287,7 @@ function MyQueuePanel({ onOpenCase }) {
           📋 طابور انتظاري ({isLoading ? '...' : cases.length} حالة مسندة إليك)
         </div>
         <Link to="/callcenter/cases" className="text-xs text-brand-600 hover:underline">
-          عرض الكل →
+          عرض الكل {fa()}
         </Link>
       </div>
       {isLoading ? (
@@ -2197,11 +2198,11 @@ export default function CallCenterPage() {
                     <div className="space-y-1">
                       <Link to={`/customers/${customer.id}`}
                         className="block text-xs text-brand-600 hover:underline py-1">
-                        👤 بروفايل العميل الكامل →
+                        👤 بروفايل العميل الكامل {fa()}
                       </Link>
                       <Link to="/callcenter/cases"
                         className="block text-xs text-brand-600 hover:underline py-1">
-                        🗂️ إدارة الحالات →
+                        🗂️ إدارة الحالات {fa()}
                       </Link>
                     </div>
                   </div>
