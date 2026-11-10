@@ -235,6 +235,37 @@ def _titles(staff):
     return titles_for(staff)
 
 
+def pic_report(start, end, branch_id=None):
+    """Customer codes (PIC) in the executive report: new / won back / served, the invoice
+    capture rate, and the employees who brought the most new customers."""
+    from apps.customers.models import PurchaseHistory
+    from apps.users.models import StaffProfile
+    from .engine import day_bounds
+    from .pic import _excluded
+    ev = PointEvent.objects.filter(day__gte=start, day__lte=end,
+                                   rule_key__in=('pic_new', 'pic_reactivated', 'pic_visit'))
+    if branch_id:
+        ev = ev.filter(staff__branch_id=branch_id)
+    counts = dict(ev.values('rule_key').annotate(n=Count('id')).values_list('rule_key', 'n'))
+    top = list(ev.filter(rule_key='pic_new').values('staff_id').annotate(n=Count('id'))
+               .order_by('-n')[:10])
+    names = {s.id: s for s in StaffProfile.objects.filter(id__in=[t['staff_id'] for t in top])
+             .select_related('user', 'branch')}
+    s, _ = day_bounds(start)
+    _, e = day_bounds(end)
+    inv = PurchaseHistory.objects.filter(doc_code='115', invoice_date__gte=s, invoice_date__lt=e)
+    if branch_id:
+        inv = inv.filter(branch_id=branch_id)
+    agg = inv.aggregate(total=Count('id'), on_pic=Count(
+        'id', filter=~Q(softech_phcode='') & ~Q(softech_phcode__in=list(_excluded()))))
+    return {'new_pics': counts.get('pic_new', 0), 'reactivated': counts.get('pic_reactivated', 0),
+            'customer_visits': counts.get('pic_visit', 0),
+            'invoices': agg['total'], 'invoices_on_pic': agg['on_pic'],
+            'capture_pct': round(agg['on_pic'] * 100 / agg['total'], 1) if agg['total'] else None,
+            'top_new': [{**_staff_row(names[t['staff_id']]), 'new_pics': t['n']}
+                        for t in top if t['staff_id'] in names]}
+
+
 def champions_in(start, end, branch_id=None):
     from .champions import champion_json
     from .models import Champion
@@ -243,6 +274,14 @@ def champions_in(start, end, branch_id=None):
     if branch_id:
         qs = qs.filter(branch_id=branch_id)
     return [champion_json(c) for c in qs]
+
+
+def _pic(staff):
+    try:
+        from .pic import summary
+        return summary(staff)
+    except Exception:          # the panel must never break the profile
+        return {'linked': False, 'error': True}
 
 
 def _wallet(staff):
@@ -301,6 +340,7 @@ def me(staff):
         'recent': recent_events(staff),
         'open_items': open_items(staff),
         'wallet': _wallet(staff),
+        'pic': _pic(staff),
         'titles': _titles(staff),
         'promotions': [{'level': _level_payload(h.level), 'reached_at': h.reached_at}
                        for h in LevelHistory.objects.filter(staff=staff)
@@ -361,4 +401,5 @@ def report(start, end, branch_id=None):
         'promotions': promotions,
         'rewards': rewards_summary(start, end, branch_id),
         'champions': champions_in(start, end, branch_id),
+        'pic': pic_report(start, end, branch_id),
     }

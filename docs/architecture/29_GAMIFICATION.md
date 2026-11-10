@@ -1,6 +1,6 @@
 # 29 — Gamification (التحفيز: النقاط والمستويات)
 
-**Status:** Phase 1 BUILT (2026-10-10) — points, levels, badges, rankings. Phase 2 BUILT (2026-10-10) — reward catalog. Phase 3 BUILT (2026-10-10) — monthly champion (بطل الشهر). Phase 4 BUILT (2026-11-10) — daily-count points, per-role points, branch team challenges.
+**Status:** Phase 1 BUILT (2026-10-10) — points, levels, badges, rankings. Phase 2 BUILT (2026-10-10) — reward catalog. Phase 3 BUILT (2026-10-10) — monthly champion (بطل الشهر). Phase 4 BUILT (2026-11-10) — daily-count points, per-role points, branch team challenges. Phase 5 BUILT (2026-11-10) — customer codes (PIC).
 **App:** `apps/gamification` · **API:** `/api/gamification/` · **Screens:** card on `/dashboard` + `/me`, `/gamification`, `/m/gamification`
 
 ## Decisions (agreed with the owner)
@@ -84,6 +84,19 @@ The engine **reads** records that already exist and writes only its own tables. 
 | `avg_points` | net points (bonus categories excluded) ÷ members | ≥ target |
 
 Members = active staff of the branch whose role is not in `GAMIFICATION_CHAMPION_EXCLUDED_ROLES`. A branch with no data for the metric is "not applicable" (no bonus, not a failure); a branch below `min_members` cannot win. Judged once after the period ends — automatically from the nightly day close (`engine.run(finalize=True)` → `evaluate_due`), or by «قيِّم الآن» (`POST challenges/{id}/evaluate/`). Idempotent: `evaluated_at` under a row lock, one `TeamChallengeResult` per branch (unique), one ledger source per member (`team:{id}`). Winners: `team_challenge` points per member (new `team` category: XP + wallet, excluded from every ranking, like champion bonuses), `gamification_team` notification. A judged challenge is locked. API: `GET challenges/` (open to all staff — network-wide progress, listed in `open_to_all_staff.txt`), `POST challenges/`, `PATCH challenges/{id}/`, `POST challenges/{id}/evaluate/` (edit). Screen: `/gamification?tab=challenges`.
+
+## Phase 5 — customer codes (PIC) (2026-11-10)
+
+`apps/gamification/pic.py`, new category `customers` («العملاء (PIC)»). Reuses the PIC Analytics definitions (doc 33) — no second definition of "new":
+
+| Rule | Points | Who / when |
+|---|---|---|
+| `pic_new` | +10 (cap 100/day) | `pic_analytics.rules.classify_pic` says `new` (first purchase ever on the day, `Customer.softech_created_at` ≥ day − 30) **and** no earlier sale in the mirror, the customer is a person (not `is_account_placeholder` / `softech_locked` / `merged_into_pic`), has a phone, first invoice > 0 → salesperson of the day's **first** invoice (doc 33 attribution). Source `picnew:{pic}` (once ever). |
+| `pic_visit` | +1 (cap 40/day) | each distinct customer a salesperson sold to on their code that day (same-day invoices = one visit). |
+| `pic_reactivated` | +8 (cap 40/day) | previous visit 365+ days before (classify_pic `reactivated`) → salesperson of the day's first invoice. |
+| `pic_capture_day` | +5 | judged at **day close** only: ≥ `GAMIFICATION_PIC_CAPTURE_PCT` (70)% of ≥ `GAMIFICATION_PIC_CAPTURE_MIN_INVOICES` (10) sale invoices carry a customer code. |
+
+A sale is "on a PIC" when `PurchaseHistory.softech_phcode` is set; `pic_analytics.PicExclusion` codes (shared / house) never count anywhere. Milestones: badges at 10/50/200/500 new customers, 100/1,000/5,000 customer visits, 10/50 won back, 20 capture days. «👥 عملائي» panel on «ملفي» (today / month: new, served, won back, capture %; next milestones) via `me.pic`; «عملاء جدد اليوم» on the dashboard card; report block `pic` (new, won back, visits, chain capture %, top 10 by new customers). Team-challenge metrics `pic_capture_rate` and `new_pics_per_member`. Reads the PostgreSQL mirror only.
 
 ## Known limits (Phase 1)
 

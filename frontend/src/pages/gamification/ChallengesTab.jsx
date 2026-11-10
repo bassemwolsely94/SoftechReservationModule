@@ -18,6 +18,8 @@ const METRIC_TEXT = {
   fast_reply_rate:  ['رد سريع على الفروع', 'Fast replies to branches', '% من طلبات الفروع خلال المهلة على الأقل', '% of branch requests answered in time at least'],
   daily_count_rate: ['إنجاز الجرد اليومي', 'Daily count done', '% من أصناف الجرد اليومي على الأقل', '% of daily-count items at least'],
   avg_points:       ['متوسط النقاط', 'Average points', 'نقطة لكل موظف على الأقل', 'points per employee at least'],
+  pic_capture_rate: ['فواتير على أكواد العملاء', 'Invoices on customer codes', '% من فواتير الفرع على الأقل', '% of the branch\'s invoices at least'],
+  new_pics_per_member: ['عملاء جدد', 'New customers', 'عميل جديد لكل موظف على الأقل', 'new customers per employee at least'],
 }
 const metricName = (m, t) => t(...(METRIC_TEXT[m] || [m, m]).slice(0, 2))
 const goalText = (c, t) => {

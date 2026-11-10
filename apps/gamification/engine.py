@@ -390,6 +390,12 @@ def _collect_daily_count(sc, day, start, end):
                  f"dcm:{p['id']}", p['updated_at'])
 
 
+def _collect_pic(sc, day, start, end):
+    """Customer codes (PIC): new, won back, customers served — see apps/gamification/pic.py."""
+    from .pic import collect
+    collect(sc, day, start, end)
+
+
 def _collect_tasks(sc, day, start, end):
     from apps.tasks.models import OperationalTask
     for t in OperationalTask.objects.filter(status='completed', completed_at__gte=start,
@@ -411,7 +417,7 @@ def _collect_audit(sc, day, start, end):
                  meta={'flag_type': f['flag_type']})
 
 
-COLLECTORS = [_collect_sales, _collect_reservations, _collect_demand, _collect_followups,
+COLLECTORS = [_collect_sales, _collect_pic, _collect_reservations, _collect_demand, _collect_followups,
               _collect_transfers, _collect_transits, _collect_isr, _collect_inventory,
               _collect_daily_count, _collect_tasks, _collect_audit]
 
@@ -467,6 +473,12 @@ def finalize_day(day, scorer=None, penalties=True):
     sc = scorer or Scorer()
     if penalties:
         _penalise_open_items(sc, day)
+    try:
+        # judged on the whole day only — a partial day can never lock the bonus in
+        from .pic import judge_capture_day
+        judge_capture_day(sc, day)
+    except Exception as exc:
+        logger.exception('gamification PIC capture day failed for %s: %s', day, exc)
 
     worked_ids = set(PointEvent.objects.filter(day=day, points__gt=0)
                      .exclude(category__in=('discipline', 'manual'))
