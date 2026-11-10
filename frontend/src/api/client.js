@@ -2014,6 +2014,12 @@ export const followupsApi = {
   myQueue: ()        => api.get('/followups/tasks/my-queue/'),
 
   // Feature 3: Create campaign
+  // Outbound call lists (campaigns) — {name, script, criteria:{segments,branch_id,inactive_days_min,inactive_days_max}, agent_ids}
+  callLists:        (status = 'active') => api.get('/followups/call-lists/', { params: { status } }),
+  callListPreview:  (criteria) => api.post('/followups/call-lists/preview/', { criteria }),
+  callListCreate:   (data)     => api.post('/followups/call-lists/', data),
+  callListClose:    (id)       => api.post(`/followups/call-lists/${id}/close/`),
+  callListAgents:   ()         => api.get('/followups/call-lists/agents/'),
   createCampaign: (data) => api.post('/followups/tasks/create-campaign/', data),
 
   // Feature 4: Upsell message
@@ -2725,6 +2731,8 @@ export const pbxApi = {
   staffChoices:   (q)       => api.get('/pbx/staff-choices/', { params: { q } }),
 }
 
+  webrtcConfig:   ()        => api.get('/pbx/webrtc/config/'),
+  setWebrtc:      (data)    => api.post('/pbx/extensions/webrtc/', data),  // {extension, enabled, sip_password?}
 // ── Approvals ─────────────────────────────────────────────────────────────────
 export const approvalsApi = {
   // Workflows (admin setup)

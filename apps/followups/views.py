@@ -112,7 +112,7 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
             'local_customer',
             'item', 'branch',
             'assigned_to__user', 'created_by__user', 'pinned_by__user',
-            'chronic_profile',
+            'chronic_profile', 'call_list',
         ).prefetch_related('assignments__staff__user')
         # Batch 5: the one branch helper — all-branch roles (incl. supervisor / quality manager,
         # B-3) see every branch; branch staff home + allowed − restricted; fail-closed.
@@ -125,6 +125,8 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
             qs = qs.filter(status=p['status'])
         if p.get('task_type'):
             qs = qs.filter(task_type=p['task_type'])
+        if p.get('call_list'):
+            qs = qs.filter(call_list_id=p['call_list'])
 
         # ── Branch / assignee ────────────────────────────────────────────────
         if p.get('branch'):
@@ -975,7 +977,7 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
             .distinct()
             .select_related(
                 'customer', 'local_customer', 'item', 'branch',
-                'assigned_to__user', 'pinned_by__user', 'chronic_profile',
+                'assigned_to__user', 'pinned_by__user', 'chronic_profile', 'call_list',
             )
             .prefetch_related('assignments__staff__user')
             .order_by('-priority_score', 'due_date')

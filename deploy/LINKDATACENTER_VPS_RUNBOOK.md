@@ -1772,6 +1772,14 @@ with `SOFTECH_READ_ONLY=True` confirm a writer dry-run is refused. Then in the V
   `/etc/ssh/sshd_config` add `Match User recreader` / `ForceCommand internal-sftp` /
   `AllowTcpForwarding no`, restart sshd; the HQ router must forward port 22 to Issabel like
   5038/3306. Fill `PBX_RECORDINGS_SFTP_*` in `.env`; «🩺 فحص الاتصال» reads the latest recording.
+- Browser phone (WebRTC, optional per agent): on Issabel enable the secure websocket —
+  `/etc/asterisk/http_custom.conf`: `tlsenable=yes`, `tlsbindaddr=0.0.0.0:8089`, a certificate the
+  agents' browsers trust (`tlscertfile`/`tlsprivatekey`); per agent extension (PBX → Extensions →
+  Advanced): transport `wss,udp`, `avpf=yes`, `force_avp=yes`, `icesupport=yes`,
+  `encryption=yes`, `dtlsenable=yes`, `dtlsverify=fingerprint`, `dtlssetup=actpass`; Apply Config.
+  Then `.env`: `PBX_WEBRTC_WSS_URL=wss://<issabel-name>:8089/ws`, `PBX_WEBRTC_SIP_DOMAIN=<issabel-name>`;
+  in «⚙️ إعدادات السنترال» → «ربط» tick «🎧 هاتف المتصفح» and enter the extension's SIP secret.
+  Agents' browsers reach Issabel directly (office LAN or VPN) — the VPS only hands out the settings.
 - Whisper (owner decision 2026-11-09): this server only queues (`WHISPER_ENABLED=True`,
   `WHISPER_LAUNCH_RUNNER=False`). The office PC transcribes: Windows Task Scheduler, daily 02:00,
   `venv\Scripts\python.exe manage.py run_whisper_queue`, «Run whether user is logged on or not»,
