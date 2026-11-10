@@ -8,6 +8,7 @@ ForecastAccuracyViewSet  — browse back-test results
 import logging
 from datetime import date
 
+from django.db import transaction
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import SAFE_METHODS, BasePermission, IsAuthenticated
@@ -86,15 +87,32 @@ class SeasonalityIndexViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], url_path='compute')
     def compute(self, request):
-        """Compute and store seasonality indices from historical sales for an item."""
+        """Compute and store seasonality indices from historical sales.
+
+        With `item_id`: that one item. Without it (the «↺ إعادة حساب الموسمية» button):
+        every item at once (ForecastService.compute_all_seasonality — one query, the
+        per-item rows replaced in one transaction)."""
         if not _is_analyst(request):
             return Response({'detail': 'غير مصرح'}, status=status.HTTP_403_FORBIDDEN)
 
         item_id = request.data.get('item_id')
-        years   = int(request.data.get('years', 2))
+        try:
+            years = int(request.data.get('years', 2))
+        except (TypeError, ValueError):
+            return Response({'detail': 'years يجب أن يكون رقماً'}, status=status.HTTP_400_BAD_REQUEST)
+        if not 1 <= years <= 5:
+            return Response({'detail': 'years بين 1 و5'}, status=status.HTTP_400_BAD_REQUEST)
 
         if not item_id:
-            return Response({'detail': 'item_id مطلوب'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                with transaction.atomic():
+                    result = ForecastService.compute_all_seasonality(years=years)
+                logger.info('seasonality recomputed for all items by %s: %s', request.user, result)
+                return Response(result)
+            except Exception:
+                logger.exception('seasonality compute (all items) failed')
+                return Response({'detail': 'فشل حساب المؤشرات الموسمية'},
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         try:
             results = ForecastService.compute_seasonality_indices(int(item_id), years=years)
