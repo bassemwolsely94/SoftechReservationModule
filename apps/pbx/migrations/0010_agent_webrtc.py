@@ -3,6 +3,10 @@
 from django.db import migrations, models
 
 
+# db_default added after the fact (migration rule R6): a fresh database gets the server defaults
+# here; one that already ran this migration gets them from 0011.
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -13,11 +17,11 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='agentextension',
             name='webrtc_credentials',
-            field=models.JSONField(blank=True, default=dict, verbose_name='بيانات هاتف المتصفح (مشفرة)'),
+            field=models.JSONField(blank=True, db_default={}, default=dict, verbose_name='بيانات هاتف المتصفح (مشفرة)'),
         ),
         migrations.AddField(
             model_name='agentextension',
             name='webrtc_enabled',
-            field=models.BooleanField(default=False, verbose_name='هاتف المتصفح مفعّل'),
+            field=models.BooleanField(db_default=False, default=False, verbose_name='هاتف المتصفح مفعّل'),
         ),
     ]

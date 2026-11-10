@@ -381,6 +381,9 @@ def required(path, method):
         return 'transfers', _EXPORT_POST
     if method == 'POST' and prefix == 'qa':
         return 'hr', _EXPORT_POST
+    # call scoring: PATCH edits a score the same view created with POST — same QA role check
+    if method == 'PATCH' and prefix == 'callcenter' and parts[3:4] == ['calls'] and parts[5:6] == ['quality']:
+        return MODULE_BY_PREFIX[prefix], ('view',)
     if method == 'POST' and ((prefix == 'callcenter' and parts[3:4] == ['calls'] and parts[5:6] == ['quality'])
                              or (prefix == 'callcenter' and parts[3:4] == ['transcripts'] and parts[5:6] == ['correct'])
                              or (prefix == 'stockcount' and parts[5:6] == ['preview-items'])

@@ -83,3 +83,19 @@ class CommsTests(TestCase):
 
     def test_everyone_still_reads_their_own_extension(self):
         self.assertNotEqual(self._call('salesperson', 'get', '/api/pbx/my-extension/').status_code, 403)
+
+    def test_quality_score_edit_follows_create(self):
+        # The view lets supervisor / quality_manager create (POST) and edit (PATCH) a call's
+        # quality score; the middleware must ask the same for both, or enforce mode would let a
+        # quality manager create a score but never correct it.
+        path = f'/api/callcenter/calls/{MISSING}/quality/'
+        self.assertEqual(module_access.required(path, 'POST'), ('callcenter', ('view',)))
+        self.assertEqual(module_access.required(path, 'PATCH'), ('callcenter', ('view',)))
+        self.assertEqual(self._call('quality_manager', 'patch', path).status_code, 404)
+
+    def test_browser_phone_settings_need_the_callcenter_module(self):
+        # Own extension only, but it hands out a SIP password: roles without the call-center
+        # screen (where the browser phone starts) never reach the view.
+        for role in ('delivery', 'salesperson', 'viewer'):
+            self.assertEqual(self._call(role, 'get', '/api/pbx/webrtc/config/').status_code, 403, role)
+        self.assertEqual(self._call('call_center', 'get', '/api/pbx/webrtc/config/').status_code, 200)

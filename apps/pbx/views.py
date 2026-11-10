@@ -221,8 +221,10 @@ class WebRTCConfigView(APIView):
     GET /api/pbx/webrtc/config/ — the browser phone settings for the CURRENT user's own
     extension only. Carries the SIP password (needed by the browser to register), so:
     own extension only, never cached, never logged.
+    Gated by the callcenter module like the other PBX views (the browser phone only starts on
+    the call-center screen); the middleware asks the same in enforce mode.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, PBX]
 
     def get(self, request):
         from django.conf import settings

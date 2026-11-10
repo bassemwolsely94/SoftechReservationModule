@@ -167,8 +167,10 @@ class AgentExtension(models.Model):
 
     # Browser phone (WebRTC): the extension's SIP password, entered by an admin, stored
     # encrypted ({"_enc": …} via apps.omni.crypto) and only ever sent to that agent.
-    webrtc_enabled     = models.BooleanField(default=False, verbose_name='هاتف المتصفح مفعّل')
-    webrtc_credentials = models.JSONField(default=dict, blank=True, verbose_name='بيانات هاتف المتصفح (مشفرة)')
+    # db_default: writers on older code (deploy window) or raw SQL that do not name the columns
+    webrtc_enabled     = models.BooleanField(default=False, db_default=False, verbose_name='هاتف المتصفح مفعّل')
+    webrtc_credentials = models.JSONField(default=dict, db_default={}, blank=True,
+                                          verbose_name='بيانات هاتف المتصفح (مشفرة)')
 
     created_at  = models.DateTimeField(auto_now_add=True)
     updated_at  = models.DateTimeField(auto_now=True)
