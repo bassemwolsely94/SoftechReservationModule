@@ -35,7 +35,7 @@ WAVE_LABELS = {1: 'من الرئيسي أولاً', 2: 'متكدس بفرع ← 
                4: 'تجربة صنف جديد — من فرع'}
 SEED_CATS = ('never_stocked', 'new_no_rate', 'hq_dormant')
 SOFTECH_ISR_DAYS = 3          # SOFTECH's own daily HQ ISRs still waiting to be dispensed
-TRANSFER_MAX_DAYS = 14        # live transfer requests (WhatsApp / shortage) — same window as in-transit
+TRANSFER_MAX_DAYS = 14        # in-transit window (the shared in_transit rule)
 PLAN_MAX_AGE_HOURS = 12       # generate only from a fresh plan
 KEEP_PLANS = 30
 DEFAULT_MIN_LINE = 100.0
@@ -152,11 +152,13 @@ def committed_flows(codes, dests):
             for code, q in items.items():
                 _add(flows, code, dest, 'transit', 'بضاعة بالطريق (إذن صرف لم يُستلم)', None, q)
 
-    # live transfer requests (WhatsApp / shortage lists / manual) to the destination
+    # open transfer requests (WhatsApp / shortage lists / manual) to the destination — the SAME rule
+    # as the supply engine (apps/supply/engine/commitments.py): not yet dispatched, because a
+    # dispatched one is already counted above as in transit
+    from apps.supply.engine.commitments import OPEN_TRANSFER_STATUSES
     from apps.transfers.models import TransferRequestItem
     for code, dest, q, aq, req in (TransferRequestItem.objects.filter(
-            request__status__in=['draft', 'pending', 'approved', 'sent_to_erp'],
-            request__created_at__gte=timezone.now() - timedelta(days=TRANSFER_MAX_DAYS),
+            request__status__in=OPEN_TRANSFER_STATUSES, request__dispatched_at__isnull=True,
             request__requesting_branch__softech_branch_id__in=dests, item__softech_id__in=codes)
             .values_list('item__softech_id', 'request__requesting_branch__softech_branch_id',
                          'quantity', 'approved_quantity', 'request_id')):

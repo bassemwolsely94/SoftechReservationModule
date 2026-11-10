@@ -98,6 +98,25 @@ class CommittedFlowTests(TestCase):
         self.assertNotIn(('A', '150'), flows)
         self.assertEqual(notes, [])
 
+    def test_transfer_requests_follow_the_shared_commitment_rule(self):
+        """Same rule as apps/supply/engine/commitments.py: open AND not yet dispatched (a dispatched
+        request is already in transit), needs-revision included, the approved qty wins."""
+        from apps.tests.factories import make_branch
+        from apps.transfers.models import TransferRequest, TransferRequestItem
+        src, dst = make_branch('مصدر', '130'), make_branch('مستلم', '160')
+        _, staff, _ = make_admin('dist_tr_admin')
+        item = make_item('A', softech_id='A')
+        for status, dispatched, qty, approved in (('needs_revision', False, 5, 3), ('sent_to_erp', True, 9, None),
+                                                  ('completed', False, 7, None)):
+            tr = TransferRequest.objects.create(requesting_branch=dst, supplying_branch=src, created_by=staff,
+                                                status=status,
+                                                dispatched_at=timezone.now() if dispatched else None)
+            TransferRequestItem.objects.create(request=tr, item=item, quantity=qty, approved_quantity=approved)
+        with mock.patch.object(DP, '_softech_isrs', return_value=[]):
+            flows, _ = DP.committed_flows({'A'}, {'160'})
+        got = [g for g in flows[('A', '160')] if g['source'] == 'transfer']
+        self.assertEqual([g['qty'] for g in got], [3.0])
+
     def test_softech_unreachable_is_noted_not_fatal(self):
         with mock.patch.object(DP, '_softech_isrs', side_effect=RuntimeError('JZ0C0')):
             flows, notes = DP.committed_flows({'A'}, {'160'})
