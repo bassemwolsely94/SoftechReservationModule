@@ -147,9 +147,9 @@ How the screen keeps the extra review fast:
 ## 5. Decisions for the owner
 
 1. **Flag policy:** ✅ strict (2026-10-25).
-2. **Auto-match cut-off:** one value (0.55 or 0.70) or per source?
-3. **Photo OCR and Excel upload on both screens:** yes?
-4. **Order:** this unification before or after the «التوزيعة» redesign (doc 30)?
+2. **Auto-match cut-off:** ✅ per source, unchanged — supplier lists 0.55, WhatsApp 0.70 (2026-11-10).
+3. **Photo OCR and Excel upload on both screens:** ✅ yes — paste, photo and Excel/CSV on both, inside the shared review grid (2026-11-10).
+4. **Order:** ✅ after doc 30 phases B–D (build order: seasonality switch → doc 30 B–D → doc 31 B–D, 2026-11-10).
 
 ## 6. Phasing
 
