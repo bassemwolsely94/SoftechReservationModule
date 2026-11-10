@@ -319,6 +319,13 @@ class FollowUpTask(models.Model):
         verbose_name='حملة المصدر',
         help_text='الحملة التي أُنشئت منها هذه المهمة',
     )
+    call_list = models.ForeignKey(
+        'followups.CallList',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='tasks',
+        verbose_name='قائمة الاتصال',
+    )
 
     # ── Pin / manual watch ────────────────────────────────────────────────────
     # Staff can manually "pin" a task to indicate they are personally tracking it.
@@ -662,3 +669,31 @@ class RefillReminderOptOut(models.Model):
 
     def __str__(self):
         return f'{self.customer_id} — {self.source}'
+
+
+class CallList(models.Model):
+    """
+    An outbound call campaign: a named batch of 'custom' FollowUpTasks for a chosen
+    group of customers (segment / branch / inactive days), split between agents.
+    Agents work it from their existing queue (my-queue); outcomes are the tasks'.
+    """
+    STATUS_CHOICES = [('active', 'نشطة'), ('closed', 'مغلقة')]
+    MAX_SIZE = 500
+
+    name       = models.CharField(max_length=120, verbose_name='اسم القائمة')
+    script     = models.TextField(blank=True, verbose_name='نص المكالمة')
+    criteria   = models.JSONField(default=dict, blank=True, verbose_name='معايير الاختيار')
+    status     = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active', db_index=True)
+    created_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL,
+                                   null=True, blank=True, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    closed_at  = models.DateTimeField(null=True, blank=True)
+    size       = models.PositiveIntegerField(default=0, verbose_name='عدد العملاء')
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'قائمة اتصال'
+        verbose_name_plural = 'قوائم الاتصال'
+
+    def __str__(self):
+        return f'{self.name} ({self.size})'

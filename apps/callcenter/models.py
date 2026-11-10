@@ -927,7 +927,12 @@ class CallTranscript(models.Model):
     ]
     MAX_ATTEMPTS = 3
 
-    call_log = models.ForeignKey(CallLog, on_delete=models.CASCADE, related_name='transcripts')
+    # A call is known from our CallLog (agent/bridge) and/or Issabel's CDR mirror;
+    # the CDR is the authority (records even while the bridge is down).
+    call_log = models.ForeignKey(CallLog, on_delete=models.CASCADE, related_name='transcripts',
+                                 null=True, blank=True)
+    cdr_call = models.ForeignKey('pbx.CdrCall', on_delete=models.CASCADE, related_name='transcripts',
+                                 null=True, blank=True)
     engine   = models.CharField(max_length=10, choices=ENGINE_CHOICES)
     status   = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending', db_index=True)
     text     = models.TextField(blank=True)
@@ -949,12 +954,22 @@ class CallTranscript(models.Model):
     class Meta:
         ordering = ['created_at']
         verbose_name = 'تفريغ مكالمة'
-        constraints = [models.UniqueConstraint(fields=['call_log', 'engine'],
-                                               name='uniq_transcript_per_engine')]
+        constraints = [
+            models.UniqueConstraint(fields=['call_log', 'engine'], name='uniq_transcript_per_engine'),
+            models.UniqueConstraint(fields=['cdr_call', 'engine'], name='uniq_cdr_transcript_per_engine'),
+            models.CheckConstraint(check=models.Q(call_log__isnull=False) | models.Q(cdr_call__isnull=False),
+                                   name='transcript_has_a_call'),
+        ]
         indexes = [models.Index(fields=['engine', 'status', 'created_at'])]
 
     def __str__(self):
-        return f'{self.engine} #{self.call_log_id} [{self.status}]'
+        return f'{self.engine} #{self.call_log_id or "cdr-" + str(self.cdr_call_id)} [{self.status}]'
+
+    @property
+    def call_seconds(self) -> int:
+        if self.cdr_call_id:
+            return self.cdr_call.billable_seconds or 0
+        return self.call_log.duration_seconds or 0 if self.call_log_id else 0
 
 
 class WhisperQueueControl(models.Model):

@@ -278,10 +278,14 @@ class FollowUpTaskListSerializer(RecordPhoneMask, serializers.ModelSerializer):
     def get_product(self, obj):  return build_product_block(obj)
     def get_refill(self, obj):   return build_refill_block(obj)
 
+    call_list_name   = serializers.CharField(source='call_list.name', read_only=True, default=None)
+    call_list_script = serializers.CharField(source='call_list.script', read_only=True, default=None)
+
     class Meta:
         model  = FollowUpTask
         fields = [
             'id', 'task_type', 'task_type_label',
+            'call_list', 'call_list_name', 'call_list_script',
             'status', 'status_label',
             'sales_channel', 'channel_label', 'channel_priority',
             'branch', 'branch_name',
