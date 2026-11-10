@@ -21,6 +21,7 @@ from django.db import models
 
 CATEGORY_CHOICES = [
     ('sales',        'المبيعات'),
+    ('customers',    'العملاء (PIC)'),
     ('reservations', 'الحجوزات'),
     ('demand',       'الطلب الضائع والمتابعة'),
     ('transfers',    'التحويلات وطلبات الفروع'),
@@ -428,12 +429,16 @@ class TeamChallenge(models.Model):
     METRIC_FAST_REPLY  = 'fast_reply_rate'
     METRIC_DAILY_COUNT = 'daily_count_rate'
     METRIC_AVG_POINTS  = 'avg_points'
+    METRIC_PIC_CAPTURE = 'pic_capture_rate'
+    METRIC_NEW_PICS    = 'new_pics_per_member'
     METRIC_CHOICES = [
         (METRIC_LEFT_BEHIND, 'لا شيء متأخر — أقصى عدد بنود متأخرة'),
         (METRIC_CLEAN_DAYS,  'نسبة الأيام النظيفة %'),
         (METRIC_FAST_REPLY,  'نسبة الرد السريع على طلبات الفروع %'),
         (METRIC_DAILY_COUNT, 'نسبة إنجاز الجرد اليومي %'),
         (METRIC_AVG_POINTS,  'متوسط نقاط الموظف'),
+        (METRIC_PIC_CAPTURE, 'نسبة الفواتير على أكواد العملاء %'),
+        (METRIC_NEW_PICS,    'عملاء جدد لكل موظف'),
     ]
     LOWER_IS_BETTER = {METRIC_LEFT_BEHIND}
 
