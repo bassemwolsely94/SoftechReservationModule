@@ -29,7 +29,11 @@ CATEGORY_CHOICES = [
     ('discipline',   'الالتزام (لا تترك شيئاً خلفك)'),
     ('manual',       'تقدير يدوي'),
     ('champion',     'بطل الشهر'),   # monthly titles — count for XP/wallet, NOT for rankings
+    ('team',         'تحديات الفروع'),  # team-challenge bonuses — same: XP/wallet, NOT rankings
 ]
+
+# Bonus categories that never count in a ranking (the winner of last period starts level).
+RANKING_EXCLUDED_CATEGORIES = ('champion', 'team')
 
 
 class PointRule(models.Model):
@@ -62,9 +66,17 @@ class PointRule(models.Model):
     )
     roles = models.JSONField(default=list, blank=True, verbose_name='الأدوار',
                              help_text='فارغ = كل الأدوار')
+    # db_default: writers on older code (or raw SQL) that do not name the column still insert '{}'
+    role_points = models.JSONField(default=dict, db_default={}, blank=True, verbose_name='نقاط حسب الدور',
+                                   help_text='{"pharmacist": 20} — يتجاوز «النقاط» لهذا الدور')
     is_active = models.BooleanField(default=True, db_index=True, verbose_name='مفعّلة')
     sort = models.PositiveIntegerField(default=100)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def points_for(self, role):
+        """Points for one occurrence for this role (role override, else the rule's points)."""
+        v = (self.role_points or {}).get(role)
+        return self.points if v is None else int(v)
 
     class Meta:
         verbose_name = 'قاعدة نقاط'
@@ -403,3 +415,67 @@ class Champion(models.Model):
         verbose_name = 'بطل شهر'
         verbose_name_plural = 'أبطال الشهر'
         ordering = ['-month', 'kind', 'role', 'rank']
+
+
+
+# ── Branch team challenges (phase 4) ─────────────────────────────────────────
+
+class TeamChallenge(models.Model):
+    """A shared goal for every branch (or chosen ones) over a period. Each branch that meets
+    the target when the period ends earns `bonus_per_member` for each of its members."""
+    METRIC_LEFT_BEHIND = 'left_behind_max'
+    METRIC_CLEAN_DAYS  = 'clean_day_rate'
+    METRIC_FAST_REPLY  = 'fast_reply_rate'
+    METRIC_DAILY_COUNT = 'daily_count_rate'
+    METRIC_AVG_POINTS  = 'avg_points'
+    METRIC_CHOICES = [
+        (METRIC_LEFT_BEHIND, 'لا شيء متأخر — أقصى عدد بنود متأخرة'),
+        (METRIC_CLEAN_DAYS,  'نسبة الأيام النظيفة %'),
+        (METRIC_FAST_REPLY,  'نسبة الرد السريع على طلبات الفروع %'),
+        (METRIC_DAILY_COUNT, 'نسبة إنجاز الجرد اليومي %'),
+        (METRIC_AVG_POINTS,  'متوسط نقاط الموظف'),
+    ]
+    LOWER_IS_BETTER = {METRIC_LEFT_BEHIND}
+
+    name_ar = models.CharField(max_length=150)
+    name_en = models.CharField(max_length=150)
+    desc_ar = models.CharField(max_length=300, blank=True)
+    desc_en = models.CharField(max_length=300, blank=True)
+    icon = models.CharField(max_length=8, default='🤝')
+    metric = models.CharField(max_length=20, choices=METRIC_CHOICES)
+    target = models.DecimalField(max_digits=10, decimal_places=2)
+    start = models.DateField()
+    end = models.DateField()
+    branch_ids = models.JSONField(default=list, blank=True, help_text='فارغ = كل الفروع')
+    bonus_per_member = models.PositiveIntegerField(default=100)
+    min_members = models.PositiveIntegerField(default=2)
+    is_active = models.BooleanField(default=True, db_index=True)
+    created_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True,
+                                   blank=True, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    evaluated_at = models.DateTimeField(null=True, blank=True,
+                                        help_text='تقييم نهائي بعد انتهاء الفترة — لا يتكرر')
+
+    class Meta:
+        verbose_name = 'تحدي فروع'
+        verbose_name_plural = 'تحديات الفروع'
+        ordering = ['-end', '-id']
+
+    def __str__(self):
+        return self.name_ar
+
+
+class TeamChallengeResult(models.Model):
+    challenge = models.ForeignKey(TeamChallenge, on_delete=models.CASCADE, related_name='results')
+    branch = models.ForeignKey('branches.Branch', on_delete=models.CASCADE, related_name='+')
+    value = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+                                help_text='فارغ = لا توجد بيانات كافية')
+    achieved = models.BooleanField(default=False)
+    members = models.PositiveIntegerField(default=0)
+    bonus = models.PositiveIntegerField(default=0, help_text='النقاط لكل عضو')
+    evaluated_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['challenge', 'branch'],
+                                               name='uniq_team_challenge_branch')]
+        ordering = ['challenge', '-achieved', 'branch']

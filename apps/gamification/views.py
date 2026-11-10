@@ -130,7 +130,8 @@ def _rule_json(r):
             'desc_en': r.desc_en, 'category': r.category, 'points': r.points,
             'unit_value': float(r.unit_value) if r.unit_value is not None else None,
             'cash_multiplier': float(r.cash_multiplier), 'daily_cap': r.daily_cap,
-            'grace_hours': r.grace_hours, 'roles': r.roles, 'is_active': r.is_active}
+            'grace_hours': r.grace_hours, 'roles': r.roles, 'role_points': r.role_points,
+            'is_active': r.is_active}
 
 
 def _level_json(lv):
@@ -174,7 +175,7 @@ def badges(request):
 # ── managers ──────────────────────────────────────────────────────────────────
 
 RULE_FIELDS = {'points': int, 'daily_cap': int, 'grace_hours': int, 'is_active': bool,
-               'unit_value': float, 'cash_multiplier': float, 'roles': list,
+               'unit_value': float, 'cash_multiplier': float, 'roles': list, 'role_points': dict,
                'name_ar': str, 'name_en': str, 'desc_ar': str, 'desc_en': str}
 
 
@@ -197,6 +198,15 @@ def _apply(obj, data, fields):
                 from apps.users.models import ROLE_CHOICES
                 valid = {r[0] for r in ROLE_CHOICES}
                 if any(x not in valid for x in v):
+                    raise ValueError
+            elif typ is dict:
+                # {role: points} — only known roles, integer points within ±1000
+                from apps.users.models import ROLE_CHOICES
+                valid = {r[0] for r in ROLE_CHOICES}
+                if not isinstance(v, dict) or any(k not in valid for k in v):
+                    raise ValueError
+                v = {k: int(x) for k, x in v.items() if x not in (None, '')}
+                if any(abs(x) > 1000 for x in v.values()):
                     raise ValueError
             elif typ is str:
                 v = str(v).strip()
@@ -658,3 +668,129 @@ def champion_revoke(request, pk):
     except ValueError as exc:
         return Response({'detail': str(exc)}, status=400)
     return Response(C.champion_json(c))
+
+
+
+# ── branch team challenges (phase 4) ──────────────────────────────────────────
+
+CHALLENGE_FIELDS = {'name_ar': str, 'name_en': str, 'desc_ar': str, 'desc_en': str, 'icon': str,
+                    'metric': str, 'target': float, 'start': 'date', 'end': 'date',
+                    'branch_ids': list, 'bonus_per_member': int, 'min_members': int,
+                    'is_active': bool}
+
+
+def _challenge_payload(data, partial, instance=None):
+    from .models import TeamChallenge
+    errors, clean = {}, {}
+    for f, typ in CHALLENGE_FIELDS.items():
+        if f not in data:
+            continue
+        v = data[f]
+        try:
+            if typ == 'date':
+                v = date.fromisoformat(str(v))
+            elif typ is bool:
+                v = bool(v)
+            elif typ is list:
+                if not isinstance(v, list):
+                    raise ValueError
+                v = [int(x) for x in v]
+            elif typ is str:
+                v = str(v).strip()
+            else:
+                v = typ(v)
+                if v < 0:
+                    raise ValueError
+        except (TypeError, ValueError):
+            errors[f] = 'قيمة غير صحيحة — invalid value'
+            continue
+        clean[f] = v
+    for f in ('name_ar', 'name_en', 'metric', 'target', 'start', 'end'):
+        if (not partial and f not in clean) or (f in clean and clean[f] in ('', None)):
+            errors[f] = 'مطلوب — required'
+    if 'metric' in clean and clean['metric'] not in {m[0] for m in TeamChallenge.METRIC_CHOICES}:
+        errors['metric'] = 'مقياس غير معروف — unknown metric'
+    start = clean.get('start', getattr(instance, 'start', None))
+    end = clean.get('end', getattr(instance, 'end', None))
+    if start and end and end < start:
+        errors['end'] = 'النهاية قبل البداية — end is before start'
+    metric = clean.get('metric', getattr(instance, 'metric', None))
+    target = clean.get('target', getattr(instance, 'target', None))
+    if metric and target is not None and metric.endswith('_rate') and float(target) > 100:
+        errors['target'] = 'النسبة من 0 إلى 100 — a percentage is 0..100'
+    if clean.get('bonus_per_member', 0) > 2000:
+        errors['bonus_per_member'] = 'أقصى مكافأة 2000 — max 2000'
+    if clean.get('branch_ids'):
+        from apps.branches.models import Branch
+        if Branch.objects.filter(id__in=clean['branch_ids']).count() != len(set(clean['branch_ids'])):
+            errors['branch_ids'] = 'فرع غير موجود — unknown branch'
+    return clean, errors
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def challenges_view(request):
+    """GET: running / upcoming / recently ended challenges with every branch's progress
+    (network-wide by design, like the branch ranking). POST: create (gamification/edit)."""
+    from . import challenges as T
+    from .models import TeamChallenge
+    profile = _profile(request)
+    if not profile:
+        return Response({'detail': 'no staff profile'}, status=404)
+    if request.method == 'GET':
+        return Response({'challenges': T.board(profile, include_inactive=_can(profile, 'edit')),
+                         'my_branch_id': profile.branch_id,
+                         'can_edit': _can(profile, 'edit'),
+                         'metrics': [{'key': k, 'label': v,
+                                      'lower_is_better': k in TeamChallenge.LOWER_IS_BETTER}
+                                     for k, v in TeamChallenge.METRIC_CHOICES]})
+    if not _can(profile, 'edit'):
+        return _deny()
+    clean, errors = _challenge_payload(request.data, partial=False)
+    if errors:
+        return Response(errors, status=400)
+    ch = TeamChallenge.objects.create(created_by=profile, **clean)
+    _log(profile, 'challenge_create', f'challenge:{ch.id}', {},
+         T.challenge_json(ch, with_standings=False))
+    return Response(T.challenge_json(ch, profile.branch_id), status=201)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def challenge_detail(request, pk):
+    from . import challenges as T
+    from .models import TeamChallenge
+    profile = _profile(request)
+    if not _can(profile, 'edit'):
+        return _deny()
+    ch = get_object_or_404(TeamChallenge, pk=pk)
+    if ch.evaluated_at:
+        return Response({'detail': 'التحدي قُيِّم ولا يمكن تعديله — already evaluated'}, status=400)
+    clean, errors = _challenge_payload(request.data, partial=True, instance=ch)
+    if errors:
+        return Response(errors, status=400)
+    before = T.challenge_json(ch, with_standings=False)
+    for f, v in clean.items():
+        setattr(ch, f, v)
+    ch.save()
+    _log(profile, 'challenge_edit', f'challenge:{ch.id}', before,
+         T.challenge_json(ch, with_standings=False), str(request.data.get('reason', ''))[:300])
+    return Response(T.challenge_json(ch, profile.branch_id))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def challenge_evaluate(request, pk):
+    """Judge an ended challenge now (normally automatic at the nightly day close)."""
+    from . import challenges as T
+    from .models import TeamChallenge
+    profile = _profile(request)
+    if not _can(profile, 'edit'):
+        return _deny()
+    ch = get_object_or_404(TeamChallenge, pk=pk)
+    try:
+        T.evaluate(ch, by=profile)
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=400)
+    ch.refresh_from_db()
+    return Response(T.challenge_json(ch, profile.branch_id))

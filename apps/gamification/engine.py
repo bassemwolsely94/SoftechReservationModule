@@ -33,7 +33,7 @@ OPEN_RESERVATION = ('pending', 'available', 'contacted', 'confirmed')
 OPEN_TASK = ('open', 'in_progress', 'on_hold')
 OPEN_DEMAND = ('new', 'assigned', 'follow_up')
 DISCIPLINE_PENALTIES = ('reservation_overdue', 'task_overdue', 'demand_sla_breach',
-                        'demand_followup_missed', 'followup_missed')
+                        'demand_followup_missed', 'followup_missed', 'daily_count_missed')
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -106,7 +106,7 @@ class Scorer:
         rule = self.rules.get(rule_key)
         if rule is None or not rule.is_active or not rule.applies_to(staff.role):
             return None
-        pts = rule.points if points is None else int(points)
+        pts = rule.points_for(staff.role) if points is None else int(points)
         if pts == 0:
             return None
         day = _local_day(at)
@@ -186,7 +186,7 @@ def _collect_sales(sc, day, start, end):
         for sid, net in totals.items():
             if net > 0:
                 sc.top_up(sc.staff[sid], 'sale_value', day,
-                          math.floor(net / rule.unit_value) * rule.points,
+                          math.floor(net / rule.unit_value) * rule.points_for(sc.staff[sid].role),
                           meta={'net_sales': float(net)})
 
     rule = sc.rules.get('sale_profit')
@@ -212,7 +212,7 @@ def _collect_sales(sc, day, start, end):
         for sid, w in weighted.items():
             if w['score'] > 0:
                 sc.top_up(sc.staff[sid], 'sale_profit', day,
-                          math.floor(w['score'] / rule.unit_value) * rule.points,
+                          math.floor(w['score'] / rule.unit_value) * rule.points_for(sc.staff[sid].role),
                           meta={'gross_profit': float(w['gp']), 'cash_gp': float(w['cash_gp'])})
 
 
@@ -364,6 +364,32 @@ def _collect_inventory(sc, day, start, end):
                  branch_id=s['branch_id'])
 
 
+def _collect_daily_count(sc, day, start, end):
+    """Daily blind counts (stockcount mode='daily'): +1 per item counted (once per item, a
+    recount does not score again), +bonus when the day's list is finished with nothing
+    missed, −1 per item the branch close marked `missed` (owner = whoever had to count it)."""
+    from apps.stockcount.models import DailyCountAttempt, DailyCountPick, StockCountSession
+    seen = set()
+    for a in DailyCountAttempt.objects.filter(created_at__gte=start, created_at__lt=end,
+                                              counted_by__isnull=False) \
+            .order_by('created_at').values('pick_id', 'counted_by_id', 'created_at'):
+        if a['pick_id'] in seen:
+            continue
+        seen.add(a['pick_id'])
+        sc.award(a['counted_by_id'], 'daily_count_item', f"dcp:{a['pick_id']}", a['created_at'])
+    sessions = StockCountSession.objects.filter(mode='daily', count_date=day, status='closed',
+                                                assigned_to__isnull=False)
+    for s in sessions.values('id', 'assigned_to_id', 'variance_at'):
+        picks = DailyCountPick.objects.filter(session_id=s['id'])
+        if picks.exists() and not picks.filter(status__in=('missed', 'pending')).exists():
+            sc.award(s['assigned_to_id'], 'daily_count_complete', f"dcs:{s['id']}",
+                     s['variance_at'] or _at(day))
+    for p in DailyCountPick.objects.filter(session__in=sessions, status='missed') \
+            .values('id', 'recount_by_id', 'session__assigned_to_id', 'updated_at'):
+        sc.award(p['recount_by_id'] or p['session__assigned_to_id'], 'daily_count_missed',
+                 f"dcm:{p['id']}", p['updated_at'])
+
+
 def _collect_tasks(sc, day, start, end):
     from apps.tasks.models import OperationalTask
     for t in OperationalTask.objects.filter(status='completed', completed_at__gte=start,
@@ -387,7 +413,7 @@ def _collect_audit(sc, day, start, end):
 
 COLLECTORS = [_collect_sales, _collect_reservations, _collect_demand, _collect_followups,
               _collect_transfers, _collect_transits, _collect_isr, _collect_inventory,
-              _collect_tasks, _collect_audit]
+              _collect_daily_count, _collect_tasks, _collect_audit]
 
 
 def score_day(day, scorer=None):
@@ -580,5 +606,10 @@ def run(days=1, today=None, finalize=True):
             _write_daily(staff, today)
     promoted = refresh_players(sc.touched)
     from .rewards import reconcile
-    return {'awarded': sc.awarded, 'players': len(sc.touched), 'promotions': promoted,
-            'redemptions_refunded': reconcile()}
+    result = {'awarded': sc.awarded, 'players': len(sc.touched), 'promotions': promoted,
+              'redemptions_refunded': reconcile()}
+    if finalize:
+        # Team challenges whose period ended are judged once the last day is closed.
+        from .challenges import evaluate_due
+        result['challenges_evaluated'] = evaluate_due(today)
+    return result

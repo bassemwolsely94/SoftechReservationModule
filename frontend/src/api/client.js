@@ -509,6 +509,11 @@ export const gamificationApi = {
   champions:      (params = {}) => api.get('/gamification/champions/', { params }),
   crownChampions: (data = {})   => api.post('/gamification/champions/crown/', data),
   revokeChampion: (id, data)    => api.post(`/gamification/champions/${id}/revoke/`, data),
+  // branch team challenges
+  challenges:        ()         => api.get('/gamification/challenges/'),
+  createChallenge:   (data)     => api.post('/gamification/challenges/', data),
+  updateChallenge:   (id, data) => api.patch(`/gamification/challenges/${id}/`, data),
+  evaluateChallenge: (id)       => api.post(`/gamification/challenges/${id}/evaluate/`),
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────────

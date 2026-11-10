@@ -8,6 +8,7 @@
  *   badges      الشارات
  *   rules       كيف تكسب النقاط — every rule, transparent to everyone
  *   champions   أبطال الشهر — live race + hall of fame (crown / revoke for editors)
+ *   challenges  تحديات الفروع — shared branch goals: live progress + results (create / judge for editors)
  *   rewards     المكافآت — spend points on the catalog (approval via /approvals)
  *   redemptions طلبات المكافآت — managers: deliver / cancel approved rewards
  *   reports     التقارير — managers (RBAC gamification/view; Excel needs /export)
@@ -27,6 +28,7 @@ import { PageHeader } from '../components/ui'
 import { LevelBar, useGamificationMe } from '../components/GamificationCard'
 import { RedemptionsTab, RewardCatalogEditor, RewardsTab } from './gamification/RewardsTabs'
 import ChampionsTab from './gamification/ChampionsTab'
+import ChallengesTab from './gamification/ChallengesTab'
 import { ROLES, roleLabel } from './gamification/labels'
 
 const fmt = (n) => (n ?? 0).toLocaleString('en-US')
@@ -549,11 +551,27 @@ function ReportsTab({ t, lang }) {
 // ── الإعدادات (editors) ──────────────────────────────────────────────────────
 
 function RuleRow({ r, t, lang, onSave }) {
-  const [d, setD] = useState({ points: r.points, daily_cap: r.daily_cap ?? '', is_active: r.is_active })
-  const dirty = d.points !== r.points || String(d.daily_cap) !== String(r.daily_cap ?? '') || d.is_active !== r.is_active
+  const [d, setD] = useState({ points: r.points, daily_cap: r.daily_cap ?? '', is_active: r.is_active,
+                               role_points: { ...(r.role_points || {}) } })
+  const [openRoles, setOpenRoles] = useState(false)
+  const rolesDirty = JSON.stringify(Object.fromEntries(Object.entries(d.role_points).filter(([, v]) => v !== '' && v != null)))
+                     !== JSON.stringify(r.role_points || {})
+  const dirty = d.points !== r.points || String(d.daily_cap) !== String(r.daily_cap ?? '') || d.is_active !== r.is_active || rolesDirty
+  const nRoles = Object.keys(r.role_points || {}).length
+  const payload = () => ({
+    points: d.points, is_active: d.is_active,
+    daily_cap: d.daily_cap === '' ? null : Number(d.daily_cap),
+    role_points: Object.fromEntries(Object.entries(d.role_points)
+      .filter(([, v]) => v !== '' && v != null).map(([k, v]) => [k, Number(v)])),
+  })
   return (
+    <>
     <tr className="border-b border-gray-50">
-      <td className="py-1.5">{lang === 'en' ? r.name_en : r.name_ar}<div className="text-[11px] text-gray-400">{r.key}</div></td>
+      <td className="py-1.5">{lang === 'en' ? r.name_en : r.name_ar}<div className="text-[11px] text-gray-400">{r.key}</div>
+        <button className="text-[11px] text-brand-700 underline" onClick={() => setOpenRoles(o => !o)}>
+          {t('نقاط حسب الدور', 'Points per role')}{nRoles ? ` (${nRoles})` : ''}
+        </button>
+      </td>
       <td className="py-1.5"><input type="number" className="input-field w-20 text-xs" value={d.points}
                                     onChange={e => setD({ ...d, points: Number(e.target.value) })} /></td>
       <td className="py-1.5"><input type="number" className="input-field w-20 text-xs" value={d.daily_cap}
@@ -564,13 +582,32 @@ function RuleRow({ r, t, lang, onSave }) {
       <td className="py-1.5">
         {dirty && (
           <button data-tour="gamification-main-rule-save" className="btn-primary text-xs"
-                  onClick={() => onSave(r.key, { points: d.points, is_active: d.is_active,
-                                                 daily_cap: d.daily_cap === '' ? null : Number(d.daily_cap) })}>
+                  onClick={() => onSave(r.key, payload())}>
             {t('حفظ', 'Save')}
           </button>
         )}
       </td>
     </tr>
+    {openRoles && (
+      <tr className="border-b border-gray-50 bg-gray-50">
+        <td colSpan={5} className="py-2">
+          <div className="text-[11px] text-gray-500 mb-1">
+            {t('اتركها فارغة لتأخذ نقاط القاعدة العامة.', 'Leave empty to use the rule\'s general points.')}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {ROLES.slice(1).map(([k, ar, en]) => (
+              <label key={k} className="text-xs flex items-center gap-1">
+                {t(ar, en)}
+                <input type="number" className="input-field w-16 text-xs" value={d.role_points[k] ?? ''}
+                       placeholder={String(d.points)}
+                       onChange={e => setD({ ...d, role_points: { ...d.role_points, [k]: e.target.value } })} />
+              </label>
+            ))}
+          </div>
+        </td>
+      </tr>
+    )}
+    </>
   )
 }
 
@@ -725,6 +762,7 @@ export default function GamificationPage() {
     ['badges', '🏅 الشارات', '🏅 Badges'],
     ['rules', '📜 كيف تكسب النقاط', '📜 How to earn'],
     ['champions', '👑 أبطال الشهر', '👑 Champions'],
+    ['challenges', '🤝 تحديات الفروع', '🤝 Team challenges'],
     ['rewards', '🎁 المكافآت', '🎁 Rewards'],
     ...(me?.can_manage ? [['redemptions', '📦 طلبات المكافآت', '📦 Reward requests'],
                           ['reports', '📊 التقارير', '📊 Reports']] : []),
@@ -759,6 +797,7 @@ export default function GamificationPage() {
             {tab === 'badges' && <BadgesTab me={me} t={t} lang={lang} />}
             {tab === 'rules' && <RulesTab t={t} lang={lang} />}
             {tab === 'champions' && <ChampionsTab t={t} lang={lang} />}
+            {tab === 'challenges' && <ChallengesTab t={t} lang={lang} />}
             {tab === 'rewards' && <RewardsTab t={t} lang={lang} />}
             {tab === 'redemptions' && me.can_manage && <RedemptionsTab t={t} lang={lang} canEdit={me.can_edit} />}
             {tab === 'reports' && me.can_manage && <ReportsTab t={t} lang={lang} />}

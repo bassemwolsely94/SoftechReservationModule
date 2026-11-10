@@ -1,6 +1,6 @@
 # 29 — Gamification (التحفيز: النقاط والمستويات)
 
-**Status:** Phase 1 BUILT (2026-10-10) — points, levels, badges, rankings. Phase 2 BUILT (2026-10-10) — reward catalog. Phase 3 BUILT (2026-10-10) — monthly champion (بطل الشهر).
+**Status:** Phase 1 BUILT (2026-10-10) — points, levels, badges, rankings. Phase 2 BUILT (2026-10-10) — reward catalog. Phase 3 BUILT (2026-10-10) — monthly champion (بطل الشهر). Phase 4 BUILT (2026-11-10) — daily-count points, per-role points, branch team challenges.
 **App:** `apps/gamification` · **API:** `/api/gamification/` · **Screens:** card on `/dashboard` + `/me`, `/gamification`, `/m/gamification`
 
 ## Decisions (agreed with the owner)
@@ -67,6 +67,24 @@ The engine **reads** records that already exist and writes only its own tables. 
 - **Revoke** (`POST champions/{id}/revoke/`, `gamification/edit`, written reason): marks the title revoked, books a `champion_revoked` reversal (−bonus; XP counts the champion category at its net value), drops champion badges no longer earned, audited in `GamificationChange`.
 - **Screens:** `/gamification?tab=champions` — live race this month (my branch + network leaders per role, days left) and the hall of fame per month; crown chip on the dashboard card for 2 months; champions listed in the executive report.
 
+## Phase 4 (2026-11-10)
+
+**Daily count (stockcount `mode='daily'`).** The full-count reward (`stockcount_completed`) already excluded daily lists; they now score on their own: `daily_count_item` +1 per item counted (first attempt per item, a recount never scores twice; cap 20/day), `daily_count_complete` +5 when the day's session closes with nothing pending or missed, `daily_count_missed` −1 per item the branch close marked `missed` (owner = `recount_by` or the session's `assigned_to`; cap −5). `daily_count_missed` is a discipline penalty → counts as "left behind" and breaks the clean day. Today's uncounted items appear in «لا تترك شيئاً خلفك» (→ `/m/daily-count`).
+
+**Per-role points.** `PointRule.role_points` (`{"pharmacist": 20}`) overrides `points` for that role; `PointRule.points_for(role)` is used by every award, including the sales value/profit aggregates. Edited in settings («نقاط حسب الدور»), validated (known roles, ±1000) and audited.
+
+**Branch team challenges — تحديات الفروع** (`apps/gamification/challenges.py`, `TeamChallenge` + `TeamChallengeResult`). Management (`gamification/edit`) sets a goal for all branches or chosen ones over a period:
+
+| Metric | Value | Goal |
+|---|---|---|
+| `left_behind_max` | Σ `DailyScore.left_behind` of the branch's members | ≤ target |
+| `clean_day_rate` | clean ÷ finalized days × 100 | ≥ target |
+| `fast_reply_rate` | other branches' transfer requests answered within the `transfer_request_fast` grace ÷ received × 100 | ≥ target |
+| `daily_count_rate` | daily-count items counted ÷ assigned × 100 | ≥ target |
+| `avg_points` | net points (bonus categories excluded) ÷ members | ≥ target |
+
+Members = active staff of the branch whose role is not in `GAMIFICATION_CHAMPION_EXCLUDED_ROLES`. A branch with no data for the metric is "not applicable" (no bonus, not a failure); a branch below `min_members` cannot win. Judged once after the period ends — automatically from the nightly day close (`engine.run(finalize=True)` → `evaluate_due`), or by «قيِّم الآن» (`POST challenges/{id}/evaluate/`). Idempotent: `evaluated_at` under a row lock, one `TeamChallengeResult` per branch (unique), one ledger source per member (`team:{id}`). Winners: `team_challenge` points per member (new `team` category: XP + wallet, excluded from every ranking, like champion bonuses), `gamification_team` notification. A judged challenge is locked. API: `GET challenges/` (open to all staff — network-wide progress, listed in `open_to_all_staff.txt`), `POST challenges/`, `PATCH challenges/{id}/`, `POST challenges/{id}/evaluate/` (edit). Screen: `/gamification?tab=challenges`.
+
 ## Known limits (Phase 1)
 
 - Sales score only for staff whose SOFTECH user code is linked (`softech_user_id`).
@@ -78,4 +96,4 @@ The engine **reads** records that already exist and writes only its own tables. 
 
 1. ~~Reward catalog~~ ✅ built (above).
 2. ~~Monthly champions~~ ✅ built (above).
-3. Team goals per branch (shared challenges), per-role rule sets.
+3. ~~Team goals per branch (shared challenges), per-role rule sets~~ ✅ built (Phase 4).

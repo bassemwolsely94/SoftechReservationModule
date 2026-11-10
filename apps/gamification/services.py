@@ -7,8 +7,8 @@ from datetime import date, timedelta
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
-from .models import (CATEGORY_CHOICES, Badge, DailyScore, Level, LevelHistory, PlayerProfile,
-                     PointEvent, PointRule, StaffBadge)
+from .models import (CATEGORY_CHOICES, RANKING_EXCLUDED_CATEGORIES, Badge, DailyScore, Level,
+                     LevelHistory, PlayerProfile, PointEvent, PointRule, StaffBadge)
 
 PERIODS = ('day', 'week', 'month', 'quarter', 'year', 'all')
 NETWORK_TOP = 10
@@ -70,7 +70,7 @@ def ranking(start, end, branch_id=None, role=None, limit=None):
     from apps.users.models import StaffProfile
     # Champion bonuses never count in a ranking — last month's winner starts level.
     qs = PointEvent.objects.filter(day__gte=start, day__lte=end, staff__is_active=True) \
-        .exclude(category='champion')
+        .exclude(category__in=RANKING_EXCLUDED_CATEGORIES)
     if branch_id:
         qs = qs.filter(staff__branch_id=branch_id)
     if role:
@@ -109,7 +109,7 @@ def rank_of(staff, start, end, branch_id=None, role=None):
 def branch_ranking(start, end):
     from apps.branches.models import Branch
     ev = (PointEvent.objects.filter(day__gte=start, day__lte=end, staff__is_active=True,
-                                    staff__branch__isnull=False).exclude(category='champion')
+                                    staff__branch__isnull=False).exclude(category__in=RANKING_EXCLUDED_CATEGORIES)
           .values('staff__branch_id')
           .annotate(net=Sum('points'), earned=Sum('points', filter=Q(points__gt=0)),
                     lost=Sum('points', filter=Q(points__lt=0)),
@@ -185,6 +185,11 @@ def open_items(staff):
         add('transfers_to_receive', 'تحويلات في الطريق لفرعك', 'Transfers on the way to your branch',
             InTransitTransfer.objects.filter(receiving_branch_id=staff.branch_id,
                                              transit_status='in_transit').count(), '/transits')
+    from apps.stockcount.models import DailyCountPick
+    add('daily_count_open', 'أصناف في جردك اليومي لم تُجرد', 'Daily-count items still to count',
+        DailyCountPick.objects.filter(
+            Q(session__assigned_to=staff, session__count_date=today, status='pending')
+            | Q(recount_by=staff, status='recount')).count(), '/m/daily-count', True)
     return items
 
 
