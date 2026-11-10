@@ -542,6 +542,8 @@ export const forecastApi = {
   generate:(id)          => api.post(`/forecasting/scenarios/${id}/generate/`),
   results: (id, params={})=> api.get(`/forecasting/scenarios/${id}/results/`, { params }),
   commit:  (id)          => api.post(`/forecasting/scenarios/${id}/commit/`),
+  // per-cell pull: set ONE target (branch/scope × metric) from this scenario's forecast
+  commitCell:(id, data)  => api.post(`/forecasting/scenarios/${id}/commit-cell/`, data),
   // rolling outlook: running month + next N months per branch + chain (read-only)
   plan:    (params = {}) => api.get('/forecasting/plan/', { params }),
   // backtest — model accuracy on history
@@ -2012,14 +2014,14 @@ export const followupsApi = {
 
   // Feature 7: My queue
   myQueue: ()        => api.get('/followups/tasks/my-queue/'),
-
-  // Feature 3: Create campaign
   // Outbound call lists (campaigns) — {name, script, criteria:{segments,branch_id,inactive_days_min,inactive_days_max}, agent_ids}
   callLists:        (status = 'active') => api.get('/followups/call-lists/', { params: { status } }),
   callListPreview:  (criteria) => api.post('/followups/call-lists/preview/', { criteria }),
   callListCreate:   (data)     => api.post('/followups/call-lists/', data),
   callListClose:    (id)       => api.post(`/followups/call-lists/${id}/close/`),
   callListAgents:   ()         => api.get('/followups/call-lists/agents/'),
+
+  // Feature 3: Create campaign
   createCampaign: (data) => api.post('/followups/tasks/create-campaign/', data),
 
   // Feature 4: Upsell message
@@ -2729,10 +2731,10 @@ export const pbxApi = {
   extensionStatus: ()       => api.get('/pbx/extensions/status/'),
   mapExtension:   (data)    => api.post('/pbx/extensions/map/', data),  // {extension, staff_id, extension_type?}
   staffChoices:   (q)       => api.get('/pbx/staff-choices/', { params: { q } }),
-}
-
   webrtcConfig:   ()        => api.get('/pbx/webrtc/config/'),
   setWebrtc:      (data)    => api.post('/pbx/extensions/webrtc/', data),  // {extension, enabled, sip_password?}
+}
+
 // ── Approvals ─────────────────────────────────────────────────────────────────
 export const approvalsApi = {
   // Workflows (admin setup)

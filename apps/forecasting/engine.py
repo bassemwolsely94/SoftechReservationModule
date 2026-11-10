@@ -603,3 +603,60 @@ class ForecastEngine:
                             'updated': len(changes) - created_n if len(changes) >= created_n else 0},
                      note=f'اعتماد {n} هدف من «{scenario.name}» ({label_month}) — {created_n} جديد / {len(changes)} تغيّر')
         return {'targets_committed': n}
+
+    def commit_cell(self, scenario, metric, branch_id=None, scope_key=None,
+                    created_by=None) -> dict:
+        """Upsert ONE incentives.SalesTarget from a single member's ForecastResult — the
+        per-cell «اعتمد من النموذج» on the KPI board (set one target from a chosen scenario's
+        forecast without committing the whole scenario). Audited like a manual target edit."""
+        from calendar import monthrange
+        from datetime import date
+        from apps.forecasting.models import ForecastResult, ForecastScenario as S
+        from apps.incentives.models import SalesTarget
+
+        if scenario.status == scenario.STATUS_DRAFT:
+            raise ValueError('احسب السيناريو أولاً قبل الاعتماد')
+
+        rq = ForecastResult.objects.filter(scenario=scenario, metric=metric).exclude(
+            scope_key='chain').select_related('branch')
+        if branch_id is not None:
+            rq = rq.filter(branch_id=branch_id)
+        elif scope_key is not None:
+            rq = rq.filter(scope_key=scope_key)
+        else:
+            raise ValueError('حدّد الفرع أو العنصر')
+        r = rq.first()
+        if r is None or r.target_value <= 0:
+            raise ValueError('لا يوجد تنبؤ لهذا الهدف في السيناريو')
+
+        start = date(scenario.year, scenario.month, 1)
+        end   = date(scenario.year, scenario.month, monthrange(scenario.year, scenario.month)[1])
+        label_month = f'{scenario.year}-{scenario.month:02d}'
+        label = f'{scenario.name} · {label_month}'
+
+        if scenario.scope_type == S.SCOPE_SALESPERSON:
+            lookup = dict(scope_type=SalesTarget.SCOPE_SALESPERSON, softech_user=r.scope_key)
+        elif scenario.scope_type == S.SCOPE_CATEGORY:
+            lookup = dict(scope_type=SalesTarget.SCOPE_CATEGORY, category_id=int(r.scope_key))
+        else:
+            lookup = dict(scope_type=SalesTarget.SCOPE_BRANCH, branch=r.branch)
+
+        existing = SalesTarget.objects.filter(
+            metric=r.metric, period_start=start, period_end=end, **lookup).first()
+        old_val = float(existing.target_value) if existing else None
+        new_val = float(r.target_value)
+        obj, _ = SalesTarget.objects.update_or_create(
+            metric=r.metric, period_start=start, period_end=end, **lookup,
+            defaults={'target_value': r.target_value, 'label': label, 'created_by': created_by},
+        )
+
+        from apps.audit.models import AuditLog
+        AuditLog.log('sales_target_committed', user=created_by, obj=obj,
+                     changes={f'{r.scope_key}·{r.metric}': [old_val, new_val]}
+                             if old_val != new_val else None,
+                     extra={'period': label_month, 'scope': scenario.scope_type,
+                            'model': scenario.model, 'scenario': scenario.pk, 'cell': True},
+                     note=f'اعتماد هدف «{r.scope_label or r.scope_key}» / {r.metric} '
+                          f'من «{scenario.name}» ({label_month})')
+        return {'target_value': new_val, 'target_id': obj.pk,
+                'created': old_val is None, 'scope_label': r.scope_label or r.scope_key}
