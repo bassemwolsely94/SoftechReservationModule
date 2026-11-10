@@ -106,6 +106,61 @@ def distribution_excel(sugs, *, filters=None, run=None) -> bytes:
     return _bytes(wb)
 
 
+PART_LABELS = {'feed': 'من فرع إلى الرئيسي', 'ready': 'جاهز الآن من الرئيسي', 'after': 'بعد الاستلام بالرئيسي'}
+
+
+def distribution_plan_excel(plan) -> bytes:
+    """A stored «التوزيعة» plan: one row per move (waves in order), the documents, and the notes."""
+    from apps.catalog.item_columns import ITEM_HEADS, ITEM_WIDTHS, item_cells, load_items
+    from apps.finance.recon_labels import branch_label as BL
+    from apps.purchasing.distribution_plan import WAVE_LABELS
+    moves = list(plan.moves.all().order_by('wave', 'rank'))
+    items = load_items(codes=[m.itemcode for m in moves])
+    status = dict(type(moves[0]).STATUS_CHOICES) if moves else {}
+    rows = []
+    for m in moves:
+        fp, tp = (m.position or {}).get('from') or {}, (m.position or {}).get('to') or {}
+        rows.append([m.wave, WAVE_LABELS.get(m.wave, ''), m.rank, status.get(m.status, m.status),
+                     m.itemcode, m.item_name, *item_cells(items.get(str(m.itemcode))),
+                     CAT_LABELS.get(m.category, m.category), BL(m.from_code), fp.get('stock'), fp.get('rate'),
+                     fp.get('max'), BL(m.to_code), tp.get('stock'), tp.get('rate'), tp.get('max'),
+                     m.qty, float(m.unit_cost), float(m.value), m.status_note,
+                     ' · '.join(c.get('label', '') for c in (m.conflicts or [])),
+                     m.feeder_push_id, m.isr_push_id])
+    wb = _book()
+    _sheet(wb.active, 'الحركات',
+           ['الموجة', 'اسم الموجة', 'الترتيب', 'الحالة', 'الكود', 'الصنف', *ITEM_HEADS, 'النوع',
+            'من', 'رصيد المصدر', 'بيع المصدر/شهر', 'حد المصدر', 'إلى', 'رصيد المستهدف', 'بيع المستهدف/شهر',
+            'حد المستهدف', 'الكمية', 'تكلفة الوحدة', 'القيمة', 'ملاحظة', 'مغطى بـ', 'طلب الفرع للرئيسي #',
+            'طلب الرئيسي للفرع #'],
+           rows, [7, 22, 7, 16, 9, 34, *ITEM_WIDTHS, 14, 20, 9, 9, 9, 20, 9, 9, 9, 8, 10, 11, 40, 40, 10, 10],
+           freeze='G2', item_block_at=7)
+    docs = [[PART_LABELS.get(d['part'], d['part']), BL(d['source']), BL(d['dest']),
+             (BL(d['waits_for']) if d.get('waits_for') else ''), d['lines'], d['qty'], d['value'],
+             d.get('push_id') or ''] for d in (plan.documents or [])]
+    ws = wb.create_sheet('الطلبات')
+    _sheet(ws, 'الطلبات', ['الجزء', 'من', 'إلى', 'ينتظر الاستلام من', 'أصناف', 'كمية', 'القيمة', 'طلب التوريد #'],
+           docs, [22, 20, 20, 20, 9, 9, 12, 12], freeze='A2')
+    inp = plan.inputs or {}
+    th = inp.get('thresholds') or {}
+    _notes(wb, [
+        f'خطة التوزيعة #{plan.pk} — {timezone.localtime(plan.created_at):%Y-%m-%d %H:%M} · {plan.get_status_display()}',
+        f'• الأرصدة: {"لحظية من سيرفر 100 (" + inp.get("stock_as_of", "") + ")" if inp.get("live_stock") else "من تشغيل المحرك"}'
+        f' · معدلات البيع من تشغيل المحرك #{plan.run_id or "—"}.',
+        '• الموجات بالترتيب: 1 من الرئيسي أولاً · 2 متكدس بفرع ← فروع تبيعه ولها مساحة تحت حدها · '
+        '3 غير مُدرج، فقط من فرع فوق حده · 4 تجربة صنف جديد من فرع (الرئيسي لا يملكه). داخل الموجة: الأعلى قيمة أولاً.',
+        f'• «متعارض» = الصنف في طريقه للفرع بالفعل: طلباتنا الحية أو المرحّلة غير المصروفة، طلبات توريد سوفتك آخر '
+        f'{inp.get("softech_isr_days", 3)} أيام غير المصروفة، بضاعة بالطريق، طلبات تحويل حية.',
+        f'• الحدود: سطر من فرع أقل من {th.get("min_line", 100):,.0f} ج لا يُنقل؛ طلب فرع للرئيسي أو جزء «بعد الاستلام» '
+        f'أقل من {th.get("min_doc", 1000):,.0f} ج يؤجل للتشغيل القادم؛ حركات الرئيسي تبقى دائماً.',
+        '• «بعد الاستلام بالرئيسي»: لا يُرحَّل إلا بعد أن يستلم الرئيسي إذن صرف الفرع (25) — يتحقق السيرفر من ذلك.',
+        *[f'• {n}' for n in inp.get('notes') or []],
+        '• هذا الملف للمراجعة فقط — لا يكتب شيئاً في SOFTECH.',
+        ITEM_NOTE,
+    ])
+    return _bytes(wb)
+
+
 # ── inter-branch pairs (TransferRecommendation) ─────────────────────────────────
 def transfer_pairs_excel(*, from_code=None, to_code=None) -> bytes:
     """The latest transfer-recommendation run's lines — one pair (from → to) or all pairs."""

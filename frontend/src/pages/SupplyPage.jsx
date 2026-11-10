@@ -697,6 +697,7 @@ function IsrTab() {
               {p.kind !== 'self' && (
                 <div className="text-[11px] text-content/50">{p.kind_label}{p.linked_push_id ? ` · مرتبط #${p.linked_push_id}` : ''}{p.origin_isr ? ` · لطلب ${p.origin_isr}` : ''}{p.origin_request_id ? ` · واتساب WA-${p.origin_request_id}` : ''}</div>
               )}
+              <IsrWaits p={p} />
               <div className="mt-1 text-xs text-content/60 flex flex-wrap gap-x-3 gap-y-0.5">
                 <span>{p.line_count} صنف</span>
                 <span>{Number(p.docvalue).toLocaleString('ar-EG', { maximumFractionDigits: 0 })} ج</span>
@@ -785,6 +786,7 @@ function IsrDetail({ push, gated, canWrite, onApprove, onPush, onCancel, approvi
           </span>
           {push.kind !== 'self' && <span className="text-xs text-content/50">{push.kind_label}{push.linked_push_id ? ` · مرتبط #${push.linked_push_id}` : ''}</span>}
           <Badge s={push.status} />
+          <IsrWaits p={push} />
           {push.coverage_months != null && (
             <span className="text-[11px] px-1.5 py-0.5 rounded bg-primary/10 text-primary"
               title="أُعيد حساب الكمية على هذه التغطية بدل فجوة المحرك">تغطية {push.coverage_months} شهر</span>
@@ -976,7 +978,7 @@ function IsrDetail({ push, gated, canWrite, onApprove, onPush, onCancel, approvi
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// L3 — التوزيعة (proactive distribution)
+// L3 — التوزيعة: one stored plan, ordered waves, conflicts, documents (doc 30 phases B–D)
 // ══════════════════════════════════════════════════════════════════════════════
 
 const DIST_CATS = [
@@ -985,155 +987,251 @@ const DIST_CATS = [
   ['over_piled',    'متكدس بفرع'],
   ['hq_dormant',    'راكد بالرئيسي'],
 ]
+const HELD = ['below_line', 'folded', 'not_allowed', 'blocked']
+
+// «التوزيعة» part tags on an ISR draft: «جاهز الآن» / «بعد الاستلام من X» and whether X's leg reached HQ
+function IsrWaits({ p }) {
+  const bl = useBranchLabels()
+  if (p.route_tag === 'dist') {
+    return <span className="text-[11px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-700">التوزيعة · جاهز الآن</span>
+  }
+  if (!p.route_tag?.startsWith('dist:')) return null
+  const w = p.waits
+  return (
+    <span className={`text-[11px] px-1.5 py-0.5 rounded ${w && !w.received ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'}`}
+      title={w?.why || ''}>
+      التوزيعة · بعد الاستلام من {bl(p.route_tag.slice(5))}
+      {w ? (w.received ? ' · استُلم بالرئيسي ✓' : ` · ينتظر #${w.feeder_id}`) : ''}
+    </span>)
+}
+const PART_LABEL = { feed: 'من فرع إلى الرئيسي', ready: 'جاهز الآن من الرئيسي', after: 'بعد الاستلام بالرئيسي' }
+const STATUS_TONE = {
+  planned: 'bg-emerald-100 text-emerald-700', conflict: 'bg-amber-100 text-amber-800',
+  below_line: 'bg-slate-100 text-slate-600', folded: 'bg-slate-100 text-slate-600',
+  not_allowed: 'bg-rose-100 text-rose-700', blocked: 'bg-rose-100 text-rose-700',
+}
+const egp = (v) => Math.round(Number(v || 0)).toLocaleString('en-US')
 
 function DistributionTab() {
   const bl = useBranchLabels()
   const qc = useQueryClient()
   const [cats, setCats] = useState(DIST_CATS.map(c => c[0]))
+  const [view, setView] = useState('1')        // '1'..'4' waves · conflicts · held · docs
   const [search, setSearch] = useState('')
 
-  // ONE read of every suggestion; the category boxes filter it here (instant, and the
-  // list always agrees with the counts beside each box)
-  const q = useQuery({
-    queryKey: ['dist-preview'],
-    queryFn: () => supplyApi.distPreview({ limit: 20000 }).then(r => r.data),
-    staleTime: 5 * 60 * 1000,
+  const planQ = useQuery({
+    queryKey: ['dist-plan'],
+    queryFn: () => supplyApi.distPlan().then(r => r.data),
+    staleTime: 60 * 1000,
+  })
+  const plan = planQ.data?.plan
+  const canWrite = !!(planQ.data?.can_write ?? plan?.can_write)
+  const setPlan = (p) => qc.setQueryData(['dist-plan'], old => ({ ...(old || {}), plan: p }))
+  const buildM = useMutation({
+    mutationFn: () => supplyApi.distPlanBuild({ categories: cats }).then(r => r.data),
+    onSuccess: (d) => { setPlan(d.plan); setView('1') },
   })
   const genM = useMutation({
-    mutationFn: () => supplyApi.distGenerate({ categories: cats }).then(r => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['isr-pushes'] }),
+    mutationFn: () => supplyApi.distPlanGenerate(plan.id).then(r => r.data),
+    onSuccess: (d) => { setPlan(d.plan); setView('docs'); qc.invalidateQueries({ queryKey: ['isr-pushes'] }) },
   })
-  // the filters on screen (categories + search) go with the export
   const xlsM = useMutation({
-    mutationFn: () => supplyApi.distExcel({ category: cats, q: search.trim() }),
-    onSuccess: (res) => downloadBlob(res.data, 'distribution.xlsx'),
+    mutationFn: () => supplyApi.distPlanExcel(plan.id),
+    onSuccess: (res) => downloadBlob(res.data, `distribution_plan_${plan.id}.xlsx`),
   })
-  const canWrite = !!q.data?.can_write
   const toggle = (c) => setCats(cs => cs.includes(c) ? cs.filter(x => x !== c) : [...cs, c])
   const catLabel = (k) => DIST_CATS.find(c => c[0] === k)?.[1] || k
-  const rows = useMemo(() => (q.data?.suggestions || []).filter(s => cats.includes(s.category)
-    && (!search.trim() || wildcardMatch(`${s.itemcode} ${s.item_name}`, search))), [q.data, cats, search])
+  const moves = useMemo(() => plan?.moves || [], [plan])
+  const count = (f) => moves.filter(f).length
+  const rows = useMemo(() => moves.filter(m => (
+    view === 'conflicts' ? m.status === 'conflict'
+      : view === 'held' ? HELD.includes(m.status)
+        : view === 'docs' ? false
+          : m.status === 'planned' && String(m.wave) === view)
+    && (!search.trim() || wildcardMatch(`${m.itemcode} ${m.item_name}`, search))), [moves, view, search])
   const { sorted, sort, onSort } = useSort(rows, {
-    category: s => catLabel(s.category), itemcode: txt(s => s.itemcode), item_name: s => s.item_name,
-    sells: s => s.sells_at, age: s => s.age_days, route: s => bl(s.from_branch),
-    qty: s => (s.category === 'over_piled' ? s.total_qty : s.qty_each), rate: s => s.network_avg,
-    to_stock: s => Math.min(...s.to_branches.map(t => t.stock ?? Infinity)),
+    rank: m => m.rank, itemcode: txt(m => m.itemcode), item_name: m => m.item_name,
+    category: m => catLabel(m.category), from: m => bl(m.from_code), to: m => bl(m.to_code),
+    qty: m => m.qty, value: m => m.value, status: m => plan?.status_labels?.[m.status] || m.status,
   })
-  // a branch's stock + monthly sales (+ its SOFTECH maximum when read live)
+  const docs = plan?.documents || []
+  const docGrid = useSort(docs, {
+    part: d => d.part, from: d => bl(d.source), to: d => bl(d.dest), lines: d => d.lines, value: d => d.value,
+  })
   const pos = (p) => p && p.stock != null ? (
-    <span className="text-[11px] text-content/60 whitespace-nowrap"
-      title={p.live ? 'الرصيد لحظي من سيرفر الفرع' : 'الرصيد من آخر تشغيل للمحرك'}>
+    <span className="text-[11px] text-content/55 whitespace-nowrap">
       رصيد {p.stock}{p.live ? '' : '*'} · بيع {p.rate}/ش{p.max != null ? ` · حد ${p.max}` : ''}
     </span>) : null
   const SHOW = 500
   const th = 'px-3 py-2'
+  const inp = plan?.inputs || {}
+  const thr = inp.thresholds || {}
+  const tab = (k, label, n, extra = '') => (
+    <button key={k} type="button" onClick={() => setView(k)}
+      className={`text-start rounded-lg border px-3 py-2 min-w-[9rem] ${view === k ? 'border-primary bg-primary/5' : 'border-line hover:border-primary/40'} ${extra}`}>
+      <div className="text-xs text-content/60">{label}</div>
+      <div className="text-sm font-semibold text-content">{n}</div>
+    </button>)
 
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-line bg-surface p-3 space-y-3">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm font-medium text-content">التوزيعة الاستباقية</span>
+          <span className="text-sm font-medium text-content">خطة التوزيعة</span>
           {DIST_CATS.map(([k, l]) => (
             <label key={k} className="flex items-center gap-1.5 text-xs text-content/70 cursor-pointer">
-              <input type="checkbox" checked={cats.includes(k)} onChange={() => toggle(k)} />
-              {l}
-              {q.data?.summary?.by_category?.[k] && (
-                <span className="text-content/40">({q.data.summary.by_category[k].count})</span>
-              )}
+              <input type="checkbox" checked={cats.includes(k)} onChange={() => toggle(k)} />{l}
             </label>
           ))}
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث بالصنف أو الكود… (* أو %)"
-            className="border border-line rounded px-2 py-1 text-xs bg-surface text-content w-52" />
-          <button data-tour="purchasing-supply-dist-export" onClick={() => xlsM.mutate()} disabled={xlsM.isPending || !cats.length || !q.data}
-            className="px-3 py-1.5 rounded border border-line text-sm text-content/80 hover:border-primary/40 disabled:opacity-50 ms-auto"
-            title="الصفوف الظاهرة بنفس الفلاتر، مع رصيد ومعدل بيع الفرع الحائز والمستهدف">
-            {xlsM.isPending ? '…' : '⬇ Excel'}</button>
-          <button data-tour="purchasing-supply-dist-generate" onClick={() => genM.mutate()} disabled={genM.isPending || !cats.length}
-            className="px-4 py-1.5 rounded bg-primary text-white text-sm font-medium disabled:opacity-50"
-            title={canWrite ? '' : 'يتطلب صلاحية'}>
-            {genM.isPending ? 'جارٍ التوليد…' : '＋ توليد مقترحات التوزيعة'}
+          <button data-tour="purchasing-supply-dist-build" onClick={() => buildM.mutate()}
+            disabled={buildM.isPending || !cats.length || !canWrite}
+            className="px-4 py-1.5 rounded border border-primary text-primary text-sm font-medium disabled:opacity-50 ms-auto"
+            title={canWrite ? 'يقرأ الأرصدة اللحظية وطلبات التوريد من سوفتك ويحسب خطة جديدة — لا يكتب شيئاً في سوفتك' : 'يتطلب صلاحية'}>
+            {buildM.isPending ? 'جارٍ بناء الخطة…' : '⟳ بناء الخطة'}
           </button>
+          {plan && (
+            <button data-tour="purchasing-supply-dist-export" onClick={() => xlsM.mutate()} disabled={xlsM.isPending}
+              className="px-3 py-1.5 rounded border border-line text-sm text-content/80 hover:border-primary/40 disabled:opacity-50"
+              title="كل حركات الخطة بموجاتها وحالاتها + الطلبات">
+              {xlsM.isPending ? '…' : '⬇ Excel'}</button>
+          )}
+          {plan?.status === 'built' && (
+            <button data-tour="purchasing-supply-dist-generate" onClick={() => genM.mutate()}
+              disabled={genM.isPending || !canWrite || !docs.length}
+              className="px-4 py-1.5 rounded bg-primary text-white text-sm font-medium disabled:opacity-50"
+              title={canWrite ? 'ينشئ طلبات التوريد «مقترحة» من الخطة — لا شيء يُكتب في سوفتك قبل الاعتماد والترحيل' : 'يتطلب صلاحية'}>
+              {genM.isPending ? 'جارٍ التوليد…' : `＋ توليد ${docs.length} طلب توريد`}
+            </button>
+          )}
         </div>
-        {q.data?.summary && (
-          <div className="text-xs text-content/60">
-            المعروض {rows.length} من إجمالي {q.data.summary.total} اقتراح — تُنشأ كطلبات توريد (تظهر في تبويب «طلبات التوريد» للاعتماد والترحيل).
-            {' '}الرصيد لحظي من سيرفر الفرع (* = من تشغيل المحرك #{q.data.positions_source?.run_id}){' '}
-            ومعدل البيع من نفس التشغيل.
-          </div>
-        )}
+        {buildM.isError && <div className="text-xs text-rose-600">{buildM.error?.response?.data?.detail || 'تعذّر بناء الخطة'}</div>}
+        {genM.isError && <div className="text-xs text-rose-600">{genM.error?.response?.data?.detail || 'تعذّر التوليد'}</div>}
         {genM.isSuccess && (
-          <div className="text-xs text-emerald-600">
-            تم إنشاء {genM.data?.count} مسار توزيعة كمقترحات (المقترح الأقدم لنفس المسار يُستبدل تلقائياً).
+          <div className="text-xs text-emerald-700">
+            أُنشئ {genM.data?.count} طلب توريد مقترح — تظهر في «طلبات التوريد / ISR» للاعتماد والترحيل.
             {genM.data?.skipped?.length > 0 && (
-              <div className="text-amber-700">لم يُنشأ {genM.data.skipped.length} مسار: {genM.data.skipped.map(s => `${s.path ? s.path.map(bl).join(` ${fa()} `) : s.route} — ${s.reason}`).join(' · ')}</div>
+              <div className="text-amber-700">لم يُنشأ {genM.data.skipped.length}: {genM.data.skipped.map(s => `${s.path.map(bl).join(` ${fa()} `)} — ${s.reason}`).join(' · ')}</div>
             )}
           </div>
         )}
-        {genM.isError && (
-          <div className="text-xs text-rose-600">{genM.error?.response?.data?.detail || 'تعذّر التوليد'}</div>
+        {planQ.isLoading && <div className="text-sm text-content/50">جارٍ التحميل…</div>}
+        {planQ.data && !plan && (
+          <div className="text-sm text-content/60">لا توجد خطة بعد — اضغط «بناء الخطة».</div>
+        )}
+        {plan && (
+          <div className="text-xs text-content/60 space-y-1">
+            <div>
+              خطة #{plan.id} · {plan.status_label} · {fmtDate(plan.created_at)}{plan.created_by ? ` · ${plan.created_by}` : ''}
+              {' · '}الأرصدة {inp.live_stock ? `لحظية من سيرفر 100 (${inp.stock_as_of})` : 'من تشغيل المحرك'}
+              {' · '}معدل البيع من تشغيل المحرك #{plan.run_id ?? '—'}
+              {' · '}حد السطر {egp(thr.min_line)} ج · حد الطلب {egp(thr.min_doc)} ج
+              {plan.generated_at && ` · وُلّدت ${fmtDate(plan.generated_at)}${plan.generated_by ? ` (${plan.generated_by})` : ''}`}
+            </div>
+            {(inp.notes || []).map((t, i) => <div key={i} className="text-amber-700">⚠ {t}</div>)}
+          </div>
         )}
       </div>
 
-      <div className="rounded-lg border border-line bg-surface overflow-x-auto max-h-[70vh]">
-        {q.isLoading && <div className="p-4 text-sm text-content/50">جارٍ تحليل التوزيعة…</div>}
-        {q.isError && <div className="p-4 text-sm text-rose-600">{q.error?.response?.data?.detail || 'تعذّر تحميل التوزيعة'}</div>}
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-surface">
-            <tr className="text-xs text-content/60 border-b border-line">
-              <SortTh k="category" sort={sort} onSort={onSort} className={`text-right ${th}`}>النوع</SortTh>
-              <SortTh k="itemcode" sort={sort} onSort={onSort} className={`text-right ${th}`}>الكود</SortTh>
-              <SortTh k="item_name" sort={sort} onSort={onSort} className={`text-right ${th}`}>الصنف</SortTh>
-              <SortTh k="sells" sort={sort} onSort={onSort} className={`text-center ${th}`}>يُباع بـ</SortTh>
-              <SortTh k="age" sort={sort} onSort={onSort} className={`text-center ${th}`}>العمر</SortTh>
-              <SortTh k="route" sort={sort} onSort={onSort} className={`text-right ${th}`}
-                title="الفرع الحائز: رصيده الآن ومعدل بيعه الشهري">من (الفرع الحائز)</SortTh>
-              <SortTh k="to_stock" sort={sort} onSort={onSort} className={`text-right ${th}`}
-                title="الفرع المستهدف: الكمية المقترحة، رصيده الآن ومعدل بيعه الشهري">إلى (الفرع المستهدف)</SortTh>
-              <SortTh k="qty" sort={sort} onSort={onSort} className={`text-center ${th}`}>لكل فرع</SortTh>
-              <SortTh k="rate" sort={sort} onSort={onSort} className={`text-center ${th}`}
-                title="مجموع البيع الشهري في كل الفروع">بيع الشبكة/شهر</SortTh>
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.slice(0, SHOW).map((s, i) => (
-              <tr key={`${s.itemcode}-${i}`} className="border-b border-line/60">
-                <td className="px-3 py-1.5 text-content/70">{catLabel(s.category)}</td>
-                <td className="px-3 py-1.5 text-content/80">{s.itemcode}</td>
-                <td className="px-3 py-1.5 text-content">
-                  {s.is_new_code && <span className="text-[10px] bg-emerald-100 text-emerald-700 rounded px-1 mr-1">جديد</span>}
-                  {s.item_name}
-                </td>
-                <td className="px-3 py-1.5 text-center text-content/70">{s.sells_at}/{s.of_branches}</td>
-                <td className="px-3 py-1.5 text-center text-content/60">
-                  {s.age_days != null ? (s.age_days < 540 ? `${s.age_days}ي` : `${Math.round(s.age_days / 365)}س`) : '—'}
-                </td>
-                <td className="px-3 py-1.5 text-content/70 align-top">
-                  <div>{bl(s.from_branch)}</div>
-                  {pos(s.from_position)}
-                </td>
-                <td className="px-3 py-1.5 text-content/70 align-top">
-                  {s.to_branches.map(t => (
-                    <div key={t.code}>
-                      {bl(t.code)} <span className="text-primary font-medium">× {t.qty}</span> {pos(t)}
-                    </div>
-                  ))}
-                </td>
-                <td className="px-3 py-1.5 text-center font-medium text-primary"
-                  title={s.category === 'over_piled' ? 'الزيادة فوق الحد الأقصى — لكل فرع حسب المساحة تحت حده' : ''}>
-                  {s.category === 'over_piled' ? `${s.total_qty} (إجمالي)` : s.qty_each}
-                </td>
-                <td className="px-3 py-1.5 text-center text-content/60">{s.network_avg}</td>
+      {plan && (
+        <div className="flex flex-wrap gap-2" data-tour="purchasing-supply-dist-waves">
+          {['1', '2', '3', '4'].map(w => {
+            const t = plan.totals?.waves?.[w] || {}
+            return tab(w, `${w} · ${plan.wave_labels?.[w] || ''}`, `${t.moves || 0} حركة · ${egp(t.value)} ج`)
+          })}
+          {tab('conflicts', 'متعارض (في الطريق بالفعل)', count(m => m.status === 'conflict'), 'border-amber-300')}
+          {tab('held', 'محجوز / مؤجل', count(m => HELD.includes(m.status)))}
+          {tab('docs', 'طلبات التوريد', docs.length)}
+        </div>
+      )}
+
+      {plan && view !== 'docs' && (
+        <div className="rounded-lg border border-line bg-surface overflow-x-auto max-h-[70vh]">
+          <div className="p-2 border-b border-line">
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث بالصنف أو الكود… (* أو %)"
+              className="border border-line rounded px-2 py-1 text-xs bg-surface text-content w-56" />
+            <span className="text-xs text-content/50 ms-2">{rows.length} حركة</span>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-surface">
+              <tr className="text-xs text-content/60 border-b border-line">
+                <SortTh k="rank" sort={sort} onSort={onSort} className={`text-center ${th}`}>#</SortTh>
+                <SortTh k="itemcode" sort={sort} onSort={onSort} className={`text-right ${th}`}>الكود</SortTh>
+                <SortTh k="item_name" sort={sort} onSort={onSort} className={`text-right ${th}`}>الصنف</SortTh>
+                <SortTh k="category" sort={sort} onSort={onSort} className={`text-right ${th}`}>السبب</SortTh>
+                <SortTh k="from" sort={sort} onSort={onSort} className={`text-right ${th}`}>من</SortTh>
+                <SortTh k="to" sort={sort} onSort={onSort} className={`text-right ${th}`}>إلى</SortTh>
+                <SortTh k="qty" sort={sort} onSort={onSort} className={`text-center ${th}`}>الكمية</SortTh>
+                <SortTh k="value" sort={sort} onSort={onSort} className={`text-center ${th}`}>القيمة</SortTh>
+                <SortTh k="status" sort={sort} onSort={onSort} className={`text-right ${th}`}>الحالة</SortTh>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        {sorted.length > SHOW && (
-          <div className="p-2 text-xs text-content/50">يُعرض أول {SHOW} من {sorted.length} — رتّب أو ابحث لتضييق القائمة.</div>
-        )}
-        {q.data && rows.length === 0 && (
-          <div className="p-4 text-sm text-content/50">لا توجد اقتراحات توزيعة للفئات المختارة.</div>
-        )}
-      </div>
+            </thead>
+            <tbody>
+              {sorted.slice(0, SHOW).map(m => (
+                <tr key={m.id} className="border-b border-line/60 align-top">
+                  <td className="px-3 py-1.5 text-center text-content/50">{m.rank}</td>
+                  <td className="px-3 py-1.5 text-content/80">{m.itemcode}</td>
+                  <td className="px-3 py-1.5 text-content">{m.item_name}</td>
+                  <td className="px-3 py-1.5 text-content/70">
+                    {catLabel(m.category)}
+                    {(m.reasons || []).includes('hq_covers') && <span className="text-[10px] bg-sky-100 text-sky-700 rounded px-1 ms-1">الرئيسي يغطيه</span>}
+                    {(m.reasons || []).includes('new_code') && <span className="text-[10px] bg-emerald-100 text-emerald-700 rounded px-1 ms-1">جديد</span>}
+                  </td>
+                  <td className="px-3 py-1.5 text-content/70"><div>{bl(m.from_code)}</div>{pos(m.position?.from)}</td>
+                  <td className="px-3 py-1.5 text-content/70"><div>{bl(m.to_code)}</div>{pos(m.position?.to)}</td>
+                  <td className="px-3 py-1.5 text-center font-medium text-primary">{m.qty}</td>
+                  <td className="px-3 py-1.5 text-center text-content/70">{egp(m.value)}</td>
+                  <td className="px-3 py-1.5 text-content/70">
+                    <span className={`text-[11px] rounded px-1.5 py-0.5 ${STATUS_TONE[m.status] || ''}`}>
+                      {plan.status_labels?.[m.status] || m.status}</span>
+                    {m.status_note && <div className="text-[11px] text-content/55 mt-0.5">{m.status_note}</div>}
+                    {(m.conflicts || []).length > 1 && (
+                      <div className="text-[11px] text-content/45">{m.conflicts.slice(1).map(c => c.label).join(' · ')}</div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {sorted.length > SHOW && <div className="p-2 text-xs text-content/50">يُعرض أول {SHOW} من {sorted.length} — رتّب أو ابحث للتضييق.</div>}
+          {rows.length === 0 && <div className="p-4 text-sm text-content/50">لا توجد حركات هنا.</div>}
+        </div>
+      )}
+
+      {plan && view === 'docs' && (
+        <div className="rounded-lg border border-line bg-surface overflow-x-auto">
+          <div className="p-2 border-b border-line text-xs text-content/60">
+            طلب واحد من كل فرع للرئيسي، وطلب «جاهز الآن» من الرئيسي لكل فرع، وجزء «بعد الاستلام» لكل فرع مصدر —
+            لا يُرحَّل إلا بعد أن يستلم الرئيسي إذن صرف ذلك الفرع (يتحقق السيرفر).
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-xs text-content/60 border-b border-line">
+                <SortTh k="part" {...docGrid} className={`text-right ${th}`}>الجزء</SortTh>
+                <SortTh k="from" {...docGrid} className={`text-right ${th}`}>من</SortTh>
+                <SortTh k="to" {...docGrid} className={`text-right ${th}`}>إلى</SortTh>
+                <th className={`text-right ${th}`}>ينتظر</th>
+                <SortTh k="lines" {...docGrid} className={`text-center ${th}`}>أصناف</SortTh>
+                <SortTh k="value" {...docGrid} className={`text-center ${th}`}>القيمة</SortTh>
+                <th className={`text-center ${th}`}>طلب التوريد</th>
+              </tr>
+            </thead>
+            <tbody>
+              {docGrid.sorted.map(d => (
+                <tr key={d.key} className="border-b border-line/60">
+                  <td className="px-3 py-1.5 text-content">{PART_LABEL[d.part] || d.part}</td>
+                  <td className="px-3 py-1.5 text-content/70">{bl(d.source)}</td>
+                  <td className="px-3 py-1.5 text-content/70">{bl(d.dest)}</td>
+                  <td className="px-3 py-1.5 text-content/60">{d.waits_for ? `استلام الرئيسي من ${bl(d.waits_for)}` : '—'}</td>
+                  <td className="px-3 py-1.5 text-center text-content/70">{d.lines}</td>
+                  <td className="px-3 py-1.5 text-center text-content/70">{egp(d.value)}</td>
+                  <td className="px-3 py-1.5 text-center text-primary">{d.push_id ? `#${d.push_id}` : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {docs.length === 0 && <div className="p-4 text-sm text-content/50">لا توجد طلبات — كل الحركات متعارضة أو محجوزة أو مؤجلة.</div>}
+        </div>
+      )}
     </div>
   )
 }

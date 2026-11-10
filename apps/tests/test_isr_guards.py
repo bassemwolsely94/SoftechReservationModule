@@ -100,17 +100,6 @@ class TransferPairTests(TestCase):
             W.create_transfer_proposals('130', '140', [('B', 1)])
         self.assertEqual(P.objects.count(), before)
 
-    def test_distribution_generate_reports_refused_routes(self):
-        P.objects.create(branchcode='100', dest_branchcode='160', kind=P.KIND_HQ_TO_BRANCH, status=P.STATUS_APPROVED)
-        sugs = [{'from_branch': '100', 'itemcode': 'A', 'qty_each': 1, 'to_branches': [{'code': '160', 'qty': 1}]},
-                {'from_branch': '100', 'itemcode': 'B', 'qty_each': 1, 'to_branches': [{'code': '150', 'qty': 1}]}]
-        skipped = []
-        with mock.patch('apps.purchasing.distribution.analyze', return_value=sugs):
-            created = W.create_distribution_proposals(skipped=skipped)
-        self.assertEqual([c['path'] for c in created], [['100', '150']])   # screen draws the arrow per language
-        self.assertEqual(skipped[0]['path'], ['100', '160'])
-
-
 class PushGuardTests(TestCase):
     def _pushed(self, lines, days_ago=1):
         p = P.objects.create(branchcode='100', dest_branchcode='160', kind=P.KIND_HQ_TO_BRANCH,
@@ -319,17 +308,6 @@ class PlannerRuleTests(TestCase):
         newer = self._draft('replenishment', ('C', 1))
         self.assertEqual(P.objects.get(pk=new.pk).status, P.STATUS_CANCELLED)
         self.assertEqual(newer.status, P.STATUS_PROPOSED)
-
-    def test_distribution_reports_the_refused_route(self):
-        waiting = self._draft('replenishment', ('A', 1))
-        sugs = [{'from_branch': '100', 'itemcode': 'B', 'qty_each': 1, 'to_branches': [{'code': '160', 'qty': 1}]}]
-        skipped = []
-        with mock.patch('apps.purchasing.distribution.analyze', return_value=sugs), \
-             mock.patch.object(W, 'build_items_plan', side_effect=_fake_items_plan):
-            created = W.create_distribution_proposals(skipped=skipped)
-        self.assertEqual(created, [])
-        self.assertIn(f'#{waiting.pk}', skipped[0]['reason'])
-
 
 class DraftExpiryTests(TestCase):
     """P-32 §2.4 / doc 30 §2.6: proposed general drafts older than N days are cancelled with audit (PG only).

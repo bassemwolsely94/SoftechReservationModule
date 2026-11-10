@@ -67,21 +67,22 @@ def _general(qs):
     return qs.filter(origin_isr__isnull=True, origin_request__isnull=True, origin_shortage_list__isnull=True)
 
 
-def live_on_route(kind, source, dest, *, exclude=None):
+def live_on_route(kind, source, dest, *, exclude=None, tag=''):
+    """Live general drafts on a route. `tag` = IsrPush.route_tag ('' general, 'dist', 'dist:<S>')."""
     from apps.purchasing.models import IsrPush as P
     qs = _general(P.objects.filter(kind=kind, branchcode=str(source), dest_branchcode=str(dest or ''),
-                                   status__in=LIVE))
+                                   route_tag=tag or '', status__in=LIVE))
     return qs.exclude(pk=exclude) if exclude else qs
 
 
 PLANNER_AR = {'replenishment': 'طلبات التوريد', 'distribution': 'التوزيعة', 'transfer': 'تحويلات المحرك'}
 
 
-def check_route_free(kind, source, dest, *, planner=None):
+def check_route_free(kind, source, dest, *, planner=None, tag=''):
     """Before a new general draft: refuse when an APPROVED one waits on the route, or (P-32 §2.3) when a PROPOSED
     one from ANOTHER planner waits there — it is no longer silently cancelled. Return the PROPOSED drafts the new
     draft will supersede (same planner, or drafts made before planners were recorded)."""
-    live = list(live_on_route(kind, source, dest).select_for_update())
+    live = list(live_on_route(kind, source, dest, tag=tag).select_for_update())
     approved = [p for p in live if p.status == 'approved']
     if approved:
         raise GuardError(f'يوجد طلب توريد معتمد #{approved[0].pk} لنفس المسار ({source} ← {dest or source}) '
@@ -230,6 +231,39 @@ def overlapping_pushed(p, *, since=None, pushed=None, before=None):
     return sorted(out, key=lambda r: r['itemcode'])
 
 
+AFTER_TAG = 'dist:'
+_NOT_YET_RECEIVED = ('in_transit', 'expired_pending')   # erp_mismatch = received, quantities differ
+
+
+def is_after_receipt(p) -> bool:
+    """An «التوزيعة» HQ → branch draft whose lines first arrive at HQ from a branch."""
+    return str(getattr(p, 'route_tag', '') or '').startswith(AFTER_TAG)
+
+
+def received_at_hq(feeder):
+    """(received, why) for a branch → HQ leg. Received = since the push, SOFTECH shows at least one
+    issue (doc 125) from that branch to HQ carrying the leg's items, and every such issue has been
+    received at HQ (doc 25) — none still in transit. From the transits mirror (refreshed every 15
+    minutes). SOFTECH puts no ISR number on the issue, so this is branch × HQ × items × time."""
+    from apps.purchasing.models import IsrPush as P
+    from apps.transits.models import InTransitTransfer as T
+    if feeder.status != P.STATUS_PUSHED or not feeder.pushed_at:
+        return False, f'الطلب #{feeder.pk} لم يُرحَّل بعد'
+    codes = {str(l.get('itemcode') or '').strip() for l in (feeder.lines_snapshot or [])} - {''}
+    since = timezone.localdate(feeder.pushed_at)
+    rel = [t for t in (T.objects.filter(erp_supplying_branch_code=str(feeder.branchcode),
+                                        erp_receiving_branch_code=HQ, issue_date__gte=since)
+                       .exclude(transit_status='cancelled')
+                       .only('erp_doc_number', 'transit_status', 'items_snapshot', 'manually_received_at'))
+           if any(str(l.get('itemcode') or '').strip() in codes for l in (t.items_snapshot or []))]
+    if not rel:
+        return False, f'لم يصدر فرع {feeder.branchcode} إذن صرف للرئيسي بأصناف الطلب بعد'
+    pending = [t for t in rel if t.transit_status in _NOT_YET_RECEIVED and not t.manually_received_at]
+    if pending:
+        return False, f'إذن الصرف {pending[0].erp_doc_number} لم يُستلم بالرئيسي بعد'
+    return True, ''
+
+
 def check_push(p, *, user=None, force_reason=''):
     """Before writing a draft to SOFTECH: no identical recent ISR on the route (unless a
     reason is given), and a forwarding leg never goes before the leg that feeds it."""
@@ -240,6 +274,12 @@ def check_push(p, *, user=None, force_reason=''):
         if feeder.kind == P.KIND_BRANCH_TO_HQ and feeder.status != P.STATUS_PUSHED:
             raise GuardError(f'هذا الطلب يصرف بضاعة تصل للرئيسي من فرع {feeder.branchcode} بالطلب #{feeder.pk} — '
                              f'رحّل #{feeder.pk} أولاً.', code='feeder_first', other=feeder.pk)
+        # «التوزيعة» (owner 2026-11-10): the forwarding part waits until the goods are RECEIVED at HQ
+        if feeder.kind == P.KIND_BRANCH_TO_HQ and is_after_receipt(p):
+            ok, why = received_at_hq(feeder)
+            if not ok:
+                raise GuardError(f'هذا الجزء «بعد الاستلام من {feeder.branchcode}» ينتظر استلام الطلب #{feeder.pk} '
+                                 f'بالرئيسي: {why}', code='feeder_not_received', other=feeder.pk)
     dup = duplicate_pushed(p)
     if dup is not None:
         reason = (force_reason or '').strip()
