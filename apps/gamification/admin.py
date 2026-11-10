@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from .models import (Badge, DailyScore, GamificationChange, Level, LevelHistory, PlayerProfile,
                      PointEvent, PointRule, Redemption, Reward, StaffBadge,
-                     Champion, ChampionMonth)
+                     Champion, ChampionMonth, TeamChallenge, TeamChallengeResult)
 
 
 @admin.register(PointRule)
@@ -75,4 +75,20 @@ class ChampionAdmin(admin.ModelAdmin):
     readonly_fields = [f.name for f in Champion._meta.fields]
 
     def has_change_permission(self, request, obj=None):   # revoke through the app (reverses the bonus)
+        return False
+
+
+@admin.register(TeamChallenge)
+class TeamChallengeAdmin(admin.ModelAdmin):
+    list_display = ('name_ar', 'metric', 'target', 'start', 'end', 'bonus_per_member',
+                    'is_active', 'evaluated_at')
+    list_filter = ('metric', 'is_active')
+
+
+@admin.register(TeamChallengeResult)
+class TeamChallengeResultAdmin(admin.ModelAdmin):
+    list_display = ('challenge', 'branch', 'value', 'achieved', 'members', 'bonus')
+    readonly_fields = [f.name for f in TeamChallengeResult._meta.fields]
+
+    def has_change_permission(self, request, obj=None):   # results are final
         return False

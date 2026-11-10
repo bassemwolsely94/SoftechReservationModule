@@ -28,5 +28,9 @@ urlpatterns = [
     path('champions/',           views.champions_view,     name='gamification-champions'),
     path('champions/crown/',     views.champions_crown,    name='gamification-champions-crown'),
     path('champions/<int:pk>/revoke/', views.champion_revoke, name='gamification-champion-revoke'),
+    # branch team challenges
+    path('challenges/',          views.challenges_view,    name='gamification-challenges'),
+    path('challenges/<int:pk>/', views.challenge_detail,   name='gamification-challenge-detail'),
+    path('challenges/<int:pk>/evaluate/', views.challenge_evaluate, name='gamification-challenge-evaluate'),
     path('changes/',            views.changes,         name='gamification-changes'),
 ]
