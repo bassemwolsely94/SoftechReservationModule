@@ -3,7 +3,7 @@
 
 amounts: ``value`` (the whole invoice, positive), ``vat`` (docvalue3, positive when it has the same
 sign as the invoice) and ``net`` = value - vat. No SOFTECH header for one invoice -> vat 0 and
-attrs.vat_missing (never guessed); a month with invoices but no SOFTECH rows at all is a failed read
+attrs.vat_missing (never guessed; returns post their full value, so they are not flagged); a month with invoices but no SOFTECH rows at all is a failed read
 and raises (the run goes partial, nothing moves). attrs.vat_value_drift marks a header that disagrees
 with the mirror or VAT above the invoice (net goes negative; build_lines flips that line's side).
 """
@@ -58,7 +58,8 @@ def read_purchases(date_from, date_to, fetch=None):
         found = vats.get((branch, doccode, _docno(inv.docnumber), inv.docdate))
         if found is None:
             vat = Decimal('0.00')
-            attrs['vat_missing'] = True
+            if doccode != '120':   # a return posts its full value (P32), so no VAT is missing from it
+                attrs['vat_missing'] = True
         else:
             vat, docvalue = found
             if docvalue != value or vat > value:
