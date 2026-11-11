@@ -31,13 +31,16 @@ from core.upload_safety import capped_rows, max_upload_bytes
 from . import balances, exports, ledger, statements
 from .coa_import import import_coa, parse_trial_balance_sheet_with_warnings
 
-CONFLICT_CODES = {'not_draft', 'not_approved', 'already_reversed', 'is_reversal', 'source_conflict'}
+CONFLICT_CODES = {'not_draft', 'not_approved', 'already_reversed', 'is_reversal', 'source_conflict',
+                  'has_corrections', 'close_entry', 'period_closing', 'period_open', 'correction_pending',
+                  'original_is_draft', 'is_correction', 'exception_not_open', 'exception_has_draft',
+                  'exception_has_original', 'original_reversed', 'lines_stale'}
 MAX_BULK = 500
 MAX_NOTES = 4000
 MAX_TEXT = 500           # LedgerEntry / LedgerLine description — refused above, never truncated
 MAX_SHORT = 40           # cheque_no / party_code
 MANUAL_BOOKS = ('general', 'cash', 'credit')
-ACCOUNT_EDITABLE = ('name', 'statement_line', 'is_active', 'requires_branch', 'party_type')
+ACCOUNT_EDITABLE = ('name', 'statement_line', 'is_active', 'requires_branch', 'party_type', 'feed')
 
 
 class AllBranchOnly(BasePermission):
@@ -148,7 +151,7 @@ def _account(a):
             'account_type': a.account_type, 'statement_line': a.statement_line,
             'is_posting': a.is_posting, 'is_active': a.is_active, 'is_system': a.is_system,
             'requires_branch': a.requires_branch, 'requires_party': a.requires_party,
-            'party_type': a.party_type}
+            'party_type': a.party_type, 'feed': a.feed}
 
 
 @api_view(['GET'])
@@ -214,6 +217,10 @@ def _apply_account_patch(acc, data, profile):
         if data['party_type'] not in dict(GLAccount.PARTY_CHOICES):
             return _bad('bad_party_type', 'نوع الطرف غير صحيح')
         acc.party_type = data['party_type']
+    if 'feed' in data:
+        if data['feed'] not in dict(GLAccount.FEED_CHOICES):
+            return _bad('bad_feed', 'مصدر التغذية غير صحيح')
+        acc.feed = data['feed']
     after = _account(acc)
     if after == before:
         return None
@@ -427,13 +434,10 @@ def entry(request, pk):
     profile = _profile(request)
     if profile is None:
         return _no_profile()
-    with transaction.atomic():
-        locked = LedgerEntry.objects.select_for_update().get(pk=pk)
-        if locked.status != 'draft':
-            return _ledger_error(ledger.LedgerError('not_draft'))
-        snapshot = ledger._snapshot(locked)
-        ledger._audit('gl_entry_draft_deleted', user=profile, obj=locked, old_data=snapshot)
-        locked.delete()
+    try:
+        ledger.delete_draft(pk, user=profile)
+    except ledger.LedgerError as err:
+        return _ledger_error(err)
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
