@@ -1,9 +1,9 @@
-# 36 — Data lifecycle (Stage 1 and Stage 3)
+# 36 — Data lifecycle (Stages 1, 3 and 4)
 
 Status: Stage 1 (retention catch-up, missed-run alert) and Stage 3 (rule register, row and file rules, holding folder,
 growth history) BUILT 2026-11-07 on branch `claude/data-lifecycle-stage-3`. **Every new rule is in `preview`; nothing
-new deletes until the owner switches it on.** Stages 2 (compaction), 4 (upload controls) and 5 (data health screen)
-are not built.
+new deletes until the owner switches it on.** Stage 4 (upload controls) is BUILT on branch `claude/data-lifecycle-stage-4-6acc36`, not merged: it lands after
+Stage 3. Stage 5 (data health screen) is not built.
 Design: `docs/superpowers/specs/2026-11-07-data-lifecycle-design.md`. Ledger entry: P-56 in
 `docs/product-review/00_INDEX_AND_DECISION_LEDGER.md`.
 
@@ -80,6 +80,46 @@ A file rule removes the file and keeps the row. A row whose file is not on disk 
 snapshot cannot fail the retention run. It is the only early part of Stage 5; the screen and the media sizes per
 folder come later. Its rows written are counted in the step's log line and are not deletions.
 
+## Stage 4: upload controls (built 2026-11-12, branch `claude/data-lifecycle-stage-4-6acc36`)
+
+Growth control at the door. Three parts; none touches SOFTECH.
+
+**Shrink on upload** (`core/upload_safety.shrink_image`, `apps/data_lifecycle/uploads.py`, a `pre_save` signal on the
+listed fields). A new photo has its longest side capped: **2000 px** on prescription
+and customer fields (POS order, usage sheet, call log, reservation and its images, WhatsApp media, call attachments,
+case events), **1600 px** on chat, task, transfer-message, reservation-activity and delivery-proof photos. The map is
+`SHRINK_LONGEST_SIDE`. Only JPEG, MPO (phone cameras, first frame), PNG and WEBP are shrunk, each in its own format
+(quality 85 for JPEG and WEBP), with EXIF orientation applied and EXIF dropped. Left unchanged: an image already within
+the limit, a non-image, CMYK and unusual colour modes, animated images, and any result that is not smaller; a failure
+stores the original and never blocks the upload. **Invoice scans and OCR sample images are never shrunk** (evidence and
+training data). The sizes were measured on local samples; the table is in
+`docs/superpowers/plans/2026-11-08-data-lifecycle-stage-4.md`.
+
+**Files follow their record** (`apps/data_lifecycle/follow.py`). `pre_save`/`post_save`/`post_delete` signals on every
+model that owns a classified file field (`register.classified_file_fields`). Deleting a record, or replacing or
+clearing a file, moves the old file after the transaction commits into the holding folder (`media_hold`, outside
+media) with `HeldFile.rule_key` = `record_deleted` or `file_replaced` and `HeldFile.deleted_by` = who. Held 30 days,
+purged by the daily retention step. Floors do not apply, and `LIFECYCLE_FILE_RULES_ENABLED` does not gate it. A file
+another record still uses is not moved; a rolled-back delete moves nothing; a failed hold is logged by ids and never
+fails the request. Such a file **cannot be restored into a record** (`holding.restore` refuses
+`STAFF_RULE_KEYS`): an admin can only retrieve a copy (`holding.retrieve`, audited). The direct file deletions in
+reservations, callcenter, tasks and product_experience views were removed so every staff deletion goes this way. This
+also closes the earlier finding that `reprocess` left deleted invoices' images behind: `batch.invoices.all().delete()`
+fires the signal per invoice. Migration `apps/data_lifecycle/migrations/0002_heldfile_deleted_by.py`.
+
+**Duplicate invoice notice.** `source_sha256` on `SupplierInvoice` and `InvoiceBatch` (migration
+`invoices/0023_upload_sha256`). Uploading a file with a known hash returns `200 {duplicate_of}` and saves nothing;
+the form shows an amber notice with «فتح» and «رفع على أيحال», and `allow_duplicate=1` continues. The hash is stored on
+the new row either way. `manage.py backfill_upload_hashes` is a dry run; `--apply` fills hashes of existing files and
+must run on the VPS after the media copy.
+
+**Bundle pages are unused after finalisation (verified).** `invoice_bundles/pages` is written and read only inside
+`ingest.process_bundle`. `reprocess` renders again from `source_file`, which stays; each invoice's own scan is a copy
+in `invoice_images/`; `benchmark_vs_softech` and `validate_learning_flywheel` render into their own folders. So the
+`bundle_pages` rule stays as Stage 3 wrote it. Pinned by `apps/tests/test_lifecycle_bundle_pages_unused.py`. Switching
+it on is an owner step on the VPS: file rules stay in preview until `LIFECYCLE_FILE_RULES_ENABLED` and a fresh
+preview exist.
+
 ## Findings
 
 - **Notifications: nothing has been marked read.** The websocket path (`consumers.py _mark_read`) and the REST paths all set both
@@ -97,7 +137,7 @@ folder come later. Its rows written are counted in the step's log line and are n
 - **Dead-stock comparison.** After pruning, `rule_dead_stock_growth` may compare against a run about 20 to 50 days old
   (not about 30). The message prints the date.
 - **Follow-ups, not built:** 19 `image_url` values point at `http://localhost:8000/...` (save a relative path in
-  `views.py`, and correct those rows before cutover); `reprocess` leaves the deleted invoices' images behind (Stage 4).
+  `views.py`, and correct those rows before cutover); (resolved in Stage 4: `reprocess` now holds the deleted invoices' images).
 
 ## How to switch a rule
 
