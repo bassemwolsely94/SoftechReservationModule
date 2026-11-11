@@ -4,12 +4,14 @@ Data Lifecycle Stage 4, Task 3: uploading the same invoice file again shows a ca
 OCR / ingest start-up is stubbed; the scan is stored byte for byte.
 """
 import hashlib
+import shutil
+import tempfile
 from io import StringIO
 from unittest import mock
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from apps.invoices.models import InvoiceBatch, SupplierInvoice
 from .factories import make_admin, make_branch, make_user
@@ -17,7 +19,7 @@ from .factories import make_admin, make_branch, make_user
 PDF_A = b'%PDF-1.4 first invoice scan \x00\x01\x02\xff'
 PDF_B = b'%PDF-1.4 a different scan \x00\x09'
 INV_URL = '/api/invoices/invoices/'
-BATCH_URL = '/api/invoices/batches/'
+BATCH_URL = '/api/invoices/invoice-batches/'
 
 
 def pdf(data, name='scan.pdf'):
@@ -26,6 +28,12 @@ def pdf(data, name='scan.pdf'):
 
 class UploadDuplicateTests(TestCase):
     def setUp(self):
+        media = tempfile.mkdtemp(prefix='inv_dup_media_')
+        self.addCleanup(shutil.rmtree, media, ignore_errors=True)
+        ov = override_settings(MEDIA_ROOT=media)
+        ov.enable()
+        self.addCleanup(ov.disable)
+        call_command('seed_permissions', verbosity=0)
         self.user, self.profile, self.client = make_admin('dup_admin')
         self.br = make_branch()
         p1 = mock.patch('apps.invoices.views.SupplierInvoiceViewSet._run_ocr_async')
@@ -113,7 +121,7 @@ class UploadDuplicateTests(TestCase):
         self.assertEqual(SupplierInvoice.objects.count(), 2)
 
     def test_permission_unchanged(self):
-        _u, _p, client = make_user('dup_nobody', role='call_center')
+        _u, _p, client = make_user('dup_nobody', role='delivery')
         r = client.post(INV_URL, {'branch': self.br.pk, 'source_image': pdf(PDF_A)}, format='multipart')
         self.assertEqual(r.status_code, 403)
         self.assertEqual(SupplierInvoice.objects.count(), 0)

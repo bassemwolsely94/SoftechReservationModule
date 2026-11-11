@@ -20,6 +20,7 @@ from django.core.exceptions import RequestDataTooBig, ValidationError
 from django.core.files.base import ContentFile
 from django.core.files.uploadhandler import FileUploadHandler
 
+
 def sha256_of(f) -> str:
     """SHA-256 (hex) of an uploaded file, read in chunks; the file is left rewound to 0."""
     h = hashlib.sha256()

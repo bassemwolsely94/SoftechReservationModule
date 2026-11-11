@@ -1153,13 +1153,13 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
 
 
 class InvoiceBatchViewSet(_DuplicateUploadNotice, viewsets.ModelViewSet):
-    upload_field = 'source_file'
     """
     Multi-invoice PDF bundles: upload one distributor PDF → it is rendered, split
     into the separate invoices it contains, and each becomes a SupplierInvoice in
     the normal review queue. The split is advisory and fully auditable
     (split_summary); the operator reviews/confirms every invoice before posting.
     """
+    upload_field = 'source_file'
     permission_classes = [IsAuthenticated, MatrixPermission]
     rbac_module = 'invoices'
     rbac_actions = {'reprocess': ('edit',)}
