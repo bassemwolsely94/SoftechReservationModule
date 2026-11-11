@@ -9,7 +9,7 @@ A failure must never lose a document, so:
 - The file moves first and the database follows in one transaction; if any of that fails the file goes back.
 - A move never overwrites anything. If the file cannot go back, it stays in the holding folder, and
   FileStranded plus a critical log line say where.
-- Nothing is recorded as purged unless the file really was deleted.
+- Nothing is recorded as purged unless the file really was deleted, or an admin said it is lost (mark_lost).
 
 hold_file and restore refuse to run inside a caller's transaction (durable=True): a later rollback would revert
 the rows and the HeldFile but could not move the file back.
@@ -40,6 +40,7 @@ logger = logging.getLogger('elrezeiky.sync')
 
 HOLD_DAYS = 30
 AUDIT_ACTION = 'lifecycle_file_restored'
+AUDIT_ACTION_LOST = 'lifecycle_file_marked_lost'
 HASH_CHUNK = 1024 * 1024
 
 
@@ -204,16 +205,74 @@ def restore(held_id, user):
     return held
 
 
+def _is_missing(path):
+    """True only when nothing at all is at `path`. A permission or disk error raises instead of looking missing."""
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return True
+    return False
+
+
+def _existing_hold_root():
+    root = _hold_root()
+    if not root.is_dir():
+        raise HoldError('مجلد الحجز LIFECYCLE_HOLD_ROOT غير موجود، فلم يُحذف أي ملف. راجع الإعداد.')
+    return root
+
+
+def _find_missing(root, rows):
+    """The ids of due held files that are not on disk. A row whose path cannot be checked is left out here and
+    fails in the purge loop instead."""
+    missing = set()
+    for held_id, hold_path in rows:
+        try:
+            if _is_missing(_inside(root, hold_path)):
+                missing.add(held_id)
+        except Exception:
+            continue
+    return missing
+
+
+def _alert_missing(held_id, now):
+    """One admin alert a day per held id. The message names the id only, never the file."""
+    from apps.sync.maintenance import _alert_admins
+    try:
+        _alert_admins('🟠 ملف محجوز مفقود',
+                      f'الملف المحجوز رقم {held_id} غير موجود في مجلد الحجز في موعد حذفه، فتم تخطيه ولم يُسجَّل '
+                      f'كمحذوف. لو تأكدت أنه فُقد: manage.py lifecycle mark-lost {held_id} --user <admin> '
+                      f'--reason "..."',
+                      f'lifecycle_held_missing_{held_id}_{timezone.localtime(now).date().isoformat()}')
+    except Exception as exc:
+        logger.error('[lifecycle] alert for missing held %s failed: %s', held_id, type(exc).__name__)
+
+
 def purge_expired(now=None):
     """Delete every held file past its date that was not restored. The row stays, so the removal date stays
-    known. One failure does not stop the others, but the step then raises so the retention run shows it. A
-    file that is already missing is a failure too: it may mean a wrong LIFECYCLE_HOLD_ROOT, so it must not be
-    recorded as purged. Returns how many were purged."""
+    known. One failure does not stop the others, but the step then raises so the retention run shows it.
+
+    A held file already missing from disk is not recorded as purged. One such file is skipped with a daily admin
+    alert (an admin closes it with mark_lost), so it cannot fail the step every day. But a missing hold root, or
+    more than half of the due files missing (two or more), likely means a wrong LIFECYCLE_HOLD_ROOT: then the
+    step raises before deleting anything. With nothing due, the hold root is not read at all.
+    Returns how many were purged."""
     now = now or timezone.now()
-    root = _hold_root()
     due = HeldFile.objects.filter(purge_after__lte=now, restored_at__isnull=True, purged_at__isnull=True)
+    rows = list(due.order_by('pk').values_list('pk', 'hold_path'))
+    if not rows:
+        return 0
+    root = _existing_hold_root()
+    missing = _find_missing(root, rows)
+    if len(missing) >= 2 and len(missing) * 2 > len(rows):
+        logger.error('[lifecycle] purge stopped: %s of %s due held files are missing', len(missing), len(rows))
+        raise HoldError(f'{len(missing)} من {len(rows)} ملف محجوز غير موجود في مجلد الحجز، وقد يكون المجلد خطأ. '
+                        f'لم يُحذف أي ملف.')
     purged, failed = 0, 0
-    for held_id in list(due.order_by('pk').values_list('pk', flat=True)):
+    for held_id, _ in rows:
+        if held_id in missing:
+            logger.warning('[lifecycle] held %s is missing from the hold folder; skipped', held_id)
+            _alert_missing(held_id, now)
+            continue
         try:
             with transaction.atomic():
                 held = due.select_for_update().filter(pk=held_id).first()
@@ -232,3 +291,35 @@ def purge_expired(now=None):
     if failed:
         raise HoldError(f'تعذر حذف {failed} ملف محجوز، وتم حذف {purged}. راجع السجل.')
     return purged
+
+
+def mark_lost(held_id, user, reason):
+    """Close a held file that is really gone from the hold folder: sets purged_at, with AuditLog. Refused while
+    anything is at its path, when the hold root itself is missing, or when the record is already closed. Who
+    may call it is the caller's check (admin only)."""
+    reason = (reason or '').strip()
+    if user is None or not reason:
+        raise HoldError('يجب تحديد المستخدم وسبب اعتبار الملف مفقودًا.')
+    try:
+        root = _existing_hold_root()
+        with transaction.atomic(durable=True):
+            held = HeldFile.objects.select_for_update().filter(pk=held_id).first()
+            if held is None:
+                raise HoldError('الملف المحجوز غير موجود.')
+            if held.restored_at or held.purged_at:
+                raise HoldError('تم استرجاع هذا الملف أو حذفه نهائيًا من قبل.')
+            if not _is_missing(_inside(root, held.hold_path)):
+                raise HoldError('الملف ما زال موجودًا في مجلد الحجز، فلا يُعتبر مفقودًا.')
+            held.purged_at = timezone.now()
+            held.save(update_fields=['purged_at'])
+            # AuditLog.log returns None instead of raising; rule 8 says no unaudited change may stick.
+            if AuditLog.log(AUDIT_ACTION_LOST, user=user, obj=held, old_data={'purged_at': None},
+                            new_data={'purged_at': held.purged_at.isoformat()},
+                            extra={'reason': reason, 'rule_key': held.rule_key, 'primary_model': held.primary_model,
+                                   'primary_pk': held.primary_pk, 'primary_field': held.primary_field}) is None:
+                raise HoldError('تعذر التسجيل في سجل المراجعة، فلم يتغير شيء.')
+    except HoldError:
+        raise
+    except Exception as exc:
+        raise HoldError(f'لم تكتمل العملية ({type(exc).__name__}).') from None
+    return held

@@ -18,7 +18,7 @@ from apps.data_lifecycle.references import FileCandidate
 from apps.data_lifecycle.register import KIND_FILE, KIND_P56, KIND_ROW, RULES, Rule
 from apps.data_lifecycle.runner import breaker_limit, preview_rule, run_lifecycle_rules
 from apps.notifications.models import Notification
-from apps.sync.maintenance import RETENTION_LOCK_KEY, run_daily_retention
+from apps.sync.maintenance import RETENTION_LOCK_KEY, _run_retention_steps, run_daily_retention
 from apps.sync.models import SlowRequest, SyncLog
 
 from .factories import make_admin, make_pharmacist
@@ -100,11 +100,28 @@ class PreviewTests(TestCase):
         self.assertFalse(LifecycleRun.objects.exists())
 
 
+class RetentionCountTests(TestCase):
+    def test_snapshot_rows_are_not_counted_as_removed(self):
+        run = _run_retention_steps([('retention:table_sizes', lambda: 7), ('retention:x', lambda: 3)])
+        self.assertEqual(run.records_synced, 3)
+        self.assertEqual(SyncLog.objects.get(sync_run=run, table_name='retention:table_sizes').records_processed, 7)
+
+
 class ModeTests(TestCase):
     def test_off_rule_does_nothing(self):
         _add_rows(5)
         candidates = mock.Mock(return_value=[_rows()])
         LifecycleRulePolicy.objects.create(rule_key='fake_a', mode='off', reason='test')
+        with _only(_rule(candidates=candidates)):
+            self.assertEqual(run_lifecycle_rules(), 0)
+        candidates.assert_not_called()
+        self.assertEqual(_rows().count(), 5)
+        self.assertFalse(LifecycleRunLine.objects.exists())
+
+    def test_stray_stored_mode_does_nothing(self):
+        _add_rows(5)
+        candidates = mock.Mock(return_value=[_rows()])
+        LifecycleRulePolicy.objects.create(rule_key='fake_a', mode='garbage', reason='test')
         with _only(_rule(candidates=candidates)):
             self.assertEqual(run_lifecycle_rules(), 0)
         candidates.assert_not_called()
@@ -489,12 +506,17 @@ class TableSizeSnapshotTests(TestCase):
         self.assertGreaterEqual(row.total_bytes, row.heap_bytes)
         self.assertGreater(row.total_bytes, 0)
 
-    def test_default_threshold_is_20_mb_so_a_test_database_writes_nothing(self):
+    def test_default_threshold_is_20_mb_and_smaller_tables_are_not_written(self):
+        # Independent of how big a kept test database has grown: only what the default lets through is checked.
+        import inspect
         from apps.data_lifecycle.models import TableSizeSnapshot
         from apps.data_lifecycle.runner import TABLE_SIZE_MIN_BYTES, snapshot_table_sizes
         self.assertEqual(TABLE_SIZE_MIN_BYTES, 20 * 1024 * 1024)
-        self.assertEqual(snapshot_table_sizes(), 0)
-        self.assertFalse(TableSizeSnapshot.objects.exists())
+        self.assertEqual(inspect.signature(snapshot_table_sizes).parameters['min_bytes'].default, TABLE_SIZE_MIN_BYTES)
+        written = snapshot_table_sizes()
+        self.assertEqual(TableSizeSnapshot.objects.count(), written)
+        self.assertFalse(TableSizeSnapshot.objects.filter(total_bytes__lt=TABLE_SIZE_MIN_BYTES).exists())
+        self.assertFalse(TableSizeSnapshot.objects.filter(table='data_lifecycle_lifecyclerun').exists())
 
     def test_the_step_never_raises(self):
         from apps.data_lifecycle.runner import snapshot_table_sizes

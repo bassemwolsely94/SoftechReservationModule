@@ -412,6 +412,9 @@ if _RUNNING_TESTS:      # tests must never write to the real media folder
 LIFECYCLE_FILE_RULES_ENABLED = config('LIFECYCLE_FILE_RULES_ENABLED', default=False, cast=bool)
 # Removed files wait here for 30 days. Outside MEDIA_ROOT, so never reachable by URL.
 LIFECYCLE_HOLD_ROOT = config('LIFECYCLE_HOLD_ROOT', default=BASE_DIR / 'media_hold', cast=Path)
+if _RUNNING_TESTS:      # nor to the real holding folder
+    LIFECYCLE_HOLD_ROOT = Path(tempfile.mkdtemp(prefix='elrezeiky_test_media_hold_'))
+    atexit.register(shutil.rmtree, LIFECYCLE_HOLD_ROOT, ignore_errors=True)
 # Uploaded files get signed, expiring URLs (core/storage.py); /media/ is served by
 # core.media.serve_media, which checks the signature. Product images stay public.
 STORAGES = {

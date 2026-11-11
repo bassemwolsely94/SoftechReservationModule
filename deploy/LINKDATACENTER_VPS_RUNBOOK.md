@@ -1773,13 +1773,16 @@ services disabled. Rollback = reverse 11.3–11.6 (stop VPS scheduler+writers fi
 
 ```bash
 sudo -u elrezeiky mkdir -p /opt/elrezeiky/backups
+# The holding folder of the data lifecycle must exist before the Friday tar: the app only creates it on the first
+# move, and until then the tar fails and the old-backup cleanup after it is skipped.
+sudo -u elrezeiky mkdir -p /opt/elrezeiky/app/media_hold
 sudo -u elrezeiky crontab -e
 ```
 ```cron
 # 02:30 nightly DB dump, keep 14 days
 30 2 * * * pg_dump -h localhost -U elrezeiky -Fc -Z 6 elrezeiky_db -f /opt/elrezeiky/backups/db_$(date +\%F).dump && find /opt/elrezeiky/backups -name 'db_*.dump' -mtime +14 -delete
 # 03:15 weekly media archive (Fridays), keep 4
-15 3 * * 5 tar czf /opt/elrezeiky/backups/media_$(date +\%F).tgz -C /opt/elrezeiky/app media && find /opt/elrezeiky/backups -name 'media_*.tgz' -mtime +28 -delete
+15 3 * * 5 tar czf /opt/elrezeiky/backups/media_$(date +\%F).tgz -C /opt/elrezeiky/app media media_hold && find /opt/elrezeiky/backups -name 'media_*.tgz' -mtime +28 -delete
 ```
 (Add `elrezeiky`'s password to `/opt/elrezeiky/.pgpass`, `localhost:5432:elrezeiky_db:elrezeiky:<pw>`, chmod 600.)
 

@@ -7,6 +7,7 @@ from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
+from rest_framework import serializers
 
 from apps.data_lifecycle.models import HeldFile
 from apps.invoices.models import SupplierInvoice
@@ -38,7 +39,7 @@ class RemovedNoteTests(TestCase):
         att = self._att()
         held = _held(att)
         data = TaskAttachmentSerializer(att).data
-        self.assertEqual(data['retention_removed'], {'file': held.moved_at.date().isoformat()})
+        self.assertEqual(data['retention_removed'], {'file': timezone.localtime(held.moved_at).date().isoformat()})
 
     def test_never_had_file_reports_nothing(self):
         data = TaskAttachmentSerializer(self._att()).data
@@ -59,7 +60,7 @@ class RemovedNoteTests(TestCase):
         _held(att, moved=timezone.now() - datetime.timedelta(days=5))
         newest = _held(att)
         data = TaskAttachmentSerializer(att).data
-        self.assertEqual(data['retention_removed']['file'], newest.moved_at.date().isoformat())
+        self.assertEqual(data['retention_removed']['file'], timezone.localtime(newest.moved_at).date().isoformat())
 
     def _list_queries(self, atts):
         with CaptureQueriesContext(connection) as ctx:
@@ -79,6 +80,28 @@ class RemovedNoteTests(TestCase):
     def test_list_without_empty_field_makes_no_query(self):
         n, _ = self._list_queries([self._att('tasks/a.png')])
         self.assertEqual(n, 0)
+
+
+class _TaskWithAttachments(serializers.ModelSerializer):
+    """A nested many=True field, as on the reservation, call center and task detail serializers."""
+    attachments = TaskAttachmentSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = OperationalTask
+        fields = ('id', 'attachments')
+
+
+class NestedListTests(TestCase):
+    def test_nested_list_makes_one_lookup_for_the_page(self):
+        owner = make_user('disp_nested', role='admin', branch=make_branch())[1]
+        task = OperationalTask.objects.create(title='t', created_by=owner, assigned_to=owner)
+        for _ in range(4):
+            _held(TaskAttachment.objects.create(task=task, file=''))
+        with CaptureQueriesContext(connection) as ctx:
+            data = _TaskWithAttachments(task).data
+        lookups = [q for q in ctx.captured_queries if 'data_lifecycle_heldfile' in q['sql']]
+        self.assertEqual(len(lookups), 1)
+        self.assertEqual(sum('retention_removed' in d for d in data['attachments']), 4)
 
 
 class ReOcrRemovedImageTests(TestCase):
