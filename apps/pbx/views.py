@@ -216,6 +216,69 @@ class ExtensionMapView(APIView):
         return Response({**AgentExtensionSerializer(ext).data, 'moved_from': moved_from})
 
 
+class WebRTCConfigView(APIView):
+    """
+    GET /api/pbx/webrtc/config/ — the browser phone settings for the CURRENT user's own
+    extension only. Carries the SIP password (needed by the browser to register), so:
+    own extension only, never cached, never logged.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from django.conf import settings
+        from apps.omni.crypto import decrypt_credentials
+        wss = getattr(settings, 'PBX_WEBRTC_WSS_URL', '')
+        profile = getattr(request.user, 'staff_profile', None)
+        ext = AgentExtension.objects.filter(staff=profile, is_active=True).first() if profile else None
+        reason = ('not_configured' if not wss else 'no_extension' if ext is None
+                  else 'not_enabled' if not ext.webrtc_enabled else '')
+        password = ''
+        if not reason:
+            password = decrypt_credentials(ext.webrtc_credentials).get('password', '')
+            if not password:
+                reason = 'no_password'
+        if reason:
+            resp = Response({'enabled': False, 'reason': reason})
+        else:
+            domain = getattr(settings, 'PBX_WEBRTC_SIP_DOMAIN', '') or getattr(settings, 'AMI_HOST', '')
+            user = ext.sip_peer or ext.extension
+            resp = Response({
+                'enabled': True, 'wss_url': wss, 'extension': ext.extension,
+                'sip_uri': f'sip:{user}@{domain}', 'authorization_user': user,
+                'password': password, 'display_name': profile.full_name,
+            })
+        resp['Cache-Control'] = 'no-store'
+        return resp
+
+
+class ExtensionWebRTCView(APIView):
+    """
+    POST /api/pbx/extensions/webrtc/ {extension, enabled, sip_password?}
+    Admin/supervisor. The password is stored encrypted; audited without the secret.
+    Nothing is written to Issabel — the password must match the extension's secret there.
+    """
+    permission_classes = [IsAuthenticated, IsAdminOrSupervisor]
+
+    def post(self, request):
+        from apps.audit.models import AuditLog
+        from apps.omni.crypto import encrypt_credentials
+        ext = AgentExtension.objects.filter(extension=str(request.data.get('extension', '')).strip()).first()
+        if ext is None:
+            return Response({'detail': 'الرقم الداخلي غير موجود — اربطه بموظف أولاً'}, status=404)
+        before = ext.webrtc_enabled
+        ext.webrtc_enabled = bool(request.data.get('enabled'))
+        password = request.data.get('sip_password')
+        changed_password = password not in (None, '')
+        if changed_password:
+            ext.webrtc_credentials = encrypt_credentials({'password': str(password)[:128]})
+        ext.save(update_fields=['webrtc_enabled', 'webrtc_credentials', 'updated_at'])
+        AuditLog.log('pbx_webrtc_changed', user=request.user.staff_profile, obj=ext,
+                     changes={'webrtc_enabled': [before, ext.webrtc_enabled]},
+                     note=f'ext {ext.extension}' + (' — كلمة سر SIP حُدّثت' if changed_password else ''))
+        return Response({'extension': ext.extension, 'webrtc_enabled': ext.webrtc_enabled,
+                         'has_password': bool(ext.webrtc_credentials)})
+
+
 class StaffChoicesView(APIView):
     """GET /api/pbx/staff-choices/?q= — active staff for the mapping picker."""
     permission_classes = [IsAuthenticated, IsAdminOrSupervisor]

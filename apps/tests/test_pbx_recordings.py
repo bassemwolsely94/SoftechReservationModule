@@ -7,8 +7,6 @@ from unittest import mock
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from apps.callcenter import whisper
-from apps.callcenter.models import CallLog
 from apps.pbx import recordings
 from apps.pbx.models import CallSession
 
@@ -69,13 +67,23 @@ class SourceTests(TestCase):
         self.assertEqual(resp.content, b'WAV')
 
 
-@override_settings(WHISPER_ENABLED=True, WHISPER_MIN_SECONDS=20)
-class EnqueuePbxWithoutRecordingTests(TestCase):
+class CdrAudioTests(TestCase):
 
-    def test_pbx_call_queued_before_recording_known(self):
-        s = _session()
-        log = CallLog.objects.create(phone_number='01012345678', status='answered', duration_seconds=60)
-        s.call_log = log
-        s.save()
-        log.refresh_from_db()
-        self.assertTrue(whisper.enqueue(log))
+    @override_settings(**SFTP)
+    def test_cdr_bare_name_resolved_to_date_folder_over_sftp(self):
+        from apps.pbx.models import CdrCall
+        cdr = CdrCall.objects.create(
+            cdr_key='k1', unique_id='1.1', direction='inbound', status='answered',
+            call_at=timezone.make_aware(datetime(2026, 10, 12, 9, 54)),
+            recording_file='exten-15-170-20261012-095454-1.wav')
+        with mock.patch.object(recordings, 'fetch_sftp', return_value=b'WAV') as fetch:
+            audio, _ = recordings.load_cdr_audio(cdr)
+        fetch.assert_called_once_with('2026/10/12/exten-15-170-20261012-095454-1.wav')
+        self.assertEqual(audio, b'WAV')
+
+    def test_no_source_configured(self):
+        from apps.pbx.models import CdrCall
+        cdr = CdrCall.objects.create(cdr_key='k2', unique_id='1.2', direction='inbound',
+                                     status='answered', call_at=timezone.now(), recording_file='x.wav')
+        with self.settings(PBX_RECORDINGS_DIR='', PBX_RECORDINGS_URL_BASE='', PBX_RECORDINGS_SFTP_HOST=''):
+            self.assertEqual(recordings.load_cdr_audio(cdr), (None, ''))

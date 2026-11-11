@@ -117,8 +117,8 @@ SCHEDULER_JOB_GUARDS = {
         'scan under pg_try_advisory_lock; loser returns None and skips notify; notify is a per-day exists() check (in-app)'),
     'customer_merge_candidates': ('advisory_lock', 'apps.customers.duplicates.rebuild_locked', 'with pg_lock(LOCK_KEY) as got:',
         'queue rebuild under pg_try_advisory_lock'),
-    'whisper_tick': ('row_lock', 'apps.callcenter.whisper.run_queue', 'select_for_update(skip_locked=True)',
-        'each transcript claimed with skip_locked; caveat: maybe_launch_runner checks run_is_active without a lock and a 2nd runner resets running->pending, so one call can be transcribed twice (CPU only)'),
+    'whisper_tick': ('row_lock', 'apps.callcenter.whisper.run_queue', "select_for_update(skip_locked=True, of=('self',))",
+        'each transcript claimed with skip_locked; the tick also queues recent CDR calls via get_or_create on a unique (cdr_call, engine) constraint; caveat: maybe_launch_runner checks run_is_active without a lock and a 2nd runner resets running->pending, so one call can be transcribed twice (CPU only)'),
 
     # ── SOFTECH writers ───────────────────────────────────────────────────────
     'pos_orders_flush': ('row_lock', 'apps.pos_orders.writer.push_order', ').update(status=SoftechSalesOrder.STATUS_PUSHING, updated_at=timezone.now())',

@@ -217,6 +217,37 @@ def load_session_audio(session) -> tuple[bytes | None, str]:
     return None, ''
 
 
+def load_cdr_audio(cdr_call) -> tuple[bytes | None, str]:
+    """Audio for a pbx.CdrCall (Issabel's own call history) — same source order as sessions."""
+    from django.utils import timezone
+    rel = relative_path(cdr_call.recording_file, timezone.localtime(cdr_call.call_at))
+    if not rel:
+        return None, ''
+    mime = mimetypes.guess_type(rel)[0] or 'audio/wav'
+
+    base = getattr(settings, 'PBX_RECORDINGS_DIR', '')
+    if base:
+        for candidate in (os.path.join(base, *rel.split('/')), os.path.join(base, posixpath.basename(rel))):
+            if os.path.isfile(candidate):
+                with open(candidate, 'rb') as f:
+                    return f.read(), mime
+
+    if sftp_configured():
+        try:
+            data = fetch_sftp(rel)
+            if data:
+                return data, mime
+        except Exception as exc:
+            logger.warning('recordings: SFTP fetch failed for %s: %s', rel, exc)
+
+    url_base = getattr(settings, 'PBX_RECORDINGS_URL_BASE', '')
+    if url_base:
+        audio = fetch_recording(f"{url_base.rstrip('/')}/{rel}")
+        if audio[0] is not None:
+            return audio
+    return None, ''
+
+
 def fetch_recording(url: str) -> tuple[bytes | None, str]:
     """A recording over HTTP — public hosts, or the PBX host admins configured in
     PBX_RECORDINGS_URL_BASE (it may sit on the LAN); ≤ MAX_AUDIO_BYTES (security Batch 6, W-6)."""
