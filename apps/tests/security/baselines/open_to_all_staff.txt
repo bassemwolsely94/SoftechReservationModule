@@ -99,3 +99,8 @@ GET /api/hr/  [hr]
 GET /api/hr/shift-assignments/  [hr]
 GET /api/hr/shifts/  [hr]
 GET /api/qa/  [hr]
+
+# reason: the caller's own browser-phone settings (apps/pbx/views.py WebRTCConfigView): only their own active
+#   extension, only after an admin enabled WebRTC on it (otherwise {"enabled": false}), Cache-Control no-store;
+#   listed in OPEN_READ_PATHS like /api/pbx/my-extension/ so a pharmacist with an extension can use it at the POS.
+GET /api/pbx/webrtc/config/  [-]
