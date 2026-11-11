@@ -1893,6 +1893,61 @@ def _run_gl_drafting():
         return None
 
 
+_gl_compare_off_logged = False
+GL_COMPARE_FROM = _dt.date(2026, 1, 1)
+
+
+def _gl_compare_months():
+    """Open month periods from January 2026 that hold at least one approved or reversed entry (an empty
+    ledger has nothing to compare). Never creates a period."""
+    from apps.finance.gl.balances import COUNTED
+    from apps.finance.models import FinancialPeriod, LedgerEntry
+    out = []
+    for p in FinancialPeriod.objects.filter(period_type='month', status='open',
+                                            period_start__gte=GL_COMPARE_FROM).order_by('period_start'):
+        if LedgerEntry.objects.filter(status__in=COUNTED, entry_date__gte=p.period_start,
+                                      entry_date__lte=p.period_end).exists():
+            out.append(p)
+    return out
+
+
+def _run_gl_compare_refresh():
+    """Nightly ledger-vs-SOFTECH comparison (03:30, after the 02:15 finance sync): `compare.refresh` for
+    every open month from January 2026. SELECT-only on SOFTECH. A month that fails is logged and skipped;
+    a month whose refresh is already running (the screen's button) is logged and skipped. Shares the OFF
+    switch of scheduled drafting, settings.GL_DRAFTING_SCHEDULE_ENABLED (Ruling P22): SOFTECH reads for a
+    ledger that is not live yet are waste. The screen's refresh button is not affected."""
+    global _gl_compare_off_logged
+    from django.conf import settings
+    if not getattr(settings, 'GL_DRAFTING_SCHEDULE_ENABLED', False):
+        if not _gl_compare_off_logged:
+            logger.info('[gl_compare] scheduled comparison is off (GL_DRAFTING_SCHEDULE_ENABLED=False)')
+            _gl_compare_off_logged = True
+        return None
+    from apps.finance.gl import compare
+    done = 0
+    for period in _gl_compare_months():
+        try:
+            compare.refresh(period, user=None)
+            done += 1
+        except compare.RefreshBusy:
+            logger.warning('[gl_compare] another refresh is running - %s skipped', period.label or period.pk)
+        except Exception:
+            logger.exception('[gl_compare] %s failed - skipped', period.label or period.pk)
+    return done
+
+
+def _run_gl_compare_catchup():
+    """Once, a few minutes after the scheduler starts: run the comparison when the last one is over a day old."""
+    from django.utils import timezone
+    from apps.finance.models import GLComparisonLine
+    last = (GLComparisonLine.objects.order_by('-computed_at')
+            .values_list('computed_at', flat=True).first())
+    if last is not None and timezone.now() - last < _dt.timedelta(days=1):
+        return None
+    return _run_gl_compare_refresh()
+
+
 # ── ERP match polling ─────────────────────────────────────────────────────────
 
 # 96 polls × 30 min = 48 hours maximum wait before marking timeout
@@ -3742,6 +3797,17 @@ def start_scheduler():
     _scheduler.add_job(
         _run_gl_drafting, 'cron', hour=8, minute=30, id='gl_drafting',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Finance GL ledger-vs-SOFTECH comparison - 03:30, after the 02:15 finance sync; plus one catch-up run
+    # shortly after the scheduler starts when the last comparison is over a day old.
+    _scheduler.add_job(
+        _run_gl_compare_refresh, 'cron', hour=3, minute=30, id='gl_compare_refresh',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    _scheduler.add_job(
+        _run_gl_compare_catchup, 'date',
+        run_date=timezone.now() + _dt.timedelta(minutes=5), id='gl_compare_catchup',
+        replace_existing=True, max_instances=1,
     )
     # Daily retention (P-56) — 04:45, quiet hour: engine-run detail rows, old
     # notifications, PBX raw events, allow-listed audit noise, slow-request log.

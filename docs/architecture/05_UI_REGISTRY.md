@@ -85,6 +85,9 @@ Framework: React 18 + React Router 6 + TanStack Query 5 + Zustand + Tailwind CSS
     /finance/statements   → finance/gl/StatementsPage (?tab=trading|position|branches|comparison)
     /finance/parties      → finance/gl/GLPartiesPage (GL party ↔ SOFTECH mapping, Plan 2)
     /finance/rules        → finance/gl/PostingRulesPage (+ RuleEditor, SourceMapsPanel; tabs rules|maps; ?code=)
+    /finance/close        → finance/gl/PeriodClosePage (tabs months|stock|cutover; ?tab=; Plan 3)
+    /finance/subledgers   → finance/gl/SubledgersPage (tab = suppliers|creditors|notes_payable|customers|employees|partners)
+    /finance/softech-compare → finance/gl/SoftechComparePage (ledger vs SOFTECH per month)
     /finance/journal tabs → entries | exceptions (ExceptionsTab, SourcePanel; ?tab=exceptions)
     /finance/pnl          → ProfitLossPage
     /finance/cashflow     → CashFlowPage

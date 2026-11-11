@@ -45,6 +45,7 @@ DOMAINS = {
     'attendance': {'label_ar': 'الحضور والبصمة', 'source': 'attendance', 'cadence_min': 60, 'kind': 'snapshot'},
     'stock_audit': {'label_ar': 'حركات المخزون (التدقيق)', 'source': 'stock_audit', 'cadence_min': 120, 'kind': 'snapshot'},
     'gl_drafting': {'label_ar': 'ترحيل القيود من سوفتيك', 'source': 'gl_drafting', 'cadence_min': 1440, 'kind': 'snapshot'},
+    'gl_compare': {'label_ar': 'مقارنة الحسابات بسوفتيك', 'source': 'gl_compare', 'cadence_min': 1440, 'kind': 'snapshot'},
     # Finance mirror (P-43): P&L snapshots refresh with the slow lane; journal and
     # expenses come from the 02:15 nightly sync_finance (last 3 months).
     'finance_pl':       {'label_ar': 'الأرباح والخسائر', 'source': 'finance_pl',       'cadence_min': 60,   'kind': 'snapshot'},
@@ -149,6 +150,14 @@ def _source_gl_drafting():
     }
 
 
+def _source_gl_compare():
+    """Ledger-vs-SOFTECH comparison (finance-gl Plan 3) - the newest GLComparisonLine.computed_at."""
+    from apps.finance.models import GLComparisonLine
+    at = (GLComparisonLine.objects.order_by('-computed_at')
+          .values_list('computed_at', flat=True).first())
+    return {'last_success_at': at, 'last_attempt_at': at, 'last_run_failed': False}
+
+
 def _source_ar_contracts():
     """Contract receivables (P-41) — the customer-side mirror sync of the tracked contract accounts."""
     from apps.finance.recon_models import ReconciliationRun
@@ -213,6 +222,7 @@ _SOURCES = {'expiry': _source_expiry, 'ap_reconciliation': _source_ap_reconcilia
             'ar_contracts': _source_ar_contracts, 'calls': _source_calls,
             'stock_audit': _source_stock_audit, 'attendance': _source_attendance, 'purchase_expiry': _source_purchase_expiry,
             'finance_pl': _source_finance_pl, 'gl_drafting': _source_gl_drafting,
+            'gl_compare': _source_gl_compare,
             'finance_expenses': lambda: _finance_run_source('expense_records'),
             'finance_journal': lambda: _finance_run_source('journal_entries')}
 

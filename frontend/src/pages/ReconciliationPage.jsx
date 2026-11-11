@@ -6,6 +6,7 @@
  * Approve/Reject write only to our PostgreSQL mirror — never to SOFTECH.
  */
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { reconciliationApi } from '../api/client'
 import { wildcardMatch } from '../utils/wildcard'
@@ -1033,8 +1034,8 @@ function LedgerDrawer({ personcode, onClose }) {
   )
 }
 
-function PartiesTab({ scope }) {
-  const [pc, setPc] = useState(null)
+function PartiesTab({ scope, initialPc = null }) {
+  const [pc, setPc] = useState(initialPc)
   const [q, setQ] = useState('')
   const [ordering, setOrdering] = useState('-softech_balance')
   const [page, setPage] = useState(1)
@@ -1434,7 +1435,10 @@ function Pager({ page, setPage, count, size = 50 }) {
 
 // ── page shell ────────────────────────────────────────────────────────────────
 export default function ReconciliationPage() {
-  const [tab, setTab] = useState('candidates')
+  // ?party=<personcode> (from the GL sub-ledgers): open that supplier's حصر straight away
+  const [params] = useSearchParams()
+  const [party] = useState(() => params.get('party') || null)
+  const [tab, setTab] = useState(party ? 'parties' : 'candidates')
   useHelpTab(tab)
   const [partyType, setPartyType] = useState('supplier')
   const [filters, setFilters] = useState({ personcodes: [], inv_date_from: '', inv_date_to: '', pay_date_from: '', pay_date_to: '', amount_min: '', amount_max: '' })
@@ -1492,7 +1496,7 @@ export default function ReconciliationPage() {
       {tab === 'candidates' && <CandidatesTab scope={scope} />}
       {tab === 'exceptions' && <ExceptionsTab scope={scope} />}
       {tab === 'unpaid' && <UnpaidTab scope={scope} />}
-      {tab === 'parties' && <PartiesTab scope={scope} />}
+      {tab === 'parties' && <PartiesTab scope={scope} initialPc={party} />}
     </div>
   )
 }
