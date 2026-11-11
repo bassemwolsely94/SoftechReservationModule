@@ -107,7 +107,14 @@ def shrink_image(data: bytes, longest_side: int, quality: int = 85) -> bytes | N
     try:
         with Image.open(io.BytesIO(data)) as img:
             fmt = img.format
-            if fmt not in _SHRINK_FORMATS or getattr(img, 'is_animated', False):
+            if fmt not in _SHRINK_FORMATS:
+                return None
+            # MPO (phone cameras) is a JPEG with extra frames: use the first frame. Others must be single frame.
+            if fmt != 'MPO' and getattr(img, 'is_animated', False):
+                return None
+            # CMYK and other unusual modes are stored unchanged (a colour conversion could shift a prescription)
+            ok_modes = ('RGB', 'L') if fmt in ('JPEG', 'MPO') else ('RGB', 'L', 'P', 'RGBA', 'LA')
+            if img.mode not in ok_modes:
                 return None
             if max(img.size) <= longest_side:
                 return None
@@ -116,8 +123,6 @@ def shrink_image(data: bytes, longest_side: int, quality: int = 85) -> bytes | N
             out.thumbnail((longest_side, longest_side), Image.Resampling.LANCZOS)
             buf = io.BytesIO()
             if fmt in ('JPEG', 'MPO'):
-                if out.mode not in ('RGB', 'L'):
-                    out = out.convert('RGB')
                 out.save(buf, format='JPEG', quality=quality, optimize=True)
             elif fmt == 'PNG':
                 out.save(buf, format='PNG', optimize=True)

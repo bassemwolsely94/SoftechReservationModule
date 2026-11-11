@@ -126,6 +126,26 @@ class UploadShrinkCase(TestCase):
         self.assertIsNone(shrink_image(b'junk', 2000))
         self.assertIsNone(shrink_image(_jpeg((1200, 900)), 2000))
 
+    def test_cmyk_jpeg_returns_none(self):
+        buf = io.BytesIO()
+        Image.new('CMYK', (2400, 2200), (10, 20, 30, 40)).save(buf, format='JPEG')
+        self.assertIsNone(shrink_image(buf.getvalue(), 2000))
+
+    def test_multiframe_mpo_is_shrunk_as_jpeg(self):
+        frames = [Image.effect_noise((3000, 2400), 60).convert('RGB') for _ in range(2)]
+        buf = io.BytesIO()
+        try:
+            frames[0].save(buf, format='MPO', save_all=True, append_images=frames[1:])
+        except Exception as exc:
+            self.skipTest(f'this Pillow cannot write MPO: {exc}')
+        data = buf.getvalue()
+        if Image.open(io.BytesIO(data)).format != 'MPO':
+            self.skipTest('Pillow wrote a plain JPEG, not an MPO')
+        out = shrink_image(data, 2000)
+        self.assertIsNotNone(out)
+        im = Image.open(io.BytesIO(out))
+        self.assertEqual((im.format, max(im.size)), ('JPEG', 2000))
+
     def test_shrink_list_is_classified(self):
         classified = register.classified_file_fields()
         for key in uploads.SHRINK_LONGEST_SIDE:

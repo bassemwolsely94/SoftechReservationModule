@@ -31,7 +31,7 @@ SHRINK_LONGEST_SIDE = {
 }
 
 
-def _fields_by_model():
+def _build_fields_by_model():
     out = {}
     for key, side in SHRINK_LONGEST_SIDE.items():
         label, field = key.rsplit('.', 1)
@@ -39,10 +39,13 @@ def _fields_by_model():
     return out
 
 
+_FIELDS_BY_MODEL = _build_fields_by_model()
+
+
 def _shrink_new_uploads(sender, instance, raw=False, **kwargs):
     if raw:
         return
-    for name, side in _fields_by_model().get(sender._meta.label, ()):
+    for name, side in _FIELDS_BY_MODEL.get(sender._meta.label, ()):
         try:
             f = getattr(instance, name, None)
             if not f or getattr(f, '_committed', True):
@@ -58,6 +61,6 @@ def _shrink_new_uploads(sender, instance, raw=False, **kwargs):
 
 
 def connect():
-    for label in _fields_by_model():
+    for label in _FIELDS_BY_MODEL:
         pre_save.connect(_shrink_new_uploads, sender=apps.get_model(label),
                          dispatch_uid=f'lifecycle_shrink_{label}')
