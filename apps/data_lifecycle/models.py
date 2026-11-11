@@ -153,3 +153,28 @@ class TableSizeSnapshot(models.Model):
 
     def __str__(self):
         return f'{self.table} {self.taken_at:%Y-%m-%d}'
+
+
+class DataHealthSnapshot(models.Model):
+    """One row per day for the /data-health screen (§6 Stage 5). Company-level: sizes and counts only, never a
+    name or a phone. Written by health.take_snapshot; seen by admin, supervisor and quality manager."""
+    day = models.DateField(unique=True)
+    taken_at = models.DateTimeField(default=timezone.now)
+    db_bytes = models.BigIntegerField(default=0)
+    empty_bytes = models.BigIntegerField(default=0)
+    media_bytes = models.BigIntegerField(default=0)
+    media_files = models.BigIntegerField(default=0)
+    disk_total_bytes = models.BigIntegerField(default=0)
+    disk_free_bytes = models.BigIntegerField(default=0)
+    empty_by_table = models.JSONField(default=dict, blank=True)    # {table: bytes}
+    media_by_folder = models.JSONField(default=dict, blank=True)   # {folder: {bytes, files}}
+    media_by_type = models.JSONField(default=dict, blank=True)     # {type_key: {bytes, files}}
+    problems = models.JSONField(default=dict, blank=True)          # {key: int | None}
+
+    class Meta:
+        ordering = ['-day']
+        verbose_name = 'لقطة صحة البيانات'
+        verbose_name_plural = 'لقطات صحة البيانات'
+
+    def __str__(self):
+        return f'data health {self.day}'

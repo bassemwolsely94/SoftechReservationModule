@@ -414,6 +414,8 @@ if _RUNNING_TESTS:      # tests must never write to the real media folder
 LIFECYCLE_FILE_RULES_ENABLED = config('LIFECYCLE_FILE_RULES_ENABLED', default=False, cast=bool)
 # Removed files wait here for 30 days. Outside MEDIA_ROOT, so never reachable by URL.
 LIFECYCLE_HOLD_ROOT = config('LIFECYCLE_HOLD_ROOT', default=BASE_DIR / 'media_hold', cast=Path)
+# /data-health warns when the disk is this full (percent).
+DATA_HEALTH_DISK_LEVEL_PERCENT = config('DATA_HEALTH_DISK_LEVEL_PERCENT', default=80, cast=int)
 # Uploaded files get signed, expiring URLs (core/storage.py); /media/ is served by
 # core.media.serve_media, which checks the signature. Product images stay public.
 STORAGES = {

@@ -381,7 +381,7 @@ class RetentionWiringTests(TestCase):
     def test_retention_includes_lifecycle_step(self):
         run = run_daily_retention()
         names = list(SyncLog.objects.filter(sync_run=run).order_by('pk').values_list('table_name', flat=True))
-        self.assertEqual(names[-2:], ['retention:lifecycle', 'retention:purge_held'])
+        self.assertEqual(names[-3:], ['retention:lifecycle', 'retention:purge_held', 'retention:data_health'])
         self.assertIn('retention:screen_views', names)
         self.assertEqual(run.status, 'success')
 
