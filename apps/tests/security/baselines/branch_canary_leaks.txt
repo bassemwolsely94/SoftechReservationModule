@@ -41,6 +41,14 @@ GET /api/procurement/segments/summary/
 GET /api/purchasing/isr/pushes/
 GET /api/users/erp-users/
 
+# reason: HR attendance is company-level by decision (spec 2026-11-07-hr-attendance-stage1-design,
+#   "Branch scoping"): the RBAC module `hr_attendance` is seeded for no role but admin, and the
+#   sweep's branch-B user holds it only because the sweep grants every module. Everyone else needs a
+#   named AttendanceAccess grant; branch managers without one get 403 (test_hr_attendance_access).
+GET /api/hr-attendance/devices/
+GET /api/hr-attendance/employees/
+GET /api/hr-attendance/month/
+
 # ── Round 2, R4 step 2: DETAIL routes of planted records (lines "GET-DETAIL <canonical path>") ───────
 
 # reason: owner decision B-2 (2026-10-30) — a customer can buy at any branch, so a FOUND customer opens
@@ -87,3 +95,7 @@ GET-DETAIL /api/insurance/claims/987654321/roster-check/
 # reason: doc 32 — a stock_audit `view` holder is management and sees every branch by design; the
 #   sweep's branch-B user holds it. Named branch managers stay own-branch (test_named_grants).
 GET-DETAIL /api/stock-audit/findings/987654321/
+
+# reason: HR attendance is company-level by decision (list lines above): an `hr_attendance` holder
+#   sees every branch's employees; seeded for admin only, others need a named grant.
+GET-DETAIL /api/hr-attendance/employees/987654321/days/

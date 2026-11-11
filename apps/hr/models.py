@@ -561,8 +561,8 @@ class GenericLogin(models.Model):
     marked_at = models.DateTimeField(auto_now_add=True)
     # False = the HR head decided this login IS one person although its name looks shared
     # (e.g. "Tester"); it overrides the name check. A mistaken generic mark is cleared the same way.
-    generic   = models.BooleanField(default=True)
-    reason    = models.CharField(max_length=255, blank=True)
+    generic   = models.BooleanField(default=True, db_default=True)
+    reason    = models.CharField(max_length=255, blank=True, default='', db_default='')
 
 
 class EmployeeLinkRejection(models.Model):
@@ -645,7 +645,7 @@ class ConflictConfirmation(models.Model):
     reason     = models.CharField(max_length=255)
     # The normalised real names on the machines when confirmed; valid only while the current
     # names stay within this set (a new, different name re-opens the conflict).
-    names      = models.JSONField(default=list)
+    names      = models.JSONField(default=list, db_default=[])
     decided_by = models.ForeignKey('users.StaffProfile', null=True, on_delete=models.SET_NULL, related_name='+')
     decided_at = models.DateTimeField(auto_now_add=True)
 

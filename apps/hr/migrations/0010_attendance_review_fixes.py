@@ -13,16 +13,16 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='conflictconfirmation',
             name='names',
-            field=models.JSONField(default=list),
+            field=models.JSONField(db_default=[], default=list),
         ),
         migrations.AddField(
             model_name='genericlogin',
             name='generic',
-            field=models.BooleanField(default=True),
+            field=models.BooleanField(db_default=True, default=True),
         ),
         migrations.AddField(
             model_name='genericlogin',
             name='reason',
-            field=models.CharField(blank=True, max_length=255),
+            field=models.CharField(blank=True, db_default='', default='', max_length=255),
         ),
     ]

@@ -28,6 +28,7 @@ from apps.audit.models import AuditLog
 from apps.hr.models import (AttendanceAccess, AttendanceAgent, AttendanceDevice, CollectionRun,
                             ConflictConfirmation, DeviceUser, Employee, UnknownIdDecision)
 from apps.users.models import StaffProfile
+from core.export_safety import neutralise_formulas
 from core.sort_ordering import explicit_order_by
 
 from . import days as day_engine
@@ -239,7 +240,7 @@ def month_export(request):
     status = request.query_params.get('status')
     wb = export.build_workbook(year, mon, status if status in ('active', 'left') else None)
     buf = BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)       # build_workbook already did; the save site says so
     AuditLog.log('hr_attendance_export', user=acc.profile, request=request,
                  extra={'month': f'{year:04d}-{mon:02d}'}, note='Monthly attendance export')
     resp = HttpResponse(
