@@ -12,12 +12,24 @@ extension are ignored. Images are decoded by Pillow; PDFs and videos are checked
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import uuid
 
 from django.core.exceptions import RequestDataTooBig, ValidationError
 from django.core.files.base import ContentFile
 from django.core.files.uploadhandler import FileUploadHandler
+
+def sha256_of(f) -> str:
+    """SHA-256 (hex) of an uploaded file, read in chunks; the file is left rewound to 0."""
+    h = hashlib.sha256()
+    f.seek(0)
+    chunks = f.chunks() if hasattr(f, 'chunks') else iter(lambda: f.read(1024 * 1024), b'')
+    for chunk in chunks:
+        h.update(chunk)
+    f.seek(0)
+    return h.hexdigest()
+
 
 IMAGE_FORMATS = {'JPEG': 'jpg', 'PNG': 'png', 'WEBP': 'webp', 'GIF': 'gif'}
 
