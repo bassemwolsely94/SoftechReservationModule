@@ -924,7 +924,7 @@ def receipt_configs(request):
 def channels_seen(request):
     """Channels on imported sales, with their counts and current rule, so no code is typed from memory."""
     rules = {r.ptclassifcode: r for r in TaxChannelRule.objects.all()}
-    rows = TaxReceipt.objects.values('channel').annotate(documents=Count('id'), value=Sum('source_value')).order_by('-documents')
+    rows = scope_code(TaxReceipt.objects.all(), request.user, 'softech_branchcode').values('channel').annotate(documents=Count('id'), value=Sum('source_value')).order_by('-documents')
     return Response([{'channel': r['channel'], 'documents': r['documents'], 'value': str(r['value'] or 0),
                       'label': rules[r['channel']].label if r['channel'] in rules else '',
                       'mode': rules[r['channel']].mode if r['channel'] in rules else TaxChannelRule.MODE_UNDECIDED} for r in rows])

@@ -1217,6 +1217,10 @@ class ReceiptBranchScopeTests(Fixture, TestCase):
         self.assertEqual(c.get(f'/api/tax-invoicing/receipts/{other.pk}/').status_code, 404)
         self.assertEqual(c.post('/api/tax-invoicing/receipts/import/', {'branch': 'OTHER', 'date': '2026-11-01'}, format='json').status_code, 403)
 
+    def test_channels_seen_counts_only_their_branch(self):
+        seen = api(self.pharmacist).get('/api/tax-invoicing/receipts/channels/seen/').data
+        self.assertEqual(sum(r['documents'] for r in seen), 1)
+
     def test_all_branch_role_sees_everything(self):
         self.assertEqual(len(api(self.accountant).get('/api/tax-invoicing/receipts/').data), 2)
 
