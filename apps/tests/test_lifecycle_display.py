@@ -38,7 +38,7 @@ class RemovedNoteTests(TestCase):
         att = self._att()
         held = _held(att)
         data = TaskAttachmentSerializer(att).data
-        self.assertEqual(data['retention_removed'], {'file': held.moved_at.date().isoformat()})
+        self.assertEqual(data['retention_removed'], {'file': timezone.localtime(held.moved_at).date().isoformat()})
 
     def test_never_had_file_reports_nothing(self):
         data = TaskAttachmentSerializer(self._att()).data
@@ -59,7 +59,7 @@ class RemovedNoteTests(TestCase):
         _held(att, moved=timezone.now() - datetime.timedelta(days=5))
         newest = _held(att)
         data = TaskAttachmentSerializer(att).data
-        self.assertEqual(data['retention_removed']['file'], newest.moved_at.date().isoformat())
+        self.assertEqual(data['retention_removed']['file'], timezone.localtime(newest.moved_at).date().isoformat())
 
     def _list_queries(self, atts):
         with CaptureQueriesContext(connection) as ctx:
