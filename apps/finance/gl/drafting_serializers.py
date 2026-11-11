@@ -1,4 +1,7 @@
 """JSON shapes for the drafting API (Plan 2 / Task 8). Decimals leave as strings, dates as ISO."""
+from apps.finance.models import LedgerEntry
+
+from .corrections import late_change_action
 from .drafting import proposal_version
 from .views import _j
 
@@ -35,13 +38,28 @@ def doc_json(d):
                'version': d.version, 'status': d.status})
 
 
+def _entry_ref(entry_id):
+    """{id, number, status} of a ledger entry, for the inbox's «who holds this group» wording."""
+    if not entry_id:
+        return None
+    row = LedgerEntry.objects.filter(pk=entry_id).values('id', 'number', 'status').first()
+    return row or None
+
+
 def exception_json(e):
-    return _j({'id': e.pk, 'kind': e.kind, 'status': e.status, 'source_date': e.source_date,
-               'message': e.message, 'detail': e.detail, 'original_entry': e.original_entry_id,
-               'proposed_lines': e.proposed_lines, 'proposal_version': proposal_version(e.proposed_lines),
-               'created_at': e.created_at,
-               'resolution_note': e.resolution_note, 'resolved_at': e.resolved_at,
-               'doc': doc_json(e.source_doc)})
+    out = {'id': e.pk, 'kind': e.kind, 'status': e.status, 'source_date': e.source_date,
+           'message': e.message, 'detail': e.detail, 'original_entry': e.original_entry_id,
+           'proposed_lines': e.proposed_lines, 'proposal_version': proposal_version(e.proposed_lines),
+           'created_at': e.created_at,
+           'resolution_note': e.resolution_note, 'resolved_at': e.resolved_at,
+           'doc': doc_json(e.source_doc)}
+    if e.kind == 'closed_period_change':   # the late-correction decision needs both entries' numbers
+        out['original_entry_number'] = e.original_entry.number if e.original_entry_id else None
+        out['original_entry_status'] = e.original_entry.status if e.original_entry_id else None
+        out['live_entry'] = _entry_ref((e.detail or {}).get('entry_id'))
+        out['late_action'], draft, out['late_post_date'] = late_change_action(e)
+        out['pending_draft'] = _entry_ref(draft.pk) if draft else None
+    return _j(out)
 
 
 def source_doc_json(d):
