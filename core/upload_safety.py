@@ -92,3 +92,40 @@ def public_upload(f, kind: str = 'image', prefix: str = '') -> ContentFile:
     if ext is None:
         raise ValidationError('نوع الملف غير مدعوم أو الملف تالف')
     return ContentFile(data, name=f'{prefix}{uuid.uuid4().hex[:12]}.{ext}')
+
+
+_SHRINK_FORMATS = {'JPEG', 'MPO', 'PNG', 'WEBP'}
+
+
+def shrink_image(data: bytes, longest_side: int, quality: int = 85) -> bytes | None:
+    """Return a smaller copy of an image, or None when the data should be stored as is.
+
+    None means: not an image Pillow opens, animated, a format other than JPEG/MPO/PNG/WEBP, already within
+    `longest_side`, any error, or a result that is not smaller. EXIF orientation is applied, then EXIF is dropped.
+    """
+    from PIL import Image, ImageOps
+    try:
+        with Image.open(io.BytesIO(data)) as img:
+            fmt = img.format
+            if fmt not in _SHRINK_FORMATS or getattr(img, 'is_animated', False):
+                return None
+            if max(img.size) <= longest_side:
+                return None
+            img.load()
+            out = ImageOps.exif_transpose(img)
+            out.thumbnail((longest_side, longest_side), Image.Resampling.LANCZOS)
+            buf = io.BytesIO()
+            if fmt in ('JPEG', 'MPO'):
+                if out.mode not in ('RGB', 'L'):
+                    out = out.convert('RGB')
+                out.save(buf, format='JPEG', quality=quality, optimize=True)
+            elif fmt == 'PNG':
+                out.save(buf, format='PNG', optimize=True)
+            else:
+                out.save(buf, format='WEBP', quality=quality)
+    except Image.DecompressionBombError:
+        return None
+    except Exception:
+        return None
+    result = buf.getvalue()
+    return result if len(result) < len(data) else None
