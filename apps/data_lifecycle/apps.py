@@ -7,5 +7,6 @@ class DataLifecycleConfig(AppConfig):
     verbose_name = 'دورة حياة البيانات'
 
     def ready(self):
-        from . import uploads
+        from . import follow, uploads
         uploads.connect()
+        follow.connect()

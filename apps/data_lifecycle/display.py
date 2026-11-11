@@ -4,11 +4,14 @@
 at least one of `retention_fields` is empty AND a held file (not restored) says retention moved it; otherwise it is
 left out (frontends treat missing and empty alike). A field that never had a file reports nothing.
 
+A file staff deleted or replaced (holding.STAFF_RULE_KEYS) is not retention's doing, so it shows no note.
+
 A list serializer (many=True) makes ONE lookup for the whole page, and only when some row has an empty field.
 """
 from django.db.models import Manager
 from django.utils import timezone
 
+from .holding import STAFF_RULE_KEYS
 from .models import HeldFile
 
 
@@ -25,6 +28,7 @@ def removed_dates(instances, fields):
     for label, w in wanted.items():
         rows = (HeldFile.objects.filter(primary_model=label, primary_pk__in=w['pks'],
                                         primary_field__in=w['fields'], restored_at__isnull=True)
+                .exclude(rule_key__in=STAFF_RULE_KEYS)
                 .order_by('moved_at').values_list('primary_pk', 'primary_field', 'moved_at'))
         for pk, field, moved_at in rows:       # oldest first, so the newest overwrites
             out[(label, pk, field)] = timezone.localtime(moved_at).date().isoformat()
