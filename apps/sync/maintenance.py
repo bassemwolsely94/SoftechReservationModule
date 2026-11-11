@@ -57,6 +57,10 @@ RETENTION_LOCK_KEY = 7_301_102     # advisory lock: one retention run at a time
 OVERDUE_HOURS = 26                 # no success for this long -> catch-up is due
 RETENTION_RETRY_HOURS = 6          # wait this long after a failed attempt before retrying
 
+MORNING_CHAIN_LOCK_KEY = 7_301_103  # advisory lock: one morning chain at a time (07:30 job or catch-up)
+MORNING_CHAIN_SLOT = (7, 30)        # local time of the scheduled morning chain
+SOFTECH_UP_MINUTES = 30             # a fast sync must have succeeded this recently before a catch-up
+
 
 def _batched_delete(qs, batch=BATCH):
     """Delete in primary-key batches so no single statement holds a long lock."""
@@ -213,12 +217,16 @@ def alert_missed_runs(now=None):
 
 
 def retention_watch():
-    """Every 15 min: run the retention catch-up if due, then raise the missed-run alert.
-    Never raises; the morning chain is only alerted on, never run, from here."""
+    """Every 15 min: run the retention catch-up and the morning-chain catch-up if due, then
+    raise the missed-run alert. Never raises; each step is isolated from the others."""
     try:
         run_retention_catchup()
     except Exception:
         logger.exception('[retention] catch-up failed')
+    try:
+        run_morning_chain_catchup()
+    except Exception:
+        logger.exception('[morning_chain] catch-up failed')
     try:
         alert_missed_runs()
     except Exception:
@@ -293,4 +301,42 @@ def run_retention_catchup():
         return None
     from apps.sync.models import SyncLog
     SyncLog.objects.create(sync_run=run, table_name='retention:catchup', records_processed=1)
+    return run
+
+
+def morning_chain_catchup_due(now=None):
+    """True when today's 07:30 morning chain was missed and SOFTECH is reachable again (owner
+    decision 2026-11-11). Its steps swallow their own errors, so a run while SOFTECH is down
+    would read as a success; requiring a recent successful fast sync avoids that. At most one
+    run per day, and a failed attempt waits RETENTION_RETRY_HOURS."""
+    from apps.sync.models import SyncRun
+    now = now or timezone.now()
+    local = timezone.localtime(now)
+    slot = local.replace(hour=MORNING_CHAIN_SLOT[0], minute=MORNING_CHAIN_SLOT[1], second=0, microsecond=0)
+    if local < slot:
+        return False
+    runs = SyncRun.objects.filter(lane='morning_chain')
+    if runs.filter(status='running').exists():
+        return False
+    if runs.filter(status='success', started_at__gte=slot).exists():
+        return False
+    last = runs.order_by('-started_at').first()
+    if (last and last.status == 'failed'
+            and last.started_at > now - datetime.timedelta(hours=RETENTION_RETRY_HOURS)):
+        return False
+    fast = SyncRun.objects.filter(lane='fast').exclude(status='running').order_by('-started_at').first()
+    return bool(fast and fast.status == 'success'
+                and fast.started_at >= now - datetime.timedelta(minutes=SOFTECH_UP_MINUTES))
+
+
+def run_morning_chain_catchup():
+    """Run the morning chain now when today's slot was missed. Returns the SyncRun or None."""
+    if not morning_chain_catchup_due():
+        return None
+    from apps.sync import tasks
+    run = tasks._run_morning_chain()
+    if run is None:
+        return None
+    from apps.sync.models import SyncLog
+    SyncLog.objects.create(sync_run=run, table_name='chain:catchup', records_processed=1)
     return run

@@ -2143,7 +2143,19 @@ MORNING_CHAIN = (
 def _run_morning_chain():
     """P-56: the 07:30 jobs run as ONE chain, in order, instead of on clock offsets
     that assume the previous one finished. Each step is logged as its own SyncLog
-    (1 = ok, 0 = failed); a failing step never stops the next one."""
+    (1 = ok, 0 = failed); a failing step never stops the next one. The same chain runs as
+    a catch-up from retention_watch, so it holds an advisory lock: returns None, creating
+    no run row, when another chain is already running."""
+    from apps.sync.maintenance import MORNING_CHAIN_LOCK_KEY
+    from apps.vouchers.coupon_dashboard import pg_lock
+    with pg_lock(MORNING_CHAIN_LOCK_KEY) as got:
+        if not got:
+            logger.info('[morning_chain] skipped: another morning chain holds the lock')
+            return None
+        return _morning_chain_steps()
+
+
+def _morning_chain_steps():
     import sys
     run = SyncRun.objects.create(status='running', lane='morning_chain')
     errors = []

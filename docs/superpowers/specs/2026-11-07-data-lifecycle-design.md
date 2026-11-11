@@ -134,6 +134,10 @@ Each stage ships alone and is approved alone. Stages 1 and 2 need no new screen.
 - **Missed-run alert:** extend `alert_failing_lanes` in `apps/sync/maintenance.py` to also send one deduplicated admin
   notification per day when `retention` or `morning_chain` has no successful run for 26 hours. Morning chain alerts
   only, with no automatic catch-up, because it includes SOFTECH reads and downstream work.
+  **Changed by the owner 2026-11-11:** the morning chain also catches up, at most once a day after its
+  07:30 slot, only once a fast sync has succeeded in the last 30 minutes (its steps swallow their own
+  errors, so a run while SOFTECH is down would read as a success). All four steps are read-only towards
+  SOFTECH; a chain lock stops the catch-up and the 07:30 job overlapping.
 - Any new scheduler job gets an entry in `SCHEDULER_JOB_GUARDS` (`apps/tests/test_scheduler_locks.py`).
 
 ### Stage 2 — Reclaim space
