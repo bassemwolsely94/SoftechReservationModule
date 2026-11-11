@@ -193,3 +193,16 @@ Decided by the owner on 2026-11-10 (all as recommended):
   - **never-stocked from a branch not over its max:** 2,099 moves, ≈407k EGP.
 - Planned by wave: HQ 394 moves (166k) · over-piled 393 (100k) · trial seeds from branches 727 (271k).
 - 30 drafts instead of ~45, and no duplicates.
+
+### Follow-up decisions (owner, 2026-11-11)
+
+1. **One receipt rule for every forwarding leg:** «التوزيعة», WhatsApp, shortage lists and engine transfers.
+   - An HQ → branch leg fed by a branch → HQ leg is pushed only after HQ receives the goods. HQ can't dispense them in SOFTECH before it books them in, so the rule costs no real speed.
+   - A waiting leg's 7-day expiry starts at that receipt.
+   - An issue to HQ unreceived for more than 14 days shows «لم يُستلم منذ N يوم ⚠». Recording the receipt by hand on the transfers screen releases the leg.
+   - Measured: HQ records receipt a median of 4 days after the issue. 24 branch → HQ issues older than 14 days were never received (≈20.8k EGP). No WhatsApp or shortage-list two-leg ISR had been created yet.
+2. **Wave 4 (trial stock from a branch):**
+   - only new codes, first stocked within 540 days; an old code that never sold anywhere belongs to returns / expiry;
+   - at most 2 branches per item;
+   - at most `distribution_trial_cap` EGP per plan (default 75,000), newest codes first.
+3. **Open transfer requests** are now read with the supply engine's own rule (`apps/supply/engine/commitments.py`): open AND not yet dispatched, «يحتاج تعديل» included. The first build counted dispatched requests twice, once as requests and once as in transit.

@@ -989,19 +989,21 @@ const DIST_CATS = [
 ]
 const HELD = ['below_line', 'folded', 'not_allowed', 'blocked']
 
-// «التوزيعة» part tags on an ISR draft: «جاهز الآن» / «بعد الاستلام من X» and whether X's leg reached HQ
+// ISR draft tags: «التوزيعة · جاهز الآن», and on every forwarding leg (any planner) whether the branch's
+// goods have been RECEIVED at HQ yet — the server refuses the push until they are (owner 2026-11-11)
 function IsrWaits({ p }) {
   const bl = useBranchLabels()
   if (p.route_tag === 'dist') {
     return <span className="text-[11px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-700">التوزيعة · جاهز الآن</span>
   }
-  if (!p.route_tag?.startsWith('dist:')) return null
   const w = p.waits
+  if (!w) return null
+  const tone = w.received ? 'bg-emerald-100 text-emerald-700' : w.stale ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'
   return (
-    <span className={`text-[11px] px-1.5 py-0.5 rounded ${w && !w.received ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'}`}
-      title={w?.why || ''}>
-      التوزيعة · بعد الاستلام من {bl(p.route_tag.slice(5))}
-      {w ? (w.received ? ' · استُلم بالرئيسي ✓' : ` · ينتظر #${w.feeder_id}`) : ''}
+    <span className={`text-[11px] px-1.5 py-0.5 rounded ${tone}`} title={w.why || ''}>
+      {p.route_tag?.startsWith('dist:') ? 'التوزيعة · ' : ''}بعد الاستلام من {bl(w.feeder_branch)}
+      {w.received ? ' · استُلم بالرئيسي ✓'
+        : w.stale ? ` · لم يُستلم منذ ${w.waiting_days} يوم ⚠` : ` · ينتظر #${w.feeder_id}`}
     </span>)
 }
 const PART_LABEL = { feed: 'من فرع إلى الرئيسي', ready: 'جاهز الآن من الرئيسي', after: 'بعد الاستلام بالرئيسي' }

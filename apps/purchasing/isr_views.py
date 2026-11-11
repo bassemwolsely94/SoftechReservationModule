@@ -68,14 +68,18 @@ def _summary(p, names=None):
 
 
 def _waits(p):
-    """«التوزيعة» «بعد الاستلام» part still to push: is its branch → HQ leg received at HQ yet?"""
+    """A forwarding leg still to push (any planner): is its branch → HQ leg received at HQ yet?"""
     from apps.purchasing import isr_guards
-    if not isr_guards.is_after_receipt(p) or p.status not in ('proposed', 'approved') or not p.linked_push_id:
+    if (p.kind != IsrPush.KIND_HQ_TO_BRANCH or p.status not in ('proposed', 'approved')
+            or not p.linked_push_id):
         return None
     feeder = p.linked_push
-    ok, why = isr_guards.received_at_hq(feeder)
+    if feeder.kind != IsrPush.KIND_BRANCH_TO_HQ:
+        return None
+    st = isr_guards.receipt_status(feeder)
     return {'feeder_id': feeder.pk, 'feeder_branch': feeder.branchcode, 'feeder_status': feeder.status,
-            'received': ok, 'why': why}
+            'received': st['received'], 'why': st['why'], 'stale': st['stale'],
+            'waiting_days': st['waiting_days']}
 
 
 def _detail(p):

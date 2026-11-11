@@ -22,10 +22,10 @@ TH = {'min_line': 100.0, 'min_doc': 1000.0}
 NO_HOLD = lambda key: (None, '')
 
 
-def _sug(code, cat, src, targets, qty=2, name=None):
+def _sug(code, cat, src, targets, qty=2, name=None, age=100):
     return {'itemcode': code, 'item_name': name or code, 'category': cat, 'from_branch': src,
             'qty_each': qty, 'to_branches': [{'code': t, 'qty': qty} for t in targets],
-            'signals': [], 'reason': '', 'from_position': {}}
+            'signals': [], 'reason': '', 'from_position': {}, 'age_days': age}
 
 
 def _lines(items):
@@ -60,6 +60,21 @@ class WaveTests(TestCase):
         moves, _ = _plan([_sug('T', 'new_no_rate', '170', ['160', '150'], qty=1)], {'T': 900},
                          hq={'T': 5}, th={'min_line': 0, 'min_doc': 0})
         self.assertEqual({(x['from_code'], x['wave']) for x in moves}, {('100', 1)})
+
+    def test_trial_stock_new_codes_two_branches_and_a_cap(self):
+        """Owner 2026-11-11: wave 4 = new codes only, ≤ 2 branches per item, ≤ the per-plan cap."""
+        th = {'min_line': 0, 'min_doc': 0, 'trial_cap': 2500}
+        sugs = [_sug('NEW', 'new_no_rate', '170', ['160', '150', '140'], qty=1, age=60),
+                _sug('OLD', 'new_no_rate', '170', ['160'], qty=1, age=2000),
+                _sug('UNK', 'new_no_rate', '170', ['160'], qty=1, age=None),
+                _sug('NEWER', 'new_no_rate', '130', ['160'], qty=1, age=10)]
+        m = _by(_plan(sugs, {'NEW': 1000, 'OLD': 1000, 'UNK': 1000, 'NEWER': 1000}, th=th)[0])
+        self.assertEqual(m[('NEW', '160')]['status'], 'not_allowed')       # third branch: over the 2-branch limit
+        self.assertIn('فرعين', m[('NEW', '160')]['status_note'])
+        self.assertEqual((m[('OLD', '160')]['status'], m[('UNK', '160')]['status']), ('not_allowed', 'not_allowed'))
+        # cap 2,500: the newest code (NEWER) goes first, then one NEW move; the other NEW waits
+        self.assertEqual(m[('NEWER', '160')]['status'], 'planned')
+        self.assertEqual(sorted(m[('NEW', b)]['status'] for b in ('140', '150')), ['folded', 'planned'])
 
     def test_ranked_by_value_within_a_wave(self):
         moves, _ = _plan([_sug('A', 'never_stocked', '100', ['160']), _sug('B', 'never_stocked', '100', ['160'])],
@@ -271,10 +286,54 @@ class ReceivedAtHqTests(TestCase):
         ok, _why = G.received_at_hq(self.feeder)
         self.assertFalse(ok)
 
-    def test_general_forwarding_legs_keep_the_pushed_rule(self):
+    def test_every_forwarding_leg_waits_for_receipt(self):
+        """Owner 2026-11-11: one rule — WhatsApp / shortage / engine-transfer legs wait too."""
         self.after.route_tag = ''
         self.after.save(update_fields=['route_tag'])
-        G.check_push(self.after)                                        # WhatsApp / transfer legs: pushed is enough
+        with self.assertRaises(G.GuardError):
+            G.check_push(self.after)
+
+    def test_stale_issue_is_flagged_and_manual_receipt_releases_it(self):
+        t = _transit('9004', 'in_transit', ['A'], pushed=self.feeder.pushed_at)
+        P.objects.filter(pk=self.feeder.pk).update(pushed_at=timezone.now() - datetime.timedelta(days=20))
+        self.feeder.refresh_from_db()
+        t.issue_date = timezone.localdate() - datetime.timedelta(days=19)
+        t.save(update_fields=['issue_date'])
+        st = G.receipt_status(self.feeder)
+        self.assertEqual((st['received'], st['stale'], st['waiting_days']), (False, True, 19))
+        self.assertIn('يدوياً', st['why'])
+        t.manually_received_at = timezone.now()
+        t.save(update_fields=['manually_received_at'])
+        self.assertTrue(G.receipt_status(self.feeder)['received'])
+
+
+class ForwardingExpiryTests(TestCase):
+    """A waiting forwarding leg's 7-day clock starts at the receipt at HQ (owner 2026-11-11)."""
+
+    def setUp(self):
+        from apps.config.models import SystemSetting
+        SystemSetting.objects.update_or_create(key='isr_draft_expiry_days', defaults={'value': '7'})
+        long_ago = timezone.now() - datetime.timedelta(days=12)
+        self.feeder = P.objects.create(branchcode='130', dest_branchcode='100', kind=P.KIND_BRANCH_TO_HQ,
+                                       status=P.STATUS_PUSHED, pushed_at=long_ago, lines_snapshot=_lines([('A', 2)]))
+        self.leg = P.objects.create(branchcode='100', dest_branchcode='160', kind=P.KIND_HQ_TO_BRANCH,
+                                    route_tag='dist:130', status=P.STATUS_PROPOSED, linked_push=self.feeder,
+                                    lines_snapshot=_lines([('A', 2)]))
+        P.objects.filter(pk=self.leg.pk).update(created_at=long_ago)
+
+    def test_not_expired_while_waiting(self):
+        self.assertEqual(G.expire_drafts(), [])
+
+    def test_clock_runs_from_the_receipt(self):
+        from apps.transits.models import InTransitTransfer
+        t = InTransitTransfer.objects.create(
+            erp_doc_number='9100', erp_supplying_branch_code='130', erp_receiving_branch_code='100',
+            issue_date=timezone.localdate() - datetime.timedelta(days=11), transit_status='received',
+            erp_received_date=timezone.localdate() - datetime.timedelta(days=3), items_snapshot=[{'itemcode': 'A'}])
+        self.assertEqual(G.expire_drafts(), [])                         # received 3 days ago
+        t.erp_received_date = timezone.localdate() - datetime.timedelta(days=8)
+        t.save(update_fields=['erp_received_date'])
+        self.assertEqual(G.expire_drafts(), [self.leg.pk])               # received 8 days ago
 
 
 class PlanViewTests(TestCase):

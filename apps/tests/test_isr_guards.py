@@ -136,8 +136,16 @@ class PushGuardTests(TestCase):
         with self.assertRaises(G.GuardError) as e:
             G.check_push(leg2)
         self.assertEqual(e.exception.code, 'feeder_first')
-        P.objects.filter(pk=leg1.pk).update(status=P.STATUS_PUSHED)
+        P.objects.filter(pk=leg1.pk).update(status=P.STATUS_PUSHED, pushed_at=timezone.now())
         leg2.refresh_from_db()
+        with self.assertRaises(G.GuardError) as e:              # pushed, but not received at HQ yet
+            G.check_push(leg2)
+        self.assertEqual(e.exception.code, 'feeder_not_received')
+        from apps.transits.models import InTransitTransfer
+        InTransitTransfer.objects.create(erp_doc_number='7001', erp_supplying_branch_code='150',
+                                         erp_receiving_branch_code='100', issue_date=timezone.localdate(),
+                                         transit_status='received', erp_received_date=timezone.localdate(),
+                                         items_snapshot=[{'itemcode': 'A', 'qty': 1}])
         G.check_push(leg2)
 
     @override_settings(ISR_WRITER_ENABLED=True)

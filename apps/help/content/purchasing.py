@@ -598,18 +598,18 @@ SCREENS = [
             {'key': 'dist', 'title': T('التوزيعة', 'Distribution'),
              'body': T('«⟳ بناء الخطة» يحسب خطة توزيعة واحدة ويحفظها: الأرصدة لحظية من سيرفر 100 ومعدل البيع من آخر تشغيل للمحرك. '
                        'الحركات بالترتيب: 1 من الرئيسي أولاً (أي صنف يملكه الرئيسي، والصنف التجريبي اللي الرئيسي يغطيه يتنقل منه بدل الفرع) · '
-                       '2 متكدس بفرع فوق حده ← فروع تبيعه ولها مساحة · 3 غير مُدرج — فقط من فرع فوق حده · 4 تجربة صنف جديد من فرع؛ داخل كل موجة الأعلى قيمة أولاً. '
+                       '2 متكدس بفرع فوق حده ← فروع تبيعه ولها مساحة · 3 غير مُدرج — فقط من فرع فوق حده · 4 تجربة صنف جديد من فرع (كود عمره أقل من 18 شهر، فرعين بحد أقصى، و75,000 ج بحد أقصى للخطة)؛ داخل كل موجة الأعلى قيمة أولاً. '
                        '«متعارض» = الصنف في طريقه للفرع بالفعل (طلباتنا الحية أو المرحّلة غير المصروفة، طلبات توريد سوفتك آخر 3 أيام، بضاعة بالطريق، طلبات تحويل حية). '
                        '«محجوز / مؤجل»: سطر من فرع أقل من 100 ج، أو طلب فرع للرئيسي أو جزء «بعد الاستلام» أقل من 1,000 ج (يتأجل للتشغيل الجاي؛ حركات الرئيسي بتفضل دايماً)، أو مسار عليه طلب معتمد. '
                        '«＋ توليد» يعمل طلب واحد من كل فرع للرئيسي، وطلب «جاهز الآن» من الرئيسي لكل فرع، وجزء «بعد الاستلام» لكل فرع مصدر — '
-                       'الجزء ده مايترحّلش غير لما الرئيسي يستلم إذن صرف الفرع. الخطة لازم تكون أحدث خطة وعمرها أقل من 12 ساعة. مفيش كتابة في SOFTECH من هنا.',
+                       'الجزء ده (وأي طلب من الرئيسي لفرع بعد استلام من فرع تاني) مايترحّلش غير لما الرئيسي يستلم إذن صرف الفرع، وصلاحيته تبدأ من الاستلام. الخطة لازم تكون أحدث خطة وعمرها أقل من 12 ساعة. مفيش كتابة في SOFTECH من هنا.',
                        '"⟳ Build plan" computes and stores one distribution plan: stock live from server 100, sales rates from the last engine run. '
                        'Moves in order: 1 HQ first (anything HQ holds; a trial item HQ can cover moves from HQ instead of a branch) · '
-                       '2 a branch over its maximum → branches that sell it and have room · 3 never stocked — only from a branch over its maximum · 4 new-item trial from a branch; highest value first within each wave. '
+                       '2 a branch over its maximum → branches that sell it and have room · 3 never stocked — only from a branch over its maximum · 4 new-item trial from a branch (codes under 18 months old, at most 2 branches, at most 75,000 EGP per plan); highest value first within each wave. '
                        '"Conflict" = the item is already on its way to the branch (our live drafts or pushed ones not yet dispensed, SOFTECH supply requests of the last 3 days, goods in transit, live transfer requests). '
                        '"Held / deferred": a branch line under 100 EGP, a branch-to-HQ request or "after receipt" part under 1,000 EGP (waits for the next run; HQ moves always stay), or a route with an approved draft. '
                        '"＋ Generate" makes one request per branch to HQ, one "ready now" request from HQ per branch, and one "after receipt" part per source branch — '
-                       'that part is pushed only after HQ has received the branch\'s issue. The plan must be the latest and under 12 hours old. Nothing is written to SOFTECH from here.')},
+                       'that part (and any HQ forwarding leg of a transfer) is pushed only after HQ has received the branch\'s issue; its expiry starts at that receipt. The plan must be the latest and under 12 hours old. Nothing is written to SOFTECH from here.')},
         ],
         'tips': [T('دور «مشاهد» المرتبط بفرع بيشوف حالات فرعه والحالات العامة للشبكة بس.', 'A branch-bound "viewer" sees their own branch\'s cases and the network-wide cases only.'),
                  T('لا شيء في هذه الشاشة يكتب في SOFTECH بدون اعتماد صريح وبوابة مفعّلة.', 'Nothing on this screen writes to SOFTECH without explicit approval and an enabled gate.'),

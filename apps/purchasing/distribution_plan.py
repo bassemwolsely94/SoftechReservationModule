@@ -6,7 +6,9 @@ build()    — read-only against SOFTECH; writes only our ledger (DistributionPl
   2. the suggestions (distribution.analyze) → one move per (item, from, to);
   3. waves, HQ first: 1 HQ supplies (anything HQ holds) · 2 over-piled branch excess →
      branches that sell it with room · 3 never-stocked, only from a branch itself over its max ·
-     4 new-item trial seeds from a branch (HQ holds none). A seed HQ can cover moves to HQ.
+     4 new-item trial seeds from a branch (HQ holds none) — new codes only (≤ 18 months), ≤ 2
+     branches per item, ≤ distribution_trial_cap EGP per plan (owner 2026-11-11). A seed HQ can
+     cover moves to HQ.
   4. wave 0 — what is already on its way to the destination: our live / recent drafts, SOFTECH's
      own ISRs of the last 3 days not yet dispensed, in-transit transfers, live transfer requests.
      A seed already covered → «متعارض»; an over-piled move is cut by the covered qty.
@@ -40,6 +42,10 @@ PLAN_MAX_AGE_HOURS = 12       # generate only from a fresh plan
 KEEP_PLANS = 30
 DEFAULT_MIN_LINE = 100.0
 DEFAULT_MIN_DOC = 1000.0
+# wave 4 — trial stock from a branch (owner 2026-11-11): new codes only, ≤ 2 branches, a value cap per plan
+TRIAL_NEW_DAYS = 540          # first stocked within this many days (= distribution.AGE_NEW_DAYS, 18 months)
+TRIAL_MAX_TARGETS = 2
+DEFAULT_TRIAL_CAP = 75000.0
 
 
 def thresholds() -> dict:
@@ -51,7 +57,8 @@ def thresholds() -> dict:
         except (TypeError, ValueError):
             return default
     return {'min_line': num('distribution_min_line_value', DEFAULT_MIN_LINE),
-            'min_doc': num('distribution_min_doc_value', DEFAULT_MIN_DOC)}
+            'min_doc': num('distribution_min_doc_value', DEFAULT_MIN_DOC),
+            'trial_cap': num('distribution_trial_cap', DEFAULT_TRIAL_CAP)}
 
 
 # ── 1. live inputs ───────────────────────────────────────────────────────────────
@@ -219,13 +226,21 @@ def _moves_from(sugs, costs, hq_stock, ceilings):
                 status, note = 'not_allowed', 'الفرع المصدر ليس فوق حده الأقصى — لا يُسحب رصيده العامل'
         else:                                           # new_no_rate (or anything else) from a branch
             wave = 4
-        for t in s['to_branches']:
+            age = s.get('age_days')
+            if age is None or age > TRIAL_NEW_DAYS:     # an old code nobody ever bought is dead stock
+                status, note = 'not_allowed', ('صنف قديم لم يُبع في أي فرع — ليس للتجربة (مكانه المرتجعات / الصلاحية)'
+                                               if age is not None else 'عمر الصنف غير معروف — لا يُجرَّب من فرع')
+        targets = sorted(s['to_branches'], key=lambda t: str(t['code']))
+        for i, t in enumerate(targets):
             qty = int(t.get('qty') or s['qty_each'])
             cost = float(costs.get(code, 0) or 0)
+            st, nt = status, note
+            if wave == 4 and st == 'planned' and i >= TRIAL_MAX_TARGETS:
+                st, nt = 'not_allowed', 'الصنف التجريبي يذهب لفرعين بحد أقصى'
             moves.append({'itemcode': code, 'item_name': s.get('item_name', ''), 'from_code': src,
                           'to_code': str(t['code']), 'qty': qty, 'unit_cost': cost, 'value': round(qty * cost, 2),
-                          'wave': wave, 'category': cat, 'reasons': reasons, 'status': status,
-                          'status_note': note, 'conflicts': [],
+                          'wave': wave, 'category': cat, 'reasons': reasons, 'status': st,
+                          'status_note': nt, 'conflicts': [], 'age_days': s.get('age_days'),
                           'position': {'from': s.get('from_position') or {},
                                        'to': {k: t.get(k) for k in ('stock', 'rate', 'max', 'live')}}})
     return moves
@@ -256,6 +271,20 @@ def _apply_line_threshold(moves, min_line):
     for m in moves:
         if m['status'] == 'planned' and m['from_code'] != HQ and m['value'] < min_line:
             m['status'], m['status_note'] = 'below_line', f'قيمة السطر {m["value"]:,.0f} أقل من {min_line:,.0f} ج'
+
+
+def _apply_trial_cap(moves, cap):
+    """Wave 4 keeps at most `cap` EGP per plan: the newest codes first, then the higher value; the rest
+    waits for the next run (owner 2026-11-11)."""
+    trial = sorted((m for m in moves if m['wave'] == 4 and m['status'] == 'planned'),
+                   key=lambda m: (m.get('age_days') if m.get('age_days') is not None else 99999, -m['value'],
+                                  m['itemcode'], m['to_code']))
+    used = 0.0
+    for m in trial:
+        if used + m['value'] <= cap:
+            used += m['value']
+        else:
+            m['status'], m['status_note'] = 'folded', f'فوق حد التجربة للخطة ({cap:,.0f} ج) — للتشغيل القادم'
 
 
 def _doc_key(m):
@@ -378,6 +407,7 @@ def plan_moves(sugs, *, costs, hq_stock, ceilings, flows, th, holder=_route_hold
     moves = _moves_from(sugs, costs, hq_stock, ceilings)
     _apply_committed(moves, flows)
     _apply_line_threshold(moves, th['min_line'])
+    _apply_trial_cap(moves, th.get('trial_cap', DEFAULT_TRIAL_CAP))
     docs = _documents(moves, th['min_doc'], holder=holder)
     _rank(moves)
     return moves, docs
