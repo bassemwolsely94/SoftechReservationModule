@@ -74,7 +74,7 @@ viewer PUT /api/replacement/cases/987654321/reversals/987654321/987654321/
 # reason: the view looks the record up through a state or link a neutral row does not have (a shortage list
 #   of the caller's branch in an open state, a loyalty account with points, a receipt that needs a sale, a
 #   classified item / tagged ingredient, a transfer line of that transfer, a counting session in progress, an
-#   a confirmed invoice, a call with a quality review). Admin also gets 404 on the
+#   a confirmed invoice). Admin also gets 404 on the
 #   seeded record, so the sweep shows nothing reached anyone; a state-aware builder per route would close it.
 call_center DELETE /api/chronic/items/987654321/unclassify/
 call_center DELETE /api/shortage/lists/987654321/
@@ -85,7 +85,6 @@ pharmacist DELETE /api/stockcount/sessions/987654321/
 purchasing DELETE /api/invoices/invoices/987654321/
 purchasing DELETE /api/items/x/ingredients/987654321/
 purchasing DELETE /api/shortage/lists/987654321/
-quality_manager PATCH /api/callcenter/calls/987654321/quality/
 salesperson DELETE /api/shortage/lists/987654321/
 supervisor DELETE /api/chronic/items/987654321/unclassify/
 supervisor DELETE /api/shortage/lists/987654321/

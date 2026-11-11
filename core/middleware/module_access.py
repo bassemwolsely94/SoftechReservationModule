@@ -89,7 +89,10 @@ OPEN_READ_PATHS = ('/api/users/my-permissions/', '/api/sync/freshness/', '/api/s
                    '/api/cheques/holidays/',    # public-holiday calendar, no business data (Z-3)
                    '/api/users/erp-permissions/me/',   # the caller's own SOFTECH group (Z-4)
                    '/api/sync/branch-health/',         # SOFTECH node up/down — pricing panel (Z-4)
-                   '/api/pbx/my-extension/')           # the caller's own PBX extension — POS screen-pop (Z-8b)
+                   '/api/pbx/my-extension/',           # the caller's own PBX extension — POS screen-pop (Z-8b)
+                   # the caller's own browser-phone settings, only when an admin enabled WebRTC on
+                   # their extension (apps/pbx/views.py WebRTCConfigView: own extension, no-store)
+                   '/api/pbx/webrtc/config/')
 # Exact paths, not prefixes: the staff picker list every screen loads (tasks, demand, HR forms,
 # follow-ups, incentives) — slim fields for roles without users view; a record needs users (Z-4).
 OPEN_READ_EXACT = ('/api/users/staff/',
@@ -381,8 +384,12 @@ def required(path, method):
         return 'transfers', _EXPORT_POST
     if method == 'POST' and prefix == 'qa':
         return 'hr', _EXPORT_POST
-    if method == 'POST' and ((prefix == 'callcenter' and parts[3:4] == ['calls'] and parts[5:6] == ['quality'])
-                             or (prefix == 'callcenter' and parts[3:4] == ['transcripts'] and parts[5:6] == ['correct'])
+    # Call scoring is created by POST and corrected by PATCH; the view asks view for both
+    # (apps/callcenter/views.py, actions={'quality': ('view',)}) and keeps its QA role check.
+    if (method in ('POST', 'PATCH') and prefix == 'callcenter' and parts[3:4] == ['calls']
+            and parts[5:6] == ['quality']):
+        return 'callcenter', ('view',)
+    if method == 'POST' and ((prefix == 'callcenter' and parts[3:4] == ['transcripts'] and parts[5:6] == ['correct'])
                              or (prefix == 'stockcount' and parts[5:6] == ['preview-items'])
                              or (prefix == 'incentives' and parts[3:4] == ['programs'] and parts[5:6] == ['simulate'])):
         return MODULE_BY_PREFIX[prefix], ('view',)

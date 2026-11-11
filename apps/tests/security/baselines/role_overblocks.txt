@@ -257,7 +257,8 @@ supervisor POST /api/followups/tasks/deduplicate/
 supervisor POST /api/followups/tasks/update-priority-scores/
 
 # reason: Z-11c — omni analytics and automations, PBX diagnostics / spy / extension map & status and
-#   whisper control are admin / supervisor supervision tools (the wallboard opens to call
+#   whisper control, and setting an extension's browser-phone SIP password, are admin / supervisor
+#   supervision tools (the wallboard opens to call
 #   center in decision 4).
 call_center GET /api/omni/analytics/
 call_center GET /api/omni/automation-runs/
@@ -270,6 +271,7 @@ call_center POST /api/omni/automations/
 call_center POST /api/pbx/agents/
 call_center POST /api/pbx/diagnostics/
 call_center POST /api/pbx/extensions/map/
+call_center POST /api/pbx/extensions/webrtc/
 call_center POST /api/pbx/spy/
 quality_manager GET /api/omni/automation-runs/
 quality_manager GET /api/omni/automations/
@@ -387,6 +389,7 @@ quality_manager POST /api/forecasting/runs/trigger/
 quality_manager POST /api/forecasting/scenarios/
 quality_manager POST /api/forecasting/scenarios/987654321/apply-references/
 quality_manager POST /api/forecasting/scenarios/987654321/commit/
+quality_manager POST /api/forecasting/scenarios/987654321/commit-cell/
 quality_manager POST /api/forecasting/scenarios/987654321/generate/
 quality_manager POST /api/forecasting/seasonality/
 quality_manager POST /api/forecasting/seasonality/compute/
@@ -681,3 +684,10 @@ viewer GET /api/purchasing/phantom/summary/
 viewer GET /api/purchasing/spike/candidates/
 viewer GET /api/purchasing/spike/med-types/
 viewer GET /api/purchasing/spike/summary/
+# reason: owner decision 2026-11-09 — outbound call lists are created and closed by admin / supervisor /
+#   call center only (apps/followups/call_list_views.py _can_create, call_lists.CREATOR_ROLES); pharmacists
+#   and salespeople hold followups create for their own follow-up tasks, and still work the lists they get.
+pharmacist POST /api/followups/call-lists/
+pharmacist POST /api/followups/call-lists/987654321/close/
+salesperson POST /api/followups/call-lists/
+salesperson POST /api/followups/call-lists/987654321/close/
