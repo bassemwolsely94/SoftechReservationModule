@@ -109,7 +109,7 @@ fires the signal per invoice. Migration `apps/data_lifecycle/migrations/0002_hel
 
 **Duplicate invoice notice.** `source_sha256` on `SupplierInvoice` and `InvoiceBatch` (migration
 `invoices/0023_upload_sha256`). Uploading a file with a known hash returns `200 {duplicate_of}` and saves nothing;
-the form shows an amber notice with «فتح» and «رفع على أيحال», and `allow_duplicate=1` continues. The hash is stored on
+the form shows an amber notice with «فتح» and «رفع على أي حال», and `allow_duplicate=1` continues. The hash is stored on
 the new row either way. `manage.py backfill_upload_hashes` is a dry run; `--apply` fills hashes of existing files and
 must run on the VPS after the media copy.
 
