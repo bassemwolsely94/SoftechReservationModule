@@ -44,13 +44,20 @@ def _control_data(c):
     }
 
 
-def _transcript_row(t, gemini_by_call):
-    g = gemini_by_call.get(t.call_log_id)
-    log = t.call_log
+def _transcript_row(t, gemini_by_call, user):
+    from apps.customers.access import record_phone
+    g = gemini_by_call.get(t.call_log_id) if t.call_log_id else None
+    log, cdr = t.call_log, t.cdr_call
+    customer = (log.customer if log else None) or (cdr.customer if cdr else None)
+    if log is not None:
+        phone, name, at = log.phone_number, (customer.name if customer else log.caller_name), log.called_at
+    else:
+        phone, name, at = cdr.customer_number, (customer.name if customer else ''), cdr.call_at
     return {
-        'id': t.id, 'call_log': t.call_log_id, 'status': t.status,
-        'phone': log.phone_number, 'customer_name': log.customer.name if log.customer else log.caller_name,
-        'called_at': log.called_at, 'duration_seconds': log.duration_seconds,
+        'id': t.id, 'call_log': t.call_log_id, 'cdr_call': t.cdr_call_id, 'status': t.status,
+        'phone': record_phone(user, phone), 'customer_name': name,
+        'called_at': at, 'duration_seconds': t.call_seconds,
+        'agent_ext': cdr.agent_ext if cdr else '',
         'whisper_text': t.text, 'gemini_text': g.text if g else '',
         'gemini_id': g.id if g else None,
         'corrected_text': t.corrected_text or (g.corrected_text if g else ''),
@@ -66,15 +73,16 @@ class WhisperStatusView(APIView):
     def get(self, request):
         from apps.callcenter import whisper
         recent = list(CallTranscript.objects.filter(engine='whisper')
-                      .exclude(status='pending').select_related('call_log__customer')
+                      .exclude(status='pending')
+                      .select_related('call_log__customer', 'cdr_call__customer')
                       .order_by('-finished_at')[:30])
         gemini = {g.call_log_id: g for g in CallTranscript.objects.filter(
-            engine='gemini', call_log_id__in=[t.call_log_id for t in recent])}
+            engine='gemini', call_log_id__in=[t.call_log_id for t in recent if t.call_log_id])}
         return Response({
             'control': _control_data(WhisperQueueControl.get()),
             'stats': whisper.queue_stats(),
             'vocabulary_prompt': whisper.build_vocabulary_prompt(),
-            'recent': [_transcript_row(t, gemini) for t in recent],
+            'recent': [_transcript_row(t, gemini, request.user) for t in recent],
         })
 
 
