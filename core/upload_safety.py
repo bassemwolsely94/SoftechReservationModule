@@ -114,7 +114,7 @@ def shrink_image(data: bytes, longest_side: int, quality: int = 85) -> bytes | N
     """Return a smaller copy of an image, or None when the data should be stored as is.
 
     None means: not an image Pillow opens, animated, a format other than JPEG/MPO/PNG/WEBP, already within
-    `longest_side`, any error, or a result that is not smaller. EXIF orientation is applied, then EXIF is dropped.
+    `longest_side`, any error, or a result that is not smaller. EXIF orientation is applied, then EXIF is dropped; an ICC colour profile is kept.
     """
     from PIL import Image, ImageOps
     try:
@@ -135,12 +135,14 @@ def shrink_image(data: bytes, longest_side: int, quality: int = 85) -> bytes | N
             out = ImageOps.exif_transpose(img)
             out.thumbnail((longest_side, longest_side), Image.Resampling.LANCZOS)
             buf = io.BytesIO()
+            # keep the colour profile (phone photos in Display P3 would otherwise shift colour)
+            extra = {'icc_profile': img.info['icc_profile']} if img.info.get('icc_profile') else {}
             if fmt in ('JPEG', 'MPO'):
-                out.save(buf, format='JPEG', quality=quality, optimize=True)
+                out.save(buf, format='JPEG', quality=quality, optimize=True, **extra)
             elif fmt == 'PNG':
-                out.save(buf, format='PNG', optimize=True)
+                out.save(buf, format='PNG', optimize=True, **extra)
             else:
-                out.save(buf, format='WEBP', quality=quality)
+                out.save(buf, format='WEBP', quality=quality, **extra)
     except Image.DecompressionBombError:
         return None
     except Exception:

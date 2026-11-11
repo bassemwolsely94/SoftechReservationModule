@@ -12,7 +12,7 @@ from django.db.models.signals import pre_save
 
 from core.upload_safety import shrink_image
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('elrezeiky.sync')
 
 SHRINK_LONGEST_SIDE = {
     'pos_orders.SoftechSalesOrder.prescription_image': 2000,

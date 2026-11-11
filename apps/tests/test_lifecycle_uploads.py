@@ -126,6 +126,15 @@ class UploadShrinkCase(TestCase):
         self.assertIsNone(shrink_image(b'junk', 2000))
         self.assertIsNone(shrink_image(_jpeg((1200, 900)), 2000))
 
+    def test_icc_profile_survives_shrink(self):
+        from PIL import ImageCms
+        profile = ImageCms.ImageCmsProfile(ImageCms.createProfile('sRGB')).tobytes()
+        buf = io.BytesIO()
+        Image.effect_noise((3000, 2400), 60).convert('RGB').save(buf, format='JPEG', quality=95, icc_profile=profile)
+        out = shrink_image(buf.getvalue(), 2000)
+        self.assertIsNotNone(out)
+        self.assertEqual(Image.open(io.BytesIO(out)).info.get('icc_profile'), profile)
+
     def test_cmyk_jpeg_returns_none(self):
         buf = io.BytesIO()
         Image.new('CMYK', (2400, 2200), (10, 20, 30, 40)).save(buf, format='JPEG')

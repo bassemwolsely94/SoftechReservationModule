@@ -5,7 +5,6 @@ reprocess renders again from the bundle's own source file, and only ingest (plus
 upload folder and the lifecycle app) touches that folder. These tests pin that finding so the bundle_pages
 rule can be switched on knowing it.
 """
-import re
 import shutil
 import tempfile
 from pathlib import Path
