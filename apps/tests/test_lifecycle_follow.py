@@ -191,6 +191,31 @@ class ReplaceTests(FollowCase):
         self.assertFalse(self._on_disk(first).exists())
         self.assertTrue(self._on_disk(second).exists())
 
+    def test_stale_full_save_does_not_hold_live_file(self):
+        order = self._order()
+        first = self._upload(order, (255, 0, 0))
+        stale = SoftechSalesOrder.objects.get(pk=order.pk)      # loaded before the next replacement
+        second = self._upload(order, (0, 0, 255))               # holds `first`
+        self.assertEqual(HeldFile.objects.get().original_path, first)
+        with self.captureOnCommitCallbacks(execute=True):
+            stale.save()                                        # a full save that changed no file field
+        self.assertTrue(self._on_disk(second).exists())
+        self.assertFalse(HeldFile.objects.filter(original_path=second).exists())
+        self.assertEqual(HeldFile.objects.count(), 1)
+
+    def test_change_after_save_is_still_held(self):
+        # the note is refreshed after a save, so a later change on the same instance is seen
+        order = self._order()
+        order.prescription_image = SimpleUploadedFile(f'{SECRET}.png', _png(), content_type='image/png')
+        with self.captureOnCommitCallbacks(execute=True):
+            order.save()
+        first = order.prescription_image.name
+        self.assertFalse(HeldFile.objects.exists())
+        order.prescription_image = None
+        with self.captureOnCommitCallbacks(execute=True):
+            order.save()
+        self.assertEqual(HeldFile.objects.get().original_path, first)
+
     def test_staff_clear_shows_no_retention_note(self):
         order = self._order()
         self._upload(order, (255, 0, 0))

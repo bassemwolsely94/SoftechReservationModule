@@ -6,8 +6,11 @@ behind. Now it goes to the holding folder for 30 days (holding.HOLD_DAYS) with w
 Floors do not apply to these holds, and they are only ever retrieved as a copy, never restored into a record.
 
 Signals on every model that owns a classified file field (register.classified_file_fields):
-- pre_save keeps the old values of those fields on the instance: one query, none for a new row, a raw save
-  (fixtures), or an update_fields set that leaves them out.
+- post_init notes on each loaded file value the name it was loaded with (no query). post_save notes it again.
+- pre_save keeps the old values of the fields this instance changed since it was loaded or last saved: one query,
+  none when it changed none of them, for a new row, a raw save (fixtures), or an update_fields set that leaves
+  them out. A stale instance saved in full (someone replaced the file after it was loaded) changed nothing, so
+  the file it writes over is not held: holding it would send a record's live file to the hold.
 - post_save schedules FILE_REPLACED for each old value that differs from the new one (a cleared field counts).
 - post_delete schedules RECORD_DELETED for each non-empty value (a cascade delete sends one per child).
 
@@ -22,7 +25,8 @@ from functools import partial
 
 from django.apps import apps
 from django.db import transaction
-from django.db.models.signals import post_delete, post_save, pre_save
+from django.db.models.fields.files import FieldFile
+from django.db.models.signals import post_delete, post_init, post_save, pre_save
 
 from . import holding, references
 from .register import classified_file_fields
@@ -30,6 +34,8 @@ from .register import classified_file_fields
 logger = logging.getLogger('elrezeiky.sync')
 
 OLD_VALUES_ATTR = '_lifecycle_old_files'
+# Kept on the FieldFile, not the instance: refresh_from_db copies the fresh FieldFile (and its note) across.
+LOADED_NAME_ATTR = '_lifecycle_loaded_name'
 
 
 def _fields_by_model():
@@ -80,6 +86,30 @@ def _schedule(sender, pk, field, path, rule_key):
     transaction.on_commit(partial(_hold_after_commit, path, origin, rule_key, _current_user_id()))
 
 
+def _note_loaded(sender, instance):
+    """Note on each file value the name it now has. A deferred field is left alone (reading it would query)."""
+    for field in FIELDS_BY_MODEL.get(sender._meta.label, ()):
+        raw = instance.__dict__.get(field, False)
+        if raw is False or not (raw is None or isinstance(raw, (str, FieldFile))):
+            continue                                  # deferred, or a new upload assigned at construction
+        value = getattr(instance, field)              # wraps a str/None in a FieldFile, no query
+        if isinstance(value, FieldFile):
+            value.__dict__[LOADED_NAME_ATTR] = _name(value)
+
+
+def _snapshot_loaded(sender, instance, **kwargs):
+    _note_loaded(sender, instance)
+
+
+def _changed_here(instance, field):
+    """True when this code changed the field since the instance was loaded or last saved. A value with no note
+    (assigned, deferred then assigned, or unpickled) counts as changed; the pre_save query then decides."""
+    value = instance.__dict__.get(field)
+    if not isinstance(value, FieldFile) or LOADED_NAME_ATTR not in value.__dict__:
+        return True
+    return value.__dict__[LOADED_NAME_ATTR] != _name(value)
+
+
 def _remember_old_files(sender, instance, raw=False, update_fields=None, **kwargs):
     instance.__dict__.pop(OLD_VALUES_ATTR, None)
     if raw or instance._state.adding or instance.pk is None:
@@ -87,6 +117,7 @@ def _remember_old_files(sender, instance, raw=False, update_fields=None, **kwarg
     fields = FIELDS_BY_MODEL.get(sender._meta.label, ())
     if update_fields is not None:
         fields = [f for f in fields if f in update_fields]
+    fields = [f for f in fields if _changed_here(instance, f)]
     if not fields:
         return
     try:
@@ -101,6 +132,7 @@ def _remember_old_files(sender, instance, raw=False, update_fields=None, **kwarg
 
 def _hold_replaced(sender, instance, created=False, raw=False, **kwargs):
     old = instance.__dict__.pop(OLD_VALUES_ATTR, None)
+    _note_loaded(sender, instance)                    # what was just saved is now the loaded value
     if raw or created or not old:
         return
     for field, before in old.items():
@@ -120,6 +152,7 @@ def connect():
     FIELDS_BY_MODEL.update(_fields_by_model())
     for label in FIELDS_BY_MODEL:
         model = apps.get_model(label)
+        post_init.connect(_snapshot_loaded, sender=model, dispatch_uid=f'lifecycle_follow_init_{label}')
         pre_save.connect(_remember_old_files, sender=model, dispatch_uid=f'lifecycle_follow_pre_{label}')
         post_save.connect(_hold_replaced, sender=model, dispatch_uid=f'lifecycle_follow_post_{label}')
         post_delete.connect(_hold_deleted, sender=model, dispatch_uid=f'lifecycle_follow_delete_{label}')
