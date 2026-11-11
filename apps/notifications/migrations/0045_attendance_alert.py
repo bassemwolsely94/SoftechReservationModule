@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('notifications', '0043_send_throttle'),
+        ('notifications', '0044_autovacuum_notification_tables'),
     ]
 
     operations = [
