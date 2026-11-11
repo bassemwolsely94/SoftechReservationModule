@@ -19,7 +19,7 @@ from django.utils import timezone
 
 from apps.branches.models import Branch
 
-from .balances import _base
+from .balances import YEAR_END_CLOSING, _base
 from .names import normalize_ar
 
 ZERO = Decimal('0.00')
@@ -117,7 +117,7 @@ def _pl_from_signed(signed: dict[str, Decimal], months: int) -> dict:
 
 def _range_qs(date_from, date_to, branch_id=None):
     return _base(branch_id).filter(entry__entry_date__gte=date_from,
-                                   entry__entry_date__lte=date_to)
+                                   entry__entry_date__lte=date_to).exclude(YEAR_END_CLOSING)
 
 
 STOCK_ENTRIES, STOCK_SUPPLIED, STOCK_MISSING = 'entries', 'supplied', 'missing'
@@ -185,7 +185,9 @@ def financial_position(as_of: datetime.date, *, closing_stock_from_entries: bool
     basis, warnings = _stock_basis(year_qs, closing_stock)
     qs = _base().filter(entry__entry_date__lte=as_of)
     if closing_stock is not None:
-        qs = qs.exclude(account__statement_line__in=('inventory', 'closing_stock'))
+        # at 31-12 the closing entry has moved the entries' 5302 to 2409: without it, 1390 and 5302 still cancel out
+        qs = (qs.exclude(account__statement_line__in=('inventory', 'closing_stock'))
+                .exclude(YEAR_END_CLOSING, entry__entry_date=as_of))
     rows = (qs.values('account__code', 'account__statement_line', 'account__group__name',
                       'account__group__section')
               .annotate(d=Sum('debit'), c=Sum('credit')))

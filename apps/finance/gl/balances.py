@@ -18,11 +18,16 @@ from apps.finance.models import GLAccount, LedgerLine
 
 ZERO = Decimal('0.00')
 COUNTED = ('approved', 'reversed')
+# lines of a year's closing entry and of its reversal on a reopen. The trial balance counts them (a P&L account opens
+# next year at 0); a statement or comparison of movement leaves them out, or the year would read as nil.
+YEAR_END_CLOSING = Q(entry__source_type='year_end') | Q(entry__reverses__source_type='year_end')
 
 
-def _base(branch_id=None, party_code=None):
+def _base(branch_id=None, party_code=None, unbranched=False):
     qs = LedgerLine.objects.filter(entry__status__in=COUNTED)
-    if branch_id is not None:
+    if unbranched:   # lines with no branch of their own and none on the entry
+        qs = qs.filter(branch__isnull=True, entry__branch__isnull=True)
+    elif branch_id is not None:
         qs = qs.filter(Q(branch_id=branch_id) |
                        Q(branch__isnull=True, entry__branch_id=branch_id))
     if party_code:
@@ -84,10 +89,11 @@ def trial_balance(date_from: datetime.date, date_to: datetime.date, *,
 
 
 def account_statement(code: str, date_from: datetime.date, date_to: datetime.date, *,
-                      branch_id: int | None = None, party_code: str | None = None) -> dict:
+                      branch_id: int | None = None, party_code: str | None = None,
+                      unbranched: bool = False) -> dict:
     """Debit-minus-credit running balance for one account (raises GLAccount.DoesNotExist)."""
     account = GLAccount.objects.get(code=code)
-    qs = _base(branch_id, party_code).filter(account=account)
+    qs = _base(branch_id, party_code, unbranched).filter(account=account)
     opening = qs.filter(entry__entry_date__lt=date_from).aggregate(d=Sum('debit'), c=Sum('credit'))
     balance = (opening['d'] or ZERO) - (opening['c'] or ZERO)
     opening_balance = balance

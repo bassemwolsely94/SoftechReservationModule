@@ -7,7 +7,8 @@
  * co-pay accounts are grouped by company. Company-level finance — the server checks the grant and all-branch scope;
  * nothing here writes to SOFTECH.
  */
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { financeApi } from '../api/client'
 import DataFreshnessBar from '../components/DataFreshnessBar'
@@ -106,10 +107,17 @@ export default function ContractReceivablesPage() {
   const qc = useQueryClient()
   const [open, setOpen] = useState({})
   const [msg, setMsg] = useState('')
+  const [params] = useSearchParams()
+  const wanted = params.get('personcode')   // from the GL sub-ledgers: open that contract's invoices
   const { data, isLoading, error } = useQuery({
     queryKey: ['receivables', 'summary'],
     queryFn: () => financeApi.receivablesSummary().then(r => r.data),
   })
+  useEffect(() => {
+    if (!wanted || !data?.groups) return
+    const g = data.groups.find(x => x.contracts.some(c => String(c.personcode) === wanted))
+    if (g) setOpen(o => ({ ...o, [`g:${g.group_name}`]: true, [wanted]: true }))
+  }, [wanted, data])
   const reload = () => qc.invalidateQueries({ queryKey: ['receivables'] })
   const refresh = () => financeApi.receivablesRefresh()
     .then(r => setMsg(r.data.detail))
