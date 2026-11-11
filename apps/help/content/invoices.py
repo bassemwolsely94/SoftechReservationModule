@@ -285,8 +285,8 @@ SCREENS = [
         'tips': [
             T('لو رفعت نفس ملف الفاتورة تاني، بيظهر تنبيه أصفر في نموذج الرفع: «رفعت هذا الملف من قبل» مع «فتح» للفاتورة القديمة و«رفع على أي حال». مفيش حاجة بتتحفظ إلا لو كملت.',
               'If you upload the same invoice file again, an amber notice appears in the upload form: "You uploaded this file before", with "Open" for the earlier one and "Upload anyway". Nothing is saved unless you continue.'),
-            T('صور الفواتير وصفحات الحزم بتتحفظ زي ما هي ومش بتتصغّر. صفحات الحزمة المؤقتة بتتنضّف بعد ما الحزمة تخلص، والملف الأصلي للحزمة بيفضل.',
-              'Invoice scans and bundle pages are stored as they are and never shrunk. The temporary bundle page images are cleaned after the bundle is finished; the original bundle file stays.'),
+            T('صور الفواتير وصفحات الحزم بتتحفظ زي ما هي ومش بتتصغّر. صفحات الحزمة المؤقتة ممكن المالك يفعّل تنضيفها بعد ما الحزمة تخلص على السيرفر لاحقًا، والملف الأصلي للحزمة بيفضل.',
+              'Invoice scans and bundle pages are stored as they are and never shrunk. The owner can switch on cleanup of the temporary bundle page images, once a bundle is finished, on the server later; the original bundle file stays.'),
             T('لما تمسح فاتورة أو تعيد تقسيم حزمة، الصورة القديمة بتتحفظ ٣٠ يومًا قبل ما تتمسح نهائيًا.',
               'When you delete an invoice or re-split a bundle, the old scan is kept 30 days before it is gone for good.'),
             T('كل إجراء بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الفواتير): التعديل وتشغيل القراءة الآلية يحتاجوا «تعديل»، «تأكيد» و«رفض» وعمل مرتجع يحتاجوا «اعتماد»، والإرسال لـ SOFTECH يحتاج «إنهاء».',
