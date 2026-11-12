@@ -6,6 +6,8 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import { procurementIntelApi } from '../api/client'
+import DataFreshnessBar from '../components/DataFreshnessBar'
+import useAuthStore from '../store/authStore'
 import useHelpTab from '../help/useHelpTab'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
@@ -278,6 +280,7 @@ function PriceControlTab() {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function ProcurementMarginPage() {
+  const { user } = useAuthStore()
   const [activeTab, setActiveTab] = useState('margin')
   useHelpTab(activeTab)
   const [days, setDays]           = useState(90)
@@ -306,6 +309,10 @@ export default function ProcurementMarginPage() {
           </div>
         )}
       </div>
+
+      <DataFreshnessBar domains={['purchases']}
+        canEdit={user?.is_staff || ['admin', 'purchasing'].includes(user?.role)}
+        onRefresh={() => procurementIntelApi.triggerEngine({})} />
 
       {/* Tabs */}
       <div data-tour="purchasing-margins-tabs" className="flex border-b border-gray-200 gap-1">

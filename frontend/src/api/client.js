@@ -509,6 +509,11 @@ export const gamificationApi = {
   champions:      (params = {}) => api.get('/gamification/champions/', { params }),
   crownChampions: (data = {})   => api.post('/gamification/champions/crown/', data),
   revokeChampion: (id, data)    => api.post(`/gamification/champions/${id}/revoke/`, data),
+  // branch team challenges
+  challenges:        ()         => api.get('/gamification/challenges/'),
+  createChallenge:   (data)     => api.post('/gamification/challenges/', data),
+  updateChallenge:   (id, data) => api.patch(`/gamification/challenges/${id}/`, data),
+  evaluateChallenge: (id)       => api.post(`/gamification/challenges/${id}/evaluate/`),
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────────
@@ -529,6 +534,8 @@ export const kpiApi = {
   refresh: () => api.post('/forecasting/kpi-board/refresh/'),
   // Rollup freshness for the current + previous months ({running, months:[{year,month,computed_at,stale}]}).
   refreshStatus: () => api.get('/forecasting/kpi-board/refresh/'),
+  // Daily follow-up board for salespeople with an assigned target this month (achieved resolved live).
+  salespersonBoard: (params = {}) => api.get('/forecasting/salesperson-board/', { params }),
 }
 
 // Forecast scenarios (doc 16, Phase 3)
@@ -2567,6 +2574,7 @@ export const insuranceApi = {
   rosters:            (params)              => api.get('/insurance/rosters/', { params }),
   portfolio:          (params)              => api.get('/insurance/portfolio/', { params }),
   portfolioExport:    (params)              => api.get('/insurance/portfolio/', { params: { ...params, format: 'xlsx' }, responseType: 'blob' }),
+  portfolioItemsExport: (params)            => api.get('/insurance/portfolio/', { params: { ...params, format: 'items_xlsx' }, responseType: 'blob' }),
   billingGroupSuggestions: (claimId)        => api.get(`/insurance/claims/${claimId}/billing-group-suggestions/`),
   createParentClient: (data)                => api.post('/insurance/parent-clients/', data),
   updateParentClient: (id, data)            => api.patch(`/insurance/parent-clients/${id}/`, data),
@@ -2578,7 +2586,8 @@ export const insuranceApi = {
   updateBillingGroup: (id, data)            => api.patch(`/insurance/billing-groups/${id}/`, data),
   deleteBillingGroup: (id)                  => api.delete(`/insurance/billing-groups/${id}/`),
   autoAssignGroup:    (id)                  => api.post(`/insurance/billing-groups/${id}/auto-assign/`),
-  assignRxToGroup:    (id, ids, manualIds, supIds)  => api.post(`/insurance/billing-groups/${id}/assign-rx/`, { prescription_ids: ids || [], manual_rx_ids: manualIds || [], supplement_ids: supIds || [] }),
+  assignRxToGroup:    (id, ids, manualIds, supIds, move = false)  => api.post(`/insurance/billing-groups/${id}/assign-rx/`, { prescription_ids: ids || [], manual_rx_ids: manualIds || [], supplement_ids: supIds || [], move }),
+  billingBoard:       (claimId)             => api.get(`/insurance/claims/${claimId}/billing-board/`),
   unassignRxFromGroup:(id, ids, manualIds, supIds)  => api.post(`/insurance/billing-groups/${id}/unassign-rx/`, { prescription_ids: ids || [], manual_rx_ids: manualIds || [], supplement_ids: supIds || [] }),
   refreshGroups:      (claimId)             => api.post('/insurance/billing-groups/refresh-all/', { claim_id: claimId }),
   exportGroup:        (id, template)        => api.get(`/insurance/billing-groups/${id}/export/`, {
@@ -2620,6 +2629,7 @@ export const insuranceApi = {
   overridesPreview:    (claimId)            => api.get(`/insurance/claims/${claimId}/overrides-preview/`),
   applyOverrides:      (claimId)            => api.post(`/insurance/claims/${claimId}/apply-overrides/`),
   claimItems:          (claimId)            => api.get(`/insurance/claims/${claimId}/claim-items/`),
+  claimItemsExport:    (claimId)            => api.get(`/insurance/claims/${claimId}/claim-items/`, { params: { format: 'xlsx' }, responseType: 'blob' }),
   prescriptionsByItem: (claimId, q)         => api.get(`/insurance/claims/${claimId}/prescriptions-by-item/`, { params: { q } }),
   auditLog:            (claimId, params={}) => api.get(`/insurance/claims/${claimId}/audit-log/`, { params }),
   deleteManualPrescription: (claimId, rxId) => api.delete(`/insurance/claims/${claimId}/manual-prescription/${rxId}/`),
@@ -3105,6 +3115,38 @@ export const stockAuditApi = {
   candidates:   (q)             => api.get('/stock-audit/access/candidates/', { params: { q } }),
   refresh:      ()              => api.post('/stock-audit/refresh/'),
   runs:         ()              => api.get('/stock-audit/runs/'),
+}
+
+// HR attendance (stage 1) — fingerprint machines → days. Every route is gated on the server by level
+// (view / manage / admin); the page only hides controls. Display only: no pay, no deductions.
+export const hrAttendanceApi = {
+  me:             ()                => api.get('/hr-attendance/me/'),
+  month:          (params = {})     => api.get('/hr-attendance/month/', { params }),
+  exportMonth:    (params = {})     => api.get('/hr-attendance/month/export/', { params, responseType: 'blob' }),
+  employees:      (params = {})     => api.get('/hr-attendance/employees/', { params }),
+  employeeDays:   (id, params = {}) => api.get(`/hr-attendance/employees/${id}/days/`, { params }),
+  issues:         ()                => api.get('/hr-attendance/issues/'),
+  unknownIds:     ()                => api.get('/hr-attendance/unknown-ids/'),
+  devices:        ()                => api.get('/hr-attendance/devices/'),
+  editEmployee:   (id, data)        => api.patch(`/hr-attendance/employees/${id}/`, data),
+  link:           (id, staff)       => api.post(`/hr-attendance/employees/${id}/link/`, { staff }),
+  rejectLink:     (id, staff)       => api.post(`/hr-attendance/employees/${id}/reject-link/`, { staff }),
+  unlink:         (id)              => api.post(`/hr-attendance/employees/${id}/unlink/`),
+  hold:           (id, data)        => api.post(`/hr-attendance/employees/${id}/hold/`, data),
+  genericLogin:   (staff)           => api.post('/hr-attendance/generic-login/', { staff }),
+  notGenericLogin:(data)            => api.post('/hr-attendance/not-generic-login/', data),
+  createEmployee: (code, data = {}) => api.post(`/hr-attendance/unknown-ids/${encodeURIComponent(code)}/create-employee/`, data),
+  ignoreUnknown:  (code, reason)    => api.post(`/hr-attendance/unknown-ids/${encodeURIComponent(code)}/ignore/`, { reason }),
+  unignoreUnknown:(code)            => api.post(`/hr-attendance/unknown-ids/${encodeURIComponent(code)}/unignore/`),
+  confirmConflict:(code, data)     => api.post(`/hr-attendance/conflicts/${encodeURIComponent(code)}/confirm/`, data),
+  collectNow:     ()                => api.post('/hr-attendance/collect-now/'),
+  agents:         ()                => api.get('/hr-attendance/agents/'),
+  issueAgent:     (name)            => api.post('/hr-attendance/agents/issue/', { name }),
+  revokeAgent:    (id)              => api.post(`/hr-attendance/agents/${id}/revoke/`),
+  editDevice:     (id, data)        => api.patch(`/hr-attendance/devices/${id}/`, data),
+  grants:         (params = {})     => api.get('/hr-attendance/grants/', { params }),
+  grant:          (data)            => api.post('/hr-attendance/grants/', data),
+  revokeGrant:    (id)              => api.post(`/hr-attendance/grants/${id}/revoke/`),
 }
 
 // PIC Analytics (doc 33) — every read takes the filter bar as query params (from, to, branch, …).

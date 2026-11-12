@@ -17,6 +17,7 @@ import PhoneAlertStatusChip from '../components/PhoneAlertStatusChip'
 import { fa } from '../utils/flowArrow'
 import SortTh from '../components/SortTh'
 import useSortableRows from '../hooks/useSortableRows'
+import RemovedFileNote from '../components/RemovedFileNote'
 
 // ── Status config ─────────────────────────────────────────────────────────────
 
@@ -1123,6 +1124,8 @@ function CommunicationTab({ tr, onRefresh, onDeleteMessage }) {
                         <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">{msg.message}</p>
                       </div>
                     )}
+                    {!msg.attachment_url && <RemovedFileNote date={msg.retention_removed?.attachment} className="mt-1.5" />}
+                    {!msg.voice_note_url && <RemovedFileNote date={msg.retention_removed?.voice_note} className="mt-1.5" />}
                     {msg.attachment_url && (
                       <div className="mt-1.5">
                         <img

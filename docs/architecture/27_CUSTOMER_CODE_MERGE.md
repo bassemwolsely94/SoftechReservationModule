@@ -119,9 +119,9 @@ they can convert to coupons (doc 170). The probe now counts those conversions af
   customers 0020).
 * `apps/customers/account_state.py` is the single decision point:
 
-| HQ flags | State | Sale on /pos | Reservation | Refill reminder | Points / coupons |
+| HQ flags | State | Sale on /pos | Reservation | Refill reminder / campaign | Points / coupons |
 |---|---|---|---|---|---|
-| `'0'` | closed file | ❌ SOFTECH's own message | ❌ (not bypassable by `?force`) | ❌ | ❌ |
+| `'0'` (merged codes too) | closed file | ❌ SOFTECH's own message | ❌ (not bypassable by `?force`) | ❌ | ❌ |
 | `'5'` or `picdied` | deceased | ❌ | ❌ | ❌ | ❌ |
 | `piclock=1` | entity | ✅ | ✅ | ❌ | ❌ |
 | `picpoints=0` | removed from points | ✅ | ✅ | ✅ | ❌ |
@@ -130,6 +130,10 @@ they can convert to coupons (doc 170). The probe now counts those conversions af
 * Returns of an earlier sale stay allowed. A reminder already sent whose customer is blocked later creates
   no reservation when tapped. `/pos` points enrollment (`pos_orders/points.is_enrolled`) also honours the
   mirror. The customer API returns `account_state`, and the customer page shows a badge.
+* WhatsApp campaigns (2026-11-10): the audience (`campaigns/dispatcher._resolve_audience`) applies
+  `account_state.outreach_q()`, the same rule as the reminder column, so campaigns no longer message closed,
+  deceased, entity or merged codes. This is not the consent / opt-out work of backlog P-05, which still needs
+  an owner decision.
 
 ## Step 2 — daily HQ vs branch check (BUILT, read-only)
 

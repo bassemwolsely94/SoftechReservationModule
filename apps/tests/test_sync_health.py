@@ -265,6 +265,8 @@ class LaneRetryTests(TestCase):
 class MorningChainTests(TestCase):
 
     def test_runs_in_order_and_logs_each_step(self):
+        # the chain only starts once SOFTECH is reachable: a fast sync succeeded just now
+        SyncRun.objects.create(status='success', lane='fast')
         order = []
         names = ['_run_ap_reconciliation_sync', '_insights_daily',
                  '_run_supply_case_sweep', '_run_replacement_check']

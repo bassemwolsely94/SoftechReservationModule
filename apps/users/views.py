@@ -59,6 +59,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
     can_stock_audit  = drf_serializers.SerializerMethodField()   # doc 32: management or a named branch manager
     can_pic_analytics = drf_serializers.SerializerMethodField()  # doc 33: management or a named branch manager
     can_usage_print  = drf_serializers.SerializerMethodField()   # Project 5: flag ON + RBAC usage_print view
+    can_hr_attendance = drf_serializers.SerializerMethodField()  # admin or a named attendance grantee
     features = drf_serializers.SerializerMethodField()           # switches for features that ship dark
 
     def get_features(self, obj):
@@ -85,6 +86,10 @@ class _MeSerializer(drf_serializers.ModelSerializer):
         from apps.pic_analytics.access import can_open
         return can_open(obj.user)
 
+    def get_can_hr_attendance(self, obj):
+        from apps.hr.attendance.access import can_open
+        return can_open(obj.user)
+
     def get_can_usage_print(self, obj):
         from apps.usage_print.access import can_open
         return can_open(obj.user)
@@ -98,7 +103,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
             'access_all_branches', 'softech_username',
             'phone', 'is_active',
             'can_see_all_customers', 'can_see_customer_phone',
-            'mfa_enabled', 'can_supply_write', 'can_run_engine', 'can_stock_audit', 'can_pic_analytics', 'can_usage_print',
+            'mfa_enabled', 'can_supply_write', 'can_run_engine', 'can_stock_audit', 'can_pic_analytics', 'can_usage_print', 'can_hr_attendance',
             'features',
         ]
 

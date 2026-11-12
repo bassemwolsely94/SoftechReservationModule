@@ -8,6 +8,7 @@
  *   badges      الشارات
  *   rules       كيف تكسب النقاط — every rule, transparent to everyone
  *   champions   أبطال الشهر — live race + hall of fame (crown / revoke for editors)
+ *   challenges  تحديات الفروع — shared branch goals: live progress + results (create / judge for editors)
  *   rewards     المكافآت — spend points on the catalog (approval via /approvals)
  *   redemptions طلبات المكافآت — managers: deliver / cancel approved rewards
  *   reports     التقارير — managers (RBAC gamification/view; Excel needs /export)
@@ -27,6 +28,7 @@ import { PageHeader } from '../components/ui'
 import { LevelBar, useGamificationMe } from '../components/GamificationCard'
 import { RedemptionsTab, RewardCatalogEditor, RewardsTab } from './gamification/RewardsTabs'
 import ChampionsTab from './gamification/ChampionsTab'
+import ChallengesTab from './gamification/ChallengesTab'
 import { ROLES, roleLabel } from './gamification/labels'
 
 const fmt = (n) => (n ?? 0).toLocaleString('en-US')
@@ -41,7 +43,7 @@ const PERIODS = [
 export { roleLabel }
 
 const CATEGORY = {
-  sales: ['المبيعات', 'Sales'], reservations: ['الحجوزات', 'Reservations'],
+  sales: ['المبيعات', 'Sales'], customers: ['العملاء (PIC)', 'Customers (PIC)'], reservations: ['الحجوزات', 'Reservations'],
   demand: ['الطلب الضائع والمتابعة', 'Demand & follow-ups'],
   transfers: ['التحويلات وطلبات الفروع', 'Transfers & branch requests'],
   inventory: ['المخزون والجرد والنواقص', 'Inventory & counts'], tasks: ['المهام', 'Tasks'],
@@ -72,6 +74,67 @@ function Kpi({ label, value, tone = 'text-gray-900' }) {
 }
 
 // ── ملفي ────────────────────────────────────────────────────────────────────
+
+// ── «عملائي» — customer codes (PIC): new, served, won back, capture rate, next milestones ──
+function PicPanel({ pic, t, lang }) {
+  if (!pic) return null
+  if (!pic.linked) {
+    return (
+      <div className="card text-sm text-gray-500">
+        {t('👥 عملائي: اربط كود المستخدم في SOFTECH بحسابك (رقم المستخدم في SOFTECH) لتظهر عملاؤك الجدد ومبيعاتك على أكواد العملاء.',
+           '👥 My customers: link your SOFTECH user code to your account to see your new customers and sales on customer codes.')}
+      </div>
+    )
+  }
+  const row = (b) => [
+    [t('عملاء جدد', 'New customers'), b.new_pics, 'text-emerald-600'],
+    [t('عملاء بعت لهم على كودهم', 'Customers served on their code'), b.customers_served],
+    [t('عملاء عادوا بعد انقطاع', 'Customers won back'), b.reactivated],
+    [t('فواتير على كود عميل', 'Invoices on a customer code'),
+     b.capture_pct == null ? '—' : `${b.capture_pct}%`,
+     b.capture_pct != null && b.capture_pct >= pic.capture_target_pct ? 'text-emerald-600' : 'text-amber-700'],
+  ]
+  return (
+    <div className="card">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div className="font-black text-gray-900">{t('👥 عملائي (PIC)', '👥 My customers (PIC)')}</div>
+        <div className="text-[11px] text-gray-400">
+          {t(`هدف اليوم: ${pic.capture_target_pct}% من فواتيرك على أكواد العملاء (من ${pic.capture_min_invoices} فواتير على الأقل) = +5`,
+             `Daily goal: ${pic.capture_target_pct}% of your invoices on customer codes (at least ${pic.capture_min_invoices} invoices) = +5`)}
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {[['today', t('اليوم', 'Today')], ['month', t('هذا الشهر', 'This month')]].map(([k, label]) => (
+          <div key={k} className="rounded-lg bg-gray-50 p-3">
+            <div className="text-xs font-bold text-gray-500 mb-2">{label}</div>
+            <div className="grid grid-cols-2 gap-2">
+              {row(pic[k]).map(([l, v, tone]) => (
+                <div key={l} className="text-center">
+                  <div className={`text-lg font-black ${tone || 'text-gray-900'}`}>{v ?? 0}</div>
+                  <div className="text-[11px] text-gray-500">{l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      {pic.milestones?.length > 0 && (
+        <div className="mt-3 space-y-1.5">
+          <div className="text-xs font-bold text-gray-500">{t('المحطات القادمة', 'Next milestones')}</div>
+          {pic.milestones.map(m => (
+            <div key={m.badge} className="flex items-center gap-2 text-sm">
+              <span className="w-44 truncate">{m.icon} {lang === 'en' ? m.name_en : m.name_ar}</span>
+              <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
+                <div className="h-full bg-brand-500" style={{ width: `${Math.min(100, (m.progress / m.threshold) * 100)}%` }} />
+              </div>
+              <span className="text-xs text-gray-500 w-20 text-end">{fmt(m.progress)} / {fmt(m.threshold)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function MeTab({ me, t, lang }) {
   const navigate = useNavigate()
@@ -138,6 +201,8 @@ function MeTab({ me, t, lang }) {
           </p>
         </div>
       </div>
+
+      <PicPanel pic={me.pic} t={t} lang={lang} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="card">
@@ -497,6 +562,27 @@ function ReportsTab({ t, lang }) {
           <ReportBranchesTable branches={data.branches} t={t} />
         </div>
       )}
+      {data.pic && (
+        <div className="card">
+          <div className="font-black mb-2">{t('👥 العملاء (PIC) في الفترة', '👥 Customers (PIC) in the period')}</div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+            <Kpi label={t('عملاء جدد', 'New customers')} value={fmt(data.pic.new_pics)} tone="text-emerald-600" />
+            <Kpi label={t('عادوا بعد انقطاع', 'Won back')} value={fmt(data.pic.reactivated)} />
+            <Kpi label={t('زيارات على كود العميل', 'Visits on a customer code')} value={fmt(data.pic.customer_visits)} />
+            <Kpi label={t('فواتير على كود عميل %', 'Invoices on a customer code %')} value={data.pic.capture_pct ?? '—'} />
+          </div>
+          {data.pic.top_new?.length > 0 && (
+            <ul className="divide-y divide-gray-100 text-sm">
+              {data.pic.top_new.map(r => (
+                <li key={r.staff_id} className="py-1.5 flex justify-between">
+                  <span>{r.name} <span className="text-xs text-gray-400">{r.branch}</span></span>
+                  <b className="text-emerald-600">+{fmt(r.new_pics)} {t('عميل جديد', 'new')}</b>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       {data.champions?.length > 0 && (
         <div className="card">
           <div className="font-black mb-2">{t('👑 أبطال الأشهر في الفترة', '👑 Champions in the period')}</div>
@@ -549,11 +635,27 @@ function ReportsTab({ t, lang }) {
 // ── الإعدادات (editors) ──────────────────────────────────────────────────────
 
 function RuleRow({ r, t, lang, onSave }) {
-  const [d, setD] = useState({ points: r.points, daily_cap: r.daily_cap ?? '', is_active: r.is_active })
-  const dirty = d.points !== r.points || String(d.daily_cap) !== String(r.daily_cap ?? '') || d.is_active !== r.is_active
+  const [d, setD] = useState({ points: r.points, daily_cap: r.daily_cap ?? '', is_active: r.is_active,
+                               role_points: { ...(r.role_points || {}) } })
+  const [openRoles, setOpenRoles] = useState(false)
+  const rolesDirty = JSON.stringify(Object.fromEntries(Object.entries(d.role_points).filter(([, v]) => v !== '' && v != null)))
+                     !== JSON.stringify(r.role_points || {})
+  const dirty = d.points !== r.points || String(d.daily_cap) !== String(r.daily_cap ?? '') || d.is_active !== r.is_active || rolesDirty
+  const nRoles = Object.keys(r.role_points || {}).length
+  const payload = () => ({
+    points: d.points, is_active: d.is_active,
+    daily_cap: d.daily_cap === '' ? null : Number(d.daily_cap),
+    role_points: Object.fromEntries(Object.entries(d.role_points)
+      .filter(([, v]) => v !== '' && v != null).map(([k, v]) => [k, Number(v)])),
+  })
   return (
+    <>
     <tr className="border-b border-gray-50">
-      <td className="py-1.5">{lang === 'en' ? r.name_en : r.name_ar}<div className="text-[11px] text-gray-400">{r.key}</div></td>
+      <td className="py-1.5">{lang === 'en' ? r.name_en : r.name_ar}<div className="text-[11px] text-gray-400">{r.key}</div>
+        <button className="text-[11px] text-brand-700 underline" onClick={() => setOpenRoles(o => !o)}>
+          {t('نقاط حسب الدور', 'Points per role')}{nRoles ? ` (${nRoles})` : ''}
+        </button>
+      </td>
       <td className="py-1.5"><input type="number" className="input-field w-20 text-xs" value={d.points}
                                     onChange={e => setD({ ...d, points: Number(e.target.value) })} /></td>
       <td className="py-1.5"><input type="number" className="input-field w-20 text-xs" value={d.daily_cap}
@@ -564,13 +666,32 @@ function RuleRow({ r, t, lang, onSave }) {
       <td className="py-1.5">
         {dirty && (
           <button data-tour="gamification-main-rule-save" className="btn-primary text-xs"
-                  onClick={() => onSave(r.key, { points: d.points, is_active: d.is_active,
-                                                 daily_cap: d.daily_cap === '' ? null : Number(d.daily_cap) })}>
+                  onClick={() => onSave(r.key, payload())}>
             {t('حفظ', 'Save')}
           </button>
         )}
       </td>
     </tr>
+    {openRoles && (
+      <tr className="border-b border-gray-50 bg-gray-50">
+        <td colSpan={5} className="py-2">
+          <div className="text-[11px] text-gray-500 mb-1">
+            {t('اتركها فارغة لتأخذ نقاط القاعدة العامة.', 'Leave empty to use the rule\'s general points.')}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {ROLES.slice(1).map(([k, ar, en]) => (
+              <label key={k} className="text-xs flex items-center gap-1">
+                {t(ar, en)}
+                <input type="number" className="input-field w-16 text-xs" value={d.role_points[k] ?? ''}
+                       placeholder={String(d.points)}
+                       onChange={e => setD({ ...d, role_points: { ...d.role_points, [k]: e.target.value } })} />
+              </label>
+            ))}
+          </div>
+        </td>
+      </tr>
+    )}
+    </>
   )
 }
 
@@ -725,6 +846,7 @@ export default function GamificationPage() {
     ['badges', '🏅 الشارات', '🏅 Badges'],
     ['rules', '📜 كيف تكسب النقاط', '📜 How to earn'],
     ['champions', '👑 أبطال الشهر', '👑 Champions'],
+    ['challenges', '🤝 تحديات الفروع', '🤝 Team challenges'],
     ['rewards', '🎁 المكافآت', '🎁 Rewards'],
     ...(me?.can_manage ? [['redemptions', '📦 طلبات المكافآت', '📦 Reward requests'],
                           ['reports', '📊 التقارير', '📊 Reports']] : []),
@@ -759,6 +881,7 @@ export default function GamificationPage() {
             {tab === 'badges' && <BadgesTab me={me} t={t} lang={lang} />}
             {tab === 'rules' && <RulesTab t={t} lang={lang} />}
             {tab === 'champions' && <ChampionsTab t={t} lang={lang} />}
+            {tab === 'challenges' && <ChallengesTab t={t} lang={lang} />}
             {tab === 'rewards' && <RewardsTab t={t} lang={lang} />}
             {tab === 'redemptions' && me.can_manage && <RedemptionsTab t={t} lang={lang} canEdit={me.can_edit} />}
             {tab === 'reports' && me.can_manage && <ReportsTab t={t} lang={lang} />}

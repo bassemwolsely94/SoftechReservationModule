@@ -11,6 +11,8 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { procurementIntelApi } from '../api/client'
+import DataFreshnessBar from '../components/DataFreshnessBar'
+import useAuthStore from '../store/authStore'
 import { useProcurementFilters } from '../components/ProcurementFilters'
 import useHelpTab from '../help/useHelpTab'
 import useSortableRows from '../hooks/useSortableRows'
@@ -74,6 +76,7 @@ function SimpleBarChart({ data, labelKey, valueKey, colorClass, maxValue }) {
 }
 
 export default function FocAnalysisPage() {
+  const { user } = useAuthStore()
   const { params } = useProcurementFilters()
   const [activeTab, setActiveTab] = useState('foc')
   useHelpTab(activeTab)
@@ -119,6 +122,10 @@ export default function FocAnalysisPage() {
           </p>
         </div>
       </div>
+
+      <DataFreshnessBar domains={['purchases']}
+        canEdit={user?.is_staff || ['admin', 'purchasing'].includes(user?.role)}
+        onRefresh={() => procurementIntelApi.triggerEngine({})} />
 
       {/* Quick KPIs row */}
       <div data-tour="purchasing-foc-kpis" className="grid grid-cols-2 md:grid-cols-4 gap-4">

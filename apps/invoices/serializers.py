@@ -4,6 +4,7 @@ from django.db import models as dj_models
 from rest_framework import serializers
 from .models import (SupplierInvoice, InvoiceLine, VendorProfile, VendorItemMapping,
                      InvoiceBatch, PurchaseOrder, PurchaseOrderLine)
+from apps.data_lifecycle.display import RetentionNoteMixin
 
 
 class PurchaseOrderLineSerializer(serializers.ModelSerializer):
@@ -129,7 +130,8 @@ class InvoiceLineWriteSerializer(serializers.ModelSerializer):
         return iso
 
 
-class SupplierInvoiceListSerializer(serializers.ModelSerializer):
+class SupplierInvoiceListSerializer(RetentionNoteMixin, serializers.ModelSerializer):
+    retention_fields = ('source_image',)
     branch_name     = serializers.CharField(source='branch.name_ar', read_only=True)
     vendor_name     = serializers.CharField(source='vendor.name', read_only=True, default=None)
     vendor_personcode = serializers.CharField(source='vendor.softech_personcode', read_only=True, default='')
@@ -203,7 +205,7 @@ class SupplierInvoiceCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = SupplierInvoice
         fields = [
-            'branch', 'vendor', 'doc_kind', 'supplier_name', 'invoice_number', 'invoice_date',
+            'id', 'branch', 'vendor', 'doc_kind', 'supplier_name', 'invoice_number', 'invoice_date',
             'currency', 'global_discount_pct', 'global_discount_amt',
             'return_of_docnumber', 'source_image', 'notes',
         ]
@@ -211,7 +213,8 @@ class SupplierInvoiceCreateSerializer(serializers.ModelSerializer):
 
 # ── Multi-invoice bundle ────────────────────────────────────────────────────────
 
-class InvoiceBatchListSerializer(serializers.ModelSerializer):
+class InvoiceBatchListSerializer(RetentionNoteMixin, serializers.ModelSerializer):
+    retention_fields = ('source_file',)
     branch_name     = serializers.CharField(source='branch.name_ar', read_only=True)
     vendor_name     = serializers.CharField(source='vendor.name', read_only=True, default=None)
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, default=None)
@@ -254,4 +257,4 @@ class InvoiceBatchDetailSerializer(InvoiceBatchListSerializer):
 class InvoiceBatchCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = InvoiceBatch
-        fields = ['branch', 'vendor', 'doc_kind', 'ocr_engine', 'source_file']
+        fields = ['id', 'branch', 'vendor', 'doc_kind', 'ocr_engine', 'source_file']

@@ -7,6 +7,7 @@ from .models import (
     OvertimeRequest, SalaryAdvance, ExpenseClaim,
     Permit,
 )
+from apps.data_lifecycle.display import RetentionNoteMixin
 
 
 def _staff_code(staff):
@@ -188,7 +189,8 @@ class SubmitAdvanceSerializer(SubjectFieldsMixin, serializers.Serializer):
 
 # ── Expense claim ──────────────────────────────────────────────────────────────
 
-class ExpenseClaimSerializer(StaffCodeMixin, serializers.ModelSerializer):
+class ExpenseClaimSerializer(RetentionNoteMixin, StaffCodeMixin, serializers.ModelSerializer):
+    retention_fields = ('receipt',)
     staff_name       = serializers.CharField(source='staff.full_name', read_only=True)
     branch_name      = serializers.CharField(source='branch.name_ar', read_only=True)
     category_display = serializers.CharField(source='get_category_display', read_only=True)

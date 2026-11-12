@@ -124,7 +124,28 @@ class _InvoiceFrozen(APIException):
     default_detail = 'الفاتورة في طابور الترحيل أو مُرحَّلة إلى SOFTECH — لا يمكن تعديل رأسها أو سطورها.'
 
 
-class SupplierInvoiceViewSet(viewsets.ModelViewSet):
+class _DuplicateUploadNotice:
+    """Same file uploaded again: answer 200 {'duplicate_of': {...}} and save nothing, unless the
+    request carries allow_duplicate=1. The hash is stored on the new row either way."""
+    upload_field = ''
+    _upload_sha = ''
+
+    def create(self, request, *args, **kwargs):
+        from core.upload_safety import sha256_of
+        from .duplicates import find_duplicate
+        self._upload_sha = ''
+        f = request.FILES.get(self.upload_field)
+        if f:
+            self._upload_sha = sha256_of(f)
+            allow = str(request.data.get('allow_duplicate', '')).lower() in ('1', 'true')
+            dup = None if allow else find_duplicate(self._upload_sha)
+            if dup:
+                return Response({'duplicate_of': dup})
+        return super().create(request, *args, **kwargs)
+
+
+class SupplierInvoiceViewSet(_DuplicateUploadNotice, viewsets.ModelViewSet):
+    upload_field = 'source_image'
     permission_classes = [IsAuthenticated, MatrixPermission]
     rbac_module = 'invoices'
     rbac_actions = {
@@ -222,7 +243,7 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         profile = getattr(self.request.user, 'staff_profile', None)
-        invoice = serializer.save(created_by=profile)
+        invoice = serializer.save(created_by=profile, source_sha256=self._upload_sha)
         # If image uploaded, kick off OCR in the background
         if invoice.source_image:
             self._run_ocr_async(invoice)
@@ -247,6 +268,9 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         from .ocr import (extract_text, parse_lines,
                           extract_structured, parse_structured, vendor_prompt_hints)
 
+        if not invoice.source_image:    # retention removed the file; nothing to read
+            logger.warning('OCR skipped for invoice %s: no image file', invoice.pk)
+            return
         invoice.status = 'processing'
         invoice.save(update_fields=['status'])
 
@@ -317,6 +341,12 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         """
         invoice = self.get_object()
         if not invoice.source_image:
+            from apps.data_lifecycle.display import removed_dates
+            gone = removed_dates([invoice], ('source_image',)).get(
+                (invoice._meta.label, str(invoice.pk), 'source_image'))
+            if gone:    # retention removed the image: say so, change nothing
+                return Response({'detail': f'أُزيلت الصورة وفق سياسة الاحتفاظ بتاريخ {gone} — لا يمكن إعادة القراءة'},
+                                status=status.HTTP_400_BAD_REQUEST)
             return Response({'detail': 'لا توجد صورة مرفوعة'}, status=status.HTTP_400_BAD_REQUEST)
         engine = (request.data.get('engine') or request.query_params.get('engine') or '').strip() or None
         invoice.lines.all().delete()
@@ -1122,13 +1152,14 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=getattr(self.request.user, 'staff_profile', None))
 
 
-class InvoiceBatchViewSet(viewsets.ModelViewSet):
+class InvoiceBatchViewSet(_DuplicateUploadNotice, viewsets.ModelViewSet):
     """
     Multi-invoice PDF bundles: upload one distributor PDF → it is rendered, split
     into the separate invoices it contains, and each becomes a SupplierInvoice in
     the normal review queue. The split is advisory and fully auditable
     (split_summary); the operator reviews/confirms every invoice before posting.
     """
+    upload_field = 'source_file'
     permission_classes = [IsAuthenticated, MatrixPermission]
     rbac_module = 'invoices'
     rbac_actions = {'reprocess': ('edit',)}
@@ -1160,7 +1191,7 @@ class InvoiceBatchViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         profile = getattr(self.request.user, 'staff_profile', None)
-        batch = serializer.save(created_by=profile)
+        batch = serializer.save(created_by=profile, source_sha256=self._upload_sha)
         if batch.source_file:
             from . import ingest
             ingest.start_async(batch)

@@ -72,6 +72,7 @@ class Notification(models.Model):
         ('system',                    '⚙️ نظام'),
         ('branch_connectivity',       '🔌 اتصال فرع'),
         ('sync_failure',              '🔴 فشل مزامنة متكرر'),
+        ('attendance_alert',          '🕒 تنبيه الحضور والبصمة'),
         ('receipt_check_digest',      '📦 استلام بدون طلب'),
         ('return_window_digest',      '📆 نوافذ مرتجع الموردين'),
         # ── Personal ──────────────────────────────────────────────────────────
@@ -80,6 +81,7 @@ class Notification(models.Model):
         ('gamification_badge',        '🏅 شارة جديدة'),
         ('gamification_reward',       '🎁 مكافأة'),
         ('gamification_champion',     '👑 بطل الشهر'),
+        ('gamification_team',         '🤝 تحدي الفروع'),
         # ── Internal broadcast ────────────────────────────────────────────────
         ('announcement',              '📢 إعلان داخلي'),
     ]
@@ -180,6 +182,8 @@ class Notification(models.Model):
         'system':               CATEGORY_SETTINGS,
         'branch_connectivity':  CATEGORY_SETTINGS,
         'sync_failure':         CATEGORY_SETTINGS,
+        # HR attendance health: for the HR head only, so it rides the bell silently (global).
+        'attendance_alert':     CATEGORY_GLOBAL,
         # ── Periodic digests → 📊 reports feed (quiet) ────────────────────────
         'weekly_summary':       CATEGORY_REPORTS,
         'monthly_report':       CATEGORY_REPORTS,
@@ -198,6 +202,7 @@ class Notification(models.Model):
         'gamification_badge':    CATEGORY_GLOBAL,
         'gamification_reward':   CATEGORY_GLOBAL,
         'gamification_champion': CATEGORY_GLOBAL,
+        'gamification_team':     CATEGORY_GLOBAL,
         # ── Internal announcement → bell ──────────────────────────────────────
         'announcement':         CATEGORY_GLOBAL,
     }

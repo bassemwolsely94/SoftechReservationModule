@@ -607,12 +607,7 @@ def task_attachment_delete(request, pk, att_pk):
     except TaskAttachment.DoesNotExist:
         return Response({'detail': 'Not found.'}, status=404)
 
-    try:
-        if att.file:
-            att.file.delete(save=False)
-    except Exception:
-        pass
-    att.delete()
+    att.delete()            # the file goes to the holding folder for 30 days (apps/data_lifecycle/follow.py)
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 

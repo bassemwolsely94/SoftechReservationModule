@@ -412,8 +412,12 @@ SCREENS = [
              'text': T('يفتح السجل اللي المهمة اتعملت عشانه (حجز، تحويل…).', 'Opens the record the task was made for (reservation, transfer…).'),
              'open_hint': T('يظهر بس لو المهمة مربوطة بسجل.', 'Shown only when the task is linked to a record.')},
         ],
-        'updated': '2026-11-03',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'tips': [
+            T('صور المرفقات الجديدة بتتصغّر تلقائيًا (١٦٠٠ بكسل). تقدر تمسح مرفق أو تبدّله زي الأول، والمحذوف بيتحفظ ٣٠ يومًا قبل ما يتمسح نهائيًا.',
+              'New attachment photos are shrunk automatically (1600 px). You can delete or replace an attachment as before; a removed one is kept 30 days before it is gone for good.'),
+        ],
+        'updated': '2026-11-12',
+        'change_note': T('الصور الجديدة بتتصغّر والمحذوف بيتحفظ ٣٠ يومًا.', 'New photos are shrunk and deleted files are kept 30 days.'),
     },
     {
         'key': 'tasks.dashboard',

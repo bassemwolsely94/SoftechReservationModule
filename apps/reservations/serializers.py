@@ -6,13 +6,15 @@ from .models import Reservation, ReservationStatusLog, ReservationActivity, Rese
 # ── Reservation Images ────────────────────────────────────────────────────────
 
 from apps.customers.phone_mask import RecordPhoneMask, CustomerPhoneMask  # Batch 5b
+from apps.data_lifecycle.display import RetentionNoteMixin
 
-class ReservationImageSerializer(serializers.ModelSerializer):
+class ReservationImageSerializer(RetentionNoteMixin, serializers.ModelSerializer):
+    retention_fields = ('image',)
     image_url = serializers.SerializerMethodField()
     uploaded_by_name = serializers.CharField(source='uploaded_by.full_name', read_only=True)
 
     def get_image_url(self, obj):
-        if not obj.image:          # a row whose file is missing must not break the reservation
+        if not obj.image:          # file missing or removed by the data lifecycle: keep the reservation working
             return None
         request = self.context.get('request')
         if request:
@@ -52,7 +54,8 @@ class ReservationStatusLogSerializer(serializers.ModelSerializer):
 
 # ── Activity / Chatter ────────────────────────────────────────────────────────
 
-class ReservationActivitySerializer(serializers.ModelSerializer):
+class ReservationActivitySerializer(RetentionNoteMixin, serializers.ModelSerializer):
+    retention_fields = ('attachment', 'voice_note')
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True)
     created_by_id   = serializers.IntegerField(source='created_by.id',     read_only=True)
     created_by_username = serializers.CharField(
@@ -198,7 +201,8 @@ class ReservationLineCreateSerializer(serializers.ModelSerializer):
 
 # ── Reservation List ──────────────────────────────────────────────────────────
 
-class ReservationListSerializer(PhoneAlertStatusMixin, RecordPhoneMask, serializers.ModelSerializer):
+class ReservationListSerializer(RetentionNoteMixin, PhoneAlertStatusMixin, RecordPhoneMask, serializers.ModelSerializer):
+    retention_fields = ('image',)
     phone_mask_fields = ('customer_phone', 'contact_phone')
     phone_alert_model = Reservation
     phone_alert_status = serializers.SerializerMethodField()
@@ -324,7 +328,8 @@ class ReservationListSerializer(PhoneAlertStatusMixin, RecordPhoneMask, serializ
 
 # ── Reservation Detail ────────────────────────────────────────────────────────
 
-class ReservationDetailSerializer(PhoneAlertStatusMixin, RecordPhoneMask, serializers.ModelSerializer):
+class ReservationDetailSerializer(RetentionNoteMixin, PhoneAlertStatusMixin, RecordPhoneMask, serializers.ModelSerializer):
+    retention_fields = ('image',)
     phone_mask_fields = ('customer_phone', 'contact_phone')
     phone_alert_model = Reservation
     phone_alert_status = serializers.SerializerMethodField()
