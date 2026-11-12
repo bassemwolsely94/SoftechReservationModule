@@ -860,7 +860,11 @@ export const supplyApi = {
   // server never read, so every filter returned all categories (owner bug 2026-10-24)
   distPreview: ({ category, ...params } = {}) => api.get('/purchasing/isr/distribution/', {
     params: { ...params, ...(category ? { category: [].concat(category).join(',') } : {}) } }),
-  distGenerate: (data = {})  => api.post('/purchasing/isr/distribution/generate/', data),
+  // «التوزيعة» plan (doc 30 phases B–D): build (reads SOFTECH) → review waves → generate drafts
+  distPlan:         (id)        => api.get('/purchasing/isr/distribution/plan/', { params: id ? { id } : {} }),
+  distPlanBuild:    (data = {}) => api.post('/purchasing/isr/distribution/plan/build/', data),
+  distPlanGenerate: (id)        => api.post(`/purchasing/isr/distribution/plan/${id}/generate/`, {}),
+  distPlanExcel:    (id)        => api.get(`/purchasing/isr/distribution/plan/${id}/export/`, { responseType: 'blob' }),
   distExcel: ({ category, ...params } = {}) => api.get('/purchasing/isr/distribution/', {
     params: { ...params, format: 'xlsx', ...(category ? { category: [].concat(category).join(',') } : {}) },
     responseType: 'blob' }),
