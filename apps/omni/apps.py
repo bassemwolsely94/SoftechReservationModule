@@ -7,4 +7,4 @@ class OmniConfig(AppConfig):
     verbose_name = 'منصة التواصل الموحدة'
 
     def ready(self):
-        from apps.omni import signals  # noqa: F401
+        from apps.omni import checks, signals  # noqa: F401  (registers signals and the deploy check)
