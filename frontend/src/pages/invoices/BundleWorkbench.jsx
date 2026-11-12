@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { invoicesApi, branchesApi } from '../../api/client'
 import BranchSelect from '../../components/BranchSelect'
 import VendorTemplateEditor from './VendorTemplateEditor'
+import { ba } from '../../utils/flowArrow'
 import DuplicateNotice from './DuplicateNotice'
 
 /**
@@ -170,7 +171,7 @@ function BundleDetail({ batchId, onBack, onOpenInvoice }) {
     <div className="flex flex-col h-full bg-gray-50" dir="rtl">
       <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button onClick={onBack} className="text-gray-400 hover:text-gray-700">→ رجوع</button>
+          <button onClick={onBack} className="text-gray-400 hover:text-gray-700">{ba()} رجوع</button>
           <div>
             <div className="font-bold text-gray-900">حزمة #{batch.id} — {batch.vendor_name || 'مورد غير محدد'}</div>
             <div className="text-xs text-gray-500">{batch.branch_name} · {batch.page_count} صفحة · {batch.detected_count} فاتورة مكتشفة</div>
