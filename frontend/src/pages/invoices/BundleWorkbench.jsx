@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { invoicesApi, branchesApi } from '../../api/client'
 import BranchSelect from '../../components/BranchSelect'
 import VendorTemplateEditor from './VendorTemplateEditor'
+import { ba } from '../../utils/flowArrow'
+import DuplicateNotice from './DuplicateNotice'
 
 /**
  * Multi-invoice PDF bundle review workbench.
@@ -42,19 +44,20 @@ function FlagChips({ flags }) {
   )
 }
 
-function UploadBundle({ branches, onClose, onCreated }) {
+function UploadBundle({ branches, onClose, onCreated, onOpenInvoice }) {
   const [form, setForm] = useState({ branch: '', vendor: '', doc_kind: 'purchase', ocr_engine: '' })
   const [vendors, setVendors] = useState([])
   const [file, setFile] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [dup, setDup] = useState(null)
 
   useEffect(() => { invoicesApi.listVendors({ main: 1 }).then(r => setVendors(r.data.results || r.data)).catch(() => {}) }, [])
 
-  const submit = async () => {
+  const submit = async (allowDuplicate = false) => {
     if (!form.branch) { setError('اختر الفرع'); return }
     if (!file) { setError('اختر ملف PDF'); return }
-    setSaving(true); setError('')
+    setSaving(true); setError(''); setDup(null)
     try {
       const fd = new FormData()
       fd.append('branch', form.branch)
@@ -62,7 +65,9 @@ function UploadBundle({ branches, onClose, onCreated }) {
       fd.append('doc_kind', form.doc_kind)
       if (form.ocr_engine) fd.append('ocr_engine', form.ocr_engine)
       fd.append('source_file', file)
+      if (allowDuplicate) fd.append('allow_duplicate', '1')
       const r = await invoicesApi.createBatch(fd)
+      if (r.data.duplicate_of) { setDup(r.data.duplicate_of); return }
       onCreated(r.data.id)
     } catch (e) {
       setError(e.response?.data?.detail || 'فشل رفع الحزمة')
@@ -113,8 +118,13 @@ function UploadBundle({ branches, onClose, onCreated }) {
           </div>
         </div>
         {error && <div className="mt-3 text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
+        {dup && (
+          <DuplicateNotice dup={dup} busy={saving}
+            onOpen={() => (dup.kind === 'invoice' ? onOpenInvoice(dup.id) : onCreated(dup.id))}
+            onContinue={() => submit(true)} />
+        )}
         <div className="flex gap-2 mt-5">
-          <button data-tour="invoices-main-bundle-upload" onClick={submit} disabled={saving}
+          <button data-tour="invoices-main-bundle-upload" onClick={() => submit()} disabled={saving}
             className="flex-1 py-2.5 bg-brand-600 text-white rounded-xl font-medium hover:bg-brand-700 disabled:opacity-50 text-sm">
             {saving ? 'جارٍ الرفع والتقسيم…' : 'رفع وتقسيم'}
           </button>
@@ -161,7 +171,7 @@ function BundleDetail({ batchId, onBack, onOpenInvoice }) {
     <div className="flex flex-col h-full bg-gray-50" dir="rtl">
       <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button onClick={onBack} className="text-gray-400 hover:text-gray-700">→ رجوع</button>
+          <button onClick={onBack} className="text-gray-400 hover:text-gray-700">{ba()} رجوع</button>
           <div>
             <div className="font-bold text-gray-900">حزمة #{batch.id} — {batch.vendor_name || 'مورد غير محدد'}</div>
             <div className="text-xs text-gray-500">{batch.branch_name} · {batch.page_count} صفحة · {batch.detected_count} فاتورة مكتشفة</div>
@@ -249,7 +259,7 @@ function BundleDetail({ batchId, onBack, onOpenInvoice }) {
   )
 }
 
-export default function BundleWorkbench({ branches, onOpenInvoice }) {
+export default function BundleWorkbench({ branches, onOpenInvoice, openBatchId, onBatchOpened }) {
   const [batches, setBatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [showUpload, setShowUpload] = useState(false)
@@ -263,6 +273,11 @@ export default function BundleWorkbench({ branches, onOpenInvoice }) {
 
   useEffect(() => { load() }, [load])
 
+  // an earlier upload of the same file lives on the other tab: open it here
+  useEffect(() => {
+    if (openBatchId) { setActiveBatch(openBatchId); onBatchOpened?.() }
+  }, [openBatchId])  // eslint-disable-line react-hooks/exhaustive-deps
+
   if (activeBatch) {
     return <BundleDetail batchId={activeBatch} onBack={() => { setActiveBatch(null); load() }}
                          onOpenInvoice={onOpenInvoice} />
@@ -271,7 +286,7 @@ export default function BundleWorkbench({ branches, onOpenInvoice }) {
   return (
     <div className="flex-1 overflow-auto p-6" dir="rtl">
       {showUpload && (
-        <UploadBundle branches={branches} onClose={() => setShowUpload(false)}
+        <UploadBundle branches={branches} onClose={() => setShowUpload(false)} onOpenInvoice={onOpenInvoice}
           onCreated={(id) => { setShowUpload(false); setActiveBatch(id); load() }} />
       )}
 

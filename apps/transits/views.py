@@ -112,6 +112,7 @@ class InTransitTransferViewSet(viewsets.ReadOnlyModelViewSet):
 
     # RouteModulePermission (D6, matrix wins): TRANSFERS lets any non-view grant through, so an export-only
     # holder (quality manager) could add notes and mark a transfer received; the middleware asks create.
+    # Owner decision 2026-11-12 ("No, block them"): the quality manager does not note or receive transfers.
     permission_classes = [IsAuthenticated, TRANSFERS, RouteModulePermission]
     filter_backends    = [
         DjangoFilterBackend,

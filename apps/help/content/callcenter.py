@@ -289,7 +289,9 @@ SCREENS = [
             T('شكوى أو طلب يحتاج متابعة؟ «فتح حالة جديدة» (التصنيف، الأولوية، العنوان، الوصف).', 'A complaint or request needing follow-up? "Open new case" (type, priority, title, description).'),
             T('«جدولة متابعة» لتذكير بموعد (تذكير إعادة صرف، متابعة مزمن، متابعة طلب، مهمة مخصصة).', '"Schedule follow-up" for a reminder (refill reminder, chronic follow-up, request follow-up, custom task).'),
         ],
-        'tips': [T('موظف الفرع لازم يكتب رقم الموبايل كامل في البحث؛ موظفو الكول سنتر يقدروا يبحثوا بجزء من الرقم.', 'Branch staff must type the full mobile number to look it up; call-center agents can search by part of it.'),
+        'tips': [T('صور الروشتة والمرفقات الجديدة بتتصغّر تلقائيًا (أطول ضلع ٢٠٠٠ بكسل). لو مرفق اتمسح أو اتبدّل، القديم بيتحفظ ٣٠ يومًا على السيرفر قبل ما يتمسح نهائيًا.',
+                   'New prescription photos and attachments are shrunk automatically (longest side 2000 px). If an attachment is deleted or replaced, the old one is kept 30 days on the server before it is gone for good.'),
+                 T('موظف الفرع لازم يكتب رقم الموبايل كامل في البحث؛ موظفو الكول سنتر يقدروا يبحثوا بجزء من الرقم.', 'Branch staff must type the full mobile number to look it up; call-center agents can search by part of it.'),
                  T('موظف الفرع بيشوف مكالمات فرعه ومحادثاته بس، ومينفعش يحوّل مكالمة لحجز أو تحويل باسم فرع تاني.', "Branch staff see their branch's calls and conversations only, and cannot turn a call into a reservation or transfer for another branch."),
                  
             T('«مخاطر الشكوى» تظهر للعملاء ذوي التاريخ السلبي — تعامل بعناية.', '"Complaint risk" shows for customers with a negative history — handle with care.'),
@@ -510,8 +512,8 @@ SCREENS = [
              'text': T('يستخدم الرقم ده كـ «عميل غير مسجل» في الشاشة دي — مش بيضيف عميل جديد لقائمة العملاء.', 'Uses this number as an "unregistered customer" on this screen — it does not add a customer to the list.'),
              'warn': T('راجع الرقم كويس: التواصل والرسايل بتروح على الرقم ده.', 'Check the number carefully: calls and messages go to it.')},
         ],
-        'updated': '2026-11-10',
-        'change_note': T('جديد: «💬 آخر الرسائل» — رسائل العميل على واتساب بجانب ملفه.', 'New: "💬 Latest messages" — the customer\'s WhatsApp messages beside their profile.'),
+        'updated': '2026-11-12',
+        'change_note': T('الصور الجديدة بتتصغّر والمرفق المحذوف بيتحفظ ٣٠ يومًا.', 'New photos are shrunk and deleted attachments are kept 30 days.'),
     },
     {
         'key': 'callcenter.cases',
@@ -525,7 +527,9 @@ SCREENS = [
             T('افتح الحالة ← «بدء المعالجة» ← سجّل كل خطوة في الملاحظات (@ لذكر زميل).', 'Open the case → "Start working" → log each step in notes (@ to mention a colleague).'),
             T('«حل الحالة» واشرح الحل والسبب الجذري، ثم «إغلاق».', '"Resolve case" with the solution and root cause, then "Close".'),
         ],
-        'tips': [T('موظف الفرع بيشوف شكاوى فرعه والشكاوى المسندة له.', "Branch staff see their branch's cases and the cases assigned to them."),
+        'tips': [T('صور الروشتة والمرفقات الجديدة بتتصغّر تلقائيًا (أطول ضلع ٢٠٠٠ بكسل). لو مرفق اتمسح أو اتبدّل، القديم بيتحفظ ٣٠ يومًا على السيرفر قبل ما يتمسح نهائيًا.',
+                   'New prescription photos and attachments are shrunk automatically (longest side 2000 px). If an attachment is deleted or replaced, the old one is kept 30 days on the server before it is gone for good.'),
+                 T('موظف الفرع بيشوف شكاوى فرعه والشكاوى المسندة له.', "Branch staff see their branch's cases and the cases assigned to them."),
                  
             T('لكل حالة موعد SLA تلقائي حسب الأولوية: عاجلة 4 ساعات، مرتفعة 8، عادية 24، منخفضة 72 (يمكن تحديد موعد آخر عند الفتح).',
               'Every case gets an automatic SLA deadline by priority: urgent 4 hours, high 8, normal 24, low 72 (a different deadline can be set when opening).'),
@@ -623,8 +627,8 @@ SCREENS = [
              'warn': T('اكتب الحل اللي اتعمل فعلاً — ده اللي المشرف بيراجعه.', 'Write what was actually done — that is what the supervisor reviews.'),
              'open_hint': T('بعد «✅ حل الحالة».', 'After "✅ Resolve case".')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح لكل أزرار الشاشة في «💡 تلميحات الأزرار»', 'Every button on the screen explained in "💡 Button hints"'),
+        'updated': '2026-11-12',
+        'change_note': T('الصور الجديدة بتتصغّر والمرفق المحذوف بيتحفظ ٣٠ يومًا.', 'New photos are shrunk and deleted attachments are kept 30 days.'),
     },
     {
         'key': 'callcenter.analytics',

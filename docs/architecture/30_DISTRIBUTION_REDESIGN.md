@@ -147,8 +147,11 @@ These close the double-post risk without waiting for the redesign.
 
 ## 5. Decisions for the owner
 
-1. Thresholds: 100 EGP per line and 1,000 EGP per document. Keep or change?
-2. Wave order (§2.3). Keep or change?
-3. Does the «بعد الاستلام» part wait for the leg to be **pushed** or **received at HQ**?
-4. Draft expiry: 7 days?
-5. Phase A now, separately, before the redesign?
+Decided by the owner on 2026-11-10 (all as recommended):
+
+1. Thresholds: ✅ 100 EGP per branch-sourced line; a route document under 1,000 EGP waits for the next run; HQ moves always stay.
+2. Wave order: ✅ HQ-first (§2.3): HQ direct → over-piled excess → introductions only from over-piled branches → trial seeds.
+3. Forwarding leg: ✅ waits until the branch → HQ leg is **received at HQ** (transfer-sync receipt record), not merely pushed.
+4. Draft expiry: ✅ unapproved drafts expire after 7 days (audited).
+5. Phase A: ✅ built first (2026-10-25).
+6. Build order of the remaining work: seasonality switch → this doc's phases B–D → doc 31 phases B–D.

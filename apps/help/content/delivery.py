@@ -529,7 +529,9 @@ SCREENS = [
                  T('السائق لا يلغي الطلب ولا يغلقه — الإلغاء والإغلاق من مسؤول التوزيع أو المشرف. لو الطلب لازم يتلغي كلّم المسؤول. موقعك بيتبعت للتتبع بس ولا يغيّر عنوان العميل المسجَّل.', 'A driver cannot cancel or close an order — cancelling and closing are done by the dispatcher or supervisor. If an order must be cancelled, tell them. Your location is only sent for tracking and never changes the customer recorded address.'),
                  T('«متوقّع نقدي» أعلى الشاشة = إجمالي النقد الذي يجب أن تحصّله في مسار اليوم.', '"Expected cash" at the top = the total cash you should collect on today\'s route.'),
                  T('تقدر تسجّل حالة أو نقدية على الطلبات المكلَّف بيها إنت بس — طلب سائق تاني بيترفض برسالة «هذا الطلب غير مسند إليك».',
-                   'You can record a status or cash only on orders assigned to you — another rider\'s order is refused with "this order is not assigned to you".')],
+                   'You can record a status or cash only on orders assigned to you — another rider\'s order is refused with "this order is not assigned to you".'),
+                 T('صورة إثبات التسليم بتتصغّر تلقائيًا (أطول ضلع ١٦٠٠ بكسل). لو اتبدّلت أو اتمسح الطلب، الصورة القديمة بتتحفظ ٣٠ يومًا على السيرفر قبل ما تتمسح نهائيًا.',
+                   'The proof-of-delivery photo is shrunk automatically (longest side 1600 px). If it is replaced or the order is deleted, the old photo is kept 30 days on the server before it is gone for good.')],
         'tour': [
             {'target': 'delivery-driver-header', 'label': T('🚚 مهامي اليوم', '🚚 My tasks today'),
              'text': T('رقم مسارك، اتسلّم كام من كام، والنقدي المتوقّع اللي المفروض تحصّله.',
@@ -591,8 +593,8 @@ SCREENS = [
                        'Final from the app. It may be refused if you are far from the recorded customer address.'),
              'open_hint': T('اضغط «تم التسليم ✅» على طلب في الطريق.', 'Press "Delivered ✅" on an order on the way.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('زر «🔒 أمان الحساب» في شاشة الطيار لتفعيل المصادقة الثنائية', 'An "🔒 Account security" button on the rider screen to turn on two-factor'),
+        'updated': '2026-11-12',
+        'change_note': T('صورة إثبات التسليم بتتصغّر، والقديمة بتتحفظ ٣٠ يومًا.', 'The proof-of-delivery photo is shrunk, and an old one is kept 30 days.'),
     },
     {
         'key': 'delivery.analytics',

@@ -7,8 +7,8 @@ from datetime import date, timedelta
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
-from .models import (CATEGORY_CHOICES, Badge, DailyScore, Level, LevelHistory, PlayerProfile,
-                     PointEvent, PointRule, StaffBadge)
+from .models import (CATEGORY_CHOICES, RANKING_EXCLUDED_CATEGORIES, Badge, DailyScore, Level,
+                     LevelHistory, PlayerProfile, PointEvent, PointRule, StaffBadge)
 
 PERIODS = ('day', 'week', 'month', 'quarter', 'year', 'all')
 NETWORK_TOP = 10
@@ -70,7 +70,7 @@ def ranking(start, end, branch_id=None, role=None, limit=None):
     from apps.users.models import StaffProfile
     # Champion bonuses never count in a ranking — last month's winner starts level.
     qs = PointEvent.objects.filter(day__gte=start, day__lte=end, staff__is_active=True) \
-        .exclude(category='champion')
+        .exclude(category__in=RANKING_EXCLUDED_CATEGORIES)
     if branch_id:
         qs = qs.filter(staff__branch_id=branch_id)
     if role:
@@ -109,7 +109,7 @@ def rank_of(staff, start, end, branch_id=None, role=None):
 def branch_ranking(start, end):
     from apps.branches.models import Branch
     ev = (PointEvent.objects.filter(day__gte=start, day__lte=end, staff__is_active=True,
-                                    staff__branch__isnull=False).exclude(category='champion')
+                                    staff__branch__isnull=False).exclude(category__in=RANKING_EXCLUDED_CATEGORIES)
           .values('staff__branch_id')
           .annotate(net=Sum('points'), earned=Sum('points', filter=Q(points__gt=0)),
                     lost=Sum('points', filter=Q(points__lt=0)),
@@ -185,6 +185,11 @@ def open_items(staff):
         add('transfers_to_receive', 'تحويلات في الطريق لفرعك', 'Transfers on the way to your branch',
             InTransitTransfer.objects.filter(receiving_branch_id=staff.branch_id,
                                              transit_status='in_transit').count(), '/transits')
+    from apps.stockcount.models import DailyCountPick
+    add('daily_count_open', 'أصناف في جردك اليومي لم تُجرد', 'Daily-count items still to count',
+        DailyCountPick.objects.filter(
+            Q(session__assigned_to=staff, session__count_date=today, status='pending')
+            | Q(recount_by=staff, status='recount')).count(), '/m/daily-count', True)
     return items
 
 
@@ -230,6 +235,37 @@ def _titles(staff):
     return titles_for(staff)
 
 
+def pic_report(start, end, branch_id=None):
+    """Customer codes (PIC) in the executive report: new / won back / served, the invoice
+    capture rate, and the employees who brought the most new customers."""
+    from apps.customers.models import PurchaseHistory
+    from apps.users.models import StaffProfile
+    from .engine import day_bounds
+    from .pic import _excluded
+    ev = PointEvent.objects.filter(day__gte=start, day__lte=end,
+                                   rule_key__in=('pic_new', 'pic_reactivated', 'pic_visit'))
+    if branch_id:
+        ev = ev.filter(staff__branch_id=branch_id)
+    counts = dict(ev.values('rule_key').annotate(n=Count('id')).values_list('rule_key', 'n'))
+    top = list(ev.filter(rule_key='pic_new').values('staff_id').annotate(n=Count('id'))
+               .order_by('-n')[:10])
+    names = {s.id: s for s in StaffProfile.objects.filter(id__in=[t['staff_id'] for t in top])
+             .select_related('user', 'branch')}
+    s, _ = day_bounds(start)
+    _, e = day_bounds(end)
+    inv = PurchaseHistory.objects.filter(doc_code='115', invoice_date__gte=s, invoice_date__lt=e)
+    if branch_id:
+        inv = inv.filter(branch_id=branch_id)
+    agg = inv.aggregate(total=Count('id'), on_pic=Count(
+        'id', filter=~Q(softech_phcode='') & ~Q(softech_phcode__in=list(_excluded()))))
+    return {'new_pics': counts.get('pic_new', 0), 'reactivated': counts.get('pic_reactivated', 0),
+            'customer_visits': counts.get('pic_visit', 0),
+            'invoices': agg['total'], 'invoices_on_pic': agg['on_pic'],
+            'capture_pct': round(agg['on_pic'] * 100 / agg['total'], 1) if agg['total'] else None,
+            'top_new': [{**_staff_row(names[t['staff_id']]), 'new_pics': t['n']}
+                        for t in top if t['staff_id'] in names]}
+
+
 def champions_in(start, end, branch_id=None):
     from .champions import champion_json
     from .models import Champion
@@ -238,6 +274,14 @@ def champions_in(start, end, branch_id=None):
     if branch_id:
         qs = qs.filter(branch_id=branch_id)
     return [champion_json(c) for c in qs]
+
+
+def _pic(staff):
+    try:
+        from .pic import summary
+        return summary(staff)
+    except Exception:          # the panel must never break the profile
+        return {'linked': False, 'error': True}
 
 
 def _wallet(staff):
@@ -296,6 +340,7 @@ def me(staff):
         'recent': recent_events(staff),
         'open_items': open_items(staff),
         'wallet': _wallet(staff),
+        'pic': _pic(staff),
         'titles': _titles(staff),
         'promotions': [{'level': _level_payload(h.level), 'reached_at': h.reached_at}
                        for h in LevelHistory.objects.filter(staff=staff)
@@ -356,4 +401,5 @@ def report(start, end, branch_id=None):
         'promotions': promotions,
         'rewards': rewards_summary(start, end, branch_id),
         'champions': champions_in(start, end, branch_id),
+        'pic': pic_report(start, end, branch_id),
     }

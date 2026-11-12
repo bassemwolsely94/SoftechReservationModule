@@ -457,8 +457,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
         if not _is_supervisor_or_admin(profile) and att.uploaded_by != profile:
             return Response({'detail': 'غير مسموح'}, status=403)
 
-        att.file.delete(save=False)
-        att.delete()
+        att.delete()        # the file goes to the holding folder for 30 days (apps/data_lifecycle/follow.py)
         return Response(status=204)
 
     # ── AI Summarize ──────────────────────────────────────────────────────────

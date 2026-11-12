@@ -283,6 +283,12 @@ SCREENS = [
               'Messy files: when a bundle is uploaded the system skips blank pages, auto-rotates sideways pages, and flags incomplete, paper-cut or low-quality (handwriting) invoices so you review them carefully.'),
         ],
         'tips': [
+            T('لو رفعت نفس ملف الفاتورة تاني، بيظهر تنبيه أصفر في نموذج الرفع: «رفعت هذا الملف من قبل» مع «فتح» للفاتورة القديمة و«رفع على أي حال». مفيش حاجة بتتحفظ إلا لو كملت.',
+              'If you upload the same invoice file again, an amber notice appears in the upload form: "You uploaded this file before", with "Open" for the earlier one and "Upload anyway". Nothing is saved unless you continue.'),
+            T('صور الفواتير وصفحات الحزم بتتحفظ زي ما هي ومش بتتصغّر. صفحات الحزمة المؤقتة ممكن المالك يفعّل تنضيفها بعد ما الحزمة تخلص على السيرفر لاحقًا، والملف الأصلي للحزمة بيفضل.',
+              'Invoice scans and bundle pages are stored as they are and never shrunk. The owner can switch on cleanup of the temporary bundle page images, once a bundle is finished, on the server later; the original bundle file stays.'),
+            T('لما تمسح فاتورة أو تعيد تقسيم حزمة، الصورة القديمة بتتحفظ ٣٠ يومًا قبل ما تتمسح نهائيًا.',
+              'When you delete an invoice or re-split a bundle, the old scan is kept 30 days before it is gone for good.'),
             T('الملف اللي عدّى مدة الاحتفاظ بيظهر مكانه «أُزيل وفق سياسة الاحتفاظ» ومعاه التاريخ.',
               'A file past its keep period shows "removed under retention" with the date.'),
             T('كل إجراء بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الفواتير): التعديل وتشغيل القراءة الآلية يحتاجوا «تعديل»، «تأكيد» و«رفض» وعمل مرتجع يحتاجوا «اعتماد»، والإرسال لـ SOFTECH يحتاج «إنهاء».',
@@ -523,7 +529,7 @@ SCREENS = [
              'warn': T('القالب بيأثر على كل فواتير المورد ده الجاية — قالب غلط يبوّظ قراءتها كلها.', "The template affects all this supplier's future invoices — a wrong one spoils them all."),
              'open_hint': T('اضغط «⚙ قالب المورد» الأول.', 'Press "⚙ Supplier template" first.')},
         ],
-        'updated': '2026-11-08',
-        'change_note': T('توضيح ظهور الملفات اللي عدّت مدة الاحتفاظ', 'Explains how files past their keep period appear'),
+        'updated': '2026-11-12',
+        'change_note': T('تنبيه عند رفع نفس ملف الفاتورة تاني، والصور المحذوفة بتتحفظ ٣٠ يومًا قبل ما تتمسح نهائيًا.', 'A notice when the same invoice file is uploaded again, and deleted scans are kept 30 days before they are gone for good.'),
     },
 ]

@@ -626,6 +626,8 @@ SCREENS = [
               'After dispensing: the "ERP document match" section looks for the sales invoice in SOFTECH (by document number or automatically by items and date) and shows whether it is matched, partial or not found.'),
         ],
         'tips': [
+            T('صور الروشتة الجديدة بتتصغّر تلقائيًا (أطول ضلع ٢٠٠٠ بكسل) من غير ما تتأثر القراءة. تقدر تمسح صورة أو تبدّلها زي الأول، والصورة المحذوفة بتتحفظ ٣٠ يومًا قبل ما تتمسح نهائيًا.',
+              'New prescription photos are shrunk automatically (longest side 2000 px) without hurting readability. You can delete or replace a photo as before; a removed photo is kept 30 days before it is gone for good.'),
             T('الملف اللي عدّى مدة الاحتفاظ بيظهر مكانه «أُزيل وفق سياسة الاحتفاظ» ومعاه التاريخ.',
               'A file past its keep period shows "removed under retention" with the date.'),
             T('الحجز في حالة نهائية (تم التسليم / ملغي) لا يمكن تغيير حالته.', 'A reservation in a final state (fulfilled / cancelled) cannot change status.'),
@@ -788,8 +790,8 @@ SCREENS = [
              'warn': T('الإلغاء نهائي — الحجز مايرجعش.', 'A cancel is final — the reservation cannot come back.'),
              'open_hint': T('بعد «إلغاء ✕» من أزرار دورك.', 'After "Cancel ✕" in your role buttons.')},
         ],
-        'updated': '2026-11-08',
-        'change_note': T('توضيح ظهور الملفات اللي عدّت مدة الاحتفاظ', 'Explains how files past their keep period appear'),
+        'updated': '2026-11-12',
+        'change_note': T('الصور الجديدة بتتصغّر والمحذوفة بتتحفظ ٣٠ يومًا.', 'New photos are shrunk and deleted ones are kept 30 days.'),
     },
     {
         'key': 'reservations.mobile_list',
