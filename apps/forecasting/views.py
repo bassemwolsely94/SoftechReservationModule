@@ -8,6 +8,7 @@ ForecastAccuracyViewSet  — browse back-test results
 import logging
 from datetime import date
 
+from django.db import transaction
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import SAFE_METHODS, BasePermission, IsAuthenticated
@@ -86,15 +87,32 @@ class SeasonalityIndexViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], url_path='compute')
     def compute(self, request):
-        """Compute and store seasonality indices from historical sales for an item."""
+        """Compute and store seasonality indices from historical sales.
+
+        With `item_id`: that one item. Without it (the «↺ إعادة حساب الموسمية» button):
+        every item at once (ForecastService.compute_all_seasonality — one query, the
+        per-item rows replaced in one transaction)."""
         if not _is_analyst(request):
             return Response({'detail': 'غير مصرح'}, status=status.HTTP_403_FORBIDDEN)
 
         item_id = request.data.get('item_id')
-        years   = int(request.data.get('years', 2))
+        try:
+            years = int(request.data.get('years', 2))
+        except (TypeError, ValueError):
+            return Response({'detail': 'years يجب أن يكون رقماً'}, status=status.HTTP_400_BAD_REQUEST)
+        if not 1 <= years <= 5:
+            return Response({'detail': 'years بين 1 و5'}, status=status.HTTP_400_BAD_REQUEST)
 
         if not item_id:
-            return Response({'detail': 'item_id مطلوب'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                with transaction.atomic():
+                    result = ForecastService.compute_all_seasonality(years=years)
+                logger.info('seasonality recomputed for all items by %s: %s', request.user, result)
+                return Response(result)
+            except Exception:
+                logger.exception('seasonality compute (all items) failed')
+                return Response({'detail': 'فشل حساب المؤشرات الموسمية'},
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         try:
             results = ForecastService.compute_seasonality_indices(int(item_id), years=years)
@@ -294,6 +312,71 @@ class KpiBoardView(APIView):
                         for m in self.CC_METRICS],
             'cells': {m: cell(actual.get(m, 0.0), *tgt.get(m, (0.0, None))) for m in self.CC_METRICS},
         }
+
+
+class SalespersonBoardView(APIView):
+    """GET /api/forecasting/salesperson-board/?year=&month= — daily follow-up board for
+    SALESPEOPLE that have an assigned target this month. There is no salesperson rollup
+    (KpiActualRollup is branch-only), so achieved is resolved LIVE per (rep × metric) over
+    the complete days of the month; % is achievement vs the target pro-rated to the latest
+    complete data day (same convention as the branch board). Only reps with ≥1 target show,
+    which keeps the live-resolver work bounded to the assigned set."""
+    permission_classes = [IsAuthenticated, CanUseForecasting]
+    METRICS = BOARD_METRICS
+
+    def get(self, request):
+        from apps.incentives.models import SalesTarget
+        from apps.forecasting import kpi_board
+        from apps.forecasting.kpi import KpiResolver
+
+        today = date.today()
+        year  = int(request.query_params.get('year',  today.year))
+        month = int(request.query_params.get('month', today.month))
+
+        m_start, m_end, data_through, total, elapsed, frac = kpi_board.month_pacing(year, month)
+
+        # assigned salesperson targets overlapping the month → {user: {metric: (value, id)}}
+        reps = {}
+        for t in (SalesTarget.objects.filter(
+                scope_type=SalesTarget.SCOPE_SALESPERSON, metric__in=self.METRICS,
+                period_start__lte=m_end, period_end__gte=m_start)
+                .exclude(softech_user='').order_by('id')
+                .values('id', 'softech_user', 'metric', 'target_value')):
+            reps.setdefault(t['softech_user'], {})[t['metric']] = (float(t['target_value'] or 0), t['id'])
+
+        resolver = KpiResolver()
+
+        def achieved(user, metric):
+            if data_through is None:
+                return 0.0
+            return float(resolver.resolve(metric, start=m_start, end=data_through, softech_user=user))
+
+        rows = []
+        totals_actual = {m: 0.0 for m in self.METRICS}
+        totals_target = {m: 0.0 for m in self.METRICS}
+        for user in sorted(reps):
+            cells = {}
+            for m in self.METRICS:
+                tv, tid = reps[user].get(m, (0.0, None))
+                a = achieved(user, m)
+                cells[m] = kpi_board.make_cell(a, tv, tid, data_through, m_end, frac)
+                totals_actual[m] += a
+                totals_target[m] += tv
+            rows.append({'softech_user': user, 'label': f'مندوب {user}', 'cells': cells})
+
+        totals = {m: kpi_board.make_cell(totals_actual[m], totals_target[m], None,
+                                         data_through, m_end, frac) for m in self.METRICS}
+
+        return Response({
+            'year': year, 'month': month,
+            'has_data': bool(rows),
+            'data_through': data_through.isoformat() if data_through else None,
+            'days_elapsed': elapsed, 'days_total': total,
+            'metrics': [{'key': m, 'label': KpiActualRollup.METRIC_LABELS.get(m, m),
+                         'is_count': m == KpiActualRollup.M_CUSTOMERS} for m in self.METRICS],
+            'salespeople': rows,
+            'totals': totals,
+        })
 
 
 class KpiRefreshView(APIView):

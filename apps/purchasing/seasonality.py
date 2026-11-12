@@ -302,6 +302,41 @@ def scheduled_tick():
     return run_now('scheduler') if is_due() else None
 
 
+# ── 4. seasonal factor for the rates pushed to SOFTECH (owner 2026-11-10) ──────────
+RATE_WINDOW_DAYS = 30            # the rate is a monthly rate → the next 30 days
+FACTOR_MIN, FACTOR_MAX = 0.7, 1.5
+
+
+def window_weights(today=None, days=RATE_WINDOW_DAYS) -> dict:
+    """{calendar month: share of the next `days` days that fall in it}."""
+    today = today or timezone.localdate()
+    counts = defaultdict(int)
+    for k in range(days):
+        counts[(today + timedelta(days=k)).month] += 1
+    return {m: c / days for m, c in counts.items()}
+
+
+def rate_factors(item_codes=None, today=None) -> dict:
+    """{softech itemcode: factor} for items with a STEADY season in the next 30 days.
+    factor = day-weighted index over the window, an unsteady (or missing) month counting
+    as ×1.00, capped to [FACTOR_MIN, FACTOR_MAX]. Items with no steady month in the window
+    are left out (= ×1.00, the rate is pushed unchanged). Owner decision 2026-11-10:
+    steady items only, capped, behind a switch on the rate-push screen."""
+    from apps.purchasing.models import ItemSeasonality
+    w = window_weights(today)
+    qs = ItemSeasonality.objects.filter(month__in=list(w), index__isnull=False, stable=True)
+    if item_codes is not None:
+        qs = qs.filter(item__softech_id__in=[str(c) for c in item_codes])
+    steady = defaultdict(dict)
+    for code, month, idx in qs.values_list('item__softech_id', 'month', 'index'):
+        steady[str(code).strip()][month] = float(idx)
+    out = {}
+    for code, months in steady.items():
+        f = sum(share * months.get(m, 1.0) for m, share in w.items())
+        out[code] = round(min(FACTOR_MAX, max(FACTOR_MIN, f)), 3)
+    return out
+
+
 def freshness() -> dict:
     last = last_success()
     run = running_run()

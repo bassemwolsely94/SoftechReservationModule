@@ -6,8 +6,10 @@ import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
 import SoftechGrid from './invoices/SoftechGrid'
 import BundleWorkbench from './invoices/BundleWorkbench'
+import DuplicateNotice from './invoices/DuplicateNotice'
 import ItemSearchInput from '../components/ItemSearchInput'
 import { fa } from '../utils/flowArrow'
+import RemovedFileNote from '../components/RemovedFileNote'
 
 // ── Download helper ────────────────────────────────────────────────────────────
 function triggerDownload(data, filename, mime) {
@@ -1231,6 +1233,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
         )}
 
         {/* OCR image preview */}
+        {!inv.source_image_url && <RemovedFileNote date={inv.retention_removed?.source_image} className="mb-4" />}
         {inv.source_image_url && (
           <div className="mb-4 flex items-start gap-4">
             <img src={inv.source_image_url} alt="فاتورة"
@@ -1348,24 +1351,27 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
 
 // ── Create Modal ──────────────────────────────────────────────────────────────
 
-function CreateInvoiceModal({ branches, onClose, onCreated }) {
+function CreateInvoiceModal({ branches, onClose, onCreated, onOpenBatch }) {
   const fileRef = useRef()
   const [form, setForm] = useState({ branch: '', vendor: '', invoice_number: '' })
   const [vendors, setVendors] = useState([])
   const [file, setFile] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState(null)
+  const [dup, setDup] = useState(null)
 
   useEffect(() => { invoicesApi.listVendors({ main: 1 }).then(r => setVendors(r.data.results || r.data)).catch(() => {}) }, [])
 
-  const submit = async () => {
+  const submit = async (allowDuplicate = false) => {
     if (!form.branch) { setError('اختر الفرع'); return }
-    setSaving(true); setError(null)
+    setSaving(true); setError(null); setDup(null)
     try {
       const fd = new FormData()
       Object.entries(form).forEach(([k, v]) => v && fd.append(k, v))
       if (file) fd.append('source_image', file)
+      if (allowDuplicate) fd.append('allow_duplicate', '1')
       const r = await invoicesApi.create(fd)
+      if (r.data.duplicate_of) { setDup(r.data.duplicate_of); return }
       onCreated(r.data.id)
     } catch (e) {
       setError(e.response?.data?.detail || 'حدث خطأ')
@@ -1432,8 +1438,13 @@ function CreateInvoiceModal({ branches, onClose, onCreated }) {
           </div>
         </div>
         {error && <div className="mt-3 text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
+        {dup && (
+          <DuplicateNotice dup={dup} busy={saving}
+            onOpen={() => (dup.kind === 'batch' ? onOpenBatch(dup.id) : onCreated(dup.id))}
+            onContinue={() => submit(true)} />
+        )}
         <div className="flex gap-2 mt-5">
-          <button data-tour="invoices-main-new-create" onClick={submit} disabled={saving}
+          <button data-tour="invoices-main-new-create" onClick={() => submit()} disabled={saving}
             className="flex-1 py-2.5 bg-brand-600 text-white rounded-xl font-medium hover:bg-brand-700 disabled:opacity-50 text-sm">
             {saving ? (file ? 'جاري الرفع والمعالجة...' : 'جاري الإنشاء...') : 'إنشاء الفاتورة'}
           </button>
@@ -1462,6 +1473,7 @@ export default function InvoicePage() {
   const [batchTyped,   setBatchTyped]   = useState('')
   const [batchReason,  setBatchReason]  = useState('')   // optional: accept warnings for the whole batch
   const [tab,          setTab]          = useState('invoices')       // 'invoices' | 'bundles'
+  const [openBatchId,  setOpenBatchId]  = useState(null)               // a bundle to open on the bundles tab
 
   const PUSHABLE = new Set(['confirmed', 'queued', 'push_failed'])
   const toggleSelect = (id) => setSelected(s => {
@@ -1514,6 +1526,7 @@ export default function InvoicePage() {
           branches={branches}
           onClose={() => setShowCreate(false)}
           onCreated={(id) => { setShowCreate(false); setActiveId(id) }}
+          onOpenBatch={(id) => { setShowCreate(false); setOpenBatchId(id); setTab('bundles') }}
         />
       )}
 
@@ -1571,7 +1584,8 @@ export default function InvoicePage() {
       </div>
 
       {tab === 'bundles' && (
-        <BundleWorkbench branches={branches} onOpenInvoice={(id) => setActiveId(id)} />
+        <BundleWorkbench branches={branches} onOpenInvoice={(id) => setActiveId(id)}
+          openBatchId={openBatchId} onBatchOpened={() => setOpenBatchId(null)} />
       )}
       {tab === 'invoices' && (<>
       {/* ── invoices list below ── */}

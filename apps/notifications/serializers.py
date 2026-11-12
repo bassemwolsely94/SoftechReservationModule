@@ -7,6 +7,7 @@ NotificationLogSerializer  — delivery / read audit row
 """
 from rest_framework import serializers
 from .models import Notification, NotificationLog, ChatterMessage, PersonalReminder
+from apps.data_lifecycle.display import RetentionNoteMixin
 
 
 # ── Notification ──────────────────────────────────────────────────────────────
@@ -51,7 +52,8 @@ class NotificationSerializer(serializers.ModelSerializer):
 
 # ── Chatter ───────────────────────────────────────────────────────────────────
 
-class ChatterMessageSerializer(serializers.ModelSerializer):
+class ChatterMessageSerializer(RetentionNoteMixin, serializers.ModelSerializer):
+    retention_fields = ('attachment', 'voice_note')
     author_name    = serializers.SerializerMethodField()
     author_avatar  = serializers.SerializerMethodField()
     time_ago       = serializers.SerializerMethodField()

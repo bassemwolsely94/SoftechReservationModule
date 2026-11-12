@@ -979,16 +979,19 @@ class Command(BaseCommand):
             if target_branch:
                 digest.setdefault(target_branch, []).append((transfer, notif_type))
 
-            InTransitNote.objects.create(
-                transfer=transfer,
-                note_type='alert',
-                body=f'🔔 تنبيه تلقائي ({alert_label}): {body}',
-                created_by=None,
-            )
-            InTransitAuditEvent.log(
-                transfer, 'alert_sent',
-                detail=f'level={level}, days={transfer.days_in_transit}',
-            )
+            # Note + audit event only when the level changes; the digest and
+            # counters still run daily (data lifecycle stage 3).
+            if transfer.last_alert_level != level:
+                InTransitNote.objects.create(
+                    transfer=transfer,
+                    note_type='alert',
+                    body=f'🔔 تنبيه تلقائي ({alert_label}): {body}',
+                    created_by=None,
+                )
+                InTransitAuditEvent.log(
+                    transfer, 'alert_sent',
+                    detail=f'level={level}, days={transfer.days_in_transit}',
+                )
 
             transfer.last_alert_level   = level
             transfer.last_alert_sent_at = timezone.now()
@@ -1094,10 +1097,11 @@ class Command(BaseCommand):
                     )
             except Exception as exc:
                 logger.warning('[sync_in_transit] local-receipt alert failed: %s', exc)
-            InTransitNote.objects.create(transfer=transfer, note_type='alert',
-                                         body=f'🔔 تنبيه تلقائي: {body}', created_by=None)
-            InTransitAuditEvent.log(transfer, 'alert_sent',
-                                    detail=f'level=local, days_since_local_receipt={waited}')
+            if transfer.last_alert_level != 'local':
+                InTransitNote.objects.create(transfer=transfer, note_type='alert',
+                                             body=f'🔔 تنبيه تلقائي: {body}', created_by=None)
+                InTransitAuditEvent.log(transfer, 'alert_sent',
+                                        detail=f'level=local, days_since_local_receipt={waited}')
             transfer.last_alert_level = 'local'
             transfer.last_alert_sent_at = now
             transfer.alert_notification_count += 1

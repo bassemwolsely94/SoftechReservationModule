@@ -1083,21 +1083,9 @@ class ReservationViewSet(viewsets.ModelViewSet):
             img = ReservationImage.objects.get(pk=image_id, reservation=reservation)
         except ReservationImage.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        # Wrap in transaction: DB record and storage file deleted together.
-        # File deletion is attempted after the DB commit — if storage fails the
-        # DB row is already gone (acceptable; avoids orphaned rows more than
-        # orphaned files).
+        # The file goes to the holding folder for 30 days after the commit (apps/data_lifecycle/follow.py).
         with transaction.atomic():
-            file_name = img.image.name  # save before delete clears it
             img.delete()
-        # Delete from storage outside the transaction — storage errors won't
-        # roll back the DB delete but will be logged.
-        try:
-            from django.core.files.storage import default_storage
-            if file_name:
-                default_storage.delete(file_name)
-        except Exception:
-            pass
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     # ── Reservation Lines (basket) ─────────────────────────────────────────────

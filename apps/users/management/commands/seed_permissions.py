@@ -40,6 +40,7 @@ ALL_MODULES = [
     'ledger',        # الحسابات العامة (finance GL): view/create drafts/approve/export = accountant; edit (COA, rules) + finalize (period close) = admin or named grant
     'counselling',   # إرشادات الاستخدام (Project 4): 'edit' = write / AI-draft / link items, 'approve' = make customer-facing
     'usage_print',   # طباعة طريقة الاستخدام: 'view' open, 'create' confirm + print, 'edit' presets + slip settings
+    'hr_attendance', # الحضور والبصمة: no role but admin; everyone else via named grants (apps/hr/attendance/access.py)
 ]
 
 ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize']
