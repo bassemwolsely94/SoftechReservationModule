@@ -2,14 +2,17 @@
 python manage.py lifecycle preview <key>
 python manage.py lifecycle set <key> --mode M [--keep-days N] --user USERNAME --reason R
 python manage.py lifecycle restore <held_id> --user USERNAME
+python manage.py lifecycle retrieve <held_id> --user USERNAME --out PATH
 python manage.py lifecycle mark-lost <held_id> --user USERNAME --reason R
 
-`set` goes only through policy.set_policy `restore` only through holding.restore, and
-`mark-lost` only through holding.mark_lost. They audit the change
-and hold the refusals; the admin-only check is here because the services leave it to their caller (design §7)."""
+`set` goes only through policy.set_policy, `restore` only through holding.restore, `retrieve` only through
+holding.retrieve and `mark-lost` only through holding.mark_lost. They audit the change and hold the refusals; the
+admin-only check is here because the services leave it to their caller (design §7)."""
+from pathlib import Path
+
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.data_lifecycle.holding import HoldError, mark_lost, restore
+from apps.data_lifecycle.holding import HoldError, mark_lost, restore, retrieve
 from apps.data_lifecycle.policy import PolicyRefused, get_mode, keep_days, set_policy
 from apps.data_lifecycle.register import RULES
 from apps.data_lifecycle.runner import preview_rule
@@ -33,6 +36,10 @@ class Command(BaseCommand):
         back = actions.add_parser('restore', help='Put a held file back where it was')
         back.add_argument('held_id', type=int)
         back.add_argument('--user', required=True, help='username of an active admin')
+        copy = actions.add_parser('retrieve', help='Write a copy of a held file; the held file stays')
+        copy.add_argument('held_id', type=int)
+        copy.add_argument('--user', required=True, help='username of an active admin')
+        copy.add_argument('--out', required=True, help='file to write; never overwritten')
         lost = actions.add_parser('mark-lost', help='Close a held file that is gone from the holding folder')
         lost.add_argument('held_id', type=int)
         lost.add_argument('--user', required=True, help='username of an active admin')
@@ -40,7 +47,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **opts):
         {'list': self._list, 'preview': self._preview, 'set': self._set, 'restore': self._restore,
-         'mark-lost': self._mark_lost}[opts['action']](opts)
+         'retrieve': self._retrieve, 'mark-lost': self._mark_lost}[opts['action']](opts)
 
     def _list(self, opts):
         for key, rule in RULES.items():
@@ -77,6 +84,23 @@ class Command(BaseCommand):
         except HoldError as exc:
             raise CommandError(str(exc))
         self.stdout.write(f'held {held.pk}: restored')
+
+    def _retrieve(self, opts):
+        staff = self._admin(opts)
+        out = Path(opts['out'])
+        if out.exists():
+            raise CommandError('--out already exists; choose a new file')
+        try:
+            data, _name = retrieve(opts['held_id'], staff)
+        except HoldError as exc:
+            raise CommandError(str(exc))
+        try:
+            with open(out, 'xb') as fh:       # 'x': never overwrite, even if the file appeared meanwhile
+                fh.write(data)
+        except OSError as exc:
+            raise CommandError(f'could not write --out ({type(exc).__name__})')
+        # ids only: the original name can carry a patient's name
+        self.stdout.write(f'held {opts["held_id"]}: copy written, {len(data)} bytes')
 
     def _mark_lost(self, opts):
         staff = self._admin(opts)

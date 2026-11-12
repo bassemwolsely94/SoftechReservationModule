@@ -770,6 +770,8 @@ SCREENS = [
               'A file past its keep period shows "removed under retention" with the date.'),
             T('لو الطلب مرتبط بشحنة «قيد النقل» يظهر رابط «قيد النقل ←» لفتحها مباشرة.', 'If the request is linked to an in-transit shipment, a "In transit ←" link opens it.'),
             T('لا تعتمد كمية أكبر من المتاح فعلاً في فرعك.', 'Do not approve more than you actually have.'),
+            T('الصور اللي بترفقها في الرسائل والملاحظات بتتصغّر تلقائيًا (أطول ضلع ١٦٠٠ بكسل)، والكلام فيها بيفضل واضح.',
+              'Photos you attach to messages and notes are shrunk automatically (longest side 1600 px); the text on them stays readable.'),
         ],
         'related': ['transfers.list', 'transfers.transits'],
         'tour': [
@@ -947,8 +949,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-08',
-        'change_note': T('توضيح ظهور الملفات اللي عدّت مدة الاحتفاظ', 'Explains how files past their keep period appear'),
+        'updated': '2026-11-12',
+        'change_note': T('صور المرفقات بتتصغّر تلقائيًا (أطول ضلع ١٦٠٠ بكسل).', 'Attachment photos are shrunk automatically (longest side 1600 px).'),
     },
     {
         'key': 'transfers.transits',

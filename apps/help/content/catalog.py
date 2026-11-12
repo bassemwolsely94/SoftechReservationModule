@@ -553,11 +553,15 @@ SCREENS = [
              'text': T('لكل صورة مرفوعة: ★ لجعلها رئيسية، «اعتماد» أو «إلغاء الاعتماد»، و🗑 للحذف.',
                        'For each uploaded image: ★ to make it main, «Approve» or «Unapprove», and 🗑 to delete.'),
              'more': T(
-                 '• ★ يخلي الصورة هي «رئيسية» اللي بتظهر في الكتالوج.\n• الصورة اللي مكتوب عليها «في انتظار الاعتماد» محتاجة «اعتماد».\n• 🗑 بيسأل «حذف هذه الصورة نهائياً؟» — الحذف مايترجعش.',
-                 '• ★ makes the image the "main" one shown in the catalog.\n• An image marked "awaiting approval" needs "Approve".\n• 🗑 asks "Delete this image permanently?" — deletion cannot be undone.')},
+                 '• ★ يخلي الصورة هي «رئيسية» اللي بتظهر في الكتالوج.\n• الصورة اللي مكتوب عليها «في انتظار الاعتماد» محتاجة «اعتماد».\n• 🗑 بيسأل «حذف هذه الصورة نهائياً؟» — الحذف مايترجعش من الشاشة، والملف بيتحفظ ٣٠ يومًا على السيرفر قبل ما يتمسح نهائيًا.',
+                 '• ★ makes the image the "main" one shown in the catalog.\n• An image marked "awaiting approval" needs "Approve".\n• 🗑 asks "Delete this image permanently?" — deletion cannot be undone from the screen; the file is kept 30 days on the server before it is gone for good.')},
         ],
-        'updated': '2026-10-26',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'tips': [
+            T('لما تمسح صورة أو ملف من «الصور والوسائط»، الملف بيتحفظ ٣٠ يومًا على السيرفر قبل ما يتمسح نهائيًا. صور المنتج مش بتتصغّر عند الرفع.',
+              'When you delete an image or file under "Images & media", the file is kept 30 days on the server before it is gone for good. Product images are not shrunk on upload.'),
+        ],
+        'updated': '2026-11-12',
+        'change_note': T('الصورة المحذوفة بتتحفظ ٣٠ يومًا قبل ما تتمسح نهائيًا.', 'A deleted image is kept 30 days before it is gone for good.'),
     },
     {
         'key': 'catalog.intel',

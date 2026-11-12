@@ -656,6 +656,30 @@ class RestoreCommandTests(HoldingCase):
             self._call('restore', str(held.pk), '--user', 'hold_cmd_admin')
         self.assertFalse(self.file.exists())
 
+    def test_retrieve_command_writes_a_copy(self):
+        held, _ = self._held()
+        out = self.tmp / 'copy.jpg'
+        output = self._call('retrieve', str(held.pk), '--user', 'hold_cmd_admin', '--out', str(out))
+        self.assertEqual(out.read_bytes(), BYTES)
+        self.assertNotIn('secret_name', output)
+        self.assertIn(str(held.pk), output)
+        self.assertTrue((self.hold / held.hold_path).exists())          # a copy; the held file stays
+        self.assertTrue(AuditLog.objects.filter(action='lifecycle_file_retrieved', object_id=str(held.pk)).exists())
+
+    def test_retrieve_command_refuses_overwrite_and_non_admins(self):
+        held, _ = self._held()
+        out = self.tmp / 'existing.jpg'
+        out.write_bytes(b'keep me')
+        with self.assertRaises(CommandError):
+            self._call('retrieve', str(held.pk), '--user', 'hold_cmd_admin', '--out', str(out))
+        self.assertEqual(out.read_bytes(), b'keep me')
+        make_pharmacist('hold_cmd_pharmacist2')
+        fresh = self.tmp / 'fresh.jpg'
+        with self.assertRaises(CommandError):
+            self._call('retrieve', str(held.pk), '--user', 'hold_cmd_pharmacist2', '--out', str(fresh))
+        self.assertFalse(fresh.exists())
+        self.assertFalse(AuditLog.objects.filter(action='lifecycle_file_retrieved').exists())
+
     def test_restore_refusal_is_a_command_error(self):
         held, _ = self._held()
         self.file.write_bytes(b'new upload')
