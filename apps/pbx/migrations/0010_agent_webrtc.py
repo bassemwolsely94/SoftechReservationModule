@@ -13,11 +13,11 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='agentextension',
             name='webrtc_credentials',
-            field=models.JSONField(blank=True, db_default={}, default=dict, verbose_name='بيانات هاتف المتصفح (مشفرة)'),
+            field=models.JSONField(blank=True, default=dict, verbose_name='بيانات هاتف المتصفح (مشفرة)'),
         ),
         migrations.AddField(
             model_name='agentextension',
             name='webrtc_enabled',
-            field=models.BooleanField(db_default=False, default=False, verbose_name='هاتف المتصفح مفعّل'),
+            field=models.BooleanField(default=False, verbose_name='هاتف المتصفح مفعّل'),
         ),
     ]
