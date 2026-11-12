@@ -628,6 +628,8 @@ SCREENS = [
         'tips': [
             T('صور الروشتة الجديدة بتتصغّر تلقائيًا (أطول ضلع ٢٠٠٠ بكسل) من غير ما تتأثر القراءة. تقدر تمسح صورة أو تبدّلها زي الأول، والصورة المحذوفة بتتحفظ ٣٠ يومًا قبل ما تتمسح نهائيًا.',
               'New prescription photos are shrunk automatically (longest side 2000 px) without hurting readability. You can delete or replace a photo as before; a removed photo is kept 30 days before it is gone for good.'),
+            T('الملف اللي عدّى مدة الاحتفاظ بيظهر مكانه «أُزيل وفق سياسة الاحتفاظ» ومعاه التاريخ.',
+              'A file past its keep period shows "removed under retention" with the date.'),
             T('الحجز في حالة نهائية (تم التسليم / ملغي) لا يمكن تغيير حالته.', 'A reservation in a final state (fulfilled / cancelled) cannot change status.'),
             T('المطابقة مع SOFTECH تُعاد بعد فترة انتظار قصيرة بين كل محاولة؛ لو «غير موجود» تأكد من رقم المستند.',
               'The SOFTECH match can be retried after a short wait between attempts; if "not found", check the document number.'),

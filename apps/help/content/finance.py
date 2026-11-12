@@ -723,8 +723,16 @@ SCREENS = [
         'audience': T('المحاسبون (إنشاء واعتماد) والمدير المالي.', 'Accountants (create and approve) and the finance manager.'),
         'tabs': [
             {'key': 'entries', 'title': T('المسودات والقيود', 'Drafts and entries'),
-             'body': T('كل القيود: المسودات الجاية من ترحيل SOFTECH أولاً. افتح أي قيد تشوف سطوره ومصدره، وعدّل أو اعتمد.',
-                       'All entries, with the drafts coming from the SOFTECH drafting first. Open one to see its lines and source, edit or approve.')},
+             'body': T('كل القيود: المسودات الجاية من ترحيل SOFTECH أولاً. افتح أي قيد تشوف سطوره ومصدره، وعدّل أو اعتمد.\n'
+                       'الشهر المقفول مبيقبلش ترحيل: الاعتماد فيه بيترفض بـ«الفترة مقفولة»، ولو الشهر بيتقفل دلوقتي بيترفض بـ«الفترة قيد الإقفال» — استنى لما الإقفال يخلص أو الشهر يتفتح.\n'
+                       '«تصحيح قيد» هو الطريق لتغيير وصل لشهر مقفول: مسودة في أول شهر مفتوح فيها الفرق بس، وبتشاور على القيد الأصلي. اعتمدها زي أي مسودة. القيد الأصلي مبيتلمسش وأرقام الشهر المقفول زي ما اتقفلت.\n'
+                       'قيود الإقفال (بضاعة آخر المدة وعكسها التلقائي وقيود آخر السنة) مينفعش تتعكس أو تتصحح من هنا — الطريق إعادة فتح الشهر. والقيد اللي عليه تصحيحات حية مينفعش يتعكس قبل ما تتعكس تصحيحاته.\n'
+                       'لو مسحت مسودة تصحيح أو مستند متأخر أو عكست واحد معتمد، صف «تغيير في فترة مغلقة» بتاعه بيرجع مفتوح في الاستثناءات بالأرقام اللي مستندات المجموعة بتقولها، عشان التغيير ما يضيعش. وعكس قيد في شهر بيتقفل دلوقتي بيترفض بـ«الفترة قيد الإقفال».',
+                       'All entries, with the drafts coming from the SOFTECH drafting first. Open one to see its lines and source, edit or approve.\n'
+                       'A closed month takes no postings: approving into it is refused with "closed period", and while a month is being closed with "period closing" - wait for the close to finish, or for the month to reopen.\n'
+                       'A late correction ("تصحيح قيد") is how a change to a closed month is posted: a draft in the first open month holding only the difference, pointing at the original entry. Approve it like any draft. The original is not touched, and the closed month\'s figures stay as they were closed.\n'
+                       'A closing entry (closing stock, its auto-reversal, the year-end entries) cannot be reversed or corrected from here - reopen the month instead. An entry with live corrections cannot be reversed until its corrections are reversed first.\n'
+                       'If you delete a correction or late-document draft, or reverse an approved one, its "closed-period change" row opens again in Exceptions with the figures the group\'s documents say now, so the change is not lost. Reversing an entry in a month that is being closed is refused with "period closing".')},
             {'key': 'exceptions', 'title': T('الاستثناءات', 'Exceptions'),
              'body': T('مستندات SOFTECH اللي ما اترحلتش لقيد، مجمّعة بالنوع، وكل نوع له علاجه في الصف ثم «إعادة الترحيل».\n'
                        '• طرف غير مربوط: المستند لمورد/عميل لسه مش مؤكد في «الأطراف» — أكّده أو أنشئ طرفاً.\n'
@@ -734,8 +742,10 @@ SCREENS = [
                        '• لا توجد قاعدة: مفيش قاعدة بتنطبق على المستند — أضف قاعدة أو وسّع شروط موجودة.\n'
                        '• قاعدتان متعارضتان: قاعدتان بنفس الأولوية بينطبقوا على نفس المستند — فرّق بالأولوية أو الشروط.\n'
                        '• قاعدة غير متوازنة: أسطر القاعدة مبتديش مدين = دائن لهذا المستند — صحّح الأسطر.\n'
-                       '• تغيير في فترة مغلقة: مستند اتغيّر في SOFTECH بعد ما شهره اتقفل — مفيش حاجة اتسجلت، والتصحيح يدوي في شهر مفتوح. بيظهر سطر واحد للقيد كله (على أول مستند فيه) ومعاه قائمة مستنداته.\n'
+                       '• تغيير في فترة مغلقة: مستند اتغيّر في SOFTECH بعد ما شهره اتقفل — مفيش حاجة اتسجلت، والتصحيح بيتعمل «تصحيح قيد» (مسودة بالفرق في أول شهر مفتوح)، والمستند الجديد في شهر مقفول بيتسجل بتاريخ أول شهر مفتوح. بيظهر سطر واحد للقيد كله (على أول مستند فيه) ومعاه قائمة مستنداته، وتصحيح واحد لكل سطر. افتح الصف تلاقي الأسطر اللي هتترحّل (الحساب والفرع والطرف ومدين ودائن) وعدد المستندات ورقم القيد الأصلي، اكتب السبب (مطلوب) واضغط «ترحيل التصحيح في أول شهر مفتوح» (لمن له صلاحية الإنشاء): بتطلع مسودة بالفرق بس ومعاها رابط للقيد في اليومية، والصف بيتقفل. لو للسطر مسودة لسه، الزر مش بيظهر — راجعها أو احذفها من اليومية الأول. لو رفض السيرفر (الشهر اتفتح، مفيش فرق، فيه تصحيح مسودة…) هيقولك السبب.\n'
                        '• مفتاح مصدر مكرر: نفس مستند SOFTECH ظهر مرتين — راجع المصدر قبل أي ترحيل.\n'
+                       '• قيد يدوي مختلط (mixed_manual_entry): قيد من يومية المالية فيه حسابات يدوية وحسابات بتيجي من SOFTECH، ومستني قرار المحاسب. إعادة الترحيل مبتلمسوش، والشهر مش هيتقفل غير لما يتضم بكل أسطره أو يتجاهل بسبب. الصف بيعرض أسطره، ويتضم من «إقفال الفترة» › «الاستيراد والمطابقة» عند إعادة رفع الملف (فيه رابط للشاشة دي).\n'
+                       '   الأزواج اللي المالية بتسجلها بإيدها رغم إنها على حسابات مربوطة (زي 1302↔1301) بتتستورد كقيود يدوية من قائمة المالية نفسها (الإعداد gl_import_manual_account_sets) — المالية هي اللي بتحدد القائمة دي. ولو فيه قيد تاني بنفس التاريخ والفرع والحسابات والمبلغ (زي تحويل اترحّل من SOFTECH)، الاستيراد بيقف عنده لحد ما المحاسب يقرر يضمه. ولو قيد اتغير في ملف جديد بعد ما اتستورد، مش بيتكرر: اعكس أو امسح القيد القديم وبعدين استورد تاني.\n'
                        '• خطأ في الدفتر: رفض الدفتر القيد (حساب موقوف، تاريخ قبل 1/1/2026…) — اقرأ الرسالة وصحّحها.\n'
                        '• قيد عدّله محاسب: لو محاسب عدّل مسودة بإيده وبعدين المستند اتغيّر في SOFTECH، الترحيل مبيلمسش تعديله — بيظهر «خطأ في الدفتر». اضغط «معالجة» تشوف جنب بعض «القيد بعد تعديلك» و«نسخة سوفتيك الجديدة» والفروق متظللة، واختار:\n'
                        '   – «اعتماد نسخة سوفتيك»: القيد بيترحّل تاني من SOFTECH فوراً (المسودة تتستبدل؛ المعتمد في شهر مفتوح يتعكس وتتعمل مسودة جديدة). تعديلك القديم مبقاش يحميه، لكن أي تعديل جديد بعدها محمي تاني.\n'
@@ -752,8 +762,10 @@ SCREENS = [
                        '• No rule: no rule matches the document — add a rule or widen an existing one.\n'
                        '• Ambiguous rule: two rules with the same priority match the same document — separate them by priority or conditions.\n'
                        '• Unbalanced rule: the rule lines do not give debit = credit for this document — fix the lines.\n'
-                       '• Closed-period change: a SOFTECH document changed after its month was closed — nothing was posted; correct it by hand in an open month. One row covers the whole entry (on its first document) and lists its documents.\n'
+                       '• Closed-period change: a SOFTECH document changed after its month was closed — nothing was posted; it is corrected with a late correction ("تصحيح قيد", a draft holding the difference in the first open month), and a brand-new document in a closed month is drafted dated the first open month. One row covers the whole entry (on its first document) and lists its documents, with one correction per row. Open the row to see the lines that will post (account, branch, party, debit, credit), the number of documents and the original entry; write the reason (required) and press "Post the correction in the first open month" (needs create permission): a draft holding only the difference appears with a link to it in the journal, and the row closes. If the group already has a draft, the button is not shown - review or delete that draft in the journal first. If the server refuses (month reopened, nothing to correct, a draft correction exists...) it says why.\n'
                        '• Duplicate source key: the same SOFTECH document appeared twice — check the source before drafting.\n'
+                       '• Mixed manual entry (mixed_manual_entry): an entry from finance\'s journal on both manual accounts and accounts SOFTECH feeds, waiting for an accountant. "Redraft" leaves it alone, and the month cannot close until it is included with all its lines or ignored with a reason. The row shows its lines; it is included from "Period close" > "Import and compare" when the file is uploaded again (the row links there).\n'
+                       '   Pairs finance keys by hand although their accounts are mapped (such as 1302↔1301) import as manual entries from finance\'s own list (the setting gl_import_manual_account_sets) — finance owns that list. If another entry has the same date, branch, accounts and amount (such as a transfer drafted from SOFTECH), the import stops at it until an accountant decides to include it. If an entry changed in a newer file after it was imported, it is not doubled: reverse or delete the old entry, then import again.\n'
                        '• Ledger error: the ledger refused the entry (stopped account, date before 1-1-2026…) — read the message and fix it.\n'
                        '• Entry edited by an accountant: if someone edited a draft by hand and the SOFTECH document then changed, drafting leaves the edit alone — a "Ledger error" appears. Press "Handle" to see "The entry after your edit" next to "The new SOFTECH version", differences highlighted, and choose:\n'
                        '   – "Accept the SOFTECH version": the entry is redrafted from SOFTECH at once (a draft is replaced; an approved entry in an open month is reversed and a new draft made). Your old edit no longer protects it, but any new edit after that is protected again.\n'
@@ -772,8 +784,8 @@ SCREENS = [
              'open_hint': T('لمن له صلاحية الإنشاء (ledger.create).', 'For users allowed to create (ledger.create).')},
             {'target': 'finance-gl-exceptions-grid', 'label': T('الاستثناءات', 'Exceptions'),
              'text': T('مجمّعة بالنوع. اضغط «معالجة» على الصف لتصلحه في مكانه، أو اتجاهله بسبب، أو حدّد عدة صفوف واضغط «إعادة الترحيل».', 'Grouped by kind. Press "Handle" on a row to fix it in place, ignore it with a reason, or tick several rows and press "Redraft".'),
-             'more': T('• طرف غير مربوط: أكّد الطرف المقترح أو أنشئ طرفاً جديداً.\n• حساب غير مربوط: اربط القيمة بحساب وفرع.\n• لا توجد قاعدة / قاعدتان: يفتح محرر القاعدة بشروط المستند.\n• تغيير في فترة مغلقة: للقراءة فقط، يُصحح في أول شهر مفتوح.\n• قيد عدّله محاسب: النسختين جنب بعض و«اعتماد نسخة سوفتيك» أو «إبقاء تعديلي».\n• أسهم وSpace وEnter وCtrl+A للتنقل والتحديد.',
-                       '• Unmapped party: confirm the proposed party or create one.\n• Unmapped account: map the value to an account and branch.\n• No rule / two rules: opens the rule editor with the document conditions.\n• Closed-period change: read-only, corrected in the first open month.\n• Entry edited by an accountant: both versions side by side, then "Accept the SOFTECH version" or "Keep my edit".\n• Arrows, Space, Enter and Ctrl+A to move and select.'),
+             'more': T('• طرف غير مربوط: أكّد الطرف المقترح أو أنشئ طرفاً جديداً.\n• حساب غير مربوط: اربط القيمة بحساب وفرع.\n• لا توجد قاعدة / قاعدتان: يفتح محرر القاعدة بشروط المستند.\n• تغيير في فترة مغلقة: افتح الصف، اكتب السبب واضغط «ترحيل التصحيح» والزرار بيقول التاريخ اللي هيتسجل بيه (مسودة بالفرق، واحدة لكل سطر). لو القيد الأصلي اتعكس، المجموعة تترحل كاملة كمستند متأخر. لو الشهر اتفتح تاني، مفيش زرار: حدد الصف واضغط «إعادة الترحيل». ولو للمجموعة مسودة، راجعها أو احذفها الأول.\n• قيد عدّله محاسب: النسختين جنب بعض و«اعتماد نسخة سوفتيك» أو «إبقاء تعديلي».\n• أسهم وSpace وEnter وCtrl+A للتنقل والتحديد.',
+                       '• Unmapped party: confirm the proposed party or create one.\n• Unmapped account: map the value to an account and branch.\n• No rule / two rules: opens the rule editor with the document conditions.\n• Closed-period change: open the row, write the reason and press "Post the correction in the first open month" (a draft holding the difference, one per row).\n• Entry edited by an accountant: both versions side by side, then "Accept the SOFTECH version" or "Keep my edit".\n• Arrows, Space, Enter and Ctrl+A to move and select.'),
              'open_hint': T('تبويب «الاستثناءات».', 'The "Exceptions" tab.')},
             {'target': 'finance-gl-journal-filters', 'label': T('الفلاتر · قيد يدوي', 'Filters · Manual entry'),
              'text': T('الحالة (المسودات أولاً)، الدفتر، التاريخ، الفرع، كود الحساب، والبحث. «+ قيد يدوي» يفتح قيد فاضي.', 'Status (drafts first), book, dates, branch, account code and search. "+ Manual entry" opens a blank entry.'),
@@ -797,8 +809,8 @@ SCREENS = [
              'text': T('للمتابعة وإنت بتكتب. الاعتماد بيرفض أي قيد مش متزن، والسيرفر هو اللي بيحسب.', 'For checking as you type. Approval refuses any unbalanced entry; the server does the sums.'),
              'open_hint': T('افتح قيداً أو «+ قيد يدوي».', 'Open an entry or "+ Manual entry".')},
         ],
-        'updated': '2026-11-06',
-        'change_note': T('القيود: «ضريبة ناقصة» في مصدر فاتورة المشتريات وعددها في نتيجة الترحيل، تحويلات النقدية بين المركز والفروع والمشتريات النقدية على مرحلتين عبر 2341، وقيد عدّله محاسب وغيّره SOFTECH — «اعتماد نسخة سوفتيك» أو «إبقاء تعديلي»', 'Entries: "VAT missing" on a purchase invoice\'s source, counted on the drafting result; Journal: cash transfers between head office and branches and two-leg cash purchases through 2341, and an accountant-edited entry SOFTECH changed — "Accept the SOFTECH version" or "Keep my edit"'),
+        'updated': '2026-11-07',
+        'change_note': T('القيود: «ضريبة ناقصة» في مصدر فاتورة المشتريات وعددها في نتيجة الترحيل، مسح أو عكس تصحيح بيرجّع صف الاستثناء مفتوح، والقيد الأصلي المعكوس بيترحل كمستند متأخر، و«تصحيح قيد» للتغيير المتأخر في شهر مقفول ورفض «الفترة قيد الإقفال» وقيد الإقفال والقيد عليه تصحيحات، واستيراد يومية المالية (القيد اليدوي المختلط وقائمة أزواج المالية)، بعد تحويلات النقدية بين المركز والفروع والمشتريات النقدية على مرحلتين عبر 2341، وقيد عدّله محاسب وغيّره SOFTECH — «اعتماد نسخة سوفتيك» أو «إبقاء تعديلي»', 'Journal: "VAT missing" on a purchase invoice\'s source, counted on the drafting result; deleting or reversing a correction reopens its exception row, a reversed original posts as a late document, late corrections ("تصحيح قيد") for changes to a closed month and the period-closing, closing-entry and has-corrections refusals, finance\'s journal import (mixed manual entry and finance\'s list of pairs), after cash transfers between head office and branches and two-leg cash purchases through 2341, and an accountant-edited entry SOFTECH changed — "Accept the SOFTECH version" or "Keep my edit"'),
     },
     {
         'key': 'finance.gl_parties',
@@ -815,8 +827,8 @@ SCREENS = [
              'open_hint': T('لمن له صلاحية التعديل (ledger.edit).', 'For users allowed to edit (ledger.edit).')},
             {'target': 'finance-gl-parties-confirm-upload', 'label': T('تأكيد من ملف المراجعة', 'Confirm from the review sheet'),
              'text': T('ارفع ملف المقترحات بعد ما تملا «الكود المعتمد»: «معاينة» تعرض اللي هيتأكد واللي مرفوض، و«تأكيد» يأكد الصفوف السليمة بس.', 'Upload the suggestions sheet once «الكود المعتمد» is filled: "Preview" shows what will be confirmed and what is refused; "Confirm" confirms only valid rows.'),
-             'more': T('• الأعمدة المطلوبة: «النوع» (عميل / مورد) و«كود المالية» و«الكود المعتمد».\n• صف «الكود المعتمد» فيه فاضي = لسه متراجعش، وبيتجاهل.\n• المعاينة مبتسجلش حاجة.\n• مرفوض لو: الطرف مش مستورد، أو مؤكد على كود SOFTECH تاني، أو نفس الكود متكرر في الملف أو مربوط بطرف تاني.\n• كل تأكيد بيتسجل لوحده (من/إمتى) زي التأكيد اليدوي.',
-                       '• Required columns: «النوع» (customer / supplier), «كود المالية» and «الكود المعتمد».\n• A row with an empty «الكود المعتمد» is not reviewed yet and is skipped.\n• Preview saves nothing.\n• Refused when: the party was never imported, it is confirmed to another SOFTECH code, or the code repeats in the file or belongs to another party.\n• Each confirmation is logged on its own (who, when), like a manual one.'),
+             'more': T('• الأعمدة المطلوبة: «النوع» (عميل / مورد) و«كود المالية» و«الكود المعتمد».\n• صف «الكود المعتمد» فيه فاضي = لسه متراجعش، وبيتجاهل.\n• المعاينة مبتسجلش حاجة.\n• كود مالية جديد بيتضاف باسمه من عمود «اسم المالية» ويتأكد.\n• «اسم مختلف»: اسم الملف مالوش أي كلمة مشتركة مع الاسم المسجل، فمبيتأكدش — راجعه من الجدول.\n• مرفوض لو: مؤكد على كود SOFTECH تاني، أو نفس الكود متكرر في الملف أو مربوط بطرف تاني.\n• كل تأكيد بيتسجل لوحده (من/إمتى) زي التأكيد اليدوي.',
+                       '• Required columns: «النوع» (customer / supplier), «كود المالية» and «الكود المعتمد».\n• A row with an empty «الكود المعتمد» is not reviewed yet and is skipped.\n• Preview saves nothing.\n• A new finance code is added under its «اسم المالية» name and confirmed.\n• "Different name": the sheet name shares no word with the recorded name, so it is not confirmed — review it on the grid.\n• Refused when: it is confirmed to another SOFTECH code, or the code repeats in the file or belongs to another party.\n• Each confirmation is logged on its own (who, when), like a manual one.'),
              'warn': T('التأكيد بيحدد على أي حساب طرف هيتسجل كل مستند مستقبلي — راجع الصفوف الضعيفة قبل الرفع.', 'Confirming decides which party account every future document posts to — review the weak rows before uploading.'),
              'open_hint': T('لمن له صلاحية الاعتماد (ledger.approve).', 'For users allowed to approve (ledger.approve).')},
             {'target': 'finance-gl-parties-grid', 'label': T('جدول الأطراف', 'Parties table'),
@@ -825,8 +837,8 @@ SCREENS = [
                        '• Filters: type (supplier/customer/employee/partner/other), status and search.\n• A proposal shows the SOFTECH person and the basis — check the name before confirming.\n• After confirming, "Redraft" in the Journal exceptions tab turns "unmapped party" documents into drafts.\n• A party confirmed to one SOFTECH code cannot be confirmed to another person.\n• Every confirm / reject / rename is logged (who, when).'),
              'warn': T('التأكيد بيحدد على أي حساب طرف هيتسجل كل مستند مستقبلي — تأكد من الاسم.', 'Confirming decides which party account every future document posts to — check the name.')},
         ],
-        'updated': '2026-11-05',
-        'change_note': T('الأطراف: تأكيد أطراف كتير مرة واحدة من ملف المراجعة (معاينة ثم تأكيد)، وشيتات 2020 الرئيسية بتتخطى في الاستيراد العادي', 'Parties: confirm many parties at once from the review sheet (preview, then confirm); the 2020 master sheets are skipped by the normal import'),
+        'updated': '2026-11-07',
+        'change_note': T('الأطراف: ملف المراجعة بيضيف أكواد المالية الجديدة وبينبّه لو الاسم مختلف', 'Parties: the review sheet adds new finance codes and flags a different name'),
     },
     {
         'key': 'finance.gl_rules',
@@ -1614,5 +1626,136 @@ SCREENS = [
         ],
         'updated': '2026-11-06',
         'change_note': T('«مدير الجودة» بقى يشوف الشاشة دي في القائمة؛ الصيدلي ماعادش بيشوفها لأنها تقارير على مستوى الشركة.', 'Quality managers now see this screen in the menu; pharmacists no longer do, because these are company-level reports.'),
+    },
+    {
+        'key': 'finance.gl_close',
+        'routes': ['/finance/close'],
+        'title': T('إقفال الفترة', 'Period close'),
+        'summary': T('إقفال الشهور واحد واحد: شروط الإقفال، بضاعة آخر المدة من سوفتيك وقيد الإقفال، وإعادة الفتح بسبب مكتوب. وأدوات التسليم: استيراد قيود المالية اليدوية ومطابقة دفاترها مع الدفتر العام.',
+                     'Closing the months one by one: the checklist, the closing stock from SOFTECH and the closing entry, and reopening with a written reason. Plus the cutover tools: importing the finance team manual entries and checking their books against the ledger.'),
+        'audience': T('المدير المالي (إقفال وإعادة فتح: ledger.finalize) والمحاسبون.', 'The finance manager (close and reopen: ledger.finalize) and accountants.'),
+        'tabs': [
+            {'key': 'months', 'title': T('الشهور', 'Months'),
+             'body': T('اختار الشهر تظهر شروط الإقفال: المانع فيها مرتب الأول وكل شرط ليه رابط للمكان اللي بيتصلح فيه. «إقفال الشهر» بيتفتح لما كل الشروط المانعة تبقى ✓. إعادة الفتح متاحة لآخر شهور مقفولة بعدد الإعداد gl_reopen_window_months (٣ في الأول) وبسبب مكتوب، وبتفتح معاها الشهور اللي بعدها وبتتعكس قيود الإقفال.\n'
+                       'حالة الشهر: «مفتوح» بيقبل ترحيل، «جاري الإقفال» الإقفال شغال والاعتماد فيه بيتأجل، «مقفول» مبيقبلش ترحيل. الشهور بتتقفل بالترتيب من أول يناير 2026.\n'
+                       'لو الإقفال علّق (السيرفر اتعاد تشغيله مثلاً) والشهر فضل «جاري الإقفال»، تقدر تعيد الإقفال بعد ٣٠ دقيقة والإقفال الجديد بيستلم الشهر. قبل ٣٠ دقيقة بيرد «فيه إقفال شغال».\n'
+                       'شروط الإقفال المانعة: الشهر السابق مقفول، مفيش مسودات ولا استثناءات مفتوحة في الشهر، مقارنة سوفتيك محدّثة ولا فيها فروق بدون تفسير في فحص بيمنع الإقفال، ولقطة المخزون من سوفتيك موجودة. فحوصات المقارنة الجاهزة في البداية كلها مبتمنعش الإقفال؛ المالية هي اللي بتفعّل المنع على فحص لما مصدره يطابق رقمها.\n'
+                       'يعني المسودات والاستثناءات المفتوحة (ومنها «قيد يدوي مختلط») بتمنع الإقفال، وفروق أرصدة الموردين وتغطية التسجيل الآلي بتظهر تنبيه بس.\n'
+                       '«تغييرات متأخرة لسه مش متصححة» تنبيه كمان: عدد صفوف «تغيير في فترة مغلقة» المفتوحة من شهور قبل الشهر ده، ورابطها بيفتح الصفوف دي في الاستثناءات. مبيمنعش الإقفال، بس رقمها لسه مش داخل الدفتر.\n'
+                       'العدد ده بيشمل اللي الترحيل لقاه بس: الترحيل المجدول بيبدأ من أقدم شهر مفتوح، فتغيير سوفتيك في شهر مقفول مبيتكشفش غير بإعادة ترحيل تغطي الشهر ده.',
+                       'Pick a month to see its checklist: blocking items first, each linking to where it is fixed. "Close the month" unlocks when every blocking item is ✓. Reopening is allowed for the latest closed months, as many as the setting gl_reopen_window_months says (3 at first), with a written reason, and reopens the months after it too and reverses their closing entries.\n'
+                       'Month status: "Open" takes postings, "Closing" means a close is running and approvals into it wait, "Closed" takes no postings. Months close in order from January 2026.\n'
+                       'If a close got stuck (a server restart, say) and the month stays "Closing", you can retry the close after 30 minutes and the new run takes the month over. Before 30 minutes it answers "a close is running".\n'
+                       'Blocking items: the previous month is closed, no drafts and no open exceptions in the month, the SOFTECH comparison is fresh with no unexplained difference on a check that blocks the close, and the SOFTECH stock snapshot is present. The comparison checks as first installed all do not block the close; finance turns blocking on for a check once its source reproduces finance\'s figure.\n'
+                       'So drafts and open exceptions (including a "Mixed manual entry") block a close, while supplier-balance differences and the automatic-drafting coverage show a warning only.\n'
+                       '"Late changes not corrected yet" is a warning too: the count of open "closed-period change" rows from months before this one, linking to those rows in Exceptions. It does not block the close, but those figures are not in the ledger yet.\n'
+                       'That count holds only what a run has raised: the scheduled run starts at the earliest open month, so a SOFTECH change in a closed month is detected only by a redraft covering that month.')},
+            {'key': 'stock', 'title': T('بضاعة آخر المدة', 'Closing stock'),
+             'body': T('معاينة قيمة المخزون لكل مخزن في آخر الشهر (داخل أو مستبعد) وجدول ربط المخازن بالفروع.\n'
+                       'بضاعة آخر المدة بتشمل مخازن الحجر (الكوارنتين) لأغراض المحاسبة بس؛ ده مش معناه إنها متاحة للبيع. المخزن المقفول (زي مخزن 110) بيتستبعد.\n'
+                       'المخزن اللي لقطته ناقصة بيمنع الإقفال. لقطات شهور قبل نوفمبر 2026 الناقصة بتتحمل من آخر لقطة قبلها (الإعداد gl_stock_carry_forward_until)، ومن نوفمبر لازم تتشغل تقرير رصيد المخازن في تاريخ من سوفتيك آخر كل شهر. التحميل بيكون من آخر لقطة فيها أصناف للمخزن، واللقطة الفاضية اللي في النص بتتخطى. وصنف في التقرير من غير كمية أو تكلفة بيوقف الفحص وبيسمّي المخزن: صلّحه في سوفتيك.\n'
+                       'قيد البضاعة: مدين 1390 ودائن 5302 لكل فرع، وبيتعكس تلقائياً أول الشهر اللي بعده. في ديسمبر بدل العكس بيتقفل حساب السنة على الأرباح المرحلة 2409 وبيتحمل مخزون أول المدة للسنة الجاية. رصيد 2409 لسنة 2026 لكل فرع مش نتيجة فرع مفيدة لأن سطر مخزون أول المدة ما عليهوش فرع.',
+                       'A preview of the stock value per store at month-end (included or excluded) and the store-to-branch map.\n'
+                       'Closing stock includes the quarantine stores, for accounting only; that does not make them available for sale. A closed store (such as store 110) is excluded.\n'
+                       'A store with a missing snapshot blocks the close. Missing snapshots for months before November 2026 are carried from the last earlier snapshot (the setting gl_stock_carry_forward_until); from November, run SOFTECH\'s stock-at-date report at each month-end. The carry uses the last snapshot where the store has lines; an empty report in between is skipped. A report line with no quantity or cost stops the check and names the store: fix it in SOFTECH.\n'
+                       'The stock entry is Dr 1390 / Cr 5302 per branch, reversed automatically on the 1st of the next month. In December, instead of the reversal, the year is closed to retained earnings 2409 and next year\'s opening stock is carried. The per-branch 2409 figure for 2026 is not a meaningful branch result, because the opening stock line carries no branch.')},
+            {'key': 'cutover', 'title': T('الاستيراد والمطابقة', 'Import and validation'),
+             'body': T('رفع دفتر يومية المالية ومعاينته قبل الاستيراد، ثم تقرير مطابقة بالفروق مع الدفتر العام.\n'
+                       'حالة «شهره مقفول»: قيد تاريخه في شهر مقفول أو بيتقفل مبيتستوردش، لأن مسودته مش هتتعتمد أبداً. افتح الشهر الأول لو لازم يدخل.\n'
+                       'ملف كله قيود مختلطة ينفع يتستورد برضه: اللي مش متحدد منها بيتعلّق في الاستثناءات لحد قرار المحاسب.',
+                       'Upload the finance journal and preview it before importing, then a validation report of differences against the ledger.\n'
+                       'The status "month closed": an entry dated in a closed or closing month is not imported, because its draft could never be approved. Reopen the month first if it has to go in.\n'
+                       'A file of only mixed entries can still be imported: the ones not ticked wait in Exceptions for an accountant\'s decision.')},
+        ],
+        'tour': [
+            {'target': 'finance-gl-close-months', 'label': T('شهور السنة', 'Months of the year'),
+             'text': T('كل شهر بحالته (مفتوح، جاري الإقفال، مقفول) ومين أقفله وبضاعة آخر المدة. اضغط شهر تظهر شروطه تحت.', 'Each month with its status (open, closing, closed), who closed it and the closing stock. Click a month to see its checklist below.'),
+             'warn': T('الإقفال بيرحّل قيد بضاعة آخر المدة، وإعادة الفتح بتتسجل بسبب.', 'Closing posts the closing-stock entry, and a reopen is logged with its reason.')},
+            {'target': 'finance-gl-close-checklist', 'label': T('شروط الإقفال', 'Close checklist'),
+             'text': T('المانع فيها ظاهر الأول وكل شرط ليه رابط للمكان اللي بيتصلح فيه. «إعادة الفحص» بيقرأ من سوفتيك.', 'Blocking items come first, each linking to where it is fixed. "Re-check" reads from SOFTECH.'),
+             'warn': T('الفحص بيقرأ من سوفتيك وممكن ياخد وقت.', 'The check reads from SOFTECH and can take a while.')},
+            {'target': 'finance-gl-close-action', 'label': T('إقفال / إعادة فتح', 'Close / reopen'),
+             'text': T('«إقفال الشهر» بيتفتح لما كل المانع يبقى ✓. إعادة الفتح بسبب مكتوب، وبتفتح الشهور اللي بعده.', 'Close unlocks when every blocking item is ✓. Reopening needs a written reason and reopens the later months too.'),
+             'warn': T('إقفال ديسمبر بيقفل السنة كمان، وإعادة الفتح متاحة لآخر الشهور المقفولة بس.', 'Closing December also closes the year; reopening is limited to the latest closed months.'),
+             'open_hint': T('اختار شهر مفتوح (للإقفال) أو مقفول حديثاً (لإعادة الفتح).', 'Pick an open month (to close) or a recently closed one (to reopen).')},
+            {'target': 'finance-gl-close-stock', 'label': T('بضاعة آخر المدة', 'Closing stock'),
+             'text': T('قيمة المخزون لكل مخزن في آخر الشهر. «معاينة من سوفتيك» بتقرأ الآن من غير ما تحفظ.', 'Stock value per store at month-end. "Preview from SOFTECH" reads now without saving.'),
+             'warn': T('المخزن المستبعد أو الناقص بيغيّر قيد الإقفال.', 'An excluded or missing store changes the closing entry.'),
+             'open_hint': T('تبويب «بضاعة آخر المدة».', 'The "Closing stock" tab.')},
+            {'target': 'finance-gl-cutover-import', 'label': T('استيراد قيود المالية', 'Import finance entries'),
+             'text': T('ارفع دفتر يومية المالية، عاين التجميع بالحالة، حدد المختلط اللي عايزه، واستورد مسودات.', 'Upload the finance journal, preview the grouping by status, tick the mixed groups you want, then import drafts.'),
+             'when': T('مرة وقت التسليم، ومرة لو المالية بعتت ملف معدّل.', 'Once at cutover, and again if finance sends a corrected file.'),
+             'open_hint': T('تبويب «الاستيراد والمطابقة».', 'The "Import and validation" tab.')},
+            {'target': 'finance-gl-cutover-validate', 'label': T('مطابقة الدفاتر', 'Books validation'),
+             'text': T('ارفع ملف المالية وهتنزّل تقرير بالفروق مع الدفتر العام، ومعاه عدد الفروق وإجماليها.', 'Upload the finance file to download a report of differences against the ledger, with the count and total.'),
+             'open_hint': T('تبويب «الاستيراد والمطابقة».', 'The "Import and validation" tab.')},
+        ],
+        'updated': '2026-11-07',
+        'change_note': T('إقفال الفترة: تنبيه التغييرات المتأخرة اللي لسه مش متصححة، وحالة «شهره مقفول» في الاستيراد، وإعادة محاولة الإقفال العالق بعد ٣٠ دقيقة، وأي الفحوصات بتمنع الإقفال، ومخازن الحجر، و2409 لكل فرع', 'Period close: the warning for late changes not corrected yet, the "month closed" import status, retrying a stuck close after 30 minutes, which checks block a close, quarantine stores, and 2409 per branch'),
+    },
+    {
+        'key': 'finance.gl_subledgers',
+        'routes': ['/finance/subledgers'],
+        'title': T('الأستاذ المساعد', 'Sub-ledgers'),
+        'summary': T('أرصدة الموردين والدائنين وأوراق الدفع والعملاء والعاملين والشركاء طرف بطرف، مربوطة بحساباتها في الدفتر العام. افتتاحي ومدين ودائن وختامي لأي فترة.',
+                     'Balances of suppliers, creditors, notes payable, customers, employees and partners party by party, tied to their ledger accounts. Opening, debit, credit and closing for any period.'),
+        'audience': T('المحاسبون والمدير المالي (ledger.view، والتصدير ledger.export).', 'Accountants and the finance manager (ledger.view; export needs ledger.export).'),
+        'tabs': [
+            {'key': 'suppliers', 'title': T('الموردون', 'Suppliers'),
+             'body': T('حساب ٢٣٤١ لكل مورد. «مقارنة بسداد الموردين» تحط رصيد الدفتر جنب رصيد سداد الموردين في آخر الفترة، والفرق بالأحمر.',
+                       'Account 2341 per supplier. "Compare with supplier payments" sets the ledger balance beside the supplier-payments balance at the end of the period, with differences in red.')},
+            {'key': 'creditors', 'title': T('الدائنون', 'Creditors'),
+             'body': T('حساب ٢٣٥١ لكل طرف.', 'Account 2351 per party.')},
+            {'key': 'notes_payable', 'title': T('أوراق الدفع', 'Notes payable'),
+             'body': T('الشيكات المفتوحة مجمّعة بشهر الاستحقاق. اضغط الشهر تظهر شيكاته.',
+                       'Open cheques grouped by the month they fall due. Click a month to see its cheques.')},
+            {'key': 'customers', 'title': T('العملاء', 'Customers'),
+             'body': T('حساب ١٣٤١ لكل عميل. الصف المربوط بطرف مؤكد فيه رابط لمستحقات التعاقدات.',
+                       'Account 1341 per customer. A row tied to a confirmed party links to the contract receivables.')},
+            {'key': 'employees', 'title': T('العاملون', 'Employees'),
+             'body': T('حساب ١٣٥١ لكل موظف.', 'Account 1351 per employee.')},
+            {'key': 'partners', 'title': T('الشركاء', 'Partners'),
+             'body': T('جاري الشركاء حساب بحساب (مفيش طرف هنا، كل حساب صف).', 'Partners current accounts, account by account (no party here, each account is a row).')},
+        ],
+        'tour': [
+            {'target': 'finance-gl-subledger-tabs', 'label': T('أنواع الأستاذ المساعد', 'Sub-ledger kinds'),
+             'text': T('كل تبويب أستاذ مساعد بحسابه. اختار الفترة فوق تتغير الأرصدة: افتتاحي قبل أول الفترة، وحركة الفترة، وختامي.',
+                       'Each tab is one sub-ledger with its account. Pick the period above: opening before the period starts, the period movement, and closing.'),
+             'warn': T('صف «بدون طرف» فيه السطور اللي ما اتحددش لها طرف، وبيدخل في الإجمالي.', 'The "no party" row holds lines with no party and is included in the total.')},
+            {'target': 'finance-gl-subledger-link', 'label': T('رابط الطرف', 'Party link'),
+             'text': T('الطرف المؤكد ليه رابط لسداد الموردين (للمورد) أو لمستحقات التعاقدات (للعميل) على نفس الطرف. اضغط أي صف لفتح كشف حسابه.',
+                       'A confirmed party links to supplier payments (supplier) or contract receivables (customer) on the same party. Click any row to open its account statement.'),
+             'when': T('لما رصيد طرف محتاج مراجعة بالمستندات.', 'When a party balance needs checking against its documents.'),
+             'open_hint': T('تبويب «الموردون» أو «العملاء».', 'The "Suppliers" or "Customers" tab.')},
+        ],
+        'updated': '2026-11-07',
+        'change_note': T('شاشة جديدة: الأستاذ المساعد', 'New screen: sub-ledgers'),
+    },
+    {
+        'key': 'finance.gl_softech_compare',
+        'routes': ['/finance/softech-compare'],
+        'title': T('مقارنة سوفتيك', 'SOFTECH comparison'),
+        'summary': T('الدفتر العام جنب سوفتيك لشهر واحد: مبيعات ومشتريات ومصروفات ومخزون وأرصدة الموردين، فرع بفرع. الفرق اللي فوق حد التسامح لازم يتفسّر قبل إقفال الشهر.',
+                     'The general ledger beside SOFTECH for one month: sales, purchases, expenses, stock and supplier balances, branch by branch. A difference over its tolerance must be explained before the month closes.'),
+        'audience': T('المحاسبون والمدير المالي (التفسير: ledger.approve، وإعدادات الفحوصات: ledger.edit).', 'Accountants and the finance manager (explaining needs ledger.approve; check settings need ledger.edit).'),
+        'tour': [
+            {'target': 'finance-gl-compare-refresh', 'label': T('تحديث المقارنة', 'Refresh the comparison'),
+             'text': T('«تحديث الآن» بيقرأ من سوفتيك ويحسب الفروق في الخلفية، وشريط التقدم بيظهر لحد ما يخلص. الأرقام المعروضة محفوظة من آخر تحديث.',
+                       '"Refresh now" reads from SOFTECH and recomputes in the background, with a progress bar until it finishes. The figures shown are stored from the last refresh.'),
+             'warn': T('لو فيه تحديث تاني شغال، التحديث ده بيستنى. وبعد أي تعديل في القيود الأرقام بتبقى قديمة لحد التحديث.', 'If another refresh is running this one waits. After entries change the figures are out of date until refreshed.')},
+            {'target': 'finance-gl-compare-grid', 'label': T('جدول المقارنة', 'Comparison grid'),
+             'text': T('كل صف فحص لفرع أو مورد: الدفتر، سوفتيك، والفرق. الأحمر فرق فوق التسامح ولسه ما اتفسّرش. اضغط صف لتفاصيله.',
+                       'One check for a branch or supplier per row: ledger, SOFTECH, difference. Red = over tolerance and unexplained. Click a row for details.'),
+             'more': T('• الفحوصات الخمسة (المبيعات والمشتريات والمخزون بالتكلفة والمصروفات وأرصدة الموردين) كلها في البداية مبتمنعش الإقفال، لأن رقم المالية لسه مش بيتطابق مع مصدره في سوفتيك.\n• لما مصدر يطابق رقم المالية، المالية بتفعّل «يمنع الإقفال» على فحصه، وساعتها أي فرق فوق التسامح بدون تفسير يمنع إقفال الشهر.\n• فروق أرصدة الموردين بتظهر تنبيه بس ومبتمنعش أبداً.\n• المقارنة بتتحدّث ليلاً الساعة 3:30 لو الجدولة شغالة. تحديث شهر مقفول بيعيد حساب الأرقام ويسيب التفسيرات، والشهر اللي بيتقفل مبيتحدّثش.',
+                       '• All five checks start out not blocking a close, because finance\'s figure is not yet reproduced from its SOFTECH source.\n• When a source matches finance\'s figure, finance turns "blocks close" on for that check; then an unexplained difference over tolerance stops the month closing.\n• Supplier-balance differences only warn and never block.\n• Nightly refresh at 03:30 when the schedule is on. A closed month can be refreshed (explanations kept); a closing month cannot.'),
+             'when': T('قبل إقفال الشهر، أو لما رقم في سوفتيك ما بيطابقش الدفتر.', 'Before closing the month, or when a SOFTECH figure does not match the ledger.')},
+            {'target': 'finance-gl-compare-detail', 'label': T('تفاصيل الفرق والتفسير', 'Difference detail and explanation'),
+             'text': T('الفرق باليوم، وسطور الدفتر، وسطور سوفتيك، وتحتهم خانة التفسير. التفسير بيحوّل الصف لمفسَّر، ولو الفرق اتغيّر بعده بيرجع يطلب تفسير جديد.',
+                       'Difference by day, ledger lines and SOFTECH lines, plus the explanation box. If the difference changes after you explain, it asks again.'),
+             'warn': T('التفسير مش بيغيّر أي رقم، بس بيسجّل السبب باسمك وتاريخه.', 'An explanation changes no figure; it records the reason with your name and date.'),
+             'open_hint': T('اضغط أي صف في الجدول.', 'Click any row in the grid.')},
+        ],
+        'updated': '2026-11-07',
+        'change_note': T('مقارنة سوفتيك: لو سوفتيك مش بيرد، تفاصيل السطر بتفضل تعرض الدفتر وخانة التفسير والخطأ في قسم سوفتيك بس، والفحص الموقوف مبيخليش الشهر «مش محدّث» بعد التحديث', 'SOFTECH comparison: if SOFTECH does not answer, a line\'s detail still shows the ledger and the explanation box, with the error in the SOFTECH section only, and a deactivated check no longer leaves a month out of date after a refresh'),
     },
 ]

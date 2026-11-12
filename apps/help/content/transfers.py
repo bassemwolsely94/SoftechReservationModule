@@ -766,6 +766,8 @@ SCREENS = [
               'The "ERP document match" section shows whether the SOFTECH document is matched, partial or missing; it is checked every 30 minutes.'),
         ],
         'tips': [
+            T('الملف اللي عدّى مدة الاحتفاظ بيظهر مكانه «أُزيل وفق سياسة الاحتفاظ» ومعاه التاريخ.',
+              'A file past its keep period shows "removed under retention" with the date.'),
             T('لو الطلب مرتبط بشحنة «قيد النقل» يظهر رابط «قيد النقل ←» لفتحها مباشرة.', 'If the request is linked to an in-transit shipment, a "In transit ←" link opens it.'),
             T('لا تعتمد كمية أكبر من المتاح فعلاً في فرعك.', 'Do not approve more than you actually have.'),
             T('الصور اللي بترفقها في الرسائل والملاحظات بتتصغّر تلقائيًا (أطول ضلع ١٦٠٠ بكسل)، والكلام فيها بيفضل واضح.',
@@ -948,7 +950,7 @@ SCREENS = [
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
         'updated': '2026-11-12',
-        'change_note': T('صور المرفقات بتتصغّر والمرفق المحذوف بيتحفظ ٣٠ يومًا.', 'Attachment photos are shrunk and deleted attachments are kept 30 days.'),
+        'change_note': T('صور المرفقات بتتصغّر تلقائيًا (أطول ضلع ١٦٠٠ بكسل).', 'Attachment photos are shrunk automatically (longest side 1600 px).'),
     },
     {
         'key': 'transfers.transits',

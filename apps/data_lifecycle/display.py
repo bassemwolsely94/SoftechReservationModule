@@ -6,10 +6,13 @@ left out (frontends treat missing and empty alike). A field that never had a fil
 
 A file staff deleted or replaced (holding.STAFF_RULE_KEYS) is not retention's doing, so it shows no note.
 
-A list serializer (many=True) makes ONE lookup for the whole page, and only when some row has an empty field.
+A list serializer (many=True) makes ONE lookup for the whole page, and only when some row has an empty field. That
+lives on a ListSerializer subclass, not a patched instance: DRF re-creates a nested `many=True` field for each parent
+serializer from its class and arguments, so a patch on the instance would be lost and every row would query.
 """
-from django.db.models import Manager
+from django.db.models.manager import BaseManager
 from django.utils import timezone
+from rest_framework.serializers import LIST_SERIALIZER_KWARGS, LIST_SERIALIZER_KWARGS_REMOVE, ListSerializer
 
 from .holding import STAFF_RULE_KEYS
 from .models import HeldFile
@@ -35,23 +38,33 @@ def removed_dates(instances, fields):
     return out
 
 
+class RetentionListSerializer(ListSerializer):
+    """The page's removed dates in one lookup, handed to the child for the length of this call."""
+
+    def to_representation(self, data):
+        items = list(data.all() if isinstance(data, BaseManager) else data)
+        self.child._retention_cache = removed_dates(items, self.child.retention_fields)
+        try:
+            return super().to_representation(items)
+        finally:
+            self.child._retention_cache = None
+
+
 class RetentionNoteMixin:
     retention_fields = ()
 
     @classmethod
     def many_init(cls, *args, **kwargs):
-        listing = super().many_init(*args, **kwargs)
-        child, plain = listing.child, listing.to_representation
-
-        def to_representation(data):
-            items = list(data.all() if isinstance(data, Manager) else data)
-            child._retention_cache = removed_dates(items, child.retention_fields)
-            try:
-                return plain(items)
-            finally:
-                child._retention_cache = None
-        listing.to_representation = to_representation
-        return listing
+        """DRF's many_init with RetentionListSerializer as the list class. DRF re-creates a nested list from its
+        class and arguments, so the one-lookup behaviour survives where an instance patch would not."""
+        list_kwargs = {}
+        for key in LIST_SERIALIZER_KWARGS_REMOVE:
+            value = kwargs.pop(key, None)
+            if value is not None:
+                list_kwargs[key] = value
+        list_kwargs['child'] = cls(*args, **kwargs)
+        list_kwargs.update({key: value for key, value in kwargs.items() if key in LIST_SERIALIZER_KWARGS})
+        return RetentionListSerializer(*args, **list_kwargs)
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

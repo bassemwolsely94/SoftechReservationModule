@@ -32,7 +32,7 @@ from apps.sync.maintenance import _alert_admins, _batched_delete
 from core.errors import redact
 
 from . import holding
-from .models import MODE_OFF, MODE_PREVIEW, LifecycleRun, LifecycleRunLine, TableSizeSnapshot
+from .models import MODE_OFF, MODE_ON, MODE_PREVIEW, LifecycleRun, LifecycleRunLine, TableSizeSnapshot
 from .policy import get_mode
 from .references import build_reference_index, partition
 from .register import KIND_FILE, KIND_P56, RULES
@@ -270,7 +270,7 @@ def run_lifecycle_rules():
                 continue
             if mode == MODE_PREVIEW:
                 _preview_line(run, rule, files, refresh=True)
-            else:
+            elif mode == MODE_ON:       # any other stored value does nothing
                 total += _real_line(run, rule, files).count
         except Exception as exc:
             _error_text(key, exc)

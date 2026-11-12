@@ -195,7 +195,7 @@ export default function EntryEditor({ entryId, onClose, onChanged }) {
 
   const cell = 'px-1.5 py-1 align-top'
   return (
-    <div className="fixed inset-y-0 left-0 z-40 w-full max-w-[1100px] bg-white shadow-2xl border-e border-gray-200 flex flex-col" dir="rtl">
+    <div data-hides-tour-offer className="fixed inset-y-0 left-0 z-40 w-full max-w-[1100px] bg-white shadow-2xl border-e border-gray-200 flex flex-col" dir="rtl">
       {/* header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200">
         <h2 className="text-lg font-bold text-gray-900">

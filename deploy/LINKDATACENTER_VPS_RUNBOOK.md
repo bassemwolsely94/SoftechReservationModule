@@ -837,22 +837,28 @@ chmod 600 .env
 Start from the **production** template (`deploy/production.env.example`): it boots as a reader —
 SOFTECH kill-switch ON, `WRITER_INSTANCE=False` and every writer flag listed and OFF
 (`apps/tests/test_go_live.py` keeps it that way). You flip them only at cutover (section 11).
-The block below is the part to fill in:
+The block below is the part to fill in. Keep comments on their own line: python-decouple
+keeps anything after `=` as the value, so a note beside a value stops the app at boot.
 
 ```env
 DEBUG=False
-DJANGO_ADMIN_ENABLED=False        # Django admin has no 2FA; set True only for a maintenance window, then back to False
+# Django admin has no 2FA; set True only for a maintenance window, then back to False
+DJANGO_ADMIN_ENABLED=False
 SECRET_KEY=<python3 -c "import secrets; print(secrets.token_urlsafe(50))">
 ALLOWED_HOSTS=elrezeikyapp.dawalvry.com,localhost,127.0.0.1
 CSRF_TRUSTED_ORIGINS=https://elrezeikyapp.dawalvry.com
 FRONTEND_BASE_URL=https://elrezeikyapp.dawalvry.com
 BEHIND_HTTPS_PROXY=True
-NETWORK_HEADER_TRUSTED=True         # ONLY because our nginx + elrezeiky-proxy-headers.conf is the sole way in (N1)
-NETWORK_UNTRUSTED_ZONE=external     # if the header is ever untrusted, treat everyone as external
-NETWORK_POLICY_ENFORCEMENT=log      # off | log | enforce (N3)
+# ONLY because our nginx + elrezeiky-proxy-headers.conf is the sole way in (N1)
+NETWORK_HEADER_TRUSTED=True
+# if the header is ever untrusted, treat everyone as external
+NETWORK_UNTRUSTED_ZONE=external
+# off | log | enforce (N3)
+NETWORK_POLICY_ENFORCEMENT=log
 SCHEDULER_AUTOSTART=False
 MEDIA_ACCEL_REDIRECT=True
-RBAC_ENFORCEMENT=log                # same as office today; 'enforce' once the rbac log is quiet
+# same as office today; 'enforce' once the rbac log is quiet
+RBAC_ENFORCEMENT=log
 REDIS_URL=redis://127.0.0.1:6379/0
 
 PG_NAME=elrezeiky_db
@@ -861,27 +867,36 @@ PG_PASSWORD=<prod password from 7.1>
 PG_HOST=localhost
 PG_PORT=5432
 
-SOFTECH_READ_ONLY=True              # ← stays True until cutover step 11.6
-SYBASE_HOST=192.168.1.8             # reached through the VPN
+# ← stays True until cutover step 11.6
+SOFTECH_READ_ONLY=True
+# reached through the VPN
+SYBASE_HOST=192.168.1.8
 SYBASE_PORT=5000
 SYBASE_USER=<from office .env>
 SYBASE_PASSWORD=<from office .env>
 SOFTECH_PROFILE=<from office .env>
-SOFTECH_BRANCH_HOST_OVERRIDE=       # EMPTY in production → real branch hosts from the Branch table
+# EMPTY in production → real branch hosts from the Branch table
+SOFTECH_BRANCH_HOST_OVERRIDE=
 
 OMNI_CREDENTIALS_KEY=<the SAME value as the office — see 1.2>
-WHISPER_ENABLED=False               # RAM budget (True only on a 16 GB plan)
+# RAM budget (True only on a 16 GB plan)
+WHISPER_ENABLED=False
 # WhatsApp / Meta / AMI / Issabel / VAPID: copy from office, but keep WhatsApp/AMI EMPTY until cutover
 
 # ── Local OCR (section 8.4) ──
 TESSERACT_CMD=/usr/bin/tesseract
-TESSERACT_TESSDATA_PREFIX=          # empty → the project's ocr_tessdata/ (copied in 8.4)
-OMP_THREAD_LIMIT=1                  # one CPU per Tesseract page, so OCR can't freeze the screens
+# empty → the project's ocr_tessdata/ (copied in 8.4)
+TESSERACT_TESSDATA_PREFIX=
+# one CPU per Tesseract page, so OCR can't freeze the screens
+OMP_THREAD_LIMIT=1
 PADDLE_OCR_URL=http://127.0.0.1:8077/boxes
-INVOICE_OCR_ENGINE=auto             # local first; Gemini only for pages local OCR reads badly
-#INVOICE_OCR_ENGINE=tesseract       # ← 100% local: no page ever leaves the server
+# local first; Gemini only for pages local OCR reads badly
+INVOICE_OCR_ENGINE=auto
+# ← 100% local: no page ever leaves the server
+#INVOICE_OCR_ENGINE=tesseract
 INVOICE_OCR_ESCALATE_THRESHOLD=0.6
-GEMINI_API_KEY=<from office>        # leave EMPTY to forbid any cloud OCR
+# leave EMPTY to forbid any cloud OCR
+GEMINI_API_KEY=<from office>
 ```
 
 Never copy Windows paths (`C:\…`) from the office `.env` — JVM path, Tesseract path, tessdata
@@ -1007,11 +1022,14 @@ the lines match — compare with what the office produced for the same invoice.
 ```bash
 sudo cp deploy/elrezeiky-web.service       /etc/systemd/system/
 sudo cp deploy/elrezeiky-scheduler.service /etc/systemd/system/
+sudo cp deploy/elrezeiky-ami-bridge.service /etc/systemd/system/
 sudo sed -i 's#WorkingDirectory=/opt/elrezeiky#WorkingDirectory=/opt/elrezeiky/app#; s#EnvironmentFile=/opt/elrezeiky/.env#EnvironmentFile=/opt/elrezeiky/app/.env#' \
-     /etc/systemd/system/elrezeiky-web.service /etc/systemd/system/elrezeiky-scheduler.service
+     /etc/systemd/system/elrezeiky-web.service /etc/systemd/system/elrezeiky-scheduler.service \
+     /etc/systemd/system/elrezeiky-ami-bridge.service
 sudo systemctl daemon-reload
 sudo systemctl enable elrezeiky-web          # start it after the data restore (section 10)
-# the scheduler is NOT enabled yet — only at cutover (section 11)
+# the scheduler and the AMI bridge are NOT enabled yet — only at cutover (section 11);
+# like the scheduler, exactly ONE AMI bridge may run (two bridges record every call twice)
 ```
 Both units already start after Redis and the VPN (`zerotier-one`, `elrezeiky-tunnel-watch`) on
 reboot. (Not `wg-quick@wg0`: WireGuard is dormant and disabled — section 5.0.) The OCR sidecar
@@ -1745,8 +1763,29 @@ with `SOFTECH_READ_ONLY=True` confirm a writer dry-run is refused. Then in the V
 - Meta developer console → WhatsApp → Configuration → Webhook URL
   `https://elrezeikyapp.dawalvry.com/api/whatsapp/webhook/` (same verify token). Same for
   Messenger/Instagram/Telegram webhooks under `/api/social/…`.
-- AMI bridge: Issabel must allow AMI logins from the HQ router's LAN IP (src-NAT, section 5.2 e). Check
-  `/pbx/live` shows calls.
+- AMI bridge: Issabel must allow AMI logins from the HQ router's LAN IP (src-NAT, section 5.2 e).
+  Stop the office copy first (Task Manager: no `python.exe … run_ami_bridge`), then
+  `sudo systemctl enable --now elrezeiky-ami-bridge` and check `/pbx/live` → «⚙️ إعدادات السنترال»
+  → «🩺 فحص الاتصال»: every step green, the badge «السنترال: متصل».
+- Issabel recordings (playback + transcription): on Issabel create a read-only SFTP user in the
+  `asterisk` group (`useradd -m -G asterisk recreader && passwd recreader`); in
+  `/etc/ssh/sshd_config` add `Match User recreader` / `ForceCommand internal-sftp` /
+  `AllowTcpForwarding no`, restart sshd; the HQ router must forward port 22 to Issabel like
+  5038/3306. Fill `PBX_RECORDINGS_SFTP_*` in `.env`; «🩺 فحص الاتصال» reads the latest recording.
+- Browser phone (WebRTC, optional per agent): on Issabel enable the secure websocket —
+  `/etc/asterisk/http_custom.conf`: `tlsenable=yes`, `tlsbindaddr=0.0.0.0:8089`, a certificate the
+  agents' browsers trust (`tlscertfile`/`tlsprivatekey`); per agent extension (PBX → Extensions →
+  Advanced): transport `wss,udp`, `avpf=yes`, `force_avp=yes`, `icesupport=yes`,
+  `encryption=yes`, `dtlsenable=yes`, `dtlsverify=fingerprint`, `dtlssetup=actpass`; Apply Config.
+  Then `.env`: `PBX_WEBRTC_WSS_URL=wss://<issabel-name>:8089/ws`, `PBX_WEBRTC_SIP_DOMAIN=<issabel-name>`;
+  in «⚙️ إعدادات السنترال» → «ربط» tick «🎧 هاتف المتصفح» and enter the extension's SIP secret.
+  Agents' browsers reach Issabel directly (office LAN or VPN) — the VPS only hands out the settings.
+- Whisper (owner decision 2026-11-09): this server only queues (`WHISPER_ENABLED=True`,
+  `WHISPER_LAUNCH_RUNNER=False`). The office PC transcribes: Windows Task Scheduler, daily 02:00,
+  `venv\Scripts\python.exe manage.py run_whisper_queue`, «Run whether user is logged on or not»,
+  «Stop the task if it runs longer than 4 hours». Its `.env` points `PG_HOST` at this server's
+  database over the tunnel (a login with write access to the callcenter tables only), has
+  `WHISPER_ENABLED=True` + the SFTP lines, and it must **not** run `run_scheduler`.
 - Web Push: users may need to re-enable notifications once (new origin = new subscription).
 - `FRONTEND_BASE_URL` makes WhatsApp/portal links point at the new domain.
 
@@ -1773,13 +1812,16 @@ services disabled. Rollback = reverse 11.3–11.6 (stop VPS scheduler+writers fi
 
 ```bash
 sudo -u elrezeiky mkdir -p /opt/elrezeiky/backups
+# The holding folder of the data lifecycle must exist before the Friday tar: the app only creates it on the first
+# move, and until then the tar fails and the old-backup cleanup after it is skipped.
+sudo -u elrezeiky mkdir -p /opt/elrezeiky/app/media_hold
 sudo -u elrezeiky crontab -e
 ```
 ```cron
 # 02:30 nightly DB dump, keep 14 days
 30 2 * * * pg_dump -h localhost -U elrezeiky -Fc -Z 6 elrezeiky_db -f /opt/elrezeiky/backups/db_$(date +\%F).dump && find /opt/elrezeiky/backups -name 'db_*.dump' -mtime +14 -delete
 # 03:15 weekly media archive (Fridays), keep 4
-15 3 * * 5 tar czf /opt/elrezeiky/backups/media_$(date +\%F).tgz -C /opt/elrezeiky/app media && find /opt/elrezeiky/backups -name 'media_*.tgz' -mtime +28 -delete
+15 3 * * 5 tar czf /opt/elrezeiky/backups/media_$(date +\%F).tgz -C /opt/elrezeiky/app media media_hold && find /opt/elrezeiky/backups -name 'media_*.tgz' -mtime +28 -delete
 ```
 (Add `elrezeiky`'s password to `/opt/elrezeiky/.pgpass`, `localhost:5432:elrezeiky_db:elrezeiky:<pw>`, chmod 600.)
 
@@ -1994,20 +2036,27 @@ and every external channel empty), then set:
 DEBUG=True
 ALLOWED_HOSTS=localhost,127.0.0.1
 SECRET_KEY=<any random value — not the production one>
-PG_NAME=elrezeiky_db                 # the LIVE database…
-PG_USER=elrezeiky_work               # …through the read-only login
+# the LIVE database…
+PG_NAME=elrezeiky_db
+# …through the read-only login
+PG_USER=elrezeiky_work
 PG_PASSWORD=<workbench password from 7.1>
 PG_HOST=localhost
-REDIS_URL=                           # empty → in-memory; never touch production's Redis
-SOFTECH_READ_ONLY=True               # NEVER change this in the workbench
+# empty → in-memory; never touch production's Redis
+REDIS_URL=
+# NEVER change this in the workbench
+SOFTECH_READ_ONLY=True
 SYBASE_HOST=192.168.1.8
 SYBASE_PORT=5000
 SYBASE_USER=<ideally a SELECT-only SOFTECH login — ask the SOFTECH DBA>
 SYBASE_PASSWORD=<…>
-SOFTECH_BRANCH_HOST_OVERRIDE=        # empty → read the real branch nodes (read-only)
+# empty → read the real branch nodes (read-only)
+SOFTECH_BRANCH_HOST_OVERRIDE=
 TESSERACT_CMD=/usr/bin/tesseract
-PADDLE_OCR_URL=http://127.0.0.1:8077/boxes   # shares the production OCR sidecar (it only reads images)
-GEMINI_API_KEY=                      # empty unless you are testing Gemini on purpose
+# shares the production OCR sidecar (it only reads images)
+PADDLE_OCR_URL=http://127.0.0.1:8077/boxes
+# empty unless you are testing Gemini on purpose
+GEMINI_API_KEY=
 RBAC_ENFORCEMENT=log
 ```
 A **SELECT-only SOFTECH login** for the workbench is the database-level guarantee on top of the

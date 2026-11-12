@@ -205,8 +205,8 @@ class DeliveryOrderListSerializer(RecordPhoneMask, serializers.ModelSerializer):
 
 
 class DeliveryOrderSerializer(RetentionNoteMixin, RecordPhoneMask, serializers.ModelSerializer):
-    retention_fields = ('pod_photo',)
     """Full read serializer with all nested data."""
+    retention_fields = ('pod_photo',)
     phone_mask_fields = ('customer_phone', 'customer_phone_alt')
     branch_name        = serializers.CharField(source='branch.name', read_only=True)
     status_label       = serializers.CharField(source='get_status_display', read_only=True)

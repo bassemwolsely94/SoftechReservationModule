@@ -180,6 +180,12 @@ class PurchaseTests(TestCase):
         self.assertEqual(doc.amounts, {'value': D('114.00'), 'vat': D('0.00'), 'net': D('114.00')})
         self.assertTrue(doc.attrs['vat_missing'])
 
+    def test_return_without_header_is_not_flagged_vat_missing(self):
+        self.mk('100', '120', '9', value='-57')
+        (doc,) = READERS['purchases'](date(2026, 3, 1), date(2026, 3, 31), fake([self.vat_row(num='56')]))
+        self.assertEqual(doc.amounts, {'value': D('57.00'), 'vat': D('0.00'), 'net': D('57.00')})
+        self.assertNotIn('vat_missing', doc.attrs)
+
     def test_return_vat_keeps_the_invoice_sign(self):
         self.mk('100', '120', '9', value='-57')
         (doc,) = READERS['purchases'](date(2026, 3, 1), date(2026, 3, 31),

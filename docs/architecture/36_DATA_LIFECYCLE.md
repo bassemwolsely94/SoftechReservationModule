@@ -20,7 +20,7 @@ The app is `apps/data_lifecycle`. Company-level by nature (no branch scoping). I
 | `holding.py` | Moves a file and its database references together, holds it 30 days, purges it, restores it. |
 | `runner.py` | Preview and real runs, the circuit breaker, the table-size snapshot. Called from `apps/sync/maintenance.py` `run_daily_retention` (lane `retention`). |
 | `models.py` | `LifecycleRulePolicy`, `LifecycleRun`, `LifecycleRunLine`, `HeldFile`, `ObsoleteItemSeen`, `UnreferencedFileSeen`, `TableSizeSnapshot`. |
-| `management/commands/lifecycle.py` | `list`, `preview <key>`, `set <key> --mode ... --user ... --reason ...`, `restore <held_id> --user ...`. |
+| `management/commands/lifecycle.py` | `list`, `preview <key>`, `set <key> --mode ... --user ... --reason ...`, `restore <held_id> --user ...`, `mark-lost <held_id> --user ... --reason ...`. |
 
 ## The register
 
@@ -72,13 +72,21 @@ A file rule removes the file and keeps the row. A row whose file is not on disk 
   while locked.
 - **Holding folder.** Removed files go to `LIFECYCLE_HOLD_ROOT` (outside `MEDIA_ROOT`, never served by URL) for 30 days;
   the `retention:purge_held` step then deletes them. An admin can restore within the 30 days.
+- **A held file that is missing when its date comes.** One lost file does not fail the step: it is skipped, is not
+  recorded as purged, and admins get one alert a day for that held id. The step still raises, and deletes nothing,
+  when the hold root itself is missing or more than half of the due files are missing (two or more), because that
+  means a wrong folder. Once someone confirms the file is gone, `lifecycle mark-lost <held_id> --user <admin>
+  --reason "..."` sets `purged_at` and writes `AuditLog`. It is refused unless the file really is missing and the
+  hold root exists. With nothing due, the step does not read the hold root at all, so a wrong setting cannot fail a
+  machine that holds nothing.
 
 ## Growth history
 
 `retention:table_sizes` runs daily before the rules and writes one `TableSizeSnapshot` row per table of 20 MB or more
 (total, heap, index bytes and the row estimate). It reads PostgreSQL's catalog only and never raises, so a failed
 snapshot cannot fail the retention run. It is the only early part of Stage 5; the screen and the media sizes per
-folder come later. Its rows written are counted in the step's log line and are not deletions.
+folder come later. Its rows written are counted in the step's log line and are not deletions, so they stay out of
+the run's `records_synced` total.
 
 ## Stage 4: upload controls (built 2026-11-12, branch `claude/data-lifecycle-stage-4-6acc36`)
 

@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 from unittest import mock
 
+from decouple import RepositoryEnv
 from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import AccessToken
@@ -469,6 +470,18 @@ class ProductionSettingsGuardTests(SimpleTestCase):
     def test_production_refuses_placeholder_secret_key(self):
         r = self._import_settings(DEBUG='False', SECRET_KEY='change-me-in-production')
         self.assertNotEqual(r.returncode, 0)
+
+    def test_production_refuses_the_env_template_placeholders(self):
+        # What an unedited template holds; `check --deploy` in release.sh only warns about these.
+        for rel in ('deploy/production.env.example', 'deploy/staging.env.example'):
+            value = RepositoryEnv(str(self.ROOT / rel)).data['SECRET_KEY']
+            r = self._import_settings(DEBUG='False', SECRET_KEY=value)
+            self.assertNotEqual(r.returncode, 0, rel)
+            self.assertIn('still the placeholder', r.stderr, rel)
+
+    def test_debug_still_boots_with_a_placeholder_key(self):
+        r = self._import_settings(DEBUG='True', SECRET_KEY='CHANGE')
+        self.assertEqual(r.returncode, 0, r.stderr)
 
     def test_production_allowed_hosts_not_wildcard(self):
         r = self._import_settings(DEBUG='False', SECRET_KEY='x' * 50)

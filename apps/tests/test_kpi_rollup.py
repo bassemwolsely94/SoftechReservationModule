@@ -230,6 +230,36 @@ class ForecastEngineTests(TestCase):
         self.assertEqual(float(t.target_value), 5000.0)   # 1333.33 → nearest 5,000 (up)
         self.assertEqual(sc.status, 'committed')
 
+    def test_commit_cell_sets_one_target_and_audits(self):
+        """Per-cell pull: commits ONE branch×metric target from the scenario, audited,
+        WITHOUT flipping the whole scenario to committed."""
+        from datetime import date
+        from apps.forecasting.engine import ForecastEngine
+        from apps.incentives.models import SalesTarget
+        from apps.audit.models import AuditLog
+        sc = self._scenario('a')
+        eng = ForecastEngine()
+        eng.generate(sc)
+        res = eng.commit_cell(sc, 'cash_delivery', branch_id=self.branch.id)
+        self.assertEqual(res['target_value'], 5000.0)
+        self.assertTrue(res['created'])
+        t = SalesTarget.objects.get(branch=self.branch, metric='cash_delivery',
+                                    period_start=date(2026, 9, 1))
+        self.assertEqual(float(t.target_value), 5000.0)
+        # only this one cell was committed; the scenario stays whatever it was (not bulk-committed)
+        self.assertEqual(SalesTarget.objects.filter(period_start=date(2026, 9, 1)).count(), 1)
+        self.assertNotEqual(sc.status, 'committed')
+        self.assertTrue(AuditLog.objects.filter(action='sales_target_committed').exists())
+
+    def test_commit_cell_no_forecast_raises(self):
+        from apps.forecasting.engine import ForecastEngine
+        sc = self._scenario('a')
+        eng = ForecastEngine()
+        eng.generate(sc)
+        # gross_profit has no rollups for this branch → no committable forecast
+        with self.assertRaises(ValueError):
+            eng.commit_cell(sc, 'gross_profit', branch_id=self.branch.id)
+
 
 class BacktestTests(TestCase):
     """ForecastEngine.compute_models + BacktestService accuracy/winner (doc 16, Phase 4)."""

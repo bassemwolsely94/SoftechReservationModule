@@ -34,6 +34,8 @@ import ModuleNotificationBell from '../components/ModuleNotificationBell'
 import CanDo from '../components/CanDo'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
+import DialButton from '../components/pbx/DialButton'
+import CallListsPanel from '../components/followups/CallListsPanel'
 
 // ─────────────────────────────────────────────
 //  Constants / config
@@ -405,11 +407,14 @@ function PhoneDisplay({ phone, canSeePhone, className = '' }) {
   if (!phone) return null
   const isMasked = !canSeePhone || phone === '●●●●●●●●●●'
   return (
-    <span
-      className={`font-mono text-xs select-all ${isMasked ? 'tracking-widest text-gray-300' : 'text-gray-400'} ${className}`}
-      dir="ltr"
-      title={isMasked ? 'ليس لديك صلاحية رؤية رقم الهاتف' : phone}>
-      {isMasked ? '🔒 ●●●●●●●●' : phone}
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        className={`font-mono text-xs select-all ${isMasked ? 'tracking-widest text-gray-300' : 'text-gray-400'} ${className}`}
+        dir="ltr"
+        title={isMasked ? 'ليس لديك صلاحية رؤية رقم الهاتف' : phone}>
+        {isMasked ? '🔒 ●●●●●●●●' : phone}
+      </span>
+      {!isMasked && <DialButton phone={phone} />}
     </span>
   )
 }
@@ -2126,6 +2131,7 @@ const PERSONAL_TABS = [
   { id: 'pinned',    label: '📌 المثبتة',       filters: { my_tasks: false, pinned_only: true,  untracked: false } },
   { id: 'untracked', label: '🔔 غير متابعة',   filters: { my_tasks: false, pinned_only: false, untracked: true  } },
   { id: 'priority',  label: '⚡ الأعلى أولوية', filters: { my_tasks: false, pinned_only: false, untracked: false, ordering: '-priority_score' } },
+  { id: 'call_lists', label: '📞 قوائم الاتصال', filters: { my_tasks: false, pinned_only: false, untracked: false } },
 ]
 
 export default function FollowUpsPage() {
@@ -2141,6 +2147,7 @@ export default function FollowUpsPage() {
   const [showBatchPreset, setShowBatchPreset] = useState(false)
   const [batchPresetId,   setBatchPresetId]   = useState('')
   const [viewMode,        setViewMode]        = useState('grouped')  // 'list' | 'grouped'
+  const [activeCallList,  setActiveCallList]  = useState(null)       // call list filter (📞 قوائم الاتصال)
 
   const toggleSelect = (id) =>
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
@@ -2150,6 +2157,7 @@ export default function FollowUpsPage() {
 
   // Build API params from filter state
   const apiParams = {
+    ...(activeCallList         && { call_list:       activeCallList }),
     ...(filters.status         && { status:          filters.status }),
     ...(filters.task_type      && { task_type:        filters.task_type }),
     ...(filters.sales_channel?.length && { sales_channel: filters.sales_channel.join(',') }),
@@ -2178,6 +2186,7 @@ export default function FollowUpsPage() {
   useHelpTab(personalTab)
   const applyPersonalTab = (tab) => {
     setPersonalTab(tab.id)
+    if (tab.id !== 'call_lists') setActiveCallList(null)
     setFilters(p => ({ ...p, ...tab.filters }))
   }
 
@@ -2446,6 +2455,10 @@ export default function FollowUpsPage() {
 
       {/* ── Body ── */}
       <div className="max-w-7xl mx-auto px-6 py-5 space-y-4">
+
+        {personalTab === 'call_lists' && (
+          <CallListsPanel branches={branches} activeListId={activeCallList} onSelectList={setActiveCallList} />
+        )}
 
         {/* Advanced filter panel */}
         <FilterPanel

@@ -14,6 +14,9 @@ date.isoformat(), so no free text reaches the SQL.
 Raised to 12 on 2026-11-06, for review with the batch: the Q3 finance batch added two read-only B608
 query builders in the same file (sql_purchase_vat, sql_branch_cost); only date.isoformat() values and
 module constants are interpolated.
+Raised to 17 on 2026-11-08, reviewed: Finance GL Plan 3 added five B608 SELECT-only readers in the same
+file (storebal_rows, storebal_snapshots, store_names, sales_net_by_day, expense_rows) — only the module
+constant DB and date.isoformat() values are interpolated; storebal dates are bound params.
 """
 import re
 from pathlib import Path
@@ -21,7 +24,7 @@ from pathlib import Path
 from django.conf import settings
 from django.test import SimpleTestCase
 
-MAX_NOSEC = 12
+MAX_NOSEC = 17
 MAX_NOQA = 126
 ROOTS = ('apps', 'core', 'config')
 NOSEC = re.compile(r'#\s*nosec\b(.*)$')

@@ -85,10 +85,14 @@ class UploadSizeLimitHandler(FileUploadHandler):
         return None                     # the next handler builds the file
 
 
+def max_import_rows() -> int:
+    from django.conf import settings
+    return int(getattr(settings, 'MAX_IMPORT_ROWS', 50_000))
+
+
 def capped_rows(rows):
     """Yield import rows, stopping with a clear ValueError past MAX_IMPORT_ROWS (header included)."""
-    from django.conf import settings
-    limit = int(getattr(settings, 'MAX_IMPORT_ROWS', 50_000))
+    limit = max_import_rows()
     for n, row in enumerate(rows):
         if n >= limit:
             raise ValueError(f'الملف أكبر من الحد المسموح ({limit} صف) — قسّمه إلى ملفات أصغر')

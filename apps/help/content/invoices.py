@@ -289,6 +289,8 @@ SCREENS = [
               'Invoice scans and bundle pages are stored as they are and never shrunk. The owner can switch on cleanup of the temporary bundle page images, once a bundle is finished, on the server later; the original bundle file stays.'),
             T('لما تمسح فاتورة أو تعيد تقسيم حزمة، الصورة القديمة بتتحفظ ٣٠ يومًا قبل ما تتمسح نهائيًا.',
               'When you delete an invoice or re-split a bundle, the old scan is kept 30 days before it is gone for good.'),
+            T('الملف اللي عدّى مدة الاحتفاظ بيظهر مكانه «أُزيل وفق سياسة الاحتفاظ» ومعاه التاريخ.',
+              'A file past its keep period shows "removed under retention" with the date.'),
             T('كل إجراء بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الفواتير): التعديل وتشغيل القراءة الآلية يحتاجوا «تعديل»، «تأكيد» و«رفض» وعمل مرتجع يحتاجوا «اعتماد»، والإرسال لـ SOFTECH يحتاج «إنهاء».',
               'Every action is checked on the server (Permissions Matrix, invoices module): editing and running OCR need "edit", "Confirm", "Reject" and creating a return need "approve", and sending to SOFTECH needs "finalize".'),
             T('بعد دخول الفاتورة طابور الترحيل أو ترحيلها إلى SOFTECH لا يُعدَّل رأسها ولا سطورها — التصحيح بمرتجع.',

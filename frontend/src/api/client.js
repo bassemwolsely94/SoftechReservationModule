@@ -11,6 +11,13 @@ const api = axios.create({
   withCredentials: true,
 })
 
+// The JSON default above would make axios serialise a FormData body to JSON (the server answers
+// 415 and the file is lost), so every upload goes as multipart whether or not its call says so.
+api.interceptors.request.use((config) => {
+  if (config.data instanceof FormData) config.headers.setContentType('multipart/form-data')
+  return config
+})
+
 // One refresh at a time, shared by every request that hit a 401 meanwhile.
 let refreshing = null
 // Exported for the live sockets: a socket closed with 4002 (access token expired, N5)
@@ -535,6 +542,8 @@ export const forecastApi = {
   generate:(id)          => api.post(`/forecasting/scenarios/${id}/generate/`),
   results: (id, params={})=> api.get(`/forecasting/scenarios/${id}/results/`, { params }),
   commit:  (id)          => api.post(`/forecasting/scenarios/${id}/commit/`),
+  // per-cell pull: set ONE target (branch/scope × metric) from this scenario's forecast
+  commitCell:(id, data)  => api.post(`/forecasting/scenarios/${id}/commit-cell/`, data),
   // rolling outlook: running month + next N months per branch + chain (read-only)
   plan:    (params = {}) => api.get('/forecasting/plan/', { params }),
   // backtest — model accuracy on history
@@ -2005,6 +2014,12 @@ export const followupsApi = {
 
   // Feature 7: My queue
   myQueue: ()        => api.get('/followups/tasks/my-queue/'),
+  // Outbound call lists (campaigns) — {name, script, criteria:{segments,branch_id,inactive_days_min,inactive_days_max}, agent_ids}
+  callLists:        (status = 'active') => api.get('/followups/call-lists/', { params: { status } }),
+  callListPreview:  (criteria) => api.post('/followups/call-lists/preview/', { criteria }),
+  callListCreate:   (data)     => api.post('/followups/call-lists/', data),
+  callListClose:    (id)       => api.post(`/followups/call-lists/${id}/close/`),
+  callListAgents:   ()         => api.get('/followups/call-lists/agents/'),
 
   // Feature 3: Create campaign
   createCampaign: (data) => api.post('/followups/tasks/create-campaign/', data),
@@ -2211,6 +2226,46 @@ export const glApi = {
   exceptionAcceptSoftech: (id, body) => api.post(`/finance/gl/exceptions/${id}/accept-softech/`, body),   // {note, version}
   exceptionKeepEdit: (id, body)    => api.post(`/finance/gl/exceptions/${id}/keep-edit/`, body),          // {note, version}
   entrySource:     (id)            => api.get(`/finance/gl/entries/${id}/source/`),
+  correctionFromException: (exception_id, reason) => api.post('/finance/gl/corrections/from-exception/', { exception_id, reason }),
+  // ── period close and cutover (Plan 3) ──
+  periods:         (year)          => api.get('/finance/gl/periods/', { params: { year } }),
+  period:          (id)            => api.get(`/finance/gl/periods/${id}/`),               // polled while closing: no SOFTECH read
+  periodChecklist: (id)            => api.get(`/finance/gl/periods/${id}/checklist/`),     // reads SOFTECH: never on a timer
+  periodClose:     (id)            => api.post(`/finance/gl/periods/${id}/close/`),
+  periodReopen:    (id, reason)    => api.post(`/finance/gl/periods/${id}/reopen/`, { reason }),
+  closingStock:    (id, preview)   => api.get(`/finance/gl/periods/${id}/closing-stock/`, { params: preview ? { preview: 1 } : {} }),
+  closingStockStores:      ()      => api.get('/finance/gl/closing-stock-stores/'),
+  closingStockStoresPatch: (stores) => api.patch('/finance/gl/closing-stock-stores/', { stores }),
+  // ── sub-ledgers and the ledger-vs-SOFTECH comparison ──
+  subledger:       (kind, params)  => api.get(`/finance/gl/subledgers/${kind}/`, { params }),
+  subledgerXlsx:   (kind, params)  => api.get(`/finance/gl/subledgers/${kind}/`, xlsx(params)),
+  suppliersVsAp:     (params)      => api.get('/finance/gl/subledgers/suppliers-vs-ap/', { params }),
+  suppliersVsApXlsx: (params)      => api.get('/finance/gl/subledgers/suppliers-vs-ap/', xlsx(params)),
+  compare:         (period, check) => api.get('/finance/gl/compare/', { params: { period, ...(check ? { check } : {}) } }),
+  compareRefresh:  (period, checks) => api.post('/finance/gl/compare/refresh/', { period, ...(checks ? { checks } : {}) }),  // 202: runs in the background
+  compareLine:     (id)            => api.get(`/finance/gl/compare/lines/${id}/`),                  // reads SOFTECH
+  compareExplain:  (id, text)      => api.post(`/finance/gl/compare/lines/${id}/explain/`, { text }),
+  compareChecks:   ()              => api.get('/finance/gl/compare/checks/'),
+  compareCheckSave: (body)         => api.patch('/finance/gl/compare/checks/', body),
+  manualImportPreview: (file, book) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    if (book) fd.append('book', book)
+    return api.post('/finance/gl/manual-import/preview/', fd)
+  },
+  manualImport:    (file, book, includeMixed) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    if (book) fd.append('book', book)
+    includeMixed.forEach(k => fd.append('include_mixed', k))
+    return api.post('/finance/gl/manual-import/', fd)
+  },
+  validation:      (file, through) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    if (through) fd.append('through', through)
+    return api.post('/finance/gl/validation/', fd, { responseType: 'blob' })
+  },
 }
 
 // ── Recommendations / FBT API ─────────────────────────────────────────────────
@@ -2716,6 +2771,8 @@ export const pbxApi = {
   extensionStatus: ()       => api.get('/pbx/extensions/status/'),
   mapExtension:   (data)    => api.post('/pbx/extensions/map/', data),  // {extension, staff_id, extension_type?}
   staffChoices:   (q)       => api.get('/pbx/staff-choices/', { params: { q } }),
+  webrtcConfig:   ()        => api.get('/pbx/webrtc/config/'),
+  setWebrtc:      (data)    => api.post('/pbx/extensions/webrtc/', data),  // {extension, enabled, sip_password?}
 }
 
 // ── Approvals ─────────────────────────────────────────────────────────────────
