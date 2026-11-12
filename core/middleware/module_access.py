@@ -70,6 +70,7 @@ MODULE_BY_PREFIX = {
     'access': 'settings',     # trusted networks (admin only in the view); whoami is open below
     'tasks': 'tasks',         # own module since 2026-11-03 (owner); views check it too
     'counselling': 'counselling',   # Project 4 sheets; assistant + cards are POS (see required_access)
+    'data-health': 'data_health',   # Stage 5 /data-health; rules, held files, restore = IsAdminRole in the views
 }
 
 # Prefixes every staff screen reads (pickers, lookups, theme); only their
@@ -259,6 +260,9 @@ def required(path, method):
         return 'pos', (('view',) if method in ('GET', 'HEAD', 'OPTIONS') else _POST_ACTIONS)
     if prefix == 'counselling' and len(parts) > 5 and parts[3] == 'content' and parts[5] in ('approve', 'retire'):
         return 'counselling', ('approve',)
+    # Data health: the forced refresh only recomputes the read-only snapshot, so `view` holders may press it
+    if prefix == 'data-health' and parts[3:4] == ['refresh'] and method == 'POST':
+        return 'data_health', ('view',)
     # POS alternatives live under /api/composition/ (chronic) but belong to the POS module
     if prefix == 'composition' and len(parts) > 3 and parts[3] == 'alternatives':
         return 'pos', (('view',) if method in ('GET', 'HEAD', 'OPTIONS') else _POST_ACTIONS)

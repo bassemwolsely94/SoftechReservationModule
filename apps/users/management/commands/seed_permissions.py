@@ -40,6 +40,7 @@ ALL_MODULES = [
     'ledger',        # الحسابات العامة (finance GL): view/create drafts/approve/export = accountant; edit (COA, rules) + finalize (period close) = admin or named grant
     'counselling',   # إرشادات الاستخدام (Project 4): 'edit' = write / AI-draft / link items, 'approve' = make customer-facing
     'usage_print',   # طباعة طريقة الاستخدام: 'view' open, 'create' confirm + print, 'edit' presets + slip settings
+    'data_health',   # صحة البيانات: 'view' = Growth + Problems + forced refresh; rules / held files / restore = admin only
 ]
 
 ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize']
@@ -318,6 +319,12 @@ for _role, _modules in PERMISSIONS.items():
         _modules.setdefault('counselling', set(COUNSELLING_EDITORS))
     elif _role in COUNSELLING_READERS:
         _modules.setdefault('counselling', {'view'})
+
+# Data health (design 2026-11-07 §7): admin everything; supervisor and quality manager see Growth and
+# Problems (view); nobody else. Rule changes, held files and restore are admin only in the views.
+DATA_HEALTH_VIEWERS = ('supervisor', 'quality_manager')
+for _role in DATA_HEALTH_VIEWERS:
+    PERMISSIONS[_role].setdefault('data_health', {'view'})
 
 
 class Command(BaseCommand):

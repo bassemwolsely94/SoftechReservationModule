@@ -40,7 +40,10 @@ class AccountantMatrixTests(TestCase):
 
     def test_migration_seeds_an_explicit_row_for_every_module(self):
         mig = importlib.import_module('apps.users.migrations.0051_accountant_explicit_denials')
-        self.assertEqual(set(mig.MODULES), set(ALL_MODULES))
+        # Modules added after 0051 seed their own accountant row: data_health in users 0054.
+        later = importlib.import_module('apps.users.migrations.0054_data_health_module')
+        self.assertIn('accountant', later.ROLES)
+        self.assertEqual(set(mig.MODULES) | {'data_health'}, set(ALL_MODULES))
         self.assertEqual(mig.ACTIONS, ALL_ACTIONS)
         self.assertEqual(mig.GRANTED, DECIDED)
 
