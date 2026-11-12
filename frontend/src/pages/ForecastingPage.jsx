@@ -232,7 +232,17 @@ export default function ForecastingPage() {
       {/* Seasonality tab */}
       {tab === 'seasonality' && (
         <div>
-          <div data-tour="analytics-forecasting-seasonality-recalc" className="flex justify-end mb-4">
+          <div data-tour="analytics-forecasting-seasonality-recalc" className="flex items-center justify-end gap-3 mb-4">
+            {computeSeasonality.isSuccess && (
+              <span className="text-xs text-emerald-700">
+                ✓ اتحسبت الموسمية لـ {computeSeasonality.data?.data?.items ?? 0} صنف
+              </span>
+            )}
+            {computeSeasonality.isError && (
+              <span className="text-xs text-red-600">
+                {computeSeasonality.error?.response?.data?.detail || 'فشل حساب المؤشرات الموسمية'}
+              </span>
+            )}
             <button data-tour="analytics-forecasting-recompute"
               onClick={() => computeSeasonality.mutate()}
               disabled={computeSeasonality.isPending}

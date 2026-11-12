@@ -2198,12 +2198,38 @@ MORNING_CHAIN = (
 def _run_morning_chain():
     """P-56: the 07:30 jobs run as ONE chain, in order, instead of on clock offsets
     that assume the previous one finished. Each step is logged as its own SyncLog
-    (1 = ok, 0 = failed); a failing step never stops the next one."""
+    (1 = ok, 0 = failed); a failing step never stops the next one. The same chain runs as
+    a catch-up from retention_watch, so it holds an advisory lock: returns None, creating
+    no run row, when another chain is already running."""
+    from apps.sync.maintenance import MORNING_CHAIN_LOCK_KEY
+    from apps.vouchers.coupon_dashboard import pg_lock
+    from apps.sync.maintenance import (morning_chain_done_today, morning_chain_steps_done_today,
+                                       softech_reachable)
+    with pg_lock(MORNING_CHAIN_LOCK_KEY) as got:
+        if not got:
+            logger.info('[morning_chain] skipped: another morning chain holds the lock')
+            return None
+        # Checked inside the lock, for the 07:30 job and the catch-up alike: one successful chain
+        # per day (the insights step sends WhatsApp), and never while SOFTECH is unreachable,
+        # because the steps swallow their errors and an empty run would read as a success.
+        if morning_chain_done_today():
+            logger.info('[morning_chain] skipped: already succeeded today')
+            return None
+        if not softech_reachable():
+            logger.info('[morning_chain] skipped: no recent successful fast sync (SOFTECH unreachable?)')
+            return None
+        return _morning_chain_steps(skip=morning_chain_steps_done_today())
+
+
+def _morning_chain_steps(skip=frozenset()):
     import sys
     run = SyncRun.objects.create(status='running', lane='morning_chain')
     errors = []
     me = sys.modules[__name__]
     for name, label in MORNING_CHAIN:
+        if f'chain:{name.lstrip("_")}' in skip:
+            logger.info('[morning_chain] %s already done today, skipped', name)
+            continue
         ok = 1
         try:
             getattr(me, name)()
@@ -2607,6 +2633,17 @@ def _run_stock_ledger_sync(days=3):
         run_stock_audit(triggered_by='scheduler')
     except Exception as exc:
         logger.error('[APScheduler] stock-ledger sync failed: %s', exc)
+
+
+def _run_attendance_health():
+    """HR attendance stage 1: tell the HR head when a machine or the collection agent goes quiet,
+    a clock drifts, or a machine's log count falls. Our tables only; no SOFTECH, no machines.
+    A no-op while HR_ATTENDANCE_ENABLED is off."""
+    try:
+        from apps.hr.attendance.health import check_attendance_health
+        check_attendance_health()
+    except Exception as exc:
+        logger.error('[APScheduler] attendance health check failed: %s', exc)
 
 
 def _run_sales_history_catchup(days=7):
@@ -3879,6 +3916,11 @@ def start_scheduler():
     _scheduler.add_job(
         _run_stock_ledger_sync, 'cron', hour=3, minute=15, id='stock_ledger_catchup',
         kwargs={'days': 7}, replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # HR attendance health (every 30 min): silent machine/agent, clock drift, falling log count.
+    _scheduler.add_job(
+        _run_attendance_health, 'interval', minutes=30, id='attendance_health',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=900,
     )
     # Sales history catch-up — 03:45 re-syncs the last 7 days (the fast lane only re-reads 2).
     _scheduler.add_job(

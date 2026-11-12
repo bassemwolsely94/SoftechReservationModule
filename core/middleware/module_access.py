@@ -108,6 +108,7 @@ EXEMPT_PREFIXES = {'auth', 'notifications', 'personal', 'search', 'help', 'porta
                    'gamification',   # own points open to all; its views check gamification/*
                    'stock-audit',    # own gate apps/stock_audit/access.py: RBAC stock_audit
                    'pic-analytics',  # own gate apps/pic_analytics/access.py: RBAC pic_analytics + named grants
+                   'hr-attendance',  # own gate apps/hr/attendance/access.py: RBAC hr_attendance + named grants
                    'usage-print',    # own gate apps/usage_print/access.py: flag USAGE_PRINT_ENABLED + RBAC usage_print
                    'public',         # N6 anonymous surface (apps/access/public_urls.py), no business data
                    'csp-report',     # browsers' CSP reports — public, log only (core/csp.py, W-9)

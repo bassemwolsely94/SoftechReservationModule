@@ -1,0 +1,17 @@
+# Copy to agent.ini on the agent PC and fill in. Never commit the filled copy.
+
+[erp]
+# The ERP address. This is the one setting to change at the VPS switch-over.
+# Plain http is for the office network or VPN only; use https on the VPS.
+url = http://192.0.2.10:8000
+# Printed once by: manage.py issue_attendance_agent <name>
+secret = paste-the-agent-secret-here
+
+[agent]
+# Folder for the spool, the saved machine list and the log. Must survive restarts.
+# Leave out to use "agent_state" next to this file.
+# state_dir = C:\ElRezeiky\agent\state
+
+[comm_keys]
+# Only for a machine that asks for a comm key: <machine serial> = <number>
+# SERIALNUMBER = 12345

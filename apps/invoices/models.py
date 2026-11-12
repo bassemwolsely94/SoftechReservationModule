@@ -136,6 +136,8 @@ class InvoiceBatch(models.Model):
                                     db_index=True, verbose_name='الحالة')
     source_file  = models.FileField(upload_to='invoice_bundles/', null=True, blank=True,
                                     verbose_name='ملف الحزمة (PDF)')
+    source_sha256   = models.CharField(max_length=64, blank=True, default='', db_default='', db_index=True, editable=False,
+                                       verbose_name='بصمة الملف')
     page_count      = models.PositiveIntegerField(default=0, verbose_name='عدد الصفحات')
     detected_count  = models.PositiveIntegerField(default=0, verbose_name='عدد الفواتير المكتشفة')
     processed_count = models.PositiveIntegerField(default=0, verbose_name='تمت معالجتها')
@@ -267,6 +269,8 @@ class SupplierInvoice(models.Model):
     # Source file (image or PDF, for OCR)
     source_image    = models.FileField(upload_to='invoice_images/', null=True, blank=True,
                                         verbose_name='ملف الفاتورة (صورة / PDF)')
+    source_sha256   = models.CharField(max_length=64, blank=True, default='', db_default='', db_index=True, editable=False,
+                                       verbose_name='بصمة الملف')
     raw_ocr_text    = models.TextField(blank=True, verbose_name='نص OCR الخام')
     # Invoice grand-total as READ from the document by OCR — used only to reconcile
     # against the sum of captured lines (anomaly flag); never written to SOFTECH.

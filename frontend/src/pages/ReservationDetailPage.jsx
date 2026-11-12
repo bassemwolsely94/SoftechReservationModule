@@ -17,6 +17,7 @@ import ItemSearchWidget from '../components/ItemSearchWidget'
 import CancelReasonPicker, { cancelNote, EMPTY_CANCEL } from '../components/CancelReasonPicker'
 import SortTh from '../components/SortTh'
 import useSortableRows from '../hooks/useSortableRows'
+import RemovedFileNote from '../components/RemovedFileNote'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -524,6 +525,8 @@ function ActivityEntry({ activity, onDelete }) {
             )}
 
             {/* Attachment */}
+            {!activity.attachment_url && <RemovedFileNote date={activity.retention_removed?.attachment} className="mt-2" />}
+            {!activity.voice_note_url && <RemovedFileNote date={activity.retention_removed?.voice_note} className="mt-2" />}
             {activity.attachment_url && (
               <div className="mt-2">
                 <img
@@ -1772,7 +1775,7 @@ export default function ReservationDetailPage() {
           )}
 
           {/* Images gallery */}
-          {(r.image_url || extraImages.length > 0) && (
+          {(r.image_url || r.retention_removed?.image || extraImages.length > 0) && (
             <div className="card">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-bold text-gray-700 text-sm">المرفقات</h3>
@@ -1785,9 +1788,12 @@ export default function ReservationDetailPage() {
                 {r.image_url && (
                   <img src={r.image_url} alt="مرفق" className="rounded-xl border border-gray-200 object-contain w-full max-h-48 cursor-pointer hover:opacity-90" onClick={() => window.open(r.image_url, '_blank')} />
                 )}
+                {!r.image_url && <RemovedFileNote date={r.retention_removed?.image} />}
                 {extraImages.map(img => (
                   <div key={img.id} className="relative group">
-                    <img src={img.image_url} alt="مرفق" className="rounded-xl border border-gray-200 object-contain w-full max-h-48 cursor-pointer hover:opacity-90" onClick={() => window.open(img.image_url, '_blank')} />
+                    {img.image_url
+                      ? <img src={img.image_url} alt="مرفق" className="rounded-xl border border-gray-200 object-contain w-full max-h-48 cursor-pointer hover:opacity-90" onClick={() => window.open(img.image_url, '_blank')} />
+                      : <RemovedFileNote date={img.retention_removed?.image} />}
                     <button data-tour="reservations-detail-delete-image" onClick={() => handleDeleteImage(img.id)} className="absolute top-1 left-1 bg-red-600 text-white rounded-full w-5 h-5 text-xs hidden group-hover:flex items-center justify-center">×</button>
                   </div>
                 ))}

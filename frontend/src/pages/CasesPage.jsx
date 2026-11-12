@@ -10,6 +10,7 @@ import useAuthStore from '../store/authStore'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { fa } from '../utils/flowArrow'
+import RemovedFileNote from '../components/RemovedFileNote'
 
 const toLatinDigits = s =>
   s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -285,6 +286,7 @@ function CaseDetailPanel({ caseId, onClose, onStateChange }) {
                     </div>
                   )}
                   {/* Attachment */}
+                  {!ev.attachment_url && <RemovedFileNote date={ev.retention_removed?.attachment} className="mt-1.5" />}
                   {ev.attachment_url && (
                     <div className="mt-1.5">
                       {ev.attachment_type === 'voice' ? (

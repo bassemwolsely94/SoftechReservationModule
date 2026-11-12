@@ -70,6 +70,9 @@ def _line_dict(ln):
         'old': (float(ln.old_rate) if ln.old_rate is not None else None),
         'old_hq': (float(ln.old_rate_hq) if ln.old_rate_hq is not None else None),
         'new': float(ln.new_rate), 'eligible': ln.eligible, 'reason': ln.reason,
+        # seasonal push: the engine rate before the factor, and the factor applied
+        'base': (float(ln.base_rate) if ln.base_rate is not None else None),
+        'factor': (float(ln.season_factor) if ln.season_factor is not None else None),
         'written': ln.written, 'verified': ln.verified, 'error': ln.error,
     }
 
@@ -122,11 +125,14 @@ def propose(request):
     method_params = request.data.get('method_params') or {}
     if not isinstance(method_params, dict):
         method_params = {}
+    method_params = {k: v for k, v in method_params.items() if k != 'seasonal'}   # only the switch sets it
     target = (request.data.get('target') or rate_writer.TARGET_BOTH).strip().lower()
+    seasonal = str(request.data.get('seasonal', '')).lower() in ('1', 'true', 'yes', 'on')
     try:
         plan = rate_writer.push(branch_filter=branch, item_filter=item,
                                 dry_run=True, persist=True, created_by=request.user,
-                                method=method, method_params=method_params, target=target)
+                                method=method, method_params=method_params, target=target,
+                                seasonal=seasonal)
     except ValueError as exc:
         return Response({'detail': str(exc)}, status=http.HTTP_400_BAD_REQUEST)
     return Response(_detail_payload(get_object_or_404(SalesRatePush, pk=plan['push_id'])),

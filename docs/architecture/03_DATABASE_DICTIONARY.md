@@ -3064,6 +3064,23 @@ Finance's own ledger (no SOFTECH link). `glaccountgroup(name unique, section bal
 | check_out_at | datetime | |
 | check_out_lat / check_out_lng / check_out_distance_m / check_out_ok | decimal/int/bool | |
 
+### HR fingerprint attendance, Stage 1  (migrations hr 0007–0010; our tables only, no SOFTECH)
+Design: `docs/superpowers/specs/2026-11-07-hr-attendance-stage1-design.md`. Runbook: `docs/deploy/2026-11-attendance-agent-go-live.md`.
+| Table | Key columns / notes |
+|-------|---------------------|
+| hr_employee | HR employee list imported from the payroll workbook (`import_attendance_employees`); `employee_type`, `work_location`, `softech_usercode` |
+| hr_genericlogin | marks a fingerprint ID as a shared account (who/when) |
+| hr_employeelinkrejection | "this ID is not this employee" decisions (who/when) |
+| hr_attendanceagent | office agent: `name`, `token_hash` (unique; the secret is shown once and never stored), `revoked_at`, `last_seen_at`, `collect_requested_at` |
+| hr_attendancedevice | ZK machine: `serial` (unique), `name`, `ip`, `port`, `model_name`, `location_label`, FK branch, FK agent, `is_active`, last contact / status / drift / log count |
+| hr_deviceuser | machine user table: FK device, `user_code`, `device_name`, `is_admin`, first/last seen |
+| hr_unknowniddecision | unknown fingerprint ID: add as employee or ignored, with reason, who/when |
+| hr_conflictconfirmation | confirmed name conflict on one ID: FK employee, reason, names, who/when |
+| hr_attendancepunch | immutable punch: FK device (PROTECT), `user_code`, `raw_stamp`, `punch_date`/`punch_time` as sent, `state`, `verify_mode`, `received_at`, `flag` ('' or 'bad_date'), FK employee (nullable) |
+| hr_collectionrun | one agent read of one machine: counts (read/new/duplicate), oldest/newest date, drift, device log count, spool waiting, `status`, `error` |
+| hr_attendanceaccess | access grant: FK staff, `level` (view / manage / export), granted by/at, `revoked_at`. Granted by admin only |
+Also: `users` 0054 (`hr_attendance` module permission) and `notifications` 0044 (attendance health alerts).
+
 ---
 
 ## PROCUREMENT  (analytics over SOFTECH purchase data — doccode 10 buy / 120 return)

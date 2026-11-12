@@ -510,3 +510,215 @@ class Permit(HrRequestIdentity):
 
     def __str__(self):
         return f'{self.staff} | {self.get_permit_type_display()} | {self.date} [{self.get_status_display()}]'
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Attendance stage 1 (design 2026-11-07): employee list + ZK fingerprint punch collection.
+# Company-level data (not branch-scoped by decision): seen only by admins and named grantees,
+# see apps/hr/attendance/access.py. Punches are an append-only ledger.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class Employee(models.Model):
+    """One person on the HR employee list (the payroll workbook's master), optionally linked to
+    a system login. hr_number is the HR code, unique."""
+    STATUS_CHOICES = [('active', 'على رأس العمل'), ('left', 'ترك العمل')]
+    TYPE_CHOICES = [('payroll', 'على الراتب'), ('non_payroll', 'خارج الراتب')]
+
+    hr_number     = models.CharField(max_length=30, unique=True, verbose_name='الرقم الوظيفي')
+    name_ar       = models.CharField(max_length=200, verbose_name='الاسم')
+    department    = models.CharField(max_length=120, blank=True, verbose_name='الإدارة')
+    section       = models.CharField(max_length=120, blank=True, verbose_name='القسم')
+    job_title     = models.CharField(max_length=120, blank=True, verbose_name='الوظيفة')
+    work_location = models.CharField(max_length=120, blank=True, verbose_name='جهة العمل')
+    branch        = models.ForeignKey('branches.Branch', null=True, blank=True, on_delete=models.SET_NULL,
+                                      related_name='+', verbose_name='الفرع')
+    daily_hours   = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True,
+                                        verbose_name='ساعات العمل اليومية')
+    status        = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active', db_index=True)
+    employee_type = models.CharField(max_length=12, choices=TYPE_CHOICES, default='payroll')
+    start_date    = models.DateField(null=True, blank=True)
+    end_date      = models.DateField(null=True, blank=True)
+    day_boundary  = models.TimeField(default=datetime.time(4, 0), verbose_name='بداية يوم العمل')
+    staff         = models.OneToOneField('users.StaffProfile', null=True, blank=True,
+                                         on_delete=models.SET_NULL, related_name='hr_employee')
+    softech_usercode = models.CharField(max_length=40, blank=True)
+    hold_resolution  = models.BooleanField(default=False)
+    hold_reason      = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ['hr_number']
+        verbose_name = 'موظف'
+        verbose_name_plural = 'الموظفون'
+
+    def __str__(self):
+        return f'{self.hr_number} {self.name_ar}'
+
+
+class GenericLogin(models.Model):
+    """A system login shared by many people (not one employee); never auto-linked to an Employee."""
+    staff     = models.OneToOneField('users.StaffProfile', on_delete=models.CASCADE, related_name='generic_login')
+    marked_by = models.ForeignKey('users.StaffProfile', null=True, on_delete=models.SET_NULL, related_name='+')
+    marked_at = models.DateTimeField(auto_now_add=True)
+    # False = the HR head decided this login IS one person although its name looks shared
+    # (e.g. "Tester"); it overrides the name check. A mistaken generic mark is cleared the same way.
+    generic   = models.BooleanField(default=True, db_default=True)
+    reason    = models.CharField(max_length=255, blank=True, default='', db_default='')
+
+
+class EmployeeLinkRejection(models.Model):
+    """A suggested Employee<->login link a human rejected; it is not suggested again."""
+    employee   = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='link_rejections')
+    staff      = models.ForeignKey('users.StaffProfile', on_delete=models.CASCADE, related_name='+')
+    decided_by = models.ForeignKey('users.StaffProfile', null=True, on_delete=models.SET_NULL, related_name='+')
+    decided_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['employee', 'staff'], name='uniq_employee_link_rejection')]
+
+
+class AttendanceAgent(models.Model):
+    """The small program on the office network that talks to the fingerprint machines. It signs in
+    with a secret kept only as a hash (token_hash)."""
+    name         = models.CharField(max_length=120)
+    token_hash   = models.CharField(max_length=64, unique=True)
+    revoked_at   = models.DateTimeField(null=True, blank=True)
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+    collect_requested_at = models.DateTimeField(null=True, blank=True)
+    created_by   = models.ForeignKey('users.StaffProfile', null=True, blank=True,
+                                     on_delete=models.SET_NULL, related_name='+')
+
+    def __str__(self):
+        return self.name
+
+
+class AttendanceDevice(models.Model):
+    """One ZK fingerprint machine."""
+    serial         = models.CharField(max_length=60, unique=True)
+    name           = models.CharField(max_length=120)
+    ip             = models.CharField(max_length=64, blank=True)
+    port           = models.PositiveIntegerField(default=4370)
+    model_name     = models.CharField(max_length=80, blank=True)
+    location_label = models.CharField(max_length=120, blank=True)
+    branch         = models.ForeignKey('branches.Branch', null=True, blank=True, on_delete=models.SET_NULL,
+                                       related_name='+')
+    agent          = models.ForeignKey(AttendanceAgent, null=True, blank=True, on_delete=models.SET_NULL,
+                                       related_name='devices')
+    is_active      = models.BooleanField(default=True)
+    last_contact_at    = models.DateTimeField(null=True, blank=True)
+    last_status        = models.CharField(max_length=20, blank=True)
+    last_drift_seconds = models.IntegerField(null=True, blank=True)
+    last_log_count     = models.PositiveIntegerField(null=True, blank=True)
+
+    def __str__(self):
+        return f'{self.name} ({self.serial})'
+
+
+class DeviceUser(models.Model):
+    """A person enrolled on a machine, as the machine lists them (its own user code)."""
+    device        = models.ForeignKey(AttendanceDevice, on_delete=models.CASCADE, related_name='users')
+    user_code     = models.CharField(max_length=30)
+    device_name   = models.CharField(max_length=120, blank=True)
+    is_admin      = models.BooleanField(default=False)
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at  = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['device', 'user_code'], name='uniq_device_user_code')]
+
+
+class UnknownIdDecision(models.Model):
+    """A fingerprint id nobody can match to an employee, deliberately set aside."""
+    DECISION_CHOICES = [('ignored', 'تجاهل')]
+    user_code  = models.CharField(max_length=30, unique=True)
+    decision   = models.CharField(max_length=10, choices=DECISION_CHOICES, default='ignored')
+    reason     = models.CharField(max_length=255, blank=True)
+    decided_by = models.ForeignKey('users.StaffProfile', null=True, on_delete=models.SET_NULL, related_name='+')
+    decided_at = models.DateTimeField(auto_now_add=True)
+
+
+class ConflictConfirmation(models.Model):
+    """The HR head's decision that a fingerprint ID whose machines hold different real names really
+    is this employee (resolve.py keeps a conflicted ID unresolved until this exists). It names the
+    employee, who must hold the ID as their HR number, and says why."""
+    user_code  = models.CharField(max_length=30, unique=True)
+    employee   = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='conflict_confirmations')
+    reason     = models.CharField(max_length=255)
+    # The normalised real names on the machines when confirmed; valid only while the current
+    # names stay within this set (a new, different name re-opens the conflict).
+    names      = models.JSONField(default=list, db_default=[])
+    decided_by = models.ForeignKey('users.StaffProfile', null=True, on_delete=models.SET_NULL, related_name='+')
+    decided_at = models.DateTimeField(auto_now_add=True)
+
+
+class AttendancePunch(models.Model):
+    """One fingerprint punch exactly as the machine recorded it. APPEND-ONLY: an existing row can
+    never be saved again or deleted (raw_stamp is the machine's own number, kept for audit)."""
+    device     = models.ForeignKey(AttendanceDevice, on_delete=models.PROTECT, related_name='punches')
+    user_code  = models.CharField(max_length=30)
+    raw_stamp  = models.PositiveBigIntegerField()
+    punch_date = models.DateField(null=True, blank=True)
+    punch_time = models.TimeField(null=True, blank=True)
+    state      = models.SmallIntegerField(default=0)
+    verify_mode = models.SmallIntegerField(default=0)
+    received_at = models.DateTimeField(auto_now_add=True)
+    flag       = models.CharField(max_length=12, blank=True)       # '' or 'bad_date'
+    employee   = models.ForeignKey(Employee, null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name='punches')
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['device', 'user_code', 'raw_stamp', 'state'],
+                                               name='uniq_punch_device_user_stamp_state')]
+        indexes = [models.Index(fields=['employee', 'punch_date']),
+                   models.Index(fields=['user_code'])]   # resolve.py re-links one ID across machines
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise PermissionError('Attendance punches are append-only.')
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise PermissionError('Attendance punches are append-only.')
+
+
+class CollectionRun(models.Model):
+    """One agent visit to one machine: what it read and what was new."""
+    STATUS_CHOICES = [('success', 'نجح'), ('failed', 'فشل')]
+    agent  = models.ForeignKey(AttendanceAgent, null=True, on_delete=models.SET_NULL, related_name='runs')
+    device = models.ForeignKey(AttendanceDevice, on_delete=models.CASCADE, related_name='runs')
+    started_at   = models.DateTimeField()
+    finished_at  = models.DateTimeField(null=True, blank=True)
+    records_read    = models.PositiveIntegerField(default=0)
+    # Null = not known: a run report doesn't say which punch answers belong to it.
+    new_count       = models.PositiveIntegerField(null=True, blank=True)
+    duplicate_count = models.PositiveIntegerField(null=True, blank=True)
+    oldest_date  = models.DateField(null=True, blank=True)
+    newest_date  = models.DateField(null=True, blank=True)
+    drift_seconds    = models.IntegerField(null=True, blank=True)
+    device_log_count = models.PositiveIntegerField(null=True, blank=True)
+    spool_waiting    = models.PositiveIntegerField(null=True, blank=True)   # files left waiting on the agent from earlier passes
+    # Seconds the server's clock was ahead of the agent PC's when it ran. Null = not reported.
+    pc_offset_seconds = models.IntegerField(null=True, blank=True)
+    status = models.CharField(max_length=8, choices=STATUS_CHOICES, default='success')
+    error  = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ['-started_at']
+        # The agent can send a run twice (a lost answer); the second must not count as another run.
+        constraints = [models.UniqueConstraint(fields=['device', 'started_at'],
+                                               name='uniq_collection_run_device_started')]
+
+
+class AttendanceAccess(models.Model):
+    """A NAMED staff member allowed into HR Attendance (view or manage). Grants/revokes are kept
+    (revoked_at); mirrors pic_analytics.PicAnalyticsAccess."""
+    LEVEL_CHOICES = [('view', 'عرض'), ('manage', 'إدارة')]
+    staff      = models.ForeignKey('users.StaffProfile', on_delete=models.CASCADE, related_name='attendance_grants')
+    level      = models.CharField(max_length=6, choices=LEVEL_CHOICES, default='view')
+    granted_by = models.ForeignKey('users.StaffProfile', null=True, on_delete=models.SET_NULL, related_name='+')
+    granted_at = models.DateTimeField(auto_now_add=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-granted_at']
+        constraints = [models.UniqueConstraint(fields=['staff'], condition=models.Q(revoked_at__isnull=True),
+                                               name='uniq_active_attendance_access')]

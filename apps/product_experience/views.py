@@ -257,17 +257,7 @@ def product_media_detail(request, softech_id, media_pk):
     media = get_object_or_404(ProductMedia, pk=media_pk, item=item)
 
     if request.method == 'DELETE':
-        # Remove file from storage
-        if media.file:
-            try:
-                media.file.delete(save=False)
-            except Exception:
-                pass
-        if media.thumbnail:
-            try:
-                media.thumbnail.delete(save=False)
-            except Exception:
-                pass
+        # The file and thumbnail go to the holding folder for 30 days (apps/data_lifecycle/follow.py).
         media.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 

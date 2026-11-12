@@ -254,7 +254,10 @@ SCREENS = [
         'audience': T('الصيادلة، المندوبون، الكول سنتر، المشرفون.', 'Pharmacists, salespeople, call center, supervisors.'),
         'tabs': _TABS,
         'steps': _STEPS,
-        'tips': _TIPS,
+        'tips': _TIPS + [
+            T('صورة الروشتة اللي بترفعها على الأمر بتتصغّر تلقائيًا (أطول ضلع ٢٠٠٠ بكسل). لو مسحتها أو بدّلتها، القديمة بتتحفظ ٣٠ يومًا قبل ما تتمسح نهائيًا.',
+              'A prescription photo you attach to the order is shrunk automatically (longest side 2000 px). If you delete or replace it, the old one is kept 30 days before it is gone for good.'),
+        ],
         'faq': [
             {'q': T('ما الفرق بين المعاينة والإرسال الفعلي؟', 'What is the difference between preview and live send?'),
              'a': T('المعاينة (F9) تعرض بالضبط ما سيُكتب في SOFTECH بدون كتابة. الإرسال الفعلي (F10) يكتب الأمر المعلّق لشاشة الكاشير.',
@@ -545,8 +548,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-03',
-        'change_note': T('«تفريغ الطابور الآن» من مكان لا يسمح بالكتابة في SOFTECH يُرفض ولا يغيّر حالة أي أمر', '"Flush the queue now" from a place that may not write to SOFTECH is refused and changes no order'),
+        'updated': '2026-11-12',
+        'change_note': T('صورة الروشتة بتتصغّر والمحذوفة بتتحفظ ٣٠ يومًا.', 'Prescription photos are shrunk and deleted ones are kept 30 days.'),
     },
     {
         'key': 'pos.mobile',

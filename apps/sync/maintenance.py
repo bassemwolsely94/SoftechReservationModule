@@ -8,6 +8,9 @@ Everything here deletes or marks rows in OUR Postgres only — nothing touches S
                         + the last completed run of each calendar month; delete the rest.
                         Run headers stay (history, FKs). Reviewed transfer recommendations
                         (approved / rejected / executed) are decisions and are never deleted.
+                        Takes another keep set from the lifecycle rule `rate_runs`. Once that
+                        rule is on, the daily step here does nothing and the rule does the
+                        delete, so its circuit breaker stands in front of it.
   prune_audit_log()     only actions in DELETABLE_AUDIT_ACTIONS age out (365 days). Money,
                         SOFTECH writes, permissions and approvals are never deleted (Rule 8).
   prune_pbx_events()    raw AMI events older than 90 days.
@@ -16,9 +19,11 @@ Everything here deletes or marks rows in OUR Postgres only — nothing touches S
   mark_stale_runs()     SyncRun rows 'running' for > 60 min → failed (process died).
   alert_failing_lanes() 3 failed runs in a row of one lane → one admin alert per lane per day
                         (P-55 Part B).
-  run_daily_retention() all of the above as one logged SyncRun (lane 'retention'). Guarded by a
-                        Postgres advisory lock (RETENTION_LOCK_KEY): returns None, creating no
-                        run row, when another process is already running it.
+  run_daily_retention() all of the above, then a table-size snapshot (retention:table_sizes, rows written
+                        are counted in its log line, nothing is deleted), the data lifecycle rules and the held-file purge
+                        (apps/data_lifecycle/runner.py), as one logged SyncRun (lane 'retention').
+                        Guarded by a Postgres advisory lock (RETENTION_LOCK_KEY): returns None,
+                        creating no run row, when another process is already running it.
   retention_catchup_due() / run_retention_catchup()
                         safety net for a missed daily slot: due when no success in the last
                         OVERDUE_HOURS, nothing is running, and the last failed attempt is older
@@ -27,6 +32,7 @@ Everything here deletes or marks rows in OUR Postgres only — nothing touches S
 import datetime
 import logging
 
+from django.db import connection, transaction
 from django.db.models import Max
 from django.db.models.functions import TruncMonth
 from django.utils import timezone
@@ -34,6 +40,7 @@ from django.utils import timezone
 logger = logging.getLogger('elrezeiky.sync')
 
 KEEP_LAST_RUNS = 10
+COMPLETED_RUN_STATUSES = ('success', 'partial')
 BATCH = 10_000
 
 STALE_RUN_MINUTES = 60
@@ -53,47 +60,93 @@ NOTIF_READ_DAYS = 30
 NOTIF_UNREAD_DAYS = 90
 SLOW_REQUEST_DAYS = 30
 
+LOCK_TIMEOUT_SECONDS = 30          # a delete batch waiting longer than this for a row lock fails its step
+
 RETENTION_LOCK_KEY = 7_301_102     # advisory lock: one retention run at a time
 OVERDUE_HOURS = 26                 # no success for this long -> catch-up is due
 RETENTION_RETRY_HOURS = 6          # wait this long after a failed attempt before retrying
 
+MORNING_CHAIN_LOCK_KEY = 7_301_103  # advisory lock: one morning chain at a time (07:30 job or catch-up)
+MORNING_CHAIN_SLOT = (7, 30)        # local time of the scheduled morning chain
+SOFTECH_UP_MINUTES = 30             # a fast sync must have succeeded this recently before a catch-up
+
 
 def _batched_delete(qs, batch=BATCH):
-    """Delete in primary-key batches so no single statement holds a long lock."""
+    """Delete in primary-key batches so no single statement holds a long lock. Each batch is its own
+    transaction with a lock timeout, so a row held by an idle-in-transaction session fails the step
+    (the caller records it) instead of hanging the job."""
     total = 0
     while True:
-        ids = list(qs.values_list('pk', flat=True)[:batch])
-        if not ids:
-            return total
-        n, _ = qs.model.objects.filter(pk__in=ids).delete()
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT_SECONDS}s'")
+            ids = list(qs.values_list('pk', flat=True)[:batch])
+            if not ids:
+                return total
+            n, _ = qs.model.objects.filter(pk__in=ids).delete()
         total += n
+
+
+def last_run_of_each_month(runs):
+    """Ids of the last run of each calendar month in this queryset of runs."""
+    last_per_month = (runs.annotate(month=TruncMonth('started_at'))
+                      .values('month').annotate(last=Max('started_at')).values_list('last', flat=True))
+    return set(runs.filter(started_at__in=list(last_per_month)).values_list('pk', flat=True))
 
 
 def engine_runs_to_keep():
     """Ids of DemandCalculationRuns whose detail rows are kept."""
     from apps.purchasing.models import DemandCalculationRun
-    completed = DemandCalculationRun.objects.filter(status__in=['success', 'partial'])
+    completed = DemandCalculationRun.objects.filter(status__in=COMPLETED_RUN_STATUSES)
     keep = set(completed.order_by('-started_at').values_list('pk', flat=True)[:KEEP_LAST_RUNS])
-    last_per_month = (completed.annotate(month=TruncMonth('started_at'))
-                      .values('month').annotate(last=Max('started_at')).values_list('last', flat=True))
-    keep |= set(completed.filter(started_at__in=list(last_per_month)).values_list('pk', flat=True))
+    keep |= last_run_of_each_month(completed)
     # never touch a run that is still being written
     keep |= set(DemandCalculationRun.objects.filter(status='running').values_list('pk', flat=True))
     return keep
 
 
-def prune_engine_runs():
+def engine_run_bound():
+    """The highest DemandCalculationRun pk now. Read it BEFORE computing a keep set and pass it to
+    engine_run_rows: a run created afterwards is in no keep set, so only the bound protects its rows."""
+    from apps.purchasing.models import DemandCalculationRun
+    return DemandCalculationRun.objects.aggregate(m=Max('pk'))['m'] or 0
+
+
+def engine_run_rows(keep, max_run_id=None):
+    """The detail rows of every run not in `keep` and not newer than `max_run_id`, by name.
+    Pending recommendations only. None reads the bound now (callers that compute `keep` first should
+    read it earlier, see engine_run_bound)."""
     from apps.purchasing.models import (ItemDemandAggregated, ItemDemandMetrics,
                                         TransferRecommendation)
-    keep = engine_runs_to_keep()
-    out = {
-        'metrics': _batched_delete(ItemDemandMetrics.objects.exclude(run_id__in=keep)),
-        'aggregated': _batched_delete(ItemDemandAggregated.objects.exclude(run_id__in=keep)),
-        'transfer_recs': _batched_delete(
-            TransferRecommendation.objects.filter(status='pending')
-            .exclude(run__demand_run_id__in=keep)),
+    if max_run_id is None:
+        max_run_id = engine_run_bound()
+    return {
+        'metrics': ItemDemandMetrics.objects.filter(run_id__lte=max_run_id).exclude(run_id__in=keep),
+        'aggregated': ItemDemandAggregated.objects.filter(run_id__lte=max_run_id).exclude(run_id__in=keep),
+        'transfer_recs': (TransferRecommendation.objects.filter(status='pending')
+                          .filter(run__demand_run_id__lte=max_run_id)
+                          .exclude(run__demand_run_id__in=keep)),
     }
-    return out
+
+
+def prune_engine_runs(keep=None, max_run_id=None):
+    """`keep` is a set of run ids; None means engine_runs_to_keep(). `max_run_id` is the bound from
+    engine_run_bound(), read before `keep` was computed; None reads it first here when `keep` is None."""
+    if max_run_id is None:
+        max_run_id = engine_run_bound()
+    if keep is None:
+        keep = engine_runs_to_keep()
+    return {name: _batched_delete(rows) for name, rows in engine_run_rows(keep, max_run_id).items()}
+
+
+def _prune_engine_runs_step():
+    """The P-56 step. Once the lifecycle rule rate_runs is on, it does the delete behind its circuit
+    breaker; deleting here first would go round the breaker and drop runs the rule keeps."""
+    from apps.data_lifecycle.models import MODE_ON
+    from apps.data_lifecycle.policy import get_mode
+    if get_mode('rate_runs') == MODE_ON:
+        return 0
+    return sum(prune_engine_runs().values())
 
 
 def prune_audit_log(days=AUDIT_NOISE_DAYS):
@@ -213,36 +266,67 @@ def alert_missed_runs(now=None):
 
 
 def retention_watch():
-    """Every 15 min: run the retention catch-up if due, then raise the missed-run alert.
-    Never raises; the morning chain is only alerted on, never run, from here."""
+    """Every 15 min: run the retention catch-up and the morning-chain catch-up if due, then
+    raise the missed-run alert. Never raises; each step is isolated from the others."""
     try:
         run_retention_catchup()
     except Exception:
         logger.exception('[retention] catch-up failed')
+    try:
+        run_morning_chain_catchup()
+    except Exception:
+        logger.exception('[morning_chain] catch-up failed')
     try:
         alert_missed_runs()
     except Exception:
         logger.exception('[retention] missed-run alert failed')
 
 
+def _run_lifecycle_rules():
+    # Imported here: the lifecycle app imports this module, and an import failure stays one failed step.
+    from apps.data_lifecycle.runner import run_lifecycle_rules
+    return run_lifecycle_rules()
+
+
+def _snapshot_table_sizes():
+    from apps.data_lifecycle.runner import snapshot_table_sizes
+    return snapshot_table_sizes()
+
+
+def _purge_held_files():
+    from apps.data_lifecycle.runner import purge_held_files
+    return purge_held_files()
+
+
 def run_daily_retention():
     """One SyncRun (lane 'retention') with a SyncLog per table. A failing step is
     logged and the others still run. Returns None (no run row) when another
-    process holds the retention lock."""
+    process holds the retention lock.
+
+    RULE: the lock is a session lock on this thread's Django connection. No step, and nothing a step
+    calls, may call close_old_connections() or connections.close_all(): that drops the lock silently
+    and a second run could start."""
     from apps.vouchers.coupon_dashboard import pg_lock
     steps = [
-        ('retention:engine_runs', lambda: sum(prune_engine_runs().values())),
+        ('retention:engine_runs', _prune_engine_runs_step),
         ('retention:notifications', prune_notifications),
         ('retention:pbx_events', prune_pbx_events),
         ('retention:audit_log', prune_audit_log),
         ('retention:slow_requests', prune_slow_requests),
         ('retention:screen_views', prune_screen_views),
+        ('retention:table_sizes', _snapshot_table_sizes),
+        ('retention:lifecycle', _run_lifecycle_rules),
+        ('retention:purge_held', _purge_held_files),
     ]
     with pg_lock(RETENTION_LOCK_KEY) as got:
         if not got:
             logger.warning('[retention] another run holds the lock; skipping')
             return None
         return _run_retention_steps(steps)
+
+
+# Steps whose count is rows written, not removed: kept on their SyncLog line, left out of the run's total.
+NOT_REMOVAL_STEPS = frozenset({'retention:table_sizes'})
 
 
 def _run_retention_steps(steps):
@@ -252,7 +336,8 @@ def _run_retention_steps(steps):
     for name, fn in steps:
         try:
             n = fn()
-            total += n
+            if name not in NOT_REMOVAL_STEPS:
+                total += n
             SyncLog.objects.create(sync_run=run, table_name=name, records_processed=n)
         except Exception as exc:
             logger.exception('[retention] %s failed', name)
@@ -262,7 +347,7 @@ def _run_retention_steps(steps):
     run.records_synced = total
     run.completed_at = timezone.now()
     run.save()
-    logger.info('[retention] deleted %s rows%s', total, f' ({len(errors)} step(s) failed)' if errors else '')
+    logger.info('[retention] removed %s%s', total, f' ({len(errors)} step(s) failed)' if errors else '')
     return run
 
 
@@ -293,4 +378,76 @@ def run_retention_catchup():
         return None
     from apps.sync.models import SyncLog
     SyncLog.objects.create(sync_run=run, table_name='retention:catchup', records_processed=1)
+    return run
+
+
+def _todays_morning_slot(now):
+    local = timezone.localtime(now)
+    return local.replace(hour=MORNING_CHAIN_SLOT[0], minute=MORNING_CHAIN_SLOT[1], second=0, microsecond=0)
+
+
+def morning_chain_day_start(now=None):
+    """Start of the morning chain's current day: today's 07:30 slot, or yesterday's before 07:30."""
+    now = now or timezone.now()
+    slot = _todays_morning_slot(now)
+    return slot if timezone.localtime(now) >= slot else slot - datetime.timedelta(days=1)
+
+
+def morning_chain_done_today(now=None):
+    """True when a morning chain already succeeded in its current day (see morning_chain_day_start)."""
+    from apps.sync.models import SyncRun
+    return SyncRun.objects.filter(lane='morning_chain', status='success',
+                                  started_at__gte=morning_chain_day_start(now)).exists()
+
+
+def morning_chain_steps_done_today(now=None):
+    """Names of chain steps that already completed (SyncLog 1) in a chain run of the current day,
+    so a retry after a killed run does not repeat them (the insights step sends WhatsApp)."""
+    from apps.sync.models import SyncLog
+    return set(SyncLog.objects.filter(sync_run__lane='morning_chain', records_processed=1,
+                                      sync_run__started_at__gte=morning_chain_day_start(now),
+                                      table_name__startswith='chain:')
+               .values_list('table_name', flat=True))
+
+
+def softech_reachable(now=None):
+    """The latest finished fast sync succeeded within SOFTECH_UP_MINUTES. The chain's steps swallow
+    their own errors, so this is the only reliable signal that a run would really do its work."""
+    from apps.sync.models import SyncRun
+    now = now or timezone.now()
+    fast = SyncRun.objects.filter(lane='fast').exclude(status='running').order_by('-started_at').first()
+    return bool(fast and fast.status == 'success'
+                and fast.started_at >= now - datetime.timedelta(minutes=SOFTECH_UP_MINUTES))
+
+
+def morning_chain_catchup_due(now=None):
+    """True when today's 07:30 morning chain was missed and SOFTECH is reachable again (owner
+    decision 2026-11-11). At most one successful run per day; a failed attempt (in practice a
+    run marked stale after its process died) waits RETENTION_RETRY_HOURS."""
+    from apps.sync.models import SyncRun
+    now = now or timezone.now()
+    if timezone.localtime(now) < _todays_morning_slot(now):
+        return False
+    runs = SyncRun.objects.filter(lane='morning_chain')
+    if runs.filter(status='running').exists():
+        return False
+    if morning_chain_done_today(now):
+        return False
+    last = runs.order_by('-started_at').first()
+    if (last and last.status == 'failed'
+            and last.started_at > now - datetime.timedelta(hours=RETENTION_RETRY_HOURS)):
+        return False
+    return softech_reachable(now)
+
+
+def run_morning_chain_catchup():
+    """Run the morning chain now when today's slot was missed. Returns the SyncRun or None."""
+    if not morning_chain_catchup_due():
+        return None
+    from apps.sync import tasks
+    run = tasks._run_morning_chain()
+    if run is None:
+        return None
+    from apps.sync.models import SyncLog
+    SyncLog.objects.create(sync_run=run, table_name='chain:catchup', records_processed=1)
     return run

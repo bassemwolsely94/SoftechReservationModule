@@ -14,6 +14,7 @@ const MyDashboardPage = lazy(() => import('./pages/MyDashboardPage'))
 const NotificationsInboxPage = lazy(() => import('./pages/NotificationsInboxPage'))
 const TargetsPage = lazy(() => import('./pages/TargetsPage'))
 const KpiBoardPage = lazy(() => import('./pages/KpiBoardPage'))
+const SalespersonBoardPage = lazy(() => import('./pages/SalespersonBoardPage'))
 const ForecastScenarioPage = lazy(() => import('./pages/ForecastScenarioPage'))
 const InsightsPage = lazy(() => import('./pages/InsightsPage'))
 const ReferralStatsPage = lazy(() => import('./pages/ReferralStatsPage'))
@@ -64,6 +65,7 @@ const InsuranceReportsPage = lazy(() => import('./pages/InsuranceReportsPage'))
 const MyIncentivesPage = lazy(() => import('./pages/MyIncentivesPage'))
 const GamificationPage = lazy(() => import('./pages/GamificationPage'))
 const StockAuditPage = lazy(() => import('./pages/StockAuditPage'))
+const HRAttendancePage = lazy(() => import('./pages/HRAttendancePage'))
 const PicAnalyticsPage = lazy(() => import('./pages/PicAnalyticsPage'))
 const UsagePrintPage = lazy(() => import('./pages/UsagePrintPage'))
 const UserManagementPage = lazy(() => import('./pages/UserManagementPage'))
@@ -354,6 +356,7 @@ export default function App() {
             <Route path="announcements"      element={<AnnouncementsPage />} />
             <Route path="targets"            element={<TargetsPage />} />
             <Route path="kpi-board"          element={<KpiBoardPage />} />
+            <Route path="salesperson-board"  element={<SalespersonBoardPage />} />
             <Route path="forecast-scenarios" element={<ForecastScenarioPage />} />
             <Route path="insights"           element={<InsightsPage />} />
             <Route path="referral-stats"     element={<ReferralStatsPage />} />
@@ -581,6 +584,8 @@ export default function App() {
             <Route path="approvals"     element={<RequireRole roles={['admin','supervisor','pharmacist','quality_manager','purchasing']}><ApprovalsPage /></RequireRole>} />
             <Route path="batches"       element={<BatchesPage />} />
             <Route path="hr"            element={<HRPage />} />
+            {/* attendance & fingerprint (HR stage 1): named grantees + admin; every API route is gated server-side */}
+            <Route path="hr/attendance" element={<HRAttendancePage />} />
             <Route path="payment-audit" element={<RequireRole roles={['admin','purchasing','pharmacist','quality_manager','accountant']}><PaymentAuditPage /></RequireRole>} />
             <Route path="reconciliation" element={<RequireRole roles={['admin','purchasing','quality_manager','accountant']}><ReconciliationPage /></RequireRole>} />
             <Route path="forecasting"   element={<RequireRole roles={['admin','purchasing','pharmacist','quality_manager']}><ForecastingPage /></RequireRole>} />

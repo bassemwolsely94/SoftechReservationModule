@@ -21,6 +21,7 @@ import { useChatterSocket } from '../hooks/useChatterSocket'
 import VoiceNoteRecorder from './VoiceNoteRecorder'
 import { formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import RemovedFileNote from './RemovedFileNote'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -135,6 +136,8 @@ function MessageBubble({ msg }) {
           <AttachmentRenderer fileType={msg.file_type} attachmentUrl={msg.attachment_url} />
           {/* Dedicated voice note — may appear alongside an image attachment */}
           <VoiceRenderer voiceUrl={msg.voice_note_url} />
+          {!msg.attachment_url && <RemovedFileNote date={msg.retention_removed?.attachment} className="mt-1.5" />}
+          {!msg.voice_note_url && <RemovedFileNote date={msg.retention_removed?.voice_note} className="mt-1.5" />}
         </div>
       </div>
     </div>
