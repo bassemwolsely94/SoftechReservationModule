@@ -184,17 +184,23 @@ def customer_history(pic):
 
 
 def no_serial_lines(branch='', days=30, limit=500):
-    """Redemption lines without a valid coupon serial, newest first, + totals by branch / user."""
+    """Redemption lines without a valid coupon serial, newest first, + totals by branch / user.
+
+    ``branch`` is one SOFTECH branch code, a comma list ('130,150') or a list; empty = every branch.
+    ``branches`` lists every branch in the window (before the branch filter) so the screen's
+    multi-select keeps offering the branches that are not ticked."""
     from .models import CouponEvent
+    from core.multi_filter import filter_in, multi_values
     qs = CouponEvent.objects.filter(serial_id=None, kind='redeem',
                                     docdate__gte=dt.date.today() - dt.timedelta(days=int(days)))
-    if branch:
-        qs = qs.filter(branchcode=str(branch))
+    all_branches = sorted({str(b) for b in qs.values_list('branchcode', flat=True).distinct() if b})
+    codes = multi_values({'b': branch or ''}, 'b')    # str, comma list or list → distinct codes
+    qs = filter_in(qs, 'branchcode', codes)
     by_branch = qs.values('branchcode').annotate(lines=Count('id'), qty=Sum('qty')).order_by('-qty')
     by_user = (qs.values('branchcode', 'usercode').annotate(lines=Count('id'), qty=Sum('qty'))
                .order_by('-qty'))
     return {
-        'days': int(days), 'branch': str(branch or ''),
+        'days': int(days), 'branch': ','.join(codes), 'branches': all_branches,
         'by_branch': [{'branch': r['branchcode'], 'lines': r['lines'], 'qty': _f(r['qty'])} for r in by_branch],
         'by_user': [{'branch': r['branchcode'], 'usercode': r['usercode'], 'lines': r['lines'],
                      'qty': _f(r['qty'])} for r in by_user],

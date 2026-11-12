@@ -16,6 +16,7 @@ import { usePermissions } from '../../../hooks/usePermission'
 import useSortableRows from '../../../hooks/useSortableRows'
 import useBranchLabels from '../../../hooks/useBranchLabels'
 import SortTh from '../../../components/SortTh'
+import MultiSelectFilter from '../../../components/MultiSelectFilter'
 import DataFreshnessBar from '../../../components/DataFreshnessBar'
 import ProgressBar from '../../../components/ProgressBar'
 import { SkeletonTable, EmptyState, Spinner } from '../../../components/ui'
@@ -271,7 +272,8 @@ export default function SoftechComparePage() {
   const [params, setParams] = useSearchParams()
   const setParam = (k, v) => { const p = new URLSearchParams(params); if (v) p.set(k, v); else p.delete(k); setParams(p, { replace: true }) }
   const periodId = Number(params.get('period')) || null
-  const checkKey = params.get('check') || ''
+  const checkParam = params.get('check') || ''      // one check key or a comma list (?check=a,b)
+  const checkKeys = useMemo(() => checkParam.split(',').filter(Boolean), [checkParam])
   const onlyUnexplained = params.get('unexplained') === '1'
 
   const thisYear = new Date().getFullYear()
@@ -336,7 +338,7 @@ export default function SoftechComparePage() {
     lines.forEach(l => seen.set(l.check_key, l.check_label))
     return [...seen]
   }, [lines])
-  const shown = useMemo(() => lines.filter(l => (!checkKey || l.check_key === checkKey) && (!onlyUnexplained || l.needs_explanation)), [lines, checkKey, onlyUnexplained])
+  const shown = useMemo(() => lines.filter(l => (!checkKeys.length || checkKeys.includes(l.check_key)) && (!onlyUnexplained || l.needs_explanation)), [lines, checkKeys, onlyUnexplained])
   const { sorted, headerProps } = useSortableRows(shown, { getValue, persistKey: 'gl-softech-compare' })
   const unexplained = lines.filter(l => l.needs_explanation).length
   const period = cmpQ.data?.period
@@ -363,10 +365,9 @@ export default function SoftechComparePage() {
           {periods.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
           {periodId && !periods.some(p => p.id === periodId) && <option value={periodId}>{period?.label || '…'}</option>}
         </select>
-        <select className={inputCls} value={checkKey} onChange={e => setParam('check', e.target.value)} title="الفحص">
-          <option value="">كل الفحوصات</option>
-          {checks.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-        </select>
+        <MultiSelectFilter className="w-[200px]" showCode={false} allLabel="كل الفحوصات" menuClassName="min-w-[260px]"
+          options={checks.map(([code, name]) => ({ code, name }))} selected={checkKeys}
+          onChange={v => setParam('check', v.join(','))} />
         <label className="flex items-center gap-1.5 text-sm text-gray-700">
           <input type="checkbox" checked={onlyUnexplained} onChange={e => setParam('unexplained', e.target.checked ? '1' : '')} />
           اللي محتاج تفسير بس{unexplained > 0 && <span className="rounded-full bg-red-500 text-white text-[11px] px-1.5">{unexplained}</span>}

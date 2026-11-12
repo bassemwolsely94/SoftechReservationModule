@@ -22,6 +22,7 @@ import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 
 // ── Tiny helpers ─────────────────────────────────────────────────────────────
 
@@ -2103,10 +2104,12 @@ function UserSummariesTable({ summaries }) {
   )
 }
 
+const LOG_MODE_OPTIONS = [{ code: 'calculate', name: 'احتساب فعلي' }, { code: 'simulate', name: 'محاكاة' }]
+
 function HistoryTab({ selectedProgram }) {
   const [logs, setLogs]         = useState([])
   const [loading, setLoading]   = useState(false)
-  const [modeFilter, setModeFilter] = useState('')
+  const [modeFilter, setModeFilter] = useState([])   // multi-select; none ticked = every log
   const [expandedId, setExpandedId] = useState(null)
 
   const load = useCallback(async () => {
@@ -2114,7 +2117,7 @@ function HistoryTab({ selectedProgram }) {
     setLoading(true)
     try {
       const params = { program: selectedProgram.id }
-      if (modeFilter) params.mode = modeFilter
+      if (modeFilter.length) params.mode = modeFilter.join(',')
       const { data } = await incentivesApi.listLogs(params)
       setLogs(data.results || data)
     } finally { setLoading(false) }
@@ -2134,12 +2137,9 @@ function HistoryTab({ selectedProgram }) {
           <div className="text-xs text-gray-500">{selectedProgram.name}</div>
         </div>
         <div className="flex items-center gap-2">
-          <select className="text-sm border border-gray-200 rounded-lg px-2 py-1.5"
-            value={modeFilter} onChange={e => setModeFilter(e.target.value)}>
-            <option value="">كل الأنواع</option>
-            <option value="calculate">احتساب فعلي</option>
-            <option value="simulate">محاكاة</option>
-          </select>
+          <MultiSelectFilter className="w-[150px]" showCode={false} allLabel="كل الأنواع"
+            dataTour="incentives-programs-history-mode"
+            options={LOG_MODE_OPTIONS} selected={modeFilter} onChange={setModeFilter} />
           <RefreshButton data-tour="incentives-programs-history-refresh" loading={loading} onClick={load} size="sm">↻ تحديث</RefreshButton>
         </div>
       </div>

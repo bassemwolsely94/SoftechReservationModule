@@ -15,6 +15,8 @@ from rest_framework.pagination import CursorPagination
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 
+from core.multi_filter import filter_in, multi_values
+
 from .models import PhoneAlert, PhoneAlertPolicy, WorkOwner
 from .serializers import (AlertDetailSerializer, AlertLogSerializer, OwnerSerializer,
                           PolicySerializer, clean_phone)
@@ -325,10 +327,9 @@ def log(request):
         if day is None:
             return Response({'date': 'التاريخ غير صحيح — اكتبه بالشكل 2026-11-03'},
                             status=http.HTTP_400_BAD_REQUEST)
-    if p.get('status'):
-        qs = qs.filter(status=p['status'])
-    if p.get('event'):
-        qs = qs.filter(event=p['event'])
+    # status / event take one value or several (?status=failed,skipped); none = all
+    qs = filter_in(qs, 'status', multi_values(p, 'status'))
+    qs = filter_in(qs, 'event', multi_values(p, 'event'))
     if 'staff' in ints:
         qs = qs.filter(recipient_staff_id=ints['staff'])
     if 'branch' in ints:

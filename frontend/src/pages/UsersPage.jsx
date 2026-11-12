@@ -9,6 +9,7 @@ import { usersApi, branchesApi } from '../api/client'
 import BranchSelect from '../components/BranchSelect'
 import SortTh from '../components/SortTh'
 import useServerSort from '../hooks/useServerSort'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 
 // Server-side ordering: DRF `ordering` whitelist on /users/staff/ (the list is paged).
 const USER_SORT_KEYS = ['user__first_name', 'softech_username', 'role', 'branch__name', 'is_active']
@@ -269,7 +270,7 @@ function EditModal({ staffId, roles, branches, onClose, onSaved }) {
 export default function UsersPage() {
   const qc = useQueryClient()
   const [editId, setEditId]   = useState(null)
-  const [filters, setFilters] = useState({ search: '', role: '' })
+  const [filters, setFilters] = useState({ search: '', role: [] })   // role: multi-select (none = all)
   const [ordering, setOrdering] = useState('')
   const { headerProps } = useServerSort(ordering, setOrdering, { allowed: USER_SORT_KEYS })
 
@@ -283,7 +284,7 @@ export default function UsersPage() {
     queryKey: ['staff-list', filters, ordering],
     queryFn:  () => usersApi.list({
       search: filters.search || undefined,
-      role:   filters.role   || undefined,
+      role:   filters.role.length ? filters.role.join(',') : undefined,
       ordering: ordering || undefined,
     }).then(r => r.data),
   })
@@ -315,14 +316,11 @@ export default function UsersPage() {
           placeholder="🔍 بحث بالاسم أو اسم المستخدم أو كود ERP..."
           value={filters.search}
           onChange={e => setFilters(p => ({ ...p, search: e.target.value }))} />
-        <select className="input-field" style={{ width: 180 }}
-          value={filters.role}
-          onChange={e => setFilters(p => ({ ...p, role: e.target.value }))}>
-          <option value="">كل الأدوار</option>
-          {roles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-        </select>
-        {(filters.search || filters.role) && (
-          <button onClick={() => setFilters({ search: '', role: '' })} className="btn-ghost">× مسح</button>
+        <MultiSelectFilter className="w-[180px]" menuClassName="min-w-[220px]" showCode={false} allLabel="كل الأدوار"
+          options={roles.map(r => ({ code: r.value, name: r.label }))} selected={filters.role}
+          onChange={v => setFilters(p => ({ ...p, role: v }))} />
+        {(filters.search || filters.role.length > 0) && (
+          <button onClick={() => setFilters({ search: '', role: [] })} className="btn-ghost">× مسح</button>
         )}
       </div>
 

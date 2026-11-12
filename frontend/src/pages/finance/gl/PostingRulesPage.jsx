@@ -14,11 +14,13 @@ import { usePermissions } from '../../../hooks/usePermission'
 import useSortableRows from '../../../hooks/useSortableRows'
 import useHelpTab from '../../../help/useHelpTab'
 import SortTh from '../../../components/SortTh'
+import MultiSelectFilter from '../../../components/MultiSelectFilter'
 import { SkeletonTable, EmptyState } from '../../../components/ui'
 import RuleEditor, { SOURCE_TYPES, summarizeConditions, summarizeLines } from './RuleEditor'
 import SourceMapsPanel from './SourceMapsPanel'
-import { errOf, listOf, useGlBranches, inputCls, btnPrimary, ErrorBox } from './glUi'
+import { errOf, listOf, useGlBranches, btnPrimary, ErrorBox } from './glUi'
 
+const SOURCE_OPTIONS = Object.entries(SOURCE_TYPES).map(([code, name]) => ({ code, name }))
 const GRANULARITY = { document: 'مستند', branch_day: 'فرع/يوم', party_day: 'طرف/يوم' }
 
 export default function PostingRulesPage() {
@@ -27,13 +29,13 @@ export default function PostingRulesPage() {
   const branchName = (code) => { const b = branches.find(x => String(x.softech_branch_id) === String(code)); return b ? labelOf(b.id) : code }
   const [tab, setTab] = useState('rules')
   useHelpTab(tab)
-  const [source, setSource] = useState('')
+  const [source, setSource] = useState([])     // multi-select source types (none ticked = all)
   const [onlyActive, setOnlyActive] = useState(true)
   const [open, setOpen] = useState(null)       // rule json | 'new' | null
 
   const rulesQ = useQuery({
     queryKey: ['gl', 'rules', source, onlyActive],
-    queryFn: () => glApi.rules({ source_type: source || undefined, active: onlyActive ? '1' : undefined }).then(r => listOf(r.data)),
+    queryFn: () => glApi.rules({ source_type: source.length ? source.join(',') : undefined, active: onlyActive ? '1' : undefined }).then(r => listOf(r.data)),
   })
   const rows = useMemo(() => (rulesQ.data || []).map(r => ({
     ...r, _cond: summarizeConditions(r.conditions, branchName), _lines: summarizeLines(r.lines, r.action),
@@ -63,10 +65,8 @@ export default function PostingRulesPage() {
       {tab === 'maps' ? <SourceMapsPanel canEdit={!!perms.edit} /> : (
         <>
           <div className="flex flex-wrap items-center gap-2">
-            <select className={inputCls} value={source} onChange={e => setSource(e.target.value)}>
-              <option value="">كل المصادر</option>
-              {Object.entries(SOURCE_TYPES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-            </select>
+            <MultiSelectFilter className="w-[180px]" showCode={false} allLabel="كل المصادر" menuClassName="min-w-[220px]"
+              options={SOURCE_OPTIONS} selected={source} onChange={setSource} />
             <label className="flex items-center gap-1 text-sm text-gray-600">
               <input type="checkbox" checked={onlyActive} onChange={e => setOnlyActive(e.target.checked)} /> النشطة فقط
             </label>

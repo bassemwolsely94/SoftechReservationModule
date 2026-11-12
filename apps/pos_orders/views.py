@@ -25,6 +25,7 @@ from .discount_authority import validate_discount_authority
 from . import writer
 from core import branch_scope
 from core.errors import public_error
+from core.multi_filter import filter_in, multi_ids, multi_values
 from core.permissions import matrix_permission
 
 
@@ -518,7 +519,7 @@ def lost_sales_view(request):
 @permission_classes([CanOperatePosOrders])
 def lost_sales_trends_view(request):
     """Historical lost-sale trends from the PosCancelDaily mirror (Wave 3 inc2) — fast PG read, no
-    Sybase. Cross-branch by default; filterable. GET ?days=30&branch=<code>&doccode=115&limit=25.
+    Sybase. Cross-branch by default; filterable. GET ?days=30&branch=<code>[,<code>…]&doccode=115&limit=25.
     Returns period summary, top lost items, by-branch split, and a daily time series (for a chart)."""
     from datetime import timedelta
     from django.utils import timezone
@@ -536,9 +537,8 @@ def lost_sales_trends_view(request):
     since = (timezone.now() - timedelta(days=days)).date()
 
     qs = branch_scope.scope_code(PosCancelDaily.objects.filter(day__gte=since), request.user)
-    branch = (request.query_params.get('branch') or '').strip()
-    if branch:
-        qs = qs.filter(branch_code=branch)
+    # one SOFTECH branch code or several (?branch=1,3) — narrows the scoped rows, never widens them
+    qs = filter_in(qs, 'branch_code', multi_values(request.query_params, 'branch'))
     doccode = (request.query_params.get('doccode') or '').strip()
     if doccode:
         qs = qs.filter(doccode=doccode)
@@ -1201,7 +1201,7 @@ def exceptions_view(request):
     pushed orders sitting too long awaiting the cashier (settlement / leakage risk). Reuses the
     existing order model + status lifecycle; it NEVER writes to SOFTECH and NEVER mutates a status —
     the manager acts via the existing gated flush / cancel / push endpoints.
-    Query: ?branch=<id> &queued_stale_min= &pushing_stale_min= &pushed_stale_min=."""
+    Query: ?branch=<id>[,<id>…] &queued_stale_min= &pushing_stale_min= &pushed_stale_min=."""
     from django.utils import timezone
     now = timezone.now()
 
@@ -1215,9 +1215,9 @@ def exceptions_view(request):
     pushed_stale  = _mins('pushed_stale_min', 120)
 
     qs = branch_scope.scope(SoftechSalesOrder.objects.select_related('branch'), request.user)
-    branch = request.query_params.get('branch')
-    if branch:
-        qs = qs.filter(branch_id=branch)
+    # one branch or several (?branch=3,7), applied after the branch scope; junk ids match nothing
+    if request.query_params.get('branch'):
+        qs = filter_in(qs, 'branch_id', multi_ids(request.query_params, 'branch') or [0])
 
     buckets = exception_buckets(qs, now, queued_stale, pushing_stale, pushed_stale)
     return Response({

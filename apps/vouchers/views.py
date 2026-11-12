@@ -15,6 +15,7 @@ import io
 import logging
 
 import qrcode
+from core.multi_filter import filter_in, multi_values
 from core.sort_ordering import explicit_order_by
 from django.db import transaction
 from django.db.models import F, Sum, Count, Q
@@ -131,19 +132,14 @@ class VoucherViewSet(viewsets.ModelViewSet):
         ).prefetch_related('applicable_items', 'applicable_branches')
         p = self.request.query_params
 
-        status_q  = p.get('status')
-        vtype     = p.get('type')
-        category  = p.get('category')
         branch    = p.get('branch')
         customer  = p.get('customer')
         search    = p.get('search', '').strip()
 
-        if status_q:
-            qs = qs.filter(status=status_q)
-        if vtype:
-            qs = qs.filter(voucher_type=vtype)
-        if category:
-            qs = qs.filter(voucher_category=category)
+        # status / type / category take one value or several (?status=active,paused); none = all
+        qs = filter_in(qs, 'status', multi_values(p, 'status'))
+        qs = filter_in(qs, 'voucher_type', multi_values(p, 'type'))
+        qs = filter_in(qs, 'voucher_category', multi_values(p, 'category'))
         if branch:
             qs = qs.filter(branch_id=branch)
         if customer:

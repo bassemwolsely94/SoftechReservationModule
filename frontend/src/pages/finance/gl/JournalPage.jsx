@@ -17,7 +17,8 @@ import useHelpTab from '../../../help/useHelpTab'
 import SortTh from '../../../components/SortTh'
 import DataFreshnessBar from '../../../components/DataFreshnessBar'
 import ProgressBar from '../../../components/ProgressBar'
-import BranchSelect from '../../../components/BranchSelect'
+import BranchMultiSelect from '../../../components/BranchMultiSelect'
+import MultiSelectFilter from '../../../components/MultiSelectFilter'
 import { SkeletonTable, EmptyState } from '../../../components/ui'
 import EntryEditor from './EntryEditor'
 import ExceptionsTab from './ExceptionsTab'
@@ -26,6 +27,12 @@ import {
   BOOKS, STATUS, StatusPill, money, errOf, listOf, todayIso, useGlBranches,
   inputCls, btnPrimary, btnPlain, ErrorBox,
 } from './glUi'
+
+// multi-select filter options ({code, name}); «يدوي» = entries with no source document
+const STATUS_OPTIONS = Object.entries(STATUS).map(([code, s]) => ({ code, name: s.label }))
+const BOOK_OPTIONS = Object.entries(BOOKS).map(([code, name]) => ({ code, name }))
+const SOURCE_OPTIONS = [...Object.entries(SOURCE_TYPES).map(([code, name]) => ({ code, name })), { code: 'manual', name: 'يدوي' }]
+const csv = (v) => (v || '').split(',').filter(Boolean)
 
 const KEYS_HINT = '⌨ ↑↓ تنقل · مسافة تحديد · Enter فتح القيد · Ctrl+A تحديد الكل'
 
@@ -81,9 +88,12 @@ export default function JournalPage() {
   const perms = usePermissions('ledger')
   const { branches, labelOf } = useGlBranches()
   const [params, setParams] = useSearchParams()
+  // status / book / branch / source are multi-select arrays (none ticked = all); no ?status in the
+  // URL = drafts, ?status= (empty) = all, ?status=draft or ?status=draft,approved pre-fill the filter
   const [filters, setFilters] = useState({
-    status: params.get('status') ?? 'draft', book: '', date_from: params.get('date_from') || '', date_to: params.get('date_to') || '', branch: '',
-    account: params.get('account') || '', q: '', source: '',
+    status: params.get('status') === null ? ['draft'] : csv(params.get('status')), book: [],
+    date_from: params.get('date_from') || '', date_to: params.get('date_to') || '', branch: [],
+    account: params.get('account') || '', q: '', source: [],
   })
   const tab = params.get('tab') === 'exceptions' ? 'exceptions' : 'entries'   // follows the URL
   const setTab = (t) => { const p = new URLSearchParams(params); if (t === 'exceptions') p.set('tab', t); else p.delete('tab'); setParams(p, { replace: true }) }
@@ -106,11 +116,13 @@ export default function JournalPage() {
   const setF = (patch) => { setFilters(f => ({ ...f, ...patch })); setSelected(new Set()); setRowResult({}) }
   const apiParams = useMemo(() => {
     const { source, ...rest } = filters
-    return Object.fromEntries(Object.entries({ ...rest, source_type: source }).filter(([, v]) => v !== ''))
+    return Object.fromEntries(Object.entries({ ...rest, source_type: source })
+      .map(([k, v]) => [k, Array.isArray(v) ? v.join(',') : v]).filter(([, v]) => v !== ''))
   }, [filters])
+  // exceptions always come from a SOFTECH document, so «يدوي» is dropped there
   const excFilters = useMemo(() => ({
-    source_type: filters.source && filters.source !== 'manual' ? filters.source : '',
-    date_from: filters.date_from, date_to: filters.date_to, branch: filters.branch,
+    source_type: filters.source.filter(s => s !== 'manual').join(','),
+    date_from: filters.date_from, date_to: filters.date_to, branch: filters.branch.join(','),
   }), [filters.source, filters.date_from, filters.date_to, filters.branch])
 
   const listQ = useInfiniteQuery({
@@ -223,26 +235,19 @@ export default function JournalPage() {
       {/* filters */}
       <div className="flex flex-wrap items-center gap-2" data-tour="finance-gl-journal-filters">
         {tab === 'entries' && (<>
-        <select className={inputCls} value={filters.status} onChange={e => setF({ status: e.target.value })}>
-          {Object.entries(STATUS).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
-          <option value="">كل الحالات</option>
-        </select>
-        <select className={inputCls} value={filters.book} onChange={e => setF({ book: e.target.value })}>
-          <option value="">كل الدفاتر</option>
-          {Object.entries(BOOKS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-        </select>
+        <MultiSelectFilter className="w-[140px]" showCode={false} allLabel="كل الحالات"
+          options={STATUS_OPTIONS} selected={filters.status} onChange={v => setF({ status: v })} />
+        <MultiSelectFilter className="w-[140px]" showCode={false} allLabel="كل الدفاتر"
+          options={BOOK_OPTIONS} selected={filters.book} onChange={v => setF({ book: v })} />
         </>)}
         <label className="text-xs text-gray-500">من</label>
         <input type="date" className={inputCls} value={filters.date_from} onChange={e => setF({ date_from: e.target.value })} />
         <label className="text-xs text-gray-500">إلى</label>
         <input type="date" className={inputCls} value={filters.date_to} onChange={e => setF({ date_to: e.target.value })} />
-        <BranchSelect size="sm" className="w-48" branches={branches} value={filters.branch} allLabel="كل الفروع" placeholder="كل الفروع"
-                      onChange={v => setF({ branch: v })} />
-        <select className={inputCls} value={filters.source} onChange={e => setF({ source: e.target.value })} title="مصدر القيد">
-          <option value="">كل المصادر</option>
-          {Object.entries(SOURCE_TYPES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-          <option value="manual">يدوي</option>
-        </select>
+        <BranchMultiSelect className="w-48" branches={branches}
+                           selected={filters.branch} onChange={v => setF({ branch: v })} />
+        <MultiSelectFilter className="w-[170px]" showCode={false} allLabel="كل المصادر" menuClassName="min-w-[220px]"
+          options={SOURCE_OPTIONS} selected={filters.source} onChange={v => setF({ source: v })} />
         {tab === 'entries' && (<>
         <input className={`${inputCls} w-28`} placeholder="كود الحساب" value={filters.account}
                onChange={e => setF({ account: e.target.value.trim() })} />
@@ -272,7 +277,7 @@ export default function JournalPage() {
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto" {...kb.containerProps}>
         {listQ.isLoading ? <SkeletonTable rows={8} cols={7} /> : listQ.isError ? null : !sorted.length ? (
-          <EmptyState title="لا توجد قيود" sub={filters.status === 'draft' ? 'لا مسودات تنتظر المراجعة' : 'غيّر عوامل التصفية'} />
+          <EmptyState title="لا توجد قيود" sub={filters.status.length === 1 && filters.status[0] === 'draft' ? 'لا مسودات تنتظر المراجعة' : 'غيّر عوامل التصفية'} />
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-600 text-xs">

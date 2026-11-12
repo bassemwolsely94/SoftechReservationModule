@@ -8,6 +8,7 @@ import { ROLE_LABELS } from '../utils/roleLabels'
 import { networkBadgeParts } from '../components/NetworkBadge'
 import SortTh from '../components/SortTh'
 import useServerSort from '../hooks/useServerSort'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 
 // Server-side ordering (paged list): DRF `ordering` whitelist on /users/staff/.
 const USER_SORT_KEYS = ['user__first_name', 'role', 'branch__name', 'softech_username', 'is_active']
@@ -26,6 +27,7 @@ const ROLE_COLORS = {
 }
 
 const ROLES = Object.entries(ROLE_LABELS).map(([value, label]) => ({ value, label }))
+const ROLE_OPTIONS = ROLES.map(r => ({ code: r.value, name: r.label }))   // role filter (multi-select)
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -605,7 +607,7 @@ export default function UserManagementPage() {
   const isAdmin = currentUser?.role === 'admin'
 
   const [search, setSearch]           = useState('')
-  const [roleFilter, setRoleFilter]   = useState('')
+  const [roleFilter, setRoleFilter]   = useState([])    // roles, multi-select (none = all)
   const [activeFilter, setActiveFilter] = useState('')
   const [alertsOnly, setAlertsOnly]   = useState(false)
   const [page, setPage]               = useState(1)
@@ -623,7 +625,7 @@ export default function UserManagementPage() {
     queryKey: ['users', { search, role: roleFilter, active: activeFilter, alertsOnly, page, ordering }],
     queryFn: () => usersApi.list({
       search: search || undefined,
-      role: roleFilter || undefined,
+      role: roleFilter.length ? roleFilter.join(',') : undefined,
       is_active: activeFilter || undefined,
       alerts_only: alertsOnly ? 1 : undefined,
       ordering: ordering || undefined,
@@ -692,14 +694,9 @@ export default function UserManagementPage() {
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
           />
         </div>
-        <select data-tour="admin-users-role-filter"
-          value={roleFilter}
-          onChange={e => { setRoleFilter(e.target.value); setPage(1) }}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-400"
-        >
-          <option value="">كل الأدوار</option>
-          {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-        </select>
+        <MultiSelectFilter dataTour="admin-users-role-filter" className="w-[180px]" menuClassName="min-w-[220px]"
+          showCode={false} allLabel="كل الأدوار" options={ROLE_OPTIONS} selected={roleFilter}
+          onChange={v => { setRoleFilter(v); setPage(1) }} />
         <select data-tour="admin-users-status-filter"
           value={activeFilter}
           onChange={e => { setActiveFilter(e.target.value); setPage(1) }}

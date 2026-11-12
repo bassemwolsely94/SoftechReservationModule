@@ -2,18 +2,25 @@
  * Filters — the PIC Analytics filter bar (doc 33 §6). Values live in the URL (set by the
  * page). A named branch manager gets the branch filter locked to his own branches — the
  * server enforces it anyway; the lock only avoids offering choices that would be refused.
+ *
+ * Every list filter is a multi-select: the URL keeps a comma list (?salesperson=u1,u2), so an old
+ * single-value link still pre-fills one tick. Nothing ticked = no filter.
  */
-// A select fed by the options endpoint. A value that is in the URL but not offered (e.g. an old
+import MultiSelectFilter from '../MultiSelectFilter'
+import BranchMultiSelect from '../BranchMultiSelect'
+
+const listOf = (v) => String(v || '').split(',').map(s => s.trim()).filter(Boolean)
+
+// A multi-select fed by the options endpoint. A value that is in the URL but not offered (e.g. an old
 // link) stays visible as its raw code so the filter is never silently hidden.
 function Pick({ cls, value, onChange, all, rows }) {
   const list = rows || []
-  const missing = value && !list.some(r => r.code === value)
+  const selected = listOf(value)
+  const missing = selected.filter(v => !list.some(r => r.code === v))
+  const options = [...missing.map(v => ({ code: v, name: v })), ...list.map(r => ({ code: r.code, name: r.label }))]
   return (
-    <select className={cls} value={value || ''} onChange={onChange}>
-      <option value="">{all}</option>
-      {missing && <option value={value}>{value}</option>}
-      {list.map(r => <option key={r.code} value={r.code}>{r.label}</option>)}
-    </select>
+    <MultiSelectFilter className={cls} showCode={false} allLabel={all} menuClassName="min-w-[240px]"
+      options={options} selected={selected} onChange={codes => onChange(codes.join(','))} />
   )
 }
 
@@ -24,25 +31,24 @@ export default function Filters({ values, onChange, onClear, branches, access, o
   const branchOptions = (branches || []).filter(b => !locked || (allowed || []).includes(b.id))
   const input = 'input-field text-xs py-1.5'
   const set = k => e => onChange(k, e.target.value)
+  const setList = k => v => onChange(k, v)
+  const branchSel = listOf(values.branch).map(Number).filter(n => Number.isInteger(n) && n > 0)
   return (
     <div className="flex flex-wrap gap-2 items-center" data-tour="pic-analytics-filters">
       <input type="date" className={`${input} w-36`} value={values.from || ''} onChange={set('from')} title="من" />
       <input type="date" className={`${input} w-36`} value={values.to || ''} onChange={set('to')} title="إلى" />
-      <select className={`${input} w-44`} value={values.branch || ''} onChange={set('branch')}
-              disabled={locked && branchOptions.length <= 1} data-tour="pic-analytics-branch-filter"
-              title={locked ? 'فروعك فقط' : undefined}>
-        {!locked && <option value="">كل الفروع</option>}
-        {locked && branchOptions.length > 1 && <option value="">كل فروعي</option>}
-        {branchOptions.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
-      </select>
-      <Pick cls={`${input} w-36`} value={values.salesperson} onChange={set('salesperson')} all="كل البائعين" rows={opts.salespeople} />
-      <Pick cls={`${input} w-32`} value={values.channel} onChange={set('channel')} all="كل القنوات" rows={opts.channels} />
-      <Pick cls={`${input} w-32`} value={values.category} onChange={set('category')} all="كل الفئات" rows={opts.categories} />
-      <Pick cls={`${input} w-28`} value={values.segment} onChange={set('segment')} all="كل الشرائح" rows={opts.segments} />
-      <Pick cls={`${input} w-32`} value={values.customer_type} onChange={set('customer_type')} all="كل أنواع العملاء" rows={opts.customer_types} />
-      <Pick cls={`${input} w-36`} value={values.frequency} onChange={set('frequency')} all="كل دورات الشراء" rows={opts.frequency} />
+      <BranchMultiSelect className="w-44" branches={branchOptions} selected={branchSel}
+        onChange={ids => onChange('branch', ids.join(','))}
+        allLabel={locked ? 'كل فروعي' : 'كل الفروع'}
+        disabled={locked && branchOptions.length <= 1} dataTour="pic-analytics-branch-filter" />
+      <Pick cls="w-36" value={values.salesperson} onChange={setList('salesperson')} all="كل البائعين" rows={opts.salespeople} />
+      <Pick cls="w-32" value={values.channel} onChange={setList('channel')} all="كل القنوات" rows={opts.channels} />
+      <Pick cls="w-32" value={values.category} onChange={setList('category')} all="كل الفئات" rows={opts.categories} />
+      <Pick cls="w-28" value={values.segment} onChange={setList('segment')} all="كل الشرائح" rows={opts.segments} />
+      <Pick cls="w-32" value={values.customer_type} onChange={setList('customer_type')} all="كل أنواع العملاء" rows={opts.customer_types} />
+      <Pick cls="w-36" value={values.frequency} onChange={setList('frequency')} all="كل دورات الشراء" rows={opts.frequency} />
       {opts.agents && (
-        <Pick cls={`${input} w-40`} value={values.agent} onChange={set('agent')} all="كل موظفي الاتصال" rows={opts.agents.map(a => ({ code: a.ext, label: a.label }))} />
+        <Pick cls="w-40" value={values.agent} onChange={setList('agent')} all="كل موظفي الاتصال" rows={opts.agents.map(a => ({ code: a.ext, label: a.label }))} />
       )}
       <button onClick={onClear} className="btn-secondary text-xs py-1.5" data-tour="pic-analytics-clear">مسح</button>
       {children}

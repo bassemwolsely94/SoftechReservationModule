@@ -26,6 +26,7 @@ from rest_framework.response import Response
 from . import coupon_dashboard as dash
 from . import coupons
 from core.errors import public_error
+from core.multi_filter import multi_values
 from core.export_safety import neutralise_formulas
 
 logger = logging.getLogger('elrezeiky.vouchers')
@@ -131,8 +132,8 @@ def no_serial(request):
         days = max(1, min(int(request.query_params.get('days') or 30), 3650))
     except ValueError:
         days = 30
-    return Response(dash.no_serial_lines(branch=(request.query_params.get('branch') or '').strip(),
-                                         days=days))
+    # branch: one SOFTECH code or several (?branch=130,150 or repeated); none = every branch
+    return Response(dash.no_serial_lines(branch=multi_values(request.query_params, 'branch'), days=days))
 
 
 @api_view(['GET', 'POST'])

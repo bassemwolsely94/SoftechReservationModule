@@ -25,6 +25,7 @@ from apps.branches.models import Branch
 from apps.catalog.wildcard import filter_and_rank
 from apps.finance.models import GLAccount, GLAccountGroup, LedgerEntry, LedgerLine
 from core.branch_scope import sees_everything
+from core.multi_filter import filter_in, multi_ids, multi_values
 from core.permissions import deny_unless, matrix_permission
 from core.upload_safety import capped_rows, max_upload_bytes
 
@@ -164,9 +165,9 @@ def groups(request):
 @permission_classes(VIEW)
 def accounts(request):
     qs = GLAccount.objects.select_related('group').order_by('code')
-    group = _int(request.query_params.get('group'))
-    if group:
-        qs = qs.filter(group_id=group)
+    # group takes one id or several (?group=3,7); junk ids alone match nothing
+    if request.query_params.get('group'):
+        qs = filter_in(qs, 'group_id', multi_ids(request.query_params, 'group') or [0])
     active = request.query_params.get('active')
     if active in ('true', 'false'):
         qs = qs.filter(is_active=(active == 'true'))
@@ -386,10 +387,9 @@ def entries(request):
         return _save(request)
     p = request.query_params
     qs = _entries_qs()
-    if p.get('status'):
-        qs = qs.filter(status=p['status'])
-    if p.get('book'):
-        qs = qs.filter(book=p['book'])
+    # status / book / branch / source_type take one value or several (?status=draft,approved)
+    qs = filter_in(qs, 'status', multi_values(p, 'status'))
+    qs = filter_in(qs, 'book', multi_values(p, 'book'))
     try:
         if p.get('date_from'):
             qs = qs.filter(entry_date__gte=_date(p['date_from'], 'من'))
@@ -398,15 +398,15 @@ def entries(request):
     except ValueError as e:
         return _bad('bad_input', str(e))
     # line filters go through a subquery: a join on lines here would inflate the annotated totals
-    branch = _int(p.get('branch'))
-    if branch:
-        qs = qs.filter(Q(branch_id=branch) |
-                       Q(pk__in=LedgerLine.objects.filter(branch_id=branch).values('entry_id')))
-    st = (p.get('source_type') or '').strip()
-    if st == 'manual':
-        qs = qs.filter(source_type__in=('', 'manual'))
-    elif st:
-        qs = qs.filter(source_type=st)
+    if p.get('branch'):
+        branches = multi_ids(p, 'branch') or [0]
+        qs = qs.filter(Q(branch_id__in=branches) |
+                       Q(pk__in=LedgerLine.objects.filter(branch_id__in=branches).values('entry_id')))
+    sts = multi_values(p, 'source_type')
+    if sts:
+        # «يدوي» (manual) = entries with no source document ('' or 'manual')
+        types = [t for t in sts if t != 'manual'] + (['', 'manual'] if 'manual' in sts else [])
+        qs = qs.filter(source_type__in=types)
     if p.get('account'):
         qs = qs.filter(pk__in=LedgerLine.objects.filter(
             account__code=p['account'].strip()).values('entry_id'))

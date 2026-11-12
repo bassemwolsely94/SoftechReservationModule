@@ -25,6 +25,7 @@ from apps.finance.models import (
     SourceException,
 )
 from core.errors import public_error
+from core.multi_filter import filter_in, multi_ids, multi_values
 from core.threads import start_thread
 from core.upload_safety import capped_rows, max_upload_bytes
 
@@ -169,10 +170,9 @@ def parties_root(request):
         return Response(party_json(g), status=status.HTTP_201_CREATED)
     p = request.query_params
     qs = GLParty.objects.select_related('recon_party')
-    if p.get('type'):
-        qs = qs.filter(party_type=p['type'])
-    if p.get('status'):
-        qs = qs.filter(status=p['status'])
+    # type / status take one value or several (?status=proposed,unmatched)
+    qs = filter_in(qs, 'party_type', multi_values(p, 'type'))
+    qs = filter_in(qs, 'status', multi_values(p, 'status'))
     q = (p.get('q') or '').strip()
     if q:
         qs = filter_and_rank(qs, q, ['code', 'name', 'softech_personcode', 'recon_party__name'])
@@ -379,8 +379,7 @@ def rules_root(request):
         return Response(rule_json(rule), status=status.HTTP_201_CREATED)
     p = request.query_params
     qs = PostingRule.objects.all()
-    if p.get('source_type'):
-        qs = qs.filter(source_type=p['source_type'])
+    qs = filter_in(qs, 'source_type', multi_values(p, 'source_type'))   # one or several sources
     if p.get('active') in ('1', 'true'):
         qs = qs.filter(is_active=True)
     current = {}
@@ -431,8 +430,7 @@ def exceptions_list(request):
     qs = qs.filter(status=p.get('status') or 'open')
     if p.get('kind'):
         qs = qs.filter(kind=p['kind'])
-    if p.get('source_type'):
-        qs = qs.filter(source_doc__source_type=p['source_type'])
+    qs = filter_in(qs, 'source_doc__source_type', multi_values(p, 'source_type'))   # one or several
     try:
         if p.get('date_from'):
             qs = qs.filter(source_date__gte=_date(p['date_from'], 'من'))
@@ -441,8 +439,13 @@ def exceptions_list(request):
     except ValueError as e:
         return _err([str(e)])
     if p.get('branch'):
-        b = Branch.objects.filter(pk=_int(p['branch'])).first()
-        qs = qs.filter(source_doc__branch_code=(b.softech_branch_id if b else p['branch']))
+        # one branch pk or several (?branch=3,7) → their SOFTECH codes; an unknown value is kept
+        # as a raw branch code (as before), so the filter never widens
+        wanted = multi_values(p, 'branch')
+        found = {str(b.pk): b.softech_branch_id
+                 for b in Branch.objects.filter(pk__in=multi_ids(p, 'branch'))}
+        codes = [found.get(v, v) for v in wanted] or ['']
+        qs = filter_in(qs, 'source_doc__branch_code', codes)
     pager = ExceptionCursor()
     page = pager.paginate_queryset(qs, request)
     return pager.get_paginated_response([exception_json(e) for e in page])
@@ -453,8 +456,7 @@ def exceptions_list(request):
 def exceptions_counts(request):
     """Open exceptions per kind (optionally one source_type) - the tab badge and kind chips."""
     qs = SourceException.objects.filter(status='open')
-    if request.query_params.get('source_type'):
-        qs = qs.filter(source_doc__source_type=request.query_params['source_type'])
+    qs = filter_in(qs, 'source_doc__source_type', multi_values(request.query_params, 'source_type'))
     by_kind = {r['kind']: r['n'] for r in qs.values('kind').annotate(n=Count('id'))}
     return Response({'total': sum(by_kind.values()), 'by_kind': by_kind})
 

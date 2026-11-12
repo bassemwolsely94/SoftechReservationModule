@@ -122,12 +122,23 @@ def _q_shown(q):
     return mask(q) if phone_key(q) else q
 
 
+def _joined(values, label=None):
+    """A multi-select filter as text: '' (none), 'u1' (one — as before), 'u1,u2' (several)."""
+    return ','.join((label or (lambda v: v))(v) for v in values)
+
+
+def _shown(values, label=None):
+    """The filters sheet: the ticked values joined with «، », or «الكل» when none is ticked."""
+    return '، '.join((label or (lambda v: v))(v) for v in values) or 'الكل'
+
+
 def filters_dict(f):
     """The active filters as plain JSON (the audit entry and the filters sheet)."""
     return {'from': f.start.isoformat(), 'to': f.end.isoformat(),
-            'branch': sorted(f.branch_ids) if f.branch_ids else [], 'salesperson': f.salesperson,
-            'agent': f.agent_ext, 'channel': f.channel_bucket, 'category': f.category, 'segment': f.segment,
-            'customer_type': f.customer_type, 'frequency': f.frequency, 'q': _q_shown(f.q),
+            'branch': sorted(f.branch_ids) if f.branch_ids else [], 'salesperson': _joined(f.salesperson),
+            'agent': _joined(f.agent_ext), 'channel': _joined(f.channel_bucket), 'category': _joined(f.category),
+            'segment': _joined(f.segment), 'customer_type': _joined(f.customer_type),
+            'frequency': _joined(f.frequency), 'q': _q_shown(f.q),
             'data_from': f.data_from.isoformat(), 'data_to': f.data_to.isoformat(), 'clamped': f.clamped}
 
 
@@ -211,11 +222,11 @@ def build_workbook(f, access, exported_by='', calls_f=None, progress=None):
     rows = [
         ('من', f.start.isoformat()), ('إلى', f.end.isoformat()),
         ('الفروع', 'كل الفروع' if ids is None else '، '.join(branch_names.get(i, str(i)) for i in sorted(ids))),
-        ('البائع', f.salesperson or 'الكل'),
-        ('القناة', CHANNEL_LABELS.get(f.channel_bucket, f.channel_bucket) or 'الكل'),
-        ('الصنف', f.category or 'الكل'), ('الشريحة', f.segment or 'الكل'),
-        ('نوع العميل', f.customer_type or 'الكل'), ('فئة التكرار', f.frequency or 'الكل'),
-        ('الرقم الداخلي للموظف', f.agent_ext or 'الكل'), ('بحث (ورقة العملاء فقط)', _q_shown(f.q) or 'بدون'),
+        ('البائع', _shown(f.salesperson)),
+        ('القناة', _shown(f.channel_bucket, lambda c: CHANNEL_LABELS.get(c, c))),
+        ('الصنف', _shown(f.category)), ('الشريحة', _shown(f.segment)),
+        ('نوع العميل', _shown(f.customer_type)), ('فئة التكرار', _shown(f.frequency)),
+        ('الرقم الداخلي للموظف', _shown(f.agent_ext)), ('بحث (ورقة العملاء فقط)', _q_shown(f.q) or 'بدون'),
         ('بيانات متاحة من', f.data_from.isoformat()), ('بيانات متاحة حتى', f.data_to.isoformat()),
         ('الفترة قُصّت على نطاق البيانات', 'نعم' if f.clamped else 'لا'),
         ('تاريخ التصدير', timezone.localtime().strftime('%Y-%m-%d %H:%M')), ('المصدّر', exported_by),

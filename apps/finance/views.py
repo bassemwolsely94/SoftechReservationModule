@@ -8,13 +8,14 @@ Trigger endpoints (sync, discover) additionally require admin/pharmacist role.
 from core.stable_ordering import StableOrderingMixin
 from decimal import Decimal
 
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from rest_framework import filters, generics, status
 from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 
 from core import branch_scope
+from core.multi_filter import filter_in, multi_ids, multi_values
 from core.permissions import deny_unless, matrix_permission
 from core.threads import start_thread
 
@@ -57,6 +58,23 @@ from .serializers import (
 def _fin(qs, request):
     ids = branch_scope.branch_ids(request.user)
     return qs if ids is None else qs.filter(branch_id__in=ids)
+
+
+def _expense_filters(qs, p, sub_category=True):
+    """category / sub_category / branch_id filters of the expense screens — each takes one value or
+    several (?category=rent,salaries). Applied after _fin, so they only narrow the branch scope; a
+    branch_id made only of junk matches nothing. sub_category keeps its contains-match, OR'ed."""
+    qs = filter_in(qs, 'category', multi_values(p, 'category'))
+    if sub_category:
+        subs = multi_values(p, 'sub_category')
+        if subs:
+            cond = Q()
+            for s in subs:
+                cond |= Q(sub_category__icontains=s)
+            qs = qs.filter(cond)
+    if p.get('branch_id'):
+        qs = filter_in(qs, 'branch_id', multi_ids(p, 'branch_id') or [0])
+    return qs
 
 
 def _company(request):
@@ -470,9 +488,6 @@ class ExpenseRecordListView(StableOrderingMixin, generics.ListAPIView):
         month        = p.get('month')
         date_from    = p.get('date_from')   # YYYY-MM-DD free-range start
         date_to      = p.get('date_to')     # YYYY-MM-DD free-range end
-        category     = p.get('category')
-        branch_id    = p.get('branch_id')
-        sub_category = p.get('sub_category')
 
         # Period filtering — prefer free date range when supplied
         if date_from:
@@ -491,13 +506,7 @@ class ExpenseRecordListView(StableOrderingMixin, generics.ListAPIView):
             elif year:
                 qs = qs.filter(period__year=int(year))
 
-        if category:
-            qs = qs.filter(category=category)
-        if sub_category:
-            qs = qs.filter(sub_category__icontains=sub_category)
-        if branch_id:
-            qs = qs.filter(branch_id=branch_id)
-        return qs
+        return _expense_filters(qs, p)   # category / sub_category / branch: one or several
 
 
 @api_view(['GET'])
@@ -511,10 +520,8 @@ def expense_breakdown(request):
         return Response({'detail': 'Period not found.'}, status=404)
 
     p         = request.query_params
-    branch_id = p.get('branch_id')
     date_from = p.get('date_from')
     date_to   = p.get('date_to')
-    category  = p.get('category')
 
     # Build the base queryset — use free date range when supplied
     if date_from or date_to:
@@ -528,11 +535,7 @@ def expense_breakdown(request):
         qs = ExpenseRecord.objects.filter(period=period)
         period_label = period.label
 
-    qs = _fin(qs, request)
-    if branch_id:
-        qs = qs.filter(branch_id=branch_id)
-    if category:
-        qs = qs.filter(category=category)
+    qs = _expense_filters(_fin(qs, request), p, sub_category=False)
 
     by_category = list(
         qs.values('category')
@@ -570,8 +573,6 @@ def expense_subcategories(request):
     year      = p.get('year')
     month     = p.get('month')
     period_id = p.get('period_id')
-    category  = p.get('category')
-    branch_id = p.get('branch_id')
 
     if date_from or date_to:
         qs = ExpenseRecord.objects.all()
@@ -592,11 +593,7 @@ def expense_subcategories(request):
         else:
             qs = ExpenseRecord.objects.all()
 
-    qs = _fin(qs, request)
-    if category:
-        qs = qs.filter(category=category)
-    if branch_id:
-        qs = qs.filter(branch_id=branch_id)
+    qs = _expense_filters(_fin(qs, request), p, sub_category=False)
 
     result = list(
         qs.exclude(sub_category='')
@@ -621,11 +618,9 @@ class FinanceSchemaTableListView(generics.ListAPIView):
 
     def get_queryset(self):
         qs = FinanceSchemaTable.objects.all()
-        cat       = self.request.query_params.get('category')
         confirmed = self.request.query_params.get('is_confirmed')
         enabled   = self.request.query_params.get('sync_enabled')
-        if cat:
-            qs = qs.filter(category=cat)
+        qs = filter_in(qs, 'category', multi_values(self.request.query_params, 'category'))  # one or several
         if confirmed is not None:
             qs = qs.filter(is_confirmed=confirmed.lower() == 'true')
         if enabled is not None:
