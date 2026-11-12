@@ -1,6 +1,6 @@
 # Data lifecycle and data health — design
 
-**Date:** 2026-11-07. **Status:** awaiting owner approval. Nothing is built.
+**Date:** 2026-11-07. **Status:** approved. Stage 4 (upload controls) built on branch `claude/data-lifecycle-stage-4-6acc36`, not merged; it lands after Stage 3. Stage 5 not built.
 **Arabic name:** صحة البيانات. **Extends:** P-56 retention
 ([spec](../../product-review/06_SPEC_P-56_retention_and_sync_health.md), `apps/sync/maintenance.py`).
 

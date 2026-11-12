@@ -671,7 +671,10 @@ async def run_bridge():
                                  last_error_at=timezone.now())
             await asyncio.sleep(60)
         except Exception as exc:
-            logger.error('AMI bridge disconnected: %s — reconnecting in 10s', exc)
+            reason = f'{type(exc).__name__}: {exc}'.rstrip(': ')
+            if isinstance(exc, (asyncio.TimeoutError, TimeoutError)):
+                reason += f' — {host}:{port} did not answer (network / VPN / firewall)'
+            logger.error('AMI bridge disconnected: %s — reconnecting in 10s', reason)
             await _record_status(state='disconnected',
                                  last_error=f'{type(exc).__name__}: {exc}'[:500],
                                  last_error_at=timezone.now())

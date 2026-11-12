@@ -149,6 +149,8 @@ sudo systemctl enable nginx
 sudo systemctl restart nginx
 ```
 
+`nginx.conf` gives the GL routes that read SOFTECH on the request their own location with `proxy_read_timeout 600s`. Copy the file again and reload nginx whenever it changes.
+
 ### SSL with Let's Encrypt:
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
@@ -246,7 +248,9 @@ Never set `SCHEDULER_AUTOSTART=True` in `.env`.
 
 ```bash
 sudo -u postgres pg_dump -Fc elrezeiky_db > /opt/elrezeiky/backups/elrezeiky_$(date +%F_%H%M).dump
-tar czf /opt/elrezeiky/backups/media_$(date +%F).tgz -C /opt/elrezeiky media
+# media_hold (LIFECYCLE_HOLD_ROOT) must exist first, or tar fails: the app only creates it on the first move
+sudo -u elrezeiky mkdir -p /opt/elrezeiky/media_hold
+tar czf /opt/elrezeiky/backups/media_$(date +%F).tgz -C /opt/elrezeiky media media_hold
 # restore: sudo -u postgres pg_restore --clean -d elrezeiky_db <file>.dump
 ```
 Schedule the pg_dump nightly (cron) and keep at least 7 days. SOFTECH itself is

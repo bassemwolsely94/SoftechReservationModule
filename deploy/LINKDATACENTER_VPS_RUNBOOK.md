@@ -1022,11 +1022,14 @@ the lines match — compare with what the office produced for the same invoice.
 ```bash
 sudo cp deploy/elrezeiky-web.service       /etc/systemd/system/
 sudo cp deploy/elrezeiky-scheduler.service /etc/systemd/system/
+sudo cp deploy/elrezeiky-ami-bridge.service /etc/systemd/system/
 sudo sed -i 's#WorkingDirectory=/opt/elrezeiky#WorkingDirectory=/opt/elrezeiky/app#; s#EnvironmentFile=/opt/elrezeiky/.env#EnvironmentFile=/opt/elrezeiky/app/.env#' \
-     /etc/systemd/system/elrezeiky-web.service /etc/systemd/system/elrezeiky-scheduler.service
+     /etc/systemd/system/elrezeiky-web.service /etc/systemd/system/elrezeiky-scheduler.service \
+     /etc/systemd/system/elrezeiky-ami-bridge.service
 sudo systemctl daemon-reload
 sudo systemctl enable elrezeiky-web          # start it after the data restore (section 10)
-# the scheduler is NOT enabled yet — only at cutover (section 11)
+# the scheduler and the AMI bridge are NOT enabled yet — only at cutover (section 11);
+# like the scheduler, exactly ONE AMI bridge may run (two bridges record every call twice)
 ```
 Both units already start after Redis and the VPN (`zerotier-one`, `elrezeiky-tunnel-watch`) on
 reboot. (Not `wg-quick@wg0`: WireGuard is dormant and disabled — section 5.0.) The OCR sidecar
@@ -1760,8 +1763,29 @@ with `SOFTECH_READ_ONLY=True` confirm a writer dry-run is refused. Then in the V
 - Meta developer console → WhatsApp → Configuration → Webhook URL
   `https://elrezeikyapp.dawalvry.com/api/whatsapp/webhook/` (same verify token). Same for
   Messenger/Instagram/Telegram webhooks under `/api/social/…`.
-- AMI bridge: Issabel must allow AMI logins from the HQ router's LAN IP (src-NAT, section 5.2 e). Check
-  `/pbx/live` shows calls.
+- AMI bridge: Issabel must allow AMI logins from the HQ router's LAN IP (src-NAT, section 5.2 e).
+  Stop the office copy first (Task Manager: no `python.exe … run_ami_bridge`), then
+  `sudo systemctl enable --now elrezeiky-ami-bridge` and check `/pbx/live` → «⚙️ إعدادات السنترال»
+  → «🩺 فحص الاتصال»: every step green, the badge «السنترال: متصل».
+- Issabel recordings (playback + transcription): on Issabel create a read-only SFTP user in the
+  `asterisk` group (`useradd -m -G asterisk recreader && passwd recreader`); in
+  `/etc/ssh/sshd_config` add `Match User recreader` / `ForceCommand internal-sftp` /
+  `AllowTcpForwarding no`, restart sshd; the HQ router must forward port 22 to Issabel like
+  5038/3306. Fill `PBX_RECORDINGS_SFTP_*` in `.env`; «🩺 فحص الاتصال» reads the latest recording.
+- Browser phone (WebRTC, optional per agent): on Issabel enable the secure websocket —
+  `/etc/asterisk/http_custom.conf`: `tlsenable=yes`, `tlsbindaddr=0.0.0.0:8089`, a certificate the
+  agents' browsers trust (`tlscertfile`/`tlsprivatekey`); per agent extension (PBX → Extensions →
+  Advanced): transport `wss,udp`, `avpf=yes`, `force_avp=yes`, `icesupport=yes`,
+  `encryption=yes`, `dtlsenable=yes`, `dtlsverify=fingerprint`, `dtlssetup=actpass`; Apply Config.
+  Then `.env`: `PBX_WEBRTC_WSS_URL=wss://<issabel-name>:8089/ws`, `PBX_WEBRTC_SIP_DOMAIN=<issabel-name>`;
+  in «⚙️ إعدادات السنترال» → «ربط» tick «🎧 هاتف المتصفح» and enter the extension's SIP secret.
+  Agents' browsers reach Issabel directly (office LAN or VPN) — the VPS only hands out the settings.
+- Whisper (owner decision 2026-11-09): this server only queues (`WHISPER_ENABLED=True`,
+  `WHISPER_LAUNCH_RUNNER=False`). The office PC transcribes: Windows Task Scheduler, daily 02:00,
+  `venv\Scripts\python.exe manage.py run_whisper_queue`, «Run whether user is logged on or not»,
+  «Stop the task if it runs longer than 4 hours». Its `.env` points `PG_HOST` at this server's
+  database over the tunnel (a login with write access to the callcenter tables only), has
+  `WHISPER_ENABLED=True` + the SFTP lines, and it must **not** run `run_scheduler`.
 - Web Push: users may need to re-enable notifications once (new origin = new subscription).
 - `FRONTEND_BASE_URL` makes WhatsApp/portal links point at the new domain.
 
@@ -1788,13 +1812,16 @@ services disabled. Rollback = reverse 11.3–11.6 (stop VPS scheduler+writers fi
 
 ```bash
 sudo -u elrezeiky mkdir -p /opt/elrezeiky/backups
+# The holding folder of the data lifecycle must exist before the Friday tar: the app only creates it on the first
+# move, and until then the tar fails and the old-backup cleanup after it is skipped.
+sudo -u elrezeiky mkdir -p /opt/elrezeiky/app/media_hold
 sudo -u elrezeiky crontab -e
 ```
 ```cron
 # 02:30 nightly DB dump, keep 14 days
 30 2 * * * pg_dump -h localhost -U elrezeiky -Fc -Z 6 elrezeiky_db -f /opt/elrezeiky/backups/db_$(date +\%F).dump && find /opt/elrezeiky/backups -name 'db_*.dump' -mtime +14 -delete
 # 03:15 weekly media archive (Fridays), keep 4
-15 3 * * 5 tar czf /opt/elrezeiky/backups/media_$(date +\%F).tgz -C /opt/elrezeiky/app media && find /opt/elrezeiky/backups -name 'media_*.tgz' -mtime +28 -delete
+15 3 * * 5 tar czf /opt/elrezeiky/backups/media_$(date +\%F).tgz -C /opt/elrezeiky/app media media_hold && find /opt/elrezeiky/backups -name 'media_*.tgz' -mtime +28 -delete
 ```
 (Add `elrezeiky`'s password to `/opt/elrezeiky/.pgpass`, `localhost:5432:elrezeiky_db:elrezeiky:<pw>`, chmod 600.)
 

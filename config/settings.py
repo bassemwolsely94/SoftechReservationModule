@@ -414,6 +414,9 @@ if _RUNNING_TESTS:      # tests must never write to the real media folder
 LIFECYCLE_FILE_RULES_ENABLED = config('LIFECYCLE_FILE_RULES_ENABLED', default=False, cast=bool)
 # Removed files wait here for 30 days. Outside MEDIA_ROOT, so never reachable by URL.
 LIFECYCLE_HOLD_ROOT = config('LIFECYCLE_HOLD_ROOT', default=BASE_DIR / 'media_hold', cast=Path)
+if _RUNNING_TESTS:      # nor to the real holding folder
+    LIFECYCLE_HOLD_ROOT = Path(tempfile.mkdtemp(prefix='elrezeiky_test_media_hold_'))
+    atexit.register(shutil.rmtree, LIFECYCLE_HOLD_ROOT, ignore_errors=True)
 # /data-health warns when the disk is this full (percent).
 DATA_HEALTH_DISK_LEVEL_PERCENT = config('DATA_HEALTH_DISK_LEVEL_PERCENT', default=80, cast=int)
 # Uploaded files get signed, expiring URLs (core/storage.py); /media/ is served by
@@ -941,6 +944,9 @@ AMI_PORT   = config('AMI_PORT', default=5038, cast=int)
 AMI_USER   = config('AMI_USER', default='')
 AMI_SECRET = config('AMI_SECRET', default='')
 AMI_DIAL_CONTEXT = config('AMI_DIAL_CONTEXT', default='')
+# Browser phone (WebRTC over Issabel's WSS). Empty URL = feature off.
+PBX_WEBRTC_WSS_URL    = config('PBX_WEBRTC_WSS_URL', default='')
+PBX_WEBRTC_SIP_DOMAIN = config('PBX_WEBRTC_SIP_DOMAIN', default='')
 # Recordings over SFTP (read-only download of single files from the monitor dir)
 PBX_RECORDINGS_ROOT          = config('PBX_RECORDINGS_ROOT', default='/var/spool/asterisk/monitor')
 PBX_RECORDINGS_SFTP_HOST     = config('PBX_RECORDINGS_SFTP_HOST', default='')
@@ -953,6 +959,9 @@ PBX_RECORDINGS_SFTP_KEY_FILE = config('PBX_RECORDINGS_SFTP_KEY_FILE', default=''
 CALLCENTER_AUTO_TRANSCRIBE             = config('CALLCENTER_AUTO_TRANSCRIBE', default=False, cast=bool)
 CALLCENTER_AUTO_TRANSCRIBE_MIN_SECONDS = config('CALLCENTER_AUTO_TRANSCRIBE_MIN_SECONDS', default=20, cast=int)
 WHISPER_ENABLED     = config('WHISPER_ENABLED', default=False, cast=bool)
+# False on a machine that only queues (the VPS); the transcribing machine runs
+# `manage.py run_whisper_queue` from its own nightly task instead of the scheduler.
+WHISPER_LAUNCH_RUNNER = config('WHISPER_LAUNCH_RUNNER', default=True, cast=bool)
 WHISPER_MIN_SECONDS = config('WHISPER_MIN_SECONDS', default=20, cast=int)
 WHISPER_MODEL_DIR   = config('WHISPER_MODEL_DIR', default='')
 WHISPER_EXTRA_TERMS = [t.strip() for t in config('WHISPER_EXTRA_TERMS', default='').split(',') if t.strip()]

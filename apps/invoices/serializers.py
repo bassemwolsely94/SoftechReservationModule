@@ -205,7 +205,7 @@ class SupplierInvoiceCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = SupplierInvoice
         fields = [
-            'branch', 'vendor', 'doc_kind', 'supplier_name', 'invoice_number', 'invoice_date',
+            'id', 'branch', 'vendor', 'doc_kind', 'supplier_name', 'invoice_number', 'invoice_date',
             'currency', 'global_discount_pct', 'global_discount_amt',
             'return_of_docnumber', 'source_image', 'notes',
         ]
@@ -257,4 +257,4 @@ class InvoiceBatchDetailSerializer(InvoiceBatchListSerializer):
 class InvoiceBatchCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = InvoiceBatch
-        fields = ['branch', 'vendor', 'doc_kind', 'ocr_engine', 'source_file']
+        fields = ['id', 'branch', 'vendor', 'doc_kind', 'ocr_engine', 'source_file']

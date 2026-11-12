@@ -12,12 +12,25 @@ extension are ignored. Images are decoded by Pillow; PDFs and videos are checked
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import uuid
 
 from django.core.exceptions import RequestDataTooBig, ValidationError
 from django.core.files.base import ContentFile
 from django.core.files.uploadhandler import FileUploadHandler
+
+
+def sha256_of(f) -> str:
+    """SHA-256 (hex) of an uploaded file, read in chunks; the file is left rewound to 0."""
+    h = hashlib.sha256()
+    f.seek(0)
+    chunks = f.chunks() if hasattr(f, 'chunks') else iter(lambda: f.read(1024 * 1024), b'')
+    for chunk in chunks:
+        h.update(chunk)
+    f.seek(0)
+    return h.hexdigest()
+
 
 IMAGE_FORMATS = {'JPEG': 'jpg', 'PNG': 'png', 'WEBP': 'webp', 'GIF': 'gif'}
 
@@ -72,10 +85,14 @@ class UploadSizeLimitHandler(FileUploadHandler):
         return None                     # the next handler builds the file
 
 
+def max_import_rows() -> int:
+    from django.conf import settings
+    return int(getattr(settings, 'MAX_IMPORT_ROWS', 50_000))
+
+
 def capped_rows(rows):
     """Yield import rows, stopping with a clear ValueError past MAX_IMPORT_ROWS (header included)."""
-    from django.conf import settings
-    limit = int(getattr(settings, 'MAX_IMPORT_ROWS', 50_000))
+    limit = max_import_rows()
     for n, row in enumerate(rows):
         if n >= limit:
             raise ValueError(f'الملف أكبر من الحد المسموح ({limit} صف) — قسّمه إلى ملفات أصغر')
@@ -92,3 +109,47 @@ def public_upload(f, kind: str = 'image', prefix: str = '') -> ContentFile:
     if ext is None:
         raise ValidationError('نوع الملف غير مدعوم أو الملف تالف')
     return ContentFile(data, name=f'{prefix}{uuid.uuid4().hex[:12]}.{ext}')
+
+
+_SHRINK_FORMATS = {'JPEG', 'MPO', 'PNG', 'WEBP'}
+
+
+def shrink_image(data: bytes, longest_side: int, quality: int = 85) -> bytes | None:
+    """Return a smaller copy of an image, or None when the data should be stored as is.
+
+    None means: not an image Pillow opens, animated, a format other than JPEG/MPO/PNG/WEBP, already within
+    `longest_side`, any error, or a result that is not smaller. EXIF orientation is applied, then EXIF is dropped; an ICC colour profile is kept.
+    """
+    from PIL import Image, ImageOps
+    try:
+        with Image.open(io.BytesIO(data)) as img:
+            fmt = img.format
+            if fmt not in _SHRINK_FORMATS:
+                return None
+            # MPO (phone cameras) is a JPEG with extra frames: use the first frame. Others must be single frame.
+            if fmt != 'MPO' and getattr(img, 'is_animated', False):
+                return None
+            # CMYK and other unusual modes are stored unchanged (a colour conversion could shift a prescription)
+            ok_modes = ('RGB', 'L') if fmt in ('JPEG', 'MPO') else ('RGB', 'L', 'P', 'RGBA', 'LA')
+            if img.mode not in ok_modes:
+                return None
+            if max(img.size) <= longest_side:
+                return None
+            img.load()
+            out = ImageOps.exif_transpose(img)
+            out.thumbnail((longest_side, longest_side), Image.Resampling.LANCZOS)
+            buf = io.BytesIO()
+            # keep the colour profile (phone photos in Display P3 would otherwise shift colour)
+            extra = {'icc_profile': img.info['icc_profile']} if img.info.get('icc_profile') else {}
+            if fmt in ('JPEG', 'MPO'):
+                out.save(buf, format='JPEG', quality=quality, optimize=True, **extra)
+            elif fmt == 'PNG':
+                out.save(buf, format='PNG', optimize=True, **extra)
+            else:
+                out.save(buf, format='WEBP', quality=quality, **extra)
+    except Image.DecompressionBombError:
+        return None
+    except Exception:
+        return None
+    result = buf.getvalue()
+    return result if len(result) < len(data) else None

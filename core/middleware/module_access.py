@@ -90,7 +90,8 @@ OPEN_READ_PATHS = ('/api/users/my-permissions/', '/api/sync/freshness/', '/api/s
                    '/api/cheques/holidays/',    # public-holiday calendar, no business data (Z-3)
                    '/api/users/erp-permissions/me/',   # the caller's own SOFTECH group (Z-4)
                    '/api/sync/branch-health/',         # SOFTECH node up/down — pricing panel (Z-4)
-                   '/api/pbx/my-extension/')           # the caller's own PBX extension — POS screen-pop (Z-8b)
+                   '/api/pbx/my-extension/',           # the caller's own PBX extension — POS screen-pop (Z-8b)
+                   '/api/pbx/webrtc/config/')          # the caller's own extension's browser phone (Z-8b)
 # Exact paths, not prefixes: the staff picker list every screen loads (tasks, demand, HR forms,
 # follow-ups, incentives) — slim fields for roles without users view; a record needs users (Z-4).
 OPEN_READ_EXACT = ('/api/users/staff/',
@@ -295,6 +296,21 @@ def required(path, method):
         # Ruling P23: deciding on an accountant-edited entry SOFTECH changed = approve
         if parts[4:5] == ['exceptions'] and parts[6:7] in (['accept-softech'], ['keep-edit']):
             return 'ledger', ('approve',)
+        # Close and reconcile (Plan 3): closing and reopening a month = finalize; a comparison refresh only
+        # reads and recomputes = view; explaining a difference = approve; the checks and the closing-stock store
+        # map = edit; the validation report = export. Corrections and the manual import = create.
+        if parts[4:5] == ['periods'] and parts[6:7] in (['close'], ['reopen']):
+            return 'ledger', ('finalize',)
+        if parts[4:5] == ['compare'] and parts[5:6] == ['refresh']:
+            return 'ledger', ('view',)
+        if parts[4:5] == ['compare'] and parts[5:6] == ['checks']:
+            return 'ledger', ('edit',)
+        if parts[4:5] == ['compare'] and parts[5:6] == ['lines'] and parts[7:8] == ['explain']:
+            return 'ledger', ('approve',)
+        if parts[4:5] == ['closing-stock-stores']:
+            return 'ledger', ('edit',)
+        if parts[4:5] == ['validation']:
+            return 'ledger', ('export',)
         return 'ledger', ('create',)
     # Market Shortage reads the engine's run status and the shortage screen the vendor list:
     # `shortage` view (purchasing holds it too) — owner decision 2026-10-28, map by screen (Z-7a)
@@ -389,6 +405,9 @@ def required(path, method):
                              or (prefix == 'callcenter' and parts[3:4] == ['transcripts'] and parts[5:6] == ['correct'])
                              or (prefix == 'stockcount' and parts[5:6] == ['preview-items'])
                              or (prefix == 'incentives' and parts[3:4] == ['programs'] and parts[5:6] == ['simulate'])):
+        return MODULE_BY_PREFIX[prefix], ('view',)
+    # editing a call's score is the same act as giving it (the view keeps its QA role check, Z-8b)
+    if method == 'PATCH' and prefix == 'callcenter' and parts[3:4] == ['calls'] and parts[5:6] == ['quality']:
         return MODULE_BY_PREFIX[prefix], ('view',)
     if method == 'POST' and prefix == 'hr' and parts[5:6] == ['cancel']:
         return 'hr', ('view',)

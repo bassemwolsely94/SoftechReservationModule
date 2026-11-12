@@ -9,7 +9,7 @@ A failure must never lose a document, so:
 - The file moves first and the database follows in one transaction; if any of that fails the file goes back.
 - A move never overwrites anything. If the file cannot go back, it stays in the holding folder, and
   FileStranded plus a critical log line say where.
-- Nothing is recorded as purged unless the file really was deleted.
+- Nothing is recorded as purged unless the file really was deleted, or an admin said it is lost (mark_lost).
 
 hold_file and restore refuse to run inside a caller's transaction (durable=True): a later rollback would revert
 the rows and the HeldFile but could not move the file back.
@@ -25,7 +25,7 @@ import logging
 import os
 import shutil
 import uuid
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from django.apps import apps
 from django.conf import settings
@@ -40,6 +40,15 @@ logger = logging.getLogger('elrezeiky.sync')
 
 HOLD_DAYS = 30
 AUDIT_ACTION = 'lifecycle_file_restored'
+RETRIEVE_AUDIT_ACTION = 'lifecycle_file_retrieved'
+
+# Holds made because staff deleted a record or replaced its file (follow.py), not by a retention rule. Floors do
+# not apply: 30 days, then purged. The record is gone or holds a new file, so such a file is only ever retrieved
+# as a copy, never put back.
+RECORD_DELETED = 'record_deleted'
+FILE_REPLACED = 'file_replaced'
+STAFF_RULE_KEYS = (RECORD_DELETED, FILE_REPLACED)
+AUDIT_ACTION_LOST = 'lifecycle_file_marked_lost'
 HASH_CHUNK = 1024 * 1024
 
 
@@ -130,11 +139,12 @@ def _check_row(row):
         raise HoldError('بيانات السجل غير مكتملة، فلم يُنقل الملف.')
 
 
-def hold_file(path, rows, rule_key):
+def hold_file(path, rows, rule_key, *, origin=None, deleted_by=None):
     """Move a file (`path` relative to MEDIA_ROOT) to the holding folder and clear every reference to it.
     `rows` is a list of {model: 'app.Model', pk, field, value}, value being the field's exact current content.
-    A file no record uses has rows=[]. Returns the HeldFile. Raises HoldError; the file is then back in place,
-    unless it is FileStranded."""
+    A file no record uses has rows=[]. `origin` ({model, pk, field}) names the record a file came from when
+    `rows` is empty, for a staff deletion or replacement; `deleted_by` is the StaffProfile who made it.
+    Returns the HeldFile. Raises HoldError; the file is then back in place, unless it is FileStranded."""
     moved, ref = None, ''
     try:
         root, media = _hold_root(), _media_root()
@@ -146,7 +156,7 @@ def hold_file(path, rows, rule_key):
         hold_name = uuid.uuid4().hex + source.suffix
         target = root / hold_name
         size, sha256 = source.stat().st_size, _sha256(source)
-        first = rows[0] if rows else {}
+        first = rows[0] if rows else (origin or {})
         # The HeldFile insert rolls back in the case this is for, so this line is all that says what the file is.
         ref = (f'it is in the holding folder as {hold_name}; rule_key={rule_key} '
                f'primary_model={first.get("model", "")} primary_pk={first.get("pk", "")} '
@@ -161,7 +171,7 @@ def hold_file(path, rows, rule_key):
                 original_path=source.relative_to(media).as_posix(), hold_path=hold_name, rule_key=rule_key,
                 size=size, sha256=sha256, moved_at=now, purge_after=now + datetime.timedelta(days=HOLD_DAYS),
                 primary_model=first.get('model', ''), primary_pk=str(first.get('pk', '')),
-                primary_field=first.get('field', ''), rows=rows)
+                primary_field=first.get('field', ''), rows=rows, deleted_by=deleted_by)
     except BaseException as exc:
         _after_failure(exc, moved, ref)
 
@@ -169,7 +179,8 @@ def hold_file(path, rows, rule_key):
 def restore(held_id, user):
     """Put a held file back at its original path and write each row's value back, with AuditLog. Refused when
     the path is occupied, a row is gone or no longer empty, or the bytes are not the ones held. The row lock
-    keeps a second restore and the purge out meanwhile."""
+    keeps a second restore and the purge out meanwhile. A staff deletion or replacement (STAFF_RULE_KEYS) is
+    refused: there is no record to put it back into; use retrieve."""
     moved = None
     try:
         if user is None:
@@ -181,6 +192,9 @@ def restore(held_id, user):
                 raise HoldError('الملف المحجوز غير موجود.')
             if held.restored_at or held.purged_at:
                 raise HoldError('تم استرجاع هذا الملف أو حذفه نهائيًا من قبل.')
+            if held.rule_key in STAFF_RULE_KEYS:
+                raise HoldError('هذا الملف حذفه أو استبدله مستخدم، فيمكن استرجاع نسخة منه فقط، '
+                                'ولا يمكن إعادته إلى السجل.')
             source, home = _inside(root, held.hold_path), _inside(media, held.original_path)
             if os.path.lexists(home):
                 raise HoldError('يوجد ملف آخر في المسار الأصلي، فلم يُسترجع الملف.')
@@ -204,16 +218,102 @@ def restore(held_id, user):
     return held
 
 
+def retrieve(held_id, user):
+    """(bytes, original file name) of a held file, with AuditLog. The held file stays where it is. Refused when
+    it was restored or purged, is missing, or its bytes are not the ones held. Who may call this is the
+    caller's check (server-side, admin only)."""
+    try:
+        if user is None:
+            raise HoldError('يجب تحديد المستخدم الذي يسترجع الملف.')
+        root = _hold_root()
+        held = HeldFile.objects.filter(pk=held_id).first()
+        if held is None:
+            raise HoldError('الملف المحجوز غير موجود.')
+        if held.restored_at or held.purged_at:
+            raise HoldError('تم استرجاع هذا الملف أو حذفه نهائيًا من قبل.')
+        source = _inside(root, held.hold_path)
+        if not source.is_file():
+            raise HoldError('الملف المحجوز مفقود أو تغيّر محتواه، فلم يُسترجع.')
+        data = source.read_bytes()
+        if hashlib.sha256(data).hexdigest() != held.sha256:
+            raise HoldError('الملف المحجوز مفقود أو تغيّر محتواه، فلم يُسترجع.')
+        if AuditLog.log(RETRIEVE_AUDIT_ACTION, user=user, obj=held,
+                        extra={'rule_key': held.rule_key, 'primary_model': held.primary_model,
+                               'primary_pk': held.primary_pk, 'primary_field': held.primary_field}) is None:
+            raise HoldError('تعذر تسجيل الاسترجاع في سجل المراجعة، فلم يُسترجع الملف.')
+    except HoldError:
+        raise
+    except Exception as exc:
+        raise HoldError(f'لم تكتمل العملية ({type(exc).__name__}).') from None
+    return data, PurePosixPath(held.original_path).name
+def _is_missing(path):
+    """True only when nothing at all is at `path`. A permission or disk error raises instead of looking missing."""
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return True
+    return False
+
+
+def _existing_hold_root():
+    root = _hold_root()
+    if not root.is_dir():
+        raise HoldError('مجلد الحجز LIFECYCLE_HOLD_ROOT غير موجود، فلم يُحذف أي ملف. راجع الإعداد.')
+    return root
+
+
+def _find_missing(root, rows):
+    """The ids of due held files that are not on disk. A row whose path cannot be checked is left out here and
+    fails in the purge loop instead."""
+    missing = set()
+    for held_id, hold_path in rows:
+        try:
+            if _is_missing(_inside(root, hold_path)):
+                missing.add(held_id)
+        except Exception:
+            continue
+    return missing
+
+
+def _alert_missing(held_id, now):
+    """One admin alert a day per held id. The message names the id only, never the file."""
+    from apps.sync.maintenance import _alert_admins
+    try:
+        _alert_admins('🟠 ملف محجوز مفقود',
+                      f'الملف المحجوز رقم {held_id} غير موجود في مجلد الحجز في موعد حذفه، فتم تخطيه ولم يُسجَّل '
+                      f'كمحذوف. لو تأكدت أنه فُقد: manage.py lifecycle mark-lost {held_id} --user <admin> '
+                      f'--reason "..."',
+                      f'lifecycle_held_missing_{held_id}_{timezone.localtime(now).date().isoformat()}')
+    except Exception as exc:
+        logger.error('[lifecycle] alert for missing held %s failed: %s', held_id, type(exc).__name__)
+
+
 def purge_expired(now=None):
     """Delete every held file past its date that was not restored. The row stays, so the removal date stays
-    known. One failure does not stop the others, but the step then raises so the retention run shows it. A
-    file that is already missing is a failure too: it may mean a wrong LIFECYCLE_HOLD_ROOT, so it must not be
-    recorded as purged. Returns how many were purged."""
+    known. One failure does not stop the others, but the step then raises so the retention run shows it.
+
+    A held file already missing from disk is not recorded as purged. One such file is skipped with a daily admin
+    alert (an admin closes it with mark_lost), so it cannot fail the step every day. But a missing hold root, or
+    more than half of the due files missing (two or more), likely means a wrong LIFECYCLE_HOLD_ROOT: then the
+    step raises before deleting anything. With nothing due, the hold root is not read at all.
+    Returns how many were purged."""
     now = now or timezone.now()
-    root = _hold_root()
     due = HeldFile.objects.filter(purge_after__lte=now, restored_at__isnull=True, purged_at__isnull=True)
+    rows = list(due.order_by('pk').values_list('pk', 'hold_path'))
+    if not rows:
+        return 0
+    root = _existing_hold_root()
+    missing = _find_missing(root, rows)
+    if len(missing) >= 2 and len(missing) * 2 > len(rows):
+        logger.error('[lifecycle] purge stopped: %s of %s due held files are missing', len(missing), len(rows))
+        raise HoldError(f'{len(missing)} من {len(rows)} ملف محجوز غير موجود في مجلد الحجز، وقد يكون المجلد خطأ. '
+                        f'لم يُحذف أي ملف.')
     purged, failed = 0, 0
-    for held_id in list(due.order_by('pk').values_list('pk', flat=True)):
+    for held_id, _ in rows:
+        if held_id in missing:
+            logger.warning('[lifecycle] held %s is missing from the hold folder; skipped', held_id)
+            _alert_missing(held_id, now)
+            continue
         try:
             with transaction.atomic():
                 held = due.select_for_update().filter(pk=held_id).first()
@@ -232,3 +332,35 @@ def purge_expired(now=None):
     if failed:
         raise HoldError(f'تعذر حذف {failed} ملف محجوز، وتم حذف {purged}. راجع السجل.')
     return purged
+
+
+def mark_lost(held_id, user, reason):
+    """Close a held file that is really gone from the hold folder: sets purged_at, with AuditLog. Refused while
+    anything is at its path, when the hold root itself is missing, or when the record is already closed. Who
+    may call it is the caller's check (admin only)."""
+    reason = (reason or '').strip()
+    if user is None or not reason:
+        raise HoldError('يجب تحديد المستخدم وسبب اعتبار الملف مفقودًا.')
+    try:
+        root = _existing_hold_root()
+        with transaction.atomic(durable=True):
+            held = HeldFile.objects.select_for_update().filter(pk=held_id).first()
+            if held is None:
+                raise HoldError('الملف المحجوز غير موجود.')
+            if held.restored_at or held.purged_at:
+                raise HoldError('تم استرجاع هذا الملف أو حذفه نهائيًا من قبل.')
+            if not _is_missing(_inside(root, held.hold_path)):
+                raise HoldError('الملف ما زال موجودًا في مجلد الحجز، فلا يُعتبر مفقودًا.')
+            held.purged_at = timezone.now()
+            held.save(update_fields=['purged_at'])
+            # AuditLog.log returns None instead of raising; rule 8 says no unaudited change may stick.
+            if AuditLog.log(AUDIT_ACTION_LOST, user=user, obj=held, old_data={'purged_at': None},
+                            new_data={'purged_at': held.purged_at.isoformat()},
+                            extra={'reason': reason, 'rule_key': held.rule_key, 'primary_model': held.primary_model,
+                                   'primary_pk': held.primary_pk, 'primary_field': held.primary_field}) is None:
+                raise HoldError('تعذر التسجيل في سجل المراجعة، فلم يتغير شيء.')
+    except HoldError:
+        raise
+    except Exception as exc:
+        raise HoldError(f'لم تكتمل العملية ({type(exc).__name__}).') from None
+    return held

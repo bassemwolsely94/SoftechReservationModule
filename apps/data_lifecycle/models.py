@@ -80,7 +80,8 @@ class HeldFile(models.Model):
 
     `rows` lists every reference that was cleared as {model, pk, field, value}, because one file can
     have several rows. primary_* is the first of them, indexed so a screen can find the held file of a
-    record. All blank when no record used the file (rule `unreferenced`)."""
+    record. All blank when no record used the file (rule `unreferenced`). For a staff deletion or replacement
+    `rows` is empty (nothing is left to clear) and primary_* says which record the file came from."""
     original_path = models.CharField(max_length=500)
     hold_path = models.CharField(max_length=500)
     rule_key = models.CharField(max_length=40, db_index=True)
@@ -92,6 +93,10 @@ class HeldFile(models.Model):
     restored_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
                                     related_name='+')
     purged_at = models.DateTimeField(null=True, blank=True)
+    # Who deleted the record or replaced the file (rule_key record_deleted / file_replaced). Null for a rule's
+    # own hold and for a change made outside a request.
+    deleted_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+')
     primary_model = models.CharField(max_length=100, blank=True)
     primary_pk = models.CharField(max_length=64, blank=True)
     primary_field = models.CharField(max_length=100, blank=True)

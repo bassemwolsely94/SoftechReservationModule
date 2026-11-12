@@ -14,7 +14,7 @@ class ReservationImageSerializer(RetentionNoteMixin, serializers.ModelSerializer
     uploaded_by_name = serializers.CharField(source='uploaded_by.full_name', read_only=True)
 
     def get_image_url(self, obj):
-        if not obj.image:       # the data lifecycle removed the file and kept the row
+        if not obj.image:          # file missing or removed by the data lifecycle: keep the reservation working
             return None
         request = self.context.get('request')
         if request:

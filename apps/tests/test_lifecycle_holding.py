@@ -13,6 +13,7 @@ from io import StringIO
 from pathlib import Path
 from unittest import mock
 
+from django.conf import settings as django_settings
 from django.core.management import CommandError, call_command
 from django.db import transaction
 from django.http import Http404
@@ -24,6 +25,7 @@ from apps.data_lifecycle import holding, runner
 from apps.data_lifecycle.holding import (AUDIT_ACTION, HOLD_DAYS, FileStranded, HoldError, hold_file, purge_expired,
                                          restore)
 from apps.data_lifecycle.models import HeldFile, LifecycleRulePolicy
+from apps.notifications.models import Notification
 from core.media import serve_media
 from core.storage import sign_media_name
 
@@ -528,13 +530,63 @@ class PurgeTests(HoldingCase):
         self.assertEqual(good.purged_at, when)
         self.assertFalse((self.hold / good.hold_path).exists())
 
-    def test_missing_file_is_reported_not_recorded_as_purged(self):
+    def _holds(self, count):
+        return [hold_file(self._put(f'f{i}.jpg').name, [], 'bundle_pages') for i in range(count)]
+
+    def _alerts(self):
+        return Notification.objects.filter(notification_type='sync_failure')
+
+    def test_one_missing_file_is_skipped_with_one_alert_a_day(self):
+        make_admin('hold_missing')
+        lost, *others = self._holds(3)
+        (self.hold / lost.hold_path).unlink()
+        when = lost.purge_after + datetime.timedelta(days=1)
+
+        self.assertEqual(purge_expired(now=when), 2)
+        lost.refresh_from_db()
+        self.assertIsNone(lost.purged_at)       # not recorded as purged: nobody has said what happened to it
+        for held in others:
+            held.refresh_from_db()
+            self.assertEqual(held.purged_at, when)
+        self.assertEqual(self._alerts().count(), 1)
+        self.assertIn(str(lost.pk), self._alerts().get().body)
+        self.assertNotIn('f0.jpg', self._alerts().get().body)
+
+        # The others are gone now, so it is the only one due. It is still one lost file, not a wrong folder.
+        self.assertEqual(purge_expired(now=when + datetime.timedelta(minutes=1)), 0)
+        self.assertEqual(self._alerts().count(), 1)
+        self.assertEqual(purge_expired(now=when + datetime.timedelta(days=1)), 0)
+        self.assertEqual(self._alerts().count(), 2)
+
+    def test_exactly_half_missing_is_not_a_wrong_folder(self):
+        held = self._holds(4)
+        for lost in held[:2]:
+            (self.hold / lost.hold_path).unlink()
+        self.assertEqual(purge_expired(now=held[-1].purge_after), 2)     # the last made is due last
+
+    def test_more_than_half_missing_raises_and_deletes_nothing(self):
+        make_admin('hold_most_missing')
+        held = self._holds(3)
+        for lost in held[:2]:
+            (self.hold / lost.hold_path).unlink()
+        with self.assertRaises(HoldError):
+            purge_expired(now=held[-1].purge_after)  # the last made is due last
+        self.assertTrue((self.hold / held[2].hold_path).exists())
+        held[2].refresh_from_db()
+        self.assertIsNone(held[2].purged_at)
+        self.assertEqual(self._alerts().count(), 0)
+
+    def test_missing_hold_root_raises(self):
         held, _ = self._held()
-        (self.hold / held.hold_path).unlink()
+        shutil.rmtree(self.hold)
         with self.assertRaises(HoldError):
             purge_expired(now=held.purge_after)
         held.refresh_from_db()
         self.assertIsNone(held.purged_at)
+
+    def test_bad_hold_root_with_nothing_due_is_no_failure(self):
+        with override_settings(LIFECYCLE_HOLD_ROOT=self.media):
+            self.assertEqual(purge_expired(), 0)
 
     def test_stored_hold_path_outside_the_hold_root_is_never_deleted(self):
         held, _ = self._held()
@@ -548,6 +600,13 @@ class PurgeTests(HoldingCase):
         with mock.patch.object(holding, 'purge_expired', return_value=4) as purge:
             self.assertEqual(runner.purge_held_files(), 4)
         purge.assert_called_once_with()
+
+
+class TestSettingsTests(TestCase):
+    def test_test_runs_do_not_use_the_real_hold_folder(self):
+        root = Path(django_settings.LIFECYCLE_HOLD_ROOT).resolve()
+        self.assertNotIn(Path(django_settings.BASE_DIR).resolve(), root.parents)
+        self.assertNotIn(Path(django_settings.MEDIA_ROOT).resolve(), root.parents)
 
 
 class NoUrlTests(HoldingCase):
@@ -597,8 +656,81 @@ class RestoreCommandTests(HoldingCase):
             self._call('restore', str(held.pk), '--user', 'hold_cmd_admin')
         self.assertFalse(self.file.exists())
 
+    def test_retrieve_command_writes_a_copy(self):
+        held, _ = self._held()
+        out = self.tmp / 'copy.jpg'
+        output = self._call('retrieve', str(held.pk), '--user', 'hold_cmd_admin', '--out', str(out))
+        self.assertEqual(out.read_bytes(), BYTES)
+        self.assertNotIn('secret_name', output)
+        self.assertIn(str(held.pk), output)
+        self.assertTrue((self.hold / held.hold_path).exists())          # a copy; the held file stays
+        self.assertTrue(AuditLog.objects.filter(action='lifecycle_file_retrieved', object_id=str(held.pk)).exists())
+
+    def test_retrieve_command_refuses_overwrite_and_non_admins(self):
+        held, _ = self._held()
+        out = self.tmp / 'existing.jpg'
+        out.write_bytes(b'keep me')
+        with self.assertRaises(CommandError):
+            self._call('retrieve', str(held.pk), '--user', 'hold_cmd_admin', '--out', str(out))
+        self.assertEqual(out.read_bytes(), b'keep me')
+        make_pharmacist('hold_cmd_pharmacist2')
+        fresh = self.tmp / 'fresh.jpg'
+        with self.assertRaises(CommandError):
+            self._call('retrieve', str(held.pk), '--user', 'hold_cmd_pharmacist2', '--out', str(fresh))
+        self.assertFalse(fresh.exists())
+        self.assertFalse(AuditLog.objects.filter(action='lifecycle_file_retrieved').exists())
+
     def test_restore_refusal_is_a_command_error(self):
         held, _ = self._held()
         self.file.write_bytes(b'new upload')
         with self.assertRaises(CommandError):
             self._call('restore', str(held.pk), '--user', 'hold_cmd_admin')
+
+    def _mark_lost(self, held, user='hold_cmd_admin', reason='lost in the disk move'):
+        return self._call('mark-lost', str(held.pk), '--user', user, '--reason', reason)
+
+    def test_mark_lost_closes_a_missing_file_with_audit(self):
+        held, _ = self._held()
+        (self.hold / held.hold_path).unlink()
+        output = self._mark_lost(held)
+        self.assertNotIn('secret_name', output)
+        held.refresh_from_db()
+        self.assertIsNotNone(held.purged_at)
+        log = AuditLog.objects.get(action=holding.AUDIT_ACTION_LOST)
+        self.assertEqual(log.old_data, {'purged_at': None})
+        self.assertEqual(log.extra['reason'], 'lost in the disk move')
+        self.assertEqual(purge_expired(now=held.purge_after), 0)
+
+    def test_mark_lost_is_refused_while_the_file_exists(self):
+        held, _ = self._held()
+        with self.assertRaises(CommandError):
+            self._mark_lost(held)
+        held.refresh_from_db()
+        self.assertIsNone(held.purged_at)
+        self.assertFalse(AuditLog.objects.filter(action=holding.AUDIT_ACTION_LOST).exists())
+
+    def test_mark_lost_is_refused_when_the_hold_root_is_missing(self):
+        held, _ = self._held()
+        shutil.rmtree(self.hold)
+        with self.assertRaises(CommandError):
+            self._mark_lost(held)
+        held.refresh_from_db()
+        self.assertIsNone(held.purged_at)
+
+    def test_mark_lost_needs_an_active_admin_and_a_reason(self):
+        held, _ = self._held()
+        (self.hold / held.hold_path).unlink()
+        make_pharmacist('hold_cmd_pharmacist')
+        for username in ('hold_cmd_pharmacist', 'nobody'):
+            with self.assertRaises(CommandError, msg=username):
+                self._mark_lost(held, user=username)
+        with self.assertRaises(CommandError):
+            self._mark_lost(held, reason='   ')
+        held.refresh_from_db()
+        self.assertIsNone(held.purged_at)
+
+    def test_mark_lost_is_refused_on_a_closed_record(self):
+        held, _ = self._held()
+        restore(held.pk, self.admin)
+        with self.assertRaises(CommandError):
+            self._mark_lost(held)

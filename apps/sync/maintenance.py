@@ -323,6 +323,10 @@ def run_daily_retention():
         return _run_retention_steps(steps)
 
 
+# Steps whose count is rows written, not removed: kept on their SyncLog line, left out of the run's total.
+NOT_REMOVAL_STEPS = frozenset({'retention:table_sizes'})
+
+
 def _run_retention_steps(steps):
     from apps.sync.models import SyncLog, SyncRun
     run = SyncRun.objects.create(status='running', lane='retention')
@@ -330,7 +334,8 @@ def _run_retention_steps(steps):
     for name, fn in steps:
         try:
             n = fn()
-            total += n
+            if name not in NOT_REMOVAL_STEPS:
+                total += n
             SyncLog.objects.create(sync_run=run, table_name=name, records_processed=n)
         except Exception as exc:
             logger.exception('[retention] %s failed', name)
@@ -340,7 +345,7 @@ def _run_retention_steps(steps):
     run.records_synced = total
     run.completed_at = timezone.now()
     run.save()
-    logger.info('[retention] deleted %s rows%s', total, f' ({len(errors)} step(s) failed)' if errors else '')
+    logger.info('[retention] removed %s%s', total, f' ({len(errors)} step(s) failed)' if errors else '')
     return run
 
 

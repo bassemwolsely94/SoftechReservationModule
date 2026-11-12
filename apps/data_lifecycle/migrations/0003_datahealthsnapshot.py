@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('data_lifecycle', '0001_initial'),
+        ('data_lifecycle', '0002_heldfile_deleted_by'),
     ]
 
     operations = [
