@@ -282,7 +282,12 @@ def request_replication(request, pk):
     if not _is_admin(request.user) and obj.requested_by_id != request.user.id:
         return Response({'detail': 'غير مصرح'}, status=403)
     from .replication import check_item
-    return Response(check_item(obj.item.softech_id))
+    try:
+        return Response(check_item(obj.item.softech_id))
+    except Exception:
+        # Round 2 close-out: SOFTECH down was a 500; answer 503 like the scan route (R7).
+        logger.exception('request_replication: SOFTECH check failed')
+        return Response({'detail': 'تعذر الاتصال بقاعدة بيانات ERP حالياً'}, status=503)
 
 
 @api_view(['POST'])
