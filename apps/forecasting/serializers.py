@@ -124,6 +124,17 @@ class ForecastScenarioSerializer(serializers.ModelSerializer):
     seasonality_label = serializers.CharField(source='get_seasonality_mode_display', read_only=True)
     target_season = serializers.SerializerMethodField()
 
+    # Round 2 close-out: year 1 or month 0 was saved, then «generate» failed (date bounds).
+    def validate_year(self, value):
+        if not 2000 <= value <= 2100:
+            raise serializers.ValidationError('سنة الهدف يجب أن تكون بين 2000 و2100')
+        return value
+
+    def validate_month(self, value):
+        if not 1 <= value <= 12:
+            raise serializers.ValidationError('شهر الهدف يجب أن يكون من 1 إلى 12')
+        return value
+
     def get_target_season(self, obj):
         """Chain seasonal index of the target month per metric (reference values) — what
         «موسمية السلسلة» applies; per-branch values are on each result row."""

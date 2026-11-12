@@ -524,9 +524,9 @@ class SchedulerTests(TestCase):
     def test_scheduler_window_starts_at_earliest_open_month(self):
         today = D(2026, 11, 4)
         self.assertEqual(tasks._gl_drafting_window(today), (D(2026, 10, 1), D(2026, 11, 3)))
-        FinancialPeriod.objects.create(year=2026, month=10, period_type='month', status='closed',
-                                       is_closed=True, period_start=D(2026, 10, 1),
-                                       period_end=D(2026, 10, 31))
+        # accepts_postings get-or-creates the month, so the row exists by now
+        FinancialPeriod.objects.filter(year=2026, month=10, period_type='month').update(
+            status='closed', is_closed=True)
         self.assertEqual(tasks._gl_drafting_window(today), (D(2026, 11, 1), D(2026, 11, 3)))
 
     @override_settings(GL_DRAFTING_SCHEDULE_ENABLED=False)

@@ -95,6 +95,42 @@ def _response(wb, filename):
     return resp
 
 
+SUBLEDGER_TITLES = {'suppliers': 'الموردون', 'creditors': 'الدائنون', 'notes_payable': 'أوراق الدفع',
+                    'customers': 'العملاء', 'employees': 'الموظفون', 'partners': 'جارى الشركاء'}
+
+
+def subledger(d):
+    """A party's rows, «بدون طرف», the totals; notes payable lists each month's cheques under it."""
+    amounts = ('opening', 'debit', 'credit', 'closing')
+    wb, ws = _book(f'الأستاذ المساعد - {SUBLEDGER_TITLES[d["kind"]]}', f'من {d["from"]} إلى {d["to"]}',
+                   ['الكود', 'الاسم', 'افتتاحي', 'مدين', 'دائن', 'ختامي'], [14, 40, 16, 16, 16, 16])
+
+    def add(r):
+        ws.append([r['key'] or '', r['name'], *(_num(r[c]) for c in amounts)])
+    for r in d['rows']:
+        add(r)
+        for c in r.get('cheques', ()):
+            ws.append([c['cheque_no'], f'{c["party"] or ""} — {c["due_date"] or ""}', None, None, None,
+                       _num(c['amount'])])
+    if d.get('unassigned'):
+        add(d['unassigned'])
+    add(d['totals'])
+    _bold_row(ws, ws.max_row)
+    _fmt(ws, 3, 6)
+    return _response(wb, f'subledger_{d["kind"]}_{d["from"]}_{d["to"]}.xlsx')
+
+
+def supplier_vs_ap(d):
+    wb, ws = _book('الموردون مقابل سداد الموردين', f'فى {d["as_of"]}',
+                   ['الكود', 'المورد', 'رصيد الأستاذ', 'رصيد سداد الموردين', 'الفرق', 'السبب'],
+                   [14, 40, 18, 18, 18, 30])
+    for r in d['rows']:
+        ws.append([r['party_code'], r['name'], _num(r['gl_balance']), _num(r['ap_balance']),
+                   _num(r['difference']), r['reason']])
+    _fmt(ws, 3, 5)
+    return _response(wb, f'suppliers_vs_ap_{d["as_of"]}.xlsx')
+
+
 def trial_balance(d):
     by_group = d['by'] == 'group'
     headers = (['المجموعة'] if by_group else ['الكود', 'الحساب', 'المجموعة']) + [
