@@ -12,21 +12,82 @@ Key resolution:
 
 Credentials are stored inside the existing JSONField as {"_enc": "<token>"} so
 no schema change is needed and plaintext never reaches the database.
+
+Moving to OMNI_CREDENTIALS_KEY (go-live): rows written under the SECRET_KEY-derived key
+still decrypt once the env key is set (MultiFernet tries the env key, then the derived
+one), so the order "set the key, restart, then `manage.py omni_credentials --rekey
+--apply`" never leaves a channel without its credentials. After the re-key every row is
+under the env key alone, so it decrypts on a server with a different SECRET_KEY (the VPS).
 """
 import base64
 import hashlib
 import json
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from django.conf import settings
 
 
-def _fernet() -> Fernet:
-    key = getattr(settings, 'OMNI_CREDENTIALS_KEY', '') or ''
+def env_key() -> str:
+    return (getattr(settings, 'OMNI_CREDENTIALS_KEY', '') or '').strip()
+
+
+def env_key_problem() -> str:
+    """'' when OMNI_CREDENTIALS_KEY is empty or a valid Fernet key; else why not (never the value)."""
+    key = env_key()
     if not key:
-        digest = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
-        key = base64.urlsafe_b64encode(digest).decode()
-    return Fernet(key.encode() if isinstance(key, str) else key)
+        return ''
+    try:
+        Fernet(key.encode())
+    except (ValueError, TypeError):
+        return 'it is not a Fernet key (44 characters of urlsafe base64)'
+    return ''
+
+
+def _derived_fernet() -> Fernet:
+    digest = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(digest))
+
+
+def _env_fernet() -> Fernet | None:
+    key = env_key()
+    return Fernet(key.encode()) if key else None
+
+
+def _fernet():
+    """Encrypts with the env key when set (else the derived key); decrypts with either."""
+    primary = _env_fernet()
+    if primary is None:
+        return _derived_fernet()
+    return MultiFernet([primary, _derived_fernet()])
+
+
+def key_state(stored: dict) -> str:
+    """How a stored credentials value reads: 'empty', 'plain' (legacy), 'env', 'derived' or 'unreadable'."""
+    if not stored:
+        return 'empty'
+    token = stored.get('_enc')
+    if not token:
+        return 'plain'
+    primary = _env_fernet()
+    for state, f in (('env', primary), ('derived', _derived_fernet())):
+        if f is None:
+            continue
+        try:
+            f.decrypt(token.encode())
+            return state
+        except (InvalidToken, ValueError):
+            pass
+    return 'unreadable'
+
+
+def rekey_credentials(stored: dict) -> dict:
+    """Re-encrypt one stored value under the env key. Legacy plaintext gets encrypted too."""
+    if _env_fernet() is None:
+        raise ValueError('OMNI_CREDENTIALS_KEY is not set')
+    token = (stored or {}).get('_enc')
+    if not token:
+        return encrypt_credentials(dict(stored or {}))
+    return {'_enc': _fernet().rotate(token.encode()).decode()}
 
 
 def encrypt_credentials(data: dict) -> dict:
