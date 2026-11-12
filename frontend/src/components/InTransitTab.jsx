@@ -25,6 +25,8 @@ import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from './SortTh'
+import MultiSelectFilter from './MultiSelectFilter'
+import BranchMultiSelect from './BranchMultiSelect'
 
 const toLatinDigits = s =>
   s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -58,6 +60,17 @@ const STATUS_LABEL = {
   cancelled:       { label: 'ملغي',                   icon: '↩️', color: '#9ca3af' },
   expired_pending: { label: 'منتهي المهلة — معلق',   icon: '⏰', color: '#f59e0b' },
   force_closed:    { label: 'مغلق قسراً',             icon: '🔒', color: '#6b7280' },
+}
+
+const PRIORITY_OPTIONS = Object.entries(PRIORITY).map(([k, v]) => ({ code: k, name: v.label }))
+const STATUS_OPTIONS   = Object.entries(STATUS_LABEL).map(([k, v]) => ({ code: k, name: `${v.icon} ${v.label}` }))
+// priority / transit_status / supplying_branch / receiving_branch are arrays ([] = all); min_days stays single
+const hasValue = v => (Array.isArray(v) ? v.length > 0 : Boolean(v))
+/** filters → query params: arrays become one comma list, empty ones are left out */
+function filterParams(filters) {
+  return Object.fromEntries(Object.entries(filters)
+    .map(([k, v]) => [k, Array.isArray(v) ? v.join(',') : v])
+    .filter(([, v]) => v !== '' && v !== undefined && v !== null))
 }
 
 function timeAgo(dt) {
@@ -736,36 +749,33 @@ function FiltersBar({ filters, setFilters, branches }) {
   return (
     <div className="flex gap-2 px-6 py-3 border-b border-gray-100 bg-white flex-wrap items-center" data-tour="transfers-transits-filters">
       {/* Priority filter */}
-      <select
-        className="input-field text-xs w-36"
-        value={filters.priority || ''}
-        onChange={e => setFilters(f => ({ ...f, priority: e.target.value }))}
-      >
-        <option value="">كل الأولويات</option>
-        {Object.entries(PRIORITY).map(([k, v]) => (
-          <option key={k} value={k}>{v.label}</option>
-        ))}
-      </select>
+      <MultiSelectFilter
+        className="w-36 text-xs"
+        options={PRIORITY_OPTIONS}
+        selected={filters.priority || []}
+        onChange={v => setFilters(f => ({ ...f, priority: v }))}
+        allLabel="كل الأولويات"
+        showCode={false}
+      />
 
       {/* Status filter */}
-      <select
-        className="input-field text-xs w-44"
-        value={filters.transit_status || ''}
-        onChange={e => setFilters(f => ({ ...f, transit_status: e.target.value }))}
-      >
-        <option value="">كل الحالات</option>
-        {Object.entries(STATUS_LABEL).map(([k, v]) => (
-          <option key={k} value={k}>{v.icon} {v.label}</option>
-        ))}
-      </select>
+      <MultiSelectFilter
+        className="w-44 text-xs"
+        menuClassName="min-w-[220px]"
+        options={STATUS_OPTIONS}
+        selected={filters.transit_status || []}
+        onChange={v => setFilters(f => ({ ...f, transit_status: v }))}
+        allLabel="كل الحالات"
+        showCode={false}
+      />
 
       {/* Received here but SOFTECH's receipt (doc 25) not seen yet — alerts point here */}
       <button
         type="button"
         data-tour="transfers-transits-awaiting-erp"
         onClick={() => setFilters(f => (f.awaiting_erp
-          ? { ...f, awaiting_erp: undefined, transit_status: 'in_transit' }
-          : { ...f, awaiting_erp: '1', transit_status: '' }))}
+          ? { ...f, awaiting_erp: undefined, transit_status: ['in_transit'] }
+          : { ...f, awaiting_erp: '1', transit_status: [] }))}
         className={`text-xs px-3 py-1.5 rounded-lg border font-semibold ${filters.awaiting_erp
           ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white border-gray-200 text-gray-600 hover:bg-amber-50'}`}
         title="تحويلات اتسجّل استلامها هنا ولسه مستند الاستلام (25) مش متسجّل في SOFTECH"
@@ -774,30 +784,24 @@ function FiltersBar({ filters, setFilters, branches }) {
       </button>
 
       {/* Supplying branch */}
-      <select
-        className="input-field text-xs w-44"
-        value={filters.supplying_branch || ''}
-        onChange={e => setFilters(f => ({ ...f, supplying_branch: e.target.value }))}
-      >
-        <option value="">فرع المصدر (الكل)</option>
-        {branches.map(b => (
-          <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>
-        ))}
-      </select>
+      <BranchMultiSelect
+        className="w-44 text-xs"
+        branches={branches}
+        selected={filters.supplying_branch || []}
+        onChange={v => setFilters(f => ({ ...f, supplying_branch: v }))}
+        allLabel="فرع المصدر (الكل)"
+      />
 
       {/* Receiving branch */}
-      <select
-        className="input-field text-xs w-44"
-        value={filters.receiving_branch || ''}
-        onChange={e => setFilters(f => ({ ...f, receiving_branch: e.target.value }))}
-      >
-        <option value="">فرع المستلم (الكل)</option>
-        {branches.map(b => (
-          <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>
-        ))}
-      </select>
+      <BranchMultiSelect
+        className="w-44 text-xs"
+        branches={branches}
+        selected={filters.receiving_branch || []}
+        onChange={v => setFilters(f => ({ ...f, receiving_branch: v }))}
+        allLabel="فرع المستلم (الكل)"
+      />
 
-      {/* Min days */}
+      {/* Min days — a "N+ days" threshold, so it stays single (several thresholds = the smallest) */}
       <select
         className="input-field text-xs w-36"
         value={filters.min_days || ''}
@@ -811,7 +815,7 @@ function FiltersBar({ filters, setFilters, branches }) {
       </select>
 
       {/* Clear */}
-      {Object.values(filters).some(Boolean) && (
+      {Object.values(filters).some(hasValue) && (
         <button
           onClick={() => setFilters({})}
           className="btn-secondary text-xs px-3"
@@ -1062,7 +1066,7 @@ function ScorecardModal({ onClose }) {
 export default function InTransitTab({ openId = null, onOpenConsumed }) {
   const { user } = useAuthStore()
   const qc       = useQueryClient()
-  const [filters, setFilters] = useState({ transit_status: 'in_transit' })
+  const [filters, setFilters] = useState({ transit_status: ['in_transit'] })
   // Deep-link: open a specific document straight into the detail panel
   // (e.g. arriving from a transfer request's "قيد النقل ←" link).
   const [selected, setSelected] = useState(openId ? { id: openId } : null)
@@ -1107,7 +1111,7 @@ export default function InTransitTab({ openId = null, onOpenConsumed }) {
   const { data: items = [], isLoading, isFetching } = useQuery({
     queryKey: ['in-transit', filters, orderingParam],
     queryFn: () => transitsApi.list({
-      ...filters,
+      ...filterParams(filters),
       page_size: 200,
       ordering: orderingParam,
     }).then(r => r.data.results || r.data),

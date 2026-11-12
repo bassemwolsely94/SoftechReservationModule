@@ -10,6 +10,8 @@ import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
 import SortTh from '../components/SortTh'
 import useSortableRows from '../hooks/useSortableRows'
+import MultiSelectFilter from '../components/MultiSelectFilter'
+import BranchMultiSelect from '../components/BranchMultiSelect'
 
 const fmt     = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const _today  = () => new Date().toISOString().slice(0, 10)
@@ -764,8 +766,8 @@ export default function DeliveryDashboard() {
   const qc = useQueryClient()
 
   const [statusFilter, setStatusFilter] = useState('')
-  const [branchFilter, setBranchFilter] = useState('')
-  const [sourceFilter, setSourceFilter] = useState('')
+  const [branchFilter, setBranchFilter] = useState([])   // multi-select: nothing ticked = all
+  const [sourceFilter, setSourceFilter] = useState([])
   const [search,       setSearch]       = useState('')
   const [dateFrom,     setDateFrom]     = useState(_today())
   const [dateTo,       setDateTo]       = useState(_today())
@@ -791,8 +793,8 @@ export default function DeliveryDashboard() {
 
   const params = {
     ...(statusFilter ? { status: statusFilter }       : {}),
-    ...(branchFilter ? { branch: branchFilter }       : {}),
-    ...(sourceFilter ? { source_type: sourceFilter }  : {}),
+    ...(branchFilter.length ? { branch: branchFilter.join(',') }      : {}),
+    ...(sourceFilter.length ? { source_type: sourceFilter.join(',') } : {}),
     ...(search       ? { search }                     : {}),
     date_from: dateFrom,
     date_to:   dateTo,
@@ -853,17 +855,15 @@ export default function DeliveryDashboard() {
           <input value={search} onChange={e => setSearch(e.target.value)} data-tour="delivery-dashboard-search"
             placeholder="بحث — اسم، هاتف، رقم طلب..."
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-400 focus:outline-none min-w-52" />
-          <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} data-tour="delivery-dashboard-branch"
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-400 focus:outline-none">
-            <option value="">كل الفروع</option>
-            {branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
-          </select>
-          <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} data-tour="delivery-dashboard-source"
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-400 focus:outline-none">
-            <option value="">كل المصادر</option>
-            <option value="call_center">📞 كول سنتر</option>
-            <option value="branch_pos">🏪 POS الفرع</option>
-          </select>
+          <BranchMultiSelect branches={branches} selected={branchFilter} onChange={setBranchFilter}
+            dataTour="delivery-dashboard-branch" />
+          <MultiSelectFilter className="w-[160px]" showCode={false} allLabel="كل المصادر"
+            dataTour="delivery-dashboard-source"
+            options={[
+              { code: 'call_center', name: '📞 كول سنتر' },
+              { code: 'branch_pos',  name: '🏪 POS الفرع' },
+            ]}
+            selected={sourceFilter} onChange={setSourceFilter} />
           <button type="button" onClick={() => setShowTime(v => !v)} data-tour="delivery-dashboard-dates"
             className={`flex items-center gap-1 px-3 py-2 text-xs rounded-lg border transition-colors
               ${showTime ? 'bg-brand-50 border-brand-400 text-brand-700' : 'bg-white border-gray-300 text-gray-600 hover:border-brand-400'}`}>

@@ -18,6 +18,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { callCenterApi, branchesApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import DataFreshnessBar from '../components/DataFreshnessBar'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import useHelpTab from '../help/useHelpTab'
@@ -366,9 +367,10 @@ function KpiTab() {
 
 function CallsTab() {
   const [search,     setSearch]     = useState('')
-  const [statusF,    setStatusF]    = useState('')
-  const [purposeF,   setPurposeF]   = useState('')
-  const [directionF, setDirectionF] = useState('')
+  // multi-select list filters — nothing ticked = all
+  const [statusF,    setStatusF]    = useState([])
+  const [purposeF,   setPurposeF]   = useState([])
+  const [directionF, setDirectionF] = useState([])
   const [ordering,   setOrdering]   = useState('')
   const { headerProps } = useServerSort(ordering, setOrdering, { allowed: CALL_SORT })
   const [scoringCall, setScoringCall] = useState(null)
@@ -385,9 +387,9 @@ function CallsTab() {
     queryKey: ['callcenter-calls', debouncedSearch, statusF, purposeF, directionF, ordering],
     queryFn: () => callCenterApi.list({
       search:    debouncedSearch || undefined,
-      status:    statusF    || undefined,
-      purpose:   purposeF   || undefined,
-      direction: directionF || undefined,
+      status:    statusF.length    ? statusF.join(',')    : undefined,
+      purpose:   purposeF.length   ? purposeF.join(',')   : undefined,
+      direction: directionF.length ? directionF.join(',') : undefined,
       ordering:  ordering   || undefined,
       page_size: 50,
     }).then(r => r.data),
@@ -406,27 +408,20 @@ function CallsTab() {
             placeholder="بحث باسم / هاتف / ملاحظات…"
             className="w-full border border-gray-200 rounded-xl pr-9 pl-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
         </div>
-        <select value={statusF} onChange={e => setStatusF(e.target.value)}
-          className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-indigo-400">
-          <option value="">كل الحالات</option>
-          {Object.entries(CALL_STATUS_META).map(([k, v]) => (
-            <option key={k} value={k}>{v.label}</option>
-          ))}
-        </select>
-        <select data-tour="callcenter-analytics-calls-filters" value={purposeF} onChange={e => setPurposeF(e.target.value)}
-          className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-indigo-400">
-          <option value="">كل الأغراض</option>
-          {Object.entries(PURPOSE_META).map(([k, v]) => (
-            <option key={k} value={k}>{v.icon} {v.label}</option>
-          ))}
-        </select>
-        <select value={directionF} onChange={e => setDirectionF(e.target.value)}
-          className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-indigo-400">
-          <option value="">كل الاتجاهات</option>
-          <option value="inbound">واردة 📲</option>
-          <option value="outbound">صادرة 📞</option>
-          <option value="whatsapp">واتساب 💬</option>
-        </select>
+        <MultiSelectFilter className="w-[160px]" showCode={false} allLabel="كل الحالات"
+          options={Object.entries(CALL_STATUS_META).map(([k, v]) => ({ code: k, name: v.label }))}
+          selected={statusF} onChange={setStatusF} />
+        <MultiSelectFilter className="w-[170px]" menuClassName="min-w-[220px]" showCode={false} allLabel="كل الأغراض"
+          dataTour="callcenter-analytics-calls-filters"
+          options={Object.entries(PURPOSE_META).map(([k, v]) => ({ code: k, name: `${v.icon} ${v.label}` }))}
+          selected={purposeF} onChange={setPurposeF} />
+        <MultiSelectFilter className="w-[150px]" showCode={false} allLabel="كل الاتجاهات"
+          options={[
+            { code: 'inbound',  name: 'واردة 📲' },
+            { code: 'outbound', name: 'صادرة 📞' },
+            { code: 'whatsapp', name: 'واتساب 💬' },
+          ]}
+          selected={directionF} onChange={setDirectionF} />
         {isFetching && <span className="text-xs text-indigo-500 animate-pulse">تحميل…</span>}
       </div>
 

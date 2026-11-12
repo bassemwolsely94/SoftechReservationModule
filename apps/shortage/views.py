@@ -33,6 +33,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from core.export_safety import csv_writer
+from core.multi_filter import filter_in, multi_ids, multi_values
 
 from .models import ShortageList, ShortageItem
 from .matching import find_best_matches, _normalize, dedup_key
@@ -46,6 +47,24 @@ from .serializers import (
 )
 
 logger = logging.getLogger('elrezeiky.shortage')
+
+
+def _aggregate_lists(request):
+    """The lists the aggregate view and its Excel export cover: scoped to the user's branches,
+    then ?branch_ids=1,2, ?status=open,submitted and the date range. ``status`` left out = open
+    (the old default); sent empty (``?status=``) = every status."""
+    p = request.query_params
+    qs = branch_scope.scope(ShortageList.objects.all(), request.user)
+    ids = multi_values(p, 'branch_ids')
+    if ids:
+        qs = qs.filter(branch_id__in=branch_scope.narrow_ids(request.user, ids) or set())
+    statuses = multi_values(p, 'status') if 'status' in p else ['open']
+    qs = filter_in(qs, 'status', statuses)
+    if p.get('date_from'):
+        qs = qs.filter(created_at__date__gte=p['date_from'])
+    if p.get('date_to'):
+        qs = qs.filter(created_at__date__lte=p['date_to'])
+    return qs
 
 
 # ─── OCR helper functions ─────────────────────────────────────────────────────
@@ -396,12 +415,10 @@ class ShortageListViewSet(viewsets.ModelViewSet):
         # Batch 5 part 2: a branch user sees (and acts on) only their branches' lists; ?branch=
         # can narrow that, never widen it.
         qs = branch_scope.scope(qs, self.request.user)
-        branch = self.request.query_params.get('branch')
-        status_q = self.request.query_params.get('status')
-        if branch:
-            qs = qs.filter(branch_id=branch)
-        if status_q:
-            qs = qs.filter(status=status_q)
+        # multi-select filters (?branch=1,2 & ?status=open,submitted), applied after scoping
+        p = self.request.query_params
+        qs = filter_in(qs, 'branch_id', multi_ids(p, 'branch'))
+        qs = filter_in(qs, 'status', multi_values(p, 'status'))
         return qs.order_by('-created_at')
 
     def get_serializer_class(self):
@@ -899,24 +916,10 @@ class ShortageListViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='aggregate')
     def aggregate(self, request):
         """
-        GET /api/shortage/lists/aggregate/?branch_ids=1,2&status=open
+        GET /api/shortage/lists/aggregate/?branch_ids=1,2&status=open,submitted
         Aggregate shortage items across multiple lists.
         """
-        branch_ids  = request.query_params.get('branch_ids', '')
-        status_q    = request.query_params.get('status', 'open')
-        date_from   = request.query_params.get('date_from')
-        date_to     = request.query_params.get('date_to')
-
-        qs = branch_scope.scope(ShortageList.objects.all(), request.user)
-        if branch_ids:
-            ids = [b.strip() for b in branch_ids.split(',') if b.strip()]
-            qs = qs.filter(branch_id__in=branch_scope.narrow_ids(request.user, ids) or set())
-        if status_q:
-            qs = qs.filter(status=status_q)
-        if date_from:
-            qs = qs.filter(created_at__date__gte=date_from)
-        if date_to:
-            qs = qs.filter(created_at__date__lte=date_to)
+        qs = _aggregate_lists(request)
 
         # Aggregate items
         from collections import defaultdict
@@ -982,21 +985,7 @@ class ShortageListViewSet(viewsets.ModelViewSet):
         GET /api/shortage/lists/export-aggregated/?branch_ids=1,2&status=open
         Download aggregated Excel across multiple lists.
         """
-        branch_ids = request.query_params.get('branch_ids', '')
-        status_q   = request.query_params.get('status', 'open')
-        date_from  = request.query_params.get('date_from')
-        date_to    = request.query_params.get('date_to')
-
-        qs = branch_scope.scope(ShortageList.objects.all(), request.user)
-        if branch_ids:
-            ids = [b.strip() for b in branch_ids.split(',') if b.strip()]
-            qs = qs.filter(branch_id__in=branch_scope.narrow_ids(request.user, ids) or set())
-        if status_q:
-            qs = qs.filter(status=status_q)
-        if date_from:
-            qs = qs.filter(created_at__date__gte=date_from)
-        if date_to:
-            qs = qs.filter(created_at__date__lte=date_to)
+        qs = _aggregate_lists(request)
 
         lists = list(qs.prefetch_related('items__item', 'branch'))
         content = export_aggregated_excel(lists)

@@ -187,7 +187,9 @@ class HelpContentCoverageTests(SimpleTestCase):
         src = Path(settings.BASE_DIR) / 'frontend' / 'src'
         anchors = set()
         for f in list(src.rglob('*.jsx')) + list(src.rglob('*.js')):
-            anchors.update(re.findall(r'data-tour="([a-z0-9-]+)"', f.read_text(encoding='utf-8')))
+            # data-tour="…" on an element, or dataTour="…" on a filter component that renders it
+            # (MultiSelectFilter / BranchMultiSelect put it on their wrapper as data-tour)
+            anchors.update(re.findall(r'(?:data-tour|dataTour)="([a-z0-9-]+)"', f.read_text(encoding='utf-8')))
         # the menu data lives in navGroups.js (Layout.jsx imports it and renders it)
         layout = (src / 'components' / 'navGroups.js').read_text(encoding='utf-8')
         nav_block = layout[layout.index('const NAV_GROUPS'):]

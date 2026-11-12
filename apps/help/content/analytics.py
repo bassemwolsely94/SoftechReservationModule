@@ -416,8 +416,8 @@ SCREENS = [
         'related': ['reservations.board'],
         'tour': [
             {'target': 'analytics-reservations-filters', 'label': T('من · إلى · كل الفروع · مسح', 'From · To · All branches · Clear'),
-             'text': T('فترة تسجيل الحجز (تاريخ الإنشاء) والفرع. «مسح» يرجّع كل الفترات.',
-                       'The period the reservation was created in, and the branch. "Clear" returns to all time.'),
+             'text': T('فترة تسجيل الحجز (تاريخ الإنشاء) والفروع — علّم فرعاً أو أكثر. «مسح» يرجّع كل الفترات وكل الفروع.',
+                       'The period the reservation was created in, and the branches — tick one or more. "Clear" returns to all time and all branches.'),
              'when': T('من غير تواريخ الأرقام بتشمل كل الحجوزات من البداية.', 'With no dates, the figures cover all reservations ever.'),
              'more': T(
                  'التاريخ هنا تاريخ إنشاء الحجز، ولو سبت التواريخ فاضية بيحسب كل الحجوزات.\n• لو إنت مش مدير أو مشتريات أو كول سنتر، بتشوف حجوزات فرعك بس.\n• الأرقام بتتحسب في السيرفر من الحجوزات المسجلة عندنا.',
@@ -464,8 +464,8 @@ SCREENS = [
             {'target': 'analytics-reservations-clear', 'label': T('مسح', 'Clear'),
              'text': T('يمسح التواريخ والفرع ويرجّع كل الحجوزات.', 'Clears the dates and branch and brings back all reservations.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-12',
+        'change_note': T('فلتر الفرع يقبل أكثر من فرع', 'The branch filter takes several branches'),
     },
     {
         'key': 'analytics.transfers',

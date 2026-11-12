@@ -3,7 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { reservationsApi, branchesApi } from '../api/client'
 import { StatusBadge, PriorityBadge, STATUS_OPTIONS, PRIORITY_OPTIONS } from '../components/StatusBadge'
-import BranchSelect from '../components/BranchSelect'
+import BranchMultiSelect from '../components/BranchMultiSelect'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import CancelReasonPicker, { cancelNote, EMPTY_CANCEL } from '../components/CancelReasonPicker'
 import useAuthStore from '../store/authStore'
@@ -38,6 +39,11 @@ const STATUS_LABELS = {
 // Natural forward order — used to prevent showing backward jumps in bulk
 const STATUS_ORDER = ['pending', 'available', 'contacted', 'confirmed', 'fulfilled']
 
+// multi-select filter options ({code, name})
+const STATUS_FILTER_OPTIONS = STATUS_OPTIONS.map(o => ({ code: o.value, name: o.label }))
+const PRIORITY_FILTER_OPTIONS = PRIORITY_OPTIONS.map(o => ({ code: o.value, name: o.label }))
+const joinOrUndef = arr => (arr.length ? arr.join(',') : undefined)
+
 function FilterBar({ filters, onChange, branches }) {
   return (
     <div className="card mb-4 flex flex-wrap gap-3 items-center" dir="rtl" data-tour="reservations-list-filters">
@@ -48,33 +54,18 @@ function FilterBar({ filters, onChange, branches }) {
         value={filters.search}
         onChange={e => onChange({ ...filters, search: e.target.value, page: 1 })}
       />
-      <select
-        className="input-field w-44"
-        value={filters.status}
-        onChange={e => onChange({ ...filters, status: e.target.value, page: 1 })}
-      >
-        <option value="">كل الحالات</option>
-        {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-      <select
-        className="input-field w-36"
-        value={filters.priority}
-        onChange={e => onChange({ ...filters, priority: e.target.value, page: 1 })}
-      >
-        <option value="">كل الأولويات</option>
-        {PRIORITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-      <BranchSelect
-        size="sm"
-        value={filters.branch}
-        onChange={v => onChange({ ...filters, branch: v, page: 1 })}
-        branches={branches || []}
-        allLabel="كل الفروع"
-        className="w-52"
-      />
+      <MultiSelectFilter className="w-44" showCode={false} allLabel="كل الحالات"
+        options={STATUS_FILTER_OPTIONS} selected={filters.status}
+        onChange={v => onChange({ ...filters, status: v, page: 1 })} />
+      <MultiSelectFilter className="w-36" showCode={false} allLabel="كل الأولويات"
+        options={PRIORITY_FILTER_OPTIONS} selected={filters.priority}
+        onChange={v => onChange({ ...filters, priority: v, page: 1 })} />
+      <BranchMultiSelect className="w-52" branches={branches || []}
+        selected={filters.branch}
+        onChange={v => onChange({ ...filters, branch: v, page: 1 })} />
       <button data-tour="reservations-list-clear-filters"
         className="btn-secondary text-sm"
-        onClick={() => onChange({ search: '', status: '', priority: '', branch: '', ordering: filters.ordering, page: 1 })}
+        onClick={() => onChange({ search: '', status: [], priority: [], branch: [], ordering: filters.ordering, page: 1 })}
       >
         مسح الفلاتر
       </button>
@@ -217,9 +208,10 @@ export default function ReservationsPage() {
 
   const [filters, setFilters] = useState({
     search: '',
-    status: searchParams.get('status') || '',
-    priority: '',
-    branch: '',
+    // multi-select arrays (none = all); ?status=pending (old links) or ?status=pending,available
+    status: (searchParams.get('status') || '').split(',').filter(Boolean),
+    priority: [],
+    branch: [],
     ordering: '',
     page: 1,
   })
@@ -228,9 +220,9 @@ export default function ReservationsPage() {
     queryKey: ['reservations', filters],
     queryFn: () => reservationsApi.list({
       search: filters.search || undefined,
-      status: filters.status || undefined,
-      priority: filters.priority || undefined,
-      branch: filters.branch || undefined,
+      status: joinOrUndef(filters.status),
+      priority: joinOrUndef(filters.priority),
+      branch: joinOrUndef(filters.branch),
       ordering: filters.ordering || undefined,
       page: filters.page,
     }).then(r => r.data),

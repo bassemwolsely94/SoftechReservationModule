@@ -36,6 +36,8 @@ import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
 import DialButton from '../components/pbx/DialButton'
 import CallListsPanel from '../components/followups/CallListsPanel'
+import MultiSelectFilter from '../components/MultiSelectFilter'
+import BranchMultiSelect from '../components/BranchMultiSelect'
 
 // ─────────────────────────────────────────────
 //  Constants / config
@@ -200,16 +202,16 @@ function FilterPanel({ filters, setFilters, meta, branches }) {
   const activeCount = [
     filters.sales_channel?.length,
     filters.favoured_only,
-    filters.indication,
-    filters.medicine_type,
-    filters.segment,
-    filters.churn_segment,
+    filters.indication?.length,
+    filters.medicine_type?.length,
+    filters.segment?.length,
+    filters.churn_segment?.length,
     filters.item_search,
     filters.customer_search,
     filters.due_after,
     filters.due_before,
     filters.overdue_only,
-    filters.branch,
+    filters.branch?.length,
   ].filter(Boolean).length
 
   const set = (key, val) => setFilters(p => ({ ...p, [key]: val }))
@@ -300,25 +302,15 @@ function FilterPanel({ filters, setFilters, meta, branches }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-bold text-gray-500 block mb-1">🏥 التشخيص / الاستخدام</label>
-              <select className="input-field text-sm"
-                value={filters.indication || ''}
-                onChange={e => set('indication', e.target.value)}>
-                <option value="">كل التشخيصات</option>
-                {(meta?.indications || []).map(i => (
-                  <option key={i.code} value={i.label}>{i.label}</option>
-                ))}
-              </select>
+              <MultiSelectFilter className="w-full" menuClassName="min-w-[260px]" showCode={false} allLabel="كل التشخيصات"
+                options={(meta?.indications || []).map(i => ({ code: i.label, name: i.label }))}
+                selected={filters.indication || []} onChange={v => set('indication', v)} />
             </div>
             <div>
               <label className="text-xs font-bold text-gray-500 block mb-1">💉 نوع الدواء</label>
-              <select className="input-field text-sm"
-                value={filters.medicine_type || ''}
-                onChange={e => set('medicine_type', e.target.value)}>
-                <option value="">كل الأنواع</option>
-                {(meta?.medicine_types || []).map(m => (
-                  <option key={m.code} value={m.code}>{m.label}</option>
-                ))}
-              </select>
+              <MultiSelectFilter className="w-full" showCode={false} allLabel="كل الأنواع"
+                options={(meta?.medicine_types || []).map(o => ({ code: o.code, name: o.label }))}
+                selected={filters.medicine_type || []} onChange={v => set('medicine_type', v)} />
             </div>
           </div>
 
@@ -326,36 +318,20 @@ function FilterPanel({ filters, setFilters, meta, branches }) {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="text-xs font-bold text-gray-500 block mb-1">📊 شريحة العميل</label>
-              <select className="input-field text-sm"
-                value={filters.segment || ''}
-                onChange={e => set('segment', e.target.value)}>
-                <option value="">كل الشرائح</option>
-                {(meta?.segments || []).map(s => (
-                  <option key={s.code} value={s.code}>{s.label}</option>
-                ))}
-              </select>
+              <MultiSelectFilter className="w-full" showCode={false} allLabel="كل الشرائح"
+                options={(meta?.segments || []).map(o => ({ code: o.code, name: o.label }))}
+                selected={filters.segment || []} onChange={v => set('segment', v)} />
             </div>
             <div>
               <label className="text-xs font-bold text-gray-500 block mb-1">⚠ خطر الانقطاع</label>
-              <select className="input-field text-sm"
-                value={filters.churn_segment || ''}
-                onChange={e => set('churn_segment', e.target.value)}>
-                <option value="">كل المستويات</option>
-                {(meta?.churn_segments || []).map(s => (
-                  <option key={s.code} value={s.code}>{s.label}</option>
-                ))}
-              </select>
+              <MultiSelectFilter className="w-full" showCode={false} allLabel="كل المستويات"
+                options={(meta?.churn_segments || []).map(o => ({ code: o.code, name: o.label }))}
+                selected={filters.churn_segment || []} onChange={v => set('churn_segment', v)} />
             </div>
             <div>
               <label className="text-xs font-bold text-gray-500 block mb-1">🏪 الفرع</label>
-              <select className="input-field text-sm"
-                value={filters.branch || ''}
-                onChange={e => set('branch', e.target.value)}>
-                <option value="">كل الفروع</option>
-                {(branches || []).map(b => (
-                  <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>
-                ))}
-              </select>
+              <BranchMultiSelect className="w-full" branches={branches || []}
+                selected={filters.branch || []} onChange={v => set('branch', v)} />
             </div>
           </div>
 
@@ -2108,16 +2084,16 @@ const DEFAULT_FILTERS = {
   task_type:       '',
   sales_channel:   [],
   favoured_only:   false,
-  indication:      '',
-  medicine_type:   '',
-  segment:         '',
-  churn_segment:   '',
+  indication:      [],   // multi-select filters: nothing ticked = all
+  medicine_type:   [],
+  segment:         [],
+  churn_segment:   [],
   item_search:     '',
   customer_search: '',
   due_after:       '',
   due_before:      '',
   overdue_only:    false,
-  branch:          '',
+  branch:          [],
   by_priority:     false,
   ordering:        '',
   my_tasks:        false,
@@ -2162,16 +2138,16 @@ export default function FollowUpsPage() {
     ...(filters.task_type      && { task_type:        filters.task_type }),
     ...(filters.sales_channel?.length && { sales_channel: filters.sales_channel.join(',') }),
     ...(filters.favoured_only  && { favoured_only:    '1' }),
-    ...(filters.indication     && { indication:       filters.indication }),
-    ...(filters.medicine_type  && { medicine_type:    filters.medicine_type }),
-    ...(filters.segment        && { segment:          filters.segment }),
-    ...(filters.churn_segment  && { churn_segment:    filters.churn_segment }),
+    ...(filters.indication?.length    && { indication:    filters.indication.join(',') }),
+    ...(filters.medicine_type?.length && { medicine_type: filters.medicine_type.join(',') }),
+    ...(filters.segment?.length       && { segment:       filters.segment.join(',') }),
+    ...(filters.churn_segment?.length && { churn_segment: filters.churn_segment.join(',') }),
     ...(filters.item_search    && { item_search:      filters.item_search }),
     ...(filters.customer_search && { customer_search: filters.customer_search }),
     ...(filters.due_after      && { due_after:        filters.due_after }),
     ...(filters.due_before     && { due_before:       filters.due_before }),
     ...(filters.overdue_only   && { overdue_only:     '1' }),
-    ...(filters.branch         && { branch:           filters.branch }),
+    ...(filters.branch?.length && { branch:           filters.branch.join(',') }),
     ...(filters.by_priority    && { by_priority:      '1' }),
     ...(filters.ordering       && { ordering:         filters.ordering }),
     ...(filters.my_tasks       && { my_tasks:         '1' }),

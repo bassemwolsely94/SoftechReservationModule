@@ -20,6 +20,7 @@ from django.db.models import Count, Q, Avg, Case, When, IntegerField
 
 from .models import CallLog, AddressUpdate, CallLogAttachment, CustomerCase, CaseEvent, CallQualityScore, CallItem
 from core import branch_scope
+from core.multi_filter import filter_in, multi_values
 from core.errors import public_error
 from core.sort_ordering import NullsLastOrderingFilter, staff_name_key
 from .serializers import (
@@ -71,7 +72,9 @@ class CallLogViewSet(viewsets.ModelViewSet):
     """
     permission_classes = [IsAuthenticated, CALLCENTER, RouteModuleDeletePermission]
     filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, NullsLastOrderingFilter]
-    filterset_fields   = ['direction', 'status', 'purpose', 'handled_by', 'branch', 'ai_sentiment']
+    # direction / status / purpose are multi-select list filters (?status=answered,missed) — applied
+    # in get_queryset, so they are not filterset fields (django-filter would reject a comma list)
+    filterset_fields   = ['handled_by', 'branch', 'ai_sentiment']
     search_fields      = [
         'phone_number', 'caller_name', 'notes', 'summary',
         'customer__name', 'customer__phone',
@@ -89,7 +92,12 @@ class CallLogViewSet(viewsets.ModelViewSet):
                            ).annotate(handled_by_name_key=staff_name_key('handled_by'))
 
         # Batch 5: the one branch helper (all-branch roles see all; branch staff their branches)
-        return branch_scope.scope(qs, self.request.user)
+        qs = branch_scope.scope(qs, self.request.user)
+        if self.action == 'list':   # list filters narrow the scoped queryset, never widen it
+            p = self.request.query_params
+            for field in ('direction', 'status', 'purpose'):
+                qs = filter_in(qs, field, multi_values(p, field))
+        return qs
 
     def perform_update(self, serializer):
         # Project 3: closing a call-back by hand records who/when (an automatic close records
