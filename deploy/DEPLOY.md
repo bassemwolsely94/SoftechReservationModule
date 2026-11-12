@@ -149,6 +149,8 @@ sudo systemctl enable nginx
 sudo systemctl restart nginx
 ```
 
+`nginx.conf` gives the GL routes that read SOFTECH on the request their own location with `proxy_read_timeout 600s`. Copy the file again and reload nginx whenever it changes.
+
 ### SSL with Let's Encrypt:
 ```bash
 sudo apt install -y certbot python3-certbot-nginx

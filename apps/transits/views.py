@@ -35,7 +35,7 @@ from .models import InTransitAuditEvent, InTransitNote, InTransitTransfer
 from apps.catalog.wildcard import wq
 from core import branch_scope
 from core.errors import public_error
-from core.permissions import matrix_permission
+from core.permissions import RouteModulePermission, matrix_permission
 from .serializers import (
     ForceCloseSerializer,
     InTransitNoteCreateSerializer,
@@ -110,7 +110,9 @@ class InTransitTransferViewSet(viewsets.ReadOnlyModelViewSet):
     cached SOFTECH data. Write actions are explicit @action decorators.
     """
 
-    permission_classes = [IsAuthenticated, TRANSFERS]
+    # RouteModulePermission (D6, matrix wins): TRANSFERS lets any non-view grant through, so an export-only
+    # holder (quality manager) could add notes and mark a transfer received; the middleware asks create.
+    permission_classes = [IsAuthenticated, TRANSFERS, RouteModulePermission]
     filter_backends    = [
         DjangoFilterBackend,
         filters.SearchFilter,
@@ -153,7 +155,12 @@ class InTransitTransferViewSet(viewsets.ReadOnlyModelViewSet):
             'notes__created_by',
         ).annotate(
             # numeric doc number (SOFTECH docnumbers are numeric strings)
-            doc_number_num=Cast('erp_doc_number', output_field=db_models.BigIntegerField()),
+            # numeric only when it is digits: one odd value must not break the whole list (500)
+            doc_number_num=Case(
+                When(erp_doc_number__regex=r'^[0-9]{1,18}$',
+                     then=Cast('erp_doc_number', output_field=db_models.BigIntegerField())),
+                default=None, output_field=db_models.BigIntegerField(),
+            ),
             # severity order for priority (green → critical)
             priority_rank=Case(
                 When(priority='green',    then=Value(0)),

@@ -1,7 +1,7 @@
 """General-ledger routes — mounted at /api/finance/gl/ (finance-gl Task 8)."""
 from django.urls import path
 
-from . import drafting_views, views
+from . import close_views, drafting_views, views
 
 urlpatterns = [
     path('groups/', views.groups, name='gl-groups'),
@@ -44,4 +44,23 @@ urlpatterns = [
     path('drafting/run/', drafting_views.drafting_run, name='gl-drafting-run'),
     path('drafting/runs/', drafting_views.drafting_runs, name='gl-drafting-runs'),
     path('drafting/runs/<int:pk>/', drafting_views.drafting_run_detail, name='gl-drafting-run-detail'),
+    path('periods/', close_views.periods, name='gl-periods'),
+    path('periods/<int:pk>/', close_views.period_detail, name='gl-period'),
+    path('periods/<int:pk>/checklist/', close_views.period_checklist, name='gl-period-checklist'),
+    path('periods/<int:pk>/close/', close_views.period_close, name='gl-period-close'),
+    path('periods/<int:pk>/reopen/', close_views.period_reopen, name='gl-period-reopen'),
+    path('periods/<int:pk>/closing-stock/', close_views.period_closing_stock, name='gl-period-closing-stock'),
+    path('compare/', close_views.compare_list, name='gl-compare'),
+    path('compare/refresh/', close_views.compare_refresh, name='gl-compare-refresh'),
+    path('compare/checks/', close_views.compare_checks, name='gl-compare-checks'),
+    path('compare/lines/<int:pk>/', close_views.compare_line, name='gl-compare-line'),
+    path('compare/lines/<int:pk>/explain/', close_views.compare_explain, name='gl-compare-explain'),
+    path('subledgers/suppliers-vs-ap/', close_views.suppliers_vs_ap, name='gl-suppliers-vs-ap'),
+    path('subledgers/<str:kind>/', close_views.subledger, name='gl-subledger'),
+    path('corrections/', close_views.corrections_create, name='gl-corrections'),
+    path('corrections/from-exception/', close_views.corrections_from_exception, name='gl-corrections-from-exception'),
+    path('manual-import/preview/', close_views.manual_import_preview, name='gl-manual-import-preview'),
+    path('manual-import/', close_views.manual_import_run, name='gl-manual-import'),
+    path('validation/', close_views.validation_report, name='gl-validation'),
+    path('closing-stock-stores/', close_views.closing_stock_stores, name='gl-closing-stock-stores'),
 ]

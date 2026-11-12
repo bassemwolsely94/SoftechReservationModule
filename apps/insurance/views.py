@@ -61,7 +61,20 @@ def _next_claim_number() -> str:
     return f'{prefix}{n:05d}'
 
 
-class InsuranceClientViewSet(viewsets.ModelViewSet):
+class _RefuseDeleteInUse:
+    """Round 2 close-out: deleting a client / sub-client that claims still use was a 500
+    (ProtectedError). Answer 409 and keep the record."""
+
+    def destroy(self, request, *args, **kwargs):
+        from django.db.models import ProtectedError
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response({'detail': 'لا يمكن الحذف: هناك مطالبات أو جهات مرتبطة بهذا السجل'},
+                            status=status.HTTP_409_CONFLICT)
+
+
+class InsuranceClientViewSet(_RefuseDeleteInUse, viewsets.ModelViewSet):
     permission_classes = [InsuranceModuleAccess]
     queryset = InsuranceClient.objects.prefetch_related('subclients__contracts').order_by('name')
 
@@ -89,7 +102,7 @@ class InsuranceClientViewSet(viewsets.ModelViewSet):
             return Response({'error': public_error(request, e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
 
-class InsuranceSubClientViewSet(viewsets.ModelViewSet):
+class InsuranceSubClientViewSet(_RefuseDeleteInUse, viewsets.ModelViewSet):
     permission_classes = [InsuranceModuleAccess]
     serializer_class   = InsuranceSubClientSerializer
     queryset = InsuranceSubClient.objects.select_related('client').prefetch_related('contracts')
