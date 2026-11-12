@@ -92,6 +92,18 @@ def make_salesperson(username='sales_test', branch=None) -> tuple:
     return make_user(username, role='salesperson', branch=branch)
 
 
+def make_supervisor(username='supervisor_test') -> tuple:
+    return make_user(username, role='supervisor', access_all=True)
+
+
+def make_quality_manager(username='qm_test') -> tuple:
+    return make_user(username, role='quality_manager', access_all=True)
+
+
+def make_viewer(username='viewer_test', branch=None) -> tuple:
+    return make_user(username, role='viewer', branch=branch)
+
+
 def make_anon_client() -> APIClient:
     return APIClient()
 

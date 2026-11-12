@@ -62,8 +62,24 @@ def _summary(p, names=None):
         'pushed_at': p.pushed_at, 'error': p.error,
         'origin_isr': p.origin_isr, 'notes': p.notes,
         'origin_request_id': p.origin_request_id, 'origin_donor': p.origin_donor,
-        'params': p.params or {},
+        'params': p.params or {}, 'route_tag': p.route_tag,
+        'waits': _waits(p),
     }
+
+
+def _waits(p):
+    """A forwarding leg still to push (any planner): is its branch → HQ leg received at HQ yet?"""
+    from apps.purchasing import isr_guards
+    if (p.kind != IsrPush.KIND_HQ_TO_BRANCH or p.status not in ('proposed', 'approved')
+            or not p.linked_push_id):
+        return None
+    feeder = p.linked_push
+    if feeder.kind != IsrPush.KIND_BRANCH_TO_HQ:
+        return None
+    st = isr_guards.receipt_status(feeder)
+    return {'feeder_id': feeder.pk, 'feeder_branch': feeder.branchcode, 'feeder_status': feeder.status,
+            'received': st['received'], 'why': st['why'], 'stale': st['stale'],
+            'waiting_days': st['waiting_days']}
 
 
 def _detail(p):
@@ -259,22 +275,96 @@ def distribution_preview(request):
                                           'run_at': (run.finished_at or run.started_at) if run else None}})
 
 
+# ── «التوزيعة» plan (doc 30 phases B–D). Company-level purchasing data: HQ plans moves between
+#    all branches, so it is not branch-scoped; reading needs the purchasing module, building and
+#    generating need can_supply_write. Building reads SOFTECH only; generating writes PG drafts only.
+_MOVE_FIELDS = ('id', 'itemcode', 'item_name', 'from_code', 'to_code', 'qty', 'unit_cost', 'value', 'wave',
+                'rank', 'category', 'reasons', 'status', 'status_note', 'conflicts', 'position',
+                'isr_push_id', 'feeder_push_id')
+
+
+def _plan_payload(plan, request, with_moves=True):
+    from apps.purchasing.distribution_plan import WAVE_LABELS
+    from apps.purchasing.isr_fulfillment import user_names
+    names = user_names(u.username for u in (plan.created_by, plan.generated_by) if u)
+    out = {'id': plan.id, 'status': plan.status, 'status_label': plan.get_status_display(),
+           'created_at': plan.created_at, 'created_by': _user_label(plan.created_by, names),
+           'generated_at': plan.generated_at, 'generated_by': _user_label(plan.generated_by, names),
+           'run_id': plan.run_id, 'inputs': plan.inputs, 'totals': plan.totals, 'documents': plan.documents,
+           'wave_labels': WAVE_LABELS, 'can_write': _can_write(request),
+           'status_labels': dict(plan.moves.model.STATUS_CHOICES)}
+    if with_moves:
+        moves = []
+        for m in plan.moves.all().values(*_MOVE_FIELDS):
+            m['unit_cost'], m['value'] = float(m['unit_cost']), float(m['value'])
+            moves.append(m)
+        out['moves'] = moves
+    return out
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, PURCHASING])
+def distribution_plan(request):
+    """The latest plan (or ?id=) with its moves. READ-ONLY."""
+    from apps.purchasing.models import DistributionPlan
+    pid = request.query_params.get('id')
+    plan = (get_object_or_404(DistributionPlan, pk=pid) if pid
+            else DistributionPlan.objects.order_by('-created_at').first())
+    if plan is None:
+        return Response({'plan': None, 'can_write': _can_write(request)})
+    return Response({'plan': _plan_payload(plan, request), 'can_write': _can_write(request)})
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, PURCHASING])
-def distribution_generate(request):
-    """Turn توزيعة suggestions into ISR proposals (HQ→branch, or A→HQ→branch)."""
+def distribution_plan_build(request):
+    """Compute a new plan (reads SOFTECH, writes only our ledger)."""
     if not _can_write(request):
-        return Response({'detail': 'غير مصرح لك بتوليد التوزيعة.'}, status=http.HTTP_403_FORBIDDEN)
+        return Response({'detail': 'غير مصرح لك ببناء خطة التوزيعة.'}, status=http.HTTP_403_FORBIDDEN)
+    from apps.purchasing import distribution_plan as DP
     cats = request.data.get('categories') or None
-    limit = int(request.data['limit']) if request.data.get('limit') else None
-    skipped = []
     try:
-        created = isr_writer.create_distribution_proposals(
-            categories=cats, limit=limit, created_by=request.user, skipped=skipped)
+        plan = DP.build(user=request.user, categories=cats)
     except ValueError as exc:
         return Response({'detail': str(exc)}, status=http.HTTP_400_BAD_REQUEST)
-    return Response({'created': created, 'count': len(created), 'skipped': skipped},
+    except Exception:
+        logger.exception('distribution plan build failed')
+        return Response({'detail': 'تعذّر بناء الخطة (قراءة سوفتك) — حاول مرة أخرى بعد قليل.'},
+                        status=http.HTTP_503_SERVICE_UNAVAILABLE)
+    return Response({'plan': _plan_payload(plan, request)}, status=http.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, PURCHASING])
+def distribution_plan_generate(request, pk):
+    """Proposed ISR drafts from the latest built plan (PG only — SOFTECH is written later by
+    approve → push, behind every guard)."""
+    if not _can_write(request):
+        return Response({'detail': 'غير مصرح لك بتوليد التوزيعة.'}, status=http.HTTP_403_FORBIDDEN)
+    from apps.purchasing import distribution_plan as DP
+    from apps.purchasing.models import DistributionPlan
+    plan = get_object_or_404(DistributionPlan, pk=pk)
+    try:
+        res = DP.generate(plan, user=request.user)
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=http.HTTP_400_BAD_REQUEST)
+    plan.refresh_from_db()
+    return Response({**res, 'count': len(res['created']), 'plan': _plan_payload(plan, request)},
                     status=http.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, PURCHASING])
+def distribution_plan_export(request, pk):
+    """The plan as Excel: waves, conflicts, documents. READ-ONLY."""
+    from django.http import HttpResponse
+    from apps.purchasing.models import DistributionPlan
+    from apps.purchasing.supply_exports import distribution_plan_excel
+    plan = get_object_or_404(DistributionPlan, pk=pk)
+    resp = HttpResponse(distribution_plan_excel(plan),
+                        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resp['Content-Disposition'] = f'attachment; filename="distribution_plan_{plan.pk}.xlsx"'
+    return resp
 
 
 @api_view(['POST'])
