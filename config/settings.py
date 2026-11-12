@@ -417,6 +417,8 @@ LIFECYCLE_HOLD_ROOT = config('LIFECYCLE_HOLD_ROOT', default=BASE_DIR / 'media_ho
 if _RUNNING_TESTS:      # nor to the real holding folder
     LIFECYCLE_HOLD_ROOT = Path(tempfile.mkdtemp(prefix='elrezeiky_test_media_hold_'))
     atexit.register(shutil.rmtree, LIFECYCLE_HOLD_ROOT, ignore_errors=True)
+# /data-health warns when the disk is this full (percent).
+DATA_HEALTH_DISK_LEVEL_PERCENT = config('DATA_HEALTH_DISK_LEVEL_PERCENT', default=80, cast=int)
 # Uploaded files get signed, expiring URLs (core/storage.py); /media/ is served by
 # core.media.serve_media, which checks the signature. Product images stay public.
 STORAGES = {

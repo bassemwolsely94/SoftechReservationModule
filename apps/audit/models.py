@@ -194,6 +194,7 @@ class AuditLog(models.Model):
 
         # Payment audit — bank statement upload (apps/payments/audit_views.py)
         ('bank_statement_uploaded',      'مراجعة المدفوعات — رفع كشف حساب بنكي'),
+        ('omni_credentials_rekeyed',     'قنوات التواصل — إعادة تشفير بيانات الاعتماد بالمفتاح الجديد'),
 
     ]
 
