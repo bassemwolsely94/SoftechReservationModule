@@ -3,13 +3,14 @@
 # (core.permissions.RouteModulePermission / matrix_permission) or add it here with a reason. Format:
 # <METHOD> <path>  [<module the middleware maps it to, - = not checked>]
 
-# reason: own session, inbox and dashboard — EXEMPT prefixes that act on the caller's own data only: auth (me, change-password), notifications (own inbox, reminders, preferences, push subscription; chatter checks the record's own module inside), personal (own dashboard, identities, widgets; person search is audited + throttled, N0), gamification (own wallet / points; leaderboards are network-wide by design).
+# reason: own session, inbox and dashboard — EXEMPT prefixes that act on the caller's own data only: auth (me, change-password), notifications (own inbox, reminders, preferences, push subscription; chatter checks the record's own module inside), personal (own dashboard, identities, widgets; person search is audited + throttled, N0), gamification (own wallet / points; leaderboards, champions and branch team-challenge progress are network-wide by design).
 DELETE /api/notifications/clear-all/  [-]
 DELETE /api/notifications/delete-old/  [-]
 GET /api/auth/me/  [-]
 GET /api/gamification/badges/  [-]
 GET /api/gamification/branches/  [-]
 GET /api/gamification/champions/  [-]
+GET /api/gamification/challenges/  [-]
 GET /api/gamification/leaderboard/  [-]
 GET /api/gamification/levels/  [-]
 GET /api/gamification/me/  [-]

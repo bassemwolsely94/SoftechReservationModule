@@ -882,6 +882,10 @@ GAMIFICATION_ENABLED = config('GAMIFICATION_ENABLED', default=True, cast=bool)
 GAMIFICATION_CHAMPION_MIN_PLAYERS = config('GAMIFICATION_CHAMPION_MIN_PLAYERS', default=2, cast=int)
 GAMIFICATION_BRANCH_OF_MONTH_MIN_PLAYERS = config('GAMIFICATION_BRANCH_OF_MONTH_MIN_PLAYERS', default=3, cast=int)
 # Roles that never compete for a monthly title (management).
+# Customer-code (PIC) day: share of a salesperson's sale invoices on a customer code that earns
+# pic_capture_day, and the minimum invoices that day for it to count.
+GAMIFICATION_PIC_CAPTURE_PCT = config('GAMIFICATION_PIC_CAPTURE_PCT', default=70, cast=int)
+GAMIFICATION_PIC_CAPTURE_MIN_INVOICES = config('GAMIFICATION_PIC_CAPTURE_MIN_INVOICES', default=10, cast=int)
 GAMIFICATION_CHAMPION_EXCLUDED_ROLES = config('GAMIFICATION_CHAMPION_EXCLUDED_ROLES', default='admin,viewer',
                                               cast=lambda v: [r.strip() for r in v.split(',') if r.strip()])
 CUSTOMER_MERGE_ROLES         = ['admin', 'supervisor', 'call_center']

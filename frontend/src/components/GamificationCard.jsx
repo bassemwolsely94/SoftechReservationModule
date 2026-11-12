@@ -87,6 +87,12 @@ export default function GamificationCard({ className = '' }) {
           <Stat label={t('أيام نظيفة متتالية', 'Clean-day streak')}
                 value={`🔥 ${data.streak?.current ?? 0}`}
                 sub={t(`الأفضل ${data.streak?.best ?? 0}`, `best ${data.streak?.best ?? 0}`)} />
+          {data.pic?.linked && (
+            <Stat label={t('عملاء جدد اليوم', 'New customers today')}
+                  value={`👥 ${fmt(data.pic.today?.new_pics)}`}
+                  sub={data.pic.today?.capture_pct != null
+                    ? t(`${data.pic.today.capture_pct}% على كود`, `${data.pic.today.capture_pct}% coded`) : ''} />
+          )}
           <Stat label={t('رصيد المكافآت', 'Reward balance')}
                 value={`🎁 ${fmt(data.wallet?.balance)}`} />
           {br && (
