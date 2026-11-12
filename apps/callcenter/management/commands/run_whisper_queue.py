@@ -6,10 +6,7 @@ Normally launched by the scheduler inside the nightly window (default 02:00–06
   --max N          stop after N transcripts
   --backfill-days  queue answered recorded calls from the last D days first
 """
-from datetime import timedelta
-
 from django.core.management.base import BaseCommand
-from django.utils import timezone
 
 
 class Command(BaseCommand):
@@ -22,12 +19,10 @@ class Command(BaseCommand):
 
     def handle(self, *args, **opts):
         from apps.callcenter import whisper
-        from apps.callcenter.models import CallLog
 
         if opts['backfill_days']:
-            since = timezone.now() - timedelta(days=opts['backfill_days'])
-            queued = sum(whisper.enqueue(c) for c in
-                         CallLog.objects.filter(called_at__gte=since).select_related('pbx_session'))
+            # Issabel's CDR mirror (sync_pbx_cdr) holds every call, even while the bridge was down
+            queued = whisper.enqueue_recent_cdr(hours=opts['backfill_days'] * 24)
             self.stdout.write(f'queued {queued} calls')
 
         result = whisper.run_queue(ignore_window=opts['now'], max_items=opts['max'])

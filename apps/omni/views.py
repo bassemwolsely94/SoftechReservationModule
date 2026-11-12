@@ -150,12 +150,20 @@ class TimelineListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, OMNI]
 
     def get_queryset(self):
-        return (
+        # Same branch scope as the conversation list/detail: an id outside it shows nothing
+        visible = _scope_conversations(Conversation.objects.all(), self.request.user)
+        qs = (
             TimelineEvent.objects
-            .filter(conversation_id=self.kwargs['conversation_id'])
+            .filter(conversation_id=self.kwargs['conversation_id'], conversation__in=visible)
             .select_related('actor', 'content_type')
-            .order_by('occurred_at')
         )
+        types = [t for t in self.request.query_params.get('types', '').split(',') if t]
+        if types:
+            qs = qs.filter(event_type__in=types)
+        latest = self.request.query_params.get('latest', '')
+        if latest.isdigit():
+            return qs.order_by('-occurred_at')[:min(int(latest), 50)]   # newest first
+        return qs.order_by('occurred_at')
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

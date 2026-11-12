@@ -343,6 +343,15 @@ Webhook: inbound quick-reply taps `alert:<token>:ack` and `brief:<token>` are ro
 | `/api/finance/gl/rules/` (+ `meta/`, `preview/`, `{code}/versions/`) | GET/POST | Versioned posting rules (`ledger.edit`); preview computes only (view) |
 | `/api/finance/gl/exceptions/` (+ `counts/`, `unmapped-values/`, `redraft/`, `{id}/ignore/`) | GET / POST | Drafting exceptions inbox (`ledger.create` for writes) |
 | `/api/finance/gl/drafting/run/`, `drafting/runs/`, `drafting/runs/{id}/` | POST / GET | Start a drafting run (409 when one is active) and read progress (`ledger.create`) |
+| `/api/finance/gl/exceptions/{id}/accept-softech/`, `{id}/keep-edit/` | POST | P23 decision on an `edited_by_user` exception (`ledger.approve`) |
+| `/api/finance/gl/periods/` (+ `{id}/`, `{id}/checklist/`, `{id}/closing-stock/?preview=1`) | GET | Months of the year, one month, close checklist, saved or previewed SOFTECH closing stock (`ledger.view`; doc 35 Plan 3) |
+| `/api/finance/gl/periods/{id}/close/`, `{id}/reopen/` | POST | Close a month (202, background) / reopen it and every later closed month with a reason (`ledger.finalize`) |
+| `/api/finance/gl/compare/` (+ `refresh/`, `checks/`, `lines/{id}/`, `lines/{id}/explain/`) | GET / POST / PATCH | Ledger vs SOFTECH comparison: list, background refresh (view), check settings (PATCH `ledger.edit`), drill-down, explanation (`ledger.approve`) |
+| `/api/finance/gl/subledgers/{kind}/`, `subledgers/suppliers-vs-ap/` | GET | Sub-ledgers (suppliers, creditors, notes_payable, customers, employees, partners) and 2341 vs A/P reconciliation; `?format=xlsx` = `ledger.export` |
+| `/api/finance/gl/corrections/`, `corrections/from-exception/` | POST | Late correction draft in the first open month / one per `closed_period_change` exception (`ledger.create`) |
+| `/api/finance/gl/manual-import/preview/`, `manual-import/` | POST | Finance's manual-only journal: preview, then import as drafts (`ledger.create`, multipart `.xlsx`) |
+| `/api/finance/gl/validation/` | POST | Validate the ledger against finance's workbook, returns an xlsx of differences (`ledger.export` + view) |
+| `/api/finance/gl/closing-stock-stores/` | GET / PATCH | Store-to-branch map for closing stock (PATCH `ledger.edit`, audited) |
 | `/api/finance/pnl/` | GET | Profit & loss |
 | `/api/finance/cashflow/` | GET | Cash flow |
 | `/api/finance/expenses/` | GET | Expense analytics |

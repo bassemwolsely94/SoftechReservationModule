@@ -209,6 +209,12 @@ class DemandViewSet(viewsets.ModelViewSet):
         )
         return Response(DemandDetailSerializer(demand, context={'request': request}).data)
 
+    def handle_exception(self, exc):
+        # Round 2 close-out: an action not allowed from the current status was a 500.
+        if isinstance(exc, service.InvalidTransition):
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return super().handle_exception(exc)
+
     # ── Follow-up ─────────────────────────────────────────────────────────────
 
     @action(detail=True, methods=['post'], url_path='follow-up')

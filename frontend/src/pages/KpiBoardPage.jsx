@@ -46,7 +46,8 @@ function pctColor(pct) {
 }
 
 // Editable target <td>. Click (admin) → number input → save via onSave.
-function TargetCell({ c, branchId, metric, isCount, canEdit, onSave, strong }) {
+// When a scenario is selected, a «⤓» pulls just this cell's target from that model (onPull).
+function TargetCell({ c, branchId, metric, isCount, canEdit, onSave, onPull, pulling, strong }) {
   const [editing, setEditing] = useState(false)
   const [val, setVal] = useState('')
   const start = () => { setVal(c.target != null ? String(c.target) : ''); setEditing(true) }
@@ -73,6 +74,14 @@ function TargetCell({ c, branchId, metric, isCount, canEdit, onSave, strong }) {
         className={`px-2 py-2.5 text-center tabular-nums ${strong ? 'text-gray-500' : 'text-gray-400'} ${canEdit ? 'cursor-pointer hover:bg-blue-50/60' : ''}`}>
       {fmt(c.target, isCount)}
       {canEdit && <span className="text-[8px] text-blue-300 align-top"> ✎</span>}
+      {canEdit && onPull && (
+        <button type="button" disabled={pulling}
+          onClick={e => { e.stopPropagation(); onPull({ branch_id: branchId, metric }) }}
+          title="اعتمد هذا الهدف من السيناريو المختار"
+          className="align-top text-[8px] text-emerald-500 hover:text-emerald-700 disabled:opacity-40">
+          {pulling ? '…' : ' ⤓'}
+        </button>
+      )}
     </td>
   )
 }
@@ -115,7 +124,7 @@ function SubHeaders({ metrics, sort, onSort }) {
   )
 }
 
-function CallCenterBlock({ cc, canEdit, onSave }) {
+function CallCenterBlock({ cc, canEdit, onSave, onPull, pullingKey }) {
   const metrics = cc.metrics || []
   return (
     <div className="bg-white rounded-2xl border border-gray-100 overflow-x-auto mt-4" data-tour="analytics-kpi-board-call-center">
@@ -139,7 +148,9 @@ function CallCenterBlock({ cc, canEdit, onSave }) {
                 <Fragment key={m.key}>
                   <td className="px-2 py-2.5 text-center tabular-nums text-gray-800 border-r border-gray-50">{fmt(c.actual, m.is_count)}</td>
                   <MtdTarget c={c} isCount={m.is_count} />
-                  <TargetCell c={c} branchId={cc.branch_id} metric={m.key} isCount={m.is_count} canEdit={canEdit} onSave={onSave} />
+                  <TargetCell c={c} branchId={cc.branch_id} metric={m.key} isCount={m.is_count}
+                    canEdit={canEdit} onSave={onSave} onPull={onPull}
+                    pulling={pullingKey === `${cc.branch_id}:${m.key}`} />
                   <MetricPct c={c} />
                 </Fragment>
               )
@@ -200,6 +211,16 @@ export default function KpiBoardPage() {
     onSuccess: (r) => { setMsg(`تم اعتماد الأهداف من السيناريو (${r?.data?.targets_committed ?? ''})`); qc.invalidateQueries({ queryKey: ['kpi-board', year, month] }) },
     onError: () => setMsg('تعذّر الاعتماد من السيناريو'),
   })
+  // per-cell pull: set ONE target from the selected scenario's forecast for that branch×metric
+  const [pullingKey, setPullingKey] = useState('')
+  const pullCell = useMutation({
+    mutationFn: ({ branch_id, metric }) => forecastApi.commitCell(pullSid, { branch_id, metric }),
+    onMutate: ({ branch_id, metric }) => setPullingKey(`${branch_id}:${metric}`),
+    onSuccess: () => { setMsg('تم اعتماد هذا الهدف من النموذج'); qc.invalidateQueries({ queryKey: ['kpi-board', year, month] }) },
+    onError: (e) => setMsg(e?.response?.data?.detail || 'تعذّر اعتماد الهدف من النموذج'),
+    onSettled: () => setPullingKey(''),
+  })
+  const onPull = pullSid ? (p) => pullCell.mutate(p) : null
 
   async function handleExport() {
     setExporting(true); setExportErr('')
@@ -315,7 +336,9 @@ export default function KpiBoardPage() {
                       <Fragment key={m.key}>
                         <td className="px-2 py-2.5 text-center tabular-nums text-gray-800 border-r border-gray-50">{fmt(c.actual, m.is_count)}</td>
                         <MtdTarget c={c} isCount={m.is_count} />
-                        <TargetCell c={c} branchId={b.branch_id} metric={m.key} isCount={m.is_count} canEdit={canEdit} onSave={onSave} />
+                        <TargetCell c={c} branchId={b.branch_id} metric={m.key} isCount={m.is_count}
+                          canEdit={canEdit} onSave={onSave} onPull={onPull}
+                          pulling={pullingKey === `${b.branch_id}:${m.key}`} />
                         <MetricPct c={c} />
                       </Fragment>
                     )
@@ -342,10 +365,11 @@ export default function KpiBoardPage() {
         </div>
       )}
 
-      {data?.call_center && <CallCenterBlock cc={data.call_center} canEdit={canEdit} onSave={onSave} />}
+      {data?.call_center && <CallCenterBlock cc={data.call_center} canEdit={canEdit} onSave={onSave}
+        onPull={onPull} pullingKey={pullingKey} />}
 
       <p className="text-[11px] text-gray-400 mt-3" data-tour="analytics-kpi-board-legend">
-        القيم المالية بالجنيه · «محقق» من فواتير SOFTECH (صافى بعد المرتجعات) · «تارجت» قابل للتعديل (اضغط على الخلية){canEdit ? '' : ' — للمصرّح لهم'} أو «اعتمد من سيناريو».
+        القيم المالية بالجنيه · «محقق» من فواتير SOFTECH (صافى بعد المرتجعات) · «تارجت» قابل للتعديل (اضغط على الخلية){canEdit ? '' : ' — للمصرّح لهم'} أو «اعتمد من سيناريو» (كامل)، أو «⤓» لاعتماد خلية واحدة من النموذج المختار.
         تُدار الأهداف أيضاً من <a href="/targets" className="text-blue-500 hover:underline">الأهداف البيعية</a>.
       </p>
     </div>
