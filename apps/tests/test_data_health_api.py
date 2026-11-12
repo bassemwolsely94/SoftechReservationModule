@@ -103,7 +103,7 @@ class RoleSweepTests(_ApiCase):
         import importlib
         from apps.users.management.commands.seed_permissions import PERMISSIONS
         from apps.users.models import ROLE_CHOICES
-        mig = importlib.import_module('apps.users.migrations.0054_data_health_module')
+        mig = importlib.import_module('apps.users.migrations.0055_data_health_module')
         holders = {r: a for r, mods in PERMISSIONS.items() if (a := mods.get('data_health'))}
         self.assertEqual({r: a for r, a in holders.items() if r != 'admin'},
                          {'supervisor': {'view'}, 'quality_manager': {'view'}})

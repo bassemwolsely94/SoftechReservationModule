@@ -65,6 +65,7 @@ MODULE_CHOICES = [
     ('ledger',       'الحسابات العامة'),
     ('counselling',  'إرشادات الاستخدام'),
     ('usage_print',  'طباعة طريقة الاستخدام'),
+    ('hr_attendance', 'الحضور والبصمة'),
     ('data_health',  'صحة البيانات'),
 ]
 

@@ -63,6 +63,7 @@ BRANCH_SCOPE = {
     'replacement':  'own — scoped_cases + authz.require (accessible_branch_ids = branch_scope)',
     'stock_audit':  'own — named branch managers see their branches (branch_scope); management all',
     'pic_analytics': 'own — named branch managers see their branches (branch_scope); management all',
+    'hr_attendance': 'all — company-level by decision (2026-11-07): admins and named grantees only, never branch-scoped (apps/hr/attendance/access.py)',
     'gamification': 'n/a — own data; rankings are network-wide by design',
     'help':         'n/a — no branch data',
     'ledger':       'all — finance GL is company-level: every /api/finance/gl/ endpoint refuses branch-scoped users (B-1)',

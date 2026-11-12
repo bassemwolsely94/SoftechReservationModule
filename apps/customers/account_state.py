@@ -42,6 +42,13 @@ def state(c):
             'points_enrolled': bool(c.points_enrolled), 'merged_into': merged}
 
 
+def outreach_q():
+    """Queryset filter for customers we may message (campaigns): the same rule as state()['reminders'] —
+    not closed ('0', merged codes included), not deceased, not an entity. Blank status = unset = active."""
+    from django.db.models import Q
+    return ~Q(softech_status__in=('0', '5')) & Q(softech_deceased=False, softech_locked=False)
+
+
 def for_pic(pic):
     """state() for a SOFTECH PIC, or None when we do not mirror that code."""
     from .models import Customer

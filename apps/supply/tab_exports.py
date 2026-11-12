@@ -101,18 +101,24 @@ def rate_push_excel(push) -> bytes:
     items = IC.load_items(codes=[ln.itemcode for ln in lines])
     f3 = lambda v: round(float(v), 3) if v is not None else None
     rows = [[ln.itemcode, ln.item_name, *IC.item_cells(items.get(str(ln.itemcode))),
-             BL(ln.branchcode), ln.storecode, f3(ln.old_rate), f3(ln.old_rate_hq), f3(ln.new_rate),
+             BL(ln.branchcode), ln.storecode, f3(ln.old_rate), f3(ln.old_rate_hq),
+             f3(ln.base_rate), f3(ln.season_factor), f3(ln.new_rate),
              _yes(ln.eligible), ln.reason or '', _yes(ln.written), _yes(ln.verified), ln.error or '']
             for ln in lines]
+    seasonal = bool((push.method_params or {}).get('seasonal'))
     wb = _book()
     _sheet(wb.active, 'المعدلات',
            ['الكود', 'الصنف', *IC.ITEM_HEADS, 'الفرع', 'المخزن', 'المعدل الحالي (الفرع)',
-            'المعدل الحالي (نسخة الرئيسي)', 'المعدل الجديد', 'مؤهل', 'السبب', 'كُتب', 'تم التحقق', 'خطأ'],
-           rows, [9, 34, *IC.ITEM_WIDTHS, 22, 7, 11, 11, 11, 7, 30, 7, 9, 30],
+            'المعدل الحالي (نسخة الرئيسي)', 'المعدل الأساسي', 'معامل الموسمية', 'المعدل الجديد',
+            'مؤهل', 'السبب', 'كُتب', 'تم التحقق', 'خطأ'],
+           rows, [9, 34, *IC.ITEM_WIDTHS, 22, 7, 11, 11, 11, 9, 11, 7, 30, 7, 9, 30],
            freeze='C2', item_block_at=3)
     _notes(wb, [
         f'دفعة معدلات البيع #{push.pk} — {push.get_status_display()} · {push.get_method_display()} · '
-        f'{push.get_target_display()}',
+        f'{push.get_target_display()}' + (' · موسمي' if seasonal else ''),
+        ('• موسمي: «المعدل الجديد» = «المعدل الأساسي» × «معامل الموسمية» للأصناف ذات الموسمية المستقرة '
+         'في الثلاثين يوماً القادمة (×0.7–×1.5)؛ الصنف بلا معامل يُكتب معدله كما هو.' if seasonal
+         else '• غير موسمي: «المعدل الأساسي» و«معامل الموسمية» فارغان — المعدل من المحرك كما هو.'),
         f'• {len(rows)} سطر · تشغيل المحرك #{push.run_id or "—"} · أُنشئت {timezone.localtime(push.created_at):%Y-%m-%d %H:%M}.',
         '• «المعدل الحالي» = قيمة SOFTECH وقت إعداد الدفعة؛ «المعدل الجديد» = ما سيُكتب (أو كُتب) في monthlyqty.',
         IC.ITEM_NOTE,
