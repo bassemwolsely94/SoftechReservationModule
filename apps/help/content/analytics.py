@@ -570,9 +570,9 @@ SCREENS = [
              'text': T('مؤشر كل شهر: أكبر من 1 = موسم مرتفع، أقل من 1 = موسم منخفض.', 'A monthly index: above 1 = high season, below 1 = low season.'),
              'open_hint': T('افتح تبويب «📅 مؤشرات الموسمية».', 'Open the "📅 Seasonality" tab.')},
             {'target': 'analytics-forecasting-recompute', 'label': T('↺ إعادة حساب الموسمية', '↺ Recalculate seasonality'),
-             'text': T('يطلب إعادة حساب المؤشرات من تاريخ المبيعات.', 'Asks for the indices to be recomputed from sales history.'),
-             'warn': T('السيرفر بيحسب لصنف محدد والزر ما بيبعتش صنف — لو الجدول ما اتغيرش بلّغ الدعم.',
-                       'The server computes per item and this button sends no item — if the table does not change, tell support.'),
+             'text': T('يعيد حساب المؤشرات لكل الأصناف من مبيعات آخر سنتين.', 'Recomputes the indices for every item from the last two years of sales.'),
+             'warn': T('بيستبدل المؤشرات القديمة لكل الأصناف. الصنف اللي مبيعاته أقل من 6 شهور مش بيتحسبله مؤشر.',
+                       'It replaces the old indices for every item. An item with sales in fewer than 6 months gets no index.'),
              'open_hint': T('في تبويب «📅 مؤشرات الموسمية».', 'On the "📅 Seasonality" tab.')},
             {'target': 'analytics-forecasting-seasonality-recalc',  # from the GitHub-side tour
              'label': T('↺ إعادة حساب الموسمية', '↺ Recalculate seasonality'),
@@ -580,11 +580,11 @@ SCREENS = [
              'text': T('في تبويب «مؤشرات الموسمية»: «↺ إعادة حساب الموسمية» يعيد حساب المؤشرات.',
                        'On the «مؤشرات الموسمية» (Seasonality) tab: «↺ إعادة حساب الموسمية» (Recalculate seasonality) recomputes the indices.'),
              'more': T(
-                 'استخدمه بعد ما شهور مبيعات جديدة تتسحب، عشان المؤشرات تعكس آخر سنة.\n• السيرفر بيسمح بيه للمدير والمشرف والمشتريات بس.\n• بعد الطلب الجدول بيتحمّل تاني.',
-                 'Use it after new months of sales are pulled, so the indices reflect the latest year.\n• The server allows it for admin, supervisor and purchasing only.\n• After the request the table reloads.')},
+                 'استخدمه بعد ما شهور مبيعات جديدة تتسحب، عشان المؤشرات تعكس آخر سنة.\n• بيحسب لكل الأصناف مرة واحدة، وبعدها بيظهر جنب الزر «اتحسبت الموسمية لـ … صنف».\n• السيرفر بيسمح بيه للمدير والمشرف والمشتريات بس.\n• بعدها الجدول بيتحمّل تاني.',
+                 'Use it after new months of sales are pulled, so the indices reflect the latest year.\n• It computes every item in one go, then shows "Seasonality computed for … items" next to the button.\n• The server allows it for admin, supervisor and purchasing only.\n• Then the table reloads.')},
         ],
-        'updated': '2026-10-26',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-10',
+        'change_note': T('«↺ إعادة حساب الموسمية» بقى بيحسب كل الأصناف', '"↺ Recalculate seasonality" now computes every item'),
     },
     {
         'key': 'analytics.targets',
