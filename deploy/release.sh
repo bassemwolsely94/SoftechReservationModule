@@ -27,20 +27,24 @@ $U /opt/elrezeiky/venv/bin/pip install -q -r requirements.txt
 if ! $U git diff --quiet $OLD $NEW -- ocr_sidecar/requirements.txt; then
   echo "== python deps (OCR sidecar)"; $U /opt/elrezeiky/ocr-venv/bin/pip install -q -r ocr_sidecar/requirements.txt
 fi
+# Build and check BEFORE migrating: a failure here stops with nothing applied. A failure after
+# `migrate` would leave the old processes running on a newer schema (P-56).
+echo "== frontend";           (cd frontend && $U npm ci --silent && $U npm run build)
+echo "== deploy checks";      $U $PY manage.py check --deploy
 echo "== migrations to apply:"; $U $PY manage.py migrate --plan | tail -25
 read -p "Apply these migrations and restart production? [y/N] " a
-if [[ $a != y ]]; then echo "Stopped. Code is pulled but NOT live. Undo: sudo -u elrezeiky git checkout $OLD"; exit 1; fi
+if [[ $a != y ]]; then echo "Stopped. Code is pulled (frontend built, not collected) but NOT live. Undo: sudo -u elrezeiky git checkout $OLD"; exit 1; fi
 $U $PY manage.py migrate
 # P-56: EVERY process restarts after migrate (below). A process started before a migration
 # inserts with the old column set — that caused the 2026-10 schema-mismatch sync failures.
-echo "== frontend";           (cd frontend && $U npm ci --silent && $U npm run build)
 $U $PY manage.py collectstatic --noinput
-$U $PY manage.py check --deploy
 echo "== writer role (P-54)"; $U $PY manage.py writer_status | tail -1
 echo "== restart"
 systemctl restart elrezeiky-web
 systemctl restart elrezeiky-scheduler
 $U git diff --quiet $OLD $NEW -- ocr_sidecar || systemctl restart elrezeiky-ocr
+# the AMI bridge runs only after cutover (runbook §11); when it runs it is a Django process too
+if systemctl is-active --quiet elrezeiky-ami-bridge; then systemctl restart elrezeiky-ami-bridge; fi
 echo "== health"
 for i in $(seq 1 30); do
   if curl -fsS http://127.0.0.1:8000/api/public/health/ >/dev/null 2>&1; then ok=1; break; fi
