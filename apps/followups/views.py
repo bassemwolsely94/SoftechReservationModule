@@ -11,9 +11,9 @@ FollowUpTaskViewSet exposes rich, fully-filterable follow-up tasks that connect:
   - Call Center (log_call creates a CallLog linked to the customer + item)
 
 Advanced filters (query params on the list endpoint):
-  status, task_type, sales_channel (csv), favoured_only, branch, assigned_to,
-  indication (effect text), effect_code, medicine_type, item_search,
-  customer_search, segment, churn_segment, due_after, due_before, overdue_only,
+  status, task_type, sales_channel (csv), favoured_only, branch (csv), assigned_to,
+  indication (effect text, csv), effect_code, medicine_type (csv), item_search,
+  customer_search, segment (csv), churn_segment (csv), due_after, due_before, overdue_only,
   active_ingredient, ordering
 """
 from collections import defaultdict
@@ -36,6 +36,7 @@ from .serializers import (
 from . import services
 from apps.catalog.wildcard import wq
 from core import branch_scope
+from core.multi_filter import filter_in, multi_ids, multi_values
 from apps.customers import access as _ca   # Batch 5b
 from core.errors import public_error
 
@@ -129,8 +130,9 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
             qs = qs.filter(call_list_id=p['call_list'])
 
         # ── Branch / assignee ────────────────────────────────────────────────
+        # one branch or several (?branch=3,7) — narrows the already branch-scoped queryset
         if p.get('branch'):
-            qs = qs.filter(branch_id=p['branch'])
+            qs = filter_in(qs, 'branch_id', multi_ids(p, 'branch') or [0])
         if p.get('assigned_to'):
             qs = qs.filter(assigned_to_id=p['assigned_to'])
 
@@ -179,17 +181,20 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
                 Q(item__softech_id__icontains=item_search) |
                 Q(item__active_ingredients__icontains=item_search)
             )
-        if p.get('medicine_type'):
-            qs = qs.filter(item__medicine_type=p['medicine_type'])
+        qs = filter_in(qs, 'item__medicine_type', multi_values(p, 'medicine_type'))
         if p.get('effect_code'):
             qs = qs.filter(item__effect_code=p['effect_code'])
-        indication = (p.get('indication') or '').strip()
-        if indication:
-            qs = qs.filter(
-                Q(item__effect_name_ar__icontains=indication) |
-                Q(item__effect_name2_ar__icontains=indication) |
-                Q(item__effect_name__icontains=indication)
-            )
+        # several indications (?indication=a,b) = a task matching ANY of them
+        indications = multi_values(p, 'indication')
+        if indications:
+            ind_q = Q()
+            for indication in indications:
+                ind_q |= (
+                    Q(item__effect_name_ar__icontains=indication) |
+                    Q(item__effect_name2_ar__icontains=indication) |
+                    Q(item__effect_name__icontains=indication)
+                )
+            qs = qs.filter(ind_q)
         active_ing = (p.get('active_ingredient') or '').strip()
         if active_ing:
             qs = qs.filter(item__active_ingredients__icontains=active_ing)
@@ -211,10 +216,8 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
                 # phcode stored directly on the task for fast lookup
                 Q(phcode__icontains=cust_search)
             )
-        if p.get('segment'):
-            qs = qs.filter(customer__segment=p['segment'])
-        if p.get('churn_segment'):
-            qs = qs.filter(customer__churn_segment=p['churn_segment'])
+        qs = filter_in(qs, 'customer__segment', multi_values(p, 'segment'))
+        qs = filter_in(qs, 'customer__churn_segment', multi_values(p, 'churn_segment'))
 
         # ── Date / overdue filters ───────────────────────────────────────────
         if p.get('due_after'):

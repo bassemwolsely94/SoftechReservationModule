@@ -126,8 +126,10 @@ TT_MORE_KPIS = T(
     '• "ERP mismatch": shipments whose issue (125) differs from the receipt (25).')
 TT_MORE_FILTERS = T(
     'صفّي بالأولوية (طازج ← مراقبة ← متابعة ← طارئ ← حرج حسب عمر الشحنة)، والحالة، وفرع المصدر، وفرع المستلم، وعدد الأيام.\n'
+    '• الأولوية والحالة والفرعين: علّم أكثر من اختيار؛ لا شىء معلّم = الكل.\n'
     '• ابدأ دايماً بالحرج والطارئ.',
     'Filter by priority (fresh → watch → follow-up → urgent → critical, by shipment age), status, supplying branch, receiving branch and days.\n'
+    '• Priority, status and both branches: tick several; nothing ticked = all.\n'
     '• Always start with critical and urgent.')
 TT_MORE_AWAITING = T(
     'بيعرض الشحنات اللي اتسجّل استلامها هنا ولسه مستند الاستلام (25) ما ظهرش في SOFTECH.\n'
@@ -1010,11 +1012,12 @@ SCREENS = [
                  '• «قيد النقل» وقيمتها، و«متوسط أيام النقل».\n• «حرج / طارئ»: الشحنات القديمة اللي محتاجة تدخّل.\n• «تنتهي مهلة الإلغاء» خلال 24 ساعة، و«تم الاستلام/الإصدار اليوم».\n• «تباين مع ERP»: شحنات الصرف (125) فيها مختلف عن الاستلام (25).',
                  '• "In transit" and its value, and "Average days in transit".\n• "Critical / urgent": old shipments that need action.\n• "Cancellation window ending" within 24 hours, and "Received/issued today".\n• "ERP mismatch": shipments whose issue (125) differs from the receipt (25).')},
             {'target': 'transfers-transits-filters', 'label': T('الأولوية · الحالة · الفروع · العمر', 'Priority · status · branches · age'),
-             'text': T('فلتر الشحنات. «مسح الفلاتر» يرجّع الكل.', 'Filters the shipments. "Clear filters" shows them all again.'),
+             'text': T('الأولوية والحالة والفرعين تقبل أكثر من اختيار (مثلاً «حرج» و«طارئ» معاً). «مسح الفلاتر» يرجّع الكل.',
+                       'Priority, status and both branches take several choices (e.g. "Critical" and "Urgent" together). "Clear filters" shows all.'),
              'when': T('ابدأ يومك بأولوية «حرج» و«طارئ» لفرعك.', 'Start your day with "Critical" and "Urgent" for your branch.'),
              'more': T(
-                 'صفّي بالأولوية (طازج ← مراقبة ← متابعة ← طارئ ← حرج حسب عمر الشحنة)، والحالة، وفرع المصدر، وفرع المستلم، وعدد الأيام.\n• ابدأ دايماً بالحرج والطارئ.',
-                 'Filter by priority (fresh → watch → follow-up → urgent → critical, by shipment age), status, supplying branch, receiving branch and days.\n• Always start with critical and urgent.'),
+                 'صفّي بالأولوية (طازج ← مراقبة ← متابعة ← طارئ ← حرج حسب عمر الشحنة)، والحالة، وفرع المصدر، وفرع المستلم، وعدد الأيام.\n• الأولوية والحالة والفرعين: علّم أكثر من اختيار؛ لا شىء معلّم = الكل.\n• العمر اختيار واحد (3+ أو 5+ أيام…).\n• ابدأ دايماً بالحرج والطارئ.',
+                 'Filter by priority (fresh → watch → follow-up → urgent → critical, by shipment age), status, supplying branch, receiving branch and days.\n• Priority, status and both branches: tick several; nothing ticked = all.\n• Age is a single choice (3+ or 5+ days…).\n• Always start with critical and urgent.'),
          },
             {'target': 'transfers-transits-grid', 'label': T('جدول الشحنات قيد النقل', 'In-transit shipments table'),
              'text': T('كل سطر شحنة 125. اضغط عنوان العمود للترتيب، واضغط السطر يفتح لوحة تفاصيلها.',
@@ -1084,8 +1087,8 @@ SCREENS = [
              'when': T('لتسجيل سبب تأخير أو فرق أو تنسيق مع المخزن.', 'To record a delay reason, a difference or coordination with the store.'),
              'open_hint': T('افتح إذن، ثم تبويب الملاحظات.', 'Open a transfer, then the notes tab.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('ربط الشحنة بطلب التحويل يحتاج تطابق الفرعين وليس رقم المستند وحده', 'Linking a shipment to a transfer request needs both branches to match, not the document number alone'),
+        'updated': '2026-11-12',
+        'change_note': T('فلاتر الأولوية والحالة والفروع تقبل أكثر من اختيار معاً', 'Priority, status and branch filters take several choices at once'),
     },
     {
         'key': 'transfers.pick_zones',

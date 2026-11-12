@@ -151,7 +151,7 @@ MODULE = {
                            '• "Kanban": columns by status to see where work stands.\n'
                            '• "My tasks": only those assigned to you — start your day here.')},
                 {'target': 'tasks-list-filters', 'route': '/tasks',
-                 'text': T('فلتر بالحالة والأولوية والنوع والفرع، و«متأخرة فقط».', 'Filter by status, priority, type, branch and "Overdue only".'),
+                 'text': T('الحالة والأولوية والنوع والفرع تقبل أكثر من اختيار، ومعها «متأخرة فقط».', 'Status, priority, type and branch take several choices, plus "Overdue only".'),
                  'more': T('الفلاتر بتشتغل مع بعض؛ مثلاً فرع معيّن + «متأخرة فقط» يوريك اللي محتاج تدخّل فوراً.\n'
                            '• «مسح الفلاتر» بيرجّع كل المهام.',
                            'Filters combine; for example one branch + "Overdue only" shows what needs action right now.\n'
@@ -266,10 +266,11 @@ SCREENS = [
                  'اكتب كلمة من عنوان المهمة أو رقمها والقائمة بتتفلتر.\n• بيشتغل مع باقي الفلاتر اللي جنبه.',
                  'Type a word from the task title or its number and the list filters.\n• It works together with the other filters beside it.')},
             {'target': 'tasks-list-filters', 'label': T('الحالة · الأولوية · النوع · الفرع', 'Status · priority · type · branch'),
-             'text': T('فلتر بالحالة والأولوية والنوع والفرع. «مسح الفلاتر» يرجّع كل حاجة.', 'Filter by status, priority, type and branch. "Clear filters" resets them all.'),
+             'text': T('كل فلتر يقبل أكثر من اختيار: علّم حالتين أو فرعين أو أكثر معاً. «مسح الفلاتر» يرجّع كل حاجة.',
+                       'Each filter takes several choices: tick two or more statuses, branches and so on. "Clear filters" resets them all.'),
              'more': T(
-                 'اجمع كذا فلتر مع بعض، مثلاً: فرع + أولوية «عاجلة» + «متأخرة فقط».\n• «مسح الفلاتر» بيظهر لما يكون فيه فلتر شغال، وبيرجّع كل المهام.',
-                 'Combine several filters, e.g. a branch + "Urgent" priority + "Overdue only".\n• "Clear filters" appears when a filter is on and brings every task back.')},
+                 'افتح الفلتر وعلّم اللي تحبه (الحالة، الأولوية، النوع، الفرع) — ابحث بالاسم، و«تحديد الظاهر» يعلّم كل نتائج البحث.\n• لا شىء معلّم = الكل.\n• اجمع الفلاتر مع بعض، مثلاً: فرعين + «عاجلة» و«حرجة» + «متأخرة فقط».\n• «مسح الفلاتر» بيظهر لما يكون فيه فلتر شغال، وبيرجّع كل المهام.',
+                 'Open a filter and tick what you want (status, priority, type, branch) — search by name, "Tick shown" ticks every search result.\n• Nothing ticked = all.\n• Combine filters, e.g. two branches + "Urgent" and "Critical" + "Overdue only".\n• "Clear filters" appears when a filter is on and brings every task back.')},
             {'target': 'tasks-list-overdue', 'label': T('متأخرة فقط', 'Overdue only'),
              'text': T('يعرض المهام اللي عدّى موعدها النهائي ولسه ما اتقفلتش.', 'Shows tasks past their deadline that are not closed yet.'),
              'when': T('أول حاجة يبص عليها المشرف كل صبح.', 'The first thing a supervisor checks every morning.')},
@@ -295,8 +296,8 @@ SCREENS = [
         'tips': [T('بتشوف مهام فرعك ومهام «جميع الفروع» وأي مهمة إنت عاملها أو متكلّف بيها حتى لو في فرع تاني.', 'You see your branch\'s tasks, "all branches" tasks, and any task you created or are assigned to, even in another branch.'),
                  T('يعدّل المهمة أو يلغيها منشئها والمكلَّفون بها والمشرف والمدير فقط.',
                    'Only the task creator, its assignees, supervisors and admins can change or cancel a task.')],
-        'updated': '2026-11-06',
-        'change_note': T('المهام التشغيلية بقت في القائمة لكل دور عنده صلاحية المهام.', 'Operational tasks are now in the menu for every role that holds the tasks permission.'),
+        'updated': '2026-11-12',
+        'change_note': T('فلاتر الحالة والأولوية والنوع والفرع تقبل الآن أكثر من اختيار معاً', 'Status, priority, type and branch filters now take several choices at once'),
     },
     {
         'key': 'tasks.detail',
@@ -427,14 +428,15 @@ SCREENS = [
                      'Overview: total, active and overdue tasks, 30-day completion rate, status distribution, by type and branch, due soon, latest activity and active schedules.'),
         'audience': T('المديرون والمشرفون.', 'Managers and supervisors.'),
         'tips': [T('الأرقام هنا للمهام اللي تقدر تشوفها بس — موظف الفرع بيشوف فرعه.', 'The figures cover only the tasks you can see — a branch user sees their branch.')],
-        'steps': [T('اختر الفرع، وركّز على «متأخرة» و«المستحقة قريباً».', 'Pick the branch and focus on "Overdue" and "Due soon".')],
+        'steps': [T('علّم فرعاً أو أكثر، وركّز على «متأخرة» و«المستحقة قريباً».', 'Tick one or more branches and focus on "Overdue" and "Due soon".')],
         'related': ['tasks.list', 'tasks.schedules'],
         'tour': [
             {'target': 'tasks-dashboard-branch', 'label': T('كل الفروع', 'All branches'),
-             'text': T('يحصر كل أرقام اللوحة في فرع واحد.', 'Limits every number on the dashboard to one branch.'),
+             'text': T('يحصر كل أرقام اللوحة في فرع أو أكثر — علّم عدة فروع معاً؛ لا شىء معلّم = كل الفروع.',
+                       'Limits every number on the dashboard to one or more branches — tick several; nothing ticked = all.'),
              'more': T(
-                 'كل الكروت والتوزيعات تحت بتتحسب على الفرع اللي تختاره.\n• جنبه «← المهام» يرجّعك للقائمة و«⏱ إدارة الجداول» يفتح الجداول التلقائية.',
-                 'Every card and breakdown below is calculated for the branch you choose.\n• Beside it, "← Tasks" goes back to the list and "⏱ Manage schedules" opens automatic schedules.')},
+                 'كل الكروت والتوزيعات تحت بتتحسب على الفروع اللي تعلّمها.\n• جنبه «← المهام» يرجّعك للقائمة و«⏱ إدارة الجداول» يفتح الجداول التلقائية.',
+                 'Every card and breakdown below is calculated for the branches you tick.\n• Beside it, "← Tasks" goes back to the list and "⏱ Manage schedules" opens automatic schedules.')},
             {'target': 'tasks-dashboard-kpis', 'label': T('إجمالي · نشطة · متأخرة · معدل الإتمام', 'Total · active · overdue · completion'),
              'text': T('إجمالي المهام، النشطة (مفتوحة + تنفيذ)، المتأخرة، ومعدل الإتمام آخر 30 يوم. اضغط الكارت تتفتح القائمة مفلترة.',
                        'Total, active (open + in progress), overdue, and the 30-day completion rate. Click a card to open the filtered list.'),
@@ -479,8 +481,8 @@ SCREENS = [
                  'تلات مربعات: «توزيع الحالات»، «حسب النوع»، و«حسب الفرع».\n• منها تعرف فين الضغط: فرع عليه مهام كتير مفتوحة، أو نوع شغل دايماً بيتأخر.',
                  'Three boxes: "Status distribution", "By type" and "By branch".\n• They show where the pressure is: a branch with many open tasks, or a kind of work that is always late.')},
         ],
-        'updated': '2026-10-31',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-12',
+        'change_note': T('فلتر الفرع يقبل الآن أكثر من فرع معاً', 'The branch filter now takes several branches at once'),
     },
     {
         'key': 'tasks.schedules',

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { followupsApi } from '../../api/client'
 import useAuthStore from '../../store/authStore'
+import BranchMultiSelect from '../BranchMultiSelect'
 
 const SEGMENTS = [
   ['vip', 'VIP 👑'], ['loyal', 'مخلص 💚'], ['regular', 'عادي'], ['at_risk', 'في خطر ⚠️'],
@@ -14,12 +15,12 @@ function NewListForm({ branches, onDone }) {
   const [name, setName] = useState('')
   const [script, setScript] = useState('')
   const [segments, setSegments] = useState(['at_risk'])
-  const [branchId, setBranchId] = useState('')
+  const [branchIds, setBranchIds] = useState([])   // none ticked = every allowed branch
   const [minDays, setMinDays] = useState('30')
   const [maxDays, setMaxDays] = useState('')
   const [agentIds, setAgentIds] = useState([])
   const criteria = {
-    segments, ...(branchId && { branch_id: branchId }),
+    segments, ...(branchIds.length && { branch_ids: branchIds }),
     ...(minDays !== '' && { inactive_days_min: minDays }), ...(maxDays !== '' && { inactive_days_max: maxDays }),
   }
 
@@ -54,13 +55,11 @@ function NewListForm({ branches, onDone }) {
           <span className="text-xs text-gray-500">اسم القائمة</span>
           <input value={name} onChange={e => setName(e.target.value)} className="input w-full" placeholder="مثال: استرجاع عملاء نوفمبر" />
         </label>
-        <label className="block">
-          <span className="text-xs text-gray-500">الفرع (اختياري)</span>
-          <select value={branchId} onChange={e => setBranchId(e.target.value)} className="input w-full">
-            <option value="">كل الفروع المسموحة</option>
-            {branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
-          </select>
-        </label>
+        <div className="block">
+          <span className="text-xs text-gray-500">الفرع (اختياري — يمكن اختيار أكثر من فرع)</span>
+          <BranchMultiSelect className="w-full" allLabel="كل الفروع المسموحة" branches={branches}
+            selected={branchIds} onChange={setBranchIds} />
+        </div>
       </div>
 
       <div>

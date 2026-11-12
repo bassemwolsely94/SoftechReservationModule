@@ -46,6 +46,7 @@ from rest_framework.throttling import AnonRateThrottle
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .permissions import DENIED, DeliveryModulePermission, driver_of, guard
 from core import branch_scope
+from core.multi_filter import filter_in, multi_ids, multi_values
 from rest_framework.response import Response
 
 from .models import (
@@ -239,6 +240,14 @@ def _record_phone(request, value):
     return _ca.record_phone(request.user, value)
 
 
+def _filter_branches(qs, params, field='branch_id'):
+    """?branch=3 or ?branch=3,7 on an already branch-scoped queryset. A value with no valid id
+    matches nothing (as a bad single id did), never every branch."""
+    if not params.get('branch'):
+        return qs
+    return filter_in(qs, field, multi_ids(params, 'branch') or [0])
+
+
 def _orders(request, qs=None):
     """Delivery orders this user may reach: their branches' (core.branch_scope), plus — for a
     rider — the orders assigned to them, whichever branch dispatched them."""
@@ -283,12 +292,12 @@ class DeliveryOrderListView(generics.ListCreateAPIView):
             qs = qs.exclude(status__in=DeliveryOrder.TERMINAL_STATUSES)
         if status_param:
             qs = qs.filter(status__in=[s.strip() for s in status_param.split(',') if s.strip()])
-        if branch_param:
-            qs = qs.filter(branch_id=branch_param)
+        if branch_param:   # one branch or several (?branch=3,7) — narrows the scope, never widens
+            qs = _filter_branches(qs, p)
         if driver_param:
             qs = qs.filter(assigned_driver_id=driver_param)
-        if source_param:
-            qs = qs.filter(source_type=source_param)
+        if source_param:   # ?source_type=call_center,branch_pos
+            qs = filter_in(qs, 'source_type', multi_values(p, 'source_type'))
         if date_from:
             qs = qs.filter(ordered_at__date__gte=date_from)
         if date_to:
@@ -1522,8 +1531,8 @@ def driver_performance(request):
         ordered_at__date__lte=date_to,
         assigned_driver__isnull=False,
     )
-    if branch_id:
-        qs = qs.filter(branch_id=branch_id)
+    if branch_id:   # one branch or several (?branch=3,7)
+        qs = _filter_branches(qs, p)
 
     # Per-driver aggregation
     by_driver_raw = list(
@@ -1603,8 +1612,8 @@ def delivery_area_heatmap(request):
     branch_id = p.get('branch')
 
     qs = _orders(request).filter(ordered_at__date__gte=date_from, ordered_at__date__lte=date_to)
-    if branch_id:
-        qs = qs.filter(branch_id=branch_id)
+    if branch_id:   # one branch or several (?branch=3,7)
+        qs = _filter_branches(qs, p)
 
     # By governorate
     by_gov = list(
@@ -1691,8 +1700,8 @@ def delivery_shift_report(request):
     branch_id = p.get('branch')
 
     qs = _orders(request).filter(ordered_at__date__gte=date_from, ordered_at__date__lte=date_to)
-    if branch_id:
-        qs = qs.filter(branch_id=branch_id)
+    if branch_id:   # one branch or several (?branch=3,7)
+        qs = _filter_branches(qs, p)
 
     # Cairo is UTC+2 (or UTC+3 in summer) — use the local hour
     # We annotate with the hour of ordered_at
@@ -1908,8 +1917,8 @@ def delivery_csat_report(request):
         order__ordered_at__date__lte=date_to,
         score__isnull=False,
     )
-    if branch_id:
-        qs = qs.filter(order__branch_id=branch_id)
+    if branch_id:   # one branch or several (?branch=3,7)
+        qs = _filter_branches(qs, p, 'order__branch_id')
     # Batch 5b: own branches only (?branch= narrows); the low-score list shows no usable numbers
     qs = branch_scope.scope(qs, request.user, 'order__branch')
 

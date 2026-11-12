@@ -18,6 +18,7 @@ Permissions (`shortage` module, Batch 4 Z-7b): reads → view, export → export
 POSTs (flag / unflag / dismiss / retrieve) → approve.
 """
 import io
+from core.multi_filter import filter_in, multi_values
 from config.writers import writer_allowed
 import logging
 
@@ -76,10 +77,10 @@ def _cand_json(c, extra=None):
 
 def _apply_filters(rows, request):
     """medicine_type (?med=code) + free-text (?q=) over a ShortageCandidate list."""
-    med = request.GET.get('med')
+    med = multi_values(request.GET, 'med')       # several categories: ?med=a,b (none = all)
     q = (request.GET.get('q') or '').strip().lower()
     if med:
-        rows = [c for c in rows if c.med_type_code == med]
+        rows = [c for c in rows if c.med_type_code in med]
     if q:
         rows = [c for c in rows if q in c.name.lower() or q in c.softech_id.lower()]
     return rows
@@ -155,8 +156,8 @@ def shortage_confirmed(request):
             'autodetectable': autodet.get(it.id, 0) if it.shortage_source == 'manual' else 0,
             'softech_synced': it.shortage_softech_synced,
         })
-    if request.GET.get('med'):
-        rows = [r for r in rows if r['med_type_code'] == request.GET['med']]
+    if med := multi_values(request.GET, 'med'):
+        rows = [r for r in rows if r['med_type_code'] in med]
     from django.conf import settings
     total_lost = round(sum(r.get('lost_monthly', 0) for r in rows), 2)
     return Response({'count': len(rows), 'items': rows, 'total_lost_monthly': total_lost,
@@ -443,12 +444,11 @@ def shortage_export(request):
 def shortage_whatsapp(request):
     """Plain-text list formatted for WhatsApp (confirmed by default; ?view=candidates)."""
     view = request.GET.get('view', 'confirmed')
-    med = request.GET.get('med')
+    med = multi_values(request.GET, 'med')
     lines = ['*قائمة نواقص السوق* 📉', f'_بتاريخ {timezone.now():%Y-%m-%d}_', '']
     if view == 'confirmed':
         qs = Item.objects.filter(in_shortage=True).order_by('name')
-        if med:
-            qs = qs.filter(medicine_type=med)
+        qs = filter_in(qs, 'medicine_type', med)
         for i, it in enumerate(qs, 1):
             note = f' — {it.shortage_note}' if it.shortage_note else ''
             lines.append(f'{i}. {it.name}{note}')

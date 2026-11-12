@@ -14,6 +14,7 @@ from rest_framework.response import Response
 from apps.notifications.models import Notification
 from apps.notifications.phone_alerts import hooks as phone_alert_hooks
 from core import branch_scope
+from core.multi_filter import filter_in, multi_ids, multi_values
 from core.permissions import matrix_permission
 from core.sort_ordering import explicit_order_by, staff_name_key
 from core.sort_rank import branch_label, choice_rank, label_sort
@@ -157,17 +158,15 @@ class TaskListCreateView(generics.ListCreateAPIView):
 
         p = self.request.query_params
 
-        # Filters
-        if status_val := p.get('status'):
-            qs = qs.filter(status=status_val)
-        if priority := p.get('priority'):
-            qs = qs.filter(priority=priority)
-        if task_type := p.get('task_type'):
-            qs = qs.filter(task_type=task_type)
+        # Filters — status / priority / task_type / branch take several values (?status=open,on_hold);
+        # they narrow the already-scoped queryset, never widen it.
+        qs = filter_in(qs, 'status', multi_values(p, 'status'))
+        qs = filter_in(qs, 'priority', multi_values(p, 'priority'))
+        qs = filter_in(qs, 'task_type', multi_values(p, 'task_type'))
         if category := p.get('category'):
             qs = qs.filter(category=category)
-        if branch := p.get('branch'):
-            qs = qs.filter(branch_id=branch)
+        if p.get('branch'):
+            qs = filter_in(qs, 'branch_id', multi_ids(p, 'branch') or [0])
         if assigned := p.get('assigned_to'):
             qs = qs.filter(assigned_to_id=assigned)
         if mine := p.get('mine'):
@@ -639,8 +638,8 @@ def task_dashboard(request):
     date_to = p.get('date_to')
 
     qs = _visible_tasks(request)
-    if branch:
-        qs = qs.filter(branch_id=branch)
+    if branch:   # one branch or several (?branch=3,7); applied after the visibility scope
+        qs = filter_in(qs, 'branch_id', multi_ids(p, 'branch') or [0])
     if date_from:
         qs = qs.filter(created_at__date__gte=date_from)
     if date_to:

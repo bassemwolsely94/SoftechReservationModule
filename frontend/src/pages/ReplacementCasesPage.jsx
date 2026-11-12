@@ -14,6 +14,7 @@ import useBranchLabels from '../hooks/useBranchLabels'
 import { Chip, money } from './supply/supplyUi'
 import SortTh from '../components/SortTh'
 import useServerSort from '../hooks/useServerSort'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 
 export const STATUS_TONE = {
   entitlement_active: 'amber', settled: 'blue', reconciled: 'emerald', closed: 'gray',
@@ -48,6 +49,11 @@ function Adoption({ rows, onUnclaimed }) {
 export const SEV_TONE = { info: 'blue', warning: 'amber', high: 'rose', critical: 'rose' }
 export const SEV_LABEL = { info: 'معلومة', warning: 'تحذير', high: 'مرتفع', critical: 'حرج' }
 const SUPPLIERS = [['4472', '25%'], ['4471', '30%'], ['4470', '40%'], ['4469', '50%'], ['3068', 'عام'], ['4069', 'عام 50%']]
+const SUPPLIER_OPTIONS = SUPPLIERS.map(([c, l]) => ({ code: c, name: `${c} — ${l}` }))
+const STATUS_OPTIONS = [
+  { code: 'unclaimed', name: 'شراء بدون حالة' }, { code: 'entitlement_active', name: 'رصيد قائم' },
+  { code: 'settled', name: 'مستهلكة (تحتاج مراجعة)' }, { code: 'reconciled', name: 'مطابقة' },
+]
 
 function Kpi({ label, value, sub, tone = 'text-gray-900' }) {
   return (
@@ -70,10 +76,13 @@ const SORT_KEYS = [
 
 export default function ReplacementCasesPage() {
   const nav = useNavigate()
-  const [f, setF] = useState({ q: '', branch: '', supplier: '', status: '', open_balance: '', has_exceptions: '',
+  // supplier + status are multi-select (arrays, [] = all); sent as one comma list
+  const [f, setF] = useState({ q: '', branch: '', supplier: [], status: [], open_balance: '', has_exceptions: '',
                                exception_type: '', page: 1 })
   const set = (k, v) => setF((s) => ({ ...s, [k]: v, page: k === 'page' ? v : 1 }))
-  const params = Object.fromEntries(Object.entries(f).filter(([, v]) => v !== '' && v !== null))
+  const params = Object.fromEntries(Object.entries(f)
+    .map(([k, v]) => [k, Array.isArray(v) ? v.join(',') : v])
+    .filter(([, v]) => v !== '' && v !== null))
   const { page, ...filterOnly } = params
 
   const summary = useQuery({ queryKey: ['replacement-summary', filterOnly],
@@ -123,7 +132,7 @@ export default function ReplacementCasesPage() {
              sub="انظر «سداد الموردين»" />
       </div>
 
-      <Adoption rows={s?.adoption} onUnclaimed={(b) => setF((x) => ({ ...x, branch: b, status: 'unclaimed', page: 1 }))} />
+      <Adoption rows={s?.adoption} onUnclaimed={(b) => setF((x) => ({ ...x, branch: b, status: ['unclaimed'], page: 1 }))} />
 
       {!!s?.exceptions?.length && (
         <div className="flex gap-2 flex-wrap items-center" data-tour="replacement-cases-exceptions">
@@ -144,19 +153,11 @@ export default function ReplacementCasesPage() {
                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm flex-1 min-w-[260px]" />
         <input value={f.branch} onChange={(e) => set('branch', e.target.value)} placeholder="فرع"
                className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-20" />
-        <select data-tour="replacement-cases-supplier" value={f.supplier} onChange={(e) => set('supplier', e.target.value)}
-                className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
-          <option value="">كل الموردين</option>
-          {SUPPLIERS.map(([c, l]) => <option key={c} value={c}>{c} — {l}</option>)}
-        </select>
-        <select data-tour="replacement-cases-status" value={f.status} onChange={(e) => set('status', e.target.value)}
-                className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
-          <option value="">كل الحالات</option>
-          <option value="unclaimed">شراء بدون حالة</option>
-          <option value="entitlement_active">رصيد قائم</option>
-          <option value="settled">مستهلكة (تحتاج مراجعة)</option>
-          <option value="reconciled">مطابقة</option>
-        </select>
+        <MultiSelectFilter dataTour="replacement-cases-supplier" options={SUPPLIER_OPTIONS} selected={f.supplier}
+                           onChange={(v) => set('supplier', v)} allLabel="كل الموردين" showCode={false} className="w-[160px]" />
+        <MultiSelectFilter dataTour="replacement-cases-status" options={STATUS_OPTIONS} selected={f.status}
+                           onChange={(v) => set('status', v)} allLabel="كل الحالات" showCode={false}
+                           className="w-[180px]" menuClassName="min-w-[220px]" />
         <label data-tour="replacement-cases-open-balance" className="text-xs flex items-center gap-1">
           <input type="checkbox" checked={f.open_balance === '1'} onChange={(e) => set('open_balance', e.target.checked ? '1' : '')} />
           برصيد فقط

@@ -41,6 +41,7 @@ from core import branch_scope
 from core.sort_ordering import NullsLastOrderingFilter, explicit_order_by, staff_name_key
 from core.sort_rank import branch_label, choice_rank, text_or
 from core.errors import public_error
+from core.multi_filter import filter_in, multi_ids, multi_values
 from core.permissions import deny_unless
 
 
@@ -107,7 +108,7 @@ class DemandViewSet(viewsets.ModelViewSet):
 
     permission_classes = [IsAuthenticated, DEMAND, RouteModuleDeletePermission]
     filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, NullsLastOrderingFilter]
-    filterset_fields   = ['status', 'priority', 'branch', 'source', 'assigned_to']
+    filterset_fields   = ['status', 'source', 'assigned_to']   # priority + branch: multi-select, see filter_queryset
     search_fields      = [
         'phone', 'customer_name', 'phcode', 'demand_number',
         'items__item__name', 'items__item__softech_id', 'items__item_name_free',
@@ -132,6 +133,15 @@ class DemandViewSet(viewsets.ModelViewSet):
         # Batch 5: the one branch helper — all-branch roles (incl. supervisor / quality manager,
         # owner decision B-3) see every branch; branch staff home + allowed − restricted; fail-closed.
         return branch_scope.scope(qs, self.request.user)
+
+    def filter_queryset(self, queryset):
+        """List filters: the backends, then the multi-select ones (?priority=high,urgent,
+        ?branch=1,2). The queryset is already branch-scoped, so ?branch= only narrows."""
+        qs = super().filter_queryset(queryset)
+        p = self.request.query_params
+        qs = filter_in(qs, 'priority', multi_values(p, 'priority'))
+        qs = filter_in(qs, 'branch_id', multi_ids(p, 'branch'))
+        return qs
 
     def get_serializer_class(self):
         if self.action == 'list':

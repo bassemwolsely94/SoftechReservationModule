@@ -7,6 +7,8 @@ import { useNavigate } from 'react-router-dom'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { demandApi, branchesApi, usersApi } from '../api/client'
 import BranchSelect from '../components/BranchSelect'
+import BranchMultiSelect from '../components/BranchMultiSelect'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 import useAuthStore from '../store/authStore'
 import CanDo from '../components/CanDo'
 import { usePermission } from '../hooks/usePermission'
@@ -49,6 +51,7 @@ const PRIORITY_CFG = {
   urgent:  { label: 'عاجل 🔴',        cls: 'bg-red-100 text-red-700'     },
   chronic: { label: 'مزمن 💊',        cls: 'bg-purple-100 text-purple-700' },
 }
+const PRIORITY_OPTIONS = Object.entries(PRIORITY_CFG).map(([k, c]) => ({ code: k, name: c.label }))
 
 const SOURCE_OPTIONS = [
   { value: 'walk_in',      label: '🚶 حضر للفرع' },
@@ -514,8 +517,9 @@ export default function DemandPage() {
   const { user }      = useAuthStore()
 
   const [showCreate, setShowCreate] = useState(false)
+  // priority + branch are multi-select (arrays, [] = all); status is the tab strip (single)
   const [filters, setFilters] = useState({
-    status: '', priority: '', branch: '', search: '', sla_breached: '',
+    status: '', priority: [], branch: [], search: '', sla_breached: '',
   })
 
   const [searchInput, setSearchInput] = useState('')
@@ -569,8 +573,8 @@ useEffect(() => {
 ],
     queryFn: () => demandApi.list({
       status:       filters.status       || undefined,
-      priority:     filters.priority     || undefined,
-      branch:       filters.branch       || undefined,
+      priority:     filters.priority.join(',') || undefined,
+      branch:       filters.branch.join(',')   || undefined,
       search:       filters.search       || undefined,
       ordering:     ordering             || undefined,
     }).then(r => r.data.results || r.data),
@@ -692,17 +696,13 @@ useEffect(() => {
   value={searchInput}
   onChange={e => setSearchInput(e.target.value)}
 />
-            <select className="input-field w-36 text-xs" data-tour="demand-list-priority" value={filters.priority}
-              onChange={e => setFilters(p => ({ ...p, priority: e.target.value }))}>
-              <option value="">كل الأولويات</option>
-              {Object.entries(PRIORITY_CFG).map(([v, c]) => (
-                <option key={v} value={v}>{c.label}</option>
-              ))}
-            </select>
+            <MultiSelectFilter className="w-36 text-xs" dataTour="demand-list-priority"
+              options={PRIORITY_OPTIONS} selected={filters.priority}
+              onChange={v => setFilters(p => ({ ...p, priority: v }))}
+              allLabel="كل الأولويات" showCode={false} />
             {isCCOrAdmin && (
-              <BranchSelect
-                size="sm"
-                value={filters.branch}
+              <BranchMultiSelect
+                selected={filters.branch}
                 onChange={v => setFilters(p => ({ ...p, branch: v }))}
                 branches={branches}
                 allLabel="كل الفروع"
@@ -716,7 +716,7 @@ useEffect(() => {
             </select>
             <button className="btn-secondary text-xs px-3" data-tour="demand-list-filters-reset"
   onClick={() => {
-    setFilters({ status: '', priority: '', branch: '', search: '', sla_breached: '' })
+    setFilters({ status: '', priority: [], branch: [], search: '', sla_breached: '' })
     setSearchInput('')
   }}>
               مسح

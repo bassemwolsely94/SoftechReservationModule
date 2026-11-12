@@ -22,6 +22,7 @@ from .permissions import CanUseReplacement, scoped_cases
 from .serializers import (CaseDetailSerializer, CaseListSerializer, ExceptionSerializer, GrantSerializer,
                           RuleSerializer, RunSerializer)
 from apps.catalog.wildcard import wq
+from core.multi_filter import filter_in, multi_values
 from core.sort_ordering import explicit_order_by
 from core.sort_rank import branch_label, choice_rank
 
@@ -51,9 +52,7 @@ def _filter_cases(request, qs):
     for key, field in (('branch', 'branchcode'), ('status', 'status'), ('source_type', 'source_type'),
                        ('supplier', 'supplier_personcode'), ('mode', 'settlement_mode'),
                        ('confidence', 'link_confidence'), ('severity', 'max_severity')):
-        v = p.get(key)
-        if v:
-            qs = qs.filter(**{f'{field}__in': v.split(',')})
+        qs = filter_in(qs, field, multi_values(p, key))     # ?status=a,b or ?status=a&status=b
     if p.get('date_from'):
         qs = qs.filter(purchase_date__gte=p['date_from'])
     if p.get('date_to'):
