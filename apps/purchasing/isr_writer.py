@@ -454,7 +454,7 @@ def build_items_plan(node_branch, items):
 # ── create a proposal (PG only) + optional auto-approve+push ────────────────────
 def _persist_proposal(*, source, dest, kind, lines, run_id=None, created_by=None, linked=None,
                       coverage_months=None, params=None, origin_isr=None, origin_request=None,
-                      origin_shortage_list=None, origin_donor='', notes='', planner=None):
+                      origin_shortage_list=None, origin_donor='', notes='', planner=None, route_tag=''):
     """Save one PROPOSED draft. Guards (isr_guards, doc 30 phase A): the route must be valid
     (never HQ → HQ); a GENERAL draft (no origin request) supersedes an older proposed draft
     on the same route and is refused while an approved one waits there. Drafts tied to a
@@ -472,10 +472,12 @@ def _persist_proposal(*, source, dest, kind, lines, run_id=None, created_by=None
     with transaction.atomic():
         if general and planner:
             params = {**(params or {}), 'planner': planner}       # P-32 §2.3: who made this draft
-        older = isr_guards.check_route_free(kind, source, dest, planner=planner) if general else []
+        older = (isr_guards.check_route_free(kind, source, dest, planner=planner, tag=route_tag)
+                 if general else [])
         isr_guards.retire(older, user=created_by)        # one live draft per route, always
         p = IsrPush.objects.create(
             branch=branch, branchcode=str(source), dest_branchcode=str(dest), kind=kind,
+            route_tag=(route_tag or '') if general else '',
             run_id=run_id, status=IsrPush.STATUS_PROPOSED, line_count=len(lines),
             docvalue=round(docvalue, 3), lines_snapshot=lines, created_by=created_by, linked_push=linked,
             coverage_months=coverage_months, params=params or {}, origin_isr=origin_isr,
@@ -595,44 +597,7 @@ def create_transfer_proposals(from_branch, to_branch, items, *, created_by=None,
     return leg1, leg2
 
 
-def create_distribution_proposals(*, categories=None, limit=None, created_by=None, skipped=None):
-    """L3 توزيعة: turn distribution suggestions into ISR proposals, grouped by route.
-      • HQ source (100)  → ONE HQ→branch ISR (kind=hq_to_branch) with all its items.
-      • branch source A  → two-leg (A→HQ, HQ→branch) via create_transfer_proposals.
-    Returns a list of {route, kind, ids, items}."""
-    from collections import defaultdict
-    from apps.purchasing.models import IsrPush
-    from apps.purchasing import distribution
-
-    sugs = distribution.analyze(categories=categories, limit=limit)
-    routes = defaultdict(dict)   # (source, dest) -> {itemcode: qty}  (dedup items per route)
-    for s in sugs:
-        src = str(s['from_branch'])
-        for t in s['to_branches']:
-            # per-target qty (over_piled: up to that branch's room under its ceiling)
-            routes[(src, str(t['code']))][s['itemcode']] = t.get('qty', s['qty_each'])
-
-    created = []
-    for (src, dest), item_map in routes.items():
-        items = list(item_map.items())
-        try:
-            if src == HQ_CODE:
-                lines = build_items_plan(HQ_CODE, items)
-                p = _persist_proposal(source=HQ_CODE, dest=dest, kind=IsrPush.KIND_HQ_TO_BRANCH,
-                                      lines=lines, created_by=created_by, planner='distribution')
-                if p:
-                    created.append({'route': f'{HQ_CODE} ← {dest}', 'path': [HQ_CODE, dest], 'kind': 'hq_to_branch',
-                                    'ids': [p.id], 'items': len(items)})
-                continue
-            leg1, leg2 = create_transfer_proposals(src, dest, items, created_by=created_by, planner='distribution')
-        except ValueError as exc:                # a guard refused this route (isr_guards)
-            if skipped is not None:
-                skipped.append({'route': f'{src} ← {dest}', 'path': [src, dest], 'reason': str(exc)})
-            continue
-        if leg1 or leg2:
-            created.append({'route': f'{src} ← {HQ_CODE} ← {dest}', 'path': [src, HQ_CODE, dest], 'kind': 'transfer',
-                            'ids': [x.id for x in (leg1, leg2) if x], 'items': len(items)})
-    return created
+# «التوزيعة» drafts come from a stored plan now (doc 30 phases B–D): apps/purchasing/distribution_plan.py
 
 
 def auto_generate(branchcode, *, created_by=None, max_lines=None, auto_approve=False):
