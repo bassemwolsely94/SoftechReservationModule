@@ -336,7 +336,10 @@ class MorningChainRunGuardTests(TestCase):
     def test_retry_after_a_killed_run_skips_steps_done_today(self):
         self._fast_ok()
         killed = SyncRun.objects.create(status='failed', lane='morning_chain')
-        SyncRun.objects.filter(pk=killed.pk).update(started_at=timezone.now() - timedelta(minutes=1))
+        from apps.sync.maintenance import morning_chain_day_start
+        # inside the current chain day even when the suite runs at 07:30:xx
+        started = max(timezone.now() - timedelta(minutes=1), morning_chain_day_start())
+        SyncRun.objects.filter(pk=killed.pk).update(started_at=started)
         for name in ('_run_ap_reconciliation_sync', '_insights_daily'):
             SyncLog.objects.create(sync_run=killed, table_name=f'chain:{name.lstrip("_")}',
                                    records_processed=1)
