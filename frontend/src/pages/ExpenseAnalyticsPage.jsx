@@ -14,6 +14,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { financeApi } from '../api/client'
+import DataFreshnessBar from '../components/DataFreshnessBar'
 import { fa } from '../utils/flowArrow'
 import useServerSort from '../hooks/useServerSort'
 import SortTh from '../components/SortTh'
@@ -284,6 +285,8 @@ export default function ExpenseAnalyticsPage() {
 
   return (
     <div className="space-y-5" dir="rtl">
+
+      <DataFreshnessBar domains={['finance_expenses']} />
 
       {/* ── Filter Bar ─────────────────────────────────────────────────────── */}
       <Card className="p-4">

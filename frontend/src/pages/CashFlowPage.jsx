@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { financeApi } from '../api/client'
+import DataFreshnessBar from '../components/DataFreshnessBar'
 
 const fmt = (n, d = 0) => parseFloat(n || 0).toLocaleString('en-US', {
   minimumFractionDigits: d, maximumFractionDigits: d,
@@ -76,6 +77,8 @@ export default function CashFlowPage() {
           </select>
         </div>
       </div>
+
+      <DataFreshnessBar domains={['finance_journal', 'ap_reconciliation']} />
 
       {isLoading && <div className="text-center py-16 text-gray-400 animate-pulse">جارٍ التحميل…</div>}
       {isError && (
