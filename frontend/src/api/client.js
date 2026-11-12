@@ -529,6 +529,8 @@ export const kpiApi = {
   refresh: () => api.post('/forecasting/kpi-board/refresh/'),
   // Rollup freshness for the current + previous months ({running, months:[{year,month,computed_at,stale}]}).
   refreshStatus: () => api.get('/forecasting/kpi-board/refresh/'),
+  // Daily follow-up board for salespeople with an assigned target this month (achieved resolved live).
+  salespersonBoard: (params = {}) => api.get('/forecasting/salesperson-board/', { params }),
 }
 
 // Forecast scenarios (doc 16, Phase 3)

@@ -108,6 +108,7 @@ export const NAV_GROUPS = [
       { to: '/my-incentives', icon: '🏅', label: 'حوافزي',         roles: null },
       { to: '/targets',     icon: '🎯', label: 'الأهداف البيعية',  roles: ['admin','supervisor','purchasing','pharmacist','quality_manager','viewer'] },
       { to: '/kpi-board',   icon: '📊', label: 'لوحة مؤشرات الفروع', roles: ['admin','supervisor','purchasing','pharmacist','quality_manager','viewer'] },
+      { to: '/salesperson-board', icon: '🧑‍💼', label: 'متابعة المندوبين', roles: ['admin','supervisor','purchasing'] },
       { to: '/forecast-scenarios', icon: '🔮', label: 'سيناريوهات التنبؤ', roles: ['admin','supervisor','purchasing'] },
       { to: '/insights',    icon: '📋', label: 'التقارير السردية', roles: ['admin','supervisor','purchasing','quality_manager','viewer'] },
       { to: '/referral-stats', icon: '🩺', label: 'إحالات الأطباء', roles: ['admin','supervisor','pharmacist','quality_manager','viewer'] },
