@@ -79,10 +79,11 @@ GET /api/recommendations/fbt/  [-]
 GET /api/recommendations/fbt/for-item/  [-]
 GET /api/recommendations/runs/  [-]
 
-# reason: OPEN_READ paths — what every screen loads whatever the role: own permissions / SOFTECH group, the staff picker, data-freshness bar, sync status and branch health, public-holiday calendar, own incentive progress, the screen-usage beacon, the counselling switches, own stock-audit / daily-count access flags.
+# reason: OPEN_READ paths — what every screen loads whatever the role: own permissions / SOFTECH group, the staff picker, data-freshness bar, sync status and branch health, public-holiday calendar, own incentive progress, own extension's browser-phone settings (Z-8b: own extension only, no-store), the screen-usage beacon, the counselling switches, own stock-audit / daily-count access flags.
 GET /api/cheques/holidays/  [-]
 GET /api/counselling/status/  [-]
 GET /api/incentives/my-progress/  [-]
+GET /api/pbx/webrtc/config/  [-]
 GET /api/stock-audit/me/  [-]
 GET /api/stockcount/daily/my/  [-]
 GET /api/sync/branch-health/  [-]

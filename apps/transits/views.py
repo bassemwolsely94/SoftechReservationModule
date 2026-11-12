@@ -153,7 +153,12 @@ class InTransitTransferViewSet(viewsets.ReadOnlyModelViewSet):
             'notes__created_by',
         ).annotate(
             # numeric doc number (SOFTECH docnumbers are numeric strings)
-            doc_number_num=Cast('erp_doc_number', output_field=db_models.BigIntegerField()),
+            # numeric only when it is digits: one odd value must not break the whole list (500)
+            doc_number_num=Case(
+                When(erp_doc_number__regex=r'^[0-9]{1,18}$',
+                     then=Cast('erp_doc_number', output_field=db_models.BigIntegerField())),
+                default=None, output_field=db_models.BigIntegerField(),
+            ),
             # severity order for priority (green → critical)
             priority_rank=Case(
                 When(priority='green',    then=Value(0)),
