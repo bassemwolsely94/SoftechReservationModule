@@ -3,6 +3,7 @@
  * claim period overlaps the chosen dates. All numbers come from the backend
  * (apps/insurance/portfolio.py); this page only displays, sorts, orders and exports.
  */
+import MultiSelectFilter from '../components/MultiSelectFilter'
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
@@ -87,7 +88,8 @@ export default function InsuranceReportsPage() {
   const bl = useBranchLabels()
   const [clients, setClients] = useState([])
   const [subs, setSubs]       = useState([])
-  const [f, setF] = useState({ from: monthStart(), to: monthEnd(), client_id: '', subclient_id: '', status: '' })
+  // الجهة / الفئة / الحالة are multi-select: nothing ticked = all
+  const [f, setF] = useState({ from: monthStart(), to: monthEnd(), clients: [], subclients: [], statuses: [] })
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(false)
   const [err, setErr]         = useState(null)
@@ -103,8 +105,19 @@ export default function InsuranceReportsPage() {
       setClients(c.data.results || c.data); setSubs(s.data.results || s.data)
     }).catch(() => {})
   }, [])
-  const params = () => ({ from: f.from || undefined, to: f.to || undefined, client_id: f.client_id || undefined,
-    subclient_id: f.subclient_id || undefined, status: f.status || undefined })
+  const csv = (a) => (a.length ? a.join(',') : undefined)
+  const params = () => ({ from: f.from || undefined, to: f.to || undefined, client_id: csv(f.clients),
+    subclient_id: csv(f.subclients), status: csv(f.statuses) })
+  const clientOpts = useMemo(() => clients.map(c => {
+    const s = subs.filter(x => x.client === c.id).map(x => x.name).join('، ')
+    return { code: c.id, name: s ? `${c.name} — ${s}` : c.name }
+  }), [clients, subs])
+  // فئات of the ticked جهات only; a ticked فئة narrows its own جهة, the other ticked جهات stay whole
+  const subOpts = useMemo(() => subs.filter(s => f.clients.includes(s.client)).map(s => ({
+    code: s.id, name: f.clients.length > 1 ? `${s.name} — ${clients.find(c => c.id === s.client)?.name || ''}` : s.name,
+  })), [subs, clients, f.clients])
+  const setClients_ = (ids) => setF(p => ({ ...p, clients: ids,
+    subclients: p.subclients.filter(id => ids.includes(subs.find(s => s.id === id)?.client)) }))
   const load = () => {
     setLoading(true); setErr(null)
     insuranceApi.portfolio(params())
@@ -188,21 +201,14 @@ export default function InsuranceReportsPage() {
       <div className="bg-white border border-gray-200 rounded-xl p-3 flex flex-wrap items-end gap-2" data-tour="insurance-reports-filters">
         <label className="text-xs text-gray-500">من<input type="date" className={`${inp} block mt-0.5`} value={f.from} onChange={e => setF({ ...f, from: e.target.value })} /></label>
         <label className="text-xs text-gray-500">إلى<input type="date" className={`${inp} block mt-0.5`} value={f.to} onChange={e => setF({ ...f, to: e.target.value })} /></label>
-        <label className="text-xs text-gray-500">الجهة
-          <select className={`${inp} block mt-0.5 max-w-[260px]`} value={f.client_id} onChange={e => setF({ ...f, client_id: e.target.value, subclient_id: '' })}>
-            <option value="">كل الجهات</option>
-            {clients.map(c => <option key={c.id} value={c.id}>{c.name}{(() => { const s = subs.filter(x => x.client === c.id).map(x => x.name).join('، '); return s ? ` — ${s}` : '' })()}</option>)}
-          </select></label>
-        <label className="text-xs text-gray-500">الفئة
-          <select className={`${inp} block mt-0.5`} value={f.subclient_id} disabled={!f.client_id} onChange={e => setF({ ...f, subclient_id: e.target.value })}>
-            <option value="">كل الفئات</option>
-            {subs.filter(s => String(s.client) === String(f.client_id)).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select></label>
-        <label className="text-xs text-gray-500">الحالة
-          <select className={`${inp} block mt-0.5`} value={f.status} onChange={e => setF({ ...f, status: e.target.value })}>
-            <option value="">كل الحالات (عدا الملغاة والمرفوضة)</option>
-            {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select></label>
+        <MultiSelectFilter label="الجهة" className="w-[280px]" menuClassName="min-w-[520px]" showCode={false}
+          allLabel="كل الجهات" options={clientOpts} selected={f.clients} onChange={setClients_} dataTour="insurance-reports-clients" />
+        <MultiSelectFilter label="الفئة" className="w-[200px]" menuClassName="min-w-[320px]" showCode={false}
+          allLabel={f.clients.length ? 'كل فئات المحدد' : 'اختر الجهة أولاً'} disabled={!f.clients.length}
+          options={subOpts} selected={f.subclients} onChange={ids => setF(p => ({ ...p, subclients: ids }))} />
+        <MultiSelectFilter label="الحالة" className="w-[220px]" showCode={false}
+          allLabel="كل الحالات (عدا الملغاة والمرفوضة)" options={Object.entries(STATUS).map(([k, v]) => ({ code: k, name: v }))}
+          selected={f.statuses} onChange={ids => setF(p => ({ ...p, statuses: ids }))} />
         <button onClick={load} disabled={loading} data-tour="insurance-reports-run" className="px-4 py-2 bg-blue-600 text-white text-sm rounded disabled:opacity-40">{loading ? 'جارٍ…' : 'عرض'}</button>
       </div>
       {err && <div className="text-sm text-red-600">{err}</div>}
