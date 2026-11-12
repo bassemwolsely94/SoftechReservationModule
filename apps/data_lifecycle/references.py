@@ -95,3 +95,25 @@ def partition(candidates, index):
         others = [ref for ref in index.get(normalise(candidate.path), ()) if ref.key not in own]
         (skipped if others else movable).append(candidate)
     return movable, skipped
+
+
+def references_to(path):
+    """Every record that uses this one media path, as a set of Ref. One query per FileField of every model (the
+    exact stored value) plus one per TEXT_PATH_FIELDS entry (`contains` the file name, then the URL must point
+    at exactly this path). For a single file; a rule run over many files builds the whole index instead."""
+    path = normalise(path)
+    found = set()
+    for model in apps.get_models():
+        label = model._meta.label
+        for fld in model._meta.local_fields:
+            if isinstance(fld, models.FileField):
+                for pk, value in model._default_manager.filter(**{fld.name: path}).values_list('pk', fld.name):
+                    found.add(Ref(label, pk, fld.name, value))
+    base = posixpath.basename(path)
+    if base:
+        for label, name in TEXT_PATH_FIELDS:
+            model = apps.get_model(label)
+            for pk, value in model._default_manager.filter(**{f'{name}__contains': base}).values_list('pk', name):
+                if media_path_from_url(value) == path:
+                    found.add(Ref(label, pk, name, value))
+    return found

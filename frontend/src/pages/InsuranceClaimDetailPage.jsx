@@ -1347,7 +1347,7 @@ function PaymentsTab({ claim, onRefresh }) {
 // «اقتراحات من سجل المرضى»: the فئة فوترة each receipt's patient was billed under on
 // earlier claims of this جهة (or a list linked to a فئة). Nothing is pre-ticked.
 const _BG_STATUS = { full: 'مقترح', conflict: 'أكثر من فئة', none: 'بلا سجل', assigned: 'مُخصص' }
-function BillingGroupSuggestions({ claimId, onAssigned }) {
+function BillingGroupSuggestions({ claimId, onAssigned, version = 0 }) {
   const [data, setData]   = useState(null)
   const [busy, setBusy]   = useState(false)
   const [sel, setSel]     = useState(() => new Set())
@@ -1362,7 +1362,7 @@ function BillingGroupSuggestions({ claimId, onAssigned }) {
       .catch(() => setMsg('تعذّر تحميل الاقتراحات'))
       .finally(() => setBusy(false))
   }
-  useEffect(() => { load() }, [claimId])   // eslint-disable-line
+  useEffect(() => { load() }, [claimId, version])   // eslint-disable-line -- reloads after any change on the board
   const target = (r) => pick[r.prescription_id] ?? r.suggested_group_id
   const groupName = (id) => data?.groups.find(g => g.id === Number(id))?.name || ''
   const shown = useMemo(
@@ -1374,7 +1374,8 @@ function BillingGroupSuggestions({ claimId, onAssigned }) {
     getValue: (r, k) => (k === 'group' ? groupName(target(r)) : r[k]),
   })
   if (!data) return busy ? <div className="text-xs text-gray-400 mb-3">جارٍ مطابقة المرضى مع سجل فئات الفوترة…</div> : null
-  if (!data.groups.length) return null
+  // nothing to suggest (every unassigned patient has no history) → stay out of the way
+  if (!data.groups.length || !((data.counts?.full || 0) + (data.counts?.conflict || 0))) return null
 
   const Th = (k, label, type = 'text') => (
     <SortTh {...headerProps(k, type)} className="text-right px-2 py-1.5 whitespace-nowrap">{label}</SortTh>
@@ -1454,264 +1455,290 @@ function BillingGroupSuggestions({ claimId, onAssigned }) {
   )
 }
 
-// ── unassigned rx / manual / supplements picker (sortable, selection grid) ─────
-function AssignPicker({ rows, selectedRx, setSelectedRx }) {
-  const { sorted, headerProps } = useSortableRows(rows)
-  const th = 'px-2 py-1 font-semibold'
-  return (
-    <table className="w-full text-xs">
-      <thead className="bg-gray-50 sticky top-0">
-        <tr className="text-gray-500">
-          <th className="px-2 py-1 w-6"></th>
-          <SortTh {...headerProps('doc')} className={`${th} text-right`}>رقم الفاتورة</SortTh>
-          <SortTh {...headerProps('date', 'date')} className={`${th} text-right`}>التاريخ</SortTh>
-          <SortTh {...headerProps('name')} className={`${th} text-right`}>اسم المريض</SortTh>
-          <SortTh {...headerProps('kind')} className={`${th} text-right`}></SortTh>
-          <SortTh {...headerProps('net', 'number')} className={`${th} text-left`}>الصافى</SortTh>
-        </tr>
-      </thead>
-      <tbody>
-        {sorted.map(row => (
-          <tr key={row.key} className="border-b border-gray-50 hover:bg-gray-50">
-            <td className="px-2 py-1">
-              <input type="checkbox" checked={selectedRx.has(row.key)}
-                onChange={e => {
-                  const s = new Set(selectedRx)
-                  e.target.checked ? s.add(row.key) : s.delete(row.key)
-                  setSelectedRx(s)
-                }} />
-            </td>
-            <td className="px-2 py-1 text-gray-400">{row.doc}</td>
-            <td className="px-2 py-1 text-gray-500 whitespace-nowrap">{row.date || '—'}</td>
-            <td className="px-2 py-1">{row.name || '—'}</td>
-            <td className="px-2 py-1">
-              {row.kind === 'manual'
-                ? <span className="text-[10px] bg-blue-100 text-blue-700 rounded px-1 py-0.5">يدوي</span>
-                : row.kind === 'sup'
-                ? <span className="text-[10px] bg-green-100 text-green-700 rounded px-1 py-0.5">ملحق</span>
-                : <span className="text-gray-400">{row.extra}</span>}
-            </td>
-            <td className="px-2 py-1 font-mono">{fmt(row.net)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
-}
+// ── «فئات الفوترة» board: category cards on top, one grid of every receipt below ─────
+// The grid shows each receipt's current فئة. Moving a receipt out of another فئة is always
+// an explicit action (the row's فئة picker, or «انقلها أيضاً» after a bulk add) — never silent.
+// Everything reloads from the server after any change, so a deleted فئة's receipts come
+// straight back as «غير مخصص».
+const _BG_COLORS = ['bg-purple-100 text-purple-800 border-purple-300', 'bg-sky-100 text-sky-800 border-sky-300',
+  'bg-emerald-100 text-emerald-800 border-emerald-300', 'bg-amber-100 text-amber-800 border-amber-300',
+  'bg-rose-100 text-rose-800 border-rose-300', 'bg-indigo-100 text-indigo-800 border-indigo-300',
+  'bg-teal-100 text-teal-800 border-teal-300', 'bg-orange-100 text-orange-800 border-orange-300']
+const _BG_KIND = { manual: ['يدوى', 'bg-blue-100 text-blue-700'], sup: ['ملحق', 'bg-green-100 text-green-700'] }
+const _BG_EMPTY_FORM = { code: '', name: '', description: '', filter_relative_degree: '', filter_dept_name: '',
+  filter_hi_type_code: '', filter_patient_no_prefix: '' }
+const _bgIds = (keys) => ({
+  p: keys.filter(k => k[0] === 'p').map(k => Number(k.slice(1))),
+  m: keys.filter(k => k[0] === 'm').map(k => Number(k.slice(1))),
+  s: keys.filter(k => k[0] === 's').map(k => Number(k.slice(1))),
+})
 
 function BillingGroupsTab({ claim, claimId, onRefresh }) {
-  const [groups, setGroups]   = useState([])
-  const [loading, setLoading] = useState(true)
-  const [showAdd, setShowAdd] = useState(false)
+  const [board, setBoard]     = useState(null)
+  const [busy, setBusy]       = useState(false)
+  const [view, setView]       = useState('unassigned')   // 'unassigned' | 'all' | group id
+  const [sel, setSel]         = useState(() => new Set())
+  const [q, setQ]             = useState('')
+  const [msg, setMsg]         = useState(null)            // { text, tone }
+  const [conflict, setConflict] = useState(null)          // { group, keys, list } after a 409
+  const [form, setForm]       = useState(null)            // null | { ...fields, id? }
   const [exporting, setExporting] = useState(null)
-  const [assignTarget, setAssignTarget] = useState(null)  // group id for rx-assign panel
-  const [selectedRx, setSelectedRx] = useState(new Set())
-  const [form, setForm] = useState({
-    code: '', name: '', description: '',
-    filter_relative_degree: '', filter_dept_name: '',
-    filter_hi_type_code: '', filter_patient_no_prefix: '',
-  })
-
-  const inp = 'w-full border border-gray-300 rounded px-3 py-1.5 text-sm'
+  const [ver, setVer]         = useState(0)              // bumps after every change → the suggestions reload too
 
   const load = useCallback(async () => {
-    setLoading(true)
     try {
-      const { data } = await insuranceApi.billingGroups(claimId)
-      setGroups(data.results || data)
-    } finally { setLoading(false) }
+      const { data } = await insuranceApi.billingBoard(claimId)
+      setBoard(data)
+      const live = new Set(data.rows.map(r => r.key))
+      setSel(s => new Set([...s].filter(k => live.has(k))))
+      setView(v => (typeof v === 'number' && !data.groups.some(g => g.id === v)) ? 'unassigned' : v)
+    } catch { setMsg({ text: 'تعذّر تحميل فئات الفوترة', tone: 'err' }) }
   }, [claimId])
-
   useEffect(() => { load() }, [load])
 
-  const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
-
-  async function addGroup() {
-    if (!form.code || !form.name) { alert('الكود والاسم مطلوبان'); return }
-    await insuranceApi.createBillingGroup({ ...form, claim: claimId })
-    setForm({ code: '', name: '', description: '', filter_relative_degree: '',
-              filter_dept_name: '', filter_hi_type_code: '', filter_patient_no_prefix: '' })
-    setShowAdd(false)
-    load()
+  const changed = async (text) => { await load(); setVer(v => v + 1); onRefresh && onRefresh(); if (text) setMsg({ text, tone: 'ok' }) }
+  const errText = (e, fb) => e?.response?.data?.error || e?.response?.data?.detail || fb
+  const run = async (fn, fb) => {
+    setBusy(true); setMsg(null)
+    try { await fn() } catch (e) { setMsg({ text: errText(e, fb), tone: 'err' }) } finally { setBusy(false) }
   }
 
-  async function delGroup(id) {
-    if (!window.confirm('حذف فئة الفوترة؟ سيتم إلغاء تخصيص روشتاتها.')) return
-    await insuranceApi.deleteBillingGroup(id)
-    load(); onRefresh()
-  }
+  const groups = useMemo(() => board?.groups || [], [board])
+  const color = useMemo(() => Object.fromEntries(groups.map((g, i) => [g.id, _BG_COLORS[i % _BG_COLORS.length]])), [groups])
+  const gName = (id) => groups.find(g => g.id === id)
+  const locked = !!board?.locked
 
-  async function autoAssign(id) {
-    const { data } = await insuranceApi.autoAssignGroup(id)
-    alert(`تم تخصيص ${data.assigned} روشتة تلقائياً حسب الفلاتر`)
-    load(); onRefresh()
-  }
+  const shown = useMemo(() => {
+    let rows = board?.rows || []
+    if (view === 'unassigned') rows = rows.filter(r => !r.group_id)
+    else if (view !== 'all') rows = rows.filter(r => r.group_id === view)
+    const s = q.trim()
+    if (s) rows = rows.filter(r => wildcardMatch([r.patient_name, r.docnumber, r.relative_degree], s))
+    return rows
+  }, [board, view, q])
+  const { sorted: rows, headerProps } = useSortableRows(shown, {
+    defaultSort: { key: 'sequence', dir: 'asc', type: 'number' },
+    getValue: (r, k) => (k === 'group' ? (gName(r.group_id)?.code || '') : r[k]),
+  })
+  const toggle = (k) => setSel(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n })
+  const kb = useGridKeyboard({ rows, getKey: r => r.key, onToggle: r => toggle(r.key),
+    onSelectAll: () => setSel(new Set(rows.map(r => r.key))) })
+  const selRows = (board?.rows || []).filter(r => sel.has(r.key))
+  const selNet = selRows.reduce((a, r) => a + Number(r.net_after || 0), 0)
 
-  async function exportGroup(id, name) {
-    setExporting(id)
+  // ── actions ──
+  const assignTo = (group, keys, move = false) => run(async () => {
+    const ids = _bgIds(keys)
     try {
-      const { data } = await insuranceApi.exportGroup(id, 'all')
-      const blob = new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-      const url  = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href  = url
-      link.download = `مطالبة_${claim?.claim_number || claimId}_${name}.xlsx`
-      document.body.appendChild(link); link.click(); document.body.removeChild(link)
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      const { data } = await insuranceApi.assignRxToGroup(group.id, ids.p, ids.m, ids.s, move)
+      setConflict(null); setSel(new Set())
+      await changed(`أُضيف ${data.updated} إلى «${group.name}»`)
     } catch (e) {
-      alert('فشل التصدير: ' + (e?.message || 'خطأ'))
-    } finally { setExporting(null) }
+      if (e?.response?.status === 409) { setConflict({ group, keys, list: e.response.data.conflicts || [] }); return }
+      throw e
+    }
+  }, 'تعذّر التخصيص')
+  const unassignKeys = (keys) => run(async () => {
+    const byGroup = {}
+    for (const r of (board?.rows || []).filter(x => keys.includes(x.key) && x.group_id)) (byGroup[r.group_id] ||= []).push(r.key)
+    let n = 0
+    for (const [gid, ks] of Object.entries(byGroup)) {
+      const ids = _bgIds(ks)
+      const { data } = await insuranceApi.unassignRxFromGroup(Number(gid), ids.p, ids.m, ids.s)
+      n += data.unassigned
+    }
+    setSel(new Set()); await changed(`أُلغى تخصيص ${n} — عادت «غير مخصص»`)
+  }, 'تعذّر إلغاء التخصيص')
+  // the row's فئة picker: choosing another فئة IS the explicit move
+  const setRowGroup = (r, gid) => (gid ? assignTo(gName(gid), [r.key], true) : unassignKeys([r.key]))
+  const autoAssign = (g) => run(async () => {
+    const { data } = await insuranceApi.autoAssignGroup(g.id)
+    await changed(data.assigned ? `«${g.name}»: خُصّص تلقائياً ${data.assigned} من غير المخصص` : `«${g.name}»: لا يوجد غير مخصص يطابق قواعد الفئة`)
+    setView(g.id)
+  }, 'تعذّر التخصيص التلقائى')
+  const delGroup = (g) => {
+    const n = (board?.rows || []).filter(r => r.group_id === g.id).length
+    if (!window.confirm(`حذف فئة الفوترة «${g.name}»؟${n ? `\n${n} روشتة ستعود «غير مخصص» ويمكن إضافتها لفئة أخرى.` : ''}`)) return
+    run(async () => { const { data } = await insuranceApi.deleteBillingGroup(g.id); await changed(`حُذفت «${g.name}» — ${data?.freed ?? 0} عادت غير مخصصة`) }, 'تعذّر الحذف')
+  }
+  const saveForm = () => {
+    if (!form.code?.trim() || !form.name?.trim()) { setMsg({ text: 'الكود والاسم مطلوبان', tone: 'err' }); return }
+    run(async () => {
+      const { id, ...body } = form
+      if (id) await insuranceApi.updateBillingGroup(id, body)
+      else { const { data } = await insuranceApi.createBillingGroup({ ...body, claim: claimId }); setView(data.id) }
+      setForm(null); await changed(id ? 'حُفظت الفئة' : 'أُضيفت الفئة — اختر الروشتات من «غير مخصص» وأضفها لها')
+    }, 'تعذّر حفظ الفئة')
+  }
+  const exportGroup = async (g) => {
+    setExporting(g.id)
+    try {
+      const { data } = await insuranceApi.exportGroup(g.id, 'all')
+      const url = URL.createObjectURL(new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+      const a = document.createElement('a'); a.href = url; a.download = `مطالبة_${claim?.claim_number || claimId}_${g.code}.xlsx`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch { setMsg({ text: 'فشل التصدير', tone: 'err' }) } finally { setExporting(null) }
   }
 
-  async function saveAssignment() {
-    if (!assignTarget || selectedRx.size === 0) return
-    const keys = Array.from(selectedRx)
-    const rxIds     = keys.filter(k => k.startsWith('p')).map(k => Number(k.slice(1)))
-    const manualIds = keys.filter(k => k.startsWith('m')).map(k => Number(k.slice(1)))
-    const supIds    = keys.filter(k => k.startsWith('s')).map(k => Number(k.slice(1)))
-    await insuranceApi.assignRxToGroup(assignTarget, rxIds, manualIds, supIds)
-    setAssignTarget(null); setSelectedRx(new Set())
-    load(); onRefresh()
-  }
-
-  const degreeOptions = ['', 'للعضو', 'للزوجة', 'للزوج', 'للأبناء', 'للوالدين']
-  const allRx = claim?.prescriptions || []
-  const allManual = claim?.manual_rx || []
-  const allSup = (claim?.supplements || []).filter(s => s.supplement_type !== 'standalone')
-  // excluded receipts are out of the claim — never offered, never counted as «غير مخصص»
-  const unassignedRx     = allRx.filter(r => !r.billing_group && !r.is_excluded)
-  const unassignedManual = allManual.filter(m => !m.billing_group && !m.is_excluded)
-  const unassignedSup    = allSup.filter(s => !s.billing_group && !s.is_excluded)
-  const unassignedCount  = unassignedRx.length + unassignedManual.length + unassignedSup.length
-  const totalNet = groups.reduce((s, g) => s + Number(g.net_after || 0), 0)
+  if (!board) return <div className="p-6 text-sm text-gray-400">جارٍ تحميل فئات الفوترة…</div>
+  const T = board.totals
+  const inp = 'w-full border border-gray-300 rounded px-2 py-1.5 text-sm'
+  const card = (active) => `text-right rounded-xl border p-3 min-w-[170px] transition ${active ? 'ring-2 ring-blue-500 border-blue-400 bg-blue-50/40' : 'border-gray-200 bg-white hover:border-gray-300'}`
+  const Th = (k, label, type = 'text') => <SortTh {...headerProps(k, type)} className="text-right px-2 py-1.5 whitespace-nowrap">{label}</SortTh>
+  const inOther = selRows.filter(r => r.group_id).length
+  const viewLabel = view === 'unassigned' ? 'غير مخصص' : view === 'all' ? 'كل الروشتات' : gName(view)?.name
 
   return (
-    <div className="p-4">
-      <div className="flex justify-between items-center mb-4">
+    <div className="p-4 space-y-3" data-tour="insurance-claim-billing-board">
+      <div className="flex justify-between items-start flex-wrap gap-2">
         <div>
           <h3 className="font-semibold text-gray-700">فئات الفوترة (تقسيم المطالبة)</h3>
-          <p className="text-xs text-gray-500 mt-0.5">
-            قسّم المطالبة إلى فئات فرعية، خصّص الروشتات لكل فئة، ثم صدّر فاتورة منفصلة لكل فئة.
-            <span className="text-amber-600 mr-2">غير مخصص: {unassignedCount} روشتة</span>
-          </p>
+          <p className="text-xs text-gray-500 mt-0.5">اختر بطاقة لعرض روشتاتها، حدّد الروشتات ثم أضفها لفئة. الروشتة فى فئة أخرى تظهر بلونها ولا تُنقل إلا بأمر صريح.</p>
         </div>
-        <Btn data-tour="insurance-claim-billing-new" onClick={() => setShowAdd(!showAdd)} size="md">+ فئة جديدة</Btn>
+        {!locked && <Btn data-tour="insurance-claim-billing-new" onClick={() => setForm(form && !form.id ? null : { ..._BG_EMPTY_FORM })} size="md">+ فئة جديدة</Btn>}
+      </div>
+      {locked && <div className="text-xs rounded border border-amber-300 bg-amber-50 text-amber-800 px-3 py-2">المطالبة مقفلة (مُقدَّمة/مدفوعة) — العرض والتصدير فقط.</div>}
+
+      <BillingGroupSuggestions claimId={claimId} version={ver} onAssigned={() => changed()} />
+
+      {form && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3" data-tour="insurance-claim-billing-form">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-2 mb-2">
+            <label className="text-xs text-gray-600">كود الفئة *<input className={inp} value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} placeholder="مثال: 101" /></label>
+            <label className="text-xs text-gray-600 md:col-span-2">اسم الفئة *<input className={inp} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></label>
+            <label className="text-xs text-gray-600">درجة القرابة
+              <select className={inp} value={form.filter_relative_degree} onChange={e => setForm({ ...form, filter_relative_degree: e.target.value })}>
+                {['', 'للعضو', 'للزوجة', 'للزوج', 'للأبناء', 'للوالدين'].map(d => <option key={d} value={d}>{d || '— أى —'}</option>)}
+              </select></label>
+            <label className="text-xs text-gray-600">الإدارة<input className={inp} value={form.filter_dept_name} onChange={e => setForm({ ...form, filter_dept_name: e.target.value })} /></label>
+            <label className="text-xs text-gray-600">بادئة رقم المريض<input className={inp} value={form.filter_patient_no_prefix} onChange={e => setForm({ ...form, filter_patient_no_prefix: e.target.value })} /></label>
+          </div>
+          <div className="flex gap-2 items-center">
+            <Btn data-tour="insurance-claim-billing-save" onClick={saveForm} disabled={busy} size="md">{form.id ? 'حفظ التعديل' : 'حفظ الفئة'}</Btn>
+            <Btn onClick={() => setForm(null)} variant="secondary" size="md">إلغاء</Btn>
+            <span className="text-[11px] text-gray-400">قواعد «تخصيص تلقائى» اختيارية — بدونها يأخذ كل غير المخصص.</span>
+          </div>
+        </div>
+      )}
+
+      {/* category cards */}
+      <div className="flex gap-2 overflow-x-auto pb-1" data-tour="insurance-claim-billing-cards">
+        <button onClick={() => { setView('unassigned'); setSel(new Set()) }} className={card(view === 'unassigned')}>
+          <div className="text-sm font-semibold text-amber-700">غير مخصص</div>
+          <div className="text-xs text-gray-500 mt-1">{T.unassigned_count} روشتة</div>
+          <div className="font-mono text-sm font-semibold">{fmt(T.unassigned_net)}</div>
+        </button>
+        {groups.map(g => (
+          <div key={g.id} className={card(view === g.id)}>
+            <button onClick={() => { setView(g.id); setSel(new Set()) }} className="w-full text-right">
+              <div className="flex items-center gap-1.5">
+                <span className={`text-[11px] font-mono font-semibold border rounded px-1.5 ${color[g.id]}`}>{g.code}</span>
+                <span className="text-sm font-semibold text-gray-800 truncate max-w-[200px]" title={g.name}>{g.name}</span>
+              </div>
+              <div className="text-xs text-gray-500 mt-1">{g.row_count} روشتة · إجمالى {fmt(g.gross_before)} · خصم {fmt(g.total_discount)}</div>
+              <div className="font-mono text-sm font-semibold">صافى {fmt(g.net_after)}</div>
+            </button>
+            <div className="flex gap-1 mt-2 text-[11px]">
+              {!locked && <button onClick={() => autoAssign(g)} disabled={busy} data-tour="insurance-claim-billing-auto-assign"
+                title="يضيف لهذه الفئة غير المخصص فقط (حسب قواعدها إن وُجدت) — لا يأخذ من فئة أخرى"
+                className="px-2 py-0.5 rounded border border-gray-300 bg-white hover:bg-gray-50">تلقائى</button>}
+              <button onClick={() => exportGroup(g)} disabled={exporting === g.id} data-tour="insurance-claim-billing-export"
+                className="px-2 py-0.5 rounded border border-green-300 text-green-700 bg-white hover:bg-green-50">{exporting === g.id ? '…' : 'تصدير'}</button>
+              {!locked && <button onClick={() => setForm({ ..._BG_EMPTY_FORM, ...g })} className="px-2 py-0.5 rounded border border-gray-300 bg-white hover:bg-gray-50">تعديل</button>}
+              {!locked && <button onClick={() => delGroup(g)} data-tour="insurance-claim-billing-delete"
+                className="px-2 py-0.5 rounded border border-red-200 text-red-600 bg-white hover:bg-red-50">حذف</button>}
+            </div>
+          </div>
+        ))}
+        <button onClick={() => { setView('all'); setSel(new Set()) }} className={card(view === 'all')}>
+          <div className="text-sm font-semibold text-gray-700">الكل</div>
+          <div className="text-xs text-gray-500 mt-1">{T.rows} روشتة</div>
+          <div className="font-mono text-sm font-semibold">{fmt(T.net)}</div>
+        </button>
+      </div>
+      <div className={`text-xs ${T.balanced ? 'text-gray-500' : 'text-red-600 font-semibold'}`}>
+        مجموع الفئات {fmt(T.groups_net)} + غير مخصص {fmt(T.unassigned_net)} = {fmt(T.groups_net + T.unassigned_net)} {T.balanced ? '✓' : '≠'} روشتات المطالبة {fmt(T.net)}
+        {T.excluded_count > 0 && <span className="text-gray-400"> · {T.excluded_count} مستبعدة خارج الفئات</span>}
       </div>
 
-      <BillingGroupSuggestions claimId={claimId} onAssigned={() => { load(); onRefresh() }} />
-
-      {showAdd && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-          <div className="grid grid-cols-3 gap-3 mb-3">
-            <div>
-              <label className="text-xs text-gray-600 mb-1 block">كود الفئة *</label>
-              <input className={inp} value={form.code} onChange={e => set('code', e.target.value)} placeholder="مثال: CASH, INS" />
-            </div>
-            <div className="col-span-2">
-              <label className="text-xs text-gray-600 mb-1 block">اسم الفئة *</label>
-              <input className={inp} value={form.name} onChange={e => set('name', e.target.value)} placeholder="مثال: نقدي، تأمين صحي" />
-            </div>
-          </div>
-          <p className="text-xs font-semibold text-gray-500 mb-2">قواعد التخصيص التلقائي (اختياري):</p>
-          <div className="grid grid-cols-4 gap-3 mb-3">
-            <div>
-              <label className="text-xs text-gray-600 mb-1 block">درجة القرابة</label>
-              <select className={inp} value={form.filter_relative_degree} onChange={e => set('filter_relative_degree', e.target.value)}>
-                {degreeOptions.map(d => <option key={d} value={d}>{d || '— أي —'}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-gray-600 mb-1 block">الإدارة</label>
-              <input className={inp} value={form.filter_dept_name} onChange={e => set('filter_dept_name', e.target.value)} />
-            </div>
-            <div>
-              <label className="text-xs text-gray-600 mb-1 block">نوع التأمين</label>
-              <input className={inp} value={form.filter_hi_type_code} onChange={e => set('filter_hi_type_code', e.target.value)} maxLength={1} />
-            </div>
-            <div>
-              <label className="text-xs text-gray-600 mb-1 block">بادئة رقم المريض</label>
-              <input className={inp} value={form.filter_patient_no_prefix} onChange={e => set('filter_patient_no_prefix', e.target.value)} />
-            </div>
-          </div>
+      {msg && <div className={`text-xs rounded px-3 py-2 ${msg.tone === 'err' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-blue-50 text-blue-800 border border-blue-200'}`}>{msg.text}</div>}
+      {conflict && (
+        <div className="text-xs rounded border border-amber-300 bg-amber-50 px-3 py-2 space-y-1.5" data-tour="insurance-claim-billing-conflict">
+          <div className="font-semibold text-amber-900">{conflict.list.length} من المحدد فى فئة أخرى بالفعل:</div>
+          <div className="text-amber-800">{conflict.list.slice(0, 8).map(c => `${c.patient_name} (#${c.docnumber}) ← ${c.group}`).join('، ')}{conflict.list.length > 8 ? '…' : ''}</div>
           <div className="flex gap-2">
-            <Btn data-tour="insurance-claim-billing-save" onClick={addGroup} size="md">حفظ الفئة</Btn>
-            <Btn onClick={() => setShowAdd(false)} variant="secondary" size="md">إلغاء</Btn>
+            <button onClick={() => assignTo(conflict.group, conflict.keys, true)} disabled={busy} className="px-2.5 py-1 rounded bg-amber-600 text-white">انقلها أيضاً إلى «{conflict.group.name}»</button>
+            {conflict.keys.length > conflict.list.length && (
+              <button onClick={() => { const other = new Set(conflict.list.map(c => c.key)); assignTo(conflict.group, conflict.keys.filter(k => !other.has(k))) }}
+                disabled={busy} className="px-2.5 py-1 rounded border border-gray-300 bg-white">أضف غير المخصص فقط ({conflict.keys.length - conflict.list.length})</button>
+            )}
+            <button onClick={() => setConflict(null)} className="px-2.5 py-1 rounded border border-gray-300 bg-white">إلغاء</button>
           </div>
         </div>
       )}
 
-      {loading ? (
-        <p className="text-gray-400 text-sm text-center py-8">جارٍ التحميل...</p>
-      ) : groups.length === 0 ? (
-        <p className="text-gray-400 text-sm text-center py-8">لا توجد فئات فوترة — أنشئ فئة لتقسيم المطالبة</p>
-      ) : (
-        <div className="space-y-2">
-          {groups.map(g => (
-            <div key={g.id} className="bg-white border border-gray-200 rounded-lg p-4">
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded">{g.code}</span>
-                    <span className="font-medium text-gray-800">{g.name}</span>
-                  </div>
-                  {(g.filter_relative_degree || g.filter_dept_name || g.filter_hi_type_code || g.filter_patient_no_prefix) && (
-                    <p className="text-xs text-gray-400 mt-1">
-                      فلاتر: {[
-                        g.filter_relative_degree && `قرابة=${g.filter_relative_degree}`,
-                        g.filter_dept_name && `إدارة=${g.filter_dept_name}`,
-                        g.filter_hi_type_code && `تأمين=${g.filter_hi_type_code}`,
-                        g.filter_patient_no_prefix && `بادئة=${g.filter_patient_no_prefix}`,
-                      ].filter(Boolean).join(' ، ')}
-                    </p>
-                  )}
-                  <div className="flex gap-4 mt-2 text-sm">
-                    <span className="text-gray-500">{g.rx_count} روشتة</span>
-                    <span className="font-mono text-gray-600">إجمالى {fmt(g.gross_before)}</span>
-                    <span className="font-mono text-red-600">خصم {fmt(g.total_discount)}</span>
-                    <span className="font-mono font-semibold text-gray-900">صافى {fmt(g.net_after)}</span>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex gap-1.5">
-                    <Btn data-tour="insurance-claim-billing-auto-assign" onClick={() => autoAssign(g.id)} variant="secondary">تخصيص تلقائي</Btn>
-                    <Btn data-tour="insurance-claim-billing-manual-assign" onClick={() => { setAssignTarget(g.id); setSelectedRx(new Set()) }} variant="secondary">تخصيص يدوي</Btn>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <Btn data-tour="insurance-claim-billing-export" onClick={() => exportGroup(g.id, g.code)} variant="success" disabled={exporting === g.id}>
-                      {exporting === g.id ? 'جارٍ...' : 'تصدير فاتورة'}
-                    </Btn>
-                    <Btn data-tour="insurance-claim-billing-delete" onClick={() => delGroup(g.id)} variant="danger">حذف</Btn>
-                  </div>
-                </div>
-              </div>
-
-              {/* Manual assignment panel */}
-              {assignTarget === g.id && (
-                <div className="mt-3 pt-3 border-t border-gray-100">
-                  <div className="flex justify-between items-center mb-2">
-                    <p className="text-xs font-semibold text-gray-600">اختر الروشتات غير المخصصة لإضافتها لهذه الفئة ({selectedRx.size} محدد)</p>
-                    <div className="flex gap-1.5">
-                      <Btn data-tour="insurance-claim-billing-assign-save" onClick={saveAssignment} disabled={selectedRx.size === 0}>إضافة المحدد</Btn>
-                      <Btn onClick={() => setAssignTarget(null)} variant="secondary">إغلاق</Btn>
-                    </div>
-                  </div>
-                  <div className="max-h-64 overflow-y-auto border border-gray-100 rounded">
-                    <AssignPicker selectedRx={selectedRx} setSelectedRx={setSelectedRx} rows={[
-                          ...unassignedRx.map(rx => ({ key: 'p' + rx.id, doc: rx.softech_docnumber, date: rx.softech_docdate, name: rx.patient_name, extra: rx.relative_degree || '', net: rx.net_after, kind: 'rx' })),
-                          ...unassignedManual.map(m => ({ key: 'm' + m.id, doc: m.softech_docnumber, date: m.softech_docdate, name: m.patient_name, net: m.net_after, kind: 'manual' })),
-                          ...unassignedSup.map(s => ({ key: 's' + s.id, doc: s.supplement_number || '', date: s.print_date || null, name: s.label, net: s.net_after, kind: 'sup' })),
-                        ]} />
-                    {unassignedCount === 0 && <p className="text-gray-400 text-center py-4">كل الروشتات مخصصة</p>}
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-          <div className="flex justify-end pt-2 text-sm font-semibold text-gray-700">
-            إجمالى صافى الفئات: <span className="font-mono mr-2">{fmt(totalNet)}</span>
-          </div>
-        </div>
-      )}
+      {/* bulk bar + grid */}
+      <div className="flex items-center gap-2 flex-wrap" data-tour="insurance-claim-billing-bulk">
+        <span className="text-sm font-semibold text-gray-700">{viewLabel}</span>
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="بحث بالاسم أو الإيصال… (* و % بدائل)"
+          className="border border-gray-300 rounded px-2 py-1 text-xs w-56" />
+        <button onClick={() => setSel(new Set(rows.map(r => r.key)))} disabled={!rows.length}
+          className="px-2 py-1 text-xs rounded border border-gray-300 bg-white disabled:opacity-40">تحديد الظاهر ({rows.length})</button>
+        <button onClick={() => setSel(new Set())} disabled={!sel.size}
+          className="px-2 py-1 text-xs rounded border border-gray-300 bg-white disabled:opacity-40">إلغاء التحديد</button>
+        {sel.size > 0 && !locked && (
+          <span className="flex items-center gap-1 flex-wrap text-xs bg-blue-50 border border-blue-200 rounded px-2 py-1">
+            <b>{sel.size}</b> محدد · {fmt(selNet)}{inOther > 0 && <span className="text-amber-700"> ({inOther} فى فئة)</span>} — أضف إلى:
+            {groups.map(g => (
+              <button key={g.id} onClick={() => assignTo(g, [...sel])} disabled={busy}
+                className={`px-2 py-0.5 rounded border font-mono ${color[g.id]}`} title={g.name}>{g.code}</button>
+            ))}
+            {inOther > 0 && <button onClick={() => unassignKeys([...sel])} disabled={busy}
+              className="px-2 py-0.5 rounded border border-gray-300 bg-white">إلغاء التخصيص</button>}
+          </span>
+        )}
+        {!groups.length && <span className="text-xs text-gray-400">أنشئ فئة أولاً بـ «+ فئة جديدة».</span>}
+      </div>
+      <div {...kb.containerProps} className="max-h-[60vh] overflow-auto border border-gray-200 rounded-lg bg-white" data-tour="insurance-claim-billing-grid">
+        <table className="w-full text-xs">
+          <thead className="bg-gray-50 text-gray-500 sticky top-0 z-10"><tr>
+            <th className="px-2 py-1.5 w-6"><input type="checkbox" checked={rows.length > 0 && rows.every(r => sel.has(r.key))}
+              onChange={e => setSel(e.target.checked ? new Set(rows.map(r => r.key)) : new Set())} /></th>
+            {Th('sequence', 'م', 'number')}{Th('docnumber', 'الإيصال', 'number')}{Th('date', 'التاريخ', 'date')}
+            {Th('patient_name', 'المريض')}{Th('relative_degree', 'القرابة')}{Th('group', 'الفئة')}{Th('net_after', 'الصافى', 'number')}
+          </tr></thead>
+          <tbody className="divide-y divide-gray-100">
+            {rows.map(r => {
+              const g = gName(r.group_id), rp = kb.rowProps(r), kind = _BG_KIND[r.kind]
+              return (
+                <tr key={r.key} {...rp} className={`${sel.has(r.key) ? 'bg-blue-50/60' : 'hover:bg-gray-50'} ${rp.className}`}>
+                  <td className="px-2 py-1 text-center"><input type="checkbox" checked={sel.has(r.key)} onChange={() => toggle(r.key)} /></td>
+                  <td className="px-2 py-1 text-center font-mono text-gray-500">{r.sequence || '—'}</td>
+                  <td className="px-2 py-1 font-mono text-gray-500">{r.docnumber || '—'}</td>
+                  <td className="px-2 py-1 font-mono text-gray-500 whitespace-nowrap">{r.date || '—'}</td>
+                  <td className="px-2 py-1 text-gray-800">{r.patient_name || '—'}
+                    {kind && <span className={`mr-1 text-[10px] rounded px-1 ${kind[1]}`}>{kind[0]}</span>}</td>
+                  <td className="px-2 py-1 text-gray-500">{r.relative_degree || ''}</td>
+                  <td className="px-2 py-1">
+                    {locked
+                      ? (g ? <span className={`border rounded px-1.5 font-mono ${color[g.id]}`}>{g.code}</span> : <span className="text-gray-400">غير مخصص</span>)
+                      : <select value={r.group_id || ''} disabled={busy} onChange={e => setRowGroup(r, e.target.value ? Number(e.target.value) : null)}
+                          title={g ? `فى «${g.name}» — اختيار فئة أخرى ينقلها` : 'اختر فئة لإضافتها'}
+                          className={`border rounded px-1 py-0.5 text-xs ${g ? color[g.id] : 'border-gray-300 text-gray-500'}`}>
+                          <option value="">— غير مخصص —</option>
+                          {groups.map(x => <option key={x.id} value={x.id}>{x.code} · {x.name}</option>)}
+                        </select>}
+                  </td>
+                  <td className="px-2 py-1 text-left font-mono">{fmt(r.net_after)}</td>
+                </tr>
+              )
+            })}
+            {!rows.length && <tr><td colSpan={8} className="px-2 py-8 text-center text-gray-400">
+              {view === 'unassigned' ? 'كل الروشتات مخصصة ✓' : 'لا روشتات هنا.'}</td></tr>}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -4328,6 +4355,17 @@ function ClaimItemsTab({ claimId, claim, onRefresh }) {
     } finally { setBusy(null) }
   }
 
+  const exportItems = async () => {
+    setBusy('export'); setMsg(null)
+    try {
+      const { data: blob } = await insuranceApi.claimItemsExport(claimId)
+      const url = URL.createObjectURL(new Blob([blob], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+      const a = document.createElement('a'); a.href = url; a.download = `أصناف_المطالبة_${claim?.claim_number || claimId}.xlsx`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch { setMsg('تعذّر تصدير الأصناف') } finally { setBusy(null) }
+  }
+
   if (loading) return <div className="px-6 py-6 text-sm text-gray-400">جارٍ تحميل الأصناف…</div>
   if (!data)   return null
 
@@ -4396,6 +4434,10 @@ function ClaimItemsTab({ claimId, claim, onRefresh }) {
         <span className="text-xs text-gray-400 mr-auto">
           نسب الخصم — محلى {data.rates.local}% · مستورد {data.rates.imported}% · ترسية {data.rates.tarsia}%
         </span>
+        <button onClick={exportItems} disabled={busy === 'export'} data-tour="insurance-claim-items-export"
+          title="كل أصناف المطالبة (بدون فلاتر البحث). لتصدير أصناف عدة مطالبات معاً: تقارير المطالبات ← المطالبات"
+          className="px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50">
+          {busy === 'export' ? 'جارٍ…' : '📥 تصدير Excel'}</button>
       </div>
       {msg && <div className="mb-3 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">{msg}</div>}
 

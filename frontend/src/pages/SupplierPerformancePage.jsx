@@ -8,6 +8,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { procurementIntelApi } from '../api/client'
 import RefreshButton from '../components/RefreshButton'
+import DataFreshnessBar from '../components/DataFreshnessBar'
+import useAuthStore from '../store/authStore'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
 
@@ -182,6 +184,7 @@ function SupplierDetail({ supplierCode, onBack }) {
 // ── Supplier List ─────────────────────────────────────────────────────────────
 
 export default function SupplierPerformancePage() {
+  const { user } = useAuthStore()
   const { supplierCode } = useParams()
   const navigate = useNavigate()
 
@@ -244,6 +247,10 @@ export default function SupplierPerformancePage() {
         <h1 className="text-2xl font-bold text-gray-900">أداء الموردين</h1>
         <span className="text-sm text-gray-500">{suppliers.length} مورد</span>
       </div>
+
+      <DataFreshnessBar domains={['purchases']}
+        canEdit={user?.is_staff || ['admin', 'purchasing'].includes(user?.role)}
+        onRefresh={() => procurementIntelApi.triggerEngine({})} />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">

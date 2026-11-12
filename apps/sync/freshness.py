@@ -54,6 +54,8 @@ DOMAINS = {
     'ap_reconciliation': {'label_ar': 'سداد الموردين',  'source': 'ap_reconciliation', 'cadence_min': 1440, 'kind': 'snapshot'},
     'calls':             {'label_ar': 'المكالمات (سجل السنترال)', 'source': 'calls', 'cadence_min': 10, 'kind': 'snapshot'},
     'ar_contracts':      {'label_ar': 'مستحقات التعاقدات', 'source': 'ar_contracts',    'cadence_min': 1440, 'kind': 'snapshot'},
+    # Lost-sale log (pos_cancel) — PosCancelDaily mirror, rolled up by the nightly sync_pos_cancel.
+    'pos_cancel':        {'label_ar': 'المبيعات غير المخزنة', 'source': 'pos_cancel',    'cadence_min': 1440, 'kind': 'snapshot'},
 }
 
 # A domain is "stale" once its last success is older than this many sync
@@ -205,6 +207,14 @@ def _finance_run_source(stat_key):
     }
 
 
+def _source_pos_cancel():
+    """Lost-sale log — pos_orders.PosCancelDaily, the nightly sync_pos_cancel rollup
+    of SOFTECH pos_cancel. No dedicated run log, so use the latest row write time."""
+    from apps.pos_orders.models import PosCancelDaily
+    mx = PosCancelDaily.objects.aggregate(mx=Max('synced_at'))['mx']
+    return {'last_success_at': mx, 'last_attempt_at': mx, 'last_run_failed': False}
+
+
 def _source_ap_reconciliation():
     """A/P reconciliation (doc 23) — the engine run that follows the 07:30 mirror sync."""
     from apps.finance.recon_models import ReconciliationRun
@@ -224,7 +234,8 @@ _SOURCES = {'expiry': _source_expiry, 'ap_reconciliation': _source_ap_reconcilia
             'finance_pl': _source_finance_pl, 'gl_drafting': _source_gl_drafting,
             'gl_compare': _source_gl_compare,
             'finance_expenses': lambda: _finance_run_source('expense_records'),
-            'finance_journal': lambda: _finance_run_source('journal_entries')}
+            'finance_journal': lambda: _finance_run_source('journal_entries'),
+            'pos_cancel': _source_pos_cancel}
 
 
 # ── public API ─────────────────────────────────────────────────────────────────

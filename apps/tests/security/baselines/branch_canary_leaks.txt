@@ -88,6 +88,7 @@ GET-DETAIL /api/purchasing/isr/pushes/987654321/
 GET-DETAIL /api/purchasing/rates/pushes/987654321/
 GET-DETAIL /api/users/erp-users/987654321/
 GET-DETAIL /api/insurance/claims/987654321/
+GET-DETAIL /api/insurance/claims/987654321/billing-board/
 GET-DETAIL /api/insurance/claims/987654321/invoice-dataset/
 GET-DETAIL /api/insurance/claims/987654321/readiness/
 GET-DETAIL /api/insurance/claims/987654321/roster-check/
