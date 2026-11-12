@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { financeApi } from '../api/client'
+import DataFreshnessBar from '../components/DataFreshnessBar'
 
 const fmt  = (n, d = 0) => parseFloat(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const pct  = (n, d = 1) => `${fmt(n, d)}%`
@@ -64,6 +65,8 @@ export default function ProfitLossPage() {
           </select>
         </div>
       </div>
+
+      <DataFreshnessBar domains={['finance_pl']} />
 
       {isLoading && <div className="text-center py-16 text-gray-400 animate-pulse">جارٍ التحميل…</div>}
       {isError   && <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">تعذّر التحميل. قم بتشغيل المزامنة أولاً.</div>}

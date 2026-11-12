@@ -334,3 +334,6 @@ Branch-manager scope and call visibility: decided 2026-11-02 (§5).
 - **Gateway `call_prefix`/`suffix`** is now applied only when the raw caller id is not already a national number (goip4 sends the real leading 0, which used to be stripped, leaving 22K+ ten-digit inbound numbers).
 - **Matching** prefilters on the last 8 digits (`endswith`) then compares `phone_key()` exactly: `PicResolver`, the PIC search (`queries/pics.py _search`); the callback matching in `missed.py` already compares keys in Python. The live AMI bridge stores the national number as the session caller number.
 - **Backfill** `renormalise_pbx_numbers [--commit]` rewrites stored calls from their raw `src/dst/channel/dstchannel`, relinks PICs and re-keys `PhoneLabel`; idempotent.
+
+### Used by gamification (doc 29, phase 5)
+New / won-back customers, customer visits and the customer-code day earn points through `apps/gamification/pic.py`, which calls `rules.classify_pic` and `exclusions.excluded_pics()` — the same definitions as this screen.

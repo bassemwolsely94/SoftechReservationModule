@@ -522,6 +522,11 @@ export const gamificationApi = {
   champions:      (params = {}) => api.get('/gamification/champions/', { params }),
   crownChampions: (data = {})   => api.post('/gamification/champions/crown/', data),
   revokeChampion: (id, data)    => api.post(`/gamification/champions/${id}/revoke/`, data),
+  // branch team challenges
+  challenges:        ()         => api.get('/gamification/challenges/'),
+  createChallenge:   (data)     => api.post('/gamification/challenges/', data),
+  updateChallenge:   (id, data) => api.patch(`/gamification/challenges/${id}/`, data),
+  evaluateChallenge: (id)       => api.post(`/gamification/challenges/${id}/evaluate/`),
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────────
@@ -2578,6 +2583,7 @@ export const insuranceApi = {
   rosters:            (params)              => api.get('/insurance/rosters/', { params }),
   portfolio:          (params)              => api.get('/insurance/portfolio/', { params }),
   portfolioExport:    (params)              => api.get('/insurance/portfolio/', { params: { ...params, format: 'xlsx' }, responseType: 'blob' }),
+  portfolioItemsExport: (params)            => api.get('/insurance/portfolio/', { params: { ...params, format: 'items_xlsx' }, responseType: 'blob' }),
   billingGroupSuggestions: (claimId)        => api.get(`/insurance/claims/${claimId}/billing-group-suggestions/`),
   createParentClient: (data)                => api.post('/insurance/parent-clients/', data),
   updateParentClient: (id, data)            => api.patch(`/insurance/parent-clients/${id}/`, data),
@@ -2589,7 +2595,8 @@ export const insuranceApi = {
   updateBillingGroup: (id, data)            => api.patch(`/insurance/billing-groups/${id}/`, data),
   deleteBillingGroup: (id)                  => api.delete(`/insurance/billing-groups/${id}/`),
   autoAssignGroup:    (id)                  => api.post(`/insurance/billing-groups/${id}/auto-assign/`),
-  assignRxToGroup:    (id, ids, manualIds, supIds)  => api.post(`/insurance/billing-groups/${id}/assign-rx/`, { prescription_ids: ids || [], manual_rx_ids: manualIds || [], supplement_ids: supIds || [] }),
+  assignRxToGroup:    (id, ids, manualIds, supIds, move = false)  => api.post(`/insurance/billing-groups/${id}/assign-rx/`, { prescription_ids: ids || [], manual_rx_ids: manualIds || [], supplement_ids: supIds || [], move }),
+  billingBoard:       (claimId)             => api.get(`/insurance/claims/${claimId}/billing-board/`),
   unassignRxFromGroup:(id, ids, manualIds, supIds)  => api.post(`/insurance/billing-groups/${id}/unassign-rx/`, { prescription_ids: ids || [], manual_rx_ids: manualIds || [], supplement_ids: supIds || [] }),
   refreshGroups:      (claimId)             => api.post('/insurance/billing-groups/refresh-all/', { claim_id: claimId }),
   exportGroup:        (id, template)        => api.get(`/insurance/billing-groups/${id}/export/`, {
@@ -2631,6 +2638,7 @@ export const insuranceApi = {
   overridesPreview:    (claimId)            => api.get(`/insurance/claims/${claimId}/overrides-preview/`),
   applyOverrides:      (claimId)            => api.post(`/insurance/claims/${claimId}/apply-overrides/`),
   claimItems:          (claimId)            => api.get(`/insurance/claims/${claimId}/claim-items/`),
+  claimItemsExport:    (claimId)            => api.get(`/insurance/claims/${claimId}/claim-items/`, { params: { format: 'xlsx' }, responseType: 'blob' }),
   prescriptionsByItem: (claimId, q)         => api.get(`/insurance/claims/${claimId}/prescriptions-by-item/`, { params: { q } }),
   auditLog:            (claimId, params={}) => api.get(`/insurance/claims/${claimId}/audit-log/`, { params }),
   deleteManualPrescription: (claimId, rxId) => api.delete(`/insurance/claims/${claimId}/manual-prescription/${rxId}/`),

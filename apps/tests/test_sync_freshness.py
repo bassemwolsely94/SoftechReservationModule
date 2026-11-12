@@ -117,6 +117,23 @@ class FreshnessCustomSourceTests(TestCase):
         self.assertIsNotNone(f['last_success_at'])
         self.assertTrue(f['last_run_failed'])   # latest run failed
 
+    def test_pos_cancel_reads_latest_mirror_row(self):
+        from apps.pos_orders.models import PosCancelDaily
+        f = get_freshness(['pos_cancel'])['domains']['pos_cancel']
+        self.assertTrue(f['stale'])              # never synced → stale, nulls
+        self.assertIsNone(f['last_success_at'])
+
+        PosCancelDaily.objects.create(branch_code='01', day=timezone.localdate(), item_code='123456')
+        f = get_freshness(['pos_cancel'])['domains']['pos_cancel']
+        self.assertFalse(f['stale'])
+        self.assertEqual(f['cadence_minutes'], 1440)
+        self.assertIsNotNone(f['last_success_at'])
+
+        # synced_at is auto_now — age it with a queryset update (bypasses auto_now)
+        PosCancelDaily.objects.update(synced_at=timezone.now() - timedelta(days=5))
+        f = get_freshness(['pos_cancel'])['domains']['pos_cancel']
+        self.assertTrue(f['stale'])              # 5 days > 1440m × 3
+
 
 class FreshnessEndpointTests(TestCase):
     def test_endpoint_filters_by_domains(self):
