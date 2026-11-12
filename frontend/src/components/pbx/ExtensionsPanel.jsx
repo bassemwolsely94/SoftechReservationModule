@@ -10,6 +10,31 @@ const TYPES = [
 // likely person is on top — the supervisor still picks (nothing is mapped automatically).
 const suggestQuery = (pbxName) => (pbxName || '').replace(/\s*-?\s*CC\d+\s*$/i, '').trim().split(/\s+/)[0] || ''
 
+function WebRtcEditor({ row }) {
+  const qc = useQueryClient()
+  const [enabled, setEnabled] = useState(!!row.mapping.webrtc_enabled)
+  const [password, setPassword] = useState('')
+  const save = useMutation({
+    mutationFn: () => pbxApi.setWebrtc({ extension: row.extension, enabled, sip_password: password || undefined }),
+    onSuccess: () => { setPassword(''); qc.invalidateQueries({ queryKey: ['pbx-extensions'] }) },
+  })
+  return (
+    <div className="flex items-center gap-2 flex-wrap border-t border-gray-200 dark:border-gray-700 pt-2">
+      <label className="inline-flex items-center gap-1">
+        <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
+        🎧 هاتف المتصفح
+      </label>
+      <input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password"
+        placeholder={row.mapping.webrtc_has_password ? 'كلمة سر SIP محفوظة — اكتب للتغيير' : 'كلمة سر SIP للرقم الداخلي'}
+        className="input text-xs py-1 w-56" dir="ltr" />
+      <button onClick={() => save.mutate()} disabled={save.isPending}
+        className="btn-secondary text-xs px-2 py-1">{save.isPending ? '⏳' : 'حفظ'}</button>
+      {save.isSuccess && <span className="text-green-600">✓</span>}
+      {save.isError && <span className="text-red-600">{save.error?.response?.data?.detail || 'فشل الحفظ'}</span>}
+    </div>
+  )
+}
+
 function MapEditor({ row, onDone }) {
   const qc = useQueryClient()
   const [q, setQ] = useState(row.mapping?.staff_id ? '' : suggestQuery(row.mapping?.pbx_name))
@@ -39,6 +64,7 @@ function MapEditor({ row, onDone }) {
       {row.mapping?.pbx_name && (
         <div className="text-gray-500">الاسم في السنترال: <span className="font-medium" dir="ltr">{row.mapping.pbx_name}</span></div>
       )}
+      {row.mapping && <WebRtcEditor row={row} />}
       <div className="max-h-48 overflow-auto divide-y divide-gray-100 dark:divide-gray-700">
         {staff.map(s => (
           <button key={s.id} onClick={() => save.mutate(s.id)} disabled={save.isPending}

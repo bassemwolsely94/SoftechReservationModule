@@ -8,8 +8,8 @@
  *
  * Reply routes to WhatsApp (Phase 0). Calls are click-through to /pbx/live.
  */
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { omniApi, customersApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
@@ -434,6 +434,14 @@ export default function OmniInboxPage() {
   const [statusFilter, setStatusFilter] = useState('active')
   useHelpTab(statusFilter || 'all')
   const [mineOnly, setMineOnly] = useState(false)
+
+  // Deep link (?conversation=ID), e.g. «فتح المحادثة» on the call-center screen
+  const [params] = useSearchParams()
+  const linkedId = params.get('conversation')
+  useEffect(() => {
+    if (!linkedId) return
+    omniApi.conversation(linkedId).then(r => setSelected(r.data)).catch(() => {})
+  }, [linkedId])
 
   const { data, isLoading } = useQuery({
     queryKey: ['omni-conversations', search, statusFilter, mineOnly],

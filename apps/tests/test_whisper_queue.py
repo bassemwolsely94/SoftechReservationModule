@@ -68,6 +68,14 @@ class EnqueueTests(TestCase):
         self.assertFalse(whisper.enqueue_cdr(_cdr()))
         self.assertEqual(whisper.enqueue_recent_cdr(), 0)
 
+    @override_settings(WHISPER_LAUNCH_RUNNER=False)
+    def test_queue_only_machine_never_launches(self):
+        _cdr()
+        with mock.patch('subprocess.Popen') as popen:
+            self.assertFalse(whisper.maybe_launch_runner())
+        popen.assert_not_called()
+        self.assertEqual(CallTranscript.objects.filter(engine='whisper', status='pending').count(), 1)
+
 
 @override_settings(**ON)
 class RunnerTests(TestCase):

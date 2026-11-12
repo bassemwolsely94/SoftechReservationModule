@@ -11,6 +11,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
+import CustomerWhatsAppPanel from '../components/callcenter/CustomerWhatsAppPanel'
+import SoftPhone from '../components/pbx/SoftPhone'
 import { callCenterApi, branchesApi, followupsApi, itemsApi, recommendationsApi, pbxApi } from '../api/client'
 import useScreenPop from '../hooks/useScreenPop'
 import CustomerSearchWidget from '../components/CustomerSearchWidget'
@@ -1499,6 +1501,14 @@ export default function CallCenterPage() {
             <p className="text-xs text-gray-400 mt-0.5">ادخل رقم الهاتف لعرض بيانات المتصل</p>
           </div>
           <div className="flex items-center gap-3">
+            <SoftPhone onIncoming={(num) => {
+              if (savedCallId || !num) return
+              let p = num.replace(/\s+/g, '')
+              if (p.startsWith('+20'))  p = '0' + p.slice(3)
+              if (p.startsWith('0020')) p = '0' + p.slice(4)
+              setPhone(p); setSearchPhone(p); setSelectedCustomerId(null)
+              setLogForm(f => ({ ...f, direction: 'inbound' }))
+            }} />
             <Link to="/callcenter/cases" className="btn-secondary text-xs py-1.5 px-3">
               🗂️ الحالات
             </Link>
@@ -1955,6 +1965,8 @@ export default function CallCenterPage() {
                     </div>
                   </div>
                 )}
+
+                {customer?.id && <CustomerWhatsAppPanel customerId={customer.id} />}
 
                 {/* Recent calls */}
                 {data.recent_calls?.length > 0 && (

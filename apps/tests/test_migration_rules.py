@@ -39,7 +39,10 @@ LEGACY_LAST = {
 }
 
 # '<app dir>/<migration name>': 'reason'
-EXEMPT = {}
+EXEMPT = {
+    # pushed to main without a server default; pbx 0011 adds db_default to both columns
+    'pbx/0010_agent_webrtc': 'server defaults added by pbx/0011_webrtc_db_default',
+}
 
 _CREATE = re.compile(r'create\s+table\s+if\s+not\s+exists\s+("?[\w.]+"?)\s*\((.*?)\)\s*;',
                      re.I | re.S)
