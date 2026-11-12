@@ -693,3 +693,8 @@ salesperson POST /api/followups/call-lists/987654321/close/
 # reason: Z-8b — enabling an agent's browser phone stores its SIP password: admin / supervisor only
 #   (IsAdminOrSupervisor, audited without the secret), like the omni channel-account edits.
 call_center POST /api/pbx/extensions/webrtc/
+# reason: Z-7c — force-closing an in-transit transfer stays admin / purchasing (transits/views.py
+#   force_close); seen only since the round-2 close-out fixed the transit list crash on real records.
+pharmacist POST /api/transits/987654321/force-close/
+salesperson POST /api/transits/987654321/force-close/
+supervisor POST /api/transits/987654321/force-close/

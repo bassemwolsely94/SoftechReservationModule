@@ -35,7 +35,7 @@ from .models import InTransitAuditEvent, InTransitNote, InTransitTransfer
 from apps.catalog.wildcard import wq
 from core import branch_scope
 from core.errors import public_error
-from core.permissions import matrix_permission
+from core.permissions import RouteModulePermission, matrix_permission
 from .serializers import (
     ForceCloseSerializer,
     InTransitNoteCreateSerializer,
@@ -110,7 +110,9 @@ class InTransitTransferViewSet(viewsets.ReadOnlyModelViewSet):
     cached SOFTECH data. Write actions are explicit @action decorators.
     """
 
-    permission_classes = [IsAuthenticated, TRANSFERS]
+    # RouteModulePermission (D6, matrix wins): TRANSFERS lets any non-view grant through, so an export-only
+    # holder (quality manager) could add notes and mark a transfer received; the middleware asks create.
+    permission_classes = [IsAuthenticated, TRANSFERS, RouteModulePermission]
     filter_backends    = [
         DjangoFilterBackend,
         filters.SearchFilter,

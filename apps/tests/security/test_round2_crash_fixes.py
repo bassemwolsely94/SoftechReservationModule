@@ -82,6 +82,18 @@ class CrashFixTests(TestCase):
                 self.assertEqual(r.status_code, 400, r.content[:200])
                 self.assertTrue(set(r.json()) & {'year', 'month'})
 
+    def test_export_only_role_cannot_note_or_receive_a_transit(self):
+        """Found once the transit list stopped crashing: TRANSFERS let an export-only holder (quality
+        manager) add notes and mark received in log mode; the matrix asks create (D6)."""
+        from django.test import override_settings
+        t = self.plant('transits.InTransitTransfer')
+        qm = self.clients['quality_manager']
+        with override_settings(RBAC_ENFORCEMENT='log'):
+            for action in ('add-note', 'mark-received'):
+                with self.subTest(action=action), Tripwire():
+                    r = qm.post(f'/api/transits/{t.pk}/{action}/', {'body': 'x'}, format='json')
+                    self.assertEqual(r.status_code, 403, r.content[:200])
+
     def test_transits_with_a_non_numeric_doc_number_still_list(self):
         t = self.plant('transits.InTransitTransfer')
         self.assertFalse(t.erp_doc_number.isdigit())
