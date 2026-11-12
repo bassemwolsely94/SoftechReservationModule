@@ -13073,6 +13073,51 @@
    "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
    "test_id": "B608",
    "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "74         ph = ','.join('?' for _ in codes)\n75         cur.execute('SELECT s.branchcode, s.itemcode, sum(s.nowqty) FROM stkbal s, stores st '\n76                     'WHERE s.storecode = st.storecode AND st.storerealbal = 1 '\n77                     f'AND s.branchcode IN ({ph}) GROUP BY s.branchcode, s.itemcode', codes)\n78         for bc, code, q in cur.fetchall():\n",
+   "col_offset": 20,
+   "end_col_offset": 43,
+   "filename": "apps/purchasing/distribution_plan.py",
+   "issue_confidence": "MEDIUM",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 75,
+   "line_range": [
+    75,
+    76,
+    77
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "184         ph = ','.join('?' for _ in dl)\n185         cur.execute('SELECT m.isrdocnumber, m.forbranchcode, m.docdate, l.itemcode, l.itemqty '\n186                     'FROM stockisrm m, stockisr l WHERE l.isrdocnumber = m.isrdocnumber '\n187                     f'AND m.docdate >= dateadd(day, -{int(SOFTECH_ISR_DAYS)}, getdate()) '\n188                     f'AND m.forbranchcode IN ({ph})', dl)\n189         raw = cur.fetchall()\n",
+   "col_offset": 20,
+   "end_col_offset": 53,
+   "filename": "apps/purchasing/distribution_plan.py",
+   "issue_confidence": "MEDIUM",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 185,
+   "line_range": [
+    185,
+    186,
+    187,
+    188
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
   }
  ]
 }

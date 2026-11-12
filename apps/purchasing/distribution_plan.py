@@ -72,7 +72,7 @@ def live_stock(branch_codes):
     cur = conn.cursor()
     try:
         ph = ','.join('?' for _ in codes)
-        cur.execute('SELECT s.branchcode, s.itemcode, sum(s.nowqty) FROM stkbal s, stores st '  # nosec B608 - IN list is only '?' placeholders; branch codes are bound parameters
+        cur.execute('SELECT s.branchcode, s.itemcode, sum(s.nowqty) FROM stkbal s, stores st '
                     'WHERE s.storecode = st.storecode AND st.storerealbal = 1 '
                     f'AND s.branchcode IN ({ph}) GROUP BY s.branchcode, s.itemcode', codes)
         for bc, code, q in cur.fetchall():
@@ -182,7 +182,7 @@ def _softech_isrs(dests, ours):
     cur = conn.cursor()
     try:
         ph = ','.join('?' for _ in dl)
-        cur.execute('SELECT m.isrdocnumber, m.forbranchcode, m.docdate, l.itemcode, l.itemqty '  # nosec B608 - IN list is only '?' placeholders (values bound); day count is int()-cast
+        cur.execute('SELECT m.isrdocnumber, m.forbranchcode, m.docdate, l.itemcode, l.itemqty '
                     'FROM stockisrm m, stockisr l WHERE l.isrdocnumber = m.isrdocnumber '
                     f'AND m.docdate >= dateadd(day, -{int(SOFTECH_ISR_DAYS)}, getdate()) '
                     f'AND m.forbranchcode IN ({ph})', dl)
