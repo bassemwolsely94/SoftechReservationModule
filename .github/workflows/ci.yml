@@ -19,7 +19,7 @@ jobs:
   backend-tests:
     name: Backend tests (Django)
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 100   # full suite runs 55–70 min on a free runner; 75 kept cancelling healthy runs (2026-11-12)
 
     services:
       postgres:

@@ -558,8 +558,8 @@ SCREENS = [
               'In «Dead stock» branch staff see only their branch. Exclude and strategic hold need "edit" or "approve" on purchasing.'),
         ],
         'updated': '2026-11-10',
-        'change_note': T('«معدلات البيع»: خيار «تطبيق الموسمية» للأصناف ذات الموسمية المستقرة (×0.7–×1.5).',
-                         '"Sales rates": an "Apply seasonality" option for items with a steady season (×0.7–×1.5).'),
+        'change_note': T('«التوزيعة» بقت خطة واحدة بموجات وحدود قيمة، و«بعد الاستلام» ينتظر استلام الرئيسي. «معدلات البيع»: خيار «تطبيق الموسمية».',
+                         '"Distribution" is now one plan with waves and value limits; "after receipt" waits for HQ to receive. "Sales rates": an "Apply seasonality" option.'),
     },
     {
         'key': 'purchasing.supply',
@@ -596,7 +596,20 @@ SCREENS = [
              'body': T('الصق محادثة مجموعة واتساب الفرع (أو صورة) ← تُقسَّم الرسائل وتُطابق الأصناف ← راجع سطراً سطراً (Enter للتأكيد) ← تحليل التوافر وExcel ← «إنشاء قائمة النواقص» للفرع. «إنشاء مقترحات التحويل» موجود أيضاً في «فحص المخزون» بشاشة النواقص بنفس الخطة؛ قائمة نواقص جاءت من طلب واتساب تُحوَّل مرة واحدة فقط من أي الشاشتين. المطابقة مشتركة بين «صندوق الإتاحة» و«طلبات واتساب» (محرّك واحد، تحذيرات صارمة): كل سطر عليه تحذير ينتظر شخصاً — «اختر النسخة» (أكثر من تركيز/حجم/شكل يناسب المكتوب؛ تظهر النسخ بأرصدتها ومبيعاتها)، «التركيز مختلف»، «الشكل مختلف»، «النوع مختلف» (مثل اكسترا/ادفانس)، «منتج آخر قريب»، «المحركان مختلفان»، «لا يوجد تطابق». بمجرد تأكيد نسخة لتهجئة ما يتذكرها النظام فلا يعود التحذير.',
                        'Paste the branch WhatsApp group chat (or a photo) → messages are split and items matched → review line by line (Enter confirms) → availability analysis and Excel → "Create shortage list" for the branch. "Create transfer proposals" is also in the shortage screen\'s "Stock check" with the same plan; a shortage list that came from a WhatsApp request moves only once, from either screen. Matching is shared by the availability inbox and WhatsApp requests (one engine, strict warnings): any line with a warning waits for a person — «اختر النسخة» (several strengths / sizes / forms fit; the versions show their stock and sales), «التركيز مختلف», «الشكل مختلف», «النوع مختلف» (e.g. Extra vs Advance), «منتج آخر قريب», «المحركان مختلفان», «لا يوجد تطابق». Once a version is confirmed for a spelling the system remembers it and the warning does not come back.')},
             {'key': 'dist', 'title': T('التوزيعة', 'Distribution'),
-             'body': T('توزيع استباقي: أصناف جديدة بلا معدل، أصناف غير مُدرجة بفرع، متكدسة بفرع، أو راكدة بالرئيسي — مع اقتراح توزيعها. علامات الأنواع تُصفّي القائمة فوراً (والعدد بجانب كل نوع)، وخانة البحث بالصنف أو الكود، واضغط عنوان أي عمود للترتيب. كل نقلة تعرض الفرع الحائز (رصيده ومعدل بيعه الشهري وحده الأقصى في SOFTECH) وكل فرع مستهدف (الكمية ورصيده ومعدل بيعه) — الرصيد لحظي من سيرفر الفرع حيث يوجد حد أقصى، وإلا من تشغيل المحرك (معلَّم *). «⬇ Excel» يصدّر الصفوف الظاهرة بنفس الفلاتر. الأسهم تتبع اتجاه القراءة: ← بالعربية و → بالإنجليزية.', 'Proactive distribution: new items with no rate, items never stocked at a branch, piled up at a branch, or dormant at HQ — with a suggested distribution. The type boxes filter the list instantly (the count is beside each), search by item or code, and click any column header to sort. Each move shows the holding branch (stock, monthly sales, SOFTECH maximum) and each designated branch (quantity, stock, monthly sales) — stock live from the branch server where SOFTECH holds a maximum, otherwise from the engine run (marked *). «⬇ Excel» exports the rows shown with the same filters. Arrows follow the reading direction: ← in Arabic, → in English.')},
+             'body': T('«⟳ بناء الخطة» يحسب خطة توزيعة واحدة ويحفظها: الأرصدة لحظية من سيرفر 100 ومعدل البيع من آخر تشغيل للمحرك. '
+                       'الحركات بالترتيب: 1 من الرئيسي أولاً (أي صنف يملكه الرئيسي، والصنف التجريبي اللي الرئيسي يغطيه يتنقل منه بدل الفرع) · '
+                       '2 متكدس بفرع فوق حده ← فروع تبيعه ولها مساحة · 3 غير مُدرج — فقط من فرع فوق حده · 4 تجربة صنف جديد من فرع (كود عمره أقل من 18 شهر، فرعين بحد أقصى، و75,000 ج بحد أقصى للخطة)؛ داخل كل موجة الأعلى قيمة أولاً. '
+                       '«متعارض» = الصنف في طريقه للفرع بالفعل (طلباتنا الحية أو المرحّلة غير المصروفة، طلبات توريد سوفتك آخر 3 أيام، بضاعة بالطريق، طلبات تحويل حية). '
+                       '«محجوز / مؤجل»: سطر من فرع أقل من 100 ج، أو طلب فرع للرئيسي أو جزء «بعد الاستلام» أقل من 1,000 ج (يتأجل للتشغيل الجاي؛ حركات الرئيسي بتفضل دايماً)، أو مسار عليه طلب معتمد. '
+                       '«＋ توليد» يعمل طلب واحد من كل فرع للرئيسي، وطلب «جاهز الآن» من الرئيسي لكل فرع، وجزء «بعد الاستلام» لكل فرع مصدر — '
+                       'الجزء ده (وأي طلب من الرئيسي لفرع بعد استلام من فرع تاني) مايترحّلش غير لما الرئيسي يستلم إذن صرف الفرع، وصلاحيته تبدأ من الاستلام. الخطة لازم تكون أحدث خطة وعمرها أقل من 12 ساعة. مفيش كتابة في SOFTECH من هنا.',
+                       '"⟳ Build plan" computes and stores one distribution plan: stock live from server 100, sales rates from the last engine run. '
+                       'Moves in order: 1 HQ first (anything HQ holds; a trial item HQ can cover moves from HQ instead of a branch) · '
+                       '2 a branch over its maximum → branches that sell it and have room · 3 never stocked — only from a branch over its maximum · 4 new-item trial from a branch (codes under 18 months old, at most 2 branches, at most 75,000 EGP per plan); highest value first within each wave. '
+                       '"Conflict" = the item is already on its way to the branch (our live drafts or pushed ones not yet dispensed, SOFTECH supply requests of the last 3 days, goods in transit, live transfer requests). '
+                       '"Held / deferred": a branch line under 100 EGP, a branch-to-HQ request or "after receipt" part under 1,000 EGP (waits for the next run; HQ moves always stay), or a route with an approved draft. '
+                       '"＋ Generate" makes one request per branch to HQ, one "ready now" request from HQ per branch, and one "after receipt" part per source branch — '
+                       'that part (and any HQ forwarding leg of a transfer) is pushed only after HQ has received the branch\'s issue; its expiry starts at that receipt. The plan must be the latest and under 12 hours old. Nothing is written to SOFTECH from here.')},
         ],
         'tips': [T('دور «مشاهد» المرتبط بفرع بيشوف حالات فرعه والحالات العامة للشبكة بس.', 'A branch-bound "viewer" sees their own branch\'s cases and the network-wide cases only.'),
                  T('لا شيء في هذه الشاشة يكتب في SOFTECH بدون اعتماد صريح وبوابة مفعّلة.', 'Nothing on this screen writes to SOFTECH without explicit approval and an enabled gate.'),
@@ -978,13 +991,20 @@ SCREENS = [
              'text': T('لكل فرع عنده فائض: طلب توريد مقترح منه للرئيسي، ومن الرئيسي للفرع الطالب — من الأسطر المؤكدة بس.', 'For each branch with excess: a proposed supply request from it to HQ, and from HQ to the requesting branch — confirmed lines only.'),
              'when': T('بتظهر في «طلبات التوريد / ISR» للاعتماد والترحيل.', 'They show in "Supply requests (ISR)" for approval and push.'),
              'open_hint': T('بعد «تحليل»، لو الخطة فيها فائض من فروع تانية.', 'After "Analyze", when the plan uses other branches\' excess.')},
-            {'target': 'purchasing-supply-dist-generate', 'label': T('＋ توليد مقترحات التوزيعة', '＋ Generate distribution proposals'),
-             'text': T('يعمل طلبات توريد «مقترحة» للتصنيفات المعلّمة، وبتظهر في «طلبات التوريد / ISR» للاعتماد والترحيل.', 'Creates "proposed" supply requests for the ticked categories; they show in "Supply requests (ISR)" for approval and push.'),
-             'when': T('مفيش كتابة في SOFTECH غير بعد الاعتماد والترحيل.', 'Nothing is written to SOFTECH until approval and push.'),
+            {'target': 'purchasing-supply-dist-build', 'label': T('⟳ بناء الخطة', '⟳ Build plan'),
+             'text': T('يقرأ الأرصدة وطلبات التوريد من سوفتك ويحسب خطة جديدة للتصنيفات المعلّمة. قراءة بس.', 'Reads stock and supply requests from SOFTECH and computes a new plan for the ticked categories. Read only.'),
+             'when': T('الخطة الجديدة بتحل محل القديمة اللي لسه ماتولّدش منها طلبات.', 'The new plan replaces an older one not yet generated.'),
              'open_hint': T('تبويب «التوزيعة»، لمن له صلاحية التوريد.', 'The "Distribution" tab, for users with supply rights.')},
+            {'target': 'purchasing-supply-dist-waves', 'label': T('الموجات · متعارض · محجوز · طلبات التوريد', 'Waves · Conflict · Held · Requests'),
+             'text': T('كروت: اضغط موجة تشوف حركاتها، أو «متعارض» / «محجوز / مؤجل» تعرف ليه الحركة مش داخلة، أو «طلبات التوريد».', 'Cards: press a wave to see its moves, "Conflict" / "Held" to see why a move is out, or "Requests".'),
+             'open_hint': T('بعد بناء الخطة.', 'After building the plan.')},
+            {'target': 'purchasing-supply-dist-generate', 'label': T('＋ توليد طلبات التوريد', '＋ Generate supply requests'),
+             'text': T('يعمل طلبات التوريد «مقترحة» من الخطة، وبتظهر في «طلبات التوريد / ISR» للاعتماد والترحيل. المقترحات القديمة للتوزيعة بتتلغي.', 'Creates the "proposed" supply requests from the plan; they show in "Supply requests (ISR)" for approval and push. Older distribution proposals are cancelled.'),
+             'warn': T('جزء «بعد الاستلام» مايترحّلش غير لما الرئيسي يستلم إذن صرف الفرع.', 'An "after receipt" part is pushed only after HQ receives the branch\'s issue.'),
+             'open_hint': T('خطة محسوبة لم يتولّد منها، لمن له صلاحية التوريد.', 'A built plan not yet generated, for users with supply rights.')},
             {'target': 'purchasing-supply-dist-export', 'label': T('⬇ Excel', '⬇ Excel'),
-             'text': T('الصفوف الظاهرة بنفس التصنيفات والبحث، مع رصيد ومعدل بيع الفرع الحائز والمستهدف.', 'The visible rows with the same categories and search, with stock and sales rate of the holding and target branch.'),
-             'open_hint': T('تبويب «التوزيعة».', 'The "Distribution" tab.')},
+             'text': T('كل حركات الخطة بموجاتها وحالاتها وسببها، وورقة بالطلبات.', 'Every move of the plan with its wave, status and reason, plus a sheet of the requests.'),
+             'open_hint': T('بعد بناء الخطة.', 'After building the plan.')},
             {'target': 'purchasing-supply-receipts-refresh', 'label': T('⟳ المشتريات من SOFTECH', '⟳ Purchases from SOFTECH'),
              'text': T('يسحب فواتير الشراء الجديدة من SOFTECH (قراءة بس)، والفحص بيتعاد لوحده لما يخلص.', 'Pulls new purchase invoices from SOFTECH (read only); the check reruns by itself when done.'),
              'open_hint': T('تبويب «شراء رغم تغطية عالية».', 'The "Bought despite high cover" tab.')},
