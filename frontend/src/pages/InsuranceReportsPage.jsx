@@ -95,6 +95,8 @@ export default function InsuranceReportsPage() {
   const [order, setOrder]     = useState([])      // custom motalba order (claim ids)
   const [groupByClient, setGroupByClient] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [picked, setPicked]   = useState(() => new Set())   // motalbas ticked for «تصدير الأصناف» (nothing pre-ticked)
+  const [itemsBusy, setItemsBusy] = useState(false)
 
   useEffect(() => {
     Promise.all([insuranceApi.clients(), insuranceApi.subclients()]).then(([c, s]) => {
@@ -106,7 +108,7 @@ export default function InsuranceReportsPage() {
   const load = () => {
     setLoading(true); setErr(null)
     insuranceApi.portfolio(params())
-      .then(r => { setData(r.data); setOrd(null); setOrder(r.data.motalbas.map(m => m.claim_id)) })
+      .then(r => { setData(r.data); setOrd(null); setOrder(r.data.motalbas.map(m => m.claim_id)); setPicked(new Set()) })
       .catch(e => setErr(e.response?.data?.detail || 'تعذّر تحميل التقرير'))
       .finally(() => setLoading(false))
   }
@@ -145,6 +147,20 @@ export default function InsuranceReportsPage() {
       setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch { setErr('تعذّر التصدير') } finally { setExporting(false) }
   }
+
+  // «أصناف المطالبات»: the ticked motalbas (in the order shown), or every listed one when none is ticked
+  const exportItems = async () => {
+    const ids = ordered.map(m => m.claim_id).filter(id => !picked.size || picked.has(id))
+    setItemsBusy(true)
+    try {
+      const { data: blob } = await insuranceApi.portfolioItemsExport({ ...params(), claim_ids: ids.join(',') })
+      const url = URL.createObjectURL(new Blob([blob], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+      const a = document.createElement('a'); a.href = url; a.download = `أصناف_المطالبات_${f.from}_${f.to}.xlsx`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch { setErr('تعذّر تصدير الأصناف') } finally { setItemsBusy(false) }
+  }
+  const togglePick = (id) => setPicked(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   const T = data?.totals || {}
   const bridgeRows = ordered.map(m => ({ claim_number: m.claim_number, client: m.client, ...Object.fromEntries(
@@ -238,10 +254,17 @@ export default function InsuranceReportsPage() {
                 ))}
                 <label className="flex items-center gap-1 mr-3"><input type="checkbox" checked={groupByClient} onChange={e => setGroupByClient(e.target.checked)} />
                   إجماليات فرعية لكل جهة فى التصدير</label>
+                <button onClick={exportItems} disabled={itemsBusy || !ordered.length} data-tour="insurance-reports-items-export"
+                  className="mr-auto px-3 py-1.5 rounded bg-green-600 text-white disabled:opacity-40">
+                  {itemsBusy ? 'جارٍ…' : picked.size ? `📥 تصدير أصناف المحدد (${picked.size})` : `📥 تصدير أصناف كل المطالبات (${ordered.length})`}</button>
+                {picked.size > 0 && <button onClick={() => setPicked(new Set())} className="px-2 py-1 rounded border border-gray-300 bg-white">إلغاء التحديد</button>}
               </div>
               <div className="bg-white rounded-xl border border-gray-200 overflow-auto max-h-[calc(100vh-360px)]" data-tour="insurance-reports-motalbas">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 text-gray-500 sticky top-0"><tr>
+                    <th className="px-2 py-2"><input type="checkbox" title="تحديد / إلغاء تحديد الكل"
+                      checked={ordered.length > 0 && picked.size === ordered.length}
+                      onChange={e => setPicked(e.target.checked ? new Set(ordered.map(m => m.claim_id)) : new Set())} /></th>
                     <th className="px-2 py-2" />
                     {[['claim_number', 'المطالبة'], ['client', 'الجهة'], ['subclient', 'الفئة'], ['period_from', 'الفترة', 'date'],
                       ['status', 'الحالة'], ['rx_count', 'روشتات', 'number'], ['local_before', 'محلى', 'number'],
@@ -255,7 +278,8 @@ export default function InsuranceReportsPage() {
                   </tr></thead>
                   <tbody className="divide-y divide-gray-100">
                     {ordered.map((m, i) => (
-                      <tr key={m.claim_id} className="hover:bg-gray-50">
+                      <tr key={m.claim_id} className={picked.has(m.claim_id) ? 'bg-blue-50/60' : 'hover:bg-gray-50'}>
+                        <td className="px-2 text-center"><input type="checkbox" checked={picked.has(m.claim_id)} onChange={() => togglePick(m.claim_id)} /></td>
                         <td className="px-1 whitespace-nowrap"><button onClick={() => move(m.claim_id, -1)} disabled={i === 0} className="px-1 text-gray-400 disabled:opacity-20">▲</button>
                           <button onClick={() => move(m.claim_id, 1)} disabled={i === ordered.length - 1} className="px-1 text-gray-400 disabled:opacity-20">▼</button></td>
                         <td className="px-2 py-1.5 font-mono"><a className="text-blue-700 hover:underline" href={`/insurance/claims/${m.claim_id}`}>{m.claim_number}</a></td>
@@ -271,7 +295,7 @@ export default function InsuranceReportsPage() {
                       </tr>
                     ))}
                     <tr className="bg-green-50 font-bold">
-                      <td /><td className="px-2 py-1.5" colSpan={5}>الإجمالى ({n0(T.motalbas)} مطالبة)</td>
+                      <td /><td /><td className="px-2 py-1.5" colSpan={5}>الإجمالى ({n0(T.motalbas)} مطالبة)</td>
                       <td className="px-2 text-left font-mono">{n0(T.rx_count)}</td>
                       {['local_before', 'imported_before', 'tarsia_before', 'gross', 'discount', 'net', 'patient_share', 'cost', 'gp'].map(k =>
                         <td key={k} className="px-2 text-left font-mono">{n2(T[k])}</td>)}
