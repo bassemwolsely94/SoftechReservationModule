@@ -2,8 +2,11 @@
 ElRezeiky Pharmacy Operations Platform — Django Settings
 Production configuration for Windows Server deployment
 """
+import atexit
 import os
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
@@ -233,6 +236,7 @@ INSTALLED_APPS = [
     'apps.usage_print',    # Usage-instructions receipt slip (Project 5) — read-only vs SOFTECH, flag below
     'apps.access',         # Trusted networks + request network label (security N1, log only)
     'apps.trace',          # P-58 EDA track-and-trace foundation — dormant (TRACK_TRACE_ENABLED)
+    'apps.data_lifecycle', # Data lifecycle — rule register, policies, holding folder; our data only
 ]
 
 MIDDLEWARE = [
@@ -402,6 +406,17 @@ STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+if _RUNNING_TESTS:      # tests must never write to the real media folder
+    MEDIA_ROOT = Path(tempfile.mkdtemp(prefix='elrezeiky_test_media_'))
+    atexit.register(shutil.rmtree, MEDIA_ROOT, ignore_errors=True)
+# Data lifecycle (apps.data_lifecycle). File rules stay in preview unless this is True: set it only on the
+# VPS, because MEDIA_ROOT is inside OneDrive here and its version history would keep "removed" prescriptions.
+LIFECYCLE_FILE_RULES_ENABLED = config('LIFECYCLE_FILE_RULES_ENABLED', default=False, cast=bool)
+# Removed files wait here for 30 days. Outside MEDIA_ROOT, so never reachable by URL.
+LIFECYCLE_HOLD_ROOT = config('LIFECYCLE_HOLD_ROOT', default=BASE_DIR / 'media_hold', cast=Path)
+if _RUNNING_TESTS:      # nor to the real holding folder
+    LIFECYCLE_HOLD_ROOT = Path(tempfile.mkdtemp(prefix='elrezeiky_test_media_hold_'))
+    atexit.register(shutil.rmtree, LIFECYCLE_HOLD_ROOT, ignore_errors=True)
 # Uploaded files get signed, expiring URLs (core/storage.py); /media/ is served by
 # core.media.serve_media, which checks the signature. Product images stay public.
 STORAGES = {
@@ -573,6 +588,9 @@ ERP_SERVICE_USERCODE = config('ERP_SERVICE_USERCODE', default='')
 POS_WRITER_ENABLED = config('POS_WRITER_ENABLED', default=False, cast=bool)
 # Usage-instructions slip (apps.usage_print, Project 5). OFF = screen hidden, API 404. Never writes SOFTECH.
 USAGE_PRINT_ENABLED = config('USAGE_PRINT_ENABLED', default=False, cast=bool)
+# HR Attendance stage 1 (apps/hr/attendance): fingerprint punch collection by the office agent. OFF =
+# the agent endpoints answer 503 and no collection is accepted. Read-only; never writes SOFTECH.
+HR_ATTENDANCE_ENABLED = config('HR_ATTENDANCE_ENABLED', default=False, cast=bool)
 POS_WRITER_PROFILE = config('POS_WRITER_PROFILE', default='test')   # test|prod
 # Wave 3 inc3: batch-write OUR POS item-selection telemetry into SOFTECH pos_cancel (the
 # «المبيعات غير المخزنة» activity log — NOT a transactional/financial table). OFF until the

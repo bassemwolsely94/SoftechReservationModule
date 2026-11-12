@@ -210,6 +210,29 @@ class CandidateViewTests(_Base):
         self.assertEqual(self.client_.post(f'{API}candidates/999999/review/', {'action': 'reject'},
                                            format='json').status_code, 404)
 
+    def test_approving_a_candidate_with_no_file_is_refused_and_the_primary_stays(self):
+        """The data lifecycle empties unreviewed rows and keeps them. Approving one must not take the primary slot."""
+        from apps.product_experience.models import ProductMedia
+        primary = self.media_row(is_primary=True)
+        for value in ('', None):
+            c = self.cand(local_file=value)
+            r = self.client_.post(f'{API}candidates/{c.id}/review/', {'action': 'approve'}, format='json')
+            self.assertEqual(r.status_code, 400, value)
+            self.assertIn('detail', r.data)
+            c.refresh_from_db()
+            self.assertEqual((c.status, c.reviewed_at), ('pending_review', None))
+            primary.refresh_from_db()
+            self.assertTrue(primary.is_primary)
+            self.assertEqual(list(ProductMedia.objects.filter(item=self.item)), [primary])
+            with self.assertRaises(pipeline.CandidateHasNoFile):
+                pipeline.approve_candidate(c, user=self.user)
+            primary.refresh_from_db()
+            self.assertTrue(primary.is_primary)
+
+            # Rejecting such a row still works.
+            r = self.client_.post(f'{API}candidates/{c.id}/review/', {'action': 'reject'}, format='json')
+            self.assertEqual(r.data, {'status': 'rejected'})
+
     def test_redownload_runs_worker_and_handles_dead_link(self):
         c = self.cand(status='rejected')
         with mock.patch('apps.images.views.start_thread', side_effect=lambda f, **kw: f()), \

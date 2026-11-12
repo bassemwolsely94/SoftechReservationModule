@@ -144,6 +144,7 @@ function RatesTab() {
   const [target, setTarget] = useState('both')
   const [showAdv, setShowAdv] = useState(false)
   const [adv, setAdv] = useState({ ...ADV_DEFAULTS })
+  const [seasonal, setSeasonal] = useState(false)
 
   const listQ = useQuery({ queryKey: ['rate-pushes'], queryFn: () => supplyApi.ratePushes().then(r => r.data) })
   const gated = listQ.data && !listQ.data.writer_enabled
@@ -163,7 +164,7 @@ function RatesTab() {
   const proposeM = useMutation({
     mutationFn: () => supplyApi.proposeRate({
       branch: branch.trim() || undefined, item: item.trim() || undefined,
-      method, target,
+      method, target, seasonal: seasonal || undefined,
       method_params: method === 'advanced' ? cleanAdvParams(adv) : undefined,
     }).then(r => r.data),
     onSuccess: (d) => { setSelected(d.id); invalidate() },
@@ -216,6 +217,13 @@ function RatesTab() {
             <option value="hq">نسخة الرئيسي فقط</option>
           </select>
         </div>
+        <label data-tour="purchasing-supply-rates-seasonal"
+          className="flex items-center gap-1.5 text-sm text-content pb-1.5 cursor-pointer"
+          title="يضرب معدل كل صنف موسميته مستقرة في معامل الثلاثين يوماً القادمة (من «الموسمية» في لوحة المشتريات)، بحد أدنى ×0.7 وأقصى ×1.5. باقي الأصناف تبقى كما هي.">
+          <input type="checkbox" checked={seasonal} onChange={e => setSeasonal(e.target.checked)} />
+          تطبيق الموسمية
+          <span className="text-[11px] text-content/50">(المستقرة فقط، ×0.7–×1.5)</span>
+        </label>
         {method === 'advanced' && (
           <button data-tour="purchasing-supply-rates-advanced" type="button" onClick={() => setShowAdv(v => !v)}
             className="text-xs text-primary underline underline-offset-2 pb-1.5">
@@ -335,6 +343,7 @@ function matchesText(l, q) {
 function PushDetail({ push, gated, canWrite, onApprove, onExecute, approving, executing, actionError }) {
   const bl = useBranchLabels()
   const lines = push.lines || []
+  const seasonalPush = !!push.method_params?.seasonal
   const xlsM = useMutation({ mutationFn: () => supplyApi.ratePushExcel(push.id),
     onSuccess: (res) => downloadBlob(res.data, `sales_rates_${push.id}.xlsx`) })
   const [search, setSearch] = useState('')
@@ -364,6 +373,7 @@ function PushDetail({ push, gated, canWrite, onApprove, onExecute, approving, ex
   const grid = useSort(eligible, {
     itemcode: txt(l => l.itemcode), item_name: l => l.item_name, branch: txt(l => `${l.branchcode}/${l.storecode}`),
     old: l => Number(l.old ?? NaN), old_hq: l => Number(l.old_hq ?? NaN), new: l => Number(l.new ?? NaN),
+    base: l => Number(l.base ?? NaN), factor: l => Number(l.factor ?? NaN),
     verified: l => (l.verified ? 2 : l.error ? 1 : 0),
   })
   return (
@@ -374,6 +384,10 @@ function PushDetail({ push, gated, canWrite, onApprove, onExecute, approving, ex
           <Badge s={push.status} />
           {push.method_label && (
             <span className="text-[11px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">{push.method_label}</span>
+          )}
+          {seasonalPush && (
+            <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800"
+              title="المعدل الجديد = المعدل الأساسي × معامل الموسمية (الأصناف ذات الموسمية المستقرة فقط، ×0.7–×1.5)">موسمي</span>
           )}
           {push.target_label && (
             <span className="text-[11px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-700"
@@ -440,6 +454,8 @@ function PushDetail({ push, gated, canWrite, onApprove, onExecute, approving, ex
                 {push.target === 'hq' ? 'الحالي (الرئيسي)' : 'الحالي (الفرع)'}
               </SortTh>
               {push.target === 'both' && <SortTh k="old_hq" {...grid} className="text-center px-3 py-2">الحالي (الرئيسي)</SortTh>}
+              {seasonalPush && <SortTh k="base" {...grid} className="text-center px-3 py-2">المعدل الأساسي</SortTh>}
+              {seasonalPush && <SortTh k="factor" {...grid} className="text-center px-3 py-2">معامل الموسمية</SortTh>}
               <SortTh k="new" {...grid} className="text-center px-3 py-2">المعدل الجديد</SortTh>
               {push.status === 'executed' && <SortTh k="verified" {...grid} className="text-center px-3 py-2">مؤكّد</SortTh>}
             </tr>
@@ -453,6 +469,13 @@ function PushDetail({ push, gated, canWrite, onApprove, onExecute, approving, ex
                 <td className="px-3 py-1.5 text-center text-content/60">{n(l.old)}</td>
                 {push.target === 'both' && (
                   <td className="px-3 py-1.5 text-center text-content/60">{n(l.old_hq)}</td>
+                )}
+                {seasonalPush && <td className="px-3 py-1.5 text-center text-content/60">{l.factor != null ? n(l.base) : '—'}</td>}
+                {seasonalPush && (
+                  <td className={`px-3 py-1.5 text-center ${l.factor == null ? 'text-content/40'
+                    : Number(l.factor) > 1 ? 'text-emerald-700' : Number(l.factor) < 1 ? 'text-amber-700' : 'text-content/60'}`}>
+                    {l.factor != null ? `×${Number(l.factor).toFixed(2)}` : '—'}
+                  </td>
                 )}
                 <td className="px-3 py-1.5 text-center font-medium text-primary">{n(l.new)}</td>
                 {push.status === 'executed' && (

@@ -64,8 +64,21 @@ def _image_url(sheet):
     return None, ''
 
 
+def _image_removed(sheet):
+    """{'prescription_image': date} when retention removed the sheet's own or its order's image."""
+    from apps.data_lifecycle.display import removed_dates
+    out = {}
+    for obj in (sheet, sheet.pos_order):
+        if obj is not None:
+            found = removed_dates([obj], ('prescription_image',)).get((obj._meta.label, str(obj.pk), 'prescription_image'))
+            if found:
+                out['prescription_image'] = found
+    return out
+
+
 def _sheet_json(sheet, access):
     url, origin = _image_url(sheet)
+    removed = _image_removed(sheet) if url is None else {}
     lines = list(sheet.lines.select_related('confirmed_by'))
     return {
         'id': sheet.id, 'invoice_id': sheet.softech_invoice_id, 'docnumber': sheet.docnumber,
@@ -73,6 +86,7 @@ def _sheet_json(sheet, access):
         'branch': {'code': sheet.branch.softech_branch_id, 'name': str(sheet.branch.name_ar or sheet.branch.name)},
         'patient_name': sheet.patient_name, 'invoice_changed': sheet.invoice_changed,
         'pos_order_id': sheet.pos_order_id, 'prescription_image': url, 'prescription_origin': origin,
+        **({'retention_removed': removed} if removed else {}),
         'print_count': sheet.print_count, 'last_printed_at': sheet.last_printed_at,
         'lines': [_line_json(ln) for ln in lines],
         'ready': bool(lines) and all(ln.status != UsageSheetLine.STATUS_PENDING for ln in lines)

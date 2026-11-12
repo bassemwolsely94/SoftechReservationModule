@@ -1541,7 +1541,9 @@ class SuggestItemsView(APIView):
         if not tag_filter or 'slow_moving' in tag_filter:
             try:
                 from apps.purchasing.models import ItemDemandMetrics
+                from apps.purchasing.shortage import _latest_run
                 slow_qs = ItemDemandMetrics.objects.filter(
+                    run=_latest_run(None),    # latest run only; None -> no rows
                     coverage_months__gte=3,   # more than 3 months of stock
                     monthly_avg__gt=0,        # has some sales history
                 )

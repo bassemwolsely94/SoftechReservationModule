@@ -6,6 +6,7 @@ from .models import (
     SoftechSalesOrder, SoftechSalesOrderLine, SoftechSalesOrderPayment,
     CHANNEL_TO_PTCLASSIF,
 )
+from apps.data_lifecycle.display import RetentionNoteMixin
 
 
 class LineSerializer(serializers.ModelSerializer):
@@ -35,7 +36,8 @@ class PaymentSerializer(serializers.ModelSerializer):
         read_only_fields = ['softech_paymentsno']
 
 
-class OrderSerializer(serializers.ModelSerializer):
+class OrderSerializer(RetentionNoteMixin, serializers.ModelSerializer):
+    retention_fields = ('prescription_image',)
     lines    = LineSerializer(many=True, required=False)
     payments = PaymentSerializer(many=True, required=False)
     # entered patient/claim (fresh contract orders) → stored in source_companies_raw so the

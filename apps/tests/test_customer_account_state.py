@@ -137,3 +137,19 @@ class ReminderTests(TR._Base):
         blocked = {r['task_id'] for r in rows if r['reason'] == 'account_state'}
         self.assertNotIn(ok.pk, blocked)
         self.assertEqual(len(blocked), 3)
+
+
+class CampaignAudienceTests(TestCase):
+    def test_campaigns_skip_closed_deceased_entity_and_merged_codes(self):
+        from apps.campaigns.dispatcher import CampaignDispatcher
+        from apps.campaigns.models import WhatsAppCampaign
+        ok = cust('K1')
+        unset = cust('K2', softech_status='')
+        cust('K3', softech_status='0')
+        cust('K4', softech_status='5')
+        cust('K5', softech_deceased=True, softech_status='1')
+        cust('K6', softech_locked=True)
+        cust('K7', softech_status='0', merged_into_pic='K1')
+        camp = WhatsAppCampaign.objects.create(name='t', message_template='x', target_filter={})
+        got = set(CampaignDispatcher(camp)._resolve_audience().values_list('softech_pic', flat=True))
+        self.assertEqual(got & {f'K{i}' for i in range(1, 8)}, {ok.softech_pic, unset.softech_pic})

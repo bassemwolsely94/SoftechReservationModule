@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { invoicesApi } from '../../api/client'
+import RemovedFileNote from '../../components/RemovedFileNote'
 
 /**
  * Per-distributor column-template calibrator (#9).
@@ -20,7 +21,7 @@ const FIELDS = [
 const COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899',
                 '#14b8a6', '#f97316', '#6366f1', '#84cc16', '#06b6d4', '#9ca3af']
 
-export default function VendorTemplateEditor({ vendorId, sampleImageUrl, onClose, onSaved }) {
+export default function VendorTemplateEditor({ vendorId, sampleImageUrl, sampleRemovedDate, onClose, onSaved }) {
   const [vendor, setVendor] = useState(null)
   const [bands, setBands] = useState([])
   const [multiline, setMultiline] = useState(false)
@@ -70,7 +71,9 @@ export default function VendorTemplateEditor({ vendorId, sampleImageUrl, onClose
             <div className="relative border border-gray-200 rounded-lg overflow-hidden">
               {sampleImageUrl
                 ? <img src={sampleImageUrl} alt="sample" className="w-full block" />
-                : <div className="h-64 flex items-center justify-center text-gray-400 text-sm">لا توجد عيّنة</div>}
+                : <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
+                    {sampleRemovedDate ? <RemovedFileNote date={sampleRemovedDate} /> : 'لا توجد عيّنة'}
+                  </div>}
               {bands.map((b, i) => (
                 <div key={i} className="absolute top-0 bottom-0 opacity-25"
                   style={{ left: `${Number(b.x0) * 100}%`, width: `${(Number(b.x1) - Number(b.x0)) * 100}%`,

@@ -57,7 +57,12 @@ class ForecastService:
             },
         )
 
+        # Only the latest successful demand run: older runs hold the same
+        # (item, branch) rows and would be forecast twice. No run -> nothing.
+        from apps.purchasing.shortage import _latest_run
+        demand_run = _latest_run(None)
         qs = ItemDemandMetrics.objects.select_related('item', 'branch')
+        qs = qs.filter(run=demand_run) if demand_run else qs.none()
         if branch_ids:
             qs = qs.filter(branch_id__in=branch_ids)
         if item_ids:
