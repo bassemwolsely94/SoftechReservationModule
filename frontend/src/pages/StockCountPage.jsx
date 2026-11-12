@@ -6,6 +6,7 @@ import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
 import DailyCountTab from './stockcount/DailyCountTab'
 import useAuthStore from '../store/authStore'
+import DataFreshnessBar from '../components/DataFreshnessBar'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -917,6 +918,11 @@ export default function StockCountPage() {
             </button>
           );
         })}
+      </div>
+
+      {/* Stock mirror freshness — physical counts compare against the synced on-hand */}
+      <div className="px-8 pt-3">
+        <DataFreshnessBar domains={['stock']} canEdit={user?.is_staff || user?.role === 'admin'} />
       </div>
 
       {/* Session workflow bar */}

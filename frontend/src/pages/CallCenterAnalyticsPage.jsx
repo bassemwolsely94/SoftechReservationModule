@@ -17,6 +17,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { callCenterApi, branchesApi } from '../api/client'
 import useAuthStore from '../store/authStore'
+import DataFreshnessBar from '../components/DataFreshnessBar'
 import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import useHelpTab from '../help/useHelpTab'
@@ -730,6 +731,11 @@ export default function CallCenterAnalyticsPage() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Call-log (PBX) sync freshness */}
+      <div className="px-6 pt-3">
+        <DataFreshnessBar domains={['calls']} />
       </div>
 
       {/* Tab content */}
