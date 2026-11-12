@@ -1,9 +1,10 @@
-# 36 — Data lifecycle (Stage 1 and Stage 3)
+# 36 — Data lifecycle (Stages 1, 3 and 5)
 
 Status: Stage 1 (retention catch-up, missed-run alert) and Stage 3 (rule register, row and file rules, holding folder,
-growth history) BUILT 2026-11-07 on branch `claude/data-lifecycle-stage-3`. **Every new rule is in `preview`; nothing
-new deletes until the owner switches it on.** Stages 2 (compaction), 4 (upload controls) and 5 (data health screen)
-are not built.
+growth history) BUILT 2026-11-07 on branch `claude/data-lifecycle-stage-3`. Stage 5 (the `/data-health` screen and
+its daily snapshot) BUILT 2026-11-12 on branch `claude/data-lifecycle-stage-5-dcb263`. **Every new rule is in
+`preview`; nothing new deletes until the owner switches it on.** Stages 2 (compaction) and 4 (upload controls) are
+documented with their own branches.
 Design: `docs/superpowers/specs/2026-11-07-data-lifecycle-design.md`. Ledger entry: P-56 in
 `docs/product-review/00_INDEX_AND_DECISION_LEDGER.md`.
 
@@ -20,6 +21,8 @@ The app is `apps/data_lifecycle`. Company-level by nature (no branch scoping). I
 | `holding.py` | Moves a file and its database references together, holds it 30 days, purges it, restores it. |
 | `runner.py` | Preview and real runs, the circuit breaker, the table-size snapshot. Called from `apps/sync/maintenance.py` `run_daily_retention` (lane `retention`). |
 | `models.py` | `LifecycleRulePolicy`, `LifecycleRun`, `LifecycleRunLine`, `HeldFile`, `ObsoleteItemSeen`, `UnreferencedFileSeen`, `TableSizeSnapshot`. |
+| `health.py`, `problems.py` | Stage 5 daily `DataHealthSnapshot`: database size, estimated empty space (reuses `reclaim_space.table_info`), media sizes per folder and per upload type, disk, and the open data problem counts (each count in its own try; a failure stores None). Step `retention:data_health`. |
+| `reports.py`, `views.py`, `urls.py` | Stage 5 API at `/api/data-health/` (payloads in `reports.py`, thin views). |
 | `management/commands/lifecycle.py` | `list`, `preview <key>`, `set <key> --mode ... --user ... --reason ...`, `restore <held_id> --user ...`. |
 
 ## The register
@@ -77,8 +80,28 @@ A file rule removes the file and keeps the row. A row whose file is not on disk 
 
 `retention:table_sizes` runs daily before the rules and writes one `TableSizeSnapshot` row per table of 20 MB or more
 (total, heap, index bytes and the row estimate). It reads PostgreSQL's catalog only and never raises, so a failed
-snapshot cannot fail the retention run. It is the only early part of Stage 5; the screen and the media sizes per
-folder come later. Its rows written are counted in the step's log line and are not deletions.
+snapshot cannot fail the retention run. Its rows written are counted in the step's log line and are not deletions.
+
+## Data health screen (Stage 5)
+
+`/data-health` «صحة البيانات», RBAC module `data_health` (users migration `0054_data_health_module`; renumber at
+merge if needed). Company-level by nature, no branch scoping, no SOFTECH. Who sees what (design §7): admin every
+tab; supervisor and quality manager `view` = Growth, Problems and the forced refresh; every other role an explicit
+denial. Rules, preview, held files, thumbnails and restore are `IsAdminRole` in `views.py`, so a supervisor gets 403
+whatever the matrix says (listed in `role_overblocks.txt` with the reason).
+
+| Route | Who | What |
+|---|---|---|
+| `GET growth/` | viewers | current sizes, 180-day series, forecast, tables (classified or not), upload types, folders, measures |
+| `GET problems/` | viewers | counts only, with the previous count and the change |
+| `POST refresh/` | viewers | 202; one background `take_snapshot(include_tables=True)` at a time (`cache.add` guard, 15 min) |
+| `GET rules/`, `PATCH rules/<key>/`, `POST rules/<key>/preview/` | admin | `policy.set_policy` / `runner.preview_rule`; refusals 400 with the Arabic message |
+| `GET held/`, `GET held/<id>/thumbnail/`, `POST held/<id>/restore/` | admin | never `hold_path`, `original_path`, `sha256` or `rows`; thumbnails only for item-image rules on `ImageCandidate` / `ProductMedia` (allowlist), otherwise 404 |
+
+Forecast: rate from the oldest and latest snapshot in the last 30 days of database + media bytes; none when the span
+is under 7 days; no date when the rate is zero or negative; level = `DATA_HEALTH_DISK_LEVEL_PERCENT` (default 80).
+The Problems tab fixes nothing: each row links to the screen that does. Thumbnails are limited to item images;
+prescriptions, `pos_rx` samples, conversations and orphan files never get one. Help: `apps/help/content/data_health.py`.
 
 ## Findings
 

@@ -22,5 +22,6 @@ MODULE_FILES = [
     'analytics', 'incentives',
     'finance', 'insurance', 'commerce',
     'hr',
+    'data_health',
     'admin',
 ]
