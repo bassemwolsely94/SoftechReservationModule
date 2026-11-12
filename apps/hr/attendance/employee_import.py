@@ -44,7 +44,7 @@ class ImportPreview:
     errors: list = field(default_factory=list)    # strings naming row and code only
 
 
-_CODE_TRANSLATE = {ord(c): None for c in '\xa0​‌‍‎‏⁠﻿'}
+_CODE_TRANSLATE = {ord(c): None for c in '\xa0\u200b\u200c\u200d\u200e\u200f\u2060\ufeff'}
 _CODE_TRANSLATE.update({0x0660 + i: ord(str(i)) for i in range(10)})   # Arabic-Indic digits
 _CODE_TRANSLATE.update({0x06F0 + i: ord(str(i)) for i in range(10)})   # Eastern Arabic-Indic digits
 _FLOAT_TEXT = re.compile(r'^(\d+)\.0+$')
