@@ -8,6 +8,7 @@ import SoftechGrid from './invoices/SoftechGrid'
 import BundleWorkbench from './invoices/BundleWorkbench'
 import DuplicateNotice from './invoices/DuplicateNotice'
 import ItemSearchInput from '../components/ItemSearchInput'
+import { fa } from '../utils/flowArrow'
 import RemovedFileNote from '../components/RemovedFileNote'
 
 // ── Download helper ────────────────────────────────────────────────────────────
@@ -198,7 +199,7 @@ function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNoti
               </span>
               {line.item_name && (
                 <div className="mt-0.5 flex items-center gap-1.5">
-                  <span className="text-[11px] text-gray-400">→</span>
+                  <span className="text-[11px] text-gray-400">{fa()}</span>
                   <span className="text-xs text-gray-700 font-medium">{line.item_name}</span>
                   {line.item_softech_id && (
                     <span className="text-[10px] font-mono text-gray-400 bg-gray-100 px-1 rounded">{line.item_softech_id}</span>
@@ -1222,7 +1223,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                   {(poResult.lines || []).filter(l => l.status !== 'ok').map((l, i) => (
                     <div key={i} className="text-xs bg-white rounded-lg px-3 py-1.5 border border-gray-100 flex justify-between">
                       <span>{l.item_name}</span>
-                      <span className="tabular-nums text-gray-500">طلب {l.po_qty}→فاتورة {l.inv_qty} · سعر {l.po_price}→{l.inv_price}</span>
+                      <span className="tabular-nums text-gray-500">طلب {l.po_qty}{fa()}فاتورة {l.inv_qty} · سعر {l.po_price}{fa()}{l.inv_price}</span>
                     </div>
                   ))}
                 </div>

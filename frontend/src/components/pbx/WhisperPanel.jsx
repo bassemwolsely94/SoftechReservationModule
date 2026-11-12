@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { callCenterApi } from '../../api/client'
+import { fa } from '../../utils/flowArrow'
 
 const STATUS_LABEL = {
   pending: 'في الانتظار', running: 'قيد التفريغ', done: 'تم', failed: 'فشل', skipped: 'تم التخطي',
@@ -114,7 +115,7 @@ export default function WhisperPanel() {
       </div>
 
       <div className="text-xs text-gray-500">
-        آخر تشغيل: {fmt(c.run_started_at)} → {fmt(c.run_finished_at)} — {c.run_processed} مكالمة
+        آخر تشغيل: {fmt(c.run_started_at)} {fa()} {fmt(c.run_finished_at)} — {c.run_processed} مكالمة
         {c.run_note && ` — ${c.run_note}`} · السرعة: {s.realtime_factor}× من مدة الصوت · تصحيحات: {s.corrections}
       </div>
 
