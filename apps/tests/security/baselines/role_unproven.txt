@@ -85,7 +85,6 @@ pharmacist DELETE /api/stockcount/sessions/987654321/
 purchasing DELETE /api/invoices/invoices/987654321/
 purchasing DELETE /api/items/x/ingredients/987654321/
 purchasing DELETE /api/shortage/lists/987654321/
-quality_manager PATCH /api/callcenter/calls/987654321/quality/
 salesperson DELETE /api/shortage/lists/987654321/
 supervisor DELETE /api/chronic/items/987654321/unclassify/
 supervisor DELETE /api/shortage/lists/987654321/
