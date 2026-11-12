@@ -18,6 +18,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { productsApi, itemsApi, pickZonesApi } from '../api/client'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import useHelpTab from '../help/useHelpTab'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -34,6 +35,23 @@ const INSURANCE_LABELS = {
   '3': 'تكافل',
   '4': 'أخرى',
 }
+
+const INSURANCE_OPTIONS = Object.entries(INSURANCE_LABELS).map(([code, name]) => ({ code, name }))
+
+// Multi-select filters (arrays; none ticked = all). Sent as one comma list: ?effect_code=a,b
+const EMPTY_FILTERS = {
+  availability: '', effect_code: [], shape_code: [], insurance_type: [],
+  requires_fridge: false, prescription_required: false, is_chronic: false, is_fast_moving: false, has_image: false,
+}
+// ?effect_code=12 (old links) and ?effect_code=12,15 both pre-fill the filter
+const splitParam = v => (v || '').split(',').filter(Boolean)
+// filters → request params: arrays joined with ',', empty / false values dropped
+const filterParams = f => Object.fromEntries(
+  Object.entries(f)
+    .map(([k, v]) => [k, Array.isArray(v) ? v.join(',') : v])
+    .filter(([, v]) => v !== '' && v !== false && v !== undefined && v !== null)
+)
+const isActive = v => (Array.isArray(v) ? v.length > 0 : !!v)
 
 const ORDERING_OPTIONS = [
   { value: 'popular',    label: 'الأكثر شهرة' },
@@ -290,16 +308,9 @@ function FilterPanel({ filters, onChange, options }) {
       {options?.effects?.length > 0 && (
         <div>
           <p className="text-xs font-medium text-gray-500 mb-1.5">التصنيف العلاجي</p>
-          <select
-            value={filters.effect_code || ''}
-            onChange={e => onChange({ ...filters, effect_code: e.target.value })}
-            className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
-          >
-            <option value="">الكل</option>
-            {options.effects.map(e => (
-              <option key={e.code} value={e.code}>{e.name}</option>
-            ))}
-          </select>
+          <MultiSelectFilter className="w-full" showCode={false} allLabel="الكل" menuClassName="min-w-[280px]"
+            options={options.effects} selected={filters.effect_code || []}
+            onChange={v => onChange({ ...filters, effect_code: v })} />
         </div>
       )}
 
@@ -307,32 +318,18 @@ function FilterPanel({ filters, onChange, options }) {
       {options?.shapes?.length > 0 && (
         <div>
           <p className="text-xs font-medium text-gray-500 mb-1.5">الشكل الصيدلي</p>
-          <select
-            value={filters.shape_code || ''}
-            onChange={e => onChange({ ...filters, shape_code: e.target.value })}
-            className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
-          >
-            <option value="">الكل</option>
-            {options.shapes.map(s => (
-              <option key={s.code} value={s.code}>{s.name}</option>
-            ))}
-          </select>
+          <MultiSelectFilter className="w-full" showCode={false} allLabel="الكل" menuClassName="min-w-[280px]"
+            options={options.shapes} selected={filters.shape_code || []}
+            onChange={v => onChange({ ...filters, shape_code: v })} />
         </div>
       )}
 
       {/* Insurance type */}
       <div>
         <p className="text-xs font-medium text-gray-500 mb-1.5">التأمين الصحي</p>
-        <select
-          value={filters.insurance_type || ''}
-          onChange={e => onChange({ ...filters, insurance_type: e.target.value })}
-          className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
-        >
-          <option value="">الكل</option>
-          {Object.entries(INSURANCE_LABELS).map(([code, label]) => (
-            <option key={code} value={code}>{label}</option>
-          ))}
-        </select>
+        <MultiSelectFilter className="w-full" showCode={false} allLabel="الكل"
+          options={INSURANCE_OPTIONS} selected={filters.insurance_type || []}
+          onChange={v => onChange({ ...filters, insurance_type: v })} />
       </div>
 
       {/* Special flags */}
@@ -361,7 +358,7 @@ function FilterPanel({ filters, onChange, options }) {
 
       {/* Reset */}
       <button
-        onClick={() => onChange({ availability: '' })}
+        onClick={() => onChange(EMPTY_FILTERS)}
         className="w-full text-xs text-gray-400 hover:text-red-500 border border-dashed border-gray-200
                    rounded-lg py-1.5 transition-colors"
       >
@@ -606,15 +603,10 @@ export default function ProductCatalogPage() {
   const [exporting,   setExporting]   = useState(false)
 
   const [filters, setFilters] = useState({
+    ...EMPTY_FILTERS,
     availability:          searchParams.get('availability') || '',
-    effect_code:           searchParams.get('effect_code') || '',
-    shape_code:            searchParams.get('shape_code') || '',
-    insurance_type:        '',
-    requires_fridge:       false,
-    prescription_required: false,
-    is_chronic:            false,
-    is_fast_moving:        false,
-    has_image:             false,
+    effect_code:           splitParam(searchParams.get('effect_code')),
+    shape_code:            splitParam(searchParams.get('shape_code')),
   })
 
   const debouncedQuery = useDebounce(query)
@@ -625,8 +617,8 @@ export default function ProductCatalogPage() {
     const p = {}
     if (debouncedQuery)         p.q            = debouncedQuery
     if (filters.availability)   p.availability = filters.availability
-    if (filters.effect_code)    p.effect_code  = filters.effect_code
-    if (filters.shape_code)     p.shape_code   = filters.shape_code
+    if (filters.effect_code?.length) p.effect_code = filters.effect_code.join(',')
+    if (filters.shape_code?.length)  p.shape_code  = filters.shape_code.join(',')
     setSearchParams(p, { replace: true })
     setPage(1)
   }, [debouncedQuery, filters])  // eslint-disable-line
@@ -642,9 +634,7 @@ export default function ProductCatalogPage() {
 
   const tabOrdering = viewTab === 'recent' ? 'newest' : ordering
 
-  const activeFilterCount = Object.entries(filters).filter(([k, v]) =>
-    k !== 'availability' && !!v
-  ).length + (filters.availability ? 1 : 0)
+  const activeFilterCount = Object.values(filters).filter(isActive).length
 
   const apiParams = {
     page,
@@ -653,9 +643,7 @@ export default function ProductCatalogPage() {
     // "Recent" tab browses the whole catalog ordered by newest — no search needed.
     ...(viewTab === 'recent' && { browse: 1 }),
     ...(debouncedQuery && { q: debouncedQuery }),
-    ...Object.fromEntries(
-      Object.entries({ ...filters, ...tabFilters }).filter(([, v]) => v !== '' && v !== false && v !== undefined)
-    ),
+    ...filterParams({ ...filters, ...tabFilters }),
   }
 
   const { data, isLoading, isFetching } = useQuery({
@@ -718,9 +706,7 @@ export default function ProductCatalogPage() {
     try {
       const exportParams = {
         ...(debouncedQuery && { q: debouncedQuery }),
-        ...Object.fromEntries(
-          Object.entries({ ...filters, ...tabFilters }).filter(([, v]) => v !== '' && v !== false && v !== undefined)
-        ),
+        ...filterParams({ ...filters, ...tabFilters }),
       }
       const res = await productsApi.export(exportParams)
       const url = URL.createObjectURL(new Blob([res.data]))
@@ -922,7 +908,7 @@ export default function ProductCatalogPage() {
                     <p className="text-sm">لا توجد نتائج مطابقة</p>
                     {(query || activeFilterCount > 0) && (
                       <button data-tour="catalog-products-empty-reset"
-                        onClick={() => { setQuery(''); setFilters({ availability: '' }); setPage(1) }}
+                        onClick={() => { setQuery(''); setFilters(EMPTY_FILTERS); setPage(1) }}
                         className="mt-3 text-brand-500 text-xs hover:underline"
                       >
                         مسح البحث والفلاتر

@@ -14,6 +14,8 @@ import { fa } from '../utils/flowArrow'
 import ReturnWindowTab from '../components/ReturnWindowTab'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
+import MultiSelectFilter from '../components/MultiSelectFilter'
+import BranchMultiSelect from '../components/BranchMultiSelect'
 
 // ── date helpers ──────────────────────────────────────────────────────────────
 const _iso = (d) => d.toISOString().slice(0, 10)
@@ -27,6 +29,15 @@ function _defaultExpiryTo() {
   const d = new Date(); d.setMonth(d.getMonth() + 4, 0)   // last day of +3 months
   return _iso(d)
 }
+// multi-select helpers: list filters hold arrays ([] = all)
+const _opts = (values) => values.map(v => ({ code: v, name: v }))
+const _inList = (arr, v) => arr.length === 0 || arr.includes(v)
+/** names of the picked SOFTECH branch codes; several → joined, none → «كل الفروع» */
+function _branchLabel(codes, branches) {
+  if (!codes.length) return 'كل الفروع'
+  return codes.map(c => branches.find(b => b.softech_branch_id === c)?.name_ar || c).join('، ')
+}
+
 function _fmtDate(s) {
   return s ? new Date(s).toLocaleDateString('en-GB') : '—'
 }
@@ -157,12 +168,12 @@ function RebalanceModal({ row, fromBranch, onClose }) {
 // ── Near-expiry rebalancing worklist (B3) — whole network, batch-level, advisory ──────────
 function RebalanceWorklistTab() {
   const qc = useQueryClient()
-  const [branch, setBranch] = useState('')
+  const [branch, setBranch] = useState([])     // SOFTECH codes, multi-select ([] = all)
   const [created, setCreated] = useState({})   // row key → request number
   const [err, setErr] = useState(null)
   const { data, isLoading, error } = useQuery({
     queryKey: ['stock-expiry-rebalance', branch],
-    queryFn: () => batchesApi.stockExpiryRebalance(branch ? { branch } : {}).then(r => r.data),
+    queryFn: () => batchesApi.stockExpiryRebalance(branch.length ? { branch: branch.join(',') } : {}).then(r => r.data),
   })
   const { sorted: sortedRescue, headerProps: rescueHp } = useSortableRows(data?.rows || [])
   const key = r => `${r.item_code}|${r.from_branch}|${r.to_branch}|${r.batch_no}`
@@ -179,11 +190,6 @@ function RebalanceWorklistTab() {
     onError: (e) => setErr(e.response?.data?.detail || 'تعذّر إنشاء طلب التحويل'),
   })
   const fmt = v => Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
-  const branches = useMemo(() => {
-    const m = new Map()
-    ;(data?.rows || []).forEach(r => { m.set(r.from_branch, r.from_branch_name); m.set(r.to_branch, r.to_branch_name) })
-    return [...m.entries()]
-  }, [data])
 
   if (isLoading) return <div className="text-center py-10 text-gray-400">جاري حساب الاقتراحات…</div>
   if (error) return <div className="text-red-600 text-sm">{error.response?.data?.detail || 'تعذّر التحميل'}</div>
@@ -202,10 +208,7 @@ function RebalanceWorklistTab() {
         <div className="bg-white border rounded-xl px-4 py-2"><div className="text-xs text-gray-500">قابل للإنقاذ بالنقل</div><div className="font-bold text-emerald-700">{fmt(t.rescuable_value)} ج.م · {t.lines} سطر</div></div>
         <div className="bg-white border rounded-xl px-4 py-2"><div className="text-xs text-gray-500">لا يوجد فرع يستوعبه</div><div className="font-bold text-amber-700">{fmt(t.no_target_value)} ج.م</div></div>
         <div className="bg-white border rounded-xl px-4 py-2"><div className="text-xs text-gray-500">متأخر للنقل (خصم/مرتجع)</div><div className="font-bold text-red-700">{fmt(t.too_late_value)} ج.م</div></div>
-        <select value={branch} onChange={e => setBranch(e.target.value)} className="border rounded-lg px-2 py-1.5 text-sm">
-          <option value="">كل الفروع</option>
-          {branches.map(([c, n]) => <option key={c} value={c}>{n}</option>)}
-        </select>
+        <BranchMultiSelect valueKey="code" selected={branch} onChange={setBranch} className="w-48 text-sm" />
       </div>
       {err && <p className="text-red-600 text-sm">{err}</p>}
       <div className="bg-white rounded-xl border overflow-x-auto">
@@ -261,7 +264,7 @@ function PurchaseExpiryAuditTab() {
 
   const [from, setFrom]           = useState(_defaultExpiryFrom())
   const [to, setTo]               = useState(_defaultExpiryTo())
-  const [branch, setBranch]       = useState('')          // '' = all branches
+  const [branch, setBranch]       = useState([])          // SOFTECH codes, multi-select ([] = all)
   const [onlyInStock, setOnly]    = useState(true)
   const [rows, setRows]           = useState(null)
   const [err, setErr]             = useState(null)
@@ -276,10 +279,10 @@ function PurchaseExpiryAuditTab() {
   const [passedOnly, setPassed]   = useState(false)
   const [minVar, setMinVar]       = useState('')
   const [minQ, setMinQ]           = useState('')
-  const [medType, setMedType]     = useState('')
-  const [origin, setOrigin]       = useState('')
-  const [shape, setShape]         = useState('')
-  const [producer, setProducer]   = useState('')
+  const [medType, setMedType]     = useState([])      // multi-select ([] = all)
+  const [origin, setOrigin]       = useState([])
+  const [shape, setShape]         = useState([])
+  const [producer, setProducer]   = useState([])
   const [riskFilter, setRiskFilter] = useState('')     // '' | 'atrisk' | 'critical'
   const [sortKey, setSortKey]     = useState('value_at_risk')
   const [sortDir, setSortDir]     = useState('desc')
@@ -316,10 +319,10 @@ function PurchaseExpiryAuditTab() {
       if (passedOnly && !r.has_entered_expiry_passed) return false
       if (riskFilter === 'atrisk' && !['expired', 'critical', 'high'].includes(r.risk_tier)) return false
       if (riskFilter === 'critical' && !['expired', 'critical'].includes(r.risk_tier)) return false
-      if (medType && r.medicine_type !== medType) return false
-      if (origin && r.origin !== origin) return false
-      if (shape && r.shape !== shape) return false
-      if (producer && r.producer !== producer) return false
+      if (!_inList(medType, r.medicine_type)) return false
+      if (!_inList(origin, r.origin)) return false
+      if (!_inList(shape, r.shape)) return false
+      if (!_inList(producer, r.producer)) return false
       if (minVar && (r.value_at_risk || 0) < Number(minVar)) return false
       if (minQ && (r.current_qty || 0) < Number(minQ)) return false
       if (search) {
@@ -377,7 +380,7 @@ function PurchaseExpiryAuditTab() {
   const candidates = useMutation({
     mutationFn: () => batchesApi.purchaseExpiryCandidates({
       from, to,
-      branches: branch ? [branch] : undefined,
+      branches: branch.length ? branch : undefined,
       only_in_stock: onlyInStock,
     }).then(r => r.data),
     onSuccess: (data) => { setRows(data.items || []); setMdEnabled(!!data.markdown_enabled); setMdReq(new Set()); setErr(null) },
@@ -388,7 +391,7 @@ function PurchaseExpiryAuditTab() {
     mutationFn: (r) => batchesApi.purchaseExpiryRequestMarkdown({
       item_code: r.item_code, discount_pct: r.markdown_discount_pct,
       days_to_expiry: r.days_to_expiry,
-      branch: branch || r.branches_in_stock?.[0] || '',
+      branch: (branch.length === 1 ? branch[0] : '') || r.branches_in_stock?.[0] || '',
     }),
     onSuccess: (_res, r) => setMdReq(s => new Set(s).add(r.item_code)),
     onError:   (e) => setErr(e.response?.data?.detail || 'تعذّر إنشاء طلب الخصم'),
@@ -402,17 +405,16 @@ function PurchaseExpiryAuditTab() {
 
   const spawn = useMutation({
     // Spawn a count for exactly the rows currently shown (after client filters).
+    // one count session = one branch, so the button needs exactly one branch picked
     mutationFn: () => batchesApi.purchaseExpirySpawnCount({
-      branch, from, to,
+      branch: branch[0], from, to,
       item_codes: (displayRows || []).map(r => r.item_code),
     }).then(r => r.data),
     onSuccess: (data) => navigate(`/stock-count?session=${data.session_id}`),
     onError:   (e) => setErr(e.response?.data?.detail || 'تعذّر إنشاء جلسة الجرد'),
   })
 
-  const branchLabel = branch
-    ? (branches.find(b => b.softech_branch_id === branch)?.name_ar || branch)
-    : 'كل الفروع'
+  const branchLabel = _branchLabel(branch, branches)
 
   const exportXlsx = useMutation({
     mutationFn: () => batchesApi.purchaseExpiryExport({
@@ -474,18 +476,11 @@ function PurchaseExpiryAuditTab() {
           <input type="date" value={to} onChange={e => setTo(e.target.value)}
                  className="border rounded-lg px-3 py-2 text-sm" />
         </label>
-        <label className="text-sm">
+        <div className="text-sm">
           <span className="block text-gray-500 mb-1">الفرع</span>
-          <select value={branch} onChange={e => setBranch(e.target.value)}
-                  className="border rounded-lg px-3 py-2 text-sm min-w-[10rem]">
-            <option value="">كل الفروع</option>
-            {branches.map(b => (
-              <option key={b.id} value={b.softech_branch_id}>
-                {b.name_ar || b.display_name || b.softech_branch_id}
-              </option>
-            ))}
-          </select>
-        </label>
+          <BranchMultiSelect valueKey="code" branches={branches} selected={branch} onChange={setBranch}
+                             className="w-48" />
+        </div>
         <label className="text-sm flex items-center gap-2 pb-2">
           <input type="checkbox" checked={onlyInStock} onChange={e => setOnly(e.target.checked)} />
           <span className="text-gray-600">الموجود بالمخزون فقط</span>
@@ -522,26 +517,14 @@ function PurchaseExpiryAuditTab() {
                 <option value="atrisk">عالية فأعلى</option>
               </select>
             )}
-            <select value={medType} onChange={e => setMedType(e.target.value)}
-                    className="border rounded-lg px-2 py-1.5 max-w-[11rem]">
-              <option value="">التصنيف العام: الكل</option>
-              {opts.medType.map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
-            <select value={origin} onChange={e => setOrigin(e.target.value)}
-                    className="border rounded-lg px-2 py-1.5 max-w-[10rem]">
-              <option value="">المنشأ: الكل</option>
-              {opts.origin.map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
-            <select value={shape} onChange={e => setShape(e.target.value)}
-                    className="border rounded-lg px-2 py-1.5 max-w-[10rem]">
-              <option value="">الشكل: الكل</option>
-              {opts.shape.map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
-            <select value={producer} onChange={e => setProducer(e.target.value)}
-                    className="border rounded-lg px-2 py-1.5 max-w-[11rem]">
-              <option value="">المنتج: الكل</option>
-              {opts.producer.map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
+            <MultiSelectFilter className="w-44" options={_opts(opts.medType)} selected={medType} onChange={setMedType}
+                               allLabel="التصنيف العام: الكل" showCode={false} />
+            <MultiSelectFilter className="w-40" options={_opts(opts.origin)} selected={origin} onChange={setOrigin}
+                               allLabel="المنشأ: الكل" showCode={false} />
+            <MultiSelectFilter className="w-40" options={_opts(opts.shape)} selected={shape} onChange={setShape}
+                               allLabel="الشكل: الكل" showCode={false} />
+            <MultiSelectFilter className="w-44" menuClassName="min-w-[260px]" options={_opts(opts.producer)}
+                               selected={producer} onChange={setProducer} allLabel="المنتج: الكل" showCode={false} />
             <label className="flex items-center gap-1 text-gray-600">
               <input type="checkbox" checked={importedOnly} onChange={e => setImp(e.target.checked)} />
               مستورد
@@ -580,8 +563,8 @@ function PurchaseExpiryAuditTab() {
               </button>
               <button data-tour="batches-main-audit-count"
                 onClick={() => spawn.mutate()}
-                disabled={spawn.isPending || !branch || displayRows.length === 0}
-                title={!branch ? 'اختر فرعًا لبدء جرد مادي' : ''}
+                disabled={spawn.isPending || branch.length !== 1 || displayRows.length === 0}
+                title={branch.length !== 1 ? 'اختر فرعًا واحدًا لبدء جرد مادي' : ''}
                 className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
               >
                 {spawn.isPending ? 'جاري الإنشاء…' : '▶️ بدء جرد مادي لهذه الأصناف'}
@@ -716,7 +699,7 @@ function PurchaseExpiryAuditTab() {
       {rebalanceRow && (
         <RebalanceModal
           row={rebalanceRow}
-          fromBranch={branch || rebalanceRow.branches_in_stock?.[0] || ''}
+          fromBranch={(branch.length === 1 ? branch[0] : '') || rebalanceRow.branches_in_stock?.[0] || ''}
           onClose={() => setRebal(null)}
         />
       )}
@@ -928,15 +911,15 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
 
   const [mode, setMode]         = useState(initialMode)
   const [within, setWithin]     = useState(180)
-  const [branch, setBranch]     = useState('')
-  const [store, setStore]       = useState('')
+  const [branch, setBranch]     = useState([])     // SOFTECH codes, multi-select ([] = all)
+  const [store, setStore]       = useState([])     // store codes, multi-select ([] = all)
   const [expFrom, setExpFrom]   = useState('')
   const [expTo, setExpTo]       = useState('')
   const [includeQ, setIncludeQ] = useState(false)
   const [search, setSearch]     = useState('')
   const [importedOnly, setImp]  = useState(false)
   const [fridgeOnly, setFridge] = useState(false)
-  const [medType, setMedType]   = useState('')
+  const [medType, setMedType]   = useState([])     // multi-select ([] = all)
   const [sortKey, setSortKey]   = useState('value_at_risk')
   const [sortDir, setSortDir]   = useState('desc')
 
@@ -948,14 +931,14 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
 
   const { data: storesData } = useQuery({
     queryKey: ['batches', 'stock-expiry-stores', branch],
-    queryFn:  () => batchesApi.stockExpiryStores({ branches: branch || undefined }).then(r => r.data),
+    queryFn:  () => batchesApi.stockExpiryStores({ branches: branch.join(',') || undefined }).then(r => r.data),
   })
   const stores = storesData?.stores || []
 
   const { data, isFetching } = useQuery({
     queryKey: ['batches', 'stock-expiry-report', mode, within, branch, store, includeQ, expFrom, expTo],
     queryFn:  () => batchesApi.stockExpiryReport({
-      mode, within_days: within, branches: branch || undefined, stores: store || undefined,
+      mode, within_days: within, branches: branch.join(',') || undefined, stores: store.join(',') || undefined,
       exp_from: mode === 'range' ? (expFrom || undefined) : undefined,
       exp_to:   mode === 'range' ? (expTo || undefined) : undefined,
       include_quarantine: includeQ || undefined,
@@ -979,9 +962,12 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
   const navigate = useNavigate()
   const [err, setErr] = useState(null)
   const [disposalRow, setDisposalRow] = useState(null)
-  const branchLabel = branch
-    ? (branches.find(b => b.softech_branch_id === branch)?.name_ar || branch)
-    : 'كل الفروع'
+  const branchLabel = _branchLabel(branch, branches)
+  const oneBranch = branch.length === 1 ? branch[0] : ''   // a count session / disposal is per branch
+  const storeOpts = [...new Set(stores.map(s => s.store_code))].filter(Boolean).sort().map(sc => {
+    const s = stores.find(x => x.store_code === sc)
+    return { code: sc, name: `مخزن ${sc}${s?.role && s.role !== 'live' ? ` — ${s.role_label}` : ''}` }
+  })
 
   const NUMERIC = new Set(['total_qty', 'unit_cost', 'value_at_risk', 'batch_count', 'days_to_expiry'])
   const arrow = (k) => (sortKey === k ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '')
@@ -997,7 +983,7 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
     const out = rows.filter(r => {
       if (importedOnly && !r.is_imported) return false
       if (fridgeOnly && !r.is_fridge) return false
-      if (medType && r.medicine_type !== medType) return false
+      if (!_inList(medType, r.medicine_type)) return false
       if (search) {
         const q = search.toLowerCase()
         if (!(wildcardMatch(r.item_name, search) || (r.item_code || '').includes(q))) return false
@@ -1028,7 +1014,7 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
     onError: (e) => setErr(e.response?.data?.detail || 'تعذّر التصدير'),
   })
   const spawn = useMutation({
-    mutationFn: () => batchesApi.stockExpirySpawnCount({ branch, item_codes: view.map(r => r.item_code) }),
+    mutationFn: () => batchesApi.stockExpirySpawnCount({ branch: oneBranch, item_codes: view.map(r => r.item_code) }),
     onSuccess: (res) => navigate(`/stock-count?session=${res.data.session_id}`),
     onError: (e) => setErr(e.response?.data?.detail || 'تعذّر إنشاء جلسة الجرد'),
   })
@@ -1067,16 +1053,10 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
             <input type="date" value={expTo} onChange={e => setExpTo(e.target.value)} className="border rounded-lg px-2 py-1.5" />
           </span>
         )}
-        <select value={branch} onChange={e => { setBranch(e.target.value); setStore('') }} className="border rounded-lg px-2 py-1.5 min-w-[9rem]">
-          <option value="">كل الفروع</option>
-          {branches.map(b => <option key={b.id} value={b.softech_branch_id}>{b.name_ar || b.display_name || b.softech_branch_id}</option>)}
-        </select>
-        <select value={store} onChange={e => setStore(e.target.value)} className="border rounded-lg px-2 py-1.5 min-w-[8rem]">
-          <option value="">كل المخازن</option>
-          {[...new Set(stores.map(s => s.store_code))].filter(Boolean).sort().map(sc => (
-            <option key={sc} value={sc}>مخزن {sc}{(() => { const s = stores.find(x => x.store_code === sc); return s?.role && s.role !== 'live' ? ` — ${s.role_label}` : '' })()}</option>
-          ))}
-        </select>
+        <BranchMultiSelect valueKey="code" branches={branches} selected={branch}
+                           onChange={v => { setBranch(v); setStore([]) }} className="w-44" />
+        <MultiSelectFilter className="w-40" menuClassName="min-w-[220px]" options={storeOpts} selected={store}
+                           onChange={setStore} allLabel="كل المخازن" showCode={false} />
         <label className="flex items-center gap-1 text-gray-600">
           <input type="checkbox" checked={includeQ} onChange={e => setIncludeQ(e.target.checked)} /> يشمل العزل/التالف
         </label>
@@ -1096,10 +1076,8 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
       <div data-tour="batches-main-filters" className="flex flex-wrap items-center gap-2 mb-3 bg-white rounded-xl border border-gray-200 p-3 text-sm">
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث بالاسم / الكود…"
                className="border rounded-lg px-3 py-1.5 flex-1 min-w-[9rem]" />
-        <select value={medType} onChange={e => setMedType(e.target.value)} className="border rounded-lg px-2 py-1.5 max-w-[11rem]">
-          <option value="">التصنيف العام: الكل</option>
-          {medOpts.map(v => <option key={v} value={v}>{v}</option>)}
-        </select>
+        <MultiSelectFilter className="w-44" options={_opts(medOpts)} selected={medType} onChange={setMedType}
+                           allLabel="التصنيف العام: الكل" showCode={false} />
         <label className="flex items-center gap-1 text-gray-600"><input type="checkbox" checked={importedOnly} onChange={e => setImp(e.target.checked)} /> مستورد</label>
         <label className="flex items-center gap-1 text-gray-600"><input type="checkbox" checked={fridgeOnly} onChange={e => setFridge(e.target.checked)} /> ❄️ ثلاجة</label>
       </div>
@@ -1116,8 +1094,8 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
                   className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
             {exportXlsx.isPending ? 'جاري التصدير…' : '⬇️ تصدير Excel'}
           </button>
-          <button data-tour="batches-main-count" onClick={() => spawn.mutate()} disabled={spawn.isPending || !branch || view.length === 0}
-                  title={!branch ? 'اختر فرعًا لبدء جرد مادي' : ''}
+          <button data-tour="batches-main-count" onClick={() => spawn.mutate()} disabled={spawn.isPending || !oneBranch || view.length === 0}
+                  title={!oneBranch ? 'اختر فرعًا واحدًا لبدء جرد مادي' : ''}
                   className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">
             {spawn.isPending ? 'جاري الإنشاء…' : '▶️ بدء جرد مادي'}
           </button>
@@ -1180,7 +1158,7 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
       )}
 
       {disposalRow && (
-        <DisposalModal row={disposalRow} branch={branch} onClose={() => setDisposalRow(null)} />
+        <DisposalModal row={disposalRow} branch={oneBranch} onClose={() => setDisposalRow(null)} />
       )}
     </div>
   )
@@ -1268,15 +1246,17 @@ function DisposalModal({ row, branch, onClose }) {
 }
 
 // ── Disposal / return ledger tab ──────────────────────────────────────────────
+const _DISPOSAL_STATUS = [{ code: 'draft', name: 'مسودة' }, { code: 'approved', name: 'معتمد' },
+                          { code: 'done', name: 'منفّذ' }, { code: 'cancelled', name: 'ملغي' }]
 function DisposalTab() {
   const user = useAuthStore(s => s.user)
   const canApprove = ['admin', 'quality_manager', 'supervisor'].includes(user?.role)
   const qc = useQueryClient()
-  const [statusF, setStatusF] = useState('')
+  const [statusF, setStatusF] = useState([])     // multi-select ([] = all)
 
   const { data } = useQuery({
     queryKey: ['batches', 'disposal', statusF],
-    queryFn:  () => batchesApi.expiryDisposalList({ status: statusF || undefined }).then(r => r.data),
+    queryFn:  () => batchesApi.expiryDisposalList({ status: statusF.join(',') || undefined }).then(r => r.data),
   })
   const rows = data?.items || []
   const { sorted: sortedDisp, headerProps: dispHp } = useSortableRows(rows, {
@@ -1308,13 +1288,8 @@ function DisposalTab() {
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3 text-sm">
         <div className="flex items-center gap-2">
-          <select value={statusF} onChange={e => setStatusF(e.target.value)} className="border rounded-lg px-2 py-1.5">
-            <option value="">كل الحالات</option>
-            <option value="draft">مسودة</option>
-            <option value="approved">معتمد</option>
-            <option value="done">منفّذ</option>
-            <option value="cancelled">ملغي</option>
-          </select>
+          <MultiSelectFilter className="w-40" options={_DISPOSAL_STATUS} selected={statusF} onChange={setStatusF}
+                             allLabel="كل الحالات" showCode={false} />
           <span className="text-gray-600">العدد: <b>{fmtInt(rows.length)}</b> · القيمة: <b className="text-red-600">{fmtNum(totalVal)} ج</b></span>
         </div>
         <button data-tour="batches-main-disposal-export" onClick={() => exp.mutate()} disabled={exp.isPending || rows.length === 0}

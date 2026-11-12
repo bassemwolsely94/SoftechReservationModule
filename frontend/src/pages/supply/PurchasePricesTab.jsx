@@ -10,6 +10,7 @@ import { supplyApi } from '../../api/client'
 import { wildcardMatch } from '../../utils/wildcard'
 import { fa } from '../../utils/flowArrow'
 import { FreshnessBar } from './AvailabilityControls'
+import MultiSelectFilter from '../../components/MultiSelectFilter'
 import { Chip, btnGhost, downloadBlob, errText, inputCls, money, q, SortTh, useSort, txt } from './supplyUi'
 
 const STATE_TONE = { cheaper: 'amber', best: 'emerald', single: 'gray', warehouse_only: 'gray' }
@@ -131,7 +132,7 @@ export default function PurchasePricesTab() {
   const [all, setAll] = useState(false)
   const [state, setState] = useState('')
   const [search, setSearch] = useState('')
-  const [supplier, setSupplier] = useState('')
+  const [supplier, setSupplier] = useState([])   // multi-select supplier keys (none = all)
   const [producer, setProducer] = useState('')
   const [view, setView] = useState('items')
   const [open, setOpen] = useState(null)
@@ -144,14 +145,15 @@ export default function PurchasePricesTab() {
   })
   const xlsM = useMutation({
     // the filters on screen go with the export — the file holds exactly the rows shown
-    mutationFn: () => supplyApi.purchasePricesExcel({ ...params, state, supplier, producer, q: search.trim() }),
+    mutationFn: () => supplyApi.purchasePricesExcel({ ...params, state, supplier: supplier.join(','), producer, q: search.trim() }),
     onSuccess: (res) => downloadBlob(res.data, `purchase_prices_${days}d.xlsx`),
   })
   const d = bq.data
+  const supplierOptions = useMemo(() => (d?.suppliers || []).map(s => ({ code: s.key, name: `${s.name} (${s.items})` })), [d])
   const producers = useMemo(() => [...new Set((d?.items || []).map(r => r.producer).filter(Boolean))].sort(), [d])
   const rows = useMemo(() => (d?.items || []).filter(r =>
     (!state || r.state === state)
-    && (!supplier || r.suppliers.some(c => c.key === supplier))
+    && (supplier.length === 0 || r.suppliers.some(c => supplier.includes(c.key)))
     && (!producer || r.producer === producer)
     && (!search.trim() || wildcardMatch(`${r.code} ${r.name}`, search))), [d, state, supplier, producer, search])
   const grid = useSort(rows, {
@@ -179,12 +181,11 @@ export default function PurchasePricesTab() {
         <label className="flex flex-col gap-1 text-xs text-content/60">بحث
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="كود أو اسم — * أو %" className={`${inputCls} w-48`} />
         </label>
-        <label className="flex flex-col gap-1 text-xs text-content/60">المورد
-          <select value={supplier} onChange={e => setSupplier(e.target.value)} className={`${inputCls} max-w-52`}>
-            <option value="">الكل</option>
-            {(d?.suppliers || []).map(s => <option key={s.key} value={s.key}>{s.name} ({s.items})</option>)}
-          </select>
-        </label>
+        {/* a div, not a <label>: the menu's own option labels must not re-trigger the toggle */}
+        <div className="flex flex-col gap-1 text-xs text-content/60">المورد
+          <MultiSelectFilter className="w-52" showCode={false} allLabel="الكل" menuClassName="min-w-[280px]"
+            options={supplierOptions} selected={supplier} onChange={setSupplier} />
+        </div>
         <label className="flex flex-col gap-1 text-xs text-content/60">الشركة المنتجة
           <input list="pp-producers" value={producer} onChange={e => setProducer(e.target.value)} placeholder="الكل" className={`${inputCls} w-44`} />
           <datalist id="pp-producers">{producers.map(p => <option key={p} value={p} />)}</datalist>

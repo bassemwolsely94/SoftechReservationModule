@@ -142,15 +142,17 @@ def _open_transfers(lines, meta):
 
 
 def worklist(*, branch=None, item=None, today=None):
-    """The screen's data: rebalancing lines + totals (value at cost)."""
+    """The screen's data: rebalancing lines + totals (value at cost). `branch` is one SOFTECH
+    code or a list of them (multi-select filter): a line shows when it leaves OR reaches one."""
     from apps.catalog.models import Item
     today = today or timezone.localdate()
     horizon, min_days, transit = _cfg('HORIZON_DAYS', 180), _cfg('MIN_DAYS', 30), _cfg('TRANSIT_DAYS', 7)
     batches, rates, target_stock, meta, hq, have_rates = _load(today, horizon)
     lines, buckets = plan(batches, rates, target_stock, today=today, horizon=horizon, min_days=min_days,
                           transit=transit, hq_codes=frozenset(hq))
-    if branch:
-        lines = [l for l in lines if l['from'] == str(branch) or l['to'] == str(branch)]
+    brs = {str(b) for b in ([branch] if isinstance(branch, (str, int)) else (branch or [])) if str(b)}
+    if brs:
+        lines = [l for l in lines if l['from'] in brs or l['to'] in brs]
     if item:
         lines = [l for l in lines if l['item'] == str(item)]
     codes = {l['item'] for l in lines} | {k[0] for b in buckets.values() for k in b}
@@ -183,7 +185,7 @@ def worklist(*, branch=None, item=None, today=None):
 
     def total(bucket):
         return round(sum(q * cost(ic) for (ic, br), q in bucket.items()
-                         if (not branch or br == str(branch)) and (not item or ic == str(item))), 2)
+                         if (not brs or br in brs) and (not item or ic == str(item))), 2)
     return {
         'have_rates': have_rates,
         'settings': {'horizon_days': horizon, 'min_days': min_days, 'transit_days': transit},

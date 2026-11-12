@@ -150,13 +150,24 @@ def _key(branch, store, item, batch, expiry):
     return f'{branch}|{store}|{item}|{batch}|{expiry.isoformat() if expiry else ""}'
 
 
+def _as_set(v):
+    """One value or a list → a set of non-empty strings (empty = no filter)."""
+    if v in (None, ''):
+        return set()
+    vals = v if isinstance(v, (list, tuple, set)) else [v]
+    return {str(x) for x in vals if str(x)}
+
+
 def calendar(today=None, month=None, supplier=None, location=None, branch_codes=None, state=None):
     """The tab's data. `month` (a date in the month to view) moves the reference date to the 1st of
-    that month when it is not the current month."""
+    that month when it is not the current month. `supplier` / `location` are one value or a list
+    (multi-select filter); None or empty = all."""
     from .models import ExpiryDisposalRecord, StockExpiryBalance
     from .expiry_audit import _item_attr_map
 
     today = today or _today()
+    suppliers = _as_set(supplier)
+    locations = _as_set(location)
     ref = today
     if month and (month.year, month.month) != (today.year, today.month):
         ref = month.replace(day=1)
@@ -190,9 +201,9 @@ def calendar(today=None, month=None, supplier=None, location=None, branch_codes=
         if w['state'] == 'later':
             continue
         loc = location_of(r['branch_code'], r['store_role'], hq)
-        if location and loc != location:
+        if locations and loc not in locations:
             continue
-        if supplier and supplier != sup and supplier not in a['suppliers']:
+        if suppliers and sup not in suppliers and not suppliers.intersection(a['suppliers']):
             continue
         if state and w['state'] != state:
             continue

@@ -25,6 +25,8 @@ import { useToast } from '../components/ui'
 import { SortIcon } from '../components/DataTable'
 import useSortableRows from '../hooks/useSortableRows'
 import SharedSortTh from '../components/SortTh'
+import MultiSelectFilter from '../components/MultiSelectFilter'
+import BranchMultiSelect from '../components/BranchMultiSelect'
 
 // ── Column-resize hook ────────────────────────────────────────────────────────
 // useColWidths(defaults: number[]) → [widths, onResizeStart(e, colIndex)]
@@ -547,7 +549,7 @@ function AggregatedTab({ abcFilter, search, ordering, onSort, runId, itemFilters
 const BRANCH_WIDTHS_DEFAULT = [260, 70, 120, 90, 90, 90, 110, 90, 100, 90, 90, 90, 90, 100, 100, 90, 90, 110, 280]
 
 function BranchTab({ abcFilter, search, ordering, onSort, branches, runId, itemFilters = {} }) {
-  const [selectedBranch, setSelectedBranch] = useState('')
+  const [selectedBranch, setSelectedBranch] = useState([])   // multi-select branch ids (none = all)
   const [needsPurchase,  setNeedsPurchase]  = useState(false)
   const [colW, onResizeStart] = useColWidths(BRANCH_WIDTHS_DEFAULT)
 
@@ -560,7 +562,7 @@ function BranchTab({ abcFilter, search, ordering, onSort, branches, runId, itemF
       abc_class:      abcFilter !== 'all' ? abcFilter : undefined,
       search:         search || undefined,
       ordering,
-      branch:         selectedBranch || undefined,
+      branch:         selectedBranch.length ? selectedBranch.join(',') : undefined,
       needs_purchase: needsPurchase ? '1' : undefined,
       page_size:      200,
       ...advParams,
@@ -578,16 +580,8 @@ function BranchTab({ abcFilter, search, ordering, onSort, branches, runId, itemF
       <SeasonalityBar />
       {/* Branch filter + needs-purchase toggle */}
       <div className="flex flex-wrap items-center gap-3 px-4 py-3 bg-white border-b border-gray-100">
-        <select
-          value={selectedBranch}
-          onChange={e => setSelectedBranch(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-brand-400"
-        >
-          <option value="">كل الفروع</option>
-          {branches.map(b => (
-            <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>
-          ))}
-        </select>
+        <BranchMultiSelect className="w-[200px]" branches={branches}
+          selected={selectedBranch} onChange={setSelectedBranch} />
 
         <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-700">
           <input
@@ -703,15 +697,20 @@ const STATUS_COLORS = {
 const STATUS_LABELS = {
   pending: 'انتظار', approved: 'موافق', rejected: 'مرفوض', executed: 'منفّذ',
 }
+// multi-select filter options ({code, name})
+const TRANSFER_STATUS_OPTIONS = Object.entries(STATUS_LABELS).map(([code, name]) => ({ code, name }))
+const TRANSFER_ABC_OPTIONS = ['A', 'B', 'C'].map(c => ({ code: c, name: c }))
+const EXPORT_ABC_OPTIONS = ['A', 'B', 'C', 'X'].map(c => ({ code: c, name: c }))
 
 function TransferRecsTab({ canReview }) {   // purchasing approve: admin / purchasing / supply groups (Z-12b)
   const qc = useQueryClient()
 
   // Standard filters
-  const [statusFilter,     setStatusFilter]     = useState('pending')
-  const [abcFilter,        setAbcFilter]         = useState('all')
-  const [fromBranchFilter, setFromBranchFilter]  = useState('')
-  const [toBranchFilter,   setToBranchFilter]    = useState('')
+  // multi-select filters (none ticked = all); the list still opens on «انتظار»
+  const [statusFilter,     setStatusFilter]     = useState(['pending'])
+  const [abcFilter,        setAbcFilter]         = useState([])
+  const [fromBranchFilter, setFromBranchFilter]  = useState([])
+  const [toBranchFilter,   setToBranchFilter]    = useState([])
   const [search,           setSearch]            = useState('')
   const [ordering,         setOrdering]          = useState('-priority_score')
   const [reviewing,        setReviewing]         = useState(null)
@@ -747,10 +746,10 @@ function TransferRecsTab({ canReview }) {   // purchasing approve: admin / purch
     queryKey: ['purchasing-transfer-recs', statusFilter, abcFilter,
                fromBranchFilter, toBranchFilter, search, ordering, itemFilters],
     queryFn: () => purchasingApi.transferRecs({
-      status:      statusFilter !== 'all' ? statusFilter : undefined,
-      abc_class:   abcFilter    !== 'all' ? abcFilter    : undefined,
-      from_branch: fromBranchFilter || undefined,
-      to_branch:   toBranchFilter   || undefined,
+      status:      statusFilter.length     ? statusFilter.join(',')     : undefined,
+      abc_class:   abcFilter.length        ? abcFilter.join(',')        : undefined,
+      from_branch: fromBranchFilter.length ? fromBranchFilter.join(',') : undefined,
+      to_branch:   toBranchFilter.length   ? toBranchFilter.join(',')   : undefined,
       search:      search           || undefined,
       ordering,
       page_size:   300,
@@ -808,38 +807,15 @@ function TransferRecsTab({ canReview }) {   // purchasing approve: admin / purch
 
       {/* Filters bar */}
       <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-gray-100 bg-white">
-        {/* Status */}
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-          className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-brand-400">
-          <option value="all">كل الحالات</option>
-          <option value="pending">انتظار</option>
-          <option value="approved">موافق</option>
-          <option value="rejected">مرفوض</option>
-          <option value="executed">منفّذ</option>
-        </select>
-
-        {/* ABC */}
-        <select value={abcFilter} onChange={e => setAbcFilter(e.target.value)}
-          className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-brand-400">
-          <option value="all">كل الفئات</option>
-          <option value="A">A</option>
-          <option value="B">B</option>
-          <option value="C">C</option>
-        </select>
-
-        {/* From branch */}
-        <select value={fromBranchFilter} onChange={e => setFromBranchFilter(e.target.value)}
-          className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-brand-400">
-          <option value="">من: كل الفروع</option>
-          {branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
-        </select>
-
-        {/* To branch */}
-        <select value={toBranchFilter} onChange={e => setToBranchFilter(e.target.value)}
-          className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-brand-400">
-          <option value="">إلى: كل الفروع</option>
-          {branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
-        </select>
+        {/* Status · ABC · from / to branch — each takes several values (none = all) */}
+        <MultiSelectFilter className="w-[140px]" showCode={false} allLabel="كل الحالات"
+          options={TRANSFER_STATUS_OPTIONS} selected={statusFilter} onChange={setStatusFilter} />
+        <MultiSelectFilter className="w-[120px]" showCode={false} allLabel="كل الفئات"
+          options={TRANSFER_ABC_OPTIONS} selected={abcFilter} onChange={setAbcFilter} />
+        <BranchMultiSelect className="w-[170px]" branches={branches} allLabel="من: كل الفروع"
+          selected={fromBranchFilter} onChange={setFromBranchFilter} />
+        <BranchMultiSelect className="w-[170px]" branches={branches} allLabel="إلى: كل الفروع"
+          selected={toBranchFilter} onChange={setToBranchFilter} />
 
         {/* Search */}
         <input
@@ -1642,8 +1618,8 @@ export default function PurchasingDashboard() {
 
   // ── Export state ─────────────────────────────────────────────────────────
   const [exportOpen,   setExportOpen]   = useState(false)
-  const [exportBranch, setExportBranch] = useState('')
-  const [exportAbc,    setExportAbc]    = useState('')
+  const [exportBranch, setExportBranch] = useState([])   // multi-select branch ids (none = all)
+  const [exportAbc,    setExportAbc]    = useState([])   // multi-select ABC classes (none = all)
   const [advBudget,    setAdvBudget]    = useState('')
   // Pivot demand-sheet horizon (empty = engine's 1-month; e.g. 0.8 = fill to 0.8 mo)
   const [pivotCoverage, setPivotCoverage] = useState('')
@@ -1681,8 +1657,8 @@ export default function PurchasingDashboard() {
       const res  = await purchasingApi.export({
         format,
         view,
-        branch:    exportBranch || undefined,
-        abc_class: exportAbc    || undefined,
+        branch:    exportBranch.length ? exportBranch.join(',') : undefined,
+        abc_class: exportAbc.length    ? exportAbc.join(',')    : undefined,
         ...demandExtra,
       })
 
@@ -1714,8 +1690,8 @@ export default function PurchasingDashboard() {
     setExportOpen(false)
     try {
       const res  = await purchasingApi.advancedExport({
-        branch:    exportBranch || undefined,
-        abc_class: exportAbc    || undefined,
+        branch:    exportBranch.length ? exportBranch.join(',') : undefined,
+        abc_class: exportAbc.length    ? exportAbc.join(',')    : undefined,
         budget:    advBudget    || undefined,
       })
       const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
@@ -2323,33 +2299,16 @@ export default function PurchasingDashboard() {
                   {viewTab === 'branch' && (
                     <div className="mb-2">
                       <label className="text-xs text-gray-500 block mb-1">الفرع</label>
-                      <select
-                        value={exportBranch}
-                        onChange={e => setExportBranch(e.target.value)}
-                        className="w-full border border-gray-200 rounded px-2 py-1 text-xs"
-                      >
-                        <option value="">كل الفروع</option>
-                        {branches.map(b => (
-                          <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>
-                        ))}
-                      </select>
+                      <BranchMultiSelect className="w-full" menuClassName="min-w-[240px]" branches={branches}
+                        selected={exportBranch} onChange={setExportBranch} />
                     </div>
                   )}
 
                   {/* ABC filter */}
                   <div className="mb-3">
                     <label className="text-xs text-gray-500 block mb-1">تصنيف ABC</label>
-                    <select
-                      value={exportAbc}
-                      onChange={e => setExportAbc(e.target.value)}
-                      className="w-full border border-gray-200 rounded px-2 py-1 text-xs"
-                    >
-                      <option value="">كل الفئات</option>
-                      <option value="A">A فقط</option>
-                      <option value="B">B فقط</option>
-                      <option value="C">C فقط</option>
-                      <option value="X">X فقط</option>
-                    </select>
+                    <MultiSelectFilter className="w-full" showCode={false} allLabel="كل الفئات"
+                      options={EXPORT_ABC_OPTIONS} selected={exportAbc} onChange={setExportAbc} />
                   </div>
 
                   {/* Demand-fill horizon — applies to ALL exports below (flat + pivot).

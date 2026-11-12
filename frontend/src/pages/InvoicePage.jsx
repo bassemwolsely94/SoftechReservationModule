@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { invoicesApi, branchesApi } from '../api/client'
 import BranchSelect from '../components/BranchSelect'
+import BranchMultiSelect from '../components/BranchMultiSelect'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 import useGridKeyboard from '../hooks/useGridKeyboard'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
@@ -1464,8 +1466,8 @@ export default function InvoicePage() {
   const [loading,      setLoading]      = useState(true)
   const [showCreate,   setShowCreate]   = useState(false)
   const [activeId,     setActiveId]     = useState(null)
-  const [filterBranch, setFilterBranch] = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
+  const [filterBranch, setFilterBranch] = useState([])   // multi-select branch ids (none = all)
+  const [filterStatus, setFilterStatus] = useState([])   // multi-select statuses (none = all)
   const [filterAttention, setFilterAttention] = useState('')   // '' | '1' | 'clean'
   const [selected,     setSelected]     = useState(() => new Set())  // batch push selection
   const [pushingBatch, setPushingBatch] = useState(false)
@@ -1500,8 +1502,8 @@ export default function InvoicePage() {
     setLoading(true)
     try {
       const params = {}
-      if (filterBranch) params.branch = filterBranch
-      if (filterStatus) params.status = filterStatus
+      if (filterBranch.length) params.branch = filterBranch.join(',')
+      if (filterStatus.length) params.status = filterStatus.join(',')
       if (filterAttention) params.attention = filterAttention
       const r = await invoicesApi.list(params)
       setInvoices(r.data.results || r.data)
@@ -1558,19 +1560,11 @@ export default function InvoicePage() {
         </div>
         {tab === 'invoices' && (
           <div data-tour="invoices-main-filters" className="flex gap-3 mt-4 flex-wrap">
-            <BranchSelect
-              size="sm"
-              value={filterBranch}
-              onChange={setFilterBranch}
-              branches={branches}
-              allLabel="كل الفروع"
-              className="w-52"
-            />
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-              className="border border-gray-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
-              <option value="">كل الحالات</option>
-              {Object.entries(STATUS_CONFIG).map(([v, c]) => <option key={v} value={v}>{c.dot} {c.label}</option>)}
-            </select>
+            <BranchMultiSelect className="w-52" branches={branches}
+              selected={filterBranch} onChange={setFilterBranch} />
+            <MultiSelectFilter className="w-48" showCode={false} allLabel="كل الحالات" menuClassName="min-w-[220px]"
+              options={Object.entries(STATUS_CONFIG).map(([code, c]) => ({ code, name: `${c.dot} ${c.label}` }))}
+              selected={filterStatus} onChange={setFilterStatus} />
             <div className="flex gap-1 bg-gray-100 rounded-xl p-0.5">
               {[['', 'الكل'], ['1', '⚠ تحتاج مراجعة'], ['clean', '✓ نظيفة']].map(([v, lbl]) => (
                 <button key={v} onClick={() => setFilterAttention(v)}

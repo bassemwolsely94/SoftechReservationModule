@@ -13,8 +13,8 @@
  */
 import { useState, useRef, useEffect } from 'react'
 import { wildcardMatch } from '../utils/wildcard'
+import MultiSelectFilter from './MultiSelectFilter'
 
-const SEL     = 'border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-2 focus:ring-brand-400 focus:outline-none'
 const CHK_LBL = 'flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none'
 
 /* ── helpers ─────────────────────────────────────────────────────────────── */
@@ -22,42 +22,45 @@ const CHK_LBL = 'flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer 
 export function emptyItemFilters() {
   return {
     insurance_types: [],
-    item_level:      '',
+    item_level:      [],   // item_level / *_trans are multi-select arrays ([] = all)
     nosale_classifs: [],
     store_classifs:  [],
     is_fast_moving:  false,
     has_points:      false,
-    branch_trans:    '',
-    supplier_trans:  '',
-    customer_trans:  '',
+    branch_trans:    [],
+    supplier_trans:  [],
+    customer_trans:  [],
   }
 }
+
+// older saved state may still hold a single string — treat it as a one-value list
+const asList = v => (Array.isArray(v) ? v : (v === '' || v == null ? [] : [String(v)]))
 
 export function buildItemParams(f) {
   const p = {}
   if ((f.insurance_types || []).length) p.insurance_types = f.insurance_types.join(',')
-  if (f.item_level)                     p.item_level      = f.item_level
+  if (asList(f.item_level).length)      p.item_level      = asList(f.item_level).join(',')
   if ((f.nosale_classifs || []).length) p.nosale_classifs = f.nosale_classifs.join(',')
   if ((f.store_classifs  || []).length) p.store_classifs  = f.store_classifs.join(',')
   if (f.is_fast_moving)                 p.is_fast_moving  = '1'
   if (f.has_points)                     p.has_points      = '1'
-  if (f.branch_trans)                   p.branch_trans    = f.branch_trans
-  if (f.supplier_trans)                 p.supplier_trans  = f.supplier_trans
-  if (f.customer_trans)                 p.customer_trans  = f.customer_trans
+  if (asList(f.branch_trans).length)    p.branch_trans    = asList(f.branch_trans).join(',')
+  if (asList(f.supplier_trans).length)  p.supplier_trans  = asList(f.supplier_trans).join(',')
+  if (asList(f.customer_trans).length)  p.customer_trans  = asList(f.customer_trans).join(',')
   return p
 }
 
 export function countActiveItemFilters(f) {
   return [
     (f.insurance_types || []).length > 0 ? 1 : 0,
-    f.item_level        ? 1 : 0,
+    asList(f.item_level).length > 0 ? 1 : 0,
     (f.nosale_classifs  || []).length > 0 ? 1 : 0,
     (f.store_classifs   || []).length > 0 ? 1 : 0,
     f.is_fast_moving    ? 1 : 0,
     f.has_points        ? 1 : 0,
-    f.branch_trans      ? 1 : 0,
-    f.supplier_trans    ? 1 : 0,
-    f.customer_trans    ? 1 : 0,
+    asList(f.branch_trans).length > 0 ? 1 : 0,
+    asList(f.supplier_trans).length > 0 ? 1 : 0,
+    asList(f.customer_trans).length > 0 ? 1 : 0,
   ].reduce((a, b) => a + b, 0)
 }
 
@@ -186,6 +189,10 @@ export default function ItemOperationalFiltersBar({ filters, onChange, options =
   const nosaleOpts    = options.nosale_classif_options || []
   const storeOpts     = options.store_classif_options  || []
   const transOpts     = options.trans_options          || []
+  // MultiSelectFilter options: string codes (the params are comma lists)
+  const toMs = list => list.map(o => ({ code: String(o.code), name: o.name_ar || o.name || String(o.code) }))
+  const levelMs = toMs(levelOpts)
+  const transMs = toMs(transOpts)
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-3">
@@ -257,13 +264,8 @@ export default function ItemOperationalFiltersBar({ filters, onChange, options =
             {levelOpts.length > 0 && (
               <div className="flex items-center gap-1.5">
                 <span className="text-xs text-gray-500">مستوى الصنف:</span>
-                <select value={filters.item_level || ''} onChange={e => set({ item_level: e.target.value })}
-                  className={SEL}>
-                  <option value="">الكل</option>
-                  {levelOpts.map(o => (
-                    <option key={o.code} value={o.code}>{o.name_ar || o.name}</option>
-                  ))}
-                </select>
+                <MultiSelectFilter className="w-36 text-xs" options={levelMs} showCode={false} allLabel="الكل"
+                  selected={asList(filters.item_level)} onChange={v => set({ item_level: v })} />
               </div>
             )}
 
@@ -283,33 +285,18 @@ export default function ItemOperationalFiltersBar({ filters, onChange, options =
               <>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-gray-500">حركة الفرع:</span>
-                  <select value={filters.branch_trans || ''} onChange={e => set({ branch_trans: e.target.value })}
-                    className={SEL}>
-                    <option value="">الكل</option>
-                    {transOpts.map(o => (
-                      <option key={o.code} value={o.code}>{o.name_ar || o.name}</option>
-                    ))}
-                  </select>
+                  <MultiSelectFilter className="w-32 text-xs" options={transMs} showCode={false} allLabel="الكل"
+                    selected={asList(filters.branch_trans)} onChange={v => set({ branch_trans: v })} />
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-gray-500">حركة المورد:</span>
-                  <select value={filters.supplier_trans || ''} onChange={e => set({ supplier_trans: e.target.value })}
-                    className={SEL}>
-                    <option value="">الكل</option>
-                    {transOpts.map(o => (
-                      <option key={o.code} value={o.code}>{o.name_ar || o.name}</option>
-                    ))}
-                  </select>
+                  <MultiSelectFilter className="w-32 text-xs" options={transMs} showCode={false} allLabel="الكل"
+                    selected={asList(filters.supplier_trans)} onChange={v => set({ supplier_trans: v })} />
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-gray-500">حركة العميل:</span>
-                  <select value={filters.customer_trans || ''} onChange={e => set({ customer_trans: e.target.value })}
-                    className={SEL}>
-                    <option value="">الكل</option>
-                    {transOpts.map(o => (
-                      <option key={o.code} value={o.code}>{o.name_ar || o.name}</option>
-                    ))}
-                  </select>
+                  <MultiSelectFilter className="w-32 text-xs" options={transMs} showCode={false} allLabel="الكل"
+                    selected={asList(filters.customer_trans)} onChange={v => set({ customer_trans: v })} />
                 </div>
               </>
             )}

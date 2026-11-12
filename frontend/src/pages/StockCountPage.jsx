@@ -7,6 +7,7 @@ import SortTh from '../components/SortTh'
 import DailyCountTab from './stockcount/DailyCountTab'
 import useAuthStore from '../store/authStore'
 import DataFreshnessBar from '../components/DataFreshnessBar'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,8 @@ const STATUS_LABELS = {
   variance_ready: 'الفروق جاهزة',
   closed:         'مغلق',
 };
+
+const STATUS_OPTIONS = Object.entries(STATUS_LABELS).map(([code, name]) => ({ code, name }));
 
 const STATUS_STEPS = ['draft', 'snapshot_taken', 'exported', 'uploaded', 'variance_ready', 'closed'];
 
@@ -312,13 +315,13 @@ function SessionsTab({ onSelect, refresh }) {
   const [loading, setLoading]     = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch]       = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState([]);   // multi-select ([] = all)
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const params = {};
-      if (statusFilter) params.status = statusFilter;
+      if (statusFilter.length) params.status = statusFilter.join(',');
       if (search) params.search = search;
       const res = await stockCountApi.list(params);
       setSessions(res.data.results || res.data);
@@ -339,11 +342,8 @@ function SessionsTab({ onSelect, refresh }) {
           onChange={e => setSearch(e.target.value)}
           style={{ flex: 1, minWidth: 200, border: '1px solid #d1d5db', borderRadius: 6, padding: '8px 12px' }}
         />
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} data-tour="stockcount-sessions-status"
-          style={{ border: '1px solid #d1d5db', borderRadius: 6, padding: '8px 12px' }}>
-          <option value="">كل الحالات</option>
-          {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
+        <MultiSelectFilter className="w-44" options={STATUS_OPTIONS} selected={statusFilter} onChange={setStatusFilter}
+          allLabel="كل الحالات" showCode={false} dataTour="stockcount-sessions-status" />
         <CanDo module="admin" action="create">
           <button onClick={() => setShowCreate(true)} data-tour="stockcount-sessions-new" style={{
             padding: '8px 20px', borderRadius: 6, border: 'none',

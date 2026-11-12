@@ -8,6 +8,16 @@ from django.db.models import Q, Prefetch
 from django.utils import timezone
 
 from apps.catalog.models import Item
+from core.multi_filter import filter_in
+
+
+def _many(value):
+    """A filter value as a list: the views pass a list (multi-select), older callers one value."""
+    if value in (None, ''):
+        return []
+    if isinstance(value, (list, tuple, set)):
+        return [v for v in value if v not in (None, '')]
+    return [value]
 
 
 # ── Search ────────────────────────────────────────────────────────────────────
@@ -52,19 +62,17 @@ def search_products(query: str, filters: dict = None, limit: int = None, orderin
     if filters:
         if filters.get('category'):
             qs = qs.filter(category_id=filters['category'])
-        if filters.get('shape_code'):
-            qs = qs.filter(shape_code=filters['shape_code'])
+        # shape / effect / insurance accept several values (multi-select) — any of them matches
+        qs = filter_in(qs, 'shape_code', _many(filters.get('shape_code')))
         if filters.get('origin_code'):
             qs = qs.filter(origin_code=filters['origin_code'])
         if filters.get('requires_fridge') is not None:
             qs = qs.filter(requires_fridge=filters['requires_fridge'])
         if filters.get('prescription_required') is not None:
             qs = qs.filter(attributes__prescription_required=filters['prescription_required'])
-        if filters.get('effect_code'):
-            qs = qs.filter(
-                Q(effect_code=filters['effect_code'])
-                | Q(effect_code2=filters['effect_code'])
-            )
+        effects = _many(filters.get('effect_code'))
+        if effects:
+            qs = qs.filter(Q(effect_code__in=effects) | Q(effect_code2__in=effects))
         if filters.get('is_chronic'):
             qs = qs.filter(chronic_tag__isnull=False, chronic_tag__is_active=True)
         if filters.get('supplier_code'):
@@ -73,8 +81,7 @@ def search_products(query: str, filters: dict = None, limit: int = None, orderin
             qs = qs.filter(media__media_type='image', media__approved=True).distinct()
         if filters.get('is_fast_moving'):
             qs = qs.filter(is_fast_moving=True)
-        if filters.get('insurance_type') not in (None, ''):
-            qs = qs.filter(insurance_type=filters['insurance_type'])
+        qs = filter_in(qs, 'insurance_type', _many(filters.get('insurance_type')))
         if filters.get('is_chronic'):
             qs = qs.filter(chronic_tag__isnull=False, chronic_tag__is_active=True)
         if filters.get('availability'):

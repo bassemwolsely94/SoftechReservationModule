@@ -243,16 +243,20 @@ def item_history(item_code, *, days=365, today=None) -> dict:
 
 def filter_board(board, *, state='', supplier='', producer='', q='') -> dict:
     """The board as the screen shows it after its filters (state chip, supplier, producer,
-    search) — so the Excel export holds exactly the rows on screen (owner 2026-10-25)."""
+    search) — so the Excel export holds exactly the rows on screen (owner 2026-10-25).
+    ``supplier`` is one key or a list of keys (multi-select; empty = all suppliers)."""
     from apps.catalog.wildcard import text_matches
+    sel = [supplier] if isinstance(supplier, str) else list(supplier or [])
+    sel = [k for k in sel if k]
     items = [r for r in board['items']
              if (not state or r['state'] == state)
-             and (not supplier or any(c['key'] == supplier for c in r['suppliers']))
+             and (not sel or any(c['key'] in sel for c in r['suppliers']))
              and (not producer or r['producer'] == producer)
              and (not q or text_matches(f"{r['code']} {r['name']}", q))]
-    sups = [x for x in board['suppliers'] if not supplier or x['key'] == supplier]
-    labels = {'state': board['state_labels'].get(state, state), 'supplier': next(
-        (x['name'] for x in board['suppliers'] if x['key'] == supplier), supplier), 'producer': producer, 'q': q}
+    sups = [x for x in board['suppliers'] if not sel or x['key'] in sel]
+    names = {x['key']: x['name'] for x in board['suppliers']}
+    labels = {'state': board['state_labels'].get(state, state),
+              'supplier': '، '.join(names.get(k, k) for k in sel), 'producer': producer, 'q': q}
     return {**board, 'items': items, 'suppliers': sups,
             'filters': {k: v for k, v in labels.items() if v}}
 

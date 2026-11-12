@@ -7,6 +7,7 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import BasePermission, IsAuthenticated
 
 from core import branch_scope
+from core.multi_filter import filter_in, multi_values
 from core.permissions import matrix_allows, matrix_permission
 from core.threads import start_thread
 
@@ -884,12 +885,10 @@ def expiry_disposal(request):
         qs = ExpiryDisposalRecord.objects.select_related('created_by', 'decided_by')
         qs = branch_scope.scope_code(qs, request.user)      # Batch 5 part 2
         p = request.query_params
-        if p.get('status'):
-            qs = qs.filter(status=p['status'])
-        if p.get('branch'):
-            qs = qs.filter(branch_code=p['branch'])
-        if p.get('decision'):
-            qs = qs.filter(decision=p['decision'])
+        # multi-select (?status=draft,approved); after scope_code, so a filter only narrows
+        qs = filter_in(qs, 'status', multi_values(p, 'status'))
+        qs = filter_in(qs, 'branch_code', multi_values(p, 'branch'))
+        qs = filter_in(qs, 'decision', multi_values(p, 'decision'))
         rows = [_disposal_dict(r) for r in qs[:1000]]
         return Response({'count': len(rows), 'items': rows})
 
@@ -1139,11 +1138,11 @@ class StockBatchViewSet(
 @permission_classes([IsAuthenticated, BATCH_READ])
 def stock_expiry_rebalance(request):
     """B3 — network-wide near-expiry rebalancing worklist (advisory, read-only).
-    Query: ?branch=<softech code>&item=<item code>. A line becomes a DRAFT transfer through
+    Query: ?branch=<softech code>[,<code>…]&item=<item code>. A line becomes a DRAFT transfer through
     the existing /transfers/ API, which enforces its own permission (`can_create` mirrors it)."""
     from apps.transfers.permissions import CanCreateTransfer
     from .rebalance import worklist
-    data = worklist(branch=(request.query_params.get('branch') or '').strip() or None,
+    data = worklist(branch=multi_values(request.query_params, 'branch') or None,
                     item=(request.query_params.get('item') or '').strip() or None)
     data['can_create'] = CanCreateTransfer().has_permission(request, None)
     return Response(data)
@@ -1176,16 +1175,17 @@ def _month_param(value):
 @permission_classes([IsAuthenticated, BATCH_READ])
 def return_window_calendar(request):
     """GET — the calendar: lines, per-supplier summary, «موردون بدون سياسة مرتجع».
-    Query: month=YYYY-MM, supplier, location=shelf|hq|105, state, branch."""
+    Query: month=YYYY-MM, supplier, location=shelf|hq|105, state, branch (supplier / location /
+    branch take several values: ?supplier=4469,4470)."""
     from .return_calendar import calendar, LOCATIONS
     p = request.query_params
     scope = _return_scope(request)
     branches = scope
     if p.get('branch'):
         branches = [b for b in _branch_list(p) if scope is None or b in scope]
-    location = p.get('location') if p.get('location') in LOCATIONS else None
-    data = calendar(month=_month_param(p.get('month')), supplier=(p.get('supplier') or None),
-                    location=location, branch_codes=branches, state=(p.get('state') or None))
+    locations = [loc for loc in multi_values(p, 'location') if loc in LOCATIONS] or None
+    data = calendar(month=_month_param(p.get('month')), supplier=multi_values(p, 'supplier') or None,
+                    location=locations, branch_codes=branches, state=(p.get('state') or None))
     data['can_request'] = matrix_allows(getattr(request.user, 'staff_profile', None), 'catalog', 'edit', 'approve')
     data['can_edit_policy'] = _can_edit_return_policy(request)
     data['branch_only'] = scope is not None
@@ -1312,14 +1312,15 @@ def return_window_export(request):
 
     d = request.data
     kind = d.get('kind') or 'supplier'
-    sup = str(d.get('supplier_code') or '').strip()
-    location = d.get('location') if d.get('location') in LOCATIONS else None
-    data = calendar(month=_month_param(d.get('month')), supplier=sup or None, location=location,
+    sups = multi_values(d, 'supplier_code')            # the grid takes several; the supplier sheet one
+    sup = sups[0] if len(sups) == 1 else ''
+    locations = [loc for loc in multi_values(d, 'location') if loc in LOCATIONS] or None
+    if kind == 'supplier' and not sup:
+        return Response({'detail': 'اختر موردًا واحدًا.'}, status=status.HTTP_400_BAD_REQUEST)
+    data = calendar(month=_month_param(d.get('month')), supplier=sups or None, location=locations,
                     branch_codes=_return_scope(request))
     lines = data['lines']
     if kind == 'supplier':
-        if not sup:
-            return Response({'detail': 'اختر المورد.'}, status=status.HTTP_400_BAD_REQUEST)
         lines = [l for l in lines if l['supplier_code'] == sup and l['state'] in IN_WINDOW]
         vendor_codes = dict(VendorItemMapping.objects
                             .filter(vendor__softech_personcode=sup, item__softech_id__in={l['item_code'] for l in lines})

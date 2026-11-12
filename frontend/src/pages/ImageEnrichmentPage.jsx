@@ -16,6 +16,7 @@ import useHelpTab from '../help/useHelpTab'
 import useServerSort from '../hooks/useServerSort'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const card  = { background: '#fff', borderRadius: 10, padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,.08)', marginBottom: 16 }
@@ -956,8 +957,8 @@ function GalleryTab({ initialItemId = '' }) {
   const [q,            setQ]            = useState('')
   const [debouncedQ,   setDebouncedQ]   = useState('')
   const [hasImage,     setHasImage]     = useState('')
-  const [catId,        setCatId]        = useState('')
-  const [producer,     setProducer]     = useState('')
+  const [catIds,       setCatIds]       = useState([])   // multi-select (none = all)
+  const [producers,    setProducers]    = useState([])   // multi-select (none = all)
   const [page,         setPage]         = useState(1)
   const {data:meta} = useQuery({
     queryKey: ['img-filter-meta'],
@@ -988,11 +989,11 @@ function GalleryTab({ initialItemId = '' }) {
   }, [initialItemId])
 
   const {data, isLoading} = useQuery({
-    queryKey: ['img-product-search', debouncedQ, hasImage, catId, producer, page],
+    queryKey: ['img-product-search', debouncedQ, hasImage, catIds, producers, page],
     queryFn:  () => imageApi.productSearch({
       q: debouncedQ, has_image: hasImage,
-      category_id: catId || undefined,
-      producer_name: producer || undefined,
+      category_id: catIds.length ? catIds.join(',') : undefined,
+      producer_name: producers.length ? producers.join(',') : undefined,
       page, page_size: 25,
     }).then(r => r.data),
     keepPreviousData: true,
@@ -1008,8 +1009,8 @@ function GalleryTab({ initialItemId = '' }) {
     {v:'pending', l:'⏳ لديها مرشحون'},
   ]
 
-  const cats      = meta?.categories || []
-  const producers = meta?.producers  || []
+  const catOptions      = (meta?.categories || []).map(c => ({ code: String(c.id), name: c.name_ar || c.name }))
+  const producerOptions = (meta?.producers  || []).map(p => ({ code: p, name: p }))
 
   return (
     <div style={{display:'flex', gap:0, height:'calc(100vh - 200px)', minHeight:500}}>
@@ -1031,15 +1032,12 @@ function GalleryTab({ initialItemId = '' }) {
             <select value={hasImage} onChange={e=>{setHasImage(e.target.value);setPage(1)}} style={selectStyle}>
               {hasImageOpts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
             </select>
-            <select value={catId} onChange={e=>{setCatId(e.target.value);setPage(1)}} style={selectStyle}>
-              <option value="">كل الفئات</option>
-              {cats.map(c=><option key={c.id} value={c.id}>{c.name_ar||c.name}</option>)}
-            </select>
+            <MultiSelectFilter className="w-full" showCode={false} allLabel="كل الفئات" menuClassName="min-w-[280px]"
+              dataTour="catalog-images-gallery-filters"
+              options={catOptions} selected={catIds} onChange={v=>{setCatIds(v);setPage(1)}}/>
           </div>
-          <select value={producer} onChange={e=>{setProducer(e.target.value);setPage(1)}} style={{...selectStyle, width:'100%'}}>
-            <option value="">كل الشركات المصنعة</option>
-            {producers.map(p=><option key={p} value={p}>{p}</option>)}
-          </select>
+          <MultiSelectFilter className="w-full" showCode={false} allLabel="كل الشركات المصنعة" menuClassName="min-w-[280px]"
+            options={producerOptions} selected={producers} onChange={v=>{setProducers(v);setPage(1)}}/>
           {data && (
             <div style={{fontSize:11, color:'#94a3b8', marginTop:6}}>
               {data.total.toLocaleString()} منتج
@@ -1153,12 +1151,12 @@ function InsightsTab() {
   })
 
   const [brandFilter, setBrandFilter] = useState('')
-  const [srcFilter,   setSrcFilter]   = useState('')
+  const [srcFilter,   setSrcFilter]   = useState([])   // multi-select (none = all)
 
   const top     = data?.top_sources || []
   const filteredRaw = top.filter(r =>
     (!brandFilter || r.brand.toLowerCase().includes(brandFilter.toLowerCase())) &&
-    (!srcFilter   || r.source_type.includes(srcFilter))
+    (srcFilter.length === 0 || srcFilter.includes(r.source_type))
   )
 
   const { sorted: filtered, headerProps } = useSortableRows(filteredRaw)
@@ -1200,10 +1198,9 @@ function InsightsTab() {
           <input placeholder="بحث بالماركة…" value={brandFilter}
                  onChange={e => setBrandFilter(e.target.value)}
                  style={{...input, width:180}}/>
-          <select value={srcFilter} onChange={e => setSrcFilter(e.target.value)} style={{...selectStyle, width:180}}>
-            <option value="">كل المصادر</option>
-            {sourceTypes.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
+          <MultiSelectFilter className="w-[180px]" showCode={false} allLabel="كل المصادر"
+            dataTour="catalog-images-insights-source"
+            options={sourceTypes.map(s => ({ code: s, name: s }))} selected={srcFilter} onChange={setSrcFilter}/>
           <span style={{fontSize:13, color:'#64748b', marginRight:'auto'}}>
             {filtered.length} سجل · الترتيب يشمل أعلى 50 سجل فقط
           </span>

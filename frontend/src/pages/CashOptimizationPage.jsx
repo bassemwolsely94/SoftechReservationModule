@@ -14,6 +14,7 @@ import useHelpTab from '../help/useHelpTab'
 import DeadStockTab from './cash/DeadStockTab'   // P-27 part A
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 
 const egp = (n) => (n ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
 const invalidate = (qc) => ['spike-candidates', 'spike-summary'].forEach(k => qc.invalidateQueries({ queryKey: [k] }))
@@ -31,8 +32,9 @@ function Stat({ label, value, tone = 'text-gray-800' }) {
 
 function SpikeTab() {
   const qc = useQueryClient()
-  const [tier, setTier] = useState(''); const [med, setMed] = useState(''); const [q, setQ] = useState('')
-  const params = { ...(tier ? { tier } : {}), ...(med ? { med } : {}), ...(q.trim() ? { q: q.trim() } : {}) }
+  // med is a multi-select ([] = all, sent as one comma list); tier stays a one-of switch
+  const [tier, setTier] = useState(''); const [med, setMed] = useState([]); const [q, setQ] = useState('')
+  const params = { ...(tier ? { tier } : {}), ...(med.length ? { med: med.join(',') } : {}), ...(q.trim() ? { q: q.trim() } : {}) }
   const { data: summary } = useQuery({ queryKey: ['spike-summary'], queryFn: () => purchasingApi.spikeSummary().then(r => r.data) })
   const { data: medTypes } = useQuery({ queryKey: ['spike-medtypes'], queryFn: () => purchasingApi.spikeMedTypes().then(r => r.data.med_types) })
   const { data, isLoading } = useQuery({ queryKey: ['spike-candidates', params], queryFn: () => purchasingApi.spikeCandidates(params).then(r => r.data) })
@@ -60,10 +62,8 @@ function SpikeTab() {
         {[['', 'الكل'], ['strong', 'قوية'], ['watch', 'مراقبة']].map(([v, l]) => (
           <button key={v} onClick={() => setTier(v)} className={`px-3 py-1.5 text-sm rounded-lg border ${tier === v ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600'}`}>{l}</button>
         ))}
-        <select value={med} onChange={e => setMed(e.target.value)} className="border rounded-lg px-3 py-2 text-sm">
-          <option value="">كل التصنيفات</option>
-          {(medTypes || []).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </select>
+        <MultiSelectFilter className="w-48" options={(medTypes || []).map(([v, l]) => ({ code: v, name: l }))}
+                           selected={med} onChange={setMed} allLabel="كل التصنيفات" showCode={false} />
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="بحث بالكود/الاسم…" className="border rounded-lg px-3 py-2 text-sm flex-1 min-w-[200px]" />
       </div>
       {isLoading ? <p className="text-gray-400 py-10 text-center">جارٍ التحميل…</p>

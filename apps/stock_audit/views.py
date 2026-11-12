@@ -42,6 +42,7 @@ from .params import ParamError, ensure_rules, validate_params
 from .rules import RULES, adjustments_by_user
 from .sales_context import channel_options, personcodes_in_channels, sales_context
 from core.export_safety import neutralise_formulas
+from core.multi_filter import multi_values
 from core.threads import start_thread
 
 logger = logging.getLogger('elrezeiky.stock_audit')
@@ -73,10 +74,6 @@ def _date(v):
         return _dt.date.fromisoformat(v) if v else None
     except ValueError:
         return None
-
-
-def _list(v):
-    return [x.strip() for x in (v or '').split(',') if x.strip()]
 
 
 def _period(request, default_days=30):
@@ -128,15 +125,17 @@ def _filtered(request, acc):
     qp = request.query_params
     d_from, d_to = _period(request, default_days=int(qp.get('days') or 30))
     qs = acc.scope(StockAuditFinding.objects.all()).filter(docdate__gte=d_from, docdate__lte=d_to)
-    rules = _list(qp.get('rule')) or GROUPS.get(qp.get('group') or '', [])
+    rules = multi_values(qp, 'rule') or GROUPS.get(qp.get('group') or '', [])
     if rules:
         qs = qs.filter(rule_code__in=rules)
+    # multi-select filters: ?branch=101,102 or repeated ?branch=101&branch=102 (after acc.scope,
+    # so they only narrow what the user may see)
     for param, field in (('branch', 'branchcode'), ('status', 'status'), ('severity', 'severity'),
                          ('user', 'softech_user'), ('account', 'personcode')):
-        vals = _list(qp.get(param))
+        vals = multi_values(qp, param)
         if vals:
             qs = qs.filter(**{f'{field}__in': vals})
-    channels = _list(qp.get('channel'))
+    channels = multi_values(qp, 'channel')
     if channels:
         qs = qs.filter(personcode__in=personcodes_in_channels(channels))
     q = (qp.get('q') or '').strip()
@@ -171,7 +170,7 @@ def summary(request):
     span = (d_to - d_from).days + 1
     p_from, p_to = d_from - _dt.timedelta(days=span), d_from - _dt.timedelta(days=1)
     base = acc.scope(StockAuditFinding.objects.all())
-    branches = _list(request.query_params.get('branch'))
+    branches = multi_values(request.query_params, 'branch')
     if branches:
         base = base.filter(branchcode__in=branches)
     cur = base.filter(docdate__gte=d_from, docdate__lte=d_to)
@@ -377,7 +376,7 @@ def by_user(request):
     rule = ensure_rules()['stock_adjustment']
     codes = tuple((rule.params or {}).get('doccodes') or RULES['stock_adjustment']['defaults']['doccodes'])
     qs = acc.scope(StockLedgerLine.objects.filter(docdate__gte=d_from, docdate__lte=d_to, doccode__in=codes))
-    branches = _list(request.query_params.get('branch'))
+    branches = multi_values(request.query_params, 'branch')
     if branches:
         qs = qs.filter(branchcode__in=branches)
     rank = adjustments_by_user(qs.only('branchcode', 'usercode', 'doccode', 'transqty', 'newcostprice'), codes)
