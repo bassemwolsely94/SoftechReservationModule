@@ -291,8 +291,12 @@ def _purge_held_files():
 
 
 def _take_data_health_snapshot():
+    """take_snapshot never raises; it returns None when it failed. Raise here so the step's SyncLog and the
+    run show the failure and the missed-run alert can see it."""
     from apps.data_lifecycle.health import take_snapshot
-    return 1 if take_snapshot() else 0
+    if take_snapshot() is None:
+        raise RuntimeError('data health snapshot failed; see the log')
+    return 1
 
 
 def run_daily_retention():

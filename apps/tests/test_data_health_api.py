@@ -377,6 +377,17 @@ class HeldTests(_ApiCase):
         self.assertFalse(row['has_thumbnail'])
         self.assertIsNone(row['deleted_by'])
 
+    def test_staff_hold_names_who_and_offers_no_restore(self):
+        for n in range(3):
+            self._held(holding.RECORD_DELETED, 'pos_orders.SoftechSalesOrder', deleted_by=self.admin)
+        self._held(holding.FILE_REPLACED, 'images.ImageCandidate', deleted_by=self.admin)
+        with self.assertNumQueries(2):          # count + one page with deleted_by and its user joined
+            data = reports.held_payload()
+        self.assertEqual(data['total'], 4)
+        for row in data['rows']:
+            self.assertEqual(row['deleted_by'], self.admin.full_name)
+            self.assertFalse(row['can_restore'])
+
     def test_held_state_filter(self):
         self._held('images_rejected', 'images.ImageCandidate')
         self._held('images_rejected', 'images.ImageCandidate', restored_at=timezone.now())

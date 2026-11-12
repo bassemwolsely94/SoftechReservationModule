@@ -132,7 +132,7 @@ preview exist.
 
 ## Data health screen (Stage 5)
 
-`/data-health` «صحة البيانات», RBAC module `data_health` (users migration `0054_data_health_module`; renumber at
+`/data-health` «صحة البيانات», RBAC module `data_health` (users migration `0054_data_health_module`, snapshot `data_lifecycle/0003_datahealthsnapshot`; renumber at
 merge if needed). Company-level by nature, no branch scoping, no SOFTECH. Who sees what (design §7): admin every
 tab; supervisor and quality manager `view` = Growth, Problems and the forced refresh; every other role an explicit
 denial. Rules, preview, held files, thumbnails and restore are `IsAdminRole` in `views.py`, so a supervisor gets 403

@@ -19,6 +19,7 @@ from django.db.models import Count, Sum
 from django.utils import timezone
 
 from . import policy
+from .holding import STAFF_RULE_KEYS
 from .models import DataHealthSnapshot, HeldFile, LifecycleRulePolicy, LifecycleRunLine, TableSizeSnapshot
 from .problems import PROBLEMS
 from .register import KIND_FILE, KIND_P56, KIND_ROW, RULES
@@ -300,20 +301,21 @@ def can_thumbnail(held):
 def held_row(held):
     """Never `hold_path`, `original_path`, `sha256` or `rows`: they name files and records."""
     rule = RULES.get(held.rule_key)
-    deleted_by = getattr(held, 'deleted_by', None)      # Stage 4 adds who deleted a staff-deleted file
     return {
         'id': held.pk, 'rule_key': held.rule_key, 'rule_label_ar': rule.label_ar if rule else held.rule_key,
         'record_type_ar': _model_label_ar(held.primary_model), 'record_id': held.primary_pk or None,
         'size': held.size, 'moved_at': _iso(held.moved_at), 'purge_after': _iso(held.purge_after),
         'restored_at': _iso(held.restored_at), 'purged_at': _iso(held.purged_at),
-        'deleted_by': _staff_name(deleted_by),
-        'can_restore': held.restored_at is None and held.purged_at is None,
+        'deleted_by': _staff_name(held.deleted_by),
+        # A staff deletion or replacement is never restored in place (holding.restore refuses it).
+        'can_restore': (held.restored_at is None and held.purged_at is None
+                        and held.rule_key not in STAFF_RULE_KEYS),
         'has_thumbnail': can_thumbnail(held),
     }
 
 
 def held_payload(state='held'):
-    qs = HeldFile.objects.order_by('-moved_at', '-pk')
+    qs = HeldFile.objects.select_related('deleted_by__user').order_by('-moved_at', '-pk')
     if state != 'all':
         qs = qs.filter(restored_at__isnull=True, purged_at__isnull=True)
     return {'total': qs.count(), 'rows': [held_row(h) for h in qs[:HELD_LIMIT]]}

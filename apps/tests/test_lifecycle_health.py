@@ -86,8 +86,14 @@ class ProblemCountTests(TestCase):
         done = SupplyCase.objects.create(item=other, status=SupplyCase.STATUS_FULFILLED)
         recent = SupplyCase.objects.create(item=third, status=SupplyCase.STATUS_SEARCHING)
         SupplyCase.objects.filter(pk__in=[open_case.pk, done.pk]).update(first_detected_at=old)
-        self.assertEqual(problems._supply_open(), 1)
-        self.assertEqual(recent.status, SupplyCase.STATUS_SEARCHING)
+        self.assertEqual(problems._supply_open(), 1)     # `recent` is open but too new
+
+    def test_every_count_runs_on_a_real_database(self):
+        # count_all swallows errors, so a wrong field name would only ever show «—». Pin that none fails.
+        counts = problems.count_all()
+        self.assertEqual(set(counts), {p.key for p in problems.PROBLEMS})
+        for key, value in counts.items():
+            self.assertIsNotNone(value, key)
 
 
 class TakeSnapshotTests(TestCase):
