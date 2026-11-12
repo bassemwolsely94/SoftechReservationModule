@@ -14,6 +14,7 @@ const MyDashboardPage = lazy(() => import('./pages/MyDashboardPage'))
 const NotificationsInboxPage = lazy(() => import('./pages/NotificationsInboxPage'))
 const TargetsPage = lazy(() => import('./pages/TargetsPage'))
 const KpiBoardPage = lazy(() => import('./pages/KpiBoardPage'))
+const SalespersonBoardPage = lazy(() => import('./pages/SalespersonBoardPage'))
 const ForecastScenarioPage = lazy(() => import('./pages/ForecastScenarioPage'))
 const InsightsPage = lazy(() => import('./pages/InsightsPage'))
 const ReferralStatsPage = lazy(() => import('./pages/ReferralStatsPage'))
@@ -355,6 +356,7 @@ export default function App() {
             <Route path="announcements"      element={<AnnouncementsPage />} />
             <Route path="targets"            element={<TargetsPage />} />
             <Route path="kpi-board"          element={<KpiBoardPage />} />
+            <Route path="salesperson-board"  element={<SalespersonBoardPage />} />
             <Route path="forecast-scenarios" element={<ForecastScenarioPage />} />
             <Route path="insights"           element={<InsightsPage />} />
             <Route path="referral-stats"     element={<ReferralStatsPage />} />

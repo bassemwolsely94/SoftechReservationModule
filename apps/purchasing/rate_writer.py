@@ -424,7 +424,7 @@ def _advanced_want(run, branches, item_filter, method_params):
 
 
 def build_plan(*, run=None, branch_filter=None, item_filter=None, min_delta=0.0005,
-               method=METHOD_PIVOT, method_params=None, target=TARGET_BOTH):
+               method=METHOD_PIVOT, method_params=None, target=TARGET_BOTH, seasonal=False):
     """
     Read the engine's per-branch rate for the latest successful run (by `method`),
     read the CURRENT stkbal.monthlyqty on every targeted server + the
@@ -434,6 +434,9 @@ def build_plan(*, run=None, branch_filter=None, item_filter=None, min_delta=0.00
     method = 'pivot' (monthly_avg, default) | 'advanced' (Croston/forecast policy_demand).
     method_params = optional AdvancedConfig knobs (whitelisted) for the advanced method.
     target = 'both' (branch server + server 100, DEFAULT) | 'node' | 'hq'.
+    seasonal = True (owner 2026-11-10): each rate × the item's seasonal factor for the next 30
+    days — steady-season items only, capped ×0.7–×1.5 (seasonality.rate_factors); every
+    change line keeps `base` (the engine rate) and `factor`. False = unchanged behaviour.
     With 'both', an item is included when its rate differs on EITHER server (server 100's
     copies of branch rates drift from the branch servers — 74–85% differed 2026-09-27).
 
@@ -468,6 +471,16 @@ def build_plan(*, run=None, branch_filter=None, item_filter=None, min_delta=0.00
         want = _advanced_want(run, branches, item_filter, method_params)
     else:
         want = _pivot_want(run, branches, item_filter)
+
+    # seasonal switch: rate × factor; the base rate and the factor travel with each line
+    factors = {}
+    if seasonal:
+        from apps.purchasing.seasonality import rate_factors
+        factors = rate_factors({c for items in want.values() for c in items})
+    want = {bc: {code: ((_round(rate * factors[code]) if code in factors else rate), name,
+                        (rate if code in factors else None), factors.get(code))
+                 for code, (rate, name) in items.items()}
+            for bc, items in want.items()}
 
     out_branches = []
     tot = {'branches': 0, 'eligible': 0, 'skipped': 0, 'unreachable': 0}
@@ -520,14 +533,14 @@ def build_plan(*, run=None, branch_filter=None, item_filter=None, min_delta=0.00
                 out_branches.append(entry)
                 continue
 
-        for code, (new_rate, name) in items.items():
+        for code, (new_rate, name, base, factor) in items.items():
             old = cur_rate.get(code)
             old_hq = cur_hq.get(code) if cur_hq is not None else None
             flag = gate.get(code, '0')
             if flag != '1':
                 entry['changes'].append({
                     'itemcode': code, 'item_name': name, 'old': old, 'old_hq': old_hq,
-                    'new': new_rate, 'delta': None, 'eligible': False,
+                    'new': new_rate, 'delta': None, 'eligible': False, 'base': base, 'factor': factor,
                     'reason': 'itemupdt_monthlyqty!=1 (SOFTECH excludes this item)'})
                 entry['skipped_count'] += 1
                 tot['skipped'] += 1
@@ -540,7 +553,7 @@ def build_plan(*, run=None, branch_filter=None, item_filter=None, min_delta=0.00
             entry['changes'].append({
                 'itemcode': code, 'item_name': name, 'old': old, 'old_hq': old_hq,
                 'new': new_rate, 'delta': round(new_rate - float(old or 0), RATE_DECIMALS),
-                'eligible': True, 'reason': ''})
+                'eligible': True, 'reason': '', 'base': base, 'factor': factor})
             entry['eligible_count'] += 1
             tot['eligible'] += 1
 
@@ -548,6 +561,7 @@ def build_plan(*, run=None, branch_filter=None, item_filter=None, min_delta=0.00
 
     return {'run_id': run.id, 'calc_date': str(run.calc_date),
             'method': method, 'method_params': (method_params or {}), 'target': target,
+            'seasonal': bool(seasonal), 'seasonal_items': len(factors),
             'branches': out_branches, 'totals': tot}
 
 
@@ -618,7 +632,9 @@ def persist_plan(plan, *, created_by=None, scope=None, status=None):
     push_obj = SalesRatePush.objects.create(
         run_id=plan.get('run_id'), status=st, created_by=created_by, scope=(scope or {}),
         method=plan.get('method', SalesRatePush.METHOD_PIVOT),
-        method_params=plan.get('method_params') or {},
+        # the seasonal switch is recorded with the method params (audit: who pushed what, how)
+        method_params={**(plan.get('method_params') or {}),
+                       **({'seasonal': True} if plan.get('seasonal') else {})},
         target=plan.get('target', SalesRatePush.TARGET_BOTH),
         branches_count=t['branches'], eligible_count=t['eligible'], skipped_count=t['skipped'],
         unreachable_count=t['unreachable'], written_count=written, verified_count=verified,
@@ -640,7 +656,7 @@ def persist_plan(plan, *, created_by=None, scope=None, status=None):
                 branch_id=branch_map.get(b['branchcode']), itemcode=c['itemcode'],
                 item_name=(c['item_name'] or '')[:120], branchcode=b['branchcode'],
                 storecode=b['store'], old_rate=c['old'], old_rate_hq=c.get('old_hq'),
-                new_rate=c['new'],
+                new_rate=c['new'], base_rate=c.get('base'), season_factor=c.get('factor'),
                 eligible=c['eligible'], reason=(c['reason'] or '')[:120],
                 written=bool(executed and c['eligible'] and 'verified' in c),
                 verified=bool(c.get('verified')), error=(b.get('error') or '')[:200]))
@@ -654,7 +670,7 @@ def persist_plan(plan, *, created_by=None, scope=None, status=None):
 # ── 2. PUSH — guarded; dry-run plan unless gate on + dry_run=False ──────────────
 def push(*, run=None, branch_filter=None, item_filter=None, dry_run=True,
          persist=False, created_by=None, method=METHOD_PIVOT, method_params=None,
-         target=TARGET_BOTH):
+         target=TARGET_BOTH, seasonal=False):
     """
     Build the plan, then (only when writer_enabled() AND dry_run=False) apply the
     eligible UPDATEs on each branch node, with a per-row readback verify.
@@ -668,7 +684,7 @@ def push(*, run=None, branch_filter=None, item_filter=None, dry_run=True,
     Returns the plan dict enriched per branch with 'written'/'verified'/'reverted'.
     """
     plan = build_plan(run=run, branch_filter=branch_filter, item_filter=item_filter,
-                      method=method, method_params=method_params, target=target)
+                      method=method, method_params=method_params, target=target, seasonal=seasonal)
     scope = {'branch_filter': list(branch_filter) if branch_filter else None,
              'item_filter': list(item_filter) if item_filter else None}
 

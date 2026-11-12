@@ -444,6 +444,27 @@ class ScopeResolverTests(TestCase):
         # orders containing catA = 2 invoices
         self.assertEqual(r.resolve('order_count', category_id=self.catA.id, start=s, end=e), Decimal('2'))
 
+    def test_salesperson_board_shows_only_reps_with_targets(self):
+        """SalespersonBoardView: a rep with a target this month shows with LIVE achieved
+        and % vs the to-date target; a rep with no target is omitted."""
+        from types import SimpleNamespace
+        from datetime import date as _date
+        from apps.incentives.models import SalesTarget
+        from apps.forecasting.views import SalespersonBoardView
+        from apps.forecasting.models import KpiActualRollup as K
+        SalesTarget.objects.create(
+            scope_type='salesperson', softech_user='U1', metric=K.M_CASH_DELIVERY,
+            period_start=_date(2026, 6, 1), period_end=_date(2026, 6, 30), target_value=Decimal('2000'))
+        data = SalespersonBoardView().get(
+            SimpleNamespace(query_params={'year': '2026', 'month': '6'})).data
+        self.assertTrue(data['has_data'])
+        rep = next(r for r in data['salespeople'] if r['softech_user'] == 'U1')
+        cell = rep['cells'][K.M_CASH_DELIVERY]
+        self.assertEqual(cell['actual'], 1000.0)          # live resolver: U1 whole-invoice cash = 1000
+        self.assertEqual(cell['target'], 2000.0)
+        self.assertEqual(cell['pct'], 50.0)               # June is past → frac=1 → 1000/2000
+        self.assertFalse(any(r['softech_user'] == 'U2' for r in data['salespeople']))  # U2 has no target
+
     def test_extended_metrics(self):
         # I1: 2 lines total 1000 (P1); I2: 1 line total 500 (P2) — both channel 91
         from apps.config.models import SystemSetting

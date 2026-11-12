@@ -49,7 +49,9 @@ coupons_out/
 docs/architecture/softech_gift_vouchers_lines.csv
 scratch/
 reconciliation.xlsx
-.envdocs/architecture/softech_gift_vouchers_investigation.txt
+.env
+docs/architecture/softech_gift_vouchers_investigation.txt
+docs/architecture/pic_reset_capture.txt
 docs/architecture/softech_gift_vouchers_docs.txt
 
 .pbx_known_hosts
