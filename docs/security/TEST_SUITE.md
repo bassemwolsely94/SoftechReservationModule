@@ -273,6 +273,41 @@ remembered devices, audited and throttled person search, rider GPS no longer mov
 target and riders cannot cancel/close, admin-only SOFTECH probe with cooldown, Django admin off
 in production with a per-IP nginx allow-list. H4 moves to N3; H10 is an owner decision.
 
+## Round 2 (2026-11-05 → 11-12)
+
+One page: [round2/SUMMARY.md](round2/SUMMARY.md). Plan: [2026-11-05-full-project-test-plan.md](2026-11-05-full-project-test-plan.md).
+
+| Batch | Result | New guards / tests |
+|---|---|---|
+| R0 sizing | 6,068 tests, coverage 73.7% | `check_schema_drift`; `test_suppression_count.py` (every `# nosec` names rule + reason; counts can't grow) |
+| R1 SOFTECH writes | 2 idempotency gaps closed, motalba old dates kept, actor + failure audit | `test_softech_writes_round2.py` |
+| R2 money | M-1…M-3 fixed, M-4 accepted | `test_money_*` table tests |
+| R3/R4 access + branches | sweep runs on real records; 107 views gated; Q-1…Q-8 applied; 3 privacy fixes | `seed_detail_paths`, `EveryViewGatedTests` + `open_to_all_staff`, `test_named_grants`, `test_breakin_delta`, `test_privacy_logs`, canary detail reads, `canary_skipped_models` |
+| R5/R6 abuse + reliability | exports, SQL, double sends, send limit, scheduler lock | `test_sort_ordering_security`, `test_send_limits`, `test_scheduler_locks`, `test_migration_rules`, `test_sybase_deadline` |
+| R7 per-app | coverage ≈77.9%, floor 73 | `--fail-under=73` in CI |
+| R8 frontend | lint + unit + Playwright (23 specs) | `frontend/e2e/`, `knownGaps.js` |
+| Close-out | 93 crash lines triaged: 90 fixed | `test_round2_crash_fixes.py` |
+
+Baselines at close-out (lines; every one under a `# reason:`):
+
+| Baseline | Start of round 2 | Close-out |
+|---|---:|---:|
+| role_unproven | 460 | 77 |
+| role_overblocks | 463 | 538 |
+| role_leaks_log | 2 | 6 |
+| role_leaks_enforce | 0 | 0 |
+| role_crashes | 6 | 3 |
+| branch_canary_leaks | 22 | 49 |
+| phone_canary_leaks | 4 | 4 |
+| sql_from_text | 222 | 224 |
+| unsafe_exports | 8 | 0 |
+| tracked_secrets | 1 | 2 |
+| open_to_all_staff (new) | — | 88 |
+| canary_skipped_models (new) | — | 2 |
+
+`role_overblocks` and `branch_canary_leaks` grew because the sweeps now reach real records and new
+routes; each added line is a recorded owner decision or a reviewed "stricter on purpose".
+
 ## Pending owner decisions
 
 A test exposing a hole whose fix needs the owner's OK (SOFTECH writes, auth, pricing, checkout)
@@ -282,8 +317,8 @@ comes off when the fix lands.
 
 ## CI
 
-`.github/workflows/ci.yml`: `coverage run manage.py test` + coverage report (no floor yet —
-Batch 7 sets it), `bandit -b bandit-baseline.json`, `pip_audit_check.py`, and in the frontend job
+`.github/workflows/ci.yml`: `coverage run manage.py test` + coverage report (`--fail-under=73`, R7),
+frontend lint + unit and Playwright jobs (R8), `bandit -b bandit-baseline.json`, `pip_audit_check.py`, and in the frontend job
 `npm_audit_check.cjs` before the build (it fails when the audit itself can't run).
 
 ## Known dependency advisories (2026-10-26)

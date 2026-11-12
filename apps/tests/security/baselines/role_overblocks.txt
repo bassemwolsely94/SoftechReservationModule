@@ -380,6 +380,7 @@ purchasing POST /api/offers/987654321/promo-apply/
 quality_manager POST /api/forecasting/accuracy/
 quality_manager POST /api/forecasting/accuracy/987654321/update-actual/
 quality_manager POST /api/forecasting/backtest/run/
+quality_manager POST /api/forecasting/scenarios/987654321/commit-cell/
 quality_manager POST /api/forecasting/kpi-board/refresh/
 quality_manager POST /api/forecasting/profit-exclusions/
 quality_manager POST /api/forecasting/references/
@@ -682,6 +683,21 @@ viewer GET /api/purchasing/spike/candidates/
 viewer GET /api/purchasing/spike/med-types/
 viewer GET /api/purchasing/spike/summary/
 
+# reason: owner decision 2026-11-09 — call lists are created and closed by admin / supervisor / call_center
+#   only (followups/call_list_views.py, call_lists.CREATOR_ROLES); pharmacist and salesperson hold
+#   followups create for their own follow-ups, not for call lists.
+pharmacist POST /api/followups/call-lists/
+pharmacist POST /api/followups/call-lists/987654321/close/
+salesperson POST /api/followups/call-lists/
+salesperson POST /api/followups/call-lists/987654321/close/
+# reason: Z-8b — enabling an agent's browser phone stores its SIP password: admin / supervisor only
+#   (IsAdminOrSupervisor, audited without the secret), like the omni channel-account edits.
+call_center POST /api/pbx/extensions/webrtc/
+# reason: Z-7c — force-closing an in-transit transfer stays admin / purchasing (transits/views.py
+#   force_close); seen only since the round-2 close-out fixed the transit list crash on real records.
+pharmacist POST /api/transits/987654321/force-close/
+salesperson POST /api/transits/987654321/force-close/
+supervisor POST /api/transits/987654321/force-close/
 # reason: doc 36 — the accountant works tax documents, but sending to the tax authority, signing, reconciling, issuer
 #   settings, documented bases and branch POS credentials need `finalize` (admin or a named grant, owner's open decision).
 accountant GET /api/tax-invoicing/signing/status/
