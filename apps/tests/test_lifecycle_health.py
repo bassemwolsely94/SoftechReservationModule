@@ -97,6 +97,12 @@ class ProblemCountTests(TestCase):
 
 
 class TakeSnapshotTests(TestCase):
+    def test_disk_measured_at_nearest_existing_folder(self):
+        with tempfile.TemporaryDirectory() as root, override_settings(MEDIA_ROOT=str(Path(root) / 'not' / 'yet')):
+            total, free = health._disk()
+        self.assertGreater(total, 0)
+        self.assertGreaterEqual(total, free)
+
     def test_take_snapshot_same_day_updates_one_row(self):
         with tempfile.TemporaryDirectory() as root, override_settings(MEDIA_ROOT=root):
             _write(root, 'x/a.bin', 10)

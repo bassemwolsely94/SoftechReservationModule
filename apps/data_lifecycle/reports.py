@@ -43,6 +43,8 @@ P56_TABLES = {
 
 # Thumbnails are an allowlist (design §7, Review Focus 1): item images only. Prescriptions, pos_rx samples,
 # conversations, orphans and anything unknown get none.
+# Stage 4 holds made by staff actions, not by a rule of the register.
+STAFF_HOLD_LABELS_AR = {'record_deleted': 'حذف سجل', 'file_replaced': 'استبدال ملف'}
 THUMBNAIL_RULES = frozenset({'images_rejected', 'images_unreviewed', 'images_obsolete'})
 THUMBNAIL_MODELS = frozenset({'images.ImageCandidate', 'product_experience.ProductMedia'})
 UNREFERENCED_LABEL_AR = 'ملفات لا يستخدمها أي سجل'
@@ -302,7 +304,8 @@ def held_row(held):
     """Never `hold_path`, `original_path`, `sha256` or `rows`: they name files and records."""
     rule = RULES.get(held.rule_key)
     return {
-        'id': held.pk, 'rule_key': held.rule_key, 'rule_label_ar': rule.label_ar if rule else held.rule_key,
+        'id': held.pk, 'rule_key': held.rule_key, 'rule_label_ar': rule.label_ar if rule else STAFF_HOLD_LABELS_AR.get(held.rule_key, held.rule_key),
+        'staff_hold': held.rule_key in STAFF_RULE_KEYS,
         'record_type_ar': _model_label_ar(held.primary_model), 'record_id': held.primary_pk or None,
         'size': held.size, 'moved_at': _iso(held.moved_at), 'purge_after': _iso(held.purge_after),
         'restored_at': _iso(held.restored_at), 'purged_at': _iso(held.purged_at),

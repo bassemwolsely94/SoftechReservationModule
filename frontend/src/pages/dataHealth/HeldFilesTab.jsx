@@ -128,7 +128,7 @@ export default function HeldFilesTab() {
                     <td className={`${TD} tabular-nums`} dir="ltr">{fmtBytes(r.size)}</td>
                     <td className={TD}>{fmtDate(r.moved_at)}</td>
                     <td className={TD}>{fmtDate(r.purge_after)}</td>
-                    <td className={TD}>{r.deleted_by || <span className="text-gray-400">القاعدة</span>}</td>
+                    <td className={TD}>{r.deleted_by || <span className="text-gray-400">{r.staff_hold ? 'غير معروف' : 'القاعدة'}</span>}</td>
                     <td className={`${TD} ${st.cls}`}>{st.label}</td>
                     <td className={TD}><RestoreCell row={r} /></td>
                   </tr>

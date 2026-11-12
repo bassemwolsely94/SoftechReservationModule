@@ -9,6 +9,7 @@ fail the daily retention run.
 import logging
 import os
 import shutil
+from pathlib import Path
 
 from django.conf import settings
 from django.db import connection
@@ -105,8 +106,13 @@ def _empty_space():
 
 
 def _disk():
+    """(total, free) of the disk holding MEDIA_ROOT, measured at its nearest existing folder (a fresh install may
+    not have created it yet). (0, 0) means unknown; the screen then shows no disk figure and no forecast date."""
     try:
-        usage = shutil.disk_usage(str(settings.MEDIA_ROOT))
+        path = Path(settings.MEDIA_ROOT).resolve()
+        while not path.exists() and path.parent != path:
+            path = path.parent
+        usage = shutil.disk_usage(str(path))
         return usage.total, usage.free
     except Exception:
         return 0, 0

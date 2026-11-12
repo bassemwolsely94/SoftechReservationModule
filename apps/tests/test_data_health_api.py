@@ -387,6 +387,8 @@ class HeldTests(_ApiCase):
         for row in data['rows']:
             self.assertEqual(row['deleted_by'], self.admin.full_name)
             self.assertFalse(row['can_restore'])
+            self.assertTrue(row['staff_hold'])
+            self.assertIn(row['rule_label_ar'], ('حذف سجل', 'استبدال ملف'))
 
     def test_held_state_filter(self):
         self._held('images_rejected', 'images.ImageCandidate')

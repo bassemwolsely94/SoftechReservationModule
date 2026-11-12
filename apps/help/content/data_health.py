@@ -122,12 +122,14 @@ SCREENS = [
              'body': T('الملفات التي نقلتها القواعد من مجلد الملفات تنتظر هنا 30 يومًا قبل حذفها نهائيًا. لكل ملف: القاعدة، '
                        'ونوع السجل ورقمه، والحجم، وتاريخ الحجز وتاريخ الحذف النهائي. «استرجاع» يعيد الملف لمكانه بعد تأكيد في '
                        'نفس السطر، ويُرفض إذا كان مكانه مشغولًا بملف آخر. الصور المصغّرة لصور الأصناف فقط، ولا تظهر أبدًا لصور '
-                       'الروشتات أو المحادثات. لا يظهر مسار أي ملف. للمدير فقط.',
+                       'الروشتات أو المحادثات. الملفات التي حذفها أو استبدلها موظف («حذف سجل» و«استبدال ملف») يظهر معها اسم '
+                       'الموظف في عمود «حذفه»، ولا تُسترجع إلى مكانها. لا يظهر مسار أي ملف. للمدير فقط.',
                        'Files the rules moved out of the media folder wait here 30 days before final removal. For each file: the '
                        'rule, the record type and number, the size, the date held and the final removal date. "Restore" puts the '
                        'file back after a confirmation in the same row, and is refused if its place is taken by another file. '
                        'Thumbnails are for item images only and never show for prescriptions or conversations. No file path is '
-                       'ever shown. Admin only.')},
+                       'ever shown. Files a staff member deleted or replaced ("Record deleted", "File replaced") show who did it in '
+                       'the "Deleted by" column and are not restored in place. Admin only.')},
             {'key': 'problems', 'title': T('🧩 المشكلات', '🧩 Problems'),
              'body': T('أعداد المشكلات المفتوحة في البيانات من آخر قياس: أرقام موبايل مشتركة أو بصيغة غير صحيحة، عملاء بلا '
                        'مشتريات، مواد فعالة تنتظر المراجعة، متابعات وتوصيلات وحالات توريد وجرد ونقاط بيع مفتوحة أكثر من 90 يومًا. '
@@ -191,6 +193,6 @@ SCREENS = [
                        'Counts only, with the owner, the change and a link to the screen that fixes it. This screen fixes nothing.'),
              'open_hint': T('افتح تبويب «🧩 المشكلات».', 'Open the "🧩 Problems" tab.')},
         ],
-        'updated': '2026-11-08',
+        'updated': '2026-11-12',
     },
 ]

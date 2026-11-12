@@ -32,7 +32,7 @@ function LineText({ line, preview }) {
   return (
     <span>
       {fmtInt(line.count)}{line.bytes ? ` · ${fmtBytes(line.bytes)}` : ''}
-      <span className="text-gray-400 text-xs ms-1">{fmtDate(line.at)}</span>
+      <span className="text-gray-400 text-xs ms-1">· {fmtDate(line.at)}</span>
       {preview && line.skipped_shared ? <span className="text-xs text-gray-500 ms-1">(تخطّى {fmtInt(line.skipped_shared)} مشتركة)</span> : null}
       {!preview && line.stopped_by_breaker ? <span className="text-xs text-amber-700 ms-1">(أوقفها حد الأمان)</span> : null}
     </span>

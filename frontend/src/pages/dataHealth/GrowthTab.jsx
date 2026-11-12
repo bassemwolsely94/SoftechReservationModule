@@ -195,7 +195,7 @@ export default function GrowthTab({ query }) {
       </div>
       <p className="text-xs text-gray-500">
         ملفات محجوزة الآن: {fmtInt(c.held_files)} ({fmtBytes(c.held_bytes)}) ·
-        مساحة القرص الحرة: {fmtBytes(c.disk_free_bytes)} من {fmtBytes(c.disk_total_bytes)}
+        مساحة القرص الحرة: {c.disk_total_bytes ? `${fmtBytes(c.disk_free_bytes)} من ${fmtBytes(c.disk_total_bytes)}` : 'غير معروفة'}
       </p>
 
       <Section title="الحجم عبر الأيام" data-tour="data-health-main-chart">
