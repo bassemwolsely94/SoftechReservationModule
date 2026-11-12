@@ -215,11 +215,12 @@ class LedgerServiceTests(TestCase):
         self.assertNotEqual(LedgerEntry.objects.get(pk=e.pk).status, 'reversed')
 
     def test_reverse_into_closed_period_refused(self):
+        # no explicit date: Plan 3 dates it in the first open month (test_gl_corrections)
         from apps.finance.gl.ledger import approve, reverse, LedgerError
         orig = approve(self._draft().id, user=self.staff)
         FinancialPeriod.objects.filter(pk=orig.period_id).update(status='closed', is_closed=True)
         with self.assertRaises(LedgerError) as cm:
-            reverse(orig.id, user=self.staff, reason='x')
+            reverse(orig.id, user=self.staff, reason='x', entry_date=orig.entry_date)
         self.assertEqual(cm.exception.code, 'closed_period')
         orig.refresh_from_db()
         self.assertEqual(orig.status, 'approved')
