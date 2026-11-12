@@ -378,6 +378,34 @@ class ExceptionTests(Base):
         self.assertEqual(self.acct.get(BASE + 'exceptions/counts/').data['total'], 2)
         self.assertEqual(self.pharm.get(BASE + 'exceptions/counts/').status_code, 403)
 
+    def test_ignoring_a_closed_change_frees_a_member_held_out_of_its_new_group(self):
+        """Minor 8: t1 moved to group B, which got no row (holder_busy); ignoring A releases it."""
+        moved = GLSourceDoc.objects.create(source_type='sales_tenders', source_key='held-1',
+                                           doc_date=datetime.date(2026, 3, 11), content_hash='h',
+                                           status='exception', group_key='grp-b')
+        row = SourceException.objects.create(
+            source_doc=moved, kind='closed_period_change', source_date=moved.doc_date,
+            detail={'group_key': 'grp-a', 'member_source_keys': ['held-1']})
+        r = self.acct.post(f'{BASE}exceptions/{row.pk}/ignore/', {'note': 'مقصود'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        moved.refresh_from_db()
+        self.assertEqual((moved.status, moved.entry_id), ('new', None))
+
+    def test_ignoring_a_closed_change_returns_group_members_to_the_live_entry(self):
+        entry = LedgerEntry.objects.create(
+            entry_date=D, period=FinancialPeriod.objects.create(
+                year=D.year, month=D.month, period_type='month', period_start=D.replace(day=1),
+                period_end=D.replace(day=28), status='closed'),
+            book='cash', status='approved', source_key='grp-a', created_by=self.acct_p, number='JV-T-1')
+        one, two = self.doc('m1', group_key='grp-a'), self.doc('m2', group_key='grp-a')
+        row = self.exc(one, kind='closed_period_change', original_entry=entry,
+                       detail={'group_key': 'grp-a', 'member_source_keys': ['m1', 'm2']})
+        r = self.acct.post(f'{BASE}exceptions/{row.pk}/ignore/', {'note': 'مقصود'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        for doc in (one, two):
+            doc.refresh_from_db()
+            self.assertEqual((doc.status, doc.entry_id), ('drafted', entry.pk))
+
     def test_filter_and_ignore_audited(self):
         d1 = self.doc('a')
         d2 = self.doc('b', source_type='credit_sales', doc_date=datetime.date(2026, 4, 2))
@@ -409,6 +437,26 @@ class ExceptionTests(Base):
         self.assertEqual(self.acct.post(f'{BASE}exceptions/{e1.pk}/ignore/', {'note': 'x'},
                                         format='json').status_code, 409)
         self.assertEqual(len(self.acct.get(BASE + 'exceptions/').data['results']), 1)   # default open
+
+    def test_closed_period_change_row_carries_what_the_correction_needs(self):
+        period, _ = FinancialPeriod.objects.get_or_create(
+            year=2026, month=3, period_type='month',
+            defaults={'period_start': datetime.date(2026, 3, 1), 'period_end': datetime.date(2026, 3, 31)})
+        orig = LedgerEntry.objects.create(entry_date=D, book='cash', status='approved', created_by=self.acct_p,
+                                          period=period, source_type='sales_tenders', source_key='g1', number='JV-9')
+        lines = [{'account_code': '1302', 'branch_id': None, 'party_code': '', 'debit': '10.00', 'credit': '0.00'}]
+        detail = {'group_key': 'g1', 'entry_id': orig.pk, 'member_source_keys': ['a', 'b']}
+        withorig = self.exc(self.doc('a'), 'closed_period_change', detail=detail, original_entry=orig,
+                            proposed_lines=lines)
+        late = self.exc(self.doc('c'), 'closed_period_change', detail={'group_key': 'g2', 'member_source_keys': ['c']})
+        plain = self.exc(self.doc('d'), 'no_rule')
+        rows = {x['id']: x for x in self.acct.get(BASE + 'exceptions/').data['results']}
+        row = rows[withorig.pk]
+        self.assertEqual((row['original_entry_number'], row['proposed_lines'], row['detail']['member_source_keys']),
+                         ('JV-9', lines, ['a', 'b']))
+        self.assertEqual(row['live_entry'], {'id': orig.pk, 'number': 'JV-9', 'status': 'approved'})
+        self.assertEqual((rows[late.pk]['original_entry_number'], rows[late.pk]['live_entry']), (None, None))
+        self.assertNotIn('live_entry', rows[plain.pk])
 
     def test_redraft_runs_over_selected_docs(self):
         e1 = self.exc(self.doc('a'))

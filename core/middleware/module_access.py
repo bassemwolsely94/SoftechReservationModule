@@ -292,6 +292,21 @@ def required(path, method):
         # Ruling P23: deciding on an accountant-edited entry SOFTECH changed = approve
         if parts[4:5] == ['exceptions'] and parts[6:7] in (['accept-softech'], ['keep-edit']):
             return 'ledger', ('approve',)
+        # Close and reconcile (Plan 3): closing and reopening a month = finalize; a comparison refresh only
+        # reads and recomputes = view; explaining a difference = approve; the checks and the closing-stock store
+        # map = edit; the validation report = export. Corrections and the manual import = create.
+        if parts[4:5] == ['periods'] and parts[6:7] in (['close'], ['reopen']):
+            return 'ledger', ('finalize',)
+        if parts[4:5] == ['compare'] and parts[5:6] == ['refresh']:
+            return 'ledger', ('view',)
+        if parts[4:5] == ['compare'] and parts[5:6] == ['checks']:
+            return 'ledger', ('edit',)
+        if parts[4:5] == ['compare'] and parts[5:6] == ['lines'] and parts[7:8] == ['explain']:
+            return 'ledger', ('approve',)
+        if parts[4:5] == ['closing-stock-stores']:
+            return 'ledger', ('edit',)
+        if parts[4:5] == ['validation']:
+            return 'ledger', ('export',)
         return 'ledger', ('create',)
     # Market Shortage reads the engine's run status and the shortage screen the vendor list:
     # `shortage` view (purchasing holds it too) — owner decision 2026-10-28, map by screen (Z-7a)

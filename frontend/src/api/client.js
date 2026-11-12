@@ -2226,6 +2226,46 @@ export const glApi = {
   exceptionAcceptSoftech: (id, body) => api.post(`/finance/gl/exceptions/${id}/accept-softech/`, body),   // {note, version}
   exceptionKeepEdit: (id, body)    => api.post(`/finance/gl/exceptions/${id}/keep-edit/`, body),          // {note, version}
   entrySource:     (id)            => api.get(`/finance/gl/entries/${id}/source/`),
+  correctionFromException: (exception_id, reason) => api.post('/finance/gl/corrections/from-exception/', { exception_id, reason }),
+  // ── period close and cutover (Plan 3) ──
+  periods:         (year)          => api.get('/finance/gl/periods/', { params: { year } }),
+  period:          (id)            => api.get(`/finance/gl/periods/${id}/`),               // polled while closing: no SOFTECH read
+  periodChecklist: (id)            => api.get(`/finance/gl/periods/${id}/checklist/`),     // reads SOFTECH: never on a timer
+  periodClose:     (id)            => api.post(`/finance/gl/periods/${id}/close/`),
+  periodReopen:    (id, reason)    => api.post(`/finance/gl/periods/${id}/reopen/`, { reason }),
+  closingStock:    (id, preview)   => api.get(`/finance/gl/periods/${id}/closing-stock/`, { params: preview ? { preview: 1 } : {} }),
+  closingStockStores:      ()      => api.get('/finance/gl/closing-stock-stores/'),
+  closingStockStoresPatch: (stores) => api.patch('/finance/gl/closing-stock-stores/', { stores }),
+  // ── sub-ledgers and the ledger-vs-SOFTECH comparison ──
+  subledger:       (kind, params)  => api.get(`/finance/gl/subledgers/${kind}/`, { params }),
+  subledgerXlsx:   (kind, params)  => api.get(`/finance/gl/subledgers/${kind}/`, xlsx(params)),
+  suppliersVsAp:     (params)      => api.get('/finance/gl/subledgers/suppliers-vs-ap/', { params }),
+  suppliersVsApXlsx: (params)      => api.get('/finance/gl/subledgers/suppliers-vs-ap/', xlsx(params)),
+  compare:         (period, check) => api.get('/finance/gl/compare/', { params: { period, ...(check ? { check } : {}) } }),
+  compareRefresh:  (period, checks) => api.post('/finance/gl/compare/refresh/', { period, ...(checks ? { checks } : {}) }),  // 202: runs in the background
+  compareLine:     (id)            => api.get(`/finance/gl/compare/lines/${id}/`),                  // reads SOFTECH
+  compareExplain:  (id, text)      => api.post(`/finance/gl/compare/lines/${id}/explain/`, { text }),
+  compareChecks:   ()              => api.get('/finance/gl/compare/checks/'),
+  compareCheckSave: (body)         => api.patch('/finance/gl/compare/checks/', body),
+  manualImportPreview: (file, book) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    if (book) fd.append('book', book)
+    return api.post('/finance/gl/manual-import/preview/', fd)
+  },
+  manualImport:    (file, book, includeMixed) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    if (book) fd.append('book', book)
+    includeMixed.forEach(k => fd.append('include_mixed', k))
+    return api.post('/finance/gl/manual-import/', fd)
+  },
+  validation:      (file, through) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    if (through) fd.append('through', through)
+    return api.post('/finance/gl/validation/', fd, { responseType: 'blob' })
+  },
 }
 
 // ── Recommendations / FBT API ─────────────────────────────────────────────────
