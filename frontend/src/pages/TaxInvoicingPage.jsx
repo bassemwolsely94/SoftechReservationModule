@@ -13,6 +13,7 @@ import { useSearchParams } from 'react-router-dom'
 import { taxInvoicingApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
 import ClaimsTab from './taxinvoicing/ClaimsTab'
+import CodesTab from './taxinvoicing/CodesTab'
 import DocumentsTab from './taxinvoicing/DocumentsTab'
 import ExceptionsTab from './taxinvoicing/ExceptionsTab'
 import ImportTab from './taxinvoicing/ImportTab'
@@ -29,6 +30,7 @@ const TABS = [
   { key: 'exceptions', label: '⚠️ الاستثناءات' },
   { key: 'items',      label: '🏷️ الأصناف' },
   { key: 'import',     label: '📥 استيراد الأصناف' },
+  { key: 'codes',      label: '🔖 أكواد المصلحة' },
   { key: 'receipts',   label: '🧾 الإيصالات' },
   { key: 'settings',   label: '⚙️ الإعدادات' },
 ]
@@ -89,6 +91,7 @@ export default function TaxInvoicingPage() {
       {tab === 'exceptions' && <ExceptionsTab go={go} />}
       {tab === 'items' && <ItemsTab key={`${params.get('q') || ''}|${params.get('new') || ''}`} me={access} initialQ={params.get('q') || ''} newCode={params.get('new') || ''} go={go} />}
       {tab === 'import' && <ImportTab me={access} />}
+      {tab === 'codes' && <CodesTab me={access} />}
       {tab === 'receipts' && <ReceiptsTab key={params.get('status') || ''} me={access} initialStatus={params.get('status') || ''} />}
       {tab === 'settings' && <SettingsTab me={access} />}
     </div>

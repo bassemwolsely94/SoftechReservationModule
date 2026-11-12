@@ -873,6 +873,8 @@ CUSTOMER_MERGE_QUEUE_ENABLED = config('CUSTOMER_MERGE_QUEUE_ENABLED', default=Tr
 # Tax Invoicing (apps/tax_invoicing, doc 36). Sending to ETA is OFF and goes through writer_allowed.
 # Addresses and credentials have no default, so an unconfigured server cannot reach ETA.
 TAX_ETA_SUBMIT_ENABLED = config('TAX_ETA_SUBMIT_ENABLED', default=False, cast=bool)
+# 'preprod' or 'production' picks ETA's published addresses; the two URLs below override them.
+TAX_ETA_ENVIRONMENT = config('TAX_ETA_ENVIRONMENT', default='')
 TAX_ETA_API_BASE_URL = config('TAX_ETA_API_BASE_URL', default='')
 TAX_ETA_ID_BASE_URL = config('TAX_ETA_ID_BASE_URL', default='')
 TAX_ETA_CLIENT_ID = config('TAX_ETA_CLIENT_ID', default='')
@@ -880,6 +882,8 @@ TAX_ETA_CLIENT_SECRET = config('TAX_ETA_CLIENT_SECRET', default='')
 TAX_SIGNER_CLASS = config('TAX_SIGNER_CLASS', default='apps.tax_invoicing.signing.NotConfiguredSigner')
 TAX_RECONCILE_WAIT_MINUTES = config('TAX_RECONCILE_WAIT_MINUTES', default=15, cast=int)
 TAX_ERECEIPT_SUBMIT_ENABLED = config('TAX_ERECEIPT_SUBMIT_ENABLED', default=False, cast=bool)
+TAX_ETA_CODING_ENABLED = config('TAX_ETA_CODING_ENABLED', default=False, cast=bool)
+TAX_ETA_PRODUCTION_ALLOWED = config('TAX_ETA_PRODUCTION_ALLOWED', default=False, cast=bool)
 TAX_ALLOW_MOCK_SIGNER = config('TAX_ALLOW_MOCK_SIGNER', default=False, cast=bool)
 TAX_SIGNING_AGENT_TOKEN = config('TAX_SIGNING_AGENT_TOKEN', default='')
 TAX_SIGNING_CERT_THUMBPRINT = config('TAX_SIGNING_CERT_THUMBPRINT', default='')

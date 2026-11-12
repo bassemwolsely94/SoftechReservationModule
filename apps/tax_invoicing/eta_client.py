@@ -5,8 +5,9 @@ The important distinction is whether ETA may hold the document afterwards:
   EtaRefused   — we know it was not accepted (bad login, HTTP 4xx): safe to fix and send again.
   EtaUncertain — we can't tell (timeout, dropped connection, 5xx, duplicate): reconcile first.
 
-Addresses and credentials come from the environment; there is no default, so an unconfigured
-server cannot reach anything.
+Addresses come from apps.tax_invoicing.environment (TAX_ETA_ENVIRONMENT or explicit URLs) and
+credentials from the environment; with nothing set, nothing is reachable. Every call that sends
+something passes environment.assert_may_send(), so production needs the owner's switch as well.
 """
 import json
 import threading
@@ -15,6 +16,8 @@ import time
 import requests
 from django.conf import settings
 from core.errors import redact
+
+from . import environment
 
 TIMEOUT = (10, 60)
 _token_lock = threading.Lock()
@@ -48,6 +51,20 @@ def _setting(name):
     return value
 
 
+def _base(kind):
+    value = environment.api_base() if kind == 'api' else environment.id_base()
+    if not value:
+        raise EtaNotConfigured('عنوان منظومة المصلحة غير محدد (TAX_ETA_ENVIRONMENT)')
+    return value
+
+
+def _may_send():
+    try:
+        environment.assert_may_send()
+    except environment.ProductionNotAllowed as exc:
+        raise EtaNotConfigured(str(exc)) from exc
+
+
 def _json(response):
     try:
         return response.json()
@@ -65,7 +82,7 @@ def access_token():
     with _token_lock:
         if _token['value'] and _token['expires'] > time.time() + 60:
             return _token['value']
-        url = _setting('TAX_ETA_ID_BASE_URL').rstrip('/') + '/connect/token'
+        url = _base('id') + '/connect/token'
         auth = (_setting('TAX_ETA_CLIENT_ID'), _setting('TAX_ETA_CLIENT_SECRET'))
         try:
             r = requests.post(url, data={'grant_type': 'client_credentials'}, auth=auth, timeout=TIMEOUT,
@@ -86,11 +103,12 @@ def _headers():
 
 
 def _api(path):
-    return _setting('TAX_ETA_API_BASE_URL').rstrip('/') + path
+    return _base('api') + path
 
 
 def submit_documents(signed_document_text):
     """POST one signed document, sending its exact text. Returns ETA's JSON answer."""
+    _may_send()
     headers = _headers()
     body = ('{"documents":[' + signed_document_text + ']}').encode('utf-8')
     try:
@@ -152,7 +170,7 @@ def pos_token(config):
             return cached['value']
         if not (config.client_id and config.device_serial):
             raise EtaNotConfigured(f'بيانات جهاز الفرع {config.softech_branchcode} ناقصة')
-        url = _setting('TAX_ETA_ID_BASE_URL').rstrip('/') + '/connect/token'
+        url = _base('id') + '/connect/token'
         headers = {'posserial': config.device_serial, 'pososversion': config.pos_os_version,
                    'posmodelframework': config.pos_model_framework, 'presharedkey': _env_secret(config.preshared_key_env)}
         body = {'grant_type': 'client_credentials', 'client_id': config.client_id,
@@ -174,6 +192,7 @@ def _pos_headers(config):
 
 
 def submit_receipts(config, receipt_texts, signature_b64):
+    _may_send()
     headers = _pos_headers(config)
     body = ('{"receipts":[' + ','.join(receipt_texts) + '],"signatures":[{"signatureType":"I","value":'
             + json.dumps(signature_b64) + '}]}').encode('utf-8')
@@ -209,3 +228,45 @@ def get_receipt_status(config, uuid_value, submission_uuid=''):
     if r.status_code != 200:
         raise EtaUncertain(f'تعذر الاستعلام (HTTP {r.status_code})', r.status_code)
     return _json(r)
+
+
+# ── Item codes (EGS): ask ETA to register our internal codes, then follow the request ──────────
+
+def create_egs_codes(items):
+    """POST /api/v1.0/codetypes/requests/codes. `items` as ETA's "Create EGS Code Usage" names them.
+    A 400 says ETA refused (for example, the code already exists); nothing was registered by it."""
+    _may_send()
+    try:
+        r = requests.post(_api('/api/v1.0/codetypes/requests/codes'), data=json.dumps({'items': items}).encode('utf-8'),
+                          headers=_headers(), timeout=TIMEOUT, allow_redirects=False)
+    except requests.RequestException as exc:
+        raise EtaUncertain(f'انقطع الاتصال أثناء طلب الكود: {type(exc).__name__}') from exc
+    payload = _json(r)
+    if r.status_code in (200, 201, 202):
+        return r.status_code, payload
+    if r.status_code >= 500 or r.status_code == 429:
+        raise EtaUncertain(f'ردت المصلحة HTTP {r.status_code}', r.status_code, payload)
+    raise EtaRefused(f'رفضت المصلحة طلب الكود (HTTP {r.status_code}): {json.dumps(payload, ensure_ascii=False)[:500]}',
+                     r.status_code, payload)
+
+
+def my_code_requests(item_code):
+    """Our code-usage requests for one item code, newest first. Raises when ETA can't be asked."""
+    params = {'ItemCode': item_code, 'OrderDirections': 'Descending', 'Pn': 1, 'Ps': 10}
+    try:
+        r = requests.get(_api('/api/v1.0/codetypes/requests/my'), params=params, headers=_headers(),
+                         timeout=TIMEOUT, allow_redirects=False)
+    except requests.RequestException as exc:
+        raise EtaUncertain(f'تعذر الاستعلام عن طلبات الأكواد: {type(exc).__name__}') from exc
+    if r.status_code != 200:
+        raise EtaUncertain(f'تعذر الاستعلام عن طلبات الأكواد (HTTP {r.status_code})', r.status_code)
+    body = _json(r)
+    rows = body if isinstance(body, list) else (body.get('result') or body.get('items') or [])
+    return [row for row in rows if str(row.get('itemCode') or '').upper() == item_code.upper()]
+
+
+def check_login():
+    """For the settings screen: does the ERP login work? Sends no document."""
+    reset_token()
+    access_token()
+    return True

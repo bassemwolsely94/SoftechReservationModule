@@ -21,6 +21,13 @@ const api = vi.hoisted(() => ({
   updateItem: vi.fn(),
   previewReceipts: vi.fn(),
   submitReceipts: vi.fn(),
+  etaStatus: vi.fn(),
+  etaCheckLogin: vi.fn(),
+  codes: vi.fn(),
+  codeCandidates: vi.fn(),
+  codesPrepare: vi.fn(),
+  codesSend: vi.fn(),
+  codesRefresh: vi.fn(),
 }))
 
 vi.mock('../../api/client', () => ({
@@ -33,6 +40,7 @@ const { default: PrintTab } = await import('./PrintTab')
 const { default: ImportTab, buildOptions } = await import('./ImportTab')
 const { default: ItemsTab } = await import('./ItemsTab')
 const { BranchActions } = await import('./ReceiptsTab')
+const { default: CodesTab } = await import('./CodesTab')
 
 const line = (id, status) => ({
   id, docnumber: '55', docdate: '2026-10-01', branch: '170', itemcode: `I${id}`, item_name: `صنف ${id}`, quantity: '1',
@@ -251,5 +259,43 @@ describe('item import', () => {
     const [, options, hash] = api.importApply.mock.calls[0]
     expect(hash).toBe('HASH')
     expect(options.mapping).toEqual({ itemcode: 0 })
+  })
+})
+
+describe('ETA item codes', () => {
+  const status = { environment: 'preprod', label: 'التجريبية (Pre-production)', api_base: 'https://api.preprod.invoicing.eta.gov.eg',
+    is_production: false, production_allowed: false, erp_client_configured: true, invoice_submit_enabled: false,
+    receipt_submit_enabled: false, coding_send_enabled: false }
+  const request = { id: 3, itemcode: '50001', item_code: 'EG-1-50001', code_name: 'Panadol', code_name_ar: 'بانادول',
+    parent_code: '10000454', status: 'prepared', status_label: 'جاهز للإرسال', error: '', eta_status: '', sent_at: null, checked_at: null }
+
+  beforeEach(() => {
+    api.etaStatus.mockResolvedValue({ data: status })
+    api.codes.mockResolvedValue({ data: { summary: { by_status: { prepared: 1 }, candidates: 4 }, rows: [request] } })
+    api.codeCandidates.mockResolvedValue({ data: [] })
+  })
+
+  it('shows the pre-production badge and keeps sending disabled while the switch is off', async () => {
+    show(<CodesTab me={{ ...ME, coding_send_enabled: false, code_request_statuses: [] }} />)
+    expect(await screen.findByText('التجريبية (Pre-production)')).toBeTruthy()
+    expect(await screen.findByText('EG-1-50001')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('اختيار EG-1-50001'))
+    expect(screen.getByText('إرسال للمصلحة').closest('button').disabled).toBe(true)
+  })
+
+  it('offers no send or login test without finalize', async () => {
+    show(<CodesTab me={{ ...ME, can_finalize: false, coding_send_enabled: true, code_request_statuses: [] }} />)
+    expect(await screen.findByText('EG-1-50001')).toBeTruthy()
+    expect(screen.queryByText('إرسال للمصلحة')).toBeNull()
+    expect(screen.queryByText('اختبار الدخول')).toBeNull()
+  })
+
+  it('sends the ticked requests with the typed count', async () => {
+    api.codesSend.mockResolvedValue({ data: { submitted: 1, failed: 0, uncertain: 0, stopped: '' } })
+    show(<CodesTab me={{ ...ME, coding_send_enabled: true, code_request_statuses: [] }} />)
+    fireEvent.click(await screen.findByLabelText('اختيار EG-1-50001'))
+    fireEvent.change(screen.getByLabelText(/اكتب عدد المختار/), { target: { value: '1' } })
+    fireEvent.click(screen.getByText('إرسال للمصلحة'))
+    await waitFor(() => expect(api.codesSend).toHaveBeenCalledWith({ ids: [3], confirm: '1' }))
   })
 })
