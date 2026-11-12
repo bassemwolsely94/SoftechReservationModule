@@ -188,6 +188,7 @@ function BundleDetail({ batchId, onBack, onOpenInvoice }) {
         <VendorTemplateEditor
           vendorId={batch.vendor}
           sampleImageUrl={(batch.invoices || [])[0]?.source_image_url}
+          sampleRemovedDate={(batch.invoices || [])[0]?.retention_removed?.source_image}
           onClose={() => setEditTemplate(false)}
           onSaved={load} />
       )}

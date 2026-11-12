@@ -247,6 +247,9 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         from .ocr import (extract_text, parse_lines,
                           extract_structured, parse_structured, vendor_prompt_hints)
 
+        if not invoice.source_image:    # retention removed the file; nothing to read
+            logger.warning('OCR skipped for invoice %s: no image file', invoice.pk)
+            return
         invoice.status = 'processing'
         invoice.save(update_fields=['status'])
 
@@ -317,6 +320,12 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         """
         invoice = self.get_object()
         if not invoice.source_image:
+            from apps.data_lifecycle.display import removed_dates
+            gone = removed_dates([invoice], ('source_image',)).get(
+                (invoice._meta.label, str(invoice.pk), 'source_image'))
+            if gone:    # retention removed the image: say so, change nothing
+                return Response({'detail': f'أُزيلت الصورة وفق سياسة الاحتفاظ بتاريخ {gone} — لا يمكن إعادة القراءة'},
+                                status=status.HTTP_400_BAD_REQUEST)
             return Response({'detail': 'لا توجد صورة مرفوعة'}, status=status.HTTP_400_BAD_REQUEST)
         engine = (request.data.get('engine') or request.query_params.get('engine') or '').strip() or None
         invoice.lines.all().delete()

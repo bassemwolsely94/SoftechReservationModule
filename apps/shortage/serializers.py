@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import ShortageList, ShortageItem
+from apps.data_lifecycle.display import RetentionNoteMixin
 
 
 class ShortageItemSerializer(serializers.ModelSerializer):
@@ -58,7 +59,8 @@ class ShortageItemUpdateSerializer(serializers.ModelSerializer):
                   'item', 'is_confirmed', 'is_unmatched', 'source']
 
 
-class ShortageListSerializer(serializers.ModelSerializer):
+class ShortageListSerializer(RetentionNoteMixin, serializers.ModelSerializer):
+    retention_fields = ('source_image',)
     branch_name      = serializers.CharField(source='branch.name_ar', read_only=True)
     created_by_name  = serializers.SerializerMethodField()
     status_label     = serializers.SerializerMethodField()

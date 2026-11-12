@@ -626,6 +626,8 @@ SCREENS = [
               'After dispensing: the "ERP document match" section looks for the sales invoice in SOFTECH (by document number or automatically by items and date) and shows whether it is matched, partial or not found.'),
         ],
         'tips': [
+            T('الملف اللي عدّى مدة الاحتفاظ بيظهر مكانه «أُزيل وفق سياسة الاحتفاظ» ومعاه التاريخ.',
+              'A file past its keep period shows "removed under retention" with the date.'),
             T('الحجز في حالة نهائية (تم التسليم / ملغي) لا يمكن تغيير حالته.', 'A reservation in a final state (fulfilled / cancelled) cannot change status.'),
             T('المطابقة مع SOFTECH تُعاد بعد فترة انتظار قصيرة بين كل محاولة؛ لو «غير موجود» تأكد من رقم المستند.',
               'The SOFTECH match can be retried after a short wait between attempts; if "not found", check the document number.'),
@@ -786,8 +788,8 @@ SCREENS = [
              'warn': T('الإلغاء نهائي — الحجز مايرجعش.', 'A cancel is final — the reservation cannot come back.'),
              'open_hint': T('بعد «إلغاء ✕» من أزرار دورك.', 'After "Cancel ✕" in your role buttons.')},
         ],
-        'updated': '2026-11-03',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-08',
+        'change_note': T('توضيح ظهور الملفات اللي عدّت مدة الاحتفاظ', 'Explains how files past their keep period appear'),
     },
     {
         'key': 'reservations.mobile_list',

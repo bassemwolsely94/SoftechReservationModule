@@ -5,6 +5,7 @@ db.sqlite3
 .env
 *.log
 media/
+media_hold/
 staticfiles/
 node_modules/
 .DS_Store

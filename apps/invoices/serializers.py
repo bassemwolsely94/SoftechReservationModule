@@ -4,6 +4,7 @@ from django.db import models as dj_models
 from rest_framework import serializers
 from .models import (SupplierInvoice, InvoiceLine, VendorProfile, VendorItemMapping,
                      InvoiceBatch, PurchaseOrder, PurchaseOrderLine)
+from apps.data_lifecycle.display import RetentionNoteMixin
 
 
 class PurchaseOrderLineSerializer(serializers.ModelSerializer):
@@ -129,7 +130,8 @@ class InvoiceLineWriteSerializer(serializers.ModelSerializer):
         return iso
 
 
-class SupplierInvoiceListSerializer(serializers.ModelSerializer):
+class SupplierInvoiceListSerializer(RetentionNoteMixin, serializers.ModelSerializer):
+    retention_fields = ('source_image',)
     branch_name     = serializers.CharField(source='branch.name_ar', read_only=True)
     vendor_name     = serializers.CharField(source='vendor.name', read_only=True, default=None)
     vendor_personcode = serializers.CharField(source='vendor.softech_personcode', read_only=True, default='')
@@ -211,7 +213,8 @@ class SupplierInvoiceCreateSerializer(serializers.ModelSerializer):
 
 # ── Multi-invoice bundle ────────────────────────────────────────────────────────
 
-class InvoiceBatchListSerializer(serializers.ModelSerializer):
+class InvoiceBatchListSerializer(RetentionNoteMixin, serializers.ModelSerializer):
+    retention_fields = ('source_file',)
     branch_name     = serializers.CharField(source='branch.name_ar', read_only=True)
     vendor_name     = serializers.CharField(source='vendor.name', read_only=True, default=None)
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, default=None)

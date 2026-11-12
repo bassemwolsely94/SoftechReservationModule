@@ -8,6 +8,7 @@ from .models import (
     OperationalTask, TaskAssignment, TaskItem,
     TaskMessage, TaskAttachment, TaskSchedule, TaskAuditLog,
 )
+from apps.data_lifecycle.display import RetentionNoteMixin
 
 
 # ── Nested light serializers ───────────────────────────────────────────────────
@@ -30,7 +31,8 @@ class BranchMiniSerializer(serializers.Serializer):
 
 # ── TaskAttachment ─────────────────────────────────────────────────────────────
 
-class TaskAttachmentSerializer(serializers.ModelSerializer):
+class TaskAttachmentSerializer(RetentionNoteMixin, serializers.ModelSerializer):
+    retention_fields = ('file',)
     file_url = serializers.SerializerMethodField()
     uploaded_by_name = serializers.SerializerMethodField()
 

@@ -7,6 +7,7 @@ from .models import ExternalPayment, PaymentReconciliationLog
 
 
 from apps.customers.phone_mask import RecordPhoneMask, CustomerPhoneMask  # Batch 5b
+from apps.data_lifecycle.display import RetentionNoteMixin
 
 class PaymentReconciliationLogSerializer(serializers.ModelSerializer):
     performed_by_name = serializers.SerializerMethodField()
@@ -22,7 +23,8 @@ class PaymentReconciliationLogSerializer(serializers.ModelSerializer):
         return ''
 
 
-class ExternalPaymentSerializer(RecordPhoneMask, serializers.ModelSerializer):
+class ExternalPaymentSerializer(RetentionNoteMixin, RecordPhoneMask, serializers.ModelSerializer):
+    retention_fields = ('screenshot',)
     phone_mask_fields = ('customer_phone',)
     reconciliation_logs = PaymentReconciliationLogSerializer(many=True, read_only=True)
     method_display      = serializers.CharField(source='get_method_display', read_only=True)

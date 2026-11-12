@@ -7,6 +7,7 @@ import SortTh from '../components/SortTh'
 import SoftechGrid from './invoices/SoftechGrid'
 import BundleWorkbench from './invoices/BundleWorkbench'
 import ItemSearchInput from '../components/ItemSearchInput'
+import RemovedFileNote from '../components/RemovedFileNote'
 
 // ── Download helper ────────────────────────────────────────────────────────────
 function triggerDownload(data, filename, mime) {
@@ -1230,6 +1231,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
         )}
 
         {/* OCR image preview */}
+        {!inv.source_image_url && <RemovedFileNote date={inv.retention_removed?.source_image} className="mb-4" />}
         {inv.source_image_url && (
           <div className="mb-4 flex items-start gap-4">
             <img src={inv.source_image_url} alt="فاتورة"
