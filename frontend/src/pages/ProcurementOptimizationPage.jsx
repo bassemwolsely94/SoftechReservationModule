@@ -12,9 +12,15 @@ import RefreshButton from '../components/RefreshButton'
 import useHelpTab from '../help/useHelpTab'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 
 const fmt  = (n, d = 0) => n == null ? '—' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const pct  = (n, d = 1) => n == null ? '—' : `${Number(n).toFixed(d)}%`
+
+// alert severity levels for the multi-select filter ({code, name})
+const SEVERITY_OPTIONS = [
+  { code: 'critical', name: 'حرجة' }, { code: 'warning', name: 'تحذير' }, { code: 'info', name: 'معلومة' },
+]
 
 const ALERT_STYLE = {
   critical: { bg: 'bg-red-50  border-red-300',  text: 'text-red-700',   icon: '🔴' },
@@ -287,14 +293,14 @@ function MappingTab() {
 function AlertsTab() {
   const [alerts, setAlerts]     = useState([])
   const [loading, setLoading]   = useState(true)
-  const [severity, setSeverity] = useState('')
+  const [severity, setSeverity] = useState([])   // multi-select levels (none = all)
   const [resolved, setResolved] = useState('false')
   const [resolving, setResolving] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await procurementIntelApi.listAlerts({ severity, is_resolved: resolved })
+      const res = await procurementIntelApi.listAlerts({ severity: severity.join(','), is_resolved: resolved })
       setAlerts(res.data.results || res.data || [])
     } finally {
       setLoading(false)
@@ -319,13 +325,8 @@ function AlertsTab() {
   return (
     <div className="space-y-4">
       <div data-tour="purchasing-optimization-alert-filters" className="flex flex-wrap gap-3 items-center">
-        <select value={severity} onChange={e => setSeverity(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-          <option value="">جميع المستويات</option>
-          <option value="critical">حرجة</option>
-          <option value="warning">تحذير</option>
-          <option value="info">معلومة</option>
-        </select>
+        <MultiSelectFilter className="w-[160px]" showCode={false} allLabel="جميع المستويات"
+          options={SEVERITY_OPTIONS} selected={severity} onChange={setSeverity} />
         <select value={resolved} onChange={e => setResolved(e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
           <option value="false">مفتوحة فقط</option>

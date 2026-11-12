@@ -31,6 +31,7 @@ Stats
   GET  /api/images/filter-meta/   category/producer lists for UI dropdowns
 """
 from core.threads import ContextThreadPoolExecutor, start_thread
+from core.multi_filter import filter_in, multi_ids, multi_values
 
 from django.db.models import Count, ExpressionWrapper, DurationField, Exists, F, OuterRef, Q, Subquery
 from django.utils import timezone
@@ -421,8 +422,8 @@ def product_image_search(request):
     Params:
       q             text search (name, softech_id)
       has_image     'yes' | 'no' | 'pending' | ''  (default = '')
-      category_id   int
-      producer_name str (partial)
+      category_id   int — several allowed (?category_id=1,2)
+      producer_name str (partial) — several allowed, any of them matches
       page          int (default 1)
       page_size     int (default 30, max 100)
     """
@@ -437,15 +438,16 @@ def product_image_search(request):
     if q:
         qs = qs.filter(wq(q, 'name') | Q(softech_id__icontains=q))
 
-    # ── category filter ───────────────────────────────────────────────────────
-    cat_id = p.get('category_id')
-    if cat_id:
-        qs = qs.filter(category_id=cat_id)
+    # ── category filter (multi-select: ?category_id=1,2 or repeated) ─────────
+    qs = filter_in(qs, 'category_id', multi_ids(p, 'category_id'))
 
-    # ── producer filter ───────────────────────────────────────────────────────
-    producer = (p.get('producer_name') or '').strip()
-    if producer:
-        qs = qs.filter(producer_name__icontains=producer)
+    # ── producer filter (multi-select; each value a partial match, any of them) ─
+    producers = multi_values(p, 'producer_name')
+    if producers:
+        any_producer = Q()
+        for producer in producers:
+            any_producer |= Q(producer_name__icontains=producer)
+        qs = qs.filter(any_producer)
 
     # ── image-status filter ───────────────────────────────────────────────────
     has_image_filter = p.get('has_image', '')

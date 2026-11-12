@@ -47,6 +47,7 @@ from apps.catalog.models import Item
 from apps.customers.models import Customer, PurchaseHistory, PurchaseHistoryLine
 from apps.catalog.wildcard import wq
 from core.errors import public_error
+from core.multi_filter import filter_in, multi_ids, multi_values
 
 logger = logging.getLogger('elrezeiky.analytics')
 
@@ -301,24 +302,11 @@ def _line_qs_for(purchase_qs, params=None):
         if params.get('has_points') == '1':
             qs = qs.filter(item__has_points=True)
 
-        item_level = params.get('item_level')
-        if item_level not in (None, ''):
-            try:
-                qs = qs.filter(item__item_level=int(item_level))
-            except (ValueError, TypeError):
-                pass
-
-        branch_trans = params.get('branch_trans')
-        if branch_trans not in (None, ''):
-            qs = qs.filter(item__branch_trans=branch_trans)
-
-        supplier_trans = params.get('supplier_trans')
-        if supplier_trans not in (None, ''):
-            qs = qs.filter(item__supplier_trans=supplier_trans)
-
-        customer_trans = params.get('customer_trans')
-        if customer_trans not in (None, ''):
-            qs = qs.filter(item__customer_trans=customer_trans)
+        # item_level / *_trans are multi-select (?item_level=1,2); junk levels are dropped
+        qs = filter_in(qs, 'item__item_level', multi_ids(params, 'item_level'))
+        qs = filter_in(qs, 'item__branch_trans', multi_values(params, 'branch_trans'))
+        qs = filter_in(qs, 'item__supplier_trans', multi_values(params, 'supplier_trans'))
+        qs = filter_in(qs, 'item__customer_trans', multi_values(params, 'customer_trans'))
 
     return qs
 
@@ -1509,21 +1497,11 @@ def inventory_analytics(request):
             mqs = mqs.filter(item__is_fast_moving=True)
         if p.get('has_points') == '1':
             mqs = mqs.filter(item__has_points=True)
-        if p.get('item_level') not in (None, ''):
-            try:
-                mqs = mqs.filter(item__item_level=int(p['item_level']))
-            except (ValueError, TypeError):
-                pass
-
-        branch_trans = p.get('branch_trans')
-        if branch_trans not in (None, ''):
-            mqs = mqs.filter(item__branch_trans=branch_trans)
-        supplier_trans = p.get('supplier_trans')
-        if supplier_trans not in (None, ''):
-            mqs = mqs.filter(item__supplier_trans=supplier_trans)
-        customer_trans = p.get('customer_trans')
-        if customer_trans not in (None, ''):
-            mqs = mqs.filter(item__customer_trans=customer_trans)
+        # multi-select (?item_level=1,2 · ?branch_trans=a,b); one value filters as before
+        mqs = filter_in(mqs, 'item__item_level', multi_ids(p, 'item_level'))
+        mqs = filter_in(mqs, 'item__branch_trans', multi_values(p, 'branch_trans'))
+        mqs = filter_in(mqs, 'item__supplier_trans', multi_values(p, 'supplier_trans'))
+        mqs = filter_in(mqs, 'item__customer_trans', multi_values(p, 'customer_trans'))
 
         shortage_qs   = mqs.filter(gap__gt=0)
         overstock_qs  = mqs.filter(gap__lt=0)

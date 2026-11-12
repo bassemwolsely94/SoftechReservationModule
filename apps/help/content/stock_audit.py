@@ -82,10 +82,10 @@ MODULE = {
                            'This screen reads stock movements from SOFTECH and applies fixed checks to them (sales below cost, duplicates, adjustments, after-hours entries…).\n'
                            '• Read-only: nothing is written to SOFTECH from here.')},
                 {'target': 'stock-audit-main-filters', 'route': '/stock-audit',
-                 'text': T('اختار الفترة والفرع والحالة.', 'Choose the period, branch and status.'),
-                 'more': T('ابدأ بحالة «مفتوح» عشان تشوف الملاحظات اللي لسه محدش راجعها.\n'
+                 'text': T('اختار الفترة، وعلّم فرعاً أو أكثر وحالة أو أكثر.', 'Choose the period and tick one or more branches and statuses.'),
+                 'more': T('ابدأ بحالتي «مفتوح» و«تم التصعيد» (المعلّمين من الأول) عشان تشوف الملاحظات اللي لسه محدش راجعها.\n'
                            '• مدير الفرع بيشوف فرعه بس.',
-                           'Start with the "Open" status to see findings nobody has reviewed yet.\n'
+                           'Start with the "Open" and "Escalated" statuses (ticked by default) to see findings nobody has reviewed yet.\n'
                            '• A branch manager sees their own branch only.')},
                 {'target': 'stock-audit-main-cards', 'route': '/stock-audit',
                  'text': T('بطاقة لكل فحص بعدد ملاحظاته.', 'One card per check with its number of findings.'),
@@ -199,8 +199,10 @@ SCREENS = [
                        'It loads the SOFTECH HQ server for about a minute — use it only when needed.'),
              'open_hint': T('للإدارة والمشرفين والجودة.', 'Admin, supervisors and quality.')},
             {'target': 'stock-audit-main-filters', 'label': T('من · إلى · الفرع · الحالة', 'From · To · Branch · Status'),
-             'text': T('حدد الفترة والفرع والحالة والخطورة، أو ابحث بكود الصنف أو اسمه أو رقم المستند.',
-                       'Set the period, branch, status and severity, or search by item code, name or document number.')},
+             'text': T('حدد الفترة، وعلّم فرعاً أو حالة أو خطورة أو أكثر، أو ابحث بكود الصنف أو اسمه أو رقم المستند.',
+                       'Set the period, tick one or more branches, statuses or severities, or search by item code, name or document number.'),
+             'more': T('كل فلتر قائمة تعلّم فيها أكثر من اختيار — مثلاً فرعين أو «حرج» و«تنبيه» معاً.\n• لا شىء معلّم = الكل.\n• الحالة بتبدأ على «مفتوح» و«تم التصعيد».\n• التصدير بيمشي بنفس الفلاتر.',
+                       'Each filter is a list where you tick several choices — e.g. two branches, or "Critical" and "Warning" together.\n• Nothing ticked = all.\n• Status starts on "Open" and "Escalated".\n• The export follows the same filters.')},
             {'target': 'stock-audit-main-cards', 'label': T('بطاقات الفحوص', 'Check cards'),
              'text': T('المفتوح والحرج وقيمته لكل فحص. اضغط البطاقة لتفتح ملاحظاتها.', 'Open, critical and their value per check. Click a card to open its findings.'),
              'open_hint': T('تبويب «📊 ملخص».', 'The "📊 Summary" tab.')},
@@ -211,8 +213,8 @@ SCREENS = [
              'text': T('اختر فحصاً واحداً أو اعرضها كلها.', 'Pick one check or show them all.'),
              'open_hint': T('تبويب «🧾 المبيعات والأسعار».', 'The "🧾 Sales & prices" tab.')},
             {'target': 'stock-audit-main-channel', 'label': T('قناة البيع', 'Sales channel'),
-             'text': T('يحصر الملاحظات في قناة واحدة: نقدي، Delivery، تعاقدات، عميل دائم…',
-                       'Limits the findings to one channel: cash, delivery, contracts, regular customer…'),
+             'text': T('يحصر الملاحظات في قناة أو أكثر: نقدي، Delivery، تعاقدات، عميل دائم… علّم أكثر من قناة معاً.',
+                       'Limits the findings to one or more channels: cash, delivery, contracts, regular customer… Tick several together.'),
              'when': T('مثلاً «تعاقدات / آجل» عشان تشوف البيع بأقل من التكلفة على التعاقدات بس.',
                        'For example «تعاقدات / آجل» to see below-cost sales on contracts only.')},
             {'target': 'stock-audit-main-grid', 'label': T('قائمة الملاحظات', 'Findings list'),
@@ -269,6 +271,8 @@ SCREENS = [
              'when': T('لمدير الفرع اللي عايزه يتابع ملاحظات فرعه بنفسه.', 'For a branch manager who should follow up his branch’s findings himself.'),
              'open_hint': T('ابحث عن الموظف بالاسم أو الكود (حرفين على الأقل). للإدارة.', 'Search the employee by name or code (2+ letters). Admin.')},
         ],
-        'updated': '2026-11-01',
+        'updated': '2026-11-12',
+        'change_note': T('فلاتر الفرع والحالة والخطورة وقناة البيع تقبل الآن أكثر من اختيار',
+                         'Branch, status, severity and sales-channel filters now take several choices'),
     },
 ]

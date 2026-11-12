@@ -13,6 +13,7 @@ import { purchasingApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 
 const pct = (x) => `${Math.round((x ?? 0) * 100)}%`
 const egp = (n) => (n ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
@@ -36,10 +37,8 @@ function Stat({ label, value, tone = 'text-gray-800' }) {
 function Toolbar({ med, setMed, q, setQ, medTypes }) {
   return (
     <div className="flex flex-wrap items-center gap-2 mb-3" data-tour="shortage-phantom-toolbar">
-      <select value={med} onChange={e => setMed(e.target.value)} className="border rounded-lg px-3 py-2 text-sm">
-        <option value="">كل التصنيفات</option>
-        {medTypes.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-      </select>
+      <MultiSelectFilter className="w-[190px]" showCode={false} allLabel="كل التصنيفات" menuClassName="min-w-[240px]"
+        options={medTypes.map(([code, name]) => ({ code, name }))} selected={med} onChange={setMed} />
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="بحث بالكود/الاسم…"
         className="border rounded-lg px-3 py-2 text-sm flex-1 min-w-[200px]" />
     </div>
@@ -111,8 +110,8 @@ export default function PhantomSalesPage() {
   const qc = useQueryClient()
   const [tab, setTab] = useState('flagged')
   useHelpTab(tab)
-  const [med, setMed] = useState(''); const [q, setQ] = useState('')
-  const params = { ...(med ? { med } : {}), ...(q.trim() ? { q: q.trim() } : {}) }
+  const [med, setMed] = useState([]); const [q, setQ] = useState('')   // med: multi-select codes (none = all)
+  const params = { ...(med.length ? { med: med.join(',') } : {}), ...(q.trim() ? { q: q.trim() } : {}) }
   const { data: summary } = useQuery({ queryKey: ['phantom-summary'], queryFn: () => purchasingApi.phantomSummary().then(r => r.data) })
   const { data: medTypes } = useQuery({ queryKey: ['phantom-medtypes'], queryFn: () => purchasingApi.phantomMedTypes().then(r => r.data.med_types) })
   const { data, isLoading } = useQuery({

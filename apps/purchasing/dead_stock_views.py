@@ -17,6 +17,7 @@ import datetime as dt
 import logging
 import threading
 
+from core.multi_filter import filter_in, multi_values
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -85,11 +86,10 @@ def _lines(request, snap):
     codes = _allowed_codes(request)
     if codes is not None:
         qs = qs.filter(branch_code__in=codes)
+    # one value or several (?location=a,b · ?branch=170,180) — after the branch scoping above
     for f in ('lane', 'location', 'cause'):
-        if qp.get(f):
-            qs = qs.filter(**{f: qp[f]})
-    if qp.get('branch'):
-        qs = qs.filter(branch_code=qp['branch'])
+        qs = filter_in(qs, f, multi_values(qp, f))
+    qs = filter_in(qs, 'branch_code', multi_values(qp, 'branch'))
     if qp.get('q'):
         from apps.catalog.wildcard import wq
         qs = qs.filter(wq(qp['q'], 'item__name', 'item__softech_id'))

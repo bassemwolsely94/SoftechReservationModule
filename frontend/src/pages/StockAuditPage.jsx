@@ -15,6 +15,8 @@ import DataFreshnessBar from '../components/DataFreshnessBar'
 import DataTable, { SortIcon } from '../components/DataTable'
 import useGridKeyboard from '../hooks/useGridKeyboard'
 import useHelpTab from '../help/useHelpTab'
+import MultiSelectFilter from '../components/MultiSelectFilter'
+import BranchMultiSelect from '../components/BranchMultiSelect'
 
 const TABS = [
   { key: 'summary',     label: '📊 ملخص' },
@@ -36,12 +38,10 @@ const SEVERITY = {
   warning:  { label: 'تنبيه',  dot: 'bg-amber-500' },
   info:     { label: 'معلومة', dot: 'bg-sky-500' },
 }
-const STATUS_FILTERS = [
-  { key: 'open,escalated', label: 'المفتوحة' },
-  { key: 'reviewed', label: 'تمت مراجعتها' },
-  { key: 'dismissed', label: 'المتجاهلة' },
-  { key: '', label: 'الكل' },
-]
+// branch / status / severity / channel are multi-select arrays ([] = all); the server reads comma lists
+const STATUS_OPTIONS = Object.entries(STATUS).map(([code, s]) => ({ code, name: s.label }))
+const SEVERITY_OPTIONS = Object.entries(SEVERITY).map(([code, s]) => ({ code, name: s.label }))
+const csv = v => (Array.isArray(v) ? v.join(',') : v) || undefined
 const MOVE_LABEL = { reviewed: '✔ تمت المراجعة', dismissed: 'تجاهل', escalated: '⬆ تصعيد', open: '↺ إعادة فتح' }
 const DOC = { '115': 'بيع', '30': 'مرتجع', '10': 'شراء', '50': 'فائض جرد', '150': 'عجز جرد', '160': 'هالك',
               '125': 'صرف لفرع', '25': 'استلام من فرع', '80': 'حجز', '180': 'تسليم حجز' }
@@ -123,37 +123,26 @@ function Filters({ f, setF, branches, channels = [], showStatus = true }) {
           className="mt-0.5 border border-gray-200 rounded-md px-2 py-1 text-sm bg-white" />
       </label>
       {branches.length > 1 && (
-        <label className="flex flex-col text-xs text-gray-500">الفرع
-          <select value={f.branch} onChange={e => set('branch', e.target.value)}
-            className="mt-0.5 border border-gray-200 rounded-md px-2 py-1 text-sm bg-white">
-            <option value="">كل الفروع</option>
-            {branches.map(b => <option key={b.branchcode} value={b.branchcode}>{b.branch_name?.ar || b.branchcode}</option>)}
-          </select>
-        </label>
+        <div className="flex flex-col text-xs text-gray-500">الفرع
+          <BranchMultiSelect className="mt-0.5 w-44" valueKey="code" selected={f.branch} onChange={v => set('branch', v)}
+            branches={branches.map(b => ({ id: b.branchcode, softech_branch_id: b.branchcode, name_ar: b.branch_name?.ar }))} />
+        </div>
       )}
       {showStatus && (
         <>
-          <label className="flex flex-col text-xs text-gray-500">الحالة
-            <select value={f.status} onChange={e => set('status', e.target.value)}
-              className="mt-0.5 border border-gray-200 rounded-md px-2 py-1 text-sm bg-white">
-              {STATUS_FILTERS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-            </select>
-          </label>
-          <label className="flex flex-col text-xs text-gray-500">الخطورة
-            <select value={f.severity} onChange={e => set('severity', e.target.value)}
-              className="mt-0.5 border border-gray-200 rounded-md px-2 py-1 text-sm bg-white">
-              <option value="">الكل</option>
-              {Object.entries(SEVERITY).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
-            </select>
-          </label>
+          <div className="flex flex-col text-xs text-gray-500">الحالة
+            <MultiSelectFilter className="mt-0.5 w-40" options={STATUS_OPTIONS} selected={f.status}
+              onChange={v => set('status', v)} allLabel="الكل" showCode={false} />
+          </div>
+          <div className="flex flex-col text-xs text-gray-500">الخطورة
+            <MultiSelectFilter className="mt-0.5 w-32" options={SEVERITY_OPTIONS} selected={f.severity}
+              onChange={v => set('severity', v)} allLabel="الكل" showCode={false} />
+          </div>
           {channels.length > 0 && (
-            <label className="flex flex-col text-xs text-gray-500" data-tour="stock-audit-main-channel">قناة البيع
-              <select value={f.channel} onChange={e => set('channel', e.target.value)}
-                className="mt-0.5 border border-gray-200 rounded-md px-2 py-1 text-sm bg-white">
-                <option value="">كل القنوات</option>
-                {channels.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
-              </select>
-            </label>
+            <div className="flex flex-col text-xs text-gray-500" data-tour="stock-audit-main-channel">قناة البيع
+              <MultiSelectFilter className="mt-0.5 w-40" options={channels.map(c => ({ code: c.code, name: c.label }))}
+                selected={f.channel} onChange={v => set('channel', v)} allLabel="كل القنوات" showCode={false} />
+            </div>
           )}
           <label className="flex flex-col text-xs text-gray-500 grow min-w-[180px]">بحث
             <input value={f.q} onChange={e => set('q', e.target.value)} placeholder="كود صنف، اسم، رقم مستند…"
@@ -168,7 +157,7 @@ function Filters({ f, setF, branches, channels = [], showStatus = true }) {
 // ── Summary tab ───────────────────────────────────────────────────────────────
 
 function SummaryTab({ f, onOpenRule }) {
-  const params = { from: f.from, to: f.to, branch: f.branch || undefined }
+  const params = { from: f.from, to: f.to, branch: csv(f.branch) }
   const { data, isLoading, error } = useQuery({
     queryKey: ['stock-audit', 'summary', params], queryFn: () => stockAuditApi.summary(params).then(r => r.data) })
   if (isLoading) return <div className="py-12 text-center text-gray-400">جاري التحميل…</div>
@@ -302,11 +291,11 @@ function FindingsGrid({ f, rules, access }) {
   const [picked, setPicked] = useState(new Set())
   const [open, setOpen] = useState(null)
   const [msg, setMsg] = useState('')
-  const params = { from: f.from, to: f.to, branch: f.branch || undefined, status: f.status || undefined,
-                   severity: f.severity || undefined, channel: f.channel || undefined,
+  const params = { from: f.from, to: f.to, branch: csv(f.branch), status: csv(f.status),
+                   severity: csv(f.severity), channel: csv(f.channel),
                    q: f.q || undefined, rule: rules.join(','),
                    sort: f.sort, page }
-  const filterKey = [f.from, f.to, f.branch, f.status, f.severity, f.channel, f.q, f.sort, rules.join(',')].join('|')
+  const filterKey = [f.from, f.to, csv(f.branch), csv(f.status), csv(f.severity), csv(f.channel), f.q, f.sort, rules.join(',')].join('|')
   useEffect(() => { setPage(1); setPicked(new Set()) }, [filterKey])
   const { data, isLoading, error } = useQuery({
     queryKey: ['stock-audit', 'findings', params], queryFn: () => stockAuditApi.findings(params).then(r => r.data),
@@ -459,7 +448,7 @@ function RuleChips({ codes, value, onChange, meta }) {
 }
 
 function UserRanking({ f }) {
-  const params = { from: f.from, to: f.to, branch: f.branch || undefined }
+  const params = { from: f.from, to: f.to, branch: csv(f.branch) }
   const { data } = useQuery({ queryKey: ['stock-audit', 'by-user', params], queryFn: () => stockAuditApi.byUser(params).then(r => r.data) })
   const rows = useMemo(() => (data?.rows || []).map(r => ({
     ...r, user: r.user_name || r.usercode || '', branch: r.branch_name?.ar || r.branchcode,
@@ -674,8 +663,8 @@ export default function StockAuditPage() {
   const [tab, setTab] = useState('summary')
   useHelpTab(tab)
   const [rule, setRule] = useState({})
-  const [filters, setFilters] = useState({ from: daysAgo(29), to: isoDay(new Date()), branch: '',
-                                           status: 'open,escalated', severity: '', channel: '', q: '', sort: '-date' })
+  const [filters, setFilters] = useState({ from: daysAgo(29), to: isoDay(new Date()), branch: [],
+                                           status: ['open', 'escalated'], severity: [], channel: [], q: '', sort: '-date' })
   const me = useQuery({ queryKey: ['stock-audit', 'me'], queryFn: () => stockAuditApi.me().then(r => r.data) })
   const rulesMeta = useMemo(() => Object.fromEntries((me.data?.rules || []).map(r => [r.code, r])), [me.data])
   const summaryBranches = useQuery({
@@ -697,7 +686,7 @@ export default function StockAuditPage() {
   const openRule = (code, branchcode) => {
     const group = Object.entries(access.groups).find(([, codes]) => codes.includes(code))?.[0] || 'sales'
     setRule(r => ({ ...r, [group]: code }))
-    if (branchcode) setFilters(p => ({ ...p, branch: branchcode }))
+    if (branchcode) setFilters(p => ({ ...p, branch: [branchcode] }))
     setTab(group)
   }
   const groupRules = g => (rule[g] ? [rule[g]] : access.groups[g])

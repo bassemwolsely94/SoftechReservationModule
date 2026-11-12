@@ -609,7 +609,7 @@ SCREENS = [
                  'الرقم جنب كل تبويب = عدد أصنافه.\n• الصنف اللي تقول عليه «ليست وهمية» بينتقل لـ «المستبعدة» وبيرجع يتطلب بكميته العادية.',
                  'The number next to each tab = its item count.\n• An item you mark "Not phantom" moves to "Excluded" and is ordered at its normal quantity again.')},
             {'target': 'shortage-phantom-toolbar', 'label': T('كل التصنيفات · بحث بالكود/الاسم', 'All classes · Search by code/name'),
-             'text': T('فلتر بالتصنيف العام وابحث بالكود أو الاسم.', 'Filter by general class and search by code or name.'),
+             'text': T('فلتر بالتصنيف العام (تقدر تختار أكثر من تصنيف) وابحث بالكود أو الاسم.', 'Filter by general class (you can tick several) and search by code or name.'),
              'more': T(
                  'الفلتر والبحث بيطبقوا على التبويب المفتوح.\n• مفيد لو عايز تراجع تصنيف معيّن مرة واحدة.',
                  'The filter and search apply to the open tab.\n• Useful to review one class at a time.'),
@@ -648,8 +648,8 @@ SCREENS = [
                  '• «تأكيد»: الحالة تبقى «مؤكَّد» والتخفيض يفضل مطبّق.\n• «ليست وهمية»: بيسألك عن سبب (اختياري) وينقله للمستبعدة.\n• «إرجاع للتلقائي»: يلغي قرارك ويرجّع الحكم للمحرك.',
                  '• "Confirm": the status becomes "Confirmed" and the reduction stays applied.\n• "Not phantom": asks for an (optional) reason and moves it to Excluded.\n• "Back to automatic": cancels your decision and hands it back to the engine.')},
         ],
-        'updated': '2026-11-06',
-        'change_note': T('دور «مشاهد» ماعادش يقدر يفتح الشاشة دي.', 'The viewer role can no longer open this screen.'),
+        'updated': '2026-11-12',
+        'change_note': T('فلتر التصنيف بقى يقبل أكثر من اختيار.', 'The class filter now takes several choices.'),
     },
     {
         'key': 'shortage.mobile',
