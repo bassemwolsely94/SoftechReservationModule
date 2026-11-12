@@ -34,6 +34,28 @@ def _f(v):
     return float(_d(v).quantize(_Q))
 
 
+def _ids(v):
+    """One id, a list, or a comma string ("3,7") → [3, 7]; junk dropped."""
+    from core.multi_filter import multi_ids
+    return multi_ids({'v': v}, 'v')
+
+
+def filter_client_subclient(qs, client_ids, subclient_ids, *, client_field='subclient__client_id',
+                            subclient_field='subclient_id'):
+    """Several جهات and فئات at once. A picked فئة narrows only its own جهة; a picked جهة with no
+    فئة of its own stays whole. Nothing picked = no filter."""
+    clients, subs = _ids(client_ids), _ids(subclient_ids)
+    if subs:
+        from django.db.models import Q
+        from .models import InsuranceSubClient
+        sub_clients = set(InsuranceSubClient.objects.filter(id__in=subs).values_list('client_id', flat=True))
+        whole = [c for c in clients if c not in sub_clients]
+        return qs.filter(Q(**{f'{subclient_field}__in': subs}) | Q(**{f'{client_field}__in': whole}))
+    if clients:
+        return qs.filter(**{f'{client_field}__in': clients})
+    return qs
+
+
 def select_claims(date_from=None, date_to=None, client_id=None, subclient_id=None, statuses=None):
     from .models import InsuranceClaim
     qs = InsuranceClaim.objects.select_related('subclient__client')
@@ -45,10 +67,7 @@ def select_claims(date_from=None, date_to=None, client_id=None, subclient_id=Non
         qs = qs.filter(period_to__gte=date_from)
     if date_to:
         qs = qs.filter(period_from__lte=date_to)
-    if client_id:
-        qs = qs.filter(subclient__client_id=client_id)
-    if subclient_id:
-        qs = qs.filter(subclient_id=subclient_id)
+    qs = filter_client_subclient(qs, client_id, subclient_id)
     return list(qs.order_by('period_from', 'claim_number'))
 
 
