@@ -297,6 +297,19 @@ export const counsellingApi = {
   sendCard:    (data)      => api.post('/counselling/cards/send/', data),
 }
 
+// ── Data health (data lifecycle Stage 5, doc 36): /data-health. Rules, held files, restore = admin (server) ──
+export const dataHealthApi = {
+  growth:     ()               => api.get('/data-health/growth/'),
+  problems:   ()               => api.get('/data-health/problems/'),
+  refresh:    ()               => api.post('/data-health/refresh/'),
+  rules:      ()               => api.get('/data-health/rules/'),
+  updateRule: (key, data)      => api.patch(`/data-health/rules/${key}/`, data),
+  preview:    (key)            => api.post(`/data-health/rules/${key}/preview/`),
+  held:       (state = 'held') => api.get('/data-health/held/', { params: { state } }),
+  thumbnail:  (id)             => api.get(`/data-health/held/${id}/thumbnail/`, { responseType: 'blob' }),
+  restore:    (id)             => api.post(`/data-health/held/${id}/restore/`),
+}
+
 export const offersApi = {
   // Offer CRUD (OfferViewSet) — write gated to admin/supervisor/purchasing server-side
   list:   (params) => api.get('/offers/', { params }),

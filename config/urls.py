@@ -22,6 +22,7 @@ urlpatterns = [
     path('api/chronic/', include('apps.chronic.urls')),
     path('api/composition/', include('apps.composition.urls')),
     path('api/counselling/', include('apps.counselling.urls')),
+    path('api/data-health/', include('apps.data_lifecycle.urls')),
     path('api/followups/', include('apps.followups.urls')),
     path('api/callcenter/', include('apps.callcenter.urls')),
     path('api/audit/',     include('apps.audit.urls')),
