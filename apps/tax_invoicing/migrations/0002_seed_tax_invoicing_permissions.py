@@ -33,6 +33,6 @@ def ungrant(apps, schema_editor):
 class Migration(migrations.Migration):
     dependencies = [
         ('tax_invoicing', '0001_initial'),
-        ('users', '0054_alter_rolemoduleaccess_module'),
+        ('users', '0055_alter_rolemoduleaccess_module'),
     ]
     operations = [migrations.RunPython(grant, ungrant)]

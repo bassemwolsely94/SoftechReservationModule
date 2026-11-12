@@ -3,6 +3,7 @@ from rest_framework import serializers
 from apps.notifications.phone_alerts.hooks import RECORD_EVENTS, PhoneAlertStatusMixin, PhoneAlertWriteMixin
 from .models import TransferRequest, TransferRequestItem, TransferRequestMessage
 from apps.catalog.models import ItemStock
+from apps.data_lifecycle.display import RetentionNoteMixin
 
 
 # ── Item line serializers ─────────────────────────────────────────────────────
@@ -40,7 +41,8 @@ class TransferRequestItemWriteSerializer(serializers.ModelSerializer):
 
 # ── Message serializers ───────────────────────────────────────────────────────
 
-class TransferRequestMessageSerializer(serializers.ModelSerializer):
+class TransferRequestMessageSerializer(RetentionNoteMixin, serializers.ModelSerializer):
+    retention_fields = ('attachment', 'voice_note')
     created_by_name   = serializers.CharField(source='created_by.full_name', read_only=True)
     created_by_id     = serializers.IntegerField(source='created_by.id',     read_only=True)
     created_by_role   = serializers.CharField(source='created_by.role',      read_only=True)

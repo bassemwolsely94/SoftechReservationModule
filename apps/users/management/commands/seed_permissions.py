@@ -41,6 +41,7 @@ ALL_MODULES = [
     'tax_invoicing', # الفواتير الضريبية (doc 36): view · create drafts · edit item mapping · approve review + documents = accountant; finalize (send to ETA, issuer settings, exclusion bases) = admin or named grant
     'counselling',   # إرشادات الاستخدام (Project 4): 'edit' = write / AI-draft / link items, 'approve' = make customer-facing
     'usage_print',   # طباعة طريقة الاستخدام: 'view' open, 'create' confirm + print, 'edit' presets + slip settings
+    'hr_attendance', # الحضور والبصمة: no role but admin; everyone else via named grants (apps/hr/attendance/access.py)
 ]
 
 ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize']

@@ -20,7 +20,7 @@ import time
 from typing import Optional
 
 from django.db import transaction
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
 from django.utils import timezone
 
 from apps.catalog.models import Item
@@ -137,10 +137,22 @@ def build_item_queryset(filters: dict) -> list:
 
 
 def _items_with_approved_image() -> QuerySet:
+    """An approved row whose file the data lifecycle removed is not an image."""
     from apps.product_experience.models import ProductMedia
     return (ProductMedia.objects
             .filter(media_type='image', approved=True)
+            .exclude(file='')
             .values_list('item_id', flat=True))
+
+
+def _seen_before(item: Item) -> tuple:
+    """(source URLs, pHashes) a job must not fetch again for this item. Rejected and unreviewed rows keep blocking
+    after the data lifecycle removes their file, which is why those rows stay. An approved row whose file was
+    removed does not block: its item was obsolete and is back, so it needs that image again."""
+    rows = ImageCandidate.objects.filter(item=item).exclude(
+        Q(status__in=('approved', 'auto_approved')) & (Q(local_file='') | Q(local_file__isnull=True)))
+    return (set(rows.values_list('source_url', flat=True)),
+            list(rows.exclude(phash='').values_list('phash', flat=True)))
 
 
 def sales_ranks() -> dict:
@@ -214,8 +226,9 @@ def sales_coverage(ranks: dict | None = None) -> dict:
 def _filter_by_abc(qs: QuerySet, abc: str) -> QuerySet:
     """Filter items by ABC class from the latest demand run."""
     try:
-        from apps.purchasing.models import DemandCalculationRun, ItemDemandAggregated
-        run = DemandCalculationRun.objects.filter(status='success').order_by('-calc_date').first()
+        from apps.purchasing.models import ItemDemandAggregated
+        from apps.purchasing.shortage import _latest_run
+        run = _latest_run(None)
         if not run:
             return qs
         item_ids = (
@@ -254,7 +267,7 @@ def run_job(job: ImageSearchJob) -> None:
 
         # ── Skip check ────────────────────────────────────────────────────────
         from apps.product_experience.models import ProductMedia
-        has_image = ProductMedia.objects.filter(item=item, media_type='image', approved=True).exists()
+        has_image = ProductMedia.objects.filter(item=item, media_type='image', approved=True).exclude(file='').exists()
         if has_image and job.attempt_count == 0 and job.priority < 3:
             job.status      = 'skipped'
             job.finished_at = timezone.now()
@@ -269,8 +282,7 @@ def run_job(job: ImageSearchJob) -> None:
                 learned_weights[ins.source_type] = ins.weight
 
         # ── Collect seen URLs + pHashes from previous attempts ────────────────
-        seen_urls    = set(ImageCandidate.objects.filter(item=item).values_list('source_url', flat=True))
-        phashes_seen = list(ImageCandidate.objects.filter(item=item).exclude(phash='').values_list('phash', flat=True))
+        seen_urls, phashes_seen = _seen_before(item)
 
         # ── CLOSE DB BEFORE LONG-RUNNING NETWORK I/O ─────────────────────────
         # Releases the PostgreSQL connection back to the pool while we do HTTP.
@@ -417,8 +429,16 @@ def run_job(job: ImageSearchJob) -> None:
 
 # ── Approval ───────────────────────────────────────────────────────────────────
 
+class CandidateHasNoFile(Exception):
+    """The candidate's file is gone (the data lifecycle keeps the row). The message is Arabic and safe to show."""
+
+
 def approve_candidate(candidate: ImageCandidate, user=None, set_as_primary: bool = True) -> None:
     from apps.product_experience.models import ProductMedia
+
+    # Before anything changes: an approval with no file would take the primary slot from a real image.
+    if not candidate.local_file:
+        raise CandidateHasNoFile('لا يمكن اعتماد هذه الصورة لأن ملفها لم يعد موجودًا. أعد تنزيلها أولًا أو ارفضها.')
 
     item = candidate.item
     if set_as_primary:

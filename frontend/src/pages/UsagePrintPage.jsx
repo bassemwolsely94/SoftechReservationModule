@@ -13,6 +13,7 @@ import { usagePrintApi, branchesApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
 import useAuthStore from '../store/authStore'
 import { printUsageSlip } from '../components/UsageSlipPrint'
+import RemovedFileNote from '../components/RemovedFileNote'
 
 const errText = (e) => e?.response?.data?.detail || 'حدث خطأ — حاول مرة أخرى.'
 
@@ -134,12 +135,15 @@ function Prescription({ sheet, canAct, onUploaded, toast }) {
           </button>
           <span className="text-xs text-gray-500">{sheet.prescription_origin === 'pos' ? 'من أمر نقطة البيع' : 'مرفقة هنا'}</span>
         </>
-      ) : canAct && (
+      ) : (<>
+        <RemovedFileNote date={sheet.retention_removed?.prescription_image} />
+        {canAct && (
         <button onClick={() => fileRef.current?.click()} disabled={up.isPending}
           className="text-sm px-3 py-2 rounded-lg border border-dashed text-gray-600 hover:bg-gray-50">
           {up.isPending ? 'جاري الرفع…' : '📷 إرفاق صورة الروشتة'}
         </button>
-      )}
+        )}
+      </>)}
       <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden"
         onChange={e => { const f = e.target.files?.[0]; if (f) up.mutate(f); e.target.value = '' }} />
       {open && (

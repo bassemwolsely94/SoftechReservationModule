@@ -2,7 +2,8 @@ from django.urls import path
 from rest_framework.routers import SimpleRouter
 from .views import (
     SeasonalityIndexViewSet, ForecastRunViewSet, ForecastAccuracyViewSet, KpiBoardView,
-    KpiSheetExportView, KpiRefreshView, ForecastScenarioViewSet, BacktestViewSet, GrowthView,
+    KpiSheetExportView, KpiRefreshView, SalespersonBoardView, ForecastScenarioViewSet,
+    BacktestViewSet, GrowthView,
     ProfitExclusionViewSet, ForecastReferenceView, ForecastPlanView,
 )
 
@@ -18,6 +19,7 @@ urlpatterns = router.urls + [
     path('kpi-board/',        KpiBoardView.as_view(),       name='kpi-board'),
     path('kpi-board/export/',  KpiSheetExportView.as_view(), name='kpi-board-export'),
     path('kpi-board/refresh/', KpiRefreshView.as_view(),     name='kpi-board-refresh'),
+    path('salesperson-board/', SalespersonBoardView.as_view(), name='salesperson-board'),
     path('growth/',           GrowthView.as_view(),         name='kpi-growth'),
     path('references/',       ForecastReferenceView.as_view(), name='forecast-references'),
     path('plan/',             ForecastPlanView.as_view(),   name='forecast-plan'),

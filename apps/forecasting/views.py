@@ -296,6 +296,71 @@ class KpiBoardView(APIView):
         }
 
 
+class SalespersonBoardView(APIView):
+    """GET /api/forecasting/salesperson-board/?year=&month= — daily follow-up board for
+    SALESPEOPLE that have an assigned target this month. There is no salesperson rollup
+    (KpiActualRollup is branch-only), so achieved is resolved LIVE per (rep × metric) over
+    the complete days of the month; % is achievement vs the target pro-rated to the latest
+    complete data day (same convention as the branch board). Only reps with ≥1 target show,
+    which keeps the live-resolver work bounded to the assigned set."""
+    permission_classes = [IsAuthenticated, CanUseForecasting]
+    METRICS = BOARD_METRICS
+
+    def get(self, request):
+        from apps.incentives.models import SalesTarget
+        from apps.forecasting import kpi_board
+        from apps.forecasting.kpi import KpiResolver
+
+        today = date.today()
+        year  = int(request.query_params.get('year',  today.year))
+        month = int(request.query_params.get('month', today.month))
+
+        m_start, m_end, data_through, total, elapsed, frac = kpi_board.month_pacing(year, month)
+
+        # assigned salesperson targets overlapping the month → {user: {metric: (value, id)}}
+        reps = {}
+        for t in (SalesTarget.objects.filter(
+                scope_type=SalesTarget.SCOPE_SALESPERSON, metric__in=self.METRICS,
+                period_start__lte=m_end, period_end__gte=m_start)
+                .exclude(softech_user='').order_by('id')
+                .values('id', 'softech_user', 'metric', 'target_value')):
+            reps.setdefault(t['softech_user'], {})[t['metric']] = (float(t['target_value'] or 0), t['id'])
+
+        resolver = KpiResolver()
+
+        def achieved(user, metric):
+            if data_through is None:
+                return 0.0
+            return float(resolver.resolve(metric, start=m_start, end=data_through, softech_user=user))
+
+        rows = []
+        totals_actual = {m: 0.0 for m in self.METRICS}
+        totals_target = {m: 0.0 for m in self.METRICS}
+        for user in sorted(reps):
+            cells = {}
+            for m in self.METRICS:
+                tv, tid = reps[user].get(m, (0.0, None))
+                a = achieved(user, m)
+                cells[m] = kpi_board.make_cell(a, tv, tid, data_through, m_end, frac)
+                totals_actual[m] += a
+                totals_target[m] += tv
+            rows.append({'softech_user': user, 'label': f'مندوب {user}', 'cells': cells})
+
+        totals = {m: kpi_board.make_cell(totals_actual[m], totals_target[m], None,
+                                         data_through, m_end, frac) for m in self.METRICS}
+
+        return Response({
+            'year': year, 'month': month,
+            'has_data': bool(rows),
+            'data_through': data_through.isoformat() if data_through else None,
+            'days_elapsed': elapsed, 'days_total': total,
+            'metrics': [{'key': m, 'label': KpiActualRollup.METRIC_LABELS.get(m, m),
+                         'is_count': m == KpiActualRollup.M_CUSTOMERS} for m in self.METRICS],
+            'salespeople': rows,
+            'totals': totals,
+        })
+
+
 class KpiRefreshView(APIView):
     """GET — rollup freshness for the current + previous months (computed_at vs last sales
     sync, stale flag). POST — rebuild in the background every stale month plus the current

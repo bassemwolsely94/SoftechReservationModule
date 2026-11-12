@@ -130,10 +130,13 @@ class CampaignDispatcher:
           segment, chronic_category, last_purchase_days_max,
           last_purchase_days_min, item_id, branch_id, min_ltv
         """
+        from apps.customers.account_state import outreach_q
         from apps.customers.models import Customer
 
         f = self.campaign.target_filter or {}
-        qs = Customer.objects.filter(is_guest=False, is_account_placeholder=False).exclude(phone='')
+        # B7: closed / deceased / entity / merged SOFTECH codes are never messaged (account_state.outreach_q).
+        qs = (Customer.objects.filter(is_guest=False, is_account_placeholder=False).exclude(phone='')
+              .filter(outreach_q()))
 
         if f.get('segment'):
             segments = f['segment'] if isinstance(f['segment'], list) else [f['segment']]

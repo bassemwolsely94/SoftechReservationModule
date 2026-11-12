@@ -66,6 +66,7 @@ MODULE_CHOICES = [
     ('tax_invoicing', 'الفواتير الضريبية'),
     ('counselling',  'إرشادات الاستخدام'),
     ('usage_print',  'طباعة طريقة الاستخدام'),
+    ('hr_attendance', 'الحضور والبصمة'),
 ]
 
 ACTION_CHOICES = [

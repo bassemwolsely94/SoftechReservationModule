@@ -22,6 +22,7 @@ from .models import (
 # ─────────────────────────────────────────────────────────────────────────────
 
 from apps.customers.phone_mask import RecordPhoneMask, CustomerPhoneMask  # Batch 5b
+from apps.data_lifecycle.display import RetentionNoteMixin
 
 class AddressUpdateSerializer(RecordPhoneMask, serializers.ModelSerializer):
     phone_mask_fields = ('delivery_phone',)
@@ -63,7 +64,8 @@ class AddressUpdateWriteSerializer(serializers.ModelSerializer):
 # CallLogAttachment
 # ─────────────────────────────────────────────────────────────────────────────
 
-class CallLogAttachmentSerializer(serializers.ModelSerializer):
+class CallLogAttachmentSerializer(RetentionNoteMixin, serializers.ModelSerializer):
+    retention_fields = ('file',)
     file_type_label  = serializers.CharField(source='get_file_type_display', read_only=True)
     uploaded_by_name = serializers.CharField(source='uploaded_by.full_name', read_only=True, default=None)
     file_url         = serializers.SerializerMethodField()
@@ -95,7 +97,8 @@ class CallLogAttachmentSerializer(serializers.ModelSerializer):
 # CaseEvent
 # ─────────────────────────────────────────────────────────────────────────────
 
-class CaseEventSerializer(serializers.ModelSerializer):
+class CaseEventSerializer(RetentionNoteMixin, serializers.ModelSerializer):
+    retention_fields = ('attachment',)
     event_type_label  = serializers.CharField(source='get_event_type_display', read_only=True)
     created_by_name   = serializers.CharField(source='created_by.full_name',   read_only=True, default=None)
     attachment_url    = serializers.SerializerMethodField()
@@ -316,7 +319,8 @@ class CallLogListSerializer(RecordPhoneMask, serializers.ModelSerializer):
         return bool(obj.voice_transcript)
 
 
-class CallLogDetailSerializer(RecordPhoneMask, serializers.ModelSerializer):
+class CallLogDetailSerializer(RetentionNoteMixin, RecordPhoneMask, serializers.ModelSerializer):
+    retention_fields = ('prescription_image',)
     phone_mask_fields = ('phone_number', 'customer_phone')
     phone_mask_links = ('whatsapp_url',)
     customer_name    = serializers.CharField(source='customer.name',          read_only=True)

@@ -283,6 +283,8 @@ SCREENS = [
               'Messy files: when a bundle is uploaded the system skips blank pages, auto-rotates sideways pages, and flags incomplete, paper-cut or low-quality (handwriting) invoices so you review them carefully.'),
         ],
         'tips': [
+            T('الملف اللي عدّى مدة الاحتفاظ بيظهر مكانه «أُزيل وفق سياسة الاحتفاظ» ومعاه التاريخ.',
+              'A file past its keep period shows "removed under retention" with the date.'),
             T('كل إجراء بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الفواتير): التعديل وتشغيل القراءة الآلية يحتاجوا «تعديل»، «تأكيد» و«رفض» وعمل مرتجع يحتاجوا «اعتماد»، والإرسال لـ SOFTECH يحتاج «إنهاء».',
               'Every action is checked on the server (Permissions Matrix, invoices module): editing and running OCR need "edit", "Confirm", "Reject" and creating a return need "approve", and sending to SOFTECH needs "finalize".'),
             T('بعد دخول الفاتورة طابور الترحيل أو ترحيلها إلى SOFTECH لا يُعدَّل رأسها ولا سطورها — التصحيح بمرتجع.',
@@ -521,7 +523,7 @@ SCREENS = [
              'warn': T('القالب بيأثر على كل فواتير المورد ده الجاية — قالب غلط يبوّظ قراءتها كلها.', "The template affects all this supplier's future invoices — a wrong one spoils them all."),
              'open_hint': T('اضغط «⚙ قالب المورد» الأول.', 'Press "⚙ Supplier template" first.')},
         ],
-        'updated': '2026-11-05',
-        'change_note': T('الترحيل: سبب مكتوب للتحذيرات وللتكرار، حد للكميات غير المعتادة، وعدد الفواتير لتأكيد الدفعة؛ و«ترحيل المحدد» من مكان لا يسمح بالكتابة في SOFTECH يُرفض قبل تغيير أي فاتورة', 'Posting: a written reason for warnings and duplicates, limits on unusual quantities, and the invoice count to confirm a batch; "Post selected" from a place that may not write to SOFTECH is refused before any invoice changes'),
+        'updated': '2026-11-08',
+        'change_note': T('توضيح ظهور الملفات اللي عدّت مدة الاحتفاظ', 'Explains how files past their keep period appear'),
     },
 ]

@@ -1099,6 +1099,9 @@ class SalesRatePushLine(models.Model):
     # branch server and server 100 hold independent values, so both "befores" are kept.
     old_rate_hq = models.DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)
     new_rate  = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    # seasonal push (owner 2026-11-10): the engine rate before the factor, and the factor
+    base_rate     = models.DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)
+    season_factor = models.DecimalField(max_digits=6, decimal_places=3, null=True, blank=True)
 
     eligible  = models.BooleanField(default=True)
     reason    = models.CharField(max_length=120, blank=True)   # why skipped, if not eligible

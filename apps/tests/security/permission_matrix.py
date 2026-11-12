@@ -63,6 +63,7 @@ BRANCH_SCOPE = {
     'replacement':  'own — scoped_cases + authz.require (accessible_branch_ids = branch_scope)',
     'stock_audit':  'own — named branch managers see their branches (branch_scope); management all',
     'pic_analytics': 'own — named branch managers see their branches (branch_scope); management all',
+    'hr_attendance': 'all — company-level by decision (2026-11-07): admins and named grantees only, never branch-scoped (apps/hr/attendance/access.py)',
     'gamification': 'n/a — own data; rankings are network-wide by design',
     'help':         'n/a — no branch data',
     'tax_invoicing': 'all — fiscal documents belong to the taxpayer and a claim spans branches; RBAC module only (accountant, admin)',
