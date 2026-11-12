@@ -279,6 +279,8 @@ def maybe_launch_runner() -> bool:
     if not enabled():
         return False
     enqueue_recent_cdr()
+    if not getattr(settings, 'WHISPER_LAUNCH_RUNNER', True):
+        return False   # another machine transcribes (its own nightly run_whisper_queue)
     control = WhisperQueueControl.get()
     if control.paused or run_is_active(control) or not in_window(control):
         return False

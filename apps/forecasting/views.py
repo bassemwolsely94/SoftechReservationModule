@@ -518,6 +518,32 @@ class ForecastScenarioViewSet(viewsets.ModelViewSet):
         summary = ForecastEngine().commit(scenario, created_by=sp)
         return Response({**summary, 'scenario': ForecastScenarioSerializer(scenario).data})
 
+    @action(detail=True, methods=['post'], url_path='commit-cell')
+    def commit_cell(self, request, pk=None):
+        """Set ONE target (branch/salesperson/category × metric) from this scenario's forecast
+        — the per-cell «اعتمد من النموذج» on the KPI board. Body: {metric, branch_id|scope_key}."""
+        sp = self._guard()
+        scenario = self.get_object()
+        metric = request.data.get('metric')
+        if not metric:
+            return Response({'detail': 'حدّد المؤشر'}, status=status.HTTP_400_BAD_REQUEST)
+        branch_id = request.data.get('branch_id')
+        scope_key = request.data.get('scope_key')
+        # Branch roles may only pull cells for branches they can see (round-2 R4).
+        if branch_id is not None:
+            from core.branch_scope import branch_ids
+            ids = branch_ids(request.user)
+            if ids is not None and int(branch_id) not in ids:
+                return Response({'detail': 'ليس لديك صلاحية على هذا الفرع'},
+                                status=status.HTTP_403_FORBIDDEN)
+        try:
+            res = ForecastEngine().commit_cell(
+                scenario, metric, branch_id=int(branch_id) if branch_id is not None else None,
+                scope_key=scope_key, created_by=sp)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(res)
+
 
 class ForecastReferenceView(APIView):
     """GET grounded reference values; POST (analyst) recomputes them / sets fresh inflation.

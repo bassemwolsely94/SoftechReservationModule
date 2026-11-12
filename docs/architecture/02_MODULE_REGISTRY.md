@@ -341,6 +341,7 @@ Every module in the platform is registered here with its purpose, status, and de
 | Related Screens | FinanceHubPage (tabs incl. GL: القيود، ميزان المراجعة، القوائم المالية، كشف حساب، دليل الحسابات) |
 | General ledger | `apps/finance/gl/` — finance's own COA + journal + reports (doc 35); `/api/finance/gl/`; RBAC `ledger`, role `accountant`; no SOFTECH reads/writes |
 | GL drafting engine | `apps/finance/gl/{drafting,rules,parties}.py`, `sources/*`, `queries/sybase_gl.py` (doc 35, Plan 2) — SOFTECH SELECT-only readers → versioned `PostingRule`s → **draft** entries via `ledger.save_draft`; parties (`GLParty`), maps (`GLSourceMap`), exceptions inbox, daily 08:30 job + «تحديث الآن»; never approves, never writes SOFTECH |
+| GL close and reconcile | `apps/finance/gl/{close,corrections,compare,softech_stock,softech_checks,subledgers,manual_import,validation}.py` (doc 35, Plan 3) — month close with SOFTECH closing stock (read-only), auto-reversal, reopen cascade, year-end, late corrections into the first open month, ledger-vs-SOFTECH comparison, sub-ledgers, manual-journal import and workbook validation; screens `/finance/{close,subledgers,softech-compare}`; nightly `gl_compare_refresh` (off with `GL_DRAFTING_SCHEDULE_ENABLED`); never writes SOFTECH |
 
 ---
 

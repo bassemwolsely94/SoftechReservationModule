@@ -26,22 +26,17 @@ from django.utils import timezone
 from apps.audit.models import AuditLog
 from apps.branches.models import Branch
 from apps.finance.models import (
-    FinancialPeriod, GLDraftRun, GLSourceDoc, LedgerEntry, PostingRule, SourceException,
+    GLDraftRun, GLSourceDoc, LedgerEntry, PostingRule, SourceException,
 )
 from apps.users.models import StaffProfile
 
 from . import ledger
+from .corrections import effective_lines, net_lines
 from .ledger import LedgerError
+from .periods import accepts_postings
 from .rules import SOURCE_FIELDS, RuleMiss, build_lines, select_rule
 from .sources import READERS, SourceDoc, _canon, content_hash
 from .sources import expenses, purchases, sales, treasury  # noqa: F401  (register the readers)
-
-try:   # Plan 3 Task 2
-    from apps.finance.gl.periods import accepts_postings
-except ImportError:   # same contract until Plan 3 lands
-    def accepts_postings(d) -> bool:
-        p = FinancialPeriod.objects.filter(year=d.year, month=d.month, period_type='month').first()
-        return p is None or p.status == 'open'
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +180,24 @@ def _group_key(rule, doc) -> str:
 def _to_doc(sd: GLSourceDoc) -> SourceDoc:
     return SourceDoc(sd.source_type, sd.source_key, sd.doc_date, sd.branch_code, sd.kind, sd.personcode,
                      {k: Decimal(str(v)) for k, v in (sd.amounts or {}).items()}, dict(sd.attrs or {}))
+
+
+def group_proposal(gk):
+    """(canonical lines, member keys): what a rebuild of the group proposes from the amounts its docs last read, with
+    no SOFTECH read. Lines None when they no longer build (a rule or map changed): a redraft reports why."""
+    members = list(GLSourceDoc.objects.filter(group_key=gk, status__in=(*MEMBER_STATUSES, 'exception'))
+                   .select_related('rule').order_by('doc_date', 'source_key', 'pk')) if gk else []
+    keys = [sd.source_key for sd in members]
+    if not members:
+        return [], keys
+    rule = next((sd.rule for sd in members if sd.status == 'new' and sd.rule_id), None) or members[0].rule
+    hq = Branch.objects.filter(softech_branch_id='100').first()
+    if rule is None or (hq is None and any(ln.get('branch') == 'hq' for ln in rule.lines)):
+        return None, keys
+    try:
+        return _canon(build_lines(rule, [_to_doc(sd) for sd in members], hq_branch_id=hq.pk if hq else None)), keys
+    except RuleMiss:
+        return None, keys
 
 
 def _line_tuple(ln: dict):
@@ -486,7 +499,8 @@ class _Engine:
         good_pks = [sd.pk for sd in good]
 
         if not lines:   # nothing to post: an empty or zero group
-            if live is not None and not self._remove(live, gk, targets, pending_ok, {'held_out': len(bad)}):
+            if (live is not None and not self._corrected_to(live, lines)
+                    and not self._remove(live, gk, targets, pending_ok, {'held_out': len(bad)})):
                 return
             if good:
                 self._set(good_pks, status='skipped', entry=None)
@@ -499,12 +513,21 @@ class _Engine:
         desc = (lines[0].get('description') or rule.description or gk)[:500]
         branch_ids = {ln['branch_id'] for ln in lines if ln.get('branch_id')}
         branch = Branch.objects.get(pk=branch_ids.pop()) if len(branch_ids) == 1 else None
-        if live is not None and self._same(live, entry_date, rule.book, desc, branch, good[0].source_type, lines):
+        if live is not None and (
+                self._corrected_to(live, lines) if self._live_corrections(live).exists()
+                else self._same(live, entry_date, rule.book, desc, branch, good[0].source_type, lines)):
             self._set(good_pks, status='drafted', entry=live)
             self.counts['drafted'] += len(pending_ok)
             self._settled(gk, live, live, good_pks, targets)
             return
-        if not accepts_postings(entry_date) or (live is not None and not accepts_postings(live.entry_date)):
+        if (not accepts_postings(entry_date)
+                or (live is not None and not self._can_reverse(live))):
+            if live is not None and net_lines(lines) == effective_lines(live, include_drafts=True):
+                # a description or attribute only: the ledger already says this, nothing to correct
+                self._set(good_pks, status='drafted', entry=live)
+                self.counts['drafted'] += len(pending_ok)
+                self._settled(gk, live, live, good_pks, targets)
+                return
             self._closed(gk, live, targets, pending_ok, lines)
             return
         if live is not None and self._edited_by_user(live):
@@ -523,7 +546,7 @@ class _Engine:
                     entry = ledger.save_draft(entry=live, **kw)
                     counts = ('replaced',)
                 else:
-                    ledger.reverse(live.pk, user=self.user, reason=REVERSE_REASON)
+                    self._reverse_live(live)
                     entry = ledger.save_draft(**kw)
                     counts = ('reversed', 'created')
         except LedgerError as err:
@@ -537,7 +560,7 @@ class _Engine:
 
     def _remove(self, live, gk, targets, pending_ok, edited_extra=None) -> bool:
         """Delete a draft / reverse an approved entry whose group has nothing left to post."""
-        if not accepts_postings(live.entry_date):
+        if not self._can_reverse(live):
             self._closed(gk, live, targets, pending_ok, [])
             return False
         if self._edited_by_user(live):
@@ -545,18 +568,46 @@ class _Engine:
             return False
         try:
             with transaction.atomic():
-                if live.status == 'draft':   # Ruling P4: same as the Plan 1 DELETE view
-                    ledger._audit('gl_entry_draft_deleted', user=self.user, obj=live,
-                                  old_data=ledger._snapshot(live), note=REVERSE_REASON)
-                    live.delete()
+                if live.status == 'draft':
+                    self._delete_draft(live)
                     self.counts['deleted'] += 1
                 else:
-                    ledger.reverse(live.pk, user=self.user, reason=REVERSE_REASON)
+                    self._reverse_live(live)
                     self.counts['reversed'] += 1
         except LedgerError as err:
             self._ledger_error(gk, err, targets, pending_ok)
             return False
         return True
+
+    def _live_corrections(self, live):
+        return live.corrections.filter(status__in=LIVE)
+
+    def _corrected_to(self, live, lines) -> bool:
+        """The entry has corrections, and with them it already says what the group proposes."""
+        return (self._live_corrections(live).exists()
+                and net_lines(lines) == effective_lines(live, include_drafts=True))
+
+    def _can_reverse(self, live) -> bool:
+        """The entry and every live correction of it sit in months that take postings."""
+        return accepts_postings(live.entry_date) and all(
+            accepts_postings(day) for day in self._live_corrections(live).values_list('entry_date', flat=True))
+
+    def _reverse_live(self, live):
+        """Reverse an approved entry in its own month, its corrections with it (the redraft carries
+        the whole figure). The date is explicit: a month closing mid-run must raise, not post a
+        mirror into a later month. Runs inside the caller's transaction."""
+        for fix in self._live_corrections(live).select_for_update():
+            if fix.status == 'draft':
+                self._delete_draft(fix)
+            else:
+                ledger.reverse(fix.pk, user=self.user, reason=REVERSE_REASON, entry_date=fix.entry_date,
+                               _from_engine=True)
+        ledger.reverse(live.pk, user=self.user, reason=REVERSE_REASON, entry_date=live.entry_date, _from_engine=True)
+
+    def _delete_draft(self, draft):   # Ruling P4: same as the Plan 1 DELETE view
+        ledger._audit('gl_entry_draft_deleted', user=self.user, obj=draft,
+                      old_data=ledger._snapshot(draft), note=REVERSE_REASON)
+        draft.delete()
 
     def _same(self, live, entry_date, book, desc, branch, source_type, lines) -> bool:
         if (live.entry_date, live.book, live.description, live.branch_id, live.source_type) != (
@@ -596,18 +647,25 @@ class _Engine:
         row = (SourceException.objects.select_for_update()
                .filter(status='open', kind='closed_period_change', detail__group_key=gk).order_by('pk').first())
         if row is None:
-            # the first member that does not already hold another group's open change (one open
-            # row per doc and kind); the lowest member otherwise (that row then follows this group)
+            # one open row per doc and kind: a member holding another group's open change is never
+            # taken over. A member still in this group first, then any free one. All busy: no row;
+            # each of them has an open row, so the next run retries (mark_exception_resolved
+            # releases a member that moved here once the row it holds resolves).
             busy = set(SourceException.objects.filter(
                 status='open', kind='closed_period_change', source_doc_id__in=list(docs))
                 .values_list('source_doc_id', flat=True))
-            holder = next((sd for sd in members if sd.pk not in busy), members[0] if members else None)
+            free = [sd for sd in members if sd.pk not in busy]
+            holder = next((sd for sd in free if sd.group_key == gk), free[0] if free else None)
             if holder is not None:
-                SourceException.objects.update_or_create(
+                SourceException.objects.create(
                     source_doc=holder, kind='closed_period_change', status='open',
-                    defaults={'source_date': holder.doc_date, **fields})
+                    source_date=holder.doc_date, **fields)
                 self.counts['exceptions'] += 1
+            elif members:
+                self.group_errors[gk] = 'holder_busy'
         else:
+            if row.source_doc_id in docs:   # its date can move (a document-granularity group's key has none)
+                fields['source_date'] = docs[row.source_doc_id].doc_date
             for k, v in fields.items():
                 setattr(row, k, v)
             row.save(update_fields=list(fields))
@@ -657,6 +715,7 @@ EDIT_RELEASED = 'gl_entry_edit_released'   # accept SOFTECH: earlier edits no lo
 EDIT_KEPT = 'gl_entry_edit_kept'           # keep my edit: nothing happens until the next change
 ACCEPT_NOTE = 'اعتُمدت نسخة سوفتيك'
 KEEP_NOTE = 'أُبقي تعديل المحاسب'
+LATE_POSTED = ('gl_late_document_drafted', 'gl_late_correction_drafted')   # corrections.py
 
 
 class DecisionError(Exception):
@@ -669,10 +728,12 @@ class DecisionError(Exception):
 
 def edited_by_user(live, *, system=None) -> bool:
     """Ruling P21 + P23: an accountant (anyone but the drafting user) saved this entry after the
-    latest «اعتماد نسخة سوفتيك» on it. AuditLog ids are monotonic, so "newer" = higher id."""
+    latest «اعتماد نسخة سوفتيك» on it. AuditLog ids are monotonic, so "newer" = higher id.
+    A late document or correction is saved under the accountant who posted it, with its own audit
+    row right after: that save is the system's lines, not an edit."""
     system = system or system_user()
     rows = AuditLog.objects.filter(model_name='LedgerEntry', object_id=str(live.pk))
-    released = (rows.filter(action=EDIT_RELEASED).order_by('-id')
+    released = (rows.filter(action__in=(EDIT_RELEASED, *LATE_POSTED)).order_by('-id')
                 .values_list('id', flat=True).first())
     edits = rows.filter(action='gl_entry_draft_saved').exclude(user_id=system.pk)
     if released:

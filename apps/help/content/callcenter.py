@@ -295,6 +295,12 @@ SCREENS = [
             T('«مخاطر الشكوى» تظهر للعملاء ذوي التاريخ السلبي — تعامل بعناية.', '"Complaint risk" shows for customers with a negative history — handle with care.'),
             T('بعد «🤖 تلخيص AI» يظهر الملخص ومشاعر العميل ودرجة الأهمية والإجراء المقترح تحت الأزرار خلال ثوانٍ.',
               'After "🤖 AI summary" the summary, customer sentiment, urgency and suggested next action appear under the buttons within seconds.'),
+            T('«🎧 هاتف المتصفح» (لمن فُعّل له): ترد على المكالمات وتتصل من الصفحة نفسها بسماعة، مع كتم وانتظار وتحويل لرقم داخلي — بدون هاتف مكتب. '
+              'زر «📞» يتصل من المتصفح عندما يكون جاهزاً، وإلا يرن هاتف مكتبك كالمعتاد.',
+              '"🎧 Browser phone" (for staff it is enabled for): answer and place calls from the page with a headset, with mute, hold and transfer to an extension — no desk phone. '
+              'The "📞" button calls from the browser when it is ready, otherwise your desk phone rings as usual.'),
+            T('«💬 آخر الرسائل» يعرض آخر رسائل العميل على واتساب ووسائل التواصل بجانب ملفه؛ «فتح المحادثة» ينقلك للرد من صندوق الرسائل الموحّد.',
+              '"💬 Latest messages" shows the customer\'s recent WhatsApp and social messages beside their profile; "Open conversation" takes you to reply from the unified inbox.'),
             T('في «آخر المكالمات»: «📝 تفريغ» يحوّل تسجيل المكالمة إلى نص ثم يلخصها تلقائياً. ويمكن للمدير تفعيل التفريغ التلقائي بعد كل مكالمة.',
               'In "Recent calls": "📝 Transcribe" turns the call recording into text and then summarizes it. The admin can also switch on automatic transcription after every call.'),
         ],
@@ -504,8 +510,8 @@ SCREENS = [
              'text': T('يستخدم الرقم ده كـ «عميل غير مسجل» في الشاشة دي — مش بيضيف عميل جديد لقائمة العملاء.', 'Uses this number as an "unregistered customer" on this screen — it does not add a customer to the list.'),
              'warn': T('راجع الرقم كويس: التواصل والرسايل بتروح على الرقم ده.', 'Check the number carefully: calls and messages go to it.')},
         ],
-        'updated': '2026-11-06',
-        'change_note': T('«مدير الجودة» بقى يشوف الشاشة دي في القائمة؛ دور «مشاهد» ماعادش يقدر يفتحها.', 'Quality managers now see this screen in the menu; the viewer role can no longer open it.'),
+        'updated': '2026-11-10',
+        'change_note': T('جديد: «💬 آخر الرسائل» — رسائل العميل على واتساب بجانب ملفه.', 'New: "💬 Latest messages" — the customer\'s WhatsApp messages beside their profile.'),
     },
     {
         'key': 'callcenter.cases',
@@ -774,7 +780,9 @@ SCREENS = [
                        'والموظف المرتبط به، مع شرح أي مشكلة (هاتف مطفأ، رقم داخلي غير موجود في السنترال، رقم داخلي غير مرتبط بموظف). '
                        '«ربط» يربط الرقم الداخلي بموظف عندنا فقط ولا يغيّر شيئاً في Issabel؛ الموظف له رقم داخلي واحد فيُنقل من رقمه الداخلي السابق تلقائياً. '
                        'بجانب الرقم الداخلي غير المرتبط يظهر «في السنترال: …» — الاسم الذي يستخدمه السنترال نفسه له (مثل Agent -CC15)؛ '
-                       'عند «ربط» يُكتب أول اسم في البحث فيظهر الموظف المرجّح أولاً، والاختيار يبقى لك.\n\n'
+                       'عند «ربط» يُكتب أول اسم في البحث فيظهر الموظف المرجّح أولاً، والاختيار يبقى لك. '
+                       'وفي نفس النافذة «🎧 هاتف المتصفح»: فعّله واكتب كلمة سر SIP للرقم الداخلي (نفس الموجودة في Issabel) — تُحفظ مشفّرة ولا تظهر لأحد، '
+                       'وتُرسل فقط لمتصفح الموظف صاحب الرقم.\n\n'
                        'سجل المكالمات للتقارير يُنسخ كل 10 دقائق من سجل السنترال نفسه (CDR) — قراءة فقط — فلا يضيع شيء حتى لو انقطع الربط اللحظي. '
                        'كل مكالمة عميل تُربط بكود PIC من رقم الهاتف؛ الرقم المشترك بين أكثر من عميل يُحسب مرة واحدة لآخر من اشترى قبل المكالمة، '
                        'وتُحفظ معه كل الأكواد المشتركة. لو السنترال سجّل مكالمات ولم يصل الربط اللحظي أي حدث خلال 30 دقيقة يصل تنبيه للمدير والمشرف.\n\n'
@@ -788,7 +796,9 @@ SCREENS = [
                        'the staff member mapped to it, and an explanation of any problem (phone off, extension missing from the PBX, extension not mapped to anyone). '
                        '"Map" links an extension to a staff member in our system only and changes nothing in Issabel; a staff member has one extension, so they are moved off their previous one automatically. '
                        'An unmapped extension shows "In PBX: …" — the name the PBX itself uses for it (e.g. Agent -CC15); '
-                       '"Map" pre-fills the search with its first name so the likely person is on top, and you still choose.\n\n'
+                       '"Map" pre-fills the search with its first name so the likely person is on top, and you still choose. '
+                       'The same panel has "🎧 Browser phone": switch it on and enter the extension\'s SIP password (the one in Issabel) — stored encrypted, shown to nobody, '
+                       'and sent only to the browser of the staff member who owns the extension.\n\n'
                        'The call history used by reports is copied every 10 minutes from the PBX\'s own call record (CDR), read-only, so nothing is lost even when the live link drops. '
                        'Each customer call is linked to a PIC by phone number; a number shared by several customers counts once, for whoever bought most recently before the call, '
                        'and all the sharing codes are kept with it. If the PBX logs calls but the live link received no event for 30 minutes, admin and supervisors get an alert.\n\n'
@@ -861,7 +871,7 @@ SCREENS = [
                        'A call in progress and its duration. If the caller is a known customer, clicking opens the customer card.'),
              'open_hint': T('في «مكالمات نشطة» أثناء وجود مكالمة.', 'Under "Active calls" while a call is in progress.')},
         ],
-        'updated': '2026-11-06',
-        'change_note': T('«مدير الجودة» بقى يشوف الشاشة دي في القائمة؛ دور «مشاهد» ماعادش يقدر يفتحها.', 'Quality managers now see this screen in the menu; the viewer role can no longer open it.'),
+        'updated': '2026-11-10',
+        'change_note': T('جديد: تفعيل «🎧 هاتف المتصفح» لكل رقم داخلي من «ربط».', 'New: switch on the "🎧 Browser phone" per extension from "Map".'),
     },
 ]
