@@ -2368,8 +2368,18 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
     def claim_items(self, request, pk=None):
         """One row per dispensed item in the motalba with its applied discount (for revision)."""
         claim = self.get_object()
+        if request.query_params.get('format') == 'xlsx':      # the whole table, as Excel
+            from .claim_items_export import generate_items_excel
+            return generate_items_excel([claim], filename=f'claim_items_{claim.pk}.xlsx')
         from .discrepancy import claim_items_for_revision
         return Response(claim_items_for_revision(claim))
+
+    @action(detail=True, methods=['get'], url_path='billing-board')
+    def billing_board(self, request, pk=None):
+        """«فئات الفوترة» board: every live receipt with its group, the groups' totals and
+        the balance check (groups + unassigned = claim)."""
+        from .billing_board import build_board
+        return Response(build_board(self.get_object()))
 
     @action(detail=True, methods=['get'], url_path='prescriptions-by-item')
     def prescriptions_by_item(self, request, pk=None):
@@ -2985,6 +2995,16 @@ class InsurancePortfolioView(APIView):
             k, rev = q.get('sort'), q.get('dir') == 'desc'
             report['motalbas'].sort(key=lambda m: (m.get(k) is None, m.get(k) if not isinstance(m.get(k), dict) else 0),
                                     reverse=rev)
+        if q.get('format') == 'items_xlsx':
+            # «أصناف المطالبات»: the ticked motalbas (claim_ids, in that order), else every one listed
+            from .claim_items_export import generate_items_excel
+            ids = [int(x) for x in (q.get('claim_ids') or '').split(',') if x.strip().isdigit()]
+            chosen = [c for c in claims if c.pk in ids] if ids else list(claims)
+            if ids:
+                chosen.sort(key=lambda c: ids.index(c.pk))
+            if not chosen:
+                return Response({'error': 'لا توجد مطالبات محددة'}, status=status.HTTP_400_BAD_REQUEST)
+            return generate_items_excel(chosen, filename='motalbas_items.xlsx')
         if q.get('format') == 'xlsx':
             from .portfolio_export import generate_portfolio_excel
             title = f"تقارير المطالبات {q.get('from') or ''} ← {q.get('to') or ''}".strip()
@@ -3092,77 +3112,84 @@ class InsuranceClaimBillingGroupViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_423_LOCKED)
         return None
 
+    def _staff(self):
+        return getattr(self.request.user, 'staff_profile', None)
+
+    def perform_create(self, serializer):
+        claim = serializer.validated_data['claim']
+        if claim.is_locked:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'error': 'المطالبة مقفلة — لا يمكن إضافة فئات فوترة.'})
+        g = serializer.save(created_by=self._staff())
+        record_audit(claim, 'billing_group', actor=self._staff(), target_type='billing_group', target_ref=g.code,
+                     summary=f'فئة فوترة جديدة: {g.code} — {g.name}')
+
+    def update(self, request, *args, **kwargs):
+        locked = self._group_locked(self.get_object())
+        return locked or super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        """Delete a group: its receipts go back to «غير مخصص»."""
+        group = self.get_object()
+        locked = self._group_locked(group)
+        if locked:
+            return locked
+        from .billing_board import unassign
+        freed = unassign(group, actor=self._staff())
+        record_audit(group.claim, 'billing_group', actor=self._staff(), target_type='billing_group',
+                     target_ref=group.code,
+                     summary=f'حُذفت فئة الفوترة {group.code} — {group.name} ({freed} عادت غير مخصصة)')
+        group.delete()
+        return Response({'freed': freed}, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=['post'], url_path='auto-assign')
     def auto_assign(self, request, pk=None):
-        """Auto-assign unassigned prescriptions matching filter rules."""
+        """Auto-assign the claim's UNASSIGNED receipts matching the filter rules (never
+        takes a receipt from another group)."""
         group = self.get_object()
         locked = self._group_locked(group)
         if locked:
             return locked
         count = group.auto_assign_prescriptions()
+        if count:
+            record_audit(group.claim, 'billing_group', actor=self._staff(), target_type='billing_group',
+                         target_ref=group.code, summary=f'فئة فوترة {group.name}: تخصيص تلقائى {count}')
         return Response({'assigned': count, 'group': group.name})
 
     @action(detail=True, methods=['post'], url_path='assign-rx')
     def assign_rx(self, request, pk=None):
         """
-        Manually assign prescriptions, manual Rx and/or supplements to this group.
-        Body: {"prescription_ids": [...], "manual_rx_ids": [...], "supplement_ids": [...]}
+        Assign prescriptions, manual Rx and/or supplements to this group.
+        Body: {"prescription_ids": [...], "manual_rx_ids": [...], "supplement_ids": [...], "move": bool}
+        A receipt already in ANOTHER group moves only with move=true; otherwise 409 + the list.
         """
-        from .models import InsuranceClaimManualRx, InsuranceClaimSupplement
+        from .billing_board import assign
         group = self.get_object()
         locked = self._group_locked(group)
         if locked:
             return locked
-        ids   = request.data.get('prescription_ids', [])
-        mids  = request.data.get('manual_rx_ids', [])
-        sids  = request.data.get('supplement_ids', [])
-        if not ids and not mids and not sids:
+        ids = {'p': request.data.get('prescription_ids') or [], 'm': request.data.get('manual_rx_ids') or [],
+               's': request.data.get('supplement_ids') or []}
+        if not any(ids.values()):
             return Response({'error': 'prescription_ids, manual_rx_ids or supplement_ids required'}, status=400)
-        updated = 0
-        if ids:
-            updated += InsuranceClaimPrescription.objects.filter(
-                claim=group.claim, id__in=ids).update(billing_group=group)
-        if mids:
-            updated += InsuranceClaimManualRx.objects.filter(
-                claim=group.claim, id__in=mids).update(billing_group=group)
-        if sids:
-            updated += InsuranceClaimSupplement.objects.filter(
-                claim=group.claim, id__in=sids).update(billing_group=group)
-        group.refresh_totals()
+        move = bool(request.data.get('move'))
+        updated, conflicts = assign(group, ids, move=move, actor=self._staff())
+        if conflicts and not move:
+            return Response({'error': f'{len(conflicts)} منها فى فئة أخرى — أكّد النقل أو أزلها من التحديد.',
+                             'conflicts': conflicts}, status=status.HTTP_409_CONFLICT)
         return Response({'updated': updated})
 
     @action(detail=True, methods=['post'], url_path='unassign-rx')
     def unassign_rx(self, request, pk=None):
-        """Remove prescriptions / manual Rx / supplements from this group (billing_group=null)."""
-        from .models import InsuranceClaimManualRx, InsuranceClaimSupplement
+        """Take receipts out of this group (all of them when no ids are sent)."""
+        from .billing_board import unassign
         group = self.get_object()
         locked = self._group_locked(group)
         if locked:
             return locked
-        ids   = request.data.get('prescription_ids', [])
-        mids  = request.data.get('manual_rx_ids', [])
-        sids  = request.data.get('supplement_ids', [])
-        unassigned = 0
-        # If nothing specified, unassign everything in the group.
-        if not ids and not mids and not sids:
-            unassigned += InsuranceClaimPrescription.objects.filter(
-                claim=group.claim, billing_group=group).update(billing_group=None)
-            unassigned += InsuranceClaimManualRx.objects.filter(
-                claim=group.claim, billing_group=group).update(billing_group=None)
-            unassigned += InsuranceClaimSupplement.objects.filter(
-                claim=group.claim, billing_group=group).update(billing_group=None)
-        else:
-            if ids:
-                unassigned += InsuranceClaimPrescription.objects.filter(
-                    claim=group.claim, billing_group=group, id__in=ids).update(billing_group=None)
-            if mids:
-                unassigned += InsuranceClaimManualRx.objects.filter(
-                    claim=group.claim, billing_group=group, id__in=mids).update(billing_group=None)
-            if sids:
-                unassigned += InsuranceClaimSupplement.objects.filter(
-                    claim=group.claim, billing_group=group, id__in=sids).update(billing_group=None)
-        group.refresh_totals()
-        return Response({'unassigned': unassigned})
+        ids = {'p': request.data.get('prescription_ids') or [], 'm': request.data.get('manual_rx_ids') or [],
+               's': request.data.get('supplement_ids') or []}
+        return Response({'unassigned': unassign(group, ids if any(ids.values()) else None, actor=self._staff())})
 
     @action(detail=True, methods=['get'], url_path='export')
     def export(self, request, pk=None):
