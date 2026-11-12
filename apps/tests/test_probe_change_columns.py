@@ -27,7 +27,18 @@ class _Cur:
             self.rows = {'stkbal': [('modif_lastupdate', 'datetime')],
                          'localcustomers': [('custdate', 'datetime')]}.get(params[0], [('x', 'int')])
         elif 'from softechdb9.dbo.stkbal where branchcode' in s:
-            self.rows = [('I1', 'S1', NOW if self.conn.bumped else NOW - datetime.timedelta(days=2))]
+            # [3] reads the same rows twice: the quantity changes between the reads, and
+            # modif_lastupdate moves with it only when the connection is `bumped`
+            self.conn.stock_reads += 1
+            second = self.conn.stock_reads > 1
+            mod = NOW if (second and self.conn.bumped) else NOW - datetime.timedelta(days=2)
+            self.rows = [('I1', 'S1', 4 if second else 5, mod)]
+        elif 'group by modif_lastupdate' in s:
+            self.rows = [(NOW, 120), (NOW - datetime.timedelta(minutes=5), 80)]
+        elif 'select itemcode, branchcode, storecode from softechdb9.dbo.stkbal' in s:
+            self.rows = [('I1', '130', 'S1')]
+        elif 'select distinct st.itemcode' in s:
+            self.rows = [('I1', '130', 'S1')]
         elif 'from softechdb9.dbo.stkbal' in s:
             self.rows = [(1000, 0, NOW - datetime.timedelta(days=900), NOW, 40, 300, 900, 600, NOW)]
         elif 'group by st.itemcode' in s:
@@ -56,7 +67,7 @@ class _Cur:
 
 class _Conn:
     def __init__(self, bumped=True):
-        self.bumped, self.sql = bumped, []
+        self.bumped, self.sql, self.stock_reads = bumped, [], 0
 
     def cursor(self):
         return _Cur(self)
@@ -72,7 +83,7 @@ class ProbeChangeColumnsTests(TestCase):
         with tempfile.TemporaryDirectory() as d, \
              mock.patch('config.sybase.get_sybase_connection', return_value=conn):
             path = os.path.join(d, 'probe.txt')
-            call_command('probe_softech_change_columns', out=path, stdout=out)
+            call_command('probe_softech_change_columns', out=path, watch=0, stdout=out)
             self.assertTrue(os.path.exists(path))
         return out.getvalue()
 
@@ -86,5 +97,5 @@ class ProbeChangeColumnsTests(TestCase):
         self.assertEqual([q for q in conn.sql if not is_read_only_sql(q)], [])
 
     def test_stock_verdict(self):
-        self.assertIn('safe to pull stock by modif_lastupdate', self._run(_Conn(bumped=True)))
-        self.assertIn('NOT every movement bumps it', self._run(_Conn(bumped=False)))
+        self.assertIn('safe to pull stock by it', self._run(_Conn(bumped=True)))
+        self.assertIn('did NOT move modif_lastupdate', self._run(_Conn(bumped=False)))

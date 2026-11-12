@@ -313,3 +313,10 @@ apps/finance/queries/sybase_gl.py::storebal_snapshots
 apps/sync/management/commands/reclaim_space.py::Command._apply
 #   same table name check and sql.Identifier quoting; TABLESAMPLE percent is a bound param
 apps/sync/management/commands/reclaim_space.py::_live_row_estimate
+# Owner: stock-count entry probe (doc 38 step 1, 2026-11-11) — READ-ONLY SOFTECH probe, hand-run on the owner's PC
+#   table names come from SOFTECH's own sysobjects and pass _ident() (plain identifier only); values bound
+apps/stockcount/management/commands/investigate_stockcount_entry.py::Command.s_doc
+#   column names come from SOFTECH's own syscolumns and pass _ident(); doc-code lists are module constants; date bound
+apps/stockcount/management/commands/investigate_stockcount_entry.py::Command.s_spread
+#   table names from sysobjects pass _ident(); no value interpolated
+apps/stockcount/management/commands/investigate_stockcount_entry.py::Command.s_tables
