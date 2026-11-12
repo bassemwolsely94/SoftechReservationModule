@@ -1,6 +1,6 @@
 # 30 — «التوزيعة» redesign: one plan, ordered waves, no conflicts
 
-**Status:** 🟢 Phase A BUILT (2026-10-25). Phases B–D waiting for owner approval.
+**Status:** 🟢 Phase A BUILT (2026-10-25). Phases B–D BUILT (2026-11-10) — see §6.
 - Code: `apps/purchasing/isr_guards.py`; constraint `isrpush_one_live_draft_per_route` (migration purchasing/0037).
 - Cleaned up: drafts #3–#8, #30, #32, #33, #34 cancelled with audit.
 - Also includes the leg-order rule: HQ→branch only after its branch→HQ leg is pushed. That is the minimum of decision 3.
@@ -147,8 +147,62 @@ These close the double-post risk without waiting for the redesign.
 
 ## 5. Decisions for the owner
 
-1. Thresholds: 100 EGP per line and 1,000 EGP per document. Keep or change?
-2. Wave order (§2.3). Keep or change?
-3. Does the «بعد الاستلام» part wait for the leg to be **pushed** or **received at HQ**?
-4. Draft expiry: 7 days?
-5. Phase A now, separately, before the redesign?
+Decided by the owner on 2026-11-10 (all as recommended):
+
+1. Thresholds: ✅ 100 EGP per branch-sourced line; a route document under 1,000 EGP waits for the next run; HQ moves always stay.
+2. Wave order: ✅ HQ-first (§2.3): HQ direct → over-piled excess → introductions only from over-piled branches → trial seeds.
+3. Forwarding leg: ✅ waits until the branch → HQ leg is **received at HQ** (transfer-sync receipt record), not merely pushed.
+4. Draft expiry: ✅ unapproved drafts expire after 7 days (audited).
+5. Phase A: ✅ built first (2026-10-25).
+6. Build order of the remaining work: seasonality switch → this doc's phases B–D → doc 31 phases B–D.
+
+## 6. Phases B–D as built (2026-11-10)
+
+**Code:**
+- `apps/purchasing/distribution_plan.py`: `build()` (reads SOFTECH, writes only our ledger) and `generate()` (PG drafts only). The pure part is `plan_moves()`.
+- Models `DistributionPlan` and `PlannedMove`, plus `IsrPush.route_tag` (migration purchasing/0046).
+- Endpoints `isr/distribution/plan/` · `…/build/` · `…/<id>/generate/` · `…/<id>/export/`. The old one-click `isr/distribution/generate/` is gone.
+- Tests: `apps/tests/test_distribution_plan.py`.
+
+**How each decision landed:**
+- **Live inputs:** stock comes from server 100's real-balance stores (`storerealbal = 1`), as in the SOFTECH ISR rule. Rates come from the engine run, and ceilings from each branch's own server. If the live read fails, the engine's stock is used and the plan says so.
+- **Wave 0:** what is already on its way to a destination:
+  - our live drafts, and our pushed drafts not yet dispensed (ledger doc 125);
+  - SOFTECH's ISRs of the last 3 days for that branch, not yet dispensed;
+  - in-transit transfers (the shared 14-day rule);
+  - live transfer requests.
+
+  A seed already covered becomes «متعارض». An over-piled move is cut by the quantity already coming.
+- **Waves:** 1 HQ · 2 over-piled · 3 never-stocked, only from a branch over its own max · 4 trial seeds from a branch. A branch seed that HQ can cover moves to HQ. Moves are ranked by value within each wave.
+- **Thresholds:** SystemSetting `distribution_min_line_value` (100) and `distribution_min_doc_value` (1,000).
+  - The document limit applies to branch → HQ documents and to «بعد الاستلام» parts. The two fold together.
+  - HQ «جاهز الآن» documents always stay.
+- **Documents:** one branch → HQ ISR per source, one HQ → branch «جاهز الآن» ISR per destination, and one HQ → branch «بعد الاستلام من S» ISR per (destination, source).
+  - Each «بعد الاستلام» part is its own document because SOFTECH holds one ISR per push, and that part is pushed later than the «جاهز الآن» part.
+  - Keeping one part per source means one slow branch does not hold up the others.
+- **Own routes:** distribution drafts carry `route_tag` `dist` / `dist:<S>`, so a daily replenishment draft to the same branch no longer cancels them, or gets cancelled by them. The one-live-draft rule now covers (kind, source, destination, route_tag).
+- **Dependency:** `isr_guards.received_at_hq()`. A «بعد الاستلام» part is pushed only when, since its feeder was pushed, the transfers mirror shows an issue from that branch to HQ carrying the feeder's items, and none of those issues is still in transit. WhatsApp and shortage-list legs keep the earlier rule (feeder pushed).
+- **Expiry:** the existing `isr_draft_expiry_days` = 7 (already set in the office). A new generation also cancels the planner's older proposed drafts.
+- **Generate guards:** only the latest plan, built under 12 hours ago, can be generated, and only once.
+
+**Live dry run (read-only, 2026-11-10, run 113):**
+- 5,146 suggestions became 6,537 moves:
+  - **planned:** 1,514 moves, ≈537k EGP;
+  - **already on its way:** 970 moves, ≈129k EGP, almost all in SOFTECH's own ISRs;
+  - **under 100 EGP:** 1,954 moves, ≈82k EGP;
+  - **never-stocked from a branch not over its max:** 2,099 moves, ≈407k EGP.
+- Planned by wave: HQ 394 moves (166k) · over-piled 393 (100k) · trial seeds from branches 727 (271k).
+- 30 drafts instead of ~45, and no duplicates.
+
+### Follow-up decisions (owner, 2026-11-11)
+
+1. **One receipt rule for every forwarding leg:** «التوزيعة», WhatsApp, shortage lists and engine transfers.
+   - An HQ → branch leg fed by a branch → HQ leg is pushed only after HQ receives the goods. HQ can't dispense them in SOFTECH before it books them in, so the rule costs no real speed.
+   - A waiting leg's 7-day expiry starts at that receipt.
+   - An issue to HQ unreceived for more than 14 days shows «لم يُستلم منذ N يوم ⚠». Recording the receipt by hand on the transfers screen releases the leg.
+   - Measured: HQ records receipt a median of 4 days after the issue. 24 branch → HQ issues older than 14 days were never received (≈20.8k EGP). No WhatsApp or shortage-list two-leg ISR had been created yet.
+2. **Wave 4 (trial stock from a branch):**
+   - only new codes, first stocked within 540 days; an old code that never sold anywhere belongs to returns / expiry;
+   - at most 2 branches per item;
+   - at most `distribution_trial_cap` EGP per plan (default 75,000), newest codes first.
+3. **Open transfer requests** are now read with the supply engine's own rule (`apps/supply/engine/commitments.py`): open AND not yet dispatched, «يحتاج تعديل» included. The first build counted dispatched requests twice, once as requests and once as in transit.

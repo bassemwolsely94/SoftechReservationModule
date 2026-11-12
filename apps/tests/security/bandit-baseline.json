@@ -13073,6 +13073,234 @@
    "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
    "test_id": "B608",
    "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "94         _, rows = self._q(\n95             f\"SELECT c.name, t.name FROM {DB}.syscolumns c, {DB}.systypes t, {DB}.sysobjects o \"\n96             \"WHERE o.name = ? AND o.type = 'U' AND c.id = o.id AND c.usertype = t.usertype ORDER BY c.colid\",\n97             [table])\n",
+   "col_offset": 14,
+   "end_col_offset": 41,
+   "filename": "apps/stockcount/management/commands/investigate_stockcount_entry.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 95,
+   "line_range": [
+    95,
+    96
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "106     def s_transdoc(self):\n107         cols, rows = self._q(f\"SELECT * FROM {DB}.transdoc WHERE doccode IN ('50', '150', '160')\")\n108         self._dump(cols, rows)\n",
+   "col_offset": 31,
+   "end_col_offset": 45,
+   "filename": "apps/stockcount/management/commands/investigate_stockcount_entry.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 107,
+   "line_range": [
+    107
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "111         _, rows = self._q(\n112             f\"SELECT o.name, i.rowcnt FROM {DB}.sysobjects o, {DB}.sysindexes i \"\n113             \"WHERE o.type = 'U' AND i.id = o.id AND i.indid IN (0, 1) ORDER BY o.name\")\n114         self.candidates = []\n",
+   "col_offset": 14,
+   "end_col_offset": 43,
+   "filename": "apps/stockcount/management/commands/investigate_stockcount_entry.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 112,
+   "line_range": [
+    112,
+    113
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "121             if has_doc and name.lower() not in SKIP_BIG and int(cnt or 0) < 2_000_000:\n122                 _, dist = self._q(f\"SELECT doccode, COUNT(*) FROM {DB}.{_ident(name)} GROUP BY doccode\",\n123                                   limit=40)\n",
+   "col_offset": 36,
+   "end_col_offset": 66,
+   "filename": "apps/stockcount/management/commands/investigate_stockcount_entry.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 122,
+   "line_range": [
+    122
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "146                 _, rows = self._q(\n147                     f\"SELECT {col}, COUNT(*) FROM {DB}.stktransm WHERE doccode IN {codes} AND docdate >= ? \"\n148                     f\"GROUP BY {col} ORDER BY 2 DESC\", [frm], limit=8)\n149                 spread = ', '.join(f'{v!r}: {n}' for v, n in rows) or '—'\n",
+   "col_offset": 22,
+   "end_col_offset": 29,
+   "filename": "apps/stockcount/management/commands/investigate_stockcount_entry.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 147,
+   "line_range": [
+    147,
+    148
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "157             cols, rows = self._q(\n158                 f\"SELECT * FROM {DB}.stktransm WHERE doccode = ? AND docdate >= ? ORDER BY trans_time DESC\",\n159                 [dc, since], limit=2)\n",
+   "col_offset": 18,
+   "end_col_offset": 32,
+   "filename": "apps/stockcount/management/commands/investigate_stockcount_entry.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 158,
+   "line_range": [
+    158
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "164                 lcols, lines = self._q(\n165                     f\"SELECT * FROM {DB}.stktrans WHERE doccode = ? AND branchcode = ? AND docnumber = ?\",\n166                     [dc, rec.get('branchcode'), rec.get('docnumber')], limit=3)\n",
+   "col_offset": 22,
+   "end_col_offset": 36,
+   "filename": "apps/stockcount/management/commands/investigate_stockcount_entry.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 165,
+   "line_range": [
+    165
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "170     def s_lastdoc(self):\n171         cols, rows = self._q(f\"SELECT * FROM {DB}.lastdocnumbers\", limit=10)\n172         self._dump(cols, rows)\n",
+   "col_offset": 31,
+   "end_col_offset": 45,
+   "filename": "apps/stockcount/management/commands/investigate_stockcount_entry.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 171,
+   "line_range": [
+    171
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "183                 continue\n184             c, rows = self._q(f\"SELECT * FROM {DB}.{_ident(t)} WHERE doccode = ? AND branchcode = ? AND docnumber = ?\",\n185                               [dc, br, num], limit=50)\n",
+   "col_offset": 32,
+   "end_col_offset": 46,
+   "filename": "apps/stockcount/management/commands/investigate_stockcount_entry.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 184,
+   "line_range": [
+    184
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "74         ph = ','.join('?' for _ in codes)\n75         cur.execute('SELECT s.branchcode, s.itemcode, sum(s.nowqty) FROM stkbal s, stores st '\n76                     'WHERE s.storecode = st.storecode AND st.storerealbal = 1 '\n77                     f'AND s.branchcode IN ({ph}) GROUP BY s.branchcode, s.itemcode', codes)\n78         for bc, code, q in cur.fetchall():\n",
+   "col_offset": 20,
+   "end_col_offset": 43,
+   "filename": "apps/purchasing/distribution_plan.py",
+   "issue_confidence": "MEDIUM",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 75,
+   "line_range": [
+    75,
+    76,
+    77
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "184         ph = ','.join('?' for _ in dl)\n185         cur.execute('SELECT m.isrdocnumber, m.forbranchcode, m.docdate, l.itemcode, l.itemqty '\n186                     'FROM stockisrm m, stockisr l WHERE l.isrdocnumber = m.isrdocnumber '\n187                     f'AND m.docdate >= dateadd(day, -{int(SOFTECH_ISR_DAYS)}, getdate()) '\n188                     f'AND m.forbranchcode IN ({ph})', dl)\n189         raw = cur.fetchall()\n",
+   "col_offset": 20,
+   "end_col_offset": 53,
+   "filename": "apps/purchasing/distribution_plan.py",
+   "issue_confidence": "MEDIUM",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 185,
+   "line_range": [
+    185,
+    186,
+    187,
+    188
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
   }
  ]
 }
