@@ -194,6 +194,10 @@ VALID_TRANSITIONS = {
 }
 
 
+class InvalidTransition(ValueError):
+    """The action is not allowed from the demand's current status (the API answers 400)."""
+
+
 @transaction.atomic
 def transition_status(demand, new_status, by=None, note='', **kwargs):
     """
@@ -205,7 +209,7 @@ def transition_status(demand, new_status, by=None, note='', **kwargs):
     old_status = demand.status
 
     if new_status not in VALID_TRANSITIONS.get(old_status, []):
-        raise ValueError(
+        raise InvalidTransition(
             f'لا يمكن الانتقال من "{demand.get_status_display()}" إلى "{new_status}"'
         )
 

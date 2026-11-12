@@ -89,7 +89,8 @@ OPEN_READ_PATHS = ('/api/users/my-permissions/', '/api/sync/freshness/', '/api/s
                    '/api/cheques/holidays/',    # public-holiday calendar, no business data (Z-3)
                    '/api/users/erp-permissions/me/',   # the caller's own SOFTECH group (Z-4)
                    '/api/sync/branch-health/',         # SOFTECH node up/down — pricing panel (Z-4)
-                   '/api/pbx/my-extension/')           # the caller's own PBX extension — POS screen-pop (Z-8b)
+                   '/api/pbx/my-extension/',           # the caller's own PBX extension — POS screen-pop (Z-8b)
+                   '/api/pbx/webrtc/config/')          # the caller's own extension's browser phone (Z-8b)
 # Exact paths, not prefixes: the staff picker list every screen loads (tasks, demand, HR forms,
 # follow-ups, incentives) — slim fields for roles without users view; a record needs users (Z-4).
 OPEN_READ_EXACT = ('/api/users/staff/',
@@ -400,6 +401,9 @@ def required(path, method):
                              or (prefix == 'callcenter' and parts[3:4] == ['transcripts'] and parts[5:6] == ['correct'])
                              or (prefix == 'stockcount' and parts[5:6] == ['preview-items'])
                              or (prefix == 'incentives' and parts[3:4] == ['programs'] and parts[5:6] == ['simulate'])):
+        return MODULE_BY_PREFIX[prefix], ('view',)
+    # editing a call's score is the same act as giving it (the view keeps its QA role check, Z-8b)
+    if method == 'PATCH' and prefix == 'callcenter' and parts[3:4] == ['calls'] and parts[5:6] == ['quality']:
         return MODULE_BY_PREFIX[prefix], ('view',)
     if method == 'POST' and prefix == 'hr' and parts[5:6] == ['cancel']:
         return 'hr', ('view',)
