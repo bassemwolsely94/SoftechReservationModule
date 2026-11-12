@@ -184,6 +184,17 @@ SCREENS = [
             {'key': 'pinned', 'title': T('📌 المثبتة', '📌 Pinned'), 'body': T('مهام ثبّتها للمتابعة الشخصية (اضغط الدبوس على أي مهمة).', 'Tasks you pinned for personal follow-up (press the pin on any task).')},
             {'key': 'untracked', 'title': T('🔔 غير متابعة', '🔔 Not followed'), 'body': T('مهام لم يتابعها أحد بعد — لا يجب أن تبقى هنا طويلاً.', 'Tasks nobody has followed yet — they should not stay here long.')},
             {'key': 'priority', 'title': T('⚡ الأعلى أولوية', '⚡ Highest priority'), 'body': T('مرتبة بدرجة الأولوية (قيمة العميل، التأخير، خطر الانقطاع).', 'Sorted by priority score (customer value, delay, churn risk).')},
+            {'key': 'call_lists', 'title': T('📞 قوائم الاتصال', '📞 Call lists'),
+             'body': T('حملات اتصال صادرة: «+ قائمة اتصال جديدة» ← اختر الشريحة والفرع ومدة الانقطاع عن الشراء (يظهر عدد العملاء المطابقين فوراً)، '
+                       'اكتب نص المكالمة واختر الموظفين — تُنشأ مهمة لكل عميل (حتى 500) وتوزَّع عليهم بالتساوي، ويصل كل موظف إشعار واحد. '
+                       'يُستبعد من ليس له رقم، ومن طلب إيقاف التذكيرات، ومن لديه مهمة مفتوحة. اضغط على قائمة لترى عملاءها أدناه، '
+                       'واتصل بزر «📞» بجانب الرقم ثم سجّل النتيجة كالمعتاد. «إغلاق القائمة» يلغي ما لم يتم الاتصال به. '
+                       'الإنشاء للمدير والمشرف وموظفي الكول سنتر.',
+                       'Outbound call campaigns: "+ New call list" → choose segment, branch and days since last purchase (the matching count shows instantly), '
+                       'write the call script and pick the staff — one task per customer is created (up to 500) and split evenly, with one notification per staff member. '
+                       'Customers without a phone, who asked to stop reminders, or with an open task are skipped. Click a list to see its customers below, '
+                       'call with the "📞" button next to the number, then record the outcome as usual. "Close list" cancels what was not called. '
+                       'Admins, supervisors and call-center staff can create lists.')},
             {'key': 'overview', 'title': T('📋 ملخص (داخل المهمة)', '📋 Summary (inside a task)'),
              'body': T('بيانات العميل والهاتف (إن كان مسموحاً لك برؤيته)، الدواء، آخر صرف وموعد الاستحقاق، رقم مستند SOFTECH، و«تسجيل النتيجة».',
                        'Customer data and phone (if you may see it), the medicine, last dispense and due date, the SOFTECH document number, and "Record outcome".')},
@@ -441,7 +452,7 @@ SCREENS = [
              'when': T('بعد ما تراجعها — بعدها مش هتظهر كجديدة.', 'After you have gone through them — they will no longer show as new.'),
              'open_hint': T('جوه قائمة جرس الإشعارات، لما يكون فيه غير مقروء.', 'Inside the bell list, when there are unread ones.')},
         ],
-        'updated': '2026-11-01',
+        'updated': '2026-11-09',
         'change_note': T('شرح لكل أزرار الشاشة في «💡 تلميحات الأزرار»', 'Every button on the screen explained in "💡 Button hints"'),
     },
     {

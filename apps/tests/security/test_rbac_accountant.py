@@ -93,6 +93,33 @@ class AccountantEnforcedInLogModeTests(TestCase):
         self.assertEqual(req(gl + 'exceptions/5/accept-softech/', 'POST'), ('ledger', ('approve',)))
         self.assertEqual(req(gl + 'exceptions/5/keep-edit/', 'POST'), ('ledger', ('approve',)))
         self.assertEqual(req(gl + 'drafting/run/', 'POST'), ('ledger', ('create',)))
+        # close and reconcile (Plan 3)
+        self.assertEqual(req(gl + 'periods/', 'GET'), ('ledger', ('view',)))
+        self.assertEqual(req(gl + 'periods/5/checklist/', 'GET'), ('ledger', ('view',)))
+        self.assertEqual(req(gl + 'periods/5/close/', 'POST'), ('ledger', ('finalize',)))
+        self.assertEqual(req(gl + 'periods/5/reopen/', 'POST'), ('ledger', ('finalize',)))
+        self.assertEqual(req(gl + 'compare/refresh/', 'POST'), ('ledger', ('view',)))
+        self.assertEqual(req(gl + 'compare/lines/5/explain/', 'POST'), ('ledger', ('approve',)))
+        self.assertEqual(req(gl + 'compare/checks/', 'PATCH'), ('ledger', ('edit',)))
+        self.assertEqual(req(gl + 'closing-stock-stores/', 'PATCH'), ('ledger', ('edit',)))
+        self.assertEqual(req(gl + 'validation/', 'POST'), ('ledger', ('export',)))
+        self.assertEqual(req(gl + 'manual-import/', 'POST'), ('ledger', ('create',)))
+        self.assertEqual(req(gl + 'manual-import/preview/', 'POST'), ('ledger', ('create',)))
+        self.assertEqual(req(gl + 'corrections/', 'POST'), ('ledger', ('create',)))
+        self.assertEqual(req(gl + 'corrections/from-exception/', 'POST'), ('ledger', ('create',)))
+
+    def test_accountant_may_reconcile_but_not_close_or_edit_the_close_setup(self):
+        gl = '/api/finance/gl/'
+        for path, method in ((gl + 'compare/refresh/', 'post'), (gl + 'compare/lines/987654321/explain/', 'post'),
+                             (gl + 'manual-import/preview/', 'post'), (gl + 'manual-import/', 'post'),
+                             (gl + 'corrections/', 'post'), (gl + 'corrections/from-exception/', 'post'),
+                             (gl + 'validation/', 'post')):
+            with self.subTest(path=path):
+                self.assertNotEqual(getattr(self.client, method)(path, {}, format='json').status_code, 403)
+        for path, method in ((gl + 'periods/987654321/close/', 'post'), (gl + 'periods/987654321/reopen/', 'post'),
+                             (gl + 'compare/checks/', 'patch'), (gl + 'closing-stock-stores/', 'patch')):
+            with self.subTest(path=path):
+                self.assertEqual(getattr(self.client, method)(path, {}, format='json').status_code, 403)
 
     def test_other_roles_keep_log_mode(self):
         self.assertEqual(module_access._mode_for('pharmacist'), 'log')

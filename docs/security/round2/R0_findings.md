@@ -15,14 +15,11 @@ R0 measured the project and changed no product behaviour.
 | `makemigrations --check` | Clean |
 | Bandit / pip-audit / npm audit | Green in CI on `main` 1929463d |
 
-**Decision Q3 is triggered.** Its default was "no split until R0 shows more than 60 minutes", and
-backend CI now takes 62 minutes. The R7 and R8 tests will add more, and the job is within about 13
-minutes of the 75-minute timeout. So CI is split into two runs:
-
-- **Per PR (fast):** static guards, plus the test modules for the apps the PR changes.
-- **On `main` + nightly (full):** the full suite, plus both sweep modes.
-
-This is done after the R7 and R8 PRs merge, because both of them edit `ci.yml`.
+**Decision Q3 (corrected at close-out, 2026-11-12).** Its default was "no split until R0 shows
+more than 60 minutes". After R7/R8 merged, runs took 49–52 minutes, and the full suite on every PR
+is what caught PR 75's migration bug, so CI was **not** split. Since then the backend job has grown
+to **55–70 minutes** (runs on 2026-11-07 and 11-08) of its 75-minute limit. Splitting (fast per-PR
+run, full run on `main`) or raising the limit is open for the owner — see [SUMMARY.md](SUMMARY.md).
 
 ## 2. Line coverage by app
 
@@ -123,4 +120,4 @@ These were all decided by the owner on 2026-11-05.
 - **Run `check_schema_drift`** on the VPS database after `migrate`, and before cutover.
 - **Check the live `auto_repair` value** on the pricing replication screen. It should stay OFF
   unless it is wanted.
-- **Backend CI now takes about 60 minutes.** Split CI (Q3) before more tests land.
+- **Backend CI takes 55–70 minutes of its 75-minute limit** (corrected 2026-11-12, see §1).
