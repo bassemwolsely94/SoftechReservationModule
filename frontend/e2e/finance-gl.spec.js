@@ -107,7 +107,10 @@ test.describe('finance ledger', () => {
     await expect(box.getByText('أُضيف وتأكد 1')).toBeVisible()
 
     // on the grid, confirmed
-    await page.locator('select').first().selectOption('confirmed')
+    // the status filter is a multi-select now: open it, tick «مؤكد», close it
+    await page.getByRole('button', { name: 'كل الحالات' }).click()
+    await page.getByRole('checkbox', { name: 'مؤكد' }).check()
+    await page.keyboard.press('Escape')
     await page.getByPlaceholder(/بحث بالكود أو الاسم/).fill(n)
     await expect(page.locator('[data-tour="finance-gl-parties-grid"] tbody tr', { hasText: `شركة النور ${n}` })).toContainText('مؤكد')
 
