@@ -61,6 +61,30 @@ class SchemaDriftTests(TestCase):
         self.assertEqual(stop.exception.code, 1)
         self.assertIn('ip_address', [d['column'] for d in json.loads(out.getvalue())])
 
+    def test_harmless_difference_is_reported_but_passes_the_gate(self):
+        # the office keeps two of these on purpose (notifications body, staffprofile updated_at):
+        # the database allows an empty value the code never saves, so nothing can break
+        with connection.cursor() as cur:
+            cur.execute('ALTER TABLE users_useractivitylog ALTER COLUMN note DROP NOT NULL')
+        found = [d for d in collect_drift() if d['column'] == 'note']
+        self.assertEqual([d['breaks'] for d in found], [False])
+        out = io.StringIO()
+        call_command('check_schema_drift', stdout=out)                 # no SystemExit
+        self.assertIn('harmless', out.getvalue())
+        with self.assertRaises(SystemExit) as stop:
+            call_command('check_schema_drift', '--strict', stdout=io.StringIO())
+        self.assertEqual(stop.exception.code, 1)
+
+    def test_not_null_the_code_does_not_expect_fails_the_gate(self):
+        with connection.cursor() as cur:
+            cur.execute('DELETE FROM users_useractivitylog')
+            cur.execute('ALTER TABLE users_useractivitylog ALTER COLUMN target_user_id SET NOT NULL')
+        found = [d for d in collect_drift() if d['column'] == 'target_user_id']
+        self.assertEqual([d['breaks'] for d in found], [True])
+        with self.assertRaises(SystemExit) as stop:
+            call_command('check_schema_drift', stdout=io.StringIO())
+        self.assertEqual(stop.exception.code, 1)
+
     def test_command_reads_only(self):
         # every statement the command sends is a SELECT
         from django.test.utils import CaptureQueriesContext
