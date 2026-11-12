@@ -92,7 +92,7 @@ SCHEDULER_JOB_GUARDS = {
     'daily_retention': ('advisory_lock', 'apps.sync.maintenance.run_daily_retention', 'pg_lock(RETENTION_LOCK_KEY)',
         'pg_try_advisory_lock; the loser returns None and writes no run row'),
     'retention_watch': ('advisory_lock', 'apps.sync.maintenance.run_daily_retention', 'pg_lock(RETENTION_LOCK_KEY)',
-        'catch-up shares the retention lock; missed-run alert is dedup_once per lane per day'),
+        'catch-up shares the retention lock; morning-chain catch-up shares the chain lock (MORNING_CHAIN_LOCK_KEY); missed-run alert is dedup_once per lane per day'),
     'isr_draft_expiry': ('idempotent_upsert', 'apps.purchasing.isr_guards.expire_drafts', 'P.objects.filter(status=P.STATUS_PROPOSED, created_at__lt=cutoff)',
         'status filter; concurrent runs only duplicate the cancel audit row (PG only, never SOFTECH)'),
     'return_window_reconcile': ('once_per_period_check', 'apps.batches.return_calendar.reconcile_returns', '_line_key(pl) not in used',
