@@ -588,6 +588,9 @@ ERP_SERVICE_USERCODE = config('ERP_SERVICE_USERCODE', default='')
 POS_WRITER_ENABLED = config('POS_WRITER_ENABLED', default=False, cast=bool)
 # Usage-instructions slip (apps.usage_print, Project 5). OFF = screen hidden, API 404. Never writes SOFTECH.
 USAGE_PRINT_ENABLED = config('USAGE_PRINT_ENABLED', default=False, cast=bool)
+# HR Attendance stage 1 (apps/hr/attendance): fingerprint punch collection by the office agent. OFF =
+# the agent endpoints answer 503 and no collection is accepted. Read-only; never writes SOFTECH.
+HR_ATTENDANCE_ENABLED = config('HR_ATTENDANCE_ENABLED', default=False, cast=bool)
 POS_WRITER_PROFILE = config('POS_WRITER_PROFILE', default='test')   # test|prod
 # Wave 3 inc3: batch-write OUR POS item-selection telemetry into SOFTECH pos_cancel (the
 # «المبيعات غير المخزنة» activity log — NOT a transactional/financial table). OFF until the

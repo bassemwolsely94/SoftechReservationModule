@@ -2635,6 +2635,17 @@ def _run_stock_ledger_sync(days=3):
         logger.error('[APScheduler] stock-ledger sync failed: %s', exc)
 
 
+def _run_attendance_health():
+    """HR attendance stage 1: tell the HR head when a machine or the collection agent goes quiet,
+    a clock drifts, or a machine's log count falls. Our tables only; no SOFTECH, no machines.
+    A no-op while HR_ATTENDANCE_ENABLED is off."""
+    try:
+        from apps.hr.attendance.health import check_attendance_health
+        check_attendance_health()
+    except Exception as exc:
+        logger.error('[APScheduler] attendance health check failed: %s', exc)
+
+
 def _run_sales_history_catchup(days=7):
     """Re-sync the last `days` docdate days of PurchaseHistory with the bounded window query.
     The fast lane only re-reads today + yesterday, so a day missed while the sync or a branch
@@ -3905,6 +3916,11 @@ def start_scheduler():
     _scheduler.add_job(
         _run_stock_ledger_sync, 'cron', hour=3, minute=15, id='stock_ledger_catchup',
         kwargs={'days': 7}, replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # HR attendance health (every 30 min): silent machine/agent, clock drift, falling log count.
+    _scheduler.add_job(
+        _run_attendance_health, 'interval', minutes=30, id='attendance_health',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=900,
     )
     # Sales history catch-up — 03:45 re-syncs the last 7 days (the fast lane only re-reads 2).
     _scheduler.add_job(
