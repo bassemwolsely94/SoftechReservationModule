@@ -768,8 +768,8 @@ SCREENS = [
         'tips': [
             T('لو الطلب مرتبط بشحنة «قيد النقل» يظهر رابط «قيد النقل ←» لفتحها مباشرة.', 'If the request is linked to an in-transit shipment, a "In transit ←" link opens it.'),
             T('لا تعتمد كمية أكبر من المتاح فعلاً في فرعك.', 'Do not approve more than you actually have.'),
-            T('الصور اللي بترفقها في الرسائل والملاحظات بتتصغّر تلقائيًا (أطول ضلع ١٦٠٠ بكسل). لو رسالة فيها مرفق اتمسحت، المرفق بيتحفظ ٣٠ يومًا على السيرفر قبل ما يتمسح نهائيًا.',
-              'Photos you attach to messages and notes are shrunk automatically (longest side 1600 px). If a message with an attachment is deleted, the attachment is kept 30 days on the server before it is gone for good.'),
+            T('الصور اللي بترفقها في الرسائل والملاحظات بتتصغّر تلقائيًا (أطول ضلع ١٦٠٠ بكسل)، والكلام فيها بيفضل واضح.',
+              'Photos you attach to messages and notes are shrunk automatically (longest side 1600 px); the text on them stays readable.'),
         ],
         'related': ['transfers.list', 'transfers.transits'],
         'tour': [
