@@ -278,6 +278,7 @@ class MorningChainCatchupTests(TestCase):
         patches = self._patched_steps()
         mocks = [p.start() for p in patches]
         self.addCleanup(lambda: [p.stop() for p in patches])
+        self._at('success', timezone.now() - timedelta(minutes=2), lane='fast')
         with mock.patch('apps.sync.maintenance.morning_chain_catchup_due', return_value=True):
             run = run_morning_chain_catchup()
         self.assertEqual(run.status, 'success')
@@ -302,3 +303,57 @@ class MorningChainCatchupTests(TestCase):
         self.addCleanup(lambda: [p.stop() for p in patches])
         self.assertIsNone(tasks._run_morning_chain())
         self.assertFalse(SyncRun.objects.filter(lane='morning_chain').exists())
+
+
+class MorningChainRunGuardTests(TestCase):
+    """Guards inside the chain lock (review 2026-11-12): one successful chain per day, never
+    while SOFTECH is unreachable, and a retry skips the steps already done today. They apply to
+    the 07:30 job and to the catch-up alike."""
+
+    def setUp(self):
+        self.patches = [mock.patch(f'apps.sync.tasks.{name}') for name, _ in tasks.MORNING_CHAIN]
+        self.steps = {name: p.start() for (name, _), p in zip(tasks.MORNING_CHAIN, self.patches)}
+        self.addCleanup(lambda: [p.stop() for p in self.patches])
+
+    def _fast_ok(self):
+        run = SyncRun.objects.create(status='success', lane='fast')
+        SyncRun.objects.filter(pk=run.pk).update(started_at=timezone.now() - timedelta(minutes=2))
+
+    def test_softech_down_creates_no_run_and_runs_no_step(self):
+        self.assertIsNone(tasks._run_morning_chain())
+        self.assertFalse(SyncRun.objects.filter(lane='morning_chain').exists())
+        for m in self.steps.values():
+            m.assert_not_called()
+
+    def test_a_second_chain_on_the_same_day_does_nothing(self):
+        self._fast_ok()
+        self.assertEqual(tasks._run_morning_chain().status, 'success')
+        self.assertIsNone(tasks._run_morning_chain())
+        for m in self.steps.values():
+            m.assert_called_once()
+        self.assertEqual(SyncRun.objects.filter(lane='morning_chain').count(), 1)
+
+    def test_retry_after_a_killed_run_skips_steps_done_today(self):
+        self._fast_ok()
+        killed = SyncRun.objects.create(status='failed', lane='morning_chain')
+        SyncRun.objects.filter(pk=killed.pk).update(started_at=timezone.now() - timedelta(minutes=1))
+        for name in ('_run_ap_reconciliation_sync', '_insights_daily'):
+            SyncLog.objects.create(sync_run=killed, table_name=f'chain:{name.lstrip("_")}',
+                                   records_processed=1)
+        run = tasks._run_morning_chain()
+        self.assertEqual(run.status, 'success')
+        self.steps['_run_ap_reconciliation_sync'].assert_not_called()
+        self.steps['_insights_daily'].assert_not_called()
+        self.steps['_run_supply_case_sweep'].assert_called_once()
+        self.steps['_run_replacement_check'].assert_called_once()
+
+    def test_lock_is_released_after_a_normal_run(self):
+        from apps.sync.scheduler_lock import _raw_connection
+        self._fast_ok()
+        tasks._run_morning_chain()
+        conn = _raw_connection()
+        self.addCleanup(conn.close)
+        with conn.cursor() as cur:
+            cur.execute('SELECT pg_try_advisory_lock(%s)', [MORNING_CHAIN_LOCK_KEY])
+            self.assertTrue(cur.fetchone()[0])
+            cur.execute('SELECT pg_advisory_unlock(%s)', [MORNING_CHAIN_LOCK_KEY])

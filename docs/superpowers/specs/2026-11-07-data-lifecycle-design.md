@@ -137,7 +137,11 @@ Each stage ships alone and is approved alone. Stages 1 and 2 need no new screen.
   **Changed by the owner 2026-11-11:** the morning chain also catches up, at most once a day after its
   07:30 slot, only once a fast sync has succeeded in the last 30 minutes (its steps swallow their own
   errors, so a run while SOFTECH is down would read as a success). All four steps are read-only towards
-  SOFTECH; a chain lock stops the catch-up and the 07:30 job overlapping.
+  SOFTECH; a chain lock stops the catch-up and the 07:30 job overlapping. Inside that lock, both
+  paths refuse a second successful chain in the same day (the insights step sends WhatsApp, and its
+  own throttle is only 10 minutes), refuse to start while SOFTECH is unreachable, and on a retry skip
+  the steps already completed that day. Steps swallow their own errors, so "failed" in practice means
+  a run marked stale after its process died.
 - Any new scheduler job gets an entry in `SCHEDULER_JOB_GUARDS` (`apps/tests/test_scheduler_locks.py`).
 
 ### Stage 2 — Reclaim space
