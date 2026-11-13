@@ -29,7 +29,7 @@ import { LevelBar, useGamificationMe } from '../components/GamificationCard'
 import { RedemptionsTab, RewardCatalogEditor, RewardsTab } from './gamification/RewardsTabs'
 import ChampionsTab from './gamification/ChampionsTab'
 import ChallengesTab from './gamification/ChallengesTab'
-import { ROLES, roleLabel } from './gamification/labels'
+import useRoles from '../hooks/useRoles'
 
 const fmt = (n) => (n ?? 0).toLocaleString('en-US')
 const signed = (n) => `${n > 0 ? '+' : ''}${fmt(n)}`
@@ -38,10 +38,6 @@ const PERIODS = [
   ['day', 'اليوم', 'Today'], ['week', 'الأسبوع', 'Week'], ['month', 'الشهر', 'Month'],
   ['quarter', 'الربع', 'Quarter'], ['year', 'السنة', 'Year'], ['all', 'الكل', 'All time'],
 ]
-// Role names live in ./gamification/labels so the tab modules can share them
-// without importing this page (no import cycle).
-export { roleLabel }
-
 const CATEGORY = {
   sales: ['المبيعات', 'Sales'], customers: ['العملاء (PIC)', 'Customers (PIC)'], reservations: ['الحجوزات', 'Reservations'],
   demand: ['الطلب الضائع والمتابعة', 'Demand & follow-ups'],
@@ -137,6 +133,7 @@ function PicPanel({ pic, t, lang }) {
 }
 
 function MeTab({ me, t, lang }) {
+  const { roleLabelT: roleLabel } = useRoles()
   const navigate = useNavigate()
   const { data: levels = [] } = useQuery({
     queryKey: ['gamificationLevels'], queryFn: () => gamificationApi.levels().then(r => r.data),
@@ -290,6 +287,7 @@ function ReportBranchesTable({ branches, t }) {
 // ── الترتيب ──────────────────────────────────────────────────────────────────
 
 export function LeaderboardTable({ rows, meId, t, lang, compact = false }) {
+  const { roleLabelT: roleLabel } = useRoles()
   const { sorted, headerProps } = useSortableRows(rows || [], {
     getValue: (r, k) => (k === 'level' ? (r.level?.number ?? null) : r[k]),
   })
@@ -334,6 +332,7 @@ export function LeaderboardTable({ rows, meId, t, lang, compact = false }) {
 }
 
 function LeaderboardTab({ me, t, lang }) {
+  const { roles } = useRoles()
   const [period, setPeriod] = useState('month')
   const [scope, setScope] = useState('branch')
   const [role, setRole] = useState('')
@@ -348,7 +347,8 @@ function LeaderboardTab({ me, t, lang }) {
                    options={[['branch', 'فرعي', 'My branch'], ['network', 'كل الفروع', 'Network']]} />
         <Segmented value={period} onChange={setPeriod} options={PERIODS} t={t} />
         <select value={role} onChange={e => setRole(e.target.value)} className="input-field text-xs w-auto">
-          {ROLES.map(([k, ar, en]) => <option key={k} value={k}>{t(ar, en)}</option>)}
+          <option value="">{t('كل الأدوار', 'All roles')}</option>
+          {roles.map(r => <option key={r.value} value={r.value}>{t(r.label_ar, r.label_en)}</option>)}
         </select>
       </div>
       {data?.limited && (
@@ -475,6 +475,7 @@ function RulesTab({ t, lang }) {
 // ── التقارير (managers) ──────────────────────────────────────────────────────
 
 function ReportsTab({ t, lang }) {
+  const { roleLabelT: roleLabel } = useRoles()
   const [period, setPeriod] = useState('month')
   const [err, setErr] = useState('')
   const { data, isLoading } = useQuery({
@@ -635,6 +636,7 @@ function ReportsTab({ t, lang }) {
 // ── الإعدادات (editors) ──────────────────────────────────────────────────────
 
 function RuleRow({ r, t, lang, onSave }) {
+  const { roles } = useRoles()
   const [d, setD] = useState({ points: r.points, daily_cap: r.daily_cap ?? '', is_active: r.is_active,
                                role_points: { ...(r.role_points || {}) } })
   const [openRoles, setOpenRoles] = useState(false)
@@ -679,7 +681,7 @@ function RuleRow({ r, t, lang, onSave }) {
             {t('اتركها فارغة لتأخذ نقاط القاعدة العامة.', 'Leave empty to use the rule\'s general points.')}
           </div>
           <div className="flex flex-wrap gap-2">
-            {ROLES.slice(1).map(([k, ar, en]) => (
+            {roles.map(({ value: k, label_ar: ar, label_en: en }) => (
               <label key={k} className="text-xs flex items-center gap-1">
                 {t(ar, en)}
                 <input type="number" className="input-field w-16 text-xs" value={d.role_points[k] ?? ''}

@@ -6,12 +6,8 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { notificationsApi, branchesApi } from '../api/client'
 import useAuthStore from '../store/authStore'
+import useRoles from '../hooks/useRoles'
 
-const ROLES = [
-  ['admin', 'مدير'], ['supervisor', 'مشرف'], ['pharmacist', 'صيدلي'], ['salesperson', 'مندوب'],
-  ['call_center', 'مركز اتصال'], ['purchasing', 'مشتريات'], ['delivery', 'توصيل'],
-  ['quality_manager', 'جودة'], ['accountant', 'محاسب'], ['viewer', 'عرض'],
-]
 
 export default function AnnouncementsPage() {
   const qc = useQueryClient()
@@ -118,6 +114,7 @@ function StatsModal({ id, onClose }) {
 }
 
 function AnnForm({ onDone }) {
+  const { roles } = useRoles()
   const [f, setF] = useState({ title: '', body: '', priority: 'normal', roles: [], branches: [] })
   const { data: branches = [] } = useQuery({
     queryKey: ['branches'],
@@ -143,7 +140,7 @@ function AnnForm({ onDone }) {
       <div>
         <div className="text-xs font-semibold text-gray-500 mb-1">الأدوار المستهدفة (فارغ = الجميع)</div>
         <div data-tour="general-announcements-roles" className="flex flex-wrap gap-1.5">
-          {ROLES.map(([v, l]) => (
+          {roles.map(({ value: v, label_ar: l }) => (
             <button key={v} type="button" onClick={() => toggle('roles', v)}
               className={`text-xs rounded-lg px-2.5 py-1 border ${f.roles.includes(v) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-200'}`}>{l}</button>
           ))}

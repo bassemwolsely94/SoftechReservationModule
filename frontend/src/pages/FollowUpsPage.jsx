@@ -38,6 +38,7 @@ import DialButton from '../components/pbx/DialButton'
 import CallListsPanel from '../components/followups/CallListsPanel'
 import MultiSelectFilter from '../components/MultiSelectFilter'
 import BranchMultiSelect from '../components/BranchMultiSelect'
+import useRoles, { roleOptions } from '../hooks/useRoles'
 
 // ─────────────────────────────────────────────
 //  Constants / config
@@ -961,16 +962,10 @@ function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
 // ─────────────────────────────────────────────
 //  Assign Panel — multi-user, role, branch
 // ─────────────────────────────────────────────
-const ROLE_OPTIONS = [
-  { value: '',              label: '— كل الأدوار —' },
-  { value: 'call_center',   label: 'سنترال' },
-  { value: 'pharmacist',    label: 'صيدلاني' },
-  { value: 'salesperson',   label: 'مندوب مبيعات' },
-  { value: 'admin',         label: 'مدير' },
-  { value: 'supervisor',    label: 'مشرف' },
-]
 
 function AssignPanel({ task, acting, doAction, branches = [] }) {
+  const { roles } = useRoles()
+  const ROLE_OPTIONS = [{ value: '', label: '— كل الأدوار —' }, ...roleOptions(roles)]
   // Mode: 'specific' | 'role' | 'branch' | 'role_branch' | 'task_branch'
   const [mode,           setMode]           = useState('specific')
   const [selectedIds,    setSelectedIds]    = useState([])   // specific user PKs

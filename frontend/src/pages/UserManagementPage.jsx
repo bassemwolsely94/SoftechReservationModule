@@ -4,7 +4,7 @@ import { usersApi, branchesApi } from '../api/client'
 import BranchSelect from '../components/BranchSelect'
 import useAuthStore from '../store/authStore'
 import { fa } from '../utils/flowArrow'
-import { ROLE_LABELS } from '../utils/roleLabels'
+import useRoles, { roleOptions } from '../hooks/useRoles'
 import { networkBadgeParts } from '../components/NetworkBadge'
 import SortTh from '../components/SortTh'
 import useServerSort from '../hooks/useServerSort'
@@ -24,10 +24,11 @@ const ROLE_COLORS = {
   purchasing:  'bg-purple-100 text-purple-800',
   delivery:    'bg-orange-100 text-orange-800',
   viewer:      'bg-gray-100 text-gray-700',
+  supervisor:  'bg-teal-100 text-teal-800',
+  quality_manager: 'bg-pink-100 text-pink-800',
+  accountant:  'bg-indigo-100 text-indigo-800',
 }
 
-const ROLES = Object.entries(ROLE_LABELS).map(([value, label]) => ({ value, label }))
-const ROLE_OPTIONS = ROLES.map(r => ({ code: r.value, name: r.label }))   // role filter (multi-select)
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -40,9 +41,10 @@ const POS_CHANNELS = [
 ]
 
 function RoleBadge({ role }) {
+  const { roleLabel } = useRoles()
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${ROLE_COLORS[role] || 'bg-gray-100 text-gray-700'}`}>
-      {ROLE_LABELS[role] || role}
+      {roleLabel(role)}
     </span>
   )
 }
@@ -58,6 +60,7 @@ function StatusBadge({ isActive }) {
 const FIELD_LABELS = { alerts_only: 'تنبيهات فقط', phone_alerts_enabled: 'تنبيهات الموبايل' }
 
 function UserDrawer({ user, branches, onClose, onSaved }) {
+  const { roles } = useRoles()
   const isEdit = Boolean(user)
   const qc = useQueryClient()
 
@@ -321,7 +324,7 @@ function UserDrawer({ user, branches, onClose, onSaved }) {
               onChange={e => set('role', e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-white"
             >
-              {ROLES.map(r => (
+              {roleOptions(roles).map(r => (
                 <option key={r.value} value={r.value}>{r.label}</option>
               ))}
             </select>
@@ -603,6 +606,7 @@ function ActivityLogModal({ user, onClose }) {
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function UserManagementPage() {
+  const { roles } = useRoles()
   const { user: currentUser } = useAuthStore()
   const isAdmin = currentUser?.role === 'admin'
 
@@ -695,7 +699,7 @@ export default function UserManagementPage() {
           />
         </div>
         <MultiSelectFilter dataTour="admin-users-role-filter" className="w-[180px]" menuClassName="min-w-[220px]"
-          showCode={false} allLabel="كل الأدوار" options={ROLE_OPTIONS} selected={roleFilter}
+          showCode={false} allLabel="كل الأدوار" options={roleOptions(roles).map(r => ({ code: r.value, name: r.label }))} selected={roleFilter}
           onChange={v => { setRoleFilter(v); setPage(1) }} />
         <select data-tour="admin-users-status-filter"
           value={activeFilter}
