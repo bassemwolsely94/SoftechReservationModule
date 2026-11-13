@@ -69,6 +69,18 @@ requests" (`GET /api/v1.0/codetypes/requests/my?ItemCode=`).
 - Not built: GS1 "Request Code Reuse" for items whose barcode is a GS1 code, and a scheduled status poll (the
   button and `coding.refresh` do it on demand).
 
+### Code check per ETA system
+
+`coding.check_codes` asks ETA's "Get Code Details by Item Code" for each mapped code and stores the answer with the
+system's name (`eta_check_env/status/at/detail`). ETA's test and production systems are separate registries, and the
+server that runs the test is the live one, so a status is never trusted across systems:
+- `coding_env` records which system an ETA answer set `coding_status` in ('' = the owner's workbook or a manual entry).
+  `services.classify` treats a status from another system as uncoded.
+- A code ETA reports missing or inactive in the system in use blocks its lines there.
+- In a test system, our real EGS codes it lacks can be registered as-is (`prepare_mirror`, `TaxCodeRequest.purpose =
+  mirror`). Their answers only mark the code found there; they never change the item's real coding. Never in production.
+- Not built: GS1 codes missing in a system ("Request Code Reuse").
+
 ## Which ETA system
 
 `environment.py`: `TAX_ETA_ENVIRONMENT` = `preprod` or `production` picks ETA's published addresses; explicit

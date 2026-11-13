@@ -300,3 +300,19 @@ def device_receipts(config, *, issued_from, page_size=5):
     serial = (config.device_serial or '').strip().upper()
     return [row for row in (_json(r).get('receipts') or [])
             if str(row.get('posSerialNumber') or '').strip().upper() == serial]
+
+
+def code_details(code_type, item_code):
+    """ETA's record of one code ("Get Code Details by Item Code", GET /api/v1.0/codetypes/{type}/codes/{code}),
+    or None when ETA says it has no such code. Read only; raises when ETA can't be asked."""
+    from urllib.parse import quote
+    path = f'/api/v1.0/codetypes/{quote(code_type, safe="")}/codes/{quote(item_code, safe="")}'
+    try:
+        r = requests.get(_api(path), headers=_headers(), timeout=TIMEOUT, allow_redirects=False, verify=_verify())
+    except requests.RequestException as exc:
+        raise EtaUncertain(f'تعذر الاستعلام عن الكود: {type(exc).__name__}') from exc
+    if r.status_code == 404:
+        return None
+    if r.status_code != 200:
+        raise EtaUncertain(f'تعذر الاستعلام عن الكود (HTTP {r.status_code})', r.status_code)
+    return _json(r)

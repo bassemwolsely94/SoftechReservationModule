@@ -188,10 +188,10 @@ SCREENS = [
              'body': T('ارفع ملف xlsx، اقرأ الأعمدة، ثم اربط كل حقل بعموده يدوياً؛ لا يُستنتج شيء من أسماء الأعمدة. «معاينة بدون حفظ» تعرض العدادات والأخطاء والتعارضات ولا تكتب شيئاً، والاعتماد يطبق ما رأيته بالضبط. ضريبة الملف مدخل فقط حتى يؤكدها المحاسب.',
                        'Upload an xlsx file, read its columns, then map each field to its column by hand; nothing is guessed from header names. "Preview without saving" shows the counts, errors and conflicts and writes nothing, and applying does exactly what you saw. VAT in the file stays an input until the accountant confirms it.')},
             {'key': 'codes', 'title': T('🔖 أكواد المصلحة', '🔖 ETA codes'),
-             'body': T('الصنف بلا كود معتمد يوقف كل مستند هو عليه. اختر الأصناف التي تحتاج كوداً ثم «تجهيز طلبات»: يُكوَّن لكل صنف كودنا الداخلي EG-رقم التسجيل-كود الصنف تحت كود GPC من 8 أرقام، ولا يُرسل شيء. '
+             'body': T('الصنف بلا كود معتمد يوقف كل مستند هو عليه. «فحص الأكواد» يسأل المصلحة هل تملك كل كود في المنظومة الحالية. اختر الأصناف التي تحتاج كوداً ثم «تجهيز طلبات»: يُكوَّن لكل صنف كودنا الداخلي EG-رقم التسجيل-كود الصنف تحت كود GPC من 8 أرقام، ولا يُرسل شيء. '
                        'من يملك الاعتماد النهائي يختار الطلبات ويكتب عددها ثم «إرسال للمصلحة». «تحديث الحالة من المصلحة» يسأل عن قرارها: الاعتماد يجعل كود الصنف معتمداً، والرفض يتركه موقوفاً ويسمح بطلب جديد. '
                        'النتيجة غير المؤكدة توقف الإرسال حتى الاستعلام. أعلى التبويب «منظومة المصلحة»: التجريبية أو الفعلية، والمفاتيح المفتوحة، و«اختبار الدخول».',
-                       'An item with no approved code blocks every document it is on. Pick the items that need a code, then "Prepare requests": each gets our internal code EG-<tax id>-<item code> under an 8-digit GPC code, and nothing is sent. '
+                       'An item with no approved code blocks every document it is on. "Check codes" asks ETA whether it holds each code in the system in use. Pick the items that need a code, then "Prepare requests": each gets our internal code EG-<tax id>-<item code> under an 8-digit GPC code, and nothing is sent. '
                        'Someone who holds finalize ticks the requests, types their count, then "Send to the Authority". "Refresh status from the Authority" asks for its decision: approval makes the item code approved, rejection keeps it blocked and allows a new request. '
                        'An uncertain result stops sending until the status is refreshed. At the top, "Authority system" shows pre-production or production, the switches that are on, and "Test login".')},
             {'key': 'receipts', 'title': T('🧾 الإيصالات', '🧾 Receipts'),
@@ -391,10 +391,19 @@ SCREENS = [
              'text': T('يرسل الطلبات المختارة واحداً واحداً. يحتاج كتابة عددها.', 'Sends the ticked requests one by one. Needs their count typed.'),
              'warn': T('معطل طالما طلب الأكواد مغلق، والإرسال للمنظومة الفعلية يحتاج موافقة المالك.', 'Disabled while code requests are off; sending to production needs the owner’s switch.'),
              'open_hint': T('لمن يملك الاعتماد النهائي، عند وجود طلبات جاهزة.', 'For those who hold finalize, when requests are prepared.')},
+            {'target': 'tax-invoicing-main-codes-check', 'label': T('فحص الأكواد لدى المصلحة', 'Check codes at the Authority'),
+             'text': T('هل تملك المصلحة كود كل صنف في المنظومة الحالية؟ النتيجة تُحفظ باسم المنظومة، والكود غير الموجود يوقف بنوده فيها.',
+                       'Does ETA hold each item code in the system in use? The answer is kept per system; a missing code blocks its lines there.')},
+            {'target': 'tax-invoicing-main-codes-check-run', 'label': T('فحص الأكواد التالية', 'Check the next codes'),
+             'text': T('يسأل المصلحة عن 100 كود، غير المفحوص أولاً. قراءة فقط، ولا يغير ترميز الصنف.', 'Asks ETA about 100 codes, unchecked first. Read only; it never changes the item coding.')},
+            {'target': 'tax-invoicing-main-codes-mirror', 'label': T('تجهيز تسجيلها', 'Prepare to register them'),
+             'text': T('في المنظومة التجريبية فقط: يطلب تسجيل كودنا الحالي كما هو، لتحمله المستندات التجريبية. لا يغير الترميز الفعلي.',
+                       'Test system only: asks to register our existing code as it is, so test documents can carry it. The real coding is unchanged.'),
+             'open_hint': T('بعد الفحص، عند وجود أكواد غير موجودة.', 'After a check, when codes are missing.')},
             {'target': 'tax-invoicing-main-codes-refresh', 'label': T('تحديث الحالة من المصلحة', 'Refresh status from the Authority'),
              'text': T('يسأل المصلحة عن الطلبات المرسلة. قرارها وحده يغير ترميز الصنف.', 'Asks ETA about sent requests. Only its decision changes the item coding.')},
         ],
         'updated': '2026-11-13',
-        'change_note': T('بداية سلسلة جهاز الفرع: جهاز جديد أو استلام من Invoicer بعد آخر إيصال له لدى المصلحة؛ وتبويب «أكواد المصلحة»', 'Branch device chain start: a new device, or taking over from Invoicer after its last receipt at ETA; plus the "ETA codes" tab'),
+        'change_note': T('فحص الأكواد لدى المصلحة لكل منظومة، وتسجيل أكوادنا الحالية في المنظومة التجريبية؛ وبداية سلسلة جهاز الفرع', 'Check codes at ETA per system and register our existing codes in the test system; plus the branch device chain start'),
     },
 ]

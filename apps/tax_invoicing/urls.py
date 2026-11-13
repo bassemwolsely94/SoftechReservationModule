@@ -43,6 +43,7 @@ urlpatterns = [
     path('codes/prepare/', views.codes_prepare),
     path('codes/send/', views.codes_send),
     path('codes/refresh/', views.codes_refresh),
+    path('codes/check/', views.codes_check),
     path('codes/<int:pk>/', views.code_detail),
     path('codes/<int:pk>/cancel/', views.code_cancel),
     path('receipts/', views.receipts_list),

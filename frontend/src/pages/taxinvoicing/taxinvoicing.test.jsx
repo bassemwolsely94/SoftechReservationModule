@@ -28,6 +28,7 @@ const api = vi.hoisted(() => ({
   codesPrepare: vi.fn(),
   codesSend: vi.fn(),
   codesRefresh: vi.fn(),
+  codesCheck: vi.fn(),
   chainLookup: vi.fn(),
   startChain: vi.fn(),
   undoChainStart: vi.fn(),
@@ -43,7 +44,7 @@ const { default: PrintTab } = await import('./PrintTab')
 const { default: ImportTab, buildOptions } = await import('./ImportTab')
 const { default: ItemsTab } = await import('./ItemsTab')
 const { BranchActions, ChainStart } = await import('./ReceiptsTab')
-const { default: CodesTab } = await import('./CodesTab')
+const { default: CodesTab, CodeCheck } = await import('./CodesTab')
 
 const line = (id, status) => ({
   id, docnumber: '55', docdate: '2026-10-01', branch: '170', itemcode: `I${id}`, item_name: `صنف ${id}`, quantity: '1',
@@ -335,5 +336,25 @@ describe('device chain start', () => {
   it('offers nothing to change without finalize', () => {
     show(<ChainStart branch="150" row={row} me={{ ...ME, can_finalize: false }} />)
     expect(screen.queryByText('ابحث في المصلحة عن إيصالات هذا الجهاز')).toBeNull()
+  })
+})
+
+describe('ETA code check', () => {
+  const summary = { checks: { found: 5, inactive: 0, not_found: 2, unchecked: 9 },
+    environment: { label: 'التجريبية (Pre-production)', api_base: 'https://api.preprod.invoicing.eta.gov.eg', is_production: false } }
+
+  it('shows the counts for the system in use and registers picked existing codes as mirror requests', async () => {
+    api.codeCandidates.mockResolvedValue({ data: [{ id: 4, itemcode: '60002', eta_code: 'EG-1-60002', item_name: 'Brufen', gpc_code: '10000454' }] })
+    api.codesPrepare.mockResolvedValue({ data: { created: [1], skipped: [] } })
+    show(<CodeCheck me={ME} summary={summary} />)
+    expect(screen.getByText(/غير موجود 2/)).toBeTruthy()
+    fireEvent.click(await screen.findByLabelText('اختيار 60002'))
+    fireEvent.click(screen.getByText(/تجهيز تسجيلها/))
+    await waitFor(() => expect(api.codesPrepare).toHaveBeenCalledWith({ ids: [4], kind: 'mirror' }))
+  })
+
+  it('offers no mirror list against production', () => {
+    show(<CodeCheck me={ME} summary={{ ...summary, environment: { ...summary.environment, is_production: true } }} />)
+    expect(api.codeCandidates).not.toHaveBeenCalled()
   })
 })

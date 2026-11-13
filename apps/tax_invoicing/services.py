@@ -211,6 +211,14 @@ def classify(line_review, profile, *, is_note=False):
         return L.ST_PENDING, f'بانتظار قرار المحاسب: {line_review.get_category_display()}'
     if profile is None or profile.coding_status == TaxItemProfile.CODE_MISSING:
         return L.ST_UNCODED, 'الصنف بدون كود لدى المصلحة'
+    from . import environment
+    here = environment.current()
+    if profile.coding_env and profile.coding_env != here:
+        return L.ST_UNCODED, f'حالة كود الصنف جاءت من منظومة أخرى ({profile.coding_env})؛ افحص الكود في المنظومة الحالية'
+    if profile.eta_check_env == here and profile.eta_check_status == TaxItemProfile.CHECK_NOT_FOUND:
+        return L.ST_UNCODED, 'الكود غير موجود في منظومة المصلحة الحالية'
+    if profile.eta_check_env == here and profile.eta_check_status == TaxItemProfile.CHECK_INACTIVE:
+        return L.ST_UNCODED, 'الكود غير مفعل في منظومة المصلحة الحالية'
     if profile.coding_status == TaxItemProfile.CODE_REJECTED:
         return L.ST_UNCODED, 'كود الصنف مرفوض من المصلحة'
     if profile.coding_status == TaxItemProfile.CODE_PENDING:
