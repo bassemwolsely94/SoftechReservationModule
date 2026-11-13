@@ -301,6 +301,58 @@ class CrewMembershipReviewFixTests(TestCase):
             m.preview([{'job_titles': ['كاشير']}], self.day, crew=self.crew)
         self.assertFalse([q for q in ctx.captured_queries if 'crews_crewrule' in q['sql']])
 
+    # ── final review F2: identities are deduped one by one ──────────────────────────────
+
+    def test_employee_include_row_adds_its_own_code_and_extension_while_active(self):
+        a = emp('1', 'كاشير', self.b130, usercode='55', exts=['201'])
+        manual(self.crew, 'include', employee=a, code='900', ext='250', frm=D(2026, 10, 5), to=D(2026, 10, 20))
+        x = m.members(self.crew, self.day)[0]
+        self.assertEqual((x.key, set(x.softech_usercodes), set(x.extensions)),
+                         (('emp', a.id), {'55', '900'}, {'201', '250'}))
+        # also when the employee is in by a rule, and only while the row is active
+        rule(self.crew, jobs=['كاشير'])
+        x = m.members(self.crew, self.day)[0]
+        self.assertEqual((set(x.softech_usercodes), set(x.extensions)), ({'55', '900'}, {'201', '250'}))
+        later = m.members(self.crew, D(2026, 10, 25))[0]
+        self.assertEqual((later.softech_usercodes, later.extensions), (('55',), ('201',)))
+        got = {(i.kind, i.value): (i.valid_from, i.valid_to)
+               for i in m.identities(self.crew, D(2026, 10, 1), D(2026, 10, 31))}
+        self.assertEqual(got[('softech_user', '900')], (D(2026, 10, 5), D(2026, 10, 20)))
+        self.assertEqual(got[('softech_user', '55')], (D(2026, 10, 1), D(2026, 10, 31)))
+
+    def test_bare_row_keeps_the_identity_no_employee_carries(self):
+        a = emp('1', 'صيدلي', self.b130, usercode='555')
+        rule(self.crew, jobs=['صيدلي'])
+        manual(self.crew, 'include', code='555', ext='299', label='وكيل')
+        got = {x.key: x for x in m.members(self.crew, self.day)}
+        self.assertEqual(set(got), {('emp', a.id), ('code', '555')})
+        bare = got[('code', '555')]
+        self.assertEqual((bare.softech_usercodes, bare.extensions, bare.off_payroll), ((), ('299',), True))
+        self.assertEqual(got[('emp', a.id)].softech_usercodes, ('555',))
+        ids = [(i.kind, i.value, i.member_key) for i in m.identities(self.crew, self.day, self.day)]
+        self.assertCountEqual(ids, [('softech_user', '555', ('emp', a.id)),
+                                    ('extension', '299', ('code', '555'))])
+
+    def test_employee_exclude_also_strips_that_employee_identities_from_bare_rows(self):
+        a = emp('1', 'صيدلي', self.b130, usercode='555', exts=['201'])
+        rule(self.crew, jobs=['صيدلي'])
+        manual(self.crew, 'include', code='555', label='كود أ')
+        manual(self.crew, 'include', ext='201', label='داخلي أ')
+        manual(self.crew, 'include', code='777', ext='201', label='وكيل')
+        manual(self.crew, 'exclude', employee=a, frm=D(2026, 10, 10))
+        before = {x.key for x in m.members(self.crew, D(2026, 10, 9))}
+        self.assertEqual(before, {('emp', a.id), ('code', '777')})
+        got = {x.key: x for x in m.members(self.crew, self.day)}
+        self.assertEqual(set(got), {('code', '777')})
+        self.assertEqual((got[('code', '777')].softech_usercodes, got[('code', '777')].extensions), (('777',), ()))
+        self.assertFalse([i for i in m.identities(self.crew, self.day, self.day) if i.value in ('555', '201')])
+
+    def test_employee_exclude_strips_identities_even_when_not_otherwise_a_member(self):
+        a = emp('1', 'صيدلي', self.b130, usercode='555')
+        manual(self.crew, 'include', code='555', label='كود أ')
+        manual(self.crew, 'exclude', employee=a)
+        self.assertEqual(m.members(self.crew, self.day), [])
+
     def test_members_agree_with_members_between_every_day(self):
         b140 = make_branch('فرع 140', '140')
         a = emp('1', 'صيدلي', self.b130, usercode='55')

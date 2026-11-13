@@ -200,6 +200,101 @@ class CrewsApiTests(CrewsApiBase):
         self.assertIn(self.e1.id, {e['id'] for e in data['employees']})
 
 
+class CrewsFinalReviewTests(CrewsApiBase):
+    """Final whole-branch review F3–F9."""
+
+    def test_month_floor_on_every_dated_write(self):              # F7
+        cid = self.crew()
+        before = str(self.month_start - timedelta(days=1))
+        rule = CrewRule.objects.create(crew_id=cid, job_titles=['صيدلي'], valid_from=date(2025, 1, 1))
+        row = CrewManualMember.objects.create(crew_id=cid, mode='include', softech_usercode='9001',
+                                              reason='x', valid_from=date(2025, 1, 1))
+        cases = [
+            ('rules end', f'/api/crews/{cid}/rules/{rule.id}/end/', {'on': before}),
+            ('rules replace', f'/api/crews/{cid}/rules/{rule.id}/replace/', {'job_titles': ['مساعد'], 'on': before}),
+            ('manual add', f'/api/crews/{cid}/manual/',
+             {'mode': 'include', 'softech_usercode': '9002', 'reason': 'x', 'valid_from': before}),
+            ('manual end', f'/api/crews/{cid}/manual/{row.id}/end/', {'on': before}),
+        ]
+        for name, url, body in cases:
+            with self.subTest(name):
+                r = self.client.post(url, body, format='json')
+                self.assertEqual(r.status_code, 400, r.content)
+                self.assertIn(MONTH_LOCKED, r.content.decode())
+                rule.refresh_from_db()
+                row.refresh_from_db()
+                self.assertEqual((rule.valid_to, rule.voided_at), (None, None))
+                self.assertEqual((row.valid_to, row.voided_at), (None, None))
+                self.assertEqual(CrewRule.objects.filter(crew_id=cid).count(), 1)
+                self.assertEqual(CrewManualMember.objects.filter(crew_id=cid).count(), 1)
+
+    def test_replace_audit_records_the_old_rows_end_date(self):     # F3
+        cid = self.crew()
+        old = CrewRule.objects.create(crew_id=cid, job_titles=['صيدلي'], valid_from=date(2025, 1, 1))
+        r = self.client.post(f'/api/crews/{cid}/rules/{old.id}/replace/', {
+            'job_titles': ['مساعد'], 'on': str(self.today)}, format='json')
+        self.assertEqual(r.status_code, 201, r.content)
+        log = AuditLog.objects.get(action='crew_rule_replaced', object_id=str(cid))
+        self.assertEqual(log.old_data['ended_to'], str(self.today - timedelta(days=1)))
+        self.assertIsNone(log.old_data['valid_to'])               # the row as it was before
+
+    def test_end_rereads_the_row_under_lock(self):                   # F4
+        from apps.crews import services
+        cid = self.crew()
+        crew = Crew.objects.get(pk=cid)
+        rule = CrewRule.objects.create(crew=crew, job_titles=['صيدلي'], valid_from=date(2025, 1, 1))
+        row = CrewManualMember.objects.create(crew=crew, mode='include', softech_usercode='9001', reason='x',
+                                              valid_from=date(2025, 1, 1))
+        stale_rule, stale_row = CrewRule.objects.get(pk=rule.pk), CrewManualMember.objects.get(pk=row.pk)
+        # someone else ends both rows first; our stale copies still look open
+        services.end_rule(rule, self.today, self.admin)
+        services.end_manual(row, self.today, self.admin)
+        for name, call in [('end_rule', lambda: services.end_rule(stale_rule, self.today, self.admin)),
+                           ('replace_rule', lambda: services.replace_rule(
+                               stale_rule, {'job_titles': ['مساعد']}, self.today, self.admin)),
+                           ('end_manual', lambda: services.end_manual(stale_row, self.today, self.admin))]:
+            with self.subTest(name):
+                with self.assertRaises(Exception) as ctx:
+                    call()
+                self.assertIn('منتهٍ', str(ctx.exception.detail))
+        self.assertEqual(CrewRule.objects.filter(crew=crew).count(), 1)
+
+    def test_void_reads_cancelled_from_its_start(self):              # F5
+        from apps.crews import services
+        cid = self.crew()
+        r = self.client.post(f'/api/crews/{cid}/rules/', {'job_titles': ['صيدلي'], 'valid_from': str(self.today)},
+                             format='json')
+        rid = r.json()['id']
+        self.client.post(f'/api/crews/{cid}/rules/{rid}/end/', {'on': str(self.today)}, format='json')
+        for action in ('crew_rule_voided', 'crew_member_voided'):
+            self.assertIn('إلغاء من بدايته', services.ACTION_LABELS[action])
+            self.assertNotIn('لم تُطبق', services.ACTION_LABELS[action])
+        changes = self.client.get(f'/api/crews/{cid}/history/').json()['changes']
+        voided = next(c for c in changes if c['action'] == 'crew_rule_voided')
+        self.assertIn('إلغاء من بدايته', voided['action_label'])
+
+    def test_replace_refuses_its_own_dates_in_the_body(self):       # F6
+        cid = self.crew()
+        old = CrewRule.objects.create(crew_id=cid, job_titles=['صيدلي'], valid_from=date(2025, 1, 1))
+        for extra in ({'valid_from': str(self.today)}, {'valid_to': str(self.today + timedelta(days=5))},
+                      {'valid_to': None}):
+            with self.subTest(extra=extra):
+                r = self.client.post(f'/api/crews/{cid}/rules/{old.id}/replace/', {
+                    'job_titles': ['مساعد'], 'on': str(self.today), **extra}, format='json')
+                self.assertEqual(r.status_code, 400, r.content)
+                old.refresh_from_db()
+                self.assertIsNone(old.valid_to)
+                self.assertEqual(CrewRule.objects.filter(crew_id=cid).count(), 1)
+
+    def test_delete_of_archived_crew_writes_no_new_audit(self):     # F9
+        cid = self.crew()
+        CrewRule.objects.create(crew_id=cid, job_titles=['صيدلي'], valid_from=self.today - timedelta(days=1))
+        self.assertEqual(self.client.delete(f'/api/crews/{cid}/').json(), {'result': 'archived'})
+        n = AuditLog.objects.filter(model_name='Crew', object_id=str(cid)).count()
+        self.assertEqual(self.client.delete(f'/api/crews/{cid}/').json(), {'result': 'archived'})
+        self.assertEqual(AuditLog.objects.filter(model_name='Crew', object_id=str(cid)).count(), n)
+
+
 class UnattributedSalesTests(CrewsApiBase):
     def setUp(self):
         super().setUp()
@@ -233,6 +328,14 @@ class UnattributedSalesTests(CrewsApiBase):
         self.assertFalse(sellers['S1']['generic'])
         self.assertEqual(sellers['S1']['name'], 'بائع أول')
         self.assertEqual(data['rule'], {'groups': ['17'], 'usercodes': []})
+
+    def test_seller_without_full_name_shows_user_id(self):          # final review F8
+        ERPUser.objects.create(username='S2', user_id='4242', full_name='', user_group='5')
+        PurchaseHistory.objects.create(customer=make_customer(), softech_invoice_id='INV-S2', branch=self.b1,
+                                       doc_code='115', total_amount=Decimal('10'), invoice_date=timezone.now(),
+                                       softech_user='S2')
+        sellers = {s['code']: s for s in self._report()['sellers']}
+        self.assertEqual(sellers['S2']['name'], '4242')
 
     def test_generic_config_put_audited_and_used(self):
         r = self.client.put('/api/crews/unattributed-sales/config/', {'groups': ['17'], 'usercodes': ['S1']},

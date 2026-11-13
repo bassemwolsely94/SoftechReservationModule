@@ -100,7 +100,8 @@ SCREENS = [
                        'والوصف، ثم القواعد، ثم الإضافات والاستبعادات اليدوية. القاعدة تختار الناس بالوظيفة والفرع والقسم '
                        'والإدارة؛ كل تغيير في الاختيارات يحدّث المعاينة (عدد وأسماء من سيكونون في الطاقم من التاريخ المختار). '
                        'تاريخ البداية افتراضيًا اليوم ولا يقبل ما قبل أول الشهر الحالي. «تعديل» على قاعدة يُنهيها ويبدأ قاعدة '
-                       'جديدة من التاريخ. «إنهاء» يوقف السطر من تاريخ؛ السطر الذي لم يبدأ بعد يُلغى. الأسطر المنتهية والملغاة '
+                       'جديدة من التاريخ. «إنهاء» يوقف السطر من تاريخ؛ السطر الذي يبدأ في هذا التاريخ أو بعده يُلغى من بدايته '
+                       'حتى لو طُبق أيامًا من هذا الشهر، وتظهر حالته «إلغاء من بدايته». الأسطر المنتهية والملغاة '
                        'تبقى ظاهرة باهتة بتواريخها. الإضافة اليدوية: ابحث عن موظف بالاسم أو الرقم الوظيفي أو كود المستخدم، أو '
                        'اختر «خارج كشف الرواتب» واكتب كود مستخدم و/أو رقم داخلي واسمًا؛ السبب إلزامي. «حذف / أرشفة» يحذف '
                        'الطاقم الذي لم يكن له أعضاء قط، ويؤرشف غيره.',
@@ -109,7 +110,8 @@ SCREENS = [
                        'people by job title, branch, department and section; every change to the picks refreshes the preview '
                        '(how many people, and who, will be in the crew from the chosen date). The start date is today by '
                        'default and cannot be before the first of the current month. "Edit" on a rule ends it and starts a new '
-                       'rule from the date. "End" stops a row from a date; a row that has not started yet is voided. Ended and '
+                       'rule from the date. "End" stops a row from a date; a row that starts on or after that date is cancelled from its start '
+                       'even if it applied for some days this month, and shows "cancelled from its start". Ended and '
                        'voided rows stay visible, faded, with their dates. Manual add: search an employee by name, HR number or '
                        'user code, or choose «off payroll» and type a user code and/or an extension and a label; a reason is '
                        'required. "Delete / archive" deletes a crew that never had members and archives any other.')},

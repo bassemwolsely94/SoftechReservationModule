@@ -7,12 +7,17 @@ Membership on day D = (employees whose assignment on D matches an active rule
                        ∪ manual includes active on D) − manual excludes active on D,
 restricted to employees employed on D (start_date <= D <= end_date, blanks open).
 
+Identities (SOFTECH user codes, PBX extensions) are handled one by one: an include row naming an
+employee adds its own code / extension to that person while active; a bare (off-payroll) member
+loses any identity an employee member carries that day, or that an excluded employee carries, and
+is dropped only when it has none left.
+
 Every public function loads the crew's rows, the relevant assignments and employees ONCE
 (a fixed number of queries whatever the date range), then evaluates in memory. `members` and
 `members_between` share `_timeline`, so a day's members always agree with the spans.
 """
 from bisect import bisect_right
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from functools import reduce
 from operator import or_
@@ -168,6 +173,39 @@ def _ids(mem: Member) -> set:
     return {('c', c) for c in mem.softech_usercodes} | {('x', x) for x in mem.extensions}
 
 
+def _row_ids(x) -> set:
+    return ({('c', x.softech_usercode)} if x.softech_usercode else set()) | (
+        {('x', x.pbx_extension)} if x.pbx_extension else set())
+
+
+def _with_ids(mem: Member, ids: set) -> Member:
+    return replace(mem, softech_usercodes=tuple(sorted(v for k, v in ids if k == 'c')),
+                   extensions=tuple(sorted(v for k, v in ids if k == 'x')))
+
+
+def _add_ids(mem: Member, ids: set) -> Member:
+    """The member with `ids` appended (its own order kept, nothing repeated)."""
+    codes, exts = list(mem.softech_usercodes), list(mem.extensions)
+    for k, v in sorted(ids):
+        lst = codes if k == 'c' else exts
+        if v not in lst:
+            lst.append(v)
+    return replace(mem, softech_usercodes=tuple(codes), extensions=tuple(exts))
+
+
+def _strip(out: dict, ids: set):
+    """Take `ids` off every bare (off-payroll) member; drop a bare member left with none."""
+    if not ids:
+        return
+    for k, v in list(out.items()):
+        if v.employee_id is None and _ids(v) & ids:
+            rest = _ids(v) - ids
+            if rest:
+                out[k] = _with_ids(v, rest)
+            else:
+                del out[k]
+
+
 def _evaluate(data: _Data, d: date) -> dict:
     """key -> Member for day d."""
     out = {}
@@ -179,6 +217,11 @@ def _evaluate(data: _Data, d: date) -> dict:
             if e and a and _employed(e, d) and any(r.matches(a) for r in rules):
                 out[('emp', emp_id)] = _employee_member(data, e, d, 'rule')
     manual = [x for x in data.manual if _active(x, d)]
+    # identities an include row naming an employee adds to that person while the row is active
+    extra = {}
+    for x in manual:
+        if x.mode == 'include' and x.employee_id:
+            extra.setdefault(x.employee_id, set()).update(_row_ids(x))
     for x in manual:
         if x.mode != 'include':
             continue
@@ -189,20 +232,28 @@ def _evaluate(data: _Data, d: date) -> dict:
         else:
             mem = _bare_member(x)
             out.setdefault(mem.key, mem)
+    for emp_id, ids in extra.items():
+        if ('emp', emp_id) in out:
+            out[('emp', emp_id)] = _add_ids(out[('emp', emp_id)], ids)
+    excluded_ids = set()
     for x in manual:
         if x.mode != 'exclude':
             continue
         if x.employee_id:
             out.pop(('emp', x.employee_id), None)
+            # the excluded person's identities that day leave with them, bare rows included
+            e = data.employees.get(x.employee_id)
+            if e:
+                excluded_ids |= _ids(_employee_member(data, e, d, 'manual')) | extra.get(e.id, set())
         for k in [k for k, v in out.items()
                   if (x.softech_usercode and x.softech_usercode in v.softech_usercodes)
                   or (x.pbx_extension and x.pbx_extension in v.extensions)]:
             del out[k]
+    _strip(out, excluded_ids)
     # A bare code / extension already carried by an employee member that day is the same person:
-    # keep one member so the identity is never credited twice.
-    carried = set().union(*(_ids(v) for v in out.values() if v.employee_id))
-    for k in [k for k, v in out.items() if v.employee_id is None and _ids(v) & carried]:
-        del out[k]
+    # drop just that identity from the bare member so it is never credited twice; the bare member
+    # stays while it still has an identity no employee carries.
+    _strip(out, set().union(*(_ids(v) for v in out.values() if v.employee_id)))
     return out
 
 

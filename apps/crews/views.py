@@ -11,7 +11,7 @@ apps/crews/views.py — mounted at /api/crews/ (spec 2026-11-13 §6.5, §6.8)
   GET    <id>/history/?start&end         spans + every audited change (default last 12 months)       view
   POST   <id>/rules/                     add a rule                                                  edit
   POST   <id>/rules/<rid>/end/ {on}      end the day before `on` (void when it never applied)        edit
-  POST   <id>/rules/<rid>/replace/       end + new rule from `on`                                    edit
+  POST   <id>/rules/<rid>/replace/       end + new open rule from `on` (valid_from/valid_to → 400)   edit
   POST   <id>/manual/                    add a manual include / exclude                              edit
   POST   <id>/manual/<mid>/end/ {on}                                                                 edit
   POST   preview/ {rules, date?, crew_id?}  who unsaved rules would match; saves nothing            edit
@@ -49,6 +49,7 @@ from .serializers import (CrewInput, EndInput, GenericRuleInput, ManualInput, Pr
 
 CREWS = [IsAuthenticated, matrix_permission('crews', post=('edit',), delete=('edit',))]
 BAD_DATE = 'تاريخ غير صحيح (YYYY-MM-DD).'
+REPLACE_DATES = 'التعديل يبدأ القاعدة الجديدة من «on» مفتوحة — لا ترسل valid_from أو valid_to.'
 MAX_RANGE_DAYS = 3 * 366
 
 
@@ -207,6 +208,9 @@ def rule_end(request, pk, rid):
 def rule_replace(request, pk, rid):
     rule = get_object_or_404(CrewRule, pk=rid, crew_id=pk)
     on = _valid(EndInput, request.data)['on']
+    if {'valid_from', 'valid_to'} & set(request.data):
+        # the new rule starts on `on` and stays open; dates in the body would be silently dropped
+        raise ValidationError({'detail': REPLACE_DATES})
     new = services.replace_rule(rule, _valid(RuleInput, request.data), on, _staff(request))
     return Response(rule_out(new), status=status.HTTP_201_CREATED)
 

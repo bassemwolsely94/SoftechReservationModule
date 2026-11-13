@@ -4,8 +4,10 @@ apps/crews/services.py
 Every crew write (spec 2026-11-13 §6.5). Each runs in one transaction and writes one AuditLog row
 with obj=crew, extra={'crew_id', 'row': 'rule' | 'manual' | None, 'row_id'} and the changed row
 before / after. Rule and manual rows are never edited in place: they are ended ("apply from D" =
-valid_to D - 1) or, when they never applied, voided. No change may take effect before the first
-day of the current month (past months are closed). No SOFTECH access.
+valid_to D - 1) or, when they start on or after D, voided («إلغاء من بدايته»: the row is ignored
+from its start, which may be earlier this month). No change may take effect before the first day
+of the current month (past months are closed). Ends re-read the row under select_for_update().
+No SOFTECH access.
 """
 from datetime import date, timedelta
 
@@ -37,11 +39,11 @@ ACTION_LABELS = {
     'crew_unarchived': 'إعادة الطاقم من الأرشيف',
     'crew_rule_added': 'إضافة قاعدة',
     'crew_rule_ended': 'إنهاء قاعدة',
-    'crew_rule_voided': 'إلغاء قاعدة لم تُطبق',
+    'crew_rule_voided': 'قاعدة: إلغاء من بدايته',
     'crew_rule_replaced': 'استبدال قاعدة',
     'crew_member_added': 'إضافة / استبعاد فرد يدويًا',
     'crew_member_ended': 'إنهاء إضافة / استبعاد يدوي',
-    'crew_member_voided': 'إلغاء إضافة / استبعاد لم تُطبق',
+    'crew_member_voided': 'إضافة / استبعاد يدوي: إلغاء من بدايته',
     'crew_generic_sellers_set': 'تعديل حسابات «بائع غير محدد»',
 }
 
@@ -131,7 +133,10 @@ def update_crew(crew, data: dict, user) -> Crew:
 @transaction.atomic
 def remove_crew(crew, user) -> str:
     """'deleted' when the crew never had a member before today, else 'archived' (hidden from pickers,
-    name kept in past reports)."""
+    name kept in past reports). An already-archived crew stays archived, with no new audit row."""
+    crew = Crew.objects.select_for_update().get(pk=crew.pk)
+    if crew.is_archived:
+        return 'archived'
     old = crew_data(crew)
     if not crew.has_history():
         _audit('crew_deleted', crew, user, old={**old, 'rules': [rule_data(r) for r in crew.rules.all()],
@@ -170,9 +175,16 @@ def _check_range(valid_from, valid_to):
         _refuse('تاريخ النهاية قبل تاريخ البداية.')
 
 
+def _locked(model, row):
+    """The row re-read inside the transaction under a row lock, so two ends of the same row
+    cannot both pass the checks on stale copies."""
+    return model.objects.select_for_update().get(pk=row.pk)
+
+
 def _end_or_void(row, on: date, user) -> bool:
-    """End the row the day before `on`; a row that starts on or after `on` never applied and is
-    voided. Returns True when voided."""
+    """End the row the day before `on`; a row that starts on or after `on` is voided — cancelled
+    from its start («إلغاء من بدايته»; it may have applied earlier this month). Returns True when
+    voided. The caller passes a row re-read under select_for_update()."""
     check_effective(on)
     if row.voided_at is not None:
         _refuse('هذا السطر ملغى بالفعل.')
@@ -224,6 +236,7 @@ def add_rule(crew, data: dict, user) -> CrewRule:
 
 @transaction.atomic
 def end_rule(rule, on: date, user) -> CrewRule:
+    rule = _locked(CrewRule, rule)
     crew = rule.crew
     _live(crew)
     old = rule_data(rule)
@@ -235,14 +248,17 @@ def end_rule(rule, on: date, user) -> CrewRule:
 
 @transaction.atomic
 def replace_rule(rule, data: dict, on: date, user) -> CrewRule:
-    """End (or void) `rule` and start the new one on `on`, in one transaction and one audit row."""
+    """End (or void) `rule` and start the new one on `on`, in one transaction and one audit row.
+    The new rule's dates are `on` and open; a body that names its own dates is refused (views)."""
+    rule = _locked(CrewRule, rule)
     crew = rule.crew
     _live(crew)
     old = rule_data(rule)
     voided = _end_or_void(rule, on, user)
     new_rule = _new_rule(crew, {**data, 'valid_to': None}, user, on)
     _audit('crew_rule_replaced', crew, user, row='rule', row_id=new_rule.pk,
-           old={**old, 'id': rule.pk, 'voided': voided}, new={**rule_data(new_rule), 'id': new_rule.pk})
+           old={**old, 'id': rule.pk, 'voided': voided, 'ended_to': _d(rule.valid_to)},
+           new={**rule_data(new_rule), 'id': new_rule.pk})
     return new_rule
 
 
@@ -278,6 +294,7 @@ def add_manual(crew, data: dict, user) -> CrewManualMember:
 
 @transaction.atomic
 def end_manual(row, on: date, user) -> CrewManualMember:
+    row = _locked(CrewManualMember, row)
     crew = row.crew
     _live(crew)
     old = manual_data(row)

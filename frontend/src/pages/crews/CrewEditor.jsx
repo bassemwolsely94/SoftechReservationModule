@@ -1,7 +1,7 @@
 /**
  * Crews tab (الأطقم), right side: the selected crew's editor.
  *   header   name / type / description (PATCH), «حذف / أرشفة» (server answers deleted|archived), unarchive
- *   rules    dated rules; add, «تعديل» (= replace from the date), «إنهاء» (server voids a row that never applied)
+ *   rules    dated rules; add, «تعديل» (= replace from the date), «إنهاء» (server voids — «إلغاء من بدايته» — a row starting on or after the date)
  *   preview  every picker change → POST /preview/ (400 ms debounce): who the crew would hold from the date
  *   manual   dated include / exclude rows: an employee, or «خارج كشف الرواتب» by user code and/or extension
  * One «تاريخ التطبيق» drives every change (default today, min first of this month — the server still decides).
@@ -23,6 +23,8 @@ const hasCriteria = r => r.job_titles.length + r.branch_ids.length + r.departmen
 const ruleBody = r => ({ job_titles: r.job_titles, branch_ids: r.branch_ids, departments: r.departments, sections: r.sections })
 const appliesOn = (row, d) => row.status !== 'voided' && row.valid_from <= d && (!row.valid_to || row.valid_to >= d)
 const asOptions = list => (list || []).map(v => ({ value: v, label: v }))
+/** Sort value for the manual table; module level so useSortableRows gets a stable getValue. */
+const getWho = (r, k) => (k === 'who' ? (r.employee_name || r.label || r.softech_usercode || r.pbx_extension) : r[k])
 
 function useDebounced(value, ms) {
   const [v, setV] = useState(value)
@@ -222,7 +224,6 @@ function RulesSection({ crew, options, canChange, on }) {
 // ── manual rows ───────────────────────────────────────────────────────────────
 
 function ManualTable({ rows, canChange, onEnd, busy }) {
-  const getWho = (r, k) => (k === 'who' ? (r.employee_name || r.label || r.softech_usercode || r.pbx_extension) : r[k])
   const { sorted, headerProps: h } = useSortableRows(rows, { persistKey: 'crews-manual', getValue: getWho })
   if (!rows.length) return <p className="text-xs text-gray-500">لا توجد إضافات أو استبعادات يدوية.</p>
   return (

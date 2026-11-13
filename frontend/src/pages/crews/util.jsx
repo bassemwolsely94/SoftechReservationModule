@@ -40,7 +40,7 @@ export const STATUS = {
   active: { label: 'سارية', cls: 'bg-emerald-50 text-emerald-700' },
   future: { label: 'تبدأ لاحقًا', cls: 'bg-blue-50 text-blue-700' },
   ended:  { label: 'منتهية', cls: 'bg-gray-100 text-gray-500' },
-  voided: { label: 'ملغاة', cls: 'bg-gray-100 text-gray-500 line-through' },
+  voided: { label: 'إلغاء من بدايته', cls: 'bg-gray-100 text-gray-500 line-through' },
 }
 
 export function StatusChip({ status }) {

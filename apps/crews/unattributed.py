@@ -81,8 +81,9 @@ def _money(v) -> float:
 
 def unattributed_by_branch(start: date, end: date) -> dict:
     rule = generic_rule()
-    users = {u: (g or '', n or '') for u, g, n in
-             ERPUser.objects.values_list('username', 'user_group', 'full_name')}
+    # name = full name, else the ERP user id (as analytics _build_user_map falls back)
+    users = {u: (g or '', n or uid or '') for u, g, n, uid in
+             ERPUser.objects.values_list('username', 'user_group', 'full_name', 'user_id')}
     group_of = {u: g for u, (g, _) in users.items()}
     group_names = {str(g): n for g, n in ErpUserGroup.objects.values_list('usergroup', 'name')}
 
