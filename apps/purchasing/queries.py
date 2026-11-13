@@ -41,6 +41,12 @@ Named parameters for PG_AGGREGATE_SQL (psycopg2 %(name)s style):
   d365   date — 365 days ago (rolling window start)
 """
 
+from apps.batches.store_roles import quarantine_sql_in
+
+# Quarantine stores 102/103/105 (store_roles.QUARANTINE_STORE_CODES), fixed order:
+# "('102', '103', '105')" — the SQL text sent to SOFTECH is unchanged.
+_QUARANTINE_IN = quarantine_sql_in(', ')
+
 # ── INCREMENTAL / FULL SALES FETCH FROM SOFTECH ───────────────────────────────
 #
 # Returns ONE row per (branchcode, itemcode, doccode, docnumber, docdate) with
@@ -143,7 +149,7 @@ PG_AGGREGATE_SQL = """
 # balance rather than the potentially-stale PG ItemStock snapshot.
 #
 # Excludes store codes 102, 103, 105 (expired / quarantine holding areas at
-# the HQ branch — defined in catalog.models.EXCLUDED_STORE_CODES).
+# the HQ branch — defined in batches.store_roles.QUARANTINE_STORE_CODES).
 #
 # SUMs nowqty per (itemcode, branchcode) because one branch may have multiple
 # storecodes (front counter 100, back store 101, …).  The Excel Power Query
@@ -159,7 +165,7 @@ QUERY_STKBAL = """
       AND sb.branchcode IS NOT NULL
       AND sb.itemcode   IS NOT NULL
       AND sb.itemcode   != ''
-      AND sb.storecode  NOT IN ('102', '103', '105')
+      AND sb.storecode  NOT IN """ + _QUARANTINE_IN + """
     GROUP BY sb.itemcode, sb.branchcode
 """
 

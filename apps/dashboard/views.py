@@ -16,7 +16,7 @@ from datetime import date, timedelta
 
 from apps.reservations.models import Reservation
 from apps.customers.models import Customer, PurchaseHistory
-from apps.catalog.models import ItemStock, EXCLUDED_STORE_CODES
+from apps.catalog.models import ItemStock, exclude_unsellable
 from apps.sync.models import SyncRun
 from core.permissions import RouteModulePermission  # round 2, D6
 
@@ -149,9 +149,7 @@ def dashboard_summary(request):
 
     # ── Low stock alerts ──────────────────────────────────────────────────────
     stock_qs = (
-        ItemStock.objects
-        .filter(quantity_on_hand__gt=0, quantity_on_hand__lt=5)
-        .exclude(softech_store_code__in=EXCLUDED_STORE_CODES)
+        exclude_unsellable(ItemStock.objects.filter(quantity_on_hand__gt=0, quantity_on_hand__lt=5))
         .select_related('item', 'branch')
         .order_by('quantity_on_hand')
     )

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, Item, ItemStock, ItemBarcode, EXCLUDED_STORE_CODES, \
+from .models import Category, Item, ItemStock, ItemBarcode, is_sellable, \
     CatalogVariantGroup, VariantMember, ProductBundle, BundleItem
 
 
@@ -43,7 +43,7 @@ class ItemSerializer(serializers.ModelSerializer):
         return float(sum(
             s.quantity_on_hand
             for s in obj.stock_levels.all()
-            if s.softech_store_code not in EXCLUDED_STORE_CODES
+            if is_sellable(s)
         ))
 
 
@@ -82,7 +82,7 @@ class ItemSearchSerializer(serializers.ModelSerializer):
         return float(sum(
             s.quantity_on_hand
             for s in obj.stock_levels.all()
-            if s.softech_store_code not in EXCLUDED_STORE_CODES
+            if is_sellable(s)
         ))
 
     def get_all_barcodes(self, obj):

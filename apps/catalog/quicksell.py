@@ -11,7 +11,7 @@ from datetime import timedelta
 from django.db.models import Sum, Count
 from django.utils import timezone
 
-from .models import Item, ItemStock, EXCLUDED_STORE_CODES
+from .models import Item, ItemStock, exclude_unsellable
 from .safety import item_safety_flags
 
 DEFAULT_DAYS = 30
@@ -66,9 +66,7 @@ def top_sellers(branch_id, *, days=DEFAULT_DAYS, limit=DEFAULT_LIMIT):
 
 def _branch_stock(item_ids, branch_id):
     rows = (
-        ItemStock.objects
-        .filter(item_id__in=item_ids, branch_id=branch_id)
-        .exclude(softech_store_code__in=EXCLUDED_STORE_CODES)
+        exclude_unsellable(ItemStock.objects.filter(item_id__in=item_ids, branch_id=branch_id))
         .values('item_id').annotate(qty=Sum('quantity_on_hand'))
     )
     return {r['item_id']: float(r['qty'] or 0) for r in rows}

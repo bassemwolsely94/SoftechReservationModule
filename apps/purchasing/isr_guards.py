@@ -32,6 +32,14 @@ from datetime import datetime, time, timedelta
 
 from django.utils import timezone
 
+from apps.batches.store_roles import check_quarantine_sql
+
+# Quarantine stores in the stkbal read. Literal on purpose (the sql-from-text scan trusts only
+# module-level string literals in an f-string); fails at import if it drifts from
+# store_roles.QUARANTINE_STORE_CODES.
+_QUARANTINE_SQL = "('102','103','105')"
+check_quarantine_sql(_QUARANTINE_SQL)
+
 logger = logging.getLogger('elrezeiky.purchasing')
 
 
@@ -407,7 +415,7 @@ def review_push(p, conn) -> dict:
             for r in cur.fetchall() or []:
                 master[str(r[0]).strip()] = (str(r[1] or '0').strip(), str(r[2] or '0').strip())
             cur.execute(f"SELECT itemcode, sum(nowqty) FROM stkbal WHERE branchcode=? "
-                        f"AND storecode NOT IN ('102','103','105') AND itemcode IN ({ph}) GROUP BY itemcode",
+                        f"AND storecode NOT IN {_QUARANTINE_SQL} AND itemcode IN ({ph}) GROUP BY itemcode",
                         [str(p.branchcode), *chunk])
             for r in cur.fetchall() or []:
                 stock[str(r[0]).strip()] = float(r[1] or 0)

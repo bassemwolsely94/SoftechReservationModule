@@ -154,7 +154,7 @@ def resolve_offer_items(offer, *, branch_id=None, only_ids=False):
     Resolve the concrete Item queryset an offer targets: (spec ∪ manual-includes ∪
     categories ∪ tags ∪ classification) − manual-excludes, then the stock gate.
     """
-    from apps.catalog.models import Item, ItemStock, EXCLUDED_STORE_CODES
+    from apps.catalog.models import Item, ItemStock, exclude_unsellable
 
     if offer.target_all:
         qs = Item.objects.all()
@@ -183,9 +183,7 @@ def resolve_offer_items(offer, *, branch_id=None, only_ids=False):
         qs = qs.exclude(id__in=excl)
 
     if offer.require_stock and branch_id:
-        in_stock = (ItemStock.objects
-                    .filter(branch_id=branch_id)
-                    .exclude(softech_store_code__in=EXCLUDED_STORE_CODES)
+        in_stock = (exclude_unsellable(ItemStock.objects.filter(branch_id=branch_id))
                     .values('item_id').annotate(q=Sum('quantity_on_hand'))
                     .filter(q__gt=0).values_list('item_id', flat=True))
         qs = qs.filter(id__in=in_stock)
@@ -200,7 +198,7 @@ def preview_items(*, target_all=False, target_spec=None, include_ids=None, categ
     Resolve an Item queryset from RAW selector params (unsaved offer) — powers the
     config-UI preview so the admin sees exactly which products they selected.
     """
-    from apps.catalog.models import Item, ItemStock, EXCLUDED_STORE_CODES
+    from apps.catalog.models import Item, ItemStock, exclude_unsellable
 
     if target_all:
         qs = Item.objects.all()
@@ -223,8 +221,7 @@ def preview_items(*, target_all=False, target_spec=None, include_ids=None, categ
     if exclude_ids:
         qs = qs.exclude(id__in=exclude_ids)
     if require_stock and branch_id:
-        in_stock = (ItemStock.objects.filter(branch_id=branch_id)
-                    .exclude(softech_store_code__in=EXCLUDED_STORE_CODES)
+        in_stock = (exclude_unsellable(ItemStock.objects.filter(branch_id=branch_id))
                     .values('item_id').annotate(q=Sum('quantity_on_hand'))
                     .filter(q__gt=0).values_list('item_id', flat=True))
         qs = qs.filter(id__in=in_stock)

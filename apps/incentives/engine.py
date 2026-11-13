@@ -614,7 +614,7 @@ class CalculationResult(NamedTuple):
 #   • stkbalexpiry.branchcode is ALWAYS 0 — it is NOT populated. The real
 #     physical location is stkbalexpiry.storecode (100,101,102,103,104,105,110,160).
 #   • storecodes 102, 103, 105 are quarantine / expired-stock holding stores
-#     (catalog.EXCLUDED_STORE_CODES). Stock there is NOT sellable, so it is
+#     (batches.store_roles.QUARANTINE_STORE_CODES). Stock there is NOT sellable, so it is
 #     excluded by default — a near-expiry SELLING incentive only cares about
 #     stock still on the sellable shelf.
 #   • The table also retains already-expired rows (itemexpirydate < today) and
@@ -667,14 +667,14 @@ def fetch_near_expiry_stock(
        batchno, days_remaining, expiry_bucket, is_quarantine}
     """
     from config.sybase import get_sybase_connection
-    from apps.catalog.models import EXCLUDED_STORE_CODES
+    from apps.batches.store_roles import QUARANTINE_STORE_CODES
 
     today = date.today()
     cutoff_date = today + timedelta(days=expiry_within_days)
 
     # Every value is a bound parameter. Location filter uses storecode (branchcode is always 0).
     stores = [str(c) for c in (store_codes or [])]
-    quarantine = [] if include_quarantine else sorted(EXCLUDED_STORE_CODES)   # 102/103/105
+    quarantine = [] if include_quarantine else sorted(QUARANTINE_STORE_CODES)   # 102/103/105
     qty_sql = '' if include_zero_qty else 'AND sbe.itemqty > 0'
     store_sql = f'AND sbe.storecode IN ({_marks(stores)})' if stores else ''
     quarantine_sql = f'AND sbe.storecode NOT IN ({_marks(quarantine)})' if quarantine else ''
@@ -721,7 +721,7 @@ def fetch_near_expiry_stock(
         rows.sort(key=lambda r: (_to_date(r[1]) or date.max, _to_str(r[0])))
         rows = rows[:safe_limit]
 
-    quarantine_set = set(EXCLUDED_STORE_CODES)
+    quarantine_set = set(QUARANTINE_STORE_CODES)
     results = []
     for row in rows:
         item_code     = _to_str(row[0])

@@ -33,10 +33,16 @@ from django.conf import settings
 from config.writers import writer_allowed
 from django.utils import timezone
 
+from apps.batches.store_roles import QUARANTINE_STORE_CODES, check_quarantine_sql
+
 logger = logging.getLogger('elrezeiky.purchasing')
 
 # Store codes excluded from "current stock" (quarantine/expiry) — same as the engine.
-_EXCLUDED_STORES = {'102', '103', '105'}
+_EXCLUDED_STORES = QUARANTINE_STORE_CODES
+# Literal on purpose: the sql-from-text scan trusts only module-level string literals in an
+# f-string. check_quarantine_sql fails at import if it ever drifts from the constant.
+_QUARANTINE_SQL = "('102','103','105')"
+check_quarantine_sql(_QUARANTINE_SQL)
 
 
 def _hq():
@@ -435,7 +441,7 @@ def build_items_plan(node_branch, items):
                 chunk = codes[i:i + _READ_CHUNK]
                 ph = ','.join('?' for _ in chunk)
                 cur.execute(f"SELECT itemcode, sum(nowqty) FROM stkbal WHERE branchcode=? "
-                            f"AND storecode NOT IN ('102','103','105') AND itemcode IN ({ph}) "
+                            f"AND storecode NOT IN {_QUARANTINE_SQL} AND itemcode IN ({ph}) "
                             f"GROUP BY itemcode", [str(node_branch), *chunk])
                 for r in cur.fetchall():
                     nowqty[str(r[0]).strip()] = float(r[1] or 0)

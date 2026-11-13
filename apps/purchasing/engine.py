@@ -83,6 +83,8 @@ from decimal import Decimal
 from django.utils import timezone
 from django.db import connection, transaction
 
+from apps.batches.store_roles import QUARANTINE_STORE_CODES
+
 logger = logging.getLogger('elrezeiky.purchasing')
 
 # ── Default constants (used when DB config is unavailable) ────────────────────
@@ -652,7 +654,7 @@ class DemandEngine:
         # ItemStock has one row per (item, branch, store_code); SUM them per branch.
         from collections import defaultdict
         pg_stock = defaultdict(float)
-        excluded_stores = {'102', '103', '105'}
+        excluded_stores = QUARANTINE_STORE_CODES
         for s in ItemStock.objects.values('item_id', 'branch_id',
                                           'softech_store_code', 'quantity_on_hand'):
             if s['softech_store_code'] not in excluded_stores:

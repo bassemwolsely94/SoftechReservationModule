@@ -20,6 +20,28 @@ logger = logging.getLogger('elrezeiky.batches')
 LIVE, RETURN, WRITE_OFF, COSMETICS, CLOSED = 'live', 'return_candidate', 'write_off', 'cosmetics_expired', 'closed'
 QUARANTINE_ROLES = (RETURN, WRITE_OFF, COSMETICS)
 
+# The quarantine stores (expired / return / cosmetics-expired), on any node. The one source
+# for every "never stock" filter. SOFTECH-writing paths and incentives use exactly this set;
+# catalog / POS stock uses apps.catalog.models.exclude_unsellable (this set + HQ 110 +
+# closed/pending branches).
+QUARANTINE_STORE_CODES = frozenset({'102', '103', '105'})
+
+
+def quarantine_sql_in(sep=','):
+    """SQL text "('102','103','105')" for the quarantine set, codes in fixed sorted order.
+    `sep` keeps each site's existing spacing (', ' gives "('102', '103', '105')")."""
+    return '(' + sep.join(f"'{c}'" for c in sorted(QUARANTINE_STORE_CODES)) + ')'
+
+
+def check_quarantine_sql(text, sep=','):
+    """Import-time guard for modules that must keep a literal SQL list (the sql-from-text
+    scan only trusts module-level string literals inside f-strings): fail loudly if the
+    literal ever drifts from QUARANTINE_STORE_CODES."""
+    if text != quarantine_sql_in(sep):
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured(f'Quarantine SQL {text!r} != {quarantine_sql_in(sep)!r}')
+    return text
+
 ROLE_LABELS = {
     LIVE:      'مخزون قابل للبيع',
     RETURN:    'مرشح للمرتجع (105)',

@@ -44,6 +44,12 @@ Column indices for QUERY_PURCHASES_INCREMENTAL:
                         GROUP BY merged into the paid line and hid.
 """
 
+from apps.batches.store_roles import quarantine_sql_in
+
+# Quarantine stores 102/103/105 (store_roles.QUARANTINE_STORE_CODES), fixed order:
+# "('102', '103', '105')" — the SQL text sent to SOFTECH is unchanged.
+_QUARANTINE_IN = quarantine_sql_in(', ')
+
 # ── MAIN PURCHASE LINES — incremental fetch ───────────────────────────────────
 #
 # Groups by (supplier, branch, doccode, docnumber, date, item) to collapse
@@ -144,7 +150,7 @@ QUERY_PROCUREMENT_STKBAL = """
       AND sb.branchcode IS NOT NULL
       AND sb.itemcode   IS NOT NULL
       AND sb.itemcode   != ''
-      AND sb.storecode  NOT IN ('102', '103', '105')
+      AND sb.storecode  NOT IN """ + _QUARANTINE_IN + """
     GROUP BY sb.itemcode, sb.branchcode
 """
 
