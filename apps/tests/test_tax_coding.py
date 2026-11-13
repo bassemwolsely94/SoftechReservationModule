@@ -73,6 +73,39 @@ class EnvironmentTests(SimpleTestCase):
         eta_client.reset_token()
 
 
+    @override_settings(TAX_ETA_ENVIRONMENT='preprod', TAX_ETA_API_BASE_URL='', TAX_ETA_ID_BASE_URL='',
+                       TAX_ETA_CLIENT_ID='cid', TAX_ETA_CLIENT_SECRET='sec', TAX_ETA_CA_BUNDLE='C:/eta/preprod-root-ca.pem')
+    def test_preprod_root_ca_is_trusted_for_eta_calls_only_when_named(self):
+        eta_client.reset_token()
+        with mock.patch.object(eta_client.requests, 'post',
+                               return_value=_response(200, {'access_token': 'T', 'expires_in': 3600})) as post:
+            eta_client.check_login()
+        self.assertEqual(post.call_args[1]['verify'], 'C:/eta/preprod-root-ca.pem')
+        eta_client.reset_token()
+        with override_settings(TAX_ETA_CA_BUNDLE=''), mock.patch.object(
+                eta_client.requests, 'post', return_value=_response(200, {'access_token': 'T', 'expires_in': 3600})) as post:
+            eta_client.check_login()
+        self.assertIs(post.call_args[1]['verify'], True)
+        eta_client.reset_token()
+
+    @override_settings(TAX_ETA_ENVIRONMENT='preprod', TAX_ETA_API_BASE_URL='', TAX_ETA_ID_BASE_URL='')
+    def test_pos_login_sends_preshared_key_only_when_configured(self):
+        config = mock.Mock(softech_branchcode='150', client_id='pos-id', device_serial='SN1', pos_os_version='Windows',
+                           pos_model_framework='1', secret_env='POS_SECRET_150', preshared_key_env='')
+        eta_client.reset_pos_tokens()
+        with mock.patch.dict('os.environ', {'POS_SECRET_150': 's'}), mock.patch.object(
+                eta_client.requests, 'post', return_value=_response(200, {'access_token': 'P', 'expires_in': 3600})) as post:
+            eta_client.pos_token(config)
+        self.assertNotIn('presharedkey', post.call_args[1]['headers'])
+        eta_client.reset_pos_tokens()
+        config.preshared_key_env = 'POS_PSK_150'
+        with mock.patch.dict('os.environ', {'POS_SECRET_150': 's', 'POS_PSK_150': 'k'}), mock.patch.object(
+                eta_client.requests, 'post', return_value=_response(200, {'access_token': 'P', 'expires_in': 3600})) as post:
+            eta_client.pos_token(config)
+        self.assertEqual(post.call_args[1]['headers']['presharedkey'], 'k')
+        eta_client.reset_pos_tokens()
+
+
 @override_settings(**CODING_ON)
 class CodeRequestTests(Fixture, TestCase):
 

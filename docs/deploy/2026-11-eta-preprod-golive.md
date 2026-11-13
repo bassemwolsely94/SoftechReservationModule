@@ -43,8 +43,12 @@ Pre-production addresses, from ETA's SDK site:
 
 1. Register **one ERP system** for the company. ETA shows a client ID and a client secret **once**. Keep the secret
    for step 3 only.
-2. Register **one POS device per branch** that will send e-receipts, with its serial, OS version and model. Each gives
-   its own client ID, client secret and pre-shared key.
+2. Register **one POS device per branch** that will send e-receipts, on the portal's *Register POS* screen: the branch,
+   the vendor and model of the issuing system, an optional name, and the device serial number (on Windows:
+   `wmic bios get serialnumber`). Each device gets its own client ID and client secret; it stays inactive until it
+   first logs in. ETA's API also names a *pre-shared key* without saying who issues it: if the portal shows one, keep
+   it with the secret; if not, leave its variable empty.
+3. Ask ETA what to enter as **vendor and model** when the issuing system is the company's own software.
 
 ## Step 3: Point the server at pre-production (owner types the secrets)
 
@@ -56,7 +60,13 @@ TAX_ETA_CLIENT_ID=<from step 2.1>
 TAX_ETA_CLIENT_SECRET=<typed by the owner>
 TAX_SIGNER_CLASS=apps.tax_invoicing.signing.AgentSigner
 TAX_SIGNING_CERT_THUMBPRINT=<from step 1>
+TAX_ETA_CA_BUNDLE=<path to preprod-root-ca.pem>
 ```
+
+Pre-production runs on certificates from ETA's own internal root CA. Download `preprod-root-ca.crt` from ETA's SDK
+site (FAQ, "environments"), convert it to PEM if needed, and name it in `TAX_ETA_CA_BUNDLE`. It is trusted for ETA calls
+only. **Do not install it in the server's certificate store**, as ETA itself warns; for production leave the
+variable empty.
 
 For each branch POS, the client ID and serial go in Tax invoicing → Receipts → Branch setup. The secret and the
 pre-shared key go in the environment file under the variable names that screen asks for.

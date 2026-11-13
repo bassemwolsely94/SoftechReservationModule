@@ -65,6 +65,14 @@ def _may_send():
         raise EtaNotConfigured(str(exc)) from exc
 
 
+def _verify():
+    """ETA's pre-production runs on certificates from its own internal root CA. TAX_ETA_CA_BUNDLE names a PEM
+    with that root, trusted for these calls only, never added to the server's own store. Empty = the normal
+    public roots (production)."""
+    bundle = str(getattr(settings, 'TAX_ETA_CA_BUNDLE', '') or '').strip()
+    return bundle or True
+
+
 def _json(response):
     try:
         return response.json()
@@ -86,7 +94,7 @@ def access_token():
         auth = (_setting('TAX_ETA_CLIENT_ID'), _setting('TAX_ETA_CLIENT_SECRET'))
         try:
             r = requests.post(url, data={'grant_type': 'client_credentials'}, auth=auth, timeout=TIMEOUT,
-                              allow_redirects=False)
+                              allow_redirects=False, verify=_verify())
         except requests.RequestException as exc:
             # No document was involved in a login, so nothing can have been sent.
             raise EtaRefused(f'تعذر الاتصال بخدمة الدخول: {type(exc).__name__}') from exc
@@ -113,7 +121,7 @@ def submit_documents(signed_document_text):
     body = ('{"documents":[' + signed_document_text + ']}').encode('utf-8')
     try:
         r = requests.post(_api('/api/v1.0/documentsubmissions/'), data=body, headers=headers, timeout=TIMEOUT,
-                          allow_redirects=False)
+                          allow_redirects=False, verify=_verify())
     except requests.RequestException as exc:
         raise EtaUncertain(f'انقطع الاتصال أثناء الإرسال: {type(exc).__name__}') from exc
     payload = _json(r)
@@ -134,7 +142,7 @@ def find_by_internal_id(internal_id, date_from, date_to):
               'issueDateTo': date_to.strftime('%Y-%m-%dT%H:%M:%SZ')}
     try:
         r = requests.get(_api('/api/v1.0/documents/search'), params=params, headers=_headers(), timeout=TIMEOUT,
-                         allow_redirects=False)
+                         allow_redirects=False, verify=_verify())
     except requests.RequestException as exc:
         raise EtaUncertain(f'تعذر الاستعلام: {type(exc).__name__}') from exc
     if r.status_code != 200:
@@ -172,11 +180,14 @@ def pos_token(config):
             raise EtaNotConfigured(f'بيانات جهاز الفرع {config.softech_branchcode} ناقصة')
         url = _base('id') + '/connect/token'
         headers = {'posserial': config.device_serial, 'pososversion': config.pos_os_version,
-                   'posmodelframework': config.pos_model_framework, 'presharedkey': _env_secret(config.preshared_key_env)}
+                   'posmodelframework': config.pos_model_framework}
+        # ETA's API names a pre-shared key without saying who issues it; sent only when a variable is named.
+        if config.preshared_key_env:
+            headers['presharedkey'] = _env_secret(config.preshared_key_env)
         body = {'grant_type': 'client_credentials', 'client_id': config.client_id,
                 'client_secret': _env_secret(config.secret_env)}
         try:
-            r = requests.post(url, data=body, headers=headers, timeout=TIMEOUT, allow_redirects=False)
+            r = requests.post(url, data=body, headers=headers, timeout=TIMEOUT, allow_redirects=False, verify=_verify())
         except requests.RequestException as exc:
             raise EtaRefused(f'تعذر دخول جهاز الفرع: {type(exc).__name__}') from exc
         if r.status_code != 200:
@@ -197,7 +208,7 @@ def submit_receipts(config, receipt_texts, signature_b64):
     body = ('{"receipts":[' + ','.join(receipt_texts) + '],"signatures":[{"signatureType":"I","value":'
             + json.dumps(signature_b64) + '}]}').encode('utf-8')
     try:
-        r = requests.post(_api('/api/v1/receiptsubmissions'), data=body, headers=headers, timeout=TIMEOUT, allow_redirects=False)
+        r = requests.post(_api('/api/v1/receiptsubmissions'), data=body, headers=headers, timeout=TIMEOUT, allow_redirects=False, verify=_verify())
     except requests.RequestException as exc:
         raise EtaUncertain(f'انقطع الاتصال أثناء إرسال الإيصالات: {type(exc).__name__}') from exc
     payload = _json(r)
@@ -215,12 +226,12 @@ def get_receipt_status(config, uuid_value, submission_uuid=''):
     try:
         if submission_uuid:
             r = requests.get(_api(f'/api/v1/receiptsubmissions/{submission_uuid}/details'), headers=headers,
-                             params={'PageNo': 1, 'PageSize': 100}, timeout=TIMEOUT, allow_redirects=False)
+                             params={'PageNo': 1, 'PageSize': 100}, timeout=TIMEOUT, allow_redirects=False, verify=_verify())
             if r.status_code == 200:
                 for row in _json(r).get('receipts') or []:
                     if row.get('uuid') == uuid_value:
                         return row
-        r = requests.get(_api(f'/api/v1/receipts/{uuid_value}/raw'), headers=headers, timeout=TIMEOUT, allow_redirects=False)
+        r = requests.get(_api(f'/api/v1/receipts/{uuid_value}/raw'), headers=headers, timeout=TIMEOUT, allow_redirects=False, verify=_verify())
     except requests.RequestException as exc:
         raise EtaUncertain(f'تعذر الاستعلام: {type(exc).__name__}') from exc
     if r.status_code == 404:
@@ -238,7 +249,7 @@ def create_egs_codes(items):
     _may_send()
     try:
         r = requests.post(_api('/api/v1.0/codetypes/requests/codes'), data=json.dumps({'items': items}).encode('utf-8'),
-                          headers=_headers(), timeout=TIMEOUT, allow_redirects=False)
+                          headers=_headers(), timeout=TIMEOUT, allow_redirects=False, verify=_verify())
     except requests.RequestException as exc:
         raise EtaUncertain(f'انقطع الاتصال أثناء طلب الكود: {type(exc).__name__}') from exc
     payload = _json(r)
@@ -255,7 +266,7 @@ def my_code_requests(item_code):
     params = {'ItemCode': item_code, 'OrderDirections': 'Descending', 'Pn': 1, 'Ps': 10}
     try:
         r = requests.get(_api('/api/v1.0/codetypes/requests/my'), params=params, headers=_headers(),
-                         timeout=TIMEOUT, allow_redirects=False)
+                         timeout=TIMEOUT, allow_redirects=False, verify=_verify())
     except requests.RequestException as exc:
         raise EtaUncertain(f'تعذر الاستعلام عن طلبات الأكواد: {type(exc).__name__}') from exc
     if r.status_code != 200:

@@ -877,6 +877,8 @@ TAX_ETA_SUBMIT_ENABLED = config('TAX_ETA_SUBMIT_ENABLED', default=False, cast=bo
 TAX_ETA_ENVIRONMENT = config('TAX_ETA_ENVIRONMENT', default='')
 TAX_ETA_API_BASE_URL = config('TAX_ETA_API_BASE_URL', default='')
 TAX_ETA_ID_BASE_URL = config('TAX_ETA_ID_BASE_URL', default='')
+# PEM with ETA's pre-production root CA (preprod only; trusted for ETA calls, not system-wide).
+TAX_ETA_CA_BUNDLE = config('TAX_ETA_CA_BUNDLE', default='')
 TAX_ETA_CLIENT_ID = config('TAX_ETA_CLIENT_ID', default='')
 TAX_ETA_CLIENT_SECRET = config('TAX_ETA_CLIENT_SECRET', default='')
 TAX_SIGNER_CLASS = config('TAX_SIGNER_CLASS', default='apps.tax_invoicing.signing.NotConfiguredSigner')
