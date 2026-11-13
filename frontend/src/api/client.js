@@ -363,7 +363,9 @@ export const searchApi = {
 export const branchesApi = {
   // params.scope: 'live' (default: HQ + retail) | 'live_hq' | 'retail' (no HQ) | 'all' | 'pending' (last two admin only)
   list:    (params) => api.get('/branches/', { params }),
-  listAll: ()       => api.get('/branches/', { params: { scope: 'all' } }),  // admin: every kind, incl. closed/pending/call-center
+  // admin: every kind, incl. closed/pending/call-center; non-admins (403) get the live list instead
+  listAll: () => api.get('/branches/', { params: { scope: 'all' } })
+    .catch(e => (e?.response?.status === 403 ? api.get('/branches/') : Promise.reject(e))),
 
   // Branch fields — admin only
   update:  (branchId, data) => api.patch(`/branches/${branchId}/`, data),

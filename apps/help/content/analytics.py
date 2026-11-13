@@ -466,8 +466,8 @@ SCREENS = [
             {'target': 'analytics-reservations-clear', 'label': T('مسح', 'Clear'),
              'text': T('يمسح التواريخ والفرع ويرجّع كل الحجوزات.', 'Clears the dates and branch and brings back all reservations.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلتر الفرع يقبل أكثر من فرع', 'The branch filter takes several branches'),
+        'updated': '2026-11-13',
+        'change_note': T('خانة «إظهار الفروع المغلقة» بجانب فلتر الفرع تضيف الفروع المغلقة للقائمة (للمدير).', 'A "Show closed branches" box beside the branch filter adds closed branches to the list (admins).'),
     },
     {
         'key': 'analytics.transfers',

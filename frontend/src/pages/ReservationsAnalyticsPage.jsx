@@ -15,6 +15,7 @@ import { reservationsApi, branchesApi } from '../api/client'
 import SortTh from '../components/SortTh'
 import BranchMultiSelect from '../components/BranchMultiSelect'
 import useSortableRows from '../hooks/useSortableRows'
+import useClosedBranches from '../hooks/useClosedBranches'
 
 const fmt    = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const fmtPct = n => `${fmt(n, 1)}%`
@@ -69,11 +70,13 @@ export default function ReservationsAnalyticsPage() {
   const [filters, setFilters] = useState({ date_from: '', date_to: '', branch: [] })   // branch: multi-select (none = all)
   const upd = (k, v) => setFilters(f => ({ ...f, [k]: v }))
 
-  const { data: branches = [] } = useQuery({
+  const { data: baseBranches = [] } = useQuery({
     queryKey: ['branches'],
     queryFn: () => branchesApi.list().then(r => r.data.results || r.data),
     staleTime: 5 * 60_000,
   })
+
+  const { branches, showClosed, toggle: closedToggle } = useClosedBranches(baseBranches)
 
   const params = {
     date_from: filters.date_from || undefined,
@@ -114,7 +117,8 @@ export default function ReservationsAnalyticsPage() {
         <div className="flex flex-wrap gap-2 items-center" data-tour="analytics-reservations-filters">
           <input type="date" className="input-field text-xs py-1.5 w-36" value={filters.date_from} onChange={e => upd('date_from', e.target.value)} />
           <input type="date" className="input-field text-xs py-1.5 w-36" value={filters.date_to}   onChange={e => upd('date_to',   e.target.value)} />
-          <BranchMultiSelect className="w-44" branches={branches} selected={filters.branch} onChange={v => upd('branch', v)} />
+          <BranchMultiSelect className="w-44" branches={branches} showClosed={showClosed} selected={filters.branch} onChange={v => upd('branch', v)} />
+          {closedToggle}
           <button data-tour="analytics-reservations-clear" onClick={() => setFilters({ date_from: '', date_to: '', branch: [] })} className="btn-secondary text-xs py-1.5">مسح</button>
           <button onClick={() => refetch()} className="btn-secondary text-xs py-1.5" data-tour="analytics-reservations-refresh">🔄 تحديث</button>
         </div>

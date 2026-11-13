@@ -472,8 +472,8 @@ SCREENS = [
              'text': T('يمسح كل فلاتر الأصناف المتقدمة مرة واحدة.', 'Clears every advanced item filter at once.'),
              'open_hint': T('بيظهر لما يكون فيه فلتر متقدم شغال.', 'Shows when an advanced filter is on.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلاتر الفرع والحالة والفئة (بالفرع، التحويلات، التصدير) بقت تقبل أكثر من اختيار.', 'The branch, status and class filters (by branch, transfers, export) now take several choices.'),
+        'updated': '2026-11-13',
+        'change_note': T('خانة «إظهار الفروع المغلقة» بجانب فلتر الفرع تضيف الفروع المغلقة للقائمة (للمدير).', 'A "Show closed branches" box beside the branch filter adds closed branches to the list (admins).'),
     },
     {
         'key': 'purchasing.cash',
