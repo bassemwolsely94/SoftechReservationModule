@@ -367,7 +367,8 @@ SCREENS = [
              'open_hint': T('اضغط «🔑 إعادة تعيين كلمة المرور» على صف المستخدم.', 'Press "🔑 Reset password" on the user\'s row.')},
         ],
         'updated': '2026-11-13',
-        'change_note': T('فلتر الأدوار يقبل الآن أكثر من دور معاً', 'The role filter now takes several roles at once'),
+        'change_note': T('قائمة الأدوار تشمل الآن المشرف ومدير الجودة والمحاسب، وأي دور جديد يظهر فيها تلقائياً',
+                         'The role list now includes supervisor, quality manager and accountant; any new role appears in it automatically'),
     },
     {
         'key': 'admin.permissions',
