@@ -26,6 +26,17 @@ def _response(status_code, body):
 
 class EnvironmentTests(SimpleTestCase):
 
+    def test_branch_secret_comes_from_the_environment_then_the_env_file(self):
+        with mock.patch.dict('os.environ', {'POS_X': 'from-process'}):
+            self.assertEqual(eta_client._env_secret('POS_X'), 'from-process')
+        with mock.patch.dict('os.environ', {}, clear=False), mock.patch('decouple.config', return_value='from-file'):
+            import os
+            os.environ.pop('POS_Y', None)
+            self.assertEqual(eta_client._env_secret('POS_Y'), 'from-file')
+        with mock.patch('decouple.config', return_value=''):
+            with self.assertRaises(eta_client.EtaNotConfigured):
+                eta_client._env_secret('POS_MISSING_' + 'Z')
+
     @override_settings(TAX_ETA_ENVIRONMENT='preprod', TAX_ETA_API_BASE_URL='', TAX_ETA_ID_BASE_URL='')
     def test_preprod_uses_published_addresses(self):
         self.assertEqual(environment.api_base(), 'https://api.preprod.invoicing.eta.gov.eg')

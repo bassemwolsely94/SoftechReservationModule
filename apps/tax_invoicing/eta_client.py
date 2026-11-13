@@ -159,8 +159,16 @@ _pos_tokens = {}
 
 
 def _env_secret(name):
+    """A branch device's secret by variable name: the process environment first, then the server's .env
+    file (where the owner types it). Never from the database."""
     import os
+    from decouple import UndefinedValueError, config as env_config
     value = os.environ.get(name or '', '') or ''
+    if name and not value:
+        try:
+            value = env_config(name, default='') or ''
+        except UndefinedValueError:
+            value = ''
     if not name or not value:
         raise EtaNotConfigured(f'بيانات دخول الجهاز غير موجودة في البيئة ({name or "غير محدد"})')
     return value
