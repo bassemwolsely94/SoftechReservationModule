@@ -457,8 +457,8 @@ SCREENS = [
              'warn': T('«إيقاف الكل» معناه الدور ده مش هيوصله أي إشعار خالص بعد الحفظ.', '"Off all" means this role gets no notifications at all after saving.'),
              'open_hint': T('«🔔 ظهور الإشعارات» ← اختار دور — للمدير.', '"🔔 Notification visibility" → pick a role — admins.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-13',
+        'change_note': T('أسماء الأدوار تظهر الآن بالعربية من قائمة الأدوار الموحدة', 'Role names now show in Arabic, from the single role list'),
     },
     {
         'key': 'admin.erp_permissions',

@@ -2,100 +2,100 @@
 # was written (apps/tests/security/role_literals.py). A new role belongs in apps/users/roles.py and
 # access decisions in the RBAC matrix (core.permissions.matrix_permission) — never a new literal here.
 # Some lines are coincidences (module / channel names that happen to equal role keys); they stay
-# listed so the guard keeps a stable baseline. Format: path::keys
+# listed so the guard keeps a stable baseline. Format: path::keys xN (N = occurrences; a higher count fails)
 
-frontend/src/App.jsx::accountant,admin,pharmacist,purchasing
-frontend/src/App.jsx::accountant,admin,pharmacist,purchasing,quality_manager
-frontend/src/App.jsx::accountant,admin,purchasing,quality_manager
-frontend/src/App.jsx::admin,call_center,pharmacist,purchasing,quality_manager,salesperson,supervisor
-frontend/src/App.jsx::admin,call_center,pharmacist,quality_manager,salesperson,supervisor
-frontend/src/App.jsx::admin,call_center,pharmacist,quality_manager,supervisor
-frontend/src/App.jsx::admin,call_center,pharmacist,salesperson,supervisor
-frontend/src/App.jsx::admin,delivery,supervisor
-frontend/src/App.jsx::admin,pharmacist
-frontend/src/App.jsx::admin,pharmacist,purchasing,quality_manager
-frontend/src/App.jsx::admin,pharmacist,purchasing,quality_manager,supervisor
-frontend/src/App.jsx::admin,pharmacist,quality_manager,supervisor
-frontend/src/App.jsx::admin,pharmacist,supervisor
-frontend/src/App.jsx::admin,purchasing
-frontend/src/App.jsx::admin,purchasing,quality_manager
-frontend/src/App.jsx::admin,purchasing,supervisor
-frontend/src/App.jsx::admin,quality_manager,supervisor
-frontend/src/App.jsx::admin,supervisor
-frontend/src/App.jsx::delivery
-frontend/src/components/InTransitTab.jsx::purchasing
-frontend/src/components/followups/CallListsPanel.jsx::admin,call_center,supervisor
-frontend/src/components/navGroups.js::accountant,admin
-frontend/src/components/navGroups.js::accountant,admin,pharmacist,purchasing
-frontend/src/components/navGroups.js::accountant,admin,pharmacist,purchasing,quality_manager
-frontend/src/components/navGroups.js::accountant,admin,purchasing,quality_manager
-frontend/src/components/navGroups.js::admin,call_center,delivery,pharmacist,purchasing,quality_manager,salesperson,supervisor,viewer
-frontend/src/components/navGroups.js::admin,call_center,delivery,pharmacist,quality_manager,supervisor
-frontend/src/components/navGroups.js::admin,call_center,pharmacist,purchasing
-frontend/src/components/navGroups.js::admin,call_center,pharmacist,purchasing,quality_manager,salesperson,supervisor
-frontend/src/components/navGroups.js::admin,call_center,pharmacist,purchasing,quality_manager,salesperson,supervisor,viewer
-frontend/src/components/navGroups.js::admin,call_center,pharmacist,purchasing,quality_manager,supervisor
-frontend/src/components/navGroups.js::admin,call_center,pharmacist,quality_manager,salesperson,supervisor
-frontend/src/components/navGroups.js::admin,call_center,pharmacist,quality_manager,salesperson,supervisor,viewer
-frontend/src/components/navGroups.js::admin,call_center,pharmacist,salesperson,supervisor
-frontend/src/components/navGroups.js::admin,call_center,pharmacist,supervisor
-frontend/src/components/navGroups.js::admin,call_center,purchasing,supervisor
-frontend/src/components/navGroups.js::admin,call_center,quality_manager,supervisor
-frontend/src/components/navGroups.js::admin,call_center,supervisor
-frontend/src/components/navGroups.js::admin,delivery,supervisor
-frontend/src/components/navGroups.js::admin,pharmacist
-frontend/src/components/navGroups.js::admin,pharmacist,purchasing
-frontend/src/components/navGroups.js::admin,pharmacist,purchasing,quality_manager
-frontend/src/components/navGroups.js::admin,pharmacist,purchasing,quality_manager,supervisor
-frontend/src/components/navGroups.js::admin,pharmacist,purchasing,quality_manager,supervisor,viewer
-frontend/src/components/navGroups.js::admin,pharmacist,purchasing,supervisor
-frontend/src/components/navGroups.js::admin,pharmacist,quality_manager
-frontend/src/components/navGroups.js::admin,pharmacist,quality_manager,supervisor
-frontend/src/components/navGroups.js::admin,pharmacist,quality_manager,supervisor,viewer
-frontend/src/components/navGroups.js::admin,pharmacist,supervisor
-frontend/src/components/navGroups.js::admin,purchasing
-frontend/src/components/navGroups.js::admin,purchasing,quality_manager
-frontend/src/components/navGroups.js::admin,purchasing,quality_manager,supervisor
-frontend/src/components/navGroups.js::admin,purchasing,quality_manager,supervisor,viewer
-frontend/src/components/navGroups.js::admin,purchasing,supervisor
-frontend/src/components/navGroups.js::admin,purchasing,viewer
-frontend/src/components/navGroups.js::admin,quality_manager,supervisor
-frontend/src/components/navGroups.js::admin,supervisor
-frontend/src/pages/AnnouncementsPage.jsx::admin,supervisor
-frontend/src/pages/BatchesPage.jsx::admin,pharmacist,purchasing
-frontend/src/pages/BatchesPage.jsx::admin,quality_manager,supervisor
-frontend/src/pages/BatchesPage.jsx::admin,supervisor
-frontend/src/pages/CallCenterAnalyticsPage.jsx::admin,call_center,quality_manager,supervisor
-frontend/src/pages/CallCenterPage.jsx::admin,call_center,quality_manager,supervisor
-frontend/src/pages/CallCenterPage.jsx::admin,quality_manager,supervisor
-frontend/src/pages/CasesPage.jsx::admin,call_center,quality_manager,supervisor
-frontend/src/pages/DashboardPage.jsx::admin,call_center,purchasing
-frontend/src/pages/DashboardPage.jsx::admin,purchasing,quality_manager,supervisor
-frontend/src/pages/DashboardPage.jsx::call_center
-frontend/src/pages/DemandPage.jsx::admin,call_center,purchasing
-frontend/src/pages/FocAnalysisPage.jsx::admin,purchasing
-frontend/src/pages/ForecastScenarioPage.jsx::admin,purchasing,supervisor
-frontend/src/pages/InsightsPage.jsx::admin,purchasing,quality_manager,supervisor
-frontend/src/pages/InsightsPage.jsx::admin,supervisor
-frontend/src/pages/KpiBoardPage.jsx::admin,purchasing,supervisor
-frontend/src/pages/LoginPage.jsx::delivery
-frontend/src/pages/NewReservationPage.jsx::call_center
-frontend/src/pages/OmniWallboardPage.jsx::admin,supervisor
-frontend/src/pages/PbxLivePage.jsx::admin,supervisor
-frontend/src/pages/PickZonesPage.jsx::purchasing
-frontend/src/pages/ProcurementMarginPage.jsx::admin,purchasing
-frontend/src/pages/PurchasingDashboard.jsx::purchasing
-frontend/src/pages/PurchasingPage.jsx::admin,purchasing
-frontend/src/pages/RecommendationsPage.jsx::admin,supervisor
-frontend/src/pages/ReservationsKanban.jsx::call_center
-frontend/src/pages/SalespersonBoardPage.jsx::admin,purchasing,supervisor
-frontend/src/pages/SupplierPerformancePage.jsx::admin,purchasing
-frontend/src/pages/TargetsPage.jsx::admin,purchasing,supervisor
-frontend/src/pages/VouchersPage.jsx::admin,purchasing,quality_manager,supervisor
-frontend/src/pages/mobile/MobileNewDemandPage.jsx::admin,call_center
-frontend/src/pages/mobile/MobileNewReservationPage.jsx::call_center
-frontend/src/pages/mobile/MobileNewShortagePage.jsx::admin,call_center,purchasing
-frontend/src/pages/mobile/MobileNewTransferPage.jsx::admin,call_center,purchasing
-frontend/src/pages/mobile/MobileQAPage.jsx::admin,call_center,quality_manager,supervisor
-frontend/src/pages/mobile/mobileAccess.js::admin,call_center,pharmacist,purchasing,quality_manager,salesperson,supervisor,viewer
-frontend/src/pages/mobile/mobileAccess.js::admin,call_center,pharmacist,quality_manager,salesperson,supervisor,viewer
+frontend/src/App.jsx::accountant,admin,pharmacist,purchasing x1
+frontend/src/App.jsx::accountant,admin,pharmacist,purchasing,quality_manager x1
+frontend/src/App.jsx::accountant,admin,purchasing,quality_manager x1
+frontend/src/App.jsx::admin,call_center,pharmacist,purchasing,quality_manager,salesperson,supervisor x1
+frontend/src/App.jsx::admin,call_center,pharmacist,quality_manager,salesperson,supervisor x3
+frontend/src/App.jsx::admin,call_center,pharmacist,quality_manager,supervisor x1
+frontend/src/App.jsx::admin,call_center,pharmacist,salesperson,supervisor x1
+frontend/src/App.jsx::admin,delivery,supervisor x2
+frontend/src/App.jsx::admin,pharmacist x1
+frontend/src/App.jsx::admin,pharmacist,purchasing,quality_manager x1
+frontend/src/App.jsx::admin,pharmacist,purchasing,quality_manager,supervisor x6
+frontend/src/App.jsx::admin,pharmacist,quality_manager,supervisor x2
+frontend/src/App.jsx::admin,pharmacist,supervisor x2
+frontend/src/App.jsx::admin,purchasing x1
+frontend/src/App.jsx::admin,purchasing,quality_manager x1
+frontend/src/App.jsx::admin,purchasing,supervisor x1
+frontend/src/App.jsx::admin,quality_manager,supervisor x2
+frontend/src/App.jsx::admin,supervisor x2
+frontend/src/App.jsx::delivery x1
+frontend/src/components/InTransitTab.jsx::purchasing x2
+frontend/src/components/followups/CallListsPanel.jsx::admin,call_center,supervisor x1
+frontend/src/components/navGroups.js::accountant,admin x1
+frontend/src/components/navGroups.js::accountant,admin,pharmacist,purchasing x1
+frontend/src/components/navGroups.js::accountant,admin,pharmacist,purchasing,quality_manager x2
+frontend/src/components/navGroups.js::accountant,admin,purchasing,quality_manager x1
+frontend/src/components/navGroups.js::admin,call_center,delivery,pharmacist,purchasing,quality_manager,salesperson,supervisor,viewer x1
+frontend/src/components/navGroups.js::admin,call_center,delivery,pharmacist,quality_manager,supervisor x1
+frontend/src/components/navGroups.js::admin,call_center,pharmacist,purchasing x1
+frontend/src/components/navGroups.js::admin,call_center,pharmacist,purchasing,quality_manager,salesperson,supervisor x2
+frontend/src/components/navGroups.js::admin,call_center,pharmacist,purchasing,quality_manager,salesperson,supervisor,viewer x3
+frontend/src/components/navGroups.js::admin,call_center,pharmacist,purchasing,quality_manager,supervisor x1
+frontend/src/components/navGroups.js::admin,call_center,pharmacist,quality_manager,salesperson,supervisor x2
+frontend/src/components/navGroups.js::admin,call_center,pharmacist,quality_manager,salesperson,supervisor,viewer x2
+frontend/src/components/navGroups.js::admin,call_center,pharmacist,salesperson,supervisor x2
+frontend/src/components/navGroups.js::admin,call_center,pharmacist,supervisor x1
+frontend/src/components/navGroups.js::admin,call_center,purchasing,supervisor x1
+frontend/src/components/navGroups.js::admin,call_center,quality_manager,supervisor x7
+frontend/src/components/navGroups.js::admin,call_center,supervisor x2
+frontend/src/components/navGroups.js::admin,delivery,supervisor x1
+frontend/src/components/navGroups.js::admin,pharmacist x1
+frontend/src/components/navGroups.js::admin,pharmacist,purchasing x2
+frontend/src/components/navGroups.js::admin,pharmacist,purchasing,quality_manager x1
+frontend/src/components/navGroups.js::admin,pharmacist,purchasing,quality_manager,supervisor x9
+frontend/src/components/navGroups.js::admin,pharmacist,purchasing,quality_manager,supervisor,viewer x3
+frontend/src/components/navGroups.js::admin,pharmacist,purchasing,supervisor x2
+frontend/src/components/navGroups.js::admin,pharmacist,quality_manager x1
+frontend/src/components/navGroups.js::admin,pharmacist,quality_manager,supervisor x1
+frontend/src/components/navGroups.js::admin,pharmacist,quality_manager,supervisor,viewer x1
+frontend/src/components/navGroups.js::admin,pharmacist,supervisor x1
+frontend/src/components/navGroups.js::admin,purchasing x4
+frontend/src/components/navGroups.js::admin,purchasing,quality_manager x1
+frontend/src/components/navGroups.js::admin,purchasing,quality_manager,supervisor x1
+frontend/src/components/navGroups.js::admin,purchasing,quality_manager,supervisor,viewer x1
+frontend/src/components/navGroups.js::admin,purchasing,supervisor x4
+frontend/src/components/navGroups.js::admin,purchasing,viewer x1
+frontend/src/components/navGroups.js::admin,quality_manager,supervisor x6
+frontend/src/components/navGroups.js::admin,supervisor x4
+frontend/src/pages/AnnouncementsPage.jsx::admin,supervisor x2
+frontend/src/pages/BatchesPage.jsx::admin,pharmacist,purchasing x2
+frontend/src/pages/BatchesPage.jsx::admin,quality_manager,supervisor x1
+frontend/src/pages/BatchesPage.jsx::admin,supervisor x2
+frontend/src/pages/CallCenterAnalyticsPage.jsx::admin,call_center,quality_manager,supervisor x1
+frontend/src/pages/CallCenterPage.jsx::admin,call_center,quality_manager,supervisor x1
+frontend/src/pages/CallCenterPage.jsx::admin,quality_manager,supervisor x1
+frontend/src/pages/CasesPage.jsx::admin,call_center,quality_manager,supervisor x2
+frontend/src/pages/DashboardPage.jsx::admin,call_center,purchasing x1
+frontend/src/pages/DashboardPage.jsx::admin,purchasing,quality_manager,supervisor x1
+frontend/src/pages/DashboardPage.jsx::call_center x1
+frontend/src/pages/DemandPage.jsx::admin,call_center,purchasing x1
+frontend/src/pages/FocAnalysisPage.jsx::admin,purchasing x1
+frontend/src/pages/ForecastScenarioPage.jsx::admin,purchasing,supervisor x1
+frontend/src/pages/InsightsPage.jsx::admin,purchasing,quality_manager,supervisor x1
+frontend/src/pages/InsightsPage.jsx::admin,supervisor x1
+frontend/src/pages/KpiBoardPage.jsx::admin,purchasing,supervisor x1
+frontend/src/pages/LoginPage.jsx::delivery x1
+frontend/src/pages/NewReservationPage.jsx::call_center x1
+frontend/src/pages/OmniWallboardPage.jsx::admin,supervisor x1
+frontend/src/pages/PbxLivePage.jsx::admin,supervisor x1
+frontend/src/pages/PickZonesPage.jsx::purchasing x1
+frontend/src/pages/ProcurementMarginPage.jsx::admin,purchasing x1
+frontend/src/pages/PurchasingDashboard.jsx::purchasing x1
+frontend/src/pages/PurchasingPage.jsx::admin,purchasing x1
+frontend/src/pages/RecommendationsPage.jsx::admin,supervisor x1
+frontend/src/pages/ReservationsKanban.jsx::call_center x1
+frontend/src/pages/SalespersonBoardPage.jsx::admin,purchasing,supervisor x1
+frontend/src/pages/SupplierPerformancePage.jsx::admin,purchasing x1
+frontend/src/pages/TargetsPage.jsx::admin,purchasing,supervisor x1
+frontend/src/pages/VouchersPage.jsx::admin,purchasing,quality_manager,supervisor x1
+frontend/src/pages/mobile/MobileNewDemandPage.jsx::admin,call_center x1
+frontend/src/pages/mobile/MobileNewReservationPage.jsx::call_center x1
+frontend/src/pages/mobile/MobileNewShortagePage.jsx::admin,call_center,purchasing x1
+frontend/src/pages/mobile/MobileNewTransferPage.jsx::admin,call_center,purchasing x1
+frontend/src/pages/mobile/MobileQAPage.jsx::admin,call_center,quality_manager,supervisor x1
+frontend/src/pages/mobile/mobileAccess.js::admin,call_center,pharmacist,purchasing,quality_manager,salesperson,supervisor,viewer x1
+frontend/src/pages/mobile/mobileAccess.js::admin,call_center,pharmacist,quality_manager,salesperson,supervisor,viewer x1

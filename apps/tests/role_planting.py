@@ -49,7 +49,8 @@ def planted_role(key='night_cashier', label_ar='كاشير ليلي', label_en='
 
     old = {name: getattr(roles, name) for name in _DERIVED}
     new = _derive(old['ROLES'] + (role,))
-    by_id = {id(value): name for name, value in old.items()}
+    # skip empty values: shared singletons like () must never be swapped by identity
+    by_id = {id(value): name for name, value in old.items() if value}
 
     swapped = []   # (module, attribute, previous value)
     for module in list(sys.modules.values()):

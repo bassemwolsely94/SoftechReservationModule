@@ -9,16 +9,21 @@ Python (AST):
   (b) a comparison, or a keyword argument whose name contains "role", that pairs a role-ish
       expression (its source text contains "role") with ONE role key other than 'admin'.
   Test modules (tests.py, tests_*.py, test_*.py) and the registry itself are skipped.
-  Entry: "path::Qualname::k1,k2" (keys sorted, no line numbers so entries stay stable).
+  Entry: "path::Qualname::k1,k2 xN" (keys sorted, no line numbers so entries stay stable; N = how
+  many times that literal occurs in that function, so a second copy fails the baseline).
 JS (regex over frontend/src/**/*.js|jsx, *.test.* skipped):
   array literals whose quoted strings are >= 2 role keys and nothing else;
   `role === '<key>'` / `'<key>' !== role` with key != 'admin'.
-  Entry: "path::k1,k2".
+  Entry: "path::k1,k2 xN" (N = occurrences in that file).
+
+Known blind spots (not detected): single-element tuples, JS `.includes('x')` without an array
+literal, `switch (role) { case 'x': }`, template literals.
 
 ROLE_KEYS is read from the registry at scan time, so a new role is covered automatically.
 """
 import ast
 import re
+from collections import Counter
 
 from apps.users.roles import ROLE_KEYS
 
@@ -38,6 +43,10 @@ def _entry(path, *parts):
     return '::'.join((path,) + parts)
 
 
+def _counted(counter) -> set:
+    return {f'{entry} x{n}' for entry, n in counter.items()}
+
+
 # ── Python ───────────────────────────────────────────────────────────────────
 
 def _role_key(node, keys):
@@ -54,10 +63,10 @@ class _RoleLiteralVisitor(_Scoped):
 
     def __init__(self, path, keys):
         super().__init__()
-        self.path, self.keys, self.found = path, keys, set()
+        self.path, self.keys, self.found = path, keys, Counter()
 
     def _add(self, keys):
-        self.found.add(_entry(self.path, self.qualname, ','.join(sorted(set(keys)))))
+        self.found[_entry(self.path, self.qualname, ','.join(sorted(set(keys))))] += 1
 
     def _collection(self, node):
         elts = node.elts
@@ -86,7 +95,7 @@ class _RoleLiteralVisitor(_Scoped):
 def py_role_literal_sites(tree, path) -> set:
     v = _RoleLiteralVisitor(path, _keys())
     v.visit(tree)
-    return v.found
+    return _counted(v.found)
 
 
 def _is_test_module(p, rel):
@@ -116,17 +125,17 @@ _JS_CMP_REV = re.compile(r"""(['"])(\w+)\1\s*[!=]==?\s*[\w$.?]*role""", re.IGNOR
 
 def js_role_literal_sites(text, path) -> set:
     keys = _keys()
-    found = set()
+    found = Counter()
     for m in _JS_ARRAY.finditer(text):
         strings = [a or b for a, b in _JS_STRING.findall(m.group(1))]
         if len(strings) >= 2 and all(s in keys for s in strings):
-            found.add(_entry(path, ','.join(sorted(set(strings)))))
+            found[_entry(path, ','.join(sorted(set(strings))))] += 1
     for rx in (_JS_CMP, _JS_CMP_REV):
         for m in rx.finditer(text):
             key = m.group(2)
             if key in keys and key != OPEN_KEY:
-                found.add(_entry(path, key))
-    return found
+                found[_entry(path, key)] += 1
+    return _counted(found)
 
 
 def js_files():

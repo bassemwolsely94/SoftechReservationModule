@@ -27,7 +27,7 @@ class PythonRoleLiteralUnitTests(SimpleTestCase):
             def f(role):
                 return role in ('admin', 'supervisor')
         ''')
-        self.assertEqual(role_literals.py_role_literal_sites(t, 't.py'), {'t.py::f::admin,supervisor'})
+        self.assertEqual(role_literals.py_role_literal_sites(t, 't.py'), {'t.py::f::admin,supervisor x1'})
 
     def test_list_set_and_module_level_flagged_with_sorted_keys(self):
         t = _tree('''
@@ -36,7 +36,7 @@ class PythonRoleLiteralUnitTests(SimpleTestCase):
                 ok = frozenset({'pharmacist', 'delivery'})
         ''')
         self.assertEqual(role_literals.py_role_literal_sites(t, 't.py'),
-                         {'t.py::<module>::admin,viewer', 't.py::A::delivery,pharmacist'})
+                         {'t.py::<module>::admin,viewer x1', 't.py::A::delivery,pharmacist x1'})
 
     def test_admin_compare_not_flagged(self):
         t = _tree('''
@@ -50,7 +50,7 @@ class PythonRoleLiteralUnitTests(SimpleTestCase):
             def f(role):
                 return role == 'viewer'
         ''')
-        self.assertEqual(role_literals.py_role_literal_sites(t, 't.py'), {'t.py::f::viewer'})
+        self.assertEqual(role_literals.py_role_literal_sites(t, 't.py'), {'t.py::f::viewer x1'})
 
     def test_reversed_compare_and_role_keyword_flagged(self):
         t = _tree('''
@@ -60,7 +60,7 @@ class PythonRoleLiteralUnitTests(SimpleTestCase):
                 return StaffProfile.objects.filter(role='pharmacist')
         ''')
         self.assertEqual(role_literals.py_role_literal_sites(t, 't.py'),
-                         {'t.py::f::delivery', 't.py::g::pharmacist'})
+                         {'t.py::f::delivery x1', 't.py::g::pharmacist x1'})
 
     def test_non_role_strings_not_flagged(self):
         t = _tree('''
@@ -80,19 +80,29 @@ class PythonRoleLiteralUnitTests(SimpleTestCase):
                 return user.role in ('pharmacist', 'salesperson')
         ''')
         found = role_literals.py_role_literal_sites(t, 'apps/brand_new/views.py')
-        self.assertEqual(found, {'apps/brand_new/views.py::brand_new_gate::pharmacist,salesperson'})
+        self.assertEqual(found, {'apps/brand_new/views.py::brand_new_gate::pharmacist,salesperson x1'})
         self.assertFalse(found & load_baseline('role_literals_py'))
+
+
+    def test_duplicate_literal_in_one_function_is_counted(self):
+        t = _tree('''
+            def f(role):
+                a = role in ('admin', 'supervisor')
+                b = role in ('supervisor', 'admin')
+                return a, b
+        ''')
+        self.assertEqual(role_literals.py_role_literal_sites(t, 't.py'), {'t.py::f::admin,supervisor x2'})
 
 
 class JsRoleLiteralUnitTests(SimpleTestCase):
 
     def test_array_of_role_keys_flagged(self):
         src = "const x = { roles: ['admin', \"pharmacist\"] }"
-        self.assertEqual(role_literals.js_role_literal_sites(src, 'a.jsx'), {'a.jsx::admin,pharmacist'})
+        self.assertEqual(role_literals.js_role_literal_sites(src, 'a.jsx'), {'a.jsx::admin,pharmacist x1'})
 
     def test_multiline_array_flagged(self):
         src = "const R = [\n  'supervisor',\n  'call_center',\n]"
-        self.assertEqual(role_literals.js_role_literal_sites(src, 'a.js'), {'a.js::call_center,supervisor'})
+        self.assertEqual(role_literals.js_role_literal_sites(src, 'a.js'), {'a.js::call_center,supervisor x1'})
 
     def test_admin_compare_not_flagged(self):
         src = "if (x === 'admin') {}\nif (user.role === 'admin') {}"
@@ -101,7 +111,11 @@ class JsRoleLiteralUnitTests(SimpleTestCase):
     def test_single_role_compare_flagged(self):
         src = "if (user?.role === 'viewer' || 'delivery' !== myRole) {}"
         self.assertEqual(role_literals.js_role_literal_sites(src, 'a.jsx'),
-                         {'a.jsx::viewer', 'a.jsx::delivery'})
+                         {'a.jsx::viewer x1', 'a.jsx::delivery x1'})
+
+    def test_duplicate_array_is_counted(self):
+        src = "const a = ['admin', 'viewer']; const b = ['viewer', 'admin']"
+        self.assertEqual(role_literals.js_role_literal_sites(src, 'a.js'), {'a.js::admin,viewer x2'})
 
     def test_non_role_arrays_not_flagged(self):
         src = "const a = ['a', 'b']; const m = ['admin', 'orders']; if (tab === 'delivery') {}"
@@ -110,7 +124,7 @@ class JsRoleLiteralUnitTests(SimpleTestCase):
     def test_new_literal_is_not_in_the_baseline(self):
         src = "export const GATE = ['pharmacist', 'salesperson']"
         found = role_literals.js_role_literal_sites(src, 'frontend/src/brand_new/Gate.jsx')
-        self.assertEqual(found, {'frontend/src/brand_new/Gate.jsx::pharmacist,salesperson'})
+        self.assertEqual(found, {'frontend/src/brand_new/Gate.jsx::pharmacist,salesperson x1'})
         self.assertFalse(found & load_baseline('role_literals_js'))
 
 

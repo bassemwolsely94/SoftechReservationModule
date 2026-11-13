@@ -60,7 +60,7 @@ function StatusBadge({ isActive }) {
 const FIELD_LABELS = { alerts_only: 'تنبيهات فقط', phone_alerts_enabled: 'تنبيهات الموبايل' }
 
 export function UserDrawer({ user, branches, onClose, onSaved }) {
-  const { roles } = useRoles()
+  const { roles, roleLabel } = useRoles()
   const isEdit = Boolean(user)
   const qc = useQueryClient()
 
@@ -324,7 +324,8 @@ export function UserDrawer({ user, branches, onClose, onSaved }) {
               onChange={e => set('role', e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-white"
             >
-              {roleOptions(roles).map(r => (
+              {/* roles list empty (API failed / loading): keep the user's current role selectable */}
+              {(roles?.length ? roleOptions(roles) : (form.role ? [{ value: form.role, label: roleLabel(form.role) }] : [])).map(r => (
                 <option key={r.value} value={r.value}>{r.label}</option>
               ))}
             </select>

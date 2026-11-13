@@ -17,6 +17,7 @@ vi.mock('../api/client', () => ({
 }))
 
 const { UserDrawer } = await import('./UserManagementPage')
+const { authApi } = await import('../api/client')
 
 describe('UserDrawer role dropdown', () => {
   afterEach(cleanup)
@@ -33,5 +34,21 @@ describe('UserDrawer role dropdown', () => {
     await waitFor(() => expect(container.querySelector('option[value="quality_manager"]')).toBeTruthy())
     for (const r of ROLES) expect(container.querySelector(`option[value="${r}"]`), r).toBeTruthy()
     expect(container.querySelector('option[value="supervisor"]').textContent).toBe('ar-supervisor')
+  })
+
+  it('keeps the current role selectable when the roles list fails to load', async () => {
+    authApi.roles.mockRejectedValueOnce(new Error('boom'))
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const user = { id: 1, username: 'u', full_name: 'U', role: 'quality_manager', branch: null, is_active: true }
+    const { container } = render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <UserDrawer user={user} branches={[]} onClose={() => {}} onSaved={() => {}} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    await waitFor(() => expect(container.querySelector('option[value="quality_manager"]')).toBeTruthy())
+    expect(container.querySelector('select option[value="quality_manager"]').selected).toBe(true)
+    expect(container.querySelectorAll('select option[value="admin"]').length).toBe(0)
   })
 })
