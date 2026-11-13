@@ -26,7 +26,7 @@ from rest_framework.exceptions import ParseError, ValidationError
 from rest_framework.response import Response
 
 from apps.audit.models import AuditLog
-from apps.hr.assignments import validate_extensions
+from apps.hr.assignments import record_assignment, validate_extensions
 from apps.hr.models import (AttendanceAccess, AttendanceAgent, AttendanceDevice, CollectionRun,
                             ConflictConfirmation, DeviceUser, Employee, UnknownIdDecision)
 from apps.users.models import StaffProfile
@@ -418,6 +418,8 @@ def employee_edit(request, acc, pk):
     try:
         with transaction.atomic():
             ser.save()
+            if {'job_title', 'branch', 'department', 'section'} & set(changes):
+                record_assignment(emp, on=timezone.localdate(), source='manual', user=acc.profile)
             if code_changes and emp.staff_id and emp.staff.hr_code == old_code:
                 emp.staff.hr_code = new['hr_number']
                 emp.staff.save(update_fields=['hr_code'])

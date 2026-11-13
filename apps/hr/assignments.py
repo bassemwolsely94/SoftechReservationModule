@@ -16,7 +16,7 @@ from .models import EmployeeAssignment
 
 SEED_EPOCH = date(2020, 1, 1)
 TRACKED = ('job_title', 'branch_id', 'department', 'section')
-_EXT = re.compile(r'^\d{2,8}$')
+_EXT = re.compile(r'^[0-9]{2,8}$')
 
 
 def _snapshot(employee) -> dict:
@@ -57,9 +57,15 @@ def assignment_on(employee_id: int, d: date):
 
 
 def validate_extensions(values) -> list:
+    # imported here: employee_import imports this module
+    from .attendance.employee_import import normalise_code
+    if values is None:
+        return []
+    if not isinstance(values, (list, tuple)):
+        raise ValidationError('الأرقام الداخلية يجب أن تكون قائمة')
     out = []
-    for v in values or []:
-        v = str(v).strip()
+    for v in values:
+        v = normalise_code(v)
         if not v or v in out:
             continue
         if not _EXT.match(v):

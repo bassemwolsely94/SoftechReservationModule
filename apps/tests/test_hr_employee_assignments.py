@@ -108,6 +108,17 @@ class AssignmentTests(TestCase):
             asg.validate_extensions(['12a'])
         with self.assertRaises(ValidationError):
             asg.validate_extensions(['1'])
+        self.assertEqual(asg.validate_extensions(['٢٠١', '۳۳']), ['201', '33'])
+        for bad in ('201', 5, {'a': 1}):
+            with self.assertRaises(ValidationError):
+                asg.validate_extensions(bad)
+
+    def test_back_dated_apply_rewrites_open_row_in_place(self):
+        Employee.objects.create(hr_number='1001', name_ar='أ', start_date=date(2026, 5, 1))
+        imp.apply(preview(row(1, job_title='A')), self.profile, on=date(2026, 5, 1))
+        imp.apply(preview(row(1, job_title='B')), self.profile, on=date(2026, 4, 1))
+        rows = self.rows()
+        self.assertEqual((len(rows), rows[0].job_title, rows[0].valid_from), (1, 'B', date(2026, 5, 1)))
 
     def test_import_audit_extra_has_assignments_changed(self):
         imp.apply(preview(row(1)), self.profile, on=date(2026, 11, 13))

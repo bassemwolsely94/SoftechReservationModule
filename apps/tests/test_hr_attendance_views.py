@@ -692,6 +692,21 @@ class EditTests(Base):
         self.assertEqual(r.json()['pbx_extensions'], ['201', '33'])
         self.assertEqual(self.patch(self.mgr, url, {'pbx_extensions': ['12a']}).status_code, 400)
 
+    def test_hand_edit_of_job_title_records_manual_assignment(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from apps.hr import assignments as asg
+        from apps.hr.models import EmployeeAssignment
+        EmployeeAssignment.objects.create(employee=self.emp, job_title='', valid_from=asg.SEED_EPOCH,
+                                          source='seed')
+        r = self.patch(self.mgr, f'employees/{self.emp.pk}/', {'job_title': 'صيدلي'})
+        self.assertEqual(r.status_code, 200, r.content)
+        today = timezone.localdate()
+        old, new = EmployeeAssignment.objects.filter(employee=self.emp).order_by('valid_from')
+        self.assertEqual(old.valid_to, today - timedelta(days=1))
+        self.assertEqual((new.job_title, new.source, new.valid_from, new.valid_to),
+                         ('صيدلي', 'manual', today, None))
+
     def test_unknown_and_protected_fields_are_ignored(self):
         self.patch(self.mgr, f'employees/{self.emp.pk}/', {'staff': 5, 'softech_usercode': 'x', 'id': 99})
         self.emp.refresh_from_db()
