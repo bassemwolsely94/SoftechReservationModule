@@ -321,11 +321,28 @@ function BranchCard({ branch, isAdmin, onRefresh, showToast }) {
     setEditMode(false)
   }
 
-  const statusColor = branch.is_active
-    ? branch.is_operational ? 'bg-green-100 text-green-700 border-green-200'
-                            : 'bg-amber-100 text-amber-700 border-amber-200'
-    : 'bg-red-100 text-red-500 border-red-200'
-  const statusLabel = !branch.is_active ? 'مغلق' : !branch.is_operational ? 'موقوف مؤقتاً' : 'يعمل'
+  // Liveness comes from `kind` only (is_active is not consulted); is_operational = temporarily paused.
+  const KIND_STATUS = {
+    hq:          branch.is_operational === false ? ['موقوف مؤقتاً', 'amber'] : ['يعمل', 'green'],
+    retail:      branch.is_operational === false ? ['موقوف مؤقتاً', 'amber'] : ['يعمل', 'green'],
+    closed:      ['مغلق', 'red'],
+    pending:     ['جديد — بانتظار التصنيف', 'blue'],
+    call_center: ['كول سنتر', 'gray'],
+  }
+  const [statusLabel, tone] = KIND_STATUS[branch.kind] || ['يعمل', 'green']
+  const statusColor = {
+    green: 'bg-green-100 text-green-700 border-green-200',
+    amber: 'bg-amber-100 text-amber-700 border-amber-200',
+    red:   'bg-red-100 text-red-500 border-red-200',
+    blue:  'bg-blue-100 text-blue-700 border-blue-200',
+    gray:  'bg-gray-100 text-gray-600 border-gray-200',
+  }[tone]
+  const dimmed = branch.kind === 'closed'
+  const KIND_OPTIONS = [
+    ['hq', 'المركز الرئيسي'], ['retail', 'فرع بيع'], ['call_center', 'كول سنتر'],
+    ['closed', 'مُغلق / لاغى'], ['pending', 'جديد — بانتظار التصنيف'],
+  ]
+  const [orderDraft, setOrderDraft] = useState(branch.display_order ?? 100)
 
   const FEATURE_FLAGS = [
     { field: 'allow_reservations', label: 'الحجوزات',    label_en: 'Reservations' },
@@ -340,7 +357,7 @@ function BranchCard({ branch, isAdmin, onRefresh, showToast }) {
 
   return (
     <div className={`bg-white rounded-2xl border-2 overflow-hidden transition-all
-      ${!branch.is_active ? 'border-red-100 opacity-75' : 'border-gray-200 hover:border-brand-200'}`}>
+      ${dimmed ? 'border-red-100 opacity-75' : 'border-gray-200 hover:border-brand-200'}`}>
 
       {/* Header */}
       <div className="px-4 pt-4 pb-3 flex items-start justify-between gap-2">
@@ -367,6 +384,31 @@ function BranchCard({ branch, isAdmin, onRefresh, showToast }) {
       {/* Edit profile form */}
       {editMode && (
         <div className="px-4 pb-3 border-t border-gray-100 pt-3 space-y-2.5 bg-brand-50/30">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="col-span-2">
+              <label className="text-[11px] text-gray-500 mb-1 block">التصنيف</label>
+              <select value={branch.kind || 'retail'} disabled={saving}
+                onChange={e => saveField({ kind: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-400">
+                {KIND_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] text-gray-500 mb-1 block">الترتيب</label>
+              <input type="number" min="0" value={orderDraft} dir="ltr"
+                onChange={e => setOrderDraft(e.target.value)}
+                onBlur={() => {
+                  const n = parseInt(orderDraft, 10)
+                  if (Number.isFinite(n) && n >= 0 && n !== branch.display_order) saveField({ display_order: n })
+                }}
+                className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-400" />
+            </div>
+          </div>
+          {branch.kind === 'pending' && (
+            <p className="text-[11px] text-blue-700 bg-blue-50 rounded-lg px-2 py-1.5">
+              بعد تصنيف الفرع اربط حساب الخزينة الخاص به في «قواعد الترحيل» وإلا سيتوقف الترحيل المحاسبي لمبيعاته.
+            </p>
+          )}
           <div>
             <label className="text-[11px] text-gray-500 mb-1 block">الاسم بالعربية</label>
             <input value={draft.name_ar} onChange={e => setDraft(d => ({ ...d, name_ar: e.target.value }))}

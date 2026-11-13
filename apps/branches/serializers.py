@@ -27,6 +27,8 @@ class BranchSerializer(serializers.ModelSerializer):
     display_name = serializers.CharField(read_only=True)
     can_transact = serializers.BooleanField(read_only=True)
     is_hq        = serializers.BooleanField(read_only=True)
+    is_live      = serializers.BooleanField(read_only=True)
+    kind_label   = serializers.CharField(source='get_kind_display', read_only=True)
 
     class Meta:
         model  = Branch
@@ -35,7 +37,7 @@ class BranchSerializer(serializers.ModelSerializer):
             'name', 'name_ar', 'display_name',
             'address', 'phone',
             'latitude', 'longitude',
-            'kind', 'pos_enabled', 'is_hq',
+            'kind', 'kind_label', 'is_live', 'display_order', 'pos_enabled', 'is_hq',
             'is_active', 'is_operational', 'can_transact',
             'created_at',
             'settings',

@@ -361,8 +361,9 @@ export const searchApi = {
 // ── Branches ──────────────────────────────────────────────────────────────────
 
 export const branchesApi = {
+  // params.scope: 'live' (default: HQ + retail) | 'live_hq' | 'retail' (no HQ) | 'all' | 'pending' (last two admin only)
   list:    (params) => api.get('/branches/', { params }),
-  listAll: ()       => api.get('/branches/', { params: { all: '1' } }),  // admin: includes inactive
+  listAll: ()       => api.get('/branches/', { params: { scope: 'all' } }),  // admin: every kind, incl. closed/pending/call-center
 
   // Branch fields — admin only
   update:  (branchId, data) => api.patch(`/branches/${branchId}/`, data),
