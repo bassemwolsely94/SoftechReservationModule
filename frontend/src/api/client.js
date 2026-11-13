@@ -3255,6 +3255,8 @@ export const taxInvoicingApi = {
   codes:           (params = {})  => api.get('/tax-invoicing/codes/', { params }),
   codeCandidates:  (params = {})  => api.get('/tax-invoicing/codes/candidates/', { params }),
   codesPrepare:    (data)         => api.post('/tax-invoicing/codes/prepare/', data),
+  codeGpc:         (params = {})  => api.get('/tax-invoicing/codes/gpc/', { params }),
+  codesAddFromCatalog: ()        => api.post('/tax-invoicing/codes/add-from-catalog/', {}),
   codesSend:       (data)         => api.post('/tax-invoicing/codes/send/', data),
   codesRefresh:    (data)         => api.post('/tax-invoicing/codes/refresh/', data),
   codesCheck:      (data)         => api.post('/tax-invoicing/codes/check/', data),

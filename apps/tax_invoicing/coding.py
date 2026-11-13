@@ -16,7 +16,7 @@ from django.utils import timezone
 
 from config.writers import writer_allowed
 
-from . import environment, eta_client
+from . import environment, eta_client, gpc
 from .models import TaxCodeRequest, TaxIssuerProfile, TaxItemProfile
 from .services import TaxRuleError, audit
 
@@ -47,10 +47,30 @@ def candidates(limit=500):
             .exclude(pk__in=open_ids).order_by('softech_itemcode')[:limit])
 
 
+def _catalog_without_profile():
+    from apps.catalog.models import Item
+    return Item.objects.filter(is_active=True).exclude(
+        softech_id__in=TaxItemProfile.objects.values('softech_itemcode'))
+
+
+def add_from_catalog(actor):
+    """Active catalog items with no tax profile yet (new since the owner's workbook) become uncoded profiles,
+    so they can be offered for a code. Sets nothing else: tax treatment stays for the accountant."""
+    rows = [TaxItemProfile(softech_itemcode=i.softech_id, item=i, item_name=i.name[:200],
+                           coding_status=TaxItemProfile.CODE_MISSING)
+            for i in _catalog_without_profile().order_by('softech_id')]
+    TaxItemProfile.objects.bulk_create(rows, batch_size=2000, ignore_conflicts=True)
+    audit('items_added_from_catalog', actor=actor, entity='item_import', entity_id='catalog',
+          after={'added': len(rows), 'first': [r.softech_itemcode for r in rows[:20]]})
+    return {'added': len(rows)}
+
+
 def _check_fields(parent_code, code_name, code_name_ar):
     problems = []
     if not GPC_BRICK.match(parent_code or ''):
         problems.append('كود GPC (المستوى الرابع) يجب أن يكون 8 أرقام')
+    elif not gpc.known(parent_code):
+        problems.append(f'كود GPC {parent_code} ليس في قائمة فئات GPC')
     if not (code_name or '').strip():
         problems.append('الاسم الإنجليزي مطلوب')
     if not (code_name_ar or '').strip():
@@ -58,33 +78,39 @@ def _check_fields(parent_code, code_name, code_name_ar):
     return problems
 
 
-def prepare(profile_ids, actor, *, parent_code='', active_from=None, reason=''):
-    """Draft one request per item. Sends nothing. Returns {'created': [...], 'skipped': [{itemcode, why}]}."""
+def prepare(profile_ids, actor, *, parent_code='', active_from=None, reason='', use_suggested=False):
+    """Draft one request per item. Sends nothing. Returns {'created': [...], 'skipped': [{itemcode, why}]}.
+    The brick: the one typed for the batch, else the item's own, else (only when asked) the suggested one,
+    which the person saw beside the item before preparing."""
     tax_id = _issuer_tax_id()
     ids = list(profile_ids)[:MAX_PER_ACTION]
     created, skipped = [], []
-    for profile in TaxItemProfile.objects.filter(pk__in=ids).order_by('softech_itemcode'):
+    profiles = list(TaxItemProfile.objects.filter(pk__in=ids).select_related('item__category').order_by('softech_itemcode'))
+    suggested = gpc.suggest(profiles) if use_suggested and not parent_code else {}
+    for profile in profiles:
         if profile.coding_status not in (TaxItemProfile.CODE_MISSING, TaxItemProfile.CODE_REJECTED):
             skipped.append({'itemcode': profile.softech_itemcode, 'why': 'للصنف كود معتمد أو قيد الاعتماد'})
             continue
-        gpc = (parent_code or profile.gpc_code or '').strip()
+        own = '' if (profile.gpc_code or '').strip() == '0' else (profile.gpc_code or '').strip()
+        brick = (parent_code or own or suggested.get(profile.id, {}).get('code') or '').strip()
         name_en = (profile.item_name or '').strip()
         name_ar = (profile.item_name_ar or '').strip() or name_en
-        problems = _check_fields(gpc, name_en, name_ar)
+        problems = _check_fields(brick, name_en, name_ar)
         if problems:
             skipped.append({'itemcode': profile.softech_itemcode, 'why': '؛ '.join(problems)})
             continue
         try:
             with transaction.atomic():
                 row = TaxCodeRequest.objects.create(
-                    profile=profile, item_code=item_code_for(tax_id, profile.softech_itemcode), parent_code=gpc,
+                    profile=profile, item_code=item_code_for(tax_id, profile.softech_itemcode), parent_code=brick,
                     code_name=name_en[:200], code_name_ar=name_ar[:200], active_from=active_from or timezone.localdate(),
                     request_reason=(reason or 'صنف صيدلي يُباع للعملاء')[:300], prepared_by=actor)
         except IntegrityError:
             skipped.append({'itemcode': profile.softech_itemcode, 'why': 'يوجد طلب مفتوح لهذا الصنف'})
             continue
         audit('code_request_prepared', actor=actor, entity='code_request', entity_id=row.pk,
-              after={'item_code': row.item_code, 'parent_code': gpc, 'itemcode': profile.softech_itemcode})
+              after={'item_code': row.item_code, 'parent_code': brick, 'itemcode': profile.softech_itemcode,
+                     'brick_from': 'batch' if parent_code else 'item' if own else 'suggested'})
         created.append(row.pk)
     return {'created': created, 'skipped': skipped}
 
@@ -100,7 +126,7 @@ def edit(request_id, actor, fields):
         for key, value in fields.items():
             if key in allowed:
                 setattr(row, key, str(value or '').strip()[:300])
-        problems = _check_fields(row.parent_code, row.code_name, row.code_name_ar)
+        problems = [] if row.purpose == TaxCodeRequest.PURPOSE_GS1 else _check_fields(row.parent_code, row.code_name, row.code_name_ar)
         if problems:
             raise TaxRuleError('؛ '.join(problems))
         row.save()
@@ -139,13 +165,25 @@ def _mark_profile_pending(row, actor):
         return     # a test-system copy of a real code: the item's real coding stays as it is
     profile = row.profile
     before = {'coding_status': profile.coding_status, 'eta_code': profile.eta_code, 'code_type': profile.code_type}
-    profile.coding_status, profile.eta_code, profile.code_type = TaxItemProfile.CODE_PENDING, row.item_code, 'EGS'
+    profile.coding_status, profile.eta_code, profile.code_type = TaxItemProfile.CODE_PENDING, row.item_code, _code_type(row)
     profile.coding_env = row.environment
-    if not profile.gpc_code:
+    if row.parent_code and profile.gpc_code in ('', '0'):
         profile.gpc_code = row.parent_code
     profile.save()
     audit('item_coding_from_eta', actor=actor, entity='item', entity_id=profile.pk, reason=f'طلب كود {row.item_code}',
-          before=before, after={'coding_status': profile.coding_status, 'eta_code': profile.eta_code, 'code_type': 'EGS'})
+          before=before, after={'coding_status': profile.coding_status, 'eta_code': profile.eta_code,
+                                'code_type': profile.code_type})
+
+
+def _code_type(row):
+    return 'GS1' if row.purpose == TaxCodeRequest.PURPOSE_GS1 else 'EGS'
+
+
+def _send_one(row):
+    if row.purpose == TaxCodeRequest.PURPOSE_GS1:
+        return eta_client.request_code_reuse([{'codetype': 'GS1', 'itemCode': row.item_code,
+                                               'comment': (row.request_reason or 'باركود المصنع لصنف نبيعه')[:200]}])
+    return eta_client.create_egs_codes([_payload(row)])
 
 
 def send(request_ids, actor, confirm):
@@ -169,7 +207,7 @@ def send(request_ids, actor, confirm):
         if not claimed:
             continue
         try:
-            http_status, body = eta_client.create_egs_codes([_payload(row)])
+            http_status, body = _send_one(row)
         except eta_client.EtaNotConfigured as exc:
             TaxCodeRequest.objects.filter(pk=row.pk).update(status=TaxCodeRequest.FAILED, error=str(exc))
             results['stopped'] = str(exc)
@@ -223,7 +261,7 @@ def _apply_eta_answer(row, eta_row, actor):
         profile = row.profile
         before = {'coding_status': profile.coding_status, 'eta_code': profile.eta_code}
         profile.coding_status = TaxItemProfile.CODE_APPROVED if status == TaxCodeRequest.APPROVED else TaxItemProfile.CODE_REJECTED
-        profile.eta_code, profile.code_type = row.item_code, 'EGS'
+        profile.eta_code, profile.code_type = row.item_code, _code_type(row)
         profile.coding_env = row.environment
         if status == TaxCodeRequest.APPROVED:
             profile.eta_check_env, profile.eta_check_status = row.environment, TaxItemProfile.CHECK_FOUND
@@ -284,6 +322,7 @@ def summary():
     checks = dict(TaxItemProfile.objects.exclude(eta_code='').filter(eta_check_env=here)
                   .values_list('eta_check_status').annotate(n=Count('id')))
     return {'by_status': counts, 'candidates': candidates(limit=100000).count(),
+            'catalog_without_profile': _catalog_without_profile().count(),
             'mirror_candidates': mirror_candidates(limit=100000).count() if here not in ('', 'production') else 0,
             'checks': {'found': checks.get(TaxItemProfile.CHECK_FOUND, 0),
                        'inactive': checks.get(TaxItemProfile.CHECK_INACTIVE, 0),
@@ -379,5 +418,57 @@ def prepare_mirror(profile_ids, actor, *, reason=''):
             continue
         audit('code_request_prepared', actor=actor, entity='code_request', entity_id=row.pk,
               after={'item_code': row.item_code, 'purpose': 'mirror', 'environment': here})
+        created.append(row.pk)
+    return {'created': created, 'skipped': skipped}
+
+
+# ── GS1: the manufacturer's barcode, asked for our use ─────────────────────────────────────────
+
+def gtin_ok(code):
+    """A GS1 GTIN-8/12/13/14 with a correct check digit."""
+    code = (code or '').strip()
+    if not re.fullmatch(r'\d{8}|\d{12,14}', code):
+        return False
+    digits = [int(c) for c in code]
+    body, check = digits[:-1], digits[-1]
+    total = sum(d * (3 if i % 2 == 0 else 1) for i, d in enumerate(reversed(body)))
+    return (10 - total % 10) % 10 == check
+
+
+def gs1_candidates(limit=500):
+    """Uncoded items whose catalog barcode is a valid GTIN: ETA may already hold it from GS1 Egypt."""
+    open_ids = TaxCodeRequest.objects.filter(status__in=TaxCodeRequest.OPEN_STATES).values('profile_id')
+    qs = (TaxItemProfile.objects
+          .filter(coding_status__in=[TaxItemProfile.CODE_MISSING, TaxItemProfile.CODE_REJECTED], item__isnull=False)
+          .exclude(pk__in=open_ids).exclude(item__barcode='').select_related('item').order_by('softech_itemcode'))
+    return [p for p in qs if gtin_ok(p.item.barcode)][:limit]
+
+
+def prepare_gs1(profile_ids, actor, *, reason=''):
+    """Draft a "use this GS1 code" request per item, from its catalog barcode. Sends nothing.
+    Real or test system alike: an approved GS1 code is the item's code in that system."""
+    ids = list(profile_ids)[:MAX_PER_ACTION]
+    created, skipped = [], []
+    for profile in TaxItemProfile.objects.filter(pk__in=ids).select_related('item').order_by('softech_itemcode'):
+        barcode = (profile.item.barcode if profile.item else '').strip()
+        if profile.coding_status not in (TaxItemProfile.CODE_MISSING, TaxItemProfile.CODE_REJECTED):
+            skipped.append({'itemcode': profile.softech_itemcode, 'why': 'للصنف كود معتمد أو قيد الاعتماد'})
+            continue
+        if not gtin_ok(barcode):
+            skipped.append({'itemcode': profile.softech_itemcode, 'why': f'الباركود ليس GS1 صحيحاً: {barcode or "—"}'})
+            continue
+        try:
+            with transaction.atomic():
+                row = TaxCodeRequest.objects.create(
+                    profile=profile, purpose=TaxCodeRequest.PURPOSE_GS1, item_code=barcode, parent_code='',
+                    code_name=(profile.item_name or barcode)[:200],
+                    code_name_ar=(profile.item_name_ar or profile.item_name or barcode)[:200],
+                    active_from=timezone.localdate(), request_reason=(reason or 'باركود المصنع لصنف نبيعه')[:300],
+                    prepared_by=actor)
+        except IntegrityError:
+            skipped.append({'itemcode': profile.softech_itemcode, 'why': 'يوجد طلب مفتوح لهذا الصنف'})
+            continue
+        audit('code_request_prepared', actor=actor, entity='code_request', entity_id=row.pk,
+              after={'item_code': barcode, 'purpose': 'gs1', 'itemcode': profile.softech_itemcode})
         created.append(row.pk)
     return {'created': created, 'skipped': skipped}

@@ -40,7 +40,7 @@ from core.branch_scope import allows_code, branch_codes, scope_code
 from core.errors import public_error
 from core.permissions import _get_profile, matrix_allows, matrix_permission
 
-from . import coding, environment, eta_client, item_import, receipts, services, signing, submission
+from . import coding, environment, eta_client, gpc, item_import, receipts, services, signing, submission
 from .models import (TaxBuyerProfile, TaxChannelRule, TaxCodeRequest, TaxDocument, TaxDocumentLine, TaxExclusionBasis,
                      TaxIssuerProfile, TaxItemProfile, TaxLineReview, TaxReceipt, TaxReceiptBranchConfig, TaxReceiptLine, TaxSigningJob)
 
@@ -1030,14 +1030,43 @@ def codes(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, VIEWER])
 def code_candidates(request):
-    mirror = request.query_params.get('kind') == 'mirror'
-    qs = coding.mirror_candidates(limit=100000) if mirror else coding.candidates(limit=100000)
+    """kind: '' items needing a new EGS code (with a suggested GPC brick) · mirror · gs1 (valid GTIN barcode)."""
+    kind = request.query_params.get('kind') or ''
     q = (request.query_params.get('q') or '').strip()
-    if q:
-        qs = qs.filter(Q(softech_itemcode__icontains=q) | Q(item_name__icontains=q) | Q(item_name_ar__icontains=q))
+    if kind == 'gs1':
+        rows = coding.gs1_candidates(limit=100000)
+        if q:
+            rows = [p for p in rows if q in p.softech_itemcode or q.lower() in (p.item_name or '').lower()
+                    or q in (p.item_name_ar or '') or q in p.item.barcode]
+        rows = rows[:MAX_LIST]
+    else:
+        qs = coding.mirror_candidates(limit=100000) if kind == 'mirror' else coding.candidates(limit=100000)
+        if q:
+            qs = qs.filter(Q(softech_itemcode__icontains=q) | Q(item_name__icontains=q) | Q(item_name_ar__icontains=q))
+        rows = list(TaxItemProfile.objects.filter(pk__in=[p.pk for p in qs[:MAX_LIST]])
+                    .select_related('item__category').order_by('softech_itemcode'))
+    suggested = gpc.suggest(rows) if kind == '' else {}
+    bricks = gpc.names({p.gpc_code for p in rows})
     return Response([{'id': p.id, 'itemcode': p.softech_itemcode, 'item_name': p.item_name, 'item_name_ar': p.item_name_ar,
-                      'gpc_code': p.gpc_code, 'coding_status': p.coding_status, 'eta_code': p.eta_code,
-                      'coding_status_label': p.get_coding_status_display()} for p in qs[:MAX_LIST]])
+                      'gpc_code': '' if p.gpc_code == '0' else p.gpc_code, 'gpc_name': bricks.get(p.gpc_code, ''),
+                      'coding_status': p.coding_status, 'eta_code': p.eta_code,
+                      'barcode': p.item.barcode if p.item else '', 'family': p.item.family_name if p.item else '',
+                      'suggested': suggested.get(p.id),
+                      'coding_status_label': p.get_coding_status_display()} for p in rows])
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, EDITOR])
+def codes_add_from_catalog(request):
+    """New catalog items (no tax profile yet) join the items that need a code."""
+    return Response(coding.add_from_catalog(request.user))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, VIEWER])
+def code_gpc(request):
+    """Search the GPC brick list by code or name; bricks our approved items use come first."""
+    return Response({'loaded': gpc.loaded(), 'rows': gpc.search(request.query_params.get('q'))})
 
 
 @api_view(['POST'])
@@ -1049,9 +1078,12 @@ def codes_prepare(request):
     try:
         if request.data.get('kind') == 'mirror':
             result = coding.prepare_mirror(ids, request.user, reason=(request.data.get('reason') or '').strip())
+        elif request.data.get('kind') == 'gs1':
+            result = coding.prepare_gs1(ids, request.user, reason=(request.data.get('reason') or '').strip())
         else:
             result = coding.prepare(ids, request.user, parent_code=(request.data.get('parent_code') or '').strip(),
-                                    reason=(request.data.get('reason') or '').strip())
+                                    reason=(request.data.get('reason') or '').strip(),
+                                    use_suggested=bool(request.data.get('use_suggested')))
     except services.TaxRuleError as exc:
         return _refuse(exc)
     return Response(result)

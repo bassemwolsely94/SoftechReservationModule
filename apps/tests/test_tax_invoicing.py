@@ -922,6 +922,7 @@ class ImportMappingTests(Fixture, TestCase):
                          ('pending', 'white', 'include', 'unclassified', Decimal('14.00'), 'v009'))
         self.assertIsNone(x1.treatment_confirmed_at)
         self.assertEqual((x2.coding_status, x2.list_status, x2.disposition), ('missing', 'black', 'review'))
+        self.assertEqual(x2.eta_code, '')       # a code with no type is not kept: nothing to check at ETA
 
     def test_changed_mapping_or_file_needs_a_new_preview(self):
         file = workbook([('X1', 'EG-1-X1', 'EGS', '0', 0, 'v003')])

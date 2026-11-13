@@ -69,6 +69,21 @@ requests" (`GET /api/v1.0/codetypes/requests/my?ItemCode=`).
 - Not built: GS1 "Request Code Reuse" for items whose barcode is a GS1 code, and a scheduled status poll (the
   button and `coding.refresh` do it on demand).
 
+### GPC categories and GS1 codes
+
+- `TaxGpcBrick` holds the GPC bricks (code, English, Arabic), loaded with `manage.py load_gpc_bricks <xlsx>` from the
+  owner's GPC workbook (any sheet with a `Brick Code` / `BrickCode` column). Once loaded, a code request must name a
+  brick from it; before that, any 8-digit code passes.
+- `gpc.suggest` shows, per uncoded item, the brick most used by our approved items of the same SOFTECH family, else
+  category, else type, with its share. It is never applied by itself: preparing uses a batch brick, else the item's own,
+  else the suggestion only when the person ticks "use the suggested category" after seeing it. The audit records which.
+- `add_from_catalog`: active catalog items with no tax profile (new since the owner's workbook) become uncoded profiles
+  (name from the catalog), so they can be offered for a code. Treatment and lists stay for the accountant.
+- GS1: an uncoded item whose catalog barcode is a valid GTIN can be asked for as-is ("Request Code Reuse",
+  `PUT /api/v1.0/codetypes/requests/codeusages`, `TaxCodeRequest.purpose = gs1`). ETA refuses a barcode it does not
+  hold; that item then needs an EGS code. Approval sets `code_type = GS1`, `eta_code = barcode`.
+- Follow-up of GS1 requests uses the same "my requests" search as EGS; confirmed on the test system before production.
+
 ### Code check per ETA system
 
 `coding.check_codes` asks ETA's "Get Code Details by Item Code" for each mapped code and stores the answer with the

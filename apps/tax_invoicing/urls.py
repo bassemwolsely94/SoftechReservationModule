@@ -40,6 +40,8 @@ urlpatterns = [
     path('eta/check-login/', views.eta_check_login),
     path('codes/', views.codes),
     path('codes/candidates/', views.code_candidates),
+    path('codes/gpc/', views.code_gpc),
+    path('codes/add-from-catalog/', views.codes_add_from_catalog),
     path('codes/prepare/', views.codes_prepare),
     path('codes/send/', views.codes_send),
     path('codes/refresh/', views.codes_refresh),
