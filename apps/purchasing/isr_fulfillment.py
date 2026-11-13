@@ -413,12 +413,10 @@ def _stock(snap, bc, code):
 
 
 def branch_column_order(codes):
-    """Display order of branch columns: Branch.display_order (the owner-set order on the
-    branch settings screen), then code; codes with no Branch row last. The requesting branch
-    is always shown first on its own; this orders the rest. Display only: who gives first is
-    donor_order (most excess first)."""
-    from apps.branches.models import order_codes
-    return order_codes(codes)
+    """Display order of branch columns (owner 2026-10-05): by branch code — 130, 140, 150,
+    160, 170 … The requesting branch is always shown first on its own; this orders the rest.
+    Display only: who gives first is donor_order (most excess first)."""
+    return sorted(codes, key=lambda c: (0, int(c)) if str(c).isdigit() else (1, str(c)))
 
 
 def donor_order(snap, isr, months):
@@ -1152,7 +1150,7 @@ def _isr_sheet(ws, r, snap, months):
 
     req = r['branch']
     donors = donor_order(snap, r, months)         # allocation formulas draw in this order
-    shown = branch_column_order(donors)           # …but the columns follow display_order
+    shown = branch_column_order(donors)           # …but the columns read 130, 140, 150, 160, 170
 
     ws.sheet_view.rightToLeft = True
     thin = Side(style='thin', color='C9CED6')

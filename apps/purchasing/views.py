@@ -1104,8 +1104,8 @@ def _export_xlsx_pivot_v2(run, request, filename):
     الشكل والوحدة / تصنيف الخصم) and every branch block carries a بضاعة-بالطريق
     (in-transit) column right after الرصيد-الحالى.
 
-    Branches = Branch.objects.live().ordered(): the HQ (kind=hq) block comes first, then one
-    block per live retail branch in display order — a newly classified branch gets its own
+    Branches = Branch.objects.live(): the HQ (kind=hq) block comes first, then one block
+    per live retail branch in code order — a newly classified branch gets its own
     block, % / rank columns, with no code change. Reference layout (HQ + 5 retail = 138 cols):
       [  0-12]  Item info          (13 cols — 4 classification labels)
       [ 13-18]  HQ branch          (6 cols — +in-transit, no coverage/priority)
@@ -1136,12 +1136,15 @@ def _export_xlsx_pivot_v2(run, request, filename):
     from apps.branches.models import Branch
     from collections import defaultdict
 
-    # ── 1. Live branches (HQ + retail) in display order ────────────────────────
+    # ── 1. Live branches: HQ first, then retail by branch CODE ─────────────────
     # The HQ block (6 cols) is found by kind, never by a literal code; every live
     # retail branch gets an 8-col block — a newly classified branch appears here.
-    branches        = list(Branch.objects.live().ordered())
+    # Code order (130, 140, 150, 160, 170, …) as the reference sheet — not display_order.
+    from .isr_fulfillment import branch_column_order
+    branches        = list(Branch.objects.live())
     branch_100      = next((b for b in branches if b.is_hq), None)    # the HQ (kind=hq)
-    branches_no100  = [b for b in branches if not b.is_hq]            # retail, display order
+    _retail         = {b.softech_branch_id: b for b in branches if not b.is_hq}
+    branches_no100  = [_retail[c] for c in branch_column_order(_retail)]   # retail, code order
     if branch_100 is not None:                                        # HQ block always first
         branches = [branch_100] + branches_no100
     hq_sid          = branch_100.softech_branch_id if branch_100 is not None else ''
@@ -1625,7 +1628,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
         elif branch_100:
             row += [_cell(None, B100_DFILL)] * 6
 
-        # Retail branches, display order (8 cols each)
+        # Retail branches, code order (8 cols each)
         for bi, b in enumerate(branches_no100):
             dfill = BGRP_DFILLS[bi % len(BGRP_DFILLS)]
             if b.id in branch_data:

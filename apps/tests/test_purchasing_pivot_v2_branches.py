@@ -1,7 +1,7 @@
 """
 Purchasing pivot v2 (view=pivot) follows the live branch list (branch classification piece 1,
 task 5): the HQ block is found by kind (never a literal '100'), the retail blocks come from
-Branch.objects.live().ordered(), and a newly classified live retail branch gets its own column.
+Branch.objects.live() in code order, and a newly classified live retail branch gets its own column.
 """
 import io
 from datetime import date
@@ -66,15 +66,16 @@ class PivotV2BranchesTests(TestCase):
         # every row has the same width as the headers
         self.assertTrue(all(len(r) == len(hdr) for r in rows))
 
-    def test_pivot_v2_retail_blocks_follow_display_order(self):
+    def test_pivot_v2_retail_blocks_follow_code_order(self):
+        # code order (owner), not display_order: HQ first, then 130 … 170
         self.assertEqual(self._blocks(self._rows()[1]),
-                         ['900', '160', '170', '140', '150', '130'])
+                         ['900', '130', '140', '150', '160', '170'])
 
     def test_pivot_v2_includes_new_live_branch(self):
-        self._branch('230', Branch.KIND_RETAIL, 8)
+        self._branch('230', Branch.KIND_RETAIL, 0)      # display_order 0 must not move it first
         rows = self._rows()
         hdr = rows[1]
-        self.assertEqual(self._blocks(hdr), ['900', '160', '170', '140', '150', '130', '230'])
+        self.assertEqual(self._blocks(hdr), ['900', '130', '140', '150', '160', '170', '230'])
         self.assertIn('230.RankCoverage', hdr)
         self.assertIn('230.RankDeficit', hdr)
         self.assertIn('230.Rank', hdr)
