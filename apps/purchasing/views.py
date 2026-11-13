@@ -890,8 +890,8 @@ def _export_xlsx_pivot(run, request, filename):
         .distinct()
     )
     branches = list(
-        Branch.objects
-        .filter(id__in=branch_ids, is_active=True)
+        Branch.objects.live()
+        .filter(id__in=branch_ids)
         .order_by('softech_branch_id', 'name')
     )
     if not branches:

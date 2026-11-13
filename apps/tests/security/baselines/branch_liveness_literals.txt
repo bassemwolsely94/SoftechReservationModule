@@ -1,0 +1,18 @@
+# Branch liveness from literals (branch classification piece 1, Task 7, 2026-11-13). Liveness is
+# Branch.kind only: Branch.objects.live()/retail()/closed()/pending() and hq_code(). A site is a
+# Branch filter on is_active / is_operational=True with no kind, a list of >=2 branch codes under a
+# "branch" name, or HQ... = '100'. Every line sits under a "# reason:". New lines: fix with .live().
+
+# reason: read-only SOFTECH investigation / probe commands run by hand; they pick nodes by is_operational + db_host on purpose (what can be dialled), never feed a screen or export
+apps/customers/management/commands/investigate_pic_create.py::Command.handle
+apps/customers/management/commands/investigate_pic_replication.py::Command.handle
+apps/sync/management/commands/investigate_britems.py::Command._investigate
+apps/sync/management/commands/investigate_replication.py::Command._investigate
+apps/sync/management/commands/probe_replication_source.py::Command._investigate
+apps/sync/management/commands/test_replication_cycle.py::Command.handle
+
+# reason: PBX extension numbers, not branch codes; extension classification is piece 2 (spec 5.6)
+apps/pbx/management/commands/classify_pbx_extensions.py::<module>
+
+# reason: label of the HQ node whose server is settings.SYBASE_HOST; the retail nodes already come from Branch.objects.retail()
+apps/sync/network_health.py::<module>
