@@ -713,6 +713,7 @@ accountant POST /api/tax-invoicing/receipts/branch/x/chain/start/
 accountant POST /api/tax-invoicing/receipts/branch/x/chain/undo/
 accountant POST /api/tax-invoicing/receipts/branch/x/reconcile/
 accountant POST /api/tax-invoicing/receipts/branch/x/submit/
+accountant POST /api/tax-invoicing/receipts/branch/x/test/end/
 accountant POST /api/tax-invoicing/receipts/configs/
 accountant POST /api/tax-invoicing/signing/smoke-test/
 accountant POST /api/tax-invoicing/signing-agent/next/
