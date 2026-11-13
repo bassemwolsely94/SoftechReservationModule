@@ -50,6 +50,8 @@ CHANNEL_DEFAULTS: dict[str, dict] = {
            'bucket': 'credit',    'subtype': '',         'counts_customer': False, 'include_in_profit': False},  # مقاصات (owner to confirm)
 }
 
+# Follow-up priorities the owner may pick (server rule; served to the UI as choices.ranks).
+FOLLOWUP_RANKS = (1, 2, 3, 4)
 MEANING_FIELDS = ('group', 'is_contract_sale', 'followup_rank')
 KPI_FIELDS = ('bucket', 'subtype', 'counts_customer', 'include_in_profit')
 
@@ -217,6 +219,8 @@ def ensure_channel_rows(notify: bool = True) -> list[str]:
             pt, ch = (c.ptcode or '').strip(), (c.ptclassifcode or '').strip()
             if not pt or not ch:
                 continue
+            if pt != CUSTOMER_PT and (pt, ch) not in existing:
+                continue          # only customer pairs are auto-inserted (others: seed_kpi_config)
             label = c.ptclassifdescr or ''
             row = existing.get((pt, ch))
             if row is None:

@@ -78,6 +78,7 @@ class ChannelsApiTests(_CodeMapsBase):
                          [v for v, _ in ChannelBucketMap.GROUP_CHOICES])
         self.assertIn({'value': 'contract', 'label': 'تعاقد'}, groups)
         self.assertIn({'value': 'unclassified', 'label': 'غير مصنف'}, groups)
+        self.assertEqual(r.data['choices']['ranks'], [1, 2, 3, 4])
 
     def test_list_only_customer_rows_and_unclassified_first(self):
         channels.ensure_defaults()

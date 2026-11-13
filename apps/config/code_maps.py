@@ -53,8 +53,8 @@ class ChannelPatchSerializer(serializers.Serializer):
     group = serializers.ChoiceField(choices=ChannelBucketMap.GROUP_CHOICES, required=False,
                                     error_messages=_GROUP_ERR)
     is_contract_sale = serializers.BooleanField(required=False, error_messages=_BOOL_ERR)
-    followup_rank = serializers.IntegerField(required=False, allow_null=True, min_value=1,
-                                             max_value=4, error_messages=_RANK_ERR)
+    followup_rank = serializers.IntegerField(required=False, allow_null=True, min_value=min(channels.FOLLOWUP_RANKS),
+                                             max_value=max(channels.FOLLOWUP_RANKS), error_messages=_RANK_ERR)
 
 
 class ItemTypePatchSerializer(serializers.Serializer):
@@ -142,7 +142,8 @@ def channel_list(request):
                   key=_channel_sort_key)
     sales = _sales_90d(r.channel for r in rows)
     return Response({'rows': [_channel_dict(r, sales) for r in rows],
-                     'choices': _choices(ChannelBucketMap.GROUP_CHOICES)})
+                     'choices': {**_choices(ChannelBucketMap.GROUP_CHOICES),
+                                 'ranks': list(channels.FOLLOWUP_RANKS)}})
 
 
 @api_view(['PATCH'])

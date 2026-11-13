@@ -27,7 +27,6 @@ const TABS = [
   { key: 'item-types', label: 'تصنيف الأصناف' },
 ]
 const UNCLASSIFIED = 'unclassified'
-const RANKS = [1, 2, 3, 4]
 const HINT = '⌨ ↑↓ تنقل · Enter أو M تعديل المجموعة · كل تغيير يُحفظ فورًا'
 const num = v => (v == null ? '—' : Number(v).toLocaleString('en-US'))
 
@@ -164,6 +163,7 @@ function ChannelsTable({ query }) {
   const saver = useRowSaver('channels')
   const rows = useMemo(() => query.data?.rows || [], [query.data])
   const groups = query.data?.choices?.groups || []
+  const ranks = query.data?.choices?.ranks || []
   const { display, headerProps } = usePinnedSort(rows, sortValue, 'code-maps-channels')
   const kb = useGridKeyboard({ rows: display, getKey: r => r.id,
     onConfirm: r => focusGroup(r.id), onOpen: r => focusGroup(r.id) })
@@ -199,7 +199,7 @@ function ChannelsTable({ query }) {
                           aria-label={`أولوية المتابعة — ${r.code}`}
                           onChange={e => saver.save(r, { followup_rank: e.target.value === '' ? null : Number(e.target.value) })}>
                     <option value="">—</option>
-                    {RANKS.map(n => <option key={n} value={n}>{n}</option>)}
+                    {ranks.map(n => <option key={n} value={n}>{n}</option>)}
                   </select>
                 </td>
                 <td className="p-2 text-muted">{r.bucket_label || '—'}</td>

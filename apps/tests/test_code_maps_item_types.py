@@ -87,3 +87,33 @@ class ItemTypeRegistryTests(TestCase):
 
     def test_sync_never_raises(self):
         self.assertEqual(item_types.sync_item_types(None), [])
+
+
+class MedicineTypeMapSeedMigrationTests(TestCase):
+    """The data seed of migration 0004 (called directly with the real models)."""
+
+    def setUp(self):
+        item_types.invalidate_cache()
+        MedicineTypeMap.objects.all().delete()
+
+    def tearDown(self):
+        item_types.invalidate_cache()
+
+    def _seed(self):
+        import importlib
+        from django.apps import apps
+        mod = importlib.import_module('apps.config.migrations.0004_medicinetypemap')
+        mod.seed_item_types(apps, None)
+        return set(MedicineTypeMap.objects.filter(excluded_from_planning=True)
+                   .values_list('code', flat=True))
+
+    def test_seed_honours_old_excluded_setting(self):
+        from apps.config.models import SystemSetting
+        SystemSetting.objects.update_or_create(key='analytics_excluded_medicine_types',
+                                               defaults={'value': '60,70'})
+        self.assertEqual(self._seed(), {'60', '70'})
+
+    def test_seed_without_setting_excludes_only_gifts(self):
+        from apps.config.models import SystemSetting
+        SystemSetting.objects.filter(key='analytics_excluded_medicine_types').delete()
+        self.assertEqual(self._seed(), {'60'})

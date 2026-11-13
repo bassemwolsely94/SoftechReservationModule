@@ -10,7 +10,10 @@ Seeds/refreshes the branch-KPI config tables:
 
 Usage:
   python manage.py seed_kpi_config
-  python manage.py seed_kpi_config --reset-defaults   # re-apply defaults to pt=10 rows
+  python manage.py seed_kpi_config --reset-defaults   # re-apply KPI defaults (bucket, subtype,
+                                                      #   counts_customer, include_in_profit) to pt=10 rows
+  python manage.py seed_kpi_config --reset-meanings   # re-apply group / is_contract_sale /
+                                                      #   followup_rank (audited per changed row)
 """
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -31,7 +34,10 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--reset-defaults', action='store_true',
-                            help='Re-apply the validated pt=10 defaults (overwrites those rows)')
+                            help='Re-apply the validated pt=10 KPI defaults (overwrites those fields)')
+        parser.add_argument('--reset-meanings', action='store_true',
+                            help='Re-apply the pt=10 group / is_contract_sale / followup_rank '
+                                 'defaults (audited per changed row)')
 
     @transaction.atomic
     def handle(self, *args, **opts):
@@ -39,6 +45,7 @@ class Command(BaseCommand):
         from apps.sync.models import SoftechPersonClassif
 
         reset = opts['reset_defaults']
+        reset_meanings = opts['reset_meanings']
         created = updated = skipped = 0
 
         for c in SoftechPersonClassif.objects.all():
@@ -52,12 +59,23 @@ class Command(BaseCommand):
                     person_type=pt, channel=ch, label=label or '', **vals,
                 )
                 created += 1
-            elif reset and default:
+            elif (reset or reset_meanings) and default:
                 row.label = label or row.label
-                fields = KPI_FIELDS + MEANING_FIELDS
+                fields = list(KPI_FIELDS) if reset else []
+                old, new = {}, {}
+                if reset_meanings:
+                    for f in MEANING_FIELDS:
+                        if getattr(row, f) != default[f]:
+                            old[f], new[f] = getattr(row, f), default[f]
+                    fields += list(MEANING_FIELDS)
                 for f in fields:
                     setattr(row, f, default[f])
                 row.save(update_fields=['label', *fields])
+                if new:
+                    from apps.audit.models import AuditLog
+                    AuditLog.log('code_map_changed', user=None, obj=row,
+                                 old_data=old, new_data=new,
+                                 note='seed_kpi_config --reset-meanings')
                 updated += 1
             else:
                 # keep owner edits; refresh label only if blank

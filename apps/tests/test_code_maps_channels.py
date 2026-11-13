@@ -120,5 +120,59 @@ class ChannelRegistryTests(TestCase):
                          'عميل نقدى')
         ins = ChannelBucketMap.objects.get(person_type='10', channel='15')
         self.assertEqual((ins.group, ins.bucket, ins.is_contract_sale), ('insurance', 'insurance', True))
-        other = ChannelBucketMap.objects.get(person_type='01', channel='15')
-        self.assertEqual((other.group, other.bucket), ('unclassified', 'exclude'))
+        # other person types are never auto-inserted by the sync hook
+        self.assertFalse(ChannelBucketMap.objects.filter(person_type='01').exists())
+
+    def test_ensure_channel_rows_skips_non_customer_person_types(self):
+        from apps.sync.models import SoftechPersonClassif
+        SoftechPersonClassif.objects.create(ptcode='30', ptclassifcode='77', ptclassifdescr='x')
+        SoftechPersonClassif.objects.create(ptcode='10', ptclassifcode='77', ptclassifdescr='y')
+        channels.ensure_channel_rows(notify=False)
+        self.assertFalse(ChannelBucketMap.objects.filter(person_type='30', channel='77').exists())
+        self.assertTrue(ChannelBucketMap.objects.filter(person_type='10', channel='77').exists())
+
+
+class SeedKpiConfigResetFlagTests(TestCase):
+    def setUp(self):
+        channels.invalidate_cache()
+        from apps.sync.models import SoftechPersonClassif
+        SoftechPersonClassif.objects.create(ptcode='10', ptclassifcode='91',
+                                            ptclassifdescr='نقدي')
+        # owner-edited row: both KPI and meaning fields differ from the defaults
+        ChannelBucketMap.objects.create(
+            person_type='10', channel='91', label='نقدي', bucket='credit', subtype='x',
+            counts_customer=False, include_in_profit=False,
+            group='vip', is_contract_sale=True, followup_rank=4)
+
+    def tearDown(self):
+        channels.invalidate_cache()
+
+    def _run(self, *flags):
+        from django.core.management import call_command
+        from io import StringIO
+        call_command('seed_kpi_config', *flags, stdout=StringIO())
+        return ChannelBucketMap.objects.get(person_type='10', channel='91')
+
+    def test_reset_defaults_touches_only_kpi_fields(self):
+        from apps.audit.models import AuditLog
+        row = self._run('--reset-defaults')
+        d = channels.CHANNEL_DEFAULTS['91']
+        for f in channels.KPI_FIELDS:
+            self.assertEqual(getattr(row, f), d[f], f)
+        self.assertEqual((row.group, row.is_contract_sale, row.followup_rank), ('vip', True, 4))
+        self.assertFalse(AuditLog.objects.filter(action='code_map_changed').exists())
+
+    def test_reset_meanings_touches_only_meaning_fields_and_audits(self):
+        from apps.audit.models import AuditLog
+        row = self._run('--reset-meanings')
+        d = channels.CHANNEL_DEFAULTS['91']
+        for f in channels.MEANING_FIELDS:
+            self.assertEqual(getattr(row, f), d[f], f)
+        self.assertEqual((row.bucket, row.subtype), ('credit', 'x'))
+        logs = AuditLog.objects.filter(action='code_map_changed')
+        self.assertEqual(logs.count(), 1)
+        self.assertEqual(logs[0].note, 'seed_kpi_config --reset-meanings')
+        self.assertIsNone(logs[0].user)
+        # second run changes nothing → no new audit row
+        self._run('--reset-meanings')
+        self.assertEqual(AuditLog.objects.filter(action='code_map_changed').count(), 1)
