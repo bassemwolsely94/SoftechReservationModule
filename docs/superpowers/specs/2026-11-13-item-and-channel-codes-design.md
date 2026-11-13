@@ -202,3 +202,19 @@ to `AuditLog` (before/after). Server-side permission (RBAC module per CLAUDE.md 
 3. Yes — follow-up rank: 1 = 91, 90; 2 = 30, 99; 3 = 10, 33, 11, 12; 4 = 15, 16, 17, 31.
 4. Yes — 10 = medicine, 60 = excluded from planning; 70 and 00 stay as they are.
 5. Yes — `pos_orders/models.py` and `writer.py` stay untouched; only a drift-guard test is added.
+
+## 8. Build notes (2026-11-13)
+
+- Readers: `apps/forecasting/channels.py` (channels, on `ChannelBucketMap`) and
+  `apps/config/item_types.py` (item categories, new `MedicineTypeMap`). Now routed through them:
+  follow-ups label / favoured / priority / filter list / score, بدل الروشتة contract set,
+  chronic customer type, `Customer.customer_type_label` / colour, refill tasks, stock audit,
+  ISR default + candidates, sales-rate writer candidates, seasonality, analytics exclusions.
+- The static-scan extension that would flag new literal `medicine_type='..'` / channel-code
+  filters is deferred to piece 1's scanner (`apps/tests/security/static_scan.py` is piece 1's file).
+- Not changed: `apps/pos_orders/models.py` / `writer.py`; `test_code_maps_new_values.py`
+  asserts every POS channel code is in the registry with the matching group.
+- Screen: `/code-maps` «ترميزات SOFTECH» (admin; API `/api/config/code-maps/…`, settings
+  module view/edit, audited as `code_map_changed`). At least one category must stay «دواء».
+- An edit reaches the editing server at once and other server processes within 10 minutes
+  (per-process reader cache).
