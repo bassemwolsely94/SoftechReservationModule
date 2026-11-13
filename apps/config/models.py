@@ -156,3 +156,36 @@ class PharmacyProfile(models.Model):
     def call_center_list(self):
         """Return a clean list of call center numbers (newline-separated)."""
         return [n.strip() for n in self.call_center_numbers.splitlines() if n.strip()]
+
+
+class MedicineTypeMap(models.Model):
+    """What a SOFTECH item-category code (items.itemmedicine / itemstree) means.
+
+    Owner-editable. Read through apps/config/item_types.py (cached)."""
+    GROUP_CHOICES = [
+        ('medicine',      'دواء'),
+        ('cosmetics',     'تجميل'),
+        ('others',        'أخرى'),
+        ('body_building', 'بناء أجسام'),
+        ('veterinary',    'بيطري'),
+        ('gift',          'هدايا عملاء'),
+        ('service',       'خدمات'),
+        ('na',            'غير محدد'),
+        ('unclassified',  'غير مصنف'),
+    ]
+
+    code  = models.CharField(max_length=4, unique=True, verbose_name='الكود')
+    label = models.CharField(max_length=100, blank=True, verbose_name='الاسم')
+    group = models.CharField(max_length=20, choices=GROUP_CHOICES, default='unclassified',
+                             verbose_name='المجموعة')
+    is_medicine = models.BooleanField(default=False, verbose_name='دواء')
+    excluded_from_planning = models.BooleanField(default=False, verbose_name='مستبعد من التخطيط')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['code']
+        verbose_name = 'تصنيف صنف'
+        verbose_name_plural = 'تصنيفات الأصناف'
+
+    def __str__(self):
+        return f'{self.code} — {self.label or self.get_group_display()}'

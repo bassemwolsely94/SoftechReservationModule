@@ -610,6 +610,11 @@ def sync_items(conn, sync_run):
         logger.info(f"[sync_items] itemstree loaded: {len(medicine_names)} entries")
     except Exception as exc:
         logger.warning(f"[sync_items] itemstree lookup failed: {exc}")
+    try:
+        from apps.config.item_types import sync_item_types
+        sync_item_types(medicine_names)
+    except Exception as exc:
+        logger.warning(f"[sync_items] item type map sync failed: {exc}")
 
     # ── 6. itemshape: itemshapecode → (en_name, ar_name)  (dosage form) ──────
     shape_names: dict[str, tuple[str, str]] = {}
