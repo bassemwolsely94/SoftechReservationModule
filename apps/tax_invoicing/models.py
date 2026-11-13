@@ -547,6 +547,17 @@ class TaxReceiptBranchConfig(models.Model):
     building_number = models.CharField(max_length=100, blank=True)
     payment_method = models.CharField(max_length=50, blank=True)
     last_uuid = models.CharField(max_length=64, blank=True, editable=False)
+    # Where this device's receipt chain starts, decided once before the first receipt (receipts.start_chain):
+    #   fresh     ETA holds no receipt from this device, so previousUUID starts empty;
+    #   handover  the device was used by another program (Invoicer); our first receipt follows its last one.
+    CHAIN_FRESH, CHAIN_HANDOVER = 'fresh', 'handover'
+    CHAIN_CHOICES = [(CHAIN_FRESH, 'جهاز جديد بلا إيصالات سابقة'), (CHAIN_HANDOVER, 'استلام من برنامج سابق')]
+    chain_start = models.CharField(max_length=10, choices=CHAIN_CHOICES, blank=True, default='', db_default='')
+    chain_start_uuid = models.CharField(max_length=64, blank=True, default='', db_default='', editable=False)
+    chain_start_detail = models.JSONField(null=True, blank=True, editable=False)
+    chain_start_at = models.DateTimeField(null=True, blank=True, editable=False)
+    chain_start_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                       related_name='+', editable=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

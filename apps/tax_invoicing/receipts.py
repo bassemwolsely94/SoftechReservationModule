@@ -230,7 +230,102 @@ def config_gaps(config, issuer):
             gaps.append(label)
     if not issuer.vat_basis_confirmed_at:
         gaps.append('تأكيد المحاسب: هل الأسعار شاملة الضريبة')
+    if not config.chain_start:
+        gaps.append('بداية سلسلة الجهاز (جهاز جديد أم استلام من برنامج سابق)')
     return gaps
+
+
+# ── Where a device's chain starts ──────────────────────────────────────────────────────────────
+# A device ETA already knows (registered and used by Invoicer) carries a chain: each receipt names the one
+# before it. Our first receipt must follow the device's last one, and the other program must have stopped on
+# that device. A new device starts empty. This is decided once per branch, before the first receipt, from what
+# ETA itself returns; it is never typed from memory.
+
+LOOKBACK_DAYS = 400
+
+
+def _issued_here(branchcode):
+    return TaxReceipt.objects.filter(softech_branchcode=branchcode).exclude(uuid='').exists()
+
+
+def chain_lookup(branchcode, actor=None):
+    """Ask ETA for the device's newest receipts. Reads only; changes nothing here."""
+    config = TaxReceiptBranchConfig.objects.filter(softech_branchcode=branchcode).first()
+    if config is None or not config.device_serial:
+        raise TaxRuleError('أدخل سيريال جهاز الفرع أولاً')
+    since = timezone.now() - dt.timedelta(days=LOOKBACK_DAYS)
+    try:
+        rows = eta_client.device_receipts(config, issued_from=since)
+    except eta_client.EtaError as exc:
+        raise TaxRuleError(str(exc)) from exc
+    latest = rows[0] if rows else None
+    result = {'branch': branchcode, 'device_serial': config.device_serial, 'looked_back_days': LOOKBACK_DAYS,
+              'found': len(rows), 'latest': None if latest is None else {
+                  'uuid': latest.get('uuid', ''), 'receipt_number': latest.get('receiptNumber', ''),
+                  'issued': latest.get('dateTimeIssued', ''), 'received': latest.get('dateTimeReceived', ''),
+                  'status': latest.get('status', ''), 'submitter': latest.get('submitterName', '')},
+              'chain_start': config.chain_start, 'issued_here': _issued_here(branchcode)}
+    audit('receipt_chain_lookup', actor=actor, entity='receipt_branch', entity_id=branchcode,
+          after={'found': len(rows), 'latest_uuid': result['latest']['uuid'] if latest else ''})
+    return result
+
+
+def start_chain(branchcode, actor, *, mode, confirm, other_program_stopped=False, expected_uuid=''):
+    """Decide the chain start once. ETA is asked again here, so the decision rests on its current answer:
+    'fresh' only when ETA shows no receipt from this device; 'handover' only to the newest one it shows, which
+    must be the receipt the person reviewed (expected_uuid), after they confirm the other program has stopped."""
+    if confirm != branchcode:
+        raise TaxRuleError('اكتب كود الفرع للتأكيد')
+    if mode not in (TaxReceiptBranchConfig.CHAIN_FRESH, TaxReceiptBranchConfig.CHAIN_HANDOVER):
+        raise TaxRuleError('اختر: جهاز جديد أو استلام من برنامج سابق')
+    looked = chain_lookup(branchcode, actor)
+    latest = looked['latest']
+    with transaction.atomic():
+        config = TaxReceiptBranchConfig.objects.select_for_update().get(softech_branchcode=branchcode)
+        if config.chain_start or config.last_uuid or _issued_here(branchcode):
+            raise TaxRuleError('بداية السلسلة محددة بالفعل لهذا الفرع')
+        if mode == TaxReceiptBranchConfig.CHAIN_FRESH:
+            if latest:
+                raise TaxRuleError('المصلحة لديها إيصالات من هذا الجهاز؛ اختر الاستلام من البرنامج السابق')
+            seed = ''
+        else:
+            if not latest:
+                raise TaxRuleError('المصلحة لا تعرض أي إيصال من هذا الجهاز؛ لا يوجد ما يُستلم')
+            if not other_program_stopped:
+                raise TaxRuleError('أكد أن البرنامج السابق توقف عن الإصدار على هذا الجهاز')
+            if not expected_uuid or expected_uuid != latest['uuid']:
+                raise TaxRuleError('أحدث إيصال لدى المصلحة تغير منذ المراجعة؛ ابحث مرة أخرى')
+            if str(latest.get('status') or '').lower() not in ('valid', ''):
+                raise TaxRuleError(f'أحدث إيصال حالته {latest.get("status")}؛ راجع المصلحة قبل الاستلام')
+            seed = latest['uuid']
+        config.chain_start, config.chain_start_uuid, config.last_uuid = mode, seed, seed
+        config.chain_start_detail = {'latest': latest, 'found': looked['found'], 'looked_back_days': LOOKBACK_DAYS,
+                                     'other_program_stopped': bool(other_program_stopped)}
+        config.chain_start_at, config.chain_start_by = timezone.now(), actor
+        config.save()
+        audit('receipt_chain_started', actor=actor, entity='receipt_branch', entity_id=branchcode,
+              before={'chain_start': '', 'last_uuid': ''},
+              after={'chain_start': mode, 'last_uuid': seed, 'latest': latest})
+    return config
+
+
+def undo_chain_start(branchcode, actor, reason):
+    """Only while nothing has been issued here: after that the chain is in our receipts."""
+    if not (reason or '').strip():
+        raise TaxRuleError('اكتب السبب')
+    with transaction.atomic():
+        config = TaxReceiptBranchConfig.objects.select_for_update().filter(softech_branchcode=branchcode).first()
+        if config is None:
+            raise TaxRuleError('الفرع غير مُعد')
+        if _issued_here(branchcode):
+            raise TaxRuleError('صدرت إيصالات على هذه السلسلة؛ لا يمكن التراجع')
+        before = {'chain_start': config.chain_start, 'last_uuid': config.last_uuid}
+        config.chain_start, config.chain_start_uuid, config.last_uuid = '', '', ''
+        config.chain_start_detail, config.chain_start_at, config.chain_start_by = None, None, None
+        config.save()
+        audit('receipt_chain_start_undone', actor=actor, entity='receipt_branch', entity_id=branchcode, reason=reason,
+              before=before, after={'chain_start': '', 'last_uuid': ''})
+    return config
 
 
 def _receipt_json(receipt, config, issuer, *, uuid_value, previous, reference=None):

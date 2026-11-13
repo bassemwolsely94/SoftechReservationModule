@@ -708,6 +708,9 @@ accountant POST /api/tax-invoicing/codes/send/
 accountant POST /api/tax-invoicing/documents/987654321/reconcile/
 accountant POST /api/tax-invoicing/documents/987654321/submit/
 accountant POST /api/tax-invoicing/eta/check-login/
+accountant POST /api/tax-invoicing/receipts/branch/x/chain/lookup/
+accountant POST /api/tax-invoicing/receipts/branch/x/chain/start/
+accountant POST /api/tax-invoicing/receipts/branch/x/chain/undo/
 accountant POST /api/tax-invoicing/receipts/branch/x/reconcile/
 accountant POST /api/tax-invoicing/receipts/branch/x/submit/
 accountant POST /api/tax-invoicing/receipts/configs/

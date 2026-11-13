@@ -897,6 +897,10 @@ _CONFIG_TEXT = ('seller_branch_code', 'device_serial', 'pos_os_version', 'pos_mo
 
 def _config_row(c):
     return {'branch': c.softech_branchcode, 'is_enabled': c.is_enabled, 'has_chain': bool(c.last_uuid),
+            'chain_start': c.chain_start, 'chain_start_label': c.get_chain_start_display() if c.chain_start else '',
+            'chain_start_uuid': c.chain_start_uuid, 'chain_start_at': c.chain_start_at,
+            'chain_start_by': _stamp(c.chain_start_by), 'chain_start_detail': c.chain_start_detail or {},
+            'has_chain_receipts': TaxReceipt.objects.filter(softech_branchcode=c.softech_branchcode).exclude(uuid='').exists(),
             **{f: getattr(c, f) for f in _CONFIG_TEXT}}
 
 
@@ -1086,3 +1090,28 @@ def codes_refresh(request):
     if result.get('error'):
         return Response({**result, 'detail': result['error']}, status=status.HTTP_200_OK)
     return Response(result)
+
+
+# ── Where a branch device's chain starts ───────────────────────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, SENDER])
+def receipts_chain_lookup(request, branch):
+    """Asks ETA for the device's newest receipts with the branch POS login. Reads only."""
+    return _branch_action(request, branch, lambda: receipts.chain_lookup(branch, request.user))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, SENDER])
+def receipts_chain_start(request, branch):
+    d = request.data
+    return _branch_action(request, branch, lambda: _config_row(receipts.start_chain(
+        branch, request.user, mode=d.get('mode') or '', confirm=str(d.get('confirm') or ''),
+        other_program_stopped=bool(d.get('other_program_stopped')), expected_uuid=str(d.get('expected_uuid') or ''))))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, SENDER])
+def receipts_chain_undo(request, branch):
+    return _branch_action(request, branch, lambda: _config_row(
+        receipts.undo_chain_start(branch, request.user, str(request.data.get('reason') or ''))))
