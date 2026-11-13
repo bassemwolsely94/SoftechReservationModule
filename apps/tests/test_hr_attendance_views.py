@@ -683,6 +683,15 @@ class EditTests(Base):
         self.assertEqual(log.changes['department'], ['', 'المبيعات'])
         self.assertTrue(self.audited('hr_attendance_employee_status').exists())
 
+    def test_pbx_extensions_saved_cleaned_and_validated(self):
+        url = f'employees/{self.emp.pk}/'
+        r = self.patch(self.mgr, url, {'pbx_extensions': [' 201', '201', '', '33']})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.emp.refresh_from_db()
+        self.assertEqual(self.emp.pbx_extensions, ['201', '33'])
+        self.assertEqual(r.json()['pbx_extensions'], ['201', '33'])
+        self.assertEqual(self.patch(self.mgr, url, {'pbx_extensions': ['12a']}).status_code, 400)
+
     def test_unknown_and_protected_fields_are_ignored(self):
         self.patch(self.mgr, f'employees/{self.emp.pk}/', {'staff': 5, 'softech_usercode': 'x', 'id': 99})
         self.emp.refresh_from_db()

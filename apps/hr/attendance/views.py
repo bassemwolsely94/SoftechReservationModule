@@ -14,6 +14,7 @@ import re
 from functools import wraps
 from io import BytesIO
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.http import HttpResponse
@@ -25,6 +26,7 @@ from rest_framework.exceptions import ParseError, ValidationError
 from rest_framework.response import Response
 
 from apps.audit.models import AuditLog
+from apps.hr.assignments import validate_extensions
 from apps.hr.models import (AttendanceAccess, AttendanceAgent, AttendanceDevice, CollectionRun,
                             ConflictConfirmation, DeviceUser, Employee, UnknownIdDecision)
 from apps.users.models import StaffProfile
@@ -130,6 +132,7 @@ def _employee_core(emp):
         'status': emp.status, 'employee_type': emp.employee_type, 'start_date': emp.start_date,
         'end_date': emp.end_date, 'day_boundary': emp.day_boundary,
         'hold_resolution': emp.hold_resolution, 'hold_reason': emp.hold_reason,
+        'pbx_extensions': emp.pbx_extensions,
     }
 
 
@@ -370,7 +373,13 @@ class EmployeeEditSerializer(_DatesMixin, serializers.ModelSerializer):
         model = Employee
         fields = ['hr_number', 'name_ar', 'department', 'section', 'job_title', 'work_location',
                   'branch', 'daily_hours', 'status', 'employee_type', 'start_date', 'end_date',
-                  'day_boundary']
+                  'day_boundary', 'pbx_extensions']
+
+    def validate_pbx_extensions(self, value):
+        try:
+            return validate_extensions(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages)
 
     def validate_hr_number(self, value):
         value = normalise_code(value)

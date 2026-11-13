@@ -544,6 +544,9 @@ class Employee(models.Model):
     softech_usercode = models.CharField(max_length=40, blank=True)
     hold_resolution  = models.BooleanField(default=False)
     hold_reason      = models.CharField(max_length=255, blank=True)
+    # PBX extension numbers (digit strings) this person answers on; see apps/hr/assignments.py.
+    pbx_extensions   = models.JSONField(default=list, db_default=[], blank=True,
+                                        verbose_name='الأرقام الداخلية')
 
     class Meta:
         ordering = ['hr_number']
@@ -552,6 +555,36 @@ class Employee(models.Model):
 
     def __str__(self):
         return f'{self.hr_number} {self.name_ar}'
+
+
+class EmployeeAssignment(models.Model):
+    """Dated history of where an employee works and in what role (crews design 2026-11-13).
+    valid_from / valid_to are inclusive; valid_to NULL = the current row. One open row per employee."""
+    SOURCES = [('seed', 'seed'), ('import', 'import'), ('manual', 'manual')]
+
+    employee   = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='assignments')
+    job_title  = models.CharField(max_length=120, blank=True)
+    branch     = models.ForeignKey('branches.Branch', null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name='+')
+    department = models.CharField(max_length=120, blank=True)
+    section    = models.CharField(max_length=120, blank=True)
+    valid_from = models.DateField()
+    valid_to   = models.DateField(null=True, blank=True)
+    source     = models.CharField(max_length=10, choices=SOURCES)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey('users.StaffProfile', null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name='+')
+
+    class Meta:
+        ordering = ['employee_id', 'valid_from']
+        indexes = [models.Index(fields=['employee', 'valid_from'], name='hr_empasg_emp_from_idx')]
+        constraints = [
+            models.UniqueConstraint(fields=['employee'], condition=models.Q(valid_to__isnull=True),
+                                    name='uniq_open_employee_assignment'),
+            models.CheckConstraint(condition=models.Q(valid_to__isnull=True)
+                                   | models.Q(valid_to__gte=models.F('valid_from')),
+                                   name='employee_assignment_valid_range'),
+        ]
 
 
 class GenericLogin(models.Model):
