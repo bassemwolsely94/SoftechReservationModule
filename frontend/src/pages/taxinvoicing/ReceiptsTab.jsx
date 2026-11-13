@@ -290,6 +290,46 @@ export function ChainStart({ branch, row, me }) {
   )
 }
 
+/**
+ * A test-only mapping: this branch's sales go to ETA's test system through a borrowed test device. The server
+ * refuses it anywhere else; ending it puts the test receipts back to ready for the real system.
+ */
+export function TestMapping({ branch, row, me }) {
+  const act = useAction()
+  const [reason, setReason] = useState('')
+  if (!me.can_finalize && !row.test_env) return null
+  if (row.test_env) {
+    return (
+      <div className="space-y-2" data-tour="tax-invoicing-main-receipts-test-mapping">
+        <Notice tone="warn">إعداد تجريبي فقط ({row.test_env}): لا يُرسل لمنظومة غيرها، وإيصالاته لا تُحسب للمنظومة الفعلية.</Notice>
+        {me.can_finalize && (
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="سبب إنهاء الإعداد التجريبي">
+              <input className={`${INPUT} w-64`} value={reason} onChange={e => setReason(e.target.value)} aria-label="سبب إنهاء الإعداد التجريبي" />
+            </Field>
+            <Btn disabled={!reason.trim() || act.pending}
+              onClick={() => act.run(() => taxInvoicingApi.endTestMapping(branch, reason), 'انتهى الإعداد التجريبي وعادت إيصالاته جاهزة')}>
+              إنهاء الإعداد التجريبي
+            </Btn>
+          </div>
+        )}
+        <ActionMsg msg={act.msg} />
+      </div>
+    )
+  }
+  if (row.has_chain_receipts) return null
+  return (
+    <div className="flex flex-wrap items-center gap-2" data-tour="tax-invoicing-main-receipts-test-mapping">
+      <span className="text-xs text-gray-500">لتجربة مبيعات هذا الفرع على جهاز تجريبي في المنظومة التجريبية فقط.</span>
+      <Btn disabled={act.pending}
+        onClick={() => act.run(() => taxInvoicingApi.saveReceiptConfig({ branch, test_only: true }), 'أصبح الإعداد تجريبياً فقط')}>
+        جعله إعداداً تجريبياً فقط
+      </Btn>
+      <ActionMsg msg={act.msg} />
+    </div>
+  )
+}
+
 function Configs({ me, bl }) {
   const branches = useBranchOptions()
   const [open, setOpen] = useState(null)
@@ -320,6 +360,7 @@ function Configs({ me, bl }) {
         renderOpen={c => (
           <div className="space-y-3">
             <ConfigEditor key={c.branch} branch={c.branch} row={c} me={me} onDone={() => setOpen(null)} />
+            <div className="border-t border-gray-100 pt-3"><TestMapping branch={c.branch} row={c} me={me} /></div>
             <div className="border-t border-gray-100 pt-3"><ChainStart branch={c.branch} row={c} me={me} /></div>
           </div>
         )}
@@ -327,7 +368,8 @@ function Configs({ me, bl }) {
           { key: 'branch', label: 'الفرع', value: c => bl(c.branch), render: c => bl(c.branch) },
           { key: 'is_enabled', label: 'مفعل', render: c => (c.is_enabled ? '✔' : '—') },
           { key: 'seller_branch_code', label: 'كود المصلحة', render: c => c.seller_branch_code || '—' },
-          { key: 'device_serial', label: 'سيريال الجهاز', render: c => c.device_serial || '—' },
+          { key: 'device_serial', label: 'سيريال الجهاز', render: c => (
+            <span>{c.device_serial || '—'}{c.test_env && <> <Badge>تجريبي</Badge></>}</span>) },
           { key: 'chain_start', label: 'بداية السلسلة', value: c => c.chain_start_label, render: c => c.chain_start_label || 'لم تتحدد' },
         ]} />
     </Section>

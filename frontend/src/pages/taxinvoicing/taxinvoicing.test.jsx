@@ -34,6 +34,8 @@ const api = vi.hoisted(() => ({
   chainLookup: vi.fn(),
   startChain: vi.fn(),
   undoChainStart: vi.fn(),
+  endTestMapping: vi.fn(),
+  saveReceiptConfig: vi.fn(),
 }))
 
 vi.mock('../../api/client', () => ({
@@ -45,7 +47,7 @@ const { default: DocumentDetail } = await import('./DocumentDetail')
 const { default: PrintTab } = await import('./PrintTab')
 const { default: ImportTab, buildOptions } = await import('./ImportTab')
 const { default: ItemsTab } = await import('./ItemsTab')
-const { BranchActions, ChainStart } = await import('./ReceiptsTab')
+const { BranchActions, ChainStart, TestMapping } = await import('./ReceiptsTab')
 const { default: CodesTab, CodeCheck, Candidates, Gs1Candidates } = await import('./CodesTab')
 
 const line = (id, status) => ({
@@ -403,5 +405,21 @@ describe('new catalog items', () => {
     show(<Candidates me={ME} />)
     fireEvent.click(await screen.findByText(/إضافة أصناف الكتالوج الجديدة \(12\)/))
     await waitFor(() => expect(api.codesAddFromCatalog).toHaveBeenCalled())
+  })
+})
+
+describe('test-only branch mapping', () => {
+  it('marks a branch test-only, and ends it with a reason', async () => {
+    api.saveReceiptConfig.mockResolvedValue({ data: {} })
+    const { unmount } = show(<TestMapping branch="170" row={{ test_env: '', has_chain_receipts: false }} me={ME} />)
+    fireEvent.click(screen.getByText('جعله إعداداً تجريبياً فقط'))
+    await waitFor(() => expect(api.saveReceiptConfig).toHaveBeenCalledWith({ branch: '170', test_only: true }))
+    unmount()
+    api.endTestMapping.mockResolvedValue({ data: {} })
+    show(<TestMapping branch="170" row={{ test_env: 'preprod', has_chain_receipts: true }} me={ME} />)
+    expect(screen.getByText(/إعداد تجريبي فقط \(preprod\)/)).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('سبب إنهاء الإعداد التجريبي'), { target: { value: 'انتهت التجربة' } })
+    fireEvent.click(screen.getByText('إنهاء الإعداد التجريبي'))
+    await waitFor(() => expect(api.endTestMapping).toHaveBeenCalledWith('170', 'انتهت التجربة'))
   })
 })

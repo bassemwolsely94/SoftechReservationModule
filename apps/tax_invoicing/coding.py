@@ -435,13 +435,35 @@ def gtin_ok(code):
     return (10 - total % 10) % 10 == check
 
 
+def gtin_for(item):
+    """The item's GS1 barcode: the main one if valid, else the first valid active one from SOFTECH's
+    itembarcodes (where the catalog keeps them). '' when it has none."""
+    if item is None:
+        return ''
+    if gtin_ok(item.barcode):
+        return item.barcode.strip()
+    codes = sorted(b.barcode.strip() for b in item.barcodes.all() if b.is_active and gtin_ok(b.barcode))
+    return codes[0] if codes else ''
+
+
 def gs1_candidates(limit=500):
-    """Uncoded items whose catalog barcode is a valid GTIN: ETA may already hold it from GS1 Egypt."""
+    """Uncoded items with a valid GTIN barcode: ETA may already hold it from GS1 Egypt.
+    Each comes back with `.gtin` set."""
+    from django.db.models import Prefetch
+    from apps.catalog.models import ItemBarcode
     open_ids = TaxCodeRequest.objects.filter(status__in=TaxCodeRequest.OPEN_STATES).values('profile_id')
     qs = (TaxItemProfile.objects
           .filter(coding_status__in=[TaxItemProfile.CODE_MISSING, TaxItemProfile.CODE_REJECTED], item__isnull=False)
-          .exclude(pk__in=open_ids).exclude(item__barcode='').select_related('item').order_by('softech_itemcode'))
-    return [p for p in qs if gtin_ok(p.item.barcode)][:limit]
+          .exclude(pk__in=open_ids).select_related('item').order_by('softech_itemcode')
+          .prefetch_related(Prefetch('item__barcodes', queryset=ItemBarcode.objects.filter(is_active=True))))
+    out = []
+    for p in qs:
+        p.gtin = gtin_for(p.item)
+        if p.gtin:
+            out.append(p)
+            if len(out) >= limit:
+                break
+    return out
 
 
 def prepare_gs1(profile_ids, actor, *, reason=''):
@@ -449,13 +471,13 @@ def prepare_gs1(profile_ids, actor, *, reason=''):
     Real or test system alike: an approved GS1 code is the item's code in that system."""
     ids = list(profile_ids)[:MAX_PER_ACTION]
     created, skipped = [], []
-    for profile in TaxItemProfile.objects.filter(pk__in=ids).select_related('item').order_by('softech_itemcode'):
-        barcode = (profile.item.barcode if profile.item else '').strip()
+    for profile in TaxItemProfile.objects.filter(pk__in=ids).select_related('item').prefetch_related('item__barcodes').order_by('softech_itemcode'):
+        barcode = gtin_for(profile.item)
         if profile.coding_status not in (TaxItemProfile.CODE_MISSING, TaxItemProfile.CODE_REJECTED):
             skipped.append({'itemcode': profile.softech_itemcode, 'why': 'للصنف كود معتمد أو قيد الاعتماد'})
             continue
         if not gtin_ok(barcode):
-            skipped.append({'itemcode': profile.softech_itemcode, 'why': f'الباركود ليس GS1 صحيحاً: {barcode or "—"}'})
+            skipped.append({'itemcode': profile.softech_itemcode, 'why': 'لا يوجد للصنف باركود GS1 صحيح'})
             continue
         try:
             with transaction.atomic():
