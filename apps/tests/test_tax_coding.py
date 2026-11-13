@@ -26,6 +26,17 @@ def _response(status_code, body):
 
 class EnvironmentTests(SimpleTestCase):
 
+    def test_branch_secret_comes_from_the_environment_then_the_env_file(self):
+        with mock.patch.dict('os.environ', {'POS_X': 'from-process'}):
+            self.assertEqual(eta_client._env_secret('POS_X'), 'from-process')
+        with mock.patch.dict('os.environ', {}, clear=False), mock.patch('decouple.config', return_value='from-file'):
+            import os
+            os.environ.pop('POS_Y', None)
+            self.assertEqual(eta_client._env_secret('POS_Y'), 'from-file')
+        with mock.patch('decouple.config', return_value=''):
+            with self.assertRaises(eta_client.EtaNotConfigured):
+                eta_client._env_secret('POS_MISSING_' + 'Z')
+
     @override_settings(TAX_ETA_ENVIRONMENT='preprod', TAX_ETA_API_BASE_URL='', TAX_ETA_ID_BASE_URL='')
     def test_preprod_uses_published_addresses(self):
         self.assertEqual(environment.api_base(), 'https://api.preprod.invoicing.eta.gov.eg')
@@ -364,6 +375,20 @@ class ChainStartTests(Fixture, TestCase):
     def test_issuing_waits_for_the_chain_start_decision(self):
         gaps = receipts.config_gaps(self.config, TaxIssuerProfile.load())
         self.assertTrue(any('بداية سلسلة الجهاز' in g for g in gaps))
+
+    def test_etas_no_result_404_means_no_receipts_but_another_404_does_not(self):
+        token = mock.patch.object(eta_client.requests, 'post',
+                                  return_value=_response(200, {'access_token': 'P', 'expires_in': 3600}))
+        none = _response(404, {'target': 'NoResult', 'code': 'NotFound', 'message': 'No data found'})
+        none.content = b'{}'
+        with token, mock.patch.object(eta_client.requests, 'get', return_value=none):
+            self.assertEqual(receipts.chain_lookup('150', self.admin)['found'], 0)
+        other = _response(404, {})
+        other.content = b''
+        eta_client.reset_pos_tokens()
+        with token, mock.patch.object(eta_client.requests, 'get', return_value=other):
+            with self.assertRaises(receipts.TaxRuleError):
+                receipts.chain_lookup('150', self.admin)
 
     def test_lookup_searches_this_device_newest_first_and_ignores_other_devices(self):
         token, search = self._eta(_device_row(LAST), _device_row(NEWER, serial='OTHER'))
