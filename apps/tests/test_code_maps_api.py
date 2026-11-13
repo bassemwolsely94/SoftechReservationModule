@@ -56,8 +56,8 @@ class ChannelsApiTests(_CodeMapsBase):
     def test_list_returns_twelve_seeded_channels(self):
         r = self.admin.get(CH_URL)
         self.assertEqual(r.status_code, 200, r.data)
-        self.assertEqual(len(r.data), 12)
-        by_code = {row['code']: row for row in r.data}
+        self.assertEqual(len(r.data['rows']), 12)
+        by_code = {row['code']: row for row in r.data['rows']}
         self.assertEqual(by_code['10']['group'], 'contract')
         self.assertEqual(by_code['10']['group_label'], 'تعاقد')
         self.assertTrue(by_code['10']['is_contract_sale'])
@@ -68,14 +68,23 @@ class ChannelsApiTests(_CodeMapsBase):
                                               'bucket_label', 'is_contract_sale', 'followup_rank',
                                               'sales_90d'})
         # rank, then code
-        self.assertEqual([row['code'] for row in r.data][:4], ['90', '91', '30', '99'])
+        self.assertEqual([row['code'] for row in r.data['rows']][:4], ['90', '91', '30', '99'])
+
+    def test_list_serves_group_choices_from_the_model(self):
+        r = self.admin.get(CH_URL)
+        self.assertEqual(set(r.data), {'rows', 'choices'})
+        groups = r.data['choices']['groups']
+        self.assertEqual([g['value'] for g in groups],
+                         [v for v, _ in ChannelBucketMap.GROUP_CHOICES])
+        self.assertIn({'value': 'contract', 'label': 'تعاقد'}, groups)
+        self.assertIn({'value': 'unclassified', 'label': 'غير مصنف'}, groups)
 
     def test_list_only_customer_rows_and_unclassified_first(self):
         channels.ensure_defaults()
         ChannelBucketMap.objects.create(person_type='20', channel='01', label='مورد')
         ChannelBucketMap.objects.create(person_type='10', channel='77', group='unclassified')
         r = self.admin.get(CH_URL)
-        codes = [row['code'] for row in r.data]
+        codes = [row['code'] for row in r.data['rows']]
         self.assertEqual(len(codes), 13)
         self.assertEqual(codes[0], '77')
         self.assertNotIn('01', codes)
@@ -90,7 +99,7 @@ class ChannelsApiTests(_CodeMapsBase):
                                            invoice_date=now - dt.timedelta(days=days),
                                            softech_invoice_id=f'B01-{doc}-{n}')
         r = self.admin.get(CH_URL)
-        by_code = {row['code']: row for row in r.data}
+        by_code = {row['code']: row for row in r.data['rows']}
         self.assertEqual(by_code['91']['sales_90d'], 2)
         self.assertEqual(by_code['90']['sales_90d'], 1)
         self.assertEqual(by_code['10']['sales_90d'], 0)
@@ -216,7 +225,7 @@ class ItemTypesApiTests(_CodeMapsBase):
                                 is_active=active)
         r = self.admin.get(IT_URL)
         self.assertEqual(r.status_code, 200, r.data)
-        by_code = {row['code']: row for row in r.data}
+        by_code = {row['code']: row for row in r.data['rows']}
         self.assertEqual(len(by_code), 8)
         self.assertTrue(by_code['60']['excluded_from_planning'])
         self.assertEqual(by_code['60']['group'], 'gift')
@@ -227,6 +236,13 @@ class ItemTypesApiTests(_CodeMapsBase):
         self.assertEqual(by_code['50']['item_count'], 0)
         self.assertEqual(set(by_code['10']), {'id', 'code', 'label', 'group', 'group_label',
                                               'is_medicine', 'excluded_from_planning', 'item_count'})
+
+    def test_list_serves_group_choices_from_the_model(self):
+        r = self.admin.get(IT_URL)
+        groups = r.data['choices']['groups']
+        self.assertEqual([g['value'] for g in groups],
+                         [v for v, _ in MedicineTypeMap.GROUP_CHOICES])
+        self.assertIn({'value': 'medicine', 'label': 'دواء'}, groups)
 
     def test_patch_excluded_is_live_and_audited(self):
         t70 = self._type('70')

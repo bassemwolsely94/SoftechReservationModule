@@ -4,8 +4,9 @@ apps/config/code_maps.py  (piece 4 — item & channel codes, Task 5)
 The owner's editing API behind the /code-maps screen:
 
   GET   /api/config/code-maps/channels/          customer channels (ChannelBucketMap, pt '10')
+                                                 → {rows: [...], choices: {groups: [{value, label}]}}
   PATCH /api/config/code-maps/channels/<pk>/     group · is_contract_sale · followup_rank
-  GET   /api/config/code-maps/item-types/        item categories (MedicineTypeMap)
+  GET   /api/config/code-maps/item-types/        item categories (MedicineTypeMap) — same shape
   PATCH /api/config/code-maps/item-types/<pk>/   group · is_medicine · excluded_from_planning
 
 GET needs settings/view, PATCH settings/edit (server-side matrix). Only the meaning
@@ -77,6 +78,12 @@ def _first_error(errors) -> str:
     return _GENERIC_BAD
 
 
+def _choices(group_choices) -> dict:
+    """The group options the screen offers — served from the model so a new group needs
+    no frontend change."""
+    return {'groups': [{'value': v, 'label': str(lbl)} for v, lbl in group_choices]}
+
+
 def _bad(text: str) -> Response:
     return Response({'detail': text}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -134,7 +141,8 @@ def channel_list(request):
     rows = sorted(ChannelBucketMap.objects.filter(person_type=channels.CUSTOMER_PT),
                   key=_channel_sort_key)
     sales = _sales_90d(r.channel for r in rows)
-    return Response([_channel_dict(r, sales) for r in rows])
+    return Response({'rows': [_channel_dict(r, sales) for r in rows],
+                     'choices': _choices(ChannelBucketMap.GROUP_CHOICES)})
 
 
 @api_view(['PATCH'])
@@ -177,7 +185,8 @@ def _item_type_dict(row, counts: dict) -> dict:
 def item_type_list(request):
     rows = sorted(item_types.all_types(), key=lambda r: (r.group != 'unclassified', r.code))
     counts = _item_counts(r.code for r in rows)
-    return Response([_item_type_dict(r, counts) for r in rows])
+    return Response({'rows': [_item_type_dict(r, counts) for r in rows],
+                     'choices': _choices(MedicineTypeMap.GROUP_CHOICES)})
 
 
 @api_view(['PATCH'])

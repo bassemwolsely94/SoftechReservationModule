@@ -2982,6 +2982,16 @@ export const transitsApi = {
   scorecard:    (params)  => api.get('/transits/scorecard/', { params }),
 }
 
+// ── SOFTECH code maps (/code-maps) — channel + item-category meanings ─────────
+
+export const codeMapsApi = {
+  // list → { rows: [...], choices: { groups: [{ value, label }] } }
+  channels:      ()         => api.get('/config/code-maps/channels/'),
+  patchChannel:  (id, data) => api.patch(`/config/code-maps/channels/${id}/`, data),
+  itemTypes:     ()         => api.get('/config/code-maps/item-types/'),
+  patchItemType: (id, data) => api.patch(`/config/code-maps/item-types/${id}/`, data),
+}
+
 // ── Pick zones (replenishment picking-sheet classification) ───────────────────
 
 export const pickZonesApi = {
