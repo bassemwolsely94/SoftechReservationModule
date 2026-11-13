@@ -91,7 +91,7 @@ def _nodes(hosts=None):
     if hosts:
         return [(h, 5000, h) for h in hosts]
     return [(b.db_host, b.db_port or 5000, b.softech_branch_id)
-            for b in Branch.objects.retail()          # live minus HQ
+            for b in Branch.objects.retail().filter(is_operational=True)   # live minus HQ; paused servers may be off
             .exclude(db_host='').exclude(db_host__isnull=True).order_by('softech_branch_id')]
 
 

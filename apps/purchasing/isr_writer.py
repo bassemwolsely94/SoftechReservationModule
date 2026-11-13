@@ -520,7 +520,7 @@ def create_proposal(branchcode, *, created_by=None, max_lines=None, run=None, fr
         params = {'rule': 'engine'}
     if not plan['lines']:
         return (None, plan) if return_plan else None
-    source = '100' if from_hq else str(branchcode)
+    source = _hq() if from_hq else str(branchcode)
     kind = IsrPush.KIND_HQ_TO_BRANCH if from_hq else IsrPush.KIND_SELF
     p = _persist_proposal(source=source, dest=str(branchcode), kind=kind,
                           lines=plan['lines'], run_id=plan.get('run_id'), created_by=created_by,

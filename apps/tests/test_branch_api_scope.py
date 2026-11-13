@@ -80,3 +80,21 @@ class BranchApiScopeTests(TestCase):
     def test_non_admin_cannot_patch_kind(self):
         r = self.staff.patch(f'/api/branches/{self.r1.id}/', {'kind': 'closed'}, format='json')
         self.assertEqual(r.status_code, 403)
+
+    def test_second_hq_refused(self):
+        r = self.admin.patch(f'/api/branches/{self.r1.id}/', {'kind': 'hq'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('مركز رئيسي', str(r.data['kind']))
+        self.r1.refresh_from_db()
+        self.assertEqual(self.r1.kind, Branch.KIND_RETAIL)
+        self.assertFalse(AuditLog.objects.filter(action='branch_classified').exists())
+
+    def test_only_hq_cannot_be_demoted(self):
+        r = self.admin.patch(f'/api/branches/{self.hq.id}/', {'kind': 'closed'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.hq.refresh_from_db()
+        self.assertEqual(self.hq.kind, Branch.KIND_HQ)
+
+    def test_hq_patch_keeping_kind_allowed(self):
+        r = self.admin.patch(f'/api/branches/{self.hq.id}/', {'kind': 'hq', 'phone': '2'}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)

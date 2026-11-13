@@ -388,7 +388,10 @@ function BranchCard({ branch, isAdmin, onRefresh, showToast }) {
             <div className="col-span-2">
               <label className="text-[11px] text-gray-500 mb-1 block">التصنيف</label>
               <select value={branch.kind || 'retail'} disabled={saving}
-                onChange={e => saveField({ kind: e.target.value })}
+                onChange={e => {
+                  const label = (KIND_OPTIONS.find(([v]) => v === e.target.value) || [])[1] || e.target.value
+                  if (window.confirm(`تغيير تصنيف ${branch.display_name || branch.name} إلى «${label}»؟ يغيّر هذا ظهور الفرع في كل الشاشات والتقارير.`)) saveField({ kind: e.target.value })
+                }}
                 className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-400">
                 {KIND_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>

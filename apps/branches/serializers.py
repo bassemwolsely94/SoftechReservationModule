@@ -43,3 +43,16 @@ class BranchSerializer(serializers.ModelSerializer):
             'settings',
         ]
         read_only_fields = ['id', 'softech_branch_id', 'code', 'name', 'display_name', 'can_transact', 'is_hq', 'created_at']
+
+    def validate_kind(self, value):
+        """Exactly one HQ, always: hq_code() raises on every HQ path (ISR, distribution, finance
+        GL, portal) when there are zero or two. Moving HQ is not done from this screen."""
+        inst = self.instance
+        others = Branch.objects.filter(kind=Branch.KIND_HQ)
+        if inst is not None:
+            others = others.exclude(pk=inst.pk)
+        if value == Branch.KIND_HQ and others.exists():
+            raise serializers.ValidationError('يوجد مركز رئيسي بالفعل — لا يمكن تعيين مركز رئيسي ثانٍ.')
+        if inst is not None and inst.kind == Branch.KIND_HQ and value != Branch.KIND_HQ and not others.exists():
+            raise serializers.ValidationError('لا يمكن تغيير تصنيف المركز الرئيسي الوحيد.')
+        return value
