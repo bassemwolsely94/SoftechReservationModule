@@ -16,22 +16,9 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 
-# Validated defaults for person_type '10' (customers). 2026-07-29 vs تحقيق مايو 2026.
-# channel -> (bucket, subtype, counts_customer, include_in_profit)
-PT10_DEFAULTS = {
-    '91': ('cash',      '',         True,  True),   # عميل نقدى
-    '11': ('cash',      '',         False, True),   # موظفيين شركة الرزيقي
-    '12': ('cash',      '',         False, True),   # إيصال إلكترونى بالبطاقة
-    '90': ('cash',      'delivery', True,  True),   # عميل Delivery
-    '30': ('cash',      'regular',  False, True),   # عميل دائم
-    '10': ('credit',    '',         False, False),  # تعاقدات / آجل
-    '33': ('credit',    '',         False, False),  # تعاقد - سداد آجل - خصم يدوي
-    '17': ('exclude',   '',         False, False),  # تعويضات الشركات — free-pack/patient-support compensations, NOT normal sales
-    '31': ('credit',    '',         False, False),  # مقاصات (owner to confirm)
-    '15': ('insurance', '',         False, False),  # تأمين صحي
-    '16': ('exclude',   '',         False, False),  # تبرعات
-    '99': ('exclude',   '',         False, False),  # Vip (owner to map)
-}
+# Validated defaults for person_type '10' (customers) live in one place:
+# apps.forecasting.channels.CHANNEL_DEFAULTS (KPI columns + piece-4 meaning columns).
+from apps.forecasting.channels import CHANNEL_DEFAULTS, KPI_FIELDS, MEANING_FIELDS
 
 BEAUTY_DEFAULTS = [('50', 'Cosmetics'), ('20', 'Others')]
 
@@ -56,23 +43,21 @@ class Command(BaseCommand):
 
         for c in SoftechPersonClassif.objects.all():
             pt, ch, label = c.ptcode, c.ptclassifcode, c.ptclassifdescr
-            default = PT10_DEFAULTS.get(ch) if pt == '10' else None
-            bucket, subtype, cust, profit = default or ('exclude', '', False, False)
+            default = CHANNEL_DEFAULTS.get(ch) if pt == '10' else None
 
             row = ChannelBucketMap.objects.filter(person_type=pt, channel=ch).first()
             if row is None:
+                vals = dict(default) if default else {'bucket': 'exclude'}
                 ChannelBucketMap.objects.create(
-                    person_type=pt, channel=ch, label=label or '',
-                    bucket=bucket, subtype=subtype,
-                    counts_customer=cust, include_in_profit=profit,
+                    person_type=pt, channel=ch, label=label or '', **vals,
                 )
                 created += 1
             elif reset and default:
                 row.label = label or row.label
-                row.bucket, row.subtype = bucket, subtype
-                row.counts_customer, row.include_in_profit = cust, profit
-                row.save(update_fields=['label', 'bucket', 'subtype',
-                                        'counts_customer', 'include_in_profit'])
+                fields = KPI_FIELDS + MEANING_FIELDS
+                for f in fields:
+                    setattr(row, f, default[f])
+                row.save(update_fields=['label', *fields])
                 updated += 1
             else:
                 # keep owner edits; refresh label only if blank

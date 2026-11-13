@@ -1146,6 +1146,13 @@ def sync_customers(conn, sync_run):
                     unique_fields=['ptcode', 'ptclassifcode'],
                     update_fields=['ptclassifdescr'],
                 )
+                # Piece 4: new SOFTECH channel codes get a ChannelBucketMap row
+                # (unclassified) + one admin notification. Never blocks the sync.
+                try:
+                    from apps.forecasting.channels import ensure_channel_rows
+                    ensure_channel_rows()
+                except Exception as ch_err:
+                    logger.warning(f"Channel registry refresh failed: {ch_err}")
             logger.info(
                 f"PersonType/Classif label cache: {len(pt_objs)} types, {len(pc_objs)} classifs"
             )
