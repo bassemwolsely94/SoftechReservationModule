@@ -57,7 +57,8 @@ def build_context(date_from, date_to, report_from=None):
                    .filter(doccode='30', docdate__gte=date_from, r_docnumber__isnull=False, r_docdate__isnull=False)
                    .values_list('branchcode', 'r_docnumber', 'r_docdate'))
     report_from = report_from or date_from
-    medicine_items = set(Item.objects.filter(softech_id__in=codes, medicine_type='10')
+    from apps.config.item_types import medicine_codes
+    medicine_items = set(Item.objects.filter(softech_id__in=codes, medicine_type__in=medicine_codes())
                          .values_list('softech_id', flat=True))
     monthly_qty, on_hand = {}, {}
     for bc, ic, rate, qty in (ItemStock.objects.filter(item__softech_id__in=medicine_items)

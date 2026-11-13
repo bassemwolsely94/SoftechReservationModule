@@ -178,3 +178,111 @@ class CustomerTypeLabelTests(_ChannelCacheMixin, TestCase):
         c.softech_ptclassifcode = '77'
         self.assertEqual(c.customer_type_label, 'غير مصنف (77)')
         self.assertEqual(c.customer_type_color, 'amber')
+
+
+# ── Task 4: item-category consumers read MedicineTypeMap ─────────────────────────
+
+from apps.catalog.models import Item
+from apps.config import item_types
+from apps.config.models import MedicineTypeMap
+
+
+def _mk_item(code, mtype, **kw):
+    return Item.objects.create(softech_id=code, name=f'ITEM {code}', pack_price=100,
+                               is_stockable=True, medicine_type=mtype, **kw)
+
+
+class _ItemTypeCacheMixin:
+    def setUp(self):
+        item_types.invalidate_cache()
+        super().setUp()
+
+    def tearDown(self):
+        item_types.invalidate_cache()
+        super().tearDown()
+
+
+class PlanningExcludesFollowRegistryTests(_ItemTypeCacheMixin, TestCase):
+    def setUp(self):
+        super().setUp()
+        item_types.ensure_defaults()
+        self.i10 = _mk_item('P10', '10')
+        self.i60 = _mk_item('P60', '60')
+        self.i70 = _mk_item('P70', '70')
+
+    def _flag_70(self):
+        MedicineTypeMap.objects.filter(code='70').update(excluded_from_planning=True)
+        item_types.invalidate_cache()
+
+    def test_isr_items_follow_registry(self):
+        from apps.purchasing import isr_softech as S
+        st = S.rule_settings({'medicine_type': ''})
+        codes = ['P10', 'P60', 'P70']
+        self.assertEqual(set(S._items(codes, st)), {'P10', 'P70'})
+        self._flag_70()
+        self.assertEqual(set(S._items(codes, st)), {'P10'})
+
+    def test_seasonality_follows_registry(self):
+        import datetime
+        from apps.purchasing import seasonality
+        from apps.purchasing.models import ItemMonthlySales, ItemSeasonality
+        months = seasonality.history_months(datetime.date.today())
+        for it in (self.i10, self.i60, self.i70):
+            for m in months:
+                ItemMonthlySales.objects.create(item_code=it.softech_id, item=it, month=m,
+                                                qty=5, regular_qty=5)
+        seasonality.compute_all(datetime.date.today())
+        self.assertEqual(set(ItemSeasonality.objects.values_list('item__softech_id', flat=True)),
+                         {'P10', 'P70'})
+        self._flag_70()
+        seasonality.compute_all(datetime.date.today())
+        self.assertEqual(set(ItemSeasonality.objects.values_list('item__softech_id', flat=True)),
+                         {'P10'})
+
+    def test_insights_excluded_items_follow_registry(self):
+        from apps.insights.rules import analytics_excluded_items
+        ids = set(analytics_excluded_items().values_list('softech_id', flat=True))
+        self.assertIn('P60', ids)
+        self.assertNotIn('P70', ids)
+        self._flag_70()
+        ids = set(analytics_excluded_items().values_list('softech_id', flat=True))
+        self.assertEqual({'P60', 'P70'} & ids, {'P60', 'P70'})
+
+    def test_isr_screen_default_is_first_medicine_code(self):
+        from apps.purchasing import isr_softech as S
+        self.assertEqual(S.screen_defaults()['medicine_type'], '10')
+        MedicineTypeMap.objects.filter(code='10').update(is_medicine=False)
+        item_types.invalidate_cache()
+        self.assertEqual(S.screen_defaults()['medicine_type'], '')
+
+
+class RateWriterSameSetTests(_ItemTypeCacheMixin, TestCase):
+    def test_rate_writer_same_set_as_before(self):
+        """Seeded registry: the live rate writer's item filter == the old literal filter."""
+        from apps.purchasing.models import ItemMonthlySales
+        from apps.purchasing.rate_writer import _real_stock_filter
+        import datetime
+        for code, t in (('R10', '10'), ('R50', '50'), ('R60', '60')):
+            it = _mk_item(code, t)
+            ItemMonthlySales.objects.create(item_code=code, item=it, month=datetime.date(2026, 1, 1))
+        qs = ItemMonthlySales.objects.all()
+        old = set(qs.filter(item__is_stockable=True, item__pack_price__gt=0)
+                  .exclude(item__medicine_type='60').values_list('item_code', flat=True))
+        new = set(_real_stock_filter(qs).values_list('item_code', flat=True))
+        self.assertEqual(new, old)
+        self.assertEqual(new, {'R10', 'R50'})
+
+
+class MedicineOnlyConsumersTests(_ItemTypeCacheMixin, TestCase):
+    def test_stock_audit_medicine_set_follows_registry(self):
+        item_types.ensure_defaults()
+        _mk_item('M10', '10')
+        _mk_item('M50', '50')
+        self.assertEqual(item_types.medicine_codes(), ['10'])
+        MedicineTypeMap.objects.filter(code='50').update(is_medicine=True)
+        item_types.invalidate_cache()
+        self.assertEqual(item_types.medicine_codes(), ['10', '50'])
+        got = set(Item.objects.filter(softech_id__in=['M10', 'M50'],
+                                      medicine_type__in=item_types.medicine_codes())
+                  .values_list('softech_id', flat=True))
+        self.assertEqual(got, {'M10', 'M50'})

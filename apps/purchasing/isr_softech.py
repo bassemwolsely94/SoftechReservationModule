@@ -46,10 +46,19 @@ FRIDGE_CHOICES = ('', 'yes', 'no')
 TEXT_FILTERS = ('supplier', 'producer', 'medicine_type', 'category', 'family', 'store_classif')
 # What the screen opens with = how SOFTECH's own ISRs are made (decoded 2026-10-24: every
 # line of #26100660–#26100673 is «Medicine», order point 0.8 month) — HQ options off (owner).
-SCREEN_DEFAULTS = {'target': 'order_point', 'order_months': SOFTECH_ORDER_MONTHS, 'coverage_months': '',
+_SCREEN_DEFAULTS_BASE = {'target': 'order_point', 'order_months': SOFTECH_ORDER_MONTHS, 'coverage_months': '',
                    'below_order_point': False, 'hq_only': False, 'cap_hq': False, 'stock': 'all',
-                   'medicine_type': '10', 'supplier': '', 'producer': '', 'category': '', 'family': '',
+                   'medicine_type': '', 'supplier': '', 'producer': '', 'category': '', 'family': '',
                    'store_classif': '', 'origin': '', 'fridge': '', 'name': ''}
+
+
+def screen_defaults() -> dict:
+    """The screen's opening filters; the category default is the first medicine code of the
+    owner-editable MedicineTypeMap (resolved per request, '' when none)."""
+    from apps.config.item_types import medicine_codes
+    codes = medicine_codes()
+    return {**_SCREEN_DEFAULTS_BASE, 'medicine_type': codes[0] if codes else ''}
+
 
 # Arabic labels for the counts of what was left out (shown on the proposal)
 STAT_LABELS = {
@@ -232,8 +241,9 @@ def _items(codes, st):
     """{code: item dict} for orderable items passing the item filters (catalog, PG)."""
     from apps.catalog.models import Item
     from apps.catalog.wildcard import wq
+    from apps.config.item_types import planning_excluded_codes
     qs = (Item.objects.filter(softech_id__in=list(codes), is_stockable=True, pack_price__gt=0)
-          .exclude(medicine_type='60')                       # customer gifts / coupons
+          .exclude(medicine_type__in=planning_excluded_codes())                     # customer gifts / coupons
           .exclude(supplier_trans__in=['2', '3']))           # return-only / إيقاف كامل
     field = {'supplier': 'supplier_code', 'producer': 'producer_code', 'medicine_type': 'medicine_type',
              'category': 'category__softech_id', 'family': 'family_code', 'store_classif': 'store_classif'}

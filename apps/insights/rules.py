@@ -135,10 +135,12 @@ def analytics_excluded_items():
       • analytics_excluded_medicine_types — general-category codes (default 60 = client gifts)
     Returns an Item queryset (empty when both settings are blank)."""
     from apps.config.models import SystemSetting
+    from apps.config.item_types import planning_excluded_codes
     from django.db.models import Q
     from apps.catalog.models import Item
     kws = [k.strip() for k in str(SystemSetting.get('analytics_excluded_item_keywords', 'COUPON,كوبون,هدايا,هدية') or '').split(',') if k.strip()]
-    xtypes = [t.strip() for t in str(SystemSetting.get('analytics_excluded_medicine_types', '60') or '').split(',') if t.strip()]
+    # MedicineTypeMap (excluded_from_planning) replaced the analytics_excluded_medicine_types setting.
+    xtypes = planning_excluded_codes()
     if not (kws or xtypes):
         return Item.objects.none()
     q = Q()
