@@ -111,7 +111,9 @@ def item_row(p):
             'gpc_code': p.gpc_code, 'item_name_ar': p.item_name_ar, 'active_from': p.active_from,
             'treatment_confirmed_at': p.treatment_confirmed_at, 'treatment_confirmed_by': _stamp(p.treatment_confirmed_by),
             'list_status': p.list_status, 'list_status_label': p.get_list_status_display(),
-            'listed_reason': p.listed_reason, 'disposition': p.disposition, 'disposition_label': p.get_disposition_display()}
+            'listed_reason': p.listed_reason, 'disposition': p.disposition, 'disposition_label': p.get_disposition_display(),
+            'coding_env': p.coding_env, 'eta_check_env': p.eta_check_env, 'eta_check_status': p.eta_check_status,
+            'eta_check_label': p.get_eta_check_status_display() if p.eta_check_status else '', 'eta_checked_at': p.eta_checked_at}
 
 
 # ── Who am I ───────────────────────────────────────────────────────────────────────────────────
@@ -897,6 +899,10 @@ _CONFIG_TEXT = ('seller_branch_code', 'device_serial', 'pos_os_version', 'pos_mo
 
 def _config_row(c):
     return {'branch': c.softech_branchcode, 'is_enabled': c.is_enabled, 'has_chain': bool(c.last_uuid),
+            'chain_start': c.chain_start, 'chain_start_label': c.get_chain_start_display() if c.chain_start else '',
+            'chain_start_uuid': c.chain_start_uuid, 'chain_start_at': c.chain_start_at,
+            'chain_start_by': _stamp(c.chain_start_by), 'chain_start_detail': c.chain_start_detail or {},
+            'has_chain_receipts': TaxReceipt.objects.filter(softech_branchcode=c.softech_branchcode).exclude(uuid='').exists(),
             **{f: getattr(c, f) for f in _CONFIG_TEXT}}
 
 
@@ -991,6 +997,7 @@ def eta_check_login(request):
 
 def code_row(r):
     return {'id': r.id, 'itemcode': r.profile.softech_itemcode, 'profile_id': r.profile_id, 'item_code': r.item_code,
+            'purpose': r.purpose, 'purpose_label': r.get_purpose_display(),
             'parent_code': r.parent_code, 'code_name': r.code_name, 'code_name_ar': r.code_name_ar,
             'description': r.description, 'description_ar': r.description_ar, 'request_reason': r.request_reason,
             'active_from': r.active_from, 'status': r.status, 'status_label': r.get_status_display(),
@@ -1023,12 +1030,13 @@ def codes(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, VIEWER])
 def code_candidates(request):
-    qs = coding.candidates(limit=100000)
+    mirror = request.query_params.get('kind') == 'mirror'
+    qs = coding.mirror_candidates(limit=100000) if mirror else coding.candidates(limit=100000)
     q = (request.query_params.get('q') or '').strip()
     if q:
         qs = qs.filter(Q(softech_itemcode__icontains=q) | Q(item_name__icontains=q) | Q(item_name_ar__icontains=q))
     return Response([{'id': p.id, 'itemcode': p.softech_itemcode, 'item_name': p.item_name, 'item_name_ar': p.item_name_ar,
-                      'gpc_code': p.gpc_code, 'coding_status': p.coding_status,
+                      'gpc_code': p.gpc_code, 'coding_status': p.coding_status, 'eta_code': p.eta_code,
                       'coding_status_label': p.get_coding_status_display()} for p in qs[:MAX_LIST]])
 
 
@@ -1039,8 +1047,11 @@ def codes_prepare(request):
     if not ids:
         return Response({'detail': 'اختر الأصناف'}, status=status.HTTP_400_BAD_REQUEST)
     try:
-        result = coding.prepare(ids, request.user, parent_code=(request.data.get('parent_code') or '').strip(),
-                                reason=(request.data.get('reason') or '').strip())
+        if request.data.get('kind') == 'mirror':
+            result = coding.prepare_mirror(ids, request.user, reason=(request.data.get('reason') or '').strip())
+        else:
+            result = coding.prepare(ids, request.user, parent_code=(request.data.get('parent_code') or '').strip(),
+                                    reason=(request.data.get('reason') or '').strip())
     except services.TaxRuleError as exc:
         return _refuse(exc)
     return Response(result)
@@ -1086,3 +1097,39 @@ def codes_refresh(request):
     if result.get('error'):
         return Response({**result, 'detail': result['error']}, status=status.HTTP_200_OK)
     return Response(result)
+
+
+# ── Where a branch device's chain starts ───────────────────────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, SENDER])
+def receipts_chain_lookup(request, branch):
+    """Asks ETA for the device's newest receipts with the branch POS login. Reads only."""
+    return _branch_action(request, branch, lambda: receipts.chain_lookup(branch, request.user))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, SENDER])
+def receipts_chain_start(request, branch):
+    d = request.data
+    return _branch_action(request, branch, lambda: _config_row(receipts.start_chain(
+        branch, request.user, mode=d.get('mode') or '', confirm=str(d.get('confirm') or ''),
+        other_program_stopped=bool(d.get('other_program_stopped')), expected_uuid=str(d.get('expected_uuid') or ''))))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, SENDER])
+def receipts_chain_undo(request, branch):
+    return _branch_action(request, branch, lambda: _config_row(
+        receipts.undo_chain_start(branch, request.user, str(request.data.get('reason') or ''))))
+
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, EDITOR])
+def codes_check(request):
+    """Asks ETA whether it holds each item's code in the system in use. Reads only."""
+    try:
+        return Response(coding.check_codes(request.user, _ids(request) or None))
+    except services.TaxRuleError as exc:
+        return _refuse(exc)

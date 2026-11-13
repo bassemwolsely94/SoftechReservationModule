@@ -89,6 +89,15 @@ Turn on, in pre-production only, one switch at a time: `TAX_ETA_CODING_ENABLED`,
 Each failure tells us which field name or format ETA wants. We fix it in code and send again. The open questions are
 `internalID`, `signatureType`, the receipt body, and the return type `r`.
 
+### Each branch's device chain
+
+Before a branch's first receipt, open the branch under Receipts → Branch setup and press **Ask ETA** for the device's
+receipts. If ETA shows none, start a new chain. If it shows receipts, the device was used by Invoicer:
+1. Stop Invoicer issuing on that device. It must not issue on it again.
+2. Ask ETA again, check the newest receipt shown is Invoicer's last one, tick the confirmation and type the branch code.
+
+Our first receipt then follows Invoicer's last one. This is one-way once our first receipt is issued.
+
 ## Step 5: Production
 
 Only after step 4 passes, and only when the owner says yes at that moment:

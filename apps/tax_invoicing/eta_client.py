@@ -281,3 +281,38 @@ def check_login():
     reset_token()
     access_token()
     return True
+
+
+def device_receipts(config, *, issued_from, page_size=5):
+    """The newest receipts ETA holds from this POS device ("Search Receipts", GET /api/v1/receipts/search,
+    filtered by PosSerialNumber, newest issued first). Read only. Raises when ETA can't be asked, because
+    "could not ask" must never be read as "the device has no receipts"."""
+    params = {'PosSerialNumber': config.device_serial, 'Direction': 'Submitted', 'SortBy': 'DateTimeIssued',
+              'SortDir': 'Desc', 'PageNo': 1, 'PageSize': page_size,
+              'DateTimeIssuedFrom': issued_from.strftime('%Y-%m-%dT%H:%M:%SZ')}
+    try:
+        r = requests.get(_api('/api/v1/receipts/search'), params=params, headers=_pos_headers(config),
+                         timeout=TIMEOUT, allow_redirects=False, verify=_verify())
+    except requests.RequestException as exc:
+        raise EtaUncertain(f'تعذر البحث عن إيصالات الجهاز: {type(exc).__name__}') from exc
+    if r.status_code != 200:
+        raise EtaUncertain(f'تعذر البحث عن إيصالات الجهاز (HTTP {r.status_code})', r.status_code)
+    serial = (config.device_serial or '').strip().upper()
+    return [row for row in (_json(r).get('receipts') or [])
+            if str(row.get('posSerialNumber') or '').strip().upper() == serial]
+
+
+def code_details(code_type, item_code):
+    """ETA's record of one code ("Get Code Details by Item Code", GET /api/v1.0/codetypes/{type}/codes/{code}),
+    or None when ETA says it has no such code. Read only; raises when ETA can't be asked."""
+    from urllib.parse import quote
+    path = f'/api/v1.0/codetypes/{quote(code_type, safe="")}/codes/{quote(item_code, safe="")}'
+    try:
+        r = requests.get(_api(path), headers=_headers(), timeout=TIMEOUT, allow_redirects=False, verify=_verify())
+    except requests.RequestException as exc:
+        raise EtaUncertain(f'تعذر الاستعلام عن الكود: {type(exc).__name__}') from exc
+    if r.status_code == 404:
+        return None
+    if r.status_code != 200:
+        raise EtaUncertain(f'تعذر الاستعلام عن الكود (HTTP {r.status_code})', r.status_code)
+    return _json(r)

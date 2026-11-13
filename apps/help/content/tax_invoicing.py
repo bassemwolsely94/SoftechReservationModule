@@ -188,10 +188,10 @@ SCREENS = [
              'body': T('ارفع ملف xlsx، اقرأ الأعمدة، ثم اربط كل حقل بعموده يدوياً؛ لا يُستنتج شيء من أسماء الأعمدة. «معاينة بدون حفظ» تعرض العدادات والأخطاء والتعارضات ولا تكتب شيئاً، والاعتماد يطبق ما رأيته بالضبط. ضريبة الملف مدخل فقط حتى يؤكدها المحاسب.',
                        'Upload an xlsx file, read its columns, then map each field to its column by hand; nothing is guessed from header names. "Preview without saving" shows the counts, errors and conflicts and writes nothing, and applying does exactly what you saw. VAT in the file stays an input until the accountant confirms it.')},
             {'key': 'codes', 'title': T('🔖 أكواد المصلحة', '🔖 ETA codes'),
-             'body': T('الصنف بلا كود معتمد يوقف كل مستند هو عليه. اختر الأصناف التي تحتاج كوداً ثم «تجهيز طلبات»: يُكوَّن لكل صنف كودنا الداخلي EG-رقم التسجيل-كود الصنف تحت كود GPC من 8 أرقام، ولا يُرسل شيء. '
+             'body': T('الصنف بلا كود معتمد يوقف كل مستند هو عليه. «فحص الأكواد» يسأل المصلحة هل تملك كل كود في المنظومة الحالية. اختر الأصناف التي تحتاج كوداً ثم «تجهيز طلبات»: يُكوَّن لكل صنف كودنا الداخلي EG-رقم التسجيل-كود الصنف تحت كود GPC من 8 أرقام، ولا يُرسل شيء. '
                        'من يملك الاعتماد النهائي يختار الطلبات ويكتب عددها ثم «إرسال للمصلحة». «تحديث الحالة من المصلحة» يسأل عن قرارها: الاعتماد يجعل كود الصنف معتمداً، والرفض يتركه موقوفاً ويسمح بطلب جديد. '
                        'النتيجة غير المؤكدة توقف الإرسال حتى الاستعلام. أعلى التبويب «منظومة المصلحة»: التجريبية أو الفعلية، والمفاتيح المفتوحة، و«اختبار الدخول».',
-                       'An item with no approved code blocks every document it is on. Pick the items that need a code, then "Prepare requests": each gets our internal code EG-<tax id>-<item code> under an 8-digit GPC code, and nothing is sent. '
+                       'An item with no approved code blocks every document it is on. "Check codes" asks ETA whether it holds each code in the system in use. Pick the items that need a code, then "Prepare requests": each gets our internal code EG-<tax id>-<item code> under an 8-digit GPC code, and nothing is sent. '
                        'Someone who holds finalize ticks the requests, types their count, then "Send to the Authority". "Refresh status from the Authority" asks for its decision: approval makes the item code approved, rejection keeps it blocked and allows a new request. '
                        'An uncertain result stops sending until the status is refreshed. At the top, "Authority system" shows pre-production or production, the switches that are on, and "Test login".')},
             {'key': 'receipts', 'title': T('🧾 الإيصالات', '🧾 Receipts'),
@@ -349,6 +349,19 @@ SCREENS = [
              'open_hint': T('تظهر عند وجود قناة بلا قاعدة.', 'Shows when a channel has no rule.')},
             {'target': 'tax-invoicing-main-receipts-configs', 'label': T('إعداد الفروع', 'Branch setup'),
              'text': T('جهاز كل فرع وعنوانه. الأسرار تبقى في السيرفر ويُكتب اسم متغيرها فقط.', 'Each branch’s device and address. Secrets stay on the server; only their variable name is written.')},
+            {'target': 'tax-invoicing-main-receipts-chain', 'label': T('بداية سلسلة الجهاز', 'Where the device chain starts'),
+             'text': T('كل إيصال يذكر ما قبله على نفس الجهاز. تُحدد مرة قبل أول إيصال: جهاز جديد يبدأ فارغاً، وجهاز استخدمه Invoicer يكمل بعد آخر إيصال له لدى المصلحة.',
+                       'Each receipt names the one before it on its device. Set once: a new device starts empty; a device Invoicer used continues after its last receipt at ETA.'),
+             'when': T('قبل أول «إصدار الجاهز» للفرع؛ الإصدار موقوف حتى تتحدد.', 'Before the branch’s first "Issue ready"; issuing waits until it is decided.'),
+             'open_hint': T('اضغط الفرع في «إعداد الفروع».', 'Click the branch under "Branch setup".')},
+            {'target': 'tax-invoicing-main-receipts-chain-lookup', 'label': T('ابحث في المصلحة', 'Ask ETA'),
+             'text': T('يسأل المصلحة عن أحدث إيصالات هذا الجهاز بدخول جهاز الفرع. قراءة فقط.', 'Asks ETA for this device’s newest receipts with the branch POS login. Read only.'),
+             'open_hint': T('لمن يملك الاعتماد النهائي، قبل تحديد البداية.', 'For those who hold finalize, before the start is decided.')},
+            {'target': 'tax-invoicing-main-receipts-chain-start', 'label': T('استلام السلسلة · بدء سلسلة جديدة', 'Take over the chain · Start a new chain'),
+             'text': T('يثبت البداية من إجابة المصلحة الحالية، بعد كتابة كود الفرع، وفي الاستلام بعد تأكيد أن البرنامج السابق توقف على هذا الجهاز.',
+                       'Fixes the start from ETA’s current answer, after the typed branch code and, for a takeover, the confirmation that the other program stopped on this device.'),
+             'warn': T('بعد أول إيصال صادر لا يمكن التراجع. لا تستلم جهازاً ما زال البرنامج السابق يصدر عليه.', 'Once a receipt is issued it cannot be undone. Never take over a device the other program still issues on.'),
+             'open_hint': T('بعد «ابحث في المصلحة».', 'After "Ask ETA".')},
             {'target': 'tax-invoicing-main-receipts-channels', 'label': T('قواعد القنوات', 'Channel rules'),
              'text': T('قرار كل قناة بيع: إيصال أو فاتورة مطالبة. قناة بلا قرار تُحجز إيصالاتها.', 'Each sales channel’s decision: receipt or claim invoice. A channel with no decision holds its receipts.'),
              'when': T('القنوات المبدئية تظهر «بانتظار تأكيد المحاسب»: افتح القناة واحفظ لتأكيدها أو تغييرها.', 'Starting channels show "waiting for the accountant": open one and save to confirm or change it.')},
@@ -378,10 +391,19 @@ SCREENS = [
              'text': T('يرسل الطلبات المختارة واحداً واحداً. يحتاج كتابة عددها.', 'Sends the ticked requests one by one. Needs their count typed.'),
              'warn': T('معطل طالما طلب الأكواد مغلق، والإرسال للمنظومة الفعلية يحتاج موافقة المالك.', 'Disabled while code requests are off; sending to production needs the owner’s switch.'),
              'open_hint': T('لمن يملك الاعتماد النهائي، عند وجود طلبات جاهزة.', 'For those who hold finalize, when requests are prepared.')},
+            {'target': 'tax-invoicing-main-codes-check', 'label': T('فحص الأكواد لدى المصلحة', 'Check codes at the Authority'),
+             'text': T('هل تملك المصلحة كود كل صنف في المنظومة الحالية؟ النتيجة تُحفظ باسم المنظومة، والكود غير الموجود يوقف بنوده فيها.',
+                       'Does ETA hold each item code in the system in use? The answer is kept per system; a missing code blocks its lines there.')},
+            {'target': 'tax-invoicing-main-codes-check-run', 'label': T('فحص الأكواد التالية', 'Check the next codes'),
+             'text': T('يسأل المصلحة عن 100 كود، غير المفحوص أولاً. قراءة فقط، ولا يغير ترميز الصنف.', 'Asks ETA about 100 codes, unchecked first. Read only; it never changes the item coding.')},
+            {'target': 'tax-invoicing-main-codes-mirror', 'label': T('تجهيز تسجيلها', 'Prepare to register them'),
+             'text': T('في المنظومة التجريبية فقط: يطلب تسجيل كودنا الحالي كما هو، لتحمله المستندات التجريبية. لا يغير الترميز الفعلي.',
+                       'Test system only: asks to register our existing code as it is, so test documents can carry it. The real coding is unchanged.'),
+             'open_hint': T('بعد الفحص، عند وجود أكواد غير موجودة.', 'After a check, when codes are missing.')},
             {'target': 'tax-invoicing-main-codes-refresh', 'label': T('تحديث الحالة من المصلحة', 'Refresh status from the Authority'),
              'text': T('يسأل المصلحة عن الطلبات المرسلة. قرارها وحده يغير ترميز الصنف.', 'Asks ETA about sent requests. Only its decision changes the item coding.')},
         ],
         'updated': '2026-11-13',
-        'change_note': T('تبويب «أكواد المصلحة»: طلب أكواد EGS للأصناف ومتابعتها، وحالة منظومة المصلحة واختبار الدخول', 'New "ETA codes" tab: request EGS item codes and follow them, plus the ETA system status and a login test'),
+        'change_note': T('فحص الأكواد لدى المصلحة لكل منظومة، وتسجيل أكوادنا الحالية في المنظومة التجريبية؛ وبداية سلسلة جهاز الفرع', 'Check codes at ETA per system and register our existing codes in the test system; plus the branch device chain start'),
     },
 ]

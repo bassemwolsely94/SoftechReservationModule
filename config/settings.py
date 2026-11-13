@@ -892,6 +892,12 @@ TAX_ALLOW_MOCK_SIGNER = config('TAX_ALLOW_MOCK_SIGNER', default=False, cast=bool
 TAX_SIGNING_AGENT_TOKEN = config('TAX_SIGNING_AGENT_TOKEN', default='')
 TAX_SIGNING_CERT_THUMBPRINT = config('TAX_SIGNING_CERT_THUMBPRINT', default='')
 TAX_SIGNING_WAIT_SECONDS = config('TAX_SIGNING_WAIT_SECONDS', default=60, cast=int)
+# A test run must NEVER reach ETA, whatever .env says: no address, no login, every send switch off. Tests that
+# exercise the ETA path set what they need with override_settings and mocked HTTP.
+if _RUNNING_TESTS:
+    TAX_ETA_ENVIRONMENT = TAX_ETA_API_BASE_URL = TAX_ETA_ID_BASE_URL = ''
+    TAX_ETA_CLIENT_ID = TAX_ETA_CLIENT_SECRET = TAX_ETA_CA_BUNDLE = ''
+    TAX_ETA_SUBMIT_ENABLED = TAX_ERECEIPT_SUBMIT_ENABLED = TAX_ETA_CODING_ENABLED = TAX_ETA_PRODUCTION_ALLOWED = False
 
 # Stock Transactions Audit (apps/stock_audit, doc 32). Read-only stktrans mirror from HQ:
 # every 2 h replaces the last 3 docdate days; 03:15 catch-up replaces 7 days and prunes.

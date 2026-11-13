@@ -135,9 +135,12 @@ def _payload(row):
 
 
 def _mark_profile_pending(row, actor):
+    if row.purpose == TaxCodeRequest.PURPOSE_MIRROR:
+        return     # a test-system copy of a real code: the item's real coding stays as it is
     profile = row.profile
     before = {'coding_status': profile.coding_status, 'eta_code': profile.eta_code, 'code_type': profile.code_type}
     profile.coding_status, profile.eta_code, profile.code_type = TaxItemProfile.CODE_PENDING, row.item_code, 'EGS'
+    profile.coding_env = row.environment
     if not profile.gpc_code:
         profile.gpc_code = row.parent_code
     profile.save()
@@ -157,7 +160,7 @@ def send(request_ids, actor, confirm):
         raise TaxRuleError('لا توجد طلبات جاهزة للإرسال')
     if str(confirm).strip() != str(len(rows)):
         raise TaxRuleError(f'اكتب عدد الطلبات ({len(rows)}) للتأكيد')
-    env = environment.name() or ('production' if environment.is_production() else 'custom')
+    env = environment.current() or 'custom'
     results = {'submitted': 0, 'failed': 0, 'uncertain': 0, 'stopped': ''}
     for row in rows:
         with transaction.atomic():
@@ -210,11 +213,21 @@ def _apply_eta_answer(row, eta_row, actor):
     row.save()
     if status == TaxCodeRequest.SUBMITTED and old == TaxCodeRequest.UNCERTAIN:
         _mark_profile_pending(row, actor)
-    if status in (TaxCodeRequest.APPROVED, TaxCodeRequest.REJECTED):
+    if status in (TaxCodeRequest.APPROVED, TaxCodeRequest.REJECTED) and row.purpose == TaxCodeRequest.PURPOSE_MIRROR:
+        if status == TaxCodeRequest.APPROVED:
+            profile = row.profile
+            profile.eta_check_env, profile.eta_check_status = row.environment, TaxItemProfile.CHECK_FOUND
+            profile.eta_checked_at = timezone.now()
+            profile.save()
+    elif status in (TaxCodeRequest.APPROVED, TaxCodeRequest.REJECTED):
         profile = row.profile
         before = {'coding_status': profile.coding_status, 'eta_code': profile.eta_code}
         profile.coding_status = TaxItemProfile.CODE_APPROVED if status == TaxCodeRequest.APPROVED else TaxItemProfile.CODE_REJECTED
         profile.eta_code, profile.code_type = row.item_code, 'EGS'
+        profile.coding_env = row.environment
+        if status == TaxCodeRequest.APPROVED:
+            profile.eta_check_env, profile.eta_check_status = row.environment, TaxItemProfile.CHECK_FOUND
+            profile.eta_checked_at = timezone.now()
         if status == TaxCodeRequest.APPROVED and eta_row.get('activeFrom'):
             profile.active_from = str(eta_row['activeFrom'])[:10]
         profile.save()
@@ -267,5 +280,104 @@ def refresh(actor=None, request_ids=None, limit=100):
 def summary():
     from django.db.models import Count
     counts = dict(TaxCodeRequest.objects.values_list('status').annotate(n=Count('id')))
+    here = environment.current()
+    checks = dict(TaxItemProfile.objects.exclude(eta_code='').filter(eta_check_env=here)
+                  .values_list('eta_check_status').annotate(n=Count('id')))
     return {'by_status': counts, 'candidates': candidates(limit=100000).count(),
+            'mirror_candidates': mirror_candidates(limit=100000).count() if here not in ('', 'production') else 0,
+            'checks': {'found': checks.get(TaxItemProfile.CHECK_FOUND, 0),
+                       'inactive': checks.get(TaxItemProfile.CHECK_INACTIVE, 0),
+                       'not_found': checks.get(TaxItemProfile.CHECK_NOT_FOUND, 0),
+                       'unchecked': TaxItemProfile.objects.exclude(eta_code='').exclude(eta_check_env=here).count()},
             'send_enabled': writer_allowed(FLAG), 'environment': environment.describe()}
+
+
+
+# ── Does ETA hold the code? (per ETA system) ───────────────────────────────────────────────────
+
+CHECK_PER_ACTION = 100
+
+
+def check_codes(actor=None, profile_ids=None, limit=CHECK_PER_ACTION):
+    """Ask ETA, code by code, whether it holds each item's code in the system in use, and record the answer
+    beside the system's name. Reads only. Unchecked-here items go first. "Could not ask" stops and changes
+    nothing for the item it was on."""
+    here = environment.current()
+    if not here:
+        raise TaxRuleError('منظومة المصلحة غير محددة (TAX_ETA_ENVIRONMENT)')
+    qs = TaxItemProfile.objects.exclude(eta_code='').exclude(code_type='')
+    if profile_ids:
+        qs = qs.filter(pk__in=list(profile_ids)[:limit])
+    else:
+        from django.db.models import Case, IntegerField, Value, When
+        qs = qs.annotate(seen=Case(When(eta_check_env=here, then=Value(1)), default=Value(0),
+                                   output_field=IntegerField())).order_by('seen', 'eta_checked_at', 'id')
+    done = {'checked': 0, 'found': 0, 'inactive': 0, 'not_found': 0, 'error': '', 'environment': here}
+    for profile in qs[:limit]:
+        try:
+            details = eta_client.code_details(profile.code_type.upper(), profile.eta_code)
+        except (eta_client.EtaUncertain, eta_client.EtaRefused, eta_client.EtaNotConfigured) as exc:
+            done['error'] = str(exc)
+            break
+        if details is None:
+            result = TaxItemProfile.CHECK_NOT_FOUND
+        elif details.get('active') is False:
+            result = TaxItemProfile.CHECK_INACTIVE
+        else:
+            result = TaxItemProfile.CHECK_FOUND
+        profile.eta_check_env, profile.eta_check_status, profile.eta_checked_at = here, result, timezone.now()
+        profile.eta_check_detail = None if details is None else {
+            k: details.get(k) for k in ('codeID', 'codeName', 'codeNameAr', 'activeFrom', 'activeTo', 'active',
+                                        'parentItemCode', 'parentCodeName')}
+        profile.save(update_fields=['eta_check_env', 'eta_check_status', 'eta_checked_at', 'eta_check_detail', 'updated_at'])
+        done['checked'] += 1
+        done[result] += 1
+    audit('item_codes_checked', actor=actor, entity='item', reason=f'فحص الأكواد في {here}', after=done)
+    return done
+
+
+def mirror_candidates(limit=500):
+    """Items whose real code (EGS, ours) the test system in use does not hold, with no open request."""
+    here = environment.current()
+    if here in ('', 'production'):
+        return TaxItemProfile.objects.none()
+    open_ids = TaxCodeRequest.objects.filter(status__in=TaxCodeRequest.OPEN_STATES).values('profile_id')
+    return (TaxItemProfile.objects.filter(coding_status=TaxItemProfile.CODE_APPROVED, code_type__iexact='EGS',
+                                          eta_check_env=here, eta_check_status=TaxItemProfile.CHECK_NOT_FOUND)
+            .exclude(pk__in=open_ids).order_by('softech_itemcode')[:limit])
+
+
+def prepare_mirror(profile_ids, actor, *, reason=''):
+    """Register the items' existing real codes in the test system in use, so test documents can carry them.
+    Never in production: there a missing code is a finding for the accountant, not something to re-register."""
+    here = environment.current()
+    if here in ('', 'production'):
+        raise TaxRuleError('تسجيل الأكواد الحالية متاح في المنظومة التجريبية فقط')
+    tax_id = _issuer_tax_id()
+    allowed = set(mirror_candidates(limit=100000).values_list('pk', flat=True))
+    created, skipped = [], []
+    for profile in TaxItemProfile.objects.filter(pk__in=list(profile_ids)[:MAX_PER_ACTION]).order_by('softech_itemcode'):
+        if profile.pk not in allowed:
+            skipped.append({'itemcode': profile.softech_itemcode, 'why': 'افحص الكود أولاً: يُسجل فقط كود غير موجود في هذه المنظومة'})
+            continue
+        if not profile.eta_code.upper().startswith(f'EG-{tax_id}-'):
+            skipped.append({'itemcode': profile.softech_itemcode, 'why': 'الكود ليس كوداً داخلياً لهذه الشركة'})
+            continue
+        problems = _check_fields(profile.gpc_code, profile.item_name, profile.item_name_ar or profile.item_name)
+        if problems:
+            skipped.append({'itemcode': profile.softech_itemcode, 'why': '؛ '.join(problems)})
+            continue
+        try:
+            with transaction.atomic():
+                row = TaxCodeRequest.objects.create(
+                    profile=profile, purpose=TaxCodeRequest.PURPOSE_MIRROR, item_code=profile.eta_code,
+                    parent_code=profile.gpc_code, code_name=profile.item_name[:200],
+                    code_name_ar=(profile.item_name_ar or profile.item_name)[:200], active_from=timezone.localdate(),
+                    request_reason=(reason or 'تسجيل كود قائم للاختبار')[:300], prepared_by=actor)
+        except IntegrityError:
+            skipped.append({'itemcode': profile.softech_itemcode, 'why': 'يوجد طلب مفتوح لهذا الصنف'})
+            continue
+        audit('code_request_prepared', actor=actor, entity='code_request', entity_id=row.pk,
+              after={'item_code': row.item_code, 'purpose': 'mirror', 'environment': here})
+        created.append(row.pk)
+    return {'created': created, 'skipped': skipped}

@@ -43,6 +43,7 @@ urlpatterns = [
     path('codes/prepare/', views.codes_prepare),
     path('codes/send/', views.codes_send),
     path('codes/refresh/', views.codes_refresh),
+    path('codes/check/', views.codes_check),
     path('codes/<int:pk>/', views.code_detail),
     path('codes/<int:pk>/cancel/', views.code_cancel),
     path('receipts/', views.receipts_list),
@@ -55,4 +56,7 @@ urlpatterns = [
     path('receipts/branch/<str:branch>/issue/', views.receipts_issue),
     path('receipts/branch/<str:branch>/submit/', views.receipts_submit),
     path('receipts/branch/<str:branch>/reconcile/', views.receipts_reconcile),
+    path('receipts/branch/<str:branch>/chain/lookup/', views.receipts_chain_lookup),
+    path('receipts/branch/<str:branch>/chain/start/', views.receipts_chain_start),
+    path('receipts/branch/<str:branch>/chain/undo/', views.receipts_chain_undo),
 ]

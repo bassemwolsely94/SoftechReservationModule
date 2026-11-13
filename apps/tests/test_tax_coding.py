@@ -7,9 +7,11 @@ from unittest import mock
 
 import requests
 from django.test import SimpleTestCase, TestCase, override_settings
+from django.utils import timezone
 
-from apps.tax_invoicing import coding, environment, eta_client, signing
-from apps.tax_invoicing.models import TaxAuditEvent, TaxCodeRequest, TaxIssuerProfile, TaxItemProfile
+from apps.tax_invoicing import coding, environment, eta_client, receipts, signing
+from apps.tax_invoicing.models import (TaxAuditEvent, TaxCodeRequest, TaxIssuerProfile, TaxItemProfile, TaxReceipt,
+                                       TaxReceiptBranchConfig)
 from apps.tests.test_tax_invoicing import Fixture, api
 
 CODING_ON = dict(TAX_ETA_CODING_ENABLED=True, WRITER_INSTANCE=True, TAX_ETA_ENVIRONMENT='preprod',
@@ -316,3 +318,249 @@ class CodeRequestTests(Fixture, TestCase):
         with mock.patch.object(eta_client.requests, 'post', return_value=_response(401, {})):
             r = api(self.admin).post('/api/tax-invoicing/eta/check-login/')
         self.assertEqual((r.status_code, r.json()['ok']), (200, False))
+
+
+# ── Where a branch device's chain starts (receipts.start_chain) ────────────────────────────────
+
+LAST = 'a' * 64
+NEWER = 'b' * 64
+
+
+def _search(*rows):
+    return _response(200, {'receipts': list(rows), 'metadata': {'totalCount': len(rows)}})
+
+
+def _device_row(uuid, serial='2VA0280VY1', status='Valid'):
+    return {'uuid': uuid, 'posSerialNumber': serial, 'receiptNumber': 'R-9', 'dateTimeIssued': '2026-11-12T10:00:00Z',
+            'status': status, 'submitterName': 'Invoicer POS'}
+
+
+@override_settings(TAX_ETA_ENVIRONMENT='preprod', TAX_ETA_API_BASE_URL='', TAX_ETA_ID_BASE_URL='')
+class ChainStartTests(Fixture, TestCase):
+
+    def setUp(self):
+        self.build('ch')
+        eta_client.reset_pos_tokens()
+        self.config = TaxReceiptBranchConfig.objects.create(
+            softech_branchcode='150', is_enabled=True, seller_branch_code='3', device_serial='2VA0280VY1',
+            client_id='pos-id', secret_env='POS_SECRET_150', activity_code='4772', governate='القاهرة',
+            region_city='شنن', street='شارع', building_number='16', payment_method='C')
+        env = mock.patch.dict('os.environ', {'POS_SECRET_150': 's'})
+        env.start()
+        self.addCleanup(env.stop)
+        self.addCleanup(eta_client.reset_pos_tokens)
+
+    def _eta(self, *rows):
+        token = mock.patch.object(eta_client.requests, 'post',
+                                  return_value=_response(200, {'access_token': 'P', 'expires_in': 3600}))
+        search = mock.patch.object(eta_client.requests, 'get', return_value=_search(*rows))
+        return token, search
+
+    def _start(self, rows, **kw):
+        token, search = self._eta(*rows)
+        with token, search:
+            return receipts.start_chain('150', self.admin, **kw)
+
+    def test_issuing_waits_for_the_chain_start_decision(self):
+        gaps = receipts.config_gaps(self.config, TaxIssuerProfile.load())
+        self.assertTrue(any('بداية سلسلة الجهاز' in g for g in gaps))
+
+    def test_lookup_searches_this_device_newest_first_and_ignores_other_devices(self):
+        token, search = self._eta(_device_row(LAST), _device_row(NEWER, serial='OTHER'))
+        with token, search as get:
+            out = receipts.chain_lookup('150', self.admin)
+        params = get.call_args[1]['params']
+        self.assertEqual((params['PosSerialNumber'], params['SortBy'], params['SortDir']),
+                         ('2VA0280VY1', 'DateTimeIssued', 'Desc'))
+        self.assertTrue(get.call_args[0][0].endswith('/api/v1/receipts/search'))
+        self.assertEqual((out['found'], out['latest']['uuid']), (1, LAST))
+        self.config.refresh_from_db()
+        self.assertEqual(self.config.chain_start, '')     # looking changes nothing
+
+    def test_handover_continues_from_the_last_receipt_eta_holds(self):
+        config = self._start([_device_row(LAST)], mode='handover', confirm='150', other_program_stopped=True,
+                             expected_uuid=LAST)
+        self.assertEqual((config.chain_start, config.last_uuid, config.chain_start_uuid), ('handover', LAST, LAST))
+        self.assertTrue(TaxAuditEvent.objects.filter(action='receipt_chain_started', entity_id='150').exists())
+        gaps = receipts.config_gaps(config, TaxIssuerProfile.load())
+        self.assertFalse(any('بداية سلسلة الجهاز' in g for g in gaps))
+
+    def test_handover_needs_the_other_program_stopped_and_the_reviewed_receipt(self):
+        for kw in (dict(other_program_stopped=False, expected_uuid=LAST),
+                   dict(other_program_stopped=True, expected_uuid=NEWER),     # ETA's newest moved on
+                   dict(other_program_stopped=True, expected_uuid='')):
+            with self.assertRaises(receipts.TaxRuleError):
+                self._start([_device_row(LAST)], mode='handover', confirm='150', **kw)
+        self.config.refresh_from_db()
+        self.assertEqual((self.config.chain_start, self.config.last_uuid), ('', ''))
+
+    def test_handover_refused_when_latest_is_cancelled(self):
+        with self.assertRaises(receipts.TaxRuleError):
+            self._start([_device_row(LAST, status='Cancelled')], mode='handover', confirm='150',
+                        other_program_stopped=True, expected_uuid=LAST)
+
+    def test_fresh_only_when_eta_has_nothing_from_the_device(self):
+        with self.assertRaises(receipts.TaxRuleError):
+            self._start([_device_row(LAST)], mode='fresh', confirm='150')
+        config = self._start([], mode='fresh', confirm='150')
+        self.assertEqual((config.chain_start, config.last_uuid), ('fresh', ''))
+
+    def test_could_not_ask_eta_decides_nothing(self):
+        token = mock.patch.object(eta_client.requests, 'post',
+                                  return_value=_response(200, {'access_token': 'P', 'expires_in': 3600}))
+        with token, mock.patch.object(eta_client.requests, 'get', side_effect=requests.ConnectionError()):
+            with self.assertRaises(receipts.TaxRuleError):
+                receipts.start_chain('150', self.admin, mode='fresh', confirm='150')
+        self.config.refresh_from_db()
+        self.assertEqual(self.config.chain_start, '')
+
+    def test_typed_branch_code_and_decided_once(self):
+        with self.assertRaises(receipts.TaxRuleError):
+            self._start([], mode='fresh', confirm='999')
+        self._start([], mode='fresh', confirm='150')
+        with self.assertRaises(receipts.TaxRuleError):
+            self._start([], mode='fresh', confirm='150')
+
+    def test_undo_only_before_anything_is_issued(self):
+        self._start([_device_row(LAST)], mode='handover', confirm='150', other_program_stopped=True, expected_uuid=LAST)
+        with self.assertRaises(receipts.TaxRuleError):
+            receipts.undo_chain_start('150', self.admin, '')
+        receipts.undo_chain_start('150', self.admin, 'wrong device')
+        self.config.refresh_from_db()
+        self.assertEqual((self.config.chain_start, self.config.last_uuid), ('', ''))
+        self._start([_device_row(LAST)], mode='handover', confirm='150', other_program_stopped=True, expected_uuid=LAST)
+        TaxReceipt.objects.create(softech_branchcode='150', doccode='31', docnumber='1', docdate='2026-11-13',
+                                  sold_at=timezone.now(), uuid='c' * 64, status=TaxReceipt.ISSUED)
+        with self.assertRaises(receipts.TaxRuleError):
+            receipts.undo_chain_start('150', self.admin, 'too late')
+
+    def test_views_need_finalize(self):
+        r = api(self.accountant).post('/api/tax-invoicing/receipts/branch/150/chain/start/',
+                                      {'mode': 'fresh', 'confirm': '150'}, format='json')
+        self.assertEqual(r.status_code, 403)
+        token, search = self._eta()
+        with token, search:
+            r = api(self.admin).post('/api/tax-invoicing/receipts/branch/150/chain/start/',
+                                     {'mode': 'fresh', 'confirm': '150'}, format='json')
+        self.assertEqual((r.status_code, r.json()['chain_start']), (200, 'fresh'))
+
+
+# ── Does ETA hold the code? Per ETA system (coding.check_codes, prepare_mirror) ────────────────
+
+def _details(active=True):
+    return _response(200, {'codeID': 9, 'codeName': 'Panadol', 'active': active, 'activeFrom': '2023-01-01T00:00:00Z'})
+
+
+@override_settings(**CODING_ON)
+class CodeCheckTests(Fixture, TestCase):
+
+    def setUp(self):
+        self.build('cc')
+        eta_client.reset_token()
+        self.addCleanup(eta_client.reset_token)
+        common = dict(coding_status=TaxItemProfile.CODE_APPROVED, code_type='EGS', gpc_code='10000454',
+                      tax_treatment='taxable', treatment_confirmed_at=timezone.now(), vat_rate=14)
+        self.real = TaxItemProfile.objects.create(softech_itemcode='60001', item_name='Panadol',
+                                                  eta_code='EG-100200300-60001', **common)
+        self.gone = TaxItemProfile.objects.create(softech_itemcode='60002', item_name='Brufen',
+                                                  eta_code='EG-100200300-60002', **common)
+        self.gs1 = TaxItemProfile.objects.create(softech_itemcode='60003', item_name='Cream', **{
+            **common, 'code_type': 'GS1', 'eta_code': '6221234567890'})
+
+    def _login(self):
+        return mock.patch.object(eta_client.requests, 'post',
+                                 return_value=_response(200, {'access_token': 'T', 'expires_in': 3600}))
+
+    def _check(self, answers):
+        def answer(url, **kw):
+            for code, resp in answers.items():
+                if code in url:
+                    return resp
+            return _response(404, {})
+        with self._login(), mock.patch.object(eta_client.requests, 'get', side_effect=answer) as get:
+            out = coding.check_codes(self.admin)
+        return out, get
+
+    def test_records_each_answer_beside_the_system(self):
+        out, get = self._check({'60001': _details(), '6221234567890': _details(active=False)})
+        self.assertEqual((out['found'], out['not_found'], out['inactive'], out['environment']), (1, 1, 1, 'preprod'))
+        self.assertTrue(any('/api/v1.0/codetypes/EGS/codes/EG-100200300-60001' in c[0][0] for c in get.call_args_list))
+        for p, status in ((self.real, 'found'), (self.gone, 'not_found'), (self.gs1, 'inactive')):
+            p.refresh_from_db()
+            self.assertEqual((p.eta_check_env, p.eta_check_status), ('preprod', status))
+            self.assertEqual(p.coding_status, TaxItemProfile.CODE_APPROVED)    # checking never recodes
+
+    def test_could_not_ask_stops_without_recording(self):
+        with self._login(), mock.patch.object(eta_client.requests, 'get', side_effect=requests.ConnectionError()):
+            out = coding.check_codes(self.admin)
+        self.assertTrue(out['error'])
+        self.assertEqual(TaxItemProfile.objects.exclude(eta_check_status='').count(), 0)
+
+    def test_a_code_missing_here_blocks_the_line_here_only(self):
+        from apps.tax_invoicing import services
+        self._check({'60001': _details()})
+        self.gone.refresh_from_db()
+        status, reason = services.classify(None, self.gone)
+        self.assertEqual(status, 'uncoded')
+        self.assertIn('غير موجود في منظومة المصلحة الحالية', reason)
+        with override_settings(TAX_ETA_ENVIRONMENT='production', WRITER_INSTANCE=False):
+            self.assertEqual(services.classify(None, self.gone)[0], 'approved')   # the preprod check says nothing here
+
+    def test_a_status_from_the_test_system_never_counts_in_production(self):
+        from apps.tax_invoicing import services
+        self.real.coding_env = 'preprod'
+        self.real.save()
+        self.assertEqual(services.classify(None, self.real)[0], 'approved')
+        with override_settings(TAX_ETA_ENVIRONMENT='production', WRITER_INSTANCE=False):
+            status, reason = services.classify(None, self.real)
+        self.assertEqual(status, 'uncoded')
+        self.assertIn('preprod', reason)
+
+    def test_mirror_registers_the_existing_code_and_never_recodes_the_item(self):
+        self._check({'60001': _details()})
+        self.assertEqual([p.softech_itemcode for p in coding.mirror_candidates()], ['60002'])   # EGS, missing here
+        out = coding.prepare_mirror([self.gone.pk, self.real.pk, self.gs1.pk], self.accountant)
+        self.assertEqual(len(out['created']), 1)
+        row = TaxCodeRequest.objects.get()
+        self.assertEqual((row.purpose, row.item_code), ('mirror', 'EG-100200300-60002'))
+        with self._login(), mock.patch.object(eta_client.requests, 'post',
+                                              side_effect=[_response(200, {'access_token': 'T', 'expires_in': 3600}),
+                                                           _response(200, {})]):
+            coding.send([row.pk], self.admin, '1')
+        self.gone.refresh_from_db()
+        self.assertEqual((self.gone.coding_status, self.gone.coding_env), (TaxItemProfile.CODE_APPROVED, ''))
+        with mock.patch.object(eta_client.requests, 'get',
+                               return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Approved'}])):
+            coding.refresh(self.admin)
+        self.gone.refresh_from_db()
+        self.assertEqual((self.gone.coding_status, self.gone.coding_env), (TaxItemProfile.CODE_APPROVED, ''))
+        self.assertEqual((self.gone.eta_check_env, self.gone.eta_check_status), ('preprod', 'found'))
+
+    def test_mirror_refused_in_production_and_for_unchecked_items(self):
+        with self.assertRaises(coding.TaxRuleError):
+            with override_settings(TAX_ETA_ENVIRONMENT='production'):
+                coding.prepare_mirror([self.gone.pk], self.accountant)
+        out = coding.prepare_mirror([self.gone.pk], self.accountant)      # not checked yet
+        self.assertEqual(out['created'], [])
+
+    def test_new_code_approved_in_preprod_is_tagged_with_its_system(self):
+        p = TaxItemProfile.objects.create(softech_itemcode='60009', item_name='New', gpc_code='10000454')
+        coding.prepare([p.pk], self.accountant)
+        row = TaxCodeRequest.objects.get(profile=p)
+        with mock.patch.object(eta_client.requests, 'post',
+                               side_effect=[_response(200, {'access_token': 'T', 'expires_in': 3600}), _response(200, {})]):
+            coding.send([row.pk], self.admin, '1')
+        with mock.patch.object(eta_client.requests, 'get',
+                               return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Approved'}])):
+            coding.refresh(self.admin)
+        p.refresh_from_db()
+        self.assertEqual((p.coding_status, p.coding_env, p.eta_check_status), ('approved', 'preprod', 'found'))
+
+    def test_check_view_needs_edit_and_reports(self):
+        self.assertEqual(api(self.pharmacist).post('/api/tax-invoicing/codes/check/', {}, format='json').status_code, 403)
+        with self._login(), mock.patch.object(eta_client.requests, 'get', return_value=_response(404, {})):
+            r = api(self.accountant).post('/api/tax-invoicing/codes/check/', {}, format='json')
+        self.assertEqual((r.status_code, r.json()['not_found']), (200, 3))
+        body = api(self.accountant).get('/api/tax-invoicing/codes/').json()
+        self.assertEqual(body['summary']['checks']['not_found'], 3)
+        self.assertEqual(body['summary']['mirror_candidates'], 2)
