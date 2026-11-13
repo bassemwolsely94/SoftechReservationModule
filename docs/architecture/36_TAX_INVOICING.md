@@ -89,6 +89,13 @@ name. Every sending call in `eta_client` passes `environment.assert_may_send()`:
 - Returns reference the original sale. SOFTECH's `r_doccode` is mostly `0` or blank there. A return whose original
   was not issued here is held. Exclusions on receipts are not built: a blacklisted line holds the receipt.
 - Secrets stay in the environment; `TaxReceiptBranchConfig` names the variables.
+- **Where a device's chain starts** (`receipts.start_chain`, owner decision 2026-11-13: production reuses the POS devices
+  Invoicer registered, after ETA's representative approves them). Decided once per branch, before the first receipt,
+  and issuing waits for it (`config_gaps`). `chain_lookup` asks ETA's "Search Receipts" for the device's newest
+  receipts (`PosSerialNumber`, newest issued first, 400 days back). *Fresh* is allowed only when ETA shows none.
+  *Handover* is allowed only to the newest receipt ETA shows, which must equal the one the person reviewed, must be
+  valid, and needs the confirmation that the other program stopped on that device. Undo is possible only while
+  nothing is issued here. All of it is audited (`receipt_chain_started`, `receipt_chain_start_undone`).
 
 ## Signing
 

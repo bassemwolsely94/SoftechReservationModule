@@ -28,6 +28,9 @@ const api = vi.hoisted(() => ({
   codesPrepare: vi.fn(),
   codesSend: vi.fn(),
   codesRefresh: vi.fn(),
+  chainLookup: vi.fn(),
+  startChain: vi.fn(),
+  undoChainStart: vi.fn(),
 }))
 
 vi.mock('../../api/client', () => ({
@@ -39,7 +42,7 @@ const { default: DocumentDetail } = await import('./DocumentDetail')
 const { default: PrintTab } = await import('./PrintTab')
 const { default: ImportTab, buildOptions } = await import('./ImportTab')
 const { default: ItemsTab } = await import('./ItemsTab')
-const { BranchActions } = await import('./ReceiptsTab')
+const { BranchActions, ChainStart } = await import('./ReceiptsTab')
 const { default: CodesTab } = await import('./CodesTab')
 
 const line = (id, status) => ({
@@ -297,5 +300,40 @@ describe('ETA item codes', () => {
     fireEvent.change(screen.getByLabelText(/اكتب عدد المختار/), { target: { value: '1' } })
     fireEvent.click(screen.getByText('إرسال للمصلحة'))
     await waitFor(() => expect(api.codesSend).toHaveBeenCalledWith({ ids: [3], confirm: '1' }))
+  })
+})
+
+describe('device chain start', () => {
+  const row = { branch: '150', device_serial: '2VA0280VY1', chain_start: '', has_chain_receipts: false }
+  const latest = { uuid: 'a'.repeat(64), receipt_number: 'R-9', issued: '2026-11-12T10:00:00Z', status: 'Valid', submitter: 'Invoicer POS' }
+
+  it('hands over only after the other program is confirmed stopped and the branch code typed', async () => {
+    api.chainLookup.mockResolvedValue({ data: { device_serial: '2VA0280VY1', looked_back_days: 400, found: 1, latest } })
+    api.startChain.mockResolvedValue({ data: {} })
+    show(<ChainStart branch="150" row={row} me={ME} />)
+    fireEvent.click(screen.getByText('ابحث في المصلحة عن إيصالات هذا الجهاز'))
+    const start = (await screen.findByText('استلام السلسلة بعد هذا الإيصال')).closest('button')
+    fireEvent.change(screen.getByLabelText(/اكتب كود الفرع/), { target: { value: '150' } })
+    expect(start.disabled).toBe(true)
+    fireEvent.click(screen.getByLabelText(/توقف عن الإصدار/))
+    expect(start.disabled).toBe(false)
+    fireEvent.click(start)
+    await waitFor(() => expect(api.startChain).toHaveBeenCalledWith('150',
+      { mode: 'handover', confirm: '150', other_program_stopped: true, expected_uuid: latest.uuid }))
+  })
+
+  it('starts a fresh chain when ETA shows nothing from the device', async () => {
+    api.chainLookup.mockResolvedValue({ data: { device_serial: '2VA0280VY1', looked_back_days: 400, found: 0, latest: null } })
+    api.startChain.mockResolvedValue({ data: {} })
+    show(<ChainStart branch="150" row={row} me={ME} />)
+    fireEvent.click(screen.getByText('ابحث في المصلحة عن إيصالات هذا الجهاز'))
+    fireEvent.change(await screen.findByLabelText(/اكتب كود الفرع/), { target: { value: '150' } })
+    fireEvent.click(screen.getByText('بدء سلسلة جديدة'))
+    await waitFor(() => expect(api.startChain).toHaveBeenCalledWith('150', { mode: 'fresh', confirm: '150' }))
+  })
+
+  it('offers nothing to change without finalize', () => {
+    show(<ChainStart branch="150" row={row} me={{ ...ME, can_finalize: false }} />)
+    expect(screen.queryByText('ابحث في المصلحة عن إيصالات هذا الجهاز')).toBeNull()
   })
 })

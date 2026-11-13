@@ -281,3 +281,22 @@ def check_login():
     reset_token()
     access_token()
     return True
+
+
+def device_receipts(config, *, issued_from, page_size=5):
+    """The newest receipts ETA holds from this POS device ("Search Receipts", GET /api/v1/receipts/search,
+    filtered by PosSerialNumber, newest issued first). Read only. Raises when ETA can't be asked, because
+    "could not ask" must never be read as "the device has no receipts"."""
+    params = {'PosSerialNumber': config.device_serial, 'Direction': 'Submitted', 'SortBy': 'DateTimeIssued',
+              'SortDir': 'Desc', 'PageNo': 1, 'PageSize': page_size,
+              'DateTimeIssuedFrom': issued_from.strftime('%Y-%m-%dT%H:%M:%SZ')}
+    try:
+        r = requests.get(_api('/api/v1/receipts/search'), params=params, headers=_pos_headers(config),
+                         timeout=TIMEOUT, allow_redirects=False, verify=_verify())
+    except requests.RequestException as exc:
+        raise EtaUncertain(f'تعذر البحث عن إيصالات الجهاز: {type(exc).__name__}') from exc
+    if r.status_code != 200:
+        raise EtaUncertain(f'تعذر البحث عن إيصالات الجهاز (HTTP {r.status_code})', r.status_code)
+    serial = (config.device_serial or '').strip().upper()
+    return [row for row in (_json(r).get('receipts') or [])
+            if str(row.get('posSerialNumber') or '').strip().upper() == serial]
