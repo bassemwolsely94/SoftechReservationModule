@@ -148,6 +148,43 @@ class SellableStockTests(TestCase):
                          [{'branch_id': self.shop.id, 'qty': 3.0}])
 
 
+class SellableStockFollowUpTests(TestCase):
+    """Fix round 1: reservations availability, POS basket suggestions, store_roles pending."""
+
+    def setUp(self):
+        _reset_hq_code_cache()
+        self.addCleanup(_reset_hq_code_cache)
+        self.hq = _branch('100', Branch.KIND_HQ)
+        self.shop = _branch('130', Branch.KIND_RETAIL)
+        self.closed = _branch('180', Branch.KIND_CLOSED)
+        self.item = make_item('CONCOR 5MG', 'S0002')
+        _stock(self.item, self.hq, '110', 50)
+        _stock(self.item, self.closed, '100', 9)
+        _stock(self.item, self.shop, '100', 3)
+
+    def test_reservation_stock_by_branch_drops_closed_and_hq_110(self):
+        from types import SimpleNamespace
+        from apps.reservations.serializers import ReservationDetailSerializer
+        rows = ReservationDetailSerializer().get_stock_by_branch(
+            SimpleNamespace(item_id=self.item.id, item=self.item))
+        self.assertEqual([(r['branch_id'], r['quantity']) for r in rows], [(self.shop.id, 3.0)])
+
+    def test_basket_branch_stock_uses_the_sellable_rule(self):
+        from apps.recommendations.basket_intelligence import _branch_stock
+        self.assertEqual(_branch_stock([self.item.id], self.hq.id), {})
+        self.assertEqual(_branch_stock([self.item.id], self.closed.id), {})
+        self.assertEqual(_branch_stock([self.item.id], self.shop.id), {self.item.id: 3.0})
+
+    def test_store_roles_treats_pending_branch_as_closed(self):
+        from apps.batches import store_roles
+        _branch('140', Branch.KIND_PENDING)
+        role = store_roles.resolver()
+        self.assertEqual(role('140', '100'), store_roles.CLOSED)
+        self.assertEqual(role('180', '100'), store_roles.CLOSED)
+        self.assertEqual(role('130', '100'), store_roles.LIVE)
+        self.assertEqual(role('100', '110'), store_roles.CLOSED)
+
+
 class QuarantineSetUnchangedTests(SimpleTestCase):
     """SOFTECH-writing paths and incentives keep exactly 102/103/105, byte-identical SQL."""
 
@@ -156,6 +193,17 @@ class QuarantineSetUnchangedTests(SimpleTestCase):
         self.assertIs(EXCLUDED_STORE_CODES, QUARANTINE_STORE_CODES)
         self.assertEqual(quarantine_sql_in(), "('102','103','105')")
         self.assertEqual(quarantine_sql_in(', '), "('102', '103', '105')")
+
+    def test_import_time_checks_refuse_a_drifted_list(self):
+        from django.core.exceptions import ImproperlyConfigured
+        from apps.batches.store_roles import check_quarantine_sql, check_quarantine_sql_in
+        self.assertEqual(check_quarantine_sql("('102','103','105')"), "('102','103','105')")
+        with self.assertRaises(ImproperlyConfigured):
+            check_quarantine_sql("('102','103')")
+        ok = "WHERE s NOT IN ('102', '103', '105')\n"
+        self.assertEqual(check_quarantine_sql_in(ok, ', '), ok)
+        with self.assertRaises(ImproperlyConfigured):
+            check_quarantine_sql_in("WHERE s NOT IN ('102', '105')\n", ', ')
 
     def test_isr_writer_quarantine_set_unchanged(self):
         from apps.purchasing import isr_writer
@@ -167,13 +215,14 @@ class QuarantineSetUnchangedTests(SimpleTestCase):
         self.assertEqual(isr_guards._QUARANTINE_SQL, "('102','103','105')")
         conn = _FakeConn()
 
+        from django.utils import timezone
+
         class Plan:
             branchcode = '130'
+            created_at = timezone.now()
             lines_snapshot = [{'itemcode': 'A1', 'itemqty': 2}]
-        try:
-            isr_guards.review_push(Plan(), conn)
-        except Exception:
-            pass            # only the SQL it sent matters here
+        result = isr_guards.review_push(Plan(), conn)
+        self.assertIn('issues', result)       # ran to the end on an empty SOFTECH answer
         stk = [s for s in conn.cur.sql if 'stkbal' in s]
         self.assertEqual(stk, ["SELECT itemcode, sum(nowqty) FROM stkbal WHERE branchcode=? "
                                "AND storecode NOT IN ('102','103','105') AND itemcode IN (?) "

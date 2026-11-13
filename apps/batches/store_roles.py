@@ -6,7 +6,7 @@ P-26: one place that decides what a SOFTECH store holds, for every expiry number
     store_role('100', '110')  →  'closed'
 
 Roles: live · return_candidate (105) · write_off (102) · cosmetics_expired (103) · closed (HQ 110,
-plus every store on a branch whose kind is 'closed'). Closed stores are excluded from every number,
+plus every store on a branch whose kind is 'closed' or 'pending'). Closed stores are excluded from every number,
 screen and export (owner, 2026-10-31).
 
 The map is keyed node + store ("100:110"); '*' as the node means any node — the quarantine stores
@@ -41,6 +41,16 @@ def check_quarantine_sql(text, sep=','):
         from django.core.exceptions import ImproperlyConfigured
         raise ImproperlyConfigured(f'Quarantine SQL {text!r} != {quarantine_sql_in(sep)!r}')
     return text
+
+
+def check_quarantine_sql_in(sql, sep=','):
+    """Import-time guard for a literal SQL template: it must hold the quarantine list exactly
+    as QUARANTINE_STORE_CODES renders it (literal on purpose: string-built SQL is a bandit B608
+    finding and a sql-from-text site)."""
+    if f'NOT IN {quarantine_sql_in(sep)}' not in sql:
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured(f'SQL template lost the quarantine list {quarantine_sql_in(sep)!r}')
+    return sql
 
 ROLE_LABELS = {
     LIVE:      'مخزون قابل للبيع',
@@ -79,8 +89,11 @@ def _role_map():
 
 
 def _closed_nodes():
+    """Nodes whose every store is CLOSED: branches of kind closed or pending (a pending branch
+    is not live until classified — same rule as catalog.models.exclude_unsellable)."""
     from apps.branches.models import Branch
-    return set(Branch.objects.filter(kind=Branch.KIND_CLOSED).values_list('softech_branch_id', flat=True))
+    return set(Branch.objects.filter(kind__in=(Branch.KIND_CLOSED, Branch.KIND_PENDING))
+               .values_list('softech_branch_id', flat=True))
 
 
 def resolver():

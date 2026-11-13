@@ -11,6 +11,11 @@ from django.db.models.signals import post_delete, post_save
 _HQ_CODE_CACHE = None
 
 
+class HQNotConfigured(ImproperlyConfigured):
+    """No single Branch of kind hq. An ImproperlyConfigured, so existing handlers still catch
+    it; the API answers it with a 503 (core.exceptions.api_exception_handler)."""
+
+
 def hq_code():
     """softech_branch_id of the single kind='hq' row (cached per process; the cache is
     dropped whenever a Branch is saved or deleted). Raises unless exactly one exists."""
@@ -19,7 +24,7 @@ def hq_code():
         codes = list(Branch.objects.filter(kind=Branch.KIND_HQ)
                      .values_list('softech_branch_id', flat=True)[:2])
         if len(codes) != 1:
-            raise ImproperlyConfigured(
+            raise HQNotConfigured(
                 f'Expected exactly one Branch with kind=hq, found {len(codes)}.')
         _HQ_CODE_CACHE = codes[0]
     return _HQ_CODE_CACHE

@@ -8,7 +8,8 @@ from apps.batches.store_roles import QUARANTINE_STORE_CODES
 # exclude_unsellable / is_sellable below.
 EXCLUDED_STORE_CODES = QUARANTINE_STORE_CODES
 
-# HQ store that holds the residue of closed branches (store_roles: '100:110' = closed).
+# HQ store that holds the residue of closed branches. Mirrors store_roles.DEFAULT_MAP '100:110' = CLOSED
+# (which admins may override through expiry_store_roles); the owner ruling (2026-11-13) names 110.
 HQ_CLOSED_STORE_CODE = '110'
 UNSELLABLE_BRANCH_KINDS = ('closed', 'pending')
 

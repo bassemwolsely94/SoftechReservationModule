@@ -41,11 +41,7 @@ Named parameters for PG_AGGREGATE_SQL (psycopg2 %(name)s style):
   d365   date — 365 days ago (rolling window start)
 """
 
-from apps.batches.store_roles import quarantine_sql_in
-
-# Quarantine stores 102/103/105 (store_roles.QUARANTINE_STORE_CODES), fixed order:
-# "('102', '103', '105')" — the SQL text sent to SOFTECH is unchanged.
-_QUARANTINE_IN = quarantine_sql_in(', ')
+from apps.batches.store_roles import check_quarantine_sql_in
 
 # ── INCREMENTAL / FULL SALES FETCH FROM SOFTECH ───────────────────────────────
 #
@@ -165,9 +161,12 @@ QUERY_STKBAL = """
       AND sb.branchcode IS NOT NULL
       AND sb.itemcode   IS NOT NULL
       AND sb.itemcode   != ''
-      AND sb.storecode  NOT IN """ + _QUARANTINE_IN + """
+      AND sb.storecode  NOT IN ('102', '103', '105')
     GROUP BY sb.itemcode, sb.branchcode
 """
+# Quarantine list kept literal (string-built SQL is a bandit B608 finding); fails at import
+# if it drifts from store_roles.QUARANTINE_STORE_CODES.
+check_quarantine_sql_in(QUERY_STKBAL, ', ')
 
 
 # ── LEGACY: single-shot three-window aggregation (kept for reference / fallback)
