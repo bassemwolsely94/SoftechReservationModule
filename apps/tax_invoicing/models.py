@@ -580,6 +580,9 @@ class TaxReceiptBranchConfig(models.Model):
     street = models.CharField(max_length=200, blank=True)
     building_number = models.CharField(max_length=100, blank=True)
     payment_method = models.CharField(max_length=50, blank=True)
+    # Set: a test-system-only mapping (for example a live branch's sales through a borrowed test device). It is
+    # refused anywhere else, and ending it puts that branch's test receipts back to ready for the real system.
+    test_env = models.CharField(max_length=12, blank=True, default='', db_default='')
     last_uuid = models.CharField(max_length=64, blank=True, editable=False)
     # Where this device's receipt chain starts, decided once before the first receipt (receipts.start_chain):
     #   fresh     ETA holds no receipt from this device, so previousUUID starts empty;
@@ -645,6 +648,8 @@ class TaxReceipt(models.Model):
     previous_uuid = models.CharField(max_length=64, blank=True)
     payload_text = models.TextField(blank=True)
     issued_at = models.DateTimeField(null=True, blank=True)
+    environment = models.CharField(max_length=12, blank=True, default='', db_default='',
+                                   help_text='The ETA system it was issued for')
     attempt = models.ForeignKey(TaxReceiptAttempt, null=True, blank=True, on_delete=models.SET_NULL, related_name='receipts')
     submission_uuid = models.CharField(max_length=64, blank=True)
     eta_reason = models.TextField(blank=True)

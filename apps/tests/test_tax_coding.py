@@ -709,3 +709,69 @@ class GpcAndGs1Tests(Fixture, TestCase):
         self.assertFalse(TaxItemProfile.objects.filter(softech_itemcode='71501').exists())
         self.assertEqual(api(self.accountant).get('/api/tax-invoicing/codes/').json()['summary']['catalog_without_profile'], 0)
         self.assertTrue(TaxAuditEvent.objects.filter(action='items_added_from_catalog').exists())
+
+
+# ── A test-only branch mapping (receipts.env_guard, end_test_mapping) ──────────────────────────
+
+@override_settings(TAX_ETA_ENVIRONMENT='preprod', WRITER_INSTANCE=True)
+class TestMappingTests(Fixture, TestCase):
+
+    def setUp(self):
+        self.build('tm')
+        self.config = TaxReceiptBranchConfig.objects.create(
+            softech_branchcode='150', is_enabled=True, seller_branch_code='3', device_serial='2VA0280VY1',
+            client_id='pos-id', secret_env='POS_SECRET_150', activity_code='4772', governate='القاهرة',
+            region_city='شنن', street='شارع', building_number='16', payment_method='C', chain_start='fresh')
+
+    def _receipt(self, number, *, uuid='', env='', status=TaxReceipt.READY):
+        return TaxReceipt.objects.create(softech_branchcode='150', doccode='10', docnumber=number,
+                                         docdate=timezone.localdate(), sold_at=timezone.now(), status=status,
+                                         uuid=uuid, previous_uuid='p' if uuid else '', payload_text='{}' if uuid else '',
+                                         environment=env, issued_at=timezone.now() if uuid else None)
+
+    def test_marking_test_only_is_for_the_test_system_and_audited(self):
+        r = api(self.admin).post('/api/tax-invoicing/receipts/configs/', {'branch': '150', 'test_only': True}, format='json')
+        self.assertEqual((r.status_code, r.json()['test_env']), (200, 'preprod'))
+        self.assertTrue(TaxAuditEvent.objects.filter(action='receipt_config_changed', entity_id='150').exists())
+        TaxReceiptBranchConfig.objects.create(softech_branchcode='151')
+        with override_settings(TAX_ETA_ENVIRONMENT='production', WRITER_INSTANCE=False):
+            r = api(self.admin).post('/api/tax-invoicing/receipts/configs/', {'branch': '151', 'test_only': True}, format='json')
+        self.assertEqual(r.status_code, 400)
+
+    def test_test_only_setup_is_refused_outside_its_system(self):
+        self.config.test_env = 'preprod'
+        self.config.save()
+        receipts.env_guard(self.config, '150')                          # its own test system: fine
+        with override_settings(TAX_ETA_ENVIRONMENT='production', WRITER_INSTANCE=False):
+            with self.assertRaises(receipts.TaxRuleError):
+                receipts.env_guard(self.config, '150')
+        with self.assertRaises(receipts.TaxRuleError):
+            with override_settings(TAX_ETA_ENVIRONMENT='production', WRITER_INSTANCE=False):
+                receipts.issue_next('150', self.admin)
+
+    def test_a_real_setup_never_sends_while_test_receipts_remain(self):
+        self._receipt('1', uuid='a' * 64, env='preprod', status=TaxReceipt.ACCEPTED)
+        with override_settings(TAX_ETA_ENVIRONMENT='production', WRITER_INSTANCE=False):
+            with self.assertRaises(receipts.TaxRuleError):
+                receipts.env_guard(self.config, '150')
+
+    def test_ending_puts_test_receipts_back_to_ready_and_clears_the_device(self):
+        self.config.test_env, self.config.last_uuid = 'preprod', 'a' * 64
+        self.config.save()
+        sent = self._receipt('1', uuid='a' * 64, env='preprod', status=TaxReceipt.ACCEPTED)
+        untouched = self._receipt('2')
+        with self.assertRaises(receipts.TaxRuleError):
+            receipts.end_test_mapping('150', self.admin, '')
+        r = api(self.admin).post('/api/tax-invoicing/receipts/branch/150/test/end/', {'reason': 'انتهت التجربة'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        sent.refresh_from_db()
+        self.assertEqual((sent.status, sent.uuid, sent.environment, sent.payload_text), (TaxReceipt.READY, '', '', ''))
+        untouched.refresh_from_db()
+        self.assertEqual(untouched.status, TaxReceipt.READY)
+        self.config.refresh_from_db()
+        self.assertEqual((self.config.test_env, self.config.device_serial, self.config.last_uuid, self.config.chain_start,
+                          self.config.is_enabled), ('', '', '', '', False))
+        event = TaxAuditEvent.objects.get(action='receipt_test_mapping_ended')
+        self.assertEqual(event.after['receipts_reset'], 1)
+        with override_settings(TAX_ETA_ENVIRONMENT='production', WRITER_INSTANCE=False):
+            receipts.env_guard(self.config, '150')                      # nothing left from the test

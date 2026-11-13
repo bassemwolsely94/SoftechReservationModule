@@ -899,6 +899,7 @@ _CONFIG_TEXT = ('seller_branch_code', 'device_serial', 'pos_os_version', 'pos_mo
 
 def _config_row(c):
     return {'branch': c.softech_branchcode, 'is_enabled': c.is_enabled, 'has_chain': bool(c.last_uuid),
+            'test_env': c.test_env,
             'chain_start': c.chain_start, 'chain_start_label': c.get_chain_start_display() if c.chain_start else '',
             'chain_start_uuid': c.chain_start_uuid, 'chain_start_at': c.chain_start_at,
             'chain_start_by': _stamp(c.chain_start_by), 'chain_start_detail': c.chain_start_detail or {},
@@ -924,6 +925,14 @@ def receipt_configs(request):
             setattr(c, f, str(request.data.get(f) or '').strip())
     if 'is_enabled' in request.data:
         c.is_enabled = bool(request.data['is_enabled'])
+    if request.data.get('test_only') and not c.test_env:
+        # Marks the mapping test-only, for the test system this server talks to now. Clearing it is its own,
+        # audited step (receipts_test_end), which also resets the test receipts.
+        if environment.is_production() or not environment.current():
+            return Response({'detail': 'الإعداد التجريبي متاح في المنظومة التجريبية فقط'}, status=status.HTTP_400_BAD_REQUEST)
+        if c.pk and TaxReceipt.objects.filter(softech_branchcode=code).exclude(uuid='').exists():
+            return Response({'detail': 'للفرع إيصالات صادرة؛ لا يتحول لإعداد تجريبي'}, status=status.HTTP_400_BAD_REQUEST)
+        c.test_env = environment.current()
     with transaction.atomic():
         c.save()
         services.audit('receipt_config_changed', actor=request.user, entity='receipt_branch', entity_id=code,
@@ -1147,6 +1156,14 @@ def receipts_chain_start(request, branch):
     return _branch_action(request, branch, lambda: _config_row(receipts.start_chain(
         branch, request.user, mode=d.get('mode') or '', confirm=str(d.get('confirm') or ''),
         other_program_stopped=bool(d.get('other_program_stopped')), expected_uuid=str(d.get('expected_uuid') or ''))))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, SENDER])
+def receipts_test_end(request, branch):
+    """Ends a test-only mapping and puts its test receipts back to ready for the real system."""
+    return _branch_action(request, branch, lambda: _config_row(
+        receipts.end_test_mapping(branch, request.user, str(request.data.get('reason') or ''))))
 
 
 @api_view(['POST'])

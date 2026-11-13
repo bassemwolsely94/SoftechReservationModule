@@ -84,6 +84,15 @@ requests" (`GET /api/v1.0/codetypes/requests/my?ItemCode=`).
   hold; that item then needs an EGS code. Approval sets `code_type = GS1`, `eta_code = barcode`.
 - Follow-up of GS1 requests uses the same "my requests" search as EGS; confirmed on the test system before production.
 
+### Test-only branch mapping
+
+`TaxReceiptBranchConfig.test_env` marks a branch setup as test-system-only, for example a live branch's sales sent
+through a borrowed test device (Invoicer's preprod POS at ETA branch 3, whose own SOFTECH branch 110 is closed). Each
+receipt records the system it was issued for (`TaxReceipt.environment`). `receipts.env_guard` refuses a test-only setup
+in any other system, and refuses a real setup while receipts issued for another system remain in the branch.
+`end_test_mapping` (reason required, audited) resets those receipts to ready, and clears the device, chain and switch, so
+the real device needs its own setup and chain start.
+
 ### Code check per ETA system
 
 `coding.check_codes` asks ETA's "Get Code Details by Item Code" for each mapped code and stores the answer with the
