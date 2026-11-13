@@ -4,16 +4,52 @@ apps/branches/models.py
 Branch         — physical pharmacy branch.
 BranchSettings — per-branch feature flags and notification gate.
 """
+from django.core.exceptions import ImproperlyConfigured
 from django.db import models
+from django.db.models.signals import post_delete, post_save
+
+_HQ_CODE_CACHE = None
+
+
+def hq_code():
+    """softech_branch_id of the single kind='hq' row (cached per process; the cache is
+    dropped whenever a Branch is saved or deleted). Raises unless exactly one exists."""
+    global _HQ_CODE_CACHE
+    if _HQ_CODE_CACHE is None:
+        codes = list(Branch.objects.filter(kind=Branch.KIND_HQ)
+                     .values_list('softech_branch_id', flat=True)[:2])
+        if len(codes) != 1:
+            raise ImproperlyConfigured(
+                f'Expected exactly one Branch with kind=hq, found {len(codes)}.')
+        _HQ_CODE_CACHE = codes[0]
+    return _HQ_CODE_CACHE
+
+
+def _reset_hq_code_cache(sender=None, **kwargs):
+    global _HQ_CODE_CACHE
+    _HQ_CODE_CACHE = None
 
 
 class BranchQuerySet(models.QuerySet):
-    def operational(self):
-        """The live network nodes: HQ + retail branches (excludes closed/CC)."""
+    def live(self):
+        """The live network nodes: HQ + retail branches (excludes closed/CC/pending)."""
         return self.filter(kind__in=[Branch.KIND_HQ, Branch.KIND_RETAIL])
+
+    def operational(self):
+        """Alias of live() kept for existing callers."""
+        return self.live()
 
     def retail(self):
         return self.filter(kind=Branch.KIND_RETAIL)
+
+    def closed(self):
+        return self.filter(kind=Branch.KIND_CLOSED)
+
+    def pending(self):
+        return self.filter(kind=Branch.KIND_PENDING)
+
+    def ordered(self):
+        return self.order_by('display_order', 'softech_branch_id')
 
     def pos_enabled_branches(self):
         return self.filter(pos_enabled=True)
@@ -33,17 +69,21 @@ class Branch(models.Model):
     KIND_RETAIL      = 'retail'
     KIND_CALL_CENTER = 'call_center'
     KIND_CLOSED      = 'closed'
+    KIND_PENDING     = 'pending'
     KIND_CHOICES = [
         (KIND_HQ,          'المركز الرئيسي'),
         (KIND_RETAIL,      'فرع بيع'),
         (KIND_CALL_CENTER, 'كول سنتر'),
         (KIND_CLOSED,      'مُغلق / لاغى'),
+        (KIND_PENDING,     'جديد — بانتظار التصنيف'),
     ]
     kind = models.CharField(
         max_length=20, choices=KIND_CHOICES, default=KIND_RETAIL, db_index=True,
         verbose_name='نوع النقطة',
         help_text='التصنيف التشغيلي الموثوق — يُستخدم لفحص الاتصال وتفعيل نقاط البيع والقوائم',
     )
+    display_order = models.PositiveIntegerField(
+        default=100, db_index=True, verbose_name='ترتيب العرض')
     # POS module: only branches explicitly enabled accept indirect-POS orders.
     pos_enabled = models.BooleanField(
         default=False, verbose_name='مفعّل لنقطة البيع',
@@ -99,7 +139,7 @@ class Branch(models.Model):
     class Meta:
         verbose_name        = 'فرع'
         verbose_name_plural = 'الفروع'
-        ordering            = ['name']
+        ordering            = ['display_order', 'softech_branch_id']
 
     def __str__(self):
         return self.name_ar or self.name
@@ -107,6 +147,10 @@ class Branch(models.Model):
     @property
     def is_hq(self):
         return self.kind == self.KIND_HQ
+
+    @property
+    def is_live(self):
+        return self.kind in (self.KIND_HQ, self.KIND_RETAIL)
 
     @property
     def can_transact(self):
@@ -129,6 +173,10 @@ class Branch(models.Model):
     @property
     def display_name(self):
         return self.name_ar or self.name
+
+
+post_save.connect(_reset_hq_code_cache, sender=Branch, dispatch_uid='branch_hq_cache_save')
+post_delete.connect(_reset_hq_code_cache, sender=Branch, dispatch_uid='branch_hq_cache_del')
 
 
 class BranchSettings(models.Model):
