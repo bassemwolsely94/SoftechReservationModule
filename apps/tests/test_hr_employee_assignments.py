@@ -3,7 +3,7 @@ apps/tests/test_hr_employee_assignments.py
 
 Crews piece 2a, Task 1: dated employee assignment history + PBX extensions.
 """
-from datetime import date
+from datetime import date, timedelta
 from io import StringIO
 
 from django.core.exceptions import ValidationError
@@ -43,8 +43,53 @@ class AssignmentTests(TestCase):
         imp.apply(preview(row(2)), self.profile, on=date(2026, 11, 13))
         a, b = self.rows('1001'), self.rows('1002')
         self.assertEqual((len(a), a[0].valid_from, a[0].valid_to), (1, date(2023, 5, 1), None))
-        self.assertEqual((len(b), b[0].valid_from, b[0].valid_to), (1, asg.SEED_EPOCH, None))
+        # a new hire with no start date starts on the import day, never back in 2020 (final review F1)
+        self.assertEqual((len(b), b[0].valid_from, b[0].valid_to), (1, date(2026, 11, 13), None))
         self.assertEqual(a[0].source, 'import')
+        # only the seed (the go-live backfill of people already here) reaches back to the epoch
+        seeded = Employee.objects.create(hr_number='1003', name_ar='ج')
+        asg.record_assignment(seeded, on=date(2026, 11, 13), source='seed')
+        self.assertEqual(self.rows('1003')[0].valid_from, asg.SEED_EPOCH)
+
+    def test_new_hire_import_after_go_live_leaves_last_month_unchanged(self):
+        from django.utils import timezone
+
+        from apps.crews import membership
+        from apps.crews.models import Crew, CrewRule
+        today = timezone.localdate()
+        last_end = today.replace(day=1) - timedelta(days=1)
+        last_start = last_end.replace(day=1)
+        imp.apply(preview(row(1)), self.profile, on=date(2020, 1, 1))     # an employee already here
+        crew = Crew.objects.create(name='صيادلة', type='job')
+        CrewRule.objects.create(crew=crew, job_titles=['صيدلي'], valid_from=date(2020, 1, 1))
+        before = membership.members_between(crew, last_start, last_end)
+        self.assertEqual(len(before), 1)
+        imp.apply(preview(row(1), row(2)), self.profile, on=today)        # a new hire, no start date
+        self.assertEqual(membership.members_between(crew, last_start, last_end), before)
+        new = Employee.objects.get(hr_number='1002')
+        self.assertIn(('emp', new.id), {x.key for x in membership.members(crew, today)})
+
+    def test_go_live_migration_seeds_open_rows_for_employees_without_history(self):
+        import importlib
+
+        from django.apps import apps as django_apps
+        mig = importlib.import_module('apps.hr.migrations.0014_seed_employee_assignments')
+        a = Employee.objects.create(hr_number='1001', name_ar='أ', job_title='صيدلي', branch=self.branch,
+                                    department='د', section='س', softech_usercode='55',
+                                    pbx_extensions=['201'], start_date=date(2024, 3, 1))
+        b = Employee.objects.create(hr_number='1002', name_ar='ب', job_title='كاشير')
+        c = Employee.objects.create(hr_number='1003', name_ar='ج', job_title='مدير')
+        asg.record_assignment(c, on=date(2026, 1, 1), source='manual')      # already has history
+        mig.seed(django_apps, None)
+        mig.seed(django_apps, None)                                          # idempotent
+        ra, rb, rc = self.rows('1001'), self.rows('1002'), self.rows('1003')
+        self.assertEqual(len(ra), 1)
+        self.assertEqual((ra[0].valid_from, ra[0].valid_to, ra[0].source, ra[0].job_title, ra[0].branch_id,
+                          ra[0].department, ra[0].section, ra[0].softech_usercode, ra[0].pbx_extensions),
+                         (date(2024, 3, 1), None, 'seed', 'صيدلي', self.branch.id, 'د', 'س', '55', ['201']))
+        self.assertEqual((len(rb), rb[0].valid_from, rb[0].source), (1, date(2020, 1, 1), 'seed'))
+        self.assertEqual((len(rc), rc[0].source), (1, 'manual'))
+        self.assertEqual(a.assignments.count() + b.assignments.count(), 2)
 
     def test_reimport_unchanged_writes_nothing(self):
         p = preview(row(1))

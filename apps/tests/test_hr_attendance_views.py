@@ -487,6 +487,19 @@ class IssueTests(Base):
         self.assertIsNone(p2.employee)   # a flagged punch is never resolved
         self.assertTrue(self.audited('hr_attendance_employee_create').exists())
 
+    def test_create_employee_from_unknown_id_records_assignment_from_today(self):
+        # crews final review F1: the new person's dated history starts today, not in 2020
+        from django.utils import timezone
+        from apps.hr.models import EmployeeAssignment
+        self.punch('555', 1)
+        r = self.post(self.mgr, 'unknown-ids/555/create-employee/', {'name_ar': 'ضيف', 'job_title': 'مندوب'})
+        self.assertEqual(r.status_code, 201, r.content)
+        rows = list(EmployeeAssignment.objects.filter(employee__hr_number='555'))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual((rows[0].valid_from, rows[0].valid_to, rows[0].source, rows[0].job_title),
+                         (timezone.localdate(), None, 'manual', 'مندوب'))
+        self.assertIsNotNone(rows[0].created_by_id)
+
     def test_create_employee_defaults_to_non_payroll_and_validates(self):
         self.punch('555', 1)
         self.assertEqual(self.post(self.mgr, 'unknown-ids/555/create-employee/', {}).status_code, 400)

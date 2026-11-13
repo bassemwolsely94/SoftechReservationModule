@@ -33,14 +33,18 @@ def _value(row, f):
 @transaction.atomic
 def record_assignment(employee, *, on: date, source: str, user=None):
     """Bring the history in line with the employee's current placement. Returns the created or
-    updated row, or None when nothing changed."""
+    updated row, or None when nothing changed.
+
+    The first row starts at the employee's start_date. Without one, only the seed (people already
+    here at go-live) reaches back to SEED_EPOCH; a new hire starts on `on`, so adding someone never
+    changes a past month's crew figures."""
     snap = _snapshot(employee)
     open_row = EmployeeAssignment.objects.select_for_update().filter(
         employee=employee, valid_to__isnull=True).first()
     if open_row is None:
+        first = employee.start_date or (SEED_EPOCH if source == 'seed' else on)
         return EmployeeAssignment.objects.create(
-            employee=employee, valid_from=employee.start_date or SEED_EPOCH, source=source,
-            created_by=user, **snap)
+            employee=employee, valid_from=first, source=source, created_by=user, **snap)
     if all(_value(open_row, f) == v for f, v in snap.items()):
         return None
     if open_row.valid_from >= on:      # same-day correction (or a back-dated apply): fix in place

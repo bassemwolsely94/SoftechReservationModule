@@ -521,6 +521,8 @@ def unknown_create_employee(request, acc, code):
     try:
         with transaction.atomic():
             emp = ser.save(hr_number=code)
+            # the dated history starts now (or at start_date), never back in 2020 (crews F1)
+            record_assignment(emp, on=timezone.localdate(), source='manual', user=acc.profile)
             resolve.resolve_user_code(code)
     except IntegrityError:
         raise ValidationError({'detail': 'الرقم موجود في قائمة الموظفين'})
