@@ -87,6 +87,63 @@ function Candidates({ me }) {
   )
 }
 
+/**
+ * Does ETA hold each mapped item's code, in the system this server talks to? Reads only. In a test system,
+ * our real codes it lacks can be registered there as-is ("mirror"), so test documents can carry them.
+ */
+export function CodeCheck({ me, summary }) {
+  const act = useAction()
+  const [picked, setPicked] = useState([])
+  const env = summary.environment || {}
+  const testSystem = env.api_base && !env.is_production
+  const checks = summary.checks || {}
+  const mirror = useQuery({
+    queryKey: ['tax-invoicing', 'code-candidates', 'mirror'],
+    queryFn: () => taxInvoicingApi.codeCandidates({ kind: 'mirror' }).then(r => r.data),
+    enabled: !!testSystem,
+  })
+  const toggle = id => setPicked(p => (p.includes(id) ? p.filter(x => x !== id) : [...p, id]))
+  return (
+    <Section title="فحص الأكواد لدى المصلحة" data-tour="tax-invoicing-main-codes-check"
+      hint={`في ${env.label || 'المنظومة الحالية'}: موجود ${fmtInt(checks.found)} · غير مفعل ${fmtInt(checks.inactive)} · غير موجود ${fmtInt(checks.not_found)} · لم يُفحص ${fmtInt(checks.unchecked)}`}
+      actions={me.can_edit && (
+        <Btn disabled={act.pending || !env.api_base} data-tour="tax-invoicing-main-codes-check-run"
+          onClick={() => act.run(() => taxInvoicingApi.codesCheck({}), d => d.detail || d.error
+            || `فُحص ${fmtInt(d.checked)} كود: موجود ${fmtInt(d.found)} · غير مفعل ${fmtInt(d.inactive)} · غير موجود ${fmtInt(d.not_found)}`)}>
+          فحص الأكواد التالية (100)
+        </Btn>
+      )}>
+      <p className="text-xs text-gray-500 mb-2">
+        الكود غير الموجود أو غير المفعل في المنظومة الحالية يوقف بنوده فيها. الفحص لا يغير ترميز الصنف.
+      </p>
+      {testSystem && (mirror.data || []).length > 0 && (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold text-gray-700">أكوادنا الحالية غير الموجودة في المنظومة التجريبية</span>
+            {me.can_edit && (
+              <Btn variant="primary" disabled={!picked.length || act.pending} data-tour="tax-invoicing-main-codes-mirror"
+                onClick={() => act.run(() => taxInvoicingApi.codesPrepare({ ids: picked, kind: 'mirror' }),
+                  d => `جُهّز ${fmtInt(d.created.length)} طلب تسجيل${d.skipped.length ? ` — تُرك ${fmtInt(d.skipped.length)}` : ''}`,
+                  () => setPicked([]))}>
+                تجهيز تسجيلها ({fmtInt(picked.length)})
+              </Btn>
+            )}
+          </div>
+          <Grid rows={mirror.data} onOpen={r => toggle(r.id)} columns={[
+            { key: 'pick', label: '', sortable: false, render: r => (
+              <input type="checkbox" checked={picked.includes(r.id)} onChange={() => toggle(r.id)} aria-label={`اختيار ${r.itemcode}`} />) },
+            { key: 'itemcode', label: 'الكود', className: 'whitespace-nowrap' },
+            { key: 'eta_code', label: 'كود المصلحة', render: r => <span dir="ltr" className="font-mono text-xs">{r.eta_code}</span> },
+            { key: 'item_name', label: 'الاسم', className: 'max-w-[240px] truncate' },
+            { key: 'gpc_code', label: 'GPC', render: r => r.gpc_code || '—' },
+          ]} />
+        </div>
+      )}
+      <div className="mt-2"><ActionMsg msg={act.msg} /></div>
+    </Section>
+  )
+}
+
 function EditRequest({ row }) {
   const [f, setF] = useState({ parent_code: row.parent_code, code_name: row.code_name, code_name_ar: row.code_name_ar,
     description: row.description, description_ar: row.description_ar })
@@ -130,6 +187,7 @@ function Requests({ me }) {
       ? <input type="checkbox" checked={picked.includes(r.id)} onChange={() => toggle(r.id)} aria-label={`اختيار ${r.item_code}`} /> : null) },
     { key: 'itemcode', label: 'صنف SOFTECH', className: 'whitespace-nowrap' },
     { key: 'item_code', label: 'كود المصلحة', className: 'font-mono text-xs whitespace-nowrap', render: r => <span dir="ltr">{r.item_code}</span> },
+    { key: 'purpose', label: 'النوع', value: r => r.purpose_label, render: r => (r.purpose === 'mirror' ? <Badge>تسجيل كود قائم</Badge> : 'جديد') },
     { key: 'code_name', label: 'الاسم', render: r => r.code_name_ar || r.code_name, className: 'max-w-[220px] truncate' },
     { key: 'parent_code', label: 'GPC' },
     { key: 'status', label: 'الحالة', value: r => r.status_label, render: r => <Badge tone={TONE[r.status]}>{r.status_label}</Badge> },
@@ -177,6 +235,13 @@ function Requests({ me }) {
   )
 }
 
+function CheckSection({ me }) {
+  const list = useQuery({ queryKey: ['tax-invoicing', 'codes', ''], queryFn: () => taxInvoicingApi.codes({ status: '' }).then(r => r.data) })
+  if (list.isLoading) return <Loading />
+  if (list.error) return <Failed error={list.error} />
+  return <CodeCheck me={me} summary={list.data.summary} />
+}
+
 export default function CodesTab({ me }) {
   return (
     <div className="space-y-3">
@@ -185,6 +250,7 @@ export default function CodesTab({ me }) {
         ثم نتابع الطلب حتى تعتمده المصلحة أو ترفضه. حالة ترميز الصنف تتغير من رد المصلحة فقط.
       </p>
       <EtaConnection me={me} />
+      <CheckSection me={me} />
       <Requests me={me} />
       <Candidates me={me} />
     </div>

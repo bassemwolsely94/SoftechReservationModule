@@ -63,6 +63,16 @@ def assert_may_send():
         raise ProductionNotAllowed('الإرسال لمنظومة المصلحة الفعلية موقوف حتى يوافق المالك (TAX_ETA_PRODUCTION_ALLOWED)')
 
 
+def current():
+    """The name recorded beside anything ETA answered: 'preprod', 'production', 'custom' for explicit
+    non-production URLs, or '' when nothing is configured."""
+    if is_production():
+        return 'production'
+    if name():
+        return name()
+    return 'custom' if api_base() else ''
+
+
 def describe():
     """For the screen: what is configured, without any secret."""
     return {
