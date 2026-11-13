@@ -244,3 +244,80 @@ class KpiExportTests(TestCase):
             self.assertEqual(int(r.target_value) % step, 0, f'{r.metric} target not on step')
             # forecast stays exact (not forced onto the step)
             self.assertGreater(r.forecast_value, 0)
+
+
+# ── golden layout: the 5-branch export must stay byte-identical (piece 1, task 5) ──
+import json
+import os
+from pathlib import Path
+
+GOLDEN = Path(__file__).parent / 'fixtures' / 'kpi_export_5_golden.json'
+# production display order (branches migration 0013): 160, 170, 140, 150, 130
+FIVE = [('160', 1), ('170', 2), ('140', 3), ('150', 4), ('130', 5)]
+
+
+def _plant_branch(code, order, mult, *, kind=Branch.KIND_RETAIL):
+    b = Branch.objects.create(softech_branch_id=code, code=code, name=f'Branch {code}',
+                              name_ar=f'فرع {code}', kind=kind, display_order=order)
+    for (y, m, k) in [(2025, 10, 1.0), (2026, 9, 1.1), (2026, 8, 1.2)]:
+        _roll(b, y, m, K.M_CASH_DELIVERY, round(800_000 * mult * k))
+        _roll(b, y, m, K.M_CREDIT, round(300_000 * mult * k))
+        _roll(b, y, m, K.M_GROSS_PROFIT, round(180_000 * mult * k))
+        _roll(b, y, m, K.M_CUSTOMERS, round(1_500 * mult * k))
+        _roll(b, y, m, K.M_BEAUTY, round(90_000 * mult * k))
+    for metric, v in [(K.M_CASH, 250_000), (K.M_DELIVERY, 30_000), (K.M_REGULAR, 9_000),
+                      (K.M_CASH_DELIVERY, 289_000), (K.M_CREDIT, 120_000),
+                      (K.M_GROSS_PROFIT, 60_000), (K.M_CUSTOMERS, 600), (K.M_BEAUTY, 40_000),
+                      (K.M_CALL_COUNT, 0)]:
+        _roll(b, 2026, 10, metric, round(v * mult))
+    return b
+
+
+def _snapshot(wb):
+    """Every cell's value/formula + number format, merged ranges and panes, per sheet."""
+    out = {}
+    for ws in wb.worksheets:
+        cells = {}
+        for row in ws.iter_rows():
+            for c in row:
+                if c.value is not None:
+                    cells[c.coordinate] = [c.value, c.number_format]
+        out[ws.title] = {'cells': cells,
+                         'merged': sorted(str(r) for r in ws.merged_cells.ranges),
+                         'freeze': ws.freeze_panes, 'rtl': bool(ws.sheet_view.rightToLeft)}
+    return out
+
+
+class KpiExportLayoutTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        # planted out of display order on purpose: the export must follow display_order
+        for i, (code, order) in enumerate(sorted(FIVE)):
+            _plant_branch(code, order, 1.0 + i * 0.15)
+        cc = Branch.objects.create(softech_branch_id='CC', code='CC', name='Call Center',
+                                   name_ar='الكول سنتر', kind=Branch.KIND_CALL_CENTER)
+        for (y, m, k) in [(2025, 10, 1.0), (2026, 9, 1.1), (2026, 8, 1.2)]:
+            _roll(cc, y, m, K.M_CASH_DELIVERY, round(200_000 * k))
+            _roll(cc, y, m, K.M_GROSS_PROFIT, round(40_000 * k))
+            _roll(cc, y, m, K.M_BEAUTY, round(20_000 * k))
+            _roll(cc, y, m, K.M_CUSTOMERS, round(500 * k))
+        for metric, v in [(K.M_CASH_DELIVERY, 75_000), (K.M_GROSS_PROFIT, 14_000),
+                          (K.M_BEAUTY, 6_000), (K.M_CUSTOMERS, 150), (K.M_CALL_COUNT, 900)]:
+            _roll(cc, 2026, 10, metric, v)
+
+    def _build(self):
+        return build_target_workbook(2026, 10, models=('a', 'b', 'avg'), days_elapsed=8)
+
+    def test_five_branch_export_identical_to_baseline(self):
+        snap = json.loads(json.dumps(_snapshot(self._build()), ensure_ascii=False))
+        if os.environ.get('KPI_GOLDEN_WRITE') == '1':      # regenerate only on purpose
+            GOLDEN.parent.mkdir(exist_ok=True)
+            GOLDEN.write_text(json.dumps(snap, ensure_ascii=False, indent=1, sort_keys=True),
+                              encoding='utf-8')
+        golden = json.loads(GOLDEN.read_text(encoding='utf-8'))
+        self.assertEqual(sorted(snap), sorted(golden))
+        for title in golden:
+            self.assertEqual(snap[title]['merged'], golden[title]['merged'], title)
+            self.assertEqual(snap[title]['freeze'], golden[title]['freeze'], title)
+            self.assertEqual(snap[title]['rtl'], golden[title]['rtl'], title)
+            self.assertEqual(snap[title]['cells'], golden[title]['cells'], title)
