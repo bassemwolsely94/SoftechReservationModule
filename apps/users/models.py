@@ -2,18 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 
 
-ROLE_CHOICES = [
-    ('admin',           'Admin — Full Access'),
-    ('call_center',     'Call Center — All Branches'),
-    ('pharmacist',      'Pharmacist — Own Branch'),
-    ('salesperson',     'Sales Person — Own Branch'),
-    ('purchasing',      'Purchasing — HQ Only'),
-    ('delivery',        'Delivery'),
-    ('viewer',          'Viewer — Read Only'),
-    ('supervisor',      'Supervisor — Call Center Supervisor'),
-    ('quality_manager', 'Quality Manager — QA & Scoring'),
-    ('accountant',      'Accountant — General Ledger'),
-]
+from .roles import ROLE_CHOICES, MFA_REQUIRED_ROLES  # noqa: F401 — re-exported, the registry is the source
 
 # Canonical module identifiers used by RoleModuleAccess
 MODULE_CHOICES = [
@@ -108,7 +97,7 @@ USER_ACTIVITY_ACTION_CHOICES = [
 # Roles that must pass 2FA at login once enforcement is switched on
 # (config SystemSetting key 'security.mfa_enforced'). These are the approval-
 # and pricing-capable roles reachable from outside the pharmacy network.
-MFA_REQUIRED_ROLES = frozenset({'admin', 'supervisor', 'purchasing'})
+# MFA_REQUIRED_ROLES now comes from apps.users.roles (imported at the top).
 
 
 class ERPUser(models.Model):
