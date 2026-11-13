@@ -15,9 +15,9 @@ vi.mock('../api/client', () => ({
   authApi: { roles: vi.fn(() => new Promise((res) => { resolveRoles = () => res({ data: { roles: ROLES } }) })) },
 }))
 
-const { default: useRoles, roleOptions } = await import('./useRoles')
+const { default: useRoles } = await import('./useRoles')
 
-const wrap = ({ children }) => {
+function Wrapper({ children }) {
   const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }))
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
@@ -26,7 +26,7 @@ afterEach(cleanup)
 
 describe('useRoles', () => {
   it('falls back to the key while loading, then labels from the registry', async () => {
-    const { result } = renderHook(() => useRoles(), { wrapper: wrap })
+    const { result } = renderHook(() => useRoles(), { wrapper: Wrapper })
     expect(result.current.roleLabel('admin')).toBe('admin')
     resolveRoles()
     await waitFor(() => expect(result.current.roles.length).toBe(4))
