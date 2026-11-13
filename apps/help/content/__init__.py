@@ -20,7 +20,7 @@ MODULE_FILES = [
     'callcenter', 'omni',
     'purchasing', 'invoices', 'pricing',
     'analytics', 'incentives',
-    'finance', 'insurance', 'commerce',
+    'finance', 'insurance', 'tax_invoicing', 'commerce',
     'hr',
     'data_health',
     'admin',

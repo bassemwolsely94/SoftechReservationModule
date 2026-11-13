@@ -414,7 +414,7 @@ SCREENS = [
             T('افتح «الجاهزية للإصدار» حتى لا يبقى خطأ، ثم اطبع من «طباعة وتصدير».', 'Open "Readiness to issue" until no error remains, then print from "Print & export".'),
         ],
         'tips': [T('التعديلات تؤثر على إجمالي المطالبة — الشاشة تطلب تأكيداً، وكلها قابلة للتراجع ومسجّلة.', 'Edits change the claim total — the screen asks for confirmation, and all are reversible and logged.')],
-        'related': ['insurance.print', 'insurance.item_overrides', 'insurance.separation_lists'],
+        'related': ['insurance.print', 'insurance.item_overrides', 'insurance.separation_lists', 'tax_invoicing.main'],
         'tour': [
             {'target': 'insurance-claim-kpis',
              'label': T('ملخص المطالبة', 'Claim summary'),
@@ -620,6 +620,10 @@ SCREENS = [
          },
         ],
         'hints': [
+            {'target': 'insurance-claim-fiscal-status', 'label': T('الوضع الضريبي', 'Tax status'),
+             'text': T('فاتورة المطالبة الضريبية وإشعاراتها وحالة كل منها، للعرض فقط. الرابط يفتح المستند لمن لديه صلاحية الفواتير الضريبية.',
+                       "The claim's tax invoice and notes with their status, read only. The link opens the document for those who hold tax invoicing."),
+             'open_hint': T('تحت اسم الجهة في أعلى المطالبة.', 'Under the payer name at the top of the claim.')},
             {'target': 'insurance-claim-rx-name-edit', 'label': T('✎', '✎'),
              'text': T('يفتح اسم المريض للتعديل من غير ما تفتح قفل البنود.', "Opens the patient name for editing without unlocking the lines."),
              'when': T('لاسم ناقص أو مكتوب غلط. الاسم بيتعدّل عندنا بس، واسم سوفتك محفوظ للاسترجاع.', 'For a short or misspelt name. It changes here only; the SOFTECH name is kept for revert.')},
@@ -856,7 +860,7 @@ SCREENS = [
              'open_hint': T('تبويب «تحليل البيانات»، بعد ظهور نتيجة.', 'The "Data analysis" tab, once a result shows.')},
         ],
         'updated': '2026-11-12',
-        'change_note': T('فئات الفوترة: بطاقات + جدول واحد، لا نقل صامت بين الفئات، الحذف يرجّع الروشتات فوراً؛ تصدير أصناف المطالبة Excel', 'Billing groups: cards + one grid, no silent moves between groups, deleting returns receipts at once; claim items Excel export'),
+        'change_note': T('فئات الفوترة: بطاقات + جدول واحد، لا نقل صامت بين الفئات، الحذف يرجّع الروشتات فوراً؛ تصدير أصناف المطالبة Excel؛ الوضع الضريبي للمطالبة يظهر الآن أعلى الشاشة', "Billing groups: cards + one grid, no silent moves between groups, deleting returns receipts at once; claim items Excel export; The claim's tax status now shows at the top of the screen"),
     },
     {
         'key': 'insurance.print',

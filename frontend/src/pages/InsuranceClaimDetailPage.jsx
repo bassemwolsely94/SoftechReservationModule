@@ -14,6 +14,7 @@ import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
 import DataTable from '../components/DataTable'
+import ClaimFiscalStatus from '../components/ClaimFiscalStatus'
 import { wildcardMatch } from '../utils/wildcard'
 import useGridKeyboard from '../hooks/useGridKeyboard'
 import useHelpTab from '../help/useHelpTab'
@@ -1893,6 +1894,7 @@ export default function InsuranceClaimDetailPage() {
             <p className="text-sm text-gray-500 mt-0.5">
               {claim.period_from} إلى {claim.period_to}
             </p>
+            <ClaimFiscalStatus claimId={claim.id} />
           </div>
           <div className="flex gap-2 items-center">
             {claim.is_locked && (

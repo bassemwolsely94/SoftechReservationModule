@@ -65,6 +65,7 @@ const InsuranceReportsPage = lazy(() => import('./pages/InsuranceReportsPage'))
 const MyIncentivesPage = lazy(() => import('./pages/MyIncentivesPage'))
 const GamificationPage = lazy(() => import('./pages/GamificationPage'))
 const StockAuditPage = lazy(() => import('./pages/StockAuditPage'))
+const TaxInvoicingPage = lazy(() => import('./pages/TaxInvoicingPage'))
 const HRAttendancePage = lazy(() => import('./pages/HRAttendancePage'))
 const DataHealthPage = lazy(() => import('./pages/DataHealthPage'))
 const PicAnalyticsPage = lazy(() => import('./pages/PicAnalyticsPage'))
@@ -484,6 +485,7 @@ export default function App() {
             <Route path="gamification"  element={<GamificationPage />} />
             {/* stock-transactions audit (doc 32): management + named branch managers — gated server-side */}
             <Route path="stock-audit"   element={<StockAuditPage />} />
+            <Route path="tax-invoicing" element={<TaxInvoicingPage />} />
 
             {/* ── Insurance Claims Module ───────────────────────────────── */}
             <Route path="insurance"                           element={<InsuranceClaimsPage />} />

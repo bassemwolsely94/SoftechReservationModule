@@ -31,8 +31,10 @@ class AccountantMatrixTests(TestCase):
 
     def test_code_matrix_is_the_decided_grant_and_nothing_else(self):
         # hr view + create: own leave and permit requests (owner 2026-11-06, users 0053)
+        # tax_invoicing: the accountant reviews tax documents, sending stays `finalize` (owner's tax
+        # invoicing brief 2026-11-07; the grant itself is on the open list in doc 36)
         self.assertEqual({m: a for m, a in PERMISSIONS['accountant'].items() if a},
-                         {**DECIDED, 'hr': {'view', 'create'}})
+                         {**DECIDED, 'hr': {'view', 'create'}, 'tax_invoicing': {'view', 'create', 'edit', 'approve'}})
 
     def test_only_admin_and_accountant_hold_ledger(self):
         holders = {r for r, mods in PERMISSIONS.items() if mods.get('ledger')}
@@ -42,10 +44,12 @@ class AccountantMatrixTests(TestCase):
         mig = importlib.import_module('apps.users.migrations.0051_accountant_explicit_denials')
         # 0051's list is frozen at 2026-11-04; modules added since get their explicit rows from
         # seed_permissions (hr_attendance: admin only, named grants, 2026-11-07) or their own migration
-        # (data_health: users 0055 seeds its accountant row).
+        # (data_health: users 0055 seeds its accountant row; tax_invoicing: its own migration 0002).
         later = importlib.import_module('apps.users.migrations.0055_data_health_module')
         self.assertIn('accountant', later.ROLES)
-        self.assertEqual(set(mig.MODULES) | {'hr_attendance', 'data_health'}, set(ALL_MODULES))
+        self.assertEqual(set(mig.MODULES) | {'hr_attendance', 'data_health', 'tax_invoicing'}, set(ALL_MODULES))
+        from apps.users.models import RoleModuleAccess
+        self.assertEqual(RoleModuleAccess.objects.filter(role='accountant', module='tax_invoicing').count(), len(ALL_ACTIONS))
         self.assertEqual(mig.ACTIONS, ALL_ACTIONS)
         self.assertEqual(mig.GRANTED, DECIDED)
 

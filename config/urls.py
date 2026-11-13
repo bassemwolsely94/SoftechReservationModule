@@ -70,6 +70,7 @@ urlpatterns = [
     path('api/help/',       include('apps.help.urls')),     # in-app help; edits gated by help/edit
     path('api/gamification/', include('apps.gamification.urls')),  # own data open; reports/config gated by gamification/*
     path('api/access/', include('apps.access.urls')),                # security N1 — network badge + trusted networks
+    path('api/tax-invoicing/', include('apps.tax_invoicing.urls')),   # doc 36 — RBAC tax_invoicing
     path('api/stock-audit/', include('apps.stock_audit.urls')),
     path('api/hr-attendance/', include('apps.hr.attendance.urls')),   # gated in apps/hr/attendance/access.py
     path('api/pic-analytics/', include('apps.pic_analytics.urls')),   # doc 33 — gated in apps/pic_analytics/access.py

@@ -61,6 +61,7 @@ MODULE_BY_PREFIX = {
     'hr': 'hr', 'qa': 'hr',
     'approvals': 'approvals', 'pricing-approvals': 'approvals',
     'insurance': 'insurance',
+    'tax-invoicing': 'tax_invoicing',   # doc 36; views check the same module action by action
     'replacement': 'replacement',
     'analytics': 'analytics', 'insights': 'analytics',
     'dashboard': 'dashboard',

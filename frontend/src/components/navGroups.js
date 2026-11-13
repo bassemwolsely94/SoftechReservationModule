@@ -126,6 +126,8 @@ export const NAV_GROUPS = [
       { to: '/payment-audit',  icon: '🏦', label: 'مراجعة الكشوف',  roles: ['admin','purchasing','pharmacist','quality_manager','accountant'] },
       { to: '/reconciliation', icon: '🔗', label: 'سداد الموردين',  roles: ['admin','purchasing','quality_manager','accountant'] },
       { to: '/insurance',      icon: '🏥', label: 'مطالبات التأمين', roles: ['admin','purchasing'] },
+      // Whoever holds module tax_invoicing (seed: admin, accountant); the server checks each action.
+      { to: '/tax-invoicing',  icon: '🧾', label: 'الفواتير الضريبية', roles: null, module: 'tax_invoicing' },
       { to: '/replacement',    icon: '🔁', label: 'بدل الروشتة',     roles: ['admin','supervisor','purchasing','quality_manager','pharmacist'] },
       { to: '/commerce',       icon: '🧩', label: 'المستندات التجارية', roles: ['admin','purchasing'] },
     ],

@@ -79,6 +79,7 @@ export const NAV_API = {
   '/payment-audit': '/api/payments/audit/statements/',
   '/reconciliation': '/api/finance/reconciliation/candidates/',
   '/insurance': '/api/insurance/claims/',
+  '/tax-invoicing': '/api/tax-invoicing/me/',
   '/replacement': '/api/replacement/cases/',
   '/commerce': '/api/commerce/status/',
   '/hr': '/api/hr/leave-requests/',

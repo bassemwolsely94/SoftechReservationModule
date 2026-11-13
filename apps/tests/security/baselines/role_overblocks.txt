@@ -698,6 +698,20 @@ call_center POST /api/pbx/extensions/webrtc/
 pharmacist POST /api/transits/987654321/force-close/
 salesperson POST /api/transits/987654321/force-close/
 supervisor POST /api/transits/987654321/force-close/
+# reason: doc 36 — the accountant works tax documents, but sending to the tax authority, signing, reconciling, issuer
+#   settings, documented bases and branch POS credentials need `finalize` (admin or a named grant, owner's open decision).
+accountant GET /api/tax-invoicing/signing/status/
+accountant PATCH /api/tax-invoicing/issuer/
+accountant POST /api/tax-invoicing/bases/
+accountant POST /api/tax-invoicing/bases/987654321/deactivate/
+accountant POST /api/tax-invoicing/documents/987654321/reconcile/
+accountant POST /api/tax-invoicing/documents/987654321/submit/
+accountant POST /api/tax-invoicing/receipts/branch/x/reconcile/
+accountant POST /api/tax-invoicing/receipts/branch/x/submit/
+accountant POST /api/tax-invoicing/receipts/configs/
+accountant POST /api/tax-invoicing/signing/smoke-test/
+accountant POST /api/tax-invoicing/signing-agent/next/
+accountant POST /api/tax-invoicing/signing-agent/jobs/987654321/result/
 
 # reason: data lifecycle Stage 5 (design 2026-11-07 §7) — supervisor and quality manager hold data_health view
 #   for Growth, Problems and the refresh only; the register, held files and their thumbnails are admin only

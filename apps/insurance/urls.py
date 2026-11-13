@@ -1,5 +1,6 @@
 from django.urls import path
 from rest_framework.routers import SimpleRouter
+from apps.tax_invoicing.views import claim_fiscal_status
 from .views import (
     InsuranceClientViewSet, InsuranceSubClientViewSet,
     InsuranceContractViewSet, InsuranceClaimViewSet,
@@ -22,6 +23,8 @@ router.register('item-overrides',  InsuranceItemClassificationOverrideViewSet, b
 router.register('separation-lists', InsuranceSeparationListViewSet, basename='insurance-separation-lists')
 
 urlpatterns = [
+    # Read-only link to the claim's tax documents (doc 36); the module itself is apps/tax_invoicing.
+    path('claims/<int:pk>/fiscal-status/', claim_fiscal_status, name='insurance-claim-fiscal-status'),
     path('sync-cache/', InsuranceCacheSyncView.as_view(), name='insurance-sync-cache'),
     path('rosters/', InsuranceRosterView.as_view(), name='insurance-rosters'),
     path('portfolio/', InsurancePortfolioView.as_view(), name='insurance-portfolio'),

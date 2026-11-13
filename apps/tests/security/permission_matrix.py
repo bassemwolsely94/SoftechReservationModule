@@ -66,6 +66,7 @@ BRANCH_SCOPE = {
     'hr_attendance': 'all — company-level by decision (2026-11-07): admins and named grantees only, never branch-scoped (apps/hr/attendance/access.py)',
     'gamification': 'n/a — own data; rankings are network-wide by design',
     'help':         'n/a — no branch data',
+    'tax_invoicing': 'all — fiscal documents belong to the taxpayer and a claim spans branches; RBAC module only (accountant, admin)',
     'ledger':       'all — finance GL is company-level: every /api/finance/gl/ endpoint refuses branch-scoped users (B-1)',
     'tasks':        'own + «جميع الفروع» + created / assigned to me; all-branch schedules read-only for branch roles',
     'data_health':  'all — company-level by nature; admin, supervisor and quality manager only',
