@@ -24,7 +24,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='employeeassignment',
             name='softech_usercode',
-            field=models.CharField(blank=True, max_length=40),
+            field=models.CharField(blank=True, db_default='', default='', max_length=40),
         ),
         migrations.AddField(
             model_name='employeeassignment',

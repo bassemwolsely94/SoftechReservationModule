@@ -570,7 +570,7 @@ class EmployeeAssignment(models.Model):
     section    = models.CharField(max_length=120, blank=True)
     # Identity snapshot: the SOFTECH user code and PBX extensions the person carried in this span,
     # so crew reports credit past work to the codes used then, not today's.
-    softech_usercode = models.CharField(max_length=40, blank=True)
+    softech_usercode = models.CharField(max_length=40, blank=True, default='', db_default='')
     pbx_extensions   = models.JSONField(default=list, db_default=[], blank=True)
     valid_from = models.DateField()
     valid_to   = models.DateField(null=True, blank=True)
