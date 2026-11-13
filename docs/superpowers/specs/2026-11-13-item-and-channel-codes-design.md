@@ -98,6 +98,9 @@ Verdict:
   `Customer.softech_ptclassifcode`, which is blank for 198,809 of 199,035 customers. Result:
   **every customer is classed 'home_delivery'** (the fall-through). The chronic task filter by
   customer type is therefore meaningless today.
+- A fifth copy found while checking: `Customer.customer_type_label` / `customer_type_color`
+  (`customers/models.py:184`) know only 90 / 91 / 15; every other channel shows as «عميل». It
+  switches to the reader in 5.1 too.
 
 ## 4. Item-category meanings — what the code says
 
