@@ -3,8 +3,8 @@ New-value flow test (branch classification piece 1, Task 7; spec §8).
 
 Plants HQ + the five retail branches + a 7th retail branch '230' + a pending '240' + a closed
 branch + the call center, then runs every export / report in apps/tests/new_value_registry.py:
-each must run, show the new live branch, and never show the pending, closed or call-center
-branch. Presence / absence only — column order is each export's own business (owner: ISR and
+each must run, show the new live branch, and never show the branches its entry lists as
+absent (pending, closed, call center — each entry its own set). Presence / absence only — column order is each export's own business (owner: ISR and
 pivot v2 keep code order).
 """
 import io
@@ -20,6 +20,9 @@ from apps.tests import new_value_registry
 from apps.tests.factories import make_admin, make_hq, make_item
 
 NEW, PENDING, CLOSED, CC = '230', '240', '180', 'CC'
+# registry tags (new_value_registry.PENDING / CLOSED / CALL_CENTER) → the planted branch code
+ABSENT_CODE = {new_value_registry.PENDING: PENDING, new_value_registry.CLOSED: CLOSED,
+               new_value_registry.CALL_CENTER: CC}
 RETAIL = [('160', 1), ('170', 2), ('140', 3), ('150', 4), ('130', 5), (NEW, 6)]
 
 
@@ -118,12 +121,24 @@ class NewValueFlowTests(TestCase):
         self.assertGreaterEqual(len(new_value_registry.EXPORTS), 6)
 
     def test_every_export_shows_the_new_branch_only_where_live(self):
-        for name, build in new_value_registry.EXPORTS:
+        for name, build, absent in new_value_registry.EXPORTS:
             with self.subTest(export=name):
                 texts = _texts(build())
                 self.assertTrue(_shows(texts, NEW), f'{name}: new live branch {NEW} missing')
-                for gone in (PENDING, CLOSED, CC):
-                    self.assertFalse(_shows(texts, gone), f'{name}: shows {gone}')
+                for tag in absent:
+                    gone = ABSENT_CODE[tag]
+                    self.assertFalse(_shows(texts, gone), f'{name}: shows {tag} branch {gone}')
+
+    def test_every_entry_declares_its_absent_set(self):
+        known = set(ABSENT_CODE)
+        for name, _build, absent in new_value_registry.EXPORTS:
+            with self.subTest(export=name):
+                self.assertIsInstance(absent, frozenset)
+                self.assertLessEqual(absent, known, f'{name}: unknown tag')
+        by_name = {n: a for n, _b, a in new_value_registry.EXPORTS}
+        # the KPI board has a call-center block by design; the picking sheet only checks presence
+        self.assertNotIn(new_value_registry.CALL_CENTER, by_name['kpi_export'])
+        self.assertEqual(by_name['transits_picking_sheet'], frozenset())
 
     def test_branch_list_default_scope(self):
         _, _, client = make_admin('new_value_admin')

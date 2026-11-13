@@ -268,7 +268,8 @@ def build_plan(branchcode, settings_data=None, *, max_lines=None):
     if branch is None:
         raise ValueError(f'الفرع {branchcode} غير موجود.')
     if str(branchcode) == _hq():
-        raise ValueError('طلب التوريد يكون لفرع، لا للرئيسي 100.')
+        # BL rule: name the HQ, never its bare code
+        raise ValueError(f'طلب التوريد يكون لفرع، لا للمركز الرئيسي ({branch.name_ar or branch.name}).')
     rows, hq, as_of = _read_softech(branch)
     items = _items(rows.keys(), st)
     transit, transit_days = by_branch_code(list(items), max_age=14)

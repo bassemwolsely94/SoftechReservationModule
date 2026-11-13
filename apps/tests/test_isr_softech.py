@@ -127,6 +127,16 @@ class ProposeApiTests(TestCase):
         self.addCleanup(p.stop)
         self.c = APIClient()
 
+    def test_hq_refusal_names_hq_not_its_code(self):
+        """BL rule: the refusal for an ISR to HQ shows HQ's name, never the bare code 100."""
+        from apps.branches.models import Branch
+        Branch.objects.filter(softech_branch_id='100').update(name_ar='المخزن المركزي')
+        with self.assertRaises(ValueError) as cm:
+            S.build_plan('100')
+        msg = str(cm.exception)
+        self.assertIn('المخزن المركزي', msg)
+        self.assertNotIn('100', msg)
+
     def test_needs_write_access(self):
         self.c.force_authenticate(_user('viewer'))
         self.assertEqual(self.c.post(self.URL, {'branch': '160'}, format='json').status_code, 403)

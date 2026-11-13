@@ -1,6 +1,9 @@
 """Sync creates new SOFTECH branches as `pending` and tells admins; existing
 branches' curated fields (kind, is_operational, pos_enabled, display_order) are
 never touched."""
+from unittest import mock
+
+from django.db import connection
 from django.test import TestCase, override_settings
 
 from apps.branches.models import Branch
@@ -36,6 +39,20 @@ class BranchSyncPendingTests(TestCase):
                                          recipient__user=self.admin)
         self.assertEqual(qs.count(), 1)
         self.assertEqual(qs.first().dedup_key, 'branch_pending:230')
+
+    def test_failed_notice_does_not_poison_the_sync(self):
+        """A database error inside the admin notice is rolled back to its own savepoint: the next
+        branch and the sync log still save."""
+        def broken_notice(*a, **kw):
+            with connection.cursor() as cur:
+                cur.execute('SELECT 1/0')
+
+        with mock.patch.object(Notification, 'send_to_admins', side_effect=broken_notice):
+            count = self._sync(('232', 'أ', 'A', 'x', 'y'), ('233', 'ب', 'B', 'x', 'y'))
+        self.assertEqual(count, 2)
+        self.assertTrue(Branch.objects.filter(softech_branch_id='233').exists())
+        from apps.sync.models import SyncLog
+        self.assertTrue(SyncLog.objects.filter(sync_run=self.run, table_name='branches').exists())
 
     def test_existing_branch_curated_fields_untouched(self):
         Branch.objects.create(softech_branch_id='231', name='Old', code='231',

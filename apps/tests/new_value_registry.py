@@ -3,11 +3,13 @@ apps/tests/new_value_registry.py
 
 Every per-branch export / report, run by apps/tests/test_new_values.py against planted data:
 HQ + the five retail branches + a 7th retail branch '230', a pending '240', a closed branch and
-the call center. Each must run without error, show '230', and never show the pending, closed
-or call-center branch (branch classification spec §8; CLAUDE.md "Security definition of done").
+the call center. Each must run without error, show '230', and never show the branches its entry
+lists as absent (branch classification spec §8; CLAUDE.md "Security definition of done").
 
 A new module with a per-branch export or report adds an entry here:
-    (name, zero-arg callable) -> bytes (a saved workbook) or dict / list (JSON)
+    (name, zero-arg callable, absent) — the callable returns bytes (a saved workbook) or
+    dict / list (JSON); absent = the frozenset of tags (PENDING / CLOSED / CALL_CENTER) whose
+    planted branch must never appear. Default ABSENT_ALL; narrow it only with a written reason.
 The callable may read anything test_new_values plants (Branch rows, BranchSettings, one Item,
 a successful DemandCalculationRun with metrics per branch, one in-transit transfer into '230').
 Never connect to SOFTECH: stub its reads (mock config.sybase / the module's reader).
@@ -35,6 +37,11 @@ def _get(path):
     if r.status_code != 200:
         raise AssertionError(f'{path} answered {r.status_code}: {getattr(r, "data", r.content[:300])}')
     return r.content if r.get('Content-Type', '').startswith('application/vnd') else r.json()
+
+
+# tags for the branches an entry must never show (test_new_values maps them to the planted codes)
+PENDING, CLOSED, CALL_CENTER = 'pending', 'closed', 'call_center'
+ABSENT_ALL = frozenset({PENDING, CLOSED, CALL_CENTER})
 
 
 # ── entries ─────────────────────────────────────────────────────────────────────
@@ -95,10 +102,12 @@ def analytics_branch_contribution():
 
 
 EXPORTS = [
-    ('kpi_export', kpi_export),
-    ('purchasing_pivot_v2', purchasing_pivot_v2),
-    ('isr_fulfillment_export', isr_fulfillment_export),
-    ('transits_picking_sheet', transits_picking_sheet),
-    ('stock_count_board', stock_count_board),
-    ('analytics_branch_contribution', analytics_branch_contribution),
+    # the KPI board has a call-center block by design: only pending / closed must be absent
+    ('kpi_export', kpi_export, frozenset({PENDING, CLOSED})),
+    ('purchasing_pivot_v2', purchasing_pivot_v2, ABSENT_ALL),
+    ('isr_fulfillment_export', isr_fulfillment_export, ABSENT_ALL),
+    # its branches come from the transfers passed in (only one, into '230'): presence only
+    ('transits_picking_sheet', transits_picking_sheet, frozenset()),
+    ('stock_count_board', stock_count_board, ABSENT_ALL),
+    ('analytics_branch_contribution', analytics_branch_contribution, ABSENT_ALL),
 ]

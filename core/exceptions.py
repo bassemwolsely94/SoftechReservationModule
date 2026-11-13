@@ -6,10 +6,13 @@ code 'softech_zone' (the frontend can tell it from an ordinary 403 / a 500). No 
 branch (branches.models.HQNotConfigured) answers 503 with code 'hq_not_configured'. Everything
 else goes to DRF's default handler, unchanged.
 """
+import logging
 import sys
 
 from rest_framework.response import Response
 from rest_framework.views import exception_handler, set_rollback
+
+logger = logging.getLogger(__name__)
 
 
 def is_softech_refusal(exc) -> bool:
@@ -39,6 +42,10 @@ def is_hq_not_configured(exc) -> bool:
 
 def api_exception_handler(exc, context):
     if is_hq_not_configured(exc):
+        # the view name and the branch count only — no request data, no secrets, no phones
+        view = (context or {}).get('view')
+        logger.warning('HQ not configured: %s answered 503 (%s)',
+                       type(view).__name__ if view is not None else 'unknown view', exc)
         set_rollback()     # no single kind=hq branch: a setup problem, not a crash
         return Response({'detail': HQ_NOT_CONFIGURED_MESSAGE, 'code': 'hq_not_configured'}, status=503)
     if is_softech_refusal(exc):

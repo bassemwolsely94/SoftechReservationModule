@@ -464,7 +464,8 @@ def sync_branches(conn, sync_run):
             # when no hq row exists yet — otherwise every hq_code() path would fail until an
             # admin classified it. Every other new branch arrives unclassified (pending): an
             # admin must classify it (hq / retail / closed) before it counts as live.
-            is_hq = bool(hq_setting) and code.strip() == hq_setting and                 not Branch.objects.filter(kind=Branch.KIND_HQ).exists()
+            is_hq = (bool(hq_setting) and code.strip() == hq_setting
+                     and not Branch.objects.filter(kind=Branch.KIND_HQ).exists())
             branch, created = Branch.objects.get_or_create(
                 softech_branch_id=code,
                 defaults={
@@ -480,14 +481,18 @@ def sync_branches(conn, sync_run):
             )
             if created and not is_hq:
                 try:
+                    from django.db import transaction
                     from apps.notifications.models import Notification
-                    Notification.send_to_admins(
-                        'branch_pending',
-                        '🏷️ فرع جديد بانتظار التصنيف',
-                        body=f'ظهر فرع جديد في السيرفر: {branch.name_ar or branch.name} '
-                             f'({branch.code}). صنّفه من إعدادات الفروع.',
-                        dedup_key=f'branch_pending:{branch.code}',
-                    )
+                    # own savepoint: a database error in the notice rolls back only the notice,
+                    # never the caller's transaction (the next branches and the SyncLog still save)
+                    with transaction.atomic():
+                        Notification.send_to_admins(
+                            'branch_pending',
+                            '🏷️ فرع جديد بانتظار التصنيف',
+                            body=f'ظهر فرع جديد في السيرفر: {branch.name_ar or branch.name} '
+                                 f'({branch.code}). صنّفه من إعدادات الفروع.',
+                            dedup_key=f'branch_pending:{branch.code}',
+                        )
                 except Exception as exc:  # never break the sync over a notice
                     logger.warning('branch_pending notification failed: %s', exc)
             if not created:

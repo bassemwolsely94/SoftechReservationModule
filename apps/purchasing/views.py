@@ -1097,30 +1097,31 @@ def shortage_overlay_label(item):
 
 def _export_xlsx_pivot_v2(run, request, filename):
     """
-    129-column pivot export matching the reference Excel:
+    Pivot export matching the reference Excel:
     "اولوية النواقص لكل فرع ب 3 معدلات سنوى — DataModel"
 
-    Item info now carries 4 classification LABELS (نوع الدواء / الشكل الصيدلى /
+    Item info carries 4 classification LABELS (نوع الدواء / الشكل الصيدلى /
     الشكل والوحدة / تصنيف الخصم) and every branch block carries a بضاعة-بالطريق
     (in-transit) column right after الرصيد-الحالى.
 
-    Branches = Branch.objects.live(): the HQ (kind=hq) block comes first, then one block
-    per live retail branch in code order — a newly classified branch gets its own
-    block, % / rank columns, with no code change. Reference layout (HQ + 5 retail = 138 cols):
-      [  0-12]  Item info          (13 cols — 4 classification labels)
-      [ 13-18]  HQ branch          (6 cols — +in-transit, no coverage/priority)
-      [ 19-58]  Retail branches    (8 cols each — +in-transit)
-      [ 59-64]  Network totals     (6 cols — +in-transit)
-      [ 56-61]  % of total stock   (6 cols — one per branch)
-      [ 62-67]  Rank by rate DESC  (6 cols — cross-branch rank per item)
-      [ 68-72]  Rank coverage ASC  (one per retail branch)
-      [ 73-77]  Rank deficit DESC  (one per retail branch)
-      [ 78-85]  Summary calcs      (8 cols)
-      [ 86-119] Empty placeholders (29 cols)
+    Branch order (owner 2026-10-05): HQ first — found by kind=hq, never by a literal
+    code — then every live retail branch by numeric branch code (130, 140, 150, 160,
+    170, …; isr_fulfillment.branch_column_order). Not display_order. A newly classified
+    retail branch gets its own block, % and rank columns, with no code change; pending,
+    closed and call-center branches never appear.
 
-    Seasonality (5 cols) sits right after the item info, before branch 100: this month's
-    index + stable flag, next month's index + stable flag, the note — info only, never
-    changes الفرق.
+    Layout, left to right (widths grow with the number of live retail branches):
+      Item info           (22 cols — incl. 4 classification labels and flag columns)
+      Seasonality         (5 cols — this/next month index + stable flag, note; info
+                           only, never changes الفرق)
+      HQ branch           (6 cols — +in-transit, no coverage/priority)
+      Retail branches     (8 cols each — +in-transit)
+      Network totals      (6 cols — +in-transit)
+      % of total stock    (one per branch, HQ included)
+      Rank by rate DESC   (one per branch — cross-branch rank per item)
+      Rank coverage ASC   (one per retail branch)
+      Rank deficit DESC   (one per retail branch)
+      Summary calcs, then empty placeholders
 
     Ranks are cross-branch per item (e.g. Rank 1 = branch with highest rate
     for this item), NOT cross-item within a branch.

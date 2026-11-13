@@ -40,6 +40,16 @@ class HqNotConfiguredTests(TestCase):
         self.assertEqual(r.data, {'detail': HQ_MESSAGE, 'code': 'hq_not_configured'})
         rollback.assert_called_once_with()
 
+    def test_503_logs_a_warning_naming_the_view(self):
+        class ClosingStockStoresView:
+            pass
+        with self.assertLogs('core.exceptions', level='WARNING') as logs:
+            api_exception_handler(HQNotConfigured('Expected exactly one Branch with kind=hq, found 0.'),
+                                  {'view': ClosingStockStoresView()})
+        self.assertEqual(len(logs.output), 1)
+        self.assertIn('ClosingStockStoresView', logs.output[0])
+        self.assertIn('found 0', logs.output[0])
+
     def test_other_improperly_configured_is_not_mapped(self):
         self.assertIsNone(api_exception_handler(ImproperlyConfigured('x'), {}))
 
