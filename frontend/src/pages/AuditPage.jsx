@@ -11,6 +11,7 @@ import useHelpTab from '../help/useHelpTab'
 import ScreenUsageTab from '../components/ScreenUsageTab'
 import SortTh from '../components/SortTh'
 import useServerSort from '../hooks/useServerSort'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 
 const LOG_SORT_KEYS = ['action', 'user_name', 'model_name', 'created_at']
 
@@ -29,6 +30,10 @@ const FLAG_STATUS_CFG = {
   dismissed: { label: 'تم التجاهل',     bg: '#f9fafb', text: '#6b7280' },
   escalated: { label: 'تم التصعيد',     bg: '#f5f3ff', text: '#5b21b6' },
 }
+
+const SEVERITY_OPTIONS = [
+  { code: 'critical', name: 'حرج' }, { code: 'warning', name: 'تحذير' }, { code: 'info', name: 'معلومة' },
+]
 
 const ACTION_ICONS = {
   reservation_created:        '📋',
@@ -123,7 +128,7 @@ function AuditLogRow({ log, onExpand, expanded }) {
 // ── Audit Logs Tab ────────────────────────────────────────────────────────────
 
 function AuditLogsTab() {
-  const [filters, setFilters]   = useState({ action: '', search: '' })
+  const [filters, setFilters]   = useState({ action: [], search: '' })   // action: multi-select (none = all)
   const [expanded, setExpanded] = useState(null)
   const [ordering, setOrdering] = useState('')      // server-side: the list is a paged top-100
   const { headerProps } = useServerSort(ordering, setOrdering, { allowed: LOG_SORT_KEYS })
@@ -131,7 +136,7 @@ function AuditLogsTab() {
   const { data: logs = [], isLoading } = useQuery({
     queryKey: ['audit-logs', filters, ordering],
     queryFn:  () => auditApi.logs({
-      action: filters.action || undefined,
+      action: filters.action.length ? filters.action.join(',') : undefined,
       search: filters.search || undefined,
       ordering: ordering || undefined,
       page_size: 100,
@@ -140,14 +145,13 @@ function AuditLogsTab() {
   })
 
   const ACTION_FILTERS = [
-    { value: '',                          label: 'الكل' },
-    { value: 'reservation_created',       label: 'إنشاء حجوزات' },
-    { value: 'reservation_status_changed',label: 'تغيير حالة' },
-    { value: 'reservation_cancelled',     label: 'إلغاء حجوزات' },
-    { value: 'transfer_approved',         label: 'اعتماد تحويلات' },
-    { value: 'user_login',                label: 'دخول مستخدمين' },
-    { value: 'user_login_failed',         label: 'محاولات دخول فاشلة' },
-    { value: 'sync_completed',            label: 'مزامنة' },
+    { code: 'reservation_created',       name: 'إنشاء حجوزات' },
+    { code: 'reservation_status_changed',name: 'تغيير حالة' },
+    { code: 'reservation_cancelled',     name: 'إلغاء حجوزات' },
+    { code: 'transfer_approved',         name: 'اعتماد تحويلات' },
+    { code: 'user_login',                name: 'دخول مستخدمين' },
+    { code: 'user_login_failed',         name: 'محاولات دخول فاشلة' },
+    { code: 'sync_completed',            name: 'مزامنة' },
   ]
 
   return (
@@ -160,14 +164,11 @@ function AuditLogsTab() {
           value={filters.search}
           onChange={e => setFilters(p => ({ ...p, search: e.target.value }))}
         />
-        <select className="input-field w-52 text-sm" value={filters.action}
-          onChange={e => setFilters(p => ({ ...p, action: e.target.value }))}>
-          {ACTION_FILTERS.map(f => (
-            <option key={f.value} value={f.value}>{f.label}</option>
-          ))}
-        </select>
+        <MultiSelectFilter className="w-52" showCode={false} allLabel="الكل"
+          options={ACTION_FILTERS} selected={filters.action}
+          onChange={v => setFilters(p => ({ ...p, action: v }))} />
         <button className="btn-secondary text-sm"
-          onClick={() => setFilters({ action: '', search: '' })}>
+          onClick={() => setFilters({ action: [], search: '' })}>
           مسح
         </button>
       </div>
@@ -302,7 +303,7 @@ function ReviewModal({ flag, onClose, onSaved }) {
 
 function AbuseFlagsTab() {
   const qc = useQueryClient()
-  const [filters, setFilters]     = useState({ status: 'open', severity: '' })
+  const [filters, setFilters]     = useState({ status: 'open', severity: [] })   // severity: multi-select
   const [reviewing, setReviewing] = useState(null)
   const [scanning, setScanning]   = useState(false)
 
@@ -316,7 +317,7 @@ function AbuseFlagsTab() {
     queryKey: ['abuse-flags', filters],
     queryFn:  () => auditApi.flags({
       status:   filters.status   || undefined,
-      severity: filters.severity || undefined,
+      severity: filters.severity.length ? filters.severity.join(',') : undefined,
       page_size: 100,
     }).then(r => r.data.results || r.data),
     refetchInterval: 60_000,
@@ -376,13 +377,9 @@ function AbuseFlagsTab() {
             </button>
           ))}
         </div>
-        <select className="input-field w-36 text-sm" value={filters.severity}
-          onChange={e => setFilters(p => ({ ...p, severity: e.target.value }))}>
-          <option value="">كل الخطورة</option>
-          <option value="critical">حرج</option>
-          <option value="warning">تحذير</option>
-          <option value="info">معلومة</option>
-        </select>
+        <MultiSelectFilter className="w-36" showCode={false} allLabel="كل الخطورة"
+          options={SEVERITY_OPTIONS} selected={filters.severity}
+          onChange={v => setFilters(p => ({ ...p, severity: v }))} />
         <div className="flex-1" />
         <button data-tour="admin-audit-scan" onClick={runScan} disabled={scanning}
           className="btn-secondary text-sm disabled:opacity-50">

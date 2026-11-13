@@ -13,6 +13,7 @@ import { glApi } from '../../../api/client'
 import { usePermissions } from '../../../hooks/usePermission'
 import useSortableRows from '../../../hooks/useSortableRows'
 import SortTh from '../../../components/SortTh'
+import MultiSelectFilter from '../../../components/MultiSelectFilter'
 import { SkeletonTable, EmptyState } from '../../../components/ui'
 import {
   OPENING_DATE, money, errOf, listOf, todayIso, NATURE, SECTION,
@@ -172,7 +173,7 @@ export default function GLAccountsPage() {
   const perms = usePermissions('ledger')
   const [view, setView] = useState('tree')
   const [q, setQ] = useState('')
-  const [group, setGroup] = useState('')
+  const [group, setGroup] = useState([])     // multi-select group ids (none ticked = all)
   const [active, setActive] = useState('true')
   const [editing, setEditing] = useState(null)
   const [collapsed, setCollapsed] = useState({})
@@ -185,7 +186,7 @@ export default function GLAccountsPage() {
   })
   const accountsQ = useQuery({
     queryKey: ['gl', 'accounts', dq, group, active],
-    queryFn: () => glApi.accounts({ q: dq || undefined, group: group || undefined, active: active || undefined, page_size: 2000 })
+    queryFn: () => glApi.accounts({ q: dq || undefined, group: group.length ? group.join(',') : undefined, active: active || undefined, page_size: 2000 })
       .then(r => listOf(r.data)),
     placeholderData: (prev) => prev,
   })
@@ -249,10 +250,8 @@ export default function GLAccountsPage() {
         </div>
         <input className={`${inputCls} w-64`} placeholder="بحث بالكود أو الاسم (* أو % للبدل)" value={q}
                onChange={e => setQ(e.target.value)} />
-        <select className={inputCls} value={group} onChange={e => setGroup(e.target.value)}>
-          <option value="">كل المجموعات</option>
-          {(groupsQ.data || []).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-        </select>
+        <MultiSelectFilter className="w-[180px]" showCode={false} allLabel="كل المجموعات" menuClassName="min-w-[240px]"
+          options={(groupsQ.data || []).map(g => ({ code: g.id, name: g.name }))} selected={group} onChange={setGroup} />
         <select className={inputCls} value={active} onChange={e => setActive(e.target.value)}>
           <option value="true">النشطة</option>
           <option value="false">الموقوفة</option>

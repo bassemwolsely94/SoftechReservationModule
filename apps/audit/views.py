@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 
 from core.permissions import MatrixPermission
+from core.multi_filter import filter_in, multi_values
 from core.stable_ordering import StableOrderingMixin
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
@@ -36,7 +37,7 @@ class AuditLogViewSet(StableOrderingMixin, viewsets.ReadOnlyModelViewSet):
     rbac_module        = 'audit'               # any object's trail = audit view (Batch 4, Z-4)
     rbac_actions       = {None: ()}            # a method the route lacks: DRF answers 405
     filter_backends    = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields   = ['action', 'model_name', 'user']
+    filterset_fields   = ['model_name', 'user']     # action: multi-select, see filter_queryset
     search_fields      = ['user_name', 'object_repr', 'note']
     # Grid headers (AuditPage): action code, who, entity type, when. Nothing from `changes` / `ip_address`.
     ordering_fields    = ['created_at', 'action', 'user_name', 'model_name']
@@ -50,6 +51,12 @@ class AuditLogViewSet(StableOrderingMixin, viewsets.ReadOnlyModelViewSet):
                 return AuditLog.objects.filter(user=profile)
             return AuditLog.objects.none()
         return AuditLog.objects.select_related('user__user')
+
+    def filter_queryset(self, queryset):
+        # action takes one value or several (?action=user_login,user_login_failed); applied after the
+        # own-trail scope in get_queryset, so it can only narrow what the viewer may see.
+        qs = super().filter_queryset(queryset)
+        return filter_in(qs, 'action', multi_values(self.request.query_params, 'action'))
 
     @action(detail=False, methods=['get'], url_path='for-object')
     def for_object(self, request):
@@ -91,7 +98,7 @@ class AbuseFlagViewSet(viewsets.ReadOnlyModelViewSet):
     rbac_actions       = {'review': ('approve', 'edit'), 'run_detection': ('create', 'edit'),
                           None: ()}          # a method the route lacks: DRF answers 405
     filter_backends    = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields   = ['flag_type', 'severity', 'status', 'staff']
+    filterset_fields   = ['flag_type', 'status', 'staff']     # severity: multi-select, see filter_queryset
     ordering_fields    = ['detected_at', 'severity']
     ordering           = ['-detected_at']
 
@@ -99,6 +106,11 @@ class AbuseFlagViewSet(viewsets.ReadOnlyModelViewSet):
         if not _is_admin(self.request):
             return AbuseFlag.objects.none()
         return AbuseFlag.objects.select_related('staff__user', 'reviewed_by__user')
+
+    def filter_queryset(self, queryset):
+        # severity takes one value or several (?severity=critical,warning); none = every severity
+        qs = super().filter_queryset(queryset)
+        return filter_in(qs, 'severity', multi_values(self.request.query_params, 'severity'))
 
     def get_serializer_class(self):
         if self.action == 'list':

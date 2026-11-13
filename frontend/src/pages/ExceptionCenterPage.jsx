@@ -16,6 +16,7 @@ import { Badge, MetricChip, ErrorState, Icon } from '../pos/design'
 import WhatsAppShareButton from '../components/WhatsAppShareButton'
 import SortTh from '../components/SortTh'
 import useSortableRows from '../hooks/useSortableRows'
+import BranchMultiSelect from '../components/BranchMultiSelect'
 
 const money = (v) => `${Number(v || 0).toLocaleString('en-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م`
 const fmtAge = (min) => {
@@ -115,7 +116,8 @@ function RankTable({ rows, cols, rowKey, empty }) {
 
 export default function ExceptionCenterPage() {
   const qc = useQueryClient()
-  const [branch, setBranch] = useState('')
+  // branch filter: several branches (pk); none ticked = all the user may see
+  const [branchIds, setBranchIds] = useState([])
   const [busy, setBusy] = useState('')
   const [detailId, setDetailId] = useState(null)
 
@@ -125,10 +127,18 @@ export default function ExceptionCenterPage() {
     staleTime: 600000,
   })
   const branches = branchList?.results || branchList || []
+  // the trends mirror is keyed by SOFTECH branch code, not pk
+  const branchCodes = branchIds
+    .map(id => branches.find(b => b.id === id))
+    .map(b => String(b?.softech_branch_id ?? b?.code ?? '').trim())
+    .filter(Boolean)
+  // the live «المبيعات غير المخزنة» read is per branch: it shows only when exactly one is ticked
+  const singleBranch = branchIds.length === 1 ? branchIds[0] : ''
 
   const { data, isLoading, error, refetch, isFetching } = useQuery({
-    queryKey: ['pos-exceptions', branch],
-    queryFn: async () => (await api.get('/pos-orders/exceptions/', { params: branch ? { branch } : {} })).data,
+    queryKey: ['pos-exceptions', branchIds],
+    queryFn: async () => (await api.get('/pos-orders/exceptions/',
+                          { params: branchIds.length ? { branch: branchIds.join(',') } : {} })).data,
     refetchInterval: 30000,   // manager board — refresh every 30s
   })
 
@@ -161,11 +171,8 @@ export default function ExceptionCenterPage() {
             <MetricChip icon="trending" label="قيمة معرّضة للخطر" value={money(data?.total_value_at_risk)}
                         tone={data?.total_value_at_risk > 0 ? 'warn' : 'ok'} />
           </div>
-          <select value={branch} onChange={e => setBranch(e.target.value)} data-tour="pos-exceptions-branch"
-                  className="px-2 py-1.5 rounded border text-sm bg-white">
-            <option value="">كل الفروع</option>
-            {branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
-          </select>
+          <BranchMultiSelect branches={branches} selected={branchIds} onChange={setBranchIds}
+                             dataTour="pos-exceptions-branch" />
           <button data-tour="pos-exceptions-refresh" onClick={() => refetch()} disabled={isFetching}
                   className="px-3 py-1.5 rounded border text-sm flex items-center gap-1 disabled:opacity-50">
             <Icon name="repeat" size={14} /> {isFetching ? 'تحديث…' : 'تحديث'}
@@ -223,8 +230,8 @@ export default function ExceptionCenterPage() {
         </p>
       )}
 
-      <LostSalesTrendsPanel branch={branch} />
-      <LostSalesPanel branch={branch} />
+      <LostSalesTrendsPanel branchCodes={branchCodes} filtered={branchIds.length > 0} />
+      <LostSalesPanel branch={singleBranch} several={branchIds.length > 1} />
 
       {detailId && <OrderDetailDrawer id={detailId} onClose={() => setDetailId(null)} />}
     </div>
@@ -232,13 +239,14 @@ export default function ExceptionCenterPage() {
 }
 
 /** Historical lost-sale TRENDS from the PosCancelDaily mirror — cross-branch by default (or the
- *  selected branch), over a longer window with a daily chart. Fast PG read; no branch required. */
-function LostSalesTrendsPanel({ branch }) {
+ *  ticked branches), over a longer window with a daily chart. Fast PG read; no branch required. */
+function LostSalesTrendsPanel({ branchCodes, filtered }) {
   const [days, setDays] = useState(30)
   const { data, isLoading, error } = useQuery({
-    queryKey: ['pos-lost-trends', branch, days],
+    queryKey: ['pos-lost-trends', branchCodes, filtered, days],
+    // ticked branches whose codes are not loaded yet send a no-match code instead of "all"
     queryFn: async () => (await api.get('/pos-orders/lost-sales-trends/',
-                          { params: { days, ...(branch ? { branch } : {}) } })).data,
+                          { params: { days, ...(filtered ? { branch: branchCodes.join(',') || '-' } : {}) } })).data,
   })
   const s = data?.summary
   const daily = data?.daily || []
@@ -247,7 +255,7 @@ function LostSalesTrendsPanel({ branch }) {
     <section className="border rounded-lg overflow-hidden" data-tour="pos-exceptions-trends">
       <header className="flex items-center justify-between px-3 py-2 bg-sky-50 border-b border-sky-200">
         <div className="flex items-center gap-2">
-          <Badge tone="info" icon="trending" label={`اتجاه الفرص الضائعة (تاريخى${branch ? '' : ' — كل الفروع'})`} />
+          <Badge tone="info" icon="trending" label={`اتجاه الفرص الضائعة (تاريخى${filtered ? '' : ' — كل الفروع'})`} />
           <span className="text-xs text-gray-500">من المرآة اليومية pos_cancel — يُحدَّث ليلاً</span>
         </div>
         <select value={days} onChange={e => setDays(Number(e.target.value))}
@@ -324,7 +332,7 @@ function LostSalesTrendsPanel({ branch }) {
 
 /** Lost-sales / «المبيعات غير المخزنة» — read-only aggregates from SOFTECH pos_cancel for one branch:
  *  items customers asked about but weren't sold, and cancellations by cashier. Needs a branch selected. */
-function LostSalesPanel({ branch }) {
+function LostSalesPanel({ branch, several }) {
   const [days, setDays] = useState(14)
   const { data, isLoading, error } = useQuery({
     queryKey: ['pos-lost-sales', branch, days],
@@ -334,7 +342,9 @@ function LostSalesPanel({ branch }) {
   if (!branch) {
     return (
       <section className="border rounded-lg p-4 bg-gray-50 text-sm text-gray-500 flex items-center gap-2" data-tour="pos-exceptions-lost">
-        <Icon name="search" size={16} /> اختر فرعًا بالأعلى لعرض «المبيعات غير المخزنة» (الأصناف المطلوبة ولم تُبَع + الإلغاءات).
+        <Icon name="search" size={16} /> {several
+          ? 'علّم فرعًا واحدًا فقط بالأعلى لعرض «المبيعات غير المخزنة» — هذا السجل يُقرأ من سيرفر الفرع مباشرة.'
+          : 'اختر فرعًا بالأعلى لعرض «المبيعات غير المخزنة» (الأصناف المطلوبة ولم تُبَع + الإلغاءات).'}
       </section>
     )
   }

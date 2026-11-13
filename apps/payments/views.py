@@ -10,6 +10,7 @@ from rest_framework import filters, generics, status
 from rest_framework.decorators import api_view, parser_classes, permission_classes
 
 from core import branch_scope
+from core.multi_filter import filter_in, multi_ids, multi_values
 from core.permissions import matrix_permission
 
 # External payments sit in the finance module (Batch 4, Z-3): read = view, record = create,
@@ -57,17 +58,15 @@ class ExternalPaymentListView(branch_scope.BranchScopedMixin, generics.ListCreat
             'branch', 'customer', 'created_by', 'confirmed_by'
         ).prefetch_related('reconciliation_logs'), self.request.user)
 
-        method       = self.request.query_params.get('method')
-        pay_status   = self.request.query_params.get('status')
-        branch       = self.request.query_params.get('branch')
-        payment_date = self.request.query_params.get('payment_date')
+        p            = self.request.query_params
+        payment_date = p.get('payment_date')
 
-        if method:
-            qs = qs.filter(method=method)
-        if pay_status:
-            qs = qs.filter(status=pay_status)
-        if branch:
-            qs = qs.filter(branch_id=branch)
+        # method / status / branch take one value or several (?status=pending,disputed); they run
+        # after the branch scope above, so they only narrow it (junk branch ids alone match nothing)
+        qs = filter_in(qs, 'method', multi_values(p, 'method'))
+        qs = filter_in(qs, 'status', multi_values(p, 'status'))
+        if p.get('branch'):
+            qs = filter_in(qs, 'branch_id', multi_ids(p, 'branch') or [0])
         if payment_date:
             qs = qs.filter(payment_date=payment_date)
         return qs

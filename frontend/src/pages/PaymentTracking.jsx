@@ -6,6 +6,8 @@ import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { paymentsApi, branchesApi } from '../api/client'
 import RefreshButton from '../components/RefreshButton'
+import MultiSelectFilter from '../components/MultiSelectFilter'
+import BranchMultiSelect from '../components/BranchMultiSelect'
 
 const fmt   = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const today = () => new Date().toISOString().slice(0, 10)
@@ -26,6 +28,10 @@ const STATUS_CONFIG = {
   disputed:   { label: 'متنازع',     color: 'bg-red-100 text-red-700',      dot: 'bg-red-500'    },
   cancelled:  { label: 'ملغي',       color: 'bg-gray-100 text-gray-400',    dot: 'bg-gray-300'   },
 }
+
+// multi-select filter options ({code, name})
+const METHOD_OPTIONS = Object.entries(METHOD_CONFIG).map(([code, c]) => ({ code, name: `${c.icon} ${c.label}` }))
+const STATUS_OPTIONS = Object.entries(STATUS_CONFIG).map(([code, c]) => ({ code, name: c.label }))
 
 function MethodBadge({ method }) {
   const c = METHOD_CONFIG[method] || METHOD_CONFIG.other
@@ -294,9 +300,10 @@ function PaymentRow({ payment, onConfirm, onDispute }) {
 // ── Main ─────────────────────────────────────────────────────────────────────────
 export default function PaymentTracking() {
   const qc = useQueryClient()
-  const [methodFilter,    setMethodFilter]    = useState('')
-  const [statusFilter,    setStatusFilter]    = useState('')
-  const [branchFilter,    setBranchFilter]    = useState('')
+  // method / status / branch filters are multi-select arrays (none ticked = all)
+  const [methodFilter,    setMethodFilter]    = useState([])
+  const [statusFilter,    setStatusFilter]    = useState([])
+  const [branchFilter,    setBranchFilter]    = useState([])
   const [dateFrom,        setDateFrom]        = useState(daysAgo(7))
   const [dateTo,          setDateTo]          = useState(today())
   const [dateExact,       setDateExact]       = useState('')
@@ -321,9 +328,9 @@ export default function PaymentTracking() {
   })
 
   const params = {
-    ...(methodFilter          ? { method: methodFilter }               : {}),
-    ...(statusFilter          ? { status: statusFilter }               : {}),
-    ...(branchFilter          ? { branch: branchFilter }               : {}),
+    ...(methodFilter.length   ? { method: methodFilter.join(',') }     : {}),
+    ...(statusFilter.length   ? { status: statusFilter.join(',') }     : {}),
+    ...(branchFilter.length   ? { branch: branchFilter.join(',') }     : {}),
     ...(search                ? { search }                             : {}),
     ...(dateExact             ? { date_exact: dateExact }              : { date_from: dateFrom, date_to: dateTo }),
     ...(hourFrom !== ''       ? { hour_from: hourFrom }                : {}),
@@ -416,31 +423,18 @@ export default function PaymentTracking() {
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">طريقة الدفع</label>
-            <select value={methodFilter} onChange={e => setMethodFilter(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-400 focus:outline-none">
-              <option value="">الكل</option>
-              {Object.entries(METHOD_CONFIG).map(([k, c]) => (
-                <option key={k} value={k}>{c.icon} {c.label}</option>
-              ))}
-            </select>
+            <MultiSelectFilter className="w-[160px]" showCode={false} allLabel="الكل"
+              options={METHOD_OPTIONS} selected={methodFilter} onChange={setMethodFilter} />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">الحالة</label>
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-400 focus:outline-none">
-              <option value="">الكل</option>
-              {Object.entries(STATUS_CONFIG).map(([k, c]) => (
-                <option key={k} value={k}>{c.label}</option>
-              ))}
-            </select>
+            <MultiSelectFilter className="w-[150px]" showCode={false} allLabel="الكل"
+              options={STATUS_OPTIONS} selected={statusFilter} onChange={setStatusFilter} />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">الفرع</label>
-            <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-400 focus:outline-none">
-              <option value="">الكل</option>
-              {branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
-            </select>
+            <BranchMultiSelect className="w-[180px]" branches={branches} allLabel="الكل"
+              selected={branchFilter} onChange={setBranchFilter} />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">بحث</label>
