@@ -1,7 +1,7 @@
 # Piece 4 — item and channel codes: SOFTECH findings and design addendum
 
-Date: 2026-11-13 · Status: **awaiting owner confirmation of the meaning tables (§3, §4) — no code
-changed yet** · Parent design: `2026-11-13-branch-classification-and-crews-design.md` §7 piece 4.
+Date: 2026-11-13 · Status: **approved by owner 2026-11-13** — §6 questions 1–5 all answered
+"yes" as proposed · Parent design: `2026-11-13-branch-classification-and-crews-design.md` §7 piece 4.
 
 ## 1. What piece 4 fixes
 
@@ -194,3 +194,11 @@ to `AuditLog` (before/after). Server-side permission (RBAC module per CLAUDE.md 
    code (e.g. 70 services, 00 N A) to exclude too?
 5. **POS writer:** confirm we leave `pos_orders/models.py` / `writer.py` untouched and only add the
    drift guard test (recommended).
+
+## 7. Owner decisions (2026-11-13)
+
+1. Yes — SOFTECH's labels are the meanings (10 contract/آجل, 11 employees, 30 permanent, …).
+2. Yes — 33 joins the بدل الروشتة contract set (10, 11, 15, 17, 33).
+3. Yes — follow-up rank: 1 = 91, 90; 2 = 30, 99; 3 = 10, 33, 11, 12; 4 = 15, 16, 17, 31.
+4. Yes — 10 = medicine, 60 = excluded from planning; 70 and 00 stay as they are.
+5. Yes — `pos_orders/models.py` and `writer.py` stay untouched; only a drift-guard test is added.
