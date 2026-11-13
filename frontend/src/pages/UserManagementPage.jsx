@@ -59,7 +59,7 @@ function StatusBadge({ isActive }) {
 
 const FIELD_LABELS = { alerts_only: 'تنبيهات فقط', phone_alerts_enabled: 'تنبيهات الموبايل' }
 
-function UserDrawer({ user, branches, onClose, onSaved }) {
+export function UserDrawer({ user, branches, onClose, onSaved }) {
   const { roles } = useRoles()
   const isEdit = Boolean(user)
   const qc = useQueryClient()

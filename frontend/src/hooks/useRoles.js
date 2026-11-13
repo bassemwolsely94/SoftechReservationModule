@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { authApi } from '../api/client'
 
@@ -10,18 +11,20 @@ export default function useRoles() {
     queryFn: () => authApi.roles().then((r) => r.data?.roles || []),
     staleTime: Infinity,
   })
-  const roles = data || []
-  const byKey = Object.fromEntries(roles.map((r) => [r.value, r]))
-  const roleLabel = (key, lang = 'ar') => {
-    const r = byKey[key]
-    return r ? (lang === 'en' ? r.label_en : r.label_ar) : key
-  }
-  // for bilingual screens that already hold a t(ar, en) helper
-  const roleLabelT = (key, t) => {
-    const r = byKey[key]
-    return r ? t(r.label_ar, r.label_en) : key
-  }
-  return { roles, roleLabel, roleLabelT, isLoading }
+  return useMemo(() => {
+    const roles = data || []
+    const byKey = Object.fromEntries(roles.map((r) => [r.value, r]))
+    const roleLabel = (key, lang = 'ar') => {
+      const r = byKey[key]
+      return r ? (lang === 'en' ? r.label_en : r.label_ar) : key
+    }
+    // for bilingual screens that already hold a t(ar, en) helper
+    const roleLabelT = (key, t) => {
+      const r = byKey[key]
+      return r ? t(r.label_ar, r.label_en) : key
+    }
+    return { roles, roleLabel, roleLabelT, isLoading }
+  }, [data, isLoading])
 }
 
 // [{value, label}] for a <select> / filter list, in registry order.

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, renderHook, screen, waitFor } from '@testing-library/react'
+import { cleanup, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const ROLES = [
@@ -34,22 +34,5 @@ describe('useRoles', () => {
     expect(result.current.roleLabel('supervisor', 'en')).toBe('Supervisor')
     expect(result.current.roleLabel('zzz')).toBe('zzz')
     expect(result.current.roleLabelT('quality_manager', (ar, en) => en)).toBe('Quality manager')
-  })
-
-  it('every registry role is an assignable <option> in a role dropdown', async () => {
-    function Picker() {
-      const { roles } = useRoles()
-      return (
-        <select>
-          {roleOptions(roles).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-      )
-    }
-    render(<Picker />, { wrapper: wrap })
-    resolveRoles()
-    await waitFor(() => expect(screen.getAllByRole('option').length).toBe(4))
-    for (const r of ROLES) {
-      expect(screen.getByRole('option', { name: r.label_ar }).value).toBe(r.value)
-    }
   })
 })

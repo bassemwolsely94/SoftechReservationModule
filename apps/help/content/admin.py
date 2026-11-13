@@ -15,9 +15,9 @@ MODULE = {
     'title': T('الإدارة والنظام', 'Administration & system'),
     'summary': T(
         'إدارة المستخدمين وأدوارهم وفروعهم، مصفوفة الصلاحيات (ما يراه ويفعله كل دور في كل موديول) والصلاحيات الموروثة من مجموعات SOFTECH، '
-        'إعدادات النظام، حالة المزامنة مع SOFTECH، وسجل المراجعة مع كشف الأنماط المشبوهة. الأدوار: مدير، مشرف، صيدلي، مندوب مبيعات، كول سنتر، مشتريات، توصيل، جودة، مشاهد فقط.',
+        'إعدادات النظام، حالة المزامنة مع SOFTECH، وسجل المراجعة مع كشف الأنماط المشبوهة. الأدوار: مدير، مشرف، صيدلي، مندوب مبيعات، كول سنتر، مشتريات، توصيل، جودة، محاسب، مشاهد فقط.',
         'Manage users, their roles and branches, the permissions matrix (what each role sees and does in each module) and permissions inherited from SOFTECH groups, '
-        'system settings, the SOFTECH sync status, and the audit log with suspicious-pattern detection. Roles: admin, supervisor, pharmacist, salesperson, call center, purchasing, delivery, quality, viewer.'),
+        'system settings, the SOFTECH sync status, and the audit log with suspicious-pattern detection. Roles: admin, supervisor, pharmacist, salesperson, call center, purchasing, delivery, quality, accountant, viewer.'),
     'journeys': [
         {'key': 'onboard_staff', 'shell': 'desktop', 'roles': ['admin'],
          'title': T('تعيين موظف جديد على النظام', 'Onboarding a new staff member'),
@@ -366,7 +366,7 @@ SCREENS = [
                        'The old password stops working at once. At least 10 characters and not common — hand it to the employee in person.'),
              'open_hint': T('اضغط «🔑 إعادة تعيين كلمة المرور» على صف المستخدم.', 'Press "🔑 Reset password" on the user\'s row.')},
         ],
-        'updated': '2026-11-12',
+        'updated': '2026-11-13',
         'change_note': T('فلتر الأدوار يقبل الآن أكثر من دور معاً', 'The role filter now takes several roles at once'),
     },
     {
