@@ -26,7 +26,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='branch',
             name='display_order',
-            field=models.PositiveIntegerField(db_index=True, default=100, verbose_name='ترتيب العرض'),
+            field=models.PositiveIntegerField(db_default=100, db_index=True, default=100, verbose_name='ترتيب العرض'),
         ),
         migrations.AlterField(
             model_name='branch',

@@ -150,15 +150,17 @@ def sql_transfer_legs_pointing_at(legs) -> str:
     """Ruling P28/P30: branch legs of box->box transfers pointing back at HQ vouchers
     (tf_branchcode = HQ, tf_cheqsno = the HQ cheqsno) dated within TRANSFER_PAIR_DAYS of the HQ leg.
     ``legs`` = [(cheqsno, cheqdate)]; codes must be digits and dates ``date``, so only digit codes,
-    isoformat dates and module constants are interpolated."""
+    isoformat dates and module constants are interpolated; HQ's code (hq_code(), from the database)
+    must be digits too, else ValueError."""
+    hq = _digits(_hq())
     conds = [f"(CONVERT(varchar(20), c.tf_cheqsno) = '{_digits(sno)}' AND {_near(d)})"
              for sno, d in sorted(set(legs))]
     if not conds:
         raise ValueError('no legs')
     return (
-        _PAIR_COLS + f"FROM {DB}.cheques c "  # nosec B608 - only digit codes, date.isoformat() values and module constants are interpolated
+        _PAIR_COLS + f"FROM {DB}.cheques c "  # nosec B608 - only digit codes (cheqsno and HQ's code both checked by _digits), date.isoformat() values and module constants are interpolated
         f"WHERE c.personcode = '{TRANSFER_BOX_PERSON}' "
-        f"AND CONVERT(varchar(10), c.tf_branchcode) = '{_hq()}' "
+        f"AND CONVERT(varchar(10), c.tf_branchcode) = '{hq}' "
         f"AND ({' OR '.join(conds)})"
     )
 

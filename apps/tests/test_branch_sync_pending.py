@@ -48,3 +48,34 @@ class BranchSyncPendingTests(TestCase):
         self.assertEqual(b.name, 'Renamed')
         self.assertFalse(Notification.objects.filter(
             notification_type='branch_pending').exists())
+
+
+@override_settings(RBAC_ENFORCEMENT='log', SOFTECH_HQ_BRANCH_CODE='100')
+class BranchSyncFreshHqTests(TestCase):
+    """Fresh database: the configured HQ branch arrives as hq, not pending, so hq_code() works."""
+
+    def setUp(self):
+        from apps.branches.models import _reset_hq_code_cache
+        _reset_hq_code_cache()
+        self.addCleanup(_reset_hq_code_cache)
+        Branch.objects.all().delete()
+        self.run = SyncRun.objects.create()
+        make_user('bp_admin2', role='admin')
+
+    def _sync(self, *rows):
+        return tasks.sync_branches(_Conn(list(rows)), self.run)
+
+    def test_configured_hq_created_as_hq_when_none_exists(self):
+        from apps.branches.models import hq_code
+        self._sync(('100', 'الرئيسي', 'HQ', 'a', 'p'), ('130', 'فرع', 'B130', 'a', 'p'))
+        hq = Branch.objects.get(softech_branch_id='100')
+        self.assertEqual((hq.kind, hq.is_operational), (Branch.KIND_HQ, True))
+        self.assertEqual(Branch.objects.get(softech_branch_id='130').kind, Branch.KIND_PENDING)
+        self.assertEqual(hq_code(), '100')
+        self.assertEqual(list(Notification.objects.filter(notification_type='branch_pending')
+                              .values_list('dedup_key', flat=True).distinct()), ['branch_pending:130'])
+
+    def test_configured_code_stays_pending_when_an_hq_exists(self):
+        Branch.objects.create(softech_branch_id='971', name='HQ', code='971', kind=Branch.KIND_HQ)
+        self._sync(('100', 'الرئيسي', 'HQ', 'a', 'p'))
+        self.assertEqual(Branch.objects.get(softech_branch_id='100').kind, Branch.KIND_PENDING)

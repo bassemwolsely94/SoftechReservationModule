@@ -277,10 +277,14 @@ def reorder(request):
     c = request.user.customer
 
     # Resolve branch server-side.
+    from django.core.exceptions import ImproperlyConfigured
     from apps.branches.models import Branch, hq_code
     branch = c.preferred_branch
     if branch is None or not branch.is_live:
-        branch = Branch.objects.filter(softech_branch_id=hq_code()).first()
+        try:
+            branch = Branch.objects.filter(softech_branch_id=hq_code()).first()
+        except ImproperlyConfigured:      # no (or more than one) hq row → no branch to take it
+            branch = None
     if branch is None:
         return Response(
             {'detail': 'لا يوجد فرع متاح حالياً لاستقبال الطلب'},

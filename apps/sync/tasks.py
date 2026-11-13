@@ -450,6 +450,8 @@ def sync_branches(conn, sync_run):
     Real columns: branchcode, branchname, branchename, branchaddress, branchphones
     No bractive column — all branches imported as active.
     """
+    from django.conf import settings
+    hq_setting = str(getattr(settings, 'SOFTECH_HQ_BRANCH_CODE', '') or '').strip()
     cursor = conn.cursor()
     cursor.execute(QUERY_BRANCHES)
     count = 0
@@ -457,22 +459,26 @@ def sync_branches(conn, sync_run):
         try:
             name_en = str(row[2] or row[1] or '')
             name_ar = str(row[1] or '')
+            code = str(row[0])
+            # Fresh database: the configured HQ branch (SOFTECH_HQ_BRANCH_CODE) arrives as hq
+            # when no hq row exists yet — otherwise every hq_code() path would fail until an
+            # admin classified it. Every other new branch arrives unclassified (pending): an
+            # admin must classify it (hq / retail / closed) before it counts as live.
+            is_hq = bool(hq_setting) and code.strip() == hq_setting and                 not Branch.objects.filter(kind=Branch.KIND_HQ).exists()
             branch, created = Branch.objects.get_or_create(
-                softech_branch_id=str(row[0]),
+                softech_branch_id=code,
                 defaults={
                     'name': name_en or name_ar,
                     'name_ar': name_ar,
-                    'code': str(row[0]),
+                    'code': code,
                     'address': str(row[3] or ''),
                     'phone': str(row[4] or ''),
                     'is_active': True,
-                    # New SOFTECH branches arrive unclassified: an admin must
-                    # classify them (hq / retail / closed) before they count as live.
-                    'kind': Branch.KIND_PENDING,
-                    'is_operational': False,
+                    'kind': Branch.KIND_HQ if is_hq else Branch.KIND_PENDING,
+                    'is_operational': is_hq,
                 }
             )
-            if created:
+            if created and not is_hq:
                 try:
                     from apps.notifications.models import Notification
                     Notification.send_to_admins(

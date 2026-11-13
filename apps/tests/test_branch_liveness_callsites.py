@@ -114,6 +114,12 @@ class HqLookupTests(_Base):
         with self.assertRaises(isr_guards.GuardError):
             isr_guards.validate_route(P.KIND_HQ_TO_BRANCH, '100', '130')
 
+    def test_transfer_legs_sql_refuses_a_non_digit_hq_code(self):
+        from apps.finance.queries import sybase_gl
+        mk("1'; DROP", Branch.KIND_HQ)
+        with self.assertRaises(ValueError):
+            sybase_gl.sql_transfer_legs_pointing_at([('5', dt.date(2026, 1, 1))])
+
     def test_status_drift_nodes_are_retail_with_a_server(self):
         from apps.customers.status_drift import _nodes
         mk('100', Branch.KIND_HQ, db_host='10.0.0.100')
@@ -121,3 +127,19 @@ class HqLookupTests(_Base):
         mk('110', Branch.KIND_CLOSED, db_host='10.0.0.110', is_operational=True)
         mk('P1', Branch.KIND_PENDING, db_host='10.0.0.201', is_operational=True)
         self.assertEqual([n[2] for n in _nodes()], ['130'])
+
+
+class PortalReorderBranchTests(_Base):
+
+    def test_reorder_without_hq_row_or_preferred_branch_is_a_clean_400(self):
+        """No hq row (hq_code() raises) and no preferred branch → the existing «no branch» 400."""
+        from rest_framework.test import APIClient
+        from apps.customers.models import Customer
+        from apps.portal.services import exchange_magic_link, issue_magic_link
+        mk('130', Branch.KIND_RETAIL)
+        cust = Customer.objects.create(name='عميل بوابة', phone='01212345679', softech_pic='PB9')
+        _, tok = exchange_magic_link(issue_magic_link(cust))
+        r = APIClient().post('/api/portal/reorder/', {'manual_item_name': 'بنادول'}, format='json',
+                             HTTP_AUTHORIZATION=f'Portal {tok}')
+        self.assertEqual(r.status_code, 400, getattr(r, 'data', r.content))
+        self.assertIn('لا يوجد فرع متاح', r.data['detail'])

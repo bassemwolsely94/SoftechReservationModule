@@ -83,7 +83,7 @@ class Branch(models.Model):
         help_text='التصنيف التشغيلي الموثوق — يُستخدم لفحص الاتصال وتفعيل نقاط البيع والقوائم',
     )
     display_order = models.PositiveIntegerField(
-        default=100, db_index=True, verbose_name='ترتيب العرض')
+        default=100, db_default=100, db_index=True, verbose_name='ترتيب العرض')
     # POS module: only branches explicitly enabled accept indirect-POS orders.
     pos_enabled = models.BooleanField(
         default=False, verbose_name='مفعّل لنقطة البيع',

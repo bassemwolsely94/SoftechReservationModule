@@ -74,7 +74,7 @@ def sync_stock_expiry_all(run=None, only_branch=None, timeout=180):
     from .store_roles import resolver
     role_of = resolver()
 
-    qs = Branch.objects.live()
+    qs = Branch.objects.live().filter(is_operational=True)   # a paused branch's server may be off
     if only_branch:
         qs = qs.filter(softech_branch_id=str(only_branch))
     branches = list(qs)
