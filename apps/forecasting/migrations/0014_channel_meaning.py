@@ -48,12 +48,12 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='channelbucketmap',
             name='group',
-            field=models.CharField(choices=[('cash', 'نقدي'), ('delivery', 'توصيل'), ('permanent', 'عميل دائم'), ('contract', 'تعاقد'), ('employee', 'موظفين'), ('insurance', 'تأمين'), ('card', 'بطاقة شخصية'), ('donation', 'تبرعات'), ('compensation', 'تعويضات'), ('settlement', 'مقاصات'), ('vip', 'VIP'), ('other', 'أخرى'), ('unclassified', 'غير مصنف')], db_index=True, default='unclassified', max_length=20, verbose_name='مجموعة القناة'),
+            field=models.CharField(choices=[('cash', 'نقدي'), ('delivery', 'توصيل'), ('permanent', 'عميل دائم'), ('contract', 'تعاقد'), ('employee', 'موظفين'), ('insurance', 'تأمين'), ('card', 'بطاقة شخصية'), ('donation', 'تبرعات'), ('compensation', 'تعويضات'), ('settlement', 'مقاصات'), ('vip', 'VIP'), ('other', 'أخرى'), ('unclassified', 'غير مصنف')], db_default='unclassified', db_index=True, default='unclassified', max_length=20, verbose_name='مجموعة القناة'),
         ),
         migrations.AddField(
             model_name='channelbucketmap',
             name='is_contract_sale',
-            field=models.BooleanField(default=False, verbose_name='بيع تعاقد'),
+            field=models.BooleanField(db_default=False, default=False, verbose_name='بيع تعاقد'),
         ),
         migrations.RunPython(forwards, migrations.RunPython.noop),
     ]

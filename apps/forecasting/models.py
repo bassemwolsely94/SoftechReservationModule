@@ -162,9 +162,11 @@ class ChannelBucketMap(models.Model):
     ]
     group = models.CharField(
         max_length=20, choices=GROUP_CHOICES, default='unclassified',
+        db_default='unclassified',
         db_index=True, verbose_name='مجموعة القناة',
     )
-    is_contract_sale = models.BooleanField(default=False, verbose_name='بيع تعاقد')
+    is_contract_sale = models.BooleanField(default=False, db_default=False,
+                                           verbose_name='بيع تعاقد')
     followup_rank = models.PositiveSmallIntegerField(
         null=True, blank=True, verbose_name='أولوية المتابعة',
     )
