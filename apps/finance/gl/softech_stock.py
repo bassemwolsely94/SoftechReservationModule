@@ -18,9 +18,15 @@ from apps.batches.store_roles import CLOSED, resolver
 logger = logging.getLogger('elrezeiky.finance')
 
 CENT = Decimal('0.01')
-HQ_BRANCH = '100'
 HQ_STORES = ('100', '101', '102', '103', '104', '105', '110')   # 110 so the store role map ('100:110') closes it
-STORE_BRANCH = {**{s: HQ_BRANCH for s in HQ_STORES}, '152': '150'}
+
+
+def _store_branch() -> dict:
+    """{store_code: branch_code} for stores that are not their own branch: the HQ stores belong to HQ
+    (hq_code(), looked up at call time — module import must not hit the DB), 152 to 150."""
+    from apps.branches.models import hq_code
+    hq = hq_code()
+    return {**{s: hq for s in HQ_STORES}, '152': '150'}
 DEFAULT_CARRY_FORWARD_UNTIL = date(2026, 10, 31)
 
 
@@ -135,14 +141,15 @@ def store_map(extra_stores=()) -> dict:
     from apps.finance.recon_labels import branch_label
 
     overrides = _setting_overrides()
+    store_branch = _store_branch()
     codes = {_code(c) for c in Branch.objects.values_list('softech_branch_id', flat=True)}
-    codes |= set(STORE_BRANCH) | set(overrides) | {_code(c) for c in extra_stores}
+    codes |= set(store_branch) | set(overrides) | {_code(c) for c in extra_stores}
     codes.discard('')
     role = resolver()
     out = {}
     for store in sorted(codes):
         o = overrides.get(store, {})
-        branch = o.get('branch') or STORE_BRANCH.get(store, store)
+        branch = o.get('branch') or store_branch.get(store, store)
         included = o['included'] if 'included' in o else role(branch, store) != CLOSED
         out[store] = StoreRule(branch, included, branch_label(branch))
     return out

@@ -627,7 +627,7 @@ class DemandEngine:
 
         self._branch_map = {
             b['softech_branch_id']: b['id']
-            for b in Branch.objects.filter(is_active=True)
+            for b in Branch.objects.live()
                                    .values('id', 'softech_branch_id')
             if b['softech_branch_id']
         }

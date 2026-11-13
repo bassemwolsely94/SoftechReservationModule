@@ -45,7 +45,7 @@ def _q(v):
 
 def _branches(ch):
     from apps.branches.models import Branch
-    qs = Branch.objects.all()
+    qs = Branch.objects.live()
     if ch.branch_ids:
         qs = qs.filter(id__in=ch.branch_ids)
     return list(qs.order_by('name'))

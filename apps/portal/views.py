@@ -277,10 +277,10 @@ def reorder(request):
     c = request.user.customer
 
     # Resolve branch server-side.
-    from apps.branches.models import Branch
+    from apps.branches.models import Branch, hq_code
     branch = c.preferred_branch
-    if branch is None or not branch.is_active:
-        branch = Branch.objects.filter(is_active=True).order_by('id').first()
+    if branch is None or not branch.is_live:
+        branch = Branch.objects.filter(softech_branch_id=hq_code()).first()
     if branch is None:
         return Response(
             {'detail': 'لا يوجد فرع متاح حالياً لاستقبال الطلب'},

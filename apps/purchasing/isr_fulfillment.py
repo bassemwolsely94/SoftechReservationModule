@@ -31,7 +31,14 @@ from apps.finance.recon_labels import branch_label as BL      # '170' → '170 �
 
 logger = logging.getLogger(__name__)
 
-HQ = '100'
+
+def _hq():
+    """HQ's SOFTECH branch code (the one Branch of kind hq), looked up at call time — never at
+    import (module import must not hit the DB)."""
+    from apps.branches.models import hq_code
+    return hq_code()
+
+
 NAVY = '022871'
 FONT = 'Arial'
 MAX_ISRS = 20
@@ -288,7 +295,7 @@ def _live_stock(branches, codes):
     from config.sybase import get_sybase_connection
     from apps.purchasing.rate_writer import _read_conn_for_target, resolve_store
     out, down, unreachable = {}, [], []
-    for bc, b in [(b.softech_branch_id, b) for b in branches] + [(HQ, None)]:
+    for bc, b in [(b.softech_branch_id, b) for b in branches] + [(_hq(), None)]:
         try:
             conn = get_sybase_connection() if b is None else _read_conn_for_target(b, 'node')
             cur = conn.cursor()
@@ -300,7 +307,7 @@ def _live_stock(branches, codes):
                     cur.execute(f'SELECT s.itemcode, sum(s.nowqty) FROM stkbal s, stores st '
                                 f'WHERE s.storecode=st.storecode AND st.storerealbal=1 '
                                 f'AND s.branchcode=? AND s.itemcode IN ({ph}) GROUP BY s.itemcode',
-                                [HQ, *chunk])
+                                [_hq(), *chunk])
                 else:
                     cur.execute(f'SELECT itemcode, nowqty FROM stkbal WHERE branchcode=? AND storecode=? '
                                 f'AND itemcode IN ({ph})', [bc, resolve_store(b), *chunk])
@@ -461,7 +468,7 @@ def compute(snap, months, fill=None, basis='requested'):
             # Owner rule (2026-10-04): when HQ's whole packs cover the WHOLE request, HQ fills
             # it — one shipment, no branch transfer. Otherwise other branches' excess first,
             # then HQ for the rest, then shortage. (Same coverage either way.)
-            hq_stock = _stock(snap, HQ, code)
+            hq_stock = _stock(snap, _hq(), code)
             hq_first = int(max(0.0, hq_stock or 0.0)) >= q > 0
             left = q
             drows = []
@@ -649,7 +656,7 @@ def create_donor_returns(snap, months, *, only_isr=None, created_by=None, fill=N
                 with transaction.atomic():
                     copy_at = (snap.get('fallback') or {}).get(donor)
                     p = isr_writer._persist_proposal(
-                        source=donor, dest=HQ, kind=IsrPush.KIND_BRANCH_TO_HQ, lines=lines,
+                        source=donor, dest=_hq(), kind=IsrPush.KIND_BRANCH_TO_HQ, lines=lines,
                         run_id=run_id, created_by=created_by, coverage_months=months,
                         origin_isr=int(r['isr']),
                         notes=(f'إرجاع فائض فرع {donor} إلى الرئيسي لتلبية طلب الفرع {r["branch"]} '
@@ -725,7 +732,7 @@ def create_request_transfers(snap, months, req=None, *, shortage_list=None, crea
             skipped.append({'donor': donor, 'reason': 'exists'})
             continue
         leg1_lines = isr_writer.build_items_plan(donor, items)       # nowqty from the donor
-        leg2_lines = isr_writer.build_items_plan(HQ, items)          # nowqty from HQ
+        leg2_lines = isr_writer.build_items_plan(_hq(), items)          # nowqty from HQ
         if not leg1_lines or not leg2_lines:
             skipped.append({'donor': donor, 'reason': 'no_lines'})
             continue
@@ -738,10 +745,10 @@ def create_request_transfers(snap, months, req=None, *, shortage_list=None, crea
             with transaction.atomic():
                 origin = dict(origin_kw, origin_donor=donor, notes=note)
                 leg1 = isr_writer._persist_proposal(
-                    source=donor, dest=HQ, kind=IsrPush.KIND_BRANCH_TO_HQ, lines=leg1_lines,
+                    source=donor, dest=_hq(), kind=IsrPush.KIND_BRANCH_TO_HQ, lines=leg1_lines,
                     run_id=run_id, created_by=created_by, coverage_months=months, **origin)
                 leg2 = isr_writer._persist_proposal(
-                    source=HQ, dest=requester, kind=IsrPush.KIND_HQ_TO_BRANCH, lines=leg2_lines,
+                    source=_hq(), dest=requester, kind=IsrPush.KIND_HQ_TO_BRANCH, lines=leg2_lines,
                     run_id=run_id, created_by=created_by, coverage_months=months, linked=leg1, **origin)
                 leg1.linked_push = leg2
                 leg1.save(update_fields=['linked_push'])
@@ -837,7 +844,7 @@ def compile_items(snap, months, fill=None, basis='requested'):
         requesters = sorted(rq, key=lambda b: (rows[b]['cover'] is None, rows[b]['cover'] or 0.0,
                                                str(rq[b]['date']), b))
         donors = sorted([b for b in branches if b not in rq], key=lambda b: (-rows[b]['excess'], b))
-        hq = _stock(snap, HQ, code)
+        hq = _stock(snap, _hq(), code)
         hq_whole = int(max(0.0, hq or 0.0))
         pool = sum(rows[b]['excess'] for b in donors)
         used_hq = used_pool = 0.0
@@ -1262,7 +1269,7 @@ def _isr_sheet(ws, r, snap, months):
         vals = {c_code: code, c_name: snap['names'].get(code, ''), c_cost: round(ln['cost'], 2),
                 c_req: ln['qty'], c_pp: float(ln.get('price') or 0),
                 c_rs: _stock(snap, req, code), c_rt: _transit(snap, req, code),
-                c_rr: rate_r, c_hq: _stock(snap, HQ, code)}
+                c_rr: rate_r, c_hq: _stock(snap, _hq(), code)}
         for b in donors:
             rb, gb = _rate_gap(snap, code, b)
             vals[dcol[b]['s']] = _stock(snap, b, code)

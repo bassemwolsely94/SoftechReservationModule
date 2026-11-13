@@ -58,7 +58,7 @@ def sync_pos_cancel_all(only_branch=None, days=30, timeout=180):
     since_s = since_dt.strftime('%Y-%m-%d %H:%M:%S')
     window_start = since_dt.date()
 
-    qs = Branch.objects.filter(is_operational=True)
+    qs = Branch.objects.live()
     if only_branch:
         qs = qs.filter(softech_branch_id=str(only_branch))
     branches = list(qs)

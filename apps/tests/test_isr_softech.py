@@ -12,6 +12,7 @@ from django.test import SimpleTestCase, TestCase
 from rest_framework.test import APIClient
 
 from apps.purchasing import isr_softech as S
+from apps.tests.factories import make_hq
 
 
 def _items(*codes, cost=10.0):
@@ -113,6 +114,7 @@ class ProposeApiTests(TestCase):
     URL = '/api/purchasing/isr/propose/'
 
     def setUp(self):
+        make_hq('100', self)   # HQ is read through hq_code()
         from apps.branches.models import Branch
         from apps.catalog.models import Item
         Branch.objects.create(softech_branch_id='160', name='Bab ElHadid')

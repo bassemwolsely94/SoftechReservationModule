@@ -14,6 +14,7 @@ from openpyxl import load_workbook
 from rest_framework.test import APIClient
 
 from apps.purchasing import isr_fulfillment as F
+from apps.tests.factories import make_hq
 
 User = get_user_model()
 
@@ -74,6 +75,10 @@ class CeilingAndParseTests(SimpleTestCase):
 
 @_NO_LABELS
 class ComputeTests(TestCase):   # the workbook reads «بيانات الصنف» live
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
     def test_plan_cascade_hq_and_shortage(self):
         p = F.compute(_snap(), 1.5)
         r = p['isrs'][0]
@@ -120,6 +125,10 @@ class ComputeTests(TestCase):   # the workbook reads «بيانات الصنف»
 
 @_NO_LABELS
 class WorkbookTests(TestCase):   # the workbook reads «بيانات الصنف» live
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
     def test_every_built_formula_survives_neutralising(self):
         # R5: the exports save through neutralise_formulas(wb, keep_safe_formulas=True)
         from core.export_safety import is_safe_formula
@@ -162,6 +171,7 @@ class FulfilmentApiTests(TestCase):
     URL = '/api/purchasing/isr/fulfilment/'
 
     def setUp(self):
+        make_hq('100', self)   # HQ is read through hq_code()
         cache.clear()
         self.c = APIClient()
 
@@ -218,6 +228,7 @@ class DonorReturnTests(TestCase):
     never a second HQ→branch ISR; never twice for the same (ISR, donor)."""
 
     def setUp(self):
+        make_hq('100', self)   # HQ is read through hq_code()
         cache.clear()
         p = mock.patch('apps.purchasing.isr_writer.build_items_plan', side_effect=_fake_items_plan)
         p.start()
@@ -281,6 +292,10 @@ def _conn(rows):
 class UnreachableBranchFallbackTests(TestCase):   # the workbook reads «بيانات الصنف» live
     """A branch server that is down (e.g. 170, JZ006 timeout on 2026-10-04) must not
     leave its stock blank: use server 100's copy, and say so in Arabic."""
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
 
     def _run(self, hq_copy):
         from types import SimpleNamespace as NS
@@ -420,6 +435,10 @@ class RecentPickerTests(TestCase):
 class FillCoverageTests(TestCase):   # the workbook reads «بيانات الصنف» live
     """Owner 2026-10-05: a separate, deterministic fill coverage for the REQUESTING branch —
     show requested + recommended, ship per the chosen basis (default: the smaller)."""
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
 
     def test_recommended_qty_rule(self):
         self.assertEqual(F.recommended_qty(4.0, 2.0, 10.0, 1.5), 4.0)     # ceil(6 − 2)
@@ -505,6 +524,10 @@ class FillCoverageTests(TestCase):   # the workbook reads «بيانات الص�
 class CoverageNeedTests(TestCase):   # the workbook reads «بيانات الصنف» live
     """Owner 2026-10-05: «الاحتياج» follows the coverage settings (requester: fill coverage,
     donors: donor coverage) — never the engine's own gap, never negative."""
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
 
     def test_rule(self):
         # owner's rule: months × rate − stock − in transit; positive → rounded UP (≥ 1 pack), else 0
@@ -539,6 +562,10 @@ class CoverageNeedTests(TestCase):   # the workbook reads «بيانات الص�
 class InTransitTests(TestCase):   # the workbook reads «بيانات الصنف» live
     """Owner 2026-10-05: count what is already on the way (doccode-125 transfers not yet
     received, issued within the engine's window — 14 days) so we never buy / move it twice."""
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
 
     def _snap(self, transit):
         s = _snap()
@@ -610,6 +637,10 @@ class InTransitWindowTests(TestCase):
 class RequesterCeilingTests(TestCase):   # the workbook reads «بيانات الصنف» live
     """Owner 2026-10-05: the requesting branch's maximum uses ITS coverage (C5), and
     «يتجاوز الحد الأقصى؟» only when something is supplied and stock + transit + supplied > max."""
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
 
     def test_max_uses_fill_coverage(self):
         a = F.compute(_snap(), 1.5, 0.8, 'min')['isrs'][0]['lines'][0]          # A @160, rate 4
@@ -665,6 +696,10 @@ def _multi_snap():
 class CompiledTests(TestCase):   # the workbook reads «بيانات الصنف» live
     """«تجميعي» (owner 2026-10-18): every item once, same-branch requests merged (need counted
     once), shared pool served lowest-coverage first, requesters never donate the item."""
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
 
     def test_shared_pool_priority_and_merge(self):
         p = F.compile_items(_multi_snap(), 1, 1.5, 'requested')

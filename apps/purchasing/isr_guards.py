@@ -34,7 +34,14 @@ from django.utils import timezone
 
 logger = logging.getLogger('elrezeiky.purchasing')
 
-HQ = '100'
+
+def _hq():
+    """HQ's SOFTECH branch code (the one Branch of kind hq), looked up at call time — never at
+    import (module import must not hit the DB)."""
+    from apps.branches.models import hq_code
+    return hq_code()
+
+
 DUP_PUSH_DAYS = 7
 LIVE = ('proposed', 'approved')
 MIN_REASON = 5
@@ -55,9 +62,9 @@ def validate_route(kind, source, dest):
     if kind == P.KIND_SELF:
         ok = bool(source) and dest in ('', source)
     elif kind == P.KIND_HQ_TO_BRANCH:
-        ok = source == HQ and bool(dest) and dest != HQ
+        ok = source == _hq() and bool(dest) and dest != _hq()
     elif kind == P.KIND_BRANCH_TO_HQ:
-        ok = dest == HQ and bool(source) and source != HQ
+        ok = dest == _hq() and bool(source) and source != _hq()
     else:
         ok = False
     if not ok:
@@ -254,7 +261,7 @@ def receipt_status(feeder) -> dict:
     codes = {str(l.get('itemcode') or '').strip() for l in (feeder.lines_snapshot or [])} - {''}
     since = timezone.localdate(feeder.pushed_at)
     rel = [t for t in (T.objects.filter(erp_supplying_branch_code=str(feeder.branchcode),
-                                        erp_receiving_branch_code=HQ, issue_date__gte=since)
+                                        erp_receiving_branch_code=_hq(), issue_date__gte=since)
                        .exclude(transit_status='cancelled')
                        .only('erp_doc_number', 'transit_status', 'items_snapshot', 'manually_received_at',
                              'issue_date', 'erp_received_date'))

@@ -116,7 +116,13 @@ def sql_cheques(d1: date, d2: date) -> str:
     )
 
 
-HQ_BRANCH = '100'
+def _hq():
+    """HQ's SOFTECH branch code (the one Branch of kind hq), looked up at call time — never at
+    import (module import must not hit the DB)."""
+    from apps.branches.models import hq_code
+    return hq_code()
+
+
 TRANSFER_BOX_PERSON = '-180'
 TRANSFER_BANK_PERSON = '-181'
 TRANSFER_PAIR_DAYS = 31   # Ruling P30: cheqsno repeats across years, so the other leg must be near in time
@@ -152,7 +158,7 @@ def sql_transfer_legs_pointing_at(legs) -> str:
     return (
         _PAIR_COLS + f"FROM {DB}.cheques c "  # nosec B608 - only digit codes, date.isoformat() values and module constants are interpolated
         f"WHERE c.personcode = '{TRANSFER_BOX_PERSON}' "
-        f"AND CONVERT(varchar(10), c.tf_branchcode) = '{HQ_BRANCH}' "
+        f"AND CONVERT(varchar(10), c.tf_branchcode) = '{_hq()}' "
         f"AND ({' OR '.join(conds)})"
     )
 

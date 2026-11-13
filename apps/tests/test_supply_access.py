@@ -10,6 +10,7 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from apps.purchasing import access
+from apps.tests.factories import make_hq
 
 User = get_user_model()
 
@@ -103,6 +104,7 @@ class DistributionOptionBTests(TestCase):
     """Established items: never seeded/introduced, but moved when piled up."""
 
     def setUp(self):
+        make_hq('100', self)   # HQ is read through hq_code()
         from apps.branches.models import Branch
         from apps.catalog.models import Item
         from apps.purchasing.models import (DemandCalculationRun, ItemDemandAggregated,
