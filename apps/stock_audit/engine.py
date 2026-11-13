@@ -44,7 +44,11 @@ def build_context(date_from, date_to, report_from=None):
     codes = set(StockLedgerLine.objects.filter(docdate__gte=date_from, docdate__lt=date_to)
                 .values_list('itemcode', flat=True).distinct())
     item_names = dict(Item.objects.filter(softech_id__in=codes).values_list('softech_id', 'name'))
-    channel_bucket = dict(ChannelBucketMap.objects.filter(active=True).values_list('channel', 'bucket'))
+    # Invoice channels are customer codes (person type '10'); other person types reuse the same
+    # numbers (a job title '10', a doctor '11' …) and must not overwrite them.
+    from apps.forecasting.channels import CUSTOMER_PT
+    channel_bucket = dict(ChannelBucketMap.objects.filter(active=True, person_type=CUSTOMER_PT)
+                          .values_list('channel', 'bucket'))
     channel_of_invoice = {}
     for bc, dn, d, ch in (PurchaseHistory.objects
                           .filter(doc_code='115', invoice_date__date__gte=date_from, invoice_date__date__lt=date_to)
