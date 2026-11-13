@@ -67,6 +67,7 @@ const GamificationPage = lazy(() => import('./pages/GamificationPage'))
 const StockAuditPage = lazy(() => import('./pages/StockAuditPage'))
 const TaxInvoicingPage = lazy(() => import('./pages/TaxInvoicingPage'))
 const HRAttendancePage = lazy(() => import('./pages/HRAttendancePage'))
+const CrewsPage = lazy(() => import('./pages/CrewsPage'))
 const DataHealthPage = lazy(() => import('./pages/DataHealthPage'))
 const PicAnalyticsPage = lazy(() => import('./pages/PicAnalyticsPage'))
 const UsagePrintPage = lazy(() => import('./pages/UsagePrintPage'))
@@ -592,6 +593,8 @@ export default function App() {
             <Route path="hr"            element={<HRPage />} />
             {/* attendance & fingerprint (HR stage 1): named grantees + admin; every API route is gated server-side */}
             <Route path="hr/attendance" element={<HRAttendancePage />} />
+            {/* crews «الأطقم»: RBAC module `crews` (admin by default; a matrix grant opens it); the page and every API check it */}
+            <Route path="crews"         element={<CrewsPage />} />
             <Route path="payment-audit" element={<RequireRole roles={['admin','purchasing','pharmacist','quality_manager','accountant']}><PaymentAuditPage /></RequireRole>} />
             <Route path="reconciliation" element={<RequireRole roles={['admin','purchasing','quality_manager','accountant']}><ReconciliationPage /></RequireRole>} />
             <Route path="forecasting"   element={<RequireRole roles={['admin','purchasing','pharmacist','quality_manager']}><ForecastingPage /></RequireRole>} />
