@@ -122,6 +122,11 @@ class ChronicCustomerTypeTests(_ChannelCacheMixin, TestCase):
         self.assertEqual(customer_type(cust, '11'), 'b2b')
         self.assertEqual(customer_type(cust, '10'), 'b2b')
         self.assertEqual(customer_type(cust, '15'), 'b2b')
+        self.assertEqual(customer_type(cust, '12'), 'b2b')
+        self.assertEqual(customer_type(cust, '16'), 'b2b')
+        self.assertEqual(customer_type(cust, '17'), 'b2b')
+        self.assertEqual(customer_type(cust, '99'), 'unclassified')
+        self.assertEqual(customer_type(cust, '31'), 'unclassified')
         self.assertEqual(customer_type(cust, '30'), 'unclassified')
         self.assertEqual(customer_type(cust, '77'), 'unclassified')
         self.assertEqual(customer_type(cust, None), 'unclassified')
@@ -141,6 +146,18 @@ class ChronicCustomerTypeTests(_ChannelCacheMixin, TestCase):
                 invoice_date=now - dt.timedelta(days=days), sales_channel=ch,
                 softech_invoice_id=f'B01-115-{n}')
         self.assertEqual(_latest_channels([a.pk, b.pk]), {a.pk: '91', b.pk: '90'})
+
+    def test_latest_channel_ignores_undated_row(self):
+        from apps.chronic.task_generator import _latest_channels
+        branch = make_branch()
+        a = Customer.objects.create(name='أ')
+        PurchaseHistory.objects.create(customer=a, branch=branch, doc_code='115', docnumber='1',
+                                       invoice_date=timezone.now() - dt.timedelta(days=5),
+                                       sales_channel='90', softech_invoice_id='B01-115-d1')
+        PurchaseHistory.objects.create(customer=a, branch=branch, doc_code='115', docnumber='2',
+                                       invoice_date=None, sales_channel='10',
+                                       softech_invoice_id='B01-115-n2')
+        self.assertEqual(_latest_channels([a.pk]), {a.pk: '90'})
 
     def test_unclassified_is_a_protocol_filter_choice(self):
         from apps.chronic.models import FollowUpProtocol

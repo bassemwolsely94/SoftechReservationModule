@@ -12,7 +12,7 @@ generate_tasks_for_period(period_start, period_end, ...)
 from datetime import date, timedelta
 from decimal import Decimal
 
-from django.db.models import Q
+from django.db.models import F, Q
 from django.utils import timezone
 
 from apps.chronic.classifier import customer_type
@@ -23,13 +23,14 @@ from apps.chronic.classifier import customer_type
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _latest_channels(customer_ids) -> dict:
-    """{customer_id: sales_channel of that customer's most recent sale} in one query."""
+    """{customer_id: sales_channel of that customer's most recent sale} in one query.
+    Undated rows sort last (Postgres puts NULL first in DESC); pk breaks same-time ties."""
     from apps.customers.models import PurchaseHistory
     ids = [i for i in set(customer_ids) if i is not None]
     if not ids:
         return {}
     rows = (PurchaseHistory.objects.filter(customer_id__in=ids, doc_code='115')
-            .order_by('customer_id', '-invoice_date')
+            .order_by('customer_id', F('invoice_date').desc(nulls_last=True), '-pk')
             .distinct('customer_id')
             .values_list('customer_id', 'sales_channel'))
     return dict(rows)
@@ -264,8 +265,13 @@ def generate_tasks_for_period(
     skipped_trigger       = 0
     breakdown             = {}  # (ingredient_id, protocol_id) → count
 
-    # Latest sale channel per candidate customer — one query, not one per customer.
-    latest_channels = _latest_channels(lines_qs.values_list('purchase__customer_id', flat=True))
+    # Latest sale channel per candidate customer — one query, not one per customer,
+    # and only when some active protocol filters by customer type.
+    typed = FollowUpProtocol.objects.filter(is_active=True).exclude(customer_type_filter='all')
+    if ingredient_ids:
+        typed = typed.filter(active_ingredient_id__in=ingredient_ids)
+    latest_channels = (_latest_channels(lines_qs.values_list('purchase__customer_id', flat=True))
+                       if typed.exists() else {})
 
     for line in lines_qs:
         customer  = line.purchase.customer
