@@ -68,6 +68,7 @@ MODULE_CHOICES = [
     ('usage_print',  'طباعة طريقة الاستخدام'),
     ('hr_attendance', 'الحضور والبصمة'),
     ('data_health',  'صحة البيانات'),
+    ('crews',        'الأطقم'),
 ]
 
 ACTION_CHOICES = [
