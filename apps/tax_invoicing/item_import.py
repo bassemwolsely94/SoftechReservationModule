@@ -230,7 +230,7 @@ def validate(fileobj, opts):
 
         row = {'row': number, 'itemcode': code, 'eta_code': eta_code, 'code_type': code_type, 'coded': coded,
                'item_name': v.get('item_name', '')[:200], 'item_name_ar': v.get('item_name_ar', '')[:200],
-               'gpc_code': v.get('gpc_code', '')[:10], 'active_from': active_from, 'active_to': active_to,
+               'gpc_code': '' if v.get('gpc_code', '') == '0' else v.get('gpc_code', '')[:10], 'active_from': active_from, 'active_to': active_to,
                'unit_type': v.get('unit_type', '')[:10], 'list_status': list_status, 'reason': v.get('reason', '')[:300],
                'vat_rate': vat_rate, 'vat_code': v.get('vat_code', '')[:10], 'conflicts': []}
         if counts['errors'] != errors_before:
@@ -303,7 +303,8 @@ def apply(fileobj, raw_options, actor, preview_hash):
             p.item = items.get(r['itemcode']) or p.item
             p.item_name = r['item_name'] or p.item_name or (p.item.name if p.item else '')
             p.item_name_ar = r['item_name_ar'] or p.item_name_ar
-            p.eta_code = r['eta_code'] or p.eta_code
+            if r['coded']:      # a code without its type is not a code: the item stays uncoded, with no code to check
+                p.eta_code = r['eta_code'] or p.eta_code
             p.code_type = r['code_type'] or p.code_type
             p.gpc_code = r['gpc_code'] or p.gpc_code
             p.active_from = r['active_from'] or p.active_from

@@ -564,3 +564,132 @@ class CodeCheckTests(Fixture, TestCase):
         body = api(self.accountant).get('/api/tax-invoicing/codes/').json()
         self.assertEqual(body['summary']['checks']['not_found'], 3)
         self.assertEqual(body['summary']['mirror_candidates'], 2)
+
+
+# ── GPC categories and GS1 reuse (gpc.py, coding.prepare_gs1) ──────────────────────────────────
+
+@override_settings(**CODING_ON)
+class GpcAndGs1Tests(Fixture, TestCase):
+
+    def setUp(self):
+        from apps.catalog.models import Category, Item
+        self.build('gp')
+        eta_client.reset_token()
+        self.addCleanup(eta_client.reset_token)
+        tab = Category.objects.create(softech_id='gp-tab', name='Tablet')
+
+        def item(code, family, barcode=''):
+            return Item.objects.create(softech_id=code, name=f'Item {code}', family_name=family, category=tab,
+                                       medicine_type_name='Medicine', barcode=barcode)
+
+        for code, brick in (('71001', '10000673'), ('71002', '10000673'), ('71003', '10005845')):
+            TaxItemProfile.objects.create(softech_itemcode=code, item=item(code, 'TAB: Simple coated'), item_name='x',
+                                          coding_status=TaxItemProfile.CODE_APPROVED, gpc_code=brick, code_type='EGS',
+                                          eta_code=f'EG-100200300-{code}')
+        self.new = TaxItemProfile.objects.create(softech_itemcode='71009', item=item('71009', 'TAB: Simple coated'),
+                                                 item_name='Newtab', item_name_ar='نيوتاب', gpc_code='0')
+        self.gs1 = TaxItemProfile.objects.create(softech_itemcode='71010', item=item('71010', 'Hair', '4006381333931'),
+                                                 item_name='Shampoo')
+        self.bad_barcode = TaxItemProfile.objects.create(softech_itemcode='71011',
+                                                         item=item('71011', 'Hair', '4006381333932'), item_name='Comb')
+
+    def _workbook(self, header_rows, rows):
+        import os
+        import tempfile
+
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        for r in header_rows + rows:
+            ws.append(r)
+        fd, path = tempfile.mkstemp(suffix='.xlsx')
+        os.close(fd)
+        wb.save(path)
+        self.addCleanup(os.remove, path)
+        return path
+
+    def test_loads_bricks_from_either_workbook_layout(self):
+        from apps.tax_invoicing import gpc
+        from apps.tax_invoicing.models import TaxGpcBrick
+        a = self._workbook([['Brick Code', 'Brick Description', 'Brick Name Arabic']],
+                           [[10000673, 'Medicines', 'أدوية'], [10000673, 'Medicines', ''], ['bad', 'x', 'y']])
+        b = self._workbook([['إعداد', '', ''], [None, None, None], ['BrickCode', 'BrickTitleAr', 'BrickTitle']],
+                           [['10005845', 'أدوية بوصفة', 'Prescription'], ['10000673', 'أدوية', 'Medicines (new)']])
+        self.assertEqual(gpc.load(gpc.read_workbook(a)), {'read': 1, 'created': 1, 'updated': 0})
+        self.assertEqual(gpc.load(gpc.read_workbook(b)), {'read': 2, 'created': 1, 'updated': 1})
+        self.assertEqual(TaxGpcBrick.objects.get(code='10000673').name_en, 'Medicines (new)')
+        self.assertEqual(TaxGpcBrick.objects.get(code='10005845').name_ar, 'أدوية بوصفة')
+
+    def test_once_loaded_a_request_must_name_a_listed_brick(self):
+        from apps.tax_invoicing.models import TaxGpcBrick
+        self.assertEqual(coding._check_fields('99999999', 'a', 'b'), [])      # nothing loaded: any 8 digits
+        TaxGpcBrick.objects.create(code='10000673', name_ar='أدوية')
+        self.assertEqual(len(coding._check_fields('99999999', 'a', 'b')), 1)
+        self.assertEqual(coding._check_fields('10000673', 'a', 'b'), [])
+
+    def test_suggestion_is_learned_from_our_approved_items_and_used_only_when_asked(self):
+        from apps.tax_invoicing import gpc
+        s = gpc.suggest(TaxItemProfile.objects.filter(pk=self.new.pk).select_related('item__category'))[self.new.pk]
+        self.assertEqual((s['code'], s['basis'], s['share']), ('10000673', 'family', 67))
+        out = coding.prepare([self.new.pk], self.accountant)                   # a GPC of "0" is no GPC
+        self.assertEqual(out['created'], [])
+        out = coding.prepare([self.new.pk], self.accountant, use_suggested=True)
+        row = TaxCodeRequest.objects.get(pk=out['created'][0])
+        self.assertEqual(row.parent_code, '10000673')
+        event = TaxAuditEvent.objects.filter(action='code_request_prepared').latest('id')
+        self.assertEqual(event.after['brick_from'], 'suggested')
+
+    def test_gtin_check_digit(self):
+        self.assertTrue(coding.gtin_ok('4006381333931'))
+        self.assertFalse(coding.gtin_ok('4006381333932'))
+        self.assertFalse(coding.gtin_ok('5000000001'))
+        self.assertEqual([p.softech_itemcode for p in coding.gs1_candidates()], ['71010'])
+
+    def _token(self):
+        return mock.patch.object(eta_client.requests, 'post',
+                                 return_value=_response(200, {'access_token': 'T', 'expires_in': 3600}))
+
+    def test_gs1_reuse_request_codes_the_item_with_its_barcode(self):
+        out = coding.prepare_gs1([self.gs1.pk, self.bad_barcode.pk], self.accountant)
+        self.assertEqual(len(out['created']), 1)
+        row = TaxCodeRequest.objects.get(pk=out['created'][0])
+        self.assertEqual((row.purpose, row.item_code, row.parent_code), ('gs1', '4006381333931', ''))
+        with self._token(), mock.patch.object(eta_client.requests, 'put', return_value=_response(200, {})) as put:
+            self.assertEqual(coding.send([row.pk], self.admin, '1')['submitted'], 1)
+        url, body = put.call_args[0][0], put.call_args[1]['data'].decode('utf-8')
+        self.assertTrue(url.endswith('/api/v1.0/codetypes/requests/codeusages'))
+        self.assertIn('"codetype": "GS1"', body)
+        self.gs1.refresh_from_db()
+        self.assertEqual((self.gs1.coding_status, self.gs1.code_type, self.gs1.eta_code), ('pending', 'GS1', '4006381333931'))
+        with mock.patch.object(eta_client.requests, 'get',
+                               return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Approved'}])):
+            coding.refresh(self.admin)
+        self.gs1.refresh_from_db()
+        self.assertEqual((self.gs1.coding_status, self.gs1.code_type, self.gs1.coding_env), ('approved', 'GS1', 'preprod'))
+
+    def test_gs1_refused_inside_a_200_is_failed_not_submitted(self):
+        row = TaxCodeRequest.objects.get(pk=coding.prepare_gs1([self.gs1.pk], self.accountant)['created'][0])
+        with self._token(), mock.patch.object(eta_client.requests, 'put',
+                                              return_value=_response(200, {'error': {'message': 'already has usage'}})):
+            self.assertEqual(coding.send([row.pk], self.admin, '1')['failed'], 1)
+        row.refresh_from_db()
+        self.assertEqual(row.status, 'failed')
+        self.gs1.refresh_from_db()
+        self.assertEqual(self.gs1.coding_status, TaxItemProfile.CODE_MISSING)
+
+    def test_views_offer_suggestions_gs1_and_brick_search(self):
+        from apps.tax_invoicing.models import TaxGpcBrick
+        TaxGpcBrick.objects.create(code='10000673', name_ar='أدوية')
+        TaxGpcBrick.objects.create(code='10000111', name_ar='شيء آخر')
+        rows = api(self.accountant).get('/api/tax-invoicing/codes/candidates/').json()
+        new = next(r for r in rows if r['itemcode'] == '71009')
+        self.assertEqual((new['gpc_code'], new['suggested']['code'], new['suggested']['name']), ('', '10000673', 'أدوية'))
+        gs1 = api(self.accountant).get('/api/tax-invoicing/codes/candidates/', {'kind': 'gs1'}).json()
+        self.assertEqual([r['barcode'] for r in gs1], ['4006381333931'])
+        found = api(self.accountant).get('/api/tax-invoicing/codes/gpc/', {'q': 'أدو'}).json()
+        self.assertEqual((found['loaded'], [r['code'] for r in found['rows']]), (True, ['10000673']))
+        self.assertEqual(api(self.accountant).get('/api/tax-invoicing/codes/gpc/').json()['rows'][0]['code'], '10000673')
+        r = api(self.accountant).post('/api/tax-invoicing/codes/prepare/', {'ids': [self.gs1.pk], 'kind': 'gs1'}, format='json')
+        self.assertEqual(len(r.json()['created']), 1)
+        self.assertEqual(api(self.pharmacist).post('/api/tax-invoicing/codes/prepare/', {'ids': [self.new.pk]},
+                                                   format='json').status_code, 403)
