@@ -8,6 +8,7 @@ import { deliveryApi, branchesApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
 import SortTh from '../components/SortTh'
 import useSortableRows from '../hooks/useSortableRows'
+import BranchMultiSelect from '../components/BranchMultiSelect'
 
 const fmt     = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const _today  = () => new Date().toISOString().slice(0, 10)
@@ -311,7 +312,8 @@ export default function DeliveryAnalyticsPage() {
   useHelpTab(activeTab)
   const [dateFrom,  setDateFrom]   = useState(_daysAgo(30))
   const [dateTo,    setDateTo]     = useState(_today())
-  const [branchId,  setBranchId]   = useState('')
+  const [branchIds, setBranchIds]  = useState([])   // multi-select: nothing ticked = all
+  const branchId = branchIds.join(',')              // the tabs send it as ?branch=3,7 ('' = all)
 
   const { data: branches = [] } = useQuery({
     queryKey: ['branches'],
@@ -351,11 +353,8 @@ export default function DeliveryAnalyticsPage() {
         <span className="text-gray-400 text-xs">—</span>
         <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
           className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-brand-400 focus:outline-none" />
-        <select value={branchId} onChange={e => setBranchId(e.target.value)} data-tour="delivery-analytics-branch"
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-brand-400 focus:outline-none">
-          <option value="">كل الفروع</option>
-          {branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
-        </select>
+        <BranchMultiSelect branches={branches} selected={branchIds} onChange={setBranchIds}
+          dataTour="delivery-analytics-branch" />
       </div>
 
       {/* Tab navigation */}

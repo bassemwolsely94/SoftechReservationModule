@@ -187,13 +187,16 @@ def _seeded_history():
     return hist
 
 
-def analyze(run=None, *, categories=None, limit=None, use_age=True, ceilings=None):
+def analyze(run=None, *, categories=None, limit=None, use_age=True, ceilings=None, live_stock=None):
     """Return a list of distribution suggestions (read-only). Each carries both
     signals — n_selling_ops (breadth) + age_days / is_new_age (SOFTECH stkbal opendate)
     — so established (old + broad) items are protected and new codes are prioritized.
     use_age=False skips the SOFTECH age read (breadth-only; used in tests / offline).
     ceilings = {branch: {itemcode: (stock, ceiling)}}; None → read live from the branch
-    servers (only when over_piled is requested)."""
+    servers (only when over_piled is requested).
+    live_stock = {branch: {itemcode: qty}} read from server 100 (distribution_plan.live_stock,
+    doc 30 §2.7): replaces the engine run's stock for every branch it holds; the sales rate
+    stays the engine run's. None = the engine snapshot (the old behaviour)."""
     from apps.purchasing.models import (DemandCalculationRun, ItemDemandMetrics,
                                         ItemDemandAggregated)
     run = run or (DemandCalculationRun.objects.filter(status='success')
@@ -241,6 +244,9 @@ def analyze(run=None, *, categories=None, limit=None, use_age=True, ceilings=Non
         net_avg = float(a.total_monthly_avg or 0)
         pack_price = float(a.item.pack_price or 0)
         bmap = per_item.get(item_id, {})
+        if live_stock is not None:
+            bmap = _with_live_stock(bmap, code, live_stock)
+            net_stock = sum(v[0] for v in bmap.values())
         with_stock = {bc: v for bc, v in bmap.items() if v[0] > 0}
         selling    = {bc for bc, v in bmap.items() if v[1] > 0}
         absent_ops = [bc for bc in op_codes if bmap.get(bc, (0, 0, 0))[0] <= 0]
@@ -343,6 +349,18 @@ def analyze(run=None, *, categories=None, limit=None, use_age=True, ceilings=Non
                         positions={b: _position(code, b, ceilings, bmap) for b in [source, *tgts]}))
         if limit and len(out) >= limit:
             break
+    return out
+
+
+def _with_live_stock(bmap, code, live_stock):
+    """{branch: (stock, avg, safety)} with stock replaced by the live read wherever the live
+    read covers that branch; a branch holding the item live but missing from the run is added
+    with no rate."""
+    out = {bc: ((float(live_stock[bc].get(code, 0.0)) if bc in live_stock else v[0]), v[1], v[2])
+           for bc, v in bmap.items()}
+    for bc, items in live_stock.items():
+        if bc not in out and float(items.get(code, 0.0)) > 0:
+            out[bc] = (float(items[code]), 0.0, 0.0)
     return out
 
 

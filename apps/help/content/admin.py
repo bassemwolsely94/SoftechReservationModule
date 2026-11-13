@@ -271,10 +271,10 @@ SCREENS = [
                        'Handy when looking for a specific employee to change their role or reset their password.'),
          },
             {'target': 'admin-users-role-filter', 'label': T('كل الأدوار', 'All roles'),
-             'text': T('يعرض مستخدمي دور واحد بس.', 'Shows the users of one role only.'),
-             'more': T('بيعرض مستخدمي دور واحد بس، زي كل الصيادلة أو كل الكول سنتر.\n'
+             'text': T('يعرض مستخدمي دور أو أكتر — علّم عدة أدوار معاً؛ لا شىء معلّم = كل الأدوار.', 'Shows the users of one or more roles — tick several; nothing ticked = all roles.'),
+             'more': T('علّم دور أو أكتر، زي الصيادلة والكاشير معاً، أو ابحث باسم الدور.\n'
                        'مفيد قبل ما تغيّر صلاحيات دور، عشان تعرف مين هيتأثر.',
-                       'Shows users of one role only, such as all pharmacists or all call center staff.\n'
+                       'Tick one or more roles, such as pharmacists and cashiers together, or search by role name.\n'
                        'Useful before changing a role\'s permissions, to see who will be affected.'),
          },
             {'target': 'admin-users-status-filter', 'label': T('كل الحالات', 'All statuses'),
@@ -366,8 +366,8 @@ SCREENS = [
                        'The old password stops working at once. At least 10 characters and not common — hand it to the employee in person.'),
              'open_hint': T('اضغط «🔑 إعادة تعيين كلمة المرور» على صف المستخدم.', 'Press "🔑 Reset password" on the user\'s row.')},
         ],
-        'updated': '2026-11-03',
-        'change_note': T('خياران للمدير (التصدير والكتابة في SOFTECH من جهاز معتمد خارج الشبكة)، وشرح أوضح لأزرار «اعرض لي»', 'Two admin options (export and SOFTECH writes from an approved device outside the network); clearer "Show me" buttons'),
+        'updated': '2026-11-12',
+        'change_note': T('فلتر الأدوار يقبل الآن أكثر من دور معاً', 'The role filter now takes several roles at once'),
     },
     {
         'key': 'admin.permissions',
@@ -830,15 +830,15 @@ SCREENS = [
                        'Open flags per pattern: repeated cancellations, repeated edits, ERP mismatch, out-of-hours activity.'),
              'open_hint': T('يظهر لو فيه إشارات مفتوحة.', 'Shown when there are open flags.')},
             {'target': 'admin-audit-flag-filters', 'label': T('مفتوح · مراجع · الكل · الخطورة', 'Open · reviewed · all · severity'),
-             'text': T('فلتر بالحالة وبالخطورة (حرج، تحذير، معلومة).', 'Filter by status and severity (critical, warning, info).'),
+             'text': T('فلتر بالحالة وبالخطورة (حرج، تحذير، معلومة) — الخطورة تقبل أكتر من اختيار.', 'Filter by status and severity (critical, warning, info) — severity takes several choices.'),
              'when': T('ابدأ بـ«مفتوح» + «حرج».', 'Start with "Open" + "Critical".'),
              'open_hint': _FLAGS,
              'more': T('• «مفتوح» (الافتراضي): اللي لسه محدش راجعه.\n'
                        '• «مراجع» أو «الكل» عشان تشوف القرارات اللي اتاخدت.\n'
-                       '• الخطورة: حرج، تحذير، معلومة — ابدأ بـ«حرج».',
+                       '• الخطورة: حرج، تحذير، معلومة — ابدأ بـ«حرج»، أو علّم «حرج» و«تحذير» معاً؛ لا شىء معلّم = الكل.',
                        '• "Open" (default): not yet reviewed.\n'
                        '• "Reviewed" or "All" to see decisions already taken.\n'
-                       '• Severity: critical, warning, info — start with "critical".'),
+                       '• Severity: critical, warning, info — start with "critical", or tick "critical" and "warning" together; nothing ticked = all.'),
          },
             {'target': 'admin-audit-scan', 'label': T('🔍 فحص الآن', '🔍 Scan now'),
              'text': T('يشغّل الكشف على آخر 24 ساعة ويقولك كام إشارة جديدة.', 'Runs detection over the last 24 hours and tells you how many new flags.'),
@@ -871,14 +871,14 @@ SCREENS = [
              'warn': T('ماتتجاهلش من غير ما تفتح السجل وتتأكد — والملاحظة بتفضل متسجلة.', 'Do not ignore before checking the log — the note stays on record.'),
              'open_hint': T('اضغط «مراجعة» على إشارة.', 'Press "Review" on a flag.')},
             {'target': 'admin-audit-log-filters', 'label': T('🔍 بحث · نوع الإجراء · مسح', '🔍 Search · action type · Clear'),
-             'text': T('ابحث باسم المستخدم أو الكيان، وفلتر بنوع الإجراء (دخول، محاولات فاشلة، اعتماد تحويلات…).',
-                       'Search by user or entity, and filter by action type (logins, failed attempts, transfer approvals…).'),
+             'text': T('ابحث باسم المستخدم أو الكيان، وعلّم نوع إجراء أو أكتر (دخول، محاولات فاشلة، اعتماد تحويلات…).',
+                       'Search by user or entity, and tick one or more action types (logins, failed attempts, transfer approvals…).'),
              'open_hint': _LOGS,
              'more': T('• البحث باسم المستخدم أو الكيان (زي رقم حجز).\n'
-                       '• نوع الإجراء: إنشاء حجوزات، تغيير حالة، إلغاء، اعتماد تحويلات، دخول، محاولات فاشلة، مزامنة.\n'
+                       '• نوع الإجراء: إنشاء حجوزات، تغيير حالة، إلغاء، اعتماد تحويلات، دخول، محاولات فاشلة، مزامنة — علّم أكتر من نوع معاً؛ لا شىء معلّم = الكل.\n'
                        'اضغط على أي سطر يفتح التغييرات قبل/بعد وعنوان IP. «مسح» بيرجّع الفلاتر.',
                        '• Search by user name or entity (such as a reservation number).\n'
-                       '• Action type: reservations created, status changes, cancellations, transfer approvals, logins, failed attempts, sync.\n'
+                       '• Action type: reservations created, status changes, cancellations, transfer approvals, logins, failed attempts, sync — tick several at once; nothing ticked = all.\n'
                        'Click any row to open the before/after changes and IP address. "Clear" resets the filters.'),
          },
             {'target': 'admin-audit-log-table', 'label': T('سجل الإجراءات', 'Action log'),
@@ -894,8 +894,8 @@ SCREENS = [
              'warn': T('القرار بيتسجّل باسمك — «تجاهل» بس لو اتأكدت إن الحركة سليمة.', 'The decision is logged under your name — "Ignore" only once you are sure the activity is fine.'),
              'open_hint': T('اضغط «مراجعة» على إشارة مفتوحة.', 'Press "Review" on an open flag.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('تبويب جديد: استخدام الشاشات', 'New tab: screen usage'),
+        'updated': '2026-11-12',
+        'change_note': T('فلتر نوع الإجراء وفلتر الخطورة يقبلان الآن أكثر من اختيار معاً', 'The action-type and severity filters now take several choices at once'),
     },
     {
         'key': 'admin.networks',
@@ -950,7 +950,7 @@ SCREENS = [
             {'key': 'closed', 'title': T('المحظورة والمتقاعدة', 'Blocked and retired'), 'body': T('الأجهزة المحظورة (يمكن إعادة اعتمادها) والمتقاعدة (نهائي — لا تعود).', 'Blocked devices (can be approved again) and retired ones (final — they never come back).')},
         ],
         'steps': [
-            T('بعد ما الموظفين يسجلوا دخول مرة من كمبيوتر الفرع، افتح «بانتظار الاعتماد»، صفّي بالفرع والنوع «جهاز فرع» (والشبكة داخلية)، ثم Ctrl+A و«اعتماد المحدد». الأجهزة الشخصية (لابتوب/موبايل من خارج الشبكة) تُعتمد واحداً واحداً بعد التأكد من صاحبها.', 'After staff sign in once from the branch PC, open "Pending", filter by branch and kind "Branch PC" (internal network), then Ctrl+A and "Approve selected". Personal devices (laptops/phones seen from outside the network) are approved one by one after checking the owner.'),
+            T('بعد ما الموظفين يسجلوا دخول مرة من كمبيوتر الفرع، افتح «بانتظار الاعتماد»، صفّي بالفرع والنوع «جهاز فرع» (والشبكة داخلية) — فلترا الفروع والأنواع يقبلان أكتر من اختيار، ثم Ctrl+A و«اعتماد المحدد». الأجهزة الشخصية (لابتوب/موبايل من خارج الشبكة) تُعتمد واحداً واحداً بعد التأكد من صاحبها.', 'After staff sign in once from the branch PC, open "Pending", filter by branch and kind "Branch PC" (internal network) — the branch and kind filters take several choices, then Ctrl+A and "Approve selected". Personal devices (laptops/phones seen from outside the network) are approved one by one after checking the owner.'),
             T('اكتب اسماً واضحاً للجهاز (مثلاً «كاشير 1 — فرع المعادي») واختر النوع والفرع من الصف نفسه.', 'Give the device a clear name (e.g. "Cashier 1 — Maadi") and pick its kind and branch in the row itself.'),
             T('«حظر» يحتاج سبباً تكتبه في الخانة بجانب الزر. بعدها أي طلب من الجهاز يُرفض فوراً. الحظر يوقف هذا المتصفح فقط — لإيقاف شخص عطّل حسابه. ولا يمكنك حظر الجهاز الذي تستخدمه الآن.', '"Block" needs a reason typed in the field next to the button. After that every request from the device is refused at once. Blocking stops this one browser only — to stop a person, disable their account. You cannot block the device you are using right now.'),
             T('«تقاعد» نهائي ويطلب ضغطة تأكيد ثانية: الجهاز لا يمكن إعادة تفعيله، وأي دخول من نفس المتصفح بعدها يُنشئ جهازاً جديداً.', '"Retire" is final and asks for a second click to confirm: the device cannot be reactivated, and the next sign-in from that browser creates a new device.'),
@@ -981,9 +981,8 @@ SCREENS = [
              'warn': T('الحظر يقطع جلسات الجهاز فوراً.', 'Blocking ends the device\'s sessions at once.'),
              'open_hint': T('يظهر على كل صف معتمد أو معلّق.', 'Shown on every approved or pending row.')},
         ],
-        'change_note': T('بعد التطبيق الفعلي المتصفح غير المعتمد يعرض بس؛ خطوات الكمبيوتر الجديد؛ المدير يعتمد من متصفح غير معتمد داخل الشبكة',
-                         'After enforcement an unapproved browser can only look; the new-PC steps; an admin can approve from an unapproved browser inside'),
-        'updated': '2026-11-01',
+        'change_note': T('فلترا الفروع والأنواع يقبلان الآن أكثر من اختيار معاً', 'The branch and kind filters now take several choices at once'),
+        'updated': '2026-11-12',
     },
     {
         'key': 'admin.zone_policy',

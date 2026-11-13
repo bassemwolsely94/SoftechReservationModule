@@ -14,19 +14,22 @@ import ProgressBar from '../../components/ProgressBar'
 import useGridKeyboard, { ACTIVE_ROW } from '../../hooks/useGridKeyboard'
 import useServerSort from '../../hooks/useServerSort'
 import SortTh from '../../components/SortTh'
+import MultiSelectFilter from '../../components/MultiSelectFilter'
+import BranchMultiSelect from '../../components/BranchMultiSelect'
 
 const egp = (n) => (n ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
 const errOf = (e, d) => e?.response?.data?.detail || d
 const LANES = [['', 'الكل'], ['move', 'يُباع بفرع آخر'], ['return', 'مرتجع للمورد'], ['stop', 'إيقاف (موقوف)']]
-const LOCS = [['', 'كل المواقع'], ['hq_only', 'الرئيسي فقط'], ['branches_only', 'فروع فقط'], ['both', 'الرئيسي والفروع']]
+const LOC_OPTIONS = [{ code: 'hq_only', name: 'الرئيسي فقط' }, { code: 'branches_only', name: 'فروع فقط' },
+                     { code: 'both', name: 'الرئيسي والفروع' }]
 const SORT_KEYS = ['name', 'branch_name', 'qty', 'value', 'last_sale_date', 'oldest_arrival_date', 'network_rate', 'lane_label', 'cause_label']
 const LANE_TONE = { move: 'bg-emerald-50 text-emerald-700', return: 'bg-indigo-50 text-indigo-700', stop: 'bg-gray-100 text-gray-700' }
 
 export default function DeadStockTab() {
   const qc = useQueryClient()
   const [lane, setLane] = useState('')
-  const [location, setLocation] = useState('')
-  const [branch, setBranch] = useState('')
+  const [location, setLocation] = useState([])   // multi-select ([] = all)
+  const [branch, setBranch] = useState([])       // SOFTECH codes, multi-select ([] = all)
   const [q, setQ] = useState('')
   const [showDecided, setShowDecided] = useState(false)
   const [ticked, setTicked] = useState(new Set())
@@ -36,7 +39,7 @@ export default function DeadStockTab() {
   const [since, setSince] = useState(null)
   const [page, setPage] = useState(1)
   const [ordering, setOrdering] = useState('')   // server-side sort of ALL lines (rank order until a header is clicked)
-  const filters = { lane: lane || undefined, location: location || undefined, branch: branch || undefined,
+  const filters = { lane: lane || undefined, location: location.join(',') || undefined, branch: branch.join(',') || undefined,
                     q: q || undefined, show_decided: showDecided ? 1 : undefined }
   const params = { ...filters, ...(ordering ? { ordering } : {}), page }
   useEffect(() => { setPage(1); setTicked(new Set()) }, [lane, location, branch, q, showDecided])
@@ -117,13 +120,10 @@ export default function DeadStockTab() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <select value={location} onChange={e => setLocation(e.target.value)} className="border rounded px-2 py-1">
-          {LOCS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-        </select>
-        <select value={branch} onChange={e => setBranch(e.target.value)} className="border rounded px-2 py-1">
-          <option value="">كل الفروع</option>
-          {(summary.data?.branches || []).map(b => <option key={b.code} value={b.code}>{b.name}</option>)}
-        </select>
+        <MultiSelectFilter className="w-40 text-xs" options={LOC_OPTIONS} selected={location} onChange={setLocation}
+                           allLabel="كل المواقع" showCode={false} />
+        <BranchMultiSelect className="w-44 text-xs" valueKey="code" selected={branch} onChange={setBranch}
+                           branches={(summary.data?.branches || []).map(b => ({ id: b.code, softech_branch_id: b.code, name_ar: b.name }))} />
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="بحث بالصنف أو الكود" className="border rounded px-2 py-1" />
         <label className="flex items-center gap-1 text-xs text-gray-600"><input type="checkbox" checked={showDecided} onChange={e => setShowDecided(e.target.checked)} /> إظهار المستبعد</label>
         <span className="flex-1" />

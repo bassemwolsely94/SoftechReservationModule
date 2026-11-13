@@ -15,6 +15,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { shortageApi, branchesApi, invoicesApi } from '../api/client'
 import BranchSelect from '../components/BranchSelect'
+import BranchMultiSelect from '../components/BranchMultiSelect'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import useAuthStore from '../store/authStore'
 import ItemSearchWidget from '../components/ItemSearchWidget'
@@ -1521,11 +1523,14 @@ function ShortageDetail({ listId, onBack }) {
 
 // ─── Aggregate View ───────────────────────────────────────────────────────────
 
+const AGG_STATUS_OPTIONS = [{ code: 'open', name: 'مفتوحة' }, { code: 'submitted', name: 'مُرسَلة' }]
+const LIST_STATUS_OPTIONS = [...AGG_STATUS_OPTIONS, { code: 'resolved', name: 'محلولة' }]
+
 function AggregateView({ branches, onClose }) {
   const [data,       setData]       = useState([])
   const [loading,    setLoading]    = useState(false)
   const [branchIds,  setBranchIds]  = useState([])
-  const [statusF,    setStatusF]    = useState('open')
+  const [statusF,    setStatusF]    = useState(['open'])   // multi-select; [] = every status
   const [dateFrom,   setDateFrom]   = useState('')
   const [dateTo,     setDateTo]     = useState('')
   const [exporting,  setExporting]  = useState(false)
@@ -1539,7 +1544,7 @@ function AggregateView({ branches, onClose }) {
     try {
       const params = {}
       if (branchIds.length) params.branch_ids = branchIds.join(',')
-      if (statusF) params.status = statusF
+      params.status = statusF.join(',')   // sent even when empty: no param = «open» on the server
       if (dateFrom) params.date_from = dateFrom
       if (dateTo) params.date_to = dateTo
       const r = await shortageApi.aggregate(params)
@@ -1554,7 +1559,7 @@ function AggregateView({ branches, onClose }) {
     try {
       const params = {}
       if (branchIds.length) params.branch_ids = branchIds.join(',')
-      if (statusF) params.status = statusF
+      params.status = statusF.join(',')   // sent even when empty: no param = «open» on the server
       if (dateFrom) params.date_from = dateFrom
       if (dateTo) params.date_to = dateTo
       const r = await shortageApi.exportAggregated(params)
@@ -1580,13 +1585,14 @@ function AggregateView({ branches, onClose }) {
         </div>
         <div className="flex items-end gap-3 flex-wrap">
           <div>
+            <label className="text-xs text-gray-500 block mb-1">الفروع</label>
+            <BranchMultiSelect selected={branchIds} onChange={setBranchIds} branches={branches}
+              allLabel="كل الفروع" className="w-52" />
+          </div>
+          <div>
             <label className="text-xs text-gray-500 block mb-1">الحالة</label>
-            <select value={statusF} onChange={e => setStatusF(e.target.value)}
-              className="border border-gray-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
-              <option value="">الكل</option>
-              <option value="open">مفتوحة</option>
-              <option value="submitted">مُرسَلة</option>
-            </select>
+            <MultiSelectFilter options={AGG_STATUS_OPTIONS} selected={statusF} onChange={setStatusF}
+              allLabel="الكل" showCode={false} className="w-[150px]" />
           </div>
           <div>
             <label className="text-xs text-gray-500 block mb-1">من تاريخ</label>
@@ -1758,16 +1764,16 @@ export default function ShortagePage() {
   const [showCreate,   setShowCreate]   = useState(false)
   const [activeId,     setActiveId]     = useState(null)
   const [showAggregate, setShowAggregate] = useState(false)
-  const [filterBranch, setFilterBranch] = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
+  const [filterBranch, setFilterBranch] = useState([])   // multi-select branch ids; [] = all
+  const [filterStatus, setFilterStatus] = useState([])   // multi-select statuses; [] = all
   const { user } = useAuthStore()
 
   const loadLists = useCallback(async () => {
     setLoading(true)
     try {
       const params = {}
-      if (filterBranch) params.branch = filterBranch
-      if (filterStatus) params.status = filterStatus
+      if (filterBranch.length) params.branch = filterBranch.join(',')
+      if (filterStatus.length) params.status = filterStatus.join(',')
       const r = await shortageApi.list(params)
       setLists(r.data.results || r.data)
     } finally {
@@ -1838,24 +1844,21 @@ export default function ShortagePage() {
 
         {/* Filters */}
         <div data-tour="shortage-list-filters" className="flex gap-3 flex-wrap">
-          <BranchSelect
-            size="sm"
-            value={filterBranch}
+          <BranchMultiSelect
+            selected={filterBranch}
             onChange={setFilterBranch}
             branches={branches}
             allLabel="كل الفروع"
             className="w-52"
           />
-          <select
-            value={filterStatus}
-            onChange={e => setFilterStatus(e.target.value)}
-            className="border border-gray-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
-          >
-            <option value="">كل الحالات</option>
-            <option value="open">مفتوحة</option>
-            <option value="submitted">مُرسَلة</option>
-            <option value="resolved">محلولة</option>
-          </select>
+          <MultiSelectFilter
+            options={LIST_STATUS_OPTIONS}
+            selected={filterStatus}
+            onChange={setFilterStatus}
+            allLabel="كل الحالات"
+            showCode={false}
+            className="w-[170px]"
+          />
         </div>
       </div>
 

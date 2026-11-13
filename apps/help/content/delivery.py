@@ -385,12 +385,12 @@ SCREENS = [
              'text': T('يفتح واتساب برسالة جاهزة بحالة الطلب للعميل. الرسالة بتتبعت لما تضغط إرسال في واتساب.',
                        'Opens WhatsApp with a ready message about the order status. It is sent only when you press send in WhatsApp.'),
              'open_hint': T('افتح طلب له رقم هاتف وفي مرحلة تسمح بإبلاغ العميل.', 'Open an order with a phone number at a stage that allows notifying the customer.')},
-            {'target': 'delivery-dashboard-branch', 'label': T('كل الفروع', 'All branches'), 'when': T('لما تحب تشوف طلبات فرع واحد بس.', 'When you want to see one branch\'s orders only.'),  # from the GitHub-side tour
-             'text': T('فلتر الفرع.',
-                       'Branch filter.'),
+            {'target': 'delivery-dashboard-branch', 'label': T('كل الفروع', 'All branches'), 'when': T('لما تحب تشوف طلبات فرع أو أكثر بس.', 'When you want to see the orders of one or more branches only.'),  # from the GitHub-side tour
+             'text': T('فلتر الفرع يقبل أكثر من فرع معاً، وجنبه فلتر المصدر (كول سنتر / POS) كمان متعدد.',
+                       'The branch filter takes several branches at once; the source filter next to it (call center / POS) does too.'),
              'more': T(
-                 'اختار فرع عشان تشوف طلباته بس، أو «كل الفروع» للصورة الكاملة.\n• مفيد للصيدلي اللي بيجهّز طلبات فرعه ولمسؤول التوزيع اللي ماسك كذا فرع.',
-                 'Choose a branch to see only its orders, or "All branches" for the full picture.\n• Useful for the pharmacist preparing their branch\'s orders and for the dispatcher covering several branches.')},
+                 'علّم فرع أو أكثر عشان تشوف طلباتهم بس؛ لا شىء معلّم = «كل الفروع».\n• مفيد للصيدلي اللي بيجهّز طلبات فرعه ولمسؤول التوزيع اللي ماسك كذا فرع.\n• «كل المصادر»: علّم كول سنتر أو POS الفرع أو الاتنين.',
+                 'Tick one or more branches to see only their orders; nothing ticked = "All branches".\n• Useful for the pharmacist preparing their branch\'s orders and for the dispatcher covering several branches.\n• "All sources": tick call center, branch POS or both.')},
         ],
         'hints': [
             {'target': 'delivery-dashboard-accept', 'label': T('السائق قبل ✓ · إلغاء', 'Driver accepted ✓ · Cancel'),
@@ -446,8 +446,8 @@ SCREENS = [
                        'Saved under your name with no location check, and moves the order to "On the way" or "Delivered" at once.'),
              'open_hint': T('افتح طلب واضغط «✍️ إدخال يدوي».', 'Open an order and press "✍️ Manual entry".')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-12',
+        'change_note': T('فلتر الفرع والمصدر يقبلوا أكثر من اختيار معاً', 'The branch and source filters take several choices at once'),
     },
     {
         'key': 'delivery.dispatch',
@@ -617,10 +617,10 @@ SCREENS = [
             {'target': 'delivery-analytics-filters', 'label': T('اليوم · ٧ أيام · ٣٠ يوم · ٩٠ يوم', 'Today · 7 · 30 · 90 days'),
              'text': T('اختار الفترة بزر جاهز أو من/إلى. الافتراضي آخر ٣٠ يوم.', 'Pick the period with a ready button or from/to. The default is the last 30 days.')},
             {'target': 'delivery-analytics-branch', 'label': T('كل الفروع', 'All branches'),
-             'text': T('فرع واحد أو كل الفروع.', 'One branch or all branches.'),
+             'text': T('فرع أو أكثر معاً؛ لا شىء معلّم = كل الفروع.', 'One or several branches together; nothing ticked = all branches.'),
              'more': T(
-                 'بيقصر كل الأرقام على طلبات الفرع ده بس.\n• قارن الفروع ببعض بإنك تبدّل الفرع وتبص على نفس التبويب.',
-                 "Limits every figure to that branch's orders.\n• Compare branches by switching the branch while looking at the same tab.")},
+                 'بيقصر كل الأرقام على طلبات الفروع المعلّمة بس (مجموعهم معاً).\n• قارن الفروع ببعض بإنك تبدّل الفرع وتبص على نفس التبويب.',
+                 "Limits every figure to the ticked branches' orders (added together).\n• Compare branches by switching the branch while looking at the same tab.")},
             {'target': 'delivery-analytics-tabs', 'label': T('السائقين · المناطق · الورديات · الرضا', 'Drivers · Areas · Shifts · CSAT'),
              'text': T('أربع تقارير: أداء السائقين، الطلبات حسب المنطقة، توزيع الساعات، ورضا العملاء.',
                        'Four reports: driver performance, orders by area, orders by hour, and customer satisfaction.'),
@@ -646,8 +646,8 @@ SCREENS = [
                  'شاشة قراءة بس — مفيش فيها أي تعديل على الطلبات.\n• استخدمها في مراجعة الأسبوع أو الشهر: مين من السائقين محتاج متابعة، وأي منطقة أو ساعة محتاجة سائقين أكتر.',
                  'A read-only screen — it changes nothing on the orders.\n• Use it in the weekly or monthly review: which drivers need follow-up, and which area or hour needs more drivers.')},
         ],
-        'updated': '2026-10-26',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-12',
+        'change_note': T('فلتر الفرع يقبل أكثر من فرع معاً', 'The branch filter takes several branches at once'),
     },
     {
         'key': 'delivery.mobile_board',

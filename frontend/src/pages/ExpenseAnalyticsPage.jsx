@@ -18,6 +18,8 @@ import DataFreshnessBar from '../components/DataFreshnessBar'
 import { fa } from '../utils/flowArrow'
 import useServerSort from '../hooks/useServerSort'
 import SortTh from '../components/SortTh'
+import MultiSelectFilter from '../components/MultiSelectFilter'
+import BranchMultiSelect from '../components/BranchMultiSelect'
 
 const SORT_KEYS = ['expense_date', 'category', 'sub_category', 'description', 'cost_center', 'branch__name', 'amount']
 
@@ -35,6 +37,8 @@ const MONTHS_AR = [
   'يناير','فبراير','مارس','أبريل','مايو','يونيو',
   'يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر',
 ]
+
+const toggleIn = (arr, v) => (arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v])
 
 const CATEGORY_AR = {
   payroll:      'رواتب وأجور',
@@ -55,6 +59,7 @@ const CATEGORY_AR = {
   insurance:    'تأمين',
   other:        'أخرى',
 }
+const CATEGORY_OPTIONS = Object.entries(CATEGORY_AR).map(([code, name]) => ({ code, name }))
 
 const CATEGORY_COLORS = [
   '#10b981','#3b82f6','#f59e0b','#ef4444','#8b5cf6',
@@ -160,9 +165,10 @@ export default function ExpenseAnalyticsPage() {
   const [month,        setMonth]        = useState(today.getMonth() + 1)
   const [dateFrom,     setDateFrom]     = useState('')
   const [dateTo,       setDateTo]       = useState('')
-  const [category,     setCategory]     = useState('')
-  const [subCategory,  setSubCategory]  = useState('')
-  const [branchId,     setBranchId]     = useState('')
+  // category / sub-category / branch are multi-select arrays (none ticked = all)
+  const [category,     setCategory]     = useState([])
+  const [subCategory,  setSubCategory]  = useState([])
+  const [branchId,     setBranchId]     = useState([])
   const [page,         setPage]         = useState(1)
   const [ordering,     setOrdering]     = useState('')   // server-side sort of the paged detail list
   const { headerProps } = useServerSort(ordering, o => { setOrdering(o); setPage(1) }, { allowed: SORT_KEYS })
@@ -172,12 +178,17 @@ export default function ExpenseAnalyticsPage() {
   // Reset page when any filter changes
   const handleFilterChange = fn => (...args) => { fn(...args); setPage(1) }
 
-  // When category changes, clear subcategory
-  const handleCategoryChange = val => {
-    setCategory(val)
-    setSubCategory('')
+  // When the categories change, keep only the sub-categories that belong to them
+  const handleCategoryChange = vals => {
+    setCategory(vals)
+    if (vals.length) {
+      const keep = new Set((subcatData || []).filter(r => vals.includes(r.category)).map(r => r.sub_category))
+      setSubCategory(subs => subs.filter(x => keep.has(x)))
+    }
     setPage(1)
   }
+  const toggleCategory = c => handleCategoryChange(toggleIn(category, c))
+  const toggleSub = sc => { setSubCategory(subs => toggleIn(subs, sc)); setPage(1) }
 
   // Build API params — shared across breakdown + list + subcategory queries
   const baseParams = useMemo(() => {
@@ -189,9 +200,9 @@ export default function ExpenseAnalyticsPage() {
       p.year  = year
       p.month = month
     }
-    if (category)    p.category     = category
-    if (subCategory) p.sub_category = subCategory
-    if (branchId)    p.branch_id    = branchId
+    if (category.length)    p.category     = category.join(',')
+    if (subCategory.length) p.sub_category = subCategory.join(',')
+    if (branchId.length)    p.branch_id    = branchId.join(',')
     return p
   }, [filterMode, year, month, dateFrom, dateTo, category, subCategory, branchId])
 
@@ -217,7 +228,15 @@ export default function ExpenseAnalyticsPage() {
     staleTime: 60_000,
     enabled:  true,   // always load; dropdown shows all or filtered by category
   })
-  const subcategories = subcatData || []
+  const subcategories = useMemo(() => subcatData || [], [subcatData])
+  // one option per sub-category name (a name can sit under several categories), narrowed to the ticked categories
+  const subOptions = useMemo(() => {
+    const totals = new Map()
+    subcategories.filter(s => !category.length || category.includes(s.category)).forEach(s => {
+      totals.set(s.sub_category, (totals.get(s.sub_category) || 0) + parseFloat(s.total || 0))
+    })
+    return [...totals].map(([code, t]) => ({ code, name: `${code} (${fmt(t)})` }))
+  }, [subcategories, category])
 
   // Detail list query
   const { data: listData, isLoading: lLoading } = useQuery({
@@ -244,8 +263,8 @@ export default function ExpenseAnalyticsPage() {
 
   // Sub-category rows to display: prefer breakdown's list (same period)
   // filtered to active category when one is selected
-  const subRowsVisible = category
-    ? subRows.filter(r => r.category === category)
+  const subRowsVisible = category.length
+    ? subRows.filter(r => category.includes(r.category))
     : subRows.slice(0, 20)
 
   // Sub-category total (for bar width calculation)
@@ -253,28 +272,24 @@ export default function ExpenseAnalyticsPage() {
 
   // Active filter chips
   const activeFilters = []
-  if (category) {
+  category.forEach(c => activeFilters.push({
+    label: CATEGORY_AR[c] || c,
+    color: 'orange',
+    clear: () => toggleCategory(c),
+  }))
+  subCategory.forEach(sc => activeFilters.push({
+    label: sc,
+    color: 'blue',
+    clear: () => toggleSub(sc),
+  }))
+  branchId.forEach(id => {
+    const b = branches.find(b => String(b.id) === String(id))
     activeFilters.push({
-      label: CATEGORY_AR[category] || category,
-      color: 'orange',
-      clear: () => handleCategoryChange(''),
-    })
-  }
-  if (subCategory) {
-    activeFilters.push({
-      label: subCategory,
-      color: 'blue',
-      clear: () => { setSubCategory(''); setPage(1) },
-    })
-  }
-  if (branchId) {
-    const b = branches.find(b => String(b.id) === String(branchId))
-    activeFilters.push({
-      label: b?.name || `فرع ${branchId}`,
+      label: b?.name || b?.name_ar || `فرع ${id}`,
       color: 'green',
-      clear: () => { setBranchId(''); setPage(1) },
+      clear: () => { setBranchId(ids => ids.filter(x => x !== id)); setPage(1) },
     })
-  }
+  })
   if (filterMode === 'range' && (dateFrom || dateTo)) {
     activeFilters.push({
       label: `${dateFrom || '?'} — ${dateTo || '?'}`,
@@ -325,37 +340,16 @@ export default function ExpenseAnalyticsPage() {
           )}
 
           {/* Category filter */}
-          <Select value={category} onChange={handleCategoryChange}>
-            <option value="">كل الفئات</option>
-            {Object.entries(CATEGORY_AR).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </Select>
+          <MultiSelectFilter className="w-[170px]" showCode={false} allLabel="كل الفئات" menuClassName="min-w-[220px]"
+            options={CATEGORY_OPTIONS} selected={category} onChange={handleCategoryChange} />
 
           {/* Sub-category filter — shows all subcategories, or those for selected category */}
-          <Select
-            value={subCategory}
-            onChange={v => { setSubCategory(v); setPage(1) }}
-            className="min-w-[180px]"
-          >
-            <option value="">كل التصنيفات الفرعية</option>
-            {subcategories
-              .filter(s => !category || s.category === category)
-              .map(s => (
-                <option key={s.sub_category} value={s.sub_category}>
-                  {s.sub_category} ({fmt(s.total)})
-                </option>
-              ))
-            }
-          </Select>
+          <MultiSelectFilter className="w-[200px]" showCode={false} allLabel="كل التصنيفات الفرعية" menuClassName="min-w-[300px]"
+            options={subOptions} selected={subCategory} onChange={v => { setSubCategory(v); setPage(1) }} />
 
           {/* Branch filter */}
-          <Select value={branchId} onChange={handleFilterChange(setBranchId)}>
-            <option value="">كل الفروع</option>
-            {branches.map(b => (
-              <option key={b.id} value={b.id}>{b.name || b.name_ar}</option>
-            ))}
-          </Select>
+          <BranchMultiSelect className="w-[180px]" branches={branches}
+            selected={branchId} onChange={handleFilterChange(setBranchId)} />
         </div>
 
         {/* Active filter chips */}
@@ -367,7 +361,7 @@ export default function ExpenseAnalyticsPage() {
             ))}
             {activeFilters.length > 1 && (
               <button
-                onClick={() => { setCategory(''); setSubCategory(''); setBranchId(''); setDateFrom(''); setDateTo(''); setPage(1) }}
+                onClick={() => { setCategory([]); setSubCategory([]); setBranchId([]); setDateFrom(''); setDateTo(''); setPage(1) }}
                 className="text-xs text-red-500 hover:underline px-1"
               >
                 مسح الكل
@@ -419,8 +413,8 @@ export default function ExpenseAnalyticsPage() {
                   amount={parseFloat(r.total || 0)}
                   total={total}
                   colorIdx={i}
-                  active={category === r.category}
-                  onClick={() => handleCategoryChange(category === r.category ? '' : r.category)}
+                  active={category.includes(r.category)}
+                  onClick={() => toggleCategory(r.category)}
                 />
               ))}
             </div>
@@ -434,8 +428,8 @@ export default function ExpenseAnalyticsPage() {
             <Card>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-gray-700">
-                  {category
-                    ? `التصنيفات الفرعية — ${CATEGORY_AR[category] || category}`
+                  {category.length
+                    ? `التصنيفات الفرعية — ${category.map(c => CATEGORY_AR[c] || c).join('، ')}`
                     : 'أعلى التصنيفات الفرعية'}
                 </h3>
                 <span className="text-xs text-gray-400">{subRowsVisible.length} تصنيف</span>
@@ -458,11 +452,8 @@ export default function ExpenseAnalyticsPage() {
                     amount={parseFloat(r.total || 0)}
                     count={r.count || 0}
                     total={subTotal}
-                    active={subCategory === r.sub_category}
-                    onClick={() => {
-                      setSubCategory(subCategory === r.sub_category ? '' : r.sub_category)
-                      setPage(1)
-                    }}
+                    active={subCategory.includes(r.sub_category)}
+                    onClick={() => toggleSub(r.sub_category)}
                   />
                 ))}
               </div>
@@ -514,9 +505,9 @@ export default function ExpenseAnalyticsPage() {
                     {/* Category badge — clickable */}
                     <td className="px-4 py-2.5">
                       <button
-                        onClick={() => handleCategoryChange(category === e.category ? '' : e.category)}
+                        onClick={() => toggleCategory(e.category)}
                         className={`px-2 py-0.5 rounded-full text-xs border transition-colors whitespace-nowrap ${
-                          category === e.category
+                          category.includes(e.category)
                             ? 'bg-orange-200 border-orange-300 text-orange-900'
                             : 'bg-orange-50 border-orange-100 text-orange-700 hover:bg-orange-100'
                         }`}
@@ -529,12 +520,9 @@ export default function ExpenseAnalyticsPage() {
                     <td className="px-4 py-2.5">
                       {e.sub_category ? (
                         <button
-                          onClick={() => {
-                            setSubCategory(subCategory === e.sub_category ? '' : e.sub_category)
-                            setPage(1)
-                          }}
+                          onClick={() => toggleSub(e.sub_category)}
                           className={`px-2 py-0.5 rounded-full text-xs border transition-colors max-w-[160px] truncate block ${
-                            subCategory === e.sub_category
+                            subCategory.includes(e.sub_category)
                               ? 'bg-blue-200 border-blue-300 text-blue-900'
                               : 'bg-blue-50 border-blue-100 text-blue-700 hover:bg-blue-100'
                           }`}

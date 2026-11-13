@@ -14,6 +14,7 @@ from django.utils import timezone
 from apps.pbx.models import AgentExtension, CdrCall
 from apps.pic_analytics.models import PicDayFact
 from apps.pic_analytics.settings import setting
+from core.multi_filter import filter_in
 
 
 def _bounds(f):
@@ -28,8 +29,8 @@ def calls_qs(f, use_agent=True):
     use_agent=False - missed calls lost in the queue have no agent)."""
     lo, hi = _bounds(f)
     qs = CdrCall.objects.filter(is_transfer=False, call_at__gte=lo, call_at__lt=hi)
-    if use_agent and f.agent_ext:
-        qs = qs.filter(agent_ext=f.agent_ext)
+    if use_agent and f.agent_ext:   # one extension or several (multi-select)
+        qs = filter_in(qs, 'agent_ext', list(f.agent_ext))
     return qs
 
 

@@ -42,6 +42,7 @@ from .serializers import (
     SupplierCategorySerializer, SupplierClassificationRuleSerializer,
 )
 from core.threads import start_thread
+from core.multi_filter import filter_in, multi_values
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -635,9 +636,8 @@ class AlertListView(generics.ListAPIView):
 
     def get_queryset(self):
         qs = ProcurementAlert.objects.all()
-        severity = self.request.query_params.get('severity', '').strip()
-        if severity:
-            qs = qs.filter(severity=severity)
+        # ?severity=critical or ?severity=critical,warning — several levels at once (none = all)
+        qs = filter_in(qs, 'severity', multi_values(self.request.query_params, 'severity'))
         alert_type = self.request.query_params.get('alert_type', '').strip()
         if alert_type:
             qs = qs.filter(alert_type=alert_type)

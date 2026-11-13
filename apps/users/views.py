@@ -36,6 +36,7 @@ from .serializers import (
     ERPUserSerializer,
 )
 from core.client_ip import client_ip
+from core.multi_filter import filter_in, multi_values
 from core.stable_ordering import StableOrderingMixin
 from .passwords import password_problem
 from core.permissions import IsAdminRole, MatrixPermission, matrix_allows, matrix_permission
@@ -573,11 +574,10 @@ class StaffProfileViewSet(StableOrderingMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        role   = self.request.query_params.get('role')
         branch = self.request.query_params.get('branch')
         active = self.request.query_params.get('is_active')
-        if role:
-            qs = qs.filter(role=role)
+        # role: one or several (?role=pharmacist,cashier); none = every role
+        qs = filter_in(qs, 'role', multi_values(self.request.query_params, 'role'))
         if branch:
             qs = qs.filter(branch_id=branch)
         if active is not None:

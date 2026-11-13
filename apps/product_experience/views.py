@@ -34,6 +34,7 @@ from .services import (
 )
 from .selectors import search_products, autocomplete_products, get_recommendations, get_popular_products
 from core.export_safety import neutralise_formulas
+from core.multi_filter import multi_values
 from core.permissions import RouteModulePermission  # round 2, D6
 
 
@@ -58,25 +59,26 @@ def product_list(request):
     Query params: q, category, shape_code, origin_code, requires_fridge,
                   is_chronic, prescription_required, effect_code, has_image,
                   supplier_code, page, page_size
+    shape_code / effect_code / insurance_type take several values (?k=a,b or repeated).
     """
     q = request.query_params.get('q', '').strip()
     ordering = request.query_params.get('ordering', 'popular')
     filters = {
         'availability':        request.query_params.get('availability'),
         'category':            request.query_params.get('category'),
-        'shape_code':          request.query_params.get('shape_code'),
+        'shape_code':          multi_values(request.query_params, 'shape_code'),   # multi-select
         'origin_code':         request.query_params.get('origin_code'),
-        'effect_code':         request.query_params.get('effect_code'),
+        'effect_code':         multi_values(request.query_params, 'effect_code'),   # multi-select
         'supplier_code':       request.query_params.get('supplier_code'),
         'requires_fridge':     request.query_params.get('requires_fridge'),
         'is_chronic':          request.query_params.get('is_chronic'),
         'is_fast_moving':      request.query_params.get('is_fast_moving'),
-        'insurance_type':      request.query_params.get('insurance_type'),
+        'insurance_type':      multi_values(request.query_params, 'insurance_type'),   # multi-select
         'has_image':           request.query_params.get('has_image'),
         'prescription_required': request.query_params.get('prescription_required'),
     }
     # Clean None / empty
-    filters = {k: v for k, v in filters.items() if v not in (None, '', 'null')}
+    filters = {k: v for k, v in filters.items() if v not in (None, '', 'null', [])}
     # Booleans
     for bool_key in ('requires_fridge', 'is_chronic', 'is_fast_moving', 'has_image'):
         if bool_key in filters:
@@ -654,15 +656,15 @@ def product_export(request):
     filters_raw = {
         'availability':   request.query_params.get('availability'),
         'category':       request.query_params.get('category'),
-        'shape_code':     request.query_params.get('shape_code'),
-        'effect_code':    request.query_params.get('effect_code'),
+        'shape_code':     multi_values(request.query_params, 'shape_code'),   # multi-select
+        'effect_code':    multi_values(request.query_params, 'effect_code'),   # multi-select
         'supplier_code':  request.query_params.get('supplier_code'),
         'requires_fridge': request.query_params.get('requires_fridge'),
         'is_chronic':     request.query_params.get('is_chronic'),
         'is_fast_moving': request.query_params.get('is_fast_moving'),
-        'insurance_type': request.query_params.get('insurance_type'),
+        'insurance_type': multi_values(request.query_params, 'insurance_type'),   # multi-select
     }
-    filters = {k: v for k, v in filters_raw.items() if v not in (None, '', 'null')}
+    filters = {k: v for k, v in filters_raw.items() if v not in (None, '', 'null', [])}
     for bk in ('requires_fridge', 'is_chronic', 'is_fast_moving'):
         if bk in filters:
             filters[bk] = filters[bk].lower() in ('1', 'true', 'yes')

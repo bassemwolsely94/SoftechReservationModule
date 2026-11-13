@@ -714,3 +714,13 @@ accountant POST /api/tax-invoicing/receipts/configs/
 accountant POST /api/tax-invoicing/signing/smoke-test/
 accountant POST /api/tax-invoicing/signing-agent/next/
 accountant POST /api/tax-invoicing/signing-agent/jobs/987654321/result/
+
+# reason: data lifecycle Stage 5 (design 2026-11-07 §7) — supervisor and quality manager hold data_health view
+#   for Growth, Problems and the refresh only; the register, held files and their thumbnails are admin only
+#   (IsAdminRole in apps/data_lifecycle/views.py), because held rows describe prescriptions and other files.
+quality_manager GET /api/data-health/held/
+quality_manager GET /api/data-health/held/987654321/thumbnail/
+quality_manager GET /api/data-health/rules/
+supervisor GET /api/data-health/held/
+supervisor GET /api/data-health/held/987654321/thumbnail/
+supervisor GET /api/data-health/rules/

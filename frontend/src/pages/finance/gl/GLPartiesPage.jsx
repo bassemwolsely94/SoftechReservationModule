@@ -14,11 +14,14 @@ import { usePermissions } from '../../../hooks/usePermission'
 import useSortableRows from '../../../hooks/useSortableRows'
 import useGridKeyboard, { GRID_KEYS_HINT } from '../../../hooks/useGridKeyboard'
 import SortTh from '../../../components/SortTh'
+import MultiSelectFilter from '../../../components/MultiSelectFilter'
 import { SkeletonTable, EmptyState } from '../../../components/ui'
 import { errOf, listOf, inputCls, btnPrimary, btnPlain, ErrorBox } from './glUi'
 
 export const PARTY_TYPES = { supplier: 'مورد', customer: 'عميل', employee: 'موظف', partner: 'شريك', other: 'أخرى' }
 const STATUSES = { unmapped: 'غير مربوط', proposed: 'مقترح', confirmed: 'مؤكد', rejected: 'مرفوض' }
+const STATUS_OPTIONS = Object.entries(STATUSES).map(([code, name]) => ({ code, name }))
+const TYPE_OPTIONS = Object.entries(PARTY_TYPES).map(([code, name]) => ({ code, name }))
 const BASIS = { exact: 'تطابق تام', tokens: 'تطابق كلمات', manual: 'يدوي' }
 const STATUS_CLS = {
   unmapped: 'bg-gray-100 text-gray-600 border-gray-200',
@@ -194,8 +197,8 @@ function ConfirmUploadBar({ onDone }) {
 export default function GLPartiesPage() {
   const qc = useQueryClient()
   const perms = usePermissions('ledger')
-  const [status, setStatus] = useState('proposed')
-  const [type, setType] = useState('')
+  const [status, setStatus] = useState(['proposed'])   // multi-select arrays (none ticked = all)
+  const [type, setType] = useState([])
   const [q, setQ] = useState('')
   const dq = useDebounced(q)
   const [extra, setExtra] = useState([])           // further cursor pages
@@ -205,7 +208,7 @@ export default function GLPartiesPage() {
 
   const listQ = useQuery({
     queryKey: ['gl', 'parties', status, type, dq],
-    queryFn: () => glApi.parties({ status: status || undefined, type: type || undefined, q: dq || undefined })
+    queryFn: () => glApi.parties({ status: status.length ? status.join(',') : undefined, type: type.length ? type.join(',') : undefined, q: dq || undefined })
       .then(r => r.data),
     placeholderData: (prev) => prev,
   })
@@ -244,14 +247,10 @@ export default function GLPartiesPage() {
   return (
     <div className="space-y-4" dir="rtl">
       <div className="flex flex-wrap items-center gap-2">
-        <select className={inputCls} value={status} onChange={e => setStatus(e.target.value)}>
-          <option value="">كل الحالات</option>
-          {Object.entries(STATUSES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-        </select>
-        <select className={inputCls} value={type} onChange={e => setType(e.target.value)}>
-          <option value="">كل الأنواع</option>
-          {Object.entries(PARTY_TYPES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-        </select>
+        <MultiSelectFilter className="w-[150px]" showCode={false} allLabel="كل الحالات"
+          options={STATUS_OPTIONS} selected={status} onChange={setStatus} />
+        <MultiSelectFilter className="w-[150px]" showCode={false} allLabel="كل الأنواع"
+          options={TYPE_OPTIONS} selected={type} onChange={setType} />
         <input className={`${inputCls} w-64`} placeholder="بحث بالكود أو الاسم (* أو % للبدل)" value={q}
                onChange={e => setQ(e.target.value)} />
         <span className="text-xs text-gray-500 ms-auto">{rows.length}{next ? '+' : ''} طرف</span>
@@ -265,7 +264,7 @@ export default function GLPartiesPage() {
            className={`bg-white rounded-xl border border-gray-200 overflow-x-auto ${kb.containerProps.className}`}
            data-tour="finance-gl-parties-grid">
         {listQ.isLoading ? <SkeletonTable rows={8} cols={7} /> : !sorted.length ? (
-          <EmptyState title="لا توجد أطراف" sub={status === 'proposed' ? 'لا اقتراحات بانتظار التأكيد — استورد الأطراف ثم اضغط «اقتراح المطابقة»' : 'غيّر الفلتر'} />
+          <EmptyState title="لا توجد أطراف" sub={status.length === 1 && status[0] === 'proposed' ? 'لا اقتراحات بانتظار التأكيد — استورد الأطراف ثم اضغط «اقتراح المطابقة»' : 'غيّر الفلتر'} />
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-600 text-xs">

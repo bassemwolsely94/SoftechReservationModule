@@ -185,12 +185,12 @@ SCREENS = [
             {'key': 'untracked', 'title': T('🔔 غير متابعة', '🔔 Not followed'), 'body': T('مهام لم يتابعها أحد بعد — لا يجب أن تبقى هنا طويلاً.', 'Tasks nobody has followed yet — they should not stay here long.')},
             {'key': 'priority', 'title': T('⚡ الأعلى أولوية', '⚡ Highest priority'), 'body': T('مرتبة بدرجة الأولوية (قيمة العميل، التأخير، خطر الانقطاع).', 'Sorted by priority score (customer value, delay, churn risk).')},
             {'key': 'call_lists', 'title': T('📞 قوائم الاتصال', '📞 Call lists'),
-             'body': T('حملات اتصال صادرة: «+ قائمة اتصال جديدة» ← اختر الشريحة والفرع ومدة الانقطاع عن الشراء (يظهر عدد العملاء المطابقين فوراً)، '
+             'body': T('حملات اتصال صادرة: «+ قائمة اتصال جديدة» ← اختر الشريحة والفرع (فرع أو أكثر؛ لا شىء = كل الفروع المسموحة) ومدة الانقطاع عن الشراء (يظهر عدد العملاء المطابقين فوراً)، '
                        'اكتب نص المكالمة واختر الموظفين — تُنشأ مهمة لكل عميل (حتى 500) وتوزَّع عليهم بالتساوي، ويصل كل موظف إشعار واحد. '
                        'يُستبعد من ليس له رقم، ومن طلب إيقاف التذكيرات، ومن لديه مهمة مفتوحة. اضغط على قائمة لترى عملاءها أدناه، '
                        'واتصل بزر «📞» بجانب الرقم ثم سجّل النتيجة كالمعتاد. «إغلاق القائمة» يلغي ما لم يتم الاتصال به. '
                        'الإنشاء للمدير والمشرف وموظفي الكول سنتر.',
-                       'Outbound call campaigns: "+ New call list" → choose segment, branch and days since last purchase (the matching count shows instantly), '
+                       'Outbound call campaigns: "+ New call list" → choose segment, branch (one or several; none = every allowed branch) and days since last purchase (the matching count shows instantly), '
                        'write the call script and pick the staff — one task per customer is created (up to 500) and split evenly, with one notification per staff member. '
                        'Customers without a phone, who asked to stop reminders, or with an open task are skipped. Click a list to see its customers below, '
                        'call with the "📞" button next to the number, then record the outcome as usual. "Close list" cancels what was not called. '
@@ -260,12 +260,12 @@ SCREENS = [
                  'Each chip is a status with its count: pending, called, done, missed, auto. "Missed" turns red when it has tasks.\n• The chip works together with the personal tab above it, so "Assigned to me" + "Pending" = yours and not called yet.'),
          },
             {'target': 'followups-tasks-filters', 'label': T('🔍 فلاتر متقدمة', '🔍 Advanced filters'),
-             'text': T('فلاتر متقدمة: القناة، الفرع، موعد الاستحقاق، المتأخر بس، الشريحة، خطر الانقطاع، اسم الصنف أو العميل.',
-                       'Advanced filters: channel, branch, due date, overdue only, segment, churn risk, item or customer name.'),
-             'when': T('اضغط الشريط عشان يفتح. مفيد لما تتابع فرع واحد أو صنف واحد.', 'Click the bar to open it. Useful when following one branch or one item.'),
+             'text': T('فلاتر متقدمة. التشخيص ونوع الدواء والشريحة وخطر الانقطاع والفرع تقبل أكثر من اختيار معاً؛ لا شىء معلّم = الكل.',
+                       'Advanced filters. Diagnosis, medicine type, segment, churn risk and branch take several choices; nothing ticked = all.'),
+             'when': T('اضغط الشريط عشان يفتح. مفيد لما تتابع فرعين أو شريحتين معاً.', 'Click the bar to open it. Useful when following two branches or two segments together.'),
              'more': T(
-                 'اضغط «🔍 فلاتر متقدمة» عشان تفتحها: قناة البيع، بحث صنف أو عميل، التشخيص، نوع الدواء، شريحة العميل، خطر الانقطاع، الفرع، ومدى تاريخ الاستحقاق.\n• «المتأخرة فقط» و«ترتيب حسب الأولوية» اختصارات سريعة.\n• «مسح كل الفلاتر» يرجّع الكل.',
-                 'Press "🔍 Advanced filters" to open them: sales channel, item or customer search, diagnosis, medicine type, customer segment, churn risk, branch and due-date range.\n• "Overdue only" and "Sort by priority" are quick shortcuts.\n• "Clear all filters" resets everything.'),
+                 'اضغط «🔍 فلاتر متقدمة» عشان تفتحها: قناة البيع، بحث صنف أو عميل، التشخيص، نوع الدواء، شريحة العميل، خطر الانقطاع، الفرع، ومدى تاريخ الاستحقاق.\n• التشخيص ونوع الدواء والشريحة وخطر الانقطاع والفرع: افتح الفلتر وعلّم أكثر من اختيار (مثلاً «مرتفع» + «حرج»)، ولا شىء معلّم = الكل.\n• «المتأخرة فقط» و«ترتيب حسب الأولوية» اختصارات سريعة.\n• «مسح كل الفلاتر» يرجّع الكل.',
+                 'Press "🔍 Advanced filters" to open them: sales channel, item or customer search, diagnosis, medicine type, customer segment, churn risk, branch and due-date range.\n• Diagnosis, medicine type, segment, churn risk and branch: open the filter and tick several (e.g. "High" + "Critical"); nothing ticked = all.\n• "Overdue only" and "Sort by priority" are quick shortcuts.\n• "Clear all filters" resets everything.'),
          },
             {'target': 'followups-tasks-groups', 'label': T('كارت العميل', 'Customer card'),
              'text': T('كارت لكل عميل: عدد أدويته، المعلق والمتأخر منها. اضغط الكارت عشان تفتح قائمة أدويته.',
@@ -452,8 +452,9 @@ SCREENS = [
              'when': T('بعد ما تراجعها — بعدها مش هتظهر كجديدة.', 'After you have gone through them — they will no longer show as new.'),
              'open_hint': T('جوه قائمة جرس الإشعارات، لما يكون فيه غير مقروء.', 'Inside the bell list, when there are unread ones.')},
         ],
-        'updated': '2026-11-09',
-        'change_note': T('شرح لكل أزرار الشاشة في «💡 تلميحات الأزرار»', 'Every button on the screen explained in "💡 Button hints"'),
+        'updated': '2026-11-12',
+        'change_note': T('فلاتر التشخيص ونوع الدواء والشريحة وخطر الانقطاع والفرع — وفرع قائمة الاتصال — تقبل أكثر من اختيار',
+                         'Diagnosis, medicine type, segment, churn risk and branch filters — and the call-list branch — take several choices'),
     },
     {
         'key': 'followups.reminders',

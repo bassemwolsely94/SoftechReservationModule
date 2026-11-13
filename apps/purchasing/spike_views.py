@@ -14,6 +14,7 @@ each engine run (apps.purchasing.spike + engine MODULE 10.7).
   POST unconfirm/   — revert to monitor-only (no cap)
 """
 import logging
+from core.multi_filter import filter_in, multi_values
 from django.conf import settings
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -87,9 +88,7 @@ def spike_candidates(request):
     tier = request.GET.get('tier')
     if tier in ('strong', 'watch'):
         qs = qs.filter(spike_tier=tier)
-    med = request.GET.get('med')
-    if med:
-        qs = qs.filter(medicine_type=med)
+    qs = filter_in(qs, 'medicine_type', multi_values(request.GET, 'med'))   # one class or several (?med=a,b)
     q = (request.GET.get('q') or '').strip()
     if q:
         qs = qs.filter(wq(q, 'name') | Q(softech_id__icontains=q))

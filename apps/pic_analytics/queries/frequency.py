@@ -63,3 +63,11 @@ def pics_in_bucket(bucket, end):
     if _is_yesterday(end):
         return PicRollup.objects.filter(cycle_bucket=bucket).values('pic')
     return [p for p, v in _computed(None, end).items() if v['cycle_bucket'] == bucket]
+
+
+def pics_in_buckets(buckets, end):
+    """PICs whose cycle bucket at `end` is any of `buckets` (the multi-select frequency filter)."""
+    buckets = list(buckets)
+    if _is_yesterday(end):
+        return PicRollup.objects.filter(cycle_bucket__in=buckets).values('pic')
+    return [p for p, v in _computed(None, end).items() if v['cycle_bucket'] in buckets]

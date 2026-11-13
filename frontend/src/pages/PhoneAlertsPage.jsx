@@ -18,6 +18,7 @@ import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
 import { PHONE_ALERT_STATUS } from '../components/PhoneAlertStatusChip'
 import PhoneAlertStatusChip from '../components/PhoneAlertStatusChip'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 
 const TABS = [
   { key: 'policy',   label: '⚙️ السياسات' },
@@ -432,10 +433,20 @@ function LogDetail({ id }) {
 }
 
 function LogTab({ events }) {
-  const [f, setF] = useState({ status: '', event: '', date: '' })
+  // status / event are multi-select arrays (none ticked = all), sent as a comma list
+  const [f, setF] = useState({ status: [], event: [], date: '' })
   const [cursor, setCursor] = useState(null)
   const [open, setOpen] = useState(null)
-  const params = { status: f.status || undefined, event: f.event || undefined, date: f.date || undefined, cursor: cursor || undefined }
+  const params = {
+    status: f.status.length ? f.status.join(',') : undefined,
+    event: f.event.length ? f.event.join(',') : undefined,
+    date: f.date || undefined, cursor: cursor || undefined,
+  }
+  const statusOptions = Object.entries(PHONE_ALERT_STATUS).map(([code, v]) => ({ code, name: v.label }))
+  const eventOptions = [
+    ...events.filter(p => !EXTRA_EVENTS.some(([k]) => k === p.event)).map(p => ({ code: p.event, name: p.label })),
+    ...EXTRA_EVENTS.map(([code, name]) => ({ code, name })),
+  ]
   const { data, isLoading, error } = useQuery({
     queryKey: ['phone-alert-log', params],
     queryFn: () => phoneAlertsApi.log(params).then(r => r.data),
@@ -448,16 +459,10 @@ function LogTab({ events }) {
   return (
     <div data-tour="phone-alerts-log" className="space-y-3">
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex flex-wrap gap-3 items-center">
-        <select className={INPUT} value={f.status} onChange={e => set('status', e.target.value)}>
-          <option value="">كل الحالات</option>
-          {Object.entries(PHONE_ALERT_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-        </select>
-        <select className={INPUT} value={f.event} onChange={e => set('event', e.target.value)}>
-          <option value="">كل الأحداث</option>
-          {events.filter(p => !EXTRA_EVENTS.some(([k]) => k === p.event))
-            .map(p => <option key={p.event} value={p.event}>{p.label}</option>)}
-          {EXTRA_EVENTS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-        </select>
+        <MultiSelectFilter className="w-[160px]" showCode={false} allLabel="كل الحالات"
+          options={statusOptions} selected={f.status} onChange={v => set('status', v)} />
+        <MultiSelectFilter className="w-[200px]" menuClassName="min-w-[260px]" showCode={false} allLabel="كل الأحداث"
+          options={eventOptions} selected={f.event} onChange={v => set('event', v)} />
         <input type="date" className={INPUT} value={f.date} onChange={e => set('date', e.target.value)} />
         {error && <span className="text-sm text-red-600">{errText(error, 'date')}</span>}
       </div>

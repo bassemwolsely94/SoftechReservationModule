@@ -48,6 +48,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from apps.finance.recon_labels import branch_label as BL      # '170' → '170 · name'
 from core.errors import public_error
+from core.multi_filter import filter_in, multi_values
 
 from .models import (
     IncentiveProgram, IncentiveRule, IncentiveRuleItem,
@@ -1418,8 +1419,8 @@ class IncentiveCalculationLogViewSet(viewsets.ReadOnlyModelViewSet):
         params = self.request.query_params
         if params.get('program'):
             qs = qs.filter(program_id=params['program'])
-        if params.get('mode'):
-            qs = qs.filter(mode=params['mode'])
+        # mode: one or several (?mode=calculate,simulate); none = every log of the program
+        qs = filter_in(qs, 'mode', multi_values(params, 'mode'))
         return qs.order_by('-started_at')
 
 

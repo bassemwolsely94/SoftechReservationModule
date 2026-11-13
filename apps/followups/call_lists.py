@@ -27,6 +27,7 @@ def candidates(criteria: dict, user):
     """Customers matching the criteria, inside the user's branch scope, with a phone."""
     from apps.customers.models import Customer
     from core import branch_scope
+    from core.multi_filter import filter_in, multi_ids
 
     qs = Customer.objects.exclude(phone='').filter(is_guest=False)
     ids = branch_scope.branch_ids(user)
@@ -36,9 +37,10 @@ def candidates(criteria: dict, user):
     segments = [s for s in (criteria.get('segments') or []) if s]
     if segments:
         qs = qs.filter(segment__in=segments)
-    branch_id = criteria.get('branch_id')
-    if branch_id:
-        qs = qs.filter(preferred_branch_id=branch_id)
+    # one or several branches (criteria saved before multi-select carry branch_id); narrows the
+    # branch scope above, never widens it
+    branch_ids = multi_ids(criteria, 'branch_ids') or multi_ids(criteria, 'branch_id')
+    qs = filter_in(qs, 'preferred_branch_id', branch_ids)
     min_days = criteria.get('inactive_days_min')
     if min_days not in (None, ''):
         qs = qs.filter(days_since_last_visit__gte=int(min_days))

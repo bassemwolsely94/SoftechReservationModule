@@ -298,6 +298,15 @@ def _purge_held_files():
     return purge_held_files()
 
 
+def _take_data_health_snapshot():
+    """take_snapshot never raises; it returns None when it failed. Raise here so the step's SyncLog and the
+    run show the failure and the missed-run alert can see it."""
+    from apps.data_lifecycle.health import take_snapshot
+    if take_snapshot() is None:
+        raise RuntimeError('data health snapshot failed; see the log')
+    return 1
+
+
 def run_daily_retention():
     """One SyncRun (lane 'retention') with a SyncLog per table. A failing step is
     logged and the others still run. Returns None (no run row) when another
@@ -317,6 +326,7 @@ def run_daily_retention():
         ('retention:table_sizes', _snapshot_table_sizes),
         ('retention:lifecycle', _run_lifecycle_rules),
         ('retention:purge_held', _purge_held_files),
+        ('retention:data_health', _take_data_health_snapshot),
     ]
     with pg_lock(RETENTION_LOCK_KEY) as got:
         if not got:

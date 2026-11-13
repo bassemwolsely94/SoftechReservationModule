@@ -148,7 +148,7 @@ class OverviewTests(Base):
         ok = Filters.from_request(RequestFactory().get('/x', {'from': '2026-10-01', 'to': '2026-10-20',
                                                               'branch': '1,2', 'category': '10'}), self.mgmt)
         self.assertFalse(ok.clamped)
-        self.assertEqual((ok.branch_ids, ok.category), ({1, 2}, '10'))
+        self.assertEqual((ok.branch_ids, ok.category), ({1, 2}, ('10',)))   # multi-select: a tuple
         for bad in ({}, {'from': '2026-10-01'}, {'from': 'x', 'to': '2026-10-02'},
                     {'from': '2026-10-05', 'to': '2026-10-01'}):
             with self.assertRaises(FilterError):

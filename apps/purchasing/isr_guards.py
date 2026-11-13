@@ -20,8 +20,9 @@ which was already PUSHED — approving either would have sent the same ISR again
     issued the item to that destination after the push, stock-ledger doc 125) is refused unless a reason is
     given (then recorded). Off until
     the owner confirms the rule: SystemSetting `isr_overlap_guard` = on. `report_isr_overlaps` measures it.
-  • leg order — the HQ → branch leg of a transfer is pushed only after its branch → HQ
-    leg (the goods must be on their way to HQ before HQ sends them on).
+  • leg order — the HQ → branch leg of a transfer is pushed only after its branch → HQ leg is
+    pushed AND received at HQ (owner 2026-11-11, every planner): HQ can't dispense goods it has not
+    booked in. A waiting leg's expiry clock starts at that receipt.
   • cancel — any unpushed draft, with a reason, audited.
 """
 import hashlib
@@ -67,21 +68,22 @@ def _general(qs):
     return qs.filter(origin_isr__isnull=True, origin_request__isnull=True, origin_shortage_list__isnull=True)
 
 
-def live_on_route(kind, source, dest, *, exclude=None):
+def live_on_route(kind, source, dest, *, exclude=None, tag=''):
+    """Live general drafts on a route. `tag` = IsrPush.route_tag ('' general, 'dist', 'dist:<S>')."""
     from apps.purchasing.models import IsrPush as P
     qs = _general(P.objects.filter(kind=kind, branchcode=str(source), dest_branchcode=str(dest or ''),
-                                   status__in=LIVE))
+                                   route_tag=tag or '', status__in=LIVE))
     return qs.exclude(pk=exclude) if exclude else qs
 
 
 PLANNER_AR = {'replenishment': 'طلبات التوريد', 'distribution': 'التوزيعة', 'transfer': 'تحويلات المحرك'}
 
 
-def check_route_free(kind, source, dest, *, planner=None):
+def check_route_free(kind, source, dest, *, planner=None, tag=''):
     """Before a new general draft: refuse when an APPROVED one waits on the route, or (P-32 §2.3) when a PROPOSED
     one from ANOTHER planner waits there — it is no longer silently cancelled. Return the PROPOSED drafts the new
     draft will supersede (same planner, or drafts made before planners were recorded)."""
-    live = list(live_on_route(kind, source, dest).select_for_update())
+    live = list(live_on_route(kind, source, dest, tag=tag).select_for_update())
     approved = [p for p in live if p.status == 'approved']
     if approved:
         raise GuardError(f'يوجد طلب توريد معتمد #{approved[0].pk} لنفس المسار ({source} ← {dest or source}) '
@@ -230,6 +232,59 @@ def overlapping_pushed(p, *, since=None, pushed=None, before=None):
     return sorted(out, key=lambda r: r['itemcode'])
 
 
+_NOT_YET_RECEIVED = ('in_transit', 'expired_pending')   # erp_mismatch = received, quantities differ
+
+
+RECEIPT_STALE_DAYS = 14      # an issue to HQ unreceived this long gets a warning (owner 2026-11-11)
+
+
+def receipt_status(feeder) -> dict:
+    """For a branch → HQ leg: {'received', 'why', 'received_on', 'waiting_days', 'stale', 'doc'}.
+    Received = since the push, SOFTECH shows at least one issue (doc 125) from that branch to HQ
+    carrying the leg's items, and every such issue has been received at HQ (doc 25, or recorded
+    by hand on /transits) — none still in transit. From the transits mirror (every 15 minutes).
+    SOFTECH puts no ISR number on the issue, so this is branch × HQ × items × time.
+    Measured 2026-11-10: HQ records receipt a median of 4 days after the issue."""
+    from apps.purchasing.models import IsrPush as P
+    from apps.transits.models import InTransitTransfer as T
+    out = {'received': False, 'why': '', 'received_on': None, 'waiting_days': 0, 'stale': False, 'doc': None}
+    if feeder.status != P.STATUS_PUSHED or not feeder.pushed_at:
+        out['why'] = f'الطلب #{feeder.pk} لم يُرحَّل بعد'
+        return out
+    codes = {str(l.get('itemcode') or '').strip() for l in (feeder.lines_snapshot or [])} - {''}
+    since = timezone.localdate(feeder.pushed_at)
+    rel = [t for t in (T.objects.filter(erp_supplying_branch_code=str(feeder.branchcode),
+                                        erp_receiving_branch_code=HQ, issue_date__gte=since)
+                       .exclude(transit_status='cancelled')
+                       .only('erp_doc_number', 'transit_status', 'items_snapshot', 'manually_received_at',
+                             'issue_date', 'erp_received_date'))
+           if any(str(l.get('itemcode') or '').strip() in codes for l in (t.items_snapshot or []))]
+    today = timezone.localdate()
+    if not rel:
+        out['waiting_days'] = (today - since).days
+        out['why'] = f'لم يصدر فرع {feeder.branchcode} إذن صرف للرئيسي بأصناف الطلب بعد'
+        return out
+    pending = [t for t in rel if t.transit_status in _NOT_YET_RECEIVED and not t.manually_received_at]
+    if pending:
+        t = min(pending, key=lambda t: t.issue_date)
+        days = (today - t.issue_date).days
+        out.update(waiting_days=days, stale=days > RECEIPT_STALE_DAYS, doc=t.erp_doc_number,
+                   why=(f'إذن الصرف {t.erp_doc_number} لم يُستلم بالرئيسي منذ {days} يوم — إن كان وصل فسجّل '
+                        f'الاستلام يدوياً من شاشة التحويلات' if days > RECEIPT_STALE_DAYS
+                        else f'إذن الصرف {t.erp_doc_number} لم يُستلم بالرئيسي بعد'))
+        return out
+    dates = [t.erp_received_date or (timezone.localdate(t.manually_received_at) if t.manually_received_at else None)
+             for t in rel]
+    out.update(received=True, received_on=max((d for d in dates if d), default=today))
+    return out
+
+
+def received_at_hq(feeder):
+    """(received, why) for a branch → HQ leg — see receipt_status()."""
+    st = receipt_status(feeder)
+    return st['received'], st['why']
+
+
 def check_push(p, *, user=None, force_reason=''):
     """Before writing a draft to SOFTECH: no identical recent ISR on the route (unless a
     reason is given), and a forwarding leg never goes before the leg that feeds it."""
@@ -240,6 +295,13 @@ def check_push(p, *, user=None, force_reason=''):
         if feeder.kind == P.KIND_BRANCH_TO_HQ and feeder.status != P.STATUS_PUSHED:
             raise GuardError(f'هذا الطلب يصرف بضاعة تصل للرئيسي من فرع {feeder.branchcode} بالطلب #{feeder.pk} — '
                              f'رحّل #{feeder.pk} أولاً.', code='feeder_first', other=feeder.pk)
+        # every forwarding leg — «التوزيعة», WhatsApp, shortage list, engine transfers (owner 2026-11-10 /
+        # 2026-11-11): HQ forwards only what it has RECEIVED; it can't dispense it in SOFTECH before that
+        if feeder.kind == P.KIND_BRANCH_TO_HQ:
+            ok, why = received_at_hq(feeder)
+            if not ok:
+                raise GuardError(f'هذا الطلب يصرف بضاعة تصل للرئيسي من فرع {feeder.branchcode} — ينتظر استلام '
+                                 f'الطلب #{feeder.pk} بالرئيسي: {why}', code='feeder_not_received', other=feeder.pk)
     dup = duplicate_pushed(p)
     if dup is not None:
         reason = (force_reason or '').strip()
@@ -290,9 +352,20 @@ def expire_drafts(*, now=None):
     days = expiry_days()
     if not days:
         return []
-    cutoff = (now or timezone.now()) - timedelta(days=days)
+    now = now or timezone.now()
+    cutoff = now - timedelta(days=days)
     done = []
-    for p in _general(P.objects.filter(status=P.STATUS_PROPOSED, created_at__lt=cutoff)).order_by('pk'):
+    for p in (_general(P.objects.filter(status=P.STATUS_PROPOSED, created_at__lt=cutoff))
+              .select_related('linked_push').order_by('pk')):
+        feeder = p.linked_push if p.kind == P.KIND_HQ_TO_BRANCH else None
+        if feeder is not None and feeder.kind == P.KIND_BRANCH_TO_HQ:
+            # a forwarding leg's clock starts when HQ RECEIVES the goods (owner 2026-11-11), not at creation
+            if feeder.status in (P.STATUS_CANCELLED, P.STATUS_FAILED):
+                pass                                   # its feeder is gone → nothing will arrive
+            else:
+                st = receipt_status(feeder)
+                if not st['received'] or (timezone.localdate(now) - st['received_on']).days < days:
+                    continue
         _cancel(p, reason=f'انتهت صلاحية المقترح: أقدم من {days} أيام دون اعتماد')
         done.append(p.pk)
     return done

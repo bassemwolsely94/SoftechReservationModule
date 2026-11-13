@@ -20,6 +20,7 @@ from rest_framework.views import APIView
 from apps.pos_orders.permissions import CanViewPos
 
 from apps.chronic.models import IngredientClass
+from core.multi_filter import filter_in, multi_values
 from .models import SoftechIngredientRaw, IngredientParseCandidate, ItemMoleculeIndex
 from .serializers import (
     SoftechIngredientRawSerializer,
@@ -353,6 +354,7 @@ class IngredientSearchViewSet(viewsets.ReadOnlyModelViewSet):
 
     list  ?molecule=amlodipine[&exact=1]  &strength_value=5&strength_unit=mg
           &dosage_form=قرص  &class_id=..|class_key=statins  &source=approved
+          (strength_unit, dosage_form and class_key take several values: ?class_key=a,b)
           &q=free-text (molecule OR item name)
     Extra: /molecules/ (autocomplete w/ item counts) · /facets/ (dosage forms + classes).
     """
@@ -377,14 +379,22 @@ class IngredientSearchViewSet(viewsets.ReadOnlyModelViewSet):
                 qs = qs.filter(strength_value=Decimal(sv))
             except (InvalidOperation, ValueError):
                 pass
-        if p.get('strength_unit'):
-            qs = qs.filter(strength_unit__iexact=p['strength_unit'])
-        if p.get('dosage_form'):
-            qs = qs.filter(dosage_form__icontains=p['dosage_form'])
+        # unit / dosage form / class are multi-select (?k=a,b or repeated) — any of them matches
+        units = multi_values(p, 'strength_unit')
+        if units:
+            any_unit = Q()
+            for u in units:
+                any_unit |= Q(strength_unit__iexact=u)
+            qs = qs.filter(any_unit)
+        forms = multi_values(p, 'dosage_form')
+        if forms:
+            any_form = Q()
+            for f in forms:
+                any_form |= Q(dosage_form__icontains=f)
+            qs = qs.filter(any_form)
         if p.get('class_id'):
             qs = qs.filter(ingredient_class_id=p['class_id'])
-        if p.get('class_key'):
-            qs = qs.filter(ingredient_class__key=p['class_key'])
+        qs = filter_in(qs, 'ingredient_class__key', multi_values(p, 'class_key'))
         if p.get('source'):
             qs = qs.filter(source=p['source'])
         q = p.get('q')

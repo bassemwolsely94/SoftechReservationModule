@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pricingApprovalsApi } from '../../api/client'
 import useSortableRows from '../../hooks/useSortableRows'
 import SortTh from '../../components/SortTh'
+import MultiSelectFilter from '../../components/MultiSelectFilter'
 
 function fmtDate(s) {
   if (!s) return '—'
@@ -24,12 +25,17 @@ const STATUS_STYLE = {
   repaired:    'bg-emerald-100 text-emerald-700',
 }
 const STATUS_LABEL = { stale: 'متأخر', unreachable: 'فرع متوقف', repaired: 'تم الإصلاح' }
+// gap filters are multi-select (none ticked = all); sent as ?status=stale,unreachable
+const STATUS_OPTIONS = Object.entries(STATUS_LABEL).map(([code, name]) => ({ code, name }))
+const SOURCE_OPTIONS = [{ code: 'direct', name: 'تعديل مباشر Softech' }, { code: 'module', name: 'وحدة الموافقات' }]
 
 export default function ReplicationAuditPanel() {
   const qc = useQueryClient()
   const [days, setDays] = useState(30)
   const [activeScan, setActiveScan] = useState(null)
-  const [filter, setFilter] = useState({ status: '', source_channel: '', branch_code: '' })
+  const [filter, setFilter] = useState({ status: [], source_channel: [] })
+  const filterParams = Object.fromEntries(
+    Object.entries(filter).filter(([, v]) => v.length).map(([k, v]) => [k, v.join(',')]))
   const [selected, setSelected] = useState(new Set())
   const [toast, setToast] = useState(null)   // { type, msg }
 
@@ -44,8 +50,8 @@ export default function ReplicationAuditPanel() {
   })
 
   const { data: detail, isFetching } = useQuery({
-    queryKey: ['repl-scan', activeScan, filter],
-    queryFn: () => pricingApprovalsApi.scanDetail(activeScan, filter).then(r => r.data),
+    queryKey: ['repl-scan', activeScan, filterParams],
+    queryFn: () => pricingApprovalsApi.scanDetail(activeScan, filterParams).then(r => r.data),
     enabled: !!activeScan,
   })
 
@@ -148,19 +154,11 @@ export default function ReplicationAuditPanel() {
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="p-3 border-b border-gray-100 flex items-center gap-2 flex-wrap">
             <h3 className="text-sm font-bold text-gray-800">فجوات الفحص #{activeScan}</h3>
-            <select value={filter.source_channel} onChange={e => setFilter(f => ({ ...f, source_channel: e.target.value }))}
-              className="border border-gray-300 rounded px-2 py-1 text-xs">
-              <option value="">كل المصادر</option>
-              <option value="direct">تعديل مباشر Softech</option>
-              <option value="module">وحدة الموافقات</option>
-            </select>
-            <select value={filter.status} onChange={e => setFilter(f => ({ ...f, status: e.target.value }))}
-              className="border border-gray-300 rounded px-2 py-1 text-xs">
-              <option value="">كل الحالات</option>
-              <option value="stale">متأخر</option>
-              <option value="unreachable">فرع متوقف</option>
-              <option value="repaired">تم الإصلاح</option>
-            </select>
+            <MultiSelectFilter className="w-[170px]" showCode={false} allLabel="كل المصادر" menuClassName="min-w-[200px]"
+              dataTour="pricing-approvals-replication-filters"
+              options={SOURCE_OPTIONS} selected={filter.source_channel} onChange={v => setFilter(f => ({ ...f, source_channel: v }))} />
+            <MultiSelectFilter className="w-[150px]" showCode={false} allLabel="كل الحالات"
+              options={STATUS_OPTIONS} selected={filter.status} onChange={v => setFilter(f => ({ ...f, status: v }))} />
             <div className="flex-1" />
             {selected.size > 0 && (
               <>

@@ -24,6 +24,7 @@ from apps.catalog.models import Item
 from . import phantom as P
 from apps.catalog.wildcard import wq
 from core.permissions import matrix_permission
+from core.multi_filter import filter_in, multi_values
 
 # Batch 4, Z-7b: the review list is a report (`analytics` view); confirming / excluding /
 # resetting a flag changes the engine's input — the Market Shortage reviewers (`shortage` approve).
@@ -60,10 +61,9 @@ def _row(it):
 
 
 def _apply_filters(qs, request):
-    med = request.GET.get('med')
     q = (request.GET.get('q') or '').strip()
-    if med:
-        qs = qs.filter(medicine_type=med)
+    # ?med=10 or ?med=10,50 — one general classification or several (none = all)
+    qs = filter_in(qs, 'medicine_type', multi_values(request.GET, 'med'))
     if q:
         from django.db.models import Q
         qs = qs.filter(wq(q, 'name') | Q(softech_id__icontains=q))

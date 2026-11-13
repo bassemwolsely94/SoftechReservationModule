@@ -11,13 +11,15 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { compositionApi } from '../api/client'
 import useServerSort from '../hooks/useServerSort'
 import SortTh from '../components/SortTh'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 
 export default function IngredientSearchPage() {
   const [molecule, setMolecule] = useState('')
   const [strengthValue, setStrengthValue] = useState('')
-  const [strengthUnit, setStrengthUnit] = useState('')
-  const [dosageForm, setDosageForm] = useState('')
-  const [classKey, setClassKey] = useState('')
+  // unit / dosage form / class are multi-select (none ticked = all); sent as ?k=a,b
+  const [strengthUnit, setStrengthUnit] = useState([])
+  const [dosageForm, setDosageForm] = useState([])
+  const [classKey, setClassKey] = useState([])
   const [source, setSource] = useState('')
   const [page, setPage] = useState(1)
   const [ordering, setOrdering] = useState('')
@@ -37,12 +39,12 @@ export default function IngredientSearchPage() {
   const params = { page }
   if (molecule) params.molecule = molecule
   if (strengthValue) params.strength_value = strengthValue
-  if (strengthUnit) params.strength_unit = strengthUnit
-  if (dosageForm) params.dosage_form = dosageForm
-  if (classKey) params.class_key = classKey
+  if (strengthUnit.length) params.strength_unit = strengthUnit.join(',')
+  if (dosageForm.length) params.dosage_form = dosageForm.join(',')
+  if (classKey.length) params.class_key = classKey.join(',')
   if (source) params.source = source
   if (ordering) params.ordering = ordering
-  const hasQuery = molecule || dosageForm || classKey
+  const hasQuery = molecule || dosageForm.length > 0 || classKey.length > 0
 
   const { data: results, isFetching } = useQuery({
     queryKey: ['ai-search', params],
@@ -52,7 +54,10 @@ export default function IngredientSearchPage() {
   })
 
   const rows = results?.results || []
-  const reset = () => { setStrengthValue(''); setStrengthUnit(''); setDosageForm(''); setClassKey(''); setSource(''); setPage(1) }
+  const reset = () => { setStrengthValue(''); setStrengthUnit([]); setDosageForm([]); setClassKey([]); setSource(''); setPage(1) }
+  const unitOptions = (facets?.units || []).map(u => ({ code: u, name: u }))
+  const formOptions = (facets?.dosage_forms || []).map(f => ({ code: f, name: f }))
+  const classOptions = (facets?.classes || []).map(c => ({ code: c.key, name: c.name_ar ? `${c.name} — ${c.name_ar}` : c.name }))
 
   return (
     <div className="p-4 space-y-4" dir="rtl">
@@ -81,21 +86,12 @@ export default function IngredientSearchPage() {
             placeholder="التركيز" type="number" step="any"
             className="w-24 rounded border border-line bg-surface px-2 py-1.5 text-sm text-content"
           />
-          <select value={strengthUnit} onChange={e => { setPage(1); setStrengthUnit(e.target.value) }}
-            className="rounded border border-line bg-surface px-2 py-1.5 text-sm text-content">
-            <option value="">كل الوحدات</option>
-            {(facets?.units || []).map(u => <option key={u} value={u}>{u}</option>)}
-          </select>
-          <select value={dosageForm} onChange={e => { setPage(1); setDosageForm(e.target.value) }}
-            className="rounded border border-line bg-surface px-2 py-1.5 text-sm text-content">
-            <option value="">كل الأشكال الصيدلية</option>
-            {(facets?.dosage_forms || []).map(f => <option key={f} value={f}>{f}</option>)}
-          </select>
-          <select value={classKey} onChange={e => { setPage(1); setClassKey(e.target.value) }}
-            className="rounded border border-line bg-surface px-2 py-1.5 text-sm text-content max-w-[220px]">
-            <option value="">كل التصنيفات</option>
-            {(facets?.classes || []).map(c => <option key={c.id} value={c.key}>{c.name_ar ? `${c.name} — ${c.name_ar}` : c.name}</option>)}
-          </select>
+          <MultiSelectFilter className="w-[130px]" showCode={false} allLabel="كل الوحدات"
+            options={unitOptions} selected={strengthUnit} onChange={v => { setPage(1); setStrengthUnit(v) }} />
+          <MultiSelectFilter className="w-[180px]" showCode={false} allLabel="كل الأشكال الصيدلية" menuClassName="min-w-[280px]"
+            options={formOptions} selected={dosageForm} onChange={v => { setPage(1); setDosageForm(v) }} />
+          <MultiSelectFilter className="w-[220px]" showCode={false} allLabel="كل التصنيفات" menuClassName="min-w-[280px]"
+            options={classOptions} selected={classKey} onChange={v => { setPage(1); setClassKey(v) }} />
           <select data-tour="chronic-ingredient-search-source" value={source} onChange={e => { setPage(1); setSource(e.target.value) }}
             className="rounded border border-line bg-surface px-2 py-1.5 text-sm text-content">
             <option value="">معتمد + مقترح</option>

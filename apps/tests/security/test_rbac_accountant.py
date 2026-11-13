@@ -42,10 +42,12 @@ class AccountantMatrixTests(TestCase):
 
     def test_migration_seeds_an_explicit_row_for_every_module(self):
         mig = importlib.import_module('apps.users.migrations.0051_accountant_explicit_denials')
-        # 0051's list is frozen at 2026-11-04; modules added since get their explicit rows elsewhere:
-        # hr_attendance from seed_permissions (admin only, named grants, 2026-11-07), tax_invoicing
-        # from its own migration 0002.
-        self.assertEqual(set(mig.MODULES) | {'hr_attendance', 'tax_invoicing'}, set(ALL_MODULES))
+        # 0051's list is frozen at 2026-11-04; modules added since get their explicit rows from
+        # seed_permissions (hr_attendance: admin only, named grants, 2026-11-07) or their own migration
+        # (data_health: users 0055 seeds its accountant row; tax_invoicing: its own migration 0002).
+        later = importlib.import_module('apps.users.migrations.0055_data_health_module')
+        self.assertIn('accountant', later.ROLES)
+        self.assertEqual(set(mig.MODULES) | {'hr_attendance', 'data_health', 'tax_invoicing'}, set(ALL_MODULES))
         from apps.users.models import RoleModuleAccess
         self.assertEqual(RoleModuleAccess.objects.filter(role='accountant', module='tax_invoicing').count(), len(ALL_ACTIONS))
         self.assertEqual(mig.ACTIONS, ALL_ACTIONS)

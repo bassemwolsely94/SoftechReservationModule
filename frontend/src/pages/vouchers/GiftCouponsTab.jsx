@@ -16,6 +16,8 @@ import useHelpTab from '../../help/useHelpTab'
 import { fa } from '../../utils/flowArrow'
 import useSortableRows from '../../hooks/useSortableRows'
 import SortTh from '../../components/SortTh'
+import MultiSelectFilter from '../../components/MultiSelectFilter'
+import useBranchLabels from '../../hooks/useBranchLabels'
 
 const STAGE_LABEL = {
   stocked: 'في المخزن الرئيسي', issued: 'صُرف لعميل', at_branch: 'في فرع',
@@ -299,14 +301,22 @@ function CustomersView() {
 
 // ── Redemptions without a valid serial ───────────────────────────────────────
 function NoSerialView() {
-  const [branch, setBranch] = useState('')
+  const [branch, setBranch] = useState([])     // SOFTECH branch codes, multi-select (none = all)
+  const bl = useBranchLabels()
   const [days, setDays] = useState(30)
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
 
+  const [branchList, setBranchList] = useState([])   // every branch in the window, kept while reloading
+
+  // the server lists every branch before the branch filter; any ticked code not in it stays offered
+  const branchOptions = [...new Set([...branchList, ...branch])].map(code => ({ code, name: bl(code) }))
+
   useEffect(() => {
     setData(null); setError(null)
-    couponsApi.noSerial({ branch, days }).then(r => setData(r.data)).catch(e => setError(errMsg(e)))
+    couponsApi.noSerial({ ...(branch.length ? { branch: branch.join(',') } : {}), days })
+      .then(r => { setData(r.data); setBranchList(r.data.branches || (r.data.by_branch || []).map(b => b.branch)) })
+      .catch(e => setError(errMsg(e)))
   }, [branch, days])
 
   return (
@@ -317,12 +327,8 @@ function NoSerialView() {
           className="border border-gray-300 rounded-lg px-2 py-1">
           {[7, 30, 90, 365].map(d => <option key={d} value={d}>آخر {d} يوم</option>)}
         </select>
-        <select value={branch} onChange={e => setBranch(e.target.value)}
-          className="border border-gray-300 rounded-lg px-2 py-1">
-          <option value="">كل الفروع</option>
-          {(data?.by_branch || []).map(b => <option key={b.branch} value={b.branch}>فرع {b.branch}</option>)}
-          {branch && !(data?.by_branch || []).some(b => b.branch === branch) && <option value={branch}>فرع {branch}</option>}
-        </select>
+        <MultiSelectFilter className="w-[160px]" showCode={false} allLabel="كل الفروع"
+          options={branchOptions} selected={branch} onChange={setBranch} />
       </div>
       <ErrorLine msg={error} />
       {data && (

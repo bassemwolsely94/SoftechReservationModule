@@ -31,6 +31,7 @@ from .serializers import RunSerializer, MetricsSerializer, AggregatedSerializer
 from apps.catalog.wildcard import wq
 from apps.finance.recon_labels import branch_label as BL      # '170' → '170 · name'
 from core.stable_ordering import StableOrderingMixin
+from core.multi_filter import filter_in, multi_ids, multi_values
 from core.errors import public_error
 from core.threads import start_thread
 
@@ -361,7 +362,7 @@ class MetricsListView(StableOrderingMixin, generics.ListAPIView):
     Per-item × per-branch metrics for the latest run.
 
     Filters:
-      ?branch=<id>          — filter to one branch
+      ?branch=<id>[,<id>…]  — one branch or several (multi-select)
       ?abc_class=A|B|C|X    — filter by ABC class
       ?needs_purchase=1     — only items with gap > 0
       ?search=<text>        — item name / softech_id
@@ -370,7 +371,7 @@ class MetricsListView(StableOrderingMixin, generics.ListAPIView):
     serializer_class   = MetricsSerializer
     permission_classes = [permissions.IsAuthenticated, PURCHASING]
     filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
-    filterset_fields   = ['branch', 'abc_class']
+    filterset_fields   = ['abc_class']    # branch is multi-select → filter_queryset below
     search_fields      = ['item__name', 'item__softech_id']
     ordering_fields    = [
         'priority', 'monthly_avg', 'gap', 'coverage_months',
@@ -395,6 +396,13 @@ class MetricsListView(StableOrderingMixin, generics.ListAPIView):
             qs = qs.filter(gap__gt=0)
 
         qs = _apply_item_filters(qs, self.request.query_params)
+        return qs
+
+    def filter_queryset(self, queryset):
+        qs = super().filter_queryset(queryset)
+        p = self.request.query_params
+        if p.get('branch'):   # ?branch=3 or ?branch=3,7 — junk ids match nothing (never all)
+            qs = filter_in(qs, 'branch_id', multi_ids(p, 'branch') or [0])
         return qs
 
 
@@ -588,10 +596,10 @@ def _build_metrics_qs(request, run):
     needs  = request.GET.get('needs_purchase')
     search = request.GET.get('search')
 
-    if branch:
-        qs = qs.filter(branch_id=branch)
+    if branch:   # one or several (?branch=3,7) — same rows as the multi-select on screen
+        qs = filter_in(qs, 'branch_id', multi_ids(request.GET, 'branch') or [0])
     if abc:
-        qs = qs.filter(abc_class=abc)
+        qs = filter_in(qs, 'abc_class', multi_values(request.GET, 'abc_class'))
     if needs == '1':
         qs = qs.filter(gap__gt=0)
     if search:
@@ -612,8 +620,8 @@ def _build_agg_qs(request, run):
     needs = request.GET.get('needs_purchase')
     search = request.GET.get('search')
 
-    if abc:
-        qs = qs.filter(abc_class=abc)
+    if abc:      # one class or several (?abc_class=A,B)
+        qs = filter_in(qs, 'abc_class', multi_values(request.GET, 'abc_class'))
     if needs == '1':
         qs = qs.filter(total_gap__gt=0)
     if search:
@@ -1720,8 +1728,8 @@ def export_purchasing(request):
         metrics    — flat rows: one row per item × branch
         aggregated — flat rows: one row per item (network totals)
         pivot      — one row per item, branch metrics as columns (matches reference Excel)
-      branch=<id>     filter (metrics / aggregated only)
-      abc_class=A|B|C|X
+      branch=<id>[,<id>…]     filter (metrics only)
+      abc_class=A|B|C|X[,…]
       needs_purchase=1
       search=<text>
     """
@@ -2193,7 +2201,7 @@ class TransferRecommendationListView(StableOrderingMixin, generics.ListAPIView):
     """
     Per-item × per-branch-pair transfer recommendations for the latest run.
 
-    Filters:
+    Filters (each takes one value or several — ?status=pending,approved — none = all):
       ?abc_class=A|B|C|X
       ?status=pending|approved|rejected|executed
       ?from_branch=<id>
@@ -2204,7 +2212,7 @@ class TransferRecommendationListView(StableOrderingMixin, generics.ListAPIView):
     serializer_class   = TransferRecommendationSerializer
     permission_classes = [permissions.IsAuthenticated, PURCHASING]
     filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
-    filterset_fields   = ['abc_class', 'status', 'from_branch', 'to_branch']
+    filterset_fields   = []   # all four are multi-select → filter_queryset below
     search_fields      = ['item__name', 'item__softech_id']
     ordering_fields    = [
         'priority_score', 'estimated_value', 'quantity', 'to_gap',
@@ -2229,6 +2237,16 @@ class TransferRecommendationListView(StableOrderingMixin, generics.ListAPIView):
             .prefetch_related('transfer_requests')   # prevents N+1 on is_actioned / count
         )
         qs = _apply_item_filters(qs, self.request.query_params)
+        return qs
+
+    def filter_queryset(self, queryset):
+        qs = super().filter_queryset(queryset)
+        p = self.request.query_params
+        qs = filter_in(qs, 'abc_class', multi_values(p, 'abc_class'))
+        qs = filter_in(qs, 'status', multi_values(p, 'status'))
+        for key in ('from_branch', 'to_branch'):
+            if p.get(key):
+                qs = filter_in(qs, f'{key}_id', multi_ids(p, key) or [0])
         return qs
 
 
@@ -2548,12 +2566,9 @@ def advanced_export(request):
         return Response({'detail': 'لا توجد بيانات — شغّل المحرك أولاً'}, status=503)
 
     qs = ItemDemandMetrics.objects.filter(run=run).select_related('item', 'branch')
-    branch = request.GET.get('branch')
-    if branch:
-        qs = qs.filter(branch_id=branch)
-    abc = request.GET.get('abc_class')
-    if abc:
-        qs = qs.filter(abc_class=abc)
+    if request.GET.get('branch'):   # one branch or several (?branch=3,7)
+        qs = filter_in(qs, 'branch_id', multi_ids(request.GET, 'branch') or [0])
+    qs = filter_in(qs, 'abc_class', multi_values(request.GET, 'abc_class'))
 
     # Phase E — optional cash budget (EGP); 0/absent = unlimited (all funded).
     try:

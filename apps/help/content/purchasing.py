@@ -321,8 +321,8 @@ SCREENS = [
         'audience': T('المشتريات والمدير.', 'Purchasing and admins.'),
         'tabs': [
             {'key': 'agg', 'title': T('📦 الشبكة (ABC)', '📦 Network (ABC)'), 'body': T('نظرة مجمعة على كل الفروع: المعدل الشهري، المخزون، الفجوة، القيمة، الهامش الإجمالي والصافي، والنسبة التراكمية (باريتو). صفِّ بفئة A/B/C/X.', 'An aggregate view across branches: monthly rate, stock, gap, value, gross and net margin, and cumulative % (Pareto). Filter by class A/B/C/X.')},
-            {'key': 'branch', 'title': T('🏭 بالفرع', '🏭 By branch'), 'body': T('لكل فرع: المتوسط الشهري، الأمان، البضاعة في الطريق (تُخصم من الفجوة)، التغطية، الأولوية، الحالة (نفد/حرج/منخفض/مقبول/جيد) وآخر بيع. «يحتاج شراء فقط» يختصر القائمة.', 'Per branch: monthly average, safety stock, goods in transit (deducted from the gap), coverage, priority, status (out/critical/low/ok/good) and last sale. "Needs purchase only" shortens the list.')},
-            {'key': 'transfer', 'title': T('🔄 التحويلات المقترحة', '🔄 Suggested transfers'), 'body': T('توصيات نقل من فرع عنده فائض لفرع عنده نقص مع الكمية والقيمة والأولوية. راجع وافق أو ارفض. الموافقة بتسجّل قرارك بس — مش بتعمل طلب تحويل؛ اعمل الطلب من شاشة التحويلات.', 'Suggestions to move stock from a branch with excess to one with a shortage, with quantity, value and priority. Review and approve or reject. Approving only records your decision — it does not create a transfer request; create it from the Transfers screen.')},
+            {'key': 'branch', 'title': T('🏭 بالفرع', '🏭 By branch'), 'body': T('لكل فرع: المتوسط الشهري، الأمان، البضاعة في الطريق (تُخصم من الفجوة)، التغطية، الأولوية، الحالة (نفد/حرج/منخفض/مقبول/جيد) وآخر بيع. «كل الفروع» يقبل أكثر من فرع، و«يحتاج شراء فقط» يختصر القائمة.', 'Per branch: monthly average, safety stock, goods in transit (deducted from the gap), coverage, priority, status (out/critical/low/ok/good) and last sale. "All branches" takes several branches, and "Needs purchase only" shortens the list.')},
+            {'key': 'transfer', 'title': T('🔄 التحويلات المقترحة', '🔄 Suggested transfers'), 'body': T('توصيات نقل من فرع عنده فائض لفرع عنده نقص مع الكمية والقيمة والأولوية. راجع وافق أو ارفض. الموافقة بتسجّل قرارك بس — مش بتعمل طلب تحويل؛ اعمل الطلب من شاشة التحويلات. فلاتر الحالة والفئة و«من / إلى فرع» تقبل أكثر من اختيار (بتفتح على «انتظار»).', 'Suggestions to move stock from a branch with excess to one with a shortage, with quantity, value and priority. Review and approve or reject. Approving only records your decision — it does not create a transfer request; create it from the Transfers screen. The status, class and "from / to branch" filters each take several choices (it opens on "Pending").')},
             {'key': 'lostsales', 'title': T('💸 مبيعات ضائعة', '💸 Lost sales'), 'body': T('تقدير المبيعات الضائعة بسبب نفاد المخزون.', 'Estimated sales lost to stock-outs.')},
         ],
         'steps': [
@@ -444,7 +444,7 @@ SCREENS = [
              'when': T('مابيتحفظش غير لما تضغط «💾 حفظ كافتراضي».', 'Not saved until you press "💾 Save as default".'),
              'open_hint': T('جوه نافذة ⚙.', 'Inside the ⚙ window.')},
             {'target': 'purchasing-engine-export-excel', 'label': T('📊 Excel', '📊 Excel'),
-             'text': T('يصدّر العرض الحالي (الشبكة أو بالفرع) بفلتر الفرع والفئة. لو كتبت «تعبئة الطلب لـ» بيحسب الطلب على عدد الشهور ده.', 'Exports the current view (network or by branch) with the branch and class filter. If you set "Fill order for", the order uses that many months.'),
+             'text': T('يصدّر العرض الحالي بفلتر الفرع والفئة (كل واحد يقبل أكثر من اختيار). لو كتبت «تعبئة الطلب لـ» بيحسب الطلب على عدد الشهور ده.', 'Exports the current view with the branch and class filters (each takes several choices). If you set "Fill order for", the order uses that many months.'),
              'open_hint': T('من قائمة «⬇ تصدير».', 'From the "⬇ Export" menu.')},
             {'target': 'purchasing-engine-export-csv', 'label': T('📄 CSV', '📄 CSV'),
              'text': T('نفس بيانات Excel كملف CSV.', 'The same data as the Excel, as a CSV file.'),
@@ -472,8 +472,8 @@ SCREENS = [
              'text': T('يمسح كل فلاتر الأصناف المتقدمة مرة واحدة.', 'Clears every advanced item filter at once.'),
              'open_hint': T('بيظهر لما يكون فيه فلتر متقدم شغال.', 'Shows when an advanced filter is on.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('تنزيل الـ Pivot يُحفظ كشيت احتياج مُرسَل', 'A Pivot download is kept as a sent need sheet'),
+        'updated': '2026-11-12',
+        'change_note': T('فلاتر الفرع والحالة والفئة (بالفرع، التحويلات، التصدير) بقت تقبل أكثر من اختيار.', 'The branch, status and class filters (by branch, transfers, export) now take several choices.'),
     },
     {
         'key': 'purchasing.cash',
@@ -524,7 +524,7 @@ SCREENS = [
                  '• "📈 Found": all items with a spike. "Strong": can be reduced after you confirm. "Watch": monitor only.\n• "✓ Confirmed": those someone confirmed, and "Confirmed order saving" = the purchase value avoided.\n• The badge above says whether "Reduction is enabled" in the engine run or "monitor only".'),
          },
             {'target': 'purchasing-cash-filters', 'label': T('الكل · قوية · مراقبة', 'All · Strong · Watch'),
-             'text': T('فلتر الدرجة والتصنيف، والبحث بالكود أو الاسم.', 'Filter by grade and category, and search by code or name.'),
+             'text': T('فلتر الدرجة والتصنيف (يقبل أكثر من تصنيف)، والبحث بالكود أو الاسم.', 'Filter by grade and category (several categories at once), and search by code or name.'),
              'when': T('ابدأ بـ «قوية» — دي بس اللي ينفع تتأكد.', 'Start with "Strong" — only those can be confirmed.'),
              'more': T(
                  'فلتر القوة: «الكل» أو «قوية» أو «مراقبة»، وقائمة التصنيف، وبحث بالكود أو الاسم.\n• ابدأ بـ«قوية» — دي اللي ممكن تقلّل طلبها فعلاً.\n• الفلاتر بتغيّر الجدول بس، مش الملخص فوق.',
@@ -556,10 +556,12 @@ SCREENS = [
               'Confirming or un-confirming a spike is checked on the server: it needs "edit" or "approve" on the purchasing module; viewing is open to everyone who can open the screen.'),
             T('في «مخزون راكد» موظف الفرع بيشوف فرعه بس. الاستبعاد والاحتفاظ الاستراتيجي محتاجين «تعديل» أو «اعتماد» في المشتريات.',
               'In «Dead stock» branch staff see only their branch. Exclude and strategic hold need "edit" or "approve" on purchasing.'),
+            T('فلاتر الموقع والفرع في «مخزون راكد» والتصنيف في «ذروة الطلب» تقبل أكثر من اختيار؛ لا شيء معلّم = الكل، والتصدير بياخد نفس الاختيار.',
+              'The location and branch filters in «Dead stock» and the category filter in «Demand spike» take several choices; nothing ticked = all, and the export uses the same choice.'),
         ],
-        'updated': '2026-11-10',
-        'change_note': T('«معدلات البيع»: خيار «تطبيق الموسمية» للأصناف ذات الموسمية المستقرة (×0.7–×1.5).',
-                         '"Sales rates": an "Apply seasonality" option for items with a steady season (×0.7–×1.5).'),
+        'updated': '2026-11-12',
+        'change_note': T('فلاتر الموقع والفرع والتصنيف تقبل أكثر من اختيار. «التوزيعة» بقت خطة واحدة بموجات وحدود قيمة، و«بعد الاستلام» ينتظر استلام الرئيسي.',
+                         'The location, branch and category filters take several choices. "Distribution" is now one plan with waves and value limits; "after receipt" waits for HQ to receive.'),
     },
     {
         'key': 'purchasing.supply',
@@ -576,7 +578,7 @@ SCREENS = [
              'body': T('كل صنف ورد في قوائم الموردين خلال آخر 14 يوماً، عمود لكل مورد (المخازن في عمود مستقل)، والاحتياج والرصيد والبالطريق، ومن نشتري منه. التكلفة من مشترياتنا الفعلية فقط (خصم من سعر الجمهور الحالي): آخر شراء من نفس المورد، وإلا من حساب آخر لنفس الشركة (المصرية / أخناتون)، وإلا متوسط خصمه على نفس الشركة المنتجة — ثم بونص القائمة. أسعار وخصومات نص القائمة لا تُستخدم. الأفضل = أرخص بأكثر من 1% أو ببونص. انقر الصنف لترى من عرضه في الوارد ومشتريات 12 شهراً.',
                        'Every item offered in the suppliers\' lists in the last 14 days, one column per supplier (warehouses in their own column), with need, stock, in transit, and whom to buy from. Cost comes only from our real purchases (a discount off today\'s public price): the last purchase from that supplier, else from another account of the same company (المصرية / أخناتون), else its median discount on the same manufacturer — then the list\'s bonus. Prices and discounts written in the list are not used. Best = more than 1% cheaper, or a bonus. Click an item to see who offered it and the 12-month purchases.')},
             {'key': 'prices', 'title': T('مقارنة أسعار الشراء', 'Purchase price comparison'),
-             'body': T('مقارنة الموردين المعتمدين على ما دفعناه فعلاً في فواتير الشراء المحفوظة (90 / 180 / 365 يوماً) — غير مقارنة «الوارد». الخصم = 1 − التكلفة بعد البونص ÷ سعر الجمهور وقت الشراء، فالمقارنة عادلة رغم تغيّر الأسعار. الموزعون والشركات المنتجة معاً، والمخازن مستقلة، وحسابات الشركة الواحدة (المصرية، أخناتون) عمود واحد. «متوسط خصمنا» = متوسط خصم مشترياتنا آخر 90 يوماً مرجَّحاً بالكمية؛ «يوجد أرخص» = أفضل مورد حديث يعطي خصماً أعلى منه بأكثر من نقطة؛ التوفير/شهر = الفرق × سعر الجمهور × مبيعات الشبكة الشهرية. شراء أقدم من 90 يوماً «قديم» ولا يُحسب أفضل، ويظهر «كان أرخص». اضغط الصنف لكل الموردين وكل فواتيره؛ «حسب المورد» يلخص كل مورد؛ وExcel للتصدير بنفس الفلاتر الظاهرة (الحالة والمورد والشركة والبحث). «⟳ المشتريات» يسحب الفواتير الجديدة من SOFTECH الآن.',
+             'body': T('مقارنة الموردين المعتمدين على ما دفعناه فعلاً في فواتير الشراء المحفوظة (90 / 180 / 365 يوماً) — غير مقارنة «الوارد». الخصم = 1 − التكلفة بعد البونص ÷ سعر الجمهور وقت الشراء، فالمقارنة عادلة رغم تغيّر الأسعار. الموزعون والشركات المنتجة معاً، والمخازن مستقلة، وحسابات الشركة الواحدة (المصرية، أخناتون) عمود واحد. «متوسط خصمنا» = متوسط خصم مشترياتنا آخر 90 يوماً مرجَّحاً بالكمية؛ «يوجد أرخص» = أفضل مورد حديث يعطي خصماً أعلى منه بأكثر من نقطة؛ التوفير/شهر = الفرق × سعر الجمهور × مبيعات الشبكة الشهرية. شراء أقدم من 90 يوماً «قديم» ولا يُحسب أفضل، ويظهر «كان أرخص». اضغط الصنف لكل الموردين وكل فواتيره؛ «حسب المورد» يلخص كل مورد؛ وExcel للتصدير بنفس الفلاتر الظاهرة (الحالة والمورد والشركة والبحث)، وفلتر «المورد» يقبل أكثر من مورد. «⟳ المشتريات» يسحب الفواتير الجديدة من SOFTECH الآن.',
                        'The accredited suppliers compared on what we really paid in the saved purchase invoices (90 / 180 / 365 days) — not the «الوارد» lists. Discount = 1 − cost after bonus ÷ the public price on the invoice date, so it stays fair when prices change. Distributors and manufacturers together, warehouses apart, and one company\'s accounts (EGY DRUG, Akhnaton) as one column. «متوسط خصمنا» = our quantity-weighted discount over the last 90 days; «يوجد أرخص» = the best recent supplier beats it by more than one point; saving/month = the difference × public price × network monthly sales. A buy older than 90 days is «قديم» and cannot be the best (shown as «كان أرخص»). Click an item for every supplier and invoice; «حسب المورد» summarises each supplier; Excel export with the filters on screen (state, supplier, producer, search). «⟳ المشتريات» pulls new invoices from SOFTECH now.')},
             {'key': 'cases', 'title': T('متابعة النواقص', 'Shortage follow-up'),
              'body': T('كل احتياج غير محلول حالة تستمر يوماً بعد يوم، مرتبة (عاجل ← ندرة ← الأقدم ← الأكبر فجوة) مع شرح سبب التوصية. اعتمد التحويل الداخلي (مسودة طلب تحويل) أو اطلب الباقي من مورد.',
@@ -596,7 +598,20 @@ SCREENS = [
              'body': T('الصق محادثة مجموعة واتساب الفرع (أو صورة) ← تُقسَّم الرسائل وتُطابق الأصناف ← راجع سطراً سطراً (Enter للتأكيد) ← تحليل التوافر وExcel ← «إنشاء قائمة النواقص» للفرع. «إنشاء مقترحات التحويل» موجود أيضاً في «فحص المخزون» بشاشة النواقص بنفس الخطة؛ قائمة نواقص جاءت من طلب واتساب تُحوَّل مرة واحدة فقط من أي الشاشتين. المطابقة مشتركة بين «صندوق الإتاحة» و«طلبات واتساب» (محرّك واحد، تحذيرات صارمة): كل سطر عليه تحذير ينتظر شخصاً — «اختر النسخة» (أكثر من تركيز/حجم/شكل يناسب المكتوب؛ تظهر النسخ بأرصدتها ومبيعاتها)، «التركيز مختلف»، «الشكل مختلف»، «النوع مختلف» (مثل اكسترا/ادفانس)، «منتج آخر قريب»، «المحركان مختلفان»، «لا يوجد تطابق». بمجرد تأكيد نسخة لتهجئة ما يتذكرها النظام فلا يعود التحذير.',
                        'Paste the branch WhatsApp group chat (or a photo) → messages are split and items matched → review line by line (Enter confirms) → availability analysis and Excel → "Create shortage list" for the branch. "Create transfer proposals" is also in the shortage screen\'s "Stock check" with the same plan; a shortage list that came from a WhatsApp request moves only once, from either screen. Matching is shared by the availability inbox and WhatsApp requests (one engine, strict warnings): any line with a warning waits for a person — «اختر النسخة» (several strengths / sizes / forms fit; the versions show their stock and sales), «التركيز مختلف», «الشكل مختلف», «النوع مختلف» (e.g. Extra vs Advance), «منتج آخر قريب», «المحركان مختلفان», «لا يوجد تطابق». Once a version is confirmed for a spelling the system remembers it and the warning does not come back.')},
             {'key': 'dist', 'title': T('التوزيعة', 'Distribution'),
-             'body': T('توزيع استباقي: أصناف جديدة بلا معدل، أصناف غير مُدرجة بفرع، متكدسة بفرع، أو راكدة بالرئيسي — مع اقتراح توزيعها. علامات الأنواع تُصفّي القائمة فوراً (والعدد بجانب كل نوع)، وخانة البحث بالصنف أو الكود، واضغط عنوان أي عمود للترتيب. كل نقلة تعرض الفرع الحائز (رصيده ومعدل بيعه الشهري وحده الأقصى في SOFTECH) وكل فرع مستهدف (الكمية ورصيده ومعدل بيعه) — الرصيد لحظي من سيرفر الفرع حيث يوجد حد أقصى، وإلا من تشغيل المحرك (معلَّم *). «⬇ Excel» يصدّر الصفوف الظاهرة بنفس الفلاتر. الأسهم تتبع اتجاه القراءة: ← بالعربية و → بالإنجليزية.', 'Proactive distribution: new items with no rate, items never stocked at a branch, piled up at a branch, or dormant at HQ — with a suggested distribution. The type boxes filter the list instantly (the count is beside each), search by item or code, and click any column header to sort. Each move shows the holding branch (stock, monthly sales, SOFTECH maximum) and each designated branch (quantity, stock, monthly sales) — stock live from the branch server where SOFTECH holds a maximum, otherwise from the engine run (marked *). «⬇ Excel» exports the rows shown with the same filters. Arrows follow the reading direction: ← in Arabic, → in English.')},
+             'body': T('«⟳ بناء الخطة» يحسب خطة توزيعة واحدة ويحفظها: الأرصدة لحظية من سيرفر 100 ومعدل البيع من آخر تشغيل للمحرك. '
+                       'الحركات بالترتيب: 1 من الرئيسي أولاً (أي صنف يملكه الرئيسي، والصنف التجريبي اللي الرئيسي يغطيه يتنقل منه بدل الفرع) · '
+                       '2 متكدس بفرع فوق حده ← فروع تبيعه ولها مساحة · 3 غير مُدرج — فقط من فرع فوق حده · 4 تجربة صنف جديد من فرع (كود عمره أقل من 18 شهر، فرعين بحد أقصى، و75,000 ج بحد أقصى للخطة)؛ داخل كل موجة الأعلى قيمة أولاً. '
+                       '«متعارض» = الصنف في طريقه للفرع بالفعل (طلباتنا الحية أو المرحّلة غير المصروفة، طلبات توريد سوفتك آخر 3 أيام، بضاعة بالطريق، طلبات تحويل حية). '
+                       '«محجوز / مؤجل»: سطر من فرع أقل من 100 ج، أو طلب فرع للرئيسي أو جزء «بعد الاستلام» أقل من 1,000 ج (يتأجل للتشغيل الجاي؛ حركات الرئيسي بتفضل دايماً)، أو مسار عليه طلب معتمد. '
+                       '«＋ توليد» يعمل طلب واحد من كل فرع للرئيسي، وطلب «جاهز الآن» من الرئيسي لكل فرع، وجزء «بعد الاستلام» لكل فرع مصدر — '
+                       'الجزء ده (وأي طلب من الرئيسي لفرع بعد استلام من فرع تاني) مايترحّلش غير لما الرئيسي يستلم إذن صرف الفرع، وصلاحيته تبدأ من الاستلام. الخطة لازم تكون أحدث خطة وعمرها أقل من 12 ساعة. مفيش كتابة في SOFTECH من هنا.',
+                       '"⟳ Build plan" computes and stores one distribution plan: stock live from server 100, sales rates from the last engine run. '
+                       'Moves in order: 1 HQ first (anything HQ holds; a trial item HQ can cover moves from HQ instead of a branch) · '
+                       '2 a branch over its maximum → branches that sell it and have room · 3 never stocked — only from a branch over its maximum · 4 new-item trial from a branch (codes under 18 months old, at most 2 branches, at most 75,000 EGP per plan); highest value first within each wave. '
+                       '"Conflict" = the item is already on its way to the branch (our live drafts or pushed ones not yet dispensed, SOFTECH supply requests of the last 3 days, goods in transit, live transfer requests). '
+                       '"Held / deferred": a branch line under 100 EGP, a branch-to-HQ request or "after receipt" part under 1,000 EGP (waits for the next run; HQ moves always stay), or a route with an approved draft. '
+                       '"＋ Generate" makes one request per branch to HQ, one "ready now" request from HQ per branch, and one "after receipt" part per source branch — '
+                       'that part (and any HQ forwarding leg of a transfer) is pushed only after HQ has received the branch\'s issue; its expiry starts at that receipt. The plan must be the latest and under 12 hours old. Nothing is written to SOFTECH from here.')},
         ],
         'tips': [T('دور «مشاهد» المرتبط بفرع بيشوف حالات فرعه والحالات العامة للشبكة بس.', 'A branch-bound "viewer" sees their own branch\'s cases and the network-wide cases only.'),
                  T('لا شيء في هذه الشاشة يكتب في SOFTECH بدون اعتماد صريح وبوابة مفعّلة.', 'Nothing on this screen writes to SOFTECH without explicit approval and an enabled gate.'),
@@ -823,7 +838,7 @@ SCREENS = [
              'text': T('ملف مقارنة عروض الموردين للفترة المختارة.', 'The supplier-offer comparison for the chosen period, as a file.'),
              'open_hint': T('تبويب «مقارنة الموردين».', 'The "Supplier comparison" tab.')},
             {'target': 'purchasing-supply-prices-export', 'label': T('⬇ Excel', '⬇ Excel'),
-             'text': T('ملف مقارنة أسعار الشراء بنفس الفلاتر.', 'The purchase-price comparison with the same filters, as a file.'),
+             'text': T('ملف مقارنة أسعار الشراء بنفس الفلاتر، ولو اخترت أكتر من مورد بيطلعوا كلهم.', 'The purchase-price comparison with the same filters, as a file — several ticked suppliers all go in.'),
              'open_hint': T('تبويب «مقارنة أسعار الشراء».', 'The "Purchase price comparison" tab.')},
             {'target': 'purchasing-supply-prices-state', 'label': T('كل الأصناف · يوجد أرخص · نشتري من الأفضل', 'All · Cheaper exists · We buy the best'),
              'text': T('يفلتر: كل الأصناف، أو اللي ليها مورد أرخص من اللي بنشتري منه، أو اللي بنشتريها من الأفضل.', 'Filters: all items, items with a cheaper supplier than ours, or items we already buy from the best.'),
@@ -978,13 +993,20 @@ SCREENS = [
              'text': T('لكل فرع عنده فائض: طلب توريد مقترح منه للرئيسي، ومن الرئيسي للفرع الطالب — من الأسطر المؤكدة بس.', 'For each branch with excess: a proposed supply request from it to HQ, and from HQ to the requesting branch — confirmed lines only.'),
              'when': T('بتظهر في «طلبات التوريد / ISR» للاعتماد والترحيل.', 'They show in "Supply requests (ISR)" for approval and push.'),
              'open_hint': T('بعد «تحليل»، لو الخطة فيها فائض من فروع تانية.', 'After "Analyze", when the plan uses other branches\' excess.')},
-            {'target': 'purchasing-supply-dist-generate', 'label': T('＋ توليد مقترحات التوزيعة', '＋ Generate distribution proposals'),
-             'text': T('يعمل طلبات توريد «مقترحة» للتصنيفات المعلّمة، وبتظهر في «طلبات التوريد / ISR» للاعتماد والترحيل.', 'Creates "proposed" supply requests for the ticked categories; they show in "Supply requests (ISR)" for approval and push.'),
-             'when': T('مفيش كتابة في SOFTECH غير بعد الاعتماد والترحيل.', 'Nothing is written to SOFTECH until approval and push.'),
+            {'target': 'purchasing-supply-dist-build', 'label': T('⟳ بناء الخطة', '⟳ Build plan'),
+             'text': T('يقرأ الأرصدة وطلبات التوريد من سوفتك ويحسب خطة جديدة للتصنيفات المعلّمة. قراءة بس.', 'Reads stock and supply requests from SOFTECH and computes a new plan for the ticked categories. Read only.'),
+             'when': T('الخطة الجديدة بتحل محل القديمة اللي لسه ماتولّدش منها طلبات.', 'The new plan replaces an older one not yet generated.'),
              'open_hint': T('تبويب «التوزيعة»، لمن له صلاحية التوريد.', 'The "Distribution" tab, for users with supply rights.')},
+            {'target': 'purchasing-supply-dist-waves', 'label': T('الموجات · متعارض · محجوز · طلبات التوريد', 'Waves · Conflict · Held · Requests'),
+             'text': T('كروت: اضغط موجة تشوف حركاتها، أو «متعارض» / «محجوز / مؤجل» تعرف ليه الحركة مش داخلة، أو «طلبات التوريد».', 'Cards: press a wave to see its moves, "Conflict" / "Held" to see why a move is out, or "Requests".'),
+             'open_hint': T('بعد بناء الخطة.', 'After building the plan.')},
+            {'target': 'purchasing-supply-dist-generate', 'label': T('＋ توليد طلبات التوريد', '＋ Generate supply requests'),
+             'text': T('يعمل طلبات التوريد «مقترحة» من الخطة، وبتظهر في «طلبات التوريد / ISR» للاعتماد والترحيل. المقترحات القديمة للتوزيعة بتتلغي.', 'Creates the "proposed" supply requests from the plan; they show in "Supply requests (ISR)" for approval and push. Older distribution proposals are cancelled.'),
+             'warn': T('جزء «بعد الاستلام» مايترحّلش غير لما الرئيسي يستلم إذن صرف الفرع.', 'An "after receipt" part is pushed only after HQ receives the branch\'s issue.'),
+             'open_hint': T('خطة محسوبة لم يتولّد منها، لمن له صلاحية التوريد.', 'A built plan not yet generated, for users with supply rights.')},
             {'target': 'purchasing-supply-dist-export', 'label': T('⬇ Excel', '⬇ Excel'),
-             'text': T('الصفوف الظاهرة بنفس التصنيفات والبحث، مع رصيد ومعدل بيع الفرع الحائز والمستهدف.', 'The visible rows with the same categories and search, with stock and sales rate of the holding and target branch.'),
-             'open_hint': T('تبويب «التوزيعة».', 'The "Distribution" tab.')},
+             'text': T('كل حركات الخطة بموجاتها وحالاتها وسببها، وورقة بالطلبات.', 'Every move of the plan with its wave, status and reason, plus a sheet of the requests.'),
+             'open_hint': T('بعد بناء الخطة.', 'After building the plan.')},
             {'target': 'purchasing-supply-receipts-refresh', 'label': T('⟳ المشتريات من SOFTECH', '⟳ Purchases from SOFTECH'),
              'text': T('يسحب فواتير الشراء الجديدة من SOFTECH (قراءة بس)، والفحص بيتعاد لوحده لما يخلص.', 'Pulls new purchase invoices from SOFTECH (read only); the check reruns by itself when done.'),
              'open_hint': T('تبويب «شراء رغم تغطية عالية».', 'The "Bought despite high cover" tab.')},
@@ -1003,8 +1025,8 @@ SCREENS = [
              'text': T('يجهّز رسالة بالتفاصيل ويفتح واتساب — على رقم العميل لو معروف، وإلا تختار المحادثة.', "Builds a message with the details and opens WhatsApp — to the customer's number when known, else you pick the chat."),
              'when': T('الرسالة مش بتتبعت لوحدها: راجعها واضغط إرسال في واتساب.', 'Nothing is sent by itself: review it and press send in WhatsApp.')},
         ],
-        'updated': '2026-11-09',
-        'change_note': T('«مشرف مركز الاتصال» بقى يقدر يفتح الشاشة دي للقراءة.', 'Call-center supervisors can now open this screen to read it.'),
+        'updated': '2026-11-12',
+        'change_note': T('«مقارنة أسعار الشراء»: فلتر المورد بقى يقبل أكثر من مورد.', '"Purchase price comparison": the supplier filter now takes several suppliers.'),
     },
     {
         'key': 'purchasing.overview',
@@ -1571,11 +1593,11 @@ SCREENS = [
              'when': T('لما تحب تعرف مين بيورّد صنف معيّن ومين المورد الرئيسي له.', 'When you need to know who supplies an item and who its main supplier is.'),
              'open_hint': T('تبويب «🔗 خريطة المورد-صنف».', 'The "🔗 Supplier-item map" tab.')},
             {'target': 'purchasing-optimization-alert-filters', 'label': T('المستوى · مفتوحة/محلولة', 'Severity · Open/Resolved'),
-             'text': T('فلتر التنبيهات بالخطورة وبالحالة.', 'Filter alerts by severity and status.'),
+             'text': T('فلتر التنبيهات بالخطورة (تقدر تختار أكثر من مستوى) وبالحالة.', 'Filter alerts by severity (you can tick several levels) and status.'),
              'open_hint': T('تبويب «🚨 التنبيهات».', 'The "🚨 Alerts" tab.'),
              'more': T(
-                 'فلتر بالمستوى (حرجة، تحذير، معلومة) والحالة («مفتوحة فقط» افتراضياً، أو محلولة، أو الكل).\n• بعد ما تعالج التنبيه اضغط «حل ✓» — بيتقفل ويتسجّل إنه اتحل يدوياً.\n• عدد التنبيهات مكتوب على الشمال.',
-                 'Filter by severity (critical, warning, info) and state ("Open only" by default, resolved, or all).\n• Once you have handled an alert, press "Resolve ✓" — it closes and is logged as resolved manually.\n• The alert count is shown at the end of the bar.')},
+                 'فلتر بالمستوى (حرجة، تحذير، معلومة — واحد أو أكتر، ومن غير اختيار = الكل) والحالة («مفتوحة فقط» افتراضياً، أو محلولة، أو الكل).\n• بعد ما تعالج التنبيه اضغط «حل ✓» — بيتقفل ويتسجّل إنه اتحل يدوياً.\n• عدد التنبيهات مكتوب على الشمال.',
+                 'Filter by severity (critical, warning, info — one or several; none = all) and state ("Open only" by default, resolved, or all).\n• Once you have handled an alert, press "Resolve ✓" — it closes and is logged as resolved manually.\n• The alert count is shown at the end of the bar.')},
             {'target': 'purchasing-optimization-alert-resolve', 'label': T('حل ✓', 'Resolve ✓'),
              'text': T('يقفل التنبيه كمحلول؛ بيظهر تحته مين حلّه.', 'Closes the alert as resolved; who resolved it shows below.'),
              'warn': T('بعد معالجة السبب فعلاً بس — التنبيه بيختفي من «مفتوحة فقط».', 'Only after really handling the cause — the alert leaves "Open only".'),
@@ -1605,7 +1627,7 @@ SCREENS = [
             {'target': 'purchasing-optimization-alerts-refresh', 'label': T('🔄 تحديث', '🔄 Refresh'),
              'text': T('يعيد تحميل بيانات الشاشة من السيرفر.', "Reloads the screen's data from the server.")},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-12',
+        'change_note': T('فلتر مستوى التنبيهات بقى يقبل أكثر من مستوى.', 'The alert severity filter now takes several levels.'),
     },
 ]

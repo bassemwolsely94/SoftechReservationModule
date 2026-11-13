@@ -46,6 +46,7 @@ from .models import StockCountSession, StockCountSnapshot, DOCCODE_LABELS
 from django.db.models import Q
 from apps.catalog.wildcard import wq
 from core.errors import public_error
+from core.multi_filter import filter_in, multi_values
 from .serializers import (
     StockCountSessionListSerializer,
     StockCountSessionDetailSerializer,
@@ -89,15 +90,11 @@ class StockCountSessionViewSet(viewsets.ModelViewSet):
         # counter and every count is an immutable attempt, so the classic session endpoints
         # (snapshots, count-item, upload, close) must never reach them.
         qs     = qs.exclude(mode='daily')
-        branch = self.request.query_params.get('branch_code')
-        st     = self.request.query_params.get('status')
-        mode   = self.request.query_params.get('mode')
-        if branch:
-            qs = qs.filter(branch_code=branch)
-        if st:
-            qs = qs.filter(status=st)
-        if mode:
-            qs = qs.filter(mode=mode)
+        # multi-select list filters (?status=draft,snapshot_taken); after scope_code — they only narrow
+        qp     = self.request.query_params
+        qs     = filter_in(qs, 'branch_code', multi_values(qp, 'branch_code'))
+        qs     = filter_in(qs, 'status', multi_values(qp, 'status'))
+        qs     = filter_in(qs, 'mode', multi_values(qp, 'mode'))
         return qs.order_by('-created_at')
 
     # ── Serializer dispatch ───────────────────────────────────────────────────

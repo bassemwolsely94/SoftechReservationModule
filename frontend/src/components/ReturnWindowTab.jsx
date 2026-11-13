@@ -7,7 +7,7 @@
  * (doc 120) and any transfer to HQ are posted in SOFTECH; a doc 120 closes the line by itself.
  * The server decides scope, states, quantities and permissions; this screen shows them.
  */
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { batchesApi, supplyApi } from '../api/client'
 import DataFreshnessBar from './DataFreshnessBar'
@@ -16,6 +16,7 @@ import useBranchLabels from '../hooks/useBranchLabels'
 import useGridKeyboard, { GRID_KEYS_HINT } from '../hooks/useGridKeyboard'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from './SortTh'
+import MultiSelectFilter from './MultiSelectFilter'
 
 const fmtNum = (n, d = 0) => Number(n ?? 0).toLocaleString('en-US', { maximumFractionDigits: d })
 const STATES = [
@@ -28,6 +29,8 @@ const STATE_CLS = Object.fromEntries(STATES.map(s => [s.key, s.cls]))
 const CONF_CLS = { exact: 'bg-green-50 text-green-700', month: 'bg-amber-50 text-amber-700',
                    ambiguous: 'bg-orange-100 text-orange-700', none: 'bg-gray-100 text-gray-500' }
 const LOC_LABEL = { shelf: 'رف فرع', hq: 'مخزن رئيسي', '105': 'مخزن 105' }
+const LOC_OPTIONS = [{ code: 'shelf', name: 'رفوف الفروع' }, { code: 'hq', name: 'مخازن الرئيسي' },
+                     { code: '105', name: 'مخزن 105' }]
 const ANSWERS = [{ v: 'accepted', l: 'مقبول' }, { v: 'partial', l: 'جزئي' }, { v: 'rejected', l: 'مرفوض' }]
 
 function download(res, name) {
@@ -159,15 +162,15 @@ export default function ReturnWindowTab() {
   const qc = useQueryClient()
   const bl = useBranchLabels()
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))
-  const [supplier, setSupplier] = useState('')
-  const [location, setLocation] = useState('')
+  const [supplier, setSupplier] = useState([])   // multi-select supplier codes ([] = all)
+  const [location, setLocation] = useState([])   // multi-select shelf / hq / 105 ([] = all)
   const [stateF, setStateF] = useState('')
   const [ticked, setTicked] = useState({})
   const [pick, setPick] = useState({})               // line key → chosen supplier (ambiguous lines)
   const [msg, setMsg] = useState(null)
   const [since, setSince] = useState(null)
 
-  const params = { month, supplier: supplier || undefined, location: location || undefined }
+  const params = { month, supplier: supplier.join(',') || undefined, location: location.join(',') || undefined }
   const { data, isLoading } = useQuery({
     queryKey: ['batches', 'return-window', params],
     queryFn: () => batchesApi.returnWindow(params).then(r => r.data),
@@ -190,9 +193,11 @@ export default function ReturnWindowTab() {
     onSuccess: reload,
   })
   const exportX = useMutation({
-    mutationFn: (kind) => batchesApi.returnWindowExport({ kind, supplier_code: supplier || undefined, month,
-                                                          location: location || undefined }),
-    onSuccess: (res, kind) => download(res, kind === 'supplier' ? `return_${supplier}.xlsx` : 'return_window.xlsx'),
+    // the supplier sheet is for ONE supplier; the grid export follows every ticked filter
+    mutationFn: (kind) => batchesApi.returnWindowExport({ kind, month,
+                                                          supplier_code: (kind === 'supplier' ? supplier[0] : supplier.join(',')) || undefined,
+                                                          location: location.join(',') || undefined }),
+    onSuccess: (res, kind) => download(res, kind === 'supplier' ? `return_${supplier[0]}.xlsx` : 'return_window.xlsx'),
     onError: () => setMsg('تعذّر التصدير — اختر المورد أولاً لملف المورد.'),
   })
   const refresh = useMutation({
@@ -225,6 +230,12 @@ export default function ReturnWindowTab() {
   })
   const tickedRows = lines.filter(l => ticked[l.key])
   const suppliers = Object.entries(data?.suppliers || {})
+  // the summary narrows with the supplier filter, so the options keep every supplier seen so far
+  const seenSuppliers = useRef(new Map())
+  const supplierOpts = useMemo(() => {
+    Object.entries(data?.suppliers || {}).forEach(([code, s]) => seenSuppliers.current.set(code, s.supplier_name || ''))
+    return [...seenSuppliers.current].map(([code, name]) => ({ code, name: name ? `${code} · ${name}` : code }))
+  }, [data])
 
   return (
     <div>
@@ -240,16 +251,10 @@ export default function ReturnWindowTab() {
 
       <div className="flex flex-wrap items-center gap-2 mb-3 text-sm">
         <input type="month" value={month} onChange={e => setMonth(e.target.value)} className="border rounded-lg px-2 py-1.5" />
-        <select value={supplier} onChange={e => setSupplier(e.target.value)} className="border rounded-lg px-2 py-1.5">
-          <option value="">كل الموردين</option>
-          {suppliers.map(([code, s]) => <option key={code} value={code}>{code} · {s.supplier_name}</option>)}
-        </select>
-        <select value={location} onChange={e => setLocation(e.target.value)} className="border rounded-lg px-2 py-1.5">
-          <option value="">كل المواقع</option>
-          <option value="shelf">رفوف الفروع</option>
-          <option value="hq">مخازن الرئيسي</option>
-          <option value="105">مخزن 105</option>
-        </select>
+        <MultiSelectFilter className="w-48" menuClassName="min-w-[280px]" options={supplierOpts} selected={supplier}
+                           onChange={setSupplier} allLabel="كل الموردين" showCode={false} />
+        <MultiSelectFilter className="w-40" options={LOC_OPTIONS} selected={location} onChange={setLocation}
+                           allLabel="كل المواقع" showCode={false} />
         {stateF && <button onClick={() => setStateF('')} className="px-2 py-1 text-xs border rounded-lg">✕ {STATES.find(s => s.key === stateF)?.label}</button>}
         <span className="flex-1" />
         <button data-tour="batches-main-return-refresh-expiry" onClick={() => refresh.mutate('expiry')} disabled={refresh.isPending} className="px-3 py-1.5 border rounded-lg hover:bg-gray-50 disabled:opacity-50">🔄 أرصدة الصلاحية</button>
@@ -266,7 +271,7 @@ export default function ReturnWindowTab() {
           <div key={code} className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex flex-wrap items-center gap-3 text-sm">
             <b className="min-w-40">{code} · {s.supplier_name}</b>
             {STATES.map(st => (
-              <button key={st.key} onClick={() => { setSupplier(code); setStateF(st.key) }}
+              <button key={st.key} onClick={() => { setSupplier([code]); setStateF(st.key) }}
                       className={`px-2 py-1 rounded-lg ${st.cls} hover:opacity-80`}>
                 {st.label}: <b>{fmtNum(s[st.key]?.value)} ج</b>
               </button>
@@ -279,8 +284,8 @@ export default function ReturnWindowTab() {
         <button data-tour="batches-main-return-request" onClick={() => request.mutate(tickedRows)}
                 disabled={!tickedRows.length || request.isPending}
                 className="px-4 py-2 bg-primary text-white rounded-lg disabled:opacity-40">طلب مرتجع ({tickedRows.length})</button>
-        <button data-tour="batches-main-return-export" onClick={() => exportX.mutate('supplier')} disabled={!supplier || exportX.isPending}
-                title={supplier ? '' : 'اختر المورد أولاً'}
+        <button data-tour="batches-main-return-export" onClick={() => exportX.mutate('supplier')} disabled={supplier.length !== 1 || exportX.isPending}
+                title={supplier.length === 1 ? '' : 'اختر موردًا واحدًا أولاً'}
                 className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40">⬇️ تصدير للمورد</button>
         <button data-tour="batches-main-return-export-grid" onClick={() => exportX.mutate('grid')} disabled={!lines.length || exportX.isPending}
                 className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40">⬇️ تصدير Excel</button>

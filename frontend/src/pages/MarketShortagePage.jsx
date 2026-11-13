@@ -6,6 +6,7 @@
  * filter by general classification, Excel export, WhatsApp copy, recovery &
  * auto-detectable flags.
  */
+import MultiSelectFilter from '../components/MultiSelectFilter'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { purchasingApi } from '../api/client'
@@ -92,7 +93,7 @@ const onErr = (e) => window.alert(e?.response?.data?.detail || e?.message || 'ت
 
 // Client-side filter shared by every tab (instant, no refetch).
 const matchFilter = (r, med, q) => {
-  if (med && (r.med_type_code || '') !== med) return false
+  if (med.length && !med.includes(r.med_type_code || '')) return false   // med: ticked categories (none = all)
   if (q) {
     const s = q.trim().toLowerCase()
     if (!(wildcardMatch(r.name, q) || `${r.code}`.toLowerCase().includes(s))) return false
@@ -255,15 +256,13 @@ function Toolbar({ med, setMed, q, setQ, view }) {
   const { data: mt } = useQuery({ queryKey: ['shortage-medtypes'],
     queryFn: () => purchasingApi.shortageMedTypes().then(r => r.data) })
   const exp = useMutation({
-    mutationFn: () => purchasingApi.shortageExport({ view, ...(med ? { med } : {}), ...(q ? { q } : {}) }),
+    mutationFn: () => purchasingApi.shortageExport({ view, ...(med.length ? { med: med.join(',') } : {}), ...(q ? { q } : {}) }),
     onSuccess: (r) => downloadArrayBuffer(r.data, `market-shortage-${view}.xlsx`),
   })
   return (
     <div className="flex flex-wrap items-center gap-2 mb-4" data-tour="shortage-market-toolbar">
-      <select value={med} onChange={e => setMed(e.target.value)} className="border rounded-lg px-3 py-1.5 text-sm">
-        <option value="">كل التصنيفات</option>
-        {(mt?.med_types || []).map(m => <option key={m.code} value={m.code}>{m.label}</option>)}
-      </select>
+      <MultiSelectFilter className="w-[180px]" menuClassName="min-w-[240px]" showCode={false} allLabel="كل التصنيفات"
+        options={(mt?.med_types || []).map(m => ({ code: m.code, name: m.label }))} selected={med} onChange={setMed} />
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="بحث بالكود/الاسم…"
         className="border rounded-lg px-3 py-1.5 text-sm w-44" />
       <div className="mr-auto flex gap-2">
@@ -276,7 +275,7 @@ function Toolbar({ med, setMed, q, setQ, view }) {
           📱 واتساب
         </button>
       </div>
-      {wa && <WhatsAppModal params={{ view, ...(med ? { med } : {}), ...(q ? { q } : {}) }} onClose={() => setWa(false)} />}
+      {wa && <WhatsAppModal params={{ view, ...(med.length ? { med: med.join(',') } : {}), ...(q ? { q } : {}) }} onClose={() => setWa(false)} />}
     </div>
   )
 }
@@ -629,7 +628,7 @@ function TrendsTab() {
 export default function MarketShortagePage() {
   const [tab, setTab] = useState('changes')
   useHelpTab(tab)
-  const [med, setMed] = useState('')
+  const [med, setMed] = useState([])
   const [q, setQ] = useState('')
   const { data: confirmed } = useQuery({ queryKey: ['shortage-confirmed', ''],
     queryFn: () => purchasingApi.shortageConfirmed().then(r => r.data) })

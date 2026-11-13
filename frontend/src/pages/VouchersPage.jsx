@@ -20,6 +20,7 @@ import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
 import useServerSort from '../hooks/useServerSort'
 import SortTh from '../components/SortTh'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 
 // the voucher list is paged: the server sorts all vouchers (whitelist in VoucherViewSet.LIST_ORDERINGS)
 const VOUCHER_SORT = ['code', 'title', 'voucher_category', 'voucher_type', 'times_used', 'valid_from', 'status']
@@ -43,6 +44,11 @@ const STATUS_CFG = {
   expired:  { label: 'منتهي',     color: 'bg-red-100 text-red-600' },
   cancelled:{ label: 'ملغى',      color: 'bg-gray-100 text-gray-400' },
 }
+// multi-select list filter options ({code, name})
+const STATUS_OPTIONS = Object.entries(STATUS_CFG).map(([code, c]) => ({ code, name: c.label }))
+const TYPE_OPTIONS = Object.entries(TYPE_CFG).map(([code, c]) => ({ code, name: `${c.icon} ${c.label}` }))
+const CAT_OPTIONS = Object.entries(CAT_CFG).map(([code, c]) => ({ code, name: `${c.icon} ${c.label}` }))
+
 const DOC_STATUS_CFG = {
   active:   { label: 'نشط',       color: 'bg-green-100 text-green-700', icon: '✅' },
   used:     { label: 'مُستخدَم',  color: 'bg-blue-100 text-blue-700',   icon: '✔️' },
@@ -454,9 +460,10 @@ function VouchersList({ onRedeem }) {
   const [loading,      setLoading]      = useState(true)
   const [showCreate,   setShowCreate]   = useState(false)
   const [assignTarget, setAssignTarget] = useState(null)
-  const [filterStatus, setFilterStatus] = useState('')
-  const [filterType,   setFilterType]   = useState('')
-  const [filterCat,    setFilterCat]    = useState('')
+  // status / type / category are multi-select arrays (none ticked = all)
+  const [filterStatus, setFilterStatus] = useState([])
+  const [filterType,   setFilterType]   = useState([])
+  const [filterCat,    setFilterCat]    = useState([])
   const [searchQ,      setSearchQ]      = useState('')
   const [ordering,     setOrdering]     = useState('')
   const { headerProps } = useServerSort(ordering, setOrdering, { allowed: VOUCHER_SORT })
@@ -470,9 +477,9 @@ function VouchersList({ onRedeem }) {
     setLoading(true)
     try {
       const params = {}
-      if (filterStatus) params.status   = filterStatus
-      if (filterType)   params.type     = filterType
-      if (filterCat)    params.category = filterCat
+      if (filterStatus.length) params.status   = filterStatus.join(',')
+      if (filterType.length)   params.type     = filterType.join(',')
+      if (filterCat.length)    params.category = filterCat.join(',')
       if (searchQ)      params.search   = searchQ
       if (ordering)     params.ordering = ordering
       const r = await vouchersApi.list(params)
@@ -518,21 +525,12 @@ function VouchersList({ onRedeem }) {
           value={searchQ} onChange={e => setSearchQ(e.target.value)}
           className="border border-gray-300 rounded-xl px-3 py-1.5 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-brand-400"
           placeholder="بحث بالكود أو العنوان..." />
-        <select data-tour="vouchers-main-status" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-          className="border border-gray-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
-          <option value="">كل الحالات</option>
-          {Object.entries(STATUS_CFG).map(([v, c]) => <option key={v} value={v}>{c.label}</option>)}
-        </select>
-        <select value={filterType} onChange={e => setFilterType(e.target.value)}
-          className="border border-gray-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
-          <option value="">كل الأنواع</option>
-          {Object.entries(TYPE_CFG).map(([v, c]) => <option key={v} value={v}>{c.icon} {c.label}</option>)}
-        </select>
-        <select value={filterCat} onChange={e => setFilterCat(e.target.value)}
-          className="border border-gray-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
-          <option value="">كل الفئات</option>
-          {Object.entries(CAT_CFG).map(([v, c]) => <option key={v} value={v}>{c.icon} {c.label}</option>)}
-        </select>
+        <MultiSelectFilter dataTour="vouchers-main-status" className="w-[140px]" showCode={false} allLabel="كل الحالات"
+          options={STATUS_OPTIONS} selected={filterStatus} onChange={setFilterStatus} />
+        <MultiSelectFilter className="w-[150px]" showCode={false} allLabel="كل الأنواع"
+          options={TYPE_OPTIONS} selected={filterType} onChange={setFilterType} />
+        <MultiSelectFilter className="w-[160px]" showCode={false} allLabel="كل الفئات" menuClassName="min-w-[200px]"
+          options={CAT_OPTIONS} selected={filterCat} onChange={setFilterCat} />
         <div className="flex-1" />
         <CanDo module="reservations" action="create"><Btn data-tour="vouchers-main-new" variant="primary" onClick={() => setShowCreate(true)}>+ قسيمة جديدة</Btn></CanDo>
       </div>

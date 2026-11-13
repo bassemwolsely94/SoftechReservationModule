@@ -18,10 +18,10 @@ DM_MORE_TABS = T(
 DM_MORE_SEARCH = T(
     'اكتب رقم تليفون العميل أو اسمه أو كود PIC أو اسم الصنف.\n'
     '• مفيد لما العميل يتصل يسأل على طلبه، أو قبل ما تسجّل طلب جديد تتأكد إنه مش متسجّل.\n'
-    '• جنبه فلاتر الأولوية والفرع، و«مسح» يرجّع كل الفلاتر.',
+    '• جنبه فلترا الأولوية والفرع: علّم أكثر من اختيار في كل واحد (لا شىء معلّم = الكل)، و«مسح» يرجّع كل الفلاتر.',
     'Type the customer\'s phone, name, PIC code or the item name.\n'
     '• Useful when a customer calls about their request, or to check a request is not already recorded before logging a new one.\n'
-    '• Next to it are priority and branch filters, and "Clear" resets them all.')
+    '• Next to it are the priority and branch filters: tick several in each (nothing ticked = all), and "Clear" resets them all.')
 DM_MORE_TABLE = T(
     'كل صف: رقم الطلب، العميل، الفرع، الأصناف، الحالة، الأولوية، وقت الـ SLA، ومين مسؤول.\n'
     '• اضغط الصف عشان تفتح الطلب وتتابعه.\n'
@@ -589,12 +589,10 @@ SCREENS = [
                  'كل تبويب بيعرض الطلبات اللي في المرحلة دي: جديد، مُعيَّن، متابعة، انتظار المخزون، للمشتريات، بيع ضائع، تم التسليم — و«الكل».\n• ابدأ بـ «جديد» عشان محدش يتعدى عليه وقت الـ SLA.\n• جنب البحث فيه فلتر «⚠ SLA تجاوز فقط» للطلبات المتأخرة.',
                  'Each tab shows the requests at that stage: new, assigned, follow-up, waiting for stock, to purchasing, lost sale, fulfilled — and "All".\n• Start with "New" so nothing passes its SLA time.\n• Next to search there is an "⚠ SLA breached only" filter for late requests.')},
             {'target': 'demand-list-search', 'label': T('🔍 بحث بالهاتف، اسم العميل...', '🔍 Search by phone, customer...'),
-             'text': T('ابحث بالهاتف أو اسم العميل أو PIC أو الصنف. جنبه فلتر الأولوية والفرع.',
-                       'Search by phone, customer name, PIC or item. Next to it are the priority and branch filters.'),
+             'text': T('ابحث بالهاتف أو اسم العميل أو PIC أو الصنف. جنبه فلترا الأولوية والفرع، وكل واحد يقبل أكثر من اختيار.',
+                       'Search by phone, customer name, PIC or item. Next to it, the priority and branch filters each take several choices.'),
              'when': T('أسرع طريقة لما العميل يتصل يسأل على طلبه.', 'The fastest way when a customer calls to ask about their request.'),
-             'more': T(
-                 'اكتب رقم تليفون العميل أو اسمه أو كود PIC أو اسم الصنف.\n• مفيد لما العميل يتصل يسأل على طلبه، أو قبل ما تسجّل طلب جديد تتأكد إنه مش متسجّل.\n• جنبه فلاتر الأولوية والفرع، و«مسح» يرجّع كل الفلاتر.',
-                 'Type the customer\'s phone, name, PIC code or the item name.\n• Useful when a customer calls about their request, or to check a request is not already recorded before logging a new one.\n• Next to it are priority and branch filters, and "Clear" resets them all.')},
+             'more': DM_MORE_SEARCH},
             {'target': 'demand-list-sla', 'label': T('⚠ SLA تجاوز فقط', '⚠ SLA breached only'),
              'text': T('يعرض بس الطلبات اللي عدّت وقت التعيين أو التواصل.', 'Shows only requests that passed their assign or contact time.'),
              'when': T('دي أول حاجة يراجعها المشرف كل ساعة.', 'The first thing a supervisor checks every hour.')},
@@ -691,8 +689,8 @@ SCREENS = [
              'when': T('بعد ما تراجعها — بعدها مش هتظهر كجديدة.', 'After you have gone through them — they will no longer show as new.'),
              'open_hint': T('جوه قائمة جرس الإشعارات، لما يكون فيه غير مقروء.', 'Inside the bell list, when there are unread ones.')},
         ],
-        'updated': '2026-11-06',
-        'change_note': T('لوحة الطلب الضائع بتظهر بس للي عنده صلاحية التحليلات؛ الباقي بيشتغل على القائمة من غيرها.', 'The lost-demand dashboard shows only for roles with analytics access; other roles work the list without it.'),
+        'updated': '2026-11-12',
+        'change_note': T('فلترا الأولوية والفرع يقبلان أكثر من اختيار معاً', 'Priority and branch filters take several choices at once'),
     },
     {
         'key': 'demand.detail',

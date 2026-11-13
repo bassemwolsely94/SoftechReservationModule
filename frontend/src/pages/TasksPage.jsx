@@ -10,6 +10,8 @@ import useHelpTab from '../help/useHelpTab'
 import SortTh from '../components/SortTh'
 import PhoneAlertToggle from '../components/PhoneAlertToggle'
 import useServerSort from '../hooks/useServerSort'
+import MultiSelectFilter from '../components/MultiSelectFilter'
+import BranchMultiSelect from '../components/BranchMultiSelect'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -35,6 +37,11 @@ const TYPE_LABELS = {
   maintenance: 'صيانة', meeting: 'اجتماع', training: 'تدريب',
   audit: 'تدقيق', customer: 'عملاء', other: 'أخرى',
 }
+
+// multi-select filter options ({code, name})
+const STATUS_OPTIONS = Object.entries(STATUS_LABELS).map(([code, v]) => ({ code, name: v.label }))
+const PRIORITY_OPTIONS = Object.entries(PRIORITY_LABELS).map(([code, v]) => ({ code, name: v.label }))
+const TYPE_OPTIONS = Object.entries(TYPE_LABELS).map(([code, name]) => ({ code, name }))
 
 const KANBAN_COLS = [
   { key: 'open',        label: 'مفتوحة',       headerClass: 'bg-blue-50   border-blue-200' },
@@ -300,12 +307,13 @@ export default function TasksPage() {
   const [staff, setStaff] = useState([])
   const [showNewModal, setShowNewModal] = useState(false)
 
-  // Filters
+  // Filters — status / priority / task_type / branch are multi-select arrays (none ticked = all).
+  // ?status=open (old links) and ?status=open,on_hold both pre-fill the status filter.
   const [filters, setFilters] = useState({
-    status: searchParams.get('status') || '',
-    priority: '',
-    task_type: '',
-    branch: '',
+    status: (searchParams.get('status') || '').split(',').filter(Boolean),
+    priority: [],
+    task_type: [],
+    branch: [],
     search: '',
     overdue: '',
   })
@@ -329,7 +337,10 @@ export default function TasksPage() {
     setLoading(true)
     try {
       const params = {}
-      Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v })
+      Object.entries(filters).forEach(([k, v]) => {
+        if (Array.isArray(v)) { if (v.length) params[k] = v.join(',') }
+        else if (v) params[k] = v
+      })
       if (view === 'mine') params.mine = '1'
       if (ordering) params.ordering = ordering
 
@@ -435,29 +446,21 @@ export default function TasksPage() {
           value={filters.search}
           onChange={e => setFilter('search', e.target.value)}
         />
-        <select className="border rounded-lg px-3 py-1.5 text-sm text-right" value={filters.status} onChange={e => setFilter('status', e.target.value)}>
-          <option value="">كل الحالات</option>
-          {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-        </select>
-        <select className="border rounded-lg px-3 py-1.5 text-sm text-right" value={filters.priority} onChange={e => setFilter('priority', e.target.value)}>
-          <option value="">كل الأولويات</option>
-          {Object.entries(PRIORITY_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-        </select>
-        <select className="border rounded-lg px-3 py-1.5 text-sm text-right" value={filters.task_type} onChange={e => setFilter('task_type', e.target.value)}>
-          <option value="">كل الأنواع</option>
-          {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-        <select className="border rounded-lg px-3 py-1.5 text-sm text-right" value={filters.branch} onChange={e => setFilter('branch', e.target.value)}>
-          <option value="">كل الفروع</option>
-          {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-        </select>
+        <MultiSelectFilter className="w-[150px]" showCode={false} allLabel="كل الحالات"
+          options={STATUS_OPTIONS} selected={filters.status} onChange={v => setFilter('status', v)} />
+        <MultiSelectFilter className="w-[150px]" showCode={false} allLabel="كل الأولويات"
+          options={PRIORITY_OPTIONS} selected={filters.priority} onChange={v => setFilter('priority', v)} />
+        <MultiSelectFilter className="w-[160px]" showCode={false} allLabel="كل الأنواع" menuClassName="min-w-[220px]"
+          options={TYPE_OPTIONS} selected={filters.task_type} onChange={v => setFilter('task_type', v)} />
+        <BranchMultiSelect className="w-[170px]" branches={branches}
+          selected={filters.branch} onChange={v => setFilter('branch', v)} />
         <label data-tour="tasks-list-overdue" className="flex items-center gap-1.5 text-sm text-red-600 cursor-pointer">
           <input type="checkbox" checked={filters.overdue === '1'} onChange={e => setFilter('overdue', e.target.checked ? '1' : '')} />
           متأخرة فقط
         </label>
-        {Object.values(filters).some(Boolean) && (
+        {Object.values(filters).some(v => (Array.isArray(v) ? v.length > 0 : Boolean(v))) && (
           <button
-            onClick={() => setFilters({ status:'',priority:'',task_type:'',branch:'',search:'',overdue:'' })}
+            onClick={() => setFilters({ status:[],priority:[],task_type:[],branch:[],search:'',overdue:'' })}
             className="text-xs text-gray-400 hover:text-gray-600 underline"
           >
             مسح الفلاتر

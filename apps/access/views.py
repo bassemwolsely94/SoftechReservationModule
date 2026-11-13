@@ -13,6 +13,7 @@ from rest_framework.throttling import SimpleRateThrottle
 
 from apps.audit.models import AuditLog
 from apps.users.permissions import IsAdminRole
+from core.multi_filter import filter_in, multi_values
 
 from . import devices as dev_api
 from .models import Device, DeviceUser, TrustedNetwork, ZonePolicy
@@ -160,12 +161,13 @@ class DeviceViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upd
         p = self.request.query_params
         if p.get('status'):
             qs = qs.filter(status=p['status'])
-        if p.get('kind'):
-            qs = qs.filter(kind=p['kind'])
-        if p.get('branch'):
-            if not str(p['branch']).isdigit():
+        # kind / branch take one value or several (?kind=phone,kiosk  ?branch=3,7); none = all
+        qs = filter_in(qs, 'kind', multi_values(p, 'kind'))
+        branches = multi_values(p, 'branch')
+        if branches:
+            if not all(b.isdigit() for b in branches):
                 raise ValidationError({'error': 'الفرع غير صحيح'})
-            qs = qs.filter(branch_id=int(p['branch']))
+            qs = filter_in(qs, 'branch_id', [int(b) for b in branches])
         q = (p.get('q') or '').strip()
         if q:
             qs = qs.filter(wq(q, 'name', 'last_ip', 'first_ip', 'last_site',

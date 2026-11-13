@@ -10,9 +10,10 @@
  * - View column schemas and sample data
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi } from '../api/client'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 
 const CATEGORY_AR = {
   journal:   'يومية',
@@ -64,7 +65,7 @@ function ColumnList({ columns }) {
 
 export default function FinanceSchemaPage() {
   const [search,    setSearch]    = useState('')
-  const [category,  setCategory]  = useState('')
+  const [category,  setCategory]  = useState([])   // multi-select categories (none ticked = all)
   const [filterCon, setFilterCon] = useState('')  // '' | 'confirmed' | 'unconfirmed'
   const [expanded,  setExpanded]  = useState(null)
 
@@ -74,7 +75,7 @@ export default function FinanceSchemaPage() {
     queryKey: ['finance-schema', search, category, filterCon],
     queryFn:  () => financeApi.schema({
       search:       search   || undefined,
-      category:     category || undefined,
+      category:     category.length ? category.join(',') : undefined,
       is_confirmed: filterCon === 'confirmed' ? 'true' : filterCon === 'unconfirmed' ? 'false' : undefined,
     }).then(r => r.data),
     staleTime: 30_000,
@@ -95,7 +96,12 @@ export default function FinanceSchemaPage() {
   })
 
   const tables = data?.results || data || []
-  const categories = [...new Set(tables.map(t => t.category).filter(Boolean))]
+  // every known category + any other the server returned + what is ticked (the list never shrinks to the filter)
+  const tableCats = tables.map(t => t.category).filter(Boolean).join('|')
+  const categoryOptions = useMemo(() => {
+    const codes = [...new Set([...Object.keys(CATEGORY_AR), ...tableCats.split('|').filter(Boolean), ...category])]
+    return codes.map(c => ({ code: c, name: CATEGORY_AR[c] || c }))
+  }, [tableCats, category])
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -113,13 +119,8 @@ export default function FinanceSchemaPage() {
             placeholder="بحث باسم الجدول…"
             className="border rounded-lg px-3 py-1.5 text-sm w-44 focus:ring-2 focus:ring-green-500"
           />
-          <select data-tour="finance-schema-category" value={category} onChange={e => setCategory(e.target.value)}
-            className="border rounded-lg px-3 py-1.5 text-sm">
-            <option value="">كل الفئات</option>
-            {categories.map(c => (
-              <option key={c} value={c}>{CATEGORY_AR[c] || c}</option>
-            ))}
-          </select>
+          <MultiSelectFilter dataTour="finance-schema-category" className="w-[150px]" showCode={false} allLabel="كل الفئات"
+            options={categoryOptions} selected={category} onChange={setCategory} />
           <select data-tour="finance-schema-confirmed-filter" value={filterCon} onChange={e => setFilterCon(e.target.value)}
             className="border rounded-lg px-3 py-1.5 text-sm">
             <option value="">الكل</option>

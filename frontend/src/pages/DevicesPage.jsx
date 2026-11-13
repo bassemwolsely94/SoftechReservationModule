@@ -16,6 +16,8 @@ import useGridKeyboard from '../hooks/useGridKeyboard'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
 import useHelpTab from '../help/useHelpTab'
+import MultiSelectFilter from '../components/MultiSelectFilter'
+import BranchMultiSelect from '../components/BranchMultiSelect'
 
 const KINDS = [
   { value: 'branch_pc', label: 'جهاز فرع' },
@@ -24,6 +26,7 @@ const KINDS = [
   { value: 'rider_phone', label: 'موبايل طيار' },
   { value: 'kiosk', label: 'كشك' },
 ]
+const KIND_OPTIONS = KINDS.map(k => ({ code: k.value, name: k.label }))   // kind filter (multi-select)
 const TABS = [
   { key: 'pending', label: 'بانتظار الاعتماد', match: s => s === 'pending' },
   { key: 'approved', label: 'المعتمدة', match: s => s === 'approved' },
@@ -50,8 +53,8 @@ export default function DevicesPage() {
   const qc = useQueryClient()
   const [tab, setTab] = useState('pending')
   useHelpTab(tab)
-  const [branch, setBranch] = useState('')
-  const [kind, setKind] = useState('')
+  const [branch, setBranch] = useState([])     // branch ids, multi-select (none = all)
+  const [kind, setKind] = useState([])         // device kinds, multi-select (none = all)
   const [q, setQ] = useState('')
   const [selected, setSelected] = useState(() => new Set())
   const [retireArm, setRetireArm] = useState(null)   // device id waiting for the second click on تقاعد
@@ -61,8 +64,8 @@ export default function DevicesPage() {
 
   const params = useMemo(() => {
     const p = {}
-    if (branch) p.branch = branch
-    if (kind) p.kind = kind
+    if (branch.length) p.branch = branch.join(',')
+    if (kind.length) p.kind = kind.join(',')
     if (q.trim()) p.q = q.trim()
     return p
   }, [branch, kind, q])
@@ -180,14 +183,9 @@ export default function DevicesPage() {
 
       <div className="flex flex-wrap items-center gap-2">
         <input className="input" placeholder="بحث: اسم، مستخدم، IP…" value={q} onChange={e => setQ(e.target.value)} />
-        <select className="input" value={branch} onChange={e => setBranch(e.target.value)}>
-          <option value="">كل الفروع</option>
-          {branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
-        </select>
-        <select className="input" value={kind} onChange={e => setKind(e.target.value)}>
-          <option value="">كل الأنواع</option>
-          {KINDS.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
-        </select>
+        <BranchMultiSelect branches={branches} selected={branch} onChange={setBranch} />
+        <MultiSelectFilter className="w-[160px]" showCode={false} allLabel="كل الأنواع"
+          options={KIND_OPTIONS} selected={kind} onChange={setKind} />
         {tab === 'pending' && (
           <button data-tour="admin-devices-approve" className="btn-primary text-sm"
                   disabled={!pickedPending.length || bulk.isPending}

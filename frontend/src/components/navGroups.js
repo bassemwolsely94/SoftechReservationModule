@@ -150,6 +150,7 @@ export const NAV_GROUPS = [
       { to: '/erp-permissions',  icon: '🧩', label: 'صلاحيات Softech',   roles: ['admin'] },
       { to: '/settings',         icon: '⚙️', label: 'الإعدادات',         roles: ['admin','pharmacist'] },
       { to: '/sync',             icon: '⟳', label: 'المزامنة',            roles: ['admin'] },
+      { to: '/data-health',      icon: '🩺', label: 'صحة البيانات',       roles: ['admin','supervisor','quality_manager'], module: 'data_health' },
       { to: '/access/networks',  icon: '🌐', label: 'الشبكات الموثوقة',   roles: ['admin'] },
       { to: '/access/devices',   icon: '💻', label: 'الأجهزة',            roles: ['admin'] },
       { to: '/access/zone-policy', icon: '🛰️', label: 'سياسة الشبكات',      roles: ['admin'] },

@@ -67,6 +67,7 @@ const GamificationPage = lazy(() => import('./pages/GamificationPage'))
 const StockAuditPage = lazy(() => import('./pages/StockAuditPage'))
 const TaxInvoicingPage = lazy(() => import('./pages/TaxInvoicingPage'))
 const HRAttendancePage = lazy(() => import('./pages/HRAttendancePage'))
+const DataHealthPage = lazy(() => import('./pages/DataHealthPage'))
 const PicAnalyticsPage = lazy(() => import('./pages/PicAnalyticsPage'))
 const UsagePrintPage = lazy(() => import('./pages/UsagePrintPage'))
 const UserManagementPage = lazy(() => import('./pages/UserManagementPage'))
@@ -564,6 +565,9 @@ export default function App() {
             {/* sync: admin only */}
             <Route path="sync"
               element={<RequireRole roles={['admin']}><SyncPage /></RequireRole>} />
+            {/* data health (data lifecycle Stage 5): admin all tabs; supervisor + quality growth/problems (server enforces) */}
+            <Route path="data-health"
+              element={<RequireRole roles={['admin','supervisor','quality_manager']}><DataHealthPage /></RequireRole>} />
             {/* trusted networks (security N1): admin only */}
             <Route path="access/networks"
               element={<RequireRole roles={['admin']}><TrustedNetworksPage /></RequireRole>} />

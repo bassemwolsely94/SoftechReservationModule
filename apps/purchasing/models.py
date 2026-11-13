@@ -1201,6 +1201,13 @@ class IsrPush(models.Model):
     # WhatsApp request, for lists that did not come from one.
     origin_shortage_list = models.ForeignKey('shortage.ShortageList', on_delete=models.SET_NULL,
                                              null=True, blank=True, related_name='isr_pushes')
+    # Which planner owns the ROUTE (doc 30 phase C, owner 2026-11-10). '' = the general route
+    # (replenishment, engine transfers). «التوزيعة» drafts live on their own routes so a daily
+    # replenishment draft and a distribution draft to the same branch don't cancel each other:
+    #   'dist'      — HQ → branch, lines HQ already holds («جاهز الآن»)
+    #   'dist:<S>'  — HQ → branch, lines that first arrive at HQ from branch S («بعد الاستلام من S»);
+    #                 pushed only after S's branch → HQ leg is RECEIVED at HQ (isr_guards).
+    route_tag = models.CharField(max_length=16, blank=True, default='', db_default='', db_index=True)
 
     class Meta:
         ordering = ['-created_at']
@@ -1229,16 +1236,90 @@ class IsrPush(models.Model):
             # one live GENERAL draft per route (doc 30 phase A, 2026-10-24): #30 / #32 were
             # copies of the already-pushed #29. A new draft supersedes an older proposed one
             # (isr_guards); this stops two parallel clicks from both getting through.
+            # route_tag (doc 30 phase C) keeps the distribution routes apart from the general one.
             models.UniqueConstraint(
-                fields=['kind', 'branchcode', 'dest_branchcode'],
+                fields=['kind', 'branchcode', 'dest_branchcode', 'route_tag'],
                 condition=models.Q(origin_isr__isnull=True, origin_request__isnull=True,
                                    origin_shortage_list__isnull=True,
                                    status__in=['proposed', 'approved']),
-                name='isrpush_one_live_draft_per_route'),
+                name='isrpush_one_live_draft_per_route_tag'),
         ]
 
     def __str__(self):
         return f'IsrPush {self.pk} | br{self.branchcode} | {self.get_status_display()} | {self.line_count} صنف'
+
+
+class DistributionPlan(models.Model):
+    """«التوزيعة» movement plan (doc 30 phases B–D, owner 2026-11-10): ONE ledger of moves per
+    build, stored with its inputs and read time for audit. ISR drafts are generated FROM it.
+    Company-level purchasing data (HQ plans moves between all branches) — read by whoever opens
+    /supply (PURCHASING module), built / generated only by can_supply_write."""
+    STATUS_BUILT = 'built'           # computed, nothing generated yet
+    STATUS_GENERATED = 'generated'   # ISR drafts created from it
+    STATUS_SUPERSEDED = 'superseded' # a newer plan was built
+    STATUS_CHOICES = [(STATUS_BUILT, 'محسوبة'), (STATUS_GENERATED, 'وُلّدت منها الطلبات'),
+                      (STATUS_SUPERSEDED, 'استُبدلت بخطة أحدث')]
+
+    run = models.ForeignKey(DemandCalculationRun, on_delete=models.SET_NULL, null=True, blank=True,
+                            related_name='distribution_plans')
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=STATUS_BUILT, db_index=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='distribution_plans')
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    # thresholds, categories, live-read time, which committed-flow sources were readable
+    inputs = models.JSONField(default=dict, blank=True)
+    totals = models.JSONField(default=dict, blank=True)      # per wave / per status
+    documents = models.JSONField(default=list, blank=True)   # the drafts it would make / made
+    generated_at = models.DateTimeField(null=True, blank=True)
+    generated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                     blank=True, related_name='+')
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'خطة توزيعة'
+
+    def __str__(self):
+        return f'DistributionPlan {self.pk} | {self.get_status_display()}'
+
+
+class PlannedMove(models.Model):
+    """One move of a plan: (item, from, to) once per destination, whatever category qualified it.
+    from_code / to_code are SOFTECH branch codes ('100' = HQ)."""
+    STATUS_PLANNED = 'planned'        # goes into a draft
+    STATUS_CONFLICT = 'conflict'      # already covered by another document (wave 0)
+    STATUS_BELOW_LINE = 'below_line'  # branch-sourced line under the per-line value threshold
+    STATUS_FOLDED = 'folded'          # its document is under the per-document threshold → next run
+    STATUS_NOT_ALLOWED = 'not_allowed'  # the wave's source rule refuses it (e.g. source not over its max)
+    STATUS_BLOCKED = 'blocked'        # its route is held by an approved draft / another planner
+    STATUS_CHOICES = [(STATUS_PLANNED, 'مخطط'), (STATUS_CONFLICT, 'متعارض'),
+                      (STATUS_BELOW_LINE, 'أقل من حد السطر'), (STATUS_FOLDED, 'مؤجل للتشغيل القادم'),
+                      (STATUS_NOT_ALLOWED, 'غير مسموح من هذا المصدر'), (STATUS_BLOCKED, 'المسار مشغول')]
+
+    plan = models.ForeignKey(DistributionPlan, on_delete=models.CASCADE, related_name='moves')
+    itemcode = models.CharField(max_length=20, db_index=True)
+    item_name = models.CharField(max_length=255, blank=True)
+    from_code = models.CharField(max_length=10)
+    to_code = models.CharField(max_length=10)
+    qty = models.IntegerField(default=0)
+    unit_cost = models.DecimalField(max_digits=14, decimal_places=3, default=0)
+    value = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    wave = models.PositiveSmallIntegerField(default=0)        # 1 HQ-first · 2 over_piled · 3 · 4
+    rank = models.PositiveIntegerField(default=0)             # order within the wave (value desc)
+    category = models.CharField(max_length=20, blank=True)
+    reasons = models.JSONField(default=list, blank=True)      # category + signals + text
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=STATUS_PLANNED, db_index=True)
+    status_note = models.CharField(max_length=255, blank=True)
+    conflicts = models.JSONField(default=list, blank=True)    # [{source, ref, qty, label}]
+    position = models.JSONField(default=dict, blank=True)     # stock / rate / max at source + target
+    isr_push = models.ForeignKey(IsrPush, on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='planned_moves')      # the HQ → branch draft
+    feeder_push = models.ForeignKey(IsrPush, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='+')               # the branch → HQ leg, if any
+
+    class Meta:
+        ordering = ['wave', 'rank']
+        indexes = [models.Index(fields=['plan', 'status', 'wave'])]
+        verbose_name = 'حركة مخططة'
 
 
 class CoverageTopUp(models.Model):

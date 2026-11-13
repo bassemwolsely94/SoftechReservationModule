@@ -15,6 +15,7 @@ from datetime import date, timedelta
 from apps.notifications.phone_alerts import hooks as phone_alert_hooks
 from core import branch_scope
 from core.export_safety import neutralise_formulas
+from core.multi_filter import filter_in, multi_ids, multi_values
 from core.sort_ordering import NullsLastOrderingFilter
 from core.sort_rank import choice_rank, text_or
 
@@ -65,10 +66,23 @@ class ReservationFilter(django_filters.FilterSet):
     of the plain exact filters, so the mobile queue can request the "active" set
     in a single paginated request."""
     status__in = django_filters.BaseInFilter(field_name='status', lookup_expr='in')
+    # status / priority / branch are multi-select list filters: one value as before, or several as
+    # a comma list / repeated param (?status=pending,available · ?branch=3,7). They run on the
+    # already branch-scoped queryset, so they can only narrow what the user sees.
+    status = django_filters.CharFilter(method='filter_multi')
+    priority = django_filters.CharFilter(method='filter_multi')
+    branch = django_filters.CharFilter(method='filter_multi_branch')
 
     class Meta:
         model = Reservation
         fields = ['status', 'status__in', 'priority', 'branch', 'assigned_to']
+
+    def filter_multi(self, queryset, name, value):
+        return filter_in(queryset, name, multi_values(self.data, name))
+
+    def filter_multi_branch(self, queryset, name, value):
+        # junk ids match nothing (a filter was asked for), never "all branches"
+        return filter_in(queryset, 'branch_id', multi_ids(self.data, name) or [0])
 
 
 class ReservationsPermission(BasePermission):
@@ -1422,7 +1436,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
     def analytics(self, request):
         """
         GET /api/reservations/analytics/
-        Params: date_from, date_to, branch
+        Params: date_from, date_to, branch (one id or a comma list, e.g. 3,7)
         """
         qs = Reservation.objects.all()
         qs = branch_scope.scope(qs, request.user)
@@ -1442,10 +1456,9 @@ class ReservationViewSet(viewsets.ModelViewSet):
             except (ValueError, TypeError):
                 pass
         if branch_id:
-            try:
-                qs = qs.filter(branch_id=int(branch_id))
-            except (ValueError, TypeError):
-                pass
+            # one branch or several (?branch=3,7); junk ids are ignored as before. Runs after
+            # branch_scope.scope, so it only narrows.
+            qs = filter_in(qs, 'branch_id', multi_ids(request.query_params, 'branch'))
 
         total = qs.count()
         by_status = {

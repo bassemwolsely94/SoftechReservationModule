@@ -35,6 +35,7 @@ from .models import InTransitAuditEvent, InTransitNote, InTransitTransfer
 from apps.catalog.wildcard import wq
 from core import branch_scope
 from core.errors import public_error
+from core.multi_filter import filter_in, multi_ids, multi_values
 from core.permissions import RouteModulePermission, matrix_permission
 from .serializers import (
     ForceCloseSerializer,
@@ -119,9 +120,9 @@ class InTransitTransferViewSet(viewsets.ReadOnlyModelViewSet):
         filters.SearchFilter,
         filters.OrderingFilter,
     ]
+    # transit_status / priority / supplying_branch / receiving_branch are multi-select
+    # (?priority=red,critical) — see filter_queryset; the rest stay exact single-value filters.
     filterset_fields   = [
-        'transit_status', 'priority',
-        'supplying_branch', 'receiving_branch',
         'cancellation_available', 'has_discrepancy',
     ]
     search_fields      = [
@@ -210,6 +211,17 @@ class InTransitTransferViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(manually_received_at__isnull=False, erp_received_date__isnull=True,
                            transit_status='received')
 
+        return qs
+
+    def filter_queryset(self, queryset):
+        """The list's multi-select filters, on top of the backends (same place the old
+        DjangoFilterBackend fields ran, so scoping in get_queryset still comes first)."""
+        qs = super().filter_queryset(queryset)
+        qp = self.request.query_params
+        qs = filter_in(qs, 'transit_status', multi_values(qp, 'transit_status'))
+        qs = filter_in(qs, 'priority', multi_values(qp, 'priority'))
+        qs = filter_in(qs, 'supplying_branch_id', multi_ids(qp, 'supplying_branch'))
+        qs = filter_in(qs, 'receiving_branch_id', multi_ids(qp, 'receiving_branch'))
         return qs
 
     def get_serializer_class(self):

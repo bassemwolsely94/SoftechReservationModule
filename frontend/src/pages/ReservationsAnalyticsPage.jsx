@@ -13,6 +13,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { reservationsApi, branchesApi } from '../api/client'
 import SortTh from '../components/SortTh'
+import BranchMultiSelect from '../components/BranchMultiSelect'
 import useSortableRows from '../hooks/useSortableRows'
 
 const fmt    = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
@@ -65,7 +66,7 @@ function BarRow({ label, value, max, color = 'bg-brand-500', badge }) {
 }
 
 export default function ReservationsAnalyticsPage() {
-  const [filters, setFilters] = useState({ date_from: '', date_to: '', branch: '' })
+  const [filters, setFilters] = useState({ date_from: '', date_to: '', branch: [] })   // branch: multi-select (none = all)
   const upd = (k, v) => setFilters(f => ({ ...f, [k]: v }))
 
   const { data: branches = [] } = useQuery({
@@ -77,7 +78,7 @@ export default function ReservationsAnalyticsPage() {
   const params = {
     date_from: filters.date_from || undefined,
     date_to:   filters.date_to   || undefined,
-    branch:    filters.branch    || undefined,
+    branch:    filters.branch.length ? filters.branch.join(',') : undefined,
   }
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -113,11 +114,8 @@ export default function ReservationsAnalyticsPage() {
         <div className="flex flex-wrap gap-2 items-center" data-tour="analytics-reservations-filters">
           <input type="date" className="input-field text-xs py-1.5 w-36" value={filters.date_from} onChange={e => upd('date_from', e.target.value)} />
           <input type="date" className="input-field text-xs py-1.5 w-36" value={filters.date_to}   onChange={e => upd('date_to',   e.target.value)} />
-          <select className="input-field text-xs py-1.5 w-44" value={filters.branch} onChange={e => upd('branch', e.target.value)}>
-            <option value="">كل الفروع</option>
-            {branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
-          </select>
-          <button data-tour="analytics-reservations-clear" onClick={() => setFilters({ date_from: '', date_to: '', branch: '' })} className="btn-secondary text-xs py-1.5">مسح</button>
+          <BranchMultiSelect className="w-44" branches={branches} selected={filters.branch} onChange={v => upd('branch', v)} />
+          <button data-tour="analytics-reservations-clear" onClick={() => setFilters({ date_from: '', date_to: '', branch: [] })} className="btn-secondary text-xs py-1.5">مسح</button>
           <button onClick={() => refetch()} className="btn-secondary text-xs py-1.5" data-tour="analytics-reservations-refresh">🔄 تحديث</button>
         </div>
       </div>

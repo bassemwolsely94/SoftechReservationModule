@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { reservationsApi, branchesApi } from '../api/client'
 import useAuthStore from '../store/authStore'
-import BranchSelect from '../components/BranchSelect'
+import BranchMultiSelect from '../components/BranchMultiSelect'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 import CanDo from '../components/CanDo'
 import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
@@ -22,6 +23,14 @@ const COLUMNS = [
   { key: 'confirmed', label: 'مؤكد — قادم',        color: '#7c3aed', bg: '#f5f3ff', dot: '#8b5cf6' },
   { key: 'fulfilled', label: 'تم التسليم',          color: '#059669', bg: '#ecfdf5', dot: '#10b981' },
   { key: 'cancelled', label: 'ملغي / منتهي',       color: '#dc2626', bg: '#fef2f2', dot: '#ef4444' },
+]
+
+// board filter options ({code, name}) for the multi-select filters
+const BOARD_STATUS_OPTIONS = COLUMNS.map(c => ({ code: c.key, name: c.label }))
+const BOARD_PRIORITY_OPTIONS = [
+  { code: 'urgent', name: 'عاجل' },
+  { code: 'chronic', name: 'مزمن' },
+  { code: 'normal', name: 'عادي' },
 ]
 
 const PRIORITY_BADGE = {
@@ -333,9 +342,10 @@ export default function ReservationsKanban() {
   const isCCOrAdmin = user?.role === 'admin' || user?.role === 'call_center'
 
   const [viewMode, setViewMode] = useState('kanban')   // 'kanban' | 'list'
-  const [filterBranch, setFilterBranch] = useState('')
-  const [filterPriority, setFilterPriority] = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
+  // multi-select filters (arrays; none ticked = all) — sent as one comma list, e.g. ?status=pending,available
+  const [filterBranch, setFilterBranch] = useState([])
+  const [filterPriority, setFilterPriority] = useState([])
+  const [filterStatus, setFilterStatus] = useState([])
   const [search, setSearch] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -352,9 +362,11 @@ export default function ReservationsKanban() {
   const reservationsQuery = useQuery({
     queryKey: ['reservations-kanban', filterBranch, filterPriority, filterStatus, search, dateFrom, dateTo],
     queryFn: () => reservationsApi.list({
-      branch:    filterBranch    || undefined,
-      priority:  filterPriority  || undefined,
-      status:    filterStatus    || undefined,
+      branch:    filterBranch.length   ? filterBranch.join(',')   : undefined,
+      priority:  filterPriority.length ? filterPriority.join(',') : undefined,
+      // «ملغي / منتهي» is one column for both statuses, so ticking it asks for both
+      status:    filterStatus.length
+        ? filterStatus.flatMap(s => (s === 'cancelled' ? ['cancelled', 'expired'] : [s])).join(',') : undefined,
       search:    search          || undefined,
       date_from: dateFrom        || undefined,
       date_to:   dateTo          || undefined,
@@ -493,41 +505,35 @@ export default function ReservationsKanban() {
 
           {/* Branch filter (CC/admin only) */}
           {isCCOrAdmin && (
-            <BranchSelect
-              size="sm"
-              value={filterBranch}
+            <BranchMultiSelect
+              selected={filterBranch}
               onChange={setFilterBranch}
               branches={branches}
-              allLabel="كل الفروع"
               className="w-52"
             />
           )}
 
           {/* Priority filter */}
-          <select
-            aria-label="تصفية حسب الأولوية"
-            data-tour="reservations-board-priority"
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-300"
-            value={filterPriority}
-            onChange={e => setFilterPriority(e.target.value)}
-          >
-            <option value="">كل الأولويات</option>
-            <option value="urgent">عاجل</option>
-            <option value="chronic">مزمن</option>
-            <option value="normal">عادي</option>
-          </select>
+          <MultiSelectFilter
+            dataTour="reservations-board-priority"
+            className="w-[140px]"
+            showCode={false}
+            allLabel="كل الأولويات"
+            options={BOARD_PRIORITY_OPTIONS}
+            selected={filterPriority}
+            onChange={setFilterPriority}
+          />
 
           {/* Status filter (more useful in list mode) */}
-          <select
-            aria-label="تصفية حسب الحالة"
-            data-tour="reservations-board-status"
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-300"
-            value={filterStatus}
-            onChange={e => setFilterStatus(e.target.value)}
-          >
-            <option value="">كل الحالات</option>
-            {COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
-          </select>
+          <MultiSelectFilter
+            dataTour="reservations-board-status"
+            className="w-[150px]"
+            showCode={false}
+            allLabel="كل الحالات"
+            options={BOARD_STATUS_OPTIONS}
+            selected={filterStatus}
+            onChange={setFilterStatus}
+          />
 
           {/* Date range */}
           <div className="flex items-center gap-1.5 text-xs text-gray-500" data-tour="reservations-board-dates">

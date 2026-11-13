@@ -63,6 +63,32 @@ class PortfolioTests(TestCase):
         got = select_claims(date(2026, 10, 1), date(2026, 10, 31))
         self.assertEqual(len(got), 2)               # October + the one spanning into October
 
+    def test_multi_select_clients_subclients_statuses(self):
+        a_staff = self.sub                                   # جهة أ — العاملين (self.oct)
+        a_pens = m.InsuranceSubClient.objects.create(client=a_staff.client, name='المعاشات')
+        b_staff = _sub('جهة ب')
+        c_staff = _sub('جهة ج')
+        oct_ = (date(2026, 10, 1), date(2026, 10, 31))
+        a_p = _claim(a_pens, *oct_)
+        b_s = _claim(b_staff, *oct_, status='submitted')
+        c_s = _claim(c_staff, *oct_)
+
+        def ids(got):
+            return {c.id for c in got}
+
+        # several جهات at once (list or "a,b" string — the view passes the query string as is)
+        self.assertEqual(ids(select_claims(client_id=f'{a_staff.client_id},{b_staff.client_id}')),
+                         {self.oct.id, a_p.id, b_s.id})
+        # a فئة narrows only its own جهة; the other ticked جهة stays whole
+        self.assertEqual(ids(select_claims(client_id=[a_staff.client_id, b_staff.client_id],
+                                           subclient_id=str(a_pens.id))), {a_p.id, b_s.id})
+        # several فئات across جهات
+        self.assertEqual(ids(select_claims(subclient_id=f'{a_staff.id},{c_staff.id}')), {self.oct.id, c_s.id})
+        # several حالات
+        self.assertEqual(ids(select_claims(statuses=['submitted'])), {b_s.id})
+        # junk ids ignored → no filter
+        self.assertEqual(len(select_claims(client_id='x,')), 4)
+
     def test_gp_patient_share_and_categories(self):
         r = build_report([self.oct])
         row = r['motalbas'][0]
@@ -127,3 +153,24 @@ class PortfolioAccessTests(TestCase):
 
     def test_all_branch_user_allowed(self):
         self.assertEqual(self.sup_c.get('/api/insurance/portfolio/').status_code, 200)
+
+    def test_claims_list_multi_select_filters(self):
+        """/claims/?status=a,b&client_id=x,y — the claims-list filter bar sends ticked values as comma lists."""
+        a, b, c = _sub('جهة أ'), _sub('جهة ب'), _sub('جهة ج')
+        oct_ = (date(2026, 10, 1), date(2026, 10, 31))
+        ca = _claim(a, *oct_)
+        cb = _claim(b, *oct_, status='submitted')
+        cc = _claim(c, date(2025, 10, 1), date(2025, 10, 31))
+
+        def ids(qs):
+            r = self.sup_c.get(f'/api/insurance/claims/?{qs}')
+            self.assertEqual(r.status_code, 200)
+            rows = r.json()
+            return {x['id'] for x in (rows.get('results', rows) if isinstance(rows, dict) else rows)}
+
+        self.assertEqual(ids(f'client_id={a.client_id},{b.client_id}'), {ca.id, cb.id})
+        self.assertEqual(ids(f'subclient_id={a.id}&subclient_id={c.id}'), {ca.id, cc.id})   # repeated form too
+        self.assertEqual(ids('status=submitted'), {cb.id})                                   # one value as before
+        self.assertEqual(ids('year=2025,2026'), {ca.id, cb.id, cc.id})
+        self.assertEqual(ids('year=2025'), {cc.id})
+        self.assertEqual(ids('client_id='), {ca.id, cb.id, cc.id})                           # nothing ticked = all

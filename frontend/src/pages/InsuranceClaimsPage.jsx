@@ -14,6 +14,7 @@ import SortTh from '../components/SortTh'
 import { useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
 import DataFreshnessBar from '../components/DataFreshnessBar'
+import MultiSelectFilter from '../components/MultiSelectFilter'
 import { wildcardMatch } from '../utils/wildcard'
 import { fa } from '../utils/flowArrow'
 
@@ -536,10 +537,11 @@ export default function InsuranceClaimsPage() {
 
   // ── Filters ──────────────────────────────────────────────────────────────────
   const [filters, setFilters] = useState({
-    status:       '',
-    year:         '',
-    client_id:    '',
-    subclient_id: '',
+    // multi-select (nothing ticked = all)
+    status:       [],
+    year:         [],
+    client_id:    [],
+    subclient_id: [],
     date_from:    '',
     date_to:      '',
     search:       '',
@@ -550,14 +552,14 @@ export default function InsuranceClaimsPage() {
     setLoading(true)
     try {
       const params = {}
-      if (filters.status)       params.status       = filters.status
-      if (filters.year)         params.year         = filters.year
-      if (filters.client_id)    params.client_id    = filters.client_id
-      if (filters.subclient_id) params.subclient_id = filters.subclient_id
+      if (filters.status.length)       params.status       = filters.status.join(',')
+      if (filters.year.length)         params.year         = filters.year.join(',')
+      if (filters.client_id.length)    params.client_id    = filters.client_id.join(',')
+      if (filters.subclient_id.length) params.subclient_id = filters.subclient_id.join(',')
       const { data } = await insuranceApi.claims(params)
       setClaims(data.results || data)
     } finally { setLoading(false) }
-  }, [filters.status, filters.year, filters.client_id, filters.subclient_id])
+  }, [filters.status, filters.year, filters.client_id, filters.subclient_id])   // arrays are replaced on change, never mutated
 
   useEffect(() => { load() }, [load])
 
@@ -618,7 +620,7 @@ export default function InsuranceClaimsPage() {
   })
 
   const filteredSubclients = useMemo(() =>
-    subclients.filter(sc => !filters.client_id || String(sc.client_id) === String(filters.client_id)),
+    subclients.filter(sc => !filters.client_id.length || filters.client_id.includes(sc.client_id)),
     [subclients, filters.client_id]
   )
 
@@ -738,34 +740,28 @@ export default function InsuranceClaimsPage() {
       <div className="px-6 pb-3 space-y-2">
         {/* Row 1: dropdowns */}
         <div className="flex gap-2 flex-wrap items-center" data-tour="insurance-claims-filters">
-          <select className={inp} value={filters.status} onChange={e => setF('status', e.target.value)}>
-            <option value="">كل الحالات</option>
-            {Object.entries(STATUS_CFG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-          </select>
-
-          <select className={inp} value={filters.year} onChange={e => setF('year', e.target.value)}>
-            <option value="">كل السنوات</option>
-            {years.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-
-          <select className={inp} value={filters.client_id}
-            onChange={e => { setF('client_id', e.target.value); setF('subclient_id', '') }}>
-            <option value="">كل العملاء</option>
-            {clients.map(c => <option key={c.id} value={c.id}>{c.name_short || c.name}</option>)}
-          </select>
-
-          <select className={inp} value={filters.subclient_id}
-            onChange={e => setF('subclient_id', e.target.value)}>
-            <option value="">كل الفئات</option>
-            {filteredSubclients.map(sc => <option key={sc.id} value={sc.id}>{sc.name}</option>)}
-          </select>
+          <MultiSelectFilter className="w-[170px]" showCode={false} allLabel="كل الحالات"
+            options={Object.entries(STATUS_CFG).map(([k, v]) => ({ code: k, name: v.label }))}
+            selected={filters.status} onChange={v => setF('status', v)} />
+          <MultiSelectFilter className="w-[130px]" showCode={false} allLabel="كل السنوات"
+            options={years.map(y => ({ code: Number(y), name: String(y) }))}
+            selected={filters.year} onChange={v => setF('year', v)} />
+          <MultiSelectFilter className="w-[200px]" menuClassName="min-w-[300px]" showCode={false} allLabel="كل العملاء"
+            options={clients.map(c => ({ code: c.id, name: c.name_short || c.name }))}
+            selected={filters.client_id}
+            onChange={v => setFilters(p => ({ ...p, client_id: v,
+              subclient_id: p.subclient_id.filter(id => !v.length || v.includes(subclients.find(sc => sc.id === id)?.client_id)) }))} />
+          <MultiSelectFilter className="w-[200px]" menuClassName="min-w-[300px]" showCode={false} allLabel="كل الفئات"
+            options={filteredSubclients.map(sc => ({ code: sc.id,
+              name: filters.client_id.length === 1 ? sc.name : `${sc.name} — ${sc.client_name || ''}` }))}
+            selected={filters.subclient_id} onChange={v => setF('subclient_id', v)} />
 
           <Btn variant="secondary" size="sm" onClick={load} data-tour="insurance-claims-refresh">تحديث</Btn>
 
-          {(filters.status || filters.year || filters.client_id || filters.subclient_id ||
+          {(filters.status.length || filters.year.length || filters.client_id.length || filters.subclient_id.length ||
             filters.date_from || filters.date_to || filters.search) && (
             <Btn variant="ghost" size="sm"
-              onClick={() => setFilters({ status:'', year:'', client_id:'', subclient_id:'', date_from:'', date_to:'', search:'' })}>
+              onClick={() => setFilters({ status:[], year:[], client_id:[], subclient_id:[], date_from:'', date_to:'', search:'' })}>
               × مسح الفلاتر
             </Btn>
           )}

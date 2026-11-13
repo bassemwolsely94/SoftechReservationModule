@@ -664,7 +664,7 @@ SCREENS = [
              'text': T('أغراض المكالمات في آخر 30 يوم، ومشاعر العملاء من تلخيص الذكاء الاصطناعي.', 'Call purposes over the last 30 days, and customer sentiment from the AI summaries.'),
              'open_hint': T('تبويب «📊 مؤشرات الأداء».', 'The "📊 KPIs" tab.')},
             {'target': 'callcenter-analytics-call-filters', 'label': T('بحث · الحالة · الغرض · الاتجاه', 'Search · status · purpose · direction'),
-             'text': T('دوّر في المكالمات بالاسم أو الرقم أو الملاحظات، وفلتر بالحالة والغرض والاتجاه.', 'Search calls by name, phone or notes, and filter by status, purpose and direction.'),
+             'text': T('دوّر بالاسم أو الرقم أو الملاحظات. الحالة والغرض والاتجاه تقبل أكثر من اختيار؛ لا شىء معلّم = الكل.', 'Search by name, phone or notes. Status, purpose and direction take several choices; nothing ticked = all.'),
              'open_hint': T('تبويب «📞 سجل المكالمات».', 'The "📞 Call log" tab.')},
             {'target': 'callcenter-analytics-score', 'label': T('⭐', '⭐'),
              'text': T('يفتح تقييم جودة المكالمة دي.', 'Opens the quality scoring for this call.'),
@@ -696,15 +696,16 @@ SCREENS = [
              'more': T(
                  'مفيد لما عميل يشتكي من مكالمة معيّنة وعايز تلاقيها بسرعة.\n• البحث بيدوّر كمان في الملاحظات المكتوبة.',
                  'Useful when a customer complains about a particular call and you want to find it fast.\n• The search also looks in the written notes.')},
-            {'target': 'callcenter-analytics-calls-filters', 'label': T('كل الأغراض', 'All purposes'), 'when': T('لما تحب تشوف نوع مكالمات واحد.', 'When you want to see one kind of call.'),  # from the GitHub-side tour
-             'text': T('في نفس التبويب: صفِّ المكالمات حسب الغرض، وبجانبه فلاتر الحالة والاتجاه.',
-                       'In the same tab: filter calls by purpose, next to the status and direction filters.'),
+            {'target': 'callcenter-analytics-calls-filters', 'label': T('كل الأغراض', 'All purposes'), 'when': T('لما تحب تشوف نوع مكالمات واحد أو أكثر.', 'When you want to see one or more kinds of call.'),  # from the GitHub-side tour
+             'text': T('صفِّ المكالمات حسب الغرض، وبجانبه الحالة والاتجاه. كل فلتر يقبل أكثر من اختيار معاً.',
+                       'Filter calls by purpose, next to status and direction. Each filter takes several choices at once.'),
              'more': T(
-                 '• الغرض: حجز، توصيل، شكوى، إلخ.\n• الحالة: تمت، لا رد، مشغول، بريد صوتي، معاودة.\n• الاتجاه: واردة، صادرة، واتساب.\nمثلاً: «شكوى» + «لا رد» يوريك شكاوى محتاجة رجوع.',
-                 '• Purpose: reservation, delivery, complaint, etc.\n• Status: answered, no answer, busy, voicemail, call back.\n• Direction: inbound, outbound, WhatsApp.\nE.g. "Complaint" + "No answer" shows complaints that need a callback.')},
+                 '• الغرض: حجز، توصيل، شكوى، إلخ.\n• الحالة: تمت، لا رد، مشغول، بريد صوتي، معاودة.\n• الاتجاه: واردة، صادرة، واتساب.\nمثلاً: «شكوى» + «لا رد» يوريك شكاوى محتاجة رجوع.\n• علّم أكثر من اختيار في نفس الفلتر: «لا رد» + «مشغول» = كل المكالمات اللي ما وصلتش.',
+                 '• Purpose: reservation, delivery, complaint, etc.\n• Status: answered, no answer, busy, voicemail, call back.\n• Direction: inbound, outbound, WhatsApp.\nE.g. "Complaint" + "No answer" shows complaints that need a callback.\n• Tick several in one filter: "No answer" + "Busy" = every call that did not get through.')},
         ],
-        'updated': '2026-11-06',
-        'change_note': T('دور «مشاهد» ماعادش يقدر يفتح الشاشة دي.', 'The viewer role can no longer open this screen.'),
+        'updated': '2026-11-12',
+        'change_note': T('فلاتر الحالة والغرض والاتجاه في «سجل المكالمات» تقبل أكثر من اختيار',
+                         'Status, purpose and direction filters in the "Call log" take several choices'),
     },
     {
         'key': 'callcenter.callbacks',

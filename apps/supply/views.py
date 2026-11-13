@@ -976,7 +976,8 @@ def purchase_prices(request):
         cache.set(key, board, 10 * 60)
     if request.query_params.get('format') == 'xlsx':
         qp = request.query_params                 # the screen's filters → the same rows in Excel
-        shown = price_history.filter_board(board, state=qp.get('state', ''), supplier=qp.get('supplier', ''),
+        from core.multi_filter import multi_values      # supplier: one key or several (?supplier=D1,g:A-B)
+        shown = price_history.filter_board(board, state=qp.get('state', ''), supplier=multi_values(qp, 'supplier'),
                                            producer=qp.get('producer', ''), q=qp.get('q', ''))
         resp = HttpResponse(price_history.to_excel(shown),
                             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')

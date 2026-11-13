@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { tasksApi, branchesApi } from '../api/client'
+import BranchMultiSelect from '../components/BranchMultiSelect'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -149,7 +150,8 @@ export default function TaskDashboardPage() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [schedules, setSchedules] = useState([])
-  const [branch, setBranch] = useState('')
+  const [branchIds, setBranchIds] = useState([])   // multi-select; none ticked = all branches
+  const branch = branchIds.join(',')               // the query value (?branch=3,7), '' = all
   const [branches, setBranches] = useState([])
 
   useEffect(() => {
@@ -205,14 +207,8 @@ export default function TaskDashboardPage() {
           <p className="text-sm text-gray-500 mt-0.5">نظرة عامة على المهام التشغيلية</p>
         </div>
         <div className="flex items-center gap-3">
-          <select data-tour="tasks-dashboard-branch"
-            className="border rounded-lg px-3 py-1.5 text-sm text-right"
-            value={branch}
-            onChange={e => setBranch(e.target.value)}
-          >
-            <option value="">كل الفروع</option>
-            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
+          <BranchMultiSelect dataTour="tasks-dashboard-branch" className="w-[180px]"
+            branches={branches} selected={branchIds} onChange={setBranchIds} />
           <button
             onClick={() => navigate('/tasks')}
             className="px-4 py-1.5 text-sm border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50"

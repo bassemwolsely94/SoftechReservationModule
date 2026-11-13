@@ -9,6 +9,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.multi_filter import multi_values
+
 from . import call_lists
 from .models import CallList
 from .views import FOLLOWUPS
@@ -29,7 +31,14 @@ def _clean_criteria(data) -> dict:
     segs = c.get('segments') or []
     if isinstance(segs, list) and segs:
         out['segments'] = [str(s)[:15] for s in segs if s][:10]
-    for key in ('branch_id', 'inactive_days_min', 'inactive_days_max'):
+    # branches: several (branch_ids: [3, 7]) or the old single branch_id; junk is an error (400),
+    # never silently dropped — a dropped branch would widen the list to every allowed branch
+    raw = multi_values(c, 'branch_ids') + multi_values(c, 'branch_id')
+    if raw:
+        if not all(v.isdigit() for v in raw):
+            raise ValueError('branch')
+        out['branch_ids'] = sorted({int(v) for v in raw})[:50]
+    for key in ('inactive_days_min', 'inactive_days_max'):
         v = c.get(key)
         if v not in (None, ''):
             out[key] = max(0, int(v))

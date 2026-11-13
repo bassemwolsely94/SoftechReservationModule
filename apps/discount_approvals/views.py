@@ -547,7 +547,11 @@ def replication_scans(request):
 @api_view(['GET'])
 @permission_classes([IsAdminRole])
 def replication_scan_detail(request, pk):
-    """One scan with its gaps (optionally filtered by status/source/branch)."""
+    """One scan with its gaps (optionally filtered by status/source/branch).
+
+    Each filter takes several values (?status=stale,unreachable or repeated); none = all.
+    """
+    from core.multi_filter import filter_in, multi_values
     from .models import ReplicationScan, ReplicationGap
     from .serializers import ReplicationScanSerializer, ReplicationGapSerializer
     try:
@@ -556,9 +560,7 @@ def replication_scan_detail(request, pk):
         return Response({'detail': 'غير موجود'}, status=404)
     gaps = ReplicationGap.objects.filter(scan=scan)
     for p in ('status', 'source_channel', 'branch_code'):
-        v = request.query_params.get(p)
-        if v:
-            gaps = gaps.filter(**{p: v})
+        gaps = filter_in(gaps, p, multi_values(request.query_params, p))
     data = ReplicationScanSerializer(scan).data
     data['gaps'] = ReplicationGapSerializer(gaps, many=True).data
     return Response(data)

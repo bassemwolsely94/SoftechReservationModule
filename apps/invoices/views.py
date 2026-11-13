@@ -35,6 +35,7 @@ from .serializers import (
 from .anomalies import check_invoice_anomalies
 from apps.catalog.wildcard import wq
 from core.errors import public_error
+from core.multi_filter import filter_in, multi_ids, multi_values
 from core.threads import start_thread
 
 logger = logging.getLogger('elrezeiky.invoices')
@@ -177,10 +178,10 @@ class SupplierInvoiceViewSet(_DuplicateUploadNotice, viewsets.ModelViewSet):
         status_q = self.request.query_params.get('status')
         supplier = self.request.query_params.get('supplier')
         attention = self.request.query_params.get('attention')
-        if branch:
-            qs = qs.filter(branch_id=branch)
-        if status_q:
-            qs = qs.filter(status=status_q)
+        if branch:     # one branch or several (?branch=3,7); junk ids match nothing
+            qs = filter_in(qs, 'branch_id', multi_ids(self.request.query_params, 'branch') or [0])
+        if status_q:   # one status or several (?status=draft,review)
+            qs = filter_in(qs, 'status', multi_values(self.request.query_params, 'status'))
         if supplier:
             qs = qs.filter(wq(supplier, 'supplier_name'))
         # fast-lane: '1' = only invoices needing review (flags / unmatched / pick /

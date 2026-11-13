@@ -176,19 +176,12 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
             return qs
         params = self.request.query_params
 
-        client_id    = params.get('client_id')
-        subclient_id = params.get('subclient_id')
-        status_val   = params.get('status')
-        year         = params.get('year')
-
-        if client_id:
-            qs = qs.filter(subclient__client_id=client_id)
-        if subclient_id:
-            qs = qs.filter(subclient_id=subclient_id)
-        if status_val:
-            qs = qs.filter(status=status_val)
-        if year:
-            qs = qs.filter(period_from__year=year)
+        # every list filter is multi-select: ?status=draft,submitted&client_id=3,7 (none = all)
+        from core.multi_filter import multi_ids, multi_values, filter_in
+        from .portfolio import filter_client_subclient
+        qs = filter_client_subclient(qs, multi_ids(params, 'client_id'), multi_ids(params, 'subclient_id'))
+        qs = filter_in(qs, 'status', multi_values(params, 'status'))
+        qs = filter_in(qs, 'period_from__year', multi_ids(params, 'year'))
 
         return qs
 
@@ -2977,7 +2970,7 @@ class InsuranceSeparationListViewSet(viewsets.ModelViewSet):
 
 class InsurancePortfolioView(APIView):
     """READ-ONLY «تقارير المطالبات»: motalbas whose period overlaps [from, to].
-    GET /api/insurance/portfolio/?from=&to=&client_id=&subclient_id=&status=a,b
+    GET /api/insurance/portfolio/?from=&to=&client_id=a,b&subclient_id=a,b&status=a,b
         &sort=<key>&dir=asc|desc&order=<claim ids, custom order>&group_by_client=1&format=xlsx"""
     permission_classes = [InsuranceModuleAccess]
 
