@@ -29,6 +29,7 @@ const api = vi.hoisted(() => ({
   codesSend: vi.fn(),
   codesRefresh: vi.fn(),
   codesCheck: vi.fn(),
+  codesAddFromCatalog: vi.fn(),
   codeGpc: vi.fn(() => Promise.resolve({ data: { loaded: true, rows: [{ code: '10000673', name_ar: 'أدوية', name_en: 'Medicines', used: 5 }] } })),
   chainLookup: vi.fn(),
   startChain: vi.fn(),
@@ -391,5 +392,16 @@ describe('GPC category and GS1', () => {
     fireEvent.click(await screen.findByLabelText('اختيار 71010'))
     fireEvent.click(screen.getByText(/تجهيز طلبات GS1/))
     await waitFor(() => expect(api.codesPrepare).toHaveBeenCalledWith({ ids: [5], kind: 'gs1' }))
+  })
+})
+
+describe('new catalog items', () => {
+  it('offers to add catalog items that have no tax profile yet', async () => {
+    api.codes.mockResolvedValue({ data: { summary: { catalog_without_profile: 12 }, rows: [] } })
+    api.codeCandidates.mockResolvedValue({ data: [] })
+    api.codesAddFromCatalog.mockResolvedValue({ data: { added: 12 } })
+    show(<Candidates me={ME} />)
+    fireEvent.click(await screen.findByText(/إضافة أصناف الكتالوج الجديدة \(12\)/))
+    await waitFor(() => expect(api.codesAddFromCatalog).toHaveBeenCalled())
   })
 })

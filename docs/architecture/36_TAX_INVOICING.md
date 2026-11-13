@@ -77,6 +77,8 @@ requests" (`GET /api/v1.0/codetypes/requests/my?ItemCode=`).
 - `gpc.suggest` shows, per uncoded item, the brick most used by our approved items of the same SOFTECH family, else
   category, else type, with its share. It is never applied by itself: preparing uses a batch brick, else the item's own,
   else the suggestion only when the person ticks "use the suggested category" after seeing it. The audit records which.
+- `add_from_catalog`: active catalog items with no tax profile (new since the owner's workbook) become uncoded profiles
+  (name from the catalog), so they can be offered for a code. Treatment and lists stay for the accountant.
 - GS1: an uncoded item whose catalog barcode is a valid GTIN can be asked for as-is ("Request Code Reuse",
   `PUT /api/v1.0/codetypes/requests/codeusages`, `TaxCodeRequest.purpose = gs1`). ETA refuses a barcode it does not
   hold; that item then needs an EGS code. Approval sets `code_type = GS1`, `eta_code = barcode`.

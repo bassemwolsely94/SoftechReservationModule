@@ -47,6 +47,24 @@ def candidates(limit=500):
             .exclude(pk__in=open_ids).order_by('softech_itemcode')[:limit])
 
 
+def _catalog_without_profile():
+    from apps.catalog.models import Item
+    return Item.objects.filter(is_active=True).exclude(
+        softech_id__in=TaxItemProfile.objects.values('softech_itemcode'))
+
+
+def add_from_catalog(actor):
+    """Active catalog items with no tax profile yet (new since the owner's workbook) become uncoded profiles,
+    so they can be offered for a code. Sets nothing else: tax treatment stays for the accountant."""
+    rows = [TaxItemProfile(softech_itemcode=i.softech_id, item=i, item_name=i.name[:200],
+                           coding_status=TaxItemProfile.CODE_MISSING)
+            for i in _catalog_without_profile().order_by('softech_id')]
+    TaxItemProfile.objects.bulk_create(rows, batch_size=2000, ignore_conflicts=True)
+    audit('items_added_from_catalog', actor=actor, entity='item_import', entity_id='catalog',
+          after={'added': len(rows), 'first': [r.softech_itemcode for r in rows[:20]]})
+    return {'added': len(rows)}
+
+
 def _check_fields(parent_code, code_name, code_name_ar):
     problems = []
     if not GPC_BRICK.match(parent_code or ''):
@@ -304,6 +322,7 @@ def summary():
     checks = dict(TaxItemProfile.objects.exclude(eta_code='').filter(eta_check_env=here)
                   .values_list('eta_check_status').annotate(n=Count('id')))
     return {'by_status': counts, 'candidates': candidates(limit=100000).count(),
+            'catalog_without_profile': _catalog_without_profile().count(),
             'mirror_candidates': mirror_candidates(limit=100000).count() if here not in ('', 'production') else 0,
             'checks': {'found': checks.get(TaxItemProfile.CHECK_FOUND, 0),
                        'inactive': checks.get(TaxItemProfile.CHECK_INACTIVE, 0),

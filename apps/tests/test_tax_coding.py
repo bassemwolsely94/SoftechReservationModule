@@ -693,3 +693,19 @@ class GpcAndGs1Tests(Fixture, TestCase):
         self.assertEqual(len(r.json()['created']), 1)
         self.assertEqual(api(self.pharmacist).post('/api/tax-invoicing/codes/prepare/', {'ids': [self.new.pk]},
                                                    format='json').status_code, 403)
+
+    def test_new_catalog_items_join_the_items_that_need_a_code(self):
+        from apps.catalog.models import Item
+        Item.objects.create(softech_id='71500', name='Brand new syrup')
+        Item.objects.create(softech_id='71501', name='Old', is_active=False)
+        body = api(self.accountant).get('/api/tax-invoicing/codes/').json()
+        before = body['summary']['catalog_without_profile']
+        self.assertGreaterEqual(before, 1)
+        self.assertEqual(api(self.pharmacist).post('/api/tax-invoicing/codes/add-from-catalog/', {}, format='json').status_code, 403)
+        r = api(self.accountant).post('/api/tax-invoicing/codes/add-from-catalog/', {}, format='json')
+        self.assertEqual(r.json()['added'], before)
+        p = TaxItemProfile.objects.get(softech_itemcode='71500')
+        self.assertEqual((p.coding_status, p.item_name, p.item.softech_id), ('missing', 'Brand new syrup', '71500'))
+        self.assertFalse(TaxItemProfile.objects.filter(softech_itemcode='71501').exists())
+        self.assertEqual(api(self.accountant).get('/api/tax-invoicing/codes/').json()['summary']['catalog_without_profile'], 0)
+        self.assertTrue(TaxAuditEvent.objects.filter(action='items_added_from_catalog').exists())

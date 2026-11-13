@@ -72,6 +72,8 @@ export function GpcPicker({ value, onChange }) {
 }
 
 export function Candidates({ me }) {
+  const summary = useQuery({ queryKey: ['tax-invoicing', 'codes', ''], queryFn: () => taxInvoicingApi.codes({ status: '' }).then(r => r.data) })
+  const newInCatalog = summary.data?.summary?.catalog_without_profile || 0
   const [q, setQ] = useState('')
   const [picked, setPicked] = useState([])
   const [gpc, setGpc] = useState('')
@@ -98,6 +100,12 @@ export function Candidates({ me }) {
     <Section title="أصناف تحتاج كوداً" hint="بلا كود، أو رفضت المصلحة كودها السابق، ولا يوجد لها طلب مفتوح."
       actions={me.can_edit && (
         <>
+          {newInCatalog > 0 && (
+            <Btn disabled={act.pending} data-tour="tax-invoicing-main-codes-add-catalog"
+              onClick={() => act.run(() => taxInvoicingApi.codesAddFromCatalog(), d => `أُضيف ${fmtInt(d.added)} صنف من الكتالوج`)}>
+              إضافة أصناف الكتالوج الجديدة ({fmtInt(newInCatalog)})
+            </Btn>
+          )}
           <GpcPicker value={gpc} onChange={setGpc} />
           <label className="flex items-center gap-1 text-xs text-gray-600" data-tour="tax-invoicing-main-codes-suggested">
             <input type="checkbox" checked={useSuggested} onChange={e => setUseSuggested(e.target.checked)} />

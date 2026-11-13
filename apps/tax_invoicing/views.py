@@ -1055,6 +1055,13 @@ def code_candidates(request):
                       'coding_status_label': p.get_coding_status_display()} for p in rows])
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, EDITOR])
+def codes_add_from_catalog(request):
+    """New catalog items (no tax profile yet) join the items that need a code."""
+    return Response(coding.add_from_catalog(request.user))
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, VIEWER])
 def code_gpc(request):
