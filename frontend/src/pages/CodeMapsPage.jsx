@@ -14,7 +14,7 @@
  *
  * Keys (useGridKeyboard): ↑↓ move · Enter / M jump to the row's group select.
  */
-import { useCallback, useMemo, useState } from 'react'
+import { Fragment, useCallback, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { codeMapsApi } from '../api/client'
 import useGridKeyboard from '../hooks/useGridKeyboard'
@@ -32,9 +32,12 @@ const HINT = '⌨ ↑↓ تنقل · Enter أو M تعديل المجموعة ·
 const num = v => (v == null ? '—' : Number(v).toLocaleString('en-US'))
 
 function errText(e) {
+  // status first: DRF's own 401 / 403 detail text is English — never show it
+  const status = e?.response?.status
+  if (status === 401) return 'انتهت الجلسة — سجّل الدخول مرة أخرى.'
+  if (status === 403) return 'ليس لديك صلاحية لهذا الإجراء'
   const d = e?.response?.data
   if (d?.detail && typeof d.detail === 'string') return d.detail
-  if (e?.response?.status === 403) return 'لا تملك صلاحية تعديل هذه الإعدادات.'
   return 'تعذّر الحفظ — حاول مرة أخرى.'
 }
 
@@ -50,8 +53,13 @@ function useRowSaver(which) {
   const { key, patch } = QUERIES[which]
   const [pending, setPending] = useState({})   // id -> { field: value } not yet confirmed
   const [errors, setErrors] = useState({})     // id -> server message
+  const busy = useRef(new Set())               // rows with a PATCH in flight (sync guard)
 
+  // A change on a row that is still saving is ignored (the controlled input snaps back);
+  // the control stays enabled so focus — and the grid keyboard — stay where they were.
   const save = useCallback(async (row, data) => {
+    if (busy.current.has(row.id)) return
+    busy.current.add(row.id)
     setPending(p => ({ ...p, [row.id]: { ...p[row.id], ...data } }))
     setErrors(e => ({ ...e, [row.id]: '' }))
     try {
@@ -60,6 +68,7 @@ function useRowSaver(which) {
     } catch (e) {
       setErrors(er => ({ ...er, [row.id]: errText(e) }))
     } finally {
+      busy.current.delete(row.id)
       setPending(p => {
         const cur = { ...p[row.id] }
         Object.keys(data).forEach(f => { delete cur[f] })
@@ -107,7 +116,7 @@ function CodeCell({ row }) {
 function GroupSelect({ row, groups, saver }) {
   const current = saver.value(row, 'group')
   return (
-    <select className="input py-1" value={current} disabled={saver.saving(row.id)}
+    <select className="input py-1" value={current}
             data-code-map-group={row.id} aria-label={`مجموعة الكود ${row.code}`}
             onChange={e => saver.save(row, { group: e.target.value })}>
       {groups.filter(g => g.value !== UNCLASSIFIED || current === UNCLASSIFIED)
@@ -119,7 +128,7 @@ function GroupSelect({ row, groups, saver }) {
 function Check({ row, field, saver, label }) {
   return (
     <input type="checkbox" className="accent-brand-600 cursor-pointer" aria-label={`${label} — ${row.code}`}
-           checked={!!saver.value(row, field)} disabled={saver.saving(row.id)}
+           checked={!!saver.value(row, field)}
            onChange={e => saver.save(row, { [field]: e.target.checked })} />
   )
 }
@@ -133,9 +142,6 @@ function ErrorRow({ row, saver, colSpan }) {
   if (!msg) return null
   return <tr><td colSpan={colSpan} className="px-3 pb-2 text-xs text-red-600">{msg}</td></tr>
 }
-
-// A keyed fragment around a row and its optional error row.
-function RowFragment({ children }) { return <>{children}</> }
 
 function Shell({ query, kb, children, empty }) {
   if (query.isLoading) return <div className="card p-6 text-center text-muted">جارٍ التحميل…</div>
@@ -182,14 +188,14 @@ function ChannelsTable({ query }) {
           const rp = kb.rowProps(r)
           const rank = saver.value(r, 'followup_rank')
           return (
-            <RowFragment key={r.id}>
-              <tr {...rp} className={`border-b border-line ${rp.className}`}>
+            <Fragment key={r.id}>
+              <tr {...rp} aria-busy={saver.saving(r.id) || undefined} className={`border-b border-line ${rp.className}`}>
                 <CodeCell row={r} />
                 <td className="p-2">{r.label || '—'}</td>
                 <td className="p-2"><GroupSelect row={r} groups={groups} saver={saver} /></td>
                 <td className="p-2 text-center"><Check row={r} field="is_contract_sale" saver={saver} label="بيع تعاقد" /></td>
                 <td className="p-2">
-                  <select className="input py-1 w-20" value={rank ?? ''} disabled={saver.saving(r.id)}
+                  <select className="input py-1 w-20" value={rank ?? ''}
                           aria-label={`أولوية المتابعة — ${r.code}`}
                           onChange={e => saver.save(r, { followup_rank: e.target.value === '' ? null : Number(e.target.value) })}>
                     <option value="">—</option>
@@ -201,7 +207,7 @@ function ChannelsTable({ query }) {
                 <StatusCell row={r} saver={saver} />
               </tr>
               <ErrorRow row={r} saver={saver} colSpan={COLS} />
-            </RowFragment>
+            </Fragment>
           )
         })}
       </tbody>
@@ -234,8 +240,8 @@ function ItemTypesTable({ query }) {
         {display.map(r => {
           const rp = kb.rowProps(r)
           return (
-            <RowFragment key={r.id}>
-              <tr {...rp} className={`border-b border-line ${rp.className}`}>
+            <Fragment key={r.id}>
+              <tr {...rp} aria-busy={saver.saving(r.id) || undefined} className={`border-b border-line ${rp.className}`}>
                 <CodeCell row={r} />
                 <td className="p-2">{r.label || '—'}</td>
                 <td className="p-2"><GroupSelect row={r} groups={groups} saver={saver} /></td>
@@ -245,7 +251,7 @@ function ItemTypesTable({ query }) {
                 <StatusCell row={r} saver={saver} />
               </tr>
               <ErrorRow row={r} saver={saver} colSpan={COLS} />
-            </RowFragment>
+            </Fragment>
           )
         })}
       </tbody>
