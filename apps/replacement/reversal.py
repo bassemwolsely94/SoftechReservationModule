@@ -271,7 +271,7 @@ def _returns_of(sale, *, contract: bool):
                                          invoice_date__date__gte=day,
                                          invoice_date__date__lte=day + timedelta(days=C.get('LIVE_RETURN_WATCH_DAYS')))
           .prefetch_related('lines__item').select_related('branch'))
-    qs = qs.filter(sales_channel__in=C.CONTRACT_CHANNELS) if contract else qs.exclude(sales_channel__in=C.CONTRACT_CHANNELS)
+    qs = qs.filter(sales_channel__in=C.contract_channels()) if contract else qs.exclude(sales_channel__in=C.contract_channels())
     items = {l.item.softech_id for l in sale.lines.all() if l.item_id}
     return [r for r in qs if {l.item.softech_id for l in r.lines.all() if l.item_id} <= items]
 

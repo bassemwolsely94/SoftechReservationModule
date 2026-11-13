@@ -60,6 +60,7 @@ const TYPE_COLOR = {
   blue:  { bg: '#eff6ff', text: '#1e40af', border: '#bfdbfe' },
   green: { bg: '#f0fdf4', text: '#166534', border: '#bbf7d0' },
   gray:  { bg: '#f9fafb', text: '#374151', border: '#e5e7eb' },
+  amber: { bg: '#fffbeb', text: '#92400e', border: '#fde68a' },
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

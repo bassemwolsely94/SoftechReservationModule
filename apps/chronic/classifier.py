@@ -31,24 +31,30 @@ from .models import (
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Customer type detection
-# Determines if a sale was walkin / home-delivery / b2b
-# based on Customer.softech_ptclassifcode
+# walkin / home_delivery / b2b / unclassified, from the channel GROUP (channel
+# registry, apps/forecasting/channels.py) of the customer's most recent sale
+# (PurchaseHistory.sales_channel = stktransm.ptclassifcode). Customer.softech_ptclassifcode
+# is blank for almost every customer, so it is not used.
 # ─────────────────────────────────────────────────────────────────────────────
 
-WALKIN_CLASSIF_CODES = {'1', '01', 'CASH', 'WALK', 'W'}
-B2B_CLASSIF_CODES    = {'INS', 'B2B', 'CORP', 'GOV', '5', '6', '7', '8', '9'}
+_GROUP_TO_CUSTOMER_TYPE = {
+    'cash': 'walkin',
+    'delivery': 'home_delivery',
+    'contract': 'b2b', 'employee': 'b2b', 'insurance': 'b2b',
+    'compensation': 'b2b', 'donation': 'b2b', 'card': 'b2b',
+}
 
 
-def classify_customer_type(customer) -> str:
-    """Returns 'walkin', 'b2b', or 'home_delivery'."""
-    if customer is None:
-        return 'walkin'
-    code = (customer.softech_ptclassifcode or '').upper().strip()
-    if code in WALKIN_CLASSIF_CODES:
-        return 'walkin'
-    if code in B2B_CLASSIF_CODES:
-        return 'b2b'
-    return 'home_delivery'
+def customer_type(customer, latest_channel: str | None) -> str:
+    """Returns 'walkin', 'home_delivery', 'b2b' or 'unclassified'.
+
+    `latest_channel` = sales_channel of the customer's most recent sale (None = no sale).
+    Any other group (permanent, vip, settlement, other, unknown code) or no sale →
+    'unclassified'. `customer` is kept for callers / future rules; it is not read."""
+    from apps.forecasting.channels import channel
+    if not (latest_channel or '').strip():
+        return 'unclassified'
+    return _GROUP_TO_CUSTOMER_TYPE.get(channel(latest_channel).group, 'unclassified')
 
 
 # ─────────────────────────────────────────────────────────────────────────────

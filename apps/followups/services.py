@@ -863,8 +863,8 @@ def _score_one(task, today) -> float:
         overdue_score = 0.0
 
     # Channel: favoured → 1.0, others → 0.0
-    from .models import FollowUpTask as FUT
-    channel_score = 1.0 if task.sales_channel in FUT.FAVOURED_CHANNEL_CODES else 0.3
+    from apps.forecasting.channels import favoured_codes
+    channel_score = 1.0 if task.sales_channel in favoured_codes() else 0.3
 
     score = (
         ltv_score      * 0.25 +
