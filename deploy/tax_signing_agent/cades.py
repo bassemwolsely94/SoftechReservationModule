@@ -14,6 +14,7 @@ against the USB token on the workstation.
 """
 import datetime as dt
 import hashlib
+import warnings
 
 from asn1crypto import algos, cms, core, tsp, x509
 
@@ -66,6 +67,24 @@ class SignatureInvalid(Exception):
     pass
 
 
+def load_certificate(der):
+    """cryptography's view of a certificate. Egypt Trust encodes some serial numbers with the top bit set and
+    no leading zero, which reads as negative: RFC 5280 forbids it, cryptography only warns, and the bytes
+    are what every check here compares. That one warning is silenced; anything else still surfaces."""
+    from cryptography import x509 as cx509
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', message=".*serial number which wasn't positive.*")
+        return cx509.load_der_x509_certificate(der)
+
+
+def serial_hex(cert):
+    """The serial as Windows shows it: the encoded bytes, without a padding zero."""
+    raw = cert['tbs_certificate']['serial_number'].contents
+    if len(raw) > 1 and raw[0] == 0 and raw[1] & 0x80:
+        raw = raw[1:]
+    return raw.hex().upper()
+
+
 def _signed_bytes(attrs):
     """RFC 5652 §5.4: the signature covers the attributes as a SET (tag 0x31), although they travel
     with the implicit [0] tag (0xA0). Only the tag octet differs, so the bytes on the wire are kept
@@ -108,7 +127,6 @@ def _check_format(signed, signer, cert, attrs):
 
 def inspect_signature(der, content):
     """Check a signature against `content`; returns the signer's details. Raises SignatureInvalid."""
-    from cryptography import x509 as cx509
     from cryptography.exceptions import InvalidSignature
     from cryptography.hazmat.primitives import hashes
     from cryptography.hazmat.primitives.asymmetric import padding, rsa
@@ -122,7 +140,7 @@ def inspect_signature(der, content):
         digest = next(a['values'][0].native for a in attrs if a['type'].native == 'message_digest')
         signed_bytes = _signed_bytes(attrs)
         signature = signer['signature'].native
-        loaded = cx509.load_der_x509_certificate(cert.dump())
+        loaded = load_certificate(cert.dump())
         public_key = loaded.public_key()
     except SignatureInvalid:
         raise

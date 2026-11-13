@@ -105,7 +105,8 @@ def assert_ready_for_live(signer=None):
     if signer.is_mock:
         if not getattr(settings, 'TAX_ALLOW_MOCK_SIGNER', False):
             raise SigningUnavailable('التوقيع التجريبي مسموح فقط في بيئة الاختبار')
-        if PRODUCTION_HOST in str(getattr(settings, 'TAX_ETA_API_BASE_URL', '')):
+        from . import environment
+        if environment.is_production():
             raise SigningUnavailable('لا يمكن استخدام التوقيع التجريبي مع منظومة المصلحة الفعلية')
         return
     if not signer.needs_certification:

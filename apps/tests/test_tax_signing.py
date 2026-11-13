@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from unittest import mock
 
@@ -219,6 +220,25 @@ class CadesRoundTripTests(SimpleTestCase):
         der = cades.build_cades_bes(self.content, cert.public_bytes(serialization.Encoding.DER), lambda b: b'\0' * 64)
         with self.assertRaisesRegex(cades.SignatureInvalid, 'not RSA'):
             cades.inspect_signature(der, self.content)
+
+    def test_negative_serial_like_egypt_trust_signs_and_verifies_quietly(self):
+        """The real seal's certificate (Egypt Trust CA G7) encodes serial AB33CB… with no leading zero, so it
+        parses as negative. It must sign, verify and identify the same way, without a warning."""
+        from asn1crypto import x509 as ax509
+        seal = Seal('Negative Serial Seal')
+        cert = ax509.Certificate.load(seal.der)
+        cert['tbs_certificate']['serial_number'] = int.from_bytes(bytes.fromhex('AB33CBEA34E6BFBAA4D1318B3AAD21DA'),
+                                                                  'big', signed=True)
+        tbs = cert['tbs_certificate'].dump(force=True)
+        cert['signature_value'] = seal.key.sign(tbs, padding.PKCS1v15(), hashes.SHA256())
+        seal.der = cert.dump(force=True)
+        self.assertIn(bytes.fromhex('0210AB33CBEA'), seal.der)      # really encoded without the zero
+        with warnings.catch_warnings():
+            warnings.simplefilter('error')
+            details = cades.inspect_signature(seal.cades(self.content), self.content)
+            parsed = agent_module.parse_certificate(seal.der)
+        self.assertEqual(details['thumbprint'], hashlib.sha1(seal.der, usedforsecurity=False).hexdigest().upper())
+        self.assertEqual(parsed.serial, 'AB33CBEA34E6BFBAA4D1318B3AAD21DA')
 
     def test_garbage_refused(self):
         for junk in (b'', b'not a signature', b'\x30\x03\x01\x01\xff'):
@@ -1175,7 +1195,9 @@ class AgentSecretTests(SimpleTestCase):
         code, output, lib = self._main('identify')
         self.assertEqual(code, agent_module.EXIT_OK)
         self.assertEqual(lib.pins_tried, [])
-        for expected in (SEAL.thumbprint, 'CN=Test Seal', format(SEAL.cert.serial_number, 'X'), 'TOKEN0',
+        serial = format(SEAL.cert.serial_number, 'X')
+        serial = serial.rjust(len(serial) + len(serial) % 2, '0')   # whole bytes, as Windows shows it
+        for expected in (SEAL.thumbprint, 'CN=Test Seal', serial, 'TOKEN0',
                          SEAL.cert.not_valid_after_utc.strftime('%Y-%m-%d')):
             self.assertIn(expected, output)
 

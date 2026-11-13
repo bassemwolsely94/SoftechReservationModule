@@ -132,14 +132,13 @@ def normalise_thumbprint(value):
 
 def parse_certificate(der, key_id=b'', label=''):
     from asn1crypto import x509 as ax509
-    from cryptography import x509 as cx509
-    loaded = cx509.load_der_x509_certificate(der)
+    loaded = cades.load_certificate(der)
     parsed = ax509.Certificate.load(der)
     return TokenCertificate(
         der=der, key_id=key_id, label=label,
         thumbprint=hashlib.sha1(der, usedforsecurity=False).hexdigest().upper(),   # Windows thumbprint, an identifier
         subject=loaded.subject.rfc4514_string(), issuer=loaded.issuer.rfc4514_string(),
-        serial=format(loaded.serial_number, 'X'), not_after=loaded.not_valid_after_utc,
+        serial=cades.serial_hex(parsed), not_after=loaded.not_valid_after_utc,
         is_ca=bool(parsed.ca), key_type=parsed.public_key.algorithm.upper())
 
 
@@ -619,6 +618,7 @@ def load_config(path):
 def configure_logging(log_file=''):
     handlers = [logging.StreamHandler()]
     if log_file:
+        Path(log_file).parent.mkdir(parents=True, exist_ok=True)   # a fresh install has no logs folder yet
         handlers.append(RotatingFileHandler(log_file, maxBytes=5_000_000, backupCount=5, encoding='utf-8'))
     logging.basicConfig(level=logging.INFO, handlers=handlers, format='%(asctime)s %(levelname)s %(message)s', force=True)
 

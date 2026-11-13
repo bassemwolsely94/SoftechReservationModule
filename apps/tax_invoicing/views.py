@@ -14,6 +14,9 @@ apps/tax_invoicing/views.py — mounted at /api/tax-invoicing/ (doc 36).
   GET|POST items/   PATCH items/<id>/    POST items/import/ (preview unless commit=1)
   GET|POST bases/   POST bases/<id>/deactivate/
   GET|PATCH issuer/    GET|POST buyers/
+  GET  eta/status/   POST eta/check-login/          which ETA system, is the login working (finalize)
+  GET  codes/  GET codes/candidates/  POST codes/prepare/ · codes/send/ · codes/refresh/
+  PATCH codes/<id>/  POST codes/<id>/cancel/         EGS item-code requests (coding.py)
 Every rule is enforced in services.py or here; the screen only hides what the user cannot do.
 """
 import datetime as dt
@@ -37,8 +40,8 @@ from core.branch_scope import allows_code, branch_codes, scope_code
 from core.errors import public_error
 from core.permissions import _get_profile, matrix_allows, matrix_permission
 
-from . import item_import, receipts, services, signing, submission
-from .models import (TaxBuyerProfile, TaxChannelRule, TaxDocument, TaxDocumentLine, TaxExclusionBasis,
+from . import coding, environment, eta_client, item_import, receipts, services, signing, submission
+from .models import (TaxBuyerProfile, TaxChannelRule, TaxCodeRequest, TaxDocument, TaxDocumentLine, TaxExclusionBasis,
                      TaxIssuerProfile, TaxItemProfile, TaxLineReview, TaxReceipt, TaxReceiptBranchConfig, TaxReceiptLine, TaxSigningJob)
 
 logger = logging.getLogger('elrezeiky.tax_invoicing')
@@ -120,6 +123,9 @@ def me(request):
                      'can_approve': _can(request, 'approve'), 'can_view_all_lines': _can(request, 'approve'),
                      'can_finalize': _can(request, 'finalize'), 'submit_enabled': writer_allowed(submission.FLAG),
                      'receipt_submit_enabled': writer_allowed(receipts.FLAG),
+                     'coding_send_enabled': writer_allowed(coding.FLAG),
+                     'eta_environment': environment.name() or None, 'eta_is_production': environment.is_production(),
+                     'code_request_statuses': [{'key': k, 'label': v} for k, v in TaxCodeRequest.STATUS_CHOICES],
                      'document_statuses': [{'key': k, 'label': v} for k, v in TaxDocument.STATUS_CHOICES],
                      'line_statuses': [{'key': k, 'label': v} for k, v in TaxDocumentLine.STATUS_CHOICES],
                      'receipt_statuses': [{'key': k, 'label': v} for k, v in TaxReceipt.STATUS_CHOICES]})
@@ -955,3 +961,128 @@ def channel_rules(request):
                        before=_json_safe(before), after=_json_safe(_rule_row(r)))
         n = receipts.reevaluate_channel(code)
     return Response({**_rule_row(r), 'reevaluated': n})
+
+
+# ── ETA connection ─────────────────────────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, VIEWER])
+def eta_status(request):
+    """Which ETA system this server is set to, and which switches are on. No secret is returned."""
+    return Response({**environment.describe(), 'invoice_submit_enabled': writer_allowed(submission.FLAG),
+                     'receipt_submit_enabled': writer_allowed(receipts.FLAG),
+                     'coding_send_enabled': writer_allowed(coding.FLAG)})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, SENDER])
+def eta_check_login(request):
+    """Logs in to ETA with the ERP credentials and sends nothing else."""
+    try:
+        eta_client.check_login()
+    except eta_client.EtaError as exc:
+        services.audit('eta_login_check', actor=request.user, entity='eta', reason=str(exc)[:300], after={'ok': False})
+        return Response({'ok': False, 'detail': str(exc)}, status=status.HTTP_200_OK)
+    services.audit('eta_login_check', actor=request.user, entity='eta', after={'ok': True, 'environment': environment.name()})
+    return Response({'ok': True, 'detail': 'تم الدخول لمنظومة المصلحة بنجاح', **environment.describe()})
+
+
+# ── EGS item codes ─────────────────────────────────────────────────────────────────────────────
+
+def code_row(r):
+    return {'id': r.id, 'itemcode': r.profile.softech_itemcode, 'profile_id': r.profile_id, 'item_code': r.item_code,
+            'parent_code': r.parent_code, 'code_name': r.code_name, 'code_name_ar': r.code_name_ar,
+            'description': r.description, 'description_ar': r.description_ar, 'request_reason': r.request_reason,
+            'active_from': r.active_from, 'status': r.status, 'status_label': r.get_status_display(),
+            'eta_status': r.eta_status, 'eta_request_id': r.eta_request_id, 'environment': r.environment,
+            'error': r.error, 'prepared_by': _stamp(r.prepared_by), 'prepared_at': r.prepared_at,
+            'sent_by': _stamp(r.sent_by), 'sent_at': r.sent_at, 'checked_at': r.checked_at, 'decided_at': r.decided_at}
+
+
+def _ids(request):
+    raw = request.data.get('ids') or []
+    try:
+        return [int(x) for x in raw][:coding.MAX_PER_ACTION]
+    except (TypeError, ValueError):
+        return []
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, VIEWER])
+def codes(request):
+    qs = TaxCodeRequest.objects.select_related('profile', 'prepared_by', 'sent_by')
+    if request.query_params.get('status'):
+        qs = qs.filter(status=request.query_params['status'])
+    q = (request.query_params.get('q') or '').strip()
+    if q:
+        qs = qs.filter(Q(item_code__icontains=q) | Q(code_name__icontains=q) | Q(code_name_ar__icontains=q)
+                       | Q(profile__softech_itemcode__icontains=q))
+    return Response({'summary': coding.summary(), 'rows': [code_row(r) for r in qs[:MAX_LIST]]})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, VIEWER])
+def code_candidates(request):
+    qs = coding.candidates(limit=100000)
+    q = (request.query_params.get('q') or '').strip()
+    if q:
+        qs = qs.filter(Q(softech_itemcode__icontains=q) | Q(item_name__icontains=q) | Q(item_name_ar__icontains=q))
+    return Response([{'id': p.id, 'itemcode': p.softech_itemcode, 'item_name': p.item_name, 'item_name_ar': p.item_name_ar,
+                      'gpc_code': p.gpc_code, 'coding_status': p.coding_status,
+                      'coding_status_label': p.get_coding_status_display()} for p in qs[:MAX_LIST]])
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, EDITOR])
+def codes_prepare(request):
+    ids = _ids(request)
+    if not ids:
+        return Response({'detail': 'اختر الأصناف'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        result = coding.prepare(ids, request.user, parent_code=(request.data.get('parent_code') or '').strip(),
+                                reason=(request.data.get('reason') or '').strip())
+    except services.TaxRuleError as exc:
+        return _refuse(exc)
+    return Response(result)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated, EDITOR])
+def code_detail(request, pk):
+    get_object_or_404(TaxCodeRequest, pk=pk)
+    try:
+        row = coding.edit(pk, request.user, request.data)
+    except services.TaxRuleError as exc:
+        return _refuse(exc)
+    return Response(code_row(row))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, EDITOR])
+def code_cancel(request, pk):
+    get_object_or_404(TaxCodeRequest, pk=pk)
+    try:
+        row = coding.cancel(pk, request.user, (request.data.get('reason') or '').strip())
+    except services.TaxRuleError as exc:
+        return _refuse(exc)
+    return Response(code_row(row))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, SENDER])
+def codes_send(request):
+    try:
+        result = coding.send(_ids(request), request.user, request.data.get('confirm'))
+    except services.TaxRuleError as exc:
+        return _refuse(exc)
+    return Response(result)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, EDITOR])
+def codes_refresh(request):
+    """Asks ETA what it decided. Reads only; the item's coding follows ETA's answer."""
+    result = coding.refresh(request.user, _ids(request) or None)
+    if result.get('error'):
+        return Response({**result, 'detail': result['error']}, status=status.HTTP_200_OK)
+    return Response(result)

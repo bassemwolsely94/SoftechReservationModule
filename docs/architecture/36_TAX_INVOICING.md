@@ -52,6 +52,30 @@ reads the filter.
 
 No basis is seeded. A blacklist entry alone never removes a line.
 
+## Item codes from ETA (EGS)
+
+`coding.py`, tab «🔖 أكواد المصلحة». An item with no approved code blocks every document it is on. For such an item
+we ask ETA to register our internal code `EG-<company tax id>-<SOFTECH item code>` under an 8-digit GPC brick, with ETA's
+"Create EGS Code Usage" call (`POST /api/v1.0/codetypes/requests/codes`), and follow it with "Search my EGS code usage
+requests" (`GET /api/v1.0/codetypes/requests/my?ItemCode=`).
+
+- `TaxCodeRequest`: prepared → sending → submitted → approved | rejected; failed (ETA refused the request, or never got
+  it) and uncertain (can't tell) as on documents. One open request per item (`one_open_code_request_per_item`).
+- The item's coding moves only from ETA's answer: `pending` once ETA holds the request, `approved` or `rejected` on
+  its decision. Each change is a `TaxAuditEvent` (`item_coding_from_eta`).
+- Sending is one item per call, so each outcome is its own. An uncertain result stops the batch; "Refresh status"
+  settles it. "Could not ask" changes nothing.
+- Prepare/edit/cancel need `edit`; sending needs `finalize`, `TAX_ETA_CODING_ENABLED`, and a typed count.
+- Not built: GS1 "Request Code Reuse" for items whose barcode is a GS1 code, and a scheduled status poll (the
+  button and `coding.refresh` do it on demand).
+
+## Which ETA system
+
+`environment.py`: `TAX_ETA_ENVIRONMENT` = `preprod` or `production` picks ETA's published addresses; explicit
+`TAX_ETA_API_BASE_URL` / `TAX_ETA_ID_BASE_URL` override them. Production is recognised by the addresses in use, not by the
+name. Every sending call in `eta_client` passes `environment.assert_may_send()`: production also needs
+`TAX_ETA_PRODUCTION_ALLOWED` (writer instance only). Owner steps: `docs/deploy/2026-11-eta-preprod-golive.md`.
+
 ## E-receipts
 
 - Document key: `softech_branchcode + doccode + docnumber + docdate` (`one_receipt_per_softech_document`).

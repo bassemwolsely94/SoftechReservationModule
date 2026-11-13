@@ -408,6 +408,68 @@ class TaxAuditEvent(models.Model):
         raise ValidationError('سجل التدقيق لا يُحذف')
 
 
+# ── Item codes (EGS) ───────────────────────────────────────────────────────────────────────────
+
+class TaxCodeRequest(models.Model):
+    """One request to ETA to register an internal (EGS) code for one item, followed until ETA decides.
+
+    prepared → sending → submitted → approved | rejected
+                       ↘ failed (ETA said no, or never got it: safe to send again)
+                       ↘ uncertain (we can't tell: ask ETA before sending again)
+    The item's own coding fields change only from ETA's answer: pending on submit, approved or
+    rejected on ETA's decision. Nothing here marks a code approved by itself.
+    """
+    PREPARED, SENDING, SUBMITTED, APPROVED, REJECTED, FAILED, UNCERTAIN, CANCELLED = (
+        'prepared', 'sending', 'submitted', 'approved', 'rejected', 'failed', 'uncertain', 'cancelled')
+    STATUS_CHOICES = [(PREPARED, 'جاهز للإرسال'), (SENDING, 'جارٍ الإرسال'), (SUBMITTED, 'لدى المصلحة — قيد المراجعة'),
+                      (APPROVED, 'اعتمدته المصلحة'), (REJECTED, 'رفضته المصلحة'), (FAILED, 'لم يُقبل الطلب'),
+                      (UNCERTAIN, 'نتيجة غير مؤكدة'), (CANCELLED, 'أُلغي')]
+    OPEN_STATES = (PREPARED, SENDING, SUBMITTED, UNCERTAIN)
+    TRANSITIONS = {
+        PREPARED: [SENDING, CANCELLED],
+        SENDING: [SUBMITTED, FAILED, UNCERTAIN],
+        SUBMITTED: [APPROVED, REJECTED],
+        UNCERTAIN: [SUBMITTED, FAILED, APPROVED, REJECTED],
+        FAILED: [SENDING, CANCELLED, SUBMITTED, APPROVED, REJECTED],
+        APPROVED: [], REJECTED: [], CANCELLED: [],
+    }
+
+    profile = models.ForeignKey(TaxItemProfile, on_delete=models.PROTECT, related_name='code_requests')
+    item_code = models.CharField(max_length=60, db_index=True, help_text='EG-<tax id>-<internal code>')
+    parent_code = models.CharField(max_length=20, help_text='GPC level-4 (brick) code')
+    code_name = models.CharField(max_length=200)
+    code_name_ar = models.CharField(max_length=200)
+    description = models.CharField(max_length=300, blank=True)
+    description_ar = models.CharField(max_length=300, blank=True)
+    active_from = models.DateField()
+    request_reason = models.CharField(max_length=300, blank=True)
+    environment = models.CharField(max_length=12, blank=True, help_text='The ETA system it went to')
+
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=PREPARED, db_index=True)
+    eta_request_id = models.CharField(max_length=30, blank=True)
+    eta_status = models.CharField(max_length=20, blank=True)
+    eta_response = models.JSONField(default=dict, blank=True)
+    error = models.TextField(blank=True)
+
+    prepared_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='+')
+    prepared_at = models.DateTimeField(auto_now_add=True)
+    sent_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    sent_at = models.DateTimeField(null=True, blank=True)
+    checked_at = models.DateTimeField(null=True, blank=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'طلب كود صنف من المصلحة'
+        ordering = ['-prepared_at', '-id']
+        constraints = [
+            models.UniqueConstraint(fields=['profile'], condition=Q(status__in=['prepared', 'sending', 'submitted', 'uncertain']),
+                                    name='one_open_code_request_per_item'),
+        ]
+
+    def __str__(self):
+        return f'{self.item_code} {self.status}'
+
+
 # ── Signing ────────────────────────────────────────────────────────────────────────────────────
 
 class TaxSigningJob(models.Model):
