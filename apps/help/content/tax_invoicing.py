@@ -351,7 +351,7 @@ SCREENS = [
              'text': T('جهاز كل فرع وعنوانه. الأسرار تبقى في السيرفر ويُكتب اسم متغيرها فقط.', 'Each branch’s device and address. Secrets stay on the server; only their variable name is written.')},
             {'target': 'tax-invoicing-main-receipts-chain', 'label': T('بداية سلسلة الجهاز', 'Where the device chain starts'),
              'text': T('كل إيصال يذكر ما قبله على نفس الجهاز. تُحدد مرة قبل أول إيصال: جهاز جديد يبدأ فارغاً، وجهاز استخدمه Invoicer يكمل بعد آخر إيصال له لدى المصلحة.',
-                       'Each receipt names the one before it on the same device. Decided once before the first receipt: a new device starts empty, and a device another program (Invoicer) used continues after its last receipt at ETA.'),
+                       'Each receipt names the one before it on its device. Set once: a new device starts empty; a device Invoicer used continues after its last receipt at ETA.'),
              'when': T('قبل أول «إصدار الجاهز» للفرع؛ الإصدار موقوف حتى تتحدد.', 'Before the branch’s first "Issue ready"; issuing waits until it is decided.'),
              'open_hint': T('اضغط الفرع في «إعداد الفروع».', 'Click the branch under "Branch setup".')},
             {'target': 'tax-invoicing-main-receipts-chain-lookup', 'label': T('ابحث في المصلحة', 'Ask ETA'),
