@@ -579,8 +579,13 @@ class GpcAndGs1Tests(Fixture, TestCase):
         tab = Category.objects.create(softech_id='gp-tab', name='Tablet')
 
         def item(code, family, barcode=''):
-            return Item.objects.create(softech_id=code, name=f'Item {code}', family_name=family, category=tab,
-                                       medicine_type_name='Medicine', barcode=barcode)
+            from apps.catalog.models import ItemBarcode
+            row = Item.objects.create(softech_id=code, name=f'Item {code}', family_name=family, category=tab,
+                                      medicine_type_name='Medicine')
+            if barcode:      # the catalog keeps barcodes in SOFTECH's itembarcodes, not on the item
+                ItemBarcode.objects.create(item=row, barcode='100010000000006')      # internal code: not a GTIN
+                ItemBarcode.objects.create(item=row, barcode=barcode)
+            return row
 
         for code, brick in (('71001', '10000673'), ('71002', '10000673'), ('71003', '10005845')):
             TaxItemProfile.objects.create(softech_itemcode=code, item=item(code, 'TAB: Simple coated'), item_name='x',

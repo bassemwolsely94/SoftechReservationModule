@@ -1046,7 +1046,7 @@ def code_candidates(request):
         rows = coding.gs1_candidates(limit=100000)
         if q:
             rows = [p for p in rows if q in p.softech_itemcode or q.lower() in (p.item_name or '').lower()
-                    or q in (p.item_name_ar or '') or q in p.item.barcode]
+                    or q in (p.item_name_ar or '') or q in p.gtin]
         rows = rows[:MAX_LIST]
     else:
         qs = coding.mirror_candidates(limit=100000) if kind == 'mirror' else coding.candidates(limit=100000)
@@ -1059,7 +1059,8 @@ def code_candidates(request):
     return Response([{'id': p.id, 'itemcode': p.softech_itemcode, 'item_name': p.item_name, 'item_name_ar': p.item_name_ar,
                       'gpc_code': '' if p.gpc_code == '0' else p.gpc_code, 'gpc_name': bricks.get(p.gpc_code, ''),
                       'coding_status': p.coding_status, 'eta_code': p.eta_code,
-                      'barcode': p.item.barcode if p.item else '', 'family': p.item.family_name if p.item else '',
+                      'barcode': getattr(p, 'gtin', '') or (p.item.barcode if p.item else ''),
+                      'family': p.item.family_name if p.item else '',
                       'suggested': suggested.get(p.id),
                       'coding_status_label': p.get_coding_status_display()} for p in rows])
 
