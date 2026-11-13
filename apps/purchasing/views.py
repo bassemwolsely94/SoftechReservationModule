@@ -1104,19 +1104,17 @@ def _export_xlsx_pivot_v2(run, request, filename):
     الشكل والوحدة / تصنيف الخصم) and every branch block carries a بضاعة-بالطريق
     (in-transit) column right after الرصيد-الحالى.
 
-    Column layout (129 total):
+    Branches = Branch.objects.live().ordered(): the HQ (kind=hq) block comes first, then one
+    block per live retail branch in display order — a newly classified branch gets its own
+    block, % / rank columns, with no code change. Reference layout (HQ + 5 retail = 138 cols):
       [  0-12]  Item info          (13 cols — 4 classification labels)
-      [ 13-18]  Branch 100         (6 cols — +in-transit, no coverage/priority)
-      [ 19-26]  Branch 130         (8 cols — +in-transit)
-      [ 27-34]  Branch 140         (8 cols)
-      [ 35-42]  Branch 150         (8 cols)
-      [ 43-50]  Branch 160         (8 cols)
-      [ 51-58]  Branch 170         (8 cols)
+      [ 13-18]  HQ branch          (6 cols — +in-transit, no coverage/priority)
+      [ 19-58]  Retail branches    (8 cols each — +in-transit)
       [ 59-64]  Network totals     (6 cols — +in-transit)
       [ 56-61]  % of total stock   (6 cols — one per branch)
       [ 62-67]  Rank by rate DESC  (6 cols — cross-branch rank per item)
-      [ 68-72]  Rank coverage ASC  (5 cols — branches 130-170)
-      [ 73-77]  Rank deficit DESC  (5 cols — branches 130-170)
+      [ 68-72]  Rank coverage ASC  (one per retail branch)
+      [ 73-77]  Rank deficit DESC  (one per retail branch)
       [ 78-85]  Summary calcs      (8 cols)
       [ 86-119] Empty placeholders (29 cols)
 
@@ -1138,19 +1136,16 @@ def _export_xlsx_pivot_v2(run, request, filename):
     from apps.branches.models import Branch
     from collections import defaultdict
 
-    # ── 1. Load fixed branches in exact reference order ───────────────────────
-    BRANCH_ORDER = ['100', '130', '140', '150', '160', '170']
-
-    branch_map = {
-        b.softech_branch_id: b
-        for b in Branch.objects.filter(
-            softech_branch_id__in=BRANCH_ORDER,
-            is_active=True,
-        )
-    }
-    branches        = [branch_map[sid] for sid in BRANCH_ORDER if sid in branch_map]
-    branch_100      = branch_map.get('100')
-    branches_no100  = [b for b in branches if b.softech_branch_id != '100']  # 130-170
+    # ── 1. Live branches (HQ + retail) in display order ────────────────────────
+    # The HQ block (6 cols) is found by kind, never by a literal code; every live
+    # retail branch gets an 8-col block — a newly classified branch appears here.
+    branches        = list(Branch.objects.live().ordered())
+    branch_100      = next((b for b in branches if b.is_hq), None)    # the HQ (kind=hq)
+    branches_no100  = [b for b in branches if not b.is_hq]            # retail, display order
+    if branch_100 is not None:                                        # HQ block always first
+        branches = [branch_100] + branches_no100
+    hq_sid          = branch_100.softech_branch_id if branch_100 is not None else ''
+    n_retail        = len(branches_no100)
 
     if not branches:
         return HttpResponse('لا توجد فروع للتصدير', status=404)
@@ -1177,7 +1172,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
             item_order.append(iid)
         pivot[iid][m.branch_id] = m
 
-    logger.info('[PIVOT-V2] %d items × %d branches → 132 cols', len(item_order), len(branches))
+    logger.info('[PIVOT-V2] %d items × %d branches', len(item_order), len(branches))
 
     # ── 3. Styles ──────────────────────────────────────────────────────────────
     THIN   = Side(style='thin', color='D0D0D0')
@@ -1226,7 +1221,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
     ws.sheet_view.rightToLeft = True
     ws.freeze_panes = 'Q3'   # freeze rows 1-2 + first 16 item-info cols
 
-    # Column widths: 16 item + 6 b100 + 40 b130-170 + 6 tot + 6 pct + 6 rrate + 5 rcov + 5 rdef + 8 sum + 34 empty
+    # Column widths: 16 item + 6 HQ + 8 per retail branch + 6 tot + 6 pct + 6 rrate + 5 rcov + 5 rdef + 8 sum + 34 empty
     _cw = (
         # 16 item info: archive, medtype, dosage, shape, discount, supply-order,
         #   supp_code, supp_name, prod_code, prod_name, fam_code, fam_name,
@@ -1234,17 +1229,17 @@ def _export_xlsx_pivot_v2(run, request, filename):
         [7, 14, 12, 16, 12, 9, 8, 16, 10, 18, 8, 14, 9, 34, 9, 9]
         + [12, 26, 22, 20, 34, 34]                   # 6 flags: shortage, match, phantom, spike, cheaper, bonus
         + [10, 10, 10, 10, 60]                       # 5 seasonality
-        + [10, 10, 10, 9, 10, 9]                     # 6 branch-100 cols (+in-transit)
-        + [10, 10, 10, 9, 9, 10, 10, 9] * 5          # 40 (8 cols × 5 branches)
+        + ([10, 10, 10, 9, 10, 9] if branch_100 else [])   # 6 HQ cols (+in-transit)
+        + [10, 10, 10, 9, 9, 10, 10, 9] * n_retail   # 8 cols × each retail branch
         + [11, 11, 11, 10, 11, 10]                   # 6 totals (+in-transit)
-        + [9]  * 6                                   # 6 % stock
-        + [7]  * 6                                   # 6 rank-rate
-        + [8]  * 5                                   # 5 rank-coverage
-        + [8]  * 5                                   # 5 rank-deficit
+        + [9]  * len(branches)                       # % stock (one per live branch)
+        + [7]  * len(branches)                       # rank-rate
+        + [8]  * n_retail                            # rank-coverage
+        + [8]  * n_retail                            # rank-deficit
         + [13, 13, 13, 13, 16, 16, 13, 13]           # 8 summary
         + [5]  * 29                                  # 29 empty
     )
-    assert len(_cw) == 138, f'Expected 138 cols, got {len(_cw)}'
+    # 138 cols with HQ + 5 retail branches (the reference layout); grows with the network
     for ci, w in enumerate(_cw, start=1):
         ws.column_dimensions[get_column_letter(ci)].width = w
 
@@ -1273,16 +1268,16 @@ def _export_xlsx_pivot_v2(run, request, filename):
     row1 = (
         [_hdr('بيانات الصنف', HDR_FILL)] * 22
         + [_hdr('الموسمية', SEA_HFILL)] * 5
-        + [_hdr(BL('100'),      B100_HFILL)] * 6
+        + ([_hdr(BL(hq_sid),    B100_HFILL)] * 6 if branch_100 else [])
     )
     for bi, b in enumerate(branches_no100):
         row1 += [_hdr(BL(b.softech_branch_id), BGRP_HFILLS[bi % len(BGRP_HFILLS)])] * 8
     row1 += (
         [_hdr('الإجمالى',      TOT_HFILL)] * 6
-        + [_hdr('% المخزون',  PCT_HFILL)] * 6
-        + [_hdr('ترتيب المعدل',RNK_HFILL)] * 6
-        + [_hdr('ترتيب التغطية', RNK_HFILL)] * 5
-        + [_hdr('ترتيب الفجوة', RNK_HFILL)] * 5
+        + [_hdr('% المخزون',  PCT_HFILL)] * len(branches)
+        + [_hdr('ترتيب المعدل',RNK_HFILL)] * len(branches)
+        + [_hdr('ترتيب التغطية', RNK_HFILL)] * n_retail
+        + [_hdr('ترتيب الفجوة', RNK_HFILL)] * n_retail
         + [_hdr('مؤشرات محسوبة', SUM_HFILL)] * 8
         + [_blank()] * 29
     )
@@ -1313,14 +1308,14 @@ def _export_xlsx_pivot_v2(run, request, filename):
         'يوجد أرخص (المورد الأفضل)',  # 💲 a recent accredited supplier beats what we paid (buy_flags)
         'بونص زائد عن 6 شهور',        # 🎁 bonus deal bought > 6 months of sales (buy_flags)
     ]
-    B100_HDRS = [
-        '100.الرصيد-الحالى',
-        '100.بضاعة-بالطريق',
-        '100.معدل-البيع-الشهرى',
-        '100.كمية-الأمان',
-        '100.الفرق-مطلوب/راكد',
-        '100.معدل-عدد-حركات-البيع-الشهرى',
-    ]
+    B100_HDRS = [f'{hq_sid}.{h}' for h in (
+        'الرصيد-الحالى',
+        'بضاعة-بالطريق',
+        'معدل-البيع-الشهرى',
+        'كمية-الأمان',
+        'الفرق-مطلوب/راكد',
+        'معدل-عدد-حركات-البيع-الشهرى',
+    )] if branch_100 else []
     B7_TMPL = [
         '{sid}.الرصيد-الحالى',
         '{sid}.بضاعة-بالطريق',
@@ -1627,10 +1622,10 @@ def _export_xlsx_pivot_v2(run, request, filename):
             row.append(_cell(_fv(m100, 'safety_stock')     or 0, B100_DFILL, '#,##0.00'))
             row.append(_cell(gap_disp.get(branch_100.id, 0.0), B100_DFILL, '#,##0.00'))
             row.append(_cell(_fv(m100, 'monthly_avg_trns') or 0, B100_DFILL, '#,##0.00'))
-        else:
+        elif branch_100:
             row += [_cell(None, B100_DFILL)] * 6
 
-        # [17-...] Branches 130-170 (8 cols each)
+        # Retail branches, display order (8 cols each)
         for bi, b in enumerate(branches_no100):
             dfill = BGRP_DFILLS[bi % len(BGRP_DFILLS)]
             if b.id in branch_data:
@@ -1673,11 +1668,11 @@ def _export_xlsx_pivot_v2(run, request, filename):
         for b in branches:
             row.append(_cell(rate_ranks.get(b.id), RNK_DFILL, '#,##0'))
 
-        # [68-72] Rank by coverage ASC (branches 130-170)
+        # [68-72] Rank by coverage ASC (retail branches)
         for b in branches_no100:
             row.append(_cell(cov_ranks.get(b.id), RNK_DFILL, '#,##0'))
 
-        # [73-77] Rank by deficit DESC (branches 130-170)
+        # [73-77] Rank by deficit DESC (retail branches)
         for b in branches_no100:
             row.append(_cell(def_ranks.get(b.id), RNK_DFILL, '#,##0'))
 
@@ -1705,7 +1700,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     )
     resp['Content-Disposition'] = f'attachment; filename="{filename}"'
-    logger.info('[PIVOT-V2] exported %d items, 138 cols', len(item_order))
+    logger.info('[PIVOT-V2] exported %d items, %d cols', len(item_order), len(_cw))
     # P-31: keep the sheet as sent — buyers order from its Total gap. Never breaks the download.
     try:
         _pivot_sheets.record_snapshot(sheet_lines, staff=getattr(request.user, 'staff_profile', None), run=run,

@@ -14,7 +14,10 @@ from django.test import TestCase
 
 from apps.branches.models import Branch
 from apps.forecasting.models import KpiActualRollup as K
-from apps.forecasting.kpi_export import build_target_workbook, forecast_targets, TARGET_ROWS, ACH_ROWS
+from apps.forecasting.kpi_export import build_target_workbook, forecast_targets
+
+# the legacy 5-slot geometry the export keeps with ≤5 branches (KpiLayout(5))
+TARGET_ROWS, ACH_ROWS = [8, 10, 12, 14, 16], [9, 11, 13, 15, 17]
 from apps.forecasting.engine import round_up_step, ForecastEngine
 
 
@@ -321,3 +324,47 @@ class KpiExportLayoutTests(TestCase):
             self.assertEqual(snap[title]['freeze'], golden[title]['freeze'], title)
             self.assertEqual(snap[title]['rtl'], golden[title]['rtl'], title)
             self.assertEqual(snap[title]['cells'], golden[title]['cells'], title)
+
+    def test_six_branch_export_no_crash_and_shifted(self):
+        from apps.forecasting.kpi_export import KpiLayout
+        _plant_branch('230', 6, 1.9)
+        ws = self._build()['Model A أكتوبر']
+        L = KpiLayout(6)
+        self.assertEqual([L.target_row(i) for i in range(6)], [8, 10, 12, 14, 16, 18])
+        self.assertEqual((L.total_tgt_row, L.total_ach_row), (20, 21))
+        self.assertEqual((L.cc_label_row, L.cc_tgt_row, L.cc_ach_row), (23, 24, 25))
+        # six branch blocks, the new branch last (display_order 6)
+        self.assertEqual([str(ws[f'C{r}'].value) for r in L.target_rows],
+                         ['160', '170', '140', '150', '130', '230'])
+        self.assertEqual(ws['E19'].value, round(250_000 * 1.9))              # 230 cash achieved
+        # totals reference all six target / achieved rows
+        self.assertEqual(ws['I20'].value, '=I8+I10+I12+I14+I16+I18')
+        self.assertEqual(ws['H21'].value, '=H9+H11+H13+H15+H17+H19')
+        self.assertEqual(ws['J21'].value, '=H21/I21')
+        self.assertEqual(ws['AH9'].value, '=$AH$7*$J$21')
+        # call-center block shifted by two: label row 23, targets 24, achieved 25
+        self.assertEqual(ws['W23'].value, 'المبيعات')
+        self.assertEqual(ws['D24'].value, 'call center')
+        self.assertEqual(ws['E25'].value, 75000)
+        self.assertEqual(ws['F25'].value, '=F24/$E$1*$H$1')
+        self.assertEqual(ws['X25'].value, '=$J$25*$X$24')
+        self.assertIn('IF(J$19>=90%,H$19,0)', ws['AG24'].value)              # 6th branch counted
+        # management block shifted: 26..30
+        self.assertEqual(ws['AC26'].value, '=AG24-AG25')
+        self.assertEqual(ws['AC27'].value, '=I21')
+        self.assertEqual(ws['AC28'].value, '=(IF(AC$21<(0.9*AC$7),AC$26/AC$27,J$21))')
+        self.assertEqual(ws['AH30'].value, '=SUM(AC30:AG30)')
+
+    def test_branch_order_follows_display_order(self):
+        Branch.objects.filter(softech_branch_id='130').update(display_order=0)
+        Branch.objects.filter(softech_branch_id='160').update(display_order=9)
+        ws = self._build()['Avg (A+B) أكتوبر']
+        self.assertEqual([str(ws[f'C{r}'].value) for r in (8, 10, 12, 14, 16)],
+                         ['130', '170', '140', '150', '160'])
+
+    def test_fewer_than_five_branches_keeps_legacy_rows(self):
+        from apps.forecasting.kpi_export import KpiLayout
+        L = KpiLayout(3)
+        self.assertEqual((L.total_tgt_row, L.total_ach_row, L.cc_label_row, L.cc_tgt_row,
+                          L.cc_ach_row), (18, 19, 21, 22, 23))
+        self.assertEqual(L.ach_rows, [9, 11, 13, 15, 17])

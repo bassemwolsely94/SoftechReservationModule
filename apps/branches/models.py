@@ -25,6 +25,19 @@ def hq_code():
     return _HQ_CODE_CACHE
 
 
+def order_codes(codes):
+    """Sort branch codes (softech_branch_id) by Branch.display_order, then numeric code;
+    codes with no Branch row go last (numeric first, then text). Duplicates are kept."""
+    codes = [str(c) for c in codes]
+    orders = dict(Branch.objects.filter(softech_branch_id__in=set(codes))
+                  .values_list('softech_branch_id', 'display_order'))
+
+    def key(c):
+        num = (0, int(c), '') if c.isdigit() else (1, 0, c)
+        return (0, orders[c], *num) if c in orders else (1, 0, *num)
+    return sorted(codes, key=key)
+
+
 def _reset_hq_code_cache(sender=None, **kwargs):
     global _HQ_CODE_CACHE
     _HQ_CODE_CACHE = None

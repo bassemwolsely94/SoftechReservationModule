@@ -51,11 +51,23 @@ def _snap():
 _NO_LABELS = mock.patch('apps.finance.recon_labels._maps',
                         new=lambda: {'at': 0.0, 'branches': {}, 'users': {}})
 
-class CeilingAndParseTests(SimpleTestCase):
-    def test_branch_column_order(self):
+class BranchColumnOrderTests(TestCase):
+    # columns follow Branch.display_order (apps.branches.models.order_codes); codes with no
+    # Branch row fall back to numeric code order after the known ones
+    def test_unknown_codes_numeric(self):
         self.assertEqual(F.branch_column_order(['150', '130', '170', '140', '160']),
                          ['130', '140', '150', '160', '170'])
         self.assertEqual(F.branch_column_order(['200', '130', 'CC']), ['130', '200', 'CC'])
+
+    def test_display_order_first(self):
+        from apps.branches.models import Branch
+        for code, order in [('160', 1), ('170', 2), ('140', 3), ('150', 4), ('130', 5)]:
+            Branch.objects.create(softech_branch_id=code, code=code, name=code, display_order=order)
+        self.assertEqual(F.branch_column_order(['150', '130', '999', '170', '140', '160']),
+                         ['160', '170', '140', '150', '130', '999'])
+
+
+class CeilingAndParseTests(SimpleTestCase):
 
     def test_ceiling_matches_workbook_formula(self):
         self.assertEqual(F.ceiling(0.9, 1.5), 1.4)       # 1.35 → 1.4 half-up (no float drift)
