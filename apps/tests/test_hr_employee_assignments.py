@@ -72,6 +72,22 @@ class AssignmentTests(TestCase):
         self.assertEqual(rows[2].section, 'قسم 2')
         self.assertEqual(rows[1].valid_to, date(2026, 2, 28))
 
+    def test_usercode_and_extension_change_open_row_with_snapshot(self):
+        emp = Employee.objects.create(hr_number='1001', name_ar='أ', start_date=date(2026, 1, 1),
+                                      softech_usercode='55', pbx_extensions=['201'])
+        asg.record_assignment(emp, on=date(2026, 1, 1), source='seed')
+        emp.pbx_extensions = ['201']          # same list again → nothing changes
+        self.assertIsNone(asg.record_assignment(emp, on=date(2026, 2, 1), source='manual'))
+        emp.softech_usercode = '66'
+        asg.record_assignment(emp, on=date(2026, 3, 1), source='manual')
+        emp.pbx_extensions = ['201', '202']
+        asg.record_assignment(emp, on=date(2026, 4, 1), source='manual')
+        rows = self.rows()
+        self.assertEqual([(r.softech_usercode, r.pbx_extensions, r.valid_from, r.valid_to) for r in rows], [
+            ('55', ['201'], date(2026, 1, 1), date(2026, 2, 28)),
+            ('66', ['201'], date(2026, 3, 1), date(2026, 3, 31)),
+            ('66', ['201', '202'], date(2026, 4, 1), None)])
+
     def test_same_day_change_corrects_in_place(self):
         d = date(2026, 11, 13)
         # the first row starts at start_date; a same-day fix applies when that equals `on`

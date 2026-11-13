@@ -418,7 +418,8 @@ def employee_edit(request, acc, pk):
     try:
         with transaction.atomic():
             ser.save()
-            if {'job_title', 'branch', 'department', 'section'} & set(changes):
+            if {'job_title', 'branch', 'department', 'section', 'softech_usercode',
+                    'pbx_extensions'} & set(changes):
                 record_assignment(emp, on=timezone.localdate(), source='manual', user=acc.profile)
             if code_changes and emp.staff_id and emp.staff.hr_code == old_code:
                 emp.staff.hr_code = new['hr_number']

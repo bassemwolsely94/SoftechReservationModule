@@ -15,12 +15,19 @@ from django.db.models import Q
 from .models import EmployeeAssignment
 
 SEED_EPOCH = date(2020, 1, 1)
-TRACKED = ('job_title', 'branch_id', 'department', 'section')
+TRACKED = ('job_title', 'branch_id', 'department', 'section', 'softech_usercode', 'pbx_extensions')
 _EXT = re.compile(r'^[0-9]{2,8}$')
 
 
 def _snapshot(employee) -> dict:
-    return {f: getattr(employee, f) for f in TRACKED}
+    snap = {f: getattr(employee, f) for f in TRACKED}
+    snap['pbx_extensions'] = list(snap['pbx_extensions'] or [])
+    return snap
+
+
+def _value(row, f):
+    v = getattr(row, f)
+    return list(v or []) if f == 'pbx_extensions' else v
 
 
 @transaction.atomic
@@ -34,7 +41,7 @@ def record_assignment(employee, *, on: date, source: str, user=None):
         return EmployeeAssignment.objects.create(
             employee=employee, valid_from=employee.start_date or SEED_EPOCH, source=source,
             created_by=user, **snap)
-    if all(getattr(open_row, f) == v for f, v in snap.items()):
+    if all(_value(open_row, f) == v for f, v in snap.items()):
         return None
     if open_row.valid_from >= on:      # same-day correction (or a back-dated apply): fix in place
         for f, v in snap.items():

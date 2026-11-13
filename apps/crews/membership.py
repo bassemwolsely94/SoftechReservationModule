@@ -144,23 +144,28 @@ class _Data:
 
 
 def _employee_member(data: _Data, e, d: date, source: str) -> Member:
+    # User code and extensions come from the assignment covering d (dated identity), never from
+    # the Employee's current values; no covering assignment = no identity.
     a = data.assignment(e.id, d)
     return Member(
         key=('emp', e.id), employee_id=e.id, name=e.name_ar, hr_number=e.hr_number,
         job_title=a.job_title if a else '', branch_id=a.branch_id if a else None,
-        softech_usercodes=(e.softech_usercode,) if e.softech_usercode else (),
-        extensions=tuple(e.pbx_extensions or ()), staff_id=e.staff_id,
+        softech_usercodes=(a.softech_usercode,) if a and a.softech_usercode else (),
+        extensions=tuple(a.pbx_extensions or ()) if a else (), staff_id=e.staff_id,
         off_payroll=False, source=source)
 
 
 def _bare_member(x) -> Member:
-    if x.softech_usercode:
-        key, codes, exts = ('code', x.softech_usercode), (x.softech_usercode,), ()
-    else:
-        key, codes, exts = ('ext', x.pbx_extension), (), (x.pbx_extension,)
+    codes = (x.softech_usercode,) if x.softech_usercode else ()
+    exts = (x.pbx_extension,) if x.pbx_extension else ()
+    key = ('code', x.softech_usercode) if codes else ('ext', x.pbx_extension)
     return Member(key=key, employee_id=None, name=x.label or key[1], hr_number='', job_title='',
                   branch_id=None, softech_usercodes=codes, extensions=exts, staff_id=None,
                   off_payroll=True, source='manual')
+
+
+def _ids(mem: Member) -> set:
+    return {('c', c) for c in mem.softech_usercodes} | {('x', x) for x in mem.extensions}
 
 
 def _evaluate(data: _Data, d: date) -> dict:
@@ -189,13 +194,15 @@ def _evaluate(data: _Data, d: date) -> dict:
             continue
         if x.employee_id:
             out.pop(('emp', x.employee_id), None)
-        if x.softech_usercode:
-            out.pop(('code', x.softech_usercode), None)
-            for k in [k for k, v in out.items()
-                      if v.employee_id and x.softech_usercode in v.softech_usercodes]:
-                del out[k]
-        if x.pbx_extension:
-            out.pop(('ext', x.pbx_extension), None)
+        for k in [k for k, v in out.items()
+                  if (x.softech_usercode and x.softech_usercode in v.softech_usercodes)
+                  or (x.pbx_extension and x.pbx_extension in v.extensions)]:
+            del out[k]
+    # A bare code / extension already carried by an employee member that day is the same person:
+    # keep one member so the identity is never credited twice.
+    carried = set().union(*(_ids(v) for v in out.values() if v.employee_id))
+    for k in [k for k, v in out.items() if v.employee_id is None and _ids(v) & carried]:
+        del out[k]
     return out
 
 
@@ -207,14 +214,12 @@ def _timeline(data: _Data, start: date, end: date) -> list:
 
 
 def _load(crew, start: date, end: date, extra_rules=None) -> _Data:
-    if crew is None:
-        rules, manual = [], []
-    else:
-        rules = [_rule_from_row(r) for r in crew.rules.filter(voided_at__isnull=True)
-                 .filter(_overlap_q(start, end)).prefetch_related('branches')]
+    rules, manual = extra_rules or [], []
+    if crew is not None:
+        if extra_rules is None:
+            rules = [_rule_from_row(r) for r in crew.rules.filter(voided_at__isnull=True)
+                     .filter(_overlap_q(start, end)).prefetch_related('branches')]
         manual = list(crew.manual_members.filter(voided_at__isnull=True).filter(_overlap_q(start, end)))
-    if extra_rules is not None:
-        rules = extra_rules
     return _Data(rules, manual, start, end)
 
 

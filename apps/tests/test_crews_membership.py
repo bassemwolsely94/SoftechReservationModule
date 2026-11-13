@@ -242,3 +242,81 @@ class CrewMembershipTests(TestCase):
         Employee.objects.filter(hr_number='1').update(name_ar='أ')
         names = [x.name for x in m.members(self.crew, today)]
         self.assertEqual(names, sorted(names))
+
+
+class CrewMembershipReviewFixTests(TestCase):
+    """Review round 1: one member per identity, dated identities, consistency of members/spans."""
+
+    def setUp(self):
+        self.b130 = make_branch('فرع 130', '130')
+        self.crew = Crew.objects.create(name='كول سنتر', type='call_center')
+        self.day = D(2026, 10, 10)
+
+    def test_bare_include_of_an_employee_code_is_one_member(self):
+        a = emp('1', 'صيدلي', self.b130, usercode='555', exts=['201'])
+        rule(self.crew, jobs=['صيدلي'])
+        manual(self.crew, 'include', code='555')
+        manual(self.crew, 'include', ext='201')
+        self.assertEqual(keys(m.members(self.crew, self.day)), {('emp', a.id)})
+        got = m.identities(self.crew, D(2026, 10, 1), D(2026, 10, 31))
+        self.assertEqual([i for i in got if i.kind == 'softech_user'],
+                         [m.Identity('softech_user', '555', D(2026, 10, 1), D(2026, 10, 31), ('emp', a.id))])
+        self.assertEqual(len([i for i in got if i.kind == 'extension']), 1)
+
+    def test_identities_are_dated_by_assignment(self):
+        a = emp('1', 'صيدلي', self.b130, usercode='55', exts=['201'])
+        rule(self.crew, jobs=['صيدلي'])
+        today = timezone.localdate()
+        last_end = today.replace(day=1) - timedelta(days=1)
+        last_start = last_end.replace(day=1)
+        before = m.identities(self.crew, last_start, last_end)
+        change(a, today, softech_usercode='66', pbx_extensions=['299'])
+        self.assertEqual(m.identities(self.crew, last_start, last_end), before)
+        self.assertEqual({i.value for i in before}, {'55', '201'})
+        now = m.members(self.crew, today)[0]
+        self.assertEqual((now.softech_usercodes, now.extensions), (('66',), ('299',)))
+        # exclusion follows the dated code too: excluding 66 does not touch last month
+        manual(self.crew, 'exclude', code='66', frm=last_start)
+        self.assertEqual(m.identities(self.crew, last_start, last_end), before)
+        self.assertEqual(m.members(self.crew, today), [])
+
+    def test_bare_row_with_code_and_extension_keeps_both(self):
+        manual(self.crew, 'include', code='777', ext='215', label='وكيل')
+        x = m.members(self.crew, self.day)[0]
+        self.assertEqual((x.key, x.softech_usercodes, x.extensions), (('code', '777'), ('777',), ('215',)))
+        kinds = {(i.kind, i.value) for i in m.identities(self.crew, self.day, self.day)}
+        self.assertEqual(kinds, {('softech_user', '777'), ('extension', '215')})
+
+    def test_extension_exclude_removes_employee_carrying_it(self):
+        a = emp('1', 'صيدلي', self.b130, exts=['201', '202'])
+        b = emp('2', 'صيدلي', self.b130, exts=['203'])
+        rule(self.crew, jobs=['صيدلي'])
+        manual(self.crew, 'exclude', ext='202')
+        self.assertEqual(keys(m.members(self.crew, self.day)), {('emp', b.id)})
+        self.assertNotIn(('emp', a.id), keys(m.members(self.crew, self.day)))
+
+    def test_preview_with_crew_does_not_read_its_rules(self):
+        rule(self.crew, jobs=['صيدلي'])
+        with CaptureQueriesContext(connection) as ctx:
+            m.preview([{'job_titles': ['كاشير']}], self.day, crew=self.crew)
+        self.assertFalse([q for q in ctx.captured_queries if 'crews_crewrule' in q['sql']])
+
+    def test_members_agree_with_members_between_every_day(self):
+        b140 = make_branch('فرع 140', '140')
+        a = emp('1', 'صيدلي', self.b130, usercode='55')
+        b = emp('2', 'صيدلي', b140, start=D(2026, 10, 7), end=D(2026, 10, 24))
+        c = emp('3', 'كاشير', self.b130)
+        rule(self.crew, jobs=['صيدلي'], to=D(2026, 10, 20))
+        rule(self.crew, jobs=['صيدلي'], branches=[self.b130], frm=D(2026, 10, 21))
+        manual(self.crew, 'include', employee=c, frm=D(2026, 10, 5), to=D(2026, 10, 12))
+        manual(self.crew, 'exclude', code='55', frm=D(2026, 10, 15), to=D(2026, 10, 17))
+        manual(self.crew, 'include', code='777', frm=D(2026, 10, 9))
+        change(a, D(2026, 10, 27), branch=b140)
+        start, end = D(2026, 10, 1), D(2026, 10, 31)
+        spans = m.members_between(self.crew, start, end)
+        self.assertEqual(set(spans), {('emp', a.id), ('emp', b.id), ('emp', c.id), ('code', '777')})
+        d = start
+        while d <= end:
+            expected = {k for k, lst in spans.items() if any(f <= d <= t for f, t in lst)}
+            self.assertEqual(keys(m.members(self.crew, d)), expected, d)
+            d += timedelta(days=1)

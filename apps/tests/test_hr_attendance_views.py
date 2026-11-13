@@ -707,6 +707,15 @@ class EditTests(Base):
         self.assertEqual((new.job_title, new.source, new.valid_from, new.valid_to),
                          ('صيدلي', 'manual', today, None))
 
+    def test_hand_edit_of_extensions_records_manual_assignment(self):
+        from apps.hr import assignments as asg
+        from apps.hr.models import EmployeeAssignment
+        EmployeeAssignment.objects.create(employee=self.emp, valid_from=asg.SEED_EPOCH, source='seed')
+        r = self.patch(self.mgr, f'employees/{self.emp.pk}/', {'pbx_extensions': ['201']})
+        self.assertEqual(r.status_code, 200, r.content)
+        old, new = EmployeeAssignment.objects.filter(employee=self.emp).order_by('valid_from')
+        self.assertEqual((old.pbx_extensions, new.pbx_extensions), ([], ['201']))
+
     def test_unknown_and_protected_fields_are_ignored(self):
         self.patch(self.mgr, f'employees/{self.emp.pk}/', {'staff': 5, 'softech_usercode': 'x', 'id': 99})
         self.emp.refresh_from_db()
