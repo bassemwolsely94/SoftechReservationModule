@@ -2,7 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 
 
-from .roles import ROLE_CHOICES, MFA_REQUIRED_ROLES  # noqa: F401 — re-exported, the registry is the source
+from .roles import ROLE_CHOICES, MFA_REQUIRED_ROLES as _REGISTRY_MFA_ROLES   # apps/users/roles.py is the source
 
 # Canonical module identifiers used by RoleModuleAccess
 MODULE_CHOICES = [
@@ -97,7 +97,7 @@ USER_ACTIVITY_ACTION_CHOICES = [
 # Roles that must pass 2FA at login once enforcement is switched on
 # (config SystemSetting key 'security.mfa_enforced'). These are the approval-
 # and pricing-capable roles reachable from outside the pharmacy network.
-# MFA_REQUIRED_ROLES now comes from apps.users.roles (imported at the top).
+MFA_REQUIRED_ROLES = _REGISTRY_MFA_ROLES   # the roles with mfa_required in apps/users/roles.py
 
 
 class ERPUser(models.Model):

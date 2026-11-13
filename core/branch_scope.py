@@ -14,7 +14,7 @@ owner decision 3, 2026-10-26).
 """
 from __future__ import annotations
 
-from apps.users.roles import ALL_BRANCH_ROLES  # noqa: F401,E402 — derived from the role registry
+from apps.users.roles import ALL_BRANCH_ROLES   # roles with all_branches in the role registry
 
 
 def _profile(user_or_profile):
