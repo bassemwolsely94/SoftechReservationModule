@@ -147,10 +147,14 @@ def _load() -> dict:
         from apps.forecasting.models import ChannelBucketMap
         data = {}
         for r in ChannelBucketMap.objects.all():
+            group = r.group or 'unclassified'
+            # An unclassified row (e.g. a code SOFTECH added later) reads like an unknown
+            # code until the owner gives it a meaning; its SOFTECH label stays on the API.
+            label = f'غير مصنف ({r.channel})' if group == 'unclassified' else (r.label or '')
             data[(r.person_type, r.channel)] = ChannelInfo(
-                code=r.channel, group=r.group or 'unclassified',
-                group_label=GROUP_LABELS.get(r.group, r.group or ''),
-                label=r.label or '', bucket=r.bucket,
+                code=r.channel, group=group,
+                group_label=GROUP_LABELS.get(group, group),
+                label=label, bucket=r.bucket,
                 followup_rank=r.followup_rank,
                 is_contract_sale=bool(r.is_contract_sale), known=True,
             )

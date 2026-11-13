@@ -243,7 +243,7 @@ def _items(codes, st):
     from apps.catalog.wildcard import wq
     from apps.config.item_types import planning_excluded_codes
     qs = (Item.objects.filter(softech_id__in=list(codes), is_stockable=True, pack_price__gt=0)
-          .exclude(medicine_type__in=planning_excluded_codes())                     # customer gifts / coupons
+          .exclude(medicine_type__in=planning_excluded_codes())  # MedicineTypeMap excluded_from_planning (seeded 60 = gifts/coupons)
           .exclude(supplier_trans__in=['2', '3']))           # return-only / إيقاف كامل
     field = {'supplier': 'supplier_code', 'producer': 'producer_code', 'medicine_type': 'medicine_type',
              'category': 'category__softech_id', 'family': 'family_code', 'store_classif': 'store_classif'}

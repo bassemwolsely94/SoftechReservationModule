@@ -195,6 +195,8 @@ class AuditLog(models.Model):
         # Payment audit — bank statement upload (apps/payments/audit_views.py)
         ('bank_statement_uploaded',      'مراجعة المدفوعات — رفع كشف حساب بنكي'),
         ('omni_credentials_rekeyed',     'قنوات التواصل — إعادة تشفير بيانات الاعتماد بالمفتاح الجديد'),
+        # SOFTECH code maps — owner edits a channel / item-category meaning (apps/config/code_maps.py)
+        ('code_map_changed',             'ترميزات SOFTECH — تعديل'),
 
     ]
 
