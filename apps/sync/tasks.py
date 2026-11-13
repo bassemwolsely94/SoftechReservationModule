@@ -466,8 +466,24 @@ def sync_branches(conn, sync_run):
                     'address': str(row[3] or ''),
                     'phone': str(row[4] or ''),
                     'is_active': True,
+                    # New SOFTECH branches arrive unclassified: an admin must
+                    # classify them (hq / retail / closed) before they count as live.
+                    'kind': Branch.KIND_PENDING,
+                    'is_operational': False,
                 }
             )
+            if created:
+                try:
+                    from apps.notifications.models import Notification
+                    Notification.send_to_admins(
+                        'branch_pending',
+                        '🏷️ فرع جديد بانتظار التصنيف',
+                        body=f'ظهر فرع جديد في السيرفر: {branch.name_ar or branch.name} '
+                             f'({branch.code}). صنّفه من إعدادات الفروع.',
+                        dedup_key=f'branch_pending:{branch.code}',
+                    )
+                except Exception as exc:  # never break the sync over a notice
+                    logger.warning('branch_pending notification failed: %s', exc)
             if not created:
                 # Only sync the canonical ERP fields on subsequent runs.
                 # name_ar / address / phone are admin-managed — never overwrite them.

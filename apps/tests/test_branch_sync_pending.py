@@ -1,0 +1,50 @@
+"""Sync creates new SOFTECH branches as `pending` and tells admins; existing
+branches' curated fields (kind, is_operational, pos_enabled, display_order) are
+never touched."""
+from django.test import TestCase, override_settings
+
+from apps.branches.models import Branch
+from apps.notifications.models import Notification
+from apps.sync import tasks
+from apps.sync.models import SyncRun
+from apps.tests.factories import make_user
+from apps.tests.test_sync_r7 import _Conn
+
+
+@override_settings(RBAC_ENFORCEMENT='log')
+class BranchSyncPendingTests(TestCase):
+
+    def setUp(self):
+        self.run = SyncRun.objects.create()
+        self.admin, _, _ = make_user('bp_admin', role='admin')
+
+    def _sync(self, *rows):
+        return tasks.sync_branches(_Conn(list(rows)), self.run)
+
+    def test_new_softech_branch_created_pending(self):
+        self._sync(('230', 'فرع جديد', 'New Branch', 'addr', '012'))
+        b = Branch.objects.get(softech_branch_id='230')
+        self.assertEqual(b.kind, Branch.KIND_PENDING)
+        self.assertFalse(b.is_operational)
+        self.assertFalse(b.pos_enabled)
+
+    def test_new_branch_notifies_admins_once(self):
+        row = ('230', 'فرع جديد', 'New Branch', 'addr', '012')
+        self._sync(row)
+        self._sync(row)
+        qs = Notification.objects.filter(notification_type='branch_pending',
+                                         recipient__user=self.admin)
+        self.assertEqual(qs.count(), 1)
+        self.assertEqual(qs.first().dedup_key, 'branch_pending:230')
+
+    def test_existing_branch_curated_fields_untouched(self):
+        Branch.objects.create(softech_branch_id='231', name='Old', code='231',
+                              kind=Branch.KIND_CLOSED, is_operational=False,
+                              pos_enabled=True, display_order=7)
+        self._sync(('231', 'س', 'Renamed', 'x', 'y'))
+        b = Branch.objects.get(softech_branch_id='231')
+        self.assertEqual((b.kind, b.is_operational, b.pos_enabled, b.display_order),
+                         (Branch.KIND_CLOSED, False, True, 7))
+        self.assertEqual(b.name, 'Renamed')
+        self.assertFalse(Notification.objects.filter(
+            notification_type='branch_pending').exists())
