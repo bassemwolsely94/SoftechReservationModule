@@ -63,12 +63,18 @@ class ItemTypePatchSerializer(serializers.Serializer):
     excluded_from_planning = serializers.BooleanField(required=False, error_messages=_BOOL_ERR)
 
 
+_GENERIC_BAD = 'بيانات غير صحيحة.'
+
+
 def _first_error(errors) -> str:
-    """One Arabic sentence out of a serializer's errors (our own messages only)."""
-    for msgs in errors.values():
+    """One Arabic sentence out of a serializer's errors (our own field messages only;
+    a non-dict body / non_field_errors carries DRF's English text, so it maps to generic)."""
+    for key, msgs in errors.items():
+        if key == 'non_field_errors':
+            return _GENERIC_BAD
         if isinstance(msgs, (list, tuple)) and msgs:
             return str(msgs[0])
-    return 'بيانات غير صحيحة.'
+    return _GENERIC_BAD
 
 
 def _bad(text: str) -> Response:
@@ -140,7 +146,10 @@ def channel_detail(request, pk: int):
     with transaction.atomic():
         row = get_object_or_404(ChannelBucketMap.objects.select_for_update(),
                                 pk=pk, person_type=channels.CUSTOMER_PT)
-        _apply(row, ser.validated_data, request)
+        if _apply(row, ser.validated_data, request):
+            # the post_save signal already dropped it; again after commit so a read
+            # between save and commit cannot re-cache the old meaning
+            transaction.on_commit(channels.invalidate_cache)
     return Response(_channel_dict(row, _sales_90d([row.channel])))
 
 
@@ -179,14 +188,18 @@ def item_type_detail(request, pk: int):
         return _bad(_first_error(ser.errors))
     data = ser.validated_data
     with transaction.atomic():
+        # Lock order: every medicine row by pk first, then the target row — one fixed
+        # order for all PATCHes, so two owners editing at once queue, never deadlock,
+        # and cannot both un-tick the last two medicine rows.
+        medicine_pks = list(MedicineTypeMap.objects.select_for_update()
+                            .filter(is_medicine=True).order_by('pk')
+                            .values_list('pk', flat=True))
         row = get_object_or_404(MedicineTypeMap.objects.select_for_update(), pk=pk)
         # An empty medicine set would make refill / chronic inference switch every
-        # inferred profile off — refuse the change that would leave none. The medicine
-        # rows are locked so two owners un-ticking the last two at once cannot both pass.
-        if row.is_medicine and data.get('is_medicine') is False:
-            others = [r.pk for r in MedicineTypeMap.objects.select_for_update()
-                      .filter(is_medicine=True).exclude(pk=row.pk)]
-            if not others:
-                return _bad(_EMPTY_MEDICINE)
-        _apply(row, data, request)
+        # inferred profile off — refuse the change that would leave none.
+        if (row.is_medicine and data.get('is_medicine') is False
+                and not [p for p in medicine_pks if p != row.pk]):
+            return _bad(_EMPTY_MEDICINE)
+        if _apply(row, data, request):
+            transaction.on_commit(item_types.invalidate_cache)   # signal fires too; see channels
     return Response(_item_type_dict(row, _item_counts([row.code])))

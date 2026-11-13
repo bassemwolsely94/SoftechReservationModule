@@ -148,9 +148,12 @@ def _load() -> dict:
         data = {}
         for r in ChannelBucketMap.objects.all():
             group = r.group or 'unclassified'
-            # An unclassified row (e.g. a code SOFTECH added later) reads like an unknown
-            # code until the owner gives it a meaning; its SOFTECH label stays on the API.
-            label = f'غير مصنف ({r.channel})' if group == 'unclassified' else (r.label or '')
+            # An unclassified row (e.g. a code SOFTECH added later) reads «غير مصنف (<code>)»
+            # until the owner gives it a meaning, followed by SOFTECH's name when it has one.
+            if group == 'unclassified':
+                label = f'غير مصنف ({r.channel})' + (f' — {r.label}' if r.label else '')
+            else:
+                label = r.label or ''
             data[(r.person_type, r.channel)] = ChannelInfo(
                 code=r.channel, group=group,
                 group_label=GROUP_LABELS.get(group, group),

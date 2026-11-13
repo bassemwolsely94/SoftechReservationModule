@@ -169,6 +169,37 @@ class ChannelsApiTests(_CodeMapsBase):
         self.assertEqual(pharma.patch(f'{CH_URL}{row.pk}/', {'group': 'cash'},
                                       format='json').status_code, 403)
 
+    def test_patch_schedules_cache_drop_on_commit(self):
+        row, t = self._row('99'), self._type('70')
+        with self.captureOnCommitCallbacks() as cbs:
+            self.admin.patch(f'{CH_URL}{row.pk}/', {'group': 'cash'}, format='json')
+            self.admin.patch(f'{IT_URL}{t.pk}/', {'excluded_from_planning': True}, format='json')
+        self.assertIn(channels.invalidate_cache, cbs)
+        self.assertIn(item_types.invalidate_cache, cbs)
+        with self.captureOnCommitCallbacks() as cbs:      # no change → nothing scheduled
+            self.admin.patch(f'{CH_URL}{row.pk}/', {'group': 'cash'}, format='json')
+        self.assertNotIn(channels.invalidate_cache, cbs)
+
+    def test_detail_other_methods_405(self):
+        row, t = self._row('91'), self._type('10')
+        for url in (f'{CH_URL}{row.pk}/', f'{IT_URL}{t.pk}/'):
+            self.assertEqual(self.admin.put(url, {'group': 'cash'}, format='json').status_code, 405, url)
+            self.assertEqual(self.admin.post(url, {'group': 'cash'}, format='json').status_code, 405, url)
+            self.assertEqual(self.admin.delete(url).status_code, 405, url)
+        self.assertTrue(ChannelBucketMap.objects.filter(pk=row.pk).exists())
+        self.assertTrue(MedicineTypeMap.objects.filter(pk=t.pk).exists())
+        self.assertFalse(self._audits().exists())
+
+    def test_non_dict_body_is_generic_arabic_400(self):
+        row = self._row('91')
+        r = self.admin.patch(f'{CH_URL}{row.pk}/', ['group', 'cash'], format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data['detail'], 'بيانات غير صحيحة.')
+        t = self._type('10')
+        r = self.admin.patch(f'{IT_URL}{t.pk}/', 'x', format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data['detail'], 'بيانات غير صحيحة.')
+
     def test_unauthenticated_is_401(self):
         row = self._row('99')
         anon = APIClient()

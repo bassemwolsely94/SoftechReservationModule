@@ -53,7 +53,7 @@ class NewChannelFlowsUnclassifiedTests(_RegistryCacheMixin, TestCase):
     def setUp(self):
         super().setUp()
         channels.ensure_defaults()
-        SoftechPersonClassif.objects.create(ptcode='10', ptclassifcode='77', ptclassifdescr='')
+        SoftechPersonClassif.objects.create(ptcode='10', ptclassifcode='77', ptclassifdescr='جديد')
         self.assertEqual(channels.ensure_channel_rows(notify=False), ['77'])
 
     def test_new_channel_flows_unclassified(self):
@@ -75,7 +75,7 @@ class NewChannelFlowsUnclassifiedTests(_RegistryCacheMixin, TestCase):
         self.assertEqual(r.status_code, 200)
         rows = r.data.get('results', r.data) if isinstance(r.data, dict) else r.data
         self.assertIn(task.pk, [row['id'] for row in rows])
-        self.assertEqual(task.sales_channel_label, 'غير مصنف (77)')
+        self.assertEqual(task.sales_channel_label, 'غير مصنف (77) — جديد')
         self.assertFalse(task.channel_is_favoured)
         self.assertNotIn('77', channels.favoured_codes())
 
@@ -86,8 +86,20 @@ class NewChannelFlowsUnclassifiedTests(_RegistryCacheMixin, TestCase):
         call_command('seed_permissions', verbosity=0)
         r = admin.get('/api/config/code-maps/channels/')
         self.assertEqual(r.status_code, 200, r.data)
-        self.assertEqual(r.data[0]['code'], '77')
-        self.assertEqual(r.data[0]['group'], 'unclassified')
+        row = r.data[0]
+        self.assertEqual(row['code'], '77')
+        self.assertEqual(row['group'], 'unclassified')
+        self.assertEqual(row['group_label'], 'غير مصنف')
+        self.assertEqual(row['label'], 'جديد')          # SOFTECH's raw name for the owner
+        self.assertFalse(row['is_contract_sale'])
+        self.assertIsNone(row['followup_rank'])
+
+    def test_unclassified_row_with_blank_label(self):
+        from apps.forecasting.models import ChannelBucketMap
+        ChannelBucketMap.objects.create(person_type='10', channel='78', group='unclassified')
+        channels.invalidate_cache()
+        self.assertEqual(channels.channel('78').label, 'غير مصنف (78)')
+        self.assertEqual(channels.channel('79').label, 'غير مصنف (79)')   # no row at all
 
 
 class NewItemTypeFlowsUnclassifiedTests(_RegistryCacheMixin, TestCase):
