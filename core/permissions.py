@@ -120,8 +120,9 @@ def matrix_allows(profile, module: str, *actions) -> bool:
     if profile.role == 'admin':
         return True
     from core.middleware import module_access
-    # an enforced role (RBAC_ENFORCED_ROLES) never fails open: only its own allowed rows count (R17)
-    if module not in module_access.seeded_modules() and profile.role not in module_access.enforced_roles():
+    # an enforced role (RBAC_ENFORCED_ROLES, a non-legacy or unknown role) never fails open: only
+    # its own allowed rows count (R17)
+    if module not in module_access.seeded_modules() and not module_access.is_enforced(profile.role):
         import logging
         logging.getLogger('elrezeiky.rbac').error('RBAC module %s not seeded — %s not enforced', module, actions)
         return True
