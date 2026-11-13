@@ -86,7 +86,7 @@ class NewChannelFlowsUnclassifiedTests(_RegistryCacheMixin, TestCase):
         call_command('seed_permissions', verbosity=0)
         r = admin.get('/api/config/code-maps/channels/')
         self.assertEqual(r.status_code, 200, r.data)
-        row = r.data[0]
+        row = r.data['rows'][0]
         self.assertEqual(row['code'], '77')
         self.assertEqual(row['group'], 'unclassified')
         self.assertEqual(row['group_label'], 'غير مصنف')
@@ -117,7 +117,7 @@ class NewItemTypeFlowsUnclassifiedTests(_RegistryCacheMixin, TestCase):
         _, _, admin = make_admin('cm_new_it_admin')
         r = admin.get('/api/config/code-maps/item-types/')
         self.assertEqual(r.status_code, 200, r.data)
-        first = r.data[0]
+        first = r.data['rows'][0]
         self.assertEqual((first['code'], first['group'], first['is_medicine'],
                           first['excluded_from_planning'], first['item_count']),
                          ('85', 'unclassified', False, False, 1))
