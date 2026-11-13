@@ -325,6 +325,12 @@ def device_receipts(config, *, issued_from, page_size=5):
                          timeout=TIMEOUT, allow_redirects=False, verify=_verify())
     except requests.RequestException as exc:
         raise EtaUncertain(f'تعذر البحث عن إيصالات الجهاز: {type(exc).__name__}') from exc
+    if r.status_code == 404:
+        body = _json(r) if r.content else {}
+        # ETA's explicit "nothing matches" (target NoResult, code NotFound): the device has no receipts.
+        # Any other 404 (a wrong address, a gateway page) still means "could not ask".
+        if isinstance(body, dict) and body.get('target') == 'NoResult' and body.get('code') == 'NotFound':
+            return []
     if r.status_code != 200:
         raise EtaUncertain(f'تعذر البحث عن إيصالات الجهاز (HTTP {r.status_code})', r.status_code)
     serial = (config.device_serial or '').strip().upper()

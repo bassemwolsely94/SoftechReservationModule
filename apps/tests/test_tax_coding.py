@@ -376,6 +376,20 @@ class ChainStartTests(Fixture, TestCase):
         gaps = receipts.config_gaps(self.config, TaxIssuerProfile.load())
         self.assertTrue(any('بداية سلسلة الجهاز' in g for g in gaps))
 
+    def test_etas_no_result_404_means_no_receipts_but_another_404_does_not(self):
+        token = mock.patch.object(eta_client.requests, 'post',
+                                  return_value=_response(200, {'access_token': 'P', 'expires_in': 3600}))
+        none = _response(404, {'target': 'NoResult', 'code': 'NotFound', 'message': 'No data found'})
+        none.content = b'{}'
+        with token, mock.patch.object(eta_client.requests, 'get', return_value=none):
+            self.assertEqual(receipts.chain_lookup('150', self.admin)['found'], 0)
+        other = _response(404, {})
+        other.content = b''
+        eta_client.reset_pos_tokens()
+        with token, mock.patch.object(eta_client.requests, 'get', return_value=other):
+            with self.assertRaises(receipts.TaxRuleError):
+                receipts.chain_lookup('150', self.admin)
+
     def test_lookup_searches_this_device_newest_first_and_ignores_other_devices(self):
         token, search = self._eta(_device_row(LAST), _device_row(NEWER, serial='OTHER'))
         with token, search as get:
