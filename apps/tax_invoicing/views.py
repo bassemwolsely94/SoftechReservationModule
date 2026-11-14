@@ -1211,12 +1211,16 @@ def history_progress(request):
 
 
 def _history_round(system):
+    from django.db import connection
     from . import eta_history
     import datetime as _d
-    for kind in eta_history.KINDS:
-        eta_history.plan_windows(system, kind, eta_history.start_date(), _d.date.today() - _d.timedelta(days=1))
-        eta_history.step(system, kind)
-    eta_history.top_up(system)
+    try:
+        for kind in eta_history.KINDS:
+            eta_history.plan_windows(system, kind, eta_history.start_date(), _d.date.today() - _d.timedelta(days=1))
+            eta_history.step(system, kind)
+        eta_history.top_up(system)
+    finally:
+        connection.close()
 
 
 @api_view(['POST'])

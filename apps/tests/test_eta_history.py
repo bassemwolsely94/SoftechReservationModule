@@ -212,7 +212,7 @@ class BackfillTests(TestCase):
 
     def test_plan_windows_uses_4_day_receipt_and_30_day_document_windows(self):
         self.assertEqual(eta_history.plan_windows('preprod', 'receipts', dt.date(2024, 1, 1), dt.date(2024, 1, 8)), 2)
-        self.assertEqual(eta_history.plan_windows('preprod', 'documents', dt.date(2024, 1, 1), dt.date(2024, 3, 1)), 3)
+        self.assertEqual(eta_history.plan_windows('preprod', 'documents', dt.date(2024, 1, 1), dt.date(2024, 3, 1)), 2)   # whole windows only
         self.assertEqual(eta_history.plan_windows('preprod', 'receipts', dt.date(2024, 1, 1), dt.date(2024, 1, 8)), 0)
 
     def test_backfill_requests_polls_downloads_and_loads(self):
@@ -246,7 +246,7 @@ class BackfillTests(TestCase):
         self.fake.too_big_over_days = 2
         eta_history.step('preprod', 'receipts', max_requests=1)
         spans = sorted((w.date_from.day, w.date_to.day, w.state) for w in EtaHistoryWindow.objects.all())
-        self.assertEqual(spans, [(1, 2, 'planned'), (3, 4, 'planned')])
+        self.assertEqual(spans, [(1, 2, 'planned'), (1, 4, 'split'), (3, 4, 'planned')])
 
     def test_one_day_window_still_too_big_is_marked_too_big(self):
         self._window('receipts', days=1)
@@ -262,7 +262,7 @@ class BackfillTests(TestCase):
         out = eta_history.step('preprod', 'documents')
         w.refresh_from_db()
         self.assertEqual(w.state, 'planned')
-        self.assertIn('connection lost', w.error)
+        self.assertIn('connection lost', eta_history.progress('preprod')['documents']['last_error'])
         self.assertTrue(out['error'])
         self.assertEqual(EtaMirrorDocument.objects.count(), 0)
 
@@ -393,3 +393,114 @@ class HistoryViewTests(Fixture, TestCase):
             r = api(self.accountant).post('/api/tax-invoicing/history/refresh/', {'system': 'preprod'}, format='json')
         self.assertEqual(r.status_code, 202)
         thread.assert_called_once()
+
+
+# ── Final review fixes ─────────────────────────────────────────────────────────────────────────
+
+class ReviewFixTests(TestCase):
+
+    def setUp(self):
+        from apps.tax_invoicing.models import TaxIssuerProfile
+        issuer = TaxIssuerProfile.load()
+        issuer.tax_id = '499336534'
+        issuer.save()
+        self.fake = FakeReader('preprod')
+        p = mock.patch.object(eta_history, 'EtaReader', return_value=self.fake)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_planning_after_a_split_never_brings_the_parent_back(self):
+        eta_history.plan_windows('preprod', 'receipts', dt.date(2024, 1, 1), dt.date(2024, 1, 4))
+        self.fake.too_big_over_days = 2
+        eta_history.step('preprod', 'receipts', max_requests=1)
+        self.assertEqual(eta_history.plan_windows('preprod', 'receipts', dt.date(2024, 1, 1), dt.date(2024, 1, 4)), 0)
+        eta_history.step('preprod', 'receipts', max_requests=5)
+        planned_or_asked = sorted((w.date_from.day, w.date_to.day) for w in EtaHistoryWindow.objects.exclude(state='split'))
+        self.assertEqual(planned_or_asked, [(1, 2), (3, 4)])
+        self.assertEqual(len(self.fake.requests), 2)        # only the halves were asked for
+
+    def test_only_whole_windows_are_planned_so_days_never_overlap(self):
+        self.assertEqual(eta_history.plan_windows('preprod', 'receipts', dt.date(2024, 1, 1), dt.date(2024, 1, 6)), 1)
+        self.assertEqual(eta_history.plan_windows('preprod', 'receipts', dt.date(2024, 1, 1), dt.date(2024, 1, 7)), 0)
+        self.assertEqual(eta_history.plan_windows('preprod', 'receipts', dt.date(2024, 1, 1), dt.date(2024, 1, 8)), 1)
+        spans = [(w.date_from.day, w.date_to.day) for w in EtaHistoryWindow.objects.order_by('date_from')]
+        self.assertEqual(spans, [(1, 4), (5, 8)])
+
+    def test_a_vanished_package_goes_back_to_planned_and_others_still_move(self):
+        a = EtaHistoryWindow.objects.create(system='preprod', kind='documents', date_from=dt.date(2024, 1, 1),
+                                            date_to=dt.date(2024, 1, 1), state='requested', package_id='GONE')
+        b = EtaHistoryWindow.objects.create(system='preprod', kind='documents', date_from=dt.date(2024, 1, 2),
+                                            date_to=dt.date(2024, 1, 2), state='requested', package_id='OK')
+        self.fake.statuses['OK'] = 2
+        self.fake.packages['OK'] = _zip([_doc_row('A')])
+        self.fake.download_package = lambda kind, pid: (_ for _ in ()).throw(
+            eta_client.EtaUncertain('gone', 404)) if pid == 'GONE' else self.fake.packages[pid]
+        eta_history.step('preprod', 'documents', max_requests=0)
+        a.refresh_from_db()
+        b.refresh_from_db()
+        self.assertEqual((a.state, a.package_id), ('planned', ''))
+        self.assertEqual(b.state, 'loaded')
+
+    def test_a_broken_zip_fails_that_window_with_its_reason(self):
+        w = EtaHistoryWindow.objects.create(system='preprod', kind='documents', date_from=dt.date(2024, 1, 1),
+                                            date_to=dt.date(2024, 1, 1), state='requested', package_id='P9')
+        self.fake.statuses['P9'] = 2
+        self.fake.packages['P9'] = b'not a zip'
+        eta_history.step('preprod', 'documents', max_requests=0)
+        w.refresh_from_db()
+        self.assertIn(w.state, ('planned', 'failed'))
+        self.assertTrue(w.error)
+
+    def test_a_uuid_twice_in_one_package_loads_once(self):
+        self.assertEqual(eta_history.upsert_documents('preprod', [_doc_row('A'), _doc_row('A', status='Cancelled')], 'package'), 1)
+        self.assertEqual(EtaMirrorDocument.objects.get().status, 'cancelled')
+
+    def test_an_older_package_never_overwrites_a_newer_status(self):
+        w = EtaHistoryWindow.objects.create(system='preprod', kind='documents', date_from=dt.date(2024, 1, 1),
+                                            date_to=dt.date(2024, 1, 1), state='requested', package_id='P1',
+                                            requested_at=timezone.now() - dt.timedelta(hours=2))
+        eta_history.upsert_documents('preprod', [_doc_row('A', status='Cancelled')], 'search')   # after the request
+        self.fake.statuses['P1'] = 2
+        self.fake.packages['P1'] = _zip([_doc_row('A', status='Valid'), _doc_row('B')])
+        eta_history.step('preprod', 'documents', max_requests=0)
+        self.assertEqual(EtaMirrorDocument.objects.get(uuid='A').status, 'cancelled')
+        self.assertTrue(EtaMirrorDocument.objects.filter(uuid='B').exists())
+        w.refresh_from_db()
+        self.assertEqual(w.state, 'loaded')
+
+    def test_topup_covers_etas_cancel_and_reject_period(self):
+        self.assertGreaterEqual(eta_history.TOPUP_DAYS['receipts'], 7)
+        self.assertGreaterEqual(eta_history.TOPUP_DAYS['documents'], 7)
+
+    def test_a_refused_login_stops_the_round_without_failing_windows(self):
+        eta_history.plan_windows('preprod', 'documents', dt.date(2024, 1, 1), dt.date(2024, 3, 30))
+        self.fake.fail_with = eta_client.EtaRefused('forbidden', 403)
+        for _ in range(6):
+            out = eta_history.step('preprod', 'documents')
+        self.assertTrue(out['error'])
+        self.assertFalse(EtaHistoryWindow.objects.filter(state='failed').exists())
+        self.assertEqual(set(EtaHistoryWindow.objects.values_list('attempts', flat=True)), {0})
+
+    def test_a_busy_system_is_skipped(self):
+        eta_history.plan_windows('preprod', 'documents', dt.date(2024, 1, 1), dt.date(2024, 1, 30))
+        with mock.patch.object(eta_history, '_try_lock', return_value=False):
+            out = eta_history.step('preprod', 'documents')
+        self.assertTrue(out['busy'])
+        self.assertEqual(self.fake.requests, [])
+
+    def test_the_last_error_belongs_to_the_last_round_and_clears(self):
+        eta_history.plan_windows('preprod', 'documents', dt.date(2024, 1, 1), dt.date(2024, 1, 30))
+        self.fake.fail_with = eta_client.EtaUncertain('down')
+        eta_history.step('preprod', 'documents')
+        self.assertIn('down', eta_history.progress('preprod')['documents']['last_error'])
+        self.fake.fail_with = None
+        eta_history.step('preprod', 'documents')
+        self.assertEqual(eta_history.progress('preprod')['documents']['last_error'], '')
+        self.assertEqual(EtaHistoryWindow.objects.exclude(error='').count(), 0)
+
+    def test_failed_windows_can_be_retried(self):
+        EtaHistoryWindow.objects.create(system='preprod', kind='documents', date_from=dt.date(2024, 1, 1),
+                                        date_to=dt.date(2024, 1, 1), state='failed', attempts=5, error='x')
+        self.assertEqual(eta_history.retry_failed('preprod'), 1)
+        w = EtaHistoryWindow.objects.get()
+        self.assertEqual((w.state, w.attempts), ('planned', 0))

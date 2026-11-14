@@ -756,9 +756,9 @@ class EtaMirrorReceipt(models.Model):
 
 class EtaHistoryWindow(models.Model):
     """One date window of the backfill, per system and kind, so "not fetched yet" is never read as "none"."""
-    PLANNED, REQUESTED, LOADED, FAILED, TOO_BIG = 'planned', 'requested', 'loaded', 'failed', 'too_big'
+    PLANNED, REQUESTED, LOADED, FAILED, TOO_BIG, SPLIT = 'planned', 'requested', 'loaded', 'failed', 'too_big', 'split'
     STATES = [(PLANNED, 'لم يُطلب'), (REQUESTED, 'طُلب من المصلحة'), (LOADED, 'تم التحميل'), (FAILED, 'تعذر'),
-              (TOO_BIG, 'أكبر من حد المصلحة')]
+              (TOO_BIG, 'أكبر من حد المصلحة'), (SPLIT, 'قُسمت لنصفين')]
     system = models.CharField(max_length=12, choices=ETA_SYSTEMS)
     kind = models.CharField(max_length=10)                            # documents | receipts
     date_from = models.DateField()
@@ -776,3 +776,18 @@ class EtaHistoryWindow(models.Model):
         verbose_name = 'نافذة تحميل من سجل المصلحة'
         ordering = ['system', 'kind', 'date_from']
         constraints = [models.UniqueConstraint(fields=['system', 'kind', 'date_from', 'date_to'], name='eta_history_window_once')]
+
+
+
+class EtaHistoryState(models.Model):
+    """The last backfill / top-up round per ETA system and kind: when, and the reason it stopped (cleared on a
+    clean round). Kept apart from the windows so a stale reason never hides behind an old window."""
+    system = models.CharField(max_length=12, choices=ETA_SYSTEMS)
+    kind = models.CharField(max_length=10)
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    last_ok_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = 'حالة آخر تحميل من سجل المصلحة'
+        constraints = [models.UniqueConstraint(fields=['system', 'kind'], name='eta_history_state_once')]

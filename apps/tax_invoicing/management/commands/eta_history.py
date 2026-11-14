@@ -15,7 +15,8 @@ class Command(BaseCommand):
         parser.add_argument('--plan', action='store_true')
         parser.add_argument('--step', type=int, default=0, help='backfill rounds to run per kind')
         parser.add_argument('--topup', action='store_true')
-        parser.add_argument('--days', type=int, default=3)
+        parser.add_argument('--days', type=int, default=0, help='top-up span (default: 30 documents / 7 receipts)')
+        parser.add_argument('--retry-failed', action='store_true')
 
     def handle(self, *args, **o):
         system = o['system']
@@ -27,7 +28,9 @@ class Command(BaseCommand):
         for _ in range(o['step']):
             for kind in eta_history.KINDS:
                 self.stdout.write(f'{kind}: {eta_history.step(system, kind)}')
+        if o['retry_failed']:
+            self.stdout.write(f"{eta_history.retry_failed(system)} failed windows back to planned")
         if o['topup']:
-            self.stdout.write(str(eta_history.top_up(system, days=o['days'])))
-        if not (o['plan'] or o['step'] or o['topup']):
-            raise CommandError('nothing to do: give --plan, --step N or --topup')
+            self.stdout.write(str(eta_history.top_up(system, days=o['days'] or None)))
+        if not (o['plan'] or o['step'] or o['topup'] or o['retry_failed']):
+            raise CommandError('nothing to do: give --plan, --step N, --topup or --retry-failed')
