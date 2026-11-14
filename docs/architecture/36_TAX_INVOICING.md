@@ -84,6 +84,15 @@ requests" (`GET /api/v1.0/codetypes/requests/my?ItemCode=`).
   hold; that item then needs an EGS code. Approval sets `code_type = GS1`, `eta_code = barcode`.
 - Follow-up of GS1 requests uses the same "my requests" search as EGS; confirmed on the test system before production.
 
+### Where a branch's sending starts
+
+`TaxReceiptBranchConfig.send_from` is required before a branch's first receipt (`config_gaps`). ETA's test system
+refused a two-day-old sale with CF313 ("issuance date time value is out of the range of submission workflow parameter"),
+and sales before go-live belong to the program used before. `receipts.evaluate` holds any sale before `send_from` with
+`before_start`, and `issue_next` never takes one. `set_send_from` (send permission, reason, audited) re-checks the
+branch's unsent receipts; once a receipt is issued the start only moves later, so older sales are never issued after
+newer ones.
+
 ### Test-only branch mapping
 
 `TaxReceiptBranchConfig.test_env` marks a branch setup as test-system-only, for example a live branch's sales sent

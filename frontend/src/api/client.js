@@ -3275,6 +3275,7 @@ export const taxInvoicingApi = {
   startChain:      (branch, data) => api.post(`/tax-invoicing/receipts/branch/${encodeURIComponent(branch)}/chain/start/`, data),
   undoChainStart:  (branch, reason) => api.post(`/tax-invoicing/receipts/branch/${encodeURIComponent(branch)}/chain/undo/`, { reason }),
   endTestMapping:  (branch, reason) => api.post(`/tax-invoicing/receipts/branch/${encodeURIComponent(branch)}/test/end/`, { reason }),
+  setSendFrom:     (branch, data) => api.post(`/tax-invoicing/receipts/branch/${encodeURIComponent(branch)}/send-from/`, data),
   saveReceiptConfig: (data)       => api.post('/tax-invoicing/receipts/configs/', data),
   channelRules:    ()             => api.get('/tax-invoicing/receipts/channels/'),
   channelsSeen:    ()             => api.get('/tax-invoicing/receipts/channels/seen/'),

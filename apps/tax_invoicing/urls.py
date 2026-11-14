@@ -62,4 +62,5 @@ urlpatterns = [
     path('receipts/branch/<str:branch>/chain/start/', views.receipts_chain_start),
     path('receipts/branch/<str:branch>/chain/undo/', views.receipts_chain_undo),
     path('receipts/branch/<str:branch>/test/end/', views.receipts_test_end),
+    path('receipts/branch/<str:branch>/send-from/', views.receipts_send_from),
 ]

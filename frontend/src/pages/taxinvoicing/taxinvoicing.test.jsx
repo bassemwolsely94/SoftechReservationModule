@@ -35,6 +35,7 @@ const api = vi.hoisted(() => ({
   startChain: vi.fn(),
   undoChainStart: vi.fn(),
   endTestMapping: vi.fn(),
+  setSendFrom: vi.fn(),
   saveReceiptConfig: vi.fn(),
 }))
 
@@ -47,7 +48,7 @@ const { default: DocumentDetail } = await import('./DocumentDetail')
 const { default: PrintTab } = await import('./PrintTab')
 const { default: ImportTab, buildOptions } = await import('./ImportTab')
 const { default: ItemsTab } = await import('./ItemsTab')
-const { BranchActions, ChainStart, TestMapping } = await import('./ReceiptsTab')
+const { BranchActions, ChainStart, TestMapping, SendFrom } = await import('./ReceiptsTab')
 const { default: CodesTab, CodeCheck, Candidates, Gs1Candidates } = await import('./CodesTab')
 
 const line = (id, status) => ({
@@ -421,5 +422,17 @@ describe('test-only branch mapping', () => {
     fireEvent.change(screen.getByLabelText('سبب إنهاء الإعداد التجريبي'), { target: { value: 'انتهت التجربة' } })
     fireEvent.click(screen.getByText('إنهاء الإعداد التجريبي'))
     await waitFor(() => expect(api.endTestMapping).toHaveBeenCalledWith('170', 'انتهت التجربة'))
+  })
+})
+
+describe('branch send start', () => {
+  it('sets when the branch starts sending, with a reason', async () => {
+    api.setSendFrom.mockResolvedValue({ data: { rechecked: 7 } })
+    show(<SendFrom branch="150" row={{ send_from: null }} me={ME} />)
+    fireEvent.change(screen.getByLabelText('بداية الإرسال'), { target: { value: '2026-11-14T08:00' } })
+    fireEvent.change(screen.getByLabelText('سبب بداية الإرسال'), { target: { value: 'بدء التشغيل' } })
+    fireEvent.click(screen.getByText('حفظ بداية الإرسال'))
+    await waitFor(() => expect(api.setSendFrom).toHaveBeenCalledWith('150', expect.objectContaining({ reason: 'بدء التشغيل' })))
+    expect(await screen.findByText(/أُعيد فحص 7/)).toBeTruthy()
   })
 })

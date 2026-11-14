@@ -357,6 +357,10 @@ SCREENS = [
             {'target': 'tax-invoicing-main-receipts-chain-lookup', 'label': T('ابحث في المصلحة', 'Ask ETA'),
              'text': T('يسأل المصلحة عن أحدث إيصالات هذا الجهاز بدخول جهاز الفرع. قراءة فقط.', 'Asks ETA for this device’s newest receipts with the branch POS login. Read only.'),
              'open_hint': T('لمن يملك الاعتماد النهائي، قبل تحديد البداية.', 'For those who hold finalize, before the start is decided.')},
+            {'target': 'tax-invoicing-main-receipts-send-from', 'label': T('بداية الإرسال', 'Sending starts'),
+             'text': T('مبيعات الفرع قبل هذا الوقت لا تُرسل من هنا؛ المصلحة ترفض الإيصال القديم. بعد أول إيصال تتأخر فقط.',
+                       "The branch's sales before this time are never sent from here; ETA refuses old receipts. After the first receipt it only moves later."),
+             'warn': T('بعد أول إيصال لا يمكن تقديمها لوقت أبكر.', 'After the first receipt it can never move earlier.')},
             {'target': 'tax-invoicing-main-receipts-test-mapping', 'label': T('إعداد تجريبي فقط', 'Test-only setup'),
              'text': T('يرسل مبيعات الفرع لمنظومة المصلحة التجريبية فقط. إنهاؤه يعيد إيصالاته جاهزة للمنظومة الفعلية.',
                        "Sends the branch's sales to ETA's test system only. Ending it puts its receipts back to ready for the real system.")},
@@ -418,6 +422,6 @@ SCREENS = [
              'text': T('يسأل المصلحة عن الطلبات المرسلة. قرارها وحده يغير ترميز الصنف.', 'Asks ETA about sent requests. Only its decision changes the item coding.')},
         ],
         'updated': '2026-11-13',
-        'change_note': T('قائمة فئات GPC بالعربية مع فئة مقترحة لكل صنف، وطلب استخدام باركود GS1 من المصلحة', 'GPC category list in Arabic with a suggested category per item, and asking ETA to use a GS1 barcode'),
+        'change_note': T('بداية الإرسال لكل فرع: المبيعات قبلها لا تُرسل؛ وإعداد تجريبي للفرع، وفئات GPC وطلب GS1', 'Per-branch sending start: earlier sales are never sent; plus a test-only branch setup, GPC categories and GS1 requests'),
     },
 ]
