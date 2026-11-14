@@ -435,13 +435,12 @@ class ReservationDetailSerializer(RetentionNoteMixin, PhoneAlertStatusMixin, Rec
     def get_stock_by_branch(self, obj):
         if not obj.item_id:
             return []
-        from apps.catalog.models import ItemStock, EXCLUDED_STORE_CODES
+        from apps.catalog.models import ItemStock, exclude_unsellable
         from django.db.models import Sum
-        # Aggregate quantities per branch, excluding expired-stock stores
+        # Aggregate sellable quantities per branch (quarantine stores, HQ store 110 and
+        # closed/pending branches never show as available)
         rows = (
-            ItemStock.objects
-            .filter(item=obj.item)
-            .exclude(softech_store_code__in=EXCLUDED_STORE_CODES)
+            exclude_unsellable(ItemStock.objects.filter(item=obj.item))
             .select_related('branch')
             .values('branch__id', 'branch__name', 'branch__name_ar')
             .annotate(qty=Sum('quantity_on_hand'))

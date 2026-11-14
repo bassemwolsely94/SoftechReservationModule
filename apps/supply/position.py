@@ -23,9 +23,11 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from apps.batches.store_roles import QUARANTINE_STORE_CODES
+
 # Quarantine / expired stores excluded from usable stock everywhere in the platform
 # (see apps.shortage.stock_check, ItemDemandMetrics docs).
-_EXCLUDED_STORES = frozenset({'102', '103', '105'})
+_EXCLUDED_STORES = QUARANTINE_STORE_CODES
 
 # Reservation statuses that are NO LONGER waiting on stock.
 _CLOSED_RESERVATION_STATUSES = ('fulfilled', 'cancelled', 'expired')

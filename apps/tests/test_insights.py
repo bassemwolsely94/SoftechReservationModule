@@ -15,6 +15,7 @@ from apps.catalog.models import Item, Category
 from apps.customers.models import Customer, PurchaseHistory, PurchaseHistoryLine
 from apps.forecasting.models import ChannelBucketMap
 from apps.insights.engine import InsightEngine
+from apps.tests.factories import make_hq
 
 
 class InsightsEngineTests(TestCase):
@@ -151,12 +152,16 @@ class InsightsBottomRankingTests(TestCase):
 class InsightsPurchasingKpiTests(TestCase):
     """New purchasing KPIs on procurement.PurchaseLine: supplier-category value, invoice count,
     input VAT, expiry returns, and the enriched HQ at-a-glance — chain + HQ + per-branch."""
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
     DAY = date(2026, 7, 15)
 
     @classmethod
     def setUpTestData(cls):
         from apps.procurement.models import PurchaseLine
-        cls.hq = Branch.objects.create(softech_branch_id='100', code='100', name='HQ',
+        cls.hq = Branch.objects.create(softech_branch_id='100', code='100', name='HQ', kind=Branch.KIND_HQ,
                                        name_ar='المخزن الرئيسي', is_operational=True)
         cls.br = Branch.objects.create(softech_branch_id='130', code='130', name='Nozha',
                                        name_ar='النزهة', is_operational=True)

@@ -38,10 +38,12 @@ def analytics_excluded_branch_codes():
 
 
 def analytics_branches():
-    """Operational RETAIL branches for analytics/targets/board (excludes HQ/admin)."""
+    """RETAIL branches for analytics/targets/board (kind retail — never HQ, CC, closed or pending),
+    minus the owner's analytics_excluded_branches. A temporarily paused (is_operational=False) retail
+    branch stays in (spec §6.9)."""
     from apps.branches.models import Branch
     excl = analytics_excluded_branch_codes()
-    return (Branch.objects.filter(is_operational=True)
+    return (Branch.objects.retail()
             .exclude(code__in=excl).exclude(softech_branch_id__in=excl))
 
 

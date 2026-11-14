@@ -128,11 +128,9 @@ def _basket_stock_ids(item_ids, branch_id):
     """Subset of item_ids that have available stock at the branch (for the stock gate)."""
     if not item_ids:
         return set()
-    from apps.catalog.models import ItemStock, EXCLUDED_STORE_CODES
+    from apps.catalog.models import ItemStock, exclude_unsellable
     from django.db.models import Sum
-    rows = (ItemStock.objects
-            .filter(item_id__in=item_ids, branch_id=branch_id)
-            .exclude(softech_store_code__in=EXCLUDED_STORE_CODES)
+    rows = (exclude_unsellable(ItemStock.objects.filter(item_id__in=item_ids, branch_id=branch_id))
             .values('item_id').annotate(q=Sum('quantity_on_hand')).filter(q__gt=0))
     return {r['item_id'] for r in rows}
 

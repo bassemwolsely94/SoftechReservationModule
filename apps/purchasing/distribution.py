@@ -23,7 +23,6 @@ from django.utils import timezone
 
 logger = logging.getLogger('elrezeiky.purchasing')
 
-HQ_CODE          = '100'
 DORMANT_AVG_MAX  = 0.15    # network monthly_avg ≤ this ⇒ effectively dormant
 # over_piled uses the SOFTECH ceilings (owner, 2026-09-28) instead of the old
 # "stock > 3 × engine need" rule, so توزيعة agrees with the purchase-screen warning and
@@ -73,7 +72,7 @@ def _branch_ceilings(branch_codes):
     from apps.branches.models import Branch
     from apps.purchasing.rate_writer import resolve_store, _read_conn_for_target
     out = {}
-    for b in Branch.objects.filter(softech_branch_id__in=[c for c in branch_codes if c != HQ_CODE]):
+    for b in Branch.objects.filter(softech_branch_id__in=[c for c in branch_codes if c != _hq()]):
         bc = b.softech_branch_id
         key = f'distribution_ceilings_{bc}'
         data = cache.get(key)
@@ -101,7 +100,7 @@ def _pick_surplus(code, ceilings, op_codes):
     or (None, 0.0). HQ never counts as over-piled."""
     best, best_ex = None, 0.0
     for bc in op_codes:
-        if bc == HQ_CODE:
+        if bc == _hq():
             continue
         c = ceilings.get(bc, {}).get(code)
         if not c:
@@ -118,7 +117,7 @@ def _room_targets(code, ceilings, op_codes, source):
     pack below it. Excludes the source and HQ."""
     room = {}
     for bc in op_codes:
-        if bc in (source, HQ_CODE):
+        if bc in (source, _hq()):
             continue
         c = ceilings.get(bc, {}).get(code)
         if not c:
@@ -150,10 +149,18 @@ MAX_TARGETS      = 4       # spread a seed to at most this many branches at once
 ROTATE_DAYS      = 45      # trial window; a branch seeded within this is "in trial"
 
 
+def _hq():
+    """HQ's SOFTECH branch code (the one Branch of kind hq), looked up at call time — never at
+    import (module import must not hit the DB)."""
+    from apps.branches.models import hq_code
+    return hq_code()
+
+
 def _operational_branches():
+    """Live, not-paused branches with their own server."""
     from apps.branches.models import Branch
     return {b.softech_branch_id: b.name for b in
-            Branch.objects.filter(is_active=True, is_operational=True)
+            Branch.objects.live().filter(is_operational=True)
             .exclude(db_host='').exclude(db_host__isnull=True)}
 
 
@@ -274,14 +281,14 @@ def analyze(run=None, *, categories=None, limit=None, use_age=True, ceilings=Non
         # may move to branches that sell it and have room under their own ceiling.
         if established and not surplus:
             continue
-        source = surplus or (HQ_CODE if with_stock.get(HQ_CODE) else
+        source = surplus or (_hq() if with_stock.get(_hq()) else
                              max(with_stock, key=lambda b: with_stock[b][0]))
         avail = best_excess if surplus else with_stock[source][0]
 
         # ── CATEGORY (one per item — dedup over_piled∩never_stocked) ─────────────
         if net_avg <= 0.0001:
             cat, reason = 'new_no_rate', 'صنف بلا معدل بيع — توزيع تجريبي'
-        elif source == HQ_CODE and net_avg <= DORMANT_AVG_MAX:
+        elif source == _hq() and net_avg <= DORMANT_AVG_MAX:
             cat, reason = 'hq_dormant', 'راكد بالمخزن الرئيسي — دفعه للفروع'
         elif surplus:
             s_stock, s_cap = ceilings[surplus][code]

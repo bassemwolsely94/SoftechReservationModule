@@ -3,13 +3,14 @@ apps/catalog/pos_search.py
 
 POS Speed Wave — read-only enrichment of item-search rows (thumbnail, strength,
 per-branch stock, next action, stock age). No writes, no SOFTECH calls.
-Quarantine stores (EXCLUDED_STORE_CODES) never count as stock.
+Only sellable stock counts (catalog.models.exclude_unsellable: quarantine 102/103/105,
+HQ store 110 and closed/pending branches never count).
 """
 import re
 
 from django.db.models import Sum
 
-from .models import ItemStock, EXCLUDED_STORE_CODES
+from .models import ItemStock, exclude_unsellable
 
 _NUM = r'\d+(?:\.\d+)?'
 _STRENGTH_RE = re.compile(
@@ -32,9 +33,8 @@ def network_stock(item_ids):
     quarantine stores excluded. Branches with a (zero-qty) stock row are listed."""
     if not item_ids:
         return {}
-    rows = (ItemStock.objects.filter(item_id__in=item_ids,
-                                     branch__is_operational=True)
-            .exclude(softech_store_code__in=EXCLUDED_STORE_CODES)
+    rows = (exclude_unsellable(ItemStock.objects.filter(item_id__in=item_ids,
+                                                        branch__is_operational=True))
             .values('item_id', 'branch_id').annotate(qty=Sum('quantity_on_hand')))
     out = {}
     for r in rows:

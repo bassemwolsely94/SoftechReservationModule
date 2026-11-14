@@ -115,7 +115,7 @@ def _load(today, horizon):
             items.add(r['item_code'])
             batches.append({'item': r['item_code'], 'branch': r['branch_code'], 'batch_no': r['batch_no'] or '',
                             'expiry': r['expiry_date'], 'qty': float(r['q'])})
-    meta = {b.softech_branch_id: b for b in Branch.objects.filter(is_active=True)}
+    meta = {b.softech_branch_id: b for b in Branch.objects.live()}
     rates = {}
     latest = ItemDemandMetrics.objects.aggregate(m=Max('calc_date'))['m']
     if latest:

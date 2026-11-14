@@ -620,3 +620,117 @@ def unsafe_export_sites(tree, path) -> set:
     v = _UnsafeExport(path)
     v.visit(tree)
     return v.sites
+
+
+# ── Branch liveness from literals (branch classification piece 1, Task 7) ────
+#
+# Branch.kind is the only liveness authority (Branch.objects.live() / retail() / closed() /
+# pending(), hq_code()). A site is a def/class/module that instead:
+#   * filters Branch.objects on is_active=… or is_operational=True with no kind filter and no
+#     kind helper (live/retail/closed/pending/operational) anywhere in the same chain;
+#   * holds a list/tuple/set literal of ≥2 known branch codes in a branch context — assigned
+#     to, passed as, or compared with a name containing "branch" (doccode names are not);
+#   * assigns HQ… = '100'.
+
+_BRANCH_CODES = {'100', '130', '140', '150', '160', '170', '110', '120', '180', '190', '200',
+                 '210', '220'}
+_KIND_HELPERS = {'live', 'retail', 'closed', 'pending', 'operational'}
+
+
+def _branchy(name) -> bool:
+    return bool(name) and 'branch' in name.lower() and 'doc' not in name.lower()
+
+
+def _name_of(node):
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
+def _code_list(node) -> bool:
+    if not isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+        return False
+    return sum(1 for e in node.elts if isinstance(e, ast.Constant)
+               and e.value in _BRANCH_CODES) >= 2
+
+
+def _branch_chain(node):
+    """(is Branch.objects chain, keyword names, method names) for a call chain."""
+    kwargs, methods = [], set()
+    cur = node
+    while True:
+        if isinstance(cur, ast.Call):
+            kwargs += [(k.arg, k.value) for k in cur.keywords if k.arg]
+            cur = cur.func
+        elif isinstance(cur, ast.Attribute):
+            if cur.attr == 'objects' and isinstance(cur.value, ast.Name) \
+                    and cur.value.id == 'Branch':
+                return True, kwargs, methods
+            methods.add(cur.attr)
+            cur = cur.value
+        else:
+            return False, kwargs, methods
+
+
+class _BranchLiterals(_Scoped):
+
+    def __init__(self, path):
+        super().__init__()
+        self.path, self.sites, self.seen_chains = path, set(), set()
+
+    def _hit(self):
+        self.sites.add(f'{self.path}::{self.qualname}')
+
+    def _assign(self, targets, value):
+        for t in targets:
+            name = _name_of(t)
+            if name is None:
+                continue
+            if name.upper().startswith('HQ') and isinstance(value, ast.Constant) \
+                    and value.value == '100':
+                self._hit()
+            if _branchy(name) and _code_list(value):
+                self._hit()
+
+    def visit_Assign(self, node):
+        self._assign(node.targets, node.value)
+        self.generic_visit(node)
+
+    def visit_AnnAssign(self, node):
+        if node.value is not None:
+            self._assign([node.target], node.value)
+        self.generic_visit(node)
+
+    def visit_Compare(self, node):
+        if _branchy(_name_of(node.left)) and any(_code_list(c) for c in node.comparators):
+            self._hit()
+        self.generic_visit(node)
+
+    def visit_Call(self, node):
+        if any(_branchy(k.arg) and _code_list(k.value) for k in node.keywords):
+            self._hit()
+        if id(node) not in self.seen_chains:
+            is_branch, kwargs, methods = _branch_chain(node)
+            if is_branch:
+                # judge the whole chain once, from its outermost call
+                sub = node
+                while isinstance(sub, (ast.Call, ast.Attribute)):
+                    self.seen_chains.add(id(sub))
+                    sub = sub.func if isinstance(sub, ast.Call) else sub.value
+                by_kind = methods & _KIND_HELPERS or any(
+                    k == 'kind' or k.startswith('kind__') for k, _ in kwargs)
+                liveness = any(
+                    k == 'is_active' or (k == 'is_operational' and isinstance(v, ast.Constant)
+                                         and v.value is True)
+                    for k, v in kwargs)
+                if liveness and not by_kind:
+                    self._hit()
+        self.generic_visit(node)
+
+
+def branch_literal_sites(tree, path) -> set:
+    v = _BranchLiterals(path)
+    v.visit(tree)
+    return v.sites

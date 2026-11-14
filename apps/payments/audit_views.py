@@ -122,7 +122,7 @@ class BankStatementImportViewSet(StableOrderingMixin, viewsets.ModelViewSet):
         """What the upload form offers: the user's branches, payment methods, bank names used."""
         from apps.branches.models import Branch
 
-        branches = branch_scope.scope(Branch.objects.filter(is_active=True), request.user, 'id').order_by('name')
+        branches = branch_scope.scope(Branch.objects.live(), request.user, 'id').order_by('name')
         rows = [{'id': b.pk, 'name': b.name_ar or b.name} for b in branches]
         ids = {r['id'] for r in rows}
         home = getattr(_staff(request), 'branch_id', None)

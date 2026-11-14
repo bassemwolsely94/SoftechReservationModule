@@ -423,7 +423,7 @@ def run_job(now=None):
     from apps.stockcount.models import DailyCountSettings, StockCountSession
     now = timezone.localtime(now or timezone.now())
     s = DailyCountSettings.get()
-    for branch in Branch.objects.filter(is_active=True, settings__daily_count_enabled=True):
+    for branch in Branch.objects.live().filter(settings__daily_count_enabled=True):
         try:
             for day in (now.date() - dt.timedelta(days=1), now.date()):
                 open_ = StockCountSession.objects.filter(mode='daily', branch_code=branch.softech_branch_id,

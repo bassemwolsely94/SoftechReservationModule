@@ -32,7 +32,7 @@ from apps.finance.gl.periods import month_period
 from apps.finance.gl.softech_stock import Valuation
 from apps.finance.models import (ClosingStockSnapshot, FinancialPeriod, GLAccount, GLAccountGroup, GLComparisonLine, GLSoftechCheck,
                                  GLSourceDoc, LedgerEntry, PostingRule, SourceException)
-from apps.tests.factories import make_user
+from apps.tests.factories import make_user, make_hq
 from apps.tests.security.fixtures import seed_code_matrix
 from apps.users.models import RoleModuleAccess
 from core.middleware import module_access
@@ -731,6 +731,10 @@ class ValidationApiTests(ApiBase):
 
 
 class ClosingStockStoresTests(ApiBase):
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
     URL = BASE + 'closing-stock-stores/'
 
     def rows(self):
@@ -784,6 +788,10 @@ def _broken(upload):
 
 class FixRoundTests(ApiBase):
     """Read errors only become `unreadable`; everything else is a logged 500. Row cap on validation."""
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
     ROWS = ManualImportTests.ROWS
 
     def multipart(self, path, **data):
@@ -964,6 +972,10 @@ class FromExceptionFixTests(CorrectionBase):
 
 
 class FinalReviewTests(ApiBase):
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
     def test_compare_line_shows_the_ledger_side_when_softech_is_down(self):
         self.posted(day=D(2026, 1, 10))
         compare.compute(self.jan)

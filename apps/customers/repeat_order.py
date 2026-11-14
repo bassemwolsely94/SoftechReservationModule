@@ -10,7 +10,7 @@ Deterministic, read-only. The cashier confirms; nothing is auto-added.
 """
 from django.db.models import Sum
 
-from apps.catalog.models import Item, ItemStock, EXCLUDED_STORE_CODES
+from apps.catalog.models import Item, ItemStock, exclude_unsellable
 from apps.catalog.safety import item_safety_flags, blocks_sale
 
 
@@ -106,8 +106,6 @@ def last_sale_for(customer):
 
 
 def _branch_stock(item_ids, branch_id):
-    rows = (ItemStock.objects
-            .filter(item_id__in=item_ids, branch_id=branch_id)
-            .exclude(softech_store_code__in=EXCLUDED_STORE_CODES)
+    rows = (exclude_unsellable(ItemStock.objects.filter(item_id__in=item_ids, branch_id=branch_id))
             .values('item_id').annotate(qty=Sum('quantity_on_hand')))
     return {r['item_id']: float(r['qty'] or 0) for r in rows}

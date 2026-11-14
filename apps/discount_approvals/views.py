@@ -651,7 +651,7 @@ def branch_health(request):
     from .models import ReplicationScan, ReplicationGap
 
     latest = ReplicationScan.objects.filter(status=ReplicationScan.STATUS_DONE).first()
-    branches = Branch.objects.filter(
+    branches = Branch.objects.live().filter(       # live() narrows only; other predicates unchanged
         is_operational=True, db_host__isnull=False
     ).exclude(softech_branch_id='100').exclude(db_host='')
 

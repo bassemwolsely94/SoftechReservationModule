@@ -24,7 +24,7 @@ function Pick({ cls, value, onChange, all, rows }) {
   )
 }
 
-export default function Filters({ values, onChange, onClear, branches, access, options, children }) {
+export default function Filters({ values, onChange, onClear, branches, showClosed, closedToggle, access, options, children }) {
   const opts = options || {}
   const locked = !!access?.branch_manager
   const allowed = access?.branch_ids
@@ -37,10 +37,11 @@ export default function Filters({ values, onChange, onClear, branches, access, o
     <div className="flex flex-wrap gap-2 items-center" data-tour="pic-analytics-filters">
       <input type="date" className={`${input} w-36`} value={values.from || ''} onChange={set('from')} title="من" />
       <input type="date" className={`${input} w-36`} value={values.to || ''} onChange={set('to')} title="إلى" />
-      <BranchMultiSelect className="w-44" branches={branchOptions} selected={branchSel}
+      <BranchMultiSelect className="w-44" branches={branchOptions} showClosed={showClosed} selected={branchSel}
         onChange={ids => onChange('branch', ids.join(','))}
         allLabel={locked ? 'كل فروعي' : 'كل الفروع'}
         disabled={locked && branchOptions.length <= 1} dataTour="pic-analytics-branch-filter" />
+      {closedToggle}
       <Pick cls="w-36" value={values.salesperson} onChange={setList('salesperson')} all="كل البائعين" rows={opts.salespeople} />
       <Pick cls="w-32" value={values.channel} onChange={setList('channel')} all="كل القنوات" rows={opts.channels} />
       <Pick cls="w-32" value={values.category} onChange={setList('category')} all="كل الفئات" rows={opts.categories} />
