@@ -41,6 +41,8 @@ urlpatterns = [
     path('codes/', views.codes),
     path('codes/candidates/', views.code_candidates),
     path('codes/gpc/', views.code_gpc),
+    path('history/progress/', views.history_progress),
+    path('history/refresh/', views.history_refresh),
     path('codes/add-from-catalog/', views.codes_add_from_catalog),
     path('codes/prepare/', views.codes_prepare),
     path('codes/send/', views.codes_send),
