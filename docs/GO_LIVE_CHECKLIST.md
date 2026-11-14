@@ -105,13 +105,15 @@ Claude sessions on the PC are not allowed to SSH to the VPS. Do these in order.
 | **W0** | VPS | `writer_status --expect reader` | `ROLE = reader`, exit 0 |
 | **W1** | office | Make **every** office `.env` a reader with the PowerShell block below, then restart the office web + scheduler | The block prints `READER` for every file |
 | **W2** | office | In the project folder: `venv\Scripts\python manage.py writer_status --expect reader` | `ROLE = reader`, exit 0. The scheduler boot log says `not the writer instance` |
-| **W3** | office | Drain (§11.2). `/api/pos-orders/queue-status/` must show queued and push_failed = 0. No ISR / invoice / A/P / insurance item may be "pushing". No ISR draft may be proposed or approved (#30/#32 were cancelled 2026-10-25) | All zero. **If something is still queued: stop and ask.** Never flip the office back to writer while the VPS has any writer flag on |
+| **W3** | office | Drain (§11.2), **and the tax drain in `docs/deploy/2026-11-tax-cutover-steps.md` (expected `0 0 0 0`)**. `/api/pos-orders/queue-status/` must show queued and push_failed = 0. No ISR / invoice / A/P / insurance item may be "pushing". No ISR draft may be proposed or approved (#30/#32 were cancelled 2026-10-25) | All zero. **If something is still queued: stop and ask.** Never flip the office back to writer while the VPS has any writer flag on |
 | **W4** | office | Stop everything (§11.3): every `runserver`, every `run_scheduler`, `daphne` and the NSSM service `ElRezeikyPlatform` if installed, plus Task Scheduler / Startup entries | Task Manager: no `python.exe` with `runserver` / `run_scheduler` / `daphne` |
 | **W5** | both | Final `pg_dump` (office) → restore + `migrate` on the VPS (§11.4). Start the VPS web + **scheduler**, still a reader (§11.5) | One full sync cycle is green on the freshness bar. `writer_status --expect reader` still passes |
-| **W6** | VPS | Kill-switch test (§11.6). Then in `/opt/elrezeiky/app/.env` set `SOFTECH_READ_ONLY=False` + `WRITER_INSTANCE=True`, with **all writer flags still False**. Restart web + scheduler. Run `writer_status --expect writer` | `ROLE = writer`, every flag `effective=False` |
-| **W7** | VPS | Turn on one writer flag at a time, in the §11.6 order, up to the signed table and **never more than the office had**. Restart, do one real operation, read it back in SOFTECH, then do the next | Each read-back matches. `/sync` → «🔐 مفاتيح الكتابة» matches the signed table |
+| **W6** | VPS | Kill-switch test (§11.6). Tax keys (names) per `docs/deploy/2026-11-tax-cutover-steps.md` §W6, every tax flag False. Then in `/opt/elrezeiky/app/.env` set `SOFTECH_READ_ONLY=False` + `WRITER_INSTANCE=True`, with **all writer flags still False**. Restart web + scheduler. Run `writer_status --expect writer` | `ROLE = writer`, every flag `effective=False` |
+| **W7** | VPS | Turn on one writer flag at a time, in the §11.6 order (tax flags last, per the tax cutover page), up to the signed table and **never more than the office had**. Restart, do one real operation, read it back in SOFTECH, then do the next | Each read-back matches. `/sync` → «🔐 مفاتيح الكتابة» matches the signed table |
 | **W8** | VPS | `RBAC_ENFORCEMENT=enforce` (P-54 §3.4), restart | Normal users still reach their screens |
 | **W9** | VPS | External channels (§11.7), users get the new URL (§11.8) | WhatsApp webhook verified. Bell WS 101 |
+
+**W1 also:** set `TAX_ETA_READ_PREPROD_ENABLED=False` and `TAX_ETA_READ_PRODUCTION_ENABLED=False` in every office `.env` (the ETA history reader is not a writer flag, so the reader switch does not stop it).
 
 **W1: flip every office `.env` to reader** (PowerShell, in the project folder; it only touches these two keys):
 ```powershell
