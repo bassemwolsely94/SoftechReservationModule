@@ -70,6 +70,7 @@ BRANCH_SCOPE = {
     'ledger':       'all — finance GL is company-level: every /api/finance/gl/ endpoint refuses branch-scoped users (B-1)',
     'tasks':        'own + «جميع الفروع» + created / assigned to me; all-branch schedules read-only for branch roles',
     'data_health':  'all — company-level by nature; admin, supervisor and quality manager only',
+    'crews':        'all — company-level by design (spec 2026-11-13 §10): crews group people across branches; admin only by default',
     'usage_print':  'own — invoice lookup (403 before any SOFTECH read), sheets, lines, print, prescription (branch_scope); presets + slip settings chain-wide',
 }
 

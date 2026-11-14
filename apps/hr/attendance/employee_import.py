@@ -12,11 +12,13 @@ from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
+from django.utils import timezone
 from openpyxl import load_workbook
 from openpyxl.utils import column_index_from_string
 
 from apps.audit.models import AuditLog
 from apps.branches.models import Branch
+from apps.hr import assignments
 from apps.hr.models import Employee
 
 from . import resolve
@@ -133,12 +135,14 @@ def _branch_map(locations):
 
 
 @transaction.atomic
-def apply(preview, user=None) -> dict:
-    """Upsert Employee rows by hr_number. Idempotent. `user` is a StaffProfile (or None)."""
+def apply(preview, user=None, on=None) -> dict:
+    """Upsert Employee rows by hr_number. Idempotent. `user` is a StaffProfile (or None); `on` is the
+    date placement changes take effect (default today)."""
     if preview.errors:
         raise ImportBlocked(f'{len(preview.errors)} error(s); fix the workbook first')
     branches = _branch_map({r['work_location'] for r in preview.rows})
-    created = updated = 0
+    on = on or timezone.localdate()
+    created = updated = changed = 0
     new_codes = []
     for r in preview.rows:
         defaults = {k: r[k] for k in ('name_ar', 'department', 'section', 'work_location',
@@ -146,7 +150,8 @@ def apply(preview, user=None) -> dict:
         branch = branches.get(r['work_location'])
         if branch is not None:     # a branch set by hand stays when the workbook doesn't match one
             defaults['branch'] = branch
-        _, was_created = Employee.objects.update_or_create(hr_number=r['hr_number'], defaults=defaults)
+        emp, was_created = Employee.objects.update_or_create(hr_number=r['hr_number'], defaults=defaults)
+        changed += assignments.record_assignment(emp, on=on, source='import', user=user) is not None
         created += was_created
         updated += not was_created
         if was_created:
@@ -155,6 +160,7 @@ def apply(preview, user=None) -> dict:
     for code in new_codes:
         resolve.resolve_user_code(code)
     result = {'created': created, 'updated': updated, 'total': len(preview.rows),
+              'assignments_changed': changed,
               'branch_matched': sum(1 for r in preview.rows if r['work_location'] in branches)}
     AuditLog.log('hr_employee_import', user=user, extra=result,
                  note='One-time HR employee import (counts only)')

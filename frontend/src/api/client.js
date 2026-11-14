@@ -298,6 +298,28 @@ export const counsellingApi = {
   sendCard:    (data)      => api.post('/counselling/cards/send/', data),
 }
 
+// ── Crews «الأطقم» (2026-11-13): /crews. Reads need crews view, every write crews edit (server) ──
+export const crewsApi = {
+  list:          (archived = false) => api.get('/crews/', { params: archived ? { archived: 1 } : {} }),
+  create:        (data)             => api.post('/crews/', data),
+  get:           (id)               => api.get(`/crews/${id}/`),
+  update:        (id, data)         => api.patch(`/crews/${id}/`, data),
+  remove:        (id)               => api.delete(`/crews/${id}/`),
+  unarchive:     (id)               => api.post(`/crews/${id}/unarchive/`),
+  members:       (id, date)         => api.get(`/crews/${id}/members/`, { params: date ? { date } : {} }),
+  history:       (id, params)       => api.get(`/crews/${id}/history/`, { params }),
+  addRule:       (id, data)         => api.post(`/crews/${id}/rules/`, data),
+  endRule:       (id, rid, on)      => api.post(`/crews/${id}/rules/${rid}/end/`, { on }),
+  replaceRule:   (id, rid, data)    => api.post(`/crews/${id}/rules/${rid}/replace/`, data),
+  addManual:     (id, data)         => api.post(`/crews/${id}/manual/`, data),
+  endManual:     (id, mid, on)      => api.post(`/crews/${id}/manual/${mid}/end/`, { on }),
+  preview:       (data)             => api.post('/crews/preview/', data),
+  options:       ()                 => api.get('/crews/options/'),
+  unattributed:  (params)           => api.get('/crews/unattributed-sales/', { params }),
+  genericConfig: ()                 => api.get('/crews/unattributed-sales/config/'),
+  setGeneric:    (data)             => api.put('/crews/unattributed-sales/config/', data),
+}
+
 // ── Data health (data lifecycle Stage 5, doc 36): /data-health. Rules, held files, restore = admin (server) ──
 export const dataHealthApi = {
   growth:     ()               => api.get('/data-health/growth/'),

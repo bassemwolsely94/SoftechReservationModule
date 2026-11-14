@@ -49,6 +49,12 @@ GET /api/hr-attendance/devices/
 GET /api/hr-attendance/employees/
 GET /api/hr-attendance/month/
 
+# reason: crews «الأطقم» are company-level by design (spec 2026-11-13-branch-classification-and-crews,
+#   §10): a crew groups people across branches, and the RBAC module `crews` is seeded for admin only
+#   (users 0057). The sweep's branch-B user holds it only because the sweep grants every module. The
+#   options list (employees + live branches for the rule pickers) is the editor's vocabulary.
+GET /api/crews/options/
+
 # ── Round 2, R4 step 2: DETAIL routes of planted records (lines "GET-DETAIL <canonical path>") ───────
 
 # reason: owner decision B-2 (2026-10-30) — a customer can buy at any branch, so a FOUND customer opens
