@@ -261,6 +261,78 @@ def upsert_receipts(system, rows, source):
     return len(objs)
 
 
+# ── daily top-up ───────────────────────────────────────────────────────────────────────────────
+
+SEARCH_PAGE = 100
+MAX_PAGES = 200
+
+
+def top_up(system, days=3):
+    """Refreshes the last `days` days from ETA's search (documents sent and received, receipts), so recent
+    status changes (a cancellation, a rejection) reach the mirror without waiting for a package."""
+    reader = EtaReader(system)
+    out = {'documents': 0, 'receipts': 0, 'error': ''}
+    reason = reader.why_not()
+    if reason:
+        out['error'] = reason
+        return out
+    now = timezone.now()
+    since = now - dt.timedelta(days=days)
+    stamp = '%Y-%m-%dT%H:%M:%SZ'
+    try:
+        token = ''
+        for _ in range(MAX_PAGES):
+            params = {'submissionDateFrom': since.strftime(stamp), 'submissionDateTo': now.strftime(stamp),
+                      'pageSize': SEARCH_PAGE, 'continuationToken': token}
+            r = reader.get('/api/v1.0/documents/search', params)
+            if r.status_code == 404:
+                break
+            if r.status_code != 200:
+                raise EtaError(f'بحث المستندات HTTP {r.status_code}')
+            payload = r.json() or {}
+            out['documents'] += upsert_documents(system, _as_rows(payload.get('result') or []), 'search')
+            token = str((payload.get('metadata') or {}).get('continuationToken') or '')
+            if not token or token.lower() == 'endofresultset':
+                break
+        for page in range(1, MAX_PAGES + 1):
+            params = {'DateTimeIssuedFrom': since.strftime(stamp), 'DateTimeIssuedTo': now.strftime(stamp),
+                      'PageNo': page, 'PageSize': SEARCH_PAGE}
+            r = reader.get('/api/v1/receipts/search', params)
+            if r.status_code == 404 and (r.json() or {}).get('target') == 'NoResult':
+                break
+            if r.status_code != 200:
+                raise EtaError(f'بحث الإيصالات HTTP {r.status_code}')
+            payload = r.json() or {}
+            out['receipts'] += upsert_receipts(system, _as_rows(payload.get('receipts') or payload.get('result') or []), 'search')
+            if page >= int((payload.get('metadata') or {}).get('totalPages') or 1):
+                break
+    except EtaError as exc:
+        out['error'] = str(exc)[:500]
+    return out
+
+
+def enabled_systems():
+    from .eta_reader import SYSTEMS
+    return [s for s in SYSTEMS if EtaReader(s).enabled()]
+
+
+def start_date():
+    from django.conf import settings
+    try:
+        return dt.date.fromisoformat(str(getattr(settings, 'TAX_ETA_HISTORY_START', '2022-06-01')))
+    except ValueError:
+        return dt.date(2022, 6, 1)
+
+
+def last_loaded_at(system):
+    """Newest moment anything from this system reached the mirror (freshness bar)."""
+    times = [EtaMirrorDocument.objects.filter(system=system).aggregate(t=Max('fetched_at'))['t'],
+             EtaMirrorReceipt.objects.filter(system=system).aggregate(t=Max('fetched_at'))['t'],
+             W.objects.filter(system=system).aggregate(t=Max('loaded_at'))['t']]
+    times = [t for t in times if t]
+    return max(times) if times else None
+
+
 # ── progress ───────────────────────────────────────────────────────────────────────────────────
 
 def progress(system):

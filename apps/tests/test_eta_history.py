@@ -294,3 +294,69 @@ class BackfillTests(TestCase):
             p = eta_history.progress('preprod')
         self.assertEqual(p['documents']['states']['planned'], 1)
         self.assertEqual(p['why_not'], 'off')
+
+
+# ── Task 4: top-up, jobs, freshness ────────────────────────────────────────────────────────────
+
+class TopUpTests(TestCase):
+
+    def setUp(self):
+        from apps.tax_invoicing.models import TaxIssuerProfile
+        issuer = TaxIssuerProfile.load()
+        issuer.tax_id = '499336534'
+        issuer.save()
+
+    def _reader(self, doc_pages, receipt_pages):
+        reader = mock.Mock()
+        reader.why_not.return_value = ''
+        calls = []
+
+        def get(path, params=None):
+            calls.append((path, dict(params or {})))
+            if path == '/api/v1.0/documents/search':
+                return _response(200, doc_pages.pop(0))
+            if path == '/api/v1/receipts/search':
+                if not receipt_pages:
+                    return _response(404, {'target': 'NoResult', 'code': 'NotFound'})
+                return _response(200, receipt_pages.pop(0))
+            raise AssertionError(path)
+        reader.get.side_effect = get
+        return reader, calls
+
+    def test_topup_pages_with_continuation_token_until_EndofResultSet(self):
+        docs = [{'result': [_doc_row('A')], 'metadata': {'continuationToken': 'NEXT'}},
+                {'result': [_doc_row('B')], 'metadata': {'continuationToken': 'EndofResultSet'}}]
+        receipts_ = [{'receipts': [{'uuid': 'R9', 'receiptNumber': 'R-9', 'status': 'Valid',
+                                    'dateTimeIssued': '2026-11-13T10:00:00Z'}], 'metadata': {'totalPages': 1}}]
+        reader, calls = self._reader(docs, receipts_)
+        with mock.patch.object(eta_history, 'EtaReader', return_value=reader):
+            out = eta_history.top_up('preprod', days=3)
+        self.assertEqual((out['documents'], out['receipts']), (2, 1))
+        doc_calls = [p for path, p in calls if path == '/api/v1.0/documents/search']
+        self.assertEqual(doc_calls[1]['continuationToken'], 'NEXT')
+        self.assertIn('submissionDateFrom', doc_calls[0])
+        self.assertEqual(EtaMirrorDocument.objects.get(uuid='B').source, 'search')
+        self.assertEqual(EtaMirrorReceipt.objects.get(uuid='R9').receipt_number, 'R-9')
+
+    def test_topup_with_no_receipts_is_zero_not_an_error(self):
+        reader, _ = self._reader([{'result': [], 'metadata': {'continuationToken': 'EndofResultSet'}}], [])
+        with mock.patch.object(eta_history, 'EtaReader', return_value=reader):
+            out = eta_history.top_up('preprod', days=1)
+        self.assertEqual((out['documents'], out['receipts'], out['error']), (0, 0, ''))
+
+    def test_jobs_skip_disabled_systems(self):
+        from apps.sync import tasks
+        with mock.patch.object(eta_history, 'step') as step, mock.patch.object(eta_history, 'top_up') as top, \
+                override_settings(TAX_ETA_READ_PREPROD_ENABLED=True, TAX_ETA_READ_PRODUCTION_ENABLED=False):
+            tasks._run_eta_history_backfill()
+            tasks._run_eta_history_topup()
+        self.assertEqual({c[0][0] for c in step.call_args_list}, {'preprod'})
+        self.assertEqual({c[0][0] for c in top.call_args_list}, {'preprod'})
+
+    def test_freshness_reports_the_newest_load_per_system(self):
+        from apps.sync import freshness
+        self.assertIn('eta_history_preprod', freshness.DOMAINS)
+        self.assertIsNone(freshness._SOURCES['eta_history_preprod']()['last_success_at'])
+        eta_history.upsert_documents('preprod', [_doc_row('A')], 'search')
+        self.assertIsNotNone(freshness._SOURCES['eta_history_preprod']()['last_success_at'])
+        self.assertIsNone(freshness._SOURCES['eta_history_production']()['last_success_at'])
