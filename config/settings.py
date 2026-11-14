@@ -522,6 +522,9 @@ SOFTECH_READ_ONLY = config('SOFTECH_READ_ONLY', default=not WRITER_INSTANCE, cas
 # Staging: send every branch-server connection to this host ('host' or 'host:port')
 # instead of the production addresses stored in Branch.db_host.
 SOFTECH_BRANCH_HOST_OVERRIDE = config('SOFTECH_BRANCH_HOST_OVERRIDE', default='')
+# SOFTECH's HQ branch code. Used ONCE: on a fresh database the branch sync creates this branch as
+# kind 'hq' (when no hq row exists yet) instead of 'pending'. After that Branch.kind is the authority.
+SOFTECH_HQ_BRANCH_CODE = config('SOFTECH_HQ_BRANCH_CODE', default='100')
 # The test runner must never reach a real SOFTECH, whatever the developer's .env
 # says (several writer tests drive the live code path to prove a gate is open).
 # No HQ host, every branch connection sent to an unresolvable name, and the
@@ -898,6 +901,7 @@ if _RUNNING_TESTS:
     TAX_ETA_ENVIRONMENT = TAX_ETA_API_BASE_URL = TAX_ETA_ID_BASE_URL = ''
     TAX_ETA_CLIENT_ID = TAX_ETA_CLIENT_SECRET = TAX_ETA_CA_BUNDLE = ''
     TAX_ETA_SUBMIT_ENABLED = TAX_ERECEIPT_SUBMIT_ENABLED = TAX_ETA_CODING_ENABLED = TAX_ETA_PRODUCTION_ALLOWED = False
+    TAX_SIGNER_CLASS, TAX_ALLOW_MOCK_SIGNER = 'apps.tax_invoicing.signing.NotConfiguredSigner', False
 
 # Stock Transactions Audit (apps/stock_audit, doc 32). Read-only stktrans mirror from HQ:
 # every 2 h replaces the last 3 docdate days; 03:15 catch-up replaces 7 days and prunes.

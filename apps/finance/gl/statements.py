@@ -298,8 +298,6 @@ def branch_pl(date_from: datetime.date, date_to: datetime.date, *,
     per_code, missing = _softech_rows(date_from, date_to, today or timezone.localdate())
     by_code = {(b.softech_branch_id or '').strip(): b for b in Branch.objects.all()}
     hq_codes = {c for c, b in by_code.items() if b.kind == Branch.KIND_HQ}
-    if not hq_codes and HQ_CODE not in by_code:
-        hq_codes = {HQ_CODE}
     for softech_code in per_code:
         b = by_code.get(softech_code)
         if b is not None and b.kind != Branch.KIND_HQ:
@@ -350,7 +348,6 @@ def branch_pl(date_from: datetime.date, date_to: datetime.date, *,
     return cols
 
 
-HQ_CODE = '100'
 WARN_SOFTECH_MISSING = ('لا توجد أرقام سوفتيك لشهور: {months} — شغّل ترحيل المبيعات لها أو '
                         'gl_sync_branch_cost.')
 WARN_SOFTECH_PARTIAL = 'الفترة أجزاء من شهور — أرقام سوفتيك للشهور كاملة'

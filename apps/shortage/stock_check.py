@@ -9,9 +9,11 @@ Uses ItemStock (synced from SOFTECH) — no live SOFTECH query needed.
 from __future__ import annotations
 from decimal import Decimal
 
+from apps.batches.store_roles import QUARANTINE_STORE_CODES
+
 
 # Store codes to exclude (expired / quarantine stocks at HQ)
-_EXCLUDED_STORES = frozenset({'102', '103', '105'})
+_EXCLUDED_STORES = QUARANTINE_STORE_CODES
 
 
 def check_stock_for_list(shortage_list) -> list[dict]:

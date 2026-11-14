@@ -1,9 +1,43 @@
 from django.db import models
 from django.contrib.postgres.indexes import GinIndex
 
-# Stores that hold expired / quarantine stock at HQ branch (code 100).
-# These must NEVER appear in any stock balance queries or displays.
-EXCLUDED_STORE_CODES = frozenset({'102', '103', '105'})
+from apps.batches.store_roles import QUARANTINE_STORE_CODES
+
+# Quarantine stores (expired / return / cosmetics-expired). Kept as an alias for callers that
+# must stay quarantine-only (SOFTECH-writing paths, incentives, …). Catalog / POS stock uses
+# exclude_unsellable / is_sellable below.
+EXCLUDED_STORE_CODES = QUARANTINE_STORE_CODES
+
+# HQ store that holds the residue of closed branches. Mirrors store_roles.DEFAULT_MAP '100:110' = CLOSED
+# (which admins may override through expiry_store_roles); the owner ruling (2026-11-13) names 110.
+HQ_CLOSED_STORE_CODE = '110'
+UNSELLABLE_BRANCH_KINDS = ('closed', 'pending')
+
+
+def unsellable_q(prefix=''):
+    """Q matching ItemStock rows that are NOT sellable stock. `prefix` reaches ItemStock
+    through a relation, e.g. unsellable_q('stock_levels__') from Item.
+    Unsellable = quarantine stores 102/103/105 (any branch), store 110 at HQ, and every store
+    of a branch whose kind is closed or pending (owner, 2026-11-13)."""
+    p = prefix
+    return (models.Q(**{f'{p}softech_store_code__in': QUARANTINE_STORE_CODES})
+            | models.Q(**{f'{p}branch__kind': 'hq', f'{p}softech_store_code': HQ_CLOSED_STORE_CODE})
+            | models.Q(**{f'{p}branch__kind__in': UNSELLABLE_BRANCH_KINDS}))
+
+
+def exclude_unsellable(qs):
+    """ItemStock queryset → only sellable stock (the one catalog / POS stock rule)."""
+    return qs.exclude(unsellable_q())
+
+
+def is_sellable(stock) -> bool:
+    """Same rule as exclude_unsellable for one loaded ItemStock (select/prefetch its branch)."""
+    if stock.softech_store_code in QUARANTINE_STORE_CODES:
+        return False
+    kind = stock.branch.kind
+    if kind in UNSELLABLE_BRANCH_KINDS:
+        return False
+    return not (kind == 'hq' and stock.softech_store_code == HQ_CLOSED_STORE_CODE)
 
 
 class Category(models.Model):

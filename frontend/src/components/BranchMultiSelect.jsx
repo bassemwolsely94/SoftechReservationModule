@@ -16,21 +16,29 @@ import MultiSelectFilter from './MultiSelectFilter'
 const codeOf = (b) => String(b.softech_branch_id ?? b.code ?? '').trim()
 
 export default function BranchMultiSelect({ selected = [], onChange, branches, valueKey = 'id',
-  allLabel = 'كل الفروع', label, className = 'w-[180px]', menuClassName = 'min-w-[260px]', disabled, dataTour }) {
+  allLabel = 'كل الفروع', label, className = 'w-[180px]', menuClassName = 'min-w-[260px]', disabled, dataTour,
+  showClosed = false }) {
+  // Default = live branches (the server's default scope). showClosed asks for scope=all (admin only;
+  // a non-admin gets 403 and falls back to the live list).
   const q = useQuery({
-    queryKey: ['branch-labels'],          // shared with useBranchLabels — one request per session
-    queryFn: () => branchesApi.list({ page_size: 500 }).then(r => r.data),
+    queryKey: showClosed ? ['branch-labels', 'all'] : ['branch-labels'],   // plain key shared with useBranchLabels
+    queryFn: () => (showClosed
+      ? branchesApi.list({ scope: 'all', page_size: 500 }).catch(() => branchesApi.list({ page_size: 500 }))
+      : branchesApi.list({ page_size: 500 })).then(r => r.data),
     staleTime: 30 * 60 * 1000,
     enabled: !branches,
   })
   const rows = useMemo(() => {
     const src = branches || (Array.isArray(q.data) ? q.data : (q.data?.results || []))
-    return src.map(b => {
-      const code = codeOf(b)
-      const name = b.name_ar || b.name || ''
-      return { code: valueKey === 'code' ? code : b.id, name: code && name ? `${code} · ${name}` : (name || code) }
-    })
-  }, [branches, q.data, valueKey])
+    return src
+      .filter(b => showClosed || b.kind !== 'closed')
+      .map(b => {
+        const code = codeOf(b)
+        const name = b.name_ar || b.name || ''
+        const label = code && name ? `${code} · ${name}` : (name || code)
+        return { code: valueKey === 'code' ? code : b.id, name: b.kind === 'closed' ? `${label} (مغلق)` : label }
+      })
+  }, [branches, q.data, valueKey, showClosed])
   return (
     <MultiSelectFilter label={label} className={className} menuClassName={menuClassName} showCode={false}
       allLabel={allLabel} options={rows} selected={selected} onChange={onChange} disabled={disabled} dataTour={dataTour} />

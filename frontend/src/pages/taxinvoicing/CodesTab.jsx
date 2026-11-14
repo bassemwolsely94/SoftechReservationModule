@@ -47,31 +47,72 @@ export function EtaConnection({ me }) {
   )
 }
 
-function Candidates({ me }) {
+/** Pick a GPC brick from the loaded list: type a code or part of a name; bricks we already use come first. */
+export function GpcPicker({ value, onChange }) {
+  const [q, setQ] = useState('')
+  const list = useQuery({
+    queryKey: ['tax-invoicing', 'gpc', q],
+    queryFn: () => taxInvoicingApi.codeGpc({ q }).then(r => r.data),
+  })
+  const rows = list.data?.rows || []
+  return (
+    <Field label="فئة GPC للمختار (اختياري)" hint={list.data && !list.data.loaded ? 'قائمة GPC لم تُحمّل بعد' : 'فارغ = فئة الصنف أو المقترحة'}>
+      <input className={`${INPUT} w-64`} list="tax-gpc-bricks" value={value || q} aria-label="فئة GPC"
+        placeholder="كود أو اسم الفئة"
+        onChange={e => {
+          const v = e.target.value
+          const code = v.match(/^\d{8}/)?.[0]
+          if (code && rows.some(r => r.code === code)) { onChange(code); setQ('') } else { onChange(''); setQ(v) }
+        }} />
+      <datalist id="tax-gpc-bricks">
+        {rows.map(r => <option key={r.code} value={`${r.code} ${r.name_ar || r.name_en}`}>{r.used ? `مستخدم ${r.used}` : ''}</option>)}
+      </datalist>
+    </Field>
+  )
+}
+
+export function Candidates({ me }) {
+  const summary = useQuery({ queryKey: ['tax-invoicing', 'codes', ''], queryFn: () => taxInvoicingApi.codes({ status: '' }).then(r => r.data) })
+  const newInCatalog = summary.data?.summary?.catalog_without_profile || 0
   const [q, setQ] = useState('')
   const [picked, setPicked] = useState([])
   const [gpc, setGpc] = useState('')
+  const [useSuggested, setUseSuggested] = useState(true)
   const act = useAction()
   const list = useQuery({ queryKey: ['tax-invoicing', 'code-candidates', q], queryFn: () => taxInvoicingApi.codeCandidates({ q }).then(r => r.data) })
   const toggle = id => setPicked(p => (p.includes(id) ? p.filter(x => x !== id) : [...p, id]))
+  const BASIS = { family: 'العائلة', category: 'التصنيف', type: 'النوع' }
   const columns = [
     { key: 'pick', label: '', sortable: false, render: r => (
       <input type="checkbox" checked={picked.includes(r.id)} onChange={() => toggle(r.id)} aria-label={`اختيار ${r.itemcode}`} />) },
     { key: 'itemcode', label: 'الكود', className: 'whitespace-nowrap' },
     { key: 'item_name', label: 'الاسم الإنجليزي', render: r => r.item_name || '—', className: 'max-w-[220px] truncate' },
-    { key: 'item_name_ar', label: 'الاسم العربي', render: r => r.item_name_ar || '—', className: 'max-w-[220px] truncate' },
-    { key: 'gpc_code', label: 'GPC', render: r => r.gpc_code || '—' },
+    { key: 'item_name_ar', label: 'الاسم العربي', render: r => r.item_name_ar || '—', className: 'max-w-[200px] truncate' },
+    { key: 'gpc_code', label: 'فئة GPC', render: r => (r.gpc_code ? <span title={r.gpc_name}>{r.gpc_code}</span> : '—') },
+    { key: 'suggested', label: 'الفئة المقترحة', value: r => r.suggested?.code || '', render: r => (r.suggested
+      ? <span title={`${r.suggested.name} — ${r.suggested.share}% من أصناف ${BASIS[r.suggested.basis]} «${r.suggested.basis_value}»`}>
+          <span dir="ltr" className="font-mono">{r.suggested.code}</span> <span className="text-xs text-gray-500">{r.suggested.name}</span>
+        </span>
+      : '—'), className: 'max-w-[240px] truncate' },
     { key: 'coding_status', label: 'الترميز', value: r => r.coding_status_label, render: r => <Badge>{r.coding_status_label}</Badge> },
   ]
   return (
     <Section title="أصناف تحتاج كوداً" hint="بلا كود، أو رفضت المصلحة كودها السابق، ولا يوجد لها طلب مفتوح."
       actions={me.can_edit && (
         <>
-          <Field label="كود GPC للمختار (اختياري)" hint="8 أرقام؛ فارغ = كود الصنف المسجل">
-            <input className={`${INPUT} w-28`} value={gpc} onChange={e => setGpc(e.target.value.trim())} dir="ltr" inputMode="numeric" />
-          </Field>
+          {newInCatalog > 0 && (
+            <Btn disabled={act.pending} data-tour="tax-invoicing-main-codes-add-catalog"
+              onClick={() => act.run(() => taxInvoicingApi.codesAddFromCatalog(), d => `أُضيف ${fmtInt(d.added)} صنف من الكتالوج`)}>
+              إضافة أصناف الكتالوج الجديدة ({fmtInt(newInCatalog)})
+            </Btn>
+          )}
+          <GpcPicker value={gpc} onChange={setGpc} />
+          <label className="flex items-center gap-1 text-xs text-gray-600" data-tour="tax-invoicing-main-codes-suggested">
+            <input type="checkbox" checked={useSuggested} onChange={e => setUseSuggested(e.target.checked)} />
+            الفئة المقترحة لما ليس له فئة
+          </label>
           <Btn variant="primary" disabled={!picked.length || act.pending} data-tour="tax-invoicing-main-codes-prepare"
-            onClick={() => act.run(() => taxInvoicingApi.codesPrepare({ ids: picked, parent_code: gpc }),
+            onClick={() => act.run(() => taxInvoicingApi.codesPrepare({ ids: picked, parent_code: gpc, use_suggested: useSuggested }),
               d => `جُهّز ${fmtInt(d.created.length)} طلب${d.skipped.length ? ` — تُرك ${fmtInt(d.skipped.length)}: ${d.skipped.slice(0, 3).map(s => `${s.itemcode} (${s.why})`).join('، ')}` : ''}`,
               () => setPicked([]))}>
             تجهيز طلبات ({fmtInt(picked.length)})
@@ -81,6 +122,37 @@ function Candidates({ me }) {
       <div className="mb-2"><input className={`${INPUT} w-64`} placeholder="بحث بالكود أو الاسم" value={q} onChange={e => setQ(e.target.value)} /></div>
       {list.isLoading ? <Loading /> : list.error ? <Failed error={list.error} /> : (
         <Grid columns={columns} rows={list.data} onOpen={r => toggle(r.id)} empty="✅ لا توجد أصناف تحتاج كوداً" />
+      )}
+      <div className="mt-2"><ActionMsg msg={act.msg} /></div>
+    </Section>
+  )
+}
+
+/** Uncoded items whose barcode is a valid GS1 code: ask ETA to let us use the manufacturer's code. */
+export function Gs1Candidates({ me }) {
+  const [picked, setPicked] = useState([])
+  const act = useAction()
+  const list = useQuery({ queryKey: ['tax-invoicing', 'code-candidates', 'gs1'], queryFn: () => taxInvoicingApi.codeCandidates({ kind: 'gs1' }).then(r => r.data) })
+  const toggle = id => setPicked(p => (p.includes(id) ? p.filter(x => x !== id) : [...p, id]))
+  return (
+    <Section title="أصناف لها باركود GS1" data-tour="tax-invoicing-main-codes-gs1"
+      hint="باركود المصنع موجود غالباً لدى المصلحة من GS1 مصر؛ نطلب استخدامه بدل كود EGS جديد. إن لم تجده المصلحة يُرفض الطلب ويبقى كود EGS."
+      actions={me.can_edit && (
+        <Btn variant="primary" disabled={!picked.length || act.pending}
+          onClick={() => act.run(() => taxInvoicingApi.codesPrepare({ ids: picked, kind: 'gs1' }),
+            d => `جُهّز ${fmtInt(d.created.length)} طلب استخدام GS1${d.skipped.length ? ` — تُرك ${fmtInt(d.skipped.length)}` : ''}`,
+            () => setPicked([]))}>
+          تجهيز طلبات GS1 ({fmtInt(picked.length)})
+        </Btn>
+      )}>
+      {list.isLoading ? <Loading /> : list.error ? <Failed error={list.error} /> : (
+        <Grid rows={list.data} onOpen={r => toggle(r.id)} empty="لا توجد أصناف غير مرمزة بباركود GS1 صحيح" columns={[
+          { key: 'pick', label: '', sortable: false, render: r => (
+            <input type="checkbox" checked={picked.includes(r.id)} onChange={() => toggle(r.id)} aria-label={`اختيار ${r.itemcode}`} />) },
+          { key: 'itemcode', label: 'الكود', className: 'whitespace-nowrap' },
+          { key: 'barcode', label: 'الباركود', render: r => <span dir="ltr" className="font-mono text-xs">{r.barcode}</span> },
+          { key: 'item_name', label: 'الاسم', className: 'max-w-[260px] truncate' },
+        ]} />
       )}
       <div className="mt-2"><ActionMsg msg={act.msg} /></div>
     </Section>
@@ -187,7 +259,7 @@ function Requests({ me }) {
       ? <input type="checkbox" checked={picked.includes(r.id)} onChange={() => toggle(r.id)} aria-label={`اختيار ${r.item_code}`} /> : null) },
     { key: 'itemcode', label: 'صنف SOFTECH', className: 'whitespace-nowrap' },
     { key: 'item_code', label: 'كود المصلحة', className: 'font-mono text-xs whitespace-nowrap', render: r => <span dir="ltr">{r.item_code}</span> },
-    { key: 'purpose', label: 'النوع', value: r => r.purpose_label, render: r => (r.purpose === 'mirror' ? <Badge>تسجيل كود قائم</Badge> : 'جديد') },
+    { key: 'purpose', label: 'النوع', value: r => r.purpose_label, render: r => (r.purpose === 'mirror' ? <Badge>تسجيل كود قائم</Badge> : r.purpose === 'gs1' ? <Badge>GS1</Badge> : 'جديد') },
     { key: 'code_name', label: 'الاسم', render: r => r.code_name_ar || r.code_name, className: 'max-w-[220px] truncate' },
     { key: 'parent_code', label: 'GPC' },
     { key: 'status', label: 'الحالة', value: r => r.status_label, render: r => <Badge tone={TONE[r.status]}>{r.status_label}</Badge> },
@@ -253,6 +325,7 @@ export default function CodesTab({ me }) {
       <CheckSection me={me} />
       <Requests me={me} />
       <Candidates me={me} />
+      <Gs1Candidates me={me} />
     </div>
   )
 }

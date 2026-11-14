@@ -14,6 +14,8 @@
  *   className    – extra class(es) on the outer wrapper div
  *   disabled     – boolean
  *   size         – "sm" (filter bars) | "md" (forms, default)
+ *   showClosed   – list closed branches too (tagged «مغلق»); default hides them. The list itself
+ *                  comes from the caller: closed rows only exist when it fetched scope=all.
  */
 import { useState, useRef, useEffect } from 'react'
 import { wildcardMatch } from '../utils/wildcard'
@@ -27,6 +29,7 @@ export default function BranchSelect({
   className   = '',
   disabled    = false,
   size        = 'md',
+  showClosed  = false,
 }) {
   const [query,  setQuery]  = useState('')
   const [open,   setOpen]   = useState(false)
@@ -49,6 +52,7 @@ export default function BranchSelect({
 
   // Filter list
   const filtered = branches.filter(b => {
+    if (b.kind === 'closed' && !showClosed && String(b.id) !== String(value)) return false
     if (!query) return true
     const q = query.toLowerCase()
     return (
@@ -165,6 +169,9 @@ export default function BranchSelect({
                 {b.softech_branch_id}
               </span>
               <span className="text-sm text-gray-800 flex-1">{b.name_ar || b.name}</span>
+              {b.kind === 'closed' && (
+                <span className="text-[10px] text-red-500 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded">مغلق</span>
+              )}
               {String(b.id) === String(value) && (
                 <span className="text-brand-500 text-xs">✓</span>
               )}

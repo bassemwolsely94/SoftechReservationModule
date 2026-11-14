@@ -6,11 +6,11 @@ only — no SOFTECH read or write, no transfer or return document. One function 
 the Excel and (later) part B all read its output.
 
 Dead (per item × branch, latest successful engine run):
-  • stock > 0, the branch is active (store 110 never), the item is stockable and not a strategic hold;
+  • stock > 0, the branch is live (kind hq/retail — closed, pending and CC never), the item is stockable and not a strategic hold;
   • no local sale for N months (SystemSetting dead_stock_months, default 6) — `last_sale_date` null or older;
   • and the oldest unit on hand arrived N+ months ago — FIFO over the stock-ledger arrivals of the last year
     (expiry_audit._fifo_oldest_date); no arrival in the year → «أقدم من سنة».
-  • HQ (100) is a warehouse, not a selling point: there a line is dead only when no branch sells the item.
+  • HQ (hq_code()) is a warehouse, not a selling point: there a line is dead only when no branch sells the item.
 Network rate = Σ monthly_avg at the other active branches (HQ excluded). Value = stock × Item.cost_price.
 Lanes: move «يُباع بفرع آخر» (network rate > 0) · return «مرتجع للمورد» (rate 0, latest supplier's class in
 dead_stock_return_classes) · stop «إيقاف» (otherwise).
@@ -24,8 +24,14 @@ import datetime as dt
 from collections import defaultdict
 from decimal import ROUND_DOWN, Decimal
 
-HQ = '100'
-CLOSED = '110'
+
+def _hq():
+    """HQ's SOFTECH branch code (the one Branch of kind hq), looked up at call time — never at
+    import (module import must not hit the DB)."""
+    from apps.branches.models import hq_code
+    return hq_code()
+
+
 DEFAULT_MONTHS = 6
 DEFAULT_MIN_MOVE_VALUE = Decimal('100')
 DEFAULT_RETURN_CLASSES = ('20', '60', '70', '50')
@@ -62,12 +68,12 @@ def classify(rows, *, today, active, arrivals, suppliers, soonest_expiry=None, s
              return_classes=DEFAULT_RETURN_CLASSES):
     """rows: [{item, item_id, name, branch, stock, rate, gap, last_sale, qty_365d, cost, hold, stockable, fridge,
     no_more_use}] — one per item × branch. arrivals: {(branch, item): [(date, qty)] newest first}.
+    active = the live branch codes (build() passes Branch.objects.live()); rows elsewhere are ignored.
     suppliers: {item: (supplier_code, class)}. soonest_expiry: {(branch, item): date}. sent_out: {(branch, item):
     last date it left that branch}. open_transfers: {(item, source): number}. Returns lines, ranked."""
     from apps.batches.expiry_audit import _fifo_oldest_date
     soonest_expiry, sent_out = soonest_expiry or {}, sent_out or {}
     open_transfers, windows = open_transfers or {}, windows or {}
-    active = {b for b in active if b != CLOSED}
     cutoff = months_ago(today, months)
     by_item = defaultdict(list)
     for r in rows:
@@ -76,13 +82,13 @@ def classify(rows, *, today, active, arrivals, suppliers, soonest_expiry=None, s
 
     out = []
     for item, item_rows in by_item.items():
-        sellers = {r['branch']: r for r in item_rows if r['branch'] != HQ and r['rate'] > 0}
+        sellers = {r['branch']: r for r in item_rows if r['branch'] != _hq() and r['rate'] > 0}
         dead = []
         for r in item_rows:
             if r['stock'] <= 0 or r['hold'] or not r['stockable']:
                 continue
             others = sum((s['rate'] for b, s in sellers.items() if b != r['branch']), ZERO)
-            if r['branch'] == HQ:
+            if r['branch'] == _hq():
                 if others > 0:
                     continue                              # warehouse stock a branch still sells
             elif r['last_sale'] is not None and r['last_sale'] >= cutoff:
@@ -94,8 +100,8 @@ def classify(rows, *, today, active, arrivals, suppliers, soonest_expiry=None, s
             dead.append((r, others, oldest))
         if not dead:
             continue
-        at_hq = any(r['branch'] == HQ for r, _, _ in dead)
-        at_branches = any(r['branch'] != HQ for r, _, _ in dead)
+        at_hq = any(r['branch'] == _hq() for r, _, _ in dead)
+        at_branches = any(r['branch'] != _hq() for r, _, _ in dead)
         location = 'both' if at_hq and at_branches else 'hq_only' if at_hq else 'branches_only'
         sup_code, sup_class = suppliers.get(item, ('', ''))
         for r, others, oldest in dead:
@@ -120,7 +126,7 @@ def classify(rows, *, today, active, arrivals, suppliers, soonest_expiry=None, s
                      'conflict': open_transfers.get((item, r['branch']), '')}
             targets, move_value = [], ZERO
             if lane == 'move' and not r['fridge']:
-                cands = [s for b, s in sellers.items() if b != r['branch'] and b != HQ
+                cands = [s for b, s in sellers.items() if b != r['branch'] and b != _hq()
                          and not (sent_out.get((b, item)) and sent_out[(b, item)] >= cutoff)]
                 key = (lambda s: (-s['rate'], s['branch'])) if short else \
                       (lambda s: (-max(s['gap'], ZERO), s['branch']))
@@ -232,7 +238,7 @@ def _open_transfers(items):
 def build(run, today):
     from apps.branches.models import Branch
     c = cfg()
-    active = set(Branch.objects.filter(is_active=True).values_list('softech_branch_id', flat=True)) - {CLOSED}
+    active = set(Branch.objects.live().values_list('softech_branch_id', flat=True))   # closed/pending/CC never
     rows = [r for r in _rows(run) if r['branch'] in active]
     pairs = {(r['branch'], r['item']) for r in rows if r['stock'] > 0}
     items = {i for _, i in pairs}

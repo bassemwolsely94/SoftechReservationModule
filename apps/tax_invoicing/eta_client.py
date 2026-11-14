@@ -159,8 +159,16 @@ _pos_tokens = {}
 
 
 def _env_secret(name):
+    """A branch device's secret by variable name: the process environment first, then the server's .env
+    file (where the owner types it). Never from the database."""
     import os
+    from decouple import UndefinedValueError, config as env_config
     value = os.environ.get(name or '', '') or ''
+    if name and not value:
+        try:
+            value = env_config(name, default='') or ''
+        except UndefinedValueError:
+            value = ''
     if not name or not value:
         raise EtaNotConfigured(f'بيانات دخول الجهاز غير موجودة في البيئة ({name or "غير محدد"})')
     return value
@@ -261,6 +269,28 @@ def create_egs_codes(items):
                      r.status_code, payload)
 
 
+def request_code_reuse(items):
+    """PUT /api/v1.0/codetypes/requests/codeusages ("Request Code Reuse"): ask to use a code that already
+    exists at ETA, such as a manufacturer's GS1 barcode. `items`: [{codetype, itemCode, comment}]."""
+    _may_send()
+    try:
+        r = requests.put(_api('/api/v1.0/codetypes/requests/codeusages'), data=json.dumps({'items': items}).encode('utf-8'),
+                         headers=_headers(), timeout=TIMEOUT, allow_redirects=False, verify=_verify())
+    except requests.RequestException as exc:
+        raise EtaUncertain(f'انقطع الاتصال أثناء طلب استخدام الكود: {type(exc).__name__}') from exc
+    payload = _json(r)
+    if r.status_code in (200, 201, 202):
+        # ETA answers a refused item (for example "already has usage") inside a 200.
+        if isinstance(payload, dict) and (payload.get('error') or payload.get('rejectedItems')):
+            raise EtaRefused(f'رفضت المصلحة طلب استخدام الكود: {json.dumps(payload, ensure_ascii=False)[:500]}',
+                             r.status_code, payload)
+        return r.status_code, payload
+    if r.status_code >= 500 or r.status_code == 429:
+        raise EtaUncertain(f'ردت المصلحة HTTP {r.status_code}', r.status_code, payload)
+    raise EtaRefused(f'رفضت المصلحة طلب استخدام الكود (HTTP {r.status_code}): {json.dumps(payload, ensure_ascii=False)[:500]}',
+                     r.status_code, payload)
+
+
 def my_code_requests(item_code):
     """Our code-usage requests for one item code, newest first. Raises when ETA can't be asked."""
     params = {'ItemCode': item_code, 'OrderDirections': 'Descending', 'Pn': 1, 'Ps': 10}
@@ -295,6 +325,12 @@ def device_receipts(config, *, issued_from, page_size=5):
                          timeout=TIMEOUT, allow_redirects=False, verify=_verify())
     except requests.RequestException as exc:
         raise EtaUncertain(f'تعذر البحث عن إيصالات الجهاز: {type(exc).__name__}') from exc
+    if r.status_code == 404:
+        body = _json(r) if r.content else {}
+        # ETA's explicit "nothing matches" (target NoResult, code NotFound): the device has no receipts.
+        # Any other 404 (a wrong address, a gateway page) still means "could not ask".
+        if isinstance(body, dict) and body.get('target') == 'NoResult' and body.get('code') == 'NotFound':
+            return []
     if r.status_code != 200:
         raise EtaUncertain(f'تعذر البحث عن إيصالات الجهاز (HTTP {r.status_code})', r.status_code)
     serial = (config.device_serial or '').strip().upper()

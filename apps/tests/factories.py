@@ -29,6 +29,21 @@ def make_branch(name='فرع التجربة', softech_id='B01') -> Branch:
     return branch
 
 
+def make_hq(code='100', testcase=None) -> Branch:
+    """The one HQ branch (kind hq) — code that reads HQ through hq_code() needs it. Any other hq row
+    becomes retail. Drops the hq_code() cache now and, with ``testcase``, again at cleanup (a
+    test-transaction rollback fires no signals)."""
+    from apps.branches.models import _reset_hq_code_cache
+    Branch.objects.filter(kind=Branch.KIND_HQ).exclude(softech_branch_id=code).update(kind=Branch.KIND_RETAIL)
+    branch, _ = Branch.objects.update_or_create(
+        softech_branch_id=code, defaults={'kind': Branch.KIND_HQ},
+        create_defaults={'kind': Branch.KIND_HQ, 'name': 'HQ', 'name_ar': 'الرئيسي'})
+    _reset_hq_code_cache()
+    if testcase is not None:
+        testcase.addCleanup(_reset_hq_code_cache)
+    return branch
+
+
 def make_branch2(name='فرع ثانٍ', softech_id='B02') -> Branch:
     branch, _ = Branch.objects.get_or_create(
         softech_branch_id=softech_id,

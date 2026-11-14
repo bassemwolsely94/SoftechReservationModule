@@ -362,8 +362,11 @@ export const searchApi = {
 // ── Branches ──────────────────────────────────────────────────────────────────
 
 export const branchesApi = {
+  // params.scope: 'live' (default: HQ + retail) | 'live_hq' | 'retail' (no HQ) | 'all' | 'pending' (last two admin only)
   list:    (params) => api.get('/branches/', { params }),
-  listAll: ()       => api.get('/branches/', { params: { all: '1' } }),  // admin: includes inactive
+  // admin: every kind, incl. closed/pending/call-center; non-admins (403) get the live list instead
+  listAll: () => api.get('/branches/', { params: { scope: 'all' } })
+    .catch(e => (e?.response?.status === 403 ? api.get('/branches/') : Promise.reject(e))),
 
   // Branch fields — admin only
   update:  (branchId, data) => api.patch(`/branches/${branchId}/`, data),
@@ -3256,6 +3259,8 @@ export const taxInvoicingApi = {
   codes:           (params = {})  => api.get('/tax-invoicing/codes/', { params }),
   codeCandidates:  (params = {})  => api.get('/tax-invoicing/codes/candidates/', { params }),
   codesPrepare:    (data)         => api.post('/tax-invoicing/codes/prepare/', data),
+  codeGpc:         (params = {})  => api.get('/tax-invoicing/codes/gpc/', { params }),
+  codesAddFromCatalog: ()        => api.post('/tax-invoicing/codes/add-from-catalog/', {}),
   codesSend:       (data)         => api.post('/tax-invoicing/codes/send/', data),
   codesRefresh:    (data)         => api.post('/tax-invoicing/codes/refresh/', data),
   codesCheck:      (data)         => api.post('/tax-invoicing/codes/check/', data),
@@ -3273,6 +3278,8 @@ export const taxInvoicingApi = {
   chainLookup:     (branch)       => api.post(`/tax-invoicing/receipts/branch/${encodeURIComponent(branch)}/chain/lookup/`),
   startChain:      (branch, data) => api.post(`/tax-invoicing/receipts/branch/${encodeURIComponent(branch)}/chain/start/`, data),
   undoChainStart:  (branch, reason) => api.post(`/tax-invoicing/receipts/branch/${encodeURIComponent(branch)}/chain/undo/`, { reason }),
+  endTestMapping:  (branch, reason) => api.post(`/tax-invoicing/receipts/branch/${encodeURIComponent(branch)}/test/end/`, { reason }),
+  setSendFrom:     (branch, data) => api.post(`/tax-invoicing/receipts/branch/${encodeURIComponent(branch)}/send-from/`, data),
   saveReceiptConfig: (data)       => api.post('/tax-invoicing/receipts/configs/', data),
   channelRules:    ()             => api.get('/tax-invoicing/receipts/channels/'),
   channelsSeen:    ()             => api.get('/tax-invoicing/receipts/channels/seen/'),

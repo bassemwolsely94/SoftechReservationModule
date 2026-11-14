@@ -29,9 +29,14 @@ const api = vi.hoisted(() => ({
   codesSend: vi.fn(),
   codesRefresh: vi.fn(),
   codesCheck: vi.fn(),
+  codesAddFromCatalog: vi.fn(),
+  codeGpc: vi.fn(() => Promise.resolve({ data: { loaded: true, rows: [{ code: '10000673', name_ar: 'أدوية', name_en: 'Medicines', used: 5 }] } })),
   chainLookup: vi.fn(),
   startChain: vi.fn(),
   undoChainStart: vi.fn(),
+  endTestMapping: vi.fn(),
+  setSendFrom: vi.fn(),
+  saveReceiptConfig: vi.fn(),
 }))
 
 vi.mock('../../api/client', () => ({
@@ -43,8 +48,8 @@ const { default: DocumentDetail } = await import('./DocumentDetail')
 const { default: PrintTab } = await import('./PrintTab')
 const { default: ImportTab, buildOptions } = await import('./ImportTab')
 const { default: ItemsTab } = await import('./ItemsTab')
-const { BranchActions, ChainStart } = await import('./ReceiptsTab')
-const { default: CodesTab, CodeCheck } = await import('./CodesTab')
+const { BranchActions, ChainStart, TestMapping, SendFrom } = await import('./ReceiptsTab')
+const { default: CodesTab, CodeCheck, Candidates, Gs1Candidates } = await import('./CodesTab')
 
 const line = (id, status) => ({
   id, docnumber: '55', docdate: '2026-10-01', branch: '170', itemcode: `I${id}`, item_name: `صنف ${id}`, quantity: '1',
@@ -356,5 +361,78 @@ describe('ETA code check', () => {
   it('offers no mirror list against production', () => {
     show(<CodeCheck me={ME} summary={{ ...summary, environment: { ...summary.environment, is_production: true } }} />)
     expect(api.codeCandidates).not.toHaveBeenCalled()
+  })
+})
+
+describe('GPC category and GS1', () => {
+  it('shows the suggested category and prepares with it when ticked', async () => {
+    api.codeCandidates.mockResolvedValue({ data: [{ id: 9, itemcode: '71009', item_name: 'Newtab', item_name_ar: 'نيوتاب', gpc_code: '',
+      suggested: { code: '10000673', name: 'أدوية', basis: 'family', basis_value: 'TAB', share: 67 }, coding_status_label: 'بلا كود' }] })
+    api.codesPrepare.mockResolvedValue({ data: { created: [1], skipped: [] } })
+    show(<Candidates me={ME} />)
+    expect(await screen.findByText('10000673')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('اختيار 71009'))
+    fireEvent.click(screen.getByText(/تجهيز طلبات \(/))
+    await waitFor(() => expect(api.codesPrepare).toHaveBeenCalledWith({ ids: [9], parent_code: '', use_suggested: true }))
+  })
+
+  it('takes a brick picked from the list for the whole batch', async () => {
+    api.codeCandidates.mockResolvedValue({ data: [{ id: 9, itemcode: '71009', item_name: 'Newtab', gpc_code: '', suggested: null, coding_status_label: 'بلا كود' }] })
+    api.codesPrepare.mockResolvedValue({ data: { created: [1], skipped: [] } })
+    show(<Candidates me={ME} />)
+    fireEvent.click(await screen.findByLabelText('اختيار 71009'))
+    await waitFor(() => expect(api.codeGpc).toHaveBeenCalled())
+    await waitFor(() => expect(document.querySelectorAll('#tax-gpc-bricks option').length).toBe(1))
+    fireEvent.change(screen.getByLabelText('فئة GPC'), { target: { value: '10000673 أدوية' } })
+    fireEvent.click(screen.getByText(/تجهيز طلبات \(/))
+    await waitFor(() => expect(api.codesPrepare).toHaveBeenCalledWith({ ids: [9], parent_code: '10000673', use_suggested: true }))
+  })
+
+  it('prepares GS1 reuse requests for ticked barcodes', async () => {
+    api.codeCandidates.mockResolvedValue({ data: [{ id: 5, itemcode: '71010', barcode: '4006381333931', item_name: 'Shampoo' }] })
+    api.codesPrepare.mockResolvedValue({ data: { created: [2], skipped: [] } })
+    show(<Gs1Candidates me={ME} />)
+    fireEvent.click(await screen.findByLabelText('اختيار 71010'))
+    fireEvent.click(screen.getByText(/تجهيز طلبات GS1/))
+    await waitFor(() => expect(api.codesPrepare).toHaveBeenCalledWith({ ids: [5], kind: 'gs1' }))
+  })
+})
+
+describe('new catalog items', () => {
+  it('offers to add catalog items that have no tax profile yet', async () => {
+    api.codes.mockResolvedValue({ data: { summary: { catalog_without_profile: 12 }, rows: [] } })
+    api.codeCandidates.mockResolvedValue({ data: [] })
+    api.codesAddFromCatalog.mockResolvedValue({ data: { added: 12 } })
+    show(<Candidates me={ME} />)
+    fireEvent.click(await screen.findByText(/إضافة أصناف الكتالوج الجديدة \(12\)/))
+    await waitFor(() => expect(api.codesAddFromCatalog).toHaveBeenCalled())
+  })
+})
+
+describe('test-only branch mapping', () => {
+  it('marks a branch test-only, and ends it with a reason', async () => {
+    api.saveReceiptConfig.mockResolvedValue({ data: {} })
+    const { unmount } = show(<TestMapping branch="170" row={{ test_env: '', has_chain_receipts: false }} me={ME} />)
+    fireEvent.click(screen.getByText('جعله إعداداً تجريبياً فقط'))
+    await waitFor(() => expect(api.saveReceiptConfig).toHaveBeenCalledWith({ branch: '170', test_only: true }))
+    unmount()
+    api.endTestMapping.mockResolvedValue({ data: {} })
+    show(<TestMapping branch="170" row={{ test_env: 'preprod', has_chain_receipts: true }} me={ME} />)
+    expect(screen.getByText(/إعداد تجريبي فقط \(preprod\)/)).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('سبب إنهاء الإعداد التجريبي'), { target: { value: 'انتهت التجربة' } })
+    fireEvent.click(screen.getByText('إنهاء الإعداد التجريبي'))
+    await waitFor(() => expect(api.endTestMapping).toHaveBeenCalledWith('170', 'انتهت التجربة'))
+  })
+})
+
+describe('branch send start', () => {
+  it('sets when the branch starts sending, with a reason', async () => {
+    api.setSendFrom.mockResolvedValue({ data: { rechecked: 7 } })
+    show(<SendFrom branch="150" row={{ send_from: null }} me={ME} />)
+    fireEvent.change(screen.getByLabelText('بداية الإرسال'), { target: { value: '2026-11-14T08:00' } })
+    fireEvent.change(screen.getByLabelText('سبب بداية الإرسال'), { target: { value: 'بدء التشغيل' } })
+    fireEvent.click(screen.getByText('حفظ بداية الإرسال'))
+    await waitFor(() => expect(api.setSendFrom).toHaveBeenCalledWith('150', expect.objectContaining({ reason: 'بدء التشغيل' })))
+    expect(await screen.findByText(/أُعيد فحص 7/)).toBeTruthy()
   })
 })

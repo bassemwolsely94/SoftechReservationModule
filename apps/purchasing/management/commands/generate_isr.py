@@ -37,7 +37,7 @@ class Command(BaseCommand):
         if o.get('branches'):
             codes += [c.strip() for c in o['branches'].split(',') if c.strip()]
         if o.get('all_operational'):
-            codes += list(Branch.objects.filter(is_active=True, is_operational=True)
+            codes += list(Branch.objects.live().filter(is_active=True, is_operational=True)
                           .exclude(db_host='').exclude(db_host__isnull=True)
                           .exclude(softech_branch_id='100')
                           .values_list('softech_branch_id', flat=True))

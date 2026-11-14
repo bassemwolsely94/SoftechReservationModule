@@ -40,7 +40,7 @@ from core.branch_scope import allows_code, branch_codes, scope_code
 from core.errors import public_error
 from core.permissions import _get_profile, matrix_allows, matrix_permission
 
-from . import coding, environment, eta_client, item_import, receipts, services, signing, submission
+from . import coding, environment, eta_client, gpc, item_import, receipts, services, signing, submission
 from .models import (TaxBuyerProfile, TaxChannelRule, TaxCodeRequest, TaxDocument, TaxDocumentLine, TaxExclusionBasis,
                      TaxIssuerProfile, TaxItemProfile, TaxLineReview, TaxReceipt, TaxReceiptBranchConfig, TaxReceiptLine, TaxSigningJob)
 
@@ -899,6 +899,7 @@ _CONFIG_TEXT = ('seller_branch_code', 'device_serial', 'pos_os_version', 'pos_mo
 
 def _config_row(c):
     return {'branch': c.softech_branchcode, 'is_enabled': c.is_enabled, 'has_chain': bool(c.last_uuid),
+            'test_env': c.test_env, 'send_from': c.send_from,
             'chain_start': c.chain_start, 'chain_start_label': c.get_chain_start_display() if c.chain_start else '',
             'chain_start_uuid': c.chain_start_uuid, 'chain_start_at': c.chain_start_at,
             'chain_start_by': _stamp(c.chain_start_by), 'chain_start_detail': c.chain_start_detail or {},
@@ -924,6 +925,14 @@ def receipt_configs(request):
             setattr(c, f, str(request.data.get(f) or '').strip())
     if 'is_enabled' in request.data:
         c.is_enabled = bool(request.data['is_enabled'])
+    if request.data.get('test_only') and not c.test_env:
+        # Marks the mapping test-only, for the test system this server talks to now. Clearing it is its own,
+        # audited step (receipts_test_end), which also resets the test receipts.
+        if environment.is_production() or not environment.current():
+            return Response({'detail': 'الإعداد التجريبي متاح في المنظومة التجريبية فقط'}, status=status.HTTP_400_BAD_REQUEST)
+        if c.pk and TaxReceipt.objects.filter(softech_branchcode=code).exclude(uuid='').exists():
+            return Response({'detail': 'للفرع إيصالات صادرة؛ لا يتحول لإعداد تجريبي'}, status=status.HTTP_400_BAD_REQUEST)
+        c.test_env = environment.current()
     with transaction.atomic():
         c.save()
         services.audit('receipt_config_changed', actor=request.user, entity='receipt_branch', entity_id=code,
@@ -1030,14 +1039,44 @@ def codes(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, VIEWER])
 def code_candidates(request):
-    mirror = request.query_params.get('kind') == 'mirror'
-    qs = coding.mirror_candidates(limit=100000) if mirror else coding.candidates(limit=100000)
+    """kind: '' items needing a new EGS code (with a suggested GPC brick) · mirror · gs1 (valid GTIN barcode)."""
+    kind = request.query_params.get('kind') or ''
     q = (request.query_params.get('q') or '').strip()
-    if q:
-        qs = qs.filter(Q(softech_itemcode__icontains=q) | Q(item_name__icontains=q) | Q(item_name_ar__icontains=q))
+    if kind == 'gs1':
+        rows = coding.gs1_candidates(limit=100000)
+        if q:
+            rows = [p for p in rows if q in p.softech_itemcode or q.lower() in (p.item_name or '').lower()
+                    or q in (p.item_name_ar or '') or q in p.gtin]
+        rows = rows[:MAX_LIST]
+    else:
+        qs = coding.mirror_candidates(limit=100000) if kind == 'mirror' else coding.candidates(limit=100000)
+        if q:
+            qs = qs.filter(Q(softech_itemcode__icontains=q) | Q(item_name__icontains=q) | Q(item_name_ar__icontains=q))
+        rows = list(TaxItemProfile.objects.filter(pk__in=[p.pk for p in qs[:MAX_LIST]])
+                    .select_related('item__category').order_by('softech_itemcode'))
+    suggested = gpc.suggest(rows) if kind == '' else {}
+    bricks = gpc.names({p.gpc_code for p in rows})
     return Response([{'id': p.id, 'itemcode': p.softech_itemcode, 'item_name': p.item_name, 'item_name_ar': p.item_name_ar,
-                      'gpc_code': p.gpc_code, 'coding_status': p.coding_status, 'eta_code': p.eta_code,
-                      'coding_status_label': p.get_coding_status_display()} for p in qs[:MAX_LIST]])
+                      'gpc_code': '' if p.gpc_code == '0' else p.gpc_code, 'gpc_name': bricks.get(p.gpc_code, ''),
+                      'coding_status': p.coding_status, 'eta_code': p.eta_code,
+                      'barcode': getattr(p, 'gtin', '') or (p.item.barcode if p.item else ''),
+                      'family': p.item.family_name if p.item else '',
+                      'suggested': suggested.get(p.id),
+                      'coding_status_label': p.get_coding_status_display()} for p in rows])
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, EDITOR])
+def codes_add_from_catalog(request):
+    """New catalog items (no tax profile yet) join the items that need a code."""
+    return Response(coding.add_from_catalog(request.user))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, VIEWER])
+def code_gpc(request):
+    """Search the GPC brick list by code or name; bricks our approved items use come first."""
+    return Response({'loaded': gpc.loaded(), 'rows': gpc.search(request.query_params.get('q'))})
 
 
 @api_view(['POST'])
@@ -1049,9 +1088,12 @@ def codes_prepare(request):
     try:
         if request.data.get('kind') == 'mirror':
             result = coding.prepare_mirror(ids, request.user, reason=(request.data.get('reason') or '').strip())
+        elif request.data.get('kind') == 'gs1':
+            result = coding.prepare_gs1(ids, request.user, reason=(request.data.get('reason') or '').strip())
         else:
             result = coding.prepare(ids, request.user, parent_code=(request.data.get('parent_code') or '').strip(),
-                                    reason=(request.data.get('reason') or '').strip())
+                                    reason=(request.data.get('reason') or '').strip(),
+                                    use_suggested=bool(request.data.get('use_suggested')))
     except services.TaxRuleError as exc:
         return _refuse(exc)
     return Response(result)
@@ -1115,6 +1157,27 @@ def receipts_chain_start(request, branch):
     return _branch_action(request, branch, lambda: _config_row(receipts.start_chain(
         branch, request.user, mode=d.get('mode') or '', confirm=str(d.get('confirm') or ''),
         other_program_stopped=bool(d.get('other_program_stopped')), expected_uuid=str(d.get('expected_uuid') or ''))))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, SENDER])
+def receipts_send_from(request, branch):
+    """Sets when this branch's sales start being sent from here. Earlier sales are held as before_start."""
+    from django.utils.dateparse import parse_datetime
+
+    def run():
+        value = parse_datetime(str(request.data.get('send_from') or ''))
+        config, rechecked = receipts.set_send_from(branch, request.user, value, str(request.data.get('reason') or ''))
+        return {**_config_row(config), 'rechecked': rechecked}
+    return _branch_action(request, branch, run)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, SENDER])
+def receipts_test_end(request, branch):
+    """Ends a test-only mapping and puts its test receipts back to ready for the real system."""
+    return _branch_action(request, branch, lambda: _config_row(
+        receipts.end_test_mapping(branch, request.user, str(request.data.get('reason') or ''))))
 
 
 @api_view(['POST'])

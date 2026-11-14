@@ -27,7 +27,7 @@ from apps.finance.gl.statements import trading_and_pl
 from apps.finance.models import (ClosingStockSnapshot, FinancialPeriod, GLAccount, GLAccountGroup,
                                  GLComparisonLine, GLDraftRun, GLSoftechCheck, GLSourceDoc, LedgerEntry,
                                  SourceException)
-from apps.tests.factories import make_admin, make_user
+from apps.tests.factories import make_admin, make_user, make_hq
 
 D = datetime.date
 Z = Decimal('0')
@@ -159,6 +159,10 @@ class CloseBase(TestCase):
 
 
 class ChecklistTests(CloseBase):
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
     def test_item_order_and_shape(self):
         items = checklist(month_period(JAN))
         self.assertEqual([i['key'] for i in items], [
@@ -243,7 +247,7 @@ class ChecklistTests(CloseBase):
         self.assertIn('شغّل تقرير رصيد المخازن في تاريخ من سوفتيك لهذا التاريخ', item['detail'])
 
     def test_missing_hq_store_keeps_its_code_beside_the_branch_label(self):
-        Branch.objects.create(softech_branch_id='100', name='HQ')
+        Branch.objects.filter(softech_branch_id='100').update(name='HQ', name_ar='HQ')   # setUp made it the hq row
         self.valuations[JAN] = Valuation(as_of=JAN, stores=[], missing_stores=['102', '103'])
         detail = self.items(JAN)['stock_snapshot']['detail']
         self.assertIn('102 (100 · HQ)', detail)
@@ -294,6 +298,10 @@ class ChecklistTests(CloseBase):
 
 
 class CloseTests(CloseBase):
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
     def test_close_posts_closing_stock_per_branch_and_reversal_on_first(self):
         period = self.close(JAN)
         self.assertEqual(period.status, 'closed')

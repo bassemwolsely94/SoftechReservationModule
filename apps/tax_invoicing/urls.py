@@ -40,6 +40,8 @@ urlpatterns = [
     path('eta/check-login/', views.eta_check_login),
     path('codes/', views.codes),
     path('codes/candidates/', views.code_candidates),
+    path('codes/gpc/', views.code_gpc),
+    path('codes/add-from-catalog/', views.codes_add_from_catalog),
     path('codes/prepare/', views.codes_prepare),
     path('codes/send/', views.codes_send),
     path('codes/refresh/', views.codes_refresh),
@@ -59,4 +61,6 @@ urlpatterns = [
     path('receipts/branch/<str:branch>/chain/lookup/', views.receipts_chain_lookup),
     path('receipts/branch/<str:branch>/chain/start/', views.receipts_chain_start),
     path('receipts/branch/<str:branch>/chain/undo/', views.receipts_chain_undo),
+    path('receipts/branch/<str:branch>/test/end/', views.receipts_test_end),
+    path('receipts/branch/<str:branch>/send-from/', views.receipts_send_from),
 ]

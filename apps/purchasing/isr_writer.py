@@ -33,11 +33,23 @@ from django.conf import settings
 from config.writers import writer_allowed
 from django.utils import timezone
 
+from apps.batches.store_roles import QUARANTINE_STORE_CODES, check_quarantine_sql
+
 logger = logging.getLogger('elrezeiky.purchasing')
 
 # Store codes excluded from "current stock" (quarantine/expiry) — same as the engine.
-_EXCLUDED_STORES = {'102', '103', '105'}
-HQ_CODE = '100'      # the main warehouse (was referenced below but never defined → NameError)
+_EXCLUDED_STORES = QUARANTINE_STORE_CODES
+# Literal on purpose: the sql-from-text scan trusts only module-level string literals in an
+# f-string. check_quarantine_sql fails at import if it ever drifts from the constant.
+_QUARANTINE_SQL = "('102','103','105')"
+check_quarantine_sql(_QUARANTINE_SQL)
+
+
+def _hq():
+    """The main warehouse: HQ's SOFTECH branch code (the one Branch of kind hq), looked up at call time — never at
+    import (module import must not hit the DB)."""
+    from apps.branches.models import hq_code
+    return hq_code()
 
 
 LOCK_ISR_PUSH = 7_301_006   # pg advisory lock, × 1e6 + IsrPush pk: one push of a draft at a time (P-15)
@@ -429,7 +441,7 @@ def build_items_plan(node_branch, items):
                 chunk = codes[i:i + _READ_CHUNK]
                 ph = ','.join('?' for _ in chunk)
                 cur.execute(f"SELECT itemcode, sum(nowqty) FROM stkbal WHERE branchcode=? "
-                            f"AND storecode NOT IN ('102','103','105') AND itemcode IN ({ph}) "
+                            f"AND storecode NOT IN {_QUARANTINE_SQL} AND itemcode IN ({ph}) "
                             f"GROUP BY itemcode", [str(node_branch), *chunk])
                 for r in cur.fetchall():
                     nowqty[str(r[0]).strip()] = float(r[1] or 0)
@@ -508,7 +520,7 @@ def create_proposal(branchcode, *, created_by=None, max_lines=None, run=None, fr
         params = {'rule': 'engine'}
     if not plan['lines']:
         return (None, plan) if return_plan else None
-    source = '100' if from_hq else str(branchcode)
+    source = _hq() if from_hq else str(branchcode)
     kind = IsrPush.KIND_HQ_TO_BRANCH if from_hq else IsrPush.KIND_SELF
     p = _persist_proposal(source=source, dest=str(branchcode), kind=kind,
                           lines=plan['lines'], run_id=plan.get('run_id'), created_by=created_by,
@@ -575,20 +587,20 @@ def create_transfer_proposals(from_branch, to_branch, items, *, created_by=None,
     src, dst = str(from_branch), str(to_branch)
     if src == dst:
         return None, None
-    if dst == HQ_CODE:                                       # surplus branch → HQ only
-        return _persist_proposal(source=src, dest=HQ_CODE, kind=IsrPush.KIND_BRANCH_TO_HQ,
+    if dst == _hq():                                       # surplus branch → HQ only
+        return _persist_proposal(source=src, dest=_hq(), kind=IsrPush.KIND_BRANCH_TO_HQ,
                                  lines=build_items_plan(src, items), created_by=created_by, planner=planner), None
-    if src == HQ_CODE:                                       # HQ → deficit branch only
-        return None, _persist_proposal(source=HQ_CODE, dest=dst, kind=IsrPush.KIND_HQ_TO_BRANCH,
-                                       lines=build_items_plan(HQ_CODE, items), created_by=created_by, planner=planner)
+    if src == _hq():                                       # HQ → deficit branch only
+        return None, _persist_proposal(source=_hq(), dest=dst, kind=IsrPush.KIND_HQ_TO_BRANCH,
+                                       lines=build_items_plan(_hq(), items), created_by=created_by, planner=planner)
     leg1_lines = build_items_plan(src, items)                # nowqty from surplus branch
-    leg2_lines = build_items_plan(HQ_CODE, items)            # nowqty from HQ
+    leg2_lines = build_items_plan(_hq(), items)            # nowqty from HQ
     if not leg1_lines and not leg2_lines:
         return None, None
     with transaction.atomic():                               # both legs or neither
-        leg1 = _persist_proposal(source=src, dest=HQ_CODE, kind=IsrPush.KIND_BRANCH_TO_HQ,
+        leg1 = _persist_proposal(source=src, dest=_hq(), kind=IsrPush.KIND_BRANCH_TO_HQ,
                                  lines=leg1_lines, created_by=created_by, planner=planner)
-        leg2 = _persist_proposal(source=HQ_CODE, dest=dst, kind=IsrPush.KIND_HQ_TO_BRANCH,
+        leg2 = _persist_proposal(source=_hq(), dest=dst, kind=IsrPush.KIND_HQ_TO_BRANCH,
                                  lines=leg2_lines, created_by=created_by, linked=leg1,
                                  planner=planner)
         if leg1 and leg2:

@@ -25,6 +25,7 @@ from .models import (TaxChannelRule, TaxIssuerProfile, TaxItemProfile, TaxReceip
 from .services import TaxRuleError, _subtype, audit, classify
 
 FLAG = 'TAX_ERECEIPT_SUBMIT_ENABLED'
+BEFORE_START = 'before_start'
 TYPE_VERSION = '1.2'
 ZERO = Decimal('0')
 BUYER_ID_THRESHOLD = Decimal('150000')   # receipt v1.2: a person's ID is required from this value
@@ -173,6 +174,10 @@ def evaluate(receipt, rule=None):
             issues.append({'code': 'return_reference', 'message': 'الإيصال الأصلي غير صادر من هذا النظام'})
     if receipt.total_amount >= BUYER_ID_THRESHOLD:
         issues.append({'code': 'buyer_id', 'message': 'الإيصال فوق حد بيانات المشتري'})
+    send_from = (TaxReceiptBranchConfig.objects.filter(softech_branchcode=receipt.softech_branchcode)
+                 .values_list('send_from', flat=True).first())
+    if send_from and receipt.sold_at < send_from:
+        issues.insert(0, {'code': BEFORE_START, 'message': 'قبل بداية الإرسال للفرع؛ لا يُرسل من هنا'})
     receipt.hold_reasons = issues
     receipt.status = TaxReceipt.HELD if issues else TaxReceipt.READY
     receipt.save()
@@ -232,7 +237,39 @@ def config_gaps(config, issuer):
         gaps.append('تأكيد المحاسب: هل الأسعار شاملة الضريبة')
     if not config.chain_start:
         gaps.append('بداية سلسلة الجهاز (جهاز جديد أم استلام من برنامج سابق)')
+    if not config.send_from:
+        gaps.append('بداية الإرسال (المبيعات قبلها لا تُرسل من هنا)')
     return gaps
+
+
+def set_send_from(branchcode, actor, value, reason=''):
+    """Sets the moment from which this branch's sales are sent. Once a receipt is issued it can only move
+    later: an earlier start would issue older sales after newer ones. Re-checks the branch's unsent receipts."""
+    if value is None:
+        raise TaxRuleError('حدد تاريخ ووقت بداية الإرسال')
+    if timezone.is_naive(value):
+        value = timezone.make_aware(value)
+    if value > timezone.now() + dt.timedelta(days=31):
+        raise TaxRuleError('بداية الإرسال بعيدة في المستقبل')
+    with transaction.atomic():
+        config = TaxReceiptBranchConfig.objects.select_for_update().filter(softech_branchcode=branchcode).first()
+        if config is None:
+            raise TaxRuleError('الفرع غير مسجل')
+        issued = TaxReceipt.objects.filter(softech_branchcode=branchcode).exclude(uuid='')
+        if issued.exists() and (config.send_from is None or value < config.send_from):
+            raise TaxRuleError('صدرت إيصالات من هذا الفرع؛ بداية الإرسال تتأخر فقط ولا تتقدم')
+        before = config.send_from
+        config.send_from = value
+        config.save(update_fields=['send_from'])
+        audit('receipt_send_from_set', actor=actor, entity='receipt_branch', entity_id=branchcode, reason=reason,
+              before={'send_from': before}, after={'send_from': value})
+    rules = {r.ptclassifcode: r for r in TaxChannelRule.objects.all()}
+    rechecked = 0
+    for receipt in TaxReceipt.objects.filter(softech_branchcode=branchcode,
+                                             status__in=[TaxReceipt.HELD, TaxReceipt.READY]).iterator():
+        evaluate(receipt, rules.get(receipt.channel))
+        rechecked += 1
+    return config, rechecked
 
 
 # ── Where a device's chain starts ──────────────────────────────────────────────────────────────
@@ -369,6 +406,54 @@ def receipt_uuid(document):
     return fiscal.sha256_hex(fiscal.canonical(fiscal.to_text(document)))
 
 
+def _here():
+    from . import environment
+    return 'production' if environment.is_production() else (environment.current() or 'custom')
+
+
+def env_guard(config, branchcode):
+    """A test-only mapping works only in its test system; a real one never sends while test receipts remain."""
+    here = _here()
+    if config.test_env:
+        if here == 'production' or here != config.test_env:
+            raise TaxRuleError(f'إعداد الفرع {branchcode} تجريبي فقط ({config.test_env})؛ لا يُستخدم في هذه المنظومة')
+        return
+    leftover = TaxReceipt.objects.filter(softech_branchcode=branchcode).exclude(environment__in=['', here]).exclude(uuid='')
+    if leftover.exists():
+        raise TaxRuleError('في هذا الفرع إيصالات صدرت لمنظومة أخرى؛ أنهِ الإعداد التجريبي أولاً')
+
+
+TEST_RESET_FIELDS = ('status', 'uuid', 'previous_uuid', 'payload_text', 'issued_at', 'environment', 'attempt',
+                     'submission_uuid', 'eta_reason')
+
+
+def end_test_mapping(branchcode, actor, reason):
+    """Ends a test-only mapping: its test receipts go back to ready (they never count for the real system),
+    and the branch's device, chain and switch are cleared, so the real device needs its own setup and chain start."""
+    if not (reason or '').strip():
+        raise TaxRuleError('اكتب سبب إنهاء الإعداد التجريبي')
+    with transaction.atomic():
+        config = TaxReceiptBranchConfig.objects.select_for_update().filter(softech_branchcode=branchcode).first()
+        if config is None or not config.test_env:
+            raise TaxRuleError('إعداد الفرع ليس تجريبياً')
+        before = {'test_env': config.test_env, 'device_serial': config.device_serial, 'last_uuid': config.last_uuid,
+                  'chain_start': config.chain_start}
+        rows = TaxReceipt.objects.select_for_update().filter(softech_branchcode=branchcode, environment=config.test_env)
+        reset = [r.pk for r in rows if r.uuid]
+        TaxReceipt.objects.filter(pk__in=reset).update(
+            status=TaxReceipt.READY, uuid='', previous_uuid='', payload_text='', issued_at=None, environment='',
+            attempt=None, submission_uuid='', eta_reason='')
+        for f in ('test_env', 'device_serial', 'client_id', 'secret_env', 'preshared_key_env', 'last_uuid',
+                  'chain_start', 'chain_start_uuid'):
+            setattr(config, f, '')
+        config.chain_start_detail, config.chain_start_at, config.chain_start_by = None, None, None
+        config.is_enabled = False
+        config.save()
+        audit('receipt_test_mapping_ended', actor=actor, entity='receipt_branch', entity_id=branchcode, reason=reason,
+              before=before, after={'receipts_reset': len(reset), 'first': reset[:20]})
+    return config
+
+
 def issue_next(branchcode, actor, limit=200):
     """Freeze ready receipts into the branch's UUID chain, oldest sale first. Nothing is sent here."""
     issuer = TaxIssuerProfile.load()
@@ -380,7 +465,10 @@ def issue_next(branchcode, actor, limit=200):
         gaps = config_gaps(config, issuer)
         if gaps:
             raise TaxRuleError('بيانات ناقصة: ' + '، '.join(gaps))
-        queue = TaxReceipt.objects.select_for_update().filter(softech_branchcode=branchcode, status=TaxReceipt.READY).order_by('sold_at', 'id')[:limit]
+        env_guard(config, branchcode)
+        here = _here()
+        queue = TaxReceipt.objects.select_for_update().filter(
+            softech_branchcode=branchcode, status=TaxReceipt.READY, sold_at__gte=config.send_from).order_by('sold_at', 'id')[:limit]
         for receipt in queue:
             reference = _original_of(receipt).uuid if receipt.doccode == '30' else None
             document = _receipt_json(receipt, config, issuer, uuid_value='', previous=config.last_uuid, reference=reference)
@@ -390,6 +478,7 @@ def issue_next(branchcode, actor, limit=200):
             receipt.payload_text = fiscal.to_text(document)
             receipt.status = TaxReceipt.ISSUED
             receipt.issued_at = timezone.now()
+            receipt.environment = here
             receipt.save()
             config.last_uuid = value
             issued += 1
@@ -415,6 +504,7 @@ def submit_branch(branchcode, actor, confirm, limit=50):
     config = TaxReceiptBranchConfig.objects.filter(softech_branchcode=branchcode, is_enabled=True).first()
     if config is None:
         raise TaxRuleError('الفرع غير مفعل')
+    env_guard(config, branchcode)
     signer = signing.get_signer()
     try:
         signing.assert_ready_for_live(signer)

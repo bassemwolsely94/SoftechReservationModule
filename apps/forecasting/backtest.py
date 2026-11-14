@@ -45,8 +45,9 @@ class BacktestService:
     def _operational_branch_ids(self):
         if self._op_branch_ids is None:
             from apps.branches.models import Branch
+            # retail — the same set build_kpi_rollups writes (spec §6.9)
             self._op_branch_ids = list(
-                Branch.objects.filter(is_operational=True).values_list('id', flat=True))
+                Branch.objects.retail().values_list('id', flat=True))
         return self._op_branch_ids
 
     def _chain_actual(self, year, month, metric) -> Decimal:
