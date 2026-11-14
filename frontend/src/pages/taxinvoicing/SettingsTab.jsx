@@ -5,6 +5,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { taxInvoicingApi } from '../../api/client'
+import DataFreshnessBar from '../../components/DataFreshnessBar'
 import {
   ActionMsg, Badge, Btn, Failed, Field, fmtDate, fmtTime, Grid, INPUT, Loading, Notice, Section, useAction,
 } from './ui'
@@ -268,6 +269,48 @@ function Signing() {
   )
 }
 
+const STATE_LABELS = [['loaded', 'تم'], ['requested', 'قيد التجهيز'], ['planned', 'لم يُطلب'], ['failed', 'تعذر'], ['too_big', 'أكبر من الحد']]
+const KIND_LABELS = { documents: 'الفواتير والإشعارات', receipts: 'الإيصالات' }
+
+/** What the ETA history mirror holds per ETA system, and what is still missing. Reads only. */
+export function HistoryProgress({ me }) {
+  const act = useAction()
+  const q = useQuery({ queryKey: ['tax-invoicing', 'history-progress'], queryFn: () => taxInvoicingApi.historyProgress().then(r => r.data) })
+  return (
+    <Section title="سجل المصلحة — التحميل" data-tour="tax-invoicing-main-settings-history"
+      hint="نسخة للقراءة فقط مما تحتفظ به المصلحة، لكل منظومة على حدة. لا يُرسل شيء من هنا.">
+      <DataFreshnessBar domains={['eta_history_preprod', 'eta_history_production']} />
+      {q.isLoading ? <Loading /> : q.error ? <Failed error={q.error} /> : (
+        <div className="grid gap-3 md:grid-cols-2">
+          {q.data.systems.map(s => (
+            <div key={s.system} className="rounded-lg border border-gray-100 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-bold text-sm">{s.label}</span>
+                {me.can_edit && (
+                  <Btn disabled={!!s.why_not || act.pending} data-tour="tax-invoicing-main-settings-history-refresh"
+                    onClick={() => act.run(() => taxInvoicingApi.historyRefresh({ system: s.system }), 'بدأ التحديث في الخلفية')}>
+                    تحديث الآن
+                  </Btn>
+                )}
+              </div>
+              {s.why_not && <Notice tone="warn">{s.why_not}</Notice>}
+              {['documents', 'receipts'].map(k => (
+                <div key={k} className="text-xs text-gray-600">
+                  <div className="font-bold text-gray-700">{KIND_LABELS[k]}: {s[k].rows.toLocaleString('en')} في النسخة</div>
+                  <div>{STATE_LABELS.map(([st, label]) => `${label} ${s[k].states[st] || 0}`).join(' · ')}</div>
+                  <div>{s[k].loaded_from ? `من ${fmtDate(s[k].loaded_from)} إلى ${fmtDate(s[k].loaded_to)}` : 'لم يُحمّل شيء بعد'}</div>
+                  {s[k].last_error && <div className="text-red-600">آخر خطأ: {s[k].last_error}</div>}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="mt-2"><ActionMsg msg={act.msg} /></div>
+    </Section>
+  )
+}
+
 export default function SettingsTab({ me }) {
   const issuer = useQuery({ queryKey: ['tax-invoicing', 'issuer'], queryFn: () => taxInvoicingApi.issuer().then(r => r.data) })
   return (
@@ -278,6 +321,7 @@ export default function SettingsTab({ me }) {
       <Buyers me={me} />
       <Bases me={me} />
       {me.can_finalize && <Signing />}
+      <HistoryProgress me={me} />
     </div>
   )
 }

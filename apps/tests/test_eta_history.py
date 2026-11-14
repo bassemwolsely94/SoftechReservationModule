@@ -360,3 +360,36 @@ class TopUpTests(TestCase):
         eta_history.upsert_documents('preprod', [_doc_row('A')], 'search')
         self.assertIsNotNone(freshness._SOURCES['eta_history_preprod']()['last_success_at'])
         self.assertIsNone(freshness._SOURCES['eta_history_production']()['last_success_at'])
+
+
+# ── Task 5: progress and refresh views ─────────────────────────────────────────────────────────
+
+from apps.tests.test_tax_invoicing import Fixture, api  # noqa: E402
+
+
+class HistoryViewTests(Fixture, TestCase):
+
+    def setUp(self):
+        self.build('eh')
+        EtaHistoryWindow.objects.create(system='preprod', kind='receipts', date_from=dt.date(2024, 1, 1),
+                                        date_to=dt.date(2024, 1, 4), state='loaded', loaded_count=12)
+
+    def test_progress_view_needs_view_and_lists_both_systems(self):
+        self.assertEqual(api(self.pharmacist).get('/api/tax-invoicing/history/progress/').status_code, 403)
+        body = api(self.accountant).get('/api/tax-invoicing/history/progress/').json()
+        self.assertEqual([s['system'] for s in body['systems']], ['preprod', 'production'])
+        self.assertEqual(body['systems'][0]['receipts']['states']['loaded'], 1)
+        self.assertTrue(body['systems'][1]['why_not'])
+
+    @override_settings(TAX_ETA_READ_PREPROD_ENABLED=True, TAX_ETA_READ_PREPROD_CLIENT_ID='i', TAX_ETA_READ_PREPROD_CLIENT_SECRET='s')
+    def test_refresh_needs_edit_and_refuses_a_disabled_system(self):
+        self.assertEqual(api(self.pharmacist).post('/api/tax-invoicing/history/refresh/', {'system': 'preprod'},
+                                                   format='json').status_code, 403)
+        r = api(self.accountant).post('/api/tax-invoicing/history/refresh/', {'system': 'production'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(api(self.accountant).post('/api/tax-invoicing/history/refresh/', {'system': 'x'},
+                                                   format='json').status_code, 400)
+        with mock.patch('apps.tax_invoicing.views.start_thread') as thread:
+            r = api(self.accountant).post('/api/tax-invoicing/history/refresh/', {'system': 'preprod'}, format='json')
+        self.assertEqual(r.status_code, 202)
+        thread.assert_called_once()
