@@ -7,7 +7,7 @@ The full how-to for every owner step is in [owner steps](2026-11-owner-go-live-s
 | Stage | Verdict |
 |---|---|
 | **A** (VPS live as a reader, office stays the writer) | **GO** once owner steps 2–6 of the 2026-11-12 page are done (step 1 is done). About 1 hour. |
-| **B** (cutover: the VPS becomes the only writer) | **NO-GO** until owner steps 7–12 are done **and** the tax cutover steps (T below) are written and followed. |
+| **B** (cutover: the VPS becomes the only writer) | **NO-GO** until owner steps 7–12 are done. On cutover day, follow the tax steps too (T below, added by #133). |
 
 ## What merged since 2026-11-12
 
@@ -37,26 +37,20 @@ The full how-to for every owner step is in [owner steps](2026-11-owner-go-live-s
 | Role | `WRITER_INSTANCE=True`, `SOFTECH_READ_ONLY=False` | Expected until W1. |
 | Tax | `TAX_ETA_ENVIRONMENT=preprod`, `TAX_ERECEIPT_SUBMIT_ENABLED=True`, `TAX_ETA_CODING_ENABLED=True` | The office sends e-receipts to the tax authority's **pre-production** system. See T. |
 
-## T — tax cutover steps (to be added to the checklist)
+## T — tax cutover steps (done: PR #133)
 
-The checklist (W0–W9) and runbook §11 do not mention tax yet. The tax session is adding:
-
-1. **W3 drain:** no tax document, e-receipt or signing job may be `submitting`, `uncertain` or `claimed`.
-2. **VPS `.env` at W6/W7:** the list of `TAX_*` keys to copy from the password manager (names only).
-3. **Signed switch table (step 7):** the 4 tax flags, and their place in the W7 one-at-a-time order.
-4. **E-receipt chain:** confirm the chain continues across the database copy. W4 stops the office before the final dump, so no receipt can be issued in between.
-5. **Signing agent on 192.168.1.8:** what changes for it on cutover day, if anything.
-
-Stage B stays NO-GO until T is on `main`.
+The tax steps are now in [`2026-11-tax-cutover-steps.md`](2026-11-tax-cutover-steps.md), linked from the checklist and the P-54 switch spec:
+W1 (the office stops sending), W3 tax drain, W5 (the database copy carries the tax state and the e-receipt chain), W6 tax keys for the VPS `.env` (names only), W7 tax flags after the SOFTECH writers, the signing agent on 192.168.1.8, and rollback.
+Stage B now waits only on owner steps 7–12, with these tax steps followed on cutover day.
 
 ## Open PRs (none needed for Stage A)
 
 | PR | What | State |
 |---|---|---|
-| #122 | Roles registry | CI running; its session merges when green |
+| #122 | Roles registry | Merged 2026-11-14 |
 | #124 | Crews «الأطقم» foundation | CI running; its session merges when green |
-| #125 | Item and channel code maps | Needs `main` merged in again (conflict); its session is on it |
-| #131 | ETA history mirror, phase 1 (read-only) | Its session is finishing the proof |
+| #125 | Item and channel code maps | Merged 2026-11-14 |
+| #131 | ETA history mirror, phase 1 (read-only; switches off) | Merged 2026-11-14 |
 
 ## Developing after go-live
 
