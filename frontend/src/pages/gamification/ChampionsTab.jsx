@@ -9,13 +9,14 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { gamificationApi } from '../../api/client'
-import { roleLabel } from './labels'
+import useRoles from '../../hooks/useRoles'
 
 const fmt = (n) => (n ?? 0).toLocaleString('en-US')
 const MEDAL = { 1: '🥇', 2: '🥈', 3: '🥉' }
 const ym = (d) => String(d || '').slice(0, 7)
 
 function Leaders({ title, groups, t, showBranch }) {
+  const { roleLabelT: roleLabel } = useRoles()
   const roles = Object.keys(groups || {})
   return (
     <div className="card">
@@ -60,6 +61,7 @@ function RevokeButton({ c, t, onRevoke, busy }) {
 }
 
 export default function ChampionsTab({ t, lang }) {
+  const { roleLabelT: roleLabel } = useRoles()
   const qc = useQueryClient()
   const [month, setMonth] = useState('')
   const [msg, setMsg] = useState(null)

@@ -25,6 +25,7 @@ class LoginRateThrottle(AnonRateThrottle):
     """
     scope = 'login'
 
+from . import roles
 from .models import StaffProfile, ERPUser, UserActivityLog, RoleModuleAccess, ROLE_CHOICES, MODULE_CHOICES, ACTION_CHOICES
 from .serializers import (
     StaffProfileSerializer,
@@ -464,6 +465,14 @@ def logout_view(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def roles_view(request):
+    """The permission-role registry (value, Arabic/English label, description), registry order.
+    Every signed-in staff member may read it: it carries role names only, no access data."""
+    return Response({'roles': roles.as_api()})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def me_view(request):
     profile = getattr(request.user, 'staff_profile', None)
     if profile:
@@ -737,7 +746,8 @@ class PermissionsMatrixView(viewsets.ViewSet):
 
         return Response({
             'matrix': matrix,
-            'roles':   [{'value': v, 'label': l} for v, l in ROLE_CHOICES if v != 'admin'],
+            'roles':   [{'value': r.key, 'label': r.label_ar, 'label_en': r.label_en}
+                        for r in roles.ROLES if r.key != 'admin'],
             'modules': [{'value': v, 'label': l} for v, l in MODULE_CHOICES],
             'actions': [{'value': v, 'label': l} for v, l in ACTION_CHOICES],
             'notifiers':       [{'value': v, 'label': l} for v, l in Notification.CATEGORY_CHOICES],
