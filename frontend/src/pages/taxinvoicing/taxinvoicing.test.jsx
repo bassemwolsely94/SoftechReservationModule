@@ -36,9 +36,12 @@ const api = vi.hoisted(() => ({
   undoChainStart: vi.fn(),
   endTestMapping: vi.fn(),
   setSendFrom: vi.fn(),
+  historyProgress: vi.fn(),
+  historyRefresh: vi.fn(),
   saveReceiptConfig: vi.fn(),
 }))
 
+vi.mock('../../components/DataFreshnessBar', () => ({ default: () => null }))
 vi.mock('../../api/client', () => ({
   taxInvoicingApi: api,
   branchesApi: { list: vi.fn(() => Promise.resolve({ data: [{ softech_branch_id: '170', name_ar: 'فرع الجيش' }] })) },
@@ -50,6 +53,7 @@ const { default: ImportTab, buildOptions } = await import('./ImportTab')
 const { default: ItemsTab } = await import('./ItemsTab')
 const { BranchActions, ChainStart, TestMapping, SendFrom } = await import('./ReceiptsTab')
 const { default: CodesTab, CodeCheck, Candidates, Gs1Candidates } = await import('./CodesTab')
+const { HistoryProgress } = await import('./SettingsTab')
 
 const line = (id, status) => ({
   id, docnumber: '55', docdate: '2026-10-01', branch: '170', itemcode: `I${id}`, item_name: `صنف ${id}`, quantity: '1',
@@ -434,5 +438,21 @@ describe('branch send start', () => {
     fireEvent.click(screen.getByText('حفظ بداية الإرسال'))
     await waitFor(() => expect(api.setSendFrom).toHaveBeenCalledWith('150', expect.objectContaining({ reason: 'بدء التشغيل' })))
     expect(await screen.findByText(/أُعيد فحص 7/)).toBeTruthy()
+  })
+})
+
+describe('ETA history progress', () => {
+  it('shows both systems and refreshes one', async () => {
+    const kind = { states: { planned: 2, requested: 1, loaded: 5, failed: 0, too_big: 0 }, windows: 8, rows: 1234,
+      loaded_from: '2022-06-01', loaded_to: '2022-07-30', last_loaded_at: null, last_error: '' }
+    api.historyProgress.mockResolvedValue({ data: { systems: [
+      { system: 'preprod', label: 'التجريبية', why_not: '', documents: kind, receipts: kind },
+      { system: 'production', label: 'الفعلية', why_not: 'قراءة سجل المنظومة production مغلقة', documents: kind, receipts: kind },
+    ] } })
+    api.historyRefresh.mockResolvedValue({ data: { started: true } })
+    show(<HistoryProgress me={ME} />)
+    expect(await screen.findByText(/قراءة سجل المنظومة production مغلقة/)).toBeTruthy()
+    fireEvent.click(screen.getAllByText('تحديث الآن')[0])
+    await waitFor(() => expect(api.historyRefresh).toHaveBeenCalledWith({ system: 'preprod' }))
   })
 })

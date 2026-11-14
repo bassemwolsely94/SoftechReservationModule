@@ -56,6 +56,9 @@ DOMAINS = {
     'ar_contracts':      {'label_ar': 'مستحقات التعاقدات', 'source': 'ar_contracts',    'cadence_min': 1440, 'kind': 'snapshot'},
     # Lost-sale log (pos_cancel) — PosCancelDaily mirror, rolled up by the nightly sync_pos_cancel.
     'pos_cancel':        {'label_ar': 'المبيعات غير المخزنة', 'source': 'pos_cancel',    'cadence_min': 1440, 'kind': 'snapshot'},
+    # ETA history mirror (doc 36 §history), one per ETA system.
+    'eta_history_preprod':    {'label_ar': 'سجل المصلحة (التجريبية)', 'source': 'eta_history_preprod', 'cadence_min': 1440, 'kind': 'snapshot'},
+    'eta_history_production': {'label_ar': 'سجل المصلحة (الفعلية)', 'source': 'eta_history_production', 'cadence_min': 1440, 'kind': 'snapshot'},
 }
 
 # A domain is "stale" once its last success is older than this many sync
@@ -228,6 +231,12 @@ def _source_ap_reconciliation():
     }
 
 
+def _source_eta_history(system):
+    from apps.tax_invoicing.eta_history import last_loaded_at
+    at = last_loaded_at(system)
+    return {'last_success_at': at, 'last_attempt_at': at, 'last_run_failed': False}
+
+
 _SOURCES = {'expiry': _source_expiry, 'ap_reconciliation': _source_ap_reconciliation, 'purchases': _source_purchases,
             'ar_contracts': _source_ar_contracts, 'calls': _source_calls,
             'stock_audit': _source_stock_audit, 'attendance': _source_attendance, 'purchase_expiry': _source_purchase_expiry,
@@ -235,7 +244,9 @@ _SOURCES = {'expiry': _source_expiry, 'ap_reconciliation': _source_ap_reconcilia
             'gl_compare': _source_gl_compare,
             'finance_expenses': lambda: _finance_run_source('expense_records'),
             'finance_journal': lambda: _finance_run_source('journal_entries'),
-            'pos_cancel': _source_pos_cancel}
+            'pos_cancel': _source_pos_cancel,
+            'eta_history_preprod': lambda: _source_eta_history('preprod'),
+            'eta_history_production': lambda: _source_eta_history('production')}
 
 
 # ── public API ─────────────────────────────────────────────────────────────────

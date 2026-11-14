@@ -892,6 +892,15 @@ TAX_ERECEIPT_SUBMIT_ENABLED = config('TAX_ERECEIPT_SUBMIT_ENABLED', default=Fals
 TAX_ETA_CODING_ENABLED = config('TAX_ETA_CODING_ENABLED', default=False, cast=bool)
 TAX_ETA_PRODUCTION_ALLOWED = config('TAX_ETA_PRODUCTION_ALLOWED', default=False, cast=bool)
 TAX_ALLOW_MOCK_SIGNER = config('TAX_ALLOW_MOCK_SIGNER', default=False, cast=bool)
+# ETA history mirror: reading each ETA system with its own login (never sends). Production uses an ERP
+# registration made for us, never Invoicer's. Each system has its own switch, default off.
+TAX_ETA_READ_PREPROD_ENABLED = config('TAX_ETA_READ_PREPROD_ENABLED', default=False, cast=bool)
+TAX_ETA_READ_PRODUCTION_ENABLED = config('TAX_ETA_READ_PRODUCTION_ENABLED', default=False, cast=bool)
+TAX_ETA_READ_PREPROD_CLIENT_ID = config('TAX_ETA_READ_PREPROD_CLIENT_ID', default='')
+TAX_ETA_READ_PREPROD_CLIENT_SECRET = config('TAX_ETA_READ_PREPROD_CLIENT_SECRET', default='')
+TAX_ETA_READ_PRODUCTION_CLIENT_ID = config('TAX_ETA_READ_PRODUCTION_CLIENT_ID', default='')
+TAX_ETA_READ_PRODUCTION_CLIENT_SECRET = config('TAX_ETA_READ_PRODUCTION_CLIENT_SECRET', default='')
+TAX_ETA_HISTORY_START = config('TAX_ETA_HISTORY_START', default='2022-06-01')
 TAX_SIGNING_AGENT_TOKEN = config('TAX_SIGNING_AGENT_TOKEN', default='')
 TAX_SIGNING_CERT_THUMBPRINT = config('TAX_SIGNING_CERT_THUMBPRINT', default='')
 TAX_SIGNING_WAIT_SECONDS = config('TAX_SIGNING_WAIT_SECONDS', default=60, cast=int)
@@ -902,6 +911,9 @@ if _RUNNING_TESTS:
     TAX_ETA_CLIENT_ID = TAX_ETA_CLIENT_SECRET = TAX_ETA_CA_BUNDLE = ''
     TAX_ETA_SUBMIT_ENABLED = TAX_ERECEIPT_SUBMIT_ENABLED = TAX_ETA_CODING_ENABLED = TAX_ETA_PRODUCTION_ALLOWED = False
     TAX_SIGNER_CLASS, TAX_ALLOW_MOCK_SIGNER = 'apps.tax_invoicing.signing.NotConfiguredSigner', False
+    TAX_ETA_READ_PREPROD_ENABLED = TAX_ETA_READ_PRODUCTION_ENABLED = False
+    TAX_ETA_READ_PREPROD_CLIENT_ID = TAX_ETA_READ_PREPROD_CLIENT_SECRET = ''
+    TAX_ETA_READ_PRODUCTION_CLIENT_ID = TAX_ETA_READ_PRODUCTION_CLIENT_SECRET = ''
 
 # Stock Transactions Audit (apps/stock_audit, doc 32). Read-only stktrans mirror from HQ:
 # every 2 h replaces the last 3 docdate days; 03:15 catch-up replaces 7 days and prunes.
