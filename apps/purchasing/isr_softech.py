@@ -36,7 +36,14 @@ from decimal import Decimal, ROUND_CEILING
 
 logger = logging.getLogger('elrezeiky.purchasing')
 
-HQ = '100'
+
+def _hq():
+    """HQ's SOFTECH branch code (the one Branch of kind hq), looked up at call time — never at
+    import (module import must not hit the DB)."""
+    from apps.branches.models import hq_code
+    return hq_code()
+
+
 MIN_PACK_FRACTION = 0.16          # owner: a need under 0.16 of a pack is not ordered
 SOFTECH_ORDER_MONTHS = 0.8        # the «حد الطلب» SOFTECH's ISRs are made with (decoded)
 TARGETS = ('order_point', 'max')
@@ -224,7 +231,7 @@ def _read_softech(branch):
                 for r in cur.fetchall()}
         cur.execute('SELECT s.itemcode, sum(s.nowqty) FROM stkbal s, stores st '
                     'WHERE s.storecode = st.storecode AND st.storerealbal = 1 AND s.branchcode = ? '
-                    'GROUP BY s.itemcode', [HQ])
+                    'GROUP BY s.itemcode', [_hq()])
         hq = {str(r[0]).strip(): float(r[1] or 0) for r in cur.fetchall()}
         # how fresh server 100's copy of the branch is: its newest transaction there
         cur.execute('SELECT max(trans_time) FROM stktransm WHERE branchcode = ? AND docdate >= '
@@ -270,8 +277,9 @@ def build_plan(branchcode, settings_data=None, *, max_lines=None):
     branch = Branch.objects.filter(softech_branch_id=str(branchcode)).first()
     if branch is None:
         raise ValueError(f'الفرع {branchcode} غير موجود.')
-    if str(branchcode) == HQ:
-        raise ValueError('طلب التوريد يكون لفرع، لا للرئيسي 100.')
+    if str(branchcode) == _hq():
+        # BL rule: name the HQ, never its bare code
+        raise ValueError(f'طلب التوريد يكون لفرع، لا للمركز الرئيسي ({branch.name_ar or branch.name}).')
     rows, hq, as_of = _read_softech(branch)
     items = _items(rows.keys(), st)
     transit, transit_days = by_branch_code(list(items), max_age=14)

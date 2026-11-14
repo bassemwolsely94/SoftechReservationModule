@@ -93,10 +93,11 @@ def backfill_sales(run=None, since=None) -> dict:
     end   = today + datetime.timedelta(days=1)   # inclusive of today
     total_chunks = max(1, math.ceil((end - start).days / CHUNK_DAYS))
 
-    # Resolve maps over ALL items (incl. discontinued no_more_use) and active branches.
+    # Resolve maps over ALL items (incl. discontinued no_more_use) and ALL branches — a
+    # label map (same as the main sales sync): a sale keeps its branch whatever its kind.
     item_map   = dict(Item.objects.values_list('softech_id', 'id'))
     branch_map = {str(b).strip(): bid for b, bid in
-                  Branch.objects.filter(is_active=True).values_list('softech_branch_id', 'id')}
+                  Branch.objects.values_list('softech_branch_id', 'id')}
 
     _set_progress(run, 'backfill', 0,
                   f'مزامنة المبيعات المتأخرة — {(end - start).days} يوم على {total_chunks} دفعات')

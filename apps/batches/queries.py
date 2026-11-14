@@ -32,6 +32,8 @@ DATETIME range comparison (`docdate >= 'YYYY-MM-DD 00:00:00' AND docdate <
 The window end is EXCLUSIVE (pass the first day of the month AFTER the range).
 """
 
+from apps.batches.store_roles import check_quarantine_sql_in
+
 # ── Purchase lines carrying an entered expiry, for a supplier set + window ────
 #
 # Placeholders are formatted in Python (not bound params) because the supplier
@@ -109,3 +111,6 @@ QUERY_STOCK_IN_MOVEMENTS = """
       AND st.storecode  NOT IN ('102', '103', '105')
     GROUP BY st.itemcode, st.branchcode, st.docdate
 """
+# Quarantine list kept literal (string-built SQL is a bandit B608 finding); fails at import
+# if it drifts from store_roles.QUARANTINE_STORE_CODES.
+check_quarantine_sql_in(QUERY_STOCK_IN_MOVEMENTS, ', ')

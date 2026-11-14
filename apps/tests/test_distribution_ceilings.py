@@ -6,11 +6,16 @@ ceilings = {branch: {itemcode: (stock, ceiling)}}
 from django.test import SimpleTestCase
 
 from apps.purchasing import distribution as d
+from unittest import mock
 
 OPS = {'100', '130', '140', '150', '160', '170'}
 
 
 class PickSurplusTests(SimpleTestCase):
+    def setUp(self):
+        super().setUp()
+        self.enterContext(mock.patch('apps.purchasing.distribution._hq', return_value='100'))   # no DB in SimpleTestCase
+
     def test_picks_branch_with_most_stock_above_its_ceiling(self):
         c = {'140': {'X': (20.0, 2.6)},      # 17.4 over
              '150': {'X': (10.0, 4.0)}}      # 6 over
@@ -30,6 +35,10 @@ class PickSurplusTests(SimpleTestCase):
 
 
 class RoomTargetsTests(SimpleTestCase):
+    def setUp(self):
+        super().setUp()
+        self.enterContext(mock.patch('apps.purchasing.distribution._hq', return_value='100'))   # no DB in SimpleTestCase
+
     def test_only_selling_branches_with_a_pack_of_room(self):
         c = {'130': {'X': (0.0, 5.0)},       # room 5
              '150': {'X': (4.5, 5.0)},       # room 0.5 → less than a pack

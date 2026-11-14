@@ -15,6 +15,7 @@ from rest_framework.test import APIClient
 from apps.purchasing import isr_guards as G
 from apps.purchasing import isr_writer as W
 from apps.purchasing.models import IsrPush as P
+from apps.tests.factories import make_hq
 
 
 def _lines(*pairs):
@@ -27,6 +28,10 @@ def _fake_items_plan(node, items):
 
 
 class RouteTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
     def test_valid_and_invalid_routes(self):
         G.validate_route(P.KIND_HQ_TO_BRANCH, '100', '160')
         G.validate_route(P.KIND_BRANCH_TO_HQ, '170', '100')
@@ -42,6 +47,10 @@ class RouteTests(TestCase):
 
 
 class OneLiveDraftTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
     def _new(self, lines=(('A', 2),)):
         return W._persist_proposal(source='100', dest='160', kind=P.KIND_HQ_TO_BRANCH, lines=_lines(*lines))
 
@@ -78,6 +87,7 @@ class OneLiveDraftTests(TestCase):
 
 class TransferPairTests(TestCase):
     def setUp(self):
+        make_hq('100', self)   # HQ is read through hq_code()
         p = mock.patch.object(W, 'build_items_plan', side_effect=_fake_items_plan)
         p.start()
         self.addCleanup(p.stop)
@@ -101,6 +111,10 @@ class TransferPairTests(TestCase):
         self.assertEqual(P.objects.count(), before)
 
 class PushGuardTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
     def _pushed(self, lines, days_ago=1):
         p = P.objects.create(branchcode='100', dest_branchcode='160', kind=P.KIND_HQ_TO_BRANCH,
                              status=P.STATUS_PUSHED, lines_snapshot=lines, isrdocnumber=26100661,
@@ -161,6 +175,7 @@ class PushGuardTests(TestCase):
 @override_settings(SUPPLY_ERP_GROUPS='10,19,21,27')
 class ApiTests(TestCase):
     def setUp(self):
+        make_hq('100', self)   # HQ is read through hq_code()
         from .factories import make_user
         self.admin, _, _ = make_user('g_admin', role='admin')
         self.viewer, _, _ = make_user('g_sales', role='salesperson')
@@ -192,6 +207,10 @@ class ApiTests(TestCase):
 class OverlapGuardTests(TestCase):
     """P-32 §2.4: a draft that shares some items with an ISR pushed to the same destination in the last
     DUP_PUSH_DAYS days. Off by default (SystemSetting isr_overlap_guard) until the owner confirms the rule."""
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
 
     def _pushed(self, lines, days_ago=1, dest='160', kind=P.KIND_HQ_TO_BRANCH, source='100'):
         return P.objects.create(branchcode=source, dest_branchcode=dest, kind=kind, status=P.STATUS_PUSHED,
@@ -290,6 +309,10 @@ class OverlapReportTests(TestCase):
 class PlannerRuleTests(TestCase):
     """P-32 §2.3: one live draft per route, whoever made it — a draft from another planner is refused with
     `other_planner` instead of silently cancelling the waiting one; same planner still supersedes."""
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
 
     def _draft(self, planner, *lines):
         return W._persist_proposal(source='100', dest='160', kind=P.KIND_HQ_TO_BRANCH, lines=_lines(*lines),

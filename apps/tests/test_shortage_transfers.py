@@ -12,6 +12,7 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from .test_branch_requests import _branch, _fake_items_plan, _items, _user
+from apps.tests.factories import make_hq
 
 URL = '/api/shortage/lists/'
 
@@ -20,6 +21,7 @@ URL = '/api/shortage/lists/'
 class ShortageTransferTests(TestCase):
 
     def setUp(self):
+        make_hq('100', self)   # HQ is read through hq_code()
         from apps.shortage.models import ShortageItem, ShortageList
         self.br = _branch('130')
         self.a, self.b = _items('ELIQUIS 2.5MG 20TAB (XX)  (2STRIPSX10)', 'CELLCEPT 500MG 50TAB (XX) (5 STRIPSX10)')

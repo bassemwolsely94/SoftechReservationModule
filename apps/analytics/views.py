@@ -497,7 +497,7 @@ def filter_options(request):
     # Branches
     branches = [
         {'id': str(b.id), 'name': b.name_ar or b.name}
-        for b in branch_scope.scope(Branch.objects.filter(is_active=True), request.user, 'id')
+        for b in branch_scope.scope(Branch.objects.live(), request.user, 'id')
         .order_by('name_ar', 'name')
     ]
     own_ph = branch_scope.scope(PurchaseHistory.objects.all(), request.user)
@@ -1914,10 +1914,9 @@ def branch_contribution(request):
             if row['branch_id']:
                 expense_by_branch[row['branch_id']] = float(row['total'] or 0)
 
-    branches = {b.id: b for b in Branch.objects.filter(is_active=True)}
     result   = []
 
-    for branch in Branch.objects.filter(is_active=True).order_by('name'):
+    for branch in Branch.objects.live().order_by('name'):
         m        = branch_metrics.get(branch.id, {})
         gross    = m.get('gross_revenue', 0.0)
         ret      = m.get('returns', 0.0)

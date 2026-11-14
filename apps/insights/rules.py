@@ -315,7 +315,7 @@ class Ctx:
         b = self.all_branch_by_code.get(str(code))
         if b:
             return (b.name_ar or b.name) if lang == 'ar' else (b.name or b.name_ar)
-        if str(code) == HQ_CODE:
+        if str(code) == _hq():
             return 'المخزن الرئيسي' if lang == 'ar' else 'HQ warehouse'
         return str(code)
 
@@ -710,7 +710,13 @@ def rule_top_branch(ctx, threshold):
     return []
 
 
-HQ_CODE = '100'
+def _hq():
+    """HQ's SOFTECH branch code (the one Branch of kind hq), looked up at call time — never at
+    import (module import must not hit the DB)."""
+    from apps.branches.models import hq_code
+    return hq_code()
+
+
 _PROFIT = ExpressionWrapper(F('line_total') - F('quantity') * F('cost_at_sale'),
                            output_field=DecimalField(max_digits=18, decimal_places=4))
 
@@ -1260,7 +1266,7 @@ def rule_hq_purchase_summary(ctx, threshold):
     """HQ purchasing AT-A-GLANCE headline: net value, distinct items, distinct suppliers,
     invoice count + avg invoice, returns value/rate, free/bonus value, and trend vs prev — one
     board-level remark so HQ purchasing is front-and-centre."""
-    qs = _purchases(ctx.start, ctx.end).filter(branch_code=HQ_CODE, is_return=False)
+    qs = _purchases(ctx.start, ctx.end).filter(branch_code=_hq(), is_return=False)
     val = Decimal(str(qs.aggregate(v=Sum('net_value'))['v'] or 0))
     if val <= 0:
         # HQ central buying is LUMPY — big supplier deliveries every few days, nothing in between.
@@ -1268,13 +1274,13 @@ def rule_hq_purchase_summary(ctx, threshold):
         # scope (while branches, which buy locally most days, stayed). Emit a zero-state note so HQ
         # is ALWAYS selectable, showing when the last central delivery landed.
         from apps.procurement.models import PurchaseLine
-        last = (PurchaseLine.objects.filter(branch_code=HQ_CODE, is_return=False, net_value__gt=0,
+        last = (PurchaseLine.objects.filter(branch_code=_hq(), is_return=False, net_value__gt=0,
                     doc_date__lte=ctx.end).exclude(supplier_code__in=_excluded_supplier_codes())
                 .order_by('-doc_date').values_list('doc_date', flat=True).first())
         last_ar = f' — آخر توريد مركزي بتاريخ {last}' if last else ''
         last_en = f' — last central delivery {last}' if last else ''
         return [dict(rule_code='hq_purchase_summary', category='coverage', severity='info',
-            scope_type='branch', scope_key=HQ_CODE, scope_label='المخزن الرئيسي',
+            scope_type='branch', scope_key=_hq(), scope_label='المخزن الرئيسي',
             value=Decimal('0'), baseline=None, threshold=None,
             message_ar=f'🏭 المخزن الرئيسي: لا مشتريات مركزية خلال ال{ctx.label()}{last_ar} (الشراء المركزي يتم على دفعات).',
             message_en=f'🏭 HQ: no central purchases this {ctx.pw_en()}{last_en} (central buying is batched).')]
@@ -1282,14 +1288,14 @@ def rule_hq_purchase_summary(ctx, threshold):
     suppliers = qs.exclude(supplier_code='').values('supplier_code').distinct().count()
     invs = _inv_count(qs)
     avg_inv = (val / Decimal(invs)) if invs else Decimal('0')
-    ret_val = abs(Decimal(str(_purchases(ctx.start, ctx.end).filter(branch_code=HQ_CODE, is_return=True)
+    ret_val = abs(Decimal(str(_purchases(ctx.start, ctx.end).filter(branch_code=_hq(), is_return=True)
                              .aggregate(v=Sum('raw_value'))['v'] or 0)))
     rate = ret_val / (val + ret_val) * 100 if (val + ret_val) else Decimal('0')
     cost_foc = ExpressionWrapper(F('cost_price') * F('bonus_qty'),   # FOC value = FREE units × cost (NOT paid qty)
                                  output_field=DecimalField(max_digits=20, decimal_places=4))
-    foc = Decimal(str(_purchases(ctx.start, ctx.end).filter(branch_code=HQ_CODE, is_foc=True)
+    foc = Decimal(str(_purchases(ctx.start, ctx.end).filter(branch_code=_hq(), is_foc=True)
                       .aggregate(v=Sum(cost_foc))['v'] or 0))
-    prev = Decimal(str(_purchases(ctx.prev_start, ctx.prev_end).filter(branch_code=HQ_CODE, is_return=False)
+    prev = Decimal(str(_purchases(ctx.prev_start, ctx.prev_end).filter(branch_code=_hq(), is_return=False)
                        .aggregate(v=Sum('net_value'))['v'] or 0))
     trend_ar = trend_en = ''
     if prev > 0:
@@ -1298,7 +1304,7 @@ def rule_hq_purchase_summary(ctx, threshold):
         trend_ar = f' ({arrow}{abs(float(d)):.0f}% عن السابق)'
         trend_en = f' ({arrow}{abs(float(d)):.0f}% vs prev)'
     return [dict(rule_code='hq_purchase_summary', category='highlight', severity='info',
-        scope_type='branch', scope_key=HQ_CODE, scope_label='المخزن الرئيسي',
+        scope_type='branch', scope_key=_hq(), scope_label='المخزن الرئيسي',
         value=val, baseline=(prev or None), threshold=None,
         message_ar=(f'🏭 مشتريات المخزن الرئيسي ({ctx.label()}): صافي {_fmt(val)} ج.م{trend_ar} على {items} صنف '
                     f'من {suppliers} مورد · {invs} فاتورة (متوسط {_fmt(avg_inv)} ج.م) · '
@@ -1356,7 +1362,7 @@ def rule_hq_purchase_trend(ctx, threshold):
     """HQ purchasing value + distinct items vs the previous equal period (trend)."""
     thr = Decimal(str(threshold if threshold is not None else 20))
     def snap(s, e):
-        qs = _purchases(s, e).filter(branch_code=HQ_CODE, is_return=False)
+        qs = _purchases(s, e).filter(branch_code=_hq(), is_return=False)
         return (Decimal(str(qs.aggregate(v=Sum('net_value'))['v'] or 0)),
                 qs.values('item_code').distinct().count())
     cv, ci = snap(ctx.start, ctx.end)
@@ -1366,7 +1372,7 @@ def rule_hq_purchase_trend(ctx, threshold):
     d = (cv - pv) / pv * 100
     arrow = '▲' if d >= 0 else '▼'
     return [dict(rule_code='hq_purchase_trend', category='comparison', severity='info',
-        scope_type='branch', scope_key=HQ_CODE, scope_label='المخزن الرئيسي',
+        scope_type='branch', scope_key=_hq(), scope_label='المخزن الرئيسي',
         value=cv, baseline=pv, threshold=thr,
         message_ar=f'🏭 مشتريات المخزن الرئيسي: {_fmt(cv)} ج.م على {ci} صنف ({arrow}{abs(float(d)):.0f}% عن السابق: {_fmt(pv)} ج.م / {pi} صنف).',
         message_en=f'🏭 HQ purchases: {_fmt(cv)} EGP over {ci} items ({arrow}{abs(float(d)):.0f}% vs prev: {_fmt(pv)} EGP / {pi} items).')]
@@ -1377,7 +1383,7 @@ def rule_purchase_price_creep(ctx, threshold):
     (supplier price creep). FOC lines excluded so free goods don't distort cost."""
     thr = Decimal(str(threshold if threshold is not None else 10))
     def unit_cost(s, e):
-        rows = (_purchases(s, e).filter(branch_code=HQ_CODE, is_return=False, is_foc=False)
+        rows = (_purchases(s, e).filter(branch_code=_hq(), is_return=False, is_foc=False)
                 .values('item_code').annotate(v=Sum('net_value'), q=Sum('net_qty')))
         return {r['item_code']: (Decimal(str(r['v'] or 0)), Decimal(str(r['q'] or 0)))
                 for r in rows if (r['q'] or 0) > 0 and (r['v'] or 0) > 0}
@@ -1412,7 +1418,7 @@ def rule_purchase_thin_margin(ctx, threshold):
     wm = ExpressionWrapper(F('margin_pct') * F('net_value'),
                            output_field=DecimalField(max_digits=22, decimal_places=4))
     rows = (_purchases(ctx.start, ctx.end)
-            .filter(branch_code=HQ_CODE, is_return=False, is_foc=False, margin_pct__isnull=False, net_value__gt=0)
+            .filter(branch_code=_hq(), is_return=False, is_foc=False, margin_pct__isnull=False, net_value__gt=0)
             .values('item_code').annotate(v=Sum('net_value'), mw=Sum(wm)))
     hits = []
     for r in rows:
@@ -1439,7 +1445,7 @@ def rule_buyer_small_warehouse(ctx, threshold):
     thr = Decimal(str(threshold if threshold is not None else 30))
     sw_val = Case(When(supplier_category='SMALL_WAREHOUSE', then=F('net_value')),
                   default=Value(0), output_field=DecimalField(max_digits=18, decimal_places=4))
-    rows = (_purchases(ctx.start, ctx.end).filter(branch_code=HQ_CODE, is_return=False)
+    rows = (_purchases(ctx.start, ctx.end).filter(branch_code=_hq(), is_return=False)
             .exclude(buyer_code='').values('buyer_code')
             .annotate(tot=Sum('net_value'), sw=Sum(sw_val)))
     out = []
@@ -1461,7 +1467,7 @@ def rule_buyer_small_warehouse(ctx, threshold):
 def rule_supplier_concentration(ctx, threshold):
     """One supplier taking ≥ threshold% of HQ spend (dependency / negotiation risk)."""
     thr = Decimal(str(threshold if threshold is not None else 35))
-    rows = dict(_purchases(ctx.start, ctx.end).filter(branch_code=HQ_CODE, is_return=False)
+    rows = dict(_purchases(ctx.start, ctx.end).filter(branch_code=_hq(), is_return=False)
                 .exclude(supplier_code='').values_list('supplier_code').annotate(v=Sum('net_value')))
     total = sum(Decimal(str(v or 0)) for v in rows.values())
     if total <= 0:
@@ -1485,14 +1491,14 @@ def rule_foc_captured(ctx, threshold):
     what those free units cost the supplier / would have cost us — the true 'free goods' worth."""
     cost = ExpressionWrapper(F('cost_price') * F('bonus_qty'),   # FOC value = FREE units × cost (NOT paid qty)
                              output_field=DecimalField(max_digits=20, decimal_places=4))
-    qs = _purchases(ctx.start, ctx.end).filter(branch_code=HQ_CODE, is_foc=True, bonus_qty__gt=0)
+    qs = _purchases(ctx.start, ctx.end).filter(branch_code=_hq(), is_foc=True, bonus_qty__gt=0)
     agg = qs.aggregate(n=Count('id'), q=Sum('bonus_qty'), val=Sum(cost))
     val = Decimal(str(agg['val'] or 0))
     if (agg['n'] or 0) == 0 or val <= 0:
         return []
     units = float(agg['q'] or 0)
     return [dict(rule_code='foc_captured', category='highlight', severity='info',
-        scope_type='branch', scope_key=HQ_CODE, scope_label='المخزن الرئيسي',
+        scope_type='branch', scope_key=_hq(), scope_label='المخزن الرئيسي',
         value=val, baseline=None, threshold=None,
         message_ar=f'🎁 بضائع مجانية/بونص مُحصّلة: ~{units:,.0f} وحدة بقيمة ~{_fmt(val)} ج.م (تكلفة) خلال ال{ctx.label()}.',
         message_en=f'🎁 Free/bonus goods captured: ~{units:,.0f} units worth ~{_fmt(val)} EGP (cost) this {ctx.pw_en()}.')]
@@ -1505,7 +1511,7 @@ def rule_branch_local_purchase(ctx, threshold):
     is usually costlier than central distribution, so it's worth watching."""
     thr = Decimal(str(threshold if threshold is not None else 10000))
     rows = (_purchases(ctx.start, ctx.end).filter(is_return=False)
-            .exclude(branch_code=HQ_CODE).exclude(branch_code='')
+            .exclude(branch_code=_hq()).exclude(branch_code='')
             .values('branch_code').annotate(v=Sum('net_value'), items=Count('item_code', distinct=True))
             .order_by('-v'))
     out = []
@@ -1530,7 +1536,7 @@ def rule_branch_small_warehouse(ctx, threshold):
     sw_val = Case(When(supplier_category='SMALL_WAREHOUSE', then=F('net_value')),
                   default=Value(0), output_field=DecimalField(max_digits=18, decimal_places=4))
     rows = (_purchases(ctx.start, ctx.end).filter(is_return=False)
-            .exclude(branch_code=HQ_CODE).exclude(branch_code='')
+            .exclude(branch_code=_hq()).exclude(branch_code='')
             .values('branch_code').annotate(tot=Sum('net_value'), sw=Sum(sw_val)))
     out = []
     for r in rows:
@@ -1577,7 +1583,7 @@ def rule_buy_vs_sell_imbalance(ctx, threshold):
     period — overstock / tied-up capital. threshold = max sell-through (% of buy value)."""
     thr = Decimal(str(threshold if threshold is not None else 10))
     bought = dict(_purchases(ctx.start, ctx.end)
-                  .filter(branch_code=HQ_CODE, is_return=False, net_value__gt=0)
+                  .filter(branch_code=_hq(), is_return=False, net_value__gt=0)
                   .values_list('item_code').annotate(v=Sum('net_value')))
     bought = {c: Decimal(str(v or 0)) for c, v in bought.items() if Decimal(str(v or 0)) >= 20000}
     if not bought:
@@ -1633,9 +1639,9 @@ def rule_purchase_overview(ctx, threshold):
     def net(s, e, branch=None):
         q = _purchases(s, e).filter(is_return=False)
         if branch == 'hq':
-            q = q.filter(branch_code=HQ_CODE)
+            q = q.filter(branch_code=_hq())
         elif branch == 'branches':
-            q = q.exclude(branch_code=HQ_CODE)
+            q = q.exclude(branch_code=_hq())
         return Decimal(str(q.aggregate(v=Sum('net_value'))['v'] or 0))
     cur = net(ctx.start, ctx.end)
     if cur <= 0:
@@ -1740,8 +1746,8 @@ def rule_branch_purchase_profile(ctx, threshold):
         if v < thr:
             continue
         b = bmap.get(code)
-        nm = (b.name_ar or b.name) if b else (HQ if code == HQ_CODE else code)
-        ne = (b.name or b.name_ar) if b else (HQ if code == HQ_CODE else code)
+        nm = (b.name_ar or b.name) if b else (HQ if code == _hq() else code)
+        ne = (b.name or b.name_ar) if b else (HQ if code == _hq() else code)
         tot = sum(cat[code].values()) or Decimal('1')
         cs = sorted(cat[code].items(), key=lambda x: -x[1])[:4]
         pa = ' · '.join(f'{_GENCAT_AR.get(c, c)} {x/tot*100:.0f}%' for c, x in cs)
@@ -1840,12 +1846,12 @@ def rule_purchase_supplier_category(ctx, threshold):
     r = emit(base, 'chain', '', '', '', 'highlight')
     if r:
         out.append(r)
-    r = emit(base.filter(branch_code=HQ_CODE), 'branch', HQ_CODE,
-             ctx.branch_name(HQ_CODE, 'ar'), ctx.branch_name(HQ_CODE, 'en'), 'highlight')
+    r = emit(base.filter(branch_code=_hq()), 'branch', _hq(),
+             ctx.branch_name(_hq(), 'ar'), ctx.branch_name(_hq(), 'en'), 'highlight')
     if r:
         out.append(r)
     for code in _purchase_branch_codes(ctx):
-        if code == HQ_CODE:
+        if code == _hq():
             continue
         r = emit(base.filter(branch_code=code), 'branch', code,
                  ctx.branch_name(code, 'ar'), ctx.branch_name(code, 'en'), 'comparison', floor=thr)
@@ -1884,7 +1890,7 @@ def rule_purchase_invoice_count(ctx, threshold):
     for code in _purchase_branch_codes(ctx):
         r = emit(base.filter(branch_code=code), 'branch', code,
                  ctx.branch_name(code, 'ar'), ctx.branch_name(code, 'en'), 'comparison',
-                 floor=(Decimal('0') if code == HQ_CODE else thr))
+                 floor=(Decimal('0') if code == _hq() else thr))
         if r:
             out.append(r)
     return out
@@ -1914,8 +1920,8 @@ def rule_purchase_input_vat(ctx, threshold):
     r = emit(base, 'chain', '', '', '', 'highlight')
     if r:
         out.append(r)
-    r = emit(base.filter(branch_code=HQ_CODE), 'branch', HQ_CODE,
-             ctx.branch_name(HQ_CODE, 'ar'), ctx.branch_name(HQ_CODE, 'en'), 'comparison')
+    r = emit(base.filter(branch_code=_hq()), 'branch', _hq(),
+             ctx.branch_name(_hq(), 'ar'), ctx.branch_name(_hq(), 'en'), 'comparison')
     if r:
         out.append(r)
     return out
@@ -1960,7 +1966,7 @@ def rule_buyer_ranking(ctx, threshold):
     small-warehouse reliance share. HQ buyers (buyer_code on HQ purchases)."""
     sw_val = Case(When(supplier_category='SMALL_WAREHOUSE', then=F('net_value')),
                   default=Value(0), output_field=DecimalField(max_digits=18, decimal_places=4))
-    rows = (_purchases(ctx.start, ctx.end).filter(branch_code=HQ_CODE, is_return=False)
+    rows = (_purchases(ctx.start, ctx.end).filter(branch_code=_hq(), is_return=False)
             .exclude(buyer_code='').values('buyer_code').annotate(v=Sum('net_value'), sw=Sum(sw_val)))
     data, share = [], {}
     for r in rows:

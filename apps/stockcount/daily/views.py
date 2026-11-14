@@ -211,7 +211,7 @@ def board(request):
         from apps.branches.models import Branch
         out['pilot_branches'] = [
             {'code': b.softech_branch_id, 'name': b.name_ar or b.name}
-            for b in Branch.objects.filter(is_active=True, settings__daily_count_enabled=True).order_by('softech_branch_id')]
+            for b in Branch.objects.live().filter(settings__daily_count_enabled=True).order_by('softech_branch_id')]
     return Response(out)
 
 

@@ -596,7 +596,7 @@ def audit_candidates(period_from, period_to, branch_codes=None, categories=None,
     else:
         from apps.branches.models import Branch
         scope_branches = list(
-            Branch.objects.filter(is_active=True)
+            Branch.objects.live()
             .values_list('softech_branch_id', flat=True)
         )
         if not scope_branches:   # fallback (e.g. tests without Branch rows)
@@ -828,7 +828,7 @@ def rebalance_suggest(item_code, from_branch, days_to_expiry,
 
     item = Item.objects.filter(softech_id=item_code).only('id', 'name', 'cost_price').first()
     bmeta = {}
-    for bc, bid, nar, nm in Branch.objects.filter(is_active=True).values_list(
+    for bc, bid, nar, nm in Branch.objects.live().values_list(
             'softech_branch_id', 'id', 'name_ar', 'name'):
         bmeta[str(bc)] = {'id': bid, 'name': nar or nm or str(bc)}
     branch_codes = list(bmeta.keys())
@@ -1060,7 +1060,7 @@ def expiry_prone_items(months_back=12, short_dated_months=SHORT_DATED_MONTHS,
 
     codes = list(per.keys())
     names = dict(qs.exclude(item_name='').values_list('item_code', 'item_name').distinct())
-    branch_codes = list(Branch.objects.filter(is_active=True)
+    branch_codes = list(Branch.objects.live()
                         .values_list('softech_branch_id', flat=True))
     vel_map, _ = _velocity_map(codes, branch_codes)
 
@@ -1110,7 +1110,7 @@ def generate_branch_worklists(back_days=30, ahead_days=90, top_n=25,
     summary = {'branches_scanned': 0, 'branches_with_items': 0,
                'notified': 0, 'errors': 0}
 
-    for b in Branch.objects.filter(is_active=True, is_operational=True):
+    for b in Branch.objects.live().filter(is_operational=True):   # paused branches skip
         bc = b.softech_branch_id
         try:
             rows = audit_candidates(frm, to, branch_codes=[bc], only_in_stock=True,

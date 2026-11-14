@@ -653,3 +653,87 @@ class EveryViewGatedTests(TestCase):
             elif s and not s.startswith('#') and header is None:
                 unexplained.append(s)
         self.assertEqual(unexplained, [], 'open views without a reason:\n' + '\n'.join(unexplained))
+
+
+class BranchLiteralScanTests(SimpleTestCase):
+    """Branch classification piece 1 (Task 7): liveness comes from Branch.kind, never from a
+    hard-coded code list, an HQ='100' literal or an is_active / is_operational filter alone."""
+
+    def test_branch_code_list_flagged(self):
+        t = _tree('''
+            RETAIL_BRANCHES = ['130', '140', '150']
+            def f(qs):
+                return qs.filter(branch_code__in=('160', '170'))
+            def g(branch):
+                return branch in {'100', '130'}
+        ''')
+        self.assertEqual(static_scan.branch_literal_sites(t, 't.py'),
+                         {'t.py::<module>', 't.py::f', 't.py::g'})
+
+    def test_doccode_list_not_flagged(self):
+        t = _tree('''
+            SALE_DOCCODES = ['130', '140']
+            BRANCH_DOCCODES = ('100', '110')
+            def f(qs):
+                return qs.filter(doccode__in=['100', '120'])
+            def g():
+                codes = ['130', '140']
+                one_branch = ['130']
+        ''')
+        self.assertEqual(static_scan.branch_literal_sites(t, 't.py'), set())
+
+    def test_hq_literal_flagged(self):
+        t = _tree('''
+            HQ_CODE = '100'
+            class K:
+                HQ = '100'
+                HQ_STORE = '110'
+        ''')
+        self.assertEqual(static_scan.branch_literal_sites(t, 't.py'),
+                         {'t.py::<module>', 't.py::K'})
+
+    def test_is_active_branch_filter_flagged(self):
+        t = _tree('''
+            def f():
+                return Branch.objects.filter(is_active=True)
+            def g():
+                return Branch.objects.filter(is_operational=True).order_by('name')
+            def h():
+                return Branch.objects.exclude(softech_branch_id='CC').filter(is_active=True)
+        ''')
+        self.assertEqual(static_scan.branch_literal_sites(t, 't.py'),
+                         {'t.py::f', 't.py::g', 't.py::h'})
+
+    def test_kind_filter_not_flagged(self):
+        t = _tree('''
+            def f():
+                return Branch.objects.filter(kind__in=['hq', 'retail'], is_active=True)
+            def g():
+                return Branch.objects.live().filter(is_operational=True)
+            def h():
+                return Branch.objects.filter(is_operational=False)
+            def i():
+                return Item.objects.filter(is_active=True)
+            def j():
+                return Branch.objects.retail().filter(is_active=True)
+        ''')
+        self.assertEqual(static_scan.branch_literal_sites(t, 't.py'), set())
+
+
+class BranchLiteralGuardTests(SimpleTestCase):
+
+    def test_no_new_branch_literals(self):
+        assert_matches_baseline(self, 'branch_liveness_literals', static_scan.repo_sites(
+            static_scan.branch_literal_sites))
+
+    def test_branch_literal_baseline_lines_are_all_explained(self):
+        from .baseline import BASELINE_DIR
+        header, unexplained = None, []
+        for ln in (BASELINE_DIR / 'branch_liveness_literals.txt').read_text(
+                encoding='utf-8').splitlines():
+            s = ln.strip()
+            if s.startswith('# reason:'):
+                header = s
+            elif s and not s.startswith('#') and header is None:
+                unexplained.append(s)
+        self.assertEqual(unexplained, [], 'unexplained branch-literal sites:\n' + '\n'.join(unexplained))

@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db import models
-from .models import Category, Item, ItemStock, EXCLUDED_STORE_CODES
+from .models import Category, Item, ItemStock, exclude_unsellable, unsellable_q
 from .serializers import CategorySerializer, ItemSerializer, ItemStockSerializer, ItemSearchSerializer
 from .wildcard import WildcardSearchFilter
 from core.errors import public_error
@@ -220,7 +220,7 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
                 total_stock=Coalesce(
                     Sum(
                         'stock_levels__quantity_on_hand',
-                        filter=~models.Q(stock_levels__softech_store_code__in=EXCLUDED_STORE_CODES),
+                        filter=~unsellable_q('stock_levels__'),
                     ),
                     Value(0, output_field=DecimalField()),
                     output_field=DecimalField(),
@@ -360,15 +360,14 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=['get'])
     def stock(self, request, pk=None):
         """
-        Returns per-branch aggregated stock (expired stores 102/103/105 excluded).
+        Returns per-branch aggregated sellable stock (catalog.models.exclude_unsellable:
+        quarantine 102/103/105, HQ store 110 and closed/pending branches excluded).
         One record per branch, quantities summed across valid stores.
         """
         item = self.get_object()
         from django.db.models import Sum as _Sum
         rows = (
-            ItemStock.objects
-            .filter(item=item)
-            .exclude(softech_store_code__in=EXCLUDED_STORE_CODES)
+            exclude_unsellable(ItemStock.objects.filter(item=item))
             .values('branch__id', 'branch__name', 'branch__name_ar')
             .annotate(
                 quantity_on_hand=_Sum('quantity_on_hand'),
@@ -483,8 +482,7 @@ def _search_rows(tiers, branch_id) -> list:
     if branch_id:
         from django.db.models import Sum as _Sum
         stock = {r['item_id']: float(r['qty'] or 0) for r in (
-            ItemStock.objects.filter(item_id__in=ids, branch_id=branch_id)
-            .exclude(softech_store_code__in=EXCLUDED_STORE_CODES)
+            exclude_unsellable(ItemStock.objects.filter(item_id__in=ids, branch_id=branch_id))
             .values('item_id').annotate(qty=_Sum('quantity_on_hand')))}
     rows = []
     for iid, tier in tiers:

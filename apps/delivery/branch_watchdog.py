@@ -107,7 +107,7 @@ def _notify_branch_event(branch_id, host, kind, streak=0, since=None,
 
     # 2) Confirmed outage / recovery → inform the OTHER branches too
     if broadcast_branches:
-        others = Branch.objects.filter(is_active=True).exclude(softech_branch_id=str(branch_id))
+        others = Branch.objects.live().exclude(softech_branch_id=str(branch_id))
         for b in others:
             Notification.send_to_branch(
                 branch=b,

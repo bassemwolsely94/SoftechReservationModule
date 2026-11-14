@@ -830,8 +830,7 @@ SCREENS = [
              'text': T('الأدمن يمنح أو يلغي صلاحية مدير فرع بعينه. هو يرى فرعه فقط.', 'The admin grants or revokes a named branch manager. They see their own branch only.'),
              'open_hint': T('يظهر للأدمن فقط، أسفل الشاشة.', 'Shown to the admin only, at the bottom of the screen.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلاتر الفرع والبائع والقناة والفئة والشريحة ونوع العميل ودورة الشراء وموظف الاتصال تقبل الآن أكثر من اختيار',
-                         'The branch, salesperson, channel, category, segment, customer-type, buying-cycle and agent filters now take several choices'),
+        'updated': '2026-11-13',
+        'change_note': T('خانة «إظهار الفروع المغلقة» بجانب فلتر الفرع تضيف الفروع المغلقة للقائمة (للمدير).', 'A "Show closed branches" box beside the branch filter adds closed branches to the list (admins).'),
     },
 ]

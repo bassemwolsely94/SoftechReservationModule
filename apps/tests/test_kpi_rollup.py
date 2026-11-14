@@ -545,7 +545,8 @@ class KpiBoardCallCenterTargetSaveTests(TestCase):
 
     def setUp(self):
         from apps.tests.factories import make_user
-        self.cc = Branch.objects.create(softech_branch_id='CC', code='CC', name='Call Center', is_operational=False)
+        self.cc = Branch.objects.create(softech_branch_id='CC', code='CC', name='Call Center', is_operational=False,
+                                     kind=Branch.KIND_CALL_CENTER)
         _, _, self.client = make_user('kpi_admin', role='admin', access_all=True)
 
     def _post(self, metric, value):
@@ -583,7 +584,8 @@ class ForecastEnginePicCountTests(TestCase):
         from apps.forecasting.models import ForecastScenario, ForecastResult
         from apps.incentives.models import SalesTarget
         br = Branch.objects.create(softech_branch_id='997', code='997', name='PB', is_operational=True)
-        cc = Branch.objects.create(softech_branch_id='CC', code='CC', name='Call Center', is_operational=False)
+        cc = Branch.objects.create(softech_branch_id='CC', code='CC', name='Call Center', is_operational=False,
+                                     kind=Branch.KIND_CALL_CENTER)
         for b in (br, cc):            # a branch pic_count rollup must still be ignored
             for (y, m, v) in [(2025, 9, 400), (2026, 8, 450), (2026, 7, 420)]:
                 KpiActualRollup.objects.create(branch=b, year=y, month=m,

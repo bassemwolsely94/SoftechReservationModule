@@ -56,7 +56,9 @@ class IsrPushTests(TestCase):
         from apps.purchasing.models import IsrPush as P
         from apps.tests.test_isr_guards import _lines
         self.W, self.P = W, P
+        from apps.tests.factories import make_hq
         _branch('100'), _branch('160')
+        make_hq('100', self)                # validate_route reads HQ through hq_code()
         p = W._persist_proposal(source='100', dest='160', kind=P.KIND_HQ_TO_BRANCH, lines=_lines(('A', 2)))
         P.objects.filter(pk=p.pk).update(status=P.STATUS_APPROVED)
         self.p = P.objects.get(pk=p.pk)
