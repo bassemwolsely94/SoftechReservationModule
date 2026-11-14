@@ -25,6 +25,7 @@ from .models import (TaxChannelRule, TaxIssuerProfile, TaxItemProfile, TaxReceip
 from .services import TaxRuleError, _subtype, audit, classify
 
 FLAG = 'TAX_ERECEIPT_SUBMIT_ENABLED'
+BEFORE_START = 'before_start'
 TYPE_VERSION = '1.2'
 ZERO = Decimal('0')
 BUYER_ID_THRESHOLD = Decimal('150000')   # receipt v1.2: a person's ID is required from this value
@@ -173,6 +174,10 @@ def evaluate(receipt, rule=None):
             issues.append({'code': 'return_reference', 'message': 'الإيصال الأصلي غير صادر من هذا النظام'})
     if receipt.total_amount >= BUYER_ID_THRESHOLD:
         issues.append({'code': 'buyer_id', 'message': 'الإيصال فوق حد بيانات المشتري'})
+    send_from = (TaxReceiptBranchConfig.objects.filter(softech_branchcode=receipt.softech_branchcode)
+                 .values_list('send_from', flat=True).first())
+    if send_from and receipt.sold_at < send_from:
+        issues.insert(0, {'code': BEFORE_START, 'message': 'قبل بداية الإرسال للفرع؛ لا يُرسل من هنا'})
     receipt.hold_reasons = issues
     receipt.status = TaxReceipt.HELD if issues else TaxReceipt.READY
     receipt.save()
@@ -232,7 +237,39 @@ def config_gaps(config, issuer):
         gaps.append('تأكيد المحاسب: هل الأسعار شاملة الضريبة')
     if not config.chain_start:
         gaps.append('بداية سلسلة الجهاز (جهاز جديد أم استلام من برنامج سابق)')
+    if not config.send_from:
+        gaps.append('بداية الإرسال (المبيعات قبلها لا تُرسل من هنا)')
     return gaps
+
+
+def set_send_from(branchcode, actor, value, reason=''):
+    """Sets the moment from which this branch's sales are sent. Once a receipt is issued it can only move
+    later: an earlier start would issue older sales after newer ones. Re-checks the branch's unsent receipts."""
+    if value is None:
+        raise TaxRuleError('حدد تاريخ ووقت بداية الإرسال')
+    if timezone.is_naive(value):
+        value = timezone.make_aware(value)
+    if value > timezone.now() + dt.timedelta(days=31):
+        raise TaxRuleError('بداية الإرسال بعيدة في المستقبل')
+    with transaction.atomic():
+        config = TaxReceiptBranchConfig.objects.select_for_update().filter(softech_branchcode=branchcode).first()
+        if config is None:
+            raise TaxRuleError('الفرع غير مسجل')
+        issued = TaxReceipt.objects.filter(softech_branchcode=branchcode).exclude(uuid='')
+        if issued.exists() and (config.send_from is None or value < config.send_from):
+            raise TaxRuleError('صدرت إيصالات من هذا الفرع؛ بداية الإرسال تتأخر فقط ولا تتقدم')
+        before = config.send_from
+        config.send_from = value
+        config.save(update_fields=['send_from'])
+        audit('receipt_send_from_set', actor=actor, entity='receipt_branch', entity_id=branchcode, reason=reason,
+              before={'send_from': before}, after={'send_from': value})
+    rules = {r.ptclassifcode: r for r in TaxChannelRule.objects.all()}
+    rechecked = 0
+    for receipt in TaxReceipt.objects.filter(softech_branchcode=branchcode,
+                                             status__in=[TaxReceipt.HELD, TaxReceipt.READY]).iterator():
+        evaluate(receipt, rules.get(receipt.channel))
+        rechecked += 1
+    return config, rechecked
 
 
 # ── Where a device's chain starts ──────────────────────────────────────────────────────────────
@@ -430,7 +467,8 @@ def issue_next(branchcode, actor, limit=200):
             raise TaxRuleError('بيانات ناقصة: ' + '، '.join(gaps))
         env_guard(config, branchcode)
         here = _here()
-        queue = TaxReceipt.objects.select_for_update().filter(softech_branchcode=branchcode, status=TaxReceipt.READY).order_by('sold_at', 'id')[:limit]
+        queue = TaxReceipt.objects.select_for_update().filter(
+            softech_branchcode=branchcode, status=TaxReceipt.READY, sold_at__gte=config.send_from).order_by('sold_at', 'id')[:limit]
         for receipt in queue:
             reference = _original_of(receipt).uuid if receipt.doccode == '30' else None
             document = _receipt_json(receipt, config, issuer, uuid_value='', previous=config.last_uuid, reference=reference)

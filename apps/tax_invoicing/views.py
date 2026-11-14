@@ -899,7 +899,7 @@ _CONFIG_TEXT = ('seller_branch_code', 'device_serial', 'pos_os_version', 'pos_mo
 
 def _config_row(c):
     return {'branch': c.softech_branchcode, 'is_enabled': c.is_enabled, 'has_chain': bool(c.last_uuid),
-            'test_env': c.test_env,
+            'test_env': c.test_env, 'send_from': c.send_from,
             'chain_start': c.chain_start, 'chain_start_label': c.get_chain_start_display() if c.chain_start else '',
             'chain_start_uuid': c.chain_start_uuid, 'chain_start_at': c.chain_start_at,
             'chain_start_by': _stamp(c.chain_start_by), 'chain_start_detail': c.chain_start_detail or {},
@@ -1157,6 +1157,19 @@ def receipts_chain_start(request, branch):
     return _branch_action(request, branch, lambda: _config_row(receipts.start_chain(
         branch, request.user, mode=d.get('mode') or '', confirm=str(d.get('confirm') or ''),
         other_program_stopped=bool(d.get('other_program_stopped')), expected_uuid=str(d.get('expected_uuid') or ''))))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, SENDER])
+def receipts_send_from(request, branch):
+    """Sets when this branch's sales start being sent from here. Earlier sales are held as before_start."""
+    from django.utils.dateparse import parse_datetime
+
+    def run():
+        value = parse_datetime(str(request.data.get('send_from') or ''))
+        config, rechecked = receipts.set_send_from(branch, request.user, value, str(request.data.get('reason') or ''))
+        return {**_config_row(config), 'rechecked': rechecked}
+    return _branch_action(request, branch, run)
 
 
 @api_view(['POST'])

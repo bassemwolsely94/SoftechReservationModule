@@ -983,7 +983,7 @@ class ReceiptTests(Fixture, TestCase):
         self.config = TaxReceiptBranchConfig.objects.create(
             softech_branchcode='150', is_enabled=True, seller_branch_code='0', device_serial='POS1', activity_code='4772',
             governate='القاهرة', region_city='عين شمس', street='شارع', building_number='1', payment_method='C', client_id='c',
-            secret_env='X_SECRET', preshared_key_env='X_PSK', chain_start='fresh')
+            secret_env='X_SECRET', preshared_key_env='X_PSK', chain_start='fresh', send_from=dt.datetime(2020, 1, 1, tzinfo=dt.timezone.utc))
 
     def one(self, number='7'):
         return TaxReceipt.objects.get(docnumber=number)
@@ -1056,7 +1056,7 @@ class ReceiptTests(Fixture, TestCase):
     def test_each_branch_has_its_own_chain_and_config(self):
         TaxReceiptBranchConfig.objects.create(softech_branchcode='160', is_enabled=True, seller_branch_code='1', device_serial='POS2',
                                               activity_code='4772', governate='g', region_city='r', street='s', building_number='1', payment_method='C',
-                                              chain_start='fresh')
+                                              chain_start='fresh', send_from=dt.datetime(2020, 1, 1, tzinfo=dt.timezone.utc))
         receipts.import_rows([row(1), row(2, branch='160')])
         receipts.issue_next('150', self.accountant)
         receipts.issue_next('160', self.accountant)

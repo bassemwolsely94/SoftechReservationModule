@@ -3,6 +3,7 @@ Tax Invoicing go-live pieces: which ETA system we talk to, the production gate, 
 requests (apps/tax_invoicing/environment.py, coding.py). ETA is mocked; these tests prove our behaviour
 around ETA's documented answers, not ETA's acceptance.
 """
+import datetime as dt
 from unittest import mock
 
 import requests
@@ -751,7 +752,7 @@ class TestMappingTests(Fixture, TestCase):
         self.config = TaxReceiptBranchConfig.objects.create(
             softech_branchcode='150', is_enabled=True, seller_branch_code='3', device_serial='2VA0280VY1',
             client_id='pos-id', secret_env='POS_SECRET_150', activity_code='4772', governate='القاهرة',
-            region_city='شنن', street='شارع', building_number='16', payment_method='C', chain_start='fresh')
+            region_city='شنن', street='شارع', building_number='16', payment_method='C', chain_start='fresh', send_from=dt.datetime(2020, 1, 1, tzinfo=dt.timezone.utc))
 
     def _receipt(self, number, *, uuid='', env='', status=TaxReceipt.READY):
         return TaxReceipt.objects.create(softech_branchcode='150', doccode='10', docnumber=number,
@@ -805,3 +806,56 @@ class TestMappingTests(Fixture, TestCase):
         self.assertEqual(event.after['receipts_reset'], 1)
         with override_settings(TAX_ETA_ENVIRONMENT='production', WRITER_INSTANCE=False):
             receipts.env_guard(self.config, '150')                      # nothing left from the test
+
+
+# ── Where a branch's sending starts (receipts.set_send_from) ───────────────────────────────────
+
+class SendFromTests(Fixture, TestCase):
+
+    def setUp(self):
+        self.build('sf')
+        self.config = TaxReceiptBranchConfig.objects.create(
+            softech_branchcode='150', is_enabled=True, seller_branch_code='3', device_serial='D1', client_id='c',
+            secret_env='S', activity_code='4772', governate='g', region_city='r', street='s', building_number='1',
+            payment_method='C', chain_start='fresh')
+        self.now = timezone.now()
+
+    def _receipt(self, number, hours_ago, *, uuid=''):
+        return TaxReceipt.objects.create(softech_branchcode='150', doccode='10', docnumber=number,
+                                         docdate=timezone.localdate(), sold_at=self.now - dt.timedelta(hours=hours_ago),
+                                         status=TaxReceipt.READY, uuid=uuid)
+
+    def test_no_start_is_a_gap_before_the_first_receipt(self):
+        gaps = receipts.config_gaps(self.config, TaxIssuerProfile.load())
+        self.assertTrue(any('بداية الإرسال' in g for g in gaps))
+
+    def test_sales_before_the_start_are_held_and_never_issued(self):
+        old, new = self._receipt('1', 48), self._receipt('2', 1)
+        config, rechecked = receipts.set_send_from('150', self.admin, self.now - dt.timedelta(hours=3), 'go-live')
+        self.assertEqual(rechecked, 2)
+        old.refresh_from_db()
+        self.assertEqual(old.status, TaxReceipt.HELD)
+        self.assertEqual(old.hold_reasons[0]['code'], receipts.BEFORE_START)
+        new.refresh_from_db()
+        self.assertNotEqual(new.hold_reasons[:1], [{'code': receipts.BEFORE_START}])
+        self.assertFalse(any(h['code'] == receipts.BEFORE_START for h in new.hold_reasons))
+        event = TaxAuditEvent.objects.get(action='receipt_send_from_set')
+        self.assertEqual(event.reason, 'go-live')
+
+    def test_after_issuing_the_start_only_moves_later(self):
+        receipts.set_send_from('150', self.admin, self.now - dt.timedelta(hours=3))
+        self._receipt('9', 1, uuid='a' * 64)
+        with self.assertRaises(receipts.TaxRuleError):
+            receipts.set_send_from('150', self.admin, self.now - dt.timedelta(hours=10))
+        receipts.set_send_from('150', self.admin, self.now - dt.timedelta(hours=2))      # later: fine
+        with self.assertRaises(receipts.TaxRuleError):
+            receipts.set_send_from('150', self.admin, None)
+
+    def test_view_needs_send_permission_and_returns_the_branch(self):
+        when = (self.now - dt.timedelta(hours=1)).isoformat()
+        self.assertEqual(api(self.accountant).post('/api/tax-invoicing/receipts/branch/150/send-from/',
+                                                   {'send_from': when}, format='json').status_code, 403)
+        r = api(self.admin).post('/api/tax-invoicing/receipts/branch/150/send-from/', {'send_from': when, 'reason': 'x'},
+                                 format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()['send_from'])
