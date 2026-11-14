@@ -71,6 +71,13 @@ def _too_big(exc):
     return 'OperationExceedsLimit' in text
 
 
+def _empty(exc):
+    """ETA's answer to a package request for a period with nothing in it (seen on the test system 2026-11-14):
+    400 InvalidInput "Sorry, Your Criteria does not return any results"."""
+    body = exc.body if isinstance(exc.body, dict) else {}
+    return body.get('code') == 'InvalidInput' and 'does not return any results' in str(body.get('message') or '')
+
+
 def _split(w, reason):
     days = (w.date_to - w.date_from).days + 1
     if days <= 1:
@@ -185,6 +192,11 @@ def step(system, kind, max_requests=5):
             except EtaRefused as exc:
                 if getattr(exc, 'http_status', None) in (401, 403):
                     raise                       # a login / permission problem stops the round; windows keep their state
+                if _empty(exc):
+                    w.state, w.loaded_count, w.eta_count, w.loaded_at, w.error = W.LOADED, 0, 0, timezone.now(), ''
+                    w.save()
+                    out['loaded'] += 1
+                    continue
                 if _too_big(exc):
                     _split(w, str(exc)[:300])
                     out['split'] += 1

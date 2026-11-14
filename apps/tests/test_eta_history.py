@@ -504,3 +504,23 @@ class ReviewFixTests(TestCase):
         self.assertEqual(eta_history.retry_failed('preprod'), 1)
         w = EtaHistoryWindow.objects.get()
         self.assertEqual((w.state, w.attempts), ('planned', 0))
+
+
+class EmptyWindowTests(TestCase):
+    """ETA answers an empty period with 400 InvalidInput "Sorry, Your Criteria does not return any results"."""
+
+    def setUp(self):
+        self.fake = FakeReader('preprod')
+        p = mock.patch.object(eta_history, 'EtaReader', return_value=self.fake)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_an_empty_period_is_loaded_with_zero_not_failed(self):
+        w = EtaHistoryWindow.objects.create(system='preprod', kind='receipts', date_from=dt.date(2024, 1, 1),
+                                            date_to=dt.date(2024, 1, 4))
+        self.fake.fail_with = eta_client.EtaRefused('empty', 400, {
+            'target': 'Request', 'code': 'InvalidInput', 'message': 'Sorry, Your Criteria does not return any results.'})
+        out = eta_history.step('preprod', 'receipts')
+        w.refresh_from_db()
+        self.assertEqual((w.state, w.loaded_count, w.eta_count, w.attempts), ('loaded', 0, 0, 0))
+        self.assertEqual(out['error'], '')
