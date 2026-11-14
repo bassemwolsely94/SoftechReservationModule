@@ -43,6 +43,7 @@ ALL_MODULES = [
     'usage_print',   # طباعة طريقة الاستخدام: 'view' open, 'create' confirm + print, 'edit' presets + slip settings
     'hr_attendance', # الحضور والبصمة: no role but admin; everyone else via named grants (apps/hr/attendance/access.py)
     'data_health',   # صحة البيانات: 'view' = Growth + Problems + forced refresh; rules / held files / restore = admin only
+    'crews',         # الأطقم: 'view' = list/members/history/unattributed sales, 'edit' = create/change/end rows/archive; admin only by default
 ]
 
 ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize']

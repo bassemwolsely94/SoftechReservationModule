@@ -223,6 +223,7 @@ INSTALLED_APPS = [
     'apps.approvals',
     'apps.batches',
     'apps.hr',
+    'apps.crews',  # الأطقم — dated cross-branch people groupings (spec 2026-11-13 §6)
     'apps.forecasting',
     'apps.insights',
     'apps.qa',

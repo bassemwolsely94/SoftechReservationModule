@@ -83,6 +83,7 @@ export const NAV_API = {
   '/replacement': '/api/replacement/cases/',
   '/commerce': '/api/commerce/status/',
   '/hr': '/api/hr/leave-requests/',
+  '/crews': '/api/crews/',
   '/approvals': '/api/approvals/requests/pending/',
   '/audit': '/api/audit/logs/',
   '/users': '/api/users/staff/',

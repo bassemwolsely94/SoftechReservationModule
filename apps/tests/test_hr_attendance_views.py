@@ -487,6 +487,19 @@ class IssueTests(Base):
         self.assertIsNone(p2.employee)   # a flagged punch is never resolved
         self.assertTrue(self.audited('hr_attendance_employee_create').exists())
 
+    def test_create_employee_from_unknown_id_records_assignment_from_today(self):
+        # crews final review F1: the new person's dated history starts today, not in 2020
+        from django.utils import timezone
+        from apps.hr.models import EmployeeAssignment
+        self.punch('555', 1)
+        r = self.post(self.mgr, 'unknown-ids/555/create-employee/', {'name_ar': 'ضيف', 'job_title': 'مندوب'})
+        self.assertEqual(r.status_code, 201, r.content)
+        rows = list(EmployeeAssignment.objects.filter(employee__hr_number='555'))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual((rows[0].valid_from, rows[0].valid_to, rows[0].source, rows[0].job_title),
+                         (timezone.localdate(), None, 'manual', 'مندوب'))
+        self.assertIsNotNone(rows[0].created_by_id)
+
     def test_create_employee_defaults_to_non_payroll_and_validates(self):
         self.punch('555', 1)
         self.assertEqual(self.post(self.mgr, 'unknown-ids/555/create-employee/', {}).status_code, 400)
@@ -682,6 +695,39 @@ class EditTests(Base):
         log = self.audited('hr_attendance_employee_edit').get()
         self.assertEqual(log.changes['department'], ['', 'المبيعات'])
         self.assertTrue(self.audited('hr_attendance_employee_status').exists())
+
+    def test_pbx_extensions_saved_cleaned_and_validated(self):
+        url = f'employees/{self.emp.pk}/'
+        r = self.patch(self.mgr, url, {'pbx_extensions': [' 201', '201', '', '33']})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.emp.refresh_from_db()
+        self.assertEqual(self.emp.pbx_extensions, ['201', '33'])
+        self.assertEqual(r.json()['pbx_extensions'], ['201', '33'])
+        self.assertEqual(self.patch(self.mgr, url, {'pbx_extensions': ['12a']}).status_code, 400)
+
+    def test_hand_edit_of_job_title_records_manual_assignment(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from apps.hr import assignments as asg
+        from apps.hr.models import EmployeeAssignment
+        EmployeeAssignment.objects.create(employee=self.emp, job_title='', valid_from=asg.SEED_EPOCH,
+                                          source='seed')
+        r = self.patch(self.mgr, f'employees/{self.emp.pk}/', {'job_title': 'صيدلي'})
+        self.assertEqual(r.status_code, 200, r.content)
+        today = timezone.localdate()
+        old, new = EmployeeAssignment.objects.filter(employee=self.emp).order_by('valid_from')
+        self.assertEqual(old.valid_to, today - timedelta(days=1))
+        self.assertEqual((new.job_title, new.source, new.valid_from, new.valid_to),
+                         ('صيدلي', 'manual', today, None))
+
+    def test_hand_edit_of_extensions_records_manual_assignment(self):
+        from apps.hr import assignments as asg
+        from apps.hr.models import EmployeeAssignment
+        EmployeeAssignment.objects.create(employee=self.emp, valid_from=asg.SEED_EPOCH, source='seed')
+        r = self.patch(self.mgr, f'employees/{self.emp.pk}/', {'pbx_extensions': ['201']})
+        self.assertEqual(r.status_code, 200, r.content)
+        old, new = EmployeeAssignment.objects.filter(employee=self.emp).order_by('valid_from')
+        self.assertEqual((old.pbx_extensions, new.pbx_extensions), ([], ['201']))
 
     def test_unknown_and_protected_fields_are_ignored(self):
         self.patch(self.mgr, f'employees/{self.emp.pk}/', {'staff': 5, 'softech_usercode': 'x', 'id': 99})
