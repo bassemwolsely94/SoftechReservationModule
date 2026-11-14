@@ -2644,6 +2644,29 @@ def _run_pic_facts():
         logger.exception('pic export job cleanup failed: %s', exc)
 
 
+def _run_eta_history_backfill():
+    """ETA history mirror (doc 36 §history): plan any new windows up to yesterday and move each enabled system's
+    backfill one round. Read only towards ETA; never sends."""
+    import datetime as _d
+    from apps.tax_invoicing import eta_history
+    for system in eta_history.enabled_systems():
+        for kind in eta_history.KINDS:
+            try:
+                eta_history.plan_windows(system, kind, eta_history.start_date(), _d.date.today() - _d.timedelta(days=1))
+                eta_history.step(system, kind)
+            except Exception as exc:     # one system's trouble never stops the other
+                logger.warning('[APScheduler] ETA history backfill %s/%s: %s', system, kind, exc)
+
+
+def _run_eta_history_topup():
+    from apps.tax_invoicing import eta_history
+    for system in eta_history.enabled_systems():
+        try:
+            eta_history.top_up(system)
+        except Exception as exc:
+            logger.warning('[APScheduler] ETA history top-up %s: %s', system, exc)
+
+
 def _run_stock_ledger_sync(days=3):
     """Doc 32: mirror stktrans (all doccodes) from HQ — replaces the last `days` docdate
     days — then run the audit checks. READ-ONLY vs SOFTECH. Off with STOCK_AUDIT_ENABLED=False."""
@@ -3943,6 +3966,15 @@ def start_scheduler():
     _scheduler.add_job(
         _run_stock_ledger_sync, 'cron', hour=3, minute=15, id='stock_ledger_catchup',
         kwargs={'days': 7}, replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # ETA history mirror (doc 36 §history): backfill rounds every 15 min, top-up of the last 3 days at 04:30.
+    _scheduler.add_job(
+        _run_eta_history_backfill, 'interval', minutes=15, id='eta_history_backfill',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=900,
+    )
+    _scheduler.add_job(
+        _run_eta_history_topup, 'cron', hour=4, minute=30, id='eta_history_topup',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # HR attendance health (every 30 min): silent machine/agent, clock drift, falling log count.
     _scheduler.add_job(

@@ -38,6 +38,7 @@ from apps.insurance.models import InsuranceClaim, InsuranceClient
 from config.writers import writer_allowed
 from core.branch_scope import allows_code, branch_codes, scope_code
 from core.errors import public_error
+from core.threads import start_thread
 from core.permissions import _get_profile, matrix_allows, matrix_permission
 
 from . import coding, environment, eta_client, gpc, item_import, receipts, services, signing, submission
@@ -1196,3 +1197,43 @@ def codes_check(request):
         return Response(coding.check_codes(request.user, _ids(request) or None))
     except services.TaxRuleError as exc:
         return _refuse(exc)
+
+
+# ── ETA history mirror: progress and refresh (doc 36 §history) ─────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, VIEWER])
+def history_progress(request):
+    from . import eta_history
+    from .eta_reader import SYSTEMS
+    return Response({'systems': [{**eta_history.progress(s), 'label': environment.ENVIRONMENTS[s]['label']}
+                                 for s in SYSTEMS]})
+
+
+def _history_round(system):
+    from django.db import connection
+    from . import eta_history
+    import datetime as _d
+    try:
+        for kind in eta_history.KINDS:
+            eta_history.plan_windows(system, kind, eta_history.start_date(), _d.date.today() - _d.timedelta(days=1))
+            eta_history.step(system, kind)
+        eta_history.top_up(system)
+    finally:
+        connection.close()
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, EDITOR])
+def history_refresh(request):
+    """Runs one backfill round and the top-up for one ETA system, in the background. Reads only."""
+    from .eta_reader import SYSTEMS, EtaReader
+    system = str(request.data.get('system') or '')
+    if system not in SYSTEMS:
+        return Response({'detail': 'منظومة غير معروفة'}, status=status.HTTP_400_BAD_REQUEST)
+    reason = EtaReader(system).why_not()
+    if reason:
+        return Response({'detail': reason}, status=status.HTTP_400_BAD_REQUEST)
+    start_thread(_history_round, args=(system,), name=f'eta-history-{system}')
+    services.audit('eta_history_refresh', actor=request.user, entity='eta_history', entity_id=system)
+    return Response({'started': True, 'system': system}, status=status.HTTP_202_ACCEPTED)
