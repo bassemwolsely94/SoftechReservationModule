@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import history_views, views
 
 urlpatterns = [
     path('me/', views.me),
@@ -43,6 +43,13 @@ urlpatterns = [
     path('codes/gpc/', views.code_gpc),
     path('history/progress/', views.history_progress),
     path('history/refresh/', views.history_refresh),
+    path('history/documents/', history_views.history_documents),
+    path('history/documents/export/', history_views.history_export, {'kind': 'documents'}),
+    path('history/documents/<int:pk>/', history_views.history_document_detail),
+    path('history/documents/<int:pk>/pdf/', history_views.history_document_pdf),
+    path('history/receipts/', history_views.history_receipts),
+    path('history/receipts/export/', history_views.history_export, {'kind': 'receipts'}),
+    path('history/receipts/<int:pk>/', history_views.history_receipt_detail),
     path('codes/add-from-catalog/', views.codes_add_from_catalog),
     path('codes/prepare/', views.codes_prepare),
     path('codes/send/', views.codes_send),

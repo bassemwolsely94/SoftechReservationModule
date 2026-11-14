@@ -38,6 +38,12 @@ const api = vi.hoisted(() => ({
   setSendFrom: vi.fn(),
   historyProgress: vi.fn(),
   historyRefresh: vi.fn(),
+  historyDocuments: vi.fn(),
+  historyReceipts: vi.fn(),
+  historyDocument: vi.fn(),
+  historyReceipt: vi.fn(),
+  historyDocumentPdf: vi.fn(),
+  historyExport: vi.fn(),
   saveReceiptConfig: vi.fn(),
 }))
 
@@ -54,6 +60,7 @@ const { default: ItemsTab } = await import('./ItemsTab')
 const { BranchActions, ChainStart, TestMapping, SendFrom } = await import('./ReceiptsTab')
 const { default: CodesTab, CodeCheck, Candidates, Gs1Candidates } = await import('./CodesTab')
 const { HistoryProgress } = await import('./SettingsTab')
+const { default: HistoryTab } = await import('./HistoryTab')
 
 const line = (id, status) => ({
   id, docnumber: '55', docdate: '2026-10-01', branch: '170', itemcode: `I${id}`, item_name: `صنف ${id}`, quantity: '1',
@@ -454,5 +461,37 @@ describe('ETA history progress', () => {
     expect(await screen.findByText(/قراءة سجل المنظومة production مغلقة/)).toBeTruthy()
     fireEvent.click(screen.getAllByText('تحديث الآن')[0])
     await waitFor(() => expect(api.historyRefresh).toHaveBeenCalledWith({ system: 'preprod' }))
+  })
+})
+
+describe('ETA history tab', () => {
+  const doc = { id: 7, uuid: 'U-7', internal_id: 'INV-7', doc_type: 'i', direction: 'sent', status: 'valid', issued_at: '2026-10-01T10:00:00Z',
+    issuer_name: 'الرزيقى', receiver_name: 'شركة النور', receiver_id: '999888777', total_amount: '114.00000' }
+
+  it('lists the live system first, filters, sorts and opens a document with its lines', async () => {
+    api.historyDocuments.mockResolvedValue({ data: { count: 1, page: 1, pages: 1, total_amount: '114.00000', rows: [doc] } })
+    api.historyDocument.mockResolvedValue({ data: { ...doc, lines: [{ internal_code: '60001', description: 'Panadol', item_code: 'EG-1', quantity: '2', unit_value: '50', net_total: '100', tax: '14', total: '114' }],
+      validation: [{ name: 'Step-03', status: 'Valid', error: null }], detail_unavailable: '' } })
+    show(<HistoryTab />)
+    expect(await screen.findByText('INV-7')).toBeTruthy()
+    expect(api.historyDocuments).toHaveBeenCalledWith(expect.objectContaining({ system: 'production', page: 1 }))
+    fireEvent.change(screen.getByLabelText('الاتجاه'), { target: { value: 'received' } })
+    await waitFor(() => expect(api.historyDocuments).toHaveBeenLastCalledWith(expect.objectContaining({ direction: 'received' })))
+    fireEvent.click(screen.getByText('INV-7'))
+    expect(await screen.findByText('Panadol')).toBeTruthy()
+    expect(screen.getByText(/Step-03: Valid/)).toBeTruthy()
+  })
+
+  it('switches to receipts of the test system with the device filter', async () => {
+    api.historyDocuments.mockResolvedValue({ data: { count: 0, page: 1, pages: 1, total_amount: null, rows: [] } })
+    api.historyReceipts.mockResolvedValue({ data: { count: 1, page: 1, pages: 1, total_amount: '10.00000', devices: ['POS-A'],
+      rows: [{ id: 3, uuid: 'R', receipt_number: '900', pos_serial: 'POS-A', issued_at: '2026-11-01T10:00:00Z', status: 'valid', total_amount: '10.00000', submitter: 'Invoicer' }] } })
+    show(<HistoryTab />)
+    fireEvent.click(await screen.findByText('التجريبية'))
+    fireEvent.click(screen.getByText('الإيصالات'))
+    expect(await screen.findByText('900')).toBeTruthy()
+    expect(api.historyReceipts).toHaveBeenLastCalledWith(expect.objectContaining({ system: 'preprod' }))
+    fireEvent.change(screen.getByLabelText('الجهاز'), { target: { value: 'POS-A' } })
+    await waitFor(() => expect(api.historyReceipts).toHaveBeenLastCalledWith(expect.objectContaining({ device: 'POS-A' })))
   })
 })

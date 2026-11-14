@@ -16,6 +16,7 @@ import ClaimsTab from './taxinvoicing/ClaimsTab'
 import CodesTab from './taxinvoicing/CodesTab'
 import DocumentsTab from './taxinvoicing/DocumentsTab'
 import ExceptionsTab from './taxinvoicing/ExceptionsTab'
+import HistoryTab from './taxinvoicing/HistoryTab'
 import ImportTab from './taxinvoicing/ImportTab'
 import ItemsTab from './taxinvoicing/ItemsTab'
 import PrintTab from './taxinvoicing/PrintTab'
@@ -32,6 +33,7 @@ const TABS = [
   { key: 'import',     label: '📥 استيراد الأصناف' },
   { key: 'codes',      label: '🔖 أكواد المصلحة' },
   { key: 'receipts',   label: '🧾 الإيصالات' },
+  { key: 'history',    label: '🗂️ سجل المصلحة' },
   { key: 'settings',   label: '⚙️ الإعدادات' },
 ]
 
@@ -93,6 +95,7 @@ export default function TaxInvoicingPage() {
       {tab === 'import' && <ImportTab me={access} />}
       {tab === 'codes' && <CodesTab me={access} />}
       {tab === 'receipts' && <ReceiptsTab key={params.get('status') || ''} me={access} initialStatus={params.get('status') || ''} />}
+      {tab === 'history' && <HistoryTab />}
       {tab === 'settings' && <SettingsTab me={access} />}
     </div>
   )
