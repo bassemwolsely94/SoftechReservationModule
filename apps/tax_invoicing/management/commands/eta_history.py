@@ -23,7 +23,7 @@ class Command(BaseCommand):
         if o['plan']:
             end = dt.date.today() - dt.timedelta(days=1)
             for kind in eta_history.KINDS:
-                n = eta_history.plan_windows(system, kind, eta_history.start_date(), end)
+                n = eta_history.plan_windows(system, kind, eta_history.start_date(kind), end)
                 self.stdout.write(f'{kind}: {n} new windows')
         for _ in range(o['step']):
             for kind in eta_history.KINDS:
