@@ -2652,7 +2652,7 @@ def _run_eta_history_backfill():
     for system in eta_history.enabled_systems():
         for kind in eta_history.KINDS:
             try:
-                eta_history.plan_windows(system, kind, eta_history.start_date(), _d.date.today() - _d.timedelta(days=1))
+                eta_history.plan_windows(system, kind, eta_history.start_date(kind), _d.date.today() - _d.timedelta(days=1))
                 eta_history.step(system, kind)
             except Exception as exc:     # one system's trouble never stops the other
                 logger.warning('[APScheduler] ETA history backfill %s/%s: %s', system, kind, exc)

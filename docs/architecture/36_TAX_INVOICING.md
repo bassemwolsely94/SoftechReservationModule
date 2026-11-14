@@ -84,16 +84,21 @@ requests" (`GET /api/v1.0/codetypes/requests/my?ItemCode=`).
   hold; that item then needs an EGS code. Approval sets `code_type = GS1`, `eta_code = barcode`.
 - Follow-up of GS1 requests uses the same "my requests" search as EGS; confirmed on the test system before production.
 
-### ETA history mirror (phase 1)
+### ETA history mirror
 
-Design: `docs/superpowers/specs/2026-11-14-eta-history-mirror-design.md`. `eta_reader.EtaReader(system)` reads one
-ETA system with its own login (`TAX_ETA_READ_<SYSTEM>_*`, production = an ERP registration made for us) and has no
-way to send (a test asserts its surface). `eta_history` backfills from `TAX_ETA_HISTORY_START` through ETA packages
-(receipts 4-day windows, documents 30-day; too big → halves; one day still too big → `too_big`; unreachable → window
-keeps its state and reason), tops up the last 3 days daily, and upserts `EtaMirrorDocument` / `EtaMirrorReceipt` by
-(system, uuid). Jobs `eta_history_backfill` (15 min) and `eta_history_topup` (04:30) run only for systems whose
-`TAX_ETA_READ_<SYSTEM>_ENABLED` is on. Progress: Settings → «سجل المصلحة — التحميل», freshness domains
-`eta_history_preprod` / `eta_history_production`. `manage.py eta_history --system preprod --plan --step 3 --topup`.
+Design: `docs/superpowers/specs/2026-11-14-eta-history-mirror-design.md` (phase 1b = search-based backfill).
+`eta_reader.EtaReader(system)` reads one ETA system with its own login (`TAX_ETA_READ_<SYSTEM>_*`, production = an ERP
+registration made for us) and has no way to send (a test asserts its surface). ETA's packages only cover what the
+requesting ERP itself submitted, so `eta_history` backfills from ETA's **search lists**: documents (sent and received)
+in 30-day windows by submission date from `TAX_ETA_HISTORY_START` (2022-06-01), following continuation tokens; receipts
+in one-day windows by **issue date** from `TAX_ETA_HISTORY_RECEIPTS_START` (2025-01-01 — ETA holds none earlier), 100 a
+page, ETA's 3000-per-query cap → a longer window splits in halves, a single day stays `too_big`. Each window keeps ETA's
+count beside ours; "no results" = loaded 0; unreachable → the window keeps its state and the reason goes to
+`EtaHistoryState`. Daily top-up re-reads 30 days of documents and 14 days of receipts (Invoicer uploads late, in bursts).
+One round per system at a time (advisory lock); 401/403 stops the round. Jobs `eta_history_backfill` (15 min) and
+`eta_history_topup` (04:30) run only for systems whose `TAX_ETA_READ_<SYSTEM>_ENABLED` is on. Progress: Settings →
+«سجل المصلحة — التحميل», freshness domains `eta_history_preprod` / `eta_history_production`.
+`manage.py eta_history --system production --plan --step 3 --topup --retry-failed`.
 
 ### Where a branch's sending starts
 
