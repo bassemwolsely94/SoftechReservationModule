@@ -12,33 +12,35 @@ generate_tasks_for_period(period_start, period_end, ...)
 from datetime import date, timedelta
 from decimal import Decimal
 
-from django.db.models import Q
+from django.db.models import F, Q
 from django.utils import timezone
 
+from apps.chronic.classifier import customer_type
+
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Customer type detection  (shared with classifier.py)
+# Customer type detection  (apps.chronic.classifier.customer_type)
 # ─────────────────────────────────────────────────────────────────────────────
 
-WALKIN_CLASSIF_CODES = {'1', '01', 'CASH', 'WALK', 'W'}
-B2B_CLASSIF_CODES    = {'INS', 'B2B', 'CORP', 'GOV', '5', '6', '7', '8', '9'}
+def _latest_channels(customer_ids) -> dict:
+    """{customer_id: sales_channel of that customer's most recent sale} in one query.
+    Undated rows sort last (Postgres puts NULL first in DESC); pk breaks same-time ties."""
+    from apps.customers.models import PurchaseHistory
+    ids = [i for i in set(customer_ids) if i is not None]
+    if not ids:
+        return {}
+    rows = (PurchaseHistory.objects.filter(customer_id__in=ids, doc_code='115')
+            .order_by('customer_id', F('invoice_date').desc(nulls_last=True), '-pk')
+            .distinct('customer_id')
+            .values_list('customer_id', 'sales_channel'))
+    return dict(rows)
 
 
-def _customer_type(customer) -> str:
-    if customer is None:
-        return 'walkin'
-    code = (customer.softech_ptclassifcode or '').upper().strip()
-    if code in WALKIN_CLASSIF_CODES:
-        return 'walkin'
-    if code in B2B_CLASSIF_CODES:
-        return 'b2b'
-    return 'home_delivery'
-
-
-def _matches_type_filter(customer, type_filter: str) -> bool:
+def _matches_type_filter(customer, type_filter: str, latest_channels: dict) -> bool:
     if type_filter == 'all':
         return True
-    return _customer_type(customer) == type_filter
+    latest = latest_channels.get(customer.pk) if customer is not None else None
+    return customer_type(customer, latest) == type_filter
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -263,6 +265,14 @@ def generate_tasks_for_period(
     skipped_trigger       = 0
     breakdown             = {}  # (ingredient_id, protocol_id) → count
 
+    # Latest sale channel per candidate customer — one query, not one per customer,
+    # and only when some active protocol filters by customer type.
+    typed = FollowUpProtocol.objects.filter(is_active=True).exclude(customer_type_filter='all')
+    if ingredient_ids:
+        typed = typed.filter(active_ingredient_id__in=ingredient_ids)
+    latest_channels = (_latest_channels(lines_qs.values_list('purchase__customer_id', flat=True))
+                       if typed.exists() else {})
+
     for line in lines_qs:
         customer  = line.purchase.customer
         branch    = line.purchase.branch
@@ -290,10 +300,10 @@ def generate_tasks_for_period(
 
                 # Customer type filter
                 if customer_types and 'all' not in customer_types:
-                    if not _matches_type_filter(customer, protocol.customer_type_filter):
+                    if not _matches_type_filter(customer, protocol.customer_type_filter, latest_channels):
                         skipped_type_filter += 1
                         continue
-                elif not _matches_type_filter(customer, protocol.customer_type_filter):
+                elif not _matches_type_filter(customer, protocol.customer_type_filter, latest_channels):
                     skipped_type_filter += 1
                     continue
 

@@ -858,6 +858,7 @@ function IngredientsManager() {
                         <option value="home_delivery">توصيل منزلي</option>
                         <option value="walkin">كاش / مشي</option>
                         <option value="b2b">شركات / تأمين</option>
+                        <option value="unclassified">غير مصنف</option>
                       </select>
                     </div>
                     <div>
@@ -1103,6 +1104,7 @@ function TaskGenerator() {
               { v: 'home_delivery', l: 'توصيل منزلي' },
               { v: 'walkin',        l: 'كاش / مشي' },
               { v: 'b2b',           l: 'شركات / تأمين' },
+              { v: 'unclassified',  l: 'غير مصنف' },
             ].map(({ v, l }) => (
               <label key={v} className="flex items-center gap-1.5 text-sm cursor-pointer select-none">
                 <input

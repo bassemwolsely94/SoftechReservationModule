@@ -130,15 +130,17 @@ def _seg_stats(ctx, channels, *, user=None, branch_id=None, max_total=None, min_
 
 def analytics_excluded_items():
     """Pseudo/non-retail items kept OUT of item-level findings (insights AND stock audit, doc 32):
-    loyalty coupons and customer gifts. Owner-editable SystemSettings:
-      • analytics_excluded_item_keywords — item-name keywords (default COUPON/كوبون/هدايا/هدية)
-      • analytics_excluded_medicine_types — general-category codes (default 60 = client gifts)
-    Returns an Item queryset (empty when both settings are blank)."""
+    loyalty coupons and customer gifts. Owner-editable in two places:
+      • analytics_excluded_item_keywords (SystemSetting) — item-name keywords (default COUPON/كوبون/هدايا/هدية)
+      • MedicineTypeMap.excluded_from_planning (/code-maps) — item-category codes (seeded 60 = client gifts)
+    Returns an Item queryset (empty when both are empty)."""
     from apps.config.models import SystemSetting
+    from apps.config.item_types import planning_excluded_codes
     from django.db.models import Q
     from apps.catalog.models import Item
     kws = [k.strip() for k in str(SystemSetting.get('analytics_excluded_item_keywords', 'COUPON,كوبون,هدايا,هدية') or '').split(',') if k.strip()]
-    xtypes = [t.strip() for t in str(SystemSetting.get('analytics_excluded_medicine_types', '60') or '').split(',') if t.strip()]
+    # MedicineTypeMap (excluded_from_planning) replaced the analytics_excluded_medicine_types setting.
+    xtypes = planning_excluded_codes()
     if not (kws or xtypes):
         return Item.objects.none()
     q = Q()
@@ -190,9 +192,9 @@ class Ctx:
         self.rep_names = {str(c): (n or '').strip() for c, n in
                           ERPUser.objects.exclude(user_id='').values_list('username', 'user_id')}
         # pseudo/non-retail items to keep OUT of item-level findings — loyalty coupons AND
-        # customer-gift items (هدايا العملاء, medicine_type 60). Owner-editable via two settings:
-        #  • analytics_excluded_item_keywords  — item-name keywords (default COUPON/كوبون/هدايا/هدية)
-        #  • analytics_excluded_medicine_types  — general-category codes (default 60 = client gifts)
+        # customer-gift items (هدايا العملاء). Owner-editable in two places:
+        #  • analytics_excluded_item_keywords (SystemSetting) — item-name keywords (default COUPON/كوبون/هدايا/هدية)
+        #  • MedicineTypeMap.excluded_from_planning (/code-maps) — item-category codes (seeded 60 = client gifts)
         # Both feed ONE excluded_item_ids set used by item-level SALES and STOCK rules.
         from apps.config.models import SystemSetting
         self.excluded_item_ids = set(analytics_excluded_items().values_list('id', flat=True))

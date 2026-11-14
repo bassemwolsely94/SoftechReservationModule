@@ -370,11 +370,13 @@ def _real_stock_filter(qs):
     """Keep only items that are real stock (qs over ItemDemandMetrics):
       • is_stockable=True — drop non-stockable / service items,
       • pack_price > 0 — coupons/gifts carry a zero/negative price (118639 = −50),
-      • medicine_type != '60' — هدايا عملاء (customer-gift/coupon category).
+      • medicine_type not in MedicineTypeMap.excluded_from_planning codes (seeded: 60 =
+        هدايا عملاء, the customer-gift/coupon category; owner-editable at /code-maps).
     One shared definition: the ISR writer uses it (plus its own supplier-status rule)
     and the coverage writer uses it so coupons never get a max-stock ceiling."""
+    from apps.config.item_types import planning_excluded_codes
     return (qs.filter(item__is_stockable=True, item__pack_price__gt=0)
-              .exclude(item__medicine_type='60'))
+              .exclude(item__medicine_type__in=planning_excluded_codes()))
 
 
 def _pivot_want(run, branches, item_filter, *, stock_only=False):

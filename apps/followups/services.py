@@ -484,6 +484,7 @@ def infer_chronic_profiles_from_sales(months=24, min_episodes=3, min_patients=5,
     """
     from collections import defaultdict
     from statistics import median
+    from apps.config.item_types import medicine_codes
     from apps.catalog.models import Item
     from apps.customers.models import PurchaseHistoryLine
 
@@ -491,7 +492,7 @@ def infer_chronic_profiles_from_sales(months=24, min_episodes=3, min_patients=5,
     dates = defaultdict(list)                      # (item_id, pic) → purchase dates
     rows = (PurchaseHistoryLine.objects
             .filter(purchase__doc_code='115', purchase__invoice_date__date__gte=since,
-                    item__medicine_type='10')
+                    item__medicine_type__in=medicine_codes())
             .exclude(purchase__softech_phcode='')
             .values_list('item_id', 'purchase__softech_phcode', 'purchase__invoice_date'))
     for item_id, pic, when in rows.iterator(chunk_size=20000):
@@ -863,8 +864,8 @@ def _score_one(task, today) -> float:
         overdue_score = 0.0
 
     # Channel: favoured → 1.0, others → 0.0
-    from .models import FollowUpTask as FUT
-    channel_score = 1.0 if task.sales_channel in FUT.FAVOURED_CHANNEL_CODES else 0.3
+    from apps.forecasting.channels import favoured_codes
+    channel_score = 1.0 if task.sales_channel in favoured_codes() else 0.3
 
     score = (
         ltv_score      * 0.25 +

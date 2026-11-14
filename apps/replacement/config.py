@@ -50,9 +50,15 @@ def supplier_cfg(code):
     return _s('SUPPLIERS', SUPPLIERS).get(str(code).strip(), {})
 
 
-# Contract-sale channels (stktransm.ptclassifcode on the sale): 10 contract, 11 employee,
-# 15 insurance (unused today), 17 compensation.
-CONTRACT_CHANNELS = ('10', '11', '15', '17')
+def contract_channels() -> tuple[str, ...]:
+    """Contract-sale channels (stktransm.ptclassifcode on the sale) — from the channel
+    registry (ChannelBucketMap.is_contract_sale; approved: 10, 33 contract, 11 employee,
+    15 insurance, 17 compensation). A function, not a constant: a value computed at
+    import would freeze the map and miss the owner's edits. These are also the
+    channels that are NOT product-redemption receipts."""
+    from apps.forecasting import channels
+    return channels.contract_codes()
+
 
 # D1 — purchase before sale preferred; sale before purchase allowed inside a window.
 SALE_BEFORE_PURCHASE_DAYS = 45     # sale may precede the purchase by up to N days
@@ -139,10 +145,6 @@ PURCHASE_TOKEN_PREFIX = 9
 
 CONF_HIGH   = Decimal('80')
 CONF_MEDIUM = Decimal('55')
-
-# Sales channel codes that are NOT product-redemption receipts.
-NON_REDEMPTION_CHANNELS = CONTRACT_CHANNELS
-
 
 def get(name):
     """Settings override → module default."""

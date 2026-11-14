@@ -496,7 +496,7 @@ class ReplacementCaseViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
                 return Response({'results': [], 'patients': patients})
             pic = patients[0]['pic']
         qs = (PurchaseHistory.objects.filter(softech_phcode__iexact=pic, doc_code='115',
-                                             sales_channel__in=C.CONTRACT_CHANNELS,
+                                             sales_channel__in=C.contract_channels(),
                                              invoice_date__gte=timezone.now() - timedelta(days=60))
               .select_related('branch').prefetch_related('lines__item').order_by('-invoice_date')[:20])
         if branch:

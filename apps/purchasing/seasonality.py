@@ -186,6 +186,7 @@ def note_for(m, row, nxt=None):
 def compute_all(today=None):
     """Recompute ItemSeasonality for every item from the stored history."""
     from apps.purchasing.models import ItemMonthlySales, ItemSeasonality
+    from apps.config.item_types import planning_excluded_codes
     months = history_months(today)
     pos = {m: i for i, m in enumerate(months)}
     series = defaultdict(lambda: [0.0] * len(months))
@@ -193,7 +194,7 @@ def compute_all(today=None):
     item_of = {}
     # real stock only — service / adjustment / gift / coupon codes («فرق سعر») never get a season
     for r in (ItemMonthlySales.objects.filter(month__in=months, item_id__isnull=False, item__is_stockable=True,
-                                              item__pack_price__gt=0).exclude(item__medicine_type='60')
+                                              item__pack_price__gt=0).exclude(item__medicine_type__in=planning_excluded_codes())
               .values('item_id', 'month', 'regular_qty', 'bulk_qty')):
         series[r['item_id']][pos[r['month']]] = float(r['regular_qty'] or 0)
         if r['bulk_qty']:
