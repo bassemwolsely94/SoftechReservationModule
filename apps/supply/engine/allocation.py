@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from ..position import latest_demand_run
 # Reuse the transfer engine's own threshold so the two never diverge.
+from apps.batches.store_roles import QUARANTINE_STORE_CODES
 from apps.purchasing.transfer_engine import MIN_TRANSFER_QTY
 
 
@@ -23,7 +24,7 @@ def _f(v) -> float:
     return float(v) if v is not None else 0.0
 
 
-_EXCLUDED_STORES = frozenset({'102', '103', '105'})   # quarantine — never transferable
+_EXCLUDED_STORES = QUARANTINE_STORE_CODES   # quarantine — never transferable
 
 
 def _live_stock_by_branch(item_id) -> dict:

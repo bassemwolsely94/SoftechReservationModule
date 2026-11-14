@@ -37,7 +37,7 @@ This is the primary navigation document for the ElRezeiky platform.
 
 | Module | App | Status | Doc Reference |
 |--------|-----|--------|--------------|
-| Branches | `apps/branches` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#branches) |
+| Branches | `apps/branches` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#branches) — `Branch.kind` (hq / retail / call_center / closed / `pending`) is the only liveness authority (`live()` = hq + retail); new SOFTECH branches arrive `pending` until an admin classifies them; `display_order` = the owner's screen order |
 | Catalog / Items | `apps/catalog` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#catalog) |
 | Customers / CRM | `apps/customers` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#customers) |
 | Reservations | `apps/reservations` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#reservations) |

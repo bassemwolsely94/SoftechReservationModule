@@ -19,6 +19,7 @@ from apps.data_lifecycle.models import LifecycleRulePolicy, LifecycleRunLine
 from apps.data_lifecycle.register import RULES
 from apps.data_lifecycle.rules_rows import tight_runs_to_keep
 from apps.data_lifecycle.runner import preview_rule
+from apps.tests.factories import make_hq
 from apps.purchasing.models import (
     DemandCalculationRun, IsrPush, ItemDemandAggregated, ItemDemandMetrics, SalesRatePush,
     TransferRecommendation, TransferRecommendationRun,
@@ -406,6 +407,10 @@ class SwitchTests(RateRuleTestBase):
 
 
 class IsrReaderTests(RateRuleTestBase):
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
     ISR = {'isr': '261609', 'branch': '160', 'for_branch': '100', 'date': '2026-10-01', 'approved': 1,
            'value': 60.0, 'user': '11', 'lines': [{'code': 'A', 'qty': 6.0, 'cost': 10.0}]}
 

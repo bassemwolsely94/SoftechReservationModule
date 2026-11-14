@@ -150,7 +150,7 @@ def owner_detail(request, pk):
 
 def _mobile_rows(branch_ids=None):
     from apps.branches.models import Branch, BranchSettings
-    branches = Branch.objects.filter(is_active=True).order_by('name')
+    branches = Branch.objects.live().order_by('name')
     if branch_ids is not None:
         branches = branches.filter(pk__in=branch_ids)
     mobiles = dict(BranchSettings.objects.values_list('branch_id', 'alert_mobile'))

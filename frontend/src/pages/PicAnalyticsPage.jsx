@@ -16,6 +16,7 @@ import { branchesApi, picAnalyticsApi } from '../api/client'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import ProgressBar from '../components/ProgressBar'
 import useBranchLabels from '../hooks/useBranchLabels'
+import useClosedBranches from '../hooks/useClosedBranches'
 import useHelpTab from '../help/useHelpTab'
 import Filters from '../components/pic-analytics/Filters'
 import KpiCards from '../components/pic-analytics/KpiCards'
@@ -99,12 +100,13 @@ export default function PicAnalyticsPage() {
     queryFn: () => picAnalyticsApi.options({ from: values.from, to: values.to }).then(r => r.data),
     enabled: !!access?.can_view, staleTime: 5 * 60_000, placeholderData: keepPreviousData,
   })
-  const { data: branches = [] } = useQuery({
+  const { data: baseBranches = [] } = useQuery({
     queryKey: ['branches'],
     queryFn: () => branchesApi.list().then(r => r.data.results || r.data),
     staleTime: 5 * 60_000,
   })
 
+  const { branches, showClosed, toggle: closedToggle } = useClosedBranches(baseBranches)
   const tabs = [...SALES_TABS, ...(access?.sees_calls_tabs ? CALLS_TABS : [])]
   const tab = tabs.some(t => t.key === sp.get('tab')) ? sp.get('tab') : 'overview'
   useHelpTab(tab)
@@ -254,7 +256,7 @@ export default function PicAnalyticsPage() {
 
       <DataFreshnessBar domains={['sales', 'customers', 'calls']} compact invalidateKeys={[['pic-analytics']]} />
 
-      <Filters values={shown} onChange={setParam} onClear={clear} branches={branches} access={access} options={options} />
+      <Filters values={shown} onChange={setParam} onClear={clear} branches={branches} showClosed={showClosed} closedToggle={closedToggle} access={access} options={options} />
 
       {CALLS_TABS.some(t => t.key === tab) ? (
         // call tabs read the PBX mirror (every 10 min), not the nightly sales facts

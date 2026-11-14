@@ -26,6 +26,7 @@ from django.utils import timezone
 from django.db.models import Sum, Count, Avg, Min, Max, Q, F
 
 from config.sybase import get_sybase_connection
+from apps.batches.store_roles import QUARANTINE_STORE_CODES
 from .queries import (
     QUERY_PURCHASES_INCREMENTAL,
     QUERY_SUPPLIERS,
@@ -835,8 +836,8 @@ def enrich_purchase_lines(run: ProcurementEngineRun, lookback_days: int = DEFAUL
 
     # ── Return type ───────────────────────────────────────────────────────────
     ret_base = PurchaseLine.objects.filter(doc_date__gte=since, is_return=True)
-    ret_base.filter(store_code__in=['102', '103', '105']).update(return_type='expiry')
-    ret_base.exclude(store_code__in=['102', '103', '105']).update(return_type='normal')
+    ret_base.filter(store_code__in=QUARANTINE_STORE_CODES).update(return_type='expiry')
+    ret_base.exclude(store_code__in=QUARANTINE_STORE_CODES).update(return_type='normal')
 
     # Clear return_type on purchase lines (not returns)
     PurchaseLine.objects.filter(

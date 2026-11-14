@@ -282,6 +282,11 @@ def run_cheques(rows, d1=date(2026, 3, 1), d2=date(2026, 3, 31)):
 
 
 class ChequeReaderTests(SimpleTestCase):
+    def setUp(self):
+        super().setUp()
+        self.enterContext(mock.patch('apps.finance.gl.sources.treasury._hq', return_value='100'))   # no DB in SimpleTestCase
+        self.enterContext(mock.patch('apps.finance.queries.sybase_gl._hq', return_value='100'))
+
     def test_pos_rows_dropped(self):
         docs, _ = run_cheques([chq(cheqsno='1', personcode='-170'),
                                chq(cheqsno='2', personcode='-170', financialdoccode='30')])
@@ -348,6 +353,11 @@ class ChequeReaderTests(SimpleTestCase):
 
 class TransferKindP24Tests(SimpleTestCase):
     """Ruling P24: transfer vouchers carry the counterpart SOFTECH branch or bank (fake 2026 rows)."""
+    def setUp(self):
+        super().setUp()
+        self.enterContext(mock.patch('apps.finance.gl.sources.treasury._hq', return_value='100'))   # no DB in SimpleTestCase
+        self.enterContext(mock.patch('apps.finance.queries.sybase_gl._hq', return_value='100'))
+
 
     def tf(self, **kw):
         base = dict(ptcode='-1', personcode='-180', financialdoccode='10', cheqdate=datetime(2026, 6, 10),

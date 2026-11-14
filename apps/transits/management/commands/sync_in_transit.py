@@ -239,7 +239,7 @@ class Command(BaseCommand):
         # ── Build branch lookup: softech_branch_id → Branch ──────────────────
         branch_map = {
             str(b.softech_branch_id).strip(): b
-            for b in Branch.objects.filter(is_active=True)
+            for b in Branch.objects.live()
         }
 
         # ── (erp_reference, supplying branch) → TransferRequest lookup ────────

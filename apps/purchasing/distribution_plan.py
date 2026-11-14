@@ -32,7 +32,14 @@ from django.utils import timezone
 
 logger = logging.getLogger('elrezeiky.purchasing')
 
-HQ = '100'
+
+def _hq():
+    """HQ's SOFTECH branch code (the one Branch of kind hq), looked up at call time — never at
+    import (module import must not hit the DB)."""
+    from apps.branches.models import hq_code
+    return hq_code()
+
+
 WAVE_LABELS = {1: 'من الرئيسي أولاً', 2: 'متكدس بفرع ← فروع تبيعه', 3: 'غير مُدرج — من فرع فوق حده',
                4: 'تجربة صنف جديد — من فرع'}
 SEED_CATS = ('never_stocked', 'new_no_rate', 'hq_dormant')
@@ -66,7 +73,7 @@ def live_stock(branch_codes):
     """({branch: {itemcode: qty}}, as_of) — real-balance stores (storerealbal = 1) from server 100,
     the same read as the SOFTECH ISR rule (isr_softech). READ-ONLY."""
     from config.sybase import get_sybase_connection
-    codes = sorted({str(c).strip() for c in branch_codes if str(c).strip()} | {HQ})
+    codes = sorted({str(c).strip() for c in branch_codes if str(c).strip()} | {_hq()})
     out = defaultdict(dict)
     conn = get_sybase_connection()
     cur = conn.cursor()
@@ -133,7 +140,7 @@ def committed_flows(codes, dests):
             else:
                 _add(flows, code, dest, 'draft', f'طلب توريد #{p.pk} ({p.get_status_display()})', p.pk, row['qty'])
     done = isr_guards._dispensed([{'push_id': r['push'].pk, 'itemcode': r['code'], 'pushed_at': r['push'].pushed_at,
-                                   'source': str(r['push'].branchcode if r['push'].kind == P.KIND_HQ_TO_BRANCH else HQ),
+                                   'source': str(r['push'].branchcode if r['push'].kind == P.KIND_HQ_TO_BRANCH else _hq()),
                                    'dest': r['dest']} for r in pushed_rows], timezone.now())
     for r in pushed_rows:
         if (r['push'].pk, r['code']) not in done:
@@ -197,7 +204,7 @@ def _softech_isrs(dests, ours):
         day = d.date() if hasattr(d, 'date') else d
         out.append({'push_id': int(num), 'itemcode': str(code).strip(), 'qty': float(q or 0),
                     'pushed_at': timezone.make_aware(datetime.combine(day, time.min)),
-                    'source': HQ, 'dest': str(dest).strip()})       # HQ fills every branch ISR
+                    'source': _hq(), 'dest': str(dest).strip()})       # HQ fills every branch ISR
     return out
 
 
@@ -212,10 +219,10 @@ def _moves_from(sugs, costs, hq_stock, ceilings):
         if s.get('reason'):
             reasons.append(s['reason'])
         status, note = 'planned', ''
-        if src != HQ and cat in ('never_stocked', 'new_no_rate') and hq_stock.get(code, 0) >= total:
-            src = HQ                                    # HQ holds enough → one leg from HQ, never a branch
+        if src != _hq() and cat in ('never_stocked', 'new_no_rate') and hq_stock.get(code, 0) >= total:
+            src = _hq()                                    # HQ holds enough → one leg from HQ, never a branch
             reasons.append('hq_covers')
-        if src == HQ:
+        if src == _hq():
             wave = 1
         elif cat == 'over_piled':
             wave = 2
@@ -269,7 +276,7 @@ def _apply_committed(moves, flows):
 
 def _apply_line_threshold(moves, min_line):
     for m in moves:
-        if m['status'] == 'planned' and m['from_code'] != HQ and m['value'] < min_line:
+        if m['status'] == 'planned' and m['from_code'] != _hq() and m['value'] < min_line:
             m['status'], m['status_note'] = 'below_line', f'قيمة السطر {m["value"]:,.0f} أقل من {min_line:,.0f} ج'
 
 
@@ -289,17 +296,17 @@ def _apply_trial_cap(moves, cap):
 
 def _doc_key(m):
     """The HQ → branch document a planned move lands in."""
-    return ('ready', m['to_code'], '') if m['from_code'] == HQ else ('after', m['to_code'], m['from_code'])
+    return ('ready', m['to_code'], '') if m['from_code'] == _hq() else ('after', m['to_code'], m['from_code'])
 
 
 def _route(key):
     """(kind, source, dest, route_tag) of a document key."""
     part, a, b = key
     if part == 'feed':
-        return 'branch_to_hq', a, HQ, ''
+        return 'branch_to_hq', a, _hq(), ''
     if part == 'ready':
-        return 'hq_to_branch', HQ, a, 'dist'
-    return 'hq_to_branch', HQ, a, f'dist:{b}'
+        return 'hq_to_branch', _hq(), a, 'dist'
+    return 'hq_to_branch', _hq(), a, f'dist:{b}'
 
 
 def _route_holder(key):
@@ -323,7 +330,7 @@ def _documents(moves, min_doc, holder=_route_holder):
 
     # routes held by someone else
     for key in {_doc_key(m) for m in planned()} | {('feed', m['from_code'], '') for m in planned()
-                                                    if m['from_code'] != HQ}:
+                                                    if m['from_code'] != _hq()}:
         pk, why = holder(key)
         if pk is None:
             continue
@@ -340,7 +347,7 @@ def _documents(moves, min_doc, holder=_route_holder):
         feeds = defaultdict(float)
         for m in planned():
             docs[_doc_key(m)] += m['value']
-            if m['from_code'] != HQ:
+            if m['from_code'] != _hq():
                 feeds[m['from_code']] += m['value']
         for key, v in docs.items():
             if key[0] == 'after' and v < min_doc:
@@ -356,7 +363,7 @@ def _documents(moves, min_doc, holder=_route_holder):
 
     out = {}
     for m in planned():
-        for key in ([('feed', m['from_code'], ''), _doc_key(m)] if m['from_code'] != HQ else [_doc_key(m)]):
+        for key in ([('feed', m['from_code'], ''), _doc_key(m)] if m['from_code'] != _hq() else [_doc_key(m)]):
             d = out.setdefault(key, {'items': set(), 'qty': 0, 'value': 0.0})
             d['items'].add(m['itemcode'])
             d['qty'] += m['qty']
@@ -440,7 +447,7 @@ def build(*, user=None, categories=None, live=True, run=None):
     flows, fnotes = committed_flows(codes, dests)
     notes += fnotes
     costs = dict(Item.objects.filter(softech_id__in=codes).values_list('softech_id', 'cost_price'))
-    hq_stock = (stock or {}).get(HQ) or {}
+    hq_stock = (stock or {}).get(_hq()) or {}
     moves, docs = plan_moves(sugs, costs=costs, hq_stock=hq_stock, ceilings=ceilings, flows=flows, th=th)
     with transaction.atomic():
         DistributionPlan.objects.filter(status=DistributionPlan.STATUS_BUILT).update(
@@ -490,7 +497,7 @@ def generate(plan, *, user=None):
     by_doc = defaultdict(list)
     for m in moves:
         by_doc[_doc_key({'from_code': m.from_code, 'to_code': m.to_code})].append(m)
-    sources = sorted({m.from_code for m in moves if m.from_code != HQ})
+    sources = sorted({m.from_code for m in moves if m.from_code != _hq()})
     created, skipped, keep = [], [], set()
     base = {'plan_id': plan.pk}
 
@@ -519,7 +526,7 @@ def generate(plan, *, user=None):
         try:
             with transaction.atomic():
                 feeder = isr_writer._persist_proposal(
-                    source=src, dest=HQ, kind=P.KIND_BRANCH_TO_HQ, lines=lines_for(src, src_moves),
+                    source=src, dest=_hq(), kind=P.KIND_BRANCH_TO_HQ, lines=lines_for(src, src_moves),
                     run_id=plan.run_id, created_by=user, planner='distribution',
                     params={**base, 'part': 'feed'}, notes=f'التوزيعة — خطة #{plan.pk}: من فرع {src} إلى الرئيسي')
                 if feeder is None:
@@ -528,7 +535,7 @@ def generate(plan, *, user=None):
                 for dest in afters:
                     ms = by_doc[('after', dest, src)]
                     p = isr_writer._persist_proposal(
-                        source=HQ, dest=dest, kind=P.KIND_HQ_TO_BRANCH, lines=lines_for(HQ, ms),
+                        source=_hq(), dest=dest, kind=P.KIND_HQ_TO_BRANCH, lines=lines_for(_hq(), ms),
                         run_id=plan.run_id, created_by=user, linked=feeder, planner='distribution',
                         route_tag=f'dist:{src}', params={**base, 'part': 'after', 'waits_for': src},
                         notes=f'التوزيعة — خطة #{plan.pk}: بعد الاستلام من {src}')
@@ -540,7 +547,7 @@ def generate(plan, *, user=None):
             for dest, p, ms in parts:
                 record(p, 'after', ms)
         except ValueError as exc:
-            skipped.append({'route': f'{src} ← {HQ}', 'path': [src, HQ], 'reason': str(exc)})
+            skipped.append({'route': f'{src} ← {_hq()}', 'path': [src, _hq()], 'reason': str(exc)})
             plan.moves.filter(pk__in=[m.pk for m in src_moves]).update(status='blocked', status_note=str(exc)[:255])
 
     for key, ms in sorted(by_doc.items()):
@@ -549,11 +556,11 @@ def generate(plan, *, user=None):
         dest = key[1]
         try:
             p = isr_writer._persist_proposal(
-                source=HQ, dest=dest, kind=P.KIND_HQ_TO_BRANCH, lines=lines_for(HQ, ms), run_id=plan.run_id,
+                source=_hq(), dest=dest, kind=P.KIND_HQ_TO_BRANCH, lines=lines_for(_hq(), ms), run_id=plan.run_id,
                 created_by=user, planner='distribution', route_tag='dist', params={**base, 'part': 'ready'},
                 notes=f'التوزيعة — خطة #{plan.pk}: جاهز الآن من الرئيسي')
         except ValueError as exc:
-            skipped.append({'route': f'{HQ} ← {dest}', 'path': [HQ, dest], 'reason': str(exc)})
+            skipped.append({'route': f'{_hq()} ← {dest}', 'path': [_hq(), dest], 'reason': str(exc)})
             plan.moves.filter(pk__in=[m.pk for m in ms]).update(status='blocked', status_note=str(exc)[:255])
             continue
         if p is not None:

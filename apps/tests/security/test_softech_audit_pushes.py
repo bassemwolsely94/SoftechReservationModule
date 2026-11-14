@@ -128,7 +128,9 @@ class PurchasingAuditTests(TestCase):
         from apps.purchasing import isr_writer as W
         from apps.purchasing.models import IsrPush as P
         from apps.tests.test_isr_guards import _lines
+        from apps.tests.factories import make_hq
         make_branch(softech_id='100'), make_branch(softech_id='160')
+        make_hq('100', self)                # validate_route reads HQ through hq_code()
         p = W._persist_proposal(source='100', dest='160', kind=P.KIND_HQ_TO_BRANCH, lines=_lines(('A', 2)))
         P.objects.filter(pk=p.pk).update(status=P.STATUS_APPROVED)
         p.refresh_from_db()

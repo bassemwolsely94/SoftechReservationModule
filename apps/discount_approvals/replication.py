@@ -42,8 +42,9 @@ LASTUPDATE_TOLERANCE_SEC = 2
 
 def _operational_branches():
     from apps.branches.models import Branch
+    # live() narrows only (closed/pending/CC never); the other predicates are unchanged
     return list(
-        Branch.objects.filter(is_operational=True, db_host__isnull=False)
+        Branch.objects.live().filter(is_operational=True, db_host__isnull=False)
         .exclude(softech_branch_id='100').exclude(db_host='')
     )
 

@@ -71,6 +71,7 @@ class Notification(models.Model):
         # ── System ────────────────────────────────────────────────────────────
         ('system',                    '⚙️ نظام'),
         ('branch_connectivity',       '🔌 اتصال فرع'),
+        ('branch_pending',            '🏷️ فرع جديد بانتظار التصنيف'),
         ('sync_failure',              '🔴 فشل مزامنة متكرر'),
         ('attendance_alert',          '🕒 تنبيه الحضور والبصمة'),
         ('receipt_check_digest',      '📦 استلام بدون طلب'),
@@ -181,6 +182,7 @@ class Notification(models.Model):
         # ── Settings / system → cog feed ──────────────────────────────────────
         'system':               CATEGORY_SETTINGS,
         'branch_connectivity':  CATEGORY_SETTINGS,
+        'branch_pending':       CATEGORY_SETTINGS,
         'sync_failure':         CATEGORY_SETTINGS,
         # HR attendance health: for the HR head only, so it rides the bell silently (global).
         'attendance_alert':     CATEGORY_GLOBAL,

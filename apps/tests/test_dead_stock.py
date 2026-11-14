@@ -13,7 +13,7 @@ from unittest import mock
 
 from django.test import TestCase
 
-from apps.tests.factories import make_admin, make_branch, make_user
+from apps.tests.factories import make_admin, make_branch, make_user, make_hq
 
 D = Decimal
 TODAY = dt.date(2026, 11, 1)
@@ -44,6 +44,10 @@ def by(lines):
 
 class DeadRuleTests(TestCase):
 
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
     def test_no_sale_and_old_stock_is_dead_recent_sale_or_arrival_is_not(self):
         rows = [row('X', '130', stock='5', last_sale=ago(7)), row('Y', '130', stock='5', last_sale=ago(5)),
                 row('Z', '130', stock='5', last_sale=ago(7)), row('X', '140', rate='2')]
@@ -64,6 +68,10 @@ class DeadRuleTests(TestCase):
 
 
 class LaneTests(TestCase):
+
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
 
     def test_lanes(self):
         rows = [row('M', '130', stock='4'), row('M', '140', rate='3', gap='5'),
@@ -87,10 +95,15 @@ class LaneTests(TestCase):
     def test_exclusions(self):
         rows = [row('A', '130', stock='2', hold=True), row('B', '180', stock='2'), row('C', '110', stock='2'),
                 row('D', '130', stock='2', stockable=False)]
-        self.assertEqual(classify(rows, active=ACTIVE | {'110'}), [])
+        # a closed branch (110, 180) is never in `active` — build() passes Branch.objects.live() only
+        self.assertEqual(classify(rows), [])
 
 
 class MoveTests(TestCase):
+
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
 
     def test_targets_largest_room_first_whole_packs_max_four_never_hq(self):
         rows = [row('X', '130', stock='12.6'), row('X', '100', rate='9', gap='50'),
@@ -124,6 +137,7 @@ class MoveTests(TestCase):
 class SnapshotTests(TestCase):
 
     def setUp(self):
+        make_hq('100', self)   # HQ is read through hq_code()
         from apps.catalog.models import Item
         from apps.purchasing.models import DemandCalculationRun, ItemDemandMetrics
         from django.utils import timezone
@@ -154,6 +168,7 @@ class ApiTests(SnapshotTests):
 
     def setUp(self):
         super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
         from apps.purchasing import dead_stock
         from apps.tests.security.fixtures import seed_code_matrix
         from core.middleware import module_access
@@ -206,6 +221,10 @@ class ApiTests(SnapshotTests):
 
 class PagingTests(ApiTests):
 
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
     def test_pages_in_rank_order_with_count_and_branch_list(self):
         from apps.catalog.models import Item
         from apps.purchasing import dead_stock
@@ -228,6 +247,10 @@ class PagingTests(ApiTests):
 
 class OrderingTests(ApiTests):
     """`ordering` sorts ALL lines before paging; unknown fields are refused."""
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
 
     def test_ordering_sorts_before_paging_and_rejects_unknown_fields(self):
         from apps.catalog.models import Item

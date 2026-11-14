@@ -229,10 +229,10 @@ def pharmacy_profile(request):
         profile.save()
 
     profile  = PharmacyProfile.get()
-    # Only active + operational branches appear on customer receipts/WhatsApp
+    # Only live, not-paused branches appear on customer receipts/WhatsApp
     branches = list(
-        Branch.objects
-        .filter(is_active=True, is_operational=True)
+        Branch.objects.live()
+        .filter(is_operational=True)
         .order_by('name')
         .values('id', 'name', 'name_ar', 'address', 'phone')
     )
