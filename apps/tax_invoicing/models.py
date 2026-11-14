@@ -688,3 +688,91 @@ class TaxReceiptLine(models.Model):
     class Meta:
         ordering = ['id']
 
+
+
+# ── ETA history mirror (read only; spec 2026-11-14-eta-history-mirror-design.md) ───────────────
+
+ETA_SYSTEMS = [('preprod', 'التجريبية'), ('production', 'الفعلية')]
+
+
+class EtaMirrorDocument(models.Model):
+    """One e-invoice / credit / debit note as ETA holds it, in one ETA system. Never edited here."""
+    system = models.CharField(max_length=12, choices=ETA_SYSTEMS, db_index=True)
+    uuid = models.CharField(max_length=64)
+    submission_uuid = models.CharField(max_length=64, blank=True)
+    internal_id = models.CharField(max_length=100, blank=True, db_index=True)
+    doc_type = models.CharField(max_length=5, blank=True)
+    type_version = models.CharField(max_length=10, blank=True)
+    direction = models.CharField(max_length=10, blank=True)          # sent | received
+    issuer_rin = models.CharField(max_length=30, blank=True)
+    issuer_name = models.CharField(max_length=300, blank=True)
+    issuer_branch = models.CharField(max_length=50, blank=True)
+    receiver_type = models.CharField(max_length=5, blank=True)
+    receiver_id = models.CharField(max_length=50, blank=True)
+    receiver_name = models.CharField(max_length=300, blank=True)
+    issued_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    received_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=20, blank=True, db_index=True)
+    net_amount = models.DecimalField(max_digits=18, decimal_places=5, null=True, blank=True)
+    tax_amount = models.DecimalField(max_digits=18, decimal_places=5, null=True, blank=True)
+    total_amount = models.DecimalField(max_digits=18, decimal_places=5, null=True, blank=True)
+    currency = models.CharField(max_length=5, blank=True)
+    references = models.JSONField(default=list, blank=True)
+    raw = models.JSONField(default=dict, blank=True)
+    source = models.CharField(max_length=10, blank=True)             # package | search | recent | detail
+    fetched_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'مستند لدى المصلحة (نسخة)'
+        ordering = ['-issued_at', '-id']
+        constraints = [models.UniqueConstraint(fields=['system', 'uuid'], name='eta_mirror_document_once')]
+
+
+class EtaMirrorReceipt(models.Model):
+    """One e-receipt as ETA holds it, in one ETA system. Never edited here."""
+    system = models.CharField(max_length=12, choices=ETA_SYSTEMS, db_index=True)
+    uuid = models.CharField(max_length=64)
+    submission_uuid = models.CharField(max_length=64, blank=True)
+    previous_uuid = models.CharField(max_length=64, blank=True)
+    receipt_number = models.CharField(max_length=100, blank=True, db_index=True)
+    pos_serial = models.CharField(max_length=100, blank=True, db_index=True)
+    branch_number = models.CharField(max_length=50, blank=True)
+    issued_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    receipt_type = models.CharField(max_length=5, blank=True)
+    status = models.CharField(max_length=20, blank=True, db_index=True)
+    net_amount = models.DecimalField(max_digits=18, decimal_places=5, null=True, blank=True)
+    tax_amount = models.DecimalField(max_digits=18, decimal_places=5, null=True, blank=True)
+    total_amount = models.DecimalField(max_digits=18, decimal_places=5, null=True, blank=True)
+    buyer_type = models.CharField(max_length=5, blank=True)
+    raw = models.JSONField(default=dict, blank=True)
+    source = models.CharField(max_length=10, blank=True)
+    fetched_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'إيصال لدى المصلحة (نسخة)'
+        ordering = ['-issued_at', '-id']
+        constraints = [models.UniqueConstraint(fields=['system', 'uuid'], name='eta_mirror_receipt_once')]
+
+
+class EtaHistoryWindow(models.Model):
+    """One date window of the backfill, per system and kind, so "not fetched yet" is never read as "none"."""
+    PLANNED, REQUESTED, LOADED, FAILED, TOO_BIG = 'planned', 'requested', 'loaded', 'failed', 'too_big'
+    STATES = [(PLANNED, 'لم يُطلب'), (REQUESTED, 'طُلب من المصلحة'), (LOADED, 'تم التحميل'), (FAILED, 'تعذر'),
+              (TOO_BIG, 'أكبر من حد المصلحة')]
+    system = models.CharField(max_length=12, choices=ETA_SYSTEMS)
+    kind = models.CharField(max_length=10)                            # documents | receipts
+    date_from = models.DateField()
+    date_to = models.DateField()
+    state = models.CharField(max_length=10, choices=STATES, default=PLANNED, db_index=True)
+    package_id = models.CharField(max_length=64, blank=True)
+    eta_count = models.IntegerField(null=True, blank=True)
+    loaded_count = models.IntegerField(default=0)
+    error = models.TextField(blank=True)
+    attempts = models.IntegerField(default=0)
+    requested_at = models.DateTimeField(null=True, blank=True)
+    loaded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'نافذة تحميل من سجل المصلحة'
+        ordering = ['system', 'kind', 'date_from']
+        constraints = [models.UniqueConstraint(fields=['system', 'kind', 'date_from', 'date_to'], name='eta_history_window_once')]

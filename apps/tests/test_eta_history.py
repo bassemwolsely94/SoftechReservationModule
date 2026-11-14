@@ -3,9 +3,12 @@ import inspect
 from unittest import mock
 
 import requests
-from django.test import SimpleTestCase, override_settings
+from django.db import IntegrityError, transaction
+from django.test import SimpleTestCase, TestCase, override_settings
+from django.utils import timezone
 
 from apps.tax_invoicing import eta_client, eta_reader
+from apps.tax_invoicing.models import EtaHistoryWindow, EtaMirrorDocument, EtaMirrorReceipt
 
 
 def _response(status_code, body=None, headers=None, content=b''):
@@ -96,3 +99,34 @@ class ReaderTests(SimpleTestCase):
                 mock.patch.object(eta_reader.requests, 'get', side_effect=requests.ConnectionError()):
             with self.assertRaises(eta_client.EtaUncertain):
                 eta_reader.EtaReader('preprod').get('/x')
+
+
+class MirrorModelTests(TestCase):
+
+    def _doc(self, system, uuid='U1'):
+        return EtaMirrorDocument.objects.create(system=system, uuid=uuid, doc_type='i', direction='sent',
+                                                issued_at=timezone.now(), status='valid')
+
+    def test_one_row_per_system_and_uuid(self):
+        self._doc('preprod')
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self._doc('preprod')
+        EtaMirrorReceipt.objects.create(system='preprod', uuid='R1', issued_at=timezone.now(), status='valid')
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                EtaMirrorReceipt.objects.create(system='preprod', uuid='R1', issued_at=timezone.now(), status='valid')
+
+    def test_same_uuid_may_exist_in_both_systems(self):
+        self._doc('preprod')
+        self._doc('production')
+        self.assertEqual(EtaMirrorDocument.objects.filter(uuid='U1').count(), 2)
+
+    def test_one_window_per_system_kind_and_range(self):
+        import datetime as dt
+        d = dt.date(2024, 1, 1)
+        EtaHistoryWindow.objects.create(system='preprod', kind='receipts', date_from=d, date_to=d)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                EtaHistoryWindow.objects.create(system='preprod', kind='receipts', date_from=d, date_to=d)
+        self.assertEqual(EtaHistoryWindow.objects.get().state, 'planned')
