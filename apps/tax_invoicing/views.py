@@ -1216,7 +1216,7 @@ def _history_round(system):
     import datetime as _d
     try:
         for kind in eta_history.KINDS:
-            eta_history.plan_windows(system, kind, eta_history.start_date(), _d.date.today() - _d.timedelta(days=1))
+            eta_history.plan_windows(system, kind, eta_history.start_date(kind), _d.date.today() - _d.timedelta(days=1))
             eta_history.step(system, kind)
         eta_history.top_up(system)
     finally:

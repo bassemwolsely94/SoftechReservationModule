@@ -156,6 +156,27 @@ SENDER/APPROVER unchanged for phase 4. No secret or buyer ID in logs/errors (`co
 `core/export_safety.py`. Not a SOFTECH write (read-only), so no write-manifest entry. Tests per phase, including the
 "reader cannot send" surface test and "unfinished ≠ empty" tests.
 
+## Phase 1b — backfill from search, not packages (proof run 2026-11-14, owner: "Yes, rebuild it")
+
+Read-only probes on production (our own ERP registration) showed:
+- Document and receipt **packages** answer "Sorry, Your Criteria does not return any results" for periods that hold
+  hundreds of documents — they appear to cover only what the requesting ERP itself submitted (Invoicer submitted
+  everything). Packages are not used for backfill.
+- **Documents search** sees all of the company's invoices (sent and received) back to at least 2022-06; 30-day windows,
+  continuation tokens.
+- **Receipts search** sees all receipts: 357,163 in total, **only from 2025-01-01** (none before), ≤ 3000 per query
+  (30 pages of 100). Invoicer uploads receipts late and in bursts (a received day can be 0 or several thousand),
+  while issue dates spread evenly (~600 a day), so windows go by **DateTimeIssued** and the top-up re-reads 14 days.
+- Real field names: documents `uuid, submissionUUID, internalId, typeName ('I'), typeVersionName, issuerId, issuerName,
+  receiverId, receiverName, receiverType, dateTimeIssued, dateTimeReceived, status, netAmount, totalSales,
+  totalDiscount, total`; receipts flat `uuid, submissionUuid, receiptNumber, posSerialNumber, dateTimeIssued,
+  dateTimeReceived, totalAmount, status, typeName, issuerId, submitterName, direction`.
+
+So: documents from `TAX_ETA_HISTORY_START` (2022-06-01) in 30-day windows by submission date; receipts from
+`TAX_ETA_HISTORY_RECEIPTS_START` (2025-01-01) in 1-day windows by issue date, split when ETA reports more than 3000.
+A window is fetched completely in one round (all pages) and loaded with ETA's own count beside ours; "no results"
+(404 NoResult) is a loaded window with 0. Everything else from phase 1 stands (states, lock, round record, top-up).
+
 ## Phases (one PR each)
 
 1. Reader (both systems, read-only surface), mirror models, window/run tracking, package backfill + top-up, refresh,
