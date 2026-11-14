@@ -583,6 +583,9 @@ class TaxReceiptBranchConfig(models.Model):
     # Set: a test-system-only mapping (for example a live branch's sales through a borrowed test device). It is
     # refused anywhere else, and ending it puts that branch's test receipts back to ready for the real system.
     test_env = models.CharField(max_length=12, blank=True, default='', db_default='')
+    # Sales before this moment are never sent from here: ETA refuses receipts outside its submission window
+    # (CF313), and older sales belong to the program used before. Required before the first receipt.
+    send_from = models.DateTimeField(null=True, blank=True)
     last_uuid = models.CharField(max_length=64, blank=True, editable=False)
     # Where this device's receipt chain starts, decided once before the first receipt (receipts.start_chain):
     #   fresh     ETA holds no receipt from this device, so previousUUID starts empty;
