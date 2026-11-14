@@ -130,3 +130,167 @@ class MirrorModelTests(TestCase):
             with transaction.atomic():
                 EtaHistoryWindow.objects.create(system='preprod', kind='receipts', date_from=d, date_to=d)
         self.assertEqual(EtaHistoryWindow.objects.get().state, 'planned')
+
+
+# ── Task 3: package backfill (eta_history) ─────────────────────────────────────────────────────
+
+import datetime as dt  # noqa: E402
+import io  # noqa: E402
+import json as _json  # noqa: E402
+import zipfile  # noqa: E402
+
+from apps.tax_invoicing import eta_history  # noqa: E402
+
+
+def _zip(rows, name='part1.json'):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as z:
+        z.writestr(name, _json.dumps(rows))
+    return buf.getvalue()
+
+
+def _doc_row(uuid, status='Valid', issuer='499336534', total=114):
+    return {'uuid': uuid, 'submissionUUID': 'S-' + uuid, 'internalId': 'INV-' + uuid, 'typeName': 'i',
+            'typeVersionName': '1.0', 'issuerId': issuer, 'issuerName': 'الرزيقى', 'receiverId': '999888777',
+            'receiverName': 'شركة', 'receiverType': 'B', 'dateTimeIssued': '2024-01-02T10:00:00Z',
+            'dateTimeReceived': '2024-01-02T10:01:00Z', 'status': status, 'netAmount': 100, 'totalAmount': total}
+
+
+def _receipt_row(uuid, status='Valid'):
+    return {'header': {'uuid': uuid, 'previousUUID': 'P', 'receiptNumber': 'R-' + uuid,
+                       'dateTimeIssued': '2024-01-02T10:00:00Z'},
+            'seller': {'branchCode': '3', 'deviceSerialNumber': 'POS1'}, 'documentType': {'receiptType': 's'},
+            'buyer': {'type': 'P'}, 'netAmount': 50, 'totalAmount': 57, 'status': status}
+
+
+class FakeReader:
+    """Stands in for EtaReader: records requests, answers from scripted state."""
+    def __init__(self, system):
+        self.system = system
+        self.requests = []
+        self.statuses = {}          # package id -> ETA status number
+        self.packages = {}          # package id -> zip bytes
+        self.too_big_over_days = None
+        self.fail_with = None
+
+    def why_not(self):
+        return ''
+
+    def request_package(self, kind, body):
+        if self.fail_with:
+            raise self.fail_with
+        q = body['queryParameters']
+        days = (dt.date.fromisoformat(q['dateTo'][:10]) - dt.date.fromisoformat(q['dateFrom'][:10])).days + 1
+        if self.too_big_over_days is not None and days > self.too_big_over_days:
+            raise eta_client.EtaRefused('too big', 400, {'error': {'code': 'OperationExceedsLimit'}})
+        pid = f'P{len(self.requests) + 1}'
+        self.requests.append((kind, body))
+        return pid
+
+    def package_requests(self, kind, page=1, size=50):
+        return [{'packageId': pid, 'status': st, 'isExpired': st == 4} for pid, st in self.statuses.items()]
+
+    def download_package(self, kind, package_id):
+        return self.packages.get(package_id)
+
+
+class BackfillTests(TestCase):
+
+    def setUp(self):
+        from apps.tax_invoicing.models import TaxIssuerProfile
+        issuer = TaxIssuerProfile.load()
+        issuer.tax_id = '499336534'
+        issuer.save()
+        self.fake = FakeReader('preprod')
+        p = mock.patch.object(eta_history, 'EtaReader', return_value=self.fake)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def _window(self, kind='documents', days=1):
+        d = dt.date(2024, 1, 1)
+        return EtaHistoryWindow.objects.create(system='preprod', kind=kind, date_from=d, date_to=d + dt.timedelta(days=days - 1))
+
+    def test_plan_windows_uses_4_day_receipt_and_30_day_document_windows(self):
+        self.assertEqual(eta_history.plan_windows('preprod', 'receipts', dt.date(2024, 1, 1), dt.date(2024, 1, 8)), 2)
+        self.assertEqual(eta_history.plan_windows('preprod', 'documents', dt.date(2024, 1, 1), dt.date(2024, 3, 1)), 3)
+        self.assertEqual(eta_history.plan_windows('preprod', 'receipts', dt.date(2024, 1, 1), dt.date(2024, 1, 8)), 0)
+
+    def test_backfill_requests_polls_downloads_and_loads(self):
+        w = self._window()
+        eta_history.step('preprod', 'documents')
+        w.refresh_from_db()
+        self.assertEqual((w.state, w.package_id), ('requested', 'P1'))
+        self.fake.statuses['P1'] = 2
+        self.fake.packages['P1'] = _zip([_doc_row('A'), _doc_row('B'), _doc_row('C', issuer='111')])
+        eta_history.step('preprod', 'documents')
+        w.refresh_from_db()
+        self.assertEqual((w.state, w.loaded_count), ('loaded', 3))
+        a = EtaMirrorDocument.objects.get(system='preprod', uuid='A')
+        self.assertEqual((a.direction, a.status, a.internal_id, str(a.total_amount)), ('sent', 'valid', 'INV-A', '114.00000'))
+        self.assertEqual(EtaMirrorDocument.objects.get(uuid='C').direction, 'received')
+
+    def test_receipts_load_from_nested_rows(self):
+        w = self._window('receipts')
+        eta_history.step('preprod', 'receipts')
+        self.fake.statuses['P1'] = 2
+        self.fake.packages['P1'] = _zip({'receipts': [_receipt_row('R1')]})
+        eta_history.step('preprod', 'receipts')
+        r = EtaMirrorReceipt.objects.get(uuid='R1')
+        self.assertEqual((r.receipt_number, r.pos_serial, r.branch_number, r.previous_uuid, r.status),
+                         ('R-R1', 'POS1', '3', 'P', 'valid'))
+        w.refresh_from_db()
+        self.assertEqual(w.state, 'loaded')
+
+    def test_too_big_window_is_split_in_halves(self):
+        self._window('receipts', days=4)
+        self.fake.too_big_over_days = 2
+        eta_history.step('preprod', 'receipts', max_requests=1)
+        spans = sorted((w.date_from.day, w.date_to.day, w.state) for w in EtaHistoryWindow.objects.all())
+        self.assertEqual(spans, [(1, 2, 'planned'), (3, 4, 'planned')])
+
+    def test_one_day_window_still_too_big_is_marked_too_big(self):
+        self._window('receipts', days=1)
+        self.fake.too_big_over_days = 0
+        eta_history.step('preprod', 'receipts')
+        w = EtaHistoryWindow.objects.get()
+        self.assertEqual(w.state, 'too_big')
+        self.assertTrue(w.error)
+
+    def test_unreachable_eta_leaves_window_unloaded_with_reason(self):
+        w = self._window()
+        self.fake.fail_with = eta_client.EtaUncertain('connection lost')
+        out = eta_history.step('preprod', 'documents')
+        w.refresh_from_db()
+        self.assertEqual(w.state, 'planned')
+        self.assertIn('connection lost', w.error)
+        self.assertTrue(out['error'])
+        self.assertEqual(EtaMirrorDocument.objects.count(), 0)
+
+    def test_expired_package_is_requested_again(self):
+        w = self._window()
+        eta_history.step('preprod', 'documents')
+        self.fake.statuses['P1'] = 4
+        eta_history.step('preprod', 'documents')
+        w.refresh_from_db()
+        self.assertEqual((w.state, w.package_id), ('requested', 'P2'))
+
+    def test_reload_is_idempotent_and_newest_status_wins(self):
+        eta_history.upsert_documents('preprod', [_doc_row('A')], 'package')
+        eta_history.upsert_documents('preprod', [_doc_row('A', status='Cancelled')], 'search')
+        a = EtaMirrorDocument.objects.get()
+        self.assertEqual((a.status, a.source), ('cancelled', 'search'))
+
+    def test_request_body_never_truncates(self):
+        self._window()
+        eta_history.step('preprod', 'documents')
+        kind, body = self.fake.requests[0]
+        self.assertIs(body['queryParameters']['truncateIfExceeded'], False)
+        self.assertEqual(body['format'], 'JSON')
+
+    def test_progress_counts_states_and_says_why_off(self):
+        self._window()
+        with mock.patch.object(eta_history, 'EtaReader') as R:
+            R.return_value.why_not.return_value = 'off'
+            p = eta_history.progress('preprod')
+        self.assertEqual(p['documents']['states']['planned'], 1)
+        self.assertEqual(p['why_not'], 'off')
