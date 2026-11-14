@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { syncApi } from '../api/client'
-import { ROLE_LABELS } from '../utils/roleLabels'
+import useRoles from '../hooks/useRoles'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 
@@ -145,16 +145,13 @@ const LOAD_GROUPS = [['by_scope', 'حسب المهمة', 'scope'], ['by_caller',
 const n0 = v => (v || 0).toLocaleString('en-US')
 const secs = ms => (ms || 0) >= 60_000 ? `${n0(Math.round(ms / 60_000))} د` : `${n0(Math.round((ms || 0) / 1000))} ث`
 
-// roles the user screen does not offer in its picker, but whose traffic still shows here
-const EXTRA_ROLE_LABELS = { supervisor: 'مشرف', quality_manager: 'مدير الجودة', accountant: 'محاسب' }
-
-function scopeLabel(s) {
+function scopeLabel(s, roleLabel = (r) => r) {
   if (!s) return '—'
   if (s === 'web') return 'الشاشات (طلبات المستخدمين)'
   if (s.startsWith('web:')) {
     const [, zone, role] = s.split(':')
     const where = zone === 'internal' ? 'داخل الشبكة' : 'خارج الشبكة'
-    return `الشاشات · ${where} · ${role === 'anon' ? 'غير مسجّل الدخول' : (ROLE_LABELS[role] || EXTRA_ROLE_LABELS[role] || role)}`
+    return `الشاشات · ${where} · ${role === 'anon' ? 'غير مسجّل الدخول' : roleLabel(role)}`
   }
   if (s.startsWith('job:')) return `مهمة مجدولة · ${s.slice(4)}`
   if (s.startsWith('cmd:')) return `أمر يدوي · ${s.slice(4)}`
@@ -252,6 +249,7 @@ function SlowRequestsPanel() {
 }
 
 function SoftechLoadPanel() {
+  const { roleLabel } = useRoles()
   const [hours, setHours] = useState(24)
   const [group, setGroup] = useState('by_scope')
   const { data, isLoading } = useQuery({
@@ -263,7 +261,7 @@ function SoftechLoadPanel() {
   const [, , key] = LOAD_GROUPS.find(g => g[0] === group)
   // sort every loaded row first, then show the top 15 (the server returns the whole group list)
   const { sorted: sortedRows, headerProps } = useSortableRows(data?.[group] || [], {
-    getValue: (r, k) => (k === 'label' ? (group === 'by_scope' ? scopeLabel(r.scope) : r[key]) : r[k]),
+    getValue: (r, k) => (k === 'label' ? (group === 'by_scope' ? scopeLabel(r.scope, roleLabel) : r[key]) : r[k]),
   })
   const rows = sortedRows.slice(0, 15)
   const tile = (label, value, sub) => (
@@ -318,7 +316,7 @@ function SoftechLoadPanel() {
                   {rows.map((r, i) => (
                     <tr key={i} className="border-b border-gray-50">
                       <td className="py-1.5 font-medium text-gray-700 max-w-[22rem] truncate" dir={group === 'by_caller' ? 'ltr' : undefined}
-                          title={r[key]}>{group === 'by_scope' ? scopeLabel(r.scope) : r[key]}</td>
+                          title={r[key]}>{group === 'by_scope' ? scopeLabel(r.scope, roleLabel) : r[key]}</td>
                       <td className="text-center tabnum">{n0(r.connects)}{r.connect_failures ? <span className="text-red-500"> ({n0(r.connect_failures)}✕)</span> : null}</td>
                       <td className="text-center tabnum">{n0(r.queries)}</td>
                       <td className="text-center tabnum">{n0(r.rows)}</td>

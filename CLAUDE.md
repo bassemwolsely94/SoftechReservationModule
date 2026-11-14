@@ -74,3 +74,4 @@ they can't. (Round-2 plan, docs/security/2026-11-05-full-project-test-plan.md.)
 5. **Tests:** view + permission tests and a business-rule test for its money/stock logic.
 6. **Suppressions:** no new `# nosec` / `# noqa` or baseline line without a written reason.
 7. **New values:** its per-branch exports/reports are registered in `apps/tests/new_value_registry.py`.
+8. **Roles:** a new role = one line in `apps/users/roles.py`; no literal role lists (role_literals guard).

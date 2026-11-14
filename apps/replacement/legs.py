@@ -331,7 +331,7 @@ def link_contract_sale(case_id, *, user, version, branchcode, docnumber, docdate
           .select_related('branch').first())
     if ph is None:
         raise ValidationError('لم يتم العثور على فاتورة التعاقد في المرآة (قد تحتاج مزامنة).')
-    if ph.sales_channel not in C.CONTRACT_CHANNELS:
+    if ph.sales_channel not in C.contract_channels():
         raise ValidationError('هذه ليست فاتورة تعاقد.')
     if case.softech_pic and (ph.softech_phcode or '').strip() != case.softech_pic:
         raise ValidationError('فاتورة التعاقد لمريض آخر.')
@@ -674,7 +674,7 @@ def link_native_product_sale(case_id, *, user, version, branchcode, docnumber, d
           .select_related('branch').first())
     if ph is None:
         raise ValidationError('لم يتم العثور على فاتورة المنتجات في المرآة (قد تحتاج مزامنة).')
-    if ph.sales_channel in C.CONTRACT_CHANNELS:
+    if ph.sales_channel in C.contract_channels():
         raise ValidationError('هذه فاتورة تعاقد — اربطها كفاتورة التعاقد.')
     pic = (ph.softech_phcode or '').strip()
     # owner 2026-10-26 (Q5): a redemption sale is on the patient's PIC or «عميل تبديل» — never

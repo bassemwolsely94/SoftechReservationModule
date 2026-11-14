@@ -160,7 +160,7 @@ def isr_filter_options(request):
     if data is None:
         data = isr_softech.filter_options()
         cache.set('isr_filter_options', data, 60 * 30)
-    return Response({**data, 'stat_labels': isr_softech.STAT_LABELS, 'defaults': isr_softech.SCREEN_DEFAULTS,
+    return Response({**data, 'stat_labels': isr_softech.STAT_LABELS, 'defaults': isr_softech.screen_defaults(),
                      'min_pack_fraction': isr_softech.MIN_PACK_FRACTION})
 
 

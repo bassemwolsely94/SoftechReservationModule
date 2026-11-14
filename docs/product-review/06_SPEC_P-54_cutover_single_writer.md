@@ -102,4 +102,9 @@
 | CUSTOMER_BRANCH_COPY_WRITE_ENABLED / POINTS_REMOVAL_WRITE_ENABLED | customer flags / points | ON | |
 | DEMAND_ENGINE_SCHEDULE_ENABLED | engine schedule | ON | |
 | POS_WRITER_ENABLED | indirect POS | OFF until P-39 parity | |
+| TAX_ETA_READ_PREPROD_ENABLED / TAX_ETA_READ_PRODUCTION_ENABLED | ETA history mirror (reads ETA only; not a writer flag) | VPS: ON after W7 step 1 / office: OFF | |
+| TAX_ETA_CODING_ENABLED | item-code requests to ETA (test system today) | ON (preprod) | |
+| TAX_ERECEIPT_SUBMIT_ENABLED | e-receipts to ETA (test system today) | as the office | |
+| TAX_ETA_SUBMIT_ENABLED | e-invoices to ETA | OFF until the seal passes on the VPS | |
+| TAX_ETA_PRODUCTION_ALLOWED | any send to ETA's live system | OFF — owner's yes per document kind, not part of cutover | |
 | PRICING_SOFTECH_WRITE_ENABLED, REPLICATION_REPAIR_ENABLED, LOYALTY_SOFTECH_WRITE_ENABLED, PERSONAL_COMMENT_WRITE_ENABLED, POS_CANCEL_WRITE_ENABLED, REPLACEMENT_POSTING_ENABLED, CUSTOMER_MERGE_WRITE_ENABLED | (currently OFF everywhere) | owner to decide | |

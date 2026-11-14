@@ -166,10 +166,10 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
             if codes:
                 qs = qs.filter(sales_channel__in=codes)
 
-        # Favoured channels only — use the model's constant so it stays in sync
+        # Favoured channels only — from the channel registry (ranks 1–2)
         if p.get('favoured_only') in ('1', 'true', 'True'):
-            from .models import FollowUpTask as FUT
-            qs = qs.filter(sales_channel__in=list(FUT.FAVOURED_CHANNEL_CODES))
+            from apps.forecasting.channels import favoured_codes
+            qs = qs.filter(sales_channel__in=sorted(favoured_codes()))
 
         # ── Item / catalog filters ───────────────────────────────────────────
         if p.get('item'):
@@ -249,16 +249,15 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
         elif p.get('by_score') in ('1', 'true', 'True'):
             qs = qs.order_by('-priority_score', 'due_date')
         elif p.get('by_priority') in ('1', 'true', 'True'):
-            # Favoured channels first, then soonest due
+            # Favoured channels first, then soonest due. Ranks from the channel
+            # registry; unranked / unknown / blank codes sort last (9).
             from django.db.models import Case, When, IntegerField, Value
+            from apps.forecasting.channels import rank_map
+            whens = [When(sales_channel=code, then=Value(rank))
+                     for code, rank in sorted(rank_map().items())]
             qs = qs.annotate(
-                _chan_rank=Case(
-                    When(sales_channel='91', then=Value(1)),
-                    When(sales_channel='90', then=Value(1)),
-                    When(sales_channel='13', then=Value(2)),
-                    When(sales_channel='15', then=Value(4)),
-                    default=Value(3), output_field=IntegerField(),
-                )
+                _chan_rank=Case(*whens, default=Value(FollowUpTask.UNRANKED_CHANNEL_PRIORITY),
+                                output_field=IntegerField())
             ).order_by('_chan_rank', 'due_date')
         else:
             qs = qs.order_by('due_date', '-created_at')
@@ -504,9 +503,9 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
             .distinct().order_by('medicine_type_name_ar')[:100]
         )
 
-        # ── Dynamic channels: from actual task data, labelled from model map ───
-        # Do NOT hard-code — codes differ per branch/dataset.
-        # Guaranteed codes from the model map + whatever actually appears in tasks.
+        # ── Channels: every customer channel in the registry + any other code that
+        # actually appears on tasks (unknown codes show «غير مصنف (<code>)», last).
+        from apps.forecasting.channels import channel, customer_channels, favoured_codes
         actual_codes = list(
             FollowUpTask.objects
             .exclude(sales_channel='')
@@ -514,16 +513,16 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
             .distinct()
             .order_by('sales_channel')[:50]
         )
-        # Merge with all known codes from _CHANNEL_MAP so all known channels appear
-        all_known_codes = set(FollowUpTask._CHANNEL_MAP.keys()) | set(actual_codes)
-        channels_list = []
-        for code in sorted(all_known_codes, key=lambda c: FollowUpTask._CHANNEL_MAP.get(c, ('', False, 9))[2]):
-            entry = FollowUpTask._CHANNEL_MAP.get(code)
-            label    = entry[0] if entry else f'قناة {code}'
-            favoured = entry[1] if entry else False
-            # Only include the code if it actually exists in tasks OR is a key known channel
-            if code in actual_codes or code in ('91', '90'):
-                channels_list.append({'code': code, 'label': label, 'favoured': favoured})
+        favoured = favoured_codes()
+        registry = customer_channels()          # ranked order, unranked last
+        listed = {i.code for i in registry}
+        infos = registry + [channel(c) for c in sorted(set(actual_codes) - listed)]
+        channels_list = [
+            {'code': i.code,
+             'label': i.label or i.group_label or f'قناة {i.code}',
+             'favoured': i.code in favoured}
+            for i in infos
+        ]
 
         return Response({
             'channels': channels_list,

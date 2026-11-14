@@ -397,39 +397,28 @@ class FollowUpTask(models.Model):
     # ── Sales channel helpers ─────────────────────────────────────────────────
     # Codes come from stktransm.ptclassifcode (invoice-level, SOFTECH authoritative).
     # Do NOT use personsdata.ptclassifcode — that field is blank for all customers.
-    # Format: code → (Arabic label, is_favoured, priority 1=highest)
-    _CHANNEL_MAP = {
-        '91': ('كاش / مشي',       True,  1),   # walk-in cash — largest segment
-        '90': ('توصيل',           True,  1),   # home delivery
-        '13': ('عميل دائم',      True,  2),   # permanent customer account
-        '10': ('بيع عام',         True,  2),   # general retail (2nd largest in data)
-        '11': ('شركات',           False, 3),   # corporate
-        '12': ('جملة',            False, 3),   # wholesale
-        '30': ('أخرى',            False, 3),   # other / mixed
-        '15': ('تأمين',           False, 4),   # insurance — least favoured
-        '16': ('تأمين طبي',       False, 4),   # medical insurance
-        '17': ('تأمين تكميلي',    False, 4),   # supplementary insurance
-    }
-
-    # Codes considered "favoured" for targeting (walk-in + delivery + permanent)
-    FAVOURED_CHANNEL_CODES = {'91', '90', '13', '10'}
+    # Meanings (label, favoured, rank) come from the owner-editable channel registry
+    # apps/forecasting/channels.py (ChannelBucketMap) — never hard-code them here.
+    UNRANKED_CHANNEL_PRIORITY = 9
 
     @property
     def sales_channel_label(self) -> str:
-        entry = self._CHANNEL_MAP.get(self.sales_channel)
-        if entry:
-            return entry[0]
-        if self.sales_channel:
-            return f'قناة {self.sales_channel}'
-        return '—'
+        from apps.forecasting.channels import channel
+        if not (self.sales_channel or '').strip():
+            return '—'
+        info = channel(self.sales_channel)
+        return info.label or info.group_label or f'قناة {self.sales_channel}'
 
     @property
     def channel_is_favoured(self) -> bool:
-        return self.sales_channel in self.FAVOURED_CHANNEL_CODES
+        from apps.forecasting.channels import favoured_codes
+        return (self.sales_channel or '').strip() in favoured_codes()
 
     @property
     def channel_priority(self) -> int:
-        return self._CHANNEL_MAP.get(self.sales_channel, ('', False, 3))[2]
+        from apps.forecasting.channels import channel
+        rank = channel(self.sales_channel).followup_rank
+        return rank if rank is not None else self.UNRANKED_CHANNEL_PRIORITY
 
     # ── Status helpers ────────────────────────────────────────────────────────
     @property

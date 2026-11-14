@@ -14,17 +14,11 @@ import { Workflow } from '../help/HelpArticle'
 import TourRunner from '../help/Tour'
 import { pick, itemText, label } from '../help/text'
 import { fa } from '../utils/flowArrow'
+import useRoles from '../hooks/useRoles'
 
-const ROLES = ['pharmacist', 'salesperson', 'call_center', 'purchasing', 'delivery', 'supervisor',
-  'quality_manager', 'accountant', 'viewer', 'admin']
-const ROLE_NAMES = {
-  pharmacist: ['الصيدلي', 'Pharmacist'], salesperson: ['البائع', 'Salesperson'],
-  call_center: ['الكول سنتر', 'Call center'], purchasing: ['المشتريات', 'Purchasing'],
-  delivery: ['الطيار / التوصيل', 'Delivery'], supervisor: ['المشرف', 'Supervisor'],
-  quality_manager: ['مدير الجودة', 'Quality manager'], accountant: ['المحاسب', 'Accountant'], viewer: ['مشاهد', 'Viewer'], admin: ['مدير النظام', 'Admin'],
-}
 
 export default function HelpManualPage() {
+  const { roles, roleLabel } = useRoles()
   const [params, setParams] = useSearchParams()
   const myRole = useAuthStore((s) => s.user?.role)
   const helpLang = useHelpStore((s) => s.lang)
@@ -47,7 +41,7 @@ export default function HelpManualPage() {
   const modTitle = module && index ? index.modules.find((m) => m.key === module)?.title : null
   const title = module
     ? `${en ? 'Training manual — ' : 'دليل التدريب — '}${pick(modTitle, lang)}`
-    : `${en ? 'Training manual — ' : 'دليل التدريب — '}${(ROLE_NAMES[role] || [role, role])[en ? 1 : 0]}`
+    : `${en ? 'Training manual — ' : 'دليل التدريب — '}${roleLabel(role, en ? 'en' : 'ar')}`
 
   return (
     <div dir={en ? 'ltr' : 'rtl'} className="manual min-h-screen bg-white text-gray-900">
@@ -66,7 +60,7 @@ export default function HelpManualPage() {
         <a href="/help" className="text-brand-600 hover:underline" data-tour="general-help-manual-back">{fa()} {label('guide', lang)}</a>
         <select value={role} onChange={(e) => set('role', e.target.value)} data-tour="general-help-manual-role" className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
           <option value="">{en ? '— by role —' : '— حسب الدور —'}</option>
-          {ROLES.map((r) => <option key={r} value={r}>{ROLE_NAMES[r][en ? 1 : 0]}</option>)}
+          {roles.map((r) => <option key={r.value} value={r.value}>{en ? r.label_en : r.label_ar}</option>)}
         </select>
         <select value={module} onChange={(e) => set('module', e.target.value)} data-tour="general-help-manual-module" className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
           <option value="">{en ? '— by module —' : '— حسب الموديول —'}</option>

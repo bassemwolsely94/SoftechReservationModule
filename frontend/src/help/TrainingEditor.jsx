@@ -12,9 +12,8 @@ import { helpApi } from '../api/client'
 import { TField } from './HelpEditor'
 import NoteHints, { useNoteHints } from './NoteHints'
 import { pick } from './text'
+import useRoles from '../hooks/useRoles'
 
-const ROLES = ['pharmacist', 'salesperson', 'call_center', 'purchasing', 'delivery', 'supervisor',
-  'quality_manager', 'viewer', 'admin']
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null))
 const emptyT = () => ({ ar: '', en: '' })
 const newQuestion = () => ({ q: emptyT(), options: [emptyT(), emptyT()], answer: 0, explain: emptyT() })
@@ -22,6 +21,7 @@ const newQuestion = () => ({ q: emptyT(), options: [emptyT(), emptyT()], answer:
 const btn = 'text-xs border border-line rounded-lg px-2 py-1 hover:bg-surface-2 disabled:opacity-40'
 
 export default function TrainingEditor({ index }) {
+  const { roles } = useRoles()
   // ?tkind=flow&tkey=<module>.<key>&tstep=N — opened from the usage report on a weak step
   const [params] = useSearchParams()
   const [kind, setKind] = useState(params.get('tkind') || 'path')
@@ -86,7 +86,7 @@ export default function TrainingEditor({ index }) {
         <select value={key} onChange={(e) => setKey(e.target.value)}
                 className="text-xs bg-surface border border-line rounded-lg px-2 py-1.5 text-content">
           {kind === 'path'
-            ? ROLES.map((r) => <option key={r} value={r}>{r}</option>)
+            ? roles.map((r) => <option key={r.value} value={r.value}>{r.label_ar}</option>)
             : kind === 'quiz'
             ? index.modules.map((m) => <option key={m.key} value={m.key}>{m.icon} {pick(m.title, 'ar')}</option>)
             : flows.map((f) => <option key={f.id} value={f.id.slice(5)}>{f.mobile ? '📱 ' : '🧭 '}{pick(f.title, 'ar')}</option>)}

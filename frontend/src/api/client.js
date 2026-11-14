@@ -74,6 +74,7 @@ export default api
 export const authApi = {
   login: (username, password) => api.post('/auth/login/', { username, password }),
   me: () => api.get('/auth/me/'),
+  roles: () => api.get('/auth/roles/'),
   logout: () => api.post('/auth/logout/', {}),
 
   // ── Two-factor (TOTP) ──
@@ -2983,6 +2984,16 @@ export const transitsApi = {
   dashboard:    (params)  => api.get('/transits/dashboard/', { params }),
   analytics:    (params)  => api.get('/transits/analytics/', { params }),
   scorecard:    (params)  => api.get('/transits/scorecard/', { params }),
+}
+
+// ── SOFTECH code maps (/code-maps) — channel + item-category meanings ─────────
+
+export const codeMapsApi = {
+  // list → { rows: [...], choices: { groups: [{ value, label }] } }
+  channels:      ()         => api.get('/config/code-maps/channels/'),
+  patchChannel:  (id, data) => api.patch(`/config/code-maps/channels/${id}/`, data),
+  itemTypes:     ()         => api.get('/config/code-maps/item-types/'),
+  patchItemType: (id, data) => api.patch(`/config/code-maps/item-types/${id}/`, data),
 }
 
 // ── Pick zones (replenishment picking-sheet classification) ───────────────────

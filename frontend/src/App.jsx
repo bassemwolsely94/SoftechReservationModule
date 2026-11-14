@@ -73,6 +73,7 @@ const UsagePrintPage = lazy(() => import('./pages/UsagePrintPage'))
 const UserManagementPage = lazy(() => import('./pages/UserManagementPage'))
 const PermissionsMatrixPage = lazy(() => import('./pages/PermissionsMatrixPage'))
 const PickZonesPage = lazy(() => import('./pages/PickZonesPage'))
+const CodeMapsPage = lazy(() => import('./pages/CodeMapsPage'))
 const PhoneAlertsPage = lazy(() => import('./pages/PhoneAlertsPage'))
 const ErpPermissionsPage = lazy(() => import('./pages/ErpPermissionsPage'))
 const DeliveryDashboard = lazy(() => import('./pages/DeliveryDashboard'))
@@ -562,6 +563,9 @@ export default function App() {
             {/* settings: admin + pharmacist (own branch settings) */}
             <Route path="settings"
               element={<RequireRole roles={['admin','pharmacist']}><SettingsPage /></RequireRole>} />
+            {/* SOFTECH code maps (channel + item-category meanings): admin only; server checks settings view/edit */}
+            <Route path="code-maps"
+              element={<RequireRole roles={['admin']}><CodeMapsPage /></RequireRole>} />
             {/* sync: admin only */}
             <Route path="sync"
               element={<RequireRole roles={['admin']}><SyncPage /></RequireRole>} />
