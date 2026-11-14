@@ -294,7 +294,8 @@ def _eligible_branches(branch_filter=None):
     (multi-warehouse rate mapping deferred). branch_filter = iterable of
     softech_branch_id to restrict to."""
     from apps.branches.models import Branch
-    qs = (Branch.objects.filter(is_active=True, is_operational=True)
+    # live() narrows only (closed/pending/CC never); the other predicates are unchanged
+    qs = (Branch.objects.live().filter(is_active=True, is_operational=True)
           .exclude(db_host='').exclude(db_host__isnull=True)
           .exclude(softech_branch_id='100'))          # HQ deferred
     if branch_filter:

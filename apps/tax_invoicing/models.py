@@ -143,6 +143,17 @@ class TaxItemProfile(models.Model):
     list_status = models.CharField(max_length=5, choices=LIST_CHOICES, default=LIST_NONE, db_index=True)
     listed_reason = models.CharField(max_length=300, blank=True)
     disposition = models.CharField(max_length=10, choices=DISPOSITION_CHOICES, default=DISP_INCLUDE, db_index=True)
+    # Which ETA system an ETA answer set coding_status in ('' = the owner's workbook or a manual entry, i.e. the
+    # real registry). A status ETA's test system gave never counts against production (services.classify).
+    coding_env = models.CharField(max_length=12, blank=True, default='', db_default='')
+    # The last "does ETA hold this code?" check (coding.check_codes), per system.
+    CHECK_FOUND, CHECK_INACTIVE, CHECK_NOT_FOUND = 'found', 'inactive', 'not_found'
+    CHECK_CHOICES = [(CHECK_FOUND, 'موجود ومفعل لدى المصلحة'), (CHECK_INACTIVE, 'موجود وغير مفعل'),
+                     (CHECK_NOT_FOUND, 'غير موجود لدى المصلحة')]
+    eta_check_env = models.CharField(max_length=12, blank=True, default='', db_default='')
+    eta_check_status = models.CharField(max_length=10, choices=CHECK_CHOICES, blank=True, default='', db_default='')
+    eta_checked_at = models.DateTimeField(null=True, blank=True)
+    eta_check_detail = models.JSONField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -435,8 +446,15 @@ class TaxCodeRequest(models.Model):
     }
 
     profile = models.ForeignKey(TaxItemProfile, on_delete=models.PROTECT, related_name='code_requests')
+    # new: a code the item does not have yet. mirror: the item's existing real code, registered in a test
+    # system so test documents can carry it; its answer never changes the item's real coding.
+    # gs1: the manufacturer's GS1 barcode, already in ETA's registry, asked for our use ("Request Code Reuse").
+    PURPOSE_NEW, PURPOSE_MIRROR, PURPOSE_GS1 = 'new', 'mirror', 'gs1'
+    PURPOSE_CHOICES = [(PURPOSE_NEW, 'كود جديد'), (PURPOSE_MIRROR, 'تسجيل الكود الحالي في المنظومة التجريبية'),
+                       (PURPOSE_GS1, 'استخدام باركود GS1')]
+    purpose = models.CharField(max_length=8, choices=PURPOSE_CHOICES, default=PURPOSE_NEW, db_default=PURPOSE_NEW)
     item_code = models.CharField(max_length=60, db_index=True, help_text='EG-<tax id>-<internal code>')
-    parent_code = models.CharField(max_length=20, help_text='GPC level-4 (brick) code')
+    parent_code = models.CharField(max_length=20, blank=True, help_text='GPC level-4 (brick) code; empty for GS1')
     code_name = models.CharField(max_length=200)
     code_name_ar = models.CharField(max_length=200)
     description = models.CharField(max_length=300, blank=True)
@@ -468,6 +486,22 @@ class TaxCodeRequest(models.Model):
 
     def __str__(self):
         return f'{self.item_code} {self.status}'
+
+
+class TaxGpcBrick(models.Model):
+    """One GPC brick (level 4), the category an EGS code is registered under. Loaded from the owner's GPC
+    workbook (`load_gpc_bricks`); once loaded, a code request must name a brick from this list."""
+    code = models.CharField(max_length=8, unique=True)
+    name_en = models.CharField(max_length=300, blank=True)
+    name_ar = models.CharField(max_length=300, blank=True)
+    loaded_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'فئة GPC (المستوى الرابع)'
+        ordering = ['code']
+
+    def __str__(self):
+        return f'{self.code} {self.name_ar or self.name_en}'
 
 
 # ── Signing ────────────────────────────────────────────────────────────────────────────────────
@@ -546,7 +580,24 @@ class TaxReceiptBranchConfig(models.Model):
     street = models.CharField(max_length=200, blank=True)
     building_number = models.CharField(max_length=100, blank=True)
     payment_method = models.CharField(max_length=50, blank=True)
+    # Set: a test-system-only mapping (for example a live branch's sales through a borrowed test device). It is
+    # refused anywhere else, and ending it puts that branch's test receipts back to ready for the real system.
+    test_env = models.CharField(max_length=12, blank=True, default='', db_default='')
+    # Sales before this moment are never sent from here: ETA refuses receipts outside its submission window
+    # (CF313), and older sales belong to the program used before. Required before the first receipt.
+    send_from = models.DateTimeField(null=True, blank=True)
     last_uuid = models.CharField(max_length=64, blank=True, editable=False)
+    # Where this device's receipt chain starts, decided once before the first receipt (receipts.start_chain):
+    #   fresh     ETA holds no receipt from this device, so previousUUID starts empty;
+    #   handover  the device was used by another program (Invoicer); our first receipt follows its last one.
+    CHAIN_FRESH, CHAIN_HANDOVER = 'fresh', 'handover'
+    CHAIN_CHOICES = [(CHAIN_FRESH, 'جهاز جديد بلا إيصالات سابقة'), (CHAIN_HANDOVER, 'استلام من برنامج سابق')]
+    chain_start = models.CharField(max_length=10, choices=CHAIN_CHOICES, blank=True, default='', db_default='')
+    chain_start_uuid = models.CharField(max_length=64, blank=True, default='', db_default='', editable=False)
+    chain_start_detail = models.JSONField(null=True, blank=True, editable=False)
+    chain_start_at = models.DateTimeField(null=True, blank=True, editable=False)
+    chain_start_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                       related_name='+', editable=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -600,6 +651,8 @@ class TaxReceipt(models.Model):
     previous_uuid = models.CharField(max_length=64, blank=True)
     payload_text = models.TextField(blank=True)
     issued_at = models.DateTimeField(null=True, blank=True)
+    environment = models.CharField(max_length=12, blank=True, default='', db_default='',
+                                   help_text='The ETA system it was issued for')
     attempt = models.ForeignKey(TaxReceiptAttempt, null=True, blank=True, on_delete=models.SET_NULL, related_name='receipts')
     submission_uuid = models.CharField(max_length=64, blank=True)
     eta_reason = models.TextField(blank=True)

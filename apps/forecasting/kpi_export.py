@@ -50,14 +50,48 @@ RIGHT = Alignment(horizontal='right', vertical='center')
 MONEY = '#,##0'
 PCT = '0.0%'
 
-# Owner's legacy branch display order (seniority); others fall to code order.
-LEGACY_BRANCH_ORDER = ['160', '170', '140', '150', '130']
+# Fixed cells of the owner's OLD legacy workbooks (read by the reconciliation sheet only).
+LEGACY_TARGET_ROWS = [8, 10, 12, 14, 16]     # المطلوب rows (one per branch)
+LEGACY_ACH_ROWS = [9, 11, 13, 15, 17]        # المحقق rows
 
-# Branch block geometry (identical to the legacy sheet).
-TARGET_ROWS = [8, 10, 12, 14, 16]     # المطلوب rows (one per branch)
-ACH_ROWS = [9, 11, 13, 15, 17]        # المحقق rows
-ROW_TOTAL_TGT = 18
-ROW_TOTAL_ACH = 19
+
+class KpiLayout:
+    """Row geometry of the OUTPUT sheet for n branch blocks (2 rows each from row 8), then
+    the totals, the call-center block and the management block. Never fewer than the legacy
+    five slots, so a network of ≤5 branches keeps the legacy sheet's exact rows
+    (8..17 / 18 / 19 / 21 / 22 / 23 / 24..28); a 6th branch shifts everything below by 2."""
+    FIRST_ROW = 8
+    MIN_SLOTS = 5
+
+    def __init__(self, n_branches):
+        self.slots = max(int(n_branches), self.MIN_SLOTS)
+        end = self.FIRST_ROW + 2 * self.slots          # 18 with five slots
+        self.total_tgt_row = end
+        self.total_ach_row = end + 1
+        self.cc_label_row = end + 3
+        self.cc_tgt_row = end + 4
+        self.cc_ach_row = end + 5
+        self.mgmt_net_row = end + 6                    # الصافى للادارة
+        self.mgmt_target_row = end + 7                 # التارجت الكلى
+        self.mgmt_ratio_row = end + 8                  # نسبة التحقيق الصافى
+        self.mgmt_weight_row = end + 9                 # الوزن النسبى
+        self.mgmt_weighted_row = end + 10              # نسبة التحقيق بالوزن النسبى
+
+    def target_row(self, i):
+        return self.FIRST_ROW + 2 * i
+
+    def ach_row(self, i):
+        return self.FIRST_ROW + 2 * i + 1
+
+    @property
+    def target_rows(self):
+        return [self.target_row(i) for i in range(self.slots)]
+
+    @property
+    def ach_rows(self):
+        return [self.ach_row(i) for i in range(self.slots)]
+
+
 # Weight cells (branch score): Cash .5 / Credit .1 / Profit .1 / PIC .05 / Cosm .1 / chain-cash .15
 WEIGHTS = {'AC': 0.5, 'AD': 0.1, 'AE': 0.1, 'AF': 0.05, 'AG': 0.1, 'AH': 0.15}
 
@@ -76,6 +110,7 @@ def forecast_targets(year, month, *, incentive_threshold=Decimal('0.90'),
             'chain': {<metric>:{a,b,avg}}} full-month targets per model.
     Uses the same math as ForecastEngine.compute_models (deterministic).
     """
+    from apps.branches.models import order_codes
     from .kpi import analytics_branches
     fac = factors or ForecastEngine.DEFAULT_FACTORS
     metrics = ForecastEngine.METRICS
@@ -97,7 +132,10 @@ def forecast_targets(year, month, *, incentive_threshold=Decimal('0.90'),
         return {'a': ma / thr, 'b': mb / thr, 'avg': avg / thr}
 
     branches, chain = [], {m: {'a': Decimal('0'), 'b': Decimal('0'), 'avg': Decimal('0')} for m in metrics}
-    for b in analytics_branches().order_by('code', 'softech_branch_id'):
+    # the live retail set (analytics_branches) in the owner's display order (branch settings)
+    live = list(analytics_branches())
+    rank = {c: i for i, c in enumerate(order_codes(b.softech_branch_id for b in live))}
+    for b in sorted(live, key=lambda b: rank[b.softech_branch_id]):
         row = {'code': b.code or b.softech_branch_id, 'name': getattr(b, 'name_ar', '') or b.name, 'id': b.id}
         for m in metrics:
             mm = models_for(b.id, m)
@@ -105,9 +143,6 @@ def forecast_targets(year, month, *, incentive_threshold=Decimal('0.90'),
             for k in ('a', 'b', 'avg'):
                 chain[m][k] += mm[k]
         branches.append(row)
-    # order to match the owner's legacy sheet for easy side-by-side comparison
-    order = {c: i for i, c in enumerate(LEGACY_BRANCH_ORDER)}
-    branches.sort(key=lambda r: (order.get(str(r['code']), 99), str(r['code'])))
     return {'branches': branches, 'chain': chain}
 
 
@@ -161,6 +196,7 @@ _AR_MONTHS = ['', 'يناير', 'فبراير', 'مارس', 'أبريل', 'ما�
 def _write_model_sheet(ws, year, month, data, cc, achieved_by_branch, model, days_elapsed, steps):
     days = monthrange(year, month)[1]
     mkey = model  # 'a' | 'b' | 'avg'
+    L = KpiLayout(len(data['branches']))
 
     def put(coord, value, *, fmt=None, font=None, fill=None, align=None, border=True):
         c = ws[coord]
@@ -212,7 +248,7 @@ def _write_model_sheet(ws, year, month, data, cc, achieved_by_branch, model, day
 
     # ── branch blocks ────────────────────────────────────────────────────────
     for i, b in enumerate(data['branches']):
-        rt, ra = TARGET_ROWS[i], ACH_ROWS[i]
+        rt, ra = L.target_row(i), L.ach_row(i)
         ach = achieved_by_branch[b['id']]
         # TARGETS rounded UP to the memorable per-KPI step (forecast stays exact in the model)
         tgt = {m: int(round_up_step(b[m][mkey], steps.get(m, 1))) for m in ForecastEngine.METRICS}
@@ -258,13 +294,13 @@ def _write_model_sheet(ws, year, month, data, cc, achieved_by_branch, model, day
         put(f'AE{ra}', f'=$AE$7*$S{ra}', fmt=PCT)
         put(f'AF{ra}', f'=IF(($AF$7*$V{ra})>$AF$7,$AF$7,($AF$7*$V{ra}))', fmt=PCT)
         put(f'AG{ra}', f'=IF(($AG$7*$AA{ra})>$AG$7,$AG$7,($AG$7*$AA{ra}))', fmt=PCT)
-        put(f'AH{ra}', '=$AH$7*$J$19', fmt=PCT)
+        put(f'AH{ra}', f'=$AH$7*$J${L.total_ach_row}', fmt=PCT)
         put(f'AI{ra}', f'=SUM(AC{ra}:AH{ra})', fmt=PCT, font=BOLD)
 
     # ── totals rows ──────────────────────────────────────────────────────────
-    tr, ar = ROW_TOTAL_TGT, ROW_TOTAL_ACH
-    tsum = lambda col: '+'.join(f'{col}{r}' for r in TARGET_ROWS)
-    asum = lambda col: '+'.join(f'{col}{r}' for r in ACH_ROWS)
+    tr, ar = L.total_tgt_row, L.total_ach_row
+    tsum = lambda col: '+'.join(f'{col}{r}' for r in L.target_rows)
+    asum = lambda col: '+'.join(f'{col}{r}' for r in L.ach_rows)
     put(f'B{tr}', 'اجمالى الفروع', font=BOLD, align=RIGHT, fill=TOTAL_FILL)
     for col in ('I', 'L', 'O', 'R', 'U', 'Z'):
         put(f'{col}{tr}', f'={tsum(col)}', fmt=MONEY, font=BOLD, fill=TOTAL_FILL)
@@ -290,18 +326,18 @@ def _write_model_sheet(ws, year, month, data, cc, achieved_by_branch, model, day
     put(f'Z{ar}', f'={asum("Z")}', fmt=MONEY, fill=TOTAL_FILL)
     put(f'AA{ar}', f'=Y{ar}/Z{ar}', fmt=PCT, font=BOLD, fill=TOTAL_FILL)
     put(f'AB{ar}', 'المحقق', font=BOLD, align=CTR, fill=TOTAL_FILL)
-    put(f'AC{ar}', '=$AC$7*$J19', fmt=PCT, fill=TOTAL_FILL)
-    put(f'AD{ar}', '=$AD$7*$M19', fmt=PCT, fill=TOTAL_FILL)
-    put(f'AE{ar}', '=$AE$7*$S19', fmt=PCT, fill=TOTAL_FILL)
-    put(f'AF{ar}', '=IF(($AF$7*$V19)>$AF$7,$AF$7,($AF$7*$V19))', fmt=PCT, fill=TOTAL_FILL)
-    put(f'AG{ar}', '=IF(($AG$7*$AA19)>$AG$7,$AG$7,($AG$7*$AA19))', fmt=PCT, fill=TOTAL_FILL)
-    put(f'AH{ar}', '=$AH$7*$J$19', fmt=PCT, fill=TOTAL_FILL)
-    put(f'AI{ar}', '=SUM(AC19:AH19)', fmt=PCT, font=BOLD, fill=TOTAL_FILL)
+    put(f'AC{ar}', f'=$AC$7*$J{ar}', fmt=PCT, fill=TOTAL_FILL)
+    put(f'AD{ar}', f'=$AD$7*$M{ar}', fmt=PCT, fill=TOTAL_FILL)
+    put(f'AE{ar}', f'=$AE$7*$S{ar}', fmt=PCT, fill=TOTAL_FILL)
+    put(f'AF{ar}', f'=IF(($AF$7*$V{ar})>$AF$7,$AF$7,($AF$7*$V{ar}))', fmt=PCT, fill=TOTAL_FILL)
+    put(f'AG{ar}', f'=IF(($AG$7*$AA{ar})>$AG$7,$AG$7,($AG$7*$AA{ar}))', fmt=PCT, fill=TOTAL_FILL)
+    put(f'AH{ar}', f'=$AH$7*$J${ar}', fmt=PCT, fill=TOTAL_FILL)
+    put(f'AI{ar}', f'=SUM(AC{ar}:AH{ar})', fmt=PCT, font=BOLD, fill=TOTAL_FILL)
 
     # ── call center section ──────────────────────────────────────────────────
-    _write_cc_block(ws, cc, mkey, put, steps)
+    _write_cc_block(ws, cc, mkey, put, steps, L)
     # ── management summary block ─────────────────────────────────────────────
-    _write_mgmt_block(ws, put)
+    _write_mgmt_block(ws, put, L)
 
     # column widths (mirror legacy, approximately)
     widths = {'A': 11, 'B': 15, 'C': 7, 'D': 20, 'E': 14, 'F': 13, 'G': 13, 'H': 15,
@@ -315,66 +351,68 @@ def _write_model_sheet(ws, year, month, data, cc, achieved_by_branch, model, day
     ws.freeze_panes = 'A8'
 
 
-def _write_cc_block(ws, cc, mkey, put, steps):
-    # labels row 21
-    for coord, txt in [('W21', 'المبيعات'), ('X21', 'الربحية'), ('Y21', 'التجميل'),
-                       ('Z21', 'عدد العملاء'), ('AA21', 'عدد المكالمات'), ('AC21', 'الاجمالى'),
-                       ('AG21', 'Cash'), ('AH21', 'Credit'), ('AI21', 'Profit Factor'),
-                       ('AJ21', 'PIC'), ('AK21', 'Cosm+O')]:
-        put(coord, txt, font=HDR_FONT, fill=HDR_FILL, align=CTR)
-    # row 22 — CC targets (rounded to the same per-KPI step) + weights
+def _write_cc_block(ws, cc, mkey, put, steps, L):
+    lr, t_r, a_r = L.cc_label_row, L.cc_tgt_row, L.cc_ach_row     # 21 / 22 / 23 with ≤5 branches
+    # labels row
+    for col, txt in [('W', 'المبيعات'), ('X', 'الربحية'), ('Y', 'التجميل'),
+                     ('Z', 'عدد العملاء'), ('AA', 'عدد المكالمات'), ('AC', 'الاجمالى'),
+                     ('AG', 'Cash'), ('AH', 'Credit'), ('AI', 'Profit Factor'),
+                     ('AJ', 'PIC'), ('AK', 'Cosm+O')]:
+        put(f'{col}{lr}', txt, font=HDR_FONT, fill=HDR_FILL, align=CTR)
+    # targets row — CC targets (rounded to the same per-KPI step) + weights
     _cc_step = {'sales': 'cash_delivery', 'profit': 'gross_profit',
                 'beauty': 'beauty', 'orders': 'customer_count'}
     t = (lambda name: int(round_up_step(cc[name][mkey], steps.get(_cc_step[name], 1)))
          if cc and name in cc else 0)
-    put('C22', 1, align=CTR, fill=CC_FILL)
-    put('D22', 'call center', font=BOLD, align=CTR, fill=CC_FILL)
-    put('E22', 'الاجمالى المبيعات', align=RIGHT, fill=CC_FILL)
-    put('F22', t('sales'), fmt=MONEY, fill=CC_FILL)
-    put('H22', 'الربحية', align=RIGHT, fill=CC_FILL)
-    put('I22', t('profit'), fmt=MONEY, fill=CC_FILL)
-    put('K22', 'التجميل', align=RIGHT, fill=CC_FILL)
-    put('L22', t('beauty'), fmt=MONEY, fill=CC_FILL)
-    put('N22', 'عدد العملاء', align=RIGHT, fill=CC_FILL)
-    put('O22', t('orders'), fmt=MONEY, fill=CC_FILL)
-    put('Q22', 'عدد المكالمات', align=RIGHT, fill=CC_FILL)
-    put('R22', '', fmt=MONEY, fill=CC_FILL)   # calls target: manual (no CDR history)
-    put('U22', 0, align=CTR, fill=CC_FILL)
-    for coord, w in [('W22', 0.5), ('X22', 0.1), ('Y22', 0.15), ('Z22', 0.1), ('AA22', 0.15)]:
-        put(coord, w, align=CTR, fmt='0.00', fill=CC_FILL)
-    # management achievers (row 22, AG..AK)
-    put('AF22', 'إجمالى الفروع المحققة', font=BOLD, align=RIGHT, fill=SUB_FILL)
-    _mgmt_branch_formula(put, 22, achieved=True)
-    # row 23 — CC achieved (from rollup). CC stores cash_delivery as ONE metric
+    put(f'C{t_r}', 1, align=CTR, fill=CC_FILL)
+    put(f'D{t_r}', 'call center', font=BOLD, align=CTR, fill=CC_FILL)
+    put(f'E{t_r}', 'الاجمالى المبيعات', align=RIGHT, fill=CC_FILL)
+    put(f'F{t_r}', t('sales'), fmt=MONEY, fill=CC_FILL)
+    put(f'H{t_r}', 'الربحية', align=RIGHT, fill=CC_FILL)
+    put(f'I{t_r}', t('profit'), fmt=MONEY, fill=CC_FILL)
+    put(f'K{t_r}', 'التجميل', align=RIGHT, fill=CC_FILL)
+    put(f'L{t_r}', t('beauty'), fmt=MONEY, fill=CC_FILL)
+    put(f'N{t_r}', 'عدد العملاء', align=RIGHT, fill=CC_FILL)
+    put(f'O{t_r}', t('orders'), fmt=MONEY, fill=CC_FILL)
+    put(f'Q{t_r}', 'عدد المكالمات', align=RIGHT, fill=CC_FILL)
+    put(f'R{t_r}', '', fmt=MONEY, fill=CC_FILL)   # calls target: manual (no CDR history)
+    put(f'U{t_r}', 0, align=CTR, fill=CC_FILL)
+    for col, w in [('W', 0.5), ('X', 0.1), ('Y', 0.15), ('Z', 0.1), ('AA', 0.15)]:
+        put(f'{col}{t_r}', w, align=CTR, fmt='0.00', fill=CC_FILL)
+    # management achievers (targets row, AG..AK)
+    put(f'AF{t_r}', 'إجمالى الفروع المحققة', font=BOLD, align=RIGHT, fill=SUB_FILL)
+    _mgmt_branch_formula(put, t_r, L, achieved=True)
+    # achieved row — CC achieved (from rollup). CC stores cash_delivery as ONE metric
     # (no cash/delivery/عميل دائم split), so read it directly for sales.
     cc_ach = _achieved(cc['_cc_id'], _CC_CTX['year'], _CC_CTX['month']) if cc else None
     cc_sales = float(_roll(cc['_cc_id'], _CC_CTX['year'], _CC_CTX['month'], K.M_CASH_DELIVERY)) if cc else 0
     cc_calls = float(_roll(cc['_cc_id'], _CC_CTX['year'], _CC_CTX['month'], K.M_CALL_COUNT)) if cc else 0
-    put('D23', 'المحقق', align=CTR, font=BOLD)
-    put('E23', _whole(cc_sales) if cc else 0, fmt=MONEY)
-    put('F23', '=F22/$E$1*$H$1', fmt=MONEY)
-    put('G23', '=E23/F23', fmt=PCT)
-    put('H23', _whole(cc_ach['profit']) if cc else 0, fmt=MONEY)
-    put('I23', '=I22/$E$1*$H$1', fmt=MONEY)
-    put('J23', '=H23/I23', fmt=PCT)
-    put('K23', _whole(cc_ach['beauty']) if cc else 0, fmt=MONEY)
-    put('L23', '=L22/$E$1*$H$1', fmt=MONEY)
-    put('M23', '=K23/L23', fmt=PCT)
-    put('N23', _whole(cc_ach['customers']) if cc else 0, fmt=MONEY)
-    put('O23', '=O22/$E$1*$H$1', fmt=MONEY)
-    put('P23', '=N23/O23', fmt=PCT)
-    put('Q23', _whole(cc_calls), fmt=MONEY)                # calls achieved (0 w/o CDR)
-    put('R23', '=R22/$E$1*$H$1', fmt=MONEY)
-    put('S23', '=IF(R23=0,0,Q23/R23)', fmt=PCT)
-    put('U23', '=U22/$E$1*$H$1', fmt=MONEY)
-    put('W23', '=$G23*$W22', fmt=PCT)
-    put('X23', '=$J$23*$X$22', fmt=PCT)
-    put('Y23', '=$M$23*$Y$22', fmt=PCT)
-    put('Z23', '=$P$23*$Z$22', fmt=PCT)
-    put('AA23', '=$S$23*$AA$22', fmt=PCT)
-    put('AC23', '=SUM(W23:AB23)', fmt=PCT, font=BOLD)
-    put('AF23', 'إجمالى الفرق للفروع الغير محققة', font=BOLD, align=RIGHT, fill=SUB_FILL)
-    _mgmt_branch_formula(put, 23, achieved=False)
+    a, g = a_r, t_r
+    put(f'D{a}', 'المحقق', align=CTR, font=BOLD)
+    put(f'E{a}', _whole(cc_sales) if cc else 0, fmt=MONEY)
+    put(f'F{a}', f'=F{g}/$E$1*$H$1', fmt=MONEY)
+    put(f'G{a}', f'=E{a}/F{a}', fmt=PCT)
+    put(f'H{a}', _whole(cc_ach['profit']) if cc else 0, fmt=MONEY)
+    put(f'I{a}', f'=I{g}/$E$1*$H$1', fmt=MONEY)
+    put(f'J{a}', f'=H{a}/I{a}', fmt=PCT)
+    put(f'K{a}', _whole(cc_ach['beauty']) if cc else 0, fmt=MONEY)
+    put(f'L{a}', f'=L{g}/$E$1*$H$1', fmt=MONEY)
+    put(f'M{a}', f'=K{a}/L{a}', fmt=PCT)
+    put(f'N{a}', _whole(cc_ach['customers']) if cc else 0, fmt=MONEY)
+    put(f'O{a}', f'=O{g}/$E$1*$H$1', fmt=MONEY)
+    put(f'P{a}', f'=N{a}/O{a}', fmt=PCT)
+    put(f'Q{a}', _whole(cc_calls), fmt=MONEY)                # calls achieved (0 w/o CDR)
+    put(f'R{a}', f'=R{g}/$E$1*$H$1', fmt=MONEY)
+    put(f'S{a}', f'=IF(R{a}=0,0,Q{a}/R{a})', fmt=PCT)
+    put(f'U{a}', f'=U{g}/$E$1*$H$1', fmt=MONEY)
+    put(f'W{a}', f'=$G{a}*$W{g}', fmt=PCT)
+    put(f'X{a}', f'=$J${a}*$X${g}', fmt=PCT)
+    put(f'Y{a}', f'=$M${a}*$Y${g}', fmt=PCT)
+    put(f'Z{a}', f'=$P${a}*$Z${g}', fmt=PCT)
+    put(f'AA{a}', f'=$S${a}*$AA${g}', fmt=PCT)
+    put(f'AC{a}', f'=SUM(W{a}:AB{a})', fmt=PCT, font=BOLD)
+    put(f'AF{a}', 'إجمالى الفرق للفروع الغير محققة', font=BOLD, align=RIGHT, fill=SUB_FILL)
+    _mgmt_branch_formula(put, a, L, achieved=False)
 
 
 # columns in the branch grid feeding each management category (achieved, target, ratio)
@@ -387,11 +425,12 @@ _MGMT_CATS = [
 ]
 
 
-def _mgmt_branch_formula(put, row, *, achieved):
-    """Row 22 = Σ achieved value for branches ≥90%; Row 23 = Σ shortfall for branches <90%."""
+def _mgmt_branch_formula(put, row, L, *, achieved):
+    """CC targets row (22) = Σ achieved value for branches ≥90%; CC achieved row (23) =
+    Σ shortfall for branches <90% (rows as with ≤5 branches; they shift with KpiLayout)."""
     for outcol, ach, tgt, ratio in _MGMT_CATS:
         parts = []
-        for r in ACH_ROWS:
+        for r in L.ach_rows:
             if achieved:
                 parts.append(f'(IF({ratio}${r}>=90%,{ach}${r},0))')
             else:
@@ -399,29 +438,33 @@ def _mgmt_branch_formula(put, row, *, achieved):
         put(f'{outcol}{row}', '=SUM(' + ','.join(parts) + ')', fmt=MONEY)
 
 
-def _write_mgmt_block(ws, put):
-    put('Y24', 'غير محقق', align=CTR, font=BOLD, fill=SUB_FILL)
-    put('AB24', 'الصافى للادارة', font=BOLD, align=RIGHT, fill=SUB_FILL)
+def _write_mgmt_block(ws, put, L):
+    net, tot, rat, wgt, wtd = (L.mgmt_net_row, L.mgmt_target_row, L.mgmt_ratio_row,
+                               L.mgmt_weight_row, L.mgmt_weighted_row)     # 24..28 with ≤5 branches
+    g, a, ar = L.cc_tgt_row, L.cc_ach_row, L.total_ach_row                 # 22 / 23 / 19
+    put(f'Y{net}', 'غير محقق', align=CTR, font=BOLD, fill=SUB_FILL)
+    put(f'AB{net}', 'الصافى للادارة', font=BOLD, align=RIGHT, fill=SUB_FILL)
     # الصافى = محققة − غير محققة  (AC..AG ← AG..AK)
     for dst, src in zip(['AC', 'AD', 'AE', 'AF', 'AG'], ['AG', 'AH', 'AI', 'AJ', 'AK']):
-        put(f'{dst}24', f'={src}22-{src}23', fmt=MONEY)
-    put('AB25', 'التارجت الكلى', font=BOLD, align=RIGHT, fill=SUB_FILL)
+        put(f'{dst}{net}', f'={src}{g}-{src}{a}', fmt=MONEY)
+    put(f'AB{tot}', 'التارجت الكلى', font=BOLD, align=RIGHT, fill=SUB_FILL)
     for dst, src in zip(['AC', 'AD', 'AE', 'AF', 'AG'], ['I', 'L', 'R', 'U', 'Z']):
-        put(f'{dst}25', f'={src}19', fmt=MONEY)
-    put('AB26', 'نسبة التحقيق الصافى للادارة', font=BOLD, align=RIGHT, fill=SUB_FILL)
+        put(f'{dst}{tot}', f'={src}{ar}', fmt=MONEY)
+    put(f'AB{rat}', 'نسبة التحقيق الصافى للادارة', font=BOLD, align=RIGHT, fill=SUB_FILL)
     # IF chain weighted-score < 0.9×weight → net/total, else the plain chain ratio.
     # NB: AE26 references P19 verbatim from the legacy sheet (owner formula).
-    chain_ratio = {'AC': 'J$19', 'AD': 'M$19', 'AE': 'P$19', 'AF': 'V$19', 'AG': 'AA$19'}
+    chain_ratio = {'AC': f'J${ar}', 'AD': f'M${ar}', 'AE': f'P${ar}', 'AF': f'V${ar}', 'AG': f'AA${ar}'}
     for col in ['AC', 'AD', 'AE', 'AF', 'AG']:
-        put(f'{col}26', f'=(IF({col}$19<(0.9*{col}$7),{col}$24/{col}$25,{chain_ratio[col]}))', fmt=PCT)
-    put('AB27', 'الوزن النسبى', font=BOLD, align=RIGHT, fill=SUB_FILL)
-    for coord, w in [('AC27', 0.55), ('AD27', 0.15), ('AE27', 0.15), ('AF27', 0.05), ('AG27', 0.1)]:
-        put(coord, w, align=CTR, fmt='0.00')
-    put('AH27', '=SUM(AC27:AG27)', fmt='0.00', font=BOLD)
-    put('AB28', 'نسبة التحقيق بالوزن النسبى', font=BOLD, align=RIGHT, fill=SUB_FILL)
+        put(f'{col}{rat}', f'=(IF({col}${ar}<(0.9*{col}$7),{col}${net}/{col}${tot},{chain_ratio[col]}))',
+            fmt=PCT)
+    put(f'AB{wgt}', 'الوزن النسبى', font=BOLD, align=RIGHT, fill=SUB_FILL)
+    for col, w in [('AC', 0.55), ('AD', 0.15), ('AE', 0.15), ('AF', 0.05), ('AG', 0.1)]:
+        put(f'{col}{wgt}', w, align=CTR, fmt='0.00')
+    put(f'AH{wgt}', f'=SUM(AC{wgt}:AG{wgt})', fmt='0.00', font=BOLD)
+    put(f'AB{wtd}', 'نسبة التحقيق بالوزن النسبى', font=BOLD, align=RIGHT, fill=SUB_FILL)
     for col in ['AC', 'AD', 'AE', 'AF', 'AG']:
-        put(f'{col}28', f'={col}26*{col}27', fmt=PCT)
-    put('AH28', '=SUM(AC28:AG28)', fmt=PCT, font=BOLD)
+        put(f'{col}{wtd}', f'={col}{rat}*{col}{wgt}', fmt=PCT)
+    put(f'AH{wtd}', f'=SUM(AC{wtd}:AG{wtd})', fmt=PCT, font=BOLD)
 
 
 # module-level CC context (year/month) for the CC achieved lookup inside _write_cc_block
@@ -435,7 +478,7 @@ def _read_legacy_achieved(path):
     wb = openpyxl.load_workbook(path, data_only=True)
     ws = wb.active
     out = {}
-    for rt, ra in zip(TARGET_ROWS, ACH_ROWS):
+    for rt, ra in zip(LEGACY_TARGET_ROWS, LEGACY_ACH_ROWS):
         code = ws[f'C{rt}'].value
         if code is None:
             continue
@@ -453,7 +496,7 @@ def _read_legacy_achieved(path):
 
 def _write_recon_sheet(ws, year, month, legacy_path):
     legacy = _read_legacy_achieved(legacy_path)
-    from apps.branches.models import Branch
+    from apps.branches.models import Branch, order_codes
     ws.sheet_view.rightToLeft = True
     hdr = ['الكود', 'الفرع', 'المؤشر', 'النظام الجديد', 'ملف الإكسل', 'الفرق', 'الفرق %', 'ملاحظة']
     ws.append([f'مطابقة {_AR_MONTHS[month]} {year} — النظام الجديد مقابل ملف الإكسل'])
@@ -492,8 +535,8 @@ def _write_recon_sheet(ws, year, month, legacy_path):
             ws.cell(row=r, column=7, value=(round(pct, 4) if pct is not None else '—')).number_format = PCT
             ws.cell(row=r, column=8, value=note)
 
-    for code in ['160', '170', '140', '150', '130']:
-        if code in legacy and code in branches:
+    for code in order_codes(c for c in legacy if c != 'CC'):
+        if code in branches:
             b = branches[code]
             emit(code, getattr(b, 'name_ar', '') or b.name, b.id, legacy[code])
     if 'CC' in legacy and cc:

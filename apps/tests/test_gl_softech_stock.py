@@ -10,6 +10,7 @@ from apps.branches.models import Branch
 from apps.config.models import SystemSetting
 from apps.finance.gl import softech_stock as ss
 from apps.finance.queries import sybase_gl
+from apps.tests.factories import make_hq
 
 D = date
 LOGGER = 'elrezeiky.finance'
@@ -78,6 +79,10 @@ class ReadStorebalTests(TestCase):
 
 
 class StoreMapTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
     @classmethod
     def setUpTestData(cls):
         Branch.objects.create(softech_branch_id='100', name='hq')
@@ -130,6 +135,10 @@ class StoreMapTests(TestCase):
 
 
 class ValuationTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
     @classmethod
     def setUpTestData(cls):
         Branch.objects.create(softech_branch_id='100', name='hq')

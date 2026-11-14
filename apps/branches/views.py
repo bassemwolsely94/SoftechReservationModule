@@ -6,6 +6,8 @@ BranchSettingsView  — GET/PATCH settings for a branch (admin only)
 """
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.exceptions import PermissionDenied, ValidationError
+from apps.audit.models import AuditLog
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -24,13 +26,45 @@ class BranchViewSet(viewsets.ModelViewSet):
     serializer_class   = BranchSerializer
     pagination_class   = None  # Small lookup table — always return full list
 
+    AUDITED = {'kind': 'branch_classified', 'display_order': 'branch_order_changed'}
+    SCOPES = ('live', 'live_hq', 'retail', 'all', 'pending')
+    ADMIN_SCOPES = ('all', 'pending')
+
+    def _scope(self):
+        qp = self.request.query_params
+        scope = qp.get('scope')
+        if scope is None and qp.get('all') in ('1', 'true', 'True'):
+            scope = 'all'                      # legacy alias
+        return scope or 'live'
+
     def get_queryset(self):
-        show_all = self.request.query_params.get('all') in ('1', 'true', 'True')
-        # Admins with ?all=1 → return every branch (including inactive)
-        if show_all and self._is_admin():
-            return Branch.objects.all().order_by('name')
-        # Default: active branches only (used by all other parts of the app)
-        return Branch.objects.filter(is_active=True).order_by('name')
+        if self.action != 'list':
+            return Branch.objects.live().ordered()
+        scope = self._scope()
+        if scope not in self.SCOPES:
+            raise ValidationError({'detail': 'نطاق الفروع غير معروف'})
+        if scope in self.ADMIN_SCOPES and not self._is_admin():
+            raise PermissionDenied('مخصص للمديرين فقط')
+        qs = Branch.objects
+        if scope == 'all':
+            return qs.all().ordered()
+        if scope == 'pending':
+            return qs.pending().ordered()
+        if scope == 'retail':
+            return qs.retail().ordered()
+        return qs.live().ordered()             # live / live_hq = hq + retail
+
+    def perform_update(self, serializer):
+        old = {f: getattr(serializer.instance, f) for f in self.AUDITED}
+        branch = serializer.save()
+        profile = getattr(self.request.user, 'staff_profile', None)
+        for field, action in self.AUDITED.items():
+            before, after = old[field], getattr(branch, field)
+            if before != after:
+                AuditLog.log(action, user=profile, obj=branch,
+                             changes={field: [before, after]},
+                             old_data={field: before}, new_data={field: after},
+                             request=self.request)
 
     def _is_admin(self):
         profile = getattr(self.request.user, 'staff_profile', None)

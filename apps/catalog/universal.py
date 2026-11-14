@@ -13,7 +13,7 @@ mirror). No SOFTECH write, no LLM (rule 10).
 """
 from django.db.models import Q, Sum
 
-from .models import Item, ItemStock, ItemBarcode, EXCLUDED_STORE_CODES
+from .models import Item, ItemStock, ItemBarcode, exclude_unsellable
 from .search_index import normalize_search_text
 from .safety import item_safety_flags
 from apps.catalog.wildcard import wq
@@ -96,9 +96,7 @@ def _search_items(raw, *, branch_id, limit):
 
 def _branch_stock(item_ids, branch_id):
     rows = (
-        ItemStock.objects
-        .filter(item_id__in=item_ids, branch_id=branch_id)
-        .exclude(softech_store_code__in=EXCLUDED_STORE_CODES)
+        exclude_unsellable(ItemStock.objects.filter(item_id__in=item_ids, branch_id=branch_id))
         .values('item_id')
         .annotate(qty=Sum('quantity_on_hand'))
     )

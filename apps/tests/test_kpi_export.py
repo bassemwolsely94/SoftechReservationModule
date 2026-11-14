@@ -14,7 +14,10 @@ from django.test import TestCase
 
 from apps.branches.models import Branch
 from apps.forecasting.models import KpiActualRollup as K
-from apps.forecasting.kpi_export import build_target_workbook, forecast_targets, TARGET_ROWS, ACH_ROWS
+from apps.forecasting.kpi_export import build_target_workbook, forecast_targets
+
+# the legacy 5-slot geometry the export keeps with ≤5 branches (KpiLayout(5))
+TARGET_ROWS, ACH_ROWS = [8, 10, 12, 14, 16], [9, 11, 13, 15, 17]
 from apps.forecasting.engine import round_up_step, ForecastEngine
 
 
@@ -244,3 +247,124 @@ class KpiExportTests(TestCase):
             self.assertEqual(int(r.target_value) % step, 0, f'{r.metric} target not on step')
             # forecast stays exact (not forced onto the step)
             self.assertGreater(r.forecast_value, 0)
+
+
+# ── golden layout: the 5-branch export must stay byte-identical (piece 1, task 5) ──
+import json
+import os
+from pathlib import Path
+
+GOLDEN = Path(__file__).parent / 'fixtures' / 'kpi_export_5_golden.json'
+# production display order (branches migration 0013): 160, 170, 140, 150, 130
+FIVE = [('160', 1), ('170', 2), ('140', 3), ('150', 4), ('130', 5)]
+
+
+def _plant_branch(code, order, mult, *, kind=Branch.KIND_RETAIL):
+    b = Branch.objects.create(softech_branch_id=code, code=code, name=f'Branch {code}',
+                              name_ar=f'فرع {code}', kind=kind, display_order=order)
+    for (y, m, k) in [(2025, 10, 1.0), (2026, 9, 1.1), (2026, 8, 1.2)]:
+        _roll(b, y, m, K.M_CASH_DELIVERY, round(800_000 * mult * k))
+        _roll(b, y, m, K.M_CREDIT, round(300_000 * mult * k))
+        _roll(b, y, m, K.M_GROSS_PROFIT, round(180_000 * mult * k))
+        _roll(b, y, m, K.M_CUSTOMERS, round(1_500 * mult * k))
+        _roll(b, y, m, K.M_BEAUTY, round(90_000 * mult * k))
+    for metric, v in [(K.M_CASH, 250_000), (K.M_DELIVERY, 30_000), (K.M_REGULAR, 9_000),
+                      (K.M_CASH_DELIVERY, 289_000), (K.M_CREDIT, 120_000),
+                      (K.M_GROSS_PROFIT, 60_000), (K.M_CUSTOMERS, 600), (K.M_BEAUTY, 40_000),
+                      (K.M_CALL_COUNT, 0)]:
+        _roll(b, 2026, 10, metric, round(v * mult))
+    return b
+
+
+def _snapshot(wb):
+    """Every cell's value/formula + number format, merged ranges and panes, per sheet."""
+    out = {}
+    for ws in wb.worksheets:
+        cells = {}
+        for row in ws.iter_rows():
+            for c in row:
+                if c.value is not None:
+                    cells[c.coordinate] = [c.value, c.number_format]
+        out[ws.title] = {'cells': cells,
+                         'merged': sorted(str(r) for r in ws.merged_cells.ranges),
+                         'freeze': ws.freeze_panes, 'rtl': bool(ws.sheet_view.rightToLeft)}
+    return out
+
+
+class KpiExportLayoutTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        # planted out of display order on purpose: the export must follow display_order
+        for i, (code, order) in enumerate(sorted(FIVE)):
+            _plant_branch(code, order, 1.0 + i * 0.15)
+        cc = Branch.objects.create(softech_branch_id='CC', code='CC', name='Call Center',
+                                   name_ar='الكول سنتر', kind=Branch.KIND_CALL_CENTER)
+        for (y, m, k) in [(2025, 10, 1.0), (2026, 9, 1.1), (2026, 8, 1.2)]:
+            _roll(cc, y, m, K.M_CASH_DELIVERY, round(200_000 * k))
+            _roll(cc, y, m, K.M_GROSS_PROFIT, round(40_000 * k))
+            _roll(cc, y, m, K.M_BEAUTY, round(20_000 * k))
+            _roll(cc, y, m, K.M_CUSTOMERS, round(500 * k))
+        for metric, v in [(K.M_CASH_DELIVERY, 75_000), (K.M_GROSS_PROFIT, 14_000),
+                          (K.M_BEAUTY, 6_000), (K.M_CUSTOMERS, 150), (K.M_CALL_COUNT, 900)]:
+            _roll(cc, 2026, 10, metric, v)
+
+    def _build(self):
+        return build_target_workbook(2026, 10, models=('a', 'b', 'avg'), days_elapsed=8)
+
+    def test_five_branch_export_identical_to_baseline(self):
+        snap = json.loads(json.dumps(_snapshot(self._build()), ensure_ascii=False))
+        if os.environ.get('KPI_GOLDEN_WRITE') == '1':      # regenerate only on purpose
+            GOLDEN.parent.mkdir(exist_ok=True)
+            GOLDEN.write_text(json.dumps(snap, ensure_ascii=False, indent=1, sort_keys=True),
+                              encoding='utf-8')
+        golden = json.loads(GOLDEN.read_text(encoding='utf-8'))
+        self.assertEqual(sorted(snap), sorted(golden))
+        for title in golden:
+            self.assertEqual(snap[title]['merged'], golden[title]['merged'], title)
+            self.assertEqual(snap[title]['freeze'], golden[title]['freeze'], title)
+            self.assertEqual(snap[title]['rtl'], golden[title]['rtl'], title)
+            self.assertEqual(snap[title]['cells'], golden[title]['cells'], title)
+
+    def test_six_branch_export_no_crash_and_shifted(self):
+        from apps.forecasting.kpi_export import KpiLayout
+        _plant_branch('230', 6, 1.9)
+        ws = self._build()['Model A أكتوبر']
+        L = KpiLayout(6)
+        self.assertEqual([L.target_row(i) for i in range(6)], [8, 10, 12, 14, 16, 18])
+        self.assertEqual((L.total_tgt_row, L.total_ach_row), (20, 21))
+        self.assertEqual((L.cc_label_row, L.cc_tgt_row, L.cc_ach_row), (23, 24, 25))
+        # six branch blocks, the new branch last (display_order 6)
+        self.assertEqual([str(ws[f'C{r}'].value) for r in L.target_rows],
+                         ['160', '170', '140', '150', '130', '230'])
+        self.assertEqual(ws['E19'].value, round(250_000 * 1.9))              # 230 cash achieved
+        # totals reference all six target / achieved rows
+        self.assertEqual(ws['I20'].value, '=I8+I10+I12+I14+I16+I18')
+        self.assertEqual(ws['H21'].value, '=H9+H11+H13+H15+H17+H19')
+        self.assertEqual(ws['J21'].value, '=H21/I21')
+        self.assertEqual(ws['AH9'].value, '=$AH$7*$J$21')
+        # call-center block shifted by two: label row 23, targets 24, achieved 25
+        self.assertEqual(ws['W23'].value, 'المبيعات')
+        self.assertEqual(ws['D24'].value, 'call center')
+        self.assertEqual(ws['E25'].value, 75000)
+        self.assertEqual(ws['F25'].value, '=F24/$E$1*$H$1')
+        self.assertEqual(ws['X25'].value, '=$J$25*$X$24')
+        self.assertIn('IF(J$19>=90%,H$19,0)', ws['AG24'].value)              # 6th branch counted
+        # management block shifted: 26..30
+        self.assertEqual(ws['AC26'].value, '=AG24-AG25')
+        self.assertEqual(ws['AC27'].value, '=I21')
+        self.assertEqual(ws['AC28'].value, '=(IF(AC$21<(0.9*AC$7),AC$26/AC$27,J$21))')
+        self.assertEqual(ws['AH30'].value, '=SUM(AC30:AG30)')
+
+    def test_branch_order_follows_display_order(self):
+        Branch.objects.filter(softech_branch_id='130').update(display_order=0)
+        Branch.objects.filter(softech_branch_id='160').update(display_order=9)
+        ws = self._build()['Avg (A+B) أكتوبر']
+        self.assertEqual([str(ws[f'C{r}'].value) for r in (8, 10, 12, 14, 16)],
+                         ['130', '170', '140', '150', '160'])
+
+    def test_fewer_than_five_branches_keeps_legacy_rows(self):
+        from apps.forecasting.kpi_export import KpiLayout
+        L = KpiLayout(3)
+        self.assertEqual((L.total_tgt_row, L.total_ach_row, L.cc_label_row, L.cc_tgt_row,
+                          L.cc_ach_row), (18, 19, 21, 22, 23))
+        self.assertEqual(L.ach_rows, [9, 11, 13, 15, 17])

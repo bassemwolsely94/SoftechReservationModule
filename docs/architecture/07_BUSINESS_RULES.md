@@ -8,9 +8,15 @@ All extracted business rules, organized by domain.
 
 | Rule | Implementation | Location |
 |------|---------------|----------|
+| Liveness = `Branch.kind` only: live = hq + retail; `closed`, `call_center` and `pending` are never live. Exactly one hq, read through `hq_code()` (none → API 503 `hq_not_configured`); never a literal `'100'` | `BranchQuerySet.live()/retail()/closed()/pending()`, `hq_code()` | `apps/branches/models.py` |
+| New SOFTECH branches arrive `pending` (admins notified) until an admin classifies them; on a fresh DB `SOFTECH_HQ_BRANCH_CODE` arrives as hq | `sync_branches` | `apps/sync/tasks.py` |
+| `is_operational = False` = temporarily paused (not closed); `is_active` = history only — neither decides live/closed | — | `apps/branches/models.py` |
+| Branch lists follow `display_order` (owner-set on the settings screen), then code; ISR fulfilment and purchasing pivot v2 keep code order (HQ first) | `Meta.ordering`, `.ordered()` | `apps/branches/models.py` |
 | Only operational branches can accept reservations | `Branch.is_operational` checked at reservation creation | `apps/branches/models.py` |
 | Branches with `notifications_enabled=False` suppress all notification sends | Checked in `Notification.send_to_branch()` | `apps/notifications/models.py` |
-| Store codes `102`, `103`, `105` are excluded from operational stock | `EXCLUDED_STORE_CODES = {'102', '103', '105'}` | `apps/catalog/models.py` |
+| Sellable stock excludes quarantine stores `102`/`103`/`105` (any branch), HQ store `110` (closed-branch residue) and every store of a closed or pending branch | `exclude_unsellable` / `is_sellable` / `unsellable_q` | `apps/catalog/models.py` |
+| SOFTECH writers (discount replication, rate/ISR writers + guards) and incentives exclude the quarantine stores only (`QUARANTINE_STORE_CODES`); their branch set may only shrink | `QUARANTINE_STORE_CODES` | `apps/batches/store_roles.py` |
+| The KPI target export grows with the network: ≤5 live branches keep the legacy rows; each extra branch adds a 2-row block and shifts the totals, call-center and management blocks down | `KpiLayout` | `apps/forecasting/kpi_export.py` |
 
 ---
 

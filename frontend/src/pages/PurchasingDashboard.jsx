@@ -24,6 +24,7 @@ import { fa } from '../utils/flowArrow'
 import { useToast } from '../components/ui'
 import { SortIcon } from '../components/DataTable'
 import useSortableRows from '../hooks/useSortableRows'
+import useClosedBranches from '../hooks/useClosedBranches'
 import SharedSortTh from '../components/SortTh'
 import MultiSelectFilter from '../components/MultiSelectFilter'
 import BranchMultiSelect from '../components/BranchMultiSelect'
@@ -548,7 +549,8 @@ function AggregatedTab({ abcFilter, search, ordering, onSort, runId, itemFilters
 // Widths: [item, ABC, branch, 30d, 90d, 365d, avg/mo, safety, stock, in-transit, coverage, gap, priority, status, last_sale, m%, n%]
 const BRANCH_WIDTHS_DEFAULT = [260, 70, 120, 90, 90, 90, 110, 90, 100, 90, 90, 90, 90, 100, 100, 90, 90, 110, 280]
 
-function BranchTab({ abcFilter, search, ordering, onSort, branches, runId, itemFilters = {} }) {
+function BranchTab({ abcFilter, search, ordering, onSort, branches: baseBranches, runId, itemFilters = {} }) {
+  const { branches, showClosed, toggle: closedToggle } = useClosedBranches(baseBranches)
   const [selectedBranch, setSelectedBranch] = useState([])   // multi-select branch ids (none = all)
   const [needsPurchase,  setNeedsPurchase]  = useState(false)
   const [colW, onResizeStart] = useColWidths(BRANCH_WIDTHS_DEFAULT)
@@ -580,8 +582,9 @@ function BranchTab({ abcFilter, search, ordering, onSort, branches, runId, itemF
       <SeasonalityBar />
       {/* Branch filter + needs-purchase toggle */}
       <div className="flex flex-wrap items-center gap-3 px-4 py-3 bg-white border-b border-gray-100">
-        <BranchMultiSelect className="w-[200px]" branches={branches}
+        <BranchMultiSelect className="w-[200px]" branches={branches} showClosed={showClosed}
           selected={selectedBranch} onChange={setSelectedBranch} />
+        {closedToggle}
 
         <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-700">
           <input

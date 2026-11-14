@@ -1242,10 +1242,10 @@ def public_item_lookup(request):
 @permission_classes([AllowAny])
 @throttle_classes([PublicDemandThrottle])
 def public_branches(request):
-    """Active branches for the notify page's branch picker (id + name only)."""
+    """Live branches for the notify page's branch picker (id + name only)."""
     from apps.branches.models import Branch
     rows = list(
-        Branch.objects.filter(is_active=True)
+        Branch.objects.live()
         .values('id', 'name_ar', 'name').order_by('name_ar')
     )
     for b in rows:
@@ -1279,7 +1279,7 @@ def public_demand_interest(request):
     item = Item.objects.filter(pk=item_pk, is_active=True).first() if item_pk else None
     if not item:
         return Response({'detail': 'الصنف غير متاح'}, status=400)
-    branch = Branch.objects.filter(pk=branch_pk, is_active=True).first() if branch_pk else None
+    branch = Branch.objects.live().filter(pk=branch_pk).first() if branch_pk else None
     if not branch:
         return Response({'detail': 'الفرع غير صحيح'}, status=400)
 

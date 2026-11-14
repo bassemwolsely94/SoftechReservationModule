@@ -275,7 +275,7 @@ def _update_availability_cache(item, availability_list):
     from .models import ProductAvailabilityCache
     from apps.branches.models import Branch
 
-    branch_map = {b.id: b for b in Branch.objects.all()}
+    branch_map = {b.id: b for b in Branch.objects.live()}
     for row in availability_list:
         branch = branch_map.get(row['branch_id'])
         if branch:

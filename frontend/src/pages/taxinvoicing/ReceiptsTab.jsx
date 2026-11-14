@@ -213,6 +213,150 @@ function ConfigEditor({ branch, row, me, onDone }) {
   )
 }
 
+/**
+ * Where this device's receipt chain starts, decided once before its first receipt, from ETA's own answer:
+ * a fresh device starts empty; a device another program (Invoicer) used continues after its last receipt.
+ */
+export function ChainStart({ branch, row, me }) {
+  const act = useAction()
+  const [found, setFound] = useState(null)
+  const [stopped, setStopped] = useState(false)
+  const [confirm, setConfirm] = useState('')
+  const [reason, setReason] = useState('')
+  const short = v => (v ? `${v.slice(0, 12)}…` : '—')
+  if (row.chain_start) {
+    const latest = row.chain_start_detail?.latest
+    return (
+      <div className="space-y-2 text-xs" data-tour="tax-invoicing-main-receipts-chain">
+        <div className="flex flex-wrap gap-2 items-center">
+          <Badge tone="bg-emerald-50 text-emerald-700 border-emerald-200">{row.chain_start_label}</Badge>
+          <span className="text-gray-500">{fmtTime(row.chain_start_at)} · {row.chain_start_by}</span>
+          {latest && <span className="text-gray-500">بعد الإيصال {latest.receipt_number || '—'} (<span dir="ltr" className="font-mono">{short(latest.uuid)}</span>)</span>}
+        </div>
+        {me.can_finalize && !row.has_chain_receipts && (
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="سبب التراجع"><input className={`${INPUT} w-56`} value={reason} onChange={e => setReason(e.target.value)} /></Field>
+            <Btn variant="danger" disabled={act.pending || !reason.trim()}
+              onClick={() => act.run(() => taxInvoicingApi.undoChainStart(branch, reason), 'تم التراجع عن بداية السلسلة')}>تراجع</Btn>
+          </div>
+        )}
+        <ActionMsg msg={act.msg} />
+      </div>
+    )
+  }
+  if (!me.can_finalize) return <Notice tone="gray">لم تتحدد بداية سلسلة هذا الجهاز بعد؛ يحددها من يملك الاعتماد النهائي.</Notice>
+  const latest = found?.latest
+  return (
+    <div className="space-y-2 text-xs" data-tour="tax-invoicing-main-receipts-chain">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-bold text-gray-700">بداية سلسلة الجهاز:</span>
+        <Btn disabled={act.pending || !row.device_serial} data-tour="tax-invoicing-main-receipts-chain-lookup"
+          onClick={() => act.run(() => taxInvoicingApi.chainLookup(branch), null, d => { setFound(d); setStopped(false); setConfirm('') })}>
+          ابحث في المصلحة عن إيصالات هذا الجهاز
+        </Btn>
+      </div>
+      {found && !latest && (
+        <Notice tone="green">المصلحة لا تعرض أي إيصال من الجهاز {found.device_serial} خلال آخر {fmtInt(found.looked_back_days)} يوم: يبدأ كجهاز جديد.</Notice>
+      )}
+      {latest && (
+        <Notice tone="amber">
+          الجهاز {found.device_serial} استُخدم من قبل ({latest.submitter || 'برنامج آخر'}). أحدث إيصال لدى المصلحة:
+          رقم {latest.receipt_number || '—'} بتاريخ {fmtTime(latest.issued)}، حالته {latest.status || '—'}،
+          ومعرّفه <span dir="ltr" className="font-mono">{short(latest.uuid)}</span>. أول إيصال لنا سيأتي بعده مباشرة.
+        </Notice>
+      )}
+      {found && (
+        <div className="flex flex-wrap items-end gap-2">
+          {latest && (
+            <label className="flex items-center gap-1.5 text-gray-700">
+              <input type="checkbox" checked={stopped} onChange={e => setStopped(e.target.checked)} />
+              تأكدت أن البرنامج السابق توقف عن الإصدار على هذا الجهاز
+            </label>
+          )}
+          <Field label={`اكتب كود الفرع (${branch}) للتأكيد`}>
+            <input className={`${INPUT} w-24`} value={confirm} onChange={e => setConfirm(e.target.value)} />
+          </Field>
+          <Btn variant="primary" disabled={act.pending || confirm !== branch || (latest && !stopped)}
+            data-tour="tax-invoicing-main-receipts-chain-start"
+            onClick={() => act.run(() => taxInvoicingApi.startChain(branch, latest
+              ? { mode: 'handover', confirm, other_program_stopped: stopped, expected_uuid: latest.uuid }
+              : { mode: 'fresh', confirm }), 'تحددت بداية السلسلة')}>
+            {latest ? 'استلام السلسلة بعد هذا الإيصال' : 'بدء سلسلة جديدة'}
+          </Btn>
+        </div>
+      )}
+      <ActionMsg msg={act.msg} />
+    </div>
+  )
+}
+
+/**
+ * A test-only mapping: this branch's sales go to ETA's test system through a borrowed test device. The server
+ * refuses it anywhere else; ending it puts the test receipts back to ready for the real system.
+ */
+/** From when this branch's sales are sent from here. Earlier sales stay held ("before the start"). */
+export function SendFrom({ branch, row, me }) {
+  const act = useAction()
+  const [when, setWhen] = useState(row.send_from ? String(row.send_from).slice(0, 16) : '')
+  const [reason, setReason] = useState('')
+  return (
+    <div className="flex flex-wrap items-end gap-2" data-tour="tax-invoicing-main-receipts-send-from">
+      <Field label="بداية الإرسال" hint={row.send_from ? `الحالية: ${fmtTime(row.send_from)}` : 'لم تتحدد — المبيعات قبلها لا تُرسل من هنا'}>
+        <input type="datetime-local" className={INPUT} value={when} onChange={e => setWhen(e.target.value)} aria-label="بداية الإرسال" disabled={!me.can_finalize} />
+      </Field>
+      {me.can_finalize && (
+        <>
+          <Field label="السبب">
+            <input className={`${INPUT} w-48`} value={reason} onChange={e => setReason(e.target.value)} aria-label="سبب بداية الإرسال" />
+          </Field>
+          <Btn disabled={!when || act.pending}
+            onClick={() => act.run(() => taxInvoicingApi.setSendFrom(branch, { send_from: new Date(when).toISOString(), reason }),
+              d => `تحددت بداية الإرسال · أُعيد فحص ${fmtInt(d.rechecked)} إيصال`)}>
+            حفظ بداية الإرسال
+          </Btn>
+        </>
+      )}
+      <ActionMsg msg={act.msg} />
+    </div>
+  )
+}
+
+export function TestMapping({ branch, row, me }) {
+  const act = useAction()
+  const [reason, setReason] = useState('')
+  if (!me.can_finalize && !row.test_env) return null
+  if (row.test_env) {
+    return (
+      <div className="space-y-2" data-tour="tax-invoicing-main-receipts-test-mapping">
+        <Notice tone="warn">إعداد تجريبي فقط ({row.test_env}): لا يُرسل لمنظومة غيرها، وإيصالاته لا تُحسب للمنظومة الفعلية.</Notice>
+        {me.can_finalize && (
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="سبب إنهاء الإعداد التجريبي">
+              <input className={`${INPUT} w-64`} value={reason} onChange={e => setReason(e.target.value)} aria-label="سبب إنهاء الإعداد التجريبي" />
+            </Field>
+            <Btn disabled={!reason.trim() || act.pending}
+              onClick={() => act.run(() => taxInvoicingApi.endTestMapping(branch, reason), 'انتهى الإعداد التجريبي وعادت إيصالاته جاهزة')}>
+              إنهاء الإعداد التجريبي
+            </Btn>
+          </div>
+        )}
+        <ActionMsg msg={act.msg} />
+      </div>
+    )
+  }
+  if (row.has_chain_receipts) return null
+  return (
+    <div className="flex flex-wrap items-center gap-2" data-tour="tax-invoicing-main-receipts-test-mapping">
+      <span className="text-xs text-gray-500">لتجربة مبيعات هذا الفرع على جهاز تجريبي في المنظومة التجريبية فقط.</span>
+      <Btn disabled={act.pending}
+        onClick={() => act.run(() => taxInvoicingApi.saveReceiptConfig({ branch, test_only: true }), 'أصبح الإعداد تجريبياً فقط')}>
+        جعله إعداداً تجريبياً فقط
+      </Btn>
+      <ActionMsg msg={act.msg} />
+    </div>
+  )
+}
+
 function Configs({ me, bl }) {
   const branches = useBranchOptions()
   const [open, setOpen] = useState(null)
@@ -240,13 +384,22 @@ function Configs({ me, bl }) {
       )}
       <Grid getKey={c => c.branch} rows={data} empty="لا توجد فروع مسجلة بعد"
         onOpen={c => setOpen(o => (o === c.branch ? null : c.branch))} openKey={open}
-        renderOpen={c => <ConfigEditor key={c.branch} branch={c.branch} row={c} me={me} onDone={() => setOpen(null)} />}
+        renderOpen={c => (
+          <div className="space-y-3">
+            <ConfigEditor key={c.branch} branch={c.branch} row={c} me={me} onDone={() => setOpen(null)} />
+            <div className="border-t border-gray-100 pt-3"><SendFrom branch={c.branch} row={c} me={me} /></div>
+            <div className="border-t border-gray-100 pt-3"><TestMapping branch={c.branch} row={c} me={me} /></div>
+            <div className="border-t border-gray-100 pt-3"><ChainStart branch={c.branch} row={c} me={me} /></div>
+          </div>
+        )}
         columns={[
           { key: 'branch', label: 'الفرع', value: c => bl(c.branch), render: c => bl(c.branch) },
           { key: 'is_enabled', label: 'مفعل', render: c => (c.is_enabled ? '✔' : '—') },
           { key: 'seller_branch_code', label: 'كود المصلحة', render: c => c.seller_branch_code || '—' },
-          { key: 'device_serial', label: 'سيريال الجهاز', render: c => c.device_serial || '—' },
-          { key: 'has_chain', label: 'سلسلة الإيصالات', render: c => (c.has_chain ? 'بدأت' : 'لم تبدأ') },
+          { key: 'device_serial', label: 'سيريال الجهاز', render: c => (
+            <span>{c.device_serial || '—'}{c.test_env && <> <Badge>تجريبي</Badge></>}</span>) },
+          { key: 'send_from', label: 'بداية الإرسال', value: c => c.send_from || '', render: c => (c.send_from ? fmtTime(c.send_from) : 'لم تتحدد') },
+          { key: 'chain_start', label: 'بداية السلسلة', value: c => c.chain_start_label, render: c => c.chain_start_label || 'لم تتحدد' },
         ]} />
     </Section>
   )

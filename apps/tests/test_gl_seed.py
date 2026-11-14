@@ -13,7 +13,7 @@ from apps.finance.models import (
 )
 from apps.sync import tasks
 from apps.sync.freshness import get_freshness
-from apps.tests.factories import make_user
+from apps.tests.factories import make_hq, make_user
 
 BASE = '/api/finance/gl/'
 D = datetime.date
@@ -44,6 +44,10 @@ def _make_branches():
 
 
 class SeedTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
     @classmethod
     def setUpTestData(cls):
         _make_accounts(_all_codes())

@@ -28,6 +28,8 @@ from decimal import Decimal, InvalidOperation
 from decouple import config
 from django.utils import timezone
 
+from apps.batches.store_roles import check_quarantine_sql
+
 logger = logging.getLogger('elrezeiky.stockcount')
 
 # ── Mock mode (set SOFTECH_MOCK=True in .env when server is unreachable) ──────
@@ -68,7 +70,9 @@ def _mock_preview_items(branch_code: str, seed_extra: int = 0) -> list:
     return result
 
 # ── Excluded store codes (quarantine / expired stock at HQ) ──────────────────
+# Literal on purpose (sql-from-text scan); must match store_roles.QUARANTINE_STORE_CODES.
 _EXCLUDED_STORES = "('102','103','105')"
+check_quarantine_sql(_EXCLUDED_STORES)
 
 # ── SQL: distinct items touched by specific transactions ─────────────────────
 # Sybase ASE 12.5 has no DATE type and only supports CONVERT styles 0-14/100-114.

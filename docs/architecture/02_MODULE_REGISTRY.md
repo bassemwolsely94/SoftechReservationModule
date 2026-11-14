@@ -11,12 +11,12 @@ Every module in the platform is registered here with its purpose, status, and de
 | App | `apps/branches` |
 | Purpose | Physical pharmacy location master + per-branch feature flags |
 | Status | **COMPLETE** |
-| Migrations | 3 |
+| Migrations | 14 |
 | Models | `Branch`, `BranchSettings` |
 | Key APIs | `/api/branches/` |
 | Related Tables | branch (PK for all scoped entities) |
-| Related Screens | BranchSelect component (global) |
-| Business Rules | `is_operational` gate on reservation creation; `notifications_enabled` suppresses branch-wide alerts |
+| Related Screens | BranchSelect component (global); branch settings (kind, display order); «إظهار الفروع المغلقة» toggle on report filters (admins) |
+| Business Rules | `kind` is the only liveness authority (hq / retail live; closed / call_center / `pending` not); new SOFTECH branches arrive `pending`; one hq via `hq_code()`; `display_order` orders lists; `is_operational` = temporary pause (and the reservation gate); `is_active` = history; `notifications_enabled` suppresses branch-wide alerts. See [07_BUSINESS_RULES.md](07_BUSINESS_RULES.md#branch-rules) |
 
 ---
 

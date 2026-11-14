@@ -27,7 +27,9 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-QUARANTINE_STORES = ('102', '103', '105')
+from apps.batches.store_roles import QUARANTINE_STORE_CODES
+
+QUARANTINE_STORES = QUARANTINE_STORE_CODES
 HIGH_PERCENTILE = 0.8          # value / rate reason threshold
 LOSS_LOOKBACK_DAYS = 90
 STALE_DAYS = 180               # 'never' signal saturates at this many days since the last count

@@ -15,6 +15,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework.test import APIClient
 
 from apps.supply import branch_requests as W
+from apps.tests.factories import make_hq
 
 User = get_user_model()
 
@@ -247,6 +248,7 @@ class ApiTests(TestCase):
     URL = '/api/purchasing/isr/branch-requests/'
 
     def setUp(self):
+        make_hq('100', self)   # HQ is read through hq_code()
         self.br = _branch()
         self.aricept5, self.aricept10, self.eliquis = _items(
             'ARICEPT  5 MG  7 TAB', 'ARICEPT 10MG 14TAB (2STRIPSX7)', 'ELIQUIS 2.5MG 20TAB (XX)  (2STRIPSX10)')
@@ -333,6 +335,7 @@ class TransferProposalTests(TestCase):
     URL = '/api/purchasing/isr/branch-requests/'
 
     def setUp(self):
+        make_hq('100', self)   # HQ is read through hq_code()
         from apps.supply.models import BranchRequest, BranchRequestLine as L
         self.br = _branch('130')
         self.a, self.b = _items('ELIQUIS 2.5MG 20TAB (XX)  (2STRIPSX10)', 'CELLCEPT 500MG 50TAB (XX) (5 STRIPSX10)')

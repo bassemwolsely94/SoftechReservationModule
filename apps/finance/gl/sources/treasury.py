@@ -19,7 +19,7 @@ def _kind_other(ptcode: str, personcode: str) -> str:
 
 
 
-HQ = sybase_gl.HQ_BRANCH
+_hq = sybase_gl._hq   # HQ's branch code at call time
 BOX_TRANSFER, BANK_TRANSFER = sybase_gl.TRANSFER_BOX_PERSON, sybase_gl.TRANSFER_BANK_PERSON
 BANK_TYPE_BOX, BANK_TYPE_BANK = '0', '1'   # banks.banktype: 0 = cash box, 1 = bank account
 PAIR_DAYS = sybase_gl.TRANSFER_PAIR_DAYS
@@ -90,13 +90,13 @@ def _transfer_kinds(rows, fetch) -> dict:
 
     # P28/P30 (a): HQ -180 legs not paired in the fetch -> one bounded SELECT
     hq_open = sorted((sno, _day(r)) for (b, sno), r in tf.items()
-                     if b == HQ and code(r['personcode']) == BOX_TRANSFER and _day(r)
+                     if b == _hq() and code(r['personcode']) == BOX_TRANSFER and _day(r)
                      and not (own[(b, sno)] and own[(b, sno)] != b)
                      and len(branches_near(back, (b, sno), _day(r))) != 1 and sno.isdigit())
     looked = {}
     for part in _chunks(hq_open):
         hits = [h for h in fetch(sybase_gl.sql_transfer_legs_pointing_at(part))   # re-checked below
-                if code(h.get('tf_branchcode')) == HQ]
+                if code(h.get('tf_branchcode')) == _hq()]
         for k, v in pointing(hits).items():
             looked.setdefault(k, []).extend(v)
 
@@ -129,14 +129,14 @@ def _transfer_kinds(rows, fetch) -> dict:
         counterpart = own[(branch, sno)] if own[(branch, sno)] != branch else ''
         if not counterpart:
             cands = branches_near(back, (branch, sno), day)
-            if len(cands) != 1 and branch == HQ:
+            if len(cands) != 1 and branch == _hq():
                 cands = branches_near(looked, (branch, sno), day) | cands
             counterpart = next(iter(cands)) if len(cands) == 1 else ''
         if counterpart:
-            kind = 'transfer_branch' if HQ in (branch, counterpart) else 'transfer_b2b'
+            kind = 'transfer_branch' if _hq() in (branch, counterpart) else 'transfer_b2b'
             out[(branch, sno)] = (kind, counterpart)
         else:
-            out[(branch, sno)] = ('transfer_unpaired' if branch == HQ else 'transfer', '')
+            out[(branch, sno)] = ('transfer_unpaired' if branch == _hq() else 'transfer', '')
     return out
 
 

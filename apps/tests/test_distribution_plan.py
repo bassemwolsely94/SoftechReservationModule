@@ -16,7 +16,7 @@ from apps.purchasing import distribution_plan as DP
 from apps.purchasing import isr_guards as G
 from apps.purchasing import isr_writer as W
 from apps.purchasing.models import DistributionPlan, IsrPush as P, PlannedMove
-from apps.tests.factories import make_admin, make_item, make_salesperson
+from apps.tests.factories import make_admin, make_item, make_salesperson, make_hq
 
 TH = {'min_line': 100.0, 'min_doc': 1000.0}
 NO_HOLD = lambda key: (None, '')
@@ -43,6 +43,10 @@ def _by(moves):
 
 
 class WaveTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
     def test_waves_and_source_rules(self):
         sugs = [_sug('H', 'never_stocked', '100', ['160']),
                 _sug('O', 'over_piled', '130', ['160']),
@@ -83,6 +87,10 @@ class WaveTests(TestCase):
 
 
 class CommittedFlowTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
     def test_seed_already_coming_is_a_conflict(self):
         flows = {('A', '160'): [{'source': 'softech_isr', 'label': 'ISR سوفتك 26100700', 'ref': 26100700, 'qty': 3}]}
         moves, docs = _plan([_sug('A', 'never_stocked', '100', ['160'])], {'A': 900}, flows=flows,
@@ -139,6 +147,10 @@ class CommittedFlowTests(TestCase):
 
 
 class ThresholdAndDocumentTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        make_hq('100', self)   # HQ is read through hq_code()
+
     def test_branch_line_under_100_dropped_hq_line_kept(self):
         moves, _ = _plan([_sug('A', 'over_piled', '130', ['160'], qty=1), _sug('B', 'never_stocked', '100', ['160'], qty=1)],
                          {'A': 50, 'B': 50}, th={'min_line': 100, 'min_doc': 0})
@@ -188,6 +200,7 @@ def _fake_items_plan(node, items):
 
 class GenerateTests(TestCase):
     def setUp(self):
+        make_hq('100', self)   # HQ is read through hq_code()
         for c in 'ABC':
             make_item(c, softech_id=c)
         from apps.catalog.models import Item
@@ -262,6 +275,7 @@ def _transit(doc, status, items, days_after=0, pushed=None):
 
 class ReceivedAtHqTests(TestCase):
     def setUp(self):
+        make_hq('100', self)   # HQ is read through hq_code()
         self.feeder = P.objects.create(branchcode='130', dest_branchcode='100', kind=P.KIND_BRANCH_TO_HQ,
                                        status=P.STATUS_PUSHED, pushed_at=timezone.now(), isrdocnumber=2613050,
                                        lines_snapshot=_lines([('A', 2)]))
@@ -311,6 +325,7 @@ class ForwardingExpiryTests(TestCase):
     """A waiting forwarding leg's 7-day clock starts at the receipt at HQ (owner 2026-11-11)."""
 
     def setUp(self):
+        make_hq('100', self)   # HQ is read through hq_code()
         from apps.config.models import SystemSetting
         SystemSetting.objects.update_or_create(key='isr_draft_expiry_days', defaults={'value': '7'})
         long_ago = timezone.now() - datetime.timedelta(days=12)

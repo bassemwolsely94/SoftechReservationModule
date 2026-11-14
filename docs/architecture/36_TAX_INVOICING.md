@@ -69,6 +69,51 @@ requests" (`GET /api/v1.0/codetypes/requests/my?ItemCode=`).
 - Not built: GS1 "Request Code Reuse" for items whose barcode is a GS1 code, and a scheduled status poll (the
   button and `coding.refresh` do it on demand).
 
+### GPC categories and GS1 codes
+
+- `TaxGpcBrick` holds the GPC bricks (code, English, Arabic), loaded with `manage.py load_gpc_bricks <xlsx>` from the
+  owner's GPC workbook (any sheet with a `Brick Code` / `BrickCode` column). Once loaded, a code request must name a
+  brick from it; before that, any 8-digit code passes.
+- `gpc.suggest` shows, per uncoded item, the brick most used by our approved items of the same SOFTECH family, else
+  category, else type, with its share. It is never applied by itself: preparing uses a batch brick, else the item's own,
+  else the suggestion only when the person ticks "use the suggested category" after seeing it. The audit records which.
+- `add_from_catalog`: active catalog items with no tax profile (new since the owner's workbook) become uncoded profiles
+  (name from the catalog), so they can be offered for a code. Treatment and lists stay for the accountant.
+- GS1: an uncoded item whose catalog barcode is a valid GTIN can be asked for as-is ("Request Code Reuse",
+  `PUT /api/v1.0/codetypes/requests/codeusages`, `TaxCodeRequest.purpose = gs1`). ETA refuses a barcode it does not
+  hold; that item then needs an EGS code. Approval sets `code_type = GS1`, `eta_code = barcode`.
+- Follow-up of GS1 requests uses the same "my requests" search as EGS; confirmed on the test system before production.
+
+### Where a branch's sending starts
+
+`TaxReceiptBranchConfig.send_from` is required before a branch's first receipt (`config_gaps`). ETA's test system
+refused a two-day-old sale with CF313 ("issuance date time value is out of the range of submission workflow parameter"),
+and sales before go-live belong to the program used before. `receipts.evaluate` holds any sale before `send_from` with
+`before_start`, and `issue_next` never takes one. `set_send_from` (send permission, reason, audited) re-checks the
+branch's unsent receipts; once a receipt is issued the start only moves later, so older sales are never issued after
+newer ones.
+
+### Test-only branch mapping
+
+`TaxReceiptBranchConfig.test_env` marks a branch setup as test-system-only, for example a live branch's sales sent
+through a borrowed test device (Invoicer's preprod POS at ETA branch 3, whose own SOFTECH branch 110 is closed). Each
+receipt records the system it was issued for (`TaxReceipt.environment`). `receipts.env_guard` refuses a test-only setup
+in any other system, and refuses a real setup while receipts issued for another system remain in the branch.
+`end_test_mapping` (reason required, audited) resets those receipts to ready, and clears the device, chain and switch, so
+the real device needs its own setup and chain start.
+
+### Code check per ETA system
+
+`coding.check_codes` asks ETA's "Get Code Details by Item Code" for each mapped code and stores the answer with the
+system's name (`eta_check_env/status/at/detail`). ETA's test and production systems are separate registries, and the
+server that runs the test is the live one, so a status is never trusted across systems:
+- `coding_env` records which system an ETA answer set `coding_status` in ('' = the owner's workbook or a manual entry).
+  `services.classify` treats a status from another system as uncoded.
+- A code ETA reports missing or inactive in the system in use blocks its lines there.
+- In a test system, our real EGS codes it lacks can be registered as-is (`prepare_mirror`, `TaxCodeRequest.purpose =
+  mirror`). Their answers only mark the code found there; they never change the item's real coding. Never in production.
+- Not built: GS1 codes missing in a system ("Request Code Reuse").
+
 ## Which ETA system
 
 `environment.py`: `TAX_ETA_ENVIRONMENT` = `preprod` or `production` picks ETA's published addresses; explicit
@@ -89,6 +134,13 @@ name. Every sending call in `eta_client` passes `environment.assert_may_send()`:
 - Returns reference the original sale. SOFTECH's `r_doccode` is mostly `0` or blank there. A return whose original
   was not issued here is held. Exclusions on receipts are not built: a blacklisted line holds the receipt.
 - Secrets stay in the environment; `TaxReceiptBranchConfig` names the variables.
+- **Where a device's chain starts** (`receipts.start_chain`, owner decision 2026-11-13: production reuses the POS devices
+  Invoicer registered, after ETA's representative approves them). Decided once per branch, before the first receipt,
+  and issuing waits for it (`config_gaps`). `chain_lookup` asks ETA's "Search Receipts" for the device's newest
+  receipts (`PosSerialNumber`, newest issued first, 400 days back). *Fresh* is allowed only when ETA shows none.
+  *Handover* is allowed only to the newest receipt ETA shows, which must equal the one the person reviewed, must be
+  valid, and needs the confirmation that the other program stopped on that device. Undo is possible only while
+  nothing is issued here. All of it is audited (`receipt_chain_started`, `receipt_chain_start_undone`).
 
 ## Signing
 

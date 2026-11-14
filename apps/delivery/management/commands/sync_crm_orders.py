@@ -387,7 +387,7 @@ class Command(BaseCommand):
         watchdog_results = {}   # host → {branch_id, ok, elapsed_ms, error}
         if source in ('branches', 'all'):
             import time as _time
-            branch_dbs = Branch.objects.filter(db_host__gt='', is_active=True)
+            branch_dbs = Branch.objects.live().filter(db_host__gt='', is_active=True)   # live() narrows only
             existing_cache = {}
 
             for branch in branch_dbs:
