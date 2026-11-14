@@ -147,3 +147,17 @@ class HistoryScreenTests(Fixture, TestCase):
         self.assertEqual(len(values), 3)                        # header + 2 sent documents
         self.assertIn('••••••••••4567', [v for row in values for v in row])
         self.assertEqual(api(self.pharmacist).get(URL + 'documents/export/', {'system': 'production'}).status_code, 403)
+
+
+class ExportSafetyTests(Fixture, TestCase):
+
+    def setUp(self):
+        self.build('hx')
+        EtaMirrorDocument.objects.create(system='production', uuid='X1', doc_type='i', direction='received', status='valid',
+                                         issuer_name='=HYPERLINK("http://x","click")', issued_at=_when(1))
+
+    def test_a_name_that_looks_like_a_formula_is_exported_as_text(self):
+        r = api(self.accountant).get(URL + 'documents/export/', {'system': 'production'})
+        ws = openpyxl.load_workbook(io.BytesIO(r.content)).active
+        cell = next(c for row in ws.iter_rows() for c in row if c.value and 'HYPERLINK' in str(c.value))
+        self.assertNotEqual(cell.data_type, 'f')

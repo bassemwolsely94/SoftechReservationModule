@@ -22,7 +22,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from core.export_safety import safe_sheet
+from core.export_safety import neutralise_formulas
 from core.permissions import matrix_permission
 from core.sort_ordering import explicit_order_by
 
@@ -288,9 +288,8 @@ def history_export(request, kind):
     for obj in qs.order_by(*sort).iterator(chunk_size=2000):
         row = to_row(obj)
         ws.append([_cell(row.get(key)) for key, _ in columns])
-    safe_sheet(ws)
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)       # typed text never reaches Excel as a live formula
     services.audit('eta_history_export', actor=request.user, entity='eta_history', entity_id=kind,
                    after={'system': request.query_params.get('system'), 'rows': count})
     out = HttpResponse(buf.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
