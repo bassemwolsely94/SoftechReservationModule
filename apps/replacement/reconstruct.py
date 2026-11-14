@@ -154,7 +154,7 @@ def _contract_candidates(inv, itemcodes):
     lo = inv.docdate - timedelta(days=C.get('SALE_BEFORE_PURCHASE_DAYS'))
     hi = inv.docdate + timedelta(days=C.get('SALE_AFTER_PURCHASE_DAYS'))
     base = PurchaseHistory.objects.filter(
-        branch__softech_branch_id=inv.branchcode, sales_channel__in=C.CONTRACT_CHANNELS,
+        branch__softech_branch_id=inv.branchcode, sales_channel__in=C.contract_channels(),
         invoice_date__date__gte=lo).select_related('branch').prefetch_related('lines__item')
     sales = list(base.filter(doc_code='115', invoice_date__date__lte=hi,
                              lines__item__softech_id__in=itemcodes).distinct())
@@ -207,7 +207,7 @@ def _voucher_day_patients(inv, candidate_phcodes) -> frozenset:
         return frozenset()
     seen = (PurchaseHistory.objects.filter(branch__softech_branch_id=inv.branchcode, doc_code='115',
                                            invoice_date__date__in=days, softech_phcode__in=candidate_phcodes)
-            .exclude(sales_channel__in=C.NON_REDEMPTION_CHANNELS)
+            .exclude(sales_channel__in=C.contract_channels())
             .values_list('softech_phcode', flat=True).distinct())
     return frozenset(p.strip() for p in seen)
 
@@ -219,7 +219,7 @@ def _same_day_receipts(branchcode, day, v_time, case):
     from apps.customers.models import PurchaseHistory
     qs = (PurchaseHistory.objects.filter(branch__softech_branch_id=branchcode, doc_code='115',
                                          invoice_date__date=day)
-          .exclude(sales_channel__in=C.NON_REDEMPTION_CHANNELS).select_related('branch'))
+          .exclude(sales_channel__in=C.contract_channels()).select_related('branch'))
     if v_time is not None:
         lo = v_time - timedelta(minutes=max(C.get('FUND_PATIENT_BEFORE_MIN'), C.get('FUND_ANON_BEFORE_MIN')))
         hi = v_time + timedelta(minutes=max(C.get('FUND_PATIENT_AFTER_MIN'), C.get('FUND_ANON_AFTER_MIN')))

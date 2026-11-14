@@ -198,6 +198,8 @@ class AuditLog(models.Model):
         # Branch classification (apps/branches/views.py)
         ('branch_classified',            'فرع — تغيير التصنيف'),
         ('branch_order_changed',         'فرع — تغيير الترتيب'),
+        # SOFTECH code maps — owner edits a channel / item-category meaning (apps/config/code_maps.py)
+        ('code_map_changed',             'ترميزات SOFTECH — تعديل'),
 
     ]
 

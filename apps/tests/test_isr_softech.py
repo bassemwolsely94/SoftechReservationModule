@@ -44,8 +44,8 @@ class NeedRuleTests(SimpleTestCase):
         st = _st()
         self.assertEqual((st['target'], st['order_months'], st['hq_only'], st['cap_hq']),
                          ('order_point', 0.8, False, False))   # HQ options off (owner)
-        self.assertFalse(S.SCREEN_DEFAULTS['hq_only'] or S.SCREEN_DEFAULTS['cap_hq'])
-        self.assertEqual(S.SCREEN_DEFAULTS['medicine_type'], '10')          # SOFTECH's ISRs: Medicine
+        self.assertFalse(S._SCREEN_DEFAULTS_BASE['hq_only'] or S._SCREEN_DEFAULTS_BASE['cap_hq'])
+        # the Medicine default is resolved from MedicineTypeMap: see test_code_maps_consumers
         for bad in ({'target': 'all'}, {'order_months': 20}, {'stock': 'x'}, {'origin': 'mars'},
                     {'coverage_months': 'abc'}):
             with self.assertRaises(ValueError):

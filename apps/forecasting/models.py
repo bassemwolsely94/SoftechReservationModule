@@ -152,6 +152,25 @@ class ChannelBucketMap(models.Model):
     )
     active  = models.BooleanField(default=True, db_index=True, verbose_name='نشط')
 
+    # ── Channel meaning (piece 4) — read through apps/forecasting/channels.py ──
+    GROUP_CHOICES = [
+        ('cash', 'نقدي'), ('delivery', 'توصيل'), ('permanent', 'عميل دائم'),
+        ('contract', 'تعاقد'), ('employee', 'موظفين'), ('insurance', 'تأمين'),
+        ('card', 'بطاقة شخصية'), ('donation', 'تبرعات'), ('compensation', 'تعويضات'),
+        ('settlement', 'مقاصات'), ('vip', 'VIP'), ('other', 'أخرى'),
+        ('unclassified', 'غير مصنف'),
+    ]
+    group = models.CharField(
+        max_length=20, choices=GROUP_CHOICES, default='unclassified',
+        db_default='unclassified',
+        db_index=True, verbose_name='مجموعة القناة',
+    )
+    is_contract_sale = models.BooleanField(default=False, db_default=False,
+                                           verbose_name='بيع تعاقد')
+    followup_rank = models.PositiveSmallIntegerField(
+        null=True, blank=True, verbose_name='أولوية المتابعة',
+    )
+
     class Meta:
         unique_together = [('person_type', 'channel')]
         ordering = ['person_type', 'channel']

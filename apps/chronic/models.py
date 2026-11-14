@@ -382,6 +382,7 @@ class FollowUpProtocol(models.Model):
         ('home_delivery', 'توصيل منزلي فقط'),
         ('walkin',        'كاش / مشي فقط'),
         ('b2b',           'شركات / تأمين فقط'),
+        ('unclassified',  'غير مصنف'),
     ]
 
     active_ingredient    = models.ForeignKey(

@@ -181,23 +181,25 @@ class Customer(models.Model):
     def __str__(self):
         return f"{self.name} ({self.phone})"
 
+    # Channel meaning from the channel registry (apps/forecasting/channels.py).
+    # Blank code (almost every customer) stays «عميل».
+    _TYPE_COLOR_BY_GROUP = {'delivery': 'blue', 'cash': 'gray', 'insurance': 'green',
+                            'unclassified': 'amber'}
+
     @property
     def customer_type_label(self):
-        labels = {
-            '90': 'توصيل',      # Delivery
-            '91': 'كاش',         # Cash
-            '15': 'تأمين صحي',   # Insurance
-        }
-        return labels.get(self.softech_ptclassifcode, 'عميل')
+        from apps.forecasting.channels import channel
+        if not (self.softech_ptclassifcode or '').strip():
+            return 'عميل'
+        info = channel(self.softech_ptclassifcode)
+        return info.label or info.group_label or 'عميل'
 
     @property
     def customer_type_color(self):
-        colors = {
-            '90': 'blue',
-            '91': 'gray',
-            '15': 'green',
-        }
-        return colors.get(self.softech_ptclassifcode, 'gray')
+        from apps.forecasting.channels import channel
+        if not (self.softech_ptclassifcode or '').strip():
+            return 'gray'
+        return self._TYPE_COLOR_BY_GROUP.get(channel(self.softech_ptclassifcode).group, 'gray')
 
     @property
     def total_purchases(self):

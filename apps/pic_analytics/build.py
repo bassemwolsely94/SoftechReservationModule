@@ -28,7 +28,9 @@ def channel_bucket_map() -> dict[str, str]:
     """sales_channel -> bucket; cash splits into its subtype (delivery/regular) like KpiResolver."""
     from apps.forecasting.models import ChannelBucketMap
     out = {}
-    for r in ChannelBucketMap.objects.filter(active=True):
+    from apps.forecasting.channels import CUSTOMER_PT
+    # Customer codes only: other person types reuse the same numbers and would overwrite them.
+    for r in ChannelBucketMap.objects.filter(active=True, person_type=CUSTOMER_PT):
         out[r.channel] = r.subtype if (r.bucket == ChannelBucketMap.BUCKET_CASH and r.subtype) else r.bucket
     return out
 

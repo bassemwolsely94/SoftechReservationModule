@@ -33,6 +33,8 @@ import time
 from django.conf import settings
 from django.http import JsonResponse
 
+from apps.users import roles as role_registry
+
 logger = logging.getLogger('elrezeiky.rbac')
 
 # /api/<prefix>/ → RoleModuleAccess.module
@@ -140,25 +142,39 @@ def _mode_for(role):
     held their module (hr, customers, catalog …). Finance GL ruling: the `accountant` reaches
     ledger / finance / cheques / dashboard / tasks and nothing else, from day one."""
     mode = _mode()
-    if mode == 'log' and role in enforced_roles():
+    if mode == 'log' and is_enforced(role):
         return 'enforce'
     return mode
 
 
 def enforced_roles() -> frozenset:
-    """settings.RBAC_ENFORCED_ROLES as a set of role names. A plain string (env value) is split on
-    commas — never kept as a string, where `role in 'accountant'` would be a substring test."""
-    roles = getattr(settings, 'RBAC_ENFORCED_ROLES', ('accountant',))
-    if isinstance(roles, str):
-        roles = roles.split(',')
-    return frozenset(str(r).strip() for r in (roles or ()) if str(r).strip())
+    """settings.RBAC_ENFORCED_ROLES as a set of role names, plus every registry role without
+    legacy_rbac_mode (apps/users/roles.py — a role added after 2026-11 is enforced from day one).
+    A plain string (env value) is split on commas — never kept as a string, where
+    `role in 'accountant'` would be a substring test. For a membership test use is_enforced(),
+    which also enforces role strings the registry does not know."""
+    configured = getattr(settings, 'RBAC_ENFORCED_ROLES', ('accountant',))
+    if isinstance(configured, str):
+        configured = configured.split(',')
+    names = {str(r).strip() for r in (configured or ()) if str(r).strip()}
+    names.update(r.key for r in role_registry.ROLES if not r.legacy_rbac_mode)
+    return frozenset(names)
+
+
+def is_enforced(role) -> bool:
+    """True when the matrix is enforced for `role` in every mode (no log-mode pass, no fail-open on
+    an unseeded module): a configured RBAC_ENFORCED_ROLES role, a registry role without
+    legacy_rbac_mode, or any role the registry's legacy set does not hold — an unknown string in the
+    database, or an empty role on a profile, fails closed. Read at call time, so a role planted in
+    the registry (apps.tests.role_planting) counts."""
+    return role in enforced_roles() or role not in role_registry.LEGACY_RBAC_ROLES
 
 
 def matrix_enforced_for(user) -> bool:
     """True for a caller whose role the matrix is enforced for in every mode: views use it to gate
     data they hand any signed-in user (universal search, chatter) without narrowing legacy roles."""
     profile = getattr(user, 'staff_profile', None) if not hasattr(user, 'role') else user
-    return bool(profile is not None and getattr(profile, 'role', None) in enforced_roles())
+    return bool(profile is not None and is_enforced(getattr(profile, 'role', None)))
 
 
 def clear_cache():
@@ -488,7 +504,7 @@ class ModuleAccessMiddleware:
         )
         if mode != 'enforce':
             return None
-        if not seeded and profile.role not in enforced_roles():
+        if not seeded and not is_enforced(profile.role):
             logger.error('RBAC_ENFORCEMENT=enforce but RoleModuleAccess is empty — '
                          'not blocking (run manage.py seed_permissions)')
             return None
