@@ -94,11 +94,29 @@ in 30-day windows by submission date from `TAX_ETA_HISTORY_START` (2022-06-01), 
 in one-day windows by **issue date** from `TAX_ETA_HISTORY_RECEIPTS_START` (2025-01-01 — ETA holds none earlier), 100 a
 page, ETA's 3000-per-query cap → a longer window splits in halves, a single day stays `too_big`. Each window keeps ETA's
 count beside ours; "no results" = loaded 0; unreachable → the window keeps its state and the reason goes to
-`EtaHistoryState`. Daily top-up re-reads 30 days of documents and 14 days of receipts (Invoicer uploads late, in bursts).
+`EtaHistoryState`. Daily top-up re-reads 30 days of documents and 35 days of receipts (Invoicer uploads late, in
+bursts around the 5th–7th of the month, up to 29 days after the sale — measured 2026-11-15; a loaded window is never
+asked again, so the top-up is the only way a late receipt reaches the mirror).
 One round per system at a time (advisory lock); 401/403 stops the round. Jobs `eta_history_backfill` (15 min) and
 `eta_history_topup` (04:30) run only for systems whose `TAX_ETA_READ_<SYSTEM>_ENABLED` is on. Progress: Settings →
 «سجل المصلحة — التحميل», freshness domains `eta_history_preprod` / `eta_history_production`.
 `manage.py eta_history --system production --plan --step 3 --topup --retry-failed`.
+
+### Receipts reconciliation (SOFTECH ↔ ETA)
+
+`eta_recon.reconcile_day` matches every SOFTECH sale (115) and return (30) of a branch-day to ETA's receipt by
+(branch's tills, kind, number = docnumber, Cairo day), one outcome each (`EtaReconLine`), and lists ETA receipts with no
+sale as `eta_only`. The daily job (05:15) recomputes the last 35 days (`RECENT_DAYS`, same span as the top-up). Each line
+may carry a reason (`REASONS`), decided only from SOFTECH lines and ETA's copy:
+
+| Reason | Rule |
+|---|---|
+| `all_uncoded` / `some_uncoded` | Missing at ETA; all / some of its items have no ETA code (Invoicer leaves those lines off, and sends no receipt with no coded line). |
+| `uncoded_lines` | Amount differs by exactly the items with no ETA code (0.06 tolerance). |
+| `till_silent` | Missing at ETA, no uncoded item, and the branch's tills sent under half of that day's receipt sales (an Invoicer outage: March 2025 start, 12–14 Aug and 9–13 Nov 2026). |
+| `eta_other_day` | Not on its own day, but one receipt on the day before or after has the same till, kind, number and amount (0.05), and no SOFTECH sale of its own that day: a sale around midnight. It matches, and that receipt is not listed as `eta_only` on its day. |
+
+Items with no ETA code are totalled per day (`EtaReconUncodedItem`) and ranked by value on the screen («المطابقة»).
 
 ### Where a branch's sending starts
 

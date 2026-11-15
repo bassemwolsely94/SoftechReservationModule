@@ -40,6 +40,14 @@ class FakeSoftech:
             out.append({'doccode': d, 'docnumber': str(n), 'total': Decimal(str(t)), 'channel': ch, 'lines': lines})
         return out
 
+    def neighbours(self, branch, day):
+        """Headers of the day before and after: (doccode, docnumber) -> {day, total, channel}."""
+        out = {}
+        for other in (day - dt.timedelta(days=1), day + dt.timedelta(days=1)):
+            for d, n, t, ch, *_rest in self.days.get((branch, other), []):
+                out[(d, str(n))] = {'day': other, 'total': Decimal(str(t)), 'channel': ch}
+        return out
+
     def find(self, numbers):
         """(doccode, docnumber, day) -> branch, for learning which branch a device belongs to."""
         out = {}
@@ -53,8 +61,9 @@ class ReconTests(TestCase):
 
     def setUp(self):
         self.softech = FakeSoftech()
-        for name in ('_softech_rows', '_softech_find'):
-            p = mock.patch.object(eta_recon, name, getattr(self.softech, 'rows' if name == '_softech_rows' else 'find'))
+        for name, fake in (('_softech_rows', self.softech.rows), ('_softech_find', self.softech.find),
+                           ('_softech_neighbours', self.softech.neighbours)):
+            p = mock.patch.object(eta_recon, name, fake)
             p.start()
             self.addCleanup(p.stop)
         from apps.branches.models import Branch
@@ -220,7 +229,9 @@ class ReconReasonTests(ReconTests):
         self.assertEqual(EtaReconUncodedItem.objects.count(), 2)
 
     def test_an_item_coded_later_stops_counting_on_the_next_recompute(self):
-        self.softech.days[('150', DAY)] = [('115', 1, 20, 'C', [('X', 1, 20)])]
+        self.softech.days[('150', DAY)] = [('115', 1, 20, 'C', [('X', 1, 20)]), ('115', 2, 30, 'C'), ('115', 3, 40, 'C')]
+        _eta(2, 30)
+        _eta(3, 40)                                        # a normal day: the tills sent
         eta_recon.reconcile_day('production', '150', DAY)
         TaxItemProfile.objects.filter(softech_itemcode='X').update(eta_code='EG-1-X')
         eta_recon.reconcile_day('production', '150', DAY)
@@ -234,6 +245,118 @@ class ReconReasonTests(ReconTests):
         self.assertEqual([(r['itemcode'], r['value'], r['docs']) for r in rows], [('X', Decimal('110.00'), 3), ('DLV', Decimal('90.00'), 9)])
         self.assertEqual(rows[0]['last_day'], DAY + dt.timedelta(days=1))
         self.assertEqual([r['itemcode'] for r in eta_recon.uncoded_items('production', branch='130')], ['DLV'])
+
+
+class ReconOtherDayAndSilentTests(ReconTests):
+    """A sale ETA dated a day off (around midnight) matches; a day the tills barely sent explains what is missing."""
+
+    NEXT = DAY + dt.timedelta(days=1)
+    BEFORE = DAY - dt.timedelta(days=1)
+
+    def _line(self, number, day=DAY):
+        return EtaReconLine.objects.get(system='production', day=day, docnumber=str(number))
+
+    def test_a_sale_after_midnight_matches_the_receipt_on_the_next_day(self):
+        self.softech.days[('150', DAY)] = [('115', 1, 20, 'C'), ('115', 2, 70, 'C')]
+        _eta(1, 20)
+        _eta(2, 70, when=_at(self.NEXT, 0, 7))
+        eta_recon.reconcile_day('production', '150', DAY)
+        line = self._line(2)
+        self.assertEqual((line.outcome, line.reason, line.eta_total), ('matched', 'eta_other_day', Decimal('70')))
+        # on its own day the receipt is the sale's, not an «ETA only» receipt
+        self.softech.days[('150', self.NEXT)] = [('115', 3, 15, 'C')]
+        _eta(3, 15, when=_at(self.NEXT, 9))
+        eta_recon.reconcile_day('production', '150', self.NEXT)
+        self.assertEqual(set(EtaReconLine.objects.filter(day=self.NEXT).values_list('docnumber', 'outcome')), {('3', 'matched')})
+
+    def test_a_receipt_dated_the_day_before_matches_too(self):
+        self.softech.days[('150', DAY)] = [('115', 1, 20, 'C'), ('115', 2, 70, 'C')]
+        _eta(1, 20)
+        _eta(2, 70, when=_at(self.BEFORE, 23, 50))
+        eta_recon.reconcile_day('production', '150', DAY)
+        self.assertEqual((self._line(2).outcome, self._line(2).reason), ('matched', 'eta_other_day'))
+
+    def test_another_amount_is_not_claimed(self):
+        self.softech.days[('150', DAY)] = [('115', 1, 20, 'C'), ('115', 2, 70, 'C')]
+        _eta(1, 20)
+        _eta(2, 71, when=_at(self.NEXT, 0, 7))
+        eta_recon.reconcile_day('production', '150', DAY)
+        self.assertEqual(self._line(2).outcome, 'missing_at_eta')
+        self.assertNotEqual(self._line(2).reason, 'eta_other_day')
+        self.softech.days[('150', self.NEXT)] = [('115', 3, 15, 'C')]
+        _eta(3, 15, when=_at(self.NEXT, 9))
+        eta_recon.reconcile_day('production', '150', self.NEXT)
+        self.assertEqual(self._line(2, self.NEXT).outcome, 'eta_only')
+
+    def test_a_receipt_of_a_sale_on_its_own_day_is_never_taken(self):
+        # number 2 is a sale on both days (another sequence wrapped): the next day's receipt belongs to the next day
+        self.softech.days[('150', DAY)] = [('115', 1, 20, 'C'), ('115', 2, 70, 'C')]
+        self.softech.days[('150', self.NEXT)] = [('115', 2, 70, 'C')]
+        _eta(1, 20)
+        _eta(2, 70, when=_at(self.NEXT, 0, 7))
+        eta_recon.reconcile_day('production', '150', DAY)
+        eta_recon.reconcile_day('production', '150', self.NEXT)
+        self.assertEqual(self._line(2).outcome, 'missing_at_eta')
+        self.assertEqual((self._line(2, self.NEXT).outcome, self._line(2, self.NEXT).reason), ('matched', ''))
+
+    def test_two_receipts_on_the_other_day_are_not_guessed_between(self):
+        self.softech.days[('150', DAY)] = [('115', 1, 20, 'C'), ('115', 2, 70, 'C')]
+        _eta(1, 20)
+        _eta(2, 70, when=_at(self.NEXT, 0, 7), uuid='A')
+        _eta(2, 70, when=_at(self.NEXT, 0, 9), uuid='B')
+        eta_recon.reconcile_day('production', '150', DAY)
+        self.assertEqual(self._line(2).outcome, 'missing_at_eta')
+
+    def test_a_by_invoice_sale_never_claims_a_receipt(self):
+        TaxChannelRule.objects.create(ptclassifcode='11', mode=TaxChannelRule.MODE_INVOICE)
+        self.softech.days[('150', DAY)] = [('115', 1, 20, 'C'), ('115', 2, 70, '11')]
+        _eta(1, 20)
+        _eta(2, 70, when=_at(self.NEXT, 0, 7))
+        eta_recon.reconcile_day('production', '150', DAY)
+        self.assertEqual(self._line(2).outcome, 'by_invoice')
+        eta_recon.reconcile_day('production', '150', self.NEXT)
+        self.assertEqual(self._line(2, self.NEXT).outcome, 'eta_only')
+
+    def test_a_day_the_tills_barely_sent_explains_what_is_missing(self):
+        self.softech.days[('150', DAY)] = [('115', n, 10, 'C') for n in range(1, 5)]
+        _eta(1, 10)                                        # 1 of 4 sent: under half
+        eta_recon.reconcile_day('production', '150', DAY)
+        self.assertEqual({self._line(n).reason for n in (2, 3, 4)}, {'till_silent'})
+        self.assertEqual(self._line(1).reason, '')
+
+    def test_on_a_normal_day_a_missing_sale_stays_unexplained(self):
+        self.softech.days[('150', DAY)] = [('115', n, 10, 'C') for n in range(1, 5)]
+        for n in (1, 2, 3):
+            _eta(n, 10)
+        eta_recon.reconcile_day('production', '150', DAY)
+        self.assertEqual((self._line(4).outcome, self._line(4).reason), ('missing_at_eta', ''))
+
+    def test_an_uncoded_sale_keeps_its_own_reason_on_a_silent_day(self):
+        self.softech.days[('150', DAY)] = [('115', 1, 10, 'C', [('DLV', 10, 10)]), ('115', 2, 10, 'C')]
+        eta_recon.reconcile_day('production', '150', DAY)
+        self.assertEqual((self._line(1).reason, self._line(2).reason), ('all_uncoded', 'till_silent'))
+
+    def test_the_summary_counts_the_new_reasons(self):
+        self.softech.days[('150', DAY)] = [('115', n, 10, 'C') for n in range(1, 5)] + [('115', 9, 70, 'C')]
+        _eta(9, 70, when=_at(self.NEXT, 0, 7))
+        eta_recon.reconcile_day('production', '150', DAY)
+        row = eta_recon.summary('production')[0]
+        self.assertEqual(row['reasons'], {'till_silent': 4, 'eta_other_day': 1})
+
+
+class SoftechNeighboursReadTests(TestCase):
+
+    def test_reads_the_day_before_and_after_once(self):
+        cur = mock.Mock()
+        cur.fetchall.return_value = [('115', 716503.0, 70.0, '91 ', dt.datetime(2026, 11, 6)), ('30 ', '22916', 5.0, None, '2026-11-04')]
+        conn = mock.Mock()
+        conn.cursor.return_value = cur
+        with mock.patch.object(eta_recon, '_connect', return_value=conn):
+            got = eta_recon._softech_neighbours('150', DAY)
+        conn.close.assert_called_once()
+        self.assertEqual(cur.execute.call_args[0][1], ('150', '2026-11-04', '2026-11-06'))
+        self.assertEqual(got[('115', '716503')], {'day': dt.date(2026, 11, 6), 'total': Decimal('70.0'), 'channel': '91'})
+        self.assertEqual(got[('30', '22916')]['day'], dt.date(2026, 11, 4))
 
 
 class SoftechLinesReadTests(TestCase):

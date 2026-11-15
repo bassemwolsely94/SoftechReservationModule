@@ -519,7 +519,7 @@ describe('SOFTECH ↔ ETA reconciliation', () => {
     api.historyDocuments.mockResolvedValue({ data: { count: 0, page: 1, pages: 1, total_amount: null, rows: [] } })
     api.reconSummary.mockResolvedValue({ data: { last_run_at: null, last_error: '', outcomes: [], devices: [],
       rows: [{ branch: '150', month: '2026-11', matched: 120, amount_differs: 0, missing_at_eta: 3, eta_only: 0, not_valid: 0, duplicate: 0, by_invoice: 0,
-        softech_total: '1000.00', eta_total: '990.00', reasons: { all_uncoded: 2 } }] } })
+        softech_total: '1000.00', eta_total: '990.00', reasons: { all_uncoded: 2, till_silent: 1, eta_other_day: 4 } }] } })
     api.reconLines.mockResolvedValue({ data: { count: 1, page: 1, pages: 1, rows: [{ id: 1, day: '2026-11-05', doccode: '115', docnumber: '716999',
       softech_total: '50.00', eta_total: null, eta_status: '', eta_count: 0, reason: 'all_uncoded', uncoded_total: '50.00' }] } })
     api.reconUncoded.mockResolvedValue({ data: { count: 1, page: 1, pages: 1, total_value: '879.00',
@@ -527,6 +527,8 @@ describe('SOFTECH ↔ ETA reconciliation', () => {
     show(<HistoryTab me={ME} />)
     fireEvent.click(await screen.findByText('المطابقة'))
     expect(await screen.findByText('منها 2 بلا كود')).toBeTruthy()
+    expect(screen.getByText('منها 1 توقف الإرسال')).toBeTruthy()
+    expect(screen.getByText('منها 4 في يوم مجاور')).toBeTruthy()
     fireEvent.click(await screen.findByText('3'))
     expect(await screen.findByRole('cell', { name: 'كل أصنافه بلا كود مصلحة' })).toBeTruthy()
     fireEvent.change(screen.getByLabelText('السبب'), { target: { value: 'all_uncoded' } })

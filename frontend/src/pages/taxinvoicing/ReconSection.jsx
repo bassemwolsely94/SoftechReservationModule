@@ -17,6 +17,7 @@ export const OUTCOME_LABELS = {
 // why a line differs, decided by the server from the SOFTECH lines: items with no ETA code are left off receipts
 export const REASON_LABELS = {
   all_uncoded: 'كل أصنافه بلا كود مصلحة', uncoded_lines: 'الفرق = أصناف بلا كود مصلحة', some_uncoded: 'بعض أصنافه بلا كود مصلحة',
+  till_silent: 'الجهاز لم يرسل أغلب إيصالات اليوم', eta_other_day: 'المصلحة سجلته في يوم مجاور',
 }
 const CODING_LABELS = { approved: 'كود معتمد', missing: 'بدون كود', pending: 'قيد الاعتماد', rejected: 'كود مرفوض' }
 const REQUEST_LABELS = {
@@ -94,11 +95,17 @@ function Lines({ system, pick }) {
   )
 }
 
+// the notes under a count: how many of them a known cause explains
 function explained(row, outcome) {
   const r = row.reasons || {}
-  if (outcome === 'missing_at_eta') return r.all_uncoded || 0
-  if (outcome === 'amount_differs') return r.uncoded_lines || 0
-  return 0
+  const out = []
+  if (outcome === 'missing_at_eta') {
+    if (r.all_uncoded) out.push({ n: r.all_uncoded, text: 'بلا كود', title: 'كل أصنافه بلا كود مصلحة' })
+    if (r.till_silent) out.push({ n: r.till_silent, text: 'توقف الإرسال', title: 'الجهاز لم يرسل أغلب إيصالات ذلك اليوم' })
+  }
+  if (outcome === 'amount_differs' && r.uncoded_lines) out.push({ n: r.uncoded_lines, text: 'بلا كود', title: 'الفرق = أصناف بلا كود مصلحة' })
+  if (outcome === 'matched' && r.eta_other_day) out.push({ n: r.eta_other_day, text: 'في يوم مجاور', title: 'المصلحة سجلته قبل أو بعد منتصف الليل' })
+  return out
 }
 
 function Uncoded({ system, branches }) {
@@ -193,7 +200,7 @@ export default function ReconSection({ system, me }) {
         {me?.can_edit && (
           <>
             <Btn disabled={act.pending} data-tour="tax-invoicing-main-recon-refresh"
-              onClick={() => act.run(() => taxInvoicingApi.reconRefresh({ system }), 'بدأ الحساب لآخر 30 يوماً في الخلفية')}>إعادة حساب آخر 30 يوماً</Btn>
+              onClick={() => act.run(() => taxInvoicingApi.reconRefresh({ system }), 'بدأ الحساب لآخر 35 يوماً في الخلفية')}>إعادة حساب آخر 35 يوماً</Btn>
             <Btn disabled={act.pending}
               onClick={() => act.run(() => taxInvoicingApi.reconRefresh({ system, months: 24 }), 'بدأ حساب كل السجل في الخلفية؛ قد يستغرق وقتاً')}>حساب كل السجل</Btn>
           </>
@@ -224,9 +231,9 @@ export default function ReconSection({ system, me }) {
                         <>
                           <button type="button" className={`underline ${['matched', 'by_invoice'].includes(o) ? 'text-gray-700' : 'text-red-700 font-bold'}`}
                             onClick={() => setPick({ branch: r.branch, month: r.month, outcome: o })}>{fmtInt(r[o])}</button>
-                          {explained(r, o) > 0 && (
-                            <div className="text-[11px] text-gray-500" title="بسبب أصناف بلا كود مصلحة">منها {fmtInt(explained(r, o))} بلا كود</div>
-                          )}
+                          {explained(r, o).map(x => (
+                            <div key={x.text} className="text-[11px] text-gray-500" title={x.title}>منها {fmtInt(x.n)} {x.text}</div>
+                          ))}
                         </>
                       ) : <span className="text-gray-300">0</span>}
                     </td>
