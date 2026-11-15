@@ -167,7 +167,12 @@ def _build_audience_qs(target_filter: dict):
         )
         qs = qs.filter(id__in=bought_item_ids)
 
-    return qs
+    # P-05 + B7 (one rule, apps/customers/consent.py): only customers who said yes to offers — to
+    # health-targeted offers when the audience picks a health condition — and never closed / deceased /
+    # entity / merged codes. The dispatcher applies the same rule.
+    from apps.customers import consent
+    health = bool(has_condition or has_conditions or chronic_category)
+    return consent.filter_allowed(qs, consent.MARKETING_HEALTH if health else consent.MARKETING)
 
 
 def _queue_messages(campaign: WhatsAppCampaign):

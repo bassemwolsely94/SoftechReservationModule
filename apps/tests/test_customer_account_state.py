@@ -150,6 +150,9 @@ class CampaignAudienceTests(TestCase):
         cust('K5', softech_deceased=True, softech_status='1')
         cust('K6', softech_locked=True)
         cust('K7', softech_status='0', merged_into_pic='K1')
+        from apps.customers import consent
+        for c in Customer.objects.filter(softech_pic__startswith='K'):        # all said yes to offers (P-05)
+            consent.record(c, consent.MARKETING, True, source='counter')
         camp = WhatsAppCampaign.objects.create(name='t', message_template='x', target_filter={})
         got = set(CampaignDispatcher(camp)._resolve_audience().values_list('softech_pic', flat=True))
         self.assertEqual(got & {f'K{i}' for i in range(1, 8)}, {ok.softech_pic, unset.softech_pic})

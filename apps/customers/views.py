@@ -142,6 +142,32 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
     # ── GET /api/customers/{id}/purchases/ ────────────────────────────────────
 
+    @action(detail=True, methods=['get', 'post'], url_path='consent')
+    def consent(self, request, pk=None):
+        """GET / POST /api/customers/{id}/consent/ (P-05): the customer's contact decisions and what each
+        allows (apps/customers/consent.py). POST {purpose, granted, channel?, source?, note?} records one
+        decision — needs customers edit."""
+        from . import consent as C
+        customer = self.get_object()
+        channel = (request.data.get('channel') if request.method == 'POST'
+                   else request.query_params.get('channel')) or 'whatsapp'
+        if channel not in ('whatsapp', 'call', 'sms'):
+            return Response({'detail': 'channel: whatsapp | call | sms'}, status=status.HTTP_400_BAD_REQUEST)
+        if request.method == 'POST':
+            from core.permissions import matrix_allows
+            profile = _profile(request)
+            if not matrix_allows(profile, 'customers', 'edit'):
+                return Response({'detail': 'ليس لديك صلاحية لهذا الإجراء'}, status=status.HTTP_403_FORBIDDEN)
+            purpose, granted = request.data.get('purpose'), request.data.get('granted')
+            source = request.data.get('source') or 'counter'
+            if purpose not in C.PURPOSES or not isinstance(granted, bool) or source not in ('counter', 'call', 'staff'):
+                return Response({'detail': 'purpose: service | refill | marketing | marketing_health; '
+                                           'granted: true | false; source: counter | call | staff'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            C.record(customer, purpose, granted, channel=channel, source=source, user=profile,
+                     note=str(request.data.get('note') or ''))
+        return Response({'customer': customer.pk, 'channel': channel, 'purposes': C.summary_for(customer, channel)})
+
     @action(detail=True, methods=['get'])
     def purchases(self, request, pk=None):
         """

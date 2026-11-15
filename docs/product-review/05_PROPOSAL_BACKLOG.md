@@ -273,6 +273,8 @@ scan)?
 ---
 
 ### P-05 · Customer contact consent & one outbound suppression rule (PDPL)
+> **Status 2026-11-15: minimal version BUILT** (owner approved 2026-11-11) — see
+> `docs/architecture/37_CONTACT_CONSENT.md`. Counsel confirmation still open.
 **Module(s):** customers, campaigns, followups (refill reminders), demand (restock WhatsApp), whatsapp, omni ·
 **Type:** new capability (small) + simplify
 

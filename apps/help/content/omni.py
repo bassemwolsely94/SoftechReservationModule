@@ -858,7 +858,11 @@ SCREENS = [
              'warn': T('الزرار مقفول من غير سبب. اكتب سبب واضح — المنشئ هيشتغل عليه.', 'Locked without a reason. Write a clear one — the creator will work from it.'),
              'open_hint': T('اضغط «❌ رفض» على حملة «بانتظار الموافقة».', 'Press "❌ Reject" on a "Pending approval" campaign.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('المجدولة بتستنى ميعادها قبل ما تدخل طابور واتساب، والإلغاء بيشيل الرسائل اللي لسه ماتبعتتش.', 'A scheduled campaign now waits for its time before entering the WhatsApp queue, and cancelling removes unsent messages.'),
+        'tips': [
+            T('الحملة بتوصل بس للعملاء اللي وافقوا على «العروض» — ولو الحملة مستهدفة حالة صحية لازم موافقة «عروض حسب الحالة». الحسابات المغلقة والمتوفين والجهات والأكواد المدموجة مستبعدة دايمًا، فالوصول المقدّر ممكن يكون أقل من الشريحة.',
+              'A campaign only reaches customers who agreed to "Offers" — a campaign that targets a health condition needs "Health-targeted offers" consent. Closed, deceased, entity and merged codes are always left out, so the estimated reach can be lower than the segment.'),
+        ],
+        'updated': '2026-11-15',
+        'change_note': T('موافقة التواصل (P-05): تذكيرات الصرف والعروض محتاجة موافقة العميل', "Contact consent (P-05): refill reminders and offers need the customer's yes"),
     },
 ]

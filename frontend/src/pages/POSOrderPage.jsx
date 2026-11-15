@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import usePosHotkeys from '../hooks/usePosHotkeys'
 import CustomerMomentBar from '../components/CustomerMomentBar'
+import ConsentChips from '../components/ConsentChips'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import CallPopBanner from '../components/CallPopBanner'
 import OffersPanel from '../components/OffersPanel'
@@ -768,7 +769,8 @@ function ItemsTab({ P, onOpenOcr, onOpenImages, onOpenHistory, onOpenUnits, onAl
       <div className="shrink-0 px-2 pt-2">
         {custId && (
           <div className="mb-2 flex items-start gap-2">
-            <div className="flex-1"><CustomerMomentBar customerId={custId} branchId={P.branch} /></div>
+            <div className="flex-1 space-y-1"><CustomerMomentBar customerId={custId} branchId={P.branch} />
+              <ConsentChips customerId={custId} /></div>
             {onOpenHistory && (
               <button data-tour="pos-order-history" onClick={onOpenHistory} title="سجل معاملات العميل السابقة (كل الفواتير)"
                       className="shrink-0 self-center text-[11px] px-2 py-1 rounded border border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-50 whitespace-nowrap">📜 السجل</button>

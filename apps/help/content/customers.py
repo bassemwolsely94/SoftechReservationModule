@@ -493,8 +493,12 @@ SCREENS = [
              'when': T('اكتبها واضحة — الصيدلي بيشوفها وهو بيصرف.', 'Write them clearly — the pharmacist sees them when dispensing.'),
              'open_hint': T('بعد «تعديل» في كارت «أمراض مزمنة».', 'After "Edit" on the "Chronic conditions" card.')},
         ],
-        'updated': '2026-11-03',
-        'change_note': T('الجدول الزمني يعرض كل مبيعات العميل بالـPIC من المزامنة اليومية', 'The timeline shows all of the customer\'s sales by PIC from the daily sync'),
+        'tips': [
+            T('موافقة التواصل: تذكيرات الصرف، العروض، العروض حسب الحالة الصحية، ورسائل الخدمة. التذكيرات والعروض محتاجة «✓»؛ رسائل الخدمة (طلبك جاهز، الصنف توفر) مسموحة إلا لو العميل رفض. لو العميل بعت «إيقاف» على واتساب بيتسجّل رفض لكل الأنواع تلقائيًا.',
+              'Contact consent: refill reminders, offers, health-targeted offers and service messages. Reminders and offers need a "✓"; service messages (order ready, item back) are allowed unless the customer refused. A customer who sends "STOP" on WhatsApp is recorded as refusing everything, automatically.'),
+        ],
+        'updated': '2026-11-15',
+        'change_note': T('موافقة التواصل (P-05): تذكيرات الصرف والعروض محتاجة موافقة العميل', "Contact consent (P-05): refill reminders and offers need the customer's yes"),
     },
     {
         'key': 'customers.merge',

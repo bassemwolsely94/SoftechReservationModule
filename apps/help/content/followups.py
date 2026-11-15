@@ -530,7 +530,11 @@ SCREENS = [
                  'بيشغّل دفعة النهارده فوراً بدل ما تستنى الميعاد التلقائي، وبيظهر بعدها «أُرسل X · فشل Y».\n• لو الإرسال متوقف بيقولك بس كان هيبعت كام تذكير — مفيش رسالة بتطلع.\n• الزر بيظهر للمدير والمشرف بس.',
                  'It runs today\'s batch right away instead of waiting for the automatic time, then shows "sent X · failed Y".\n• If sending is off, it only tells you how many reminders it would have sent — no message goes out.\n• The button shows for admins and supervisors only.')},
         ],
-        'updated': '2026-10-31',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'tips': [
+            T('التذكير بيروح بس للعميل اللي وافق على «تذكيرات الصرف» (من نقطة البيع أو ملف العميل). سبب الاستبعاد «لم يوافق العميل على تذكيرات الصرف بعد» معناه اسأله المرة الجاية.',
+              'A reminder only goes to a customer who agreed to "Refill reminders" (at the POS or on the customer page). The skip reason "customer has not agreed to refill reminders yet" means: ask them next time.'),
+        ],
+        'updated': '2026-11-15',
+        'change_note': T('موافقة التواصل (P-05): تذكيرات الصرف والعروض محتاجة موافقة العميل', "Contact consent (P-05): refill reminders and offers need the customer's yes"),
     },
 ]

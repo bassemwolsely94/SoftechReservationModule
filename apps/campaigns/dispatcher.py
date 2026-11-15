@@ -130,13 +130,11 @@ class CampaignDispatcher:
           segment, chronic_category, last_purchase_days_max,
           last_purchase_days_min, item_id, branch_id, min_ltv
         """
-        from apps.customers.account_state import outreach_q
+        from apps.customers import consent
         from apps.customers.models import Customer
 
         f = self.campaign.target_filter or {}
-        # B7: closed / deceased / entity / merged SOFTECH codes are never messaged (account_state.outreach_q).
-        qs = (Customer.objects.filter(is_guest=False, is_account_placeholder=False).exclude(phone='')
-              .filter(outreach_q()))
+        qs = Customer.objects.filter(is_guest=False, is_account_placeholder=False).exclude(phone='')
 
         if f.get('segment'):
             segments = f['segment'] if isinstance(f['segment'], list) else [f['segment']]
@@ -170,6 +168,11 @@ class CampaignDispatcher:
                 ltv=Coalesce(Sum('purchase_history__total_amount'), Decimal('0'))
             ).filter(ltv__gte=Decimal(str(f['min_ltv'])))
 
+        # P-05 + B7: only customers who said yes to offers (to health-targeted offers when the campaign picks a
+        # chronic condition), never closed / deceased / entity / merged codes — apps/customers/consent.py.
+        purpose = (consent.MARKETING_HEALTH if (f.get('chronic_category') or f.get('has_condition') or f.get('has_conditions'))
+                   else consent.MARKETING)
+        qs = consent.filter_allowed(qs, purpose)
         return qs.select_related('preferred_branch')[:10_000]
 
 

@@ -25,6 +25,7 @@ import useHelpTab from '../help/useHelpTab'
 import CounselSendButton from '../counselling/CounselSendButton'
 import useCounsellingStatus from '../counselling/useCounsellingStatus'
 import { fa } from '../utils/flowArrow'
+import ConsentChips from '../components/ConsentChips'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -1544,6 +1545,7 @@ export default function CustomerDetailPage() {
           </div>
 
           {/* SOFTECH account state (HQ mirror) — decided server-side, shown here */}
+          <ConsentChips customerId={customer.id} source="staff" purposes={['refill', 'marketing', 'marketing_health', 'service']} />
           {customer.account_state && (customer.account_state.code !== 'active' || !customer.account_state.points) && (
             <div data-tour="customers-detail-account-state" className={`rounded-xl px-3 py-2 text-sm border ${customer.account_state.blocked
               ? 'bg-red-50 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>

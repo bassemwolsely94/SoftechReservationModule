@@ -5,12 +5,12 @@ Daily: pick refill / chronic follow-up tasks that fall due soon and send ONE app
 (`refill_reminder`, Arabic) per customer with three quick replies:
     جهّزوا طلبي في الفرع  → a `cc_whatsapp` pickup Reservation at the branch
     توصيل للمنزل          → a `cc_whatsapp` delivery Reservation
-    إيقاف التذكيرات       → RefillReminderOptOut (never reminded again)
+    إيقاف التذكيرات       → refill consent withdrawn (apps/customers/consent.py; never reminded again)
 A pharmacist confirms the items before anything is prepared — no item is dispensed or
 substituted automatically, and the message never names the medicine (health privacy).
 
 Deterministic eligibility (every skip has a reason): task open (pending / called), due within
-[today − OVERDUE_DAYS, today + DAYS_AHEAD], customer with a usable phone, not opted out, not
+[today − OVERDUE_DAYS, today + DAYS_AHEAD], customer with a usable phone, a recorded YES to refill reminders (P-05 consent), not
 reminded within MIN_GAP_DAYS, branch able to transact, item not known out-of-stock at that branch;
 one message per customer per run; DAILY_CAP per run.
 
@@ -40,6 +40,7 @@ AR_MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو',
              'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
 SKIP_LABELS = {
     'no_phone': 'لا يوجد رقم صالح', 'opted_out': 'أوقف التذكيرات', 'recent_reminder': 'ذُكّر مؤخراً',
+    'no_consent': 'لم يوافق العميل على تذكيرات الصرف بعد',
     'no_branch': 'لا يوجد فرع متاح', 'out_of_stock': 'الصنف غير متوفر بالفرع',
     'same_customer': 'تذكير واحد لكل عميل', 'already_sent': 'أُرسل له تذكير لهذه المهمة',
     'over_cap': 'تجاوز الحد اليومي',
@@ -106,8 +107,8 @@ def _out_of_stock(task, branch) -> bool:
 # ── who would be messaged ─────────────────────────────────────────────────────
 def candidates(today=None, cap=None):
     """Returns (to_send: [dict], skipped: Counter, skipped_rows: [dict]) — pure read."""
-    from apps.customers import account_state
-    from .models import FollowUpTask, RefillReminder, RefillReminderOptOut
+    from apps.customers import account_state, consent
+    from .models import FollowUpTask, RefillReminder
     today = today or timezone.localdate()
     cap = int(cap or _cfg('DAILY_CAP', 300))
     lo = today - dt.timedelta(days=int(_cfg('OVERDUE_DAYS', 2)))
@@ -120,7 +121,7 @@ def candidates(today=None, cap=None):
                      customer__isnull=False, phone_invalid=False)
              .select_related('customer', 'customer__preferred_branch', 'branch', 'item')
              .order_by('due_date', '-priority_score', 'pk'))
-    opted = set(RefillReminderOptOut.objects.values_list('customer_id', flat=True))
+    agreed = consent.decisions({t.customer_id for t in tasks}, consent.REFILL)   # P-05: opt-in
     recent = set(RefillReminder.objects.filter(status__in=['sent', 'replied'], sent_at__gte=gap_from)
                  .values_list('customer_id', flat=True))
     existing = {r['task_id']: r for r in RefillReminder.objects.filter(
@@ -143,8 +144,11 @@ def candidates(today=None, cap=None):
         if not account_state.state(t.customer)['reminders']:     # closed / deceased / entity (B7)
             skip(t, 'account_state')
             continue
-        if t.customer_id in opted:
+        if agreed.get(t.customer_id) is False:
             skip(t, 'opted_out')
+            continue
+        if agreed.get(t.customer_id) is not True:
+            skip(t, 'no_consent')
             continue
         if t.customer_id in recent:
             skip(t, 'recent_reminder')
@@ -287,7 +291,8 @@ def _create_reservation(rem, choice):
 def handle_button_reply(*, wa_id, payload, context_wamid='', account=None) -> str:
     """Process a quick-reply tap. Idempotent: the first answer wins, repeats are ignored.
     Returns what happened (for logs/tests)."""
-    from .models import RefillReminder as RR, RefillReminderOptOut
+    from apps.customers import consent
+    from .models import RefillReminder as RR
     m = _PAYLOAD_RE.match(payload or '')
     if not m:
         return 'not_ours'
@@ -305,8 +310,9 @@ def handle_button_reply(*, wa_id, payload, context_wamid='', account=None) -> st
         from apps.customers import account_state
         blocked = account_state.state(rem.customer)['blocked']    # closed / deceased since the send (B7)
         if choice == RR.CHOICE_STOP:
-            RefillReminderOptOut.objects.get_or_create(customer=rem.customer,
-                                                       defaults={'source': 'whatsapp_button'})
+            for channel in ('whatsapp', 'call'):        # the old opt-out also kept them off call lists
+                consent.record(rem.customer, consent.REFILL, False, channel=channel, source='whatsapp_reply',
+                               note=f'refill reminder #{rem.pk}: stop button')
         elif not blocked:
             rem.reservation = _create_reservation(rem, choice)
         rem.reply_choice, rem.replied_at, rem.status = choice, timezone.now(), RR.STATUS_REPLIED
@@ -329,7 +335,8 @@ def handle_button_reply(*, wa_id, payload, context_wamid='', account=None) -> st
 # ── review screen ─────────────────────────────────────────────────────────────
 def summary(days=30):
     from django.db.models import Count
-    from .models import RefillReminder as RR, RefillReminderOptOut
+    from apps.customers.models import ContactConsent
+    from .models import RefillReminder as RR
     since = timezone.now() - dt.timedelta(days=days)
     qs = RR.objects.filter(created_at__gte=since)
     by_status = dict(qs.values_list('status').annotate(n=Count('id')))
@@ -338,7 +345,17 @@ def summary(days=30):
     return {'days': days, 'by_status': by_status, 'by_choice': by_choice, 'sent': sent,
             'reply_rate': round(100 * by_status.get('replied', 0) / sent, 1) if sent else 0,
             'reservations': qs.exclude(reservation=None).count(),
-            'opt_outs': RefillReminderOptOut.objects.count()}
+            'opt_outs': _refill_withdrawn_count(ContactConsent)}
+
+
+def _refill_withdrawn_count(ContactConsent):
+    """Customers whose current WhatsApp refill decision is "no"."""
+    from django.db.models import OuterRef, Subquery
+    latest = Subquery(ContactConsent.objects.filter(customer=OuterRef('customer'), purpose='refill',
+                                                    channel='whatsapp').order_by('-created_at', '-pk')
+                      .values('pk')[:1])
+    return (ContactConsent.objects.filter(purpose='refill', channel='whatsapp', granted=False)
+            .filter(pk=latest).count())
 
 
 # ── WhatsApp button routing ───────────────────────────────────────────────────

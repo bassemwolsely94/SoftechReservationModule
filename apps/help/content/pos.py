@@ -255,6 +255,8 @@ SCREENS = [
         'tabs': _TABS,
         'steps': _STEPS,
         'tips': _TIPS + [
+            T('موافقة التواصل تحت شريط العميل: اسأل العميل مرة واحدة «تحب توصلك تذكيرات الصرف؟ والعروض؟» واضغط الشارة — ✓ وافق، ✕ رفض، ؟ لسه ما اتسألش. من غير «✓» ما يوصلوش تذكيرات ولا حملات.',
+              'Contact consent under the customer bar: ask once "Would you like refill reminders? And offers?" and tap the chip — ✓ agreed, ✕ refused, ? not asked yet. Without "✓" they get no reminders or campaigns.'),
             T('صورة الروشتة اللي بترفعها على الأمر بتتصغّر تلقائيًا (أطول ضلع ٢٠٠٠ بكسل). لو مسحتها أو بدّلتها، القديمة بتتحفظ ٣٠ يومًا قبل ما تتمسح نهائيًا.',
               'A prescription photo you attach to the order is shrunk automatically (longest side 2000 px). If you delete or replace it, the old one is kept 30 days before it is gone for good.'),
         ],
@@ -284,6 +286,11 @@ SCREENS = [
              'more': T(
                  'اختار «نوع العميل» (نقدي، توصيل، تعاقد، تأمين…) وبعدين العميل نفسه (PIC)، أو «📇» لدليل العملاء والبحث أو الإضافة.\n• العميل إجباري في التوصيل وقنوات التعاقد.\n• بعد الاختيار بتظهر نقاطه وتنبيهاته الصحية (حساسية، حمل…) — التنبيه الصحي أهم من أي اقتراح بيع.',
                  'Choose the "Customer type" (cash, delivery, contract, insurance…) then the customer (PIC), or "📇" for the customer directory to search or add.\n• A customer is required for delivery and contract channels.\n• Once chosen, their points and health alerts (allergy, pregnancy…) show — a health alert always beats any sales suggestion.')},
+            {'target': 'customer-consent', 'label': T('موافقة التواصل', 'Contact consent'),
+             'text': T('ضغطة على الشارة تسجّل رد العميل: ✓ وافق، ✕ رفض، ؟ لسه ما اتسألش.',
+                       'A tap on the chip records the customer\'s answer: ✓ agreed, ✕ refused, ? not asked yet.'),
+             'when': T('بتظهر بعد اختيار عميل مسجّل. التذكيرات والعروض ما بتوصلش إلا بـ«✓».',
+                       'Shows once a registered customer is chosen. Reminders and offers only go with a "✓".')},
             {'target': 'pos-order-search', 'label': T('بحث الصنف', 'Item search'),
              'text': T('بالاسم أو الكود أو الباركود (* أو % لأي حروف). كل نتيجة سطر: صورة، مربع كبير برصيد فرعك، الاسم والتركيز، ثم الفروع الأخرى صغيرة.',
                        'By name, code or barcode (* or % = any letters). One line per result: image, a big box with YOUR branch stock, name and strength, then other branches small.'),
@@ -548,8 +555,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('صورة الروشتة بتتصغّر والمحذوفة بتتحفظ ٣٠ يومًا.', 'Prescription photos are shrunk and deleted ones are kept 30 days.'),
+        'updated': '2026-11-15',
+        'change_note': T('موافقة التواصل (P-05): تذكيرات الصرف والعروض محتاجة موافقة العميل', "Contact consent (P-05): refill reminders and offers need the customer's yes"),
     },
     {
         'key': 'pos.mobile',
@@ -775,8 +782,12 @@ SCREENS = [
              'text': T('يضيف الصنف المعلَّم في نتائج البحث للأمر — زي ما تضغط عليه.', 'Adds the highlighted search result to the order — same as tapping it.'),
              'open_hint': T('يظهر بعد ما تختار نتيجة في بحث الأصناف على الموبايل.', 'Appears after you highlight a result in the mobile item search.')},
         ],
-        'updated': '2026-11-03',
-        'change_note': T('«تفريغ الطابور الآن» من مكان لا يسمح بالكتابة في SOFTECH يُرفض ولا يغيّر حالة أي أمر', '"Flush the queue now" from a place that may not write to SOFTECH is refused and changes no order'),
+        'tips': [
+            T('موافقة التواصل تحت شريط العميل: ضغطة واحدة على «تذكيرات الصرف» أو «العروض» تسجّل رد العميل (✓ وافق، ✕ رفض).',
+              'Contact consent under the customer bar: one tap on "Refill reminders" or "Offers" records the customer\'s answer (✓ agreed, ✕ refused).'),
+        ],
+        'updated': '2026-11-15',
+        'change_note': T('موافقة التواصل (P-05): تذكيرات الصرف والعروض محتاجة موافقة العميل', "Contact consent (P-05): refill reminders and offers need the customer's yes"),
     },
     {
         'key': 'pos.exceptions',
