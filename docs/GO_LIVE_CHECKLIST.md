@@ -98,6 +98,10 @@ Claude sessions on the PC are not allowed to SSH to the VPS. Do these in order.
 
 ### Day 0: cutover, in a quiet window after closing (1–2 h)
 
+Print the [cutover day sheet](deploy/2026-11-cutover-day-sheet.md) and tick it as you go. Since 2026-11-15 W4 also
+means: delete `ElRezeiky office start.cmd` from the Windows Startup folder and disable the three `ElRezeiky_*` Task
+Scheduler tasks on the office PC.
+
 **The writer switch-over has no window where two instances can write.** Between W1 and W6 **nobody** writes to SOFTECH; that gap is the safety margin.
 
 | Step | Where | Exactly what | Pass condition |
