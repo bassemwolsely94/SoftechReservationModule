@@ -927,7 +927,7 @@ def push_order(order: SoftechSalesOrder, *, dry_run=True, live=False):
                 pass
 
     order.softech_docnumber = w['docnumber']
-    order.softech_docdate   = timezone.now().date()
+    order.softech_docdate   = timezone.localdate()   # Cairo date, as SOFTECH getdate() (audit S-13)
     order.status            = SoftechSalesOrder.STATUS_PUSHED
     order.erp_executed_at   = timezone.now()
     order.erp_payload       = plan
