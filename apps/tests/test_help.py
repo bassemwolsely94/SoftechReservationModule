@@ -1640,6 +1640,41 @@ class GlossaryApplyTests(TestCase):
         self.t.post('/api/help/glossary/', {'preferred': 'حجز', 'avoid': ['طلب', 'أمر بيع'],
                                             'modules': ['reservations']}, format='json')
 
+    def test_scan_workflow_tour_and_quiz_drafts(self):
+        """Same scan for the training editor: workflow-tour title / summary / step text and
+        explanation, quiz question / options / explanation; module-limited terms follow the
+        tour's or quiz's module; nothing is saved."""
+        from apps.help.models import HelpRevision, HelpTrainingOverride
+        url = '/api/help/glossary/scan/'
+        flow = {'title': {'ar': 'دورة الطلب', 'en': ''}, 'summary': {'ar': 'من الخزنة للتسليم', 'en': ''},
+                'steps': [{'target': 'x', 'text': {'ar': 'افتح الطلب', 'en': ''},
+                           'more': {'ar': 'ادفع في الخزنة. ثم سلّم', 'en': ''}}]}
+        self.assertEqual(self.ph.post(url, {'kind': 'flow', 'key': 'reservations.lifecycle', 'data': flow},
+                                      format='json').status_code, 403)
+        r = self.t.post(url, {'kind': 'flow', 'key': 'reservations.lifecycle', 'data': flow}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual([(i['path'], i['match'], i['replacement']) for i in r.json()['items']], [
+            (['title', 'ar'], 'الطلب', 'الحجز'),
+            (['summary', 'ar'], 'الخزنة', 'الكاشير'),
+            (['steps', 0, 'text', 'ar'], 'الطلب', 'الحجز'),
+            (['steps', 0, 'more', 'ar'], 'الخزنة', 'الكاشير'),
+        ])
+        # «طلب» is only avoided in reservations — a purchasing tour keeps it
+        r = self.t.post(url, {'kind': 'flow', 'key': 'purchasing.cycle', 'data': flow}, format='json')
+        self.assertEqual([i['match'] for i in r.json()['items']], ['الخزنة', 'الخزنة'])
+        quiz = {'questions': [{'q': {'ar': 'فين الخزنة؟', 'en': ''},
+                               'options': [{'ar': 'جنب الباب', 'en': ''}, {'ar': 'ورا الخزنة', 'en': ''}],
+                               'answer': 0, 'explain': {'ar': 'الخزنة جنب الباب', 'en': ''}}]}
+        r = self.t.post(url, {'kind': 'quiz', 'key': 'pos', 'data': quiz}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual([i['path'] for i in r.json()['items']], [
+            ['questions', 0, 'q', 'ar'], ['questions', 0, 'options', 1, 'ar'], ['questions', 0, 'explain', 'ar']])
+        self.assertEqual(self.t.post(url, {'kind': 'flow', 'key': 'nope.x', 'data': flow}, format='json').status_code, 404)
+        self.assertEqual(self.t.post(url, {'kind': 'quiz', 'key': 'nope', 'data': quiz}, format='json').status_code, 404)
+        self.assertEqual(self.t.post(url, {'kind': 'quiz', 'key': 'pos', 'data': []}, format='json').status_code, 400)
+        self.assertFalse(HelpTrainingOverride.objects.exists())
+        self.assertFalse(HelpRevision.objects.exclude(screen_key__startswith='glossary:').exists())
+
     def test_unit_places_and_apply(self):
         from apps.help import notecheck as n
         T = [{'preferred': 'الكاشير', 'avoid': ['الخزنة']}, {'preferred': 'حجز', 'avoid': ['طلب', 'أمر بيع']}]

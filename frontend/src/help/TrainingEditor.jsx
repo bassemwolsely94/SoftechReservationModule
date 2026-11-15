@@ -11,6 +11,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { helpApi } from '../api/client'
 import { TField } from './HelpEditor'
 import NoteHints, { useNoteHints } from './NoteHints'
+import GlossaryApply from './GlossaryApply'
 import { pick } from './text'
 import useRoles from '../hooks/useRoles'
 
@@ -106,6 +107,12 @@ export default function TrainingEditor({ index }) {
             : kind === 'quiz'
             ? <QuizEditor items={draft} onChange={setDraft} />
             : <FlowEditor flow={draft} onChange={setDraft} focusStep={focusStep} />}
+          {kind !== 'path' && (
+            // same «📖 طبّق القاموس» as the screen editor; changes only the draft until «حفظ»
+            <GlossaryApply key={`${kind}:${key}`} target={{ kind, key }}
+                           draft={kind === 'quiz' ? { questions: draft } : draft}
+                           setDraft={kind === 'quiz' ? (d) => setDraft(d.questions) : setDraft} />
+          )}
           <div className="space-y-1 pt-2 border-t border-line">
             <label className="block text-xs font-semibold text-content">
               إيه الجديد للمستخدمين؟ <span className="font-normal text-faint">(سطر واحد، اختياري — {kind === 'flow'
