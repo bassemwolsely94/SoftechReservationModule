@@ -330,6 +330,17 @@ SCREENS = [
              'label': T('تحديث', 'Refresh'),
              'text': T('يعيد تحميل القائمة من الخادم.', 'Reloads the list from the server.'),
              'when': T('بعد استيراد أو تعديل من شاشة أخرى.', 'After an import or a change made on another screen.')},
+            {'target': 'insurance-claims-search-mode',
+             'label': T('مطالبة | روشتة', 'Claim | Receipt'),
+             'text': T('اختار البحث بإيه: «مطالبة» يفلتر الجدول، و«روشتة» يدوّر على رقم روشتة سوفتك في كل المطالبات.',
+                       'Choose what to search: "Claim" filters the table, "Receipt" finds a SOFTECH receipt number across every claim.'),
+             'more': T('الاختيار بيتحفظ على الجهاز ده.
+• «روشتة»: اكتب الرقم كامل واضغط Enter (أو استنى لحظة). بيظهر فوق الجدول كل مطالبة فيها الروشتة دي — نشطة أو مستثناة وسبب الاستثناء — وجت إزاي: مستوردة، إضافة يدوية، أو مزامنة سوفتك.
+• نفس الرقم ممكن يتكرر في فرعين، فكل نتيجة بفرعها.',
+                       'The choice is remembered on this device.
+• "Receipt": type the full number and press Enter (or wait a moment). Every claim holding that receipt shows above the table — active or excluded with the reason — and how it came in: imported, added by hand, or a SOFTECH re-sync.
+• The same number can exist in two branches, so each result shows its branch.'),
+         },
             {'target': 'insurance-claims-search',
              'label': T('بحث', 'Search'),
              'text': T('ابحث برقم المطالبة أو اسم الجهة/الفئة أو رقم سوفتك. * و % للبحث الجزئي.',
@@ -379,13 +390,19 @@ SCREENS = [
              'text': T('يحذف الاستيراد المحلي للمطالبة دي بعد تأكيد. سوفتك ما بيتأثرش وتقدر تستوردها تاني.', "Deletes this claim's local import after a confirmation. SOFTECH is untouched and you can re-import it."),
              'when': T('لمطالبة اتستوردت بالغلط أو بعقد غلط.', 'For a claim imported by mistake or with the wrong contract.'),
              'warn': T('كل مراجعاتك وتعديلاتك واستبعاداتك عليها بتضيع. خلي بالك لو مش مسودة.', 'All your reviews, edits and exclusions on it are lost. Take care if it is not a draft.')},
+            {'target': 'insurance-claims-receipt-results', 'label': T('نتائج بحث الروشتة', 'Receipt search results'),
+             'text': T('كل مطالبة فيها الروشتة: نشطة أو مستثناة وجت إزاي، ومطالبة سوفتك اللي هي فيها. «فتح ↗» يفتح المطالبة على الروشتة.',
+                       'Every claim holding the receipt: active or excluded and how it came in, plus its SOFTECH claim. "Open ↗" opens the claim on that receipt.'),
+             'when': T('لما جهة تسأل عن روشتة، أو تشك إنها اتحسبت مرتين.', 'When a payer asks about a receipt, or you suspect it was billed twice.'),
+             'open_hint': T('اختار «روشتة» واكتب الرقم الأول.', 'Choose "Receipt" and type the number first.')},
             {'target': 'insurance-claims-print-profiles', 'label': T('🖨 تخصيص الطباعة', '🖨 Print setup'),
              'text': T('يفتح قوالب الطباعة: رأس الصفحة والخطوط والعلامة المائية لكل جهة.', 'Opens the print templates: page header, fonts and watermark per payer.'),
              'when': T('قبل أول طباعة لجهة جديدة، أو لو الجهة طلبت شكل مختلف.', 'Before the first print for a new payer, or if the payer asks for another layout.')},
         ],
-        'updated': '2026-11-12',
+        'updated': '2026-11-15',
 
-        'change_note': T('فلاتر الحالة والسنة والعميل والفئة تقبل الآن أكثر من اختيار معاً', 'Status, year, client and category filters now take several choices at once'),
+        'change_note': T('بحث برقم الروشتة: «مطالبة | روشتة» بجانب البحث يبيّن كل مطالبة فيها الروشتة وحالتها فيها',
+                         'Receipt search: "Claim | Receipt" next to the search shows every claim holding a receipt and its state there'),
     },
     {
         'key': 'insurance.claim',

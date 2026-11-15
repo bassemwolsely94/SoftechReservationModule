@@ -2579,6 +2579,9 @@ export const insuranceApi = {
   excludeRx:          (claimId, rxId, data) => api.post(`/insurance/claims/${claimId}/prescriptions/${rxId}/exclude/`, data),
   includeRx:          (claimId, rxId)       => api.delete(`/insurance/claims/${claimId}/prescriptions/${rxId}/exclude/`),
 
+  // «بحث برقم الروشتة» on the claims list — every claim a receipt sits in (read-only)
+  findReceipt:        (docnumber, branch)   => api.get('/insurance/claims/find-receipt/', { params: { docnumber, ...(branch ? { branch } : {}) } }),
+
   // Manual Rx
   lookupRx:           (claimId, docnumber)  => api.get(`/insurance/claims/${claimId}/lookup-rx/`, { params: { docnumber } }),
   addManualRx:        (claimId, data)       => api.post(`/insurance/claims/${claimId}/manual-rx/`, data),

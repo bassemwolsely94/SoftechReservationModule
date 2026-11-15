@@ -11,7 +11,7 @@
  */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
 import DataTable from '../components/DataTable'
 import ClaimFiscalStatus from '../components/ClaimFiscalStatus'
@@ -1751,7 +1751,9 @@ export default function InsuranceClaimDetailPage() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab]       = useState('prescriptions')
   useHelpTab(tab)
-  const [rxFilter, setRxFilter] = useState('')
+  // «فتح ↗» from the claims list's receipt search lands here as ?rx=<receipt no.> → pre-filter الروشتات
+  const [searchParams] = useSearchParams()
+  const [rxFilter, setRxFilter] = useState(() => (searchParams.get('rx') || '').trim())
   const [rxSort, setRxSort] = useState(null)   // shared sort state (null = sequence order)
   const [nameFilterMode, setNameFilterMode] = useState('')   // '' | 'complete' | 'spelling'
   const [selRx, setSelRx] = useState(new Set())              // bulk-select prescription ids
