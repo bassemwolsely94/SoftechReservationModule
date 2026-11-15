@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, parseISO } from 'date-fns'
 import { missedSalesApi } from '../api/client'
+import DataFreshnessBar from '../components/DataFreshnessBar'
 import SortTh from '../components/SortTh'
 import useServerSort from '../hooks/useServerSort'
 import useHelpTab from '../help/useHelpTab'
@@ -102,6 +103,9 @@ export default function MissedSalesPage() {
         <button data-tour="missed-sales-refresh" type="button" onClick={() => refetch()} disabled={isFetching}
                 className="btn-secondary text-sm">{isFetching ? '⏳' : '↻'} تحديث</button>
       </div>
+
+      {/* pos_cancel log is a nightly SOFTECH mirror — show its freshness */}
+      <DataFreshnessBar domains={['pos_cancel']} />
 
       <div data-tour="missed-sales-status" className="flex flex-wrap gap-2">
         {STATUS_TABS.map(t => (

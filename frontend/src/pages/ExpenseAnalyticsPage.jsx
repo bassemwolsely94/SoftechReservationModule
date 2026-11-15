@@ -15,6 +15,7 @@ import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { financeApi } from '../api/client'
 import DataFreshnessBar from '../components/DataFreshnessBar'
+import useAuthStore from '../store/authStore'
 import { fa } from '../utils/flowArrow'
 import useServerSort from '../hooks/useServerSort'
 import SortTh from '../components/SortTh'
@@ -157,6 +158,7 @@ function SubCategoryRow({ label, amount, count, total, active, onClick }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function ExpenseAnalyticsPage() {
+  const { user } = useAuthStore()
   const today = new Date()
 
   // Filter mode: 'month' (year+month selectors) or 'range' (date_from / date_to)
@@ -301,7 +303,9 @@ export default function ExpenseAnalyticsPage() {
   return (
     <div className="space-y-5" dir="rtl">
 
-      <DataFreshnessBar domains={['finance_expenses']} />
+      <DataFreshnessBar domains={['finance_expenses']}
+        canEdit={user?.is_staff || user?.role === 'admin'}
+        onRefresh={() => financeApi.triggerSync({})} />
 
       {/* ── Filter Bar ─────────────────────────────────────────────────────── */}
       <Card className="p-4">
