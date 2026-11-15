@@ -510,6 +510,16 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
         }, status=status.HTTP_201_CREATED)
 
     # ── List motalbas for a subclient from Softech ────────────────────────────
+    @action(detail=False, methods=['get'], url_path='find-receipt')
+    def find_receipt(self, request):
+        """«بحث برقم الروشتة»: every claim a SOFTECH receipt sits in (active or excluded, and how it
+        came in) plus the motalba cache. Read-only. ?docnumber=…[&branch=…]"""
+        from .receipt_search import find_receipt
+        docnumber = (request.query_params.get('docnumber') or '').strip()
+        if not docnumber:
+            return Response({'error': 'أدخل رقم الروشتة'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'results': find_receipt(docnumber, request.query_params.get('branch'))})
+
     @action(detail=False, methods=['get'], url_path='list-motalbas')
     def list_motalbas(self, request):
         """

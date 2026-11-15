@@ -8,13 +8,14 @@
  *   - "Discover from Softech" panel: query Softech by date range → pick & import
  *   - Quick status badge + print button per row
  */
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
 import { useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import MultiSelectFilter from '../components/MultiSelectFilter'
+import InsuranceReceiptResults from '../components/InsuranceReceiptResults'
 import { wildcardMatch } from '../utils/wildcard'
 import { fa } from '../utils/flowArrow'
 
@@ -548,6 +549,37 @@ export default function InsuranceClaimsPage() {
   })
   const setF = (k, v) => setFilters(p => ({ ...p, [k]: v }))
 
+  // «مطالبة | روشتة»: what the search box searches. Receipt mode asks the server (every claim, active
+  // or excluded, + SOFTECH motalba cache); the choice is remembered per browser.
+  const [searchMode, setSearchModeState] = useState(() => {
+    try { return localStorage.getItem('ins.claims.searchMode') === 'receipt' ? 'receipt' : 'claim' } catch { return 'claim' }
+  })
+  const setSearchMode = (m) => {
+    setSearchModeState(m)
+    try { localStorage.setItem('ins.claims.searchMode', m) } catch { /* private window */ }
+  }
+  const [rcpt, setRcpt] = useState({ loading: false, error: '', results: null, query: '' })
+  const rcptReq = useRef(0)
+  const findReceipt = useCallback(async (raw) => {
+    const q = (raw || '').trim()
+    const req = ++rcptReq.current
+    if (!q) { setRcpt({ loading: false, error: '', results: null, query: '' }); return }
+    setRcpt({ loading: true, error: '', results: null, query: q })
+    try {
+      const { data } = await insuranceApi.findReceipt(q)
+      if (req === rcptReq.current) setRcpt({ loading: false, error: '', results: data.results || [], query: q })
+    } catch (e) {
+      if (req === rcptReq.current) setRcpt({ loading: false, error: e?.response?.data?.error || 'تعذّر البحث عن الروشتة', results: null, query: q })
+    }
+  }, [])
+  useEffect(() => {
+    if (searchMode !== 'receipt') { rcptReq.current++; setRcpt({ loading: false, error: '', results: null, query: '' }); return }
+    const q = filters.search.trim()
+    if (q.length < 3) { if (!q) findReceipt(''); return }
+    const t = setTimeout(() => findReceipt(q), 400)
+    return () => clearTimeout(t)
+  }, [searchMode, filters.search, findReceipt])
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
@@ -597,7 +629,7 @@ export default function InsuranceClaimsPage() {
   // ── Client-side sub-filters (date range, search) ──────────────────────────
   const filteredClaims = useMemo(() => {
     let list = claims
-    if (filters.search) {
+    if (filters.search && searchMode === 'claim') {
       const q = filters.search.toLowerCase()
       list = list.filter(c =>
         c.claim_number?.toLowerCase().includes(q) ||
@@ -612,7 +644,7 @@ export default function InsuranceClaimsPage() {
       list = list.filter(c => c.period_to <= filters.date_to)
     }
     return list
-  }, [claims, filters.search, filters.date_from, filters.date_to])
+  }, [claims, filters.search, filters.date_from, filters.date_to, searchMode])
 
   // ── Sortable data grid (shared hook; newest claim number first until a header is clicked) ──
   const { sorted: sortedClaims, headerProps } = useSortableRows(filteredClaims, {
@@ -779,10 +811,23 @@ export default function InsuranceClaimsPage() {
             <input type="date" className={inp} value={filters.date_to}
               onChange={e => setF('date_to', e.target.value)} />
           </div>
-          <input data-tour="insurance-claims-search" className={`${inp} w-64`} placeholder="بحث: رقم مطالبة، عميل، رقم سوفتك..."
-            value={filters.search} onChange={e => setF('search', e.target.value)} />
+          <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden text-xs" data-tour="insurance-claims-search-mode"
+            role="group" aria-label="نوع البحث">
+            {[['claim', 'مطالبة'], ['receipt', 'روشتة']].map(([m, label]) => (
+              <button key={m} type="button" onClick={() => setSearchMode(m)} aria-pressed={searchMode === m}
+                className={`px-3 py-1.5 ${searchMode === m ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <input data-tour="insurance-claims-search" className={`${inp} w-64`}
+            placeholder={searchMode === 'receipt' ? 'رقم الروشتة (سوفتك) ثم Enter…' : 'بحث: رقم مطالبة، عميل، رقم سوفتك...'}
+            value={filters.search} onChange={e => setF('search', e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && searchMode === 'receipt') findReceipt(filters.search) }} />
         </div>
       </div>
+
+      {searchMode === 'receipt' && <InsuranceReceiptResults {...rcpt} />}
 
       {/* Bulk action bar */}
       {selected.size > 0 && (
