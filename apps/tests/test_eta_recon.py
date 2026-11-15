@@ -72,6 +72,8 @@ class ReconTests(TestCase):
             Branch.objects.get_or_create(softech_branch_id=code, defaults={'name': f'B{code}', 'kind': kind})
         EtaDeviceBranch.objects.create(system='production', pos_serial='POS-150', softech_branchcode='150',
                                        first_day=dt.date(2026, 1, 1))
+        # 'C' = a cash channel sent as receipts (a channel with no decided rule gets its own reason)
+        TaxChannelRule.objects.update_or_create(ptclassifcode='C', defaults={'mode': TaxChannelRule.MODE_RECEIPT, 'label': 'نقدي'})
 
     def _outcomes(self):
         return {(l.doccode, l.docnumber): l.outcome for l in EtaReconLine.objects.filter(system='production')}
@@ -344,6 +346,47 @@ class ReconOtherDayAndSilentTests(ReconTests):
         self.assertEqual(row['reasons'], {'till_silent': 4, 'eta_other_day': 1})
 
 
+class ReconChannelRuleTests(ReconTests):
+    """Invoicer sends cash sales only: a sale in a channel with no decided rule is explained by that, not left unknown."""
+
+    def _line(self, number):
+        return EtaReconLine.objects.get(system='production', day=DAY, docnumber=str(number))
+
+    def _normal_day(self, extra):
+        self.softech.days[('150', DAY)] = [('115', 1, 10, 'C'), ('115', 2, 10, 'C'), ('115', 3, 10, 'C')] + extra
+        for n in (1, 2, 3):
+            _eta(n, 10)
+
+    def test_a_channel_with_no_rule_is_the_reason_and_the_channel_is_kept(self):
+        self._normal_day([('115', 4, 300, '11'), ('115', 5, 40, 'C')])
+        eta_recon.reconcile_day('production', '150', DAY)
+        self.assertEqual((self._line(4).reason, self._line(4).channel), ('no_channel_rule', '11'))
+        self.assertEqual((self._line(5).reason, self._line(5).channel), ('', 'C'))
+
+    def test_an_undecided_rule_counts_as_no_rule(self):
+        TaxChannelRule.objects.update_or_create(ptclassifcode='17', defaults={'mode': TaxChannelRule.MODE_UNDECIDED})
+        self._normal_day([('115', 4, 1, '17')])
+        eta_recon.reconcile_day('production', '150', DAY)
+        self.assertEqual(self._line(4).reason, 'no_channel_rule')
+
+    def test_a_decided_receipt_channel_stays_unexplained(self):
+        TaxChannelRule.objects.update_or_create(ptclassifcode='16', defaults={'mode': TaxChannelRule.MODE_RECEIPT})
+        self._normal_day([('115', 4, 90, '16')])
+        eta_recon.reconcile_day('production', '150', DAY)
+        self.assertEqual(self._line(4).reason, '')
+
+    def test_uncoded_items_come_first_and_no_rule_comes_before_a_silent_day(self):
+        self.softech.days[('150', DAY)] = [('115', 1, 10, '11', [('DLV', 10, 10)]), ('115', 2, 10, '11'), ('115', 3, 10, 'C')]
+        eta_recon.reconcile_day('production', '150', DAY)
+        self.assertEqual([self._line(n).reason for n in (1, 2, 3)], ['all_uncoded', 'no_channel_rule', 'till_silent'])
+
+    def test_a_matched_sale_has_no_reason_whatever_its_channel(self):
+        self._normal_day([('115', 4, 25, '11')])
+        _eta(4, 25)
+        eta_recon.reconcile_day('production', '150', DAY)
+        self.assertEqual((self._line(4).outcome, self._line(4).reason), ('matched', ''))
+
+
 class SoftechNeighboursReadTests(TestCase):
 
     def test_reads_the_day_before_and_after_once(self):
@@ -438,6 +481,54 @@ class ReconViewTests(Fixture, TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn('spreadsheetml', r['Content-Type'])
         self.assertEqual(TaxAuditEvent.objects.filter(action='eta_recon_uncoded_export').count(), before + 1)
+
+
+class ReconGapsViewTests(Fixture, TestCase):
+    """The list of sales missing with no known cause: all branches, biggest first, with the channel, and its export."""
+
+    URL = '/api/tax-invoicing/history/recon/lines/'
+
+    def setUp(self):
+        self.build('gp')
+        TaxChannelRule.objects.update_or_create(ptclassifcode='90', defaults={'mode': TaxChannelRule.MODE_RECEIPT, 'label': 'Delivery'})
+        for n, (branch, total, channel, reason) in enumerate([('150', '80002', '90', ''), ('160', '95', '77', ''),
+                                                               ('160', '5000', '11', 'no_channel_rule'), ('130', '1200', '90', '')], 1):
+            EtaReconLine.objects.create(system='production', softech_branchcode=branch, day=DAY, doccode='115', docnumber=str(n),
+                                        softech_total=Decimal(total), outcome='missing_at_eta', reason=reason, channel=channel)
+
+    def test_biggest_first_across_branches_with_channel_and_total(self):
+        params = {'system': 'production', 'outcome': 'missing_at_eta', 'reason': 'none', 'ordering': '-softech_total'}
+        self.assertEqual(api(self.pharmacist).get(self.URL, params).status_code, 403)
+        body = api(self.accountant).get(self.URL, params).json()
+        self.assertEqual([(r['docnumber'], r['channel'], r['channel_label']) for r in body['rows']],
+                         [('1', '90', 'Delivery'), ('4', '90', 'Delivery'), ('2', '77', '')])
+        self.assertEqual(Decimal(body['total']), Decimal('81297'))
+        only = api(self.accountant).get(self.URL, {**params, 'channel': '90', 'branch': '130'}).json()
+        self.assertEqual([r['docnumber'] for r in only['rows']], ['4'])
+        self.assertEqual(api(self.accountant).get(self.URL, {**params, 'ordering': 'eta_uuid'}).status_code, 400)
+
+    def test_the_summary_lists_the_channels_and_the_new_reason(self):
+        body = api(self.accountant).get('/api/tax-invoicing/history/recon/', {'system': 'production'}).json()
+        self.assertIn({'code': '90', 'label': 'Delivery'}, body['channels'])
+        self.assertIn('no_channel_rule', body['reasons'])
+
+    def test_export_keeps_the_order_and_names_the_channel(self):
+        import io
+        import openpyxl
+        from apps.tax_invoicing.models import TaxAuditEvent
+        before = TaxAuditEvent.objects.filter(action='eta_recon_export').count()
+        r = api(self.accountant).get('/api/tax-invoicing/history/recon/export/',
+                                     {'system': 'production', 'outcome': 'missing_at_eta', 'reason': 'none', 'ordering': '-softech_total'})
+        self.assertEqual(r.status_code, 200)
+        ws = openpyxl.load_workbook(io.BytesIO(r.content)).active
+        head = [c.value for c in ws[1]]
+        rows = [dict(zip(head, [c.value for c in row])) for row in ws.iter_rows(min_row=2)]
+        self.assertEqual([x['الرقم'] for x in rows], ['1', '4', '2'])
+        self.assertEqual(rows[0]['القناة'], '90 · Delivery')
+        self.assertEqual(rows[2]['القناة'], '77')
+        self.assertEqual(TaxAuditEvent.objects.filter(action='eta_recon_export').count(), before + 1)
+        self.assertEqual(api(self.accountant).get('/api/tax-invoicing/history/recon/export/',
+                                                  {'system': 'production', 'ordering': 'nope'}).status_code, 400)
 
 
 class ReconJobTests(TestCase):

@@ -537,4 +537,22 @@ describe('SOFTECH ↔ ETA reconciliation', () => {
     expect(await screen.findByText('D.L.V.')).toBeTruthy()
     expect(api.reconUncoded).toHaveBeenCalledWith(expect.objectContaining({ system: 'production', ordering: '-value', open: '1' }))
   })
+
+  it('lists the missing sales with no known cause, biggest first, with their channel', async () => {
+    api.historyDocuments.mockResolvedValue({ data: { count: 0, page: 1, pages: 1, total_amount: null, rows: [] } })
+    api.reconSummary.mockResolvedValue({ data: { last_run_at: null, last_error: '', outcomes: [], devices: [],
+      channels: [{ code: '90', label: 'عميل Delivery' }],
+      rows: [{ branch: '150', month: '2026-11', matched: 120, amount_differs: 0, missing_at_eta: 9, eta_only: 0, not_valid: 0, duplicate: 0, by_invoice: 0,
+        softech_total: '1000.00', eta_total: '990.00', reasons: { no_channel_rule: 5 } }] } })
+    api.reconLines.mockResolvedValue({ data: { count: 1, page: 1, pages: 1, total: '80002.00', rows: [{ id: 7, branch: '150', day: '2026-11-05', doccode: '115',
+      docnumber: '935521', channel: '90', channel_label: 'عميل Delivery', softech_total: '80002.00', eta_total: null, reason: '' }] } })
+    show(<HistoryTab me={ME} />)
+    fireEvent.click(await screen.findByText('المطابقة'))
+    expect(await screen.findByText('منها 5 قناة بلا قاعدة')).toBeTruthy()
+    fireEvent.click(screen.getByText(/عرض المبيعات الناقصة بلا سبب معروف/))
+    expect(await screen.findByText('90 · عميل Delivery')).toBeTruthy()
+    expect(api.reconLines).toHaveBeenCalledWith(expect.objectContaining({ system: 'production', outcome: 'missing_at_eta', reason: 'none', ordering: '-softech_total' }))
+    fireEvent.change(screen.getByLabelText('القناة'), { target: { value: '90' } })
+    await waitFor(() => expect(api.reconLines).toHaveBeenLastCalledWith(expect.objectContaining({ channel: '90', reason: 'none' })))
+  })
 })

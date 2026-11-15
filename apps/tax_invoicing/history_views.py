@@ -32,7 +32,7 @@ from core.threads import start_thread
 from . import eta_recon, services
 from .eta_client import EtaError
 from .eta_reader import SYSTEMS, EtaReader
-from .models import EtaDeviceBranch, EtaHistoryState, EtaMirrorDocument, EtaMirrorReceipt, EtaReconLine
+from .models import EtaDeviceBranch, EtaHistoryState, EtaMirrorDocument, EtaMirrorReceipt, EtaReconLine, TaxChannelRule
 
 VIEWER = matrix_permission('tax_invoicing')
 PAGE_SIZE, MAX_PAGE_SIZE, MAX_EXPORT = 50, 200, 50000
@@ -304,15 +304,26 @@ def history_export(request, kind):
 
 EDITOR = matrix_permission('tax_invoicing', get=('view',), post=('edit',), edit=('edit',))
 RECON_SORT = {'day': 'day', 'docnumber': 'docnumber', 'softech_total': 'softech_total', 'eta_total': 'eta_total',
-              'outcome': 'outcome', 'branch': 'softech_branchcode'}
+              'outcome': 'outcome', 'branch': 'softech_branchcode', 'channel': 'channel'}
 
 
 def _recon_row(line):
     return {'id': line.id, 'branch': line.softech_branchcode, 'day': line.day, 'doccode': line.doccode,
             'docnumber': line.docnumber, 'softech_total': None if line.softech_total is None else str(line.softech_total),
             'eta_uuid': line.eta_uuid, 'eta_total': _money(line.eta_total), 'eta_status': line.eta_status,
-            'eta_count': line.eta_count, 'outcome': line.outcome, 'reason': line.reason,
+            'eta_count': line.eta_count, 'outcome': line.outcome, 'reason': line.reason, 'channel': line.channel,
             'uncoded_total': None if line.uncoded_total is None else str(line.uncoded_total)}
+
+
+def _channel_labels():
+    return dict(TaxChannelRule.objects.values_list('ptclassifcode', 'label'))
+
+
+def _recon_ordering(request):
+    try:
+        return explicit_order_by(request.query_params.get('ordering'), RECON_SORT, ('day', 'docnumber'))
+    except Exception:       # noqa: BLE001 — explicit_order_by raises a ValidationError for an unknown key
+        raise _Bad('ترتيب غير مدعوم')
 
 
 def _recon_lines(request):
@@ -322,6 +333,8 @@ def _recon_lines(request):
         qs = qs.filter(softech_branchcode=p['branch'])
     if p.get('outcome'):
         qs = qs.filter(outcome=p['outcome'])
+    if p.get('channel'):
+        qs = qs.filter(channel=p['channel'])
     if p.get('reason'):
         if p['reason'] not in (*eta_recon.REASONS, 'none'):
             raise _Bad('سبب غير معروف')
@@ -352,6 +365,7 @@ def recon_summary(request):
                for d in EtaDeviceBranch.objects.filter(system=system).order_by('softech_branchcode', 'pos_serial')]
     return Response({'rows': eta_recon.summary(system, request.query_params.get('branch') or None), 'devices': devices,
                      'outcomes': list(eta_recon.OUTCOMES), 'reasons': list(eta_recon.REASONS), 'last_run_at': state.last_run_at if state else None,
+                     'channels': [{'code': c, 'label': l} for c, l in sorted(_channel_labels().items())],
                      'last_error': state.last_error if state else ''})
 
 
@@ -360,27 +374,28 @@ def recon_summary(request):
 @_guard
 def recon_lines(request):
     qs = _recon_lines(request)
-    try:
-        ordering = explicit_order_by(request.query_params.get('ordering'), RECON_SORT, ('day', 'docnumber'))
-    except Exception:       # noqa: BLE001 — explicit_order_by raises a ValidationError for an unknown key
-        raise _Bad('ترتيب غير مدعوم')
+    ordering = _recon_ordering(request)
     try:
         size = min(max(int(request.query_params.get('page_size') or PAGE_SIZE), 1), MAX_PAGE_SIZE)
         page = max(int(request.query_params.get('page') or 1), 1)
     except ValueError:
         raise _Bad('رقم الصفحة غير صحيح')
     count = qs.count()
+    labels = _channel_labels()
+    rows = [_recon_row(x) for x in qs.order_by(*ordering)[(page - 1) * size:page * size]]
+    for row in rows:
+        row['channel_label'] = labels.get(row['channel'], '')
     return Response({'count': count, 'page': page, 'pages': max(math.ceil(count / size), 1),
-                     'rows': [_recon_row(x) for x in qs.order_by(*ordering)[(page - 1) * size:page * size]]})
+                     'total': str(qs.aggregate(t=Sum('softech_total'))['t'] or Decimal('0')), 'rows': rows})
 
 
 RECON_COLUMNS = [('branch', 'الفرع'), ('day', 'اليوم'), ('doccode', 'نوع المستند'), ('docnumber', 'الرقم'),
                  ('softech_total', 'إجمالي SOFTECH'), ('eta_total', 'إجمالي المصلحة'), ('eta_status', 'حالة المصلحة'),
-                 ('eta_count', 'مرات الإرسال'), ('outcome', 'النتيجة'), ('reason', 'السبب'),
+                 ('eta_count', 'مرات الإرسال'), ('outcome', 'النتيجة'), ('reason', 'السبب'), ('channel', 'القناة'),
                  ('uncoded_total', 'قيمة أصناف بلا كود'), ('eta_uuid', 'UUID')]
 RECON_REASON_LABELS = {'all_uncoded': 'كل الأصناف بلا كود مصلحة', 'uncoded_lines': 'الفرق = أصناف بلا كود مصلحة',
                        'some_uncoded': 'بعض الأصناف بلا كود مصلحة', 'till_silent': 'الجهاز لم يرسل أغلب إيصالات اليوم',
-                       'eta_other_day': 'المصلحة سجلته في يوم مجاور'}
+                       'eta_other_day': 'المصلحة سجلته في يوم مجاور', 'no_channel_rule': 'قناة بيع بلا قاعدة ضريبية'}
 
 
 @api_view(['GET'])
@@ -388,9 +403,11 @@ RECON_REASON_LABELS = {'all_uncoded': 'كل الأصناف بلا كود مصل�
 @_guard
 def recon_export(request):
     qs = _recon_lines(request)
+    ordering = _recon_ordering(request) if request.query_params.get('ordering') else ('softech_branchcode', 'day', 'docnumber')
     count = qs.count()
     if count > MAX_EXPORT:
         raise _Bad(f'النتيجة {count} صفاً؛ ضيّق الفلاتر (الحد {MAX_EXPORT})')
+    labels = _channel_labels()
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = 'المطابقة'
@@ -398,8 +415,10 @@ def recon_export(request):
     ws.append([label for _, label in RECON_COLUMNS])
     names = {str(code).strip(): (ar or en or '').strip()
              for code, ar, en in Branch.objects.values_list('softech_branch_id', 'name_ar', 'name')}
-    for line in qs.order_by('softech_branchcode', 'day', 'docnumber').iterator(chunk_size=2000):
+    for line in qs.order_by(*ordering).iterator(chunk_size=2000):
         row = _recon_row(line)
+        if row['channel'] and labels.get(row['channel']):
+            row['channel'] = f"{row['channel']} · {labels[row['channel']]}"
         name = names.get(row['branch'])
         row['branch'] = f"{row['branch']} · {name}" if name else row['branch']    # never a bare code in Excel
         row['reason'] = RECON_REASON_LABELS.get(row['reason'], '')

@@ -113,10 +113,12 @@ may carry a reason (`REASONS`), decided only from SOFTECH lines and ETA's copy:
 |---|---|
 | `all_uncoded` / `some_uncoded` | Missing at ETA; all / some of its items have no ETA code (Invoicer leaves those lines off, and sends no receipt with no coded line). |
 | `uncoded_lines` | Amount differs by exactly the items with no ETA code (0.06 tolerance). |
+| `no_channel_rule` | Missing at ETA, no uncoded item, and its SOFTECH channel (`ptclassifcode`, kept on the line as `channel`) has no decided `TaxChannelRule`. Invoicer sends cash sales only (`fatstatuscode` 30); channels sold on account (11, 17) were never sent — their mode is the owner's decision. |
 | `till_silent` | Missing at ETA, no uncoded item, and the branch's tills sent under half of that day's receipt sales (an Invoicer outage: March 2025 start, 12–14 Aug and 9–13 Nov 2026). |
 | `eta_other_day` | Not on its own day, but one receipt on the day before or after has the same till, kind, number and amount (0.05), and no SOFTECH sale of its own that day: a sale around midnight. It matches, and that receipt is not listed as `eta_only` on its day. |
 
-Items with no ETA code are totalled per day (`EtaReconUncodedItem`) and ranked by value on the screen («المطابقة»).
+Items with no ETA code are totalled per day (`EtaReconUncodedItem`) and ranked by value on the screen («المطابقة»), and
+sales missing with no known reason are listed biggest first, with their channel, for checking by hand.
 
 ### Where a branch's sending starts
 
