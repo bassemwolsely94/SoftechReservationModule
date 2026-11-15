@@ -52,6 +52,10 @@ class ReconTests(TestCase):
             p = mock.patch.object(eta_recon, name, getattr(self.softech, 'rows' if name == '_softech_rows' else 'find'))
             p.start()
             self.addCleanup(p.stop)
+        from apps.branches.models import Branch
+        for code, kind in (('150', Branch.KIND_RETAIL), ('130', Branch.KIND_RETAIL), ('160', Branch.KIND_RETAIL),
+                           ('110', Branch.KIND_CLOSED)):
+            Branch.objects.get_or_create(softech_branch_id=code, defaults={'name': f'B{code}', 'kind': kind})
         EtaDeviceBranch.objects.create(system='production', pos_serial='POS-150', softech_branchcode='150',
                                        first_day=dt.date(2026, 1, 1))
 
@@ -122,7 +126,8 @@ class ReconTests(TestCase):
         from apps.branches.models import Branch
         Branch.objects.create(softech_branch_id='240', name='pending', kind=Branch.KIND_PENDING)
         EtaDeviceBranch.objects.create(system='production', pos_serial='NEW', softech_branchcode='240', first_day=dt.date(2026, 1, 1))
-        self.assertEqual(eta_recon.open_branches('production'), ['150'])
+        EtaDeviceBranch.objects.create(system='production', pos_serial='GONE', softech_branchcode='999', first_day=dt.date(2026, 1, 1))
+        self.assertEqual(eta_recon.open_branches('production'), ['150'])     # pending and unknown codes left out
 
     def test_devices_are_learned_from_a_sample_of_their_receipts(self):
         EtaDeviceBranch.objects.all().delete()

@@ -25,7 +25,6 @@ from .models import EtaDeviceBranch, EtaHistoryState, EtaMirrorReceipt, EtaRecon
 
 logger = logging.getLogger(__name__)
 CAIRO = ZoneInfo('Africa/Cairo')
-CLOSED_BRANCHES = {'110', '120', '180', '190', '210', '220'}      # «لاغى» branches: never reconciled
 TOLERANCE = Decimal('0.05')
 KIND_BY_DOCCODE = {'115': 's', '30': 'r'}
 DOCCODE_BY_KIND = {v: k for k, v in KIND_BY_DOCCODE.items()}
@@ -108,13 +107,12 @@ def learn_devices(system, sample=SAMPLE):
 
 
 def open_branches(system):
-    """Device branches that are open: never a «لاغى» code, and never one our branch list classes as anything but HQ or
-    retail (closed, pending, call center). A code missing from the branch list is kept — SOFTECH is the source."""
+    """Device branches that are live in our branch list (HQ or retail). Branch.kind is the only liveness test: closed
+    «لاغى» branches, pending ones, the call center and codes missing from the list are left out."""
     from apps.branches.models import Branch
-    not_live = set(Branch.objects.exclude(kind__in=[Branch.KIND_HQ, Branch.KIND_RETAIL])
-                   .values_list('softech_branch_id', flat=True))
+    live = set(Branch.objects.live().values_list('softech_branch_id', flat=True))
     return sorted({b for b in EtaDeviceBranch.objects.filter(system=system).values_list('softech_branchcode', flat=True)
-                   if b not in CLOSED_BRANCHES and b not in not_live})
+                   if b in live})
 
 
 # ── one branch-day ─────────────────────────────────────────────────────────────────────────────
