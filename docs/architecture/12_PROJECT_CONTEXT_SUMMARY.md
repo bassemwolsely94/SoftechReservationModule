@@ -28,7 +28,7 @@
 
 ---
 
-## Module Map (52 Django Apps)
+## Module Map (71 Django app folders — see docs/full-project-audit/02)
 
 > The tables below highlight the headline modules. The codebase actually contains
 > **52 Django apps** under `apps/` (the "32" and "48" figures were stale). Additional
@@ -178,9 +178,9 @@
 
 ## Current Branch
 
-`claude/modules-config-stockcount-shortage-vouchers-invoices-incentives`
-
-The branch contains significant uncommitted changes across all major modules. This is a feature branch.
+Work happens on short-lived `claude/*` branches merged to `main` through PRs (CI must be green; never
+`--auto`). `main` is the source of truth; check `gh pr list` for open work. Latest full audit:
+[docs/full-project-audit/](../full-project-audit/README.md) (2026-11-15).
 
 ---
 
