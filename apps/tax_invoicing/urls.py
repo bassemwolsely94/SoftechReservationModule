@@ -54,6 +54,8 @@ urlpatterns = [
     path('history/recon/lines/', history_views.recon_lines),
     path('history/recon/export/', history_views.recon_export),
     path('history/recon/refresh/', history_views.recon_refresh),
+    path('history/recon/uncoded/', history_views.recon_uncoded),
+    path('history/recon/uncoded/export/', history_views.recon_uncoded_export),
     path('codes/add-from-catalog/', views.codes_add_from_catalog),
     path('codes/prepare/', views.codes_prepare),
     path('codes/send/', views.codes_send),
