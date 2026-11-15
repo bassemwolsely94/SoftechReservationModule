@@ -863,6 +863,7 @@ SCREENS = [
             T('غير ذلك؟ «رفض» واختر السبب.', 'Otherwise? "Reject" and pick the reason.'),
         ],
         'tips': [
+            T('الشريط فوق القائمة بيقول سجل «المبيعات غير المخزنة» من SOFTECH اتحدّث إمتى (كل ليلة).', 'The bar above the list says when the SOFTECH "unsaved sales" log was last refreshed (nightly).'),
             T('رقم العميل يظهر مُخفى (آخر 3 أرقام) لمن لا يملك صلاحية رؤية أرقام العملاء.', 'The customer number shows masked (last 3 digits) to staff without the see-customer-phones permission.'),
             T('المصدر هو كاشير النظام الجديد فقط، لأن SOFTECH لا يسجل العميل الحقيقي في سجل المبيعات غير المخزنة.',
               'The source is our new POS only, because SOFTECH does not record the real customer in its unsaved-sales log.'),
@@ -903,7 +904,7 @@ SCREENS = [
              'warn': T('بعد «تأكيد الرفض» لا يمكن التراجع.', 'After "Confirm reject" it cannot be undone.'),
              'open_hint': T('يظهر بعد الضغط على «رفض».', 'Appears after pressing "Reject".')},
         ],
-        'updated': '2026-11-05',
-        'change_note': T('شاشة جديدة: المبيعات الفائتة', 'New screen: missed sales'),
+        'updated': '2026-11-15',
+        'change_note': T('شريط يوضح آخر تحديث لسجل المبيعات غير المخزنة من SOFTECH', 'A bar shows when the SOFTECH unsaved-sales log was last refreshed'),
     },
 ]

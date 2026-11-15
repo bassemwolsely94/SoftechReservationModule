@@ -9,6 +9,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { financeApi } from '../api/client'
 import DataFreshnessBar from '../components/DataFreshnessBar'
+import useAuthStore from '../store/authStore'
 
 const fmt  = (n, d = 0) => parseFloat(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const pct  = (n, d = 1) => `${fmt(n, d)}%`
@@ -36,6 +37,7 @@ function PnlRow({ label, value, indent = 0, bold = false, separator = false, col
 }
 
 export default function ProfitLossPage() {
+  const { user } = useAuthStore()
   const today = new Date()
   const [year,  setYear]  = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth() + 1)
@@ -66,7 +68,9 @@ export default function ProfitLossPage() {
         </div>
       </div>
 
-      <DataFreshnessBar domains={['finance_pl']} />
+      <DataFreshnessBar domains={['finance_pl']}
+        canEdit={user?.is_staff || user?.role === 'admin'}
+        onRefresh={() => financeApi.triggerSync({})} />
 
       {isLoading && <div className="text-center py-16 text-gray-400 animate-pulse">جارٍ التحميل…</div>}
       {isError   && <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">تعذّر التحميل. قم بتشغيل المزامنة أولاً.</div>}

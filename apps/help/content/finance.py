@@ -449,8 +449,8 @@ SCREENS = [
              'when': T('لما الشريط يقول إن البيانات قديمة وإنت محتاج أرقام دلوقتي.', 'When the bar says the data is old and you need current figures.'),
              'open_hint': T('للمدير ومسؤول النظام بس.', 'Admins and system staff only.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شريط عمر البيانات + مزامنة مالية ليلية', 'Data-age bar + nightly finance sync'),
+        'updated': '2026-11-15',
+        'change_note': T('زر «🔄 تحديث الآن» على شريط عمر البيانات يعمل الآن للمدير', 'The "🔄 Refresh now" button on the data-age bar now works for admins'),
     },
     {
         'key': 'finance.expenses',
@@ -544,8 +544,8 @@ SCREENS = [
              'when': T('لما الشريط يقول إن البيانات قديمة وإنت محتاج أرقام دلوقتي.', 'When the bar says the data is old and you need current figures.'),
              'open_hint': T('للمدير ومسؤول النظام بس.', 'Admins and system staff only.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلاتر الفئة والتصنيف الفرعي والفرع تقبل الآن أكثر من اختيار معاً', 'Category, sub-category and branch filters now take several choices at once'),
+        'updated': '2026-11-15',
+        'change_note': T('زر «🔄 تحديث الآن» على شريط عمر البيانات يعمل الآن للمدير', 'The "🔄 Refresh now" button on the data-age bar now works for admins'),
     },
     {
         'key': 'finance.receivables',
@@ -654,6 +654,7 @@ SCREENS = [
                        'The opening cash balance (boxes and banks) each week, and the fixed outflows: salaries, rent, utilities, taxes, loans — weekly, monthly or one-off. Every change is logged under your name.')},
         ],
         'tips': [
+            T('الشريط فوق الشاشة بيقول القيود ومطابقة الموردين اتحدّثت إمتى. لو أصفر يبقى قديمة — المدير يقدر يضغط «🔄 تحديث الآن».', 'The bar above the screen says when the journal and supplier reconciliation were refreshed. Amber means old — an admin can press "🔄 Refresh now".'),
             T('من غير رصيد افتتاحي الشاشة بتعرض صافي كل أسبوع بس، من غير رصيد.', 'Without an opening balance the screen shows each week\'s net only, with no balance.'),
             T('شيك المورد المؤجل اللي مش مربوط بفاتورة بيتخصم من مستحقات نفس المورد (الأقدم استحقاقًا أولاً)، عشان المبلغ مايتحسبش مرتين.',
               'A post-dated supplier cheque not linked to an invoice is taken off that supplier\'s payables (earliest due first), so the amount is not counted twice.'),
@@ -689,8 +690,8 @@ SCREENS = [
              'when': T('لما الشريط يقول إن البيانات قديمة وإنت محتاج أرقام دلوقتي.', 'When the bar says the data is old and you need current figures.'),
              'open_hint': T('للمدير ومسؤول النظام بس.', 'Admins and system staff only.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شاشة جديدة: النقدية ١٣ أسبوع (بدل صفحة التدفق النقدي)', 'New screen: 13-week cash view (replaces the cash-flow page)'),
+        'updated': '2026-11-15',
+        'change_note': T('زر «🔄 تحديث الآن» على شريط عمر البيانات يعمل الآن للمدير', 'The "🔄 Refresh now" button on the data-age bar now works for admins'),
     },
     {
         'key': 'finance.gl_accounts',
