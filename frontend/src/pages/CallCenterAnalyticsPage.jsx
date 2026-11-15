@@ -138,15 +138,18 @@ function QAScoreModal({ call, onClose }) {
   const { data: existing } = useQuery({
     queryKey: ['call-quality', call.id],
     queryFn:  () => callCenterApi.getQuality(call.id).then(r => r.data),
-    onSuccess: q => {
-      if (q) {
-        setScores({ greeting: q.greeting, resolution: q.resolution,
-                    communication: q.communication, accuracy: q.accuracy })
-        setNotes(q.notes || '')
-      }
-    },
     retry: false,
   })
+
+  // TanStack Query v5 dropped useQuery's onSuccess, so the saved score never loaded and saving
+  // overwrote it with zeros (full audit 2026-11-15, FE-6). Fill the form when the score arrives.
+  useEffect(() => {
+    if (existing) {
+      setScores({ greeting: existing.greeting, resolution: existing.resolution,
+                  communication: existing.communication, accuracy: existing.accuracy })
+      setNotes(existing.notes || '')
+    }
+  }, [existing])
 
   const mutation = useMutation({
     mutationFn: (data) => existing
