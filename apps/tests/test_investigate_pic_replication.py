@@ -25,7 +25,9 @@ class Cur:
 
     def execute(self, sql, p=None):
         s, self.r, self.description = ' '.join(sql.split()), [], [('a',)]
-        if s.startswith('SELECT phcodestatus, piclock, picpoints, picdiscounts'):
+        if s.startswith('SELECT usercode, trans_time, phcodestatususercode, phcodestatustime'):
+            self.r = [('62', D(2025, 3, 1), '1509', D(2025, 4, 1))] if p[0] == '06HD2' else []
+        elif s.startswith('SELECT phcodestatus, piclock, picpoints, picdiscounts'):
             self.description = [(c,) for c in ('phcodestatus', 'piclock', 'picpoints', 'picdiscounts', 'picdied',
                                                'usercode', 'trans_time', 'table_dumped', 'phcodestatususercode',
                                                'phcodestatustime')]
@@ -179,3 +181,45 @@ class ReplicationProbeTests(TestCase):
         self.assertIn('picstrans: trans_time=2026-10-08 00:00:00 · usercode=1509 · picpoints=0', t)
         self.assertIn('picpoints: transdate=2026-10-08 06:19:00 · points=-79 · doccode=0', t)
         self.assertNotIn('[R1]', t)
+
+
+class DriftTraceTests(TestCase):
+    def test_lists_last_editor_and_suggestion(self):
+        import os
+        import tempfile
+        from django.utils import timezone
+        from apps.customers.models import CustomerStatusDrift as SD
+        from apps.tests.factories import make_user
+        _, mgr, _ = make_user('drift_mgr', role='supervisor')
+        mgr.softech_user_id = '1509'
+        mgr.save()
+        now = timezone.now()
+        SD.objects.create(pic='06HD2', node_branch='150', field='points', hq_value='1', node_value='0',
+                          direction=SD.NODE_STRICTER, last_seen=now)
+        SD.objects.create(pic='06HD2', node_branch='150', field='status', hq_value='1', node_value='0',
+                          direction=SD.NODE_STRICTER, last_seen=now)
+        SD.objects.create(pic='06HD3', node_branch='150', field='points', hq_value='1', node_value='0',
+                          direction=SD.NODE_STRICTER, last_seen=now)
+        SD.objects.create(pic='08HD9', node_branch='170', field='points', hq_value='1', node_value='0',
+                          direction=SD.NODE_STRICTER, last_seen=now)
+        SD.objects.create(pic='06HD4', node_branch='150', field='points', hq_value='0', node_value='1',
+                          direction=SD.HQ_STRICTER, last_seen=now)                        # not listed
+        path = os.path.join(tempfile.mkdtemp(), 'd.csv')
+        out = io.StringIO()
+        with mock.patch('config.sybase.get_sybase_connection', return_value=Conn()), \
+                mock.patch('config.sybase.get_branch_connection', return_value=Conn(node=True)):
+            call_command('investigate_pic_replication', host=['10.0.0.1'], drift=True, drift_csv=path, out='',
+                         stdout=out)
+        t = out.getvalue()
+        self.assertIn('4 open branch-stricter rows on 2 node(s)', t)
+        self.assertIn("06HD2 @ 150 points: HQ '1' / node '0' · last edit by SOFTECH user 62 (not linked to our staff)", t)
+        self.assertIn('copy HQ down (one code)', t)
+        self.assertIn('06HD2 @ 150 status', t)
+        self.assertIn('SOFTECH user 1509 (supervisor) at 2025-04-01 00:00:00 → apply at HQ (manager)', t)
+        self.assertIn('06HD3 @ 150 points', t)
+        self.assertIn('check by hand', t)
+        self.assertIn('node 170: not reached — 1 rows not traced', t)
+        self.assertNotIn('06HD4', t)
+        self.assertNotIn('[R1]', t)
+        rows = open(path, encoding='utf-8-sig').read().splitlines()
+        self.assertEqual(len(rows), 4)
