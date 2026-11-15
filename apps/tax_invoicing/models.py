@@ -795,3 +795,41 @@ class EtaHistoryState(models.Model):
     class Meta:
         verbose_name = 'حالة آخر تحميل من سجل المصلحة'
         constraints = [models.UniqueConstraint(fields=['system', 'kind'], name='eta_history_state_once')]
+
+
+class EtaDeviceBranch(models.Model):
+    """Which SOFTECH branch an ETA POS serial belongs to (learned from a sample of its receipts, or set by hand),
+    and the day its first receipt reached ETA — reconciliation starts there for that branch."""
+    system = models.CharField(max_length=12, choices=ETA_SYSTEMS)
+    pos_serial = models.CharField(max_length=100)
+    softech_branchcode = models.CharField(max_length=5)
+    first_day = models.DateField(null=True, blank=True)
+    source = models.CharField(max_length=8, default='auto')          # auto | manual
+    sample_matched = models.IntegerField(default=0)
+    sample_size = models.IntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'جهاز المصلحة وفرعه'
+        constraints = [models.UniqueConstraint(fields=['system', 'pos_serial'], name='eta_device_branch_once')]
+
+
+class EtaReconLine(models.Model):
+    """One SOFTECH sale or return (or one ETA receipt with no sale behind it) and how it stands at ETA."""
+    system = models.CharField(max_length=12, choices=ETA_SYSTEMS)
+    softech_branchcode = models.CharField(max_length=5)
+    day = models.DateField()
+    doccode = models.CharField(max_length=3)
+    docnumber = models.CharField(max_length=20)
+    softech_total = models.DecimalField(max_digits=16, decimal_places=2, null=True, blank=True)
+    eta_uuid = models.CharField(max_length=64, blank=True)
+    eta_total = models.DecimalField(max_digits=18, decimal_places=5, null=True, blank=True)
+    eta_status = models.CharField(max_length=20, blank=True)
+    eta_count = models.IntegerField(default=0)
+    outcome = models.CharField(max_length=16, db_index=True)
+    computed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'مطابقة إيصال مع المصلحة'
+        indexes = [models.Index(fields=['system', 'softech_branchcode', 'day'], name='eta_recon_branch_day'),
+                   models.Index(fields=['system', 'outcome', 'day'], name='eta_recon_outcome_day')]

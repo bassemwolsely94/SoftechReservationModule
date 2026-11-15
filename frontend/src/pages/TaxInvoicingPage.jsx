@@ -95,7 +95,7 @@ export default function TaxInvoicingPage() {
       {tab === 'import' && <ImportTab me={access} />}
       {tab === 'codes' && <CodesTab me={access} />}
       {tab === 'receipts' && <ReceiptsTab key={params.get('status') || ''} me={access} initialStatus={params.get('status') || ''} />}
-      {tab === 'history' && <HistoryTab />}
+      {tab === 'history' && <HistoryTab me={access} />}
       {tab === 'settings' && <SettingsTab me={access} />}
     </div>
   )

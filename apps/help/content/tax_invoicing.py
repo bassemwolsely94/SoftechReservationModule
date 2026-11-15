@@ -198,9 +198,9 @@ SCREENS = [
              'body': T('ملخص بالحالات لكل فرع، والقائمة بأسباب الحجز، واستيراد يوم من SOFTECH للقراءة فقط، وإعداد جهاز كل فرع، وقرار كل قناة. «إصدار الجاهز» يجمد الإيصالات في سلسلة الفرع، و«معاينة الإرسال» لا ترسل شيئاً. الإرسال الفعلي يظهر بعد المعاينة ويحتاج كتابة كود الفرع، وهو معطل طالما الإرسال مغلق.',
                        'A per-branch summary by status, the list with hold reasons, reading a day from SOFTECH (read only), each branch’s device setup, and each channel’s decision. "Issue ready" freezes receipts into the branch chain, and "Preview sending" sends nothing. The real send appears after the preview and needs the typed branch code; it is disabled while sending is off.')},
             {'key': 'history', 'title': T('🗂️ سجل المصلحة', '🗂️ ETA history'),
-             'body': T('نسخة للقراءة فقط مما تحتفظ به المصلحة: الفواتير والإشعارات الصادرة والواردة، والإيصالات، لكل منظومة على حدة (الفعلية أو التجريبية). فلتر بالتاريخ والاتجاه والنوع والجهاز والحالة، ورتب بالأعمدة، وصدّر Excel. '
+             'body': T('نسخة للقراءة فقط مما تحتفظ به المصلحة: الفواتير والإشعارات الصادرة والواردة، والإيصالات، لكل منظومة على حدة (الفعلية أو التجريبية)، و«المطابقة» بين مبيعات SOFTECH وإيصالات المصلحة. فلتر بالتاريخ والاتجاه والنوع والجهاز والحالة، ورتب بالأعمدة، وصدّر Excel. '
                        'فتح المستند يعرض بنوده وخطوات تحقق المصلحة كما تحتفظ بها، و«ملف المصلحة PDF» ينزل نسختها الرسمية. رقم الشخص يظهر مخفياً إلا آخر 4 أرقام. لا يُرسل شيء من هنا.',
-                       'A read-only copy of what ETA holds: invoices and notes sent and received, and receipts, per ETA system (live or test). Filter by date, direction, type, device and status, sort by column, and export to Excel. '
+                       'A read-only copy of what ETA holds: invoices and notes sent and received, and receipts, per ETA system (live or test), and "Reconciliation" of SOFTECH sales against ETA receipts. Filter by date, direction, type, device and status, sort by column, and export to Excel. '
                        'Opening a document shows its lines and ETA’s checks as ETA holds them, and "ETA PDF" downloads ETA’s official copy. A person’s ID shows only its last 4 digits. Nothing is sent from here.')},
             {'key': 'settings', 'title': T('⚙️ الإعدادات', '⚙️ Settings'),
              'body': T('بيانات الممول وقرارات المحاسب، والمشترون، والأسس الموثقة للاستبعاد أو عدم استحقاق الضريبة، وحالة الختم واختباره. بدون أساس موثق لا يُقبل أي استبعاد، ويبقى المستند موقوفاً.',
@@ -383,6 +383,13 @@ SCREENS = [
              'text': T('المستندات التي تبرر الاستبعاد أو عدم استحقاق الضريبة. لا يوجد أساس جاهز مسبقاً.', 'The documents that justify an exclusion or no VAT due. None exists in advance.')},
             {'target': 'tax-invoicing-main-history', 'label': T('سجل المصلحة', 'ETA history'),
              'text': T('ما تحتفظ به المصلحة لكل منظومة، للقراءة فقط: بحث وفرز وتصدير.', 'What ETA holds, per system, read only: search, sort and export.')},
+            {'target': 'tax-invoicing-main-recon', 'label': T('المطابقة', 'Reconciliation'),
+             'text': T('كل بيع ومرتجع في SOFTECH مقابل إيصاله لدى المصلحة، لكل فرع وشهر. اضغط أي رقم لترى المستندات.', 'Each SOFTECH sale and return against its ETA receipt, per branch and month. Click a number to see the documents.')},
+            {'target': 'tax-invoicing-main-recon-refresh', 'label': T('إعادة الحساب', 'Recalculate'),
+             'text': T('يقرأ SOFTECH للقراءة فقط ويعيد حساب آخر 30 يوماً، في الخلفية. لا يكتب في SOFTECH ولا يرسل للمصلحة.', 'Reads SOFTECH (read only) and recalculates the last 30 days, in the background. Writes nothing to SOFTECH, sends nothing to ETA.')},
+            {'target': 'tax-invoicing-main-recon-lines', 'label': T('المستندات خلف الرقم', 'Documents behind a number'),
+             'text': T('أرقام SOFTECH وإجماليها وما لدى المصلحة لكل منها، مع تصدير.', 'SOFTECH numbers and totals with what ETA holds for each, with export.'),
+             'open_hint': T('اضغط رقماً في جدول المطابقة.', 'Click a number in the reconciliation table.')},
             {'target': 'tax-invoicing-main-history-detail', 'label': T('تفاصيل المستند', 'Document details'),
              'text': T('البنود وخطوات تحقق المصلحة، تُطلب من المصلحة مرة واحدة ثم تُحفظ.', 'Lines and ETA’s checks, asked from ETA once and then kept.'),
              'open_hint': T('اضغط على أي صف.', 'Click any row.')},

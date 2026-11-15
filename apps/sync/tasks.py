@@ -2679,6 +2679,18 @@ def _run_eta_history_topup():
             logger.warning('[APScheduler] ETA history top-up %s: %s', system, exc)
 
 
+def _run_eta_recon_daily():
+    """SOFTECH ↔ ETA receipts reconciliation (doc 36 §history, phase 3): learn device→branch, recompute the last
+    30 days, for each system whose ETA history is on. Reads SOFTECH (HQ) and the local ETA copy only."""
+    from apps.tax_invoicing import eta_history, eta_recon
+    for system in eta_history.enabled_systems():
+        try:
+            eta_recon.learn_devices(system)
+            eta_recon.recent(system)
+        except Exception as exc:     # one system's trouble never stops the other
+            logger.warning('[APScheduler] ETA reconciliation %s: %s', system, exc)
+
+
 def _run_stock_ledger_sync(days=3):
     """Doc 32: mirror stktrans (all doccodes) from HQ — replaces the last `days` docdate
     days — then run the audit checks. READ-ONLY vs SOFTECH. Off with STOCK_AUDIT_ENABLED=False."""
@@ -3986,6 +3998,10 @@ def start_scheduler():
     )
     _scheduler.add_job(
         _run_eta_history_topup, 'cron', hour=4, minute=30, id='eta_history_topup',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    _scheduler.add_job(
+        _run_eta_recon_daily, 'cron', hour=5, minute=15, id='eta_recon_daily',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # HR attendance health (every 30 min): silent machine/agent, clock drift, falling log count.

@@ -6,11 +6,12 @@ import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { taxInvoicingApi } from '../../api/client'
 import SortTh from '../../components/SortTh'
+import ReconSection from './ReconSection'
 import useServerSort from '../../hooks/useServerSort'
 import { ActionMsg, Badge, Btn, Failed, Field, fmt, fmtInt, fmtTime, INPUT, Loading, Notice, Section, useAction } from './ui'
 
 const SYSTEMS = [['production', 'الفعلية'], ['preprod', 'التجريبية']]
-const KINDS = [['documents', 'الفواتير والإشعارات'], ['receipts', 'الإيصالات']]
+const KINDS = [['documents', 'الفواتير والإشعارات'], ['receipts', 'الإيصالات'], ['recon', 'المطابقة']]
 const DOC_TYPES = { i: 'فاتورة', c: 'إشعار دائن', d: 'إشعار مدين' }
 const STATUS = { valid: 'مقبول', invalid: 'غير صالح', rejected: 'مرفوض', cancelled: 'ملغى', submitted: 'قيد المراجعة' }
 const TONE = { valid: 'bg-emerald-50 text-emerald-700 border-emerald-200', cancelled: 'bg-gray-100 text-gray-600 border-gray-200',
@@ -90,7 +91,7 @@ export function HistoryDetail({ kind, id }) {
   )
 }
 
-export default function HistoryTab() {
+export default function HistoryTab({ me }) {
   const [system, setSystem] = useState('production')
   const [kind, setKind] = useState('documents')
   const [f, setF] = useState({ date_from: '', date_to: '', direction: '', status: '', doc_type: '', device: '', q: '' })
@@ -101,6 +102,7 @@ export default function HistoryTab() {
   const set = (k, v) => { setF(x => ({ ...x, [k]: v })); setPage(1) }
   const params = { system, page, ordering, ...Object.fromEntries(Object.entries(f).filter(([, v]) => v)) }
   const list = useQuery({
+    enabled: kind !== 'recon',
     queryKey: ['tax-invoicing', 'history', kind, params],
     queryFn: () => (kind === 'documents' ? taxInvoicingApi.historyDocuments(params) : taxInvoicingApi.historyReceipts(params)).then(r => r.data),
     placeholderData: keepPreviousData,
@@ -130,6 +132,8 @@ export default function HistoryTab() {
               className={`px-3 py-1 text-sm ${kind === k ? 'bg-gray-900 text-white' : 'bg-white text-gray-600'}`}>{label}</button>
           ))}
         </div>
+        {kind !== 'recon' && (
+          <>
         <Field label="من"><input type="date" className={INPUT} value={f.date_from} onChange={e => set('date_from', e.target.value)} aria-label="من تاريخ" /></Field>
         <Field label="إلى"><input type="date" className={INPUT} value={f.date_to} onChange={e => set('date_to', e.target.value)} aria-label="إلى تاريخ" /></Field>
         {kind === 'documents' && (
@@ -162,8 +166,10 @@ export default function HistoryTab() {
           <input className={`${INPUT} w-full`} value={f.q} onChange={e => set('q', e.target.value)}
             placeholder={kind === 'documents' ? 'الرقم الداخلي، الاسم، الرقم الضريبي، UUID' : 'رقم الإيصال أو UUID'} aria-label="بحث" />
         </Field>
+          </>
+        )}
       </div>
-      {list.isLoading ? <Loading /> : list.error ? <Failed error={list.error} /> : (
+      {kind === 'recon' ? <ReconSection system={system} me={me} /> : list.isLoading ? <Loading /> : list.error ? <Failed error={list.error} /> : (
         <>
           <div className="text-xs text-gray-600 mb-2">{fmtInt(data.count)} {kind === 'documents' ? 'مستند' : 'إيصال'} · الإجمالي {fmt(data.total_amount)}</div>
           <div className="overflow-x-auto">
