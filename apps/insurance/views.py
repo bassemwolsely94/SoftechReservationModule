@@ -513,12 +513,17 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='find-receipt')
     def find_receipt(self, request):
         """«بحث برقم الروشتة»: every claim a SOFTECH receipt sits in (active or excluded, and how it
-        came in) plus the motalba cache. Read-only. ?docnumber=…[&branch=…]"""
-        from .receipt_search import find_receipt
+        came in) plus the motalba cache. Read-only. ?docnumber=…[&branch=…]  or  ?patient=<name>
+        (receipts whose patient name matches, newest first, capped — `more` says some were left out)."""
+        from .receipt_search import find_by_patient, find_receipt
+        patient = (request.query_params.get('patient') or '').strip()
+        if patient:
+            results, more = find_by_patient(patient)
+            return Response({'results': results, 'more': more})
         docnumber = (request.query_params.get('docnumber') or '').strip()
         if not docnumber:
-            return Response({'error': 'أدخل رقم الروشتة'}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({'results': find_receipt(docnumber, request.query_params.get('branch'))})
+            return Response({'error': 'أدخل رقم الروشتة أو اسم المريض'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'results': find_receipt(docnumber, request.query_params.get('branch')), 'more': False})
 
     @action(detail=False, methods=['get'], url_path='list-motalbas')
     def list_motalbas(self, request):
