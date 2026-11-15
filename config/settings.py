@@ -91,7 +91,8 @@ if not SECRET_KEY or SECRET_KEY.lower().startswith('change'):
         if SECRET_KEY and not _RUNNING_TESTS:
             sys.stderr.write('WARNING: SECRET_KEY is the .env.example placeholder — using a throwaway key '
                              'for this process. Set a long random SECRET_KEY in .env.\n')
-        SECRET_KEY = 'dev-only-insecure-' + os.urandom(16).hex()
+        _throwaway_key = 'dev-only-insecure-' + os.urandom(16).hex()
+        SECRET_KEY = _throwaway_key
     else:
         from django.core.exceptions import ImproperlyConfigured
         raise ImproperlyConfigured(

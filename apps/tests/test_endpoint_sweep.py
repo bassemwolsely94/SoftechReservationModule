@@ -68,10 +68,10 @@ class AnonymousSweepTests(TestCase):
                         problems.append(f'{method.upper()} {path} → {code} ({vid})')
         self.assertEqual(problems, [], '\n'.join(problems))
 
-    def test_django_admin_requires_login(self):
-        r = self.client.get('/admin/')
-        self.assertEqual(r.status_code, 302)
-        self.assertIn('/admin/login/', r['Location'])
+    def test_django_admin_not_mounted_by_default(self):
+        # Full audit 2026-11-15 (SEC-4): DJANGO_ADMIN_ENABLED defaults to off; when an admin turns it on
+        # for a maintenance window it still requires login (security/test_admin_exposure.py).
+        self.assertEqual(self.client.get('/admin/').status_code, 404)
 
 
 class AuthenticatedGetSmokeTests(TestCase):
