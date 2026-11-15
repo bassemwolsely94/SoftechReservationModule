@@ -317,10 +317,10 @@ def uncoded_items(system, branch=None, start=None, end=None):
                 .order_by('-value', 'itemcode'))
     codes = [r['itemcode'] for r in rows]
     profiles = {p.softech_itemcode: p for p in TaxItemProfile.objects.filter(softech_itemcode__in=codes)}
-    requests = {}
+    latest_request = {}
     for req in (TaxCodeRequest.objects.filter(profile__softech_itemcode__in=codes, purpose=TaxCodeRequest.PURPOSE_NEW)
                 .order_by('profile_id', '-id').values('profile__softech_itemcode', 'status')):
-        requests.setdefault(req['profile__softech_itemcode'], req['status'])
+        latest_request.setdefault(req['profile__softech_itemcode'], req['status'])
     names = {}
     if codes:
         from apps.catalog.models import Item
@@ -330,5 +330,5 @@ def uncoded_items(system, branch=None, start=None, end=None):
         r['name'] = names.get(r['itemcode']) or (p.item_name_ar or p.item_name if p else '') or ''
         r['coding_status'] = p.coding_status if p else TaxItemProfile.CODE_MISSING
         r['coded_now'] = bool(p and p.eta_code)
-        r['request_status'] = requests.get(r['itemcode'], '')
+        r['request_status'] = latest_request.get(r['itemcode'], '')
     return rows

@@ -493,7 +493,7 @@ def recon_uncoded_export(request):
         raise _Bad(f'النتيجة {len(rows)} صفاً؛ ضيّق الفلاتر (الحد {MAX_EXPORT})')
     from .models import TaxCodeRequest, TaxItemProfile
     coding = dict(TaxItemProfile.CODE_STATUS_CHOICES)
-    requests = dict(TaxCodeRequest.STATUS_CHOICES)
+    request_labels = dict(TaxCodeRequest.STATUS_CHOICES)
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = 'أصناف بلا كود'
@@ -502,7 +502,7 @@ def recon_uncoded_export(request):
     for r in rows:
         row = _uncoded_row(r)
         row['coding_status'] = coding.get(row['coding_status'], row['coding_status'])
-        row['request_status'] = requests.get(row['request_status'], '')
+        row['request_status'] = request_labels.get(row['request_status'], '')
         ws.append([row.get(key) for key, _ in UNCODED_COLUMNS])
     buf = io.BytesIO()
     neutralise_formulas(wb).save(buf)       # item names are typed text: never a live formula in Excel
