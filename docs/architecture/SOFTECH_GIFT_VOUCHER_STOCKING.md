@@ -241,6 +241,18 @@ Original part-2 notes:
    (`validators._coupon_negative_price_ok`), so a −50 line can never pass without its serial verified.
 Daily `sync_coupon_lifecycle` + `coupon_report` remains the control for coupons redeemed directly in SOFTECH.
 
+### Switch-on decision (owner 2026-11-11)
+- **ON at cutover, all rules strict.** This is in the P-54 switch table and in both `.env` templates.
+  Coupon OTP (a code sent to the owner's phone) is parked: revisit after a month of the guard plus the digest.
+- **Branch 130 (−309 coupons, sold without stock) cannot be helped by relaxing the branch-stock rule.**
+  The POS writer (`pos_orders.writer._coupon_serial_alloc`) independently requires the serial's own
+  `stkbalexpiry` row with qty > 0 in the order's store. With the rule relaxed, the line passes the check
+  and is then refused at push time. Selling a coupon without its stock row would change posting, so it is
+  stop-and-ask and not built.
+- The fix for 130 is stock: transfer the coupons physically held there (doc 125 → 25, serial on each
+  line) so each serial has its row. Until then, 130's coupon sales on `/pos` are refused with the
+  «غير موجود في مخزون هذا الفرع» message. Direct SOFTECH sales at 130 stay visible in the daily digest.
+
 ## 9. Daily misuse digest + coupon screen — BUILT (2026-10-06)
 
 **Daily job** (`apps/sync/tasks._run_coupon_lifecycle_sync`, 06:20, id `coupon_lifecycle_sync`; runs in
