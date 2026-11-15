@@ -37,8 +37,8 @@ The full how-to for every owner step is in [owner steps](2026-11-owner-go-live-s
 
 | # | Finding | What to do |
 |---|---|---|
-| F1 | **The office runtime is not running.** No `python.exe` on the office PC and nothing listens on port 8000 (checked 2026-11-15). So no web, no scheduler (no SOFTECH writes, no syncs) and no AMI bridge right now. | Owner: if this was not on purpose, start web + scheduler + AMI bridge from `.claude/worktrees/main-runtime` as usual, and check there is only one scheduler. |
-| F2 | `main-runtime` is at `cd39dc84` (#135), behind `main`. It is missing `tax_invoicing` 0011 (from #136). | Before restarting: fast-forward `main-runtime` to `main`, run `migrate`, then start. |
+| F1 | **The office runtime was down** (PC restart at 04:44, nothing started on its own). | **Fixed 2026-11-15:** web, scheduler (one), AMI bridge and screens restarted. A Windows Startup entry now starts all four at logon and skips any already running. W4 on cutover day must delete it (see the [cutover day sheet](2026-11-cutover-day-sheet.md)). |
+| F2 | `main-runtime` was at `cd39dc84` (#135), behind `main`. | **Fixed:** moved to `main`. `tax_invoicing` 0011 was already applied to the office database. |
 | F3 | `TAX_ETA_HISTORY_RECEIPTS_START` (default `2025-01-01`) is not in the W6 key table of the tax cutover page. | Nothing to type: the default is right unless the owner wants another start. Copy the office value if it was changed. |
 
 ## Open PR
@@ -57,7 +57,7 @@ Owner-only unless marked. Never paste a key or password into a Claude chat.
 
 | # | Step | How | Done when |
 |---|---|---|---|
-| A0 | Office back up (F1, F2) | Fast-forward `main-runtime`, `migrate`, start web + scheduler + AMI bridge | port 8000 answers; one scheduler |
+| A0 | ~~Office back up (F1, F2)~~ **done 2026-11-15** | — | port 8000 answers; one scheduler |
 | A2 | `OMNI_CREDENTIALS_KEY`: generate, save in the password manager, add to the office `.env`, restart | 2026-11-12 page, step 2. Nothing to re-encrypt (office has no stored channel credentials). | `manage.py omni_credentials` ends `OK` |
 | A3 | `COUNSEL_PHONE_HASH_KEY`: one value for office and VPS | owner steps §2 | `check --deploy` shows no `counselling.W001` |
 | A4 | VPS `.env`: the two keys above + `LIFECYCLE_HOLD_ROOT=/opt/elrezeiky/app/media_hold`; create the folder. **Before A5.** | 2026-11-12 page, step 4 | the `grep -c` prints `2` |
@@ -79,7 +79,7 @@ Owner-only unless marked. Never paste a key or password into a Claude chat.
 | B10 | Ain Shams route on the HQ MikroTik | owner steps §6 (~20 min) |
 | B10b | Uptime monitor on `/api/public/health/` every 5 min | checklist §2 item 14 |
 | B10c | Pre-cutover checks on the VPS DB: `check_schema_drift`, the live `auto_repair` value, `migrate` (everything since the VPS was last released, incl. users 0052/0053, pbx 0011 and the 12 migrations above), `makemigrations --check` clean | `docs/security/round2/SUMMARY.md` "Left open" |
-| B10d | **Claude:** one printable cutover-day page (W0–W9 + tax steps, no secrets) | on request |
+| B10d | ~~Printable cutover-day page~~ **done:** [cutover day sheet](2026-11-cutover-day-sheet.md) | print it before the day |
 
 **Cutover day (B11)** — W0–W9 in the [checklist](../GO_LIVE_CHECKLIST.md), with the [tax steps](2026-11-tax-cutover-steps.md):
 W1 every office `.env` a reader **and** both `TAX_ETA_READ_*_ENABLED=False` · W3 drain incl. tax `0 0 0 0` · W4 stop
@@ -99,7 +99,6 @@ the one-time `eta_recon` backfill. Then turn switches on one at a time with the 
 
 - **B8:** the VPS `.env`, TLS, and the rehearsal restore.
 - **B9b:** the SSTP secret, the smoke-test admin password and the ETA portal secrets have not been rotated.
-- **F1:** whether the office runtime was stopped on purpose.
 
 ## Not checked
 
