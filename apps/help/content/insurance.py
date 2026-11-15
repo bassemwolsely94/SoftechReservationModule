@@ -334,12 +334,8 @@ SCREENS = [
              'label': T('مطالبة | روشتة', 'Claim | Receipt'),
              'text': T('اختار البحث بإيه: «مطالبة» يفلتر الجدول، و«روشتة» يدوّر على رقم روشتة سوفتك في كل المطالبات.',
                        'Choose what to search: "Claim" filters the table, "Receipt" finds a SOFTECH receipt number across every claim.'),
-             'more': T('الاختيار بيتحفظ على الجهاز ده.
-• «روشتة»: اكتب الرقم كامل واضغط Enter (أو استنى لحظة). بيظهر فوق الجدول كل مطالبة فيها الروشتة دي — نشطة أو مستثناة وسبب الاستثناء — وجت إزاي: مستوردة، إضافة يدوية، أو مزامنة سوفتك.
-• نفس الرقم ممكن يتكرر في فرعين، فكل نتيجة بفرعها.',
-                       'The choice is remembered on this device.
-• "Receipt": type the full number and press Enter (or wait a moment). Every claim holding that receipt shows above the table — active or excluded with the reason — and how it came in: imported, added by hand, or a SOFTECH re-sync.
-• The same number can exist in two branches, so each result shows its branch.'),
+             'more': T('الاختيار بيتحفظ على الجهاز ده.\n• «روشتة»: اكتب الرقم كامل واضغط Enter (أو استنى لحظة). بيظهر فوق الجدول كل مطالبة فيها الروشتة دي — نشطة أو مستثناة وسبب الاستثناء — وجت إزاي: مستوردة، إضافة يدوية، أو مزامنة سوفتك.\n• نفس الرقم ممكن يتكرر في فرعين، فكل نتيجة بفرعها.',
+                       'The choice is remembered on this device.\n• "Receipt": type the full number and press Enter (or wait a moment). Every claim holding that receipt shows above the table — active or excluded with the reason — and how it came in: imported, added by hand, or a SOFTECH re-sync.\n• The same number can exist in two branches, so each result shows its branch.'),
          },
             {'target': 'insurance-claims-search',
              'label': T('بحث', 'Search'),
