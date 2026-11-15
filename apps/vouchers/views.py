@@ -322,6 +322,10 @@ class VoucherViewSet(viewsets.ModelViewSet):
         On success returns the redemption document with reference_code for POS.
         """
         voucher = self.get_object()
+        # Lock the VOUCHER row too (not only the OTP): two different OTPs verified at the same moment
+        # both read times_used=0 and both minted a document on a single-use voucher. A concurrent
+        # verification now waits here and re-reads the incremented count (full audit 2026-11-15, BE-5).
+        voucher = Voucher.objects.select_for_update().get(pk=voucher.pk)
         ser = VerifyOTPSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         plain        = ser.validated_data['code']
