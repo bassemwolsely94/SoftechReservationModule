@@ -15,7 +15,7 @@ PC is the SOFTECH writer and development server until cutover (owner, 2026-11-15
 
 | # | Blocker | Finding | Where fixed |
 |---|---|---|---|
-| 1 | Office signs tokens with the public placeholder key; the VPS must start with its own key and the channel-credential re-key plan | SEC-1 | D-01/D-02 |
+| 1 | Office signed tokens with the public placeholder key | SEC-1 | **Closed 2026-11-15** (key replaced, guard `eec5a978`). The VPS still needs its own `SECRET_KEY`, `OMNI_CREDENTIALS_KEY` and `COUNSEL_PHONE_HASH_KEY` — do not copy the office values |
 | 2 | Double-post paths after a lost commit reply | S-1, S-2, S-3, S-5 | D-05…D-08 |
 | 3 | A posted POS order could be deleted through the API | BE-1 | **Fixed** on `claude/full-project-audit` |
 | 4 | One web process for HTTP + WebSocket + long exports; no DB statement timeout | PERF-3 | D-21 |
