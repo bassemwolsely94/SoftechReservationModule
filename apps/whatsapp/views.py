@@ -71,11 +71,12 @@ class WebhookView(APIView):
     def _verify_signature(self, request) -> bool:
         app_secret = getattr(settings, 'WHATSAPP_APP_SECRET', '')
         if not app_secret:
-            # Fail closed: without the app secret anyone could post forged events.
-            # Only a DEBUG (dev) process accepts unsigned payloads.
+            # Fail closed: without the app secret anyone could post forged events. Only an explicit
+            # WEBHOOK_ALLOW_UNSIGNED (local experiments) accepts unsigned payloads — not DEBUG (SEC-4).
+            allow = bool(getattr(settings, 'WEBHOOK_ALLOW_UNSIGNED', False))
             logger.warning('WHATSAPP_APP_SECRET not set — %s unsigned webhook',
-                           'accepting (DEBUG)' if settings.DEBUG else 'rejecting')
-            return bool(settings.DEBUG)
+                           'accepting (WEBHOOK_ALLOW_UNSIGNED)' if allow else 'rejecting')
+            return allow
 
         sig_header = request.META.get('HTTP_X_HUB_SIGNATURE_256', '')
         if not sig_header.startswith('sha256='):

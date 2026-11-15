@@ -86,7 +86,7 @@ urlpatterns = [
     path('media/<path:path>', serve_media, name='media'),
 ]
 
-# N0/H9: Django admin has no 2FA, so it is mounted only when DJANGO_ADMIN_ENABLED (default: DEBUG).
+# N0/H9: Django admin has no 2FA, so it is mounted only when DJANGO_ADMIN_ENABLED (default: off — SEC-4).
 # In production leave it off; turn it on for a maintenance window only.
 if settings.DJANGO_ADMIN_ENABLED:
     urlpatterns.insert(0, path('admin/', admin.site.urls))
