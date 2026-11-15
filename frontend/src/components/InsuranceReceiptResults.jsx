@@ -1,5 +1,5 @@
 /**
- * «بحث برقم الروشتة» results on مطالبات التأمين: one block per receipt (number · branch · date ·
+ * «بحث برقم الروشتة / باسم المريض» results on مطالبات التأمين: one block per receipt (number · branch · date ·
  * patient · net), one line per claim it sits in — active or excluded, and how it came in — plus
  * the SOFTECH motalba it belongs to (cache, ~90 days). Read-only; «فتح ↗» opens the claim
  * filtered to that receipt. Receipt numbers repeat across branches, so the branch always shows.
@@ -15,16 +15,19 @@ const ORIGIN = {
 
 const fmtNet = (v) => v == null ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-export default function InsuranceReceiptResults({ loading, error, query, results }) {
+export default function InsuranceReceiptResults({ loading, error, query, results, more = false, mode = 'receipt' }) {
   const navigate = useNavigate()
   const BL = useBranchLabels()
 
-  if (loading) return <div className="mx-6 mb-3 text-sm text-gray-400">جارٍ البحث عن الروشتة {query}…</div>
+  const byName = mode === 'patient'
+  if (loading) return <div className="mx-6 mb-3 text-sm text-gray-400">جارٍ البحث عن {byName ? 'روشتات المريض' : 'الروشتة'} {query}…</div>
   if (error) return <div className="mx-6 mb-3 text-sm text-red-600">{error}</div>
   if (!results) return null
   if (!results.length) {
     return <div className="mx-6 mb-3 px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-500">
-      لا توجد روشتة بالرقم {query} في أي مطالبة ولا في كاش مطالبات سوفتك (آخر 90 يوماً).
+      {byName
+        ? <>لا توجد روشتة لمريض باسم «{query}» في أي مطالبة.</>
+        : <>لا توجد روشتة بالرقم {query} في أي مطالبة ولا في كاش مطالبات سوفتك (آخر 90 يوماً).</>}
     </div>
   }
 
@@ -32,6 +35,11 @@ export default function InsuranceReceiptResults({ loading, error, query, results
 
   return (
     <div className="mx-6 mb-3 space-y-2" data-tour="insurance-claims-receipt-results">
+      {byName && (
+        <div className="text-xs text-gray-500">
+          {results.length} روشتة باسم «{query}» — الأحدث أولاً{more ? '. توجد نتائج أكثر: اكتب الاسم كاملاً لتضييق البحث.' : '.'}
+        </div>
+      )}
       {results.map(r => (
         <div key={`${r.docnumber}-${r.branch}`} className="rounded-lg border border-blue-200 bg-white">
           <div className="px-4 py-2 border-b border-blue-100 bg-blue-50/60 text-sm flex flex-wrap gap-x-3 gap-y-1">

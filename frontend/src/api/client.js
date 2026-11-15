@@ -2585,6 +2585,7 @@ export const insuranceApi = {
 
   // «بحث برقم الروشتة» on the claims list — every claim a receipt sits in (read-only)
   findReceipt:        (docnumber, branch)   => api.get('/insurance/claims/find-receipt/', { params: { docnumber, ...(branch ? { branch } : {}) } }),
+  findPatientReceipts: (patient)            => api.get('/insurance/claims/find-receipt/', { params: { patient } }),
 
   // Manual Rx
   lookupRx:           (claimId, docnumber)  => api.get(`/insurance/claims/${claimId}/lookup-rx/`, { params: { docnumber } }),

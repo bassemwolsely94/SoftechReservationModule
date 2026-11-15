@@ -26,9 +26,10 @@ def _claim(name='جهة أ', **kw):
 
 
 def _rx(claim, docno, branch='140', **kw):
+    kw = {'softech_docdate': date(2026, 10, 12), 'patient_name': 'أحمد محمد علي حسن',
+          'net_after': Decimal('412.50'), **kw}
     return m.InsuranceClaimPrescription.objects.create(
-        claim=claim, softech_docnumber=docno, softech_branchcode=branch, softech_docdate=date(2026, 10, 12),
-        patient_name='أحمد محمد علي حسن', net_after=Decimal('412.50'), **kw)
+        claim=claim, softech_docnumber=docno, softech_branchcode=branch, **kw)
 
 
 class FindReceiptTests(TestCase):
@@ -103,7 +104,56 @@ class FindReceiptTests(TestCase):
         self.assertEqual(find_receipt('4401'), [])
 
 
+class FindByPatientTests(TestCase):
+    def test_name_match_lists_every_claim_of_the_receipt(self):
+        from apps.insurance.receipt_search import find_by_patient
+        a, b = _claim(), _claim('جهة ب')
+        _rx(a, '1101')                                             # أحمد محمد علي حسن
+        _rx(b, '1101', patient_name='احمد محمد')                     # same receipt, other spelling
+        _rx(a, '1102', patient_name='منى سيد')
+        res, more = find_by_patient('محمد علي')
+        self.assertFalse(more)
+        self.assertEqual([r['docnumber'] for r in res], ['1101'])
+        self.assertEqual(len(res[0]['appearances']), 2)           # both claims, not just the matched row
+
+    def test_wildcard_any_order_and_newest_first(self):
+        from apps.insurance.receipt_search import find_by_patient
+        c = _claim()
+        _rx(c, '2201', softech_docdate=date(2026, 10, 1), patient_name='سارة احمد')
+        m.InsuranceClaimManualRx.objects.create(
+            claim=c, softech_docnumber='2202', softech_branchcode='150', softech_docdate=date(2026, 10, 20),
+            patient_name='سارة محمود احمد', net_after=Decimal('10'))
+        self.assertEqual([r['docnumber'] for r in find_by_patient('احمد سارة')[0]], ['2202', '2201'])
+        self.assertEqual([r['docnumber'] for r in find_by_patient('سارة*احمد')[0]], ['2202', '2201'])
+
+    def test_too_short_returns_nothing(self):
+        from apps.insurance.receipt_search import find_by_patient
+        _rx(_claim(), '3301')
+        self.assertEqual(find_by_patient('أ'), ([], False))
+        self.assertEqual(find_by_patient(' * '), ([], False))
+
+    def test_cap_sets_more(self):
+        from apps.insurance import receipt_search as rs
+        c = _claim()
+        for i in range(4):
+            _rx(c, f'44{i}', patient_name='نفس الاسم')
+        old = rs.MAX_RECEIPTS
+        rs.MAX_RECEIPTS = 3
+        self.addCleanup(setattr, rs, 'MAX_RECEIPTS', old)
+        res, more = rs.find_by_patient('نفس الاسم')
+        self.assertEqual((len(res), more), (3, True))
+
+
 class FindReceiptEndpointTests(TestCase):
+    def test_patient_param(self):
+        _rx(_claim(), '5501', patient_name='كريم فؤاد')
+        u = get_user_model().objects.create_user(username='rs2', password='x', is_staff=True, is_superuser=True)
+        api = APIClient(); api.force_authenticate(u)
+        r = api.get('/api/insurance/claims/find-receipt/', {'patient': 'كريم'})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual([x['docnumber'] for x in r.json()['results']], ['5501'])
+        self.assertFalse(r.json()['more'])
+
     def test_endpoint_and_empty_400(self):
         _rx(_claim(), '3300')
         u = get_user_model().objects.create_user(username='rs', password='x', is_staff=True, is_superuser=True)
