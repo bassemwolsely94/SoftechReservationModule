@@ -719,6 +719,8 @@ class EtaMirrorDocument(models.Model):
     currency = models.CharField(max_length=5, blank=True)
     references = models.JSONField(default=list, blank=True)
     raw = models.JSONField(default=dict, blank=True)
+    detail = models.JSONField(null=True, blank=True)           # ETA's full detail, asked once when opened
+    detail_at = models.DateTimeField(null=True, blank=True)
     source = models.CharField(max_length=10, blank=True)             # package | search | recent | detail
     fetched_at = models.DateTimeField(auto_now=True)
 
@@ -745,6 +747,8 @@ class EtaMirrorReceipt(models.Model):
     total_amount = models.DecimalField(max_digits=18, decimal_places=5, null=True, blank=True)
     buyer_type = models.CharField(max_length=5, blank=True)
     raw = models.JSONField(default=dict, blank=True)
+    detail = models.JSONField(null=True, blank=True)           # ETA's full detail, asked once when opened
+    detail_at = models.DateTimeField(null=True, blank=True)
     source = models.CharField(max_length=10, blank=True)
     fetched_at = models.DateTimeField(auto_now=True)
 
