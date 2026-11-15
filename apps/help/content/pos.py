@@ -571,7 +571,10 @@ SCREENS = [
             T('امسح الباركود أو ابحث وأضف الأصناف؛ «روشتة / صوت» لإضافة الأصناف من صورة الروشتة.', 'Scan or search to add items; "Prescription / voice" adds items from a prescription photo.'),
             T('افتح «السداد» من الأسفل، ثم «معاينة» أو «فعلي» للإرسال.', 'Open "Payment" at the bottom, then "Preview" or "Live" to send.'),
         ],
-        'tips': _TIPS[:3],
+        'tips': _TIPS[:3] + [
+            T('موافقة التواصل تحت شريط العميل: ضغطة واحدة على «تذكيرات الصرف» أو «العروض» تسجّل رد العميل (✓ وافق، ✕ رفض).',
+              'Contact consent under the customer bar: one tap on "Refill reminders" or "Offers" records the customer\'s answer (✓ agreed, ✕ refused).'),
+        ],
         'related': ['pos.order'],
         'workflows': ['order'],
         'tour': [
@@ -781,10 +784,6 @@ SCREENS = [
              'label': T('إضافة للأمر', 'Add to order'),
              'text': T('يضيف الصنف المعلَّم في نتائج البحث للأمر — زي ما تضغط عليه.', 'Adds the highlighted search result to the order — same as tapping it.'),
              'open_hint': T('يظهر بعد ما تختار نتيجة في بحث الأصناف على الموبايل.', 'Appears after you highlight a result in the mobile item search.')},
-        ],
-        'tips': [
-            T('موافقة التواصل تحت شريط العميل: ضغطة واحدة على «تذكيرات الصرف» أو «العروض» تسجّل رد العميل (✓ وافق، ✕ رفض).',
-              'Contact consent under the customer bar: one tap on "Refill reminders" or "Offers" records the customer\'s answer (✓ agreed, ✕ refused).'),
         ],
         'updated': '2026-11-15',
         'change_note': T('موافقة التواصل (P-05): تذكيرات الصرف والعروض محتاجة موافقة العميل', "Contact consent (P-05): refill reminders and offers need the customer's yes"),

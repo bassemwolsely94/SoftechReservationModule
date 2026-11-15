@@ -374,7 +374,10 @@ SCREENS = [
             T('سجّل الأمراض المزمنة في البطاقة (تعديل) لو العميل أخبرك بها.', 'Record chronic conditions on the card (edit) if the customer tells you.'),
             T('«+ حجز جديد» يفتح نموذج الحجز (اختر العميل فيه)، و«طلبات لم تُلبَّ» تفتح طلبات العميل.', '"+ New reservation" opens the reservation form (pick the customer there); "Unmet requests" opens the customer\'s requests.'),
         ],
-        'tips': [T('أرقام عميل فرع تاني بتظهر مخفية (آخر 3 أرقام) — حتى في ملخص الكاشير والفاتورة والملف الطبي.', "Another branch's customer's numbers show hidden (last 3 digits) — also in the cashier summary, the receipt and the patient profile."),
+        'tips': [
+            T('موافقة التواصل: تذكيرات الصرف، العروض، العروض حسب الحالة الصحية، ورسائل الخدمة. التذكيرات والعروض محتاجة «✓»؛ رسائل الخدمة (طلبك جاهز، الصنف توفر) مسموحة إلا لو العميل رفض. لو العميل بعت «إيقاف» على واتساب بيتسجّل رفض لكل الأنواع تلقائيًا.',
+              'Contact consent: refill reminders, offers, health-targeted offers and service messages. Reminders and offers need a "✓"; service messages (order ready, item back) are allowed unless the customer refused. A customer who sends "STOP" on WhatsApp is recorded as refusing everything, automatically.'),
+            T('أرقام عميل فرع تاني بتظهر مخفية (آخر 3 أرقام) — حتى في ملخص الكاشير والفاتورة والملف الطبي.', "Another branch's customer's numbers show hidden (last 3 digits) — also in the cashier summary, the receipt and the patient profile."),
                  
             T('الملف الصحي معلومة حساسة — لا تشاركها خارج العمل.', 'The health profile is sensitive — never share it outside work.'),
             T('تعديل النقاط يؤثر على رصيد العميل في كل الفروع ويُسجَّل باسمك.', 'Adjusting points affects the customer\'s balance in all branches and is recorded under your name.'),
@@ -492,10 +495,6 @@ SCREENS = [
              'text': T('يحفظ الأمراض المزمنة اللي كتبتها في ملف العميل عندنا.', 'Saves the chronic conditions you typed in our customer file.'),
              'when': T('اكتبها واضحة — الصيدلي بيشوفها وهو بيصرف.', 'Write them clearly — the pharmacist sees them when dispensing.'),
              'open_hint': T('بعد «تعديل» في كارت «أمراض مزمنة».', 'After "Edit" on the "Chronic conditions" card.')},
-        ],
-        'tips': [
-            T('موافقة التواصل: تذكيرات الصرف، العروض، العروض حسب الحالة الصحية، ورسائل الخدمة. التذكيرات والعروض محتاجة «✓»؛ رسائل الخدمة (طلبك جاهز، الصنف توفر) مسموحة إلا لو العميل رفض. لو العميل بعت «إيقاف» على واتساب بيتسجّل رفض لكل الأنواع تلقائيًا.',
-              'Contact consent: refill reminders, offers, health-targeted offers and service messages. Reminders and offers need a "✓"; service messages (order ready, item back) are allowed unless the customer refused. A customer who sends "STOP" on WhatsApp is recorded as refusing everything, automatically.'),
         ],
         'updated': '2026-11-15',
         'change_note': T('موافقة التواصل (P-05): تذكيرات الصرف والعروض محتاجة موافقة العميل', "Contact consent (P-05): refill reminders and offers need the customer's yes"),
