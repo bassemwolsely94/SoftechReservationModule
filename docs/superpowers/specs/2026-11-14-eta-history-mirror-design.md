@@ -177,6 +177,29 @@ So: documents from `TAX_ETA_HISTORY_START` (2022-06-01) in 30-day windows by sub
 A window is fetched completely in one round (all pages) and loaded with ETA's own count beside ours; "no results"
 (404 NoResult) is a loaded window with 0. Everything else from phase 1 stands (states, lock, round record, top-up).
 
+## Phase 3 — receipts reconciliation, SOFTECH ↔ ETA (owner: "go ahead", 2026-11-15)
+
+Facts (read-only probes 2026-11-15): Invoicer's own tables in SOFTECH (`einv_transm`, `einv_items`, …) are **empty** —
+Invoicer logs in its own database — so the match is two-way. ETA's `receiptNumber` = SOFTECH `stktransm.docnumber`
+(doccode 115), on the **Cairo** calendar date of `dateTimeIssued`. Each POS serial belongs to one SOFTECH branch
+(sampled: CN1374011JOO43→100, MJVYAW2→130, 2UA31502Ps→140, 7M7HMM1→150, CZC32553MM→160, CND7082111580JP→170). One
+sampled sale differs in amount (ETA 120.42 vs SOFTECH 638.00) — the kind of case this exists to surface.
+
+Owner-approved defaults:
+- Scope per branch starts at that device's first receipt at ETA; earlier sales were never meant for ETA.
+- Sales (115) and returns (30, ETA type `r`) are matched. Sales whose channel rule is "by invoice" are listed apart,
+  never as "missing". Closed branches (لاغى: 110, 120, 180, 190, 210, 220) are left out.
+- Outcomes per sale: matched (Valid, totals within 0.05 EGP) · amount_differs · missing_at_eta · eta_only ·
+  not_valid (cancelled / invalid / rejected) · duplicate (same number more than once at ETA) · by_invoice.
+- Receipts first; invoices in a later step once Invoicer's invoice numbering is mapped to SOFTECH documents.
+
+Design: `EtaDeviceBranch` (system, pos_serial → softech branch, first issued day; learned from a sample of each device's
+receipts against SOFTECH, editable). `EtaReconLine` per SOFTECH sale or unmatched ETA receipt (system, branch, day,
+doccode, docnumber, SOFTECH total, ETA uuid / total / status, outcome), recomputed per (system, branch, day) as a
+delete+insert in one transaction. SOFTECH read from HQ `stktransm` (read-only, `config/sybase.py`), one branch-day per
+query. Daily after the top-up: the last 30 days; the full history once (command / button, month by month). Screen:
+«المطابقة» in «🗂️ سجل المصلحة» — counts and amounts per branch × month per outcome, drill-down, export.
+
 ## Phases (one PR each)
 
 1. Reader (both systems, read-only surface), mirror models, window/run tracking, package backfill + top-up, refresh,

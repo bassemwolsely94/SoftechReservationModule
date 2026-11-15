@@ -44,6 +44,10 @@ const api = vi.hoisted(() => ({
   historyReceipt: vi.fn(),
   historyDocumentPdf: vi.fn(),
   historyExport: vi.fn(),
+  reconSummary: vi.fn(),
+  reconLines: vi.fn(),
+  reconExport: vi.fn(),
+  reconRefresh: vi.fn(),
   saveReceiptConfig: vi.fn(),
 }))
 
@@ -493,5 +497,19 @@ describe('ETA history tab', () => {
     expect(api.historyReceipts).toHaveBeenLastCalledWith(expect.objectContaining({ system: 'preprod' }))
     fireEvent.change(screen.getByLabelText('الجهاز'), { target: { value: 'POS-A' } })
     await waitFor(() => expect(api.historyReceipts).toHaveBeenLastCalledWith(expect.objectContaining({ device: 'POS-A' })))
+  })
+})
+
+describe('SOFTECH ↔ ETA reconciliation', () => {
+  it('shows outcomes per branch and month and drills into the missing ones', async () => {
+    api.historyDocuments.mockResolvedValue({ data: { count: 0, page: 1, pages: 1, total_amount: null, rows: [] } })
+    api.reconSummary.mockResolvedValue({ data: { last_run_at: null, last_error: '', outcomes: [], devices: [{ pos_serial: '7M7HMM1', branch: '150', first_day: '2025-03-05', source: 'auto', sample: '20/20' }],
+      rows: [{ branch: '150', month: '2026-11', matched: 120, amount_differs: 0, missing_at_eta: 3, eta_only: 0, not_valid: 0, duplicate: 0, by_invoice: 2, softech_total: '1000.00', eta_total: '990.00' }] } })
+    api.reconLines.mockResolvedValue({ data: { count: 1, page: 1, pages: 1, rows: [{ id: 1, day: '2026-11-05', doccode: '115', docnumber: '716999', softech_total: '50.00', eta_total: null, eta_status: '', eta_count: 0 }] } })
+    show(<HistoryTab me={ME} />)
+    fireEvent.click(await screen.findByText('المطابقة'))
+    fireEvent.click(await screen.findByText('3'))
+    expect(await screen.findByText('716999')).toBeTruthy()
+    expect(api.reconLines).toHaveBeenCalledWith(expect.objectContaining({ system: 'production', branch: '150', month: '2026-11', outcome: 'missing_at_eta' }))
   })
 })

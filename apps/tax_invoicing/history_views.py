@@ -12,6 +12,7 @@ import math
 from decimal import Decimal
 
 import openpyxl
+from django.db import connection as _connection
 from django.db.models import Q, Sum
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -22,14 +23,16 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.branches.models import Branch
 from core.export_safety import neutralise_formulas
 from core.permissions import matrix_permission
 from core.sort_ordering import explicit_order_by
+from core.threads import start_thread
 
-from . import services
+from . import eta_recon, services
 from .eta_client import EtaError
 from .eta_reader import SYSTEMS, EtaReader
-from .models import EtaMirrorDocument, EtaMirrorReceipt
+from .models import EtaDeviceBranch, EtaHistoryState, EtaMirrorDocument, EtaMirrorReceipt, EtaReconLine
 
 VIEWER = matrix_permission('tax_invoicing')
 PAGE_SIZE, MAX_PAGE_SIZE, MAX_EXPORT = 50, 200, 50000
@@ -295,3 +298,134 @@ def history_export(request, kind):
     out = HttpResponse(buf.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     out['Content-Disposition'] = f'attachment; filename="eta-{kind}-{request.query_params.get("system")}.xlsx"'
     return out
+
+
+# ── receipts reconciliation, SOFTECH ↔ ETA (phase 3) ───────────────────────────────────────────
+
+EDITOR = matrix_permission('tax_invoicing', get=('view',), post=('edit',), edit=('edit',))
+RECON_SORT = {'day': 'day', 'docnumber': 'docnumber', 'softech_total': 'softech_total', 'eta_total': 'eta_total',
+              'outcome': 'outcome', 'branch': 'softech_branchcode'}
+
+
+def _recon_row(line):
+    return {'id': line.id, 'branch': line.softech_branchcode, 'day': line.day, 'doccode': line.doccode,
+            'docnumber': line.docnumber, 'softech_total': None if line.softech_total is None else str(line.softech_total),
+            'eta_uuid': line.eta_uuid, 'eta_total': _money(line.eta_total), 'eta_status': line.eta_status,
+            'eta_count': line.eta_count, 'outcome': line.outcome}
+
+
+def _recon_lines(request):
+    p = request.query_params
+    qs = EtaReconLine.objects.filter(system=_system(request))
+    if p.get('branch'):
+        qs = qs.filter(softech_branchcode=p['branch'])
+    if p.get('outcome'):
+        qs = qs.filter(outcome=p['outcome'])
+    month = p.get('month') or ''
+    if month:
+        try:
+            year, mon = (int(x) for x in month.split('-'))
+        except ValueError:
+            raise _Bad('الشهر بصيغة YYYY-MM')
+        qs = qs.filter(day__year=year, day__month=mon)
+    if p.get('day'):
+        qs = qs.filter(day=parse_date(p['day']))
+    q = (p.get('q') or '').strip()
+    if q:
+        qs = qs.filter(Q(docnumber=q) | Q(eta_uuid__icontains=q))
+    return qs
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, VIEWER])
+@_guard
+def recon_summary(request):
+    system = _system(request)
+    state = EtaHistoryState.objects.filter(system=system, kind='recon').first()
+    devices = [{'pos_serial': d.pos_serial, 'branch': d.softech_branchcode, 'first_day': d.first_day, 'source': d.source,
+                'sample': f'{d.sample_matched}/{d.sample_size}'}
+               for d in EtaDeviceBranch.objects.filter(system=system).order_by('softech_branchcode', 'pos_serial')]
+    return Response({'rows': eta_recon.summary(system, request.query_params.get('branch') or None), 'devices': devices,
+                     'outcomes': list(eta_recon.OUTCOMES), 'last_run_at': state.last_run_at if state else None,
+                     'last_error': state.last_error if state else ''})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, VIEWER])
+@_guard
+def recon_lines(request):
+    qs = _recon_lines(request)
+    try:
+        ordering = explicit_order_by(request.query_params.get('ordering'), RECON_SORT, ('day', 'docnumber'))
+    except Exception:       # noqa: BLE001 — explicit_order_by raises a ValidationError for an unknown key
+        raise _Bad('ترتيب غير مدعوم')
+    try:
+        size = min(max(int(request.query_params.get('page_size') or PAGE_SIZE), 1), MAX_PAGE_SIZE)
+        page = max(int(request.query_params.get('page') or 1), 1)
+    except ValueError:
+        raise _Bad('رقم الصفحة غير صحيح')
+    count = qs.count()
+    return Response({'count': count, 'page': page, 'pages': max(math.ceil(count / size), 1),
+                     'rows': [_recon_row(x) for x in qs.order_by(*ordering)[(page - 1) * size:page * size]]})
+
+
+RECON_COLUMNS = [('branch', 'الفرع'), ('day', 'اليوم'), ('doccode', 'نوع المستند'), ('docnumber', 'الرقم'),
+                 ('softech_total', 'إجمالي SOFTECH'), ('eta_total', 'إجمالي المصلحة'), ('eta_status', 'حالة المصلحة'),
+                 ('eta_count', 'مرات الإرسال'), ('outcome', 'النتيجة'), ('eta_uuid', 'UUID')]
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, VIEWER])
+@_guard
+def recon_export(request):
+    qs = _recon_lines(request)
+    count = qs.count()
+    if count > MAX_EXPORT:
+        raise _Bad(f'النتيجة {count} صفاً؛ ضيّق الفلاتر (الحد {MAX_EXPORT})')
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'المطابقة'
+    ws.sheet_view.rightToLeft = True
+    ws.append([label for _, label in RECON_COLUMNS])
+    names = {str(code).strip(): (ar or en or '').strip()
+             for code, ar, en in Branch.objects.values_list('softech_branch_id', 'name_ar', 'name')}
+    for line in qs.order_by('softech_branchcode', 'day', 'docnumber').iterator(chunk_size=2000):
+        row = _recon_row(line)
+        name = names.get(row['branch'])
+        row['branch'] = f"{row['branch']} · {name}" if name else row['branch']    # never a bare code in Excel
+        ws.append([row.get(key) for key, _ in RECON_COLUMNS])
+    buf = io.BytesIO()
+    neutralise_formulas(wb).save(buf)       # typed text never reaches Excel as a live formula
+    services.audit('eta_recon_export', actor=request.user, entity='eta_recon', entity_id=request.query_params.get('system'),
+                   after={'rows': count, 'filters': dict(request.query_params.items())})
+    out = HttpResponse(buf.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    out['Content-Disposition'] = f'attachment; filename="eta-recon-{request.query_params.get("system")}.xlsx"'
+    return out
+
+
+def _recon_round(system, months):
+    try:
+        eta_recon.learn_devices(system)
+        today = timezone.localdate()
+        days = 30 * months if months else eta_recon.RECENT_DAYS
+        eta_recon.reconcile_range(system, today - dt.timedelta(days=days), today - dt.timedelta(days=1))
+    finally:
+        _connection.close()
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, EDITOR])
+@_guard
+def recon_refresh(request):
+    """Learns the device→branch map and recomputes the last 30 days (or `months` back), in the background.
+    Reads SOFTECH and the local ETA copy only."""
+    system = request.data.get('system') or ''
+    if system not in SYSTEMS:
+        raise _Bad('اختر المنظومة: التجريبية أو الفعلية')
+    try:
+        months = min(max(int(request.data.get('months') or 0), 0), 24)
+    except (TypeError, ValueError):
+        raise _Bad('عدد الشهور غير صحيح')
+    start_thread(_recon_round, args=(system, months), name=f'eta-recon-{system}')
+    services.audit('eta_recon_refresh', actor=request.user, entity='eta_recon', entity_id=system, after={'months': months})
+    return Response({'started': True}, status=status.HTTP_202_ACCEPTED)

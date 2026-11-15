@@ -101,6 +101,26 @@ def analytics_branch_contribution():
     return _get('/api/analytics/branch-contribution/')
 
 
+def eta_recon_export():
+    """SOFTECH ↔ ETA receipts reconciliation workbook (/tax-invoicing → سجل المصلحة → المطابقة → تصدير).
+    One ETA device per planted branch; the SOFTECH read is stubbed with one sale per branch-day."""
+    import datetime as dt
+    from decimal import Decimal
+
+    from apps.branches.models import Branch
+    from apps.tax_invoicing import eta_recon
+    from apps.tax_invoicing.models import EtaDeviceBranch
+
+    day = dt.date(2026, 11, 5)
+    for code in Branch.objects.values_list('softech_branch_id', flat=True):
+        EtaDeviceBranch.objects.get_or_create(system='production', pos_serial=f'NV-{code}', defaults={
+            'softech_branchcode': code, 'first_day': day})
+    sale = [{'doccode': '115', 'docnumber': '1', 'total': Decimal('10'), 'channel': ''}]
+    with mock.patch.object(eta_recon, '_softech_rows', return_value=sale):
+        eta_recon.reconcile_range('production', day, day)
+    return _get('/api/tax-invoicing/history/recon/export/?system=production')
+
+
 EXPORTS = [
     # the KPI board has a call-center block by design: only pending / closed must be absent
     ('kpi_export', kpi_export, frozenset({PENDING, CLOSED})),
@@ -110,4 +130,5 @@ EXPORTS = [
     ('transits_picking_sheet', transits_picking_sheet, frozenset()),
     ('stock_count_board', stock_count_board, ABSENT_ALL),
     ('analytics_branch_contribution', analytics_branch_contribution, ABSENT_ALL),
+    ('eta_recon_export', eta_recon_export, ABSENT_ALL),
 ]
