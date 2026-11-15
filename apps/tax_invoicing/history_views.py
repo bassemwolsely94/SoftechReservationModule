@@ -379,7 +379,8 @@ RECON_COLUMNS = [('branch', 'الفرع'), ('day', 'اليوم'), ('doccode', '�
                  ('eta_count', 'مرات الإرسال'), ('outcome', 'النتيجة'), ('reason', 'السبب'),
                  ('uncoded_total', 'قيمة أصناف بلا كود'), ('eta_uuid', 'UUID')]
 RECON_REASON_LABELS = {'all_uncoded': 'كل الأصناف بلا كود مصلحة', 'uncoded_lines': 'الفرق = أصناف بلا كود مصلحة',
-                       'some_uncoded': 'بعض الأصناف بلا كود مصلحة'}
+                       'some_uncoded': 'بعض الأصناف بلا كود مصلحة', 'till_silent': 'الجهاز لم يرسل أغلب إيصالات اليوم',
+                       'eta_other_day': 'المصلحة سجلته في يوم مجاور'}
 
 
 @api_view(['GET'])

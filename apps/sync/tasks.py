@@ -2681,7 +2681,7 @@ def _run_eta_history_topup():
 
 def _run_eta_recon_daily():
     """SOFTECH ↔ ETA receipts reconciliation (doc 36 §history, phase 3): learn device→branch, recompute the last
-    30 days, for each system whose ETA history is on. Reads SOFTECH (HQ) and the local ETA copy only."""
+    35 days, for each system whose ETA history is on. Reads SOFTECH (HQ) and the local ETA copy only."""
     from apps.tax_invoicing import eta_history, eta_recon
     for system in eta_history.enabled_systems():
         try:

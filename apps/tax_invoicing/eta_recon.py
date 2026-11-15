@@ -29,13 +29,18 @@ CAIRO = ZoneInfo('Africa/Cairo')
 TOLERANCE = Decimal('0.05')
 LINE_TOLERANCE = Decimal('0.06')        # lines are rounded to 0.01 each, so a sum of a few may be a cent further out
 # all_uncoded: not at ETA, and no item on the sale has an ETA code · some_uncoded: some items have none (not the whole
-# story) · uncoded_lines: the amount gap is exactly the items with no ETA code
-REASONS = ('all_uncoded', 'uncoded_lines', 'some_uncoded')
+# story) · uncoded_lines: the amount gap is exactly the items with no ETA code · till_silent: not at ETA, and the
+# branch's tills sent under half of that day's sales (an Invoicer outage) · eta_other_day: found at ETA a day before or
+# after (same till, number, kind and amount: a sale around midnight)
+REASONS = ('all_uncoded', 'uncoded_lines', 'some_uncoded', 'till_silent', 'eta_other_day')
+SILENT_SHARE = Decimal('0.5')
 KIND_BY_DOCCODE = {'115': 's', '30': 'r'}
 DOCCODE_BY_KIND = {v: k for k, v in KIND_BY_DOCCODE.items()}
 OUTCOMES = ('matched', 'amount_differs', 'missing_at_eta', 'eta_only', 'not_valid', 'duplicate', 'by_invoice')
 SAMPLE = 20
-RECENT_DAYS = 30
+# Invoicer uploads receipts up to 29 days after the sale (measured 2026-11-15), so the last 35 days are recomputed
+# daily; eta_history.TOPUP_DAYS re-reads the same span from ETA.
+RECENT_DAYS = 35
 
 
 # ── SOFTECH (read only) ────────────────────────────────────────────────────────────────────────
@@ -78,6 +83,31 @@ def _softech_rows(branch, day):
         key = (str(r[0]).strip(), _number(r[1]))
         out.append({'doccode': key[0], 'docnumber': key[1], 'total': Decimal(str(r[2] or 0)),
                     'channel': str(r[3] or '').strip(), 'lines': lines.get(key, [])})
+    return out
+
+
+def _softech_neighbours(branch, day):
+    """The sales and returns of the day before and the day after: {(doccode, docnumber): {day, total, channel}}.
+    Only headers, to tell whether a receipt ETA dated a day off belongs to a sale on another day."""
+    conn = _connect()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT doccode, docnumber, docvalue, ptclassifcode, docdate FROM stktransm "
+                    "WHERE branchcode = ? AND docdate IN (?, ?) AND doccode IN ('115', '30')",
+                    (branch, (day - dt.timedelta(days=1)).isoformat(), (day + dt.timedelta(days=1)).isoformat()))
+        rows = cur.fetchall()
+    finally:
+        conn.close()
+    out = {}
+    for doccode, docnumber, total, channel, docdate in rows:
+        if isinstance(docdate, dt.datetime):
+            when = docdate.date()
+        elif isinstance(docdate, dt.date):
+            when = docdate
+        else:
+            when = dt.date.fromisoformat(str(docdate)[:10])
+        out[(str(doccode).strip(), _number(docnumber))] = {'day': when, 'total': Decimal(str(total or 0)),
+                                                          'channel': str(channel or '').strip()}
     return out
 
 
@@ -191,21 +221,51 @@ def reconcile_day(system, branch, day, coded=None):
     coded = coded_items() if coded is None else coded
     sales = _softech_rows(branch, day)
     by_invoice = set(TaxChannelRule.objects.filter(mode=TaxChannelRule.MODE_INVOICE).values_list('ptclassifcode', flat=True))
-    since = dt.datetime.combine(day, dt.time.min, tzinfo=CAIRO)
-    eta = defaultdict(list)
+    since = dt.datetime.combine(day - dt.timedelta(days=1), dt.time.min, tzinfo=CAIRO)
+    near = {day + dt.timedelta(days=k): defaultdict(list) for k in (-1, 0, 1)}     # ETA receipts by Cairo day
     for r in EtaMirrorReceipt.objects.filter(system=system, pos_serial__in=[d.pos_serial for d in devices],
-                                             issued_at__gte=since, issued_at__lt=since + dt.timedelta(days=1)):
-        eta[(DOCCODE_BY_KIND.get(r.receipt_type, '115'), r.receipt_number)].append(r)
+                                             issued_at__gte=since, issued_at__lt=since + dt.timedelta(days=3)):
+        near[_cairo_day(r.issued_at)][(DOCCODE_BY_KIND.get(r.receipt_type, '115'), r.receipt_number)].append(r)
+    eta = near[day]
+    sent = sum(len(rows) for rows in eta.values())
+    expected = sum(1 for sale in sales if sale['channel'] not in by_invoice)
+    silent = expected > 0 and sent < expected * SILENT_SHARE
+    neighbours = None
+
+    def other_days():
+        nonlocal neighbours
+        if neighbours is None:
+            neighbours = _softech_neighbours(branch, day)
+        return neighbours
+
+    def same_amount(a, b):
+        return a is not None and b is not None and abs(Decimal(a) - Decimal(b)) <= TOLERANCE
+
     lines, used = [], set()
     uncoded = defaultdict(lambda: {'docs': 0, 'qty': Decimal('0'), 'value': Decimal('0')})
     for sale in sales:
         key = (sale['doccode'], sale['docnumber'])
         matches = eta.get(key, [])
         used.add(key)
+        moved = False
+        if not matches and sale['channel'] not in by_invoice:
+            # ETA dated it a day off: one receipt, same till, number, kind and amount, and no sale of its own that day
+            for other in (day - dt.timedelta(days=1), day + dt.timedelta(days=1)):
+                found = near[other].get(key, [])
+                if not found:
+                    continue
+                own = other_days().get(key)
+                if len(found) == 1 and not (own and own['day'] == other) and same_amount(found[0].total_amount, sale['total']):
+                    matches, moved = found, True
+                    break
         outcome = 'by_invoice' if sale['channel'] in by_invoice else _decide(sale, matches)
         first = matches[0] if matches else None
         eta_total = first.total_amount if first else None
         reason, uncoded_total = ('', None) if outcome == 'by_invoice' else _reason(outcome, sale, eta_total, coded)
+        if moved:
+            reason = 'eta_other_day'
+        elif outcome == 'missing_at_eta' and not reason and silent:
+            reason = 'till_silent'
         lines.append(EtaReconLine(system=system, softech_branchcode=branch, day=day, doccode=sale['doccode'],
                                   docnumber=sale['docnumber'], softech_total=sale['total'], outcome=outcome,
                                   eta_uuid=first.uuid if first else '', eta_total=eta_total,
@@ -222,6 +282,10 @@ def reconcile_day(system, branch, day, coded=None):
     for key, rows in eta.items():
         if key in used:
             continue
+        own = other_days().get(key)
+        if (own and len(rows) == 1 and own['channel'] not in by_invoice and not near[own['day']].get(key)
+                and same_amount(rows[0].total_amount, own['total'])):
+            continue                     # the sale of the day before or after claims it (eta_other_day there)
         lines.append(EtaReconLine(system=system, softech_branchcode=branch, day=day, doccode=key[0], docnumber=key[1],
                                   outcome='eta_only', eta_uuid=rows[0].uuid, eta_total=rows[0].total_amount,
                                   eta_status=rows[0].status, eta_count=len(rows)))

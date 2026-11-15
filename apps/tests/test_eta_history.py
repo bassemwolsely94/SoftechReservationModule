@@ -316,7 +316,7 @@ class SearchBackfillTests(TestCase):
         self.assertEqual(EtaMirrorDocument.objects.get().status, 'cancelled')
 
     def test_topup_rereads_30_days_of_documents_and_14_days_of_receipts_by_day(self):
-        self.assertEqual(eta_history.TOPUP_DAYS['receipts'], 14)     # Invoicer uploads late, in bursts
+        self.assertEqual(eta_history.TOPUP_DAYS['receipts'], 35)     # Invoicer uploads up to 29 days late
         today = timezone.now().date()
         self.fake.doc_pages = [([_doc_row('A')], 'EndofResultSet')]
         self.fake.receipts[(today - dt.timedelta(days=1)).isoformat()] = [_receipt_row('R1')]

@@ -26,8 +26,8 @@ from .models import EtaHistoryState, EtaHistoryWindow, EtaMirrorDocument, EtaMir
 KINDS = ('documents', 'receipts')
 WINDOW_DAYS = {'documents': 30, 'receipts': 1}
 # ETA lets the issuer cancel and the receiver reject for about 7 days; documents also wait for a whole window;
-# Invoicer uploads a day's receipts late and in bursts, so receipts are re-read by issue date for 14 days.
-TOPUP_DAYS = {'documents': 30, 'receipts': 14}
+# Invoicer uploads a day's receipts late and in bursts, so receipts are re-read by issue date for 35 days.
+TOPUP_DAYS = {'documents': 30, 'receipts': 35}     # receipts: Invoicer uploads up to 29 days late (2026-11-15)
 RECEIPT_CAP = 3000            # ETA's maximum per receipts search
 PAGE = 100
 MAX_PAGES = 400               # safety stop for one documents window (40,000 rows)
@@ -233,7 +233,7 @@ def step(system, kind, max_windows=5):
 # ── daily top-up ───────────────────────────────────────────────────────────────────────────────
 
 def top_up(system, days=None):
-    """Re-reads recent days from ETA's search (documents: 30 days in one query; receipts: day by day for 14 days,
+    """Re-reads recent days from ETA's search (documents: 30 days in one query; receipts: day by day for 35 days,
     today included), so late status changes (a cancellation, a rejection) reach the mirror."""
     reader = EtaReader(system)
     out = {'documents': 0, 'receipts': 0, 'error': ''}
