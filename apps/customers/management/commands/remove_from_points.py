@@ -5,6 +5,7 @@ the balance earned since their reset cleared. Dry run unless --commit AND POINTS
     python manage.py remove_from_points --user <username> --pic 05HD999 [--commit]          # one code
     python manage.py remove_from_points --user <username> --reset-by 19 --reset-by 54      # other resetters
     python manage.py remove_from_points --user <username> --batches 60 --quiet --commit      # all, 50 per batch
+    python manage.py remove_from_points --user <username> --pic 07HD11624 --no-discount [--commit]  # no discount
 Then the branch copies: push_customer_branch_copy --from-removals --branch N --batches 60 --quiet --commit.
 """
 import os
@@ -24,6 +25,8 @@ class Command(BaseCommand):
         parser.add_argument('--limit', type=int, default=0)
         parser.add_argument('--batches', type=int, default=1, help='repeat up to N batches (stops at a problem)')
         parser.add_argument('--quiet', action='store_true', help='only the summary line per batch')
+        parser.add_argument('--no-discount', action='store_true',
+                            help='with --pic only: points off + balance cleared, special discount left as it is')
         parser.add_argument('--commit', action='store_true')
 
     def handle(self, *a, **o):
@@ -33,10 +36,12 @@ class Command(BaseCommand):
                 or StaffProfile.objects.select_related('user').filter(softech_user_id=o['user']).first())
         if user is None or not (user.is_active and user.user.is_active) or user.role not in ('admin', 'supervisor'):
             raise CommandError('--user must be an active admin or supervisor (your login name in our system)')
+        if o['no_discount'] and not o['pic']:
+            raise CommandError('--no-discount is only for named codes (--pic)')
         batches = max(1, o['batches']) if not o['pic'] else 1
         for n in range(1, batches + 1):
             recs = PR.run(pics=o['pic'] or None, user=user, commit=o['commit'], limit=o['limit'] or None,
-                          users=tuple(o['reset_by'] or ['19']))
+                          users=tuple(o['reset_by'] or ['19']), discount=not o['no_discount'])
             problem = self._report(recs, o, n if batches > 1 else 0)
             if not recs or problem or not o['commit']:
                 break
