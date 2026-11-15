@@ -21,6 +21,7 @@ import { fa } from '../utils/flowArrow'
 import useServerSort from '../hooks/useServerSort'
 import SortTh from '../components/SortTh'
 import MultiSelectFilter from '../components/MultiSelectFilter'
+import { escapeDeep } from '../utils/escapeHtml'
 
 // the voucher list is paged: the server sorts all vouchers (whitelist in VoucherViewSet.LIST_ORDERINGS)
 const VOUCHER_SORT = ['code', 'title', 'voucher_category', 'voucher_type', 'times_used', 'valid_from', 'status']
@@ -1042,7 +1043,7 @@ function RedemptionFlow({ voucher, onClose }) {
                   onClick={async () => {
                     try {
                       const r = await vouchersApi.documentPrint(document.reference_code)
-                      const d = r.data
+                      const d = escapeDeep(r.data)   // SEC-6: voucher title / branch text into document.write
                       const fmt = (n, dp = 2) => n != null ? Number(n).toFixed(dp) : '—'
                       const win = window.open('', '_blank', 'width=420,height=600')
                       win.document.write(`<!DOCTYPE html><html dir="rtl"><head>
