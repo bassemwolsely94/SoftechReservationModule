@@ -112,10 +112,17 @@ class ReconTests(TestCase):
     def test_softech_unreachable_stops_and_keeps_old_lines(self):
         self.softech.days[('150', DAY)] = [('115', 1, 20, 'C')]
         eta_recon.reconcile_day('production', '150', DAY)
-        with mock.patch.object(eta_recon, '_softech_rows', side_effect=OSError('down')):
+        with mock.patch.object(eta_recon, '_softech_rows', side_effect=OSError('down at 10.0.0.5:5000')):
             out = eta_recon.reconcile_range('production', DAY, DAY)
-        self.assertIn('down', out['error'])
+        self.assertIn('مرجع', out['error'])
+        self.assertNotIn('10.0.0.5', out['error'])       # driver text (hosts, SQL) stays in the log
         self.assertEqual(EtaReconLine.objects.count(), 1)
+
+    def test_branches_our_list_classes_as_not_live_are_left_out(self):
+        from apps.branches.models import Branch
+        Branch.objects.create(softech_branch_id='240', name='pending', kind=Branch.KIND_PENDING)
+        EtaDeviceBranch.objects.create(system='production', pos_serial='NEW', softech_branchcode='240', first_day=dt.date(2026, 1, 1))
+        self.assertEqual(eta_recon.open_branches('production'), ['150'])
 
     def test_devices_are_learned_from_a_sample_of_their_receipts(self):
         EtaDeviceBranch.objects.all().delete()

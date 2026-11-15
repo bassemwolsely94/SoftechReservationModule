@@ -8,6 +8,8 @@ unmatched ETA receipts are listed too. A (system, branch, day) is recomputed as 
 SOFTECH is read only (HQ stktransm through config/sybase.py). Nothing is written to SOFTECH or sent to ETA.
 """
 import datetime as dt
+import logging
+import uuid
 from collections import Counter, defaultdict
 from decimal import Decimal
 from zoneinfo import ZoneInfo
@@ -17,8 +19,11 @@ from django.db.models import Count, Min, Sum
 from django.db.models.functions import TruncMonth
 from django.utils import timezone
 
+from core.errors import redact
+
 from .models import EtaDeviceBranch, EtaHistoryState, EtaMirrorReceipt, EtaReconLine, TaxChannelRule
 
+logger = logging.getLogger(__name__)
 CAIRO = ZoneInfo('Africa/Cairo')
 CLOSED_BRANCHES = {'110', '120', '180', '190', '210', '220'}      # «لاغى» branches: never reconciled
 TOLERANCE = Decimal('0.05')
@@ -103,8 +108,13 @@ def learn_devices(system, sample=SAMPLE):
 
 
 def open_branches(system):
+    """Device branches that are open: never a «لاغى» code, and never one our branch list classes as anything but HQ or
+    retail (closed, pending, call center). A code missing from the branch list is kept — SOFTECH is the source."""
+    from apps.branches.models import Branch
+    not_live = set(Branch.objects.exclude(kind__in=[Branch.KIND_HQ, Branch.KIND_RETAIL])
+                   .values_list('softech_branch_id', flat=True))
     return sorted({b for b in EtaDeviceBranch.objects.filter(system=system).values_list('softech_branchcode', flat=True)
-                   if b not in CLOSED_BRANCHES})
+                   if b not in CLOSED_BRANCHES and b not in not_live})
 
 
 # ── one branch-day ─────────────────────────────────────────────────────────────────────────────
@@ -173,7 +183,11 @@ def reconcile_range(system, start, end, branches=None):
             out['days'] += 1
             day += dt.timedelta(days=1)
     except Exception as exc:        # noqa: BLE001 — SOFTECH (jConnect) raises Java and OS errors alike
-        out['error'] = f'{type(exc).__name__}: {str(exc)[:300]}'
+        # driver text carries hostnames and SQL: the log keeps it (redacted), the screen gets a reference only
+        ref = uuid.uuid4().hex[:8]
+        logger.warning('[ref %s] ETA reconciliation %s stopped at %s: %s: %s', ref, system, day, type(exc).__name__,
+                       redact(exc)[:500])
+        out['error'] = f'تعذرت قراءة SOFTECH عند يوم {day} (مرجع: {ref})'
     state, _ = EtaHistoryState.objects.get_or_create(system=system, kind='recon')
     state.last_run_at, state.last_error = timezone.now(), out['error']
     if not out['error']:

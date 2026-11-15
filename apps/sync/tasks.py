@@ -2688,7 +2688,8 @@ def _run_eta_recon_daily():
             eta_recon.learn_devices(system)
             eta_recon.recent(system)
         except Exception as exc:     # one system's trouble never stops the other
-            logger.warning('[APScheduler] ETA reconciliation %s: %s', system, exc)
+            from core.errors import redact
+            logger.warning('[APScheduler] ETA reconciliation %s: %s: %s', system, type(exc).__name__, redact(exc)[:500])
 
 
 def _run_stock_ledger_sync(days=3):

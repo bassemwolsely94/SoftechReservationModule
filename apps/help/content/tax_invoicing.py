@@ -449,7 +449,7 @@ SCREENS = [
             {'target': 'tax-invoicing-main-codes-refresh', 'label': T('تحديث الحالة من المصلحة', 'Refresh status from the Authority'),
              'text': T('يسأل المصلحة عن الطلبات المرسلة. قرارها وحده يغير ترميز الصنف.', 'Asks ETA about sent requests. Only its decision changes the item coding.')},
         ],
-        'updated': '2026-11-14',
-        'change_note': T('تبويب «سجل المصلحة»: بحث وتفاصيل وملف المصلحة PDF وتصدير، لكل منظومة؛ وتحميل السجل من المنظومتين', 'New "ETA history" tab: search, details, ETA PDF and export, per system; plus loading the history from both systems'),
+        'updated': '2026-11-15',
+        'change_note': T('«المطابقة» في «سجل المصلحة»: كل بيع ومرتجع في SOFTECH مقابل إيصاله لدى المصلحة، لكل فرع وشهر، مع التفاصيل والتصدير', '"Reconciliation" in "ETA history": each SOFTECH sale and return against its ETA receipt, per branch and month, with details and export'),
     },
 ]

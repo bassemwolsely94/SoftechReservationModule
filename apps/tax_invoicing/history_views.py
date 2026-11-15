@@ -12,6 +12,7 @@ import math
 from decimal import Decimal
 
 import openpyxl
+from django.db import connection as _connection
 from django.db.models import Q, Sum
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -22,14 +23,16 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.branches.models import Branch
 from core.export_safety import neutralise_formulas
 from core.permissions import matrix_permission
 from core.sort_ordering import explicit_order_by
+from core.threads import start_thread
 
-from . import services
+from . import eta_recon, services
 from .eta_client import EtaError
 from .eta_reader import SYSTEMS, EtaReader
-from .models import EtaMirrorDocument, EtaMirrorReceipt
+from .models import EtaDeviceBranch, EtaHistoryState, EtaMirrorDocument, EtaMirrorReceipt, EtaReconLine
 
 VIEWER = matrix_permission('tax_invoicing')
 PAGE_SIZE, MAX_PAGE_SIZE, MAX_EXPORT = 50, 200, 50000
@@ -299,13 +302,6 @@ def history_export(request, kind):
 
 # ── receipts reconciliation, SOFTECH ↔ ETA (phase 3) ───────────────────────────────────────────
 
-from django.db import connection as _connection  # noqa: E402
-
-from core.threads import start_thread  # noqa: E402
-
-from . import eta_recon  # noqa: E402
-from .models import EtaDeviceBranch, EtaHistoryState, EtaReconLine  # noqa: E402
-
 EDITOR = matrix_permission('tax_invoicing', get=('view',), post=('edit',), edit=('edit',))
 RECON_SORT = {'day': 'day', 'docnumber': 'docnumber', 'softech_total': 'softech_total', 'eta_total': 'eta_total',
               'outcome': 'outcome', 'branch': 'softech_branchcode'}
@@ -391,8 +387,12 @@ def recon_export(request):
     ws.title = 'المطابقة'
     ws.sheet_view.rightToLeft = True
     ws.append([label for _, label in RECON_COLUMNS])
+    names = {str(code).strip(): (ar or en or '').strip()
+             for code, ar, en in Branch.objects.values_list('softech_branch_id', 'name_ar', 'name')}
     for line in qs.order_by('softech_branchcode', 'day', 'docnumber').iterator(chunk_size=2000):
         row = _recon_row(line)
+        name = names.get(row['branch'])
+        row['branch'] = f"{row['branch']} · {name}" if name else row['branch']    # never a bare code in Excel
         ws.append([row.get(key) for key, _ in RECON_COLUMNS])
     buf = io.BytesIO()
     neutralise_formulas(wb).save(buf)       # typed text never reaches Excel as a live formula
