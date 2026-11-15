@@ -827,9 +827,31 @@ class EtaReconLine(models.Model):
     eta_status = models.CharField(max_length=20, blank=True)
     eta_count = models.IntegerField(default=0)
     outcome = models.CharField(max_length=16, db_index=True)
+    # why it differs, where the SOFTECH lines tell (eta_recon.REASONS): items with no ETA code are left off receipts
+    reason = models.CharField(max_length=16, blank=True, default='', db_default='')
+    uncoded_total = models.DecimalField(max_digits=16, decimal_places=2, null=True, blank=True)
     computed_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = 'مطابقة إيصال مع المصلحة'
         indexes = [models.Index(fields=['system', 'softech_branchcode', 'day'], name='eta_recon_branch_day'),
                    models.Index(fields=['system', 'outcome', 'day'], name='eta_recon_outcome_day')]
+
+
+class EtaReconUncodedItem(models.Model):
+    """What one branch sold in one day of one item that has no ETA code (receipt sales and returns only; sales that
+    go by invoice are left out). Rebuilt with the branch-day's EtaReconLine rows; feeds «أصناف بلا كود»."""
+    system = models.CharField(max_length=12, choices=ETA_SYSTEMS)
+    softech_branchcode = models.CharField(max_length=5)
+    day = models.DateField()
+    itemcode = models.CharField(max_length=10)
+    docs = models.IntegerField(default=0)
+    qty = models.DecimalField(max_digits=16, decimal_places=5, default=0)
+    value = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+
+    class Meta:
+        verbose_name = 'صنف بلا كود في مبيعات يوم'
+        constraints = [models.UniqueConstraint(fields=['system', 'softech_branchcode', 'day', 'itemcode'],
+                                               name='eta_recon_uncoded_once')]
+        indexes = [models.Index(fields=['system', 'itemcode'], name='eta_recon_uncoded_item'),
+                   models.Index(fields=['system', 'day'], name='eta_recon_uncoded_day')]

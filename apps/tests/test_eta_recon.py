@@ -7,7 +7,8 @@ from zoneinfo import ZoneInfo
 from django.test import TestCase
 
 from apps.tax_invoicing import eta_recon
-from apps.tax_invoicing.models import EtaDeviceBranch, EtaMirrorReceipt, EtaReconLine, TaxChannelRule
+from apps.tax_invoicing.models import (EtaDeviceBranch, EtaMirrorReceipt, EtaReconLine, EtaReconUncodedItem,
+                                       TaxChannelRule, TaxItemProfile)
 from apps.tests.test_tax_invoicing import Fixture, api
 
 CAIRO = ZoneInfo('Africa/Cairo')
@@ -31,15 +32,19 @@ class FakeSoftech:
         self.calls = []
 
     def rows(self, branch, day):
+        """Each day entry is (doccode, docnumber, total, channel[, [(itemcode, qty, value), ...]])."""
         self.calls.append((branch, day))
-        return [{'doccode': d, 'docnumber': str(n), 'total': Decimal(str(t)), 'channel': ch}
-                for d, n, t, ch in self.days.get((branch, day), [])]
+        out = []
+        for d, n, t, ch, *rest in self.days.get((branch, day), []):
+            lines = [{'itemcode': i, 'qty': Decimal(str(q)), 'value': Decimal(str(v))} for i, q, v in (rest[0] if rest else [])]
+            out.append({'doccode': d, 'docnumber': str(n), 'total': Decimal(str(t)), 'channel': ch, 'lines': lines})
+        return out
 
     def find(self, numbers):
         """(doccode, docnumber, day) -> branch, for learning which branch a device belongs to."""
         out = {}
         for (branch, day), rows in self.days.items():
-            for d, n, _t, _c in rows:
+            for d, n, *_rest in rows:
                 out[(d, str(n), day)] = branch
         return {k: v for k, v in out.items() if k in numbers}
 
@@ -148,6 +153,110 @@ class ReconTests(TestCase):
         self.assertEqual(EtaDeviceBranch.objects.get(pos_serial='POS-150').softech_branchcode, '160')
 
 
+
+class ReconReasonTests(ReconTests):
+    """Production receipts leave out every line whose item has no ETA code; a sale with no coded line is not sent."""
+
+    def setUp(self):
+        super().setUp()
+        for code in ('A', 'B'):
+            TaxItemProfile.objects.create(softech_itemcode=code, eta_code=f'EG-1-{code}', coding_status='approved')
+        TaxItemProfile.objects.create(softech_itemcode='X', eta_code='')          # a profile without a code
+        # 'DLV' and 'CPN' have no profile at all: they count as having no code too
+
+    def _line(self, number):
+        return EtaReconLine.objects.get(system='production', docnumber=str(number))
+
+    def test_missing_because_no_item_has_a_code(self):
+        self.softech.days[('150', DAY)] = [('115', 1, 35, 'C', [('X', 1, 20), ('DLV', 15, 15)])]
+        eta_recon.reconcile_day('production', '150', DAY)
+        line = self._line(1)
+        self.assertEqual((line.outcome, line.reason, line.uncoded_total), ('missing_at_eta', 'all_uncoded', Decimal('35.00')))
+
+    def test_missing_with_some_coded_items_is_only_partly_explained(self):
+        self.softech.days[('150', DAY)] = [('115', 1, 50, 'C', [('A', 1, 30), ('X', 1, 20)])]
+        eta_recon.reconcile_day('production', '150', DAY)
+        self.assertEqual((self._line(1).outcome, self._line(1).reason), ('missing_at_eta', 'some_uncoded'))
+
+    def test_amount_gap_equal_to_the_uncoded_lines(self):
+        self.softech.days[('150', DAY)] = [('115', 1, 800, 'C', [('A', 1, 500), ('DLV', 300, 300)])]
+        _eta(1, 500)
+        eta_recon.reconcile_day('production', '150', DAY)
+        line = self._line(1)
+        self.assertEqual((line.outcome, line.reason, line.uncoded_total), ('amount_differs', 'uncoded_lines', Decimal('300.00')))
+
+    def test_a_coupon_line_left_off_makes_eta_higher(self):
+        self.softech.days[('150', DAY)] = [('115', 1, 424, 'C', [('A', 1, 474), ('CPN', 1, -50)])]
+        _eta(1, 474)
+        eta_recon.reconcile_day('production', '150', DAY)
+        self.assertEqual((self._line(1).outcome, self._line(1).reason), ('amount_differs', 'uncoded_lines'))
+
+    def test_a_gap_the_uncoded_lines_do_not_explain(self):
+        self.softech.days[('150', DAY)] = [('115', 1, 205, 'C', [('A', 1, 160), ('X', 1, 45)])]
+        _eta(1, 100)
+        eta_recon.reconcile_day('production', '150', DAY)
+        self.assertEqual(self._line(1).reason, 'some_uncoded')
+
+    def test_matched_and_unexplained_lines_have_no_reason(self):
+        self.softech.days[('150', DAY)] = [('115', 1, 30, 'C', [('A', 1, 30)]), ('115', 2, 60, 'C', [('A', 1, 60)])]
+        _eta(1, 30)
+        _eta(2, 50)
+        eta_recon.reconcile_day('production', '150', DAY)
+        self.assertEqual([(l.docnumber, l.outcome, l.reason) for l in EtaReconLine.objects.order_by('docnumber')],
+                         [('1', 'matched', ''), ('2', 'amount_differs', '')])
+
+    def test_uncoded_items_are_totalled_per_branch_day(self):
+        TaxChannelRule.objects.update_or_create(ptclassifcode='K', defaults={'mode': TaxChannelRule.MODE_INVOICE, 'label': 'تعاقد'})
+        self.softech.days[('150', DAY)] = [
+            ('115', 1, 35, 'C', [('X', 2, 20), ('DLV', 15, 15)]),
+            ('115', 2, 10, 'C', [('X', 1, 10)]),
+            ('30', 9, 10, 'C', [('X', 1, 10)]),           # a return takes the sale back
+            ('115', 3, 99, 'K', [('X', 9, 99)]),          # by invoice: not on a receipt, left out
+        ]
+        eta_recon.reconcile_day('production', '150', DAY)
+        got = {u.itemcode: (u.docs, u.qty, u.value) for u in EtaReconUncodedItem.objects.all()}
+        self.assertEqual(got, {'X': (3, Decimal('2.00000'), Decimal('20.00')), 'DLV': (1, Decimal('15.00000'), Decimal('15.00'))})
+        eta_recon.reconcile_day('production', '150', DAY)          # recomputing replaces, never doubles
+        self.assertEqual(EtaReconUncodedItem.objects.count(), 2)
+
+    def test_an_item_coded_later_stops_counting_on_the_next_recompute(self):
+        self.softech.days[('150', DAY)] = [('115', 1, 20, 'C', [('X', 1, 20)])]
+        eta_recon.reconcile_day('production', '150', DAY)
+        TaxItemProfile.objects.filter(softech_itemcode='X').update(eta_code='EG-1-X')
+        eta_recon.reconcile_day('production', '150', DAY)
+        self.assertEqual((self._line(1).reason, EtaReconUncodedItem.objects.count()), ('', 0))
+
+    def test_the_ranking_puts_the_biggest_sales_first(self):
+        EtaReconUncodedItem.objects.create(system='production', softech_branchcode='150', day=DAY, itemcode='X', docs=2, qty=2, value=40)
+        EtaReconUncodedItem.objects.create(system='production', softech_branchcode='130', day=DAY, itemcode='DLV', docs=9, qty=90, value=90)
+        EtaReconUncodedItem.objects.create(system='production', softech_branchcode='150', day=DAY + dt.timedelta(days=1), itemcode='X', docs=1, qty=1, value=70)
+        rows = eta_recon.uncoded_items('production')
+        self.assertEqual([(r['itemcode'], r['value'], r['docs']) for r in rows], [('X', Decimal('110.00'), 3), ('DLV', Decimal('90.00'), 9)])
+        self.assertEqual(rows[0]['last_day'], DAY + dt.timedelta(days=1))
+        self.assertEqual([r['itemcode'] for r in eta_recon.uncoded_items('production', branch='130')], ['DLV'])
+
+
+class SoftechLinesReadTests(TestCase):
+    """_softech_rows reads the headers and the lines of a branch-day on one connection and groups them."""
+
+    def test_lines_are_grouped_under_their_document(self):
+        heads = [('115', 716503.0, 140.0, '91'), ('30 ', '22916', 491.0, None)]
+        details = [('115', 716503.0, '128899 ', 1.0, 474.0, 0.0), ('115', 716503.0, '118639', 1.0, -50.0, 0.0),
+                   ('115', 716503.0, '200', 2.0, 10.0, 10.0), ('30', 22916.0, '5', 1.0, 491.0, 0.0)]
+        cur = mock.Mock()
+        cur.fetchall.side_effect = [heads, details]
+        conn = mock.Mock()
+        conn.cursor.return_value = cur
+        with mock.patch.object(eta_recon, '_connect', return_value=conn):
+            rows = eta_recon._softech_rows('150', DAY)
+        conn.close.assert_called_once()
+        sale = rows[0]
+        self.assertEqual((sale['doccode'], sale['docnumber'], sale['channel']), ('115', '716503', '91'))
+        self.assertEqual([(x['itemcode'], x['value']) for x in sale['lines']],
+                         [('128899', Decimal('474.00')), ('118639', Decimal('-50.00')), ('200', Decimal('18.00'))])
+        self.assertEqual((rows[1]['doccode'], [x['itemcode'] for x in rows[1]['lines']]), ('30', ['5']))
+
+
 class ReconViewTests(Fixture, TestCase):
 
     def setUp(self):
@@ -175,6 +284,37 @@ class ReconViewTests(Fixture, TestCase):
             r = api(self.accountant).post('/api/tax-invoicing/history/recon/refresh/', {'system': 'production'}, format='json')
         self.assertEqual(r.status_code, 202)
         thread.assert_called_once()
+
+
+    def test_lines_filter_by_reason(self):
+        EtaReconLine.objects.filter(docnumber='3').update(reason='all_uncoded', uncoded_total=Decimal('10'))
+        params = {'system': 'production', 'outcome': 'missing_at_eta'}
+        body = api(self.accountant).get('/api/tax-invoicing/history/recon/lines/', {**params, 'reason': 'all_uncoded'}).json()
+        self.assertEqual([(r['docnumber'], r['reason'], r['uncoded_total']) for r in body['rows']], [('3', 'all_uncoded', '10.00')])
+        none = api(self.accountant).get('/api/tax-invoicing/history/recon/lines/', {**params, 'reason': 'none'}).json()
+        self.assertEqual(none['count'], 0)
+        self.assertEqual(api(self.accountant).get('/api/tax-invoicing/history/recon/lines/', {**params, 'reason': 'x'}).status_code, 400)
+        row = api(self.accountant).get('/api/tax-invoicing/history/recon/', {'system': 'production'}).json()['rows'][0]
+        self.assertEqual(row['reasons'], {'all_uncoded': 1})
+
+    def test_uncoded_items_list_and_export(self):
+        from apps.tax_invoicing.models import TaxAuditEvent
+        TaxItemProfile.objects.create(softech_itemcode='CODED', eta_code='EG-1-C', coding_status='approved')
+        for code, value in (('DLV', 300), ('X', 900), ('CODED', 50)):
+            EtaReconUncodedItem.objects.create(system='production', softech_branchcode='150', day=DAY, itemcode=code, docs=1, qty=1, value=value)
+        url = '/api/tax-invoicing/history/recon/uncoded/'
+        self.assertEqual(api(self.pharmacist).get(url, {'system': 'production'}).status_code, 403)
+        body = api(self.accountant).get(url, {'system': 'production'}).json()
+        self.assertEqual([(r['itemcode'], r['value']) for r in body['rows']], [('X', '900.00'), ('DLV', '300.00'), ('CODED', '50.00')])
+        self.assertEqual(body['total_value'], '1250.00')
+        still = api(self.accountant).get(url, {'system': 'production', 'open': '1', 'ordering': 'itemcode'}).json()
+        self.assertEqual([r['itemcode'] for r in still['rows']], ['DLV', 'X'])          # coded since: left out
+        self.assertEqual(api(self.accountant).get(url, {'system': 'production', 'ordering': 'name'}).status_code, 400)
+        before = TaxAuditEvent.objects.filter(action='eta_recon_uncoded_export').count()
+        r = api(self.accountant).get(url + 'export/', {'system': 'production'})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('spreadsheetml', r['Content-Type'])
+        self.assertEqual(TaxAuditEvent.objects.filter(action='eta_recon_uncoded_export').count(), before + 1)
 
 
 class ReconJobTests(TestCase):

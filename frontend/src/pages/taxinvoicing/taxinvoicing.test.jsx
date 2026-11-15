@@ -48,6 +48,8 @@ const api = vi.hoisted(() => ({
   reconLines: vi.fn(),
   reconExport: vi.fn(),
   reconRefresh: vi.fn(),
+  reconUncoded: vi.fn(),
+  reconUncodedExport: vi.fn(),
   saveReceiptConfig: vi.fn(),
 }))
 
@@ -511,5 +513,26 @@ describe('SOFTECH ↔ ETA reconciliation', () => {
     fireEvent.click(await screen.findByText('3'))
     expect(await screen.findByText('716999')).toBeTruthy()
     expect(api.reconLines).toHaveBeenCalledWith(expect.objectContaining({ system: 'production', branch: '150', month: '2026-11', outcome: 'missing_at_eta' }))
+  })
+
+  it('shows why a sale is missing and ranks the items with no ETA code', async () => {
+    api.historyDocuments.mockResolvedValue({ data: { count: 0, page: 1, pages: 1, total_amount: null, rows: [] } })
+    api.reconSummary.mockResolvedValue({ data: { last_run_at: null, last_error: '', outcomes: [], devices: [],
+      rows: [{ branch: '150', month: '2026-11', matched: 120, amount_differs: 0, missing_at_eta: 3, eta_only: 0, not_valid: 0, duplicate: 0, by_invoice: 0,
+        softech_total: '1000.00', eta_total: '990.00', reasons: { all_uncoded: 2 } }] } })
+    api.reconLines.mockResolvedValue({ data: { count: 1, page: 1, pages: 1, rows: [{ id: 1, day: '2026-11-05', doccode: '115', docnumber: '716999',
+      softech_total: '50.00', eta_total: null, eta_status: '', eta_count: 0, reason: 'all_uncoded', uncoded_total: '50.00' }] } })
+    api.reconUncoded.mockResolvedValue({ data: { count: 1, page: 1, pages: 1, total_value: '879.00',
+      rows: [{ itemcode: '2', name: 'D.L.V.', docs: 79, qty: '879.00', value: '879.00', last_day: '2026-11-14', coding_status: 'missing', coded_now: false, request_status: '' }] } })
+    show(<HistoryTab me={ME} />)
+    fireEvent.click(await screen.findByText('المطابقة'))
+    expect(await screen.findByText('منها 2 بلا كود')).toBeTruthy()
+    fireEvent.click(await screen.findByText('3'))
+    expect(await screen.findByRole('cell', { name: 'كل أصنافه بلا كود مصلحة' })).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('السبب'), { target: { value: 'all_uncoded' } })
+    await waitFor(() => expect(api.reconLines).toHaveBeenLastCalledWith(expect.objectContaining({ reason: 'all_uncoded', outcome: 'missing_at_eta' })))
+    fireEvent.click(screen.getByText(/عرض الأصناف التي بلا كود مصلحة/))
+    expect(await screen.findByText('D.L.V.')).toBeTruthy()
+    expect(api.reconUncoded).toHaveBeenCalledWith(expect.objectContaining({ system: 'production', ordering: '-value', open: '1' }))
   })
 })

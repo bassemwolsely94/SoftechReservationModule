@@ -15,17 +15,22 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from django.db import transaction
-from django.db.models import Count, Min, Sum
+from django.db.models import Count, Max, Min, Sum
 from django.db.models.functions import TruncMonth
 from django.utils import timezone
 
 from core.errors import redact
 
-from .models import EtaDeviceBranch, EtaHistoryState, EtaMirrorReceipt, EtaReconLine, TaxChannelRule
+from .models import (EtaDeviceBranch, EtaHistoryState, EtaMirrorReceipt, EtaReconLine, EtaReconUncodedItem,
+                     TaxChannelRule, TaxItemProfile)
 
 logger = logging.getLogger(__name__)
 CAIRO = ZoneInfo('Africa/Cairo')
 TOLERANCE = Decimal('0.05')
+LINE_TOLERANCE = Decimal('0.06')        # lines are rounded to 0.01 each, so a sum of a few may be a cent further out
+# all_uncoded: not at ETA, and no item on the sale has an ETA code · some_uncoded: some items have none (not the whole
+# story) · uncoded_lines: the amount gap is exactly the items with no ETA code
+REASONS = ('all_uncoded', 'uncoded_lines', 'some_uncoded')
 KIND_BY_DOCCODE = {'115': 's', '30': 'r'}
 DOCCODE_BY_KIND = {v: k for k, v in KIND_BY_DOCCODE.items()}
 OUTCOMES = ('matched', 'amount_differs', 'missing_at_eta', 'eta_only', 'not_valid', 'duplicate', 'by_invoice')
@@ -40,18 +45,40 @@ def _connect():
     return get_sybase_connection()
 
 
+def _number(raw):
+    return str(int(float(str(raw))))
+
+
+def _line_value(qty, price, discp):
+    """A line's value for telling which lines explain a gap: quantity × sale price, less the pharmacy discount %."""
+    value = Decimal(str(qty or 0)) * Decimal(str(price or 0)) * (1 - Decimal(str(discp or 0)) / 100)
+    return value.quantize(Decimal('0.01'))
+
+
 def _softech_rows(branch, day):
-    """One branch-day of SOFTECH sales and returns from HQ: [{doccode, docnumber, total, channel}]."""
+    """One branch-day of SOFTECH sales and returns from HQ: [{doccode, docnumber, total, channel, lines}], where
+    lines = [{itemcode, qty, value}] from stktrans. Two reads on one connection."""
     conn = _connect()
     try:
         cur = conn.cursor()
         cur.execute("SELECT doccode, docnumber, docvalue, ptclassifcode FROM stktransm "
                     "WHERE branchcode = ? AND docdate = ? AND doccode IN ('115', '30')", (branch, day.isoformat()))
-        rows = cur.fetchall()
+        heads = cur.fetchall()
+        cur.execute("SELECT doccode, docnumber, itemcode, transqty, itemsaleprice, pharmacydiscp FROM stktrans "
+                    "WHERE branchcode = ? AND docdate = ? AND doccode IN ('115', '30')", (branch, day.isoformat()))
+        details = cur.fetchall()
     finally:
         conn.close()
-    return [{'doccode': str(r[0]).strip(), 'docnumber': str(int(float(str(r[1])))), 'total': Decimal(str(r[2] or 0)),
-             'channel': str(r[3] or '').strip()} for r in rows]
+    lines = defaultdict(list)
+    for doccode, docnumber, itemcode, qty, price, discp in details:
+        lines[(str(doccode).strip(), _number(docnumber))].append(
+            {'itemcode': str(itemcode or '').strip(), 'qty': Decimal(str(qty or 0)), 'value': _line_value(qty, price, discp)})
+    out = []
+    for r in heads:
+        key = (str(r[0]).strip(), _number(r[1]))
+        out.append({'doccode': key[0], 'docnumber': key[1], 'total': Decimal(str(r[2] or 0)),
+                    'channel': str(r[3] or '').strip(), 'lines': lines.get(key, [])})
+    return out
 
 
 def _softech_find(keys):
@@ -130,12 +157,38 @@ def _decide(sale, matches):
     return 'matched'
 
 
-def reconcile_day(system, branch, day):
-    """Recomputes one branch-day. Returns counts per outcome, or {'skipped': True} before the branch's devices began."""
+def coded_items():
+    """SOFTECH item codes that have an ETA code today. A receipt carries only these items' lines."""
+    return set(TaxItemProfile.objects.exclude(eta_code='').values_list('softech_itemcode', flat=True))
+
+
+def _reason(outcome, sale, eta_total, coded):
+    """(reason, uncoded_total) for one sale, from its SOFTECH lines. Production receipts leave out every line whose
+    item has no ETA code, and a sale with no coded line is not sent at all (backfill of 2026-11-15)."""
+    lines = sale.get('lines') or []
+    uncoded = [x for x in lines if x['itemcode'] not in coded]
+    if not uncoded:
+        return '', None
+    uncoded_total = sum((x['value'] for x in uncoded), Decimal('0'))
+    if outcome == 'missing_at_eta':
+        return ('all_uncoded' if len(uncoded) == len(lines) else 'some_uncoded'), uncoded_total
+    if outcome == 'amount_differs' and eta_total is not None:
+        eta_total = Decimal(eta_total)
+        coded_total = sum((x['value'] for x in lines if x['itemcode'] in coded), Decimal('0'))
+        if abs(sale['total'] - uncoded_total - eta_total) <= LINE_TOLERANCE or abs(coded_total - eta_total) <= LINE_TOLERANCE:
+            return 'uncoded_lines', uncoded_total
+        return 'some_uncoded', uncoded_total
+    return '', uncoded_total
+
+
+def reconcile_day(system, branch, day, coded=None):
+    """Recomputes one branch-day. Returns counts per outcome, or {'skipped': True} before the branch's devices began.
+    `coded` = coded_items(), passed in by a range so it is read once."""
     devices = list(EtaDeviceBranch.objects.filter(system=system, softech_branchcode=branch))
     starts = [d.first_day for d in devices if d.first_day]
     if not devices or (starts and day < min(starts)):
         return {'skipped': True}
+    coded = coded_items() if coded is None else coded
     sales = _softech_rows(branch, day)
     by_invoice = set(TaxChannelRule.objects.filter(mode=TaxChannelRule.MODE_INVOICE).values_list('ptclassifcode', flat=True))
     since = dt.datetime.combine(day, dt.time.min, tzinfo=CAIRO)
@@ -144,16 +197,28 @@ def reconcile_day(system, branch, day):
                                              issued_at__gte=since, issued_at__lt=since + dt.timedelta(days=1)):
         eta[(DOCCODE_BY_KIND.get(r.receipt_type, '115'), r.receipt_number)].append(r)
     lines, used = [], set()
+    uncoded = defaultdict(lambda: {'docs': 0, 'qty': Decimal('0'), 'value': Decimal('0')})
     for sale in sales:
         key = (sale['doccode'], sale['docnumber'])
         matches = eta.get(key, [])
         used.add(key)
         outcome = 'by_invoice' if sale['channel'] in by_invoice else _decide(sale, matches)
         first = matches[0] if matches else None
+        eta_total = first.total_amount if first else None
+        reason, uncoded_total = ('', None) if outcome == 'by_invoice' else _reason(outcome, sale, eta_total, coded)
         lines.append(EtaReconLine(system=system, softech_branchcode=branch, day=day, doccode=sale['doccode'],
                                   docnumber=sale['docnumber'], softech_total=sale['total'], outcome=outcome,
-                                  eta_uuid=first.uuid if first else '', eta_total=first.total_amount if first else None,
-                                  eta_status=first.status if first else '', eta_count=len(matches)))
+                                  eta_uuid=first.uuid if first else '', eta_total=eta_total,
+                                  eta_status=first.status if first else '', eta_count=len(matches),
+                                  reason=reason, uncoded_total=uncoded_total))
+        if outcome != 'by_invoice':
+            sign = -1 if sale['doccode'] == '30' else 1          # a return takes the sale back
+            for itemcode in {x['itemcode'] for x in sale.get('lines') or [] if x['itemcode'] not in coded}:
+                uncoded[itemcode]['docs'] += 1
+            for x in sale.get('lines') or []:
+                if x['itemcode'] not in coded:
+                    uncoded[x['itemcode']]['qty'] += sign * x['qty']
+                    uncoded[x['itemcode']]['value'] += sign * x['value']
     for key, rows in eta.items():
         if key in used:
             continue
@@ -163,6 +228,11 @@ def reconcile_day(system, branch, day):
     with transaction.atomic():
         EtaReconLine.objects.filter(system=system, softech_branchcode=branch, day=day).delete()
         EtaReconLine.objects.bulk_create(lines, batch_size=1000)
+        EtaReconUncodedItem.objects.filter(system=system, softech_branchcode=branch, day=day).delete()
+        EtaReconUncodedItem.objects.bulk_create(
+            [EtaReconUncodedItem(system=system, softech_branchcode=branch, day=day, itemcode=code, docs=v['docs'],
+                                 qty=v['qty'], value=v['value']) for code, v in uncoded.items() if code],
+            batch_size=1000)
     counts = Counter(l.outcome for l in lines)
     return {o: counts.get(o, 0) for o in OUTCOMES}
 
@@ -172,11 +242,12 @@ def reconcile_range(system, start, end, branches=None):
     already computed stay as they were. The round is recorded per system (EtaHistoryState kind 'recon')."""
     out = {'days': 0, 'branch_days': 0, 'error': ''}
     branches = branches or open_branches(system)
+    coded = coded_items()
     day = start
     try:
         while day <= end:
             for branch in branches:
-                if not reconcile_day(system, branch, day).get('skipped'):
+                if not reconcile_day(system, branch, day, coded=coded).get('skipped'):
                     out['branch_days'] += 1
             out['days'] += 1
             day += dt.timedelta(days=1)
@@ -215,8 +286,49 @@ def summary(system, branch=None):
         row[r['outcome']] = r['n']
         row['softech_total'] += r['softech'] or 0
         row['eta_total'] += r['eta'] or 0
+    for r in (qs.exclude(reason='').annotate(month=TruncMonth('day')).values('softech_branchcode', 'month', 'reason')
+              .annotate(n=Count('id')).order_by()):
+        row = rows.get((r['softech_branchcode'], r['month'].strftime('%Y-%m')))
+        if row is not None:
+            row.setdefault('reasons', {})[r['reason']] = r['n']
     out = list(rows.values())
     for row in out:
+        row.setdefault('reasons', {})
         row['softech_total'] = str(Decimal(row['softech_total']).quantize(Decimal('0.01')))
         row['eta_total'] = str(Decimal(row['eta_total']).quantize(Decimal('0.01')))
     return out
+
+
+UNCODED_SORT = {'value': 'value', 'docs': 'docs', 'qty': 'qty', 'itemcode': 'itemcode', 'last_day': 'last_day'}
+
+
+def uncoded_items(system, branch=None, start=None, end=None):
+    """Items with no ETA code on receipt sales, biggest sales value first: [{itemcode, name, docs, qty, value,
+    last_day, coding_status, request_status}]. The code status is today's, so an item coded since shows as such."""
+    from .models import TaxCodeRequest
+    qs = EtaReconUncodedItem.objects.filter(system=system)
+    if branch:
+        qs = qs.filter(softech_branchcode=branch)
+    if start:
+        qs = qs.filter(day__gte=start)
+    if end:
+        qs = qs.filter(day__lte=end)
+    rows = list(qs.values('itemcode').annotate(docs=Sum('docs'), qty=Sum('qty'), value=Sum('value'), last_day=Max('day'))
+                .order_by('-value', 'itemcode'))
+    codes = [r['itemcode'] for r in rows]
+    profiles = {p.softech_itemcode: p for p in TaxItemProfile.objects.filter(softech_itemcode__in=codes)}
+    requests = {}
+    for req in (TaxCodeRequest.objects.filter(profile__softech_itemcode__in=codes, purpose=TaxCodeRequest.PURPOSE_NEW)
+                .order_by('profile_id', '-id').values('profile__softech_itemcode', 'status')):
+        requests.setdefault(req['profile__softech_itemcode'], req['status'])
+    names = {}
+    if codes:
+        from apps.catalog.models import Item
+        names = dict(Item.objects.filter(softech_id__in=codes).values_list('softech_id', 'name'))
+    for r in rows:
+        p = profiles.get(r['itemcode'])
+        r['name'] = names.get(r['itemcode']) or (p.item_name_ar or p.item_name if p else '') or ''
+        r['coding_status'] = p.coding_status if p else TaxItemProfile.CODE_MISSING
+        r['coded_now'] = bool(p and p.eta_code)
+        r['request_status'] = requests.get(r['itemcode'], '')
+    return rows

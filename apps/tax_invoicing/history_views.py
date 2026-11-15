@@ -311,7 +311,8 @@ def _recon_row(line):
     return {'id': line.id, 'branch': line.softech_branchcode, 'day': line.day, 'doccode': line.doccode,
             'docnumber': line.docnumber, 'softech_total': None if line.softech_total is None else str(line.softech_total),
             'eta_uuid': line.eta_uuid, 'eta_total': _money(line.eta_total), 'eta_status': line.eta_status,
-            'eta_count': line.eta_count, 'outcome': line.outcome}
+            'eta_count': line.eta_count, 'outcome': line.outcome, 'reason': line.reason,
+            'uncoded_total': None if line.uncoded_total is None else str(line.uncoded_total)}
 
 
 def _recon_lines(request):
@@ -321,6 +322,10 @@ def _recon_lines(request):
         qs = qs.filter(softech_branchcode=p['branch'])
     if p.get('outcome'):
         qs = qs.filter(outcome=p['outcome'])
+    if p.get('reason'):
+        if p['reason'] not in (*eta_recon.REASONS, 'none'):
+            raise _Bad('سبب غير معروف')
+        qs = qs.filter(reason='' if p['reason'] == 'none' else p['reason'])
     month = p.get('month') or ''
     if month:
         try:
@@ -346,7 +351,7 @@ def recon_summary(request):
                 'sample': f'{d.sample_matched}/{d.sample_size}'}
                for d in EtaDeviceBranch.objects.filter(system=system).order_by('softech_branchcode', 'pos_serial')]
     return Response({'rows': eta_recon.summary(system, request.query_params.get('branch') or None), 'devices': devices,
-                     'outcomes': list(eta_recon.OUTCOMES), 'last_run_at': state.last_run_at if state else None,
+                     'outcomes': list(eta_recon.OUTCOMES), 'reasons': list(eta_recon.REASONS), 'last_run_at': state.last_run_at if state else None,
                      'last_error': state.last_error if state else ''})
 
 
@@ -371,7 +376,10 @@ def recon_lines(request):
 
 RECON_COLUMNS = [('branch', 'الفرع'), ('day', 'اليوم'), ('doccode', 'نوع المستند'), ('docnumber', 'الرقم'),
                  ('softech_total', 'إجمالي SOFTECH'), ('eta_total', 'إجمالي المصلحة'), ('eta_status', 'حالة المصلحة'),
-                 ('eta_count', 'مرات الإرسال'), ('outcome', 'النتيجة'), ('eta_uuid', 'UUID')]
+                 ('eta_count', 'مرات الإرسال'), ('outcome', 'النتيجة'), ('reason', 'السبب'),
+                 ('uncoded_total', 'قيمة أصناف بلا كود'), ('eta_uuid', 'UUID')]
+RECON_REASON_LABELS = {'all_uncoded': 'كل الأصناف بلا كود مصلحة', 'uncoded_lines': 'الفرق = أصناف بلا كود مصلحة',
+                       'some_uncoded': 'بعض الأصناف بلا كود مصلحة'}
 
 
 @api_view(['GET'])
@@ -393,6 +401,7 @@ def recon_export(request):
         row = _recon_row(line)
         name = names.get(row['branch'])
         row['branch'] = f"{row['branch']} · {name}" if name else row['branch']    # never a bare code in Excel
+        row['reason'] = RECON_REASON_LABELS.get(row['reason'], '')
         ws.append([row.get(key) for key, _ in RECON_COLUMNS])
     buf = io.BytesIO()
     neutralise_formulas(wb).save(buf)       # typed text never reaches Excel as a live formula
@@ -429,3 +438,76 @@ def recon_refresh(request):
     start_thread(_recon_round, args=(system, months), name=f'eta-recon-{system}')
     services.audit('eta_recon_refresh', actor=request.user, entity='eta_recon', entity_id=system, after={'months': months})
     return Response({'started': True}, status=status.HTTP_202_ACCEPTED)
+
+
+# ── items with no ETA code, ranked by receipt sales (reconciliation reasons) ─────────────────────
+
+UNCODED_COLUMNS = [('itemcode', 'كود الصنف'), ('name', 'الصنف'), ('docs', 'عدد الإيصالات'), ('qty', 'الكمية'),
+                   ('value', 'قيمة المبيعات'), ('last_day', 'آخر بيع'), ('coding_status', 'حالة الكود'),
+                   ('request_status', 'آخر طلب كود')]
+
+
+def _uncoded(request):
+    p = request.query_params
+    start, end = parse_date(p.get('date_from') or ''), parse_date(p.get('date_to') or '')
+    rows = eta_recon.uncoded_items(_system(request), p.get('branch') or None, start, end)
+    if p.get('open') == '1':                # still without a code today
+        rows = [r for r in rows if not r['coded_now']]
+    q = (p.get('q') or '').strip().lower()
+    if q:
+        rows = [r for r in rows if q in r['itemcode'].lower() or q in (r['name'] or '').lower()]
+    key = (p.get('ordering') or '-value').lstrip('-')
+    if key not in eta_recon.UNCODED_SORT:
+        raise _Bad('ترتيب غير مدعوم')
+    rows.sort(key=lambda r: (r[key] is None, r[key] if r[key] is not None else 0, r['itemcode']),
+              reverse=(p.get('ordering') or '-value').startswith('-'))
+    return rows
+
+
+def _uncoded_row(r):
+    return {**r, 'qty': str(Decimal(r['qty']).quantize(Decimal('0.01'))), 'value': str(Decimal(r['value']).quantize(Decimal('0.01')))}
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, VIEWER])
+@_guard
+def recon_uncoded(request):
+    rows = _uncoded(request)
+    try:
+        size = min(max(int(request.query_params.get('page_size') or PAGE_SIZE), 1), MAX_PAGE_SIZE)
+        page = max(int(request.query_params.get('page') or 1), 1)
+    except ValueError:
+        raise _Bad('رقم الصفحة غير صحيح')
+    total = sum((Decimal(r['value']) for r in rows), Decimal('0'))
+    return Response({'count': len(rows), 'page': page, 'pages': max(math.ceil(len(rows) / size), 1),
+                     'total_value': str(total.quantize(Decimal('0.01'))),
+                     'rows': [_uncoded_row(r) for r in rows[(page - 1) * size:page * size]]})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, VIEWER])
+@_guard
+def recon_uncoded_export(request):
+    rows = _uncoded(request)
+    if len(rows) > MAX_EXPORT:
+        raise _Bad(f'النتيجة {len(rows)} صفاً؛ ضيّق الفلاتر (الحد {MAX_EXPORT})')
+    from .models import TaxCodeRequest, TaxItemProfile
+    coding = dict(TaxItemProfile.CODE_STATUS_CHOICES)
+    requests = dict(TaxCodeRequest.STATUS_CHOICES)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'أصناف بلا كود'
+    ws.sheet_view.rightToLeft = True
+    ws.append([label for _, label in UNCODED_COLUMNS])
+    for r in rows:
+        row = _uncoded_row(r)
+        row['coding_status'] = coding.get(row['coding_status'], row['coding_status'])
+        row['request_status'] = requests.get(row['request_status'], '')
+        ws.append([row.get(key) for key, _ in UNCODED_COLUMNS])
+    buf = io.BytesIO()
+    neutralise_formulas(wb).save(buf)       # item names are typed text: never a live formula in Excel
+    services.audit('eta_recon_uncoded_export', actor=request.user, entity='eta_recon', entity_id=request.query_params.get('system'),
+                   after={'rows': len(rows), 'filters': dict(request.query_params.items())})
+    out = HttpResponse(buf.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    out['Content-Disposition'] = f'attachment; filename="eta-uncoded-items-{request.query_params.get("system")}.xlsx"'
+    return out
