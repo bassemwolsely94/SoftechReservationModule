@@ -416,16 +416,22 @@ class RedemptionRequest(models.Model):
         )
 
     def approve(self, by_staff):
-        self.status = 'approved'
-        self.approved_by = by_staff
-        self.approved_at = timezone.now()
-        self.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
-        # Deduct points
-        self.account.redeem_points(
-            self.points_spent,
-            reason=f'استبدال مكافأة: {self.reward.name_ar or self.reward.name}',
-            reward=self.reward,
-        )
+        # Deduct FIRST, under a lock on the account, then mark approved — all in one transaction. Before,
+        # the status was saved first: an insufficient balance left the request 'approved' with nothing
+        # deducted, and two approvals at once deducted twice (full audit 2026-11-15, BE-6).
+        from django.db import transaction
+        with transaction.atomic():
+            account = type(self.account).objects.select_for_update().get(pk=self.account_id)
+            account.redeem_points(
+                self.points_spent,
+                reason=f'استبدال مكافأة: {self.reward.name_ar or self.reward.name}',
+                reward=self.reward,
+            )
+            self.account = account
+            self.status = 'approved'
+            self.approved_by = by_staff
+            self.approved_at = timezone.now()
+            self.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
 
     def reject(self, by_staff, reason=''):
         self.status = 'rejected'

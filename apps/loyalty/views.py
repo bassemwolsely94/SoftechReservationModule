@@ -139,6 +139,11 @@ class AdjustPointsView(APIView):
 
         # ── Lane A: referral points — Django only, no SOFTECH required ────────
         if adjust_type == 'referral':
+            # add_points() takes abs(): a negative referral delta used to ADD points (full audit
+            # 2026-11-15, BE-8). Refuse instead of guessing: a referral deduction lane is an owner decision.
+            if delta < 0:
+                return Response({'detail': 'نقاط الإحالة إضافة فقط — الخصم غير متاح من هنا'},
+                                status=400)
             tx = account.add_points(
                 points      = delta,
                 reason      = reason or 'إحالة عميل',
@@ -377,18 +382,19 @@ class ApproveRedemptionView(APIView):
 
     def post(self, request, pk):
         try:
-            redemption = RedemptionRequest.objects.get(pk=pk, status='pending')
-        except RedemptionRequest.DoesNotExist:
-            return Response({'detail': 'الطلب غير موجود أو ليس بانتظار الموافقة'}, status=404)
-
-        try:
             staff = request.user.staff_profile
         except Exception:
             staff = None
 
-        try:
-            redemption.approve(by_staff=staff)
-        except ValueError as exc:
-            return Response({'detail': str(exc)}, status=400)
+        # Lock the request row: a second approve waits, then no longer finds it 'pending' (BE-6).
+        with transaction.atomic():
+            try:
+                redemption = RedemptionRequest.objects.select_for_update().get(pk=pk, status='pending')
+            except RedemptionRequest.DoesNotExist:
+                return Response({'detail': 'الطلب غير موجود أو ليس بانتظار الموافقة'}, status=404)
+            try:
+                redemption.approve(by_staff=staff)
+            except ValueError as exc:
+                return Response({'detail': str(exc)}, status=400)
 
         return Response(RedemptionRequestSerializer(redemption).data)
