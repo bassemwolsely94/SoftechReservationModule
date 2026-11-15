@@ -746,7 +746,10 @@ SCREENS = [
             T('«حملة جديدة» ← الاسم ونص الرسالة (اضغط المتغير لإضافته مثل اسم العميل) ← الجمهور ← «معاينة الجمهور» ← «حفظ الحملة».', '"New campaign" → name and message text (click a variable such as the customer name to insert it) → audience → "Preview audience" → "Save campaign".'),
             T('«طلب الموافقة»؛ بعد الاعتماد «جدولة الإرسال» أو الإرسال يدوياً.', '"Request approval"; once approved, "Schedule sending" or send manually.'),
         ],
-        'tips': [T('أرقام المستلمين بتظهر للي بيبعتوا أو بيعتمدوا الحملات بس؛ صلاحية العرض بس بتشوفها مخفية.', "Recipients' numbers show only to the people who send or approve campaigns; view-only access sees them hidden."),
+        'tips': [
+            T('الحملة بتوصل بس للعملاء اللي وافقوا على «العروض» — ولو الحملة مستهدفة حالة صحية لازم موافقة «عروض حسب الحالة». الحسابات المغلقة والمتوفين والجهات والأكواد المدموجة مستبعدة دايمًا، فالوصول المقدّر ممكن يكون أقل من الشريحة.',
+              'A campaign only reaches customers who agreed to "Offers" — a campaign that targets a health condition needs "Health-targeted offers" consent. Closed, deceased, entity and merged codes are always left out, so the estimated reach can be lower than the segment.'),
+            T('أرقام المستلمين بتظهر للي بيبعتوا أو بيعتمدوا الحملات بس؛ صلاحية العرض بس بتشوفها مخفية.', "Recipients' numbers show only to the people who send or approve campaigns; view-only access sees them hidden."),
                  T('فعّل «لديهم رقم واتساب مسجّل فقط» حتى لا تضيع رسائل.', 'Turn on "registered WhatsApp number only" so no messages are wasted.')],
         'workflows': ['campaign'],
         'related': ['omni.inbox'],
@@ -858,7 +861,7 @@ SCREENS = [
              'warn': T('الزرار مقفول من غير سبب. اكتب سبب واضح — المنشئ هيشتغل عليه.', 'Locked without a reason. Write a clear one — the creator will work from it.'),
              'open_hint': T('اضغط «❌ رفض» على حملة «بانتظار الموافقة».', 'Press "❌ Reject" on a "Pending approval" campaign.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('المجدولة بتستنى ميعادها قبل ما تدخل طابور واتساب، والإلغاء بيشيل الرسائل اللي لسه ماتبعتتش.', 'A scheduled campaign now waits for its time before entering the WhatsApp queue, and cancelling removes unsent messages.'),
+        'updated': '2026-11-15',
+        'change_note': T('موافقة التواصل (P-05): تذكيرات الصرف والعروض محتاجة موافقة العميل', "Contact consent (P-05): refill reminders and offers need the customer's yes"),
     },
 ]

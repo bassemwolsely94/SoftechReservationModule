@@ -144,6 +144,23 @@ offline node keeps its rows). `hq_stricter` = HQ restricts but the branch copy d
 still serves the customer. While any are open, admin + supervisor get one notification a day
 (`customer_status_drift`). Rows are visible read-only in Django admin.
 
+### Branch stricter than HQ — policy and trace (owner 2026-11-11)
+
+**Policy: stricter wins unless the trace shows otherwise.** A branch copy that is stricter than HQ (points
+off, file closed, locked) was changed on the node and never reached HQ.
+- **A manager made the change** (our role is one of `CUSTOMER_STATUS_DRIFT_ROLES`): apply it at HQ.
+  For points, that means `remove_from_points --pic <code>`.
+- **Anyone else, or an unknown SOFTECH user:** copy HQ back down, one code at a time, with
+  `push_customer_branch_copy --pic <code> --branch <node>`.
+
+`investigate_pic_replication --drift` (read-only) lists every open branch-stricter row of the daily check:
+- the last editor of that customer on its own node (SOFTECH user, and our role when linked) and when they
+  edited it;
+- the suggestion above.
+
+The list is saved to `scratch/branch_stricter_trace.csv`. The owner reviews it; nothing is written by the trace.
+The 17 points rows of 2026-10-10 and the status rows of 07HD11624 / 07HD11663 are the first users.
+
 ## Step 3 — fixing the branch copies (BUILT, gated off; owner chose (b) 2026-10-08)
 
 Owner: "(b) our system writes them, audited and read back, starting with 05HD999 on branch 140 only".
@@ -244,6 +261,18 @@ Candidates are now read in bulk (one query per 150 codes).
 * branch copies `--from-removals`: 130, 140, 150, 160, 170 all ran to `0 codes` (most codes `skipped` = not held
   by that branch);
 * daily check after: **HQ stricter 0**; 19 branch-stricter differences left for review (130: 3 · 160: 14 · 170: 2).
+
+### Named codes without the special discount (owner 2026-11-11)
+
+`remove_from_points --pic <code> --no-discount` turns points off and clears the balance but leaves
+`picdiscounts` as it is. It is for named codes only; the reset-customer batch always gives the discount.
+The first use is **07HD11624** (former employee: points off, no staff-style discount, stays active).
+
+Steps for 07HD11624:
+1. Run the trace (`investigate_pic_replication --trace --pic 07HD11624`) to see who closed it at branch 160.
+2. `remove_from_points --pic 07HD11624 --no-discount --user <you>`: dry run, then `--commit` with the gate on.
+3. If the trace shows a routine closure: `push_customer_branch_copy --pic 07HD11624 --branch 160 --user <you>`
+   copies HQ's flags down. That reopens the file and turns points off there, one code, read back.
 
 ### Earlier findings that led here
 `investigate_pic_replication --reset-only` writes the review list `scratch/pic_reset_customers.csv` (codes

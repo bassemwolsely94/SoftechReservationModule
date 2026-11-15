@@ -12,7 +12,8 @@ from django.utils import timezone
 from apps.catalog.models import Item, ItemStock
 from apps.customers.models import Customer
 from apps.followups import refill_reminders as RR
-from apps.followups.models import FollowUpTask, RefillReminder, RefillReminderOptOut
+from apps.customers import consent
+from apps.followups.models import FollowUpTask, RefillReminder
 from apps.reservations.models import Reservation
 
 from .factories import make_branch, make_user
@@ -43,8 +44,11 @@ class _Base(TestCase):
         self.item = Item.objects.create(softech_id='500001', name='CONCOR 5MG', pack_price=Decimal('120'), is_active=True)
         self.cust = self.customer('أحمد محمد علي', '01001234567', 'P1')
 
-    def customer(self, name, phone, pic):
-        return Customer.objects.create(name=name, phone=phone, softech_pic=pic, preferred_branch=self.branch)
+    def customer(self, name, phone, pic, agreed=True):
+        c = Customer.objects.create(name=name, phone=phone, softech_pic=pic, preferred_branch=self.branch)
+        if agreed:                                                    # P-05: reminders are opt-in
+            consent.record(c, consent.REFILL, True, source='counter')
+        return c
 
     def task(self, cust=None, due=0, status='pending', task_type='refill', item=True):
         return FollowUpTask.objects.create(customer=cust or self.cust, item=self.item if item else None,
@@ -64,8 +68,10 @@ class EligibilityTests(_Base):
         self.assertEqual(to_send[0]['phone'], '01001234567')
 
     def test_skip_reasons(self):
-        RefillReminderOptOut.objects.create(customer=self.customer('opt', '01011111111', 'O1'))
-        self.task(RefillReminderOptOut.objects.get().customer)
+        opt = self.customer('opt', '01011111111', 'O1')
+        consent.record(opt, consent.REFILL, False, source='whatsapp_reply')        # a later "no" wins
+        self.task(opt)
+        self.task(self.customer('never asked', '01055555555', 'Q1', agreed=False))
         self.task(self.customer('nophone', '123', 'N1'))
         two = self.customer('two', '01022222222', 'T1')
         self.task(two, due=0)
@@ -84,7 +90,7 @@ class EligibilityTests(_Base):
         FollowUpTask.objects.create(customer=nb, item=self.item, branch=closed, task_type='refill',
                                     status='pending', due_date=TODAY)
         _, skipped, rows = RR.candidates()
-        self.assertEqual(dict(skipped), {'opted_out': 1, 'no_phone': 1, 'same_customer': 1,
+        self.assertEqual(dict(skipped), {'opted_out': 1, 'no_consent': 1, 'no_phone': 1, 'same_customer': 1,
                                          'out_of_stock': 1, 'no_branch': 1})
         self.assertTrue(all(r['reason_label'] for r in rows))
 
@@ -176,7 +182,8 @@ class ReplyTests(_Base):
         rem2 = RefillReminder.objects.get(task=t2)
         with mock.patch('apps.whatsapp.sender.WhatsAppSender'):
             self.assertEqual(RR.handle_button_reply(wa_id='201009999999', payload=f'refill:{rem2.pk}:stop'), 'stop')
-        self.assertTrue(RefillReminderOptOut.objects.filter(customer=other).exists())
+        self.assertFalse(consent.can_contact(other, consent.REFILL))
+        self.assertEqual(consent.decisions([other.pk], consent.REFILL, 'call')[other.pk], False)
         self.assertEqual(Reservation.objects.count(), 1)
         self.task(other, due=1)
         self.assertEqual(RR.candidates()[1]['opted_out'], 1)

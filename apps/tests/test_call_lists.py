@@ -8,7 +8,8 @@ from django.test import TestCase
 
 from apps.customers.models import Customer
 from apps.followups import call_lists
-from apps.followups.models import CallList, FollowUpTask, RefillReminderOptOut
+from apps.customers import consent
+from apps.followups.models import CallList, FollowUpTask
 from apps.notifications.models import Notification
 from .factories import make_admin, make_call_center, make_customer, make_pharmacist
 
@@ -34,7 +35,7 @@ class CallListTests(TestCase):
 
     def test_create_splits_evenly_and_skips_ineligible(self):
         Customer.objects.filter(pk=self.customers[0].pk).update(phone='')
-        RefillReminderOptOut.objects.create(customer=self.customers[1])
+        consent.record(self.customers[1], consent.REFILL, False, channel='call', source='staff')   # P-05 'no'
         FollowUpTask.objects.create(customer=self.customers[2], due_date='2026-11-09', status='pending')
         Customer.objects.filter(pk=self.customers[3].pk).update(days_since_last_visit=5)
 

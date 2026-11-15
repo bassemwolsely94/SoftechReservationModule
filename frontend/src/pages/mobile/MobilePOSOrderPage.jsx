@@ -7,6 +7,7 @@ import { Icon } from '../../pos/design'
 import PrescriptionOcrModal from '../../components/PrescriptionOcrModal'
 import PicHistoryModal from '../../components/PicHistoryModal'
 import CustomerMomentBar from '../../components/CustomerMomentBar'
+import ConsentChips from '../../components/ConsentChips'
 import OffersPanel from '../../components/OffersPanel'
 import PicSuggestions from '../../components/PicSuggestions'
 import BasketIntelPanel from '../../components/BasketIntelPanel'
@@ -135,6 +136,7 @@ export default function MobilePOSOrderPage() {
         )}
         {/* intelligence layer — same as desktop (customer context · suggestions · offers · opportunities) */}
         {histCustomerId && <CustomerMomentBar customerId={histCustomerId} branchId={P.branch} />}
+        {histCustomerId && <ConsentChips customerId={histCustomerId} />}
         <PicSuggestions P={P} />
         <OffersPanel P={P} />
         <BasketIntelPanel itemCodes={P.lines.map(l => l.softech_itemcode).filter(Boolean)}

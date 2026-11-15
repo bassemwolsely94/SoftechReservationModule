@@ -12,6 +12,7 @@ never read and names are never printed.
     python manage.py investigate_pic_replication --host 192.168.3.10     # one node (repeatable)
     python manage.py investigate_pic_replication --pic 03HD3059 --pic 06HD8958
     python manage.py investigate_pic_replication --trace --pic 05HD999     # one code on HQ + every node, fast
+    python manage.py investigate_pic_replication --drift                   # who made each branch-stricter code stricter
 
 Sections
   [R1] each node: own branch code (lastdocnumbers.ver_branch='1'), row counts, which branch codes it holds
@@ -57,6 +58,9 @@ class Command(BaseCommand):
                             help='[R8] also write the reset customers as a review list (scratch/ is git-ignored)')
         parser.add_argument('--trace', action='store_true',
                             help='only trace the --pic codes on HQ and every node (fast; after a SOFTECH screen change)')
+        parser.add_argument('--drift', action='store_true',
+                            help='only the open branch-stricter rows of the daily status check: last editor on the node')
+        parser.add_argument('--drift-csv', default='scratch/branch_stricter_trace.csv')
         parser.add_argument('--reset-only', action='store_true',
                             help='only [R8]: customers reset at HQ, their branch balances and till use after the reset')
         parser.add_argument('--explain', action='store_true',
@@ -465,6 +469,66 @@ class Command(BaseCommand):
             for c in conns:
                 c.close()
 
+    def s_drift(self, targets, csv_path):
+        """Open branch-stricter rows of the daily status check (CustomerStatusDrift, node_stricter). For each, on
+        its own node: who last edited the customer row and when (the status fields have their own editor/time).
+        Owner policy 2026-11-11: stricter wins unless the trace shows otherwise — a change by a manager (a role
+        that reviews the status check, CUSTOMER_STATUS_DRIFT_ROLES) is applied at HQ; a change by anyone else or an unknown SOFTECH user is copied back
+        from HQ, one code at a time. The column `suggest` is only that suggestion; nothing is written."""
+        from config.sybase import get_branch_connection
+        from apps.customers.models import CustomerStatusDrift as D
+        from apps.customers.status_drift import roles as manager_roles
+        from apps.users.models import StaffProfile
+        managers = set(manager_roles())
+        rows = list(D.objects.filter(resolved_at__isnull=True, direction=D.NODE_STRICTER).order_by('node_branch', 'pic'))
+        roles = {str(sp.softech_user_id).strip(): sp.role for sp in
+                 StaffProfile.objects.exclude(softech_user_id='').exclude(softech_user_id__isnull=True)}
+        by_node = defaultdict(list)
+        for r in rows:
+            by_node[r.node_branch].append(r)
+        self._emit(f'  {len(rows)} open branch-stricter rows on {len(by_node)} node(s)')
+        out, seen = [], set()
+        for host, port, label in targets:
+            if len(seen) == len(by_node):
+                break
+            try:
+                conn = get_branch_connection(host, port, 'SOFTECHDB9')
+            except Exception as exc:
+                self._emit(f'  {label}: ! not reachable — {str(exc)[:80]}')
+                continue
+            try:
+                _, own = self._q(conn, f"SELECT branchcode FROM {DB}.lastdocnumbers WHERE ver_branch = '1'")
+                code = _s(own[0][0]) if own else ''
+                items = by_node.get(code, [])
+                seen.add(code)
+                for r in items:
+                    _, x = self._q(conn, f'SELECT usercode, trans_time, phcodestatususercode, phcodestatustime '
+                                         f'FROM {DB}.localcustomers WHERE phcode = ?', [r.pic])
+                    if not x:
+                        user, when = '', ''
+                    elif r.field == D.FIELD_STATUS and _s(x[0][2]):
+                        user, when = _s(x[0][2]), x[0][3]
+                    else:
+                        user, when = _s(x[0][0]), x[0][1]
+                    role = roles.get(user, '')
+                    suggest = ('apply at HQ (manager)' if role in managers
+                               else 'copy HQ down (one code)' if user else 'check by hand')
+                    self._emit(f'  {r.pic} @ {code} {r.field}: HQ {r.hq_value!r} / node {r.node_value!r} · last edit by '
+                               f'SOFTECH user {user or "?"} ({role or "not linked to our staff"}) at {when} → {suggest}')
+                    out.append([r.pic, code, r.field, r.hq_value, r.node_value, user, role, when, suggest])
+            finally:
+                conn.close()
+        for code in sorted(set(by_node) - seen):
+            self._emit(f'  node {code}: not reached — {len(by_node[code])} rows not traced')
+        if out and csv_path:
+            os.makedirs(os.path.dirname(csv_path) or '.', exist_ok=True)
+            with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
+                w = csv_writer(f)
+                w.writerow(['pic', 'node', 'field', 'hq_value', 'node_value', 'softech_user', 'our_role', 'edited_at',
+                            'suggest'])
+                w.writerows(out)
+            self._emit(f'  list: {csv_path}')
+
     # ── run ───────────────────────────────────────────────────────────────────
     def handle(self, *args, **o):
         from config.sybase import get_branch_connection, get_sybase_connection
@@ -481,6 +545,13 @@ class Command(BaseCommand):
         self._emit(f'SOFTECH PIC REPLICATION PROBE (read-only) — HQ vs {len(targets)} node(s)')
         self._emit('=' * 72)
         self.hq = get_sybase_connection()
+        if o.get('drift'):
+            try:
+                self._safe('[D] branch-stricter codes — who changed them on the node',
+                           lambda: self.s_drift(targets, o.get('drift_csv')))
+            finally:
+                self.hq.close()
+            return self._write(o)
         if o.get('trace'):
             try:
                 self._safe('[T] trace — what one customer looks like on HQ and every node', lambda: self.s_trace_pics(targets))

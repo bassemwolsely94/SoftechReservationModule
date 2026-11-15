@@ -486,6 +486,9 @@ def _auto_whatsapp_restock(demand_item):
         if demand_item.contact_opt_out:
             return False
         demand = demand_item.demand
+        from apps.customers import consent      # P-05: a service message — allowed unless the customer said no
+        if not consent.can_contact(demand.customer, consent.SERVICE):
+            return False
         phone = (demand.phone or '').strip()
         if not phone:
             return False

@@ -196,6 +196,16 @@ def _handle_inbound_message(msg: dict, value: dict, phone_number_id: str, accoun
 
     logger.debug('Inbound WhatsApp message from %s: %s', wa_id, preview[:50])
 
+    # P-05: a free opt-out — "STOP" / «إيقاف» withdraws every purpose for every customer on this number.
+    if msg_type == 'text':
+        try:
+            from apps.customers import consent
+            if consent.is_stop_word(body):
+                n = consent.withdraw_by_phone(wa_id)
+                logger.info('WhatsApp STOP from …%s: consent withdrawn for %s customer(s)', str(wa_id)[-4:], n)
+        except Exception as exc:
+            logger.error('WhatsApp STOP handling failed: %s', exc, exc_info=True)
+
     # Quick-reply taps routed to their feature by payload prefix. Never breaks the inbox.
     if msg_type == 'button':
         try:

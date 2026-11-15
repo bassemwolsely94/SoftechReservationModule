@@ -33,8 +33,9 @@ class CampaignWorkflowTests(TestCase):
         self.branch = make_branch()
         self.cc = make_user('camp_cc', role='call_center', branch=self.branch, access_all=True)[2]
         self.sup = make_user('camp_sup', role='supervisor', branch=self.branch, access_all=True)[2]
-        make_customer('عميل أول', '01011111111')
-        make_customer('عميل ثان', '01022222222')
+        from apps.customers import consent
+        for c in (make_customer('عميل أول', '01011111111'), make_customer('عميل ثان', '01022222222')):
+            consent.record(c, consent.MARKETING, True, source='counter')     # P-05: offers are opt-in
 
     def tearDown(self):
         module_access.clear_cache()

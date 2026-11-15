@@ -15,7 +15,7 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 
-from .models import CallList, FollowUpTask, FollowUpTaskAssignment, RefillReminderOptOut
+from .models import CallList, FollowUpTask, FollowUpTaskAssignment
 
 logger = logging.getLogger('elrezeiky.followups')
 
@@ -48,7 +48,8 @@ def candidates(criteria: dict, user):
     if max_days not in (None, ''):
         qs = qs.filter(days_since_last_visit__lte=int(max_days))
 
-    qs = (qs.exclude(pk__in=RefillReminderOptOut.objects.values('customer_id'))
+    from apps.customers import consent      # P-05: staff calls need no opt-in, but a "no" is honoured
+    qs = (consent.exclude_withdrawn(qs, consent.REFILL, 'call')
             .exclude(pk__in=FollowUpTask.objects.filter(status__in=OPEN_STATUSES, customer__isnull=False)
                                                 .values('customer_id')))
     return qs.order_by('-ltv', 'pk')

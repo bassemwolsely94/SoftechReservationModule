@@ -726,3 +726,37 @@ class CustomerMergeWrite(models.Model):
 
     def __str__(self):
         return f'{self.old_pic} → {self.main_pic} {self.status} ({self.points_moved})'
+
+
+class ContactConsent(models.Model):
+    """
+    One recorded contact decision of a customer (backlog P-05, owner approved 2026-11-11). Append-only: the
+    latest row per (customer, purpose, channel) is the current decision and the older rows are its history
+    (who / when / where it was recorded). Rules live in apps/customers/consent.py — every sender asks
+    consent.can_contact() / consent.filter_allowed(); nothing here is written to SOFTECH.
+    """
+    SERVICE, REFILL, MARKETING, MARKETING_HEALTH = 'service', 'refill', 'marketing', 'marketing_health'
+    PURPOSE_CHOICES = [(SERVICE, 'رسائل الخدمة (طلبك جاهز / الصنف توفر)'), (REFILL, 'تذكيرات الصرف'),
+                       (MARKETING, 'العروض والحملات'), (MARKETING_HEALTH, 'حملات حسب الحالة الصحية')]
+    WHATSAPP, CALL, SMS = 'whatsapp', 'call', 'sms'
+    CHANNEL_CHOICES = [(WHATSAPP, 'واتساب'), (CALL, 'مكالمة'), (SMS, 'رسالة نصية')]
+    SOURCE_CHOICES = [('counter', 'في الفرع'), ('call', 'مكالمة'), ('whatsapp_reply', 'رد واتساب'),
+                      ('portal', 'بوابة العميل'), ('staff', 'موظف'), ('migrated', 'منقول من إيقاف التذكيرات')]
+
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='contact_consents')
+    purpose = models.CharField(max_length=20, choices=PURPOSE_CHOICES)
+    channel = models.CharField(max_length=10, choices=CHANNEL_CHOICES, default=WHATSAPP)
+    granted = models.BooleanField(help_text='True = agreed · False = refused / withdrawn')
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES)
+    note = models.CharField(max_length=200, blank=True)
+    recorded_by = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-created_at', '-pk']
+        indexes = [models.Index(fields=['customer', 'purpose', 'channel', '-created_at'],
+                                name='consent_latest_idx')]
+
+    def __str__(self):
+        return f'{self.customer_id} {self.purpose}/{self.channel}: {"yes" if self.granted else "no"}'

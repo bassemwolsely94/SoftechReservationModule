@@ -175,6 +175,10 @@ export const customersApi = {
   addressSuggest: (field, q, area = '') => api.get('/customers/address-suggest/', { params: { field, q, area } }),
   // Compact Customer-360 for the POS side-drawer
   posSummary: (id, params = {}) => api.get(`/customers/${id}/pos-summary/`, { params }),
+  // P-05 contact consent — the backend owns the rule; POST needs customers edit
+  consent: (id) => api.get(`/customers/${id}/consent/`),
+  recordConsent: (id, purpose, granted, source = 'counter') =>
+    api.post(`/customers/${id}/consent/`, { purpose, granted, source }),
   // Revalidated repeat-order proposal (never blind-copy). opts: { branch, invoice }
   repeatOrder: (id, opts = {}) => api.get(`/customers/${id}/repeat-order/`, { params: opts }),
   // Digital receipt payload + channel send (whatsapp/sms/email/print; honest stubs)

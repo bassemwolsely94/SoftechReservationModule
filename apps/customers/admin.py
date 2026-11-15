@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import BranchCopyWrite, Customer, CustomerHealthProfile, CustomerNote, CustomerStatusDrift, CustomerMergeWrite, MergeCandidate, PointsRemoval
+from .models import ContactConsent, BranchCopyWrite, Customer, CustomerHealthProfile, CustomerNote, CustomerStatusDrift, CustomerMergeWrite, MergeCandidate, PointsRemoval
 
 
 @admin.register(CustomerHealthProfile)
@@ -122,4 +122,19 @@ class CustomerMergeWriteAdmin(admin.ModelAdmin):
     readonly_fields = [f.name for f in CustomerMergeWrite._meta.fields]
 
     def has_add_permission(self, request):
+        return False
+
+
+@admin.register(ContactConsent)
+class ContactConsentAdmin(admin.ModelAdmin):
+    """P-05 contact decisions — append-only history; recorded from the POS / customer screens."""
+    list_display = ('customer', 'purpose', 'channel', 'granted', 'source', 'recorded_by', 'created_at')
+    list_filter = ('purpose', 'channel', 'granted', 'source')
+    search_fields = ('customer__softech_pic',)
+    readonly_fields = [f.name for f in ContactConsent._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
         return False

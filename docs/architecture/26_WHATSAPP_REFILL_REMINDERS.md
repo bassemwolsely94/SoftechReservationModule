@@ -39,3 +39,9 @@ While OFF nothing is stored or sent; the screen shows a live preview.
 (+ `preview/`, `run/` admin/supervisor) · webhook routes `button` taps (`apps/whatsapp/webhook.py`) ·
 `WhatsAppSender.send_template(quick_reply_payloads=…)` · screen `/followups/reminders`
 (`RefillRemindersPage.jsx`). Tests `apps/tests/test_refill_reminders.py` (11).
+
+## Consent (P-05, 2026-11-15)
+
+Reminders now go only to customers with a recorded **yes** to refill reminders (POS customer bar or the
+customer page). The "stop" button records a withdrawal through `apps/customers/consent.py` instead of
+`RefillReminderOptOut`; the old opt-outs were migrated. New skip reason: `no_consent`. See doc 37.

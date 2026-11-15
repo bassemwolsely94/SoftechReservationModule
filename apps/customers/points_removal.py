@@ -68,10 +68,11 @@ def read_state(conn, pic):
     return int(r[0][0] or 0), bal, int(r[0][1] or 0)
 
 
-def _done(st):
-    """Removed = points off, nothing left to spend, special discount on (owner 2026-10-10)."""
+def _done(st, discount=True):
+    """Removed = points off, nothing left to spend, special discount on (owner 2026-10-10). With
+    discount=False (named codes only, e.g. a former employee — owner 2026-11-11) the discount is left as it is."""
     flag, bal, disc = st
-    return flag == 0 and bal <= 0 and disc == 1
+    return flag == 0 and bal <= 0 and (disc == 1 or not discount)
 
 
 def candidates(conn, users=('19',), limit=None):
@@ -96,7 +97,7 @@ def candidates(conn, users=('19',), limit=None):
     return out
 
 
-def remove_one(pic, *, user=None, commit=False, conn=None):
+def remove_one(pic, *, user=None, commit=False, conn=None, discount=True):
     from .models import PointsRemoval as R
     rec = R(pic=pic, requested_by=user)
     try:
@@ -104,7 +105,7 @@ def remove_one(pic, *, user=None, commit=False, conn=None):
         if st is None:
             raise ValueError(f'{pic} not found at HQ')
         rec.flag_before, rec.balance_before, rec.discount_before = st
-        if _done(st):
+        if _done(st, discount):
             rec.status = R.STATUS_NO_CHANGE
             rec.flag_after, rec.balance_after, rec.discount_after = st
         elif not (commit and write_enabled()):
@@ -117,7 +118,10 @@ def remove_one(pic, *, user=None, commit=False, conn=None):
             if not op:
                 raise ValueError('the operator has no SOFTECH user id (StaffProfile.softech_user_id)')
             cur = conn.cursor()
-            if st[0] == 1 or st[2] == 0:
+            if not discount and st[0] == 1:
+                cur.execute(f'UPDATE {DB}.localcustomers SET picpoints = 0, usercode = ?, trans_time = getdate() '
+                            'WHERE phcode = ? AND picpoints = 1', [op, pic])
+            elif discount and (st[0] == 1 or st[2] == 0):
                 cur.execute(f'UPDATE {DB}.localcustomers SET picpoints = 0, picdiscounts = 1, usercode = ?, '
                             'trans_time = getdate() WHERE phcode = ? AND (picpoints = 1 OR isnull(picdiscounts, 0) = 0)',
                             [op, pic])
@@ -129,14 +133,17 @@ def remove_one(pic, *, user=None, commit=False, conn=None):
                 rec.points_cleared = bal
             after = read_state(conn, pic)
             rec.flag_after, rec.balance_after, rec.discount_after = after
-            if _done(after):
+            if _done(after, discount):
                 rec.status = R.STATUS_VERIFIED
-            elif after[0] == 0 and after[2] == 1:
+            elif after[0] == 0 and (after[2] == 1 or not discount):
                 rec.status = R.STATUS_CONFLICT
                 rec.error = f'balance moved during the run (now {after[1]}) — rerun the code'
             else:
                 rec.status = R.STATUS_FAILED
-                rec.error = f'read back points={after[0]} discount={after[2]} (expected 0 / 1)'
+                rec.error = (f'read back points={after[0]} discount={after[2]} (expected 0 / 1)' if discount
+                             else f'read back points={after[0]} (expected 0)')
+            if not discount:
+                rec.error = ('special discount left as is (--no-discount)' + (f'; {rec.error}' if rec.error else ''))
     except Exception as exc:
         rec.status, rec.error = R.STATUS_FAILED, str(exc)[:500]
         logger.warning('[points_removal] %s failed: %s', pic, exc)
@@ -160,9 +167,12 @@ def _audit(rec, user):
         logger.exception('[points_removal] audit failed')
 
 
-def run(*, pics=None, user=None, commit=False, limit=None, users=('19',), conn=None):
-    """A live run holds LOCK_KEY: two runs read the same balance and both debited it (P-15)."""
-    kw = dict(pics=pics, user=user, commit=commit, limit=limit, users=users, conn=conn)
+def run(*, pics=None, user=None, commit=False, limit=None, users=('19',), conn=None, discount=True):
+    """A live run holds LOCK_KEY: two runs read the same balance and both debited it (P-15).
+    discount=False only with named codes (pics) — the reset-customer batch always gives the discount."""
+    if not discount and not pics:
+        raise ValueError('no-discount removal is only for named codes (--pic)')
+    kw = dict(pics=pics, user=user, commit=commit, limit=limit, users=users, conn=conn, discount=discount)
     if not commit:
         return _run(**kw)
     from apps.vouchers.coupon_dashboard import pg_lock
@@ -172,7 +182,7 @@ def run(*, pics=None, user=None, commit=False, limit=None, users=('19',), conn=N
         return _run(**kw)
 
 
-def _run(*, pics=None, user=None, commit=False, limit=None, users=('19',), conn=None):
+def _run(*, pics=None, user=None, commit=False, limit=None, users=('19',), conn=None, discount=True):
     from config.sybase import get_sybase_connection
     from .models import PointsRemoval as R
     limit = min(int(limit or batch_max()), batch_max())
@@ -182,7 +192,7 @@ def _run(*, pics=None, user=None, commit=False, limit=None, users=('19',), conn=
     try:
         todo = [p.strip() for p in pics if p.strip()][:limit] if pics else candidates(conn, users, limit)
         for pic in todo:
-            r = remove_one(pic, user=user, commit=commit, conn=conn)
+            r = remove_one(pic, user=user, commit=commit, conn=conn, discount=discount)
             recs.append(r)
             if commit and r.status in (R.STATUS_CONFLICT, R.STATUS_FAILED):
                 break

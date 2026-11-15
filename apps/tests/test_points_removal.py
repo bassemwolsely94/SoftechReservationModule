@@ -44,6 +44,10 @@ class HQ:
                         t, c = hq.bal[hq.race]
                         hq.bal[hq.race] = (t + 7, c)
                         hq.race = None
+                elif s.startswith('UPDATE SOFTECHDB9.dbo.localcustomers SET picpoints = 0, usercode = ?'):
+                    f, d = hq.flags[p[1]]
+                    if f == 1:
+                        hq.flags[p[1]] = (0, d)
                 elif s.startswith('INSERT INTO SOFTECHDB9.dbo.picpoints'):
                     pic, pts = p[0], p[1]
                     hq.log.append((pic, pts, s, p))
@@ -105,6 +109,18 @@ class RemovalTests(TestCase):
         again = PR.run(pics=['A'], user=self.admin, commit=True, conn=db)
         self.assertEqual(again[0].status, R.STATUS_NO_CHANGE)
         self.assertEqual(len(db.log), 2)
+
+    @override_settings(POINTS_REMOVAL_WRITE_ENABLED=True)
+    def test_no_discount_for_named_code(self):
+        db = hq()
+        r = PR.run(pics=['A'], user=self.admin, commit=True, conn=db, discount=False)[0]
+        self.assertEqual((r.status, r.points_cleared, db.flags['A']), ('verified', 600, (0, 0)))
+        self.assertIn('--no-discount', r.error)
+        self.assertFalse(any('picdiscounts = 1' in x for x in db.sql))
+        self.assertEqual(PR.run(pics=['A'], user=self.admin, commit=True, conn=db, discount=False)[0].status,
+                         R.STATUS_NO_CHANGE)
+        with self.assertRaises(ValueError):
+            PR.run(user=self.admin, commit=True, conn=db, discount=False)      # batch never skips the discount
 
     @override_settings(POINTS_REMOVAL_WRITE_ENABLED=True)
     def test_balance_reread_after_flag_update(self):
