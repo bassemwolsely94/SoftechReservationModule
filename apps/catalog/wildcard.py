@@ -55,8 +55,9 @@ Field.register_lookup(_UpperLike)
 
 
 # ── the FOLDED name form (item search): Arabic letter variants, tashkeel, case, space runs ─
-# ONE constant builds the SQL the lookups run. The indexes on it (catalog migrations 0044 /
-# 0045) hold a FROZEN copy of this expression — PostgreSQL only uses an expression index when
+# ONE constant builds the SQL the lookups run. The indexes on it (catalog migration 0047, which
+# rebuilt those of 0044 / 0045) hold a FROZEN copy of this expression — PostgreSQL only uses
+# an expression index when
 # the query's expression is the same, so a change here needs a new migration that rebuilds
 # those indexes (test_wildcard_search.FoldSqlFrozenTests fails until it exists).
 # translate() DELETES the characters of its `from` list that have no partner in `to`: the
@@ -65,8 +66,11 @@ Field.register_lookup(_UpperLike)
 # query only.
 FOLD_FROM = 'أإآٱةىؤئ'
 FOLD_TO = 'ااااهيوي'
-_TASHKEEL_CHARS = ''.join(map(chr, [0x0640, *range(0x064B, 0x0660), 0x0670,
-                                    *range(0x06D6, 0x06EE)]))    # tatweel, harakat, Quranic marks
+# Only the marks the catalog holds (checked 2026-11-16): tatweel U+0640 and the harakat
+# U+064B–U+0652. translate() scans its whole from-list for every character of every name, so
+# the earlier ~55-mark list (Quranic marks, superscript alef …) slowed every folded LIKE
+# ('%1%cream' through item_search on the real catalog: ≈92 ms with it, ≈57 ms without).
+_TASHKEEL_CHARS = ''.join(map(chr, [0x0640, *range(0x064B, 0x0653)]))
 # Marks are deleted BEFORE the space runs collapse (as fold_query does): a word made of marks
 # alone between two spaces must leave one space, not two.
 FOLD_SQL = ("regexp_replace(translate(upper(coalesce({col},'')), "

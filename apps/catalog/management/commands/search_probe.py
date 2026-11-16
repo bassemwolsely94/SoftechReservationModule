@@ -4,26 +4,28 @@ through every search path, with timings. Run before and after each search batch.
 
     python manage.py search_probe                       # 3 timed runs per query and path
     python manage.py search_probe --repeat 5 --json out.json
-    python manage.py search_probe --with-temp-indexes   # (re)build catalog 0044–0046 for this run
+    python manage.py search_probe --with-temp-indexes   # build the search indexes for this run
 
 Paths (in-process, APIRequestFactory as an existing superuser — no server needed):
-  A  /api/items/softech-search/?no_live=1   (the POS / pickers endpoint)
-  B  /api/items/?search=                    (item list)            — report-only until S2
-  C  /api/search/universal?types=items      (Ctrl+K)               — report-only until S2
-  D  wildcard.item_search(q)                (the engine itself)
+  A  /api/items/softech-search/?no_live=1        (the POS / pickers endpoint)
+  B  /api/items/?search=&rank=engine&page_size=10 (item list in the engine's order)
+  C  /api/search/universal?types=items           (Ctrl+K)               — report-only
+  D  wildcard.item_search(q)                     (the engine itself)
 
-Exit code 1 when a corpus entry fails on A or D, or D's p95 is over BUDGET_MS. The time budget
-is only judged when the search indexes (catalog 0044–0046) exist — without them the
-timings mean nothing, and the probe says so loudly. Entries marked `real_report_only` (the real
-catalog lacks the data) are printed but never fail the run.
+Exit code 1 when a corpus entry fails on A, B or D, D's p95 is over BUDGET_MS or B's p95 over
+B_BUDGET_MS. The time budgets are only judged when the search indexes (the fold indexes as
+catalog 0047 rebuilt them, the code-part ones of 0046) exist — without them the timings mean
+nothing, and the probe says so loudly. Entries marked `real_report_only` (the real catalog
+lacks the data) are printed but never fail the run.
 
 Read-only: everything runs in ONE transaction that is always rolled back. --with-temp-indexes
-DROPS every 0044–0046 index name that exists and creates all of them again from the migrations'
-SQL, inside that transaction (rolled back with it, never committed) — so an index left under
-the same name with an OLDER expression (a hand-made copy on the dev DB) is never what gets
-timed. Note DROP / CREATE INDEX lock catalog_item / catalog_itembarcode until the run ends:
-catalog reads from other sessions on the dropped indexes and writes (the item sync) wait for
-it — a minute or two.
+compares each search index's pg_get_indexdef with its migration's SQL and, inside that
+transaction (rolled back with it, never committed), CREATEs the missing ones and DROPs +
+CREATEs only those built on another definition (e.g. an older fold expression, so that is
+never what gets timed). It prints which. Correct indexes are left alone; when one is rebuilt,
+DROP INDEX takes an ACCESS EXCLUSIVE lock on catalog_item / catalog_itembarcode until the run
+ends (and CREATE INDEX blocks writes): catalog reads and the item sync from other sessions wait
+for it — a minute or two.
 """
 import importlib
 import json
@@ -35,43 +37,98 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
 
-BUDGET_MS = 40
+BUDGET_MS = 40                          # D: the engine itself, p95
+B_BUDGET_MS = 150                       # B: the item list (rank=engine) over HTTP-in-process, p95
 PATHS = ('A', 'B', 'C', 'D')
-GATED = ('A', 'D')                      # B and C are report-only until S2
-LABELS = {'A': 'softech-search no_live', 'B': 'items ?search=', 'C': 'universal items',
+GATED = ('A', 'B', 'D')                 # C is report-only
+LABELS = {'A': 'softech-search no_live', 'B': 'items ?search=&rank=engine', 'C': 'universal items',
           'D': 'item_search()'}
-INDEX_MIGRATIONS = ('apps.catalog.migrations.0044_folded_name_trgm',
-                    'apps.catalog.migrations.0045_folded_name_prefix',
-                    'apps.catalog.migrations.0046_code_part_trgm')
+# (migration module, its CREATE list, its DROP list): the CURRENT definition of every search
+# index — the fold indexes as 0047 rebuilt them, the code-part ones from 0046
+INDEX_MIGRATIONS = (('apps.catalog.migrations.0047_fold_marks_narrow', 'CREATE', 'DROP'),
+                    ('apps.catalog.migrations.0046_code_part_trgm', 'SQL', 'REVERSE'))
+_NAME_RE = re.compile(r'(?:CREATE INDEX IF NOT EXISTS|DROP INDEX IF EXISTS) (\w+)')
+
+
+def budget_ms(path):
+    """The p95 budget a path is judged on (when the indexes exist); None = pass/fail only."""
+    return {'D': BUDGET_MS, 'B': B_BUDGET_MS}.get(path)
 
 
 def index_sql() -> list:
-    """The CREATE INDEX statements of catalog 0044–0046 (same SQL, so the same index names)."""
+    """The current CREATE INDEX statements of the search indexes (the migrations' own SQL, so
+    the same index names)."""
     sql = []
-    for mod in INDEX_MIGRATIONS:
-        sql += importlib.import_module(mod).SQL
+    for mod, create, _ in INDEX_MIGRATIONS:
+        sql += getattr(importlib.import_module(mod), create)
     return sql
 
 
-def index_drop_sql() -> list:
-    """The DROP INDEX IF EXISTS statements of catalog 0044–0046 (each migration's own constant
-    REVERSE list) — so --with-temp-indexes never builds SQL from text."""
-    sql = []
-    for mod in INDEX_MIGRATIONS:
-        sql += importlib.import_module(mod).REVERSE
-    return sql
+def index_drop_sql() -> dict:
+    """{index name: its migration's constant DROP INDEX IF EXISTS statement} — so
+    --with-temp-indexes never builds SQL from text."""
+    out = {}
+    for mod, _, drop in INDEX_MIGRATIONS:
+        for s in getattr(importlib.import_module(mod), drop):
+            out[_NAME_RE.match(s).group(1)] = s
+    return out
 
 
 def index_names() -> list:
-    return [re.search(r'CREATE INDEX IF NOT EXISTS (\w+)', s).group(1) for s in index_sql()]
+    return [_NAME_RE.match(s).group(1) for s in index_sql()]
+
+
+def live_indexdefs() -> dict:
+    """{index name: pg_get_indexdef(…) or None when the index does not exist}."""
+    names = index_names()
+    with connection.cursor() as c:
+        c.execute('SELECT c.relname, pg_get_indexdef(c.oid) FROM pg_class c '
+                  "WHERE c.relkind = 'i' AND c.relname = ANY(%s)", [names])
+        have = dict(c.fetchall())
+    return {n: have.get(n) for n in names}
 
 
 def missing_indexes() -> list:
-    names = index_names()
-    with connection.cursor() as c:
-        c.execute('SELECT indexname FROM pg_indexes WHERE indexname = ANY(%s)', [names])
-        have = {r[0] for r in c.fetchall()}
-    return [n for n in names if n not in have]
+    return [n for n, d in live_indexdefs().items() if d is None]
+
+
+_LITERAL = re.compile(r"'(?:[^']|'')*'")
+
+
+def _norm_indexdef(sql: str) -> str:
+    """The comparable form of an index definition: string literals kept byte for byte; outside
+    them case, whitespace, parentheses, type casts, `IF NOT EXISTS`, the `public.` schema and
+    the default `USING btree` dropped (what pg_get_indexdef adds or the migration leaves out)."""
+    out, pos = [], 0
+    for m in list(_LITERAL.finditer(sql)) + [None]:
+        code = sql[pos:m.start() if m else len(sql)].lower()
+        code = re.sub(r'::\s*(?:character varying|double precision|[a-z_]+)', '', code)
+        code = re.sub(r'\bif not exists\b|\bpublic\.|\busing btree\b', ' ', code)
+        out.append(re.sub(r'[\s()]+', '', code))
+        if m:
+            out.append(m.group(0))
+            pos = m.end()
+    return ''.join(out)
+
+
+def indexdef_matches(live_def: str, migration_sql: str) -> bool:
+    """True when the live index (pg_get_indexdef) is the one the migration statement builds."""
+    return _norm_indexdef(live_def) == _norm_indexdef(migration_sql)
+
+
+def plan_temp_indexes(live: dict) -> tuple:
+    """(names to DROP, names to CREATE) for --with-temp-indexes: an index that is missing is
+    created; one built on another definition (e.g. an older fold expression) is dropped and
+    created; a correct one is left alone — no DROP, so no ACCESS EXCLUSIVE lock."""
+    drop, create = [], []
+    for name, sql in zip(index_names(), index_sql()):
+        d = live.get(name)
+        if d is None:
+            create.append(name)
+        elif not indexdef_matches(d, sql):
+            drop.append(name)
+            create.append(name)
+    return drop, create
 
 
 def pct(xs, p) -> float:
@@ -101,21 +158,27 @@ class Command(BaseCommand):
             try:
                 missing = missing_indexes()
                 if opts['with_temp_indexes']:
-                    # drop first: CREATE … IF NOT EXISTS would keep an index of the same name built
-                    # on an older expression, and the run would time that one
-                    names = index_names()
-                    with connection.cursor() as c:
-                        # DDL refuses a table with pending deferred-FK checks (rows written
-                        # earlier in this transaction, e.g. a test's fixtures): run them now
-                        c.execute('SET CONSTRAINTS ALL IMMEDIATE')
-                        for s in index_drop_sql():      # the migrations' constant DROP statements
-                            c.execute(s)
-                        for s in index_sql():
-                            c.execute(s)
-                        c.execute('ANALYZE catalog_item')
-                        c.execute('ANALYZE catalog_itembarcode')
-                    self.stdout.write('indexes rebuilt from the migrations (rolled back at the end): '
-                                      + ', '.join(names))
+                    # only what is missing or differs: CREATE … IF NOT EXISTS would keep an index
+                    # of the same name built on an older expression (and the run would time that
+                    # one), so those are dropped first; correct ones are not touched (no lock)
+                    drop, create = plan_temp_indexes(live_indexdefs())
+                    if create:
+                        drops = index_drop_sql()
+                        creates = dict(zip(index_names(), index_sql()))
+                        with connection.cursor() as c:
+                            # DDL refuses a table with pending deferred-FK checks (rows written
+                            # earlier in this transaction, e.g. a test's fixtures): run them now
+                            c.execute('SET CONSTRAINTS ALL IMMEDIATE')
+                            for n in drop:              # the migrations' constant DROP statements
+                                c.execute(drops[n])
+                            for n in create:
+                                c.execute(creates[n])
+                            c.execute('ANALYZE catalog_item')
+                            c.execute('ANALYZE catalog_itembarcode')
+                    self.stdout.write('temp indexes (rolled back at the end): '
+                                      f'rebuilt (definition differed): {", ".join(drop) or "none"}; '
+                                      f'created (missing): {", ".join(n for n in create if n not in drop) or "none"}; '
+                                      f'left as they are: {len(index_names()) - len(create)}')
                     missing = missing_indexes()
                 records = self._run(user, repeat)
             finally:
@@ -155,7 +218,8 @@ class Command(BaseCommand):
 
         calls = {
             'A': lambda q: view_rows(softech, '/api/items/softech-search/', {'q': q, 'no_live': '1'}),
-            'B': lambda q: view_rows(listing, '/api/items/', {'search': q, 'page_size': 10}),
+            'B': lambda q: view_rows(listing, '/api/items/',
+                                     {'search': q, 'rank': 'engine', 'page_size': 10}),
             'C': lambda q: view_rows(universal_search_view, '/api/search/universal',
                                      {'q': q, 'types': 'items', 'limit': 8}),
             'D': item_search,
@@ -183,7 +247,8 @@ class Command(BaseCommand):
                     names = dict(Item.objects.filter(id__in=[i for i, _ in out[:5]]).values_list('id', 'name'))
                     out = [(names.get(i), t) for i, t in out]
                 rows = out or []
-                # B and C carry no tier: judged on the name only
+                # A, B (rank=engine rows carry the engine's tier) and D: name and tier;
+                # C carries no tier: judged on the name only
                 ok = (not err) and check(e if p in GATED else dict(e, tier=None), rows)
                 rec['paths'][p] = {'ok': ok, 'ms': times, 'top': rows[:5], 'error': err}
             records.append(rec)
@@ -206,7 +271,8 @@ class Command(BaseCommand):
         for p in PATHS:
             ms = [m for r in records for m in r['paths'][p]['ms']]
             ok = sum(1 for r in gated if r['paths'][p]['ok'])
-            gate = ('pass + time' if p == 'D' else 'pass') if p in GATED else 'report-only'
+            gate = ((f'pass + p95 ≤ {budget_ms(p)} ms' if budget_ms(p) else 'pass')
+                    if p in GATED else 'report-only')
             w(f'| {p} | {LABELS[p]} | {ok}/{len(gated)} | {pct(ms, 0.5):.1f} | {pct(ms, 0.95):.1f} | {gate} |')
         ro = [r for r in records if r['report_only']]
         for r in ro:
@@ -217,21 +283,25 @@ class Command(BaseCommand):
             bad = [r['q'] for r in gated if not r['paths'][p]['ok']]
             if bad:
                 failed.append(f'path {p} failed {len(bad)}: {bad}')
-        d_ms = [m for r in records for m in r['paths']['D']['ms']]
-        p95 = pct(d_ms, 0.95)
-        slow = sorted(((pct(r['paths']['D']['ms'], 0.5), r['q']) for r in records), reverse=True)
-        slow = [(round(m, 1), q) for m, q in slow if m > BUDGET_MS]
-        if slow:
-            w(f'queries over {BUDGET_MS} ms (D, median): {slow}')
+        timed = [p for p in GATED if budget_ms(p)]
+        for p in timed:
+            slow = sorted(((pct(r['paths'][p]['ms'], 0.5), r['q']) for r in records), reverse=True)
+            slow = [(round(m, 1), q) for m, q in slow if m > budget_ms(p)]
+            if slow:
+                w(f'queries over {budget_ms(p)} ms ({p}, median): {slow}')
         if missing:
             w('')
             w('!' * 78)
             w(f'!! WARNING: indexes missing: {", ".join(missing)}')
-            w('!! The engine is tuned WITH catalog 0044–0046 — these timings mean nothing and the')
-            w(f'!! {BUDGET_MS} ms budget is NOT judged. Apply the migrations or use --with-temp-indexes.')
+            w('!! The engine is tuned WITH catalog 0044–0047 — these timings mean nothing and the')
+            w('!! time budgets (' + ', '.join(f'{p} {budget_ms(p)} ms' for p in timed)
+              + ') are NOT judged. Apply the migrations or use --with-temp-indexes.')
             w('!' * 78)
-        elif p95 > BUDGET_MS:
-            failed.append(f'item_search p95 {p95:.1f} ms > {BUDGET_MS} ms')
+        else:
+            for p in timed:
+                p95 = pct([m for r in records for m in r['paths'][p]['ms']], 0.95)
+                if p95 > budget_ms(p):
+                    failed.append(f'path {p} p95 {p95:.1f} ms > {budget_ms(p)} ms')
         w('')
         w('RESULT: ' + ('FAIL — ' + '; '.join(failed) if failed else 'PASS'))
         return failed

@@ -358,20 +358,39 @@ class FoldTests(TestCase):
 
 
 class FoldSqlFrozenTests(SimpleTestCase):
-    """Catalog 0044 / 0045 hold a FROZEN copy of FOLD_SQL. PostgreSQL uses an expression index
-    only when the query's expression is the same — so a change to wildcard.FOLD_SQL must come
-    with a new migration that rebuilds those indexes. This fails until it does."""
+    """The LATEST fold-index migration (catalog 0047) holds a FROZEN copy of FOLD_SQL.
+    PostgreSQL uses an expression index only when the query's expression is the same — so a
+    change to wildcard.FOLD_SQL must come with a new migration that rebuilds those indexes.
+    This fails until it does. 0044 / 0045 are history: they keep their v1 literal unchanged."""
 
     def test_migrations_match_fold_sql(self):
         import importlib
+        m = importlib.import_module('apps.catalog.migrations.0047_fold_marks_narrow')
+        self.assertEqual(m.FOLD_NAME, W.FOLD_SQL.format(col='name'))
+        self.assertEqual(m.FOLD_SCI, W.FOLD_SQL.format(col='name_scientific'))
+        self.assertEqual(len(m.CREATE), 4)
+        self.assertTrue(all(m.FOLD_NAME in s or m.FOLD_SCI in s for s in m.CREATE))
+        self.assertTrue(all(m.FOLD_NAME_V1 in s or m.FOLD_SCI_V1 in s for s in m.CREATE_V1))
+        # frozen: the migration does not read the app constant
+        self.assertFalse(hasattr(m, 'FOLD_SQL'))
+        # history: 0044 / 0045 still hold the v1 literal, which 0047's reverse rebuilds
         for mod in ('apps.catalog.migrations.0044_folded_name_trgm',
                     'apps.catalog.migrations.0045_folded_name_prefix'):
-            m = importlib.import_module(mod)
-            self.assertEqual(m.FOLD_NAME, W.FOLD_SQL.format(col='name'), mod)
-            self.assertEqual(m.FOLD_SCI, W.FOLD_SQL.format(col='name_scientific'), mod)
-            self.assertTrue(all(m.FOLD_NAME in s or m.FOLD_SCI in s for s in m.SQL), mod)
-            # frozen: the migration no longer reads the app constant
-            self.assertFalse(hasattr(m, 'FOLD_SQL'), mod)
+            old = importlib.import_module(mod)
+            self.assertEqual(old.FOLD_NAME, m.FOLD_NAME_V1, mod)
+            self.assertEqual(old.FOLD_SCI, m.FOLD_SCI_V1, mod)
+            self.assertNotEqual(old.FOLD_NAME, m.FOLD_NAME, mod)
+
+    def test_fold_marks_set(self):
+        # only the marks the catalog holds (tatweel + harakat U+064B–U+0652): translate() scans
+        # its from-list for every character, so a long list slowed every folded LIKE
+        want = {chr(0x0640)} | {chr(c) for c in range(0x064B, 0x0653)}
+        self.assertEqual(set(W._TASHKEEL_CHARS), want)
+        self.assertEqual(len(W._TASHKEEL_CHARS), len(want))
+        typed = 'ب' + chr(0x064E) + 'ان' + chr(0x0651) + 'ادول' + chr(0x0640) + chr(0x0652)
+        self.assertEqual(W.fold_query(typed), 'بانادول')
+        # a mark outside the set is no longer folded (on either side)
+        self.assertEqual(W.fold_query('ا' + chr(0x0670)), 'ا' + chr(0x0670))
 
 
 class RankingTests(TestCase):
@@ -850,7 +869,38 @@ class WarmStartTests(SimpleTestCase):
     def test_warm_start_runs_on_the_runserver_worker(self):
         st = self._ready(['manage.py', 'runserver'], {'RUN_MAIN': 'true'})
         st.assert_called_once()
-        self.assertIs(st.call_args.args[0], P.warm_search_index)
+        self.assertIs(st.call_args.args[0], P.warm_after_init)
+
+    def test_warm_start_not_during_app_init(self):
+        # the thread waits for the app registry (no "database during app initialization"
+        # warning), then warms, and always closes its own DB connections
+        from django.apps import apps as registry
+        calls = []
+        with mock.patch.object(registry, 'ready', False), \
+                mock.patch.object(P, 'warm_search_index', side_effect=lambda: calls.append('warm')), \
+                mock.patch('django.db.connections.close_all',
+                           side_effect=lambda: calls.append('close')) as close:
+            def sleep(_s):
+                calls.append('wait')
+                registry.ready = True
+            P.warm_after_init(sleep=sleep)
+        self.assertEqual(calls, ['wait', 'warm', 'close'])
+        close.assert_called_once()
+
+    def test_warm_start_gives_up_if_never_ready(self):
+        from django.apps import apps as registry
+        with mock.patch.object(registry, 'ready', False), \
+                mock.patch.object(P, 'warm_search_index') as warm, \
+                mock.patch('django.db.connections.close_all') as close:
+            P.warm_after_init(sleep=lambda _s: None, timeout=0)
+        warm.assert_not_called()
+        close.assert_called_once()
+
+    def test_warm_failure_still_closes(self):
+        with mock.patch.object(P, 'index', side_effect=RuntimeError('db down')), \
+                mock.patch('django.db.connections.close_all') as close:
+            P.warm_after_init(sleep=lambda _s: None)     # never raises
+        close.assert_called_once()
 
     def test_warm_start_skipped_in_the_reloader_parent(self):
         with mock.patch.dict('os.environ', {}, clear=False):
