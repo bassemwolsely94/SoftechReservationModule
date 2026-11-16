@@ -63,4 +63,10 @@ describe('AdvancedItemSearchModal on the engine', () => {
     fireEvent.click(await screen.findByText('سعر العبوة'))
     await waitFor(() => expect(lastItemParams().ordering).toBe('pack_price'))
   })
+
+  it('helper text matches the engine rules', () => {
+    setup()
+    expect(document.body.textContent).not.toContain('بالاسم فقط')
+    expect(document.body.textContent).toContain('أقرب نتيجة أولاً')
+  })
 })

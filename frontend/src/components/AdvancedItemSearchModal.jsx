@@ -326,11 +326,9 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
                 onKeyDown={e => e.key === 'Enter' && handleSearch()}
               />
               <p className="text-[10px] text-gray-400 mt-0.5">
-                بدون *: بحث في الاسم والكود والباركود ·
-                مع *: بحث بالاسم فقط مع بدل
-                (<span className="font-mono text-brand-500">urosolv*</span> = كل ما يبدأ بـ urosolv ·
-                <span className="font-mono text-brand-500">*cillin</span> = كل ما ينتهي بـ cillin ·
-                <span className="font-mono text-brand-500">amox*500</span> = بدل في المنتصف)
+                * أو % = أي حروف (<span className="font-mono text-brand-500">urosolv*</span> ·
+                <span className="font-mono text-brand-500">*cillin</span>) — البحث في الاسم والاسم العلمي والكود والباركود،
+                ويفهم العربي والأخطاء الإملائية بعلامة بجانب الاسم، وأقرب نتيجة أولاً.
               </p>
             </div>
 
