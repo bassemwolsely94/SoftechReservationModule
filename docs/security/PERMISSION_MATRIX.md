@@ -58,7 +58,7 @@ All-branch roles: admin, call_center, purchasing, supervisor, quality_manager, a
 | `hr_attendance` | all | — | — | — | — | — | — | — | — | — | all — company-level by decision (2026-11-07): admins and named grantees only, never branch-scoped (apps/hr/attendance/access.py) |
 | `data_health` | all | — | — | — | — | — | — | V | V | — | all — company-level by nature; admin, supervisor and quality manager only |
 | `crews` | all | — | — | — | — | — | — | — | — | — | all — company-level by design (spec 2026-11-13 §10): crews group people across branches; admin only by default |
-| `rpa` | all | — | — | — | VC | — | — | VCEA | VCA | — | branch — jobs scoped by RpaJob.branch via core.branch_scope; recipes/devices company-level (admin) |
+| `rpa` | all | — | — | — | VC | — | — | VCEA | VCA | — | branch — jobs scoped by RpaJob.branch via core.branch_scope; recipes/devices company-level (admin); portal jobs (/rpa/portals) are company-level — ordered for HQ, seen by rpa.view holders |
 
 ## Record-state and separation-of-duty rules enforced on the server
 
