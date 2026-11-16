@@ -378,6 +378,14 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
             add(quick_ids(WILD.sub(' ', raw), limit=limit), 'sound')
         except Exception:
             pass
+    # the active ingredient (diclofenac → CATAFLAM): after every brand/name hit, only while the
+    # window has room, never a number. An ingredient hit is a real match — approx stays off.
+    if not raw.isdigit() and len(compact) >= 3 and len(out) < NAME_WINDOW:
+        try:
+            add(_ingredient_ids(raw, base, [i for i, _ in out], NAME_WINDOW - len(out)),
+                'ingredient')
+        except Exception:
+            pass
     # no catalog text hit (a remembered item alone doesn't count) → typo-tolerant fallback
     if not raw.isdigit() and not any(t not in ('code', 'learned') for _, t in out):
         try:
@@ -394,6 +402,37 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
             add(ItemBarcode.objects.filter(barcode__contains=raw, item__in=base)
                 .order_by('barcode').values_list('item_id', flat=True)[:limit], 'code_part')
     return out[:limit]
+
+
+def _ingredient_pairs(q: str, base, room: int, have=()):
+    """[(item_id, ActiveIngredient.name)] — items whose mapped active ingredient matches the typed
+    text / pattern (the name is a plain column: `ulike` with the unfolded pattern). Primary
+    ingredient first, then item name; one row per item."""
+    from apps.chronic.models import ItemIngredientMap
+    if room <= 0:
+        return []
+    rows = (ItemIngredientMap.objects
+            .filter(active_ingredient__name__ulike=pattern(q, fold=False), item__in=base)
+            .exclude(item_id__in=list(have))
+            .order_by('-is_primary', 'item__name', 'item_id', 'active_ingredient__name')
+            .values_list('item_id', 'active_ingredient__name')[:room * 3])
+    seen, out = set(), []
+    for iid, name in rows:
+        if iid not in seen:
+            seen.add(iid)
+            out.append((iid, name))
+    return out[:room]
+
+
+def _ingredient_ids(q: str, base, have, room: int) -> list:
+    return [i for i, _ in _ingredient_pairs(q, base, room, have)]
+
+
+def ingredient_names(q: str, item_ids) -> dict:
+    """{item_id: matched ActiveIngredient name} for the picker's «المادة الفعالة» chip."""
+    from apps.catalog.models import Item
+    pairs = _ingredient_pairs(q, Item.objects.filter(id__in=list(item_ids)), len(item_ids))
+    return dict(pairs)
 
 
 def _synonym_ids(expanded, base, have, room: int) -> list:

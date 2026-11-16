@@ -446,12 +446,12 @@ class RankingTests(TestCase):
         with CaptureQueriesContext(connection) as ctx:
             W.item_search('voltaren 50')
         # data round-trips: code+barcode (one UNION) · learned memory (3) · ranked names ·
-        # any-order top-up. The SAVEPOINT / SET LOCAL enable_seqscan pair around the ranked
+        # any-order top-up · active-ingredient tier (the window was not full). The SAVEPOINT / SET LOCAL enable_seqscan pair around the ranked
         # query (_trigram_indexes: keeps the planner on the trigram index) is not counted.
         data = [q['sql'] for q in ctx.captured_queries
                 if not q['sql'].startswith(('SAVEPOINT', 'RELEASE SAVEPOINT', 'SET LOCAL'))]
-        self.assertLessEqual(len(data), 6, [q[:120] for q in data])
-        self.assertLessEqual(len(ctx.captured_queries), 10)
+        self.assertLessEqual(len(data), 7, [q[:120] for q in data])
+        self.assertLessEqual(len(ctx.captured_queries), 11)
 
     def test_code_part_is_lazy(self):
         # the name tiers already fill `limit` → the code_part scans (no index) never run
@@ -643,3 +643,74 @@ class SoundTierTests(TestCase):
         after = dict(W.item_search('بنادول'))
         self.assertNotIn(adv.id, after)
         self.assertEqual(after.get(other.id), 'sound')
+
+
+class IngredientAndEndpointTests(TestCase):
+    """Task 6: ingredient tier after brands, no disease expansion in pickers, limit param."""
+
+    def setUp(self):
+        from apps.chronic.models import ActiveIngredient, ItemIngredientMap
+        P.reset_index()
+        cache.delete('catalog:softech_search_down')
+        self.it = _items('DICLOFENAC 50MG TAB', 'CATAFLAM 50MG', 'GLUCO DR جهاز سكر',
+                         'GLUCOPHAGE 500MG', 'CONCOR 5MG', 'CONCOR 10MG', 'CONCOR PLUS')
+        dic = ActiveIngredient.objects.create(name='DICLOFENAC POTASSIUM')
+        ItemIngredientMap.objects.create(item=self.it['CATAFLAM 50MG'], active_ingredient=dic)
+        met = ActiveIngredient.objects.create(name='METFORMIN', is_chronic=True,
+                                              chronic_class='diabetes')
+        ItemIngredientMap.objects.create(item=self.it['GLUCOPHAGE 500MG'], active_ingredient=met)
+        self.user = get_user_model().objects.create_user(username='ing', password='x')
+        self.c = APIClient()
+        self.c.force_authenticate(self.user)
+
+    def _get(self, **params):
+        with mock.patch('apps.catalog.views._softech_live_search', return_value=[]):
+            return self.c.get('/api/items/softech-search/', params).json()['results']
+
+    def test_ingredient_after_brands(self):
+        out = W.item_search('diclofenac')
+        self.assertEqual(out[0], (self.it['DICLOFENAC 50MG TAB'].id, 'starts'))
+        self.assertIn((self.it['CATAFLAM 50MG'].id, 'ingredient'), out)
+        self.assertLess([i for i, _ in out].index(self.it['DICLOFENAC 50MG TAB'].id),
+                        [i for i, _ in out].index(self.it['CATAFLAM 50MG'].id))
+
+    def test_ingredient_match_suppresses_approx(self):
+        tiers = {t for _, t in W.item_search('metformin')}
+        self.assertEqual(tiers, {'ingredient'})
+
+    def test_disease_word_not_expanded_in_picker(self):
+        res = self._get(q='سكر', no_live='1')
+        names = [r['name'] for r in res]
+        self.assertIn('GLUCO DR جهاز سكر', names)
+        self.assertNotIn('GLUCOPHAGE 500MG', names)
+
+    def test_limit_param(self):
+        self.assertEqual(len(self._get(q='concor', limit='2')), 2)
+        self.assertEqual(len(self._get(q='concor')), 3)
+        with mock.patch('apps.catalog.wildcard.item_search', return_value=[]) as m:
+            self._get(q='concor', limit='999')
+            self.assertEqual(m.call_args.kwargs['limit'], 50)
+            self._get(q='concor', limit='0')
+            self.assertEqual(m.call_args.kwargs['limit'], 1)
+            self._get(q='concor', limit='abc')
+            self.assertEqual(m.call_args.kwargs['limit'], 20)
+
+    def test_pos_path_forces_exact_codes(self):
+        res = self._get(q='690', no_live='1')
+        self.assertFalse([r for r in res if r.get('code_part')])
+        with mock.patch('apps.catalog.wildcard.item_search', return_value=[]) as m:
+            self._get(q='690', no_live='1')
+            self.assertFalse(m.call_args.kwargs['code_prefix'])
+            self._get(q='690', code_prefix='0')
+            self.assertFalse(m.call_args.kwargs['code_prefix'])
+            self._get(q='690')
+            self.assertTrue(m.call_args.kwargs['code_prefix'])
+
+    def test_rows_have_id_and_flags(self):
+        res = self._get(q='diclofenac')
+        self.assertTrue(res)
+        for r in res:
+            self.assertEqual(r['id'], r['item_id'])
+        ing = [r for r in res if r['name'] == 'CATAFLAM 50MG'][0]
+        self.assertIs(ing['ingredient'], True)
+        self.assertEqual(ing['ingredient_name'], 'DICLOFENAC POTASSIUM')
