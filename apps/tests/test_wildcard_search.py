@@ -490,14 +490,19 @@ class SynonymTests(TestCase):
         self.assertEqual(res[0], ('AUGMENTIN 457MG/5ML SYRUP 70ML', 'synonym'))
 
     def test_arabic_unit(self):
-        names = [n for n, _ in self.tiers('اوجمنتين 1 جم')]
-        self.assertIn('AUGMENTIN 1G 14 TAB اوجمنتين', names)
+        # the name has NO Arabic: «جم» can only reach `1G` through the table (G / GM)
+        from apps.catalog.models import Item
+        Item.objects.filter(name__startswith='AUGMENTIN 1G').update(name='AUGMENTIN 1G 14 TAB')
+        res = self.tiers('augmentin 1 جم')
+        names = [n for n, _ in res]
+        self.assertEqual(dict(res).get('AUGMENTIN 1G 14 TAB'), 'synonym')
         if 'AUGMENTIN 457MG/5ML SYRUP 70ML' in names:
-            self.assertLess(names.index('AUGMENTIN 1G 14 TAB اوجمنتين'),
+            self.assertLess(names.index('AUGMENTIN 1G 14 TAB'),
                             names.index('AUGMENTIN 457MG/5ML SYRUP 70ML'))
 
     def test_vit(self):
-        self.assertIn('VITAMIN C 500MG 30TAB', [n for n, _ in self.tiers('vit c')])
+        # «فيتامين» is not in the name in any spelling: only the table reaches VITAMIN
+        self.assertEqual(dict(self.tiers('فيتامين c')).get('VITAMIN C 500MG 30TAB'), 'synonym')
 
     def test_whole_word_only(self):
         from apps.catalog.models import Item
