@@ -103,7 +103,12 @@ def _parse_qty(v):
         q = Decimal(_text(v))
     except (InvalidOperation, ValueError):
         return None
-    return q if q.is_finite() and q > 0 else None
+    if not q.is_finite() or q <= 0:
+        return None
+    # RpaLine.qty is DecimalField(12, 5): at most 7 integer digits and 5 decimals.
+    if q >= 10 ** 7 or q.normalize().as_tuple().exponent < -5:
+        return None
+    return q
 
 
 def _jsonable(v):

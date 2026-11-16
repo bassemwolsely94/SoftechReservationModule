@@ -70,6 +70,17 @@ class SheetParseTests(TestCase):
                           {'row_no': 3, 'itemcode': '53', 'qty': 'abc', 'expiry': None}])
         self.assertEqual([ln.status for ln in doc.lines.all()], ['error', 'error'])
 
+    def test_out_of_range_qty_is_error_not_crash(self):
+        make_item('x', '56')
+        doc = _doc()
+        build_lines(doc, [{'row_no': 2, 'itemcode': '56', 'qty': '1e20', 'expiry': None},
+                          {'row_no': 3, 'itemcode': '56', 'qty': '1.123456', 'expiry': None},
+                          {'row_no': 4, 'itemcode': '56', 'qty': '12345678', 'expiry': None},
+                          {'row_no': 5, 'itemcode': '56', 'qty': '1.50000', 'expiry': None}])
+        ln = list(doc.lines.all())
+        self.assertEqual([x.status for x in ln], ['error', 'error', 'error', 'matched'])
+        self.assertEqual(ln[0].message, 'الكمية غير صالحة')
+
     def test_expiry_formats(self):
         make_item('x', '54')
         doc = _doc()
@@ -145,6 +156,21 @@ class CreateJobTests(TestCase):
         with self.assertRaises(ValidationError):
             self._create(branch=b110)
         self.assertEqual(RpaJob.objects.count(), 0)
+
+    def test_target_branch_110_or_missing_refused(self):
+        b110 = make_branch('مغلق', '110')
+        with self.assertRaises(ValidationError):
+            self._create(target_branch=b110)
+        with self.assertRaises(ValidationError):
+            self._create(target_branch=None)
+        self.assertEqual(RpaJob.objects.count(), 0)
+
+    def test_create_takes_screen_lock(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        with CaptureQueriesContext(connection) as ctx:
+            self._create()
+        self.assertTrue(any('FOR UPDATE' in q['sql'] and 'rpa_rpascreen' in q['sql'] for q in ctx.captured_queries))
 
     def test_out_of_scope_branch_refused(self):
         user = get_user_model().objects.create_user(username='rpa_t4_sp', password='x')

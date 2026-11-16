@@ -19,18 +19,23 @@ def _is_closed_branch(branch):
 def create_job(*, profile, screen_key, branch, target_branch, store_code, upload) -> RpaJob:
     if not branch_scope.allows(profile, branch.id):
         raise PermissionDenied('لا يمكنك الرفع على فرع خارج فروعك.')
-    if target_branch is not None and target_branch.id == branch.id:
+    if target_branch is None:
+        raise ValidationError({'target_branch': 'يجب تحديد الفرع المستلم.'})
+    if target_branch.id == branch.id:
         raise ValidationError({'target_branch': 'الفرع المستلم هو نفسه الفرع المصدر.'})
+    if _is_closed_branch(target_branch):
+        raise ValidationError({'target_branch': f'الفرع {target_branch.name} مغلق ولا يمكن الصرف إليه.'})
     if _is_closed_branch(branch):
         raise ValidationError({'branch': 'هذا الفرع مغلق ولا يمكن الصرف منه.'})
-    screen = RpaScreen.objects.get(key=screen_key)
     digest = sha256_of(upload)
-    existing = RpaJob.objects.filter(upload_sha256=digest).exclude(status='cancelled').first()
-    if existing:
-        raise ValidationError({'detail': 'تم رفع هذا الملف من قبل.', 'job_id': existing.id})
     filename = getattr(upload, 'name', '') or ''
     rows = parse_issue_sheet(upload.read(), filename)
     with transaction.atomic():
+        # Serialise concurrent uploads for this screen: the sha check below has no DB constraint.
+        screen = RpaScreen.objects.select_for_update().get(key=screen_key)
+        existing = RpaJob.objects.filter(upload_sha256=digest).exclude(status='cancelled').first()
+        if existing:
+            raise ValidationError({'detail': 'تم رفع هذا الملف من قبل.', 'job_id': existing.id})
         job = RpaJob.objects.create(
             screen=screen, branch=branch, target_branch=target_branch, created_by=profile,
             store_code=str(store_code or ''), source_kind='excel', filename=filename[:255],
