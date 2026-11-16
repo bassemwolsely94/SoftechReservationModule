@@ -19,6 +19,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../api/client'
 import Highlight from './Highlight'
+import SearchTierChip from './SearchTierChip'
 
 const PAGE_SIZE = 30
 
@@ -69,7 +70,7 @@ function buildParams(criteria) {
   const q = (criteria.search || '').trim()
   // one rule set server-side (apps/catalog/wildcard.py): * and % = any characters, parts in
   // order, ranked exact text first — over name, scientific name, code and barcode
-  if (q) p.search = q
+  if (q) { p.search = q; p.rank = 'engine' }  // engine order + tier chips (S2)
 
   if (criteria.category)       p.category        = criteria.category
   if (criteria.supplier_code)  p.supplier_code   = criteria.supplier_code
@@ -158,8 +159,9 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
   const [page,         setPage]         = useState(1)
   const [highlighted,  setHighlighted]  = useState(-1)
 
-  // Sort state — field key + direction
-  const [sortField, setSortField] = useState('name')
+  // Sort state — field key + direction. null = no header clicked: the server's order (the
+  // engine's ranking when there is search text), so no `ordering` is sent
+  const [sortField, setSortField] = useState(null)
   const [sortDir,   setSortDir]   = useState('asc')
 
   const firstInputRef  = useRef(null)
@@ -173,16 +175,18 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
   })
 
   // Build ordering string for API
-  const orderingParam = sortDir === 'asc'
-    ? (SORTABLE_COLS[sortField] || sortField)
-    : `-${SORTABLE_COLS[sortField] || sortField}`
+  const orderingParam = !sortField ? undefined
+    : sortDir === 'asc'
+      ? (SORTABLE_COLS[sortField] || sortField)
+      : `-${SORTABLE_COLS[sortField] || sortField}`
 
   // ── Search results ──────────────────────────────────────────────────────────
   const { data: searchData, isFetching } = useQuery({
     queryKey: ['adv-item-search', activeParams, page, orderingParam],
     queryFn: () =>
       api.get('/items/', {
-        params: { ...activeParams, page, page_size: PAGE_SIZE, ordering: orderingParam },
+        params: { ...activeParams, page, page_size: PAGE_SIZE,
+                  ...(orderingParam ? { ordering: orderingParam } : {}) },
       }).then(r => r.data),
     enabled: activeParams !== null,
     staleTime: 10_000,
@@ -219,7 +223,7 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
     setCriteria({ ...EMPTY_CRITERIA })
     setActiveParams(null)
     setHighlighted(-1)
-    setSortField('name')
+    setSortField(null)
     setSortDir('asc')
     setTimeout(() => firstInputRef.current?.focus(), 50)
   }, [])
@@ -303,7 +307,7 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
         </div>
 
         {/* ── Criteria ────────────────────────────────────────────────────────── */}
-        <div className="px-5 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
+        <div data-tour="item-search-modal-filters" className="px-5 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
 
           {/* Row 1: main text search + category + medicine type + family */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
@@ -313,6 +317,7 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
               </label>
               <input
                 ref={firstInputRef}
+                data-tour="item-search-modal-text"
                 type="text"
                 className={inputCls}
                 placeholder="مثال: urosolv* أو par* أو *cillin أو 6221077... أو كود 404"
@@ -440,7 +445,7 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
         </div>
 
         {/* ── Results table ────────────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto min-h-0" ref={resultsBodyRef}>
+        <div data-tour="item-search-modal-results" className="flex-1 overflow-y-auto min-h-0" ref={resultsBodyRef}>
           {activeParams === null ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-300 gap-2">
               <div className="text-5xl">🔍</div>
@@ -499,7 +504,7 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
 
                       {/* Name — full wrap, no truncation */}
                       <td className="px-3 py-2 font-semibold text-gray-900 min-w-[220px]">
-                        <div className="whitespace-normal leading-snug"><Highlight text={item.name} query={activeParams?.search} /></div>
+                        <div className="whitespace-normal leading-snug"><Highlight text={item.name} query={activeParams?.search} /><SearchTierChip row={item} /></div>
                       </td>
 
                       {/* Scientific name — full wrap, no truncation */}
