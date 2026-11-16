@@ -1,6 +1,6 @@
 # Supplier Portal RPA (روبوت مواقع الموردين) — Design
 
-**Date:** 2026-11-16 · **Status:** draft, awaiting owner approval
+**Date:** 2026-11-16 · **Status:** approved by the owner, 2026-11-16
 **Scope:** part 2 of the RPA programme: ordering and expired-item returns on the **Pharma Overseas
 website** (SOFTECH supplier 565) and the **Ibn Sina mobile app** (supplier 260, run inside BlueStacks).
 Part 1 (the SOFTECH screen robot) is `docs/superpowers/specs/2026-11-16-softech-screen-rpa-design.md`
