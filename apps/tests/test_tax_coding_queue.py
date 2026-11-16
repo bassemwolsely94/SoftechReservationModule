@@ -261,6 +261,11 @@ def sold(code, value, docs=1, day=None, system='production', branch='101'):
 class QueueApiTests(Fixture, TestCase):
     def setUp(self):
         self.build('qa')
+        # The accountant's rows never seed a module (enforced role, R17) and a flushed kept DB has no seed rows:
+        # the pharmacist's explicit "no" keeps tax_invoicing seeded, so the matrix is enforced, not fail-open.
+        from apps.users.models import RoleModuleAccess
+        RoleModuleAccess.objects.update_or_create(role='pharmacist', module='tax_invoicing', action='view',
+                                                  defaults={'is_allowed': False})
         self.api = self.client_for(self.accountant)
         # A: biggest seller, bought official; B: cosmetic at 0 % (flagged); C: no catalog row, sold 200 days ago
         make_item('910001', 'Medicine', 0, name='ALPHA')
