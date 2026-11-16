@@ -183,6 +183,20 @@ def duplicate_pushed(p):
     return None
 
 
+def unknown_outcome_twin(p):
+    """A FAILED draft on the same route with the same lines whose push may have landed in SOFTECH
+    (error 'outcome-unknown: …', full audit 2026-11-15, S-5) — until someone checks, treat it as pushed."""
+    from apps.purchasing.models import IsrPush as P
+    from apps.purchasing.isr_writer import OUTCOME_UNKNOWN
+    fp = fingerprint(p.lines_snapshot)
+    for o in (P.objects.filter(kind=p.kind, branchcode=p.branchcode, dest_branchcode=p.dest_branchcode,
+                               status=P.STATUS_FAILED, error__startswith=OUTCOME_UNKNOWN).exclude(pk=p.pk)
+              .only('id', 'lines_snapshot')):
+        if fingerprint(o.lines_snapshot) == fp:
+            return o
+    return None
+
+
 def overlap_guard_on():
     from apps.config.models import SystemSetting
     return str(SystemSetting.get('isr_overlap_guard', 'off') or 'off').strip().lower() == 'on'
@@ -317,6 +331,17 @@ def check_push(p, *, user=None, force_reason=''):
             if not ok:
                 raise GuardError(f'هذا الطلب يصرف بضاعة تصل للرئيسي من فرع {feeder.branchcode} — ينتظر استلام '
                                  f'الطلب #{feeder.pk} بالرئيسي: {why}', code='feeder_not_received', other=feeder.pk)
+    twin = unknown_outcome_twin(p)
+    if twin is not None and len((force_reason or '').strip()) < MIN_REASON:
+        raise GuardError(f'ترحيل الطلب #{twin.pk} بنفس الأصناف والكميات لنفس المسار انقطع ولا نعرف هل وصل SOFTECH — '
+                         f'راجع SOFTECH أولاً؛ لن يُرحَّل هذا الطلب إلا بسبب مكتوب.', code='outcome_unknown_twin',
+                         other=twin.pk)
+    if twin is not None:
+        params = dict(p.params or {})
+        params['forced_after_unknown'] = {'reason': force_reason.strip(), 'twin': twin.pk,
+                                          'by': getattr(user, 'username', None), 'at': timezone.now().isoformat()}
+        p.params = params
+        p.save(update_fields=['params'])
     dup = duplicate_pushed(p)
     if dup is not None:
         reason = (force_reason or '').strip()
