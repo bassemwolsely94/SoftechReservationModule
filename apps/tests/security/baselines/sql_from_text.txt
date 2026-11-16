@@ -27,8 +27,8 @@ apps/discount_approvals/services.py::execute_price_change
 apps/finance/recon_writer.py::_live_write._write_steps
 apps/finance/recon_writer.py::_reverse_steps
 apps/finance/recon_writer.py::_top_up._work
-apps/finance/recon_writer.py::complete_half_reversal
-apps/finance/recon_writer.py::complete_half_write
+apps/finance/recon_writer.py::_complete_half_reversal_unlocked
+apps/finance/recon_writer.py::_complete_half_write_unlocked
 apps/finance/recon_writer.py::fix_due_before._work
 apps/insurance/date_service.py::_set_docdate
 apps/insurance/reprice_service.py::_write_receipt
@@ -110,10 +110,10 @@ apps/finance/recon_lines.py::invoice_lines
 # reason: internal-only — SELECT steps of the A/P writer; keys from the APInvoice/payment mirror (SOFTECH-sourced), int(cheqsno) (triage 2026-10-26)
 apps/finance/recon_writer.py::_live_write
 apps/finance/recon_writer.py::_top_up
-apps/finance/recon_writer.py::complete_half_write._landed
+apps/finance/recon_writer.py::_complete_half_write_unlocked._landed
 apps/finance/recon_writer.py::fix_due_before
 apps/finance/recon_writer.py::fix_due_before._restored
-apps/finance/recon_writer.py::reverse_allocation
+apps/finance/recon_writer.py::_reverse_allocation_unlocked
 
 # reason: internal-only — dates + agent usercodes only from the build_call_center_rollups command; quotes stripped (triage 2026-10-26)
 apps/forecasting/cc_softech.py::cc_returns_from_softech
