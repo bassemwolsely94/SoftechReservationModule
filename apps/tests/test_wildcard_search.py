@@ -626,3 +626,20 @@ class SoundTierTests(TestCase):
         with mock.patch('apps.shortage.phonetic.quick_ids', return_value=[]) as q:
             W.item_search('كتافلام')
             q.assert_called_once()
+
+
+    def test_recorded_rejection_leaves_the_sound_tier(self):
+        # a person replaced PANADOL ADVANCE for «بنادول»: the sound tier drops it (−0.2 puts it
+        # under the 0.75 floor, as in the shared matcher); the other PANADOL still comes
+        from apps.catalog.models import Item
+        from apps.shortage import learning
+        other = Item.objects.create(softech_id='941200', name='PANADOL EXTRA 24TAB', pack_price=1,
+                                    is_active=True)
+        adv = self.it['PANADOL ADVANCE 500MG 24TAB LOCAL EGYPT (2STRIPSX12) SMALL OLD SIZE']
+        P.reset_index()
+        before = dict(W.item_search('بنادول'))
+        self.assertEqual(before.get(adv.id), 'sound')
+        learning.record_rejection('بنادول', adv)
+        after = dict(W.item_search('بنادول'))
+        self.assertNotIn(adv.id, after)
+        self.assertEqual(after.get(other.id), 'sound')

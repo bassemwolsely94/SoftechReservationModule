@@ -289,7 +289,8 @@ def quick_ids(query: str, *, limit: int = 8) -> list:
     word scoring (its name tiers already find Arabic text in names). ≈ the cost of
     `candidates` plus one small query, where the full matcher took 26–67 ms.
     Score = the matcher's Arabic score: 0.62 + 0.30 × sound (sound ≥ 0.75, below that there
-    is no evidence) + agreement of the typed numbers / form words / descriptors; ties go to
+    is no evidence) + agreement of the typed numbers / form words / descriptors − 0.2 per
+    recorded rejection (up to 3); kept when ≥ SOUND_MIN (0.75), like `search_ids`. Ties go to
     the closer whole name. [] for a Latin query or under 3 characters, like `search_ids`."""
     if not re.search(r'[؀-ۿ]', query or '') or len((query or '').strip()) < 3:
         return []
@@ -309,11 +310,29 @@ def quick_ids(query: str, *, limit: int = 8) -> list:
     pq = parse_query(query)
     q_nums = re.findall(r'\d+(?:\.\d+)?', _normalize(query))
     qn = _normalize(query)
-    ranked = sorted(
-        ((0.62 + 0.30 * snd[i] + _arabic_adjust(SimpleNamespace(name=n), q_nums, pq['forms'], pq['words']),
-          fuzz.ratio(qn, _normalize(n)), -i, i) for i, n in names.items()),
-        reverse=True)
+    # negative learning, as the shared matcher: an item people REPLACED for this spelling (or
+    # a close one) drops per rejection — one takes a plain sound hit under the floor
+    from . import learning
+    try:
+        rejected = learning.rejections(query)
+    except Exception:
+        rejected = {}
+    ranked = []
+    for i, n in names.items():
+        # as the matcher: the floor is on the score capped to 0..1, the order on the uncapped
+        # one (bonuses must not tie at 1.0); the penalty comes off both
+        raw = 0.62 + 0.30 * snd[i] + _arabic_adjust(SimpleNamespace(name=n), q_nums, pq['forms'], pq['words'])
+        pen = REJECTION_PENALTY * min(rejected.get(i, 0), 3)
+        if min(1.0, max(0.0, raw)) - pen >= SOUND_MIN:
+            ranked.append((raw - pen, fuzz.ratio(qn, _normalize(n)), -i, i))
+    ranked.sort(reverse=True)
     return [i for *_k, i in ranked[:limit]]
+
+
+# the shared matcher's values (apps/shortage/matching.find_best_matches: the search box's
+# min_score and its local REJECTION_PENALTY) — kept equal so both paths agree
+SOUND_MIN = 0.75
+REJECTION_PENALTY = 0.2
 
 
 # ── retrieval + scoring ─────────────────────────────────────────────────────────
