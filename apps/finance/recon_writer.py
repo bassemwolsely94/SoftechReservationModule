@@ -217,7 +217,7 @@ def command_actor(username, commit: bool):
     return profile
 
 
-def push_allocation(allocation: Allocation, *, dry_run: bool = True,
+def _push_allocation_unlocked(allocation: Allocation, *, dry_run: bool = True,
                     user=None, force: bool = False, conn=None) -> dict:
     """
     Record ONE approved allocation into SOFTECH. With AP_RECONCILE_WRITER_ENABLED
@@ -555,7 +555,7 @@ def _live_write(conn, allocation: Allocation, plan: dict, result: dict, force: b
 
 # ── reversal (GATED) — undo an allocation WE wrote ────────────────────────────
 
-def reverse_allocation(allocation: Allocation, *, user=None, note: str = '', conn=None) -> dict:
+def _reverse_allocation_unlocked(allocation: Allocation, *, user=None, note: str = '', conn=None) -> dict:
     """
     Undo one allocation this writer recorded in SOFTECH: DELETE our chequestrans row
     and lower stktransm.docvaluepay by the same amount (fatcurrentstatus back to '15'
@@ -664,7 +664,7 @@ def _refresh_payment_flag(payment) -> None:
         payment.save(update_fields=['is_unallocated'])
 
 
-def complete_half_reversal(allocation: Allocation, *, user=None, note: str = '', conn=None) -> dict:
+def _complete_half_reversal_unlocked(allocation: Allocation, *, user=None, note: str = '', conn=None) -> dict:
     """
     Finish a reversal whose chequestrans DELETE landed but whose header UPDATE did
     not (the 2026-09-27 lock-wait case). Acts ONLY when SOFTECH proves it: our row is
@@ -884,7 +884,7 @@ def rechain_after_write(invoice_ids, *, conn, user=None) -> dict:
     return stats
 
 
-def complete_half_write(allocation: Allocation, *, user=None, note: str = '', conn=None) -> dict:
+def _complete_half_write_unlocked(allocation: Allocation, *, user=None, note: str = '', conn=None) -> dict:
     """
     Finish a WRITE whose chequestrans INSERT landed but whose header UPDATE did not
     (pre-atomic 2026-09-26 read-timeouts: the server ran the INSERT, the client never
@@ -977,3 +977,77 @@ def complete_half_write(allocation: Allocation, *, user=None, note: str = '', co
             except Exception:
                 pass
     return result
+
+
+# ── one writer per invoice / voucher (full audit 2026-11-15, S-2) ──────────────
+# The live reads (header paid, voucher used) happen before the SOFTECH transaction and
+# the header is written as an absolute value, so two writes on the same invoice or the
+# same voucher at the same moment lost one update or doubled a link. Every live entry
+# point now holds two PostgreSQL advisory locks — invoice and voucher — for the whole
+# write; a concurrent second write is refused (it never waits or touches SOFTECH).
+
+_LOCK_NAMESPACE = 'ap-recon-writer:'
+
+
+def _lock_key(text: str) -> int:
+    import hashlib
+    return int.from_bytes(hashlib.sha256((_LOCK_NAMESPACE + text).encode()).digest()[:8], 'big', signed=True)
+
+
+def _write_lock_keys(allocation: Allocation) -> list:
+    inv, pay = allocation.invoice, allocation.payment
+    return sorted({
+        _lock_key(f'inv:{inv.branchcode}/{inv.doccode}/{_num(inv.docnumber)}/{_fmt_date(inv.docdate)}'),
+        _lock_key(f'cheq:{pay.branchcode}/{int(pay.cheqsno)}'),
+    })
+
+
+class _WriteLocks:
+    def __init__(self, allocation: Allocation):
+        from apps.vouchers.coupon_dashboard import pg_lock
+        self._locks = [pg_lock(k) for k in _write_lock_keys(allocation)]
+
+    def __enter__(self):
+        for i, lock in enumerate(self._locks):
+            if not lock.__enter__():
+                for held in reversed(self._locks[:i]):
+                    held.__exit__(None, None, None)
+                raise ReconWriteError('another SOFTECH write on this invoice or voucher is in progress — '
+                                      'try again in a moment')
+        return self
+
+    def __exit__(self, *exc):
+        for lock in reversed(self._locks):
+            lock.__exit__(None, None, None)
+        return False
+
+
+def push_allocation(allocation: Allocation, *, dry_run: bool = True, user=None, force: bool = False,
+                    conn=None) -> dict:
+    if dry_run or not writer_enabled():
+        return _push_allocation_unlocked(allocation, dry_run=dry_run, user=user, force=force, conn=conn)
+    with _WriteLocks(allocation):
+        return _push_allocation_unlocked(allocation, dry_run=dry_run, user=user, force=force, conn=conn)
+
+
+push_allocation.__doc__ = _push_allocation_unlocked.__doc__
+
+
+def reverse_allocation(allocation: Allocation, *, user=None, note: str = '', conn=None) -> dict:
+    with _WriteLocks(allocation):
+        return _reverse_allocation_unlocked(allocation, user=user, note=note, conn=conn)
+
+
+def complete_half_reversal(allocation: Allocation, *, user=None, note: str = '', conn=None) -> dict:
+    with _WriteLocks(allocation):
+        return _complete_half_reversal_unlocked(allocation, user=user, note=note, conn=conn)
+
+
+def complete_half_write(allocation: Allocation, *, user=None, note: str = '', conn=None) -> dict:
+    with _WriteLocks(allocation):
+        return _complete_half_write_unlocked(allocation, user=user, note=note, conn=conn)
+
+
+reverse_allocation.__doc__ = _reverse_allocation_unlocked.__doc__
+complete_half_reversal.__doc__ = _complete_half_reversal_unlocked.__doc__
+complete_half_write.__doc__ = _complete_half_write_unlocked.__doc__

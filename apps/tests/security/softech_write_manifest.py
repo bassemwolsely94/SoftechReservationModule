@@ -101,12 +101,12 @@ WRITE_SITES = {
     'apps/finance/recon_writer.py::build_plan': WriteSite(
         tables=(), flag=None, dry_run_default=True, idempotency=None, audit=None,
         trigger='returns plan text only; its patientdata UPDATE is never executed', kind='not-a-write'),
-    'apps/finance/recon_writer.py::complete_half_reversal': WriteSite(
+    'apps/finance/recon_writer.py::_complete_half_reversal_unlocked': WriteSite(
         tables=('stktransm',), flag='AP_RECONCILE_WRITER_ENABLED', dry_run_default=False,
         idempotency='acts only on proven half-landed state',
         audit='ReconAuditEvent on success only (failure not audited)',
         trigger='no production caller (shell / tests)'),
-    'apps/finance/recon_writer.py::complete_half_write': WriteSite(
+    'apps/finance/recon_writer.py::_complete_half_write_unlocked': WriteSite(
         tables=('stktransm',), flag='AP_RECONCILE_WRITER_ENABLED', dry_run_default=False,
         idempotency='failed attempt + no allocation_written + links−header proof', audit='ReconAuditEvent',
         trigger='no production caller (shell / tests)'),
