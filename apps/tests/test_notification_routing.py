@@ -147,3 +147,21 @@ class NotificationRetentionTests(TestCase):
         left = set(Notification.objects.values_list('pk', flat=True))
         self.assertEqual(left, kept)
         self.assertFalse(gone & left)
+
+    def test_monitoring_alerts_age_out_after_14_days(self):
+        # Full audit PERF-1: transit / SLA / connectivity alerts are raised again while the condition lasts.
+        from apps.sync.maintenance import prune_notifications
+        _, staff, _ = make_user('ret_mon', role='pharmacist')
+
+        def notif(kind, days, read=False):
+            n = Notification.objects.create(recipient=staff, notification_type=kind, title='t', is_read=read)
+            Notification.objects.filter(pk=n.pk).update(created_at=timezone.now() - datetime.timedelta(days=days))
+            return n.pk
+
+        gone = {notif('transit_critical', 15), notif('delivery_sla_alert', 20, read=True)}
+        kept = {notif('transit_critical', 10), notif('branch_connectivity', 13),
+                notif('demand_created', 60)}          # ordinary unread work still keeps 90 days
+        prune_notifications()
+        left = set(Notification.objects.values_list('pk', flat=True))
+        self.assertEqual(left, kept)
+        self.assertFalse(gone & left)

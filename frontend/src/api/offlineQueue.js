@@ -8,11 +8,12 @@
  *
  * Scope guardrails (enforced by callers, not here):
  *   - POST-only, replay-safe create flows ONLY. Never queue GETs, money, or approvals.
- *   - IDEMPOTENCY: there is none server-side. If a request reaches the server but the
- *     response is lost (e.g. signal drops right after the write), the retry creates a
- *     DUPLICATE. Accepted for these capture flows; do not route anything where a
- *     duplicate is harmful through queuedPost. Each item carries a stable client id in
- *     the `X-Idempotency-Key` header so the backend *could* dedupe later.
+ *   - IDEMPOTENCY: each item carries a stable client id in `X-Idempotency-Key`; the server
+ *     (core/middleware/idempotency.py) runs a replayed write once, for the endpoints listed
+ *     there. A new queued endpoint must be added to that list (full audit 2026-11-15, FE-1).
+ *   - OWNER: each item records the user who made it. A shared phone replays only the
+ *     signed-in user's items; another user's stay parked (still counted) until they sign in,
+ *     so the audit trail never names the wrong person (CLAUDE.md rule 8).
  *
  * Public surface:
  *   queuedPost(url, body, { label })  → axios response  OR  { queued:true, id, label }
@@ -20,6 +21,11 @@
  *   getPending() / subscribe(cb)      → UI wiring (pending count + sync toasts)
  */
 import api from './client'
+import useAuthStore from '../store/authStore'
+
+function currentUserId() {
+  try { return useAuthStore.getState().user?.id ?? null } catch { return null }
+}
 
 const DB_NAME    = 'elrezeiky-offline'
 const STORE_NAME = 'pending'
@@ -118,7 +124,7 @@ function isNetworkError(err) {
 }
 
 async function enqueue({ method, url, body, label }) {
-  const item = { id: newId(), ts: Date.now(), method, url, body, label }
+  const item = { id: newId(), ts: Date.now(), method, url, body, label, userId: currentUserId() }
   await idbPut(item)
   await refreshCount()
   return item
@@ -151,6 +157,13 @@ export async function queuedPost(url, body, { label = '' } = {}) {
 
 let flushing = false
 
+/** The items this user may replay, oldest first (FE-1). Nobody signed in → none; items queued by another
+ *  user, or before items recorded their user, stay parked. */
+export function itemsToReplay(items, userId) {
+  if (userId == null) return []
+  return (items || []).filter(i => i.userId === userId).sort((a, b) => a.ts - b.ts)
+}
+
 /**
  * Replay pending items oldest-first. Per item:
  *   success            → drop it, emit 'synced'
@@ -162,7 +175,7 @@ export async function flushQueue() {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return
   flushing = true
   try {
-    const all = (await idbGetAll()).sort((a, b) => a.ts - b.ts)
+    const all = itemsToReplay(await idbGetAll(), currentUserId())
     for (const item of all) {
       try {
         await api.request({
@@ -201,4 +214,8 @@ if (typeof window !== 'undefined') {
   window.addEventListener('online', () => { flushQueue() })
   // Prime the pending count on load, then flush anything left from a previous session.
   refreshCount().then(() => { if (navigator.onLine) flushQueue() })
+  // Sign-in (or a user switch on a shared phone) → send that user's parked items.
+  useAuthStore.subscribe((state, prev) => {
+    if (state.user?.id != null && state.user?.id !== prev?.user?.id) flushQueue()
+  })
 }
