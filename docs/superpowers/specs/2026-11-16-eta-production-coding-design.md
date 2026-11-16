@@ -337,8 +337,10 @@ correction; "owner" = the owner's answer.
    `eta_code`. So an ETA-approved item not yet in the sheet still shows as "no code" — which is what Invoicer does.
 9. **Tax treatment from the VAT rate**: 14% → taxable 14; 0% → the sheet's own mapping (col P: 0% → `v003`, ETA's
    "exempted good or service") → **exempt**. The queue never overwrites a treatment the accountant already
-   confirmed; a disagreement shows as a flag on the row instead. The exempt reference text is **the owner's**
-   (open, see conversation).
+   confirmed; a disagreement shows as a flag on the row instead. Exempt reference text (owner, 2026-11-16):
+   «سلعة معفاة — قانون الضريبة على القيمة المضافة رقم 67 لسنة 2016، جدول الإعفاءات».
+
+**Design approved by the owner 2026-11-16.**
 10. **Code corrections to the text above:** there is no treatment-confirmation service — S1 extracts the inline
     logic from the profile-edit view (`views.py`) into `services.confirm_treatment` and both use it. The agent work
     (S5) needs: a new job model or wider `kind` (current `max_length=10`, choices document/smoke), a file-upload
