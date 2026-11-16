@@ -34,9 +34,9 @@ class ParseTests(SimpleTestCase):
         self.assertEqual(W.parse('**')['segments'], [])
 
 
-def _items(*names, active=True):
+def _items(*names, active=True, start=0):
     from apps.catalog.models import Item
-    return {n: Item.objects.create(softech_id=str(940000 + i + (0 if active else 500)), name=n,
+    return {n: Item.objects.create(softech_id=str(940000 + start + i + (0 if active else 500)), name=n,
                                    pack_price=10, is_active=active)
             for i, n in enumerate(names)}
 
@@ -243,6 +243,25 @@ class CodeTierTests(TestCase):
         res = W.item_search('690', code_prefix=False)
         self.assertNotIn('code_part', [t for _, t in res])
 
+    def test_arabic_indic_digit_code(self):
+        # «٣٦٩٠» / «۳۶۹۰» are the code 3690: the code tiers compare the digits, not the glyphs
+        self.assertEqual(W.item_search('٣٦٩٠')[0], (self.augmentin.id, 'code'))
+        self.assertEqual(W.item_search('۳۶۹۰', code_prefix=False)[0], (self.augmentin.id, 'code'))
+        self.assertEqual(W.item_search('٦٢٢١٠٢٥٠٣٢٣٤٨')[0], (self.augmentin.id, 'code'))
+        self.assertIn((self.concor.id, 'code_part'), W.item_search('٦٩٠'))
+
+    def test_barcode_case(self):
+        # a barcode stored in lower case (one real ItemBarcode) or upper case is found whichever
+        # case is typed / scanned
+        from apps.catalog.models import ItemBarcode
+        ItemBarcode.objects.create(item=self.concor, barcode='ab12cd34')
+        self.souvenir.barcode = 'XY99ZZ'
+        self.souvenir.save(update_fields=['barcode'])
+        for q in ('ab12cd34', 'AB12CD34'):
+            self.assertEqual(W.item_search(q, code_prefix=False)[0], (self.concor.id, 'code'), q)
+        for q in ('XY99ZZ', 'xy99zz'):
+            self.assertEqual(W.item_search(q, code_prefix=False)[0], (self.souvenir.id, 'code'), q)
+
 
 class FoldTests(TestCase):
     """Names are matched on a folded form (Arabic letter variants, Arabic digits, space runs)
@@ -285,6 +304,34 @@ class FoldTests(TestCase):
         self.assertNotIn(res[0][1], ('sound', 'approx', 'any_order'))
         self.assertIn(res[0][1], {'starts', 'contains'})
 
+    def test_db_side_fold_deletes_tashkeel(self):
+        # STORED names with harakat / tatweel (3 real names, 2 scientific names) meet a plain
+        # query: FOLD_SQL deletes them like fold_query does
+        fatha, damma, kasra, shadda, tatweel = chr(0x064E), chr(0x064F), chr(0x0650), chr(0x0651), chr(0x0640)
+        name = 'ب' + fatha + 'انادول' + tatweel + ' اكسترا'
+        sci = 'ب' + fatha + 'ار' + fatha + 'اس' + kasra + 'يتام' + damma + 'ول م' + shadda + 'سكن'
+        ids = _items(name)
+        iid = next(iter(ids.values())).id
+        from apps.catalog.models import Item
+        Item.objects.filter(id=iid).update(name_scientific=sci)
+        res = dict(W.item_search('بانادول'))
+        self.assertEqual(res.get(iid), 'starts')
+        # a hit only in the scientific name keeps its tier name (one rank below the same in name)
+        self.assertIn(dict(W.item_search('باراسيتامول')).get(iid), {'starts', 'word', 'contains'})
+
+    def test_fold_sql_equals_fold_query(self):
+        # the SQL fold and the Python fold give the same text for a stored-name-like string
+        # (no Arabic-Indic digits: stored names hold none, see wildcard.FOLD_SQL)
+        from django.db import connection
+        if connection.vendor != 'postgresql':
+            self.skipTest('PostgreSQL only')
+        s = ('  أَحْمَدُ  إسلام آمنة ٱلـكتاب مؤسسة ئ ى  ' + chr(0x0670) + chr(0x06D6)
+             + ' panadol  Extra 1%  ')
+        with connection.cursor() as cur:
+            cur.execute('SELECT ' + W.FOLD_SQL.format(col='%s'), [s])
+            got = cur.fetchone()[0]
+        self.assertEqual(got.strip(), W.fold_query(s))
+
     def test_fold_sql_null_safe(self):
         from apps.catalog.models import Item
         _items('NULLSAFE ONE')
@@ -308,6 +355,23 @@ class FoldTests(TestCase):
             plan2 = '\n'.join(r[0] for r in cur.fetchall())
         self.assertIn('catalog_item_name_fold_trgm', plan)
         self.assertIn('catalog_item_sci_fold_trgm', plan2)
+
+
+class FoldSqlFrozenTests(SimpleTestCase):
+    """Catalog 0044 / 0045 hold a FROZEN copy of FOLD_SQL. PostgreSQL uses an expression index
+    only when the query's expression is the same — so a change to wildcard.FOLD_SQL must come
+    with a new migration that rebuilds those indexes. This fails until it does."""
+
+    def test_migrations_match_fold_sql(self):
+        import importlib
+        for mod in ('apps.catalog.migrations.0044_folded_name_trgm',
+                    'apps.catalog.migrations.0045_folded_name_prefix'):
+            m = importlib.import_module(mod)
+            self.assertEqual(m.FOLD_NAME, W.FOLD_SQL.format(col='name'), mod)
+            self.assertEqual(m.FOLD_SCI, W.FOLD_SQL.format(col='name_scientific'), mod)
+            self.assertTrue(all(m.FOLD_NAME in s or m.FOLD_SCI in s for s in m.SQL), mod)
+            # frozen: the migration no longer reads the app constant
+            self.assertFalse(hasattr(m, 'FOLD_SQL'), mod)
 
 
 class RankingTests(TestCase):
@@ -428,8 +492,8 @@ class RankingTests(TestCase):
                         "('catalog_item_name_fold_prefix', 'catalog_item_sci_fold_prefix')")
             defs = [r[0] for r in cur.fetchall()]
         self.assertEqual(len(defs), 2)
-        self.assertTrue(all('text_pattern_ops' in d and 'translate(upper(regexp_replace' in d for d in defs))
-        self.assertIn('translate(upper(regexp_replace', sql)
+        self.assertTrue(all('text_pattern_ops' in d and 'regexp_replace(translate(upper(' in d for d in defs))
+        self.assertIn('regexp_replace(translate(upper(', sql)
 
     def test_punctuation_only_returns_nothing(self):
         for q in ('**', '%', '-', '()', '  '):
@@ -517,15 +581,54 @@ class SynonymTests(TestCase):
     def test_one_direction(self):
         from apps.catalog import search_synonyms as S
         self.assertIsNone(S.expand_terms(['SYRUP']))
-        self.assertEqual(S.expand_terms(['AUGMENTIN', 'SYP']), [('AUGMENTIN',), ('SYP', 'SYRUP')])
+        # (typed, canonical forms) kept apart — a token that is its own canonical stays visible
+        self.assertEqual(S.expand_terms(['AUGMENTIN', 'SYP']), [('AUGMENTIN', ()), ('SYP', ('SYRUP',))])
+        self.assertEqual(S.expand_terms(['ZYRTEC', 'G']), [('ZYRTEC', ()), ('G', ('G', 'GM'))])
         self.assertEqual(S.SYNONYMS['فوار'], ('SACH', 'EFF'))
         self.assertEqual(S.SYNONYMS['G'], ('G', 'GM'))
+
+    def _syn(self, *terms):
+        """The synonym tier alone, on every item (names, not ids)."""
+        from apps.catalog import search_synonyms as S
+        from apps.catalog.models import Item
+        names = dict(Item.objects.values_list('id', 'name'))
+        return {names[i] for i in W._synonym_ids(S.expand_terms(list(terms)), Item.objects.all(), [], 60)}
 
     def test_typed_form_still_literal(self):
         res = self.tiers('augmentin syrup')
         self.assertEqual(res[0][0], 'AUGMENTIN 457MG/5ML SYRUP 70ML')
         # the words are not adjacent in the name → any_order; what matters: typed form is literal
         self.assertIn(res[0][1], ('starts', 'contains', 'any_order'))
+        # inside the synonym tier: a typed token that is NOT its own canonical («syp») also
+        # matches as typed text, anywhere (SYP inside a name) …
+        _items('AUGMENTIN SYP 100ML', 'ZYRTEC 10G GEL', 'ZYRTEC GRAPE DROPS 10ML', 'ZYRTEC G CREAM',
+               'ZYRTEC 5MG TAB', 'ZYRTEC SMGO TAB', start=100)
+        self.assertIn('AUGMENTIN SYP 100ML', self._syn('AUGMENTIN', 'SYP'))
+        self.assertIn('AUGMENTIN 457MG/5ML SYRUP 70ML', self._syn('AUGMENTIN', 'SYP'))
+        # … but a token that IS its own canonical (G, MG) only by the whole-word / unit rule:
+        # never as a bare substring (G in GRAPE / GEL, MG in SMGO)
+        self.assertEqual(self._syn('ZYRTEC', 'G'), {'ZYRTEC 10G GEL', 'ZYRTEC G CREAM'})
+        self.assertEqual(self._syn('ZYRTEC', 'MG'), {'ZYRTEC 5MG TAB'})
+
+    def test_one_letter_unit_needs_whole_word(self):
+        _items('ZYRTEC GRAPE DROPS 10ML', 'ZYRTEC 10G GEL', start=100)
+        res = dict(self.tiers('zyrtec g'))
+        self.assertIn(res.get('ZYRTEC 10G GEL'), ('synonym', 'starts', 'word', 'contains', 'any_order'))
+        self.assertNotEqual(res.get('ZYRTEC GRAPE DROPS 10ML'), 'synonym')
+        res = dict(self.tiers('zyrtec gm'))
+        self.assertNotEqual(res.get('ZYRTEC GRAPE DROPS 10ML'), 'synonym')
+        self.assertIn('ZYRTEC 10G GEL', res)
+
+    def test_two_char_unit_is_starts_only(self):
+        # D7: a 2-character query is "starts with" only — no synonym rows for mg / ml / جم
+        _items('MG-TONE 10 AMP', 'MLX SYRUP', 'جم تست', start=100)
+        for q, lead in (('mg', 'MG-TONE 10 AMP'), ('ml', 'MLX SYRUP'), ('جم', 'جم تست')):
+            res = self.tiers(q)
+            self.assertIn(lead, [n for n, _ in res], q)
+            self.assertTrue(all(t == 'starts' for _, t in res), (q, res))
+        # no name starts with these: still never a synonym row (the typo fallback is not D7's)
+        for q in ('cr', 'iu', 'مل'):
+            self.assertNotIn('synonym', [t for _, t in self.tiers(q)], q)
 
 
 class TypoTests(TestCase):

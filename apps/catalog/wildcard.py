@@ -15,8 +15,9 @@ Owner decision (2026-10-05), SOFTECH-style:
   • nothing found → the smart matcher's fallback (typos, Arabic by sound, learned memory),
     tagged «تقريبي»; Arabic queries always include sound matches («بالنطق»).
 
-Fast: patterns become  UPPER(name) LIKE '%VOL%REN%50%TAB%'  which PostgreSQL answers from
-the trigram indexes (catalog migration 0041).
+Fast: item patterns become  FOLD(name) LIKE '%VOL%REN%50%TAB%'  (FOLD_SQL below), answered
+from the trigram / prefix indexes on that folded expression (catalog migrations 0044 / 0045);
+the modules' `ulike` filters run UPPER(col) LIKE … on the older trigram indexes.
 
 Use:
     wq(q, 'name', 'name_scientific')        → a Q for any filter box (pattern or any-order)
@@ -53,24 +54,35 @@ class _UpperLike(Lookup):
 Field.register_lookup(_UpperLike)
 
 
-# ── the FOLDED name form (item search): Arabic letter variants, case and space runs ───────
-# ONE constant builds both the SQL the lookups run and the expression the trigram indexes
-# are created on (catalog migration 0044) — PostgreSQL only uses an expression index when
-# the query's expression is the same, so never edit one without the other.
+# ── the FOLDED name form (item search): Arabic letter variants, tashkeel, case, space runs ─
+# ONE constant builds the SQL the lookups run. The indexes on it (catalog migrations 0044 /
+# 0045) hold a FROZEN copy of this expression — PostgreSQL only uses an expression index when
+# the query's expression is the same, so a change here needs a new migration that rebuilds
+# those indexes (test_wildcard_search.FoldSqlFrozenTests fails until it exists).
+# translate() DELETES the characters of its `from` list that have no partner in `to`: the
+# tashkeel / tatweel (_TASHKEEL_CHARS) go that way. Arabic-Indic digits are NOT folded in the
+# stored name — the real catalog has none (checked 2026-11-16); fold_query folds them in the
+# query only.
 FOLD_FROM = 'أإآٱةىؤئ'
 FOLD_TO = 'ااااهيوي'
-FOLD_SQL = (r"translate(upper(regexp_replace(coalesce({col},''), '\s+', ' ', 'g')), "
-            "'" + FOLD_FROM + "', '" + FOLD_TO + "')")
+_TASHKEEL_CHARS = ''.join(map(chr, [0x0640, *range(0x064B, 0x0660), 0x0670,
+                                    *range(0x06D6, 0x06EE)]))    # tatweel, harakat, Quranic marks
+# Marks are deleted BEFORE the space runs collapse (as fold_query does): a word made of marks
+# alone between two spaces must leave one space, not two.
+FOLD_SQL = ("regexp_replace(translate(upper(coalesce({col},'')), "
+            "'" + FOLD_FROM + _TASHKEEL_CHARS + "', '" + FOLD_TO + r"'), '\s+', ' ', 'g')")
 
 _DIGITS = {ord(c): str(i) for i, c in enumerate('٠١٢٣٤٥٦٧٨٩')}
 _DIGITS.update({ord(c): str(i) for i, c in enumerate('۰۱۲۳۴۵۶۷۸۹')})
-_TASHKEEL = re.compile('[\u0640\u064B-\u065F\u0670\u06D6-\u06ED]')     # tatweel + harakat
+_TASHKEEL = re.compile('[' + _TASHKEEL_CHARS + ']')
 _FOLD_MAP = str.maketrans(FOLD_FROM, FOLD_TO)
 
 
 def fold_query(q: str) -> str:
-    """The query in the same folded form as FOLD_SQL: Arabic digits → 0-9, tashkeel / tatweel
-    removed, أإآٱ→ا ة→ه ى→ي ؤ→و ئ→ي, upper case, space runs collapsed, stripped. Wildcards kept."""
+    """The query in the folded form FOLD_SQL gives a stored name: tashkeel / tatweel removed,
+    أإآٱ→ا ة→ه ى→ي ؤ→و ئ→ي, upper case, space runs collapsed. On the query side only: Arabic-Indic
+    digits → 0-9 (stored names hold none — see FOLD_SQL) and the ends stripped. Wildcards kept.
+    (Python's \\s and PostgreSQL's \\s may differ on rare spaces such as NBSP.)"""
     t = (q or '').translate(_DIGITS)
     t = _TASHKEEL.sub('', t).translate(_FOLD_MAP).upper()
     return re.sub(r'\s+', ' ', t).strip()
@@ -333,13 +345,18 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
                 seen.add(i)
                 out.append((i, tier))
 
-    raw = p['raw']
+    # Arabic-Indic digits → 0-9 first: the code / prefix / code_part lookups compare `raw`
+    # itself (unfolded), so «٣٦٩٠» must become 3690 to hit code 3690
+    raw = p['raw'].translate(_DIGITS)
     if not p['wild']:
-        # exact `=` (codes / barcodes are digits, nothing to case-fold) so the b-tree
-        # indexes are used; __iexact wraps the column in UPPER() and forces a seq scan
-        # ONE statement: each half of the UNION uses its own b-tree
-        add(base.filter(Q(softech_id=raw) | Q(barcode=raw)).order_by().values_list('id', flat=True)
-            .union(ItemBarcode.objects.filter(barcode=raw, item__in=base).order_by()
+        # exact `=` / `IN` so the b-tree indexes are used; __iexact wraps the column in UPPER()
+        # and forces a seq scan. Codes are digits, but a few barcodes carry letters (one real
+        # one is lower case): the typed text, its upper or its lower case. ONE statement: each
+        # half of the UNION uses its own b-tree
+        exact = list(dict.fromkeys((raw, raw.upper(), raw.lower())))
+        add(base.filter(Q(softech_id__in=exact) | Q(barcode__in=exact)).order_by()
+            .values_list('id', flat=True)
+            .union(ItemBarcode.objects.filter(barcode__in=exact, item__in=base).order_by()
                    .values_list('item_id', flat=True)), 'code')
         if code_prefix and raw.isdigit() and len(raw) >= 4:   # a partial code / barcode → its prefix
             add(base.filter(Q(softech_id__startswith=raw) | Q(barcode__startswith=raw)).order_by('softech_id')
@@ -358,8 +375,11 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
             for i, tier in _rank_name_ids(raw, base, window=max(NAME_WINDOW, limit),
                                           starts_only=len(compact) < 3):
                 add((i,), tier)
-    # Appendix A synonyms (syp → SYRUP, جم → G/GM): only when the name tiers left the window short
-    if len(out) < max(NAME_WINDOW, limit):
+    # Appendix A synonyms (syp → SYRUP, جم → G/GM): only when the name tiers left the window
+    # short (the window, not `limit`: synonym rows fill the same candidate window the name
+    # tiers use), and — D7 — never for a 2-character query («mg»,
+    # «ml», «جم» are "starts with" only)
+    if len(compact) >= 3 and len(out) < max(NAME_WINDOW, limit):
         try:
             from apps.catalog.search_synonyms import expand_terms
             exp = expand_terms(parse(raw, fold=True)['terms'])
@@ -446,10 +466,10 @@ def _synonym_ids(expanded, base, have, room: int) -> list:
     """Items where EVERY term matches: the typed text anywhere in the folded name, OR one of its
     canonical forms as a whole word / a unit glued to a number (`500MG`, `1G`; never inside a
     longer word — «G» is not GRAPE). A term that is its own canonical (g, mg, tab…) matches only
-    by the whole-word rule, or «g» would hit every name containing a G."""
+    by the whole-word rule, or «g» would hit every name containing a G. `expanded` is
+    `search_synonyms.expand_terms`: [(typed, canonical forms)]."""
     cond = Q()
-    for term in expanded:
-        typed, canon = term[0], term[1:]
+    for typed, canon in expanded:
         t = Q()
         if typed not in canon:
             t |= Q(name__fulike='%' + _esc(typed) + '%')

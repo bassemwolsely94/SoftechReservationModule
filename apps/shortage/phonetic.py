@@ -212,8 +212,12 @@ _LATIN_FORM = {'tab', 'tabs', 'tablet', 'tablets', 'cap', 'caps', 'capsule', 'ca
                'imported', 'and', 'with', 'for', 'the', 'of', 'oral', 'sol', 'solution', 'adult', 'infant'}
 
 _lock = threading.Lock()
+# The live index. `_build` makes a NEW dict and `index()` swaps this one reference (atomic in
+# CPython); a dict a reader may hold is never mutated, so a reader that took `ix = index()` sees
+# one consistent build (ids[k] always lines up with first[k] / joined[k] …).
 _index = {'built': 0.0, 'ids': [], 'first': [], 'joined': [], 'joined3': [], 'tokens': {}, 'vtokens': {},
           'sci': [], 'vfirst': []}
+_stale = False                        # reset_index: rebuild on the next lookup
 
 
 def _item_tokens(name: str, sci: str = ''):
@@ -248,20 +252,31 @@ def _build():
         vtokens[iid] = [t[1] for t in toks]
         s = _item_tokens(sname or '')
         sci.append(s[0][0] if s else '')
-    _index.update(built=time.time(), ids=ids, first=first, joined=joined, joined3=joined3,
-                  tokens=tokens, vtokens=vtokens, sci=sci, vfirst=vfirst)
+    return {'built': time.time(), 'ids': ids, 'first': first, 'joined': joined, 'joined3': joined3,
+            'tokens': tokens, 'vtokens': vtokens, 'sci': sci, 'vfirst': vfirst}
+
+
+def _needs_build(ix) -> bool:
+    return _stale or time.time() - ix['built'] > INDEX_TTL or not ix['ids']
 
 
 def index():
-    if time.time() - _index['built'] > INDEX_TTL or not _index['ids']:
+    """The current index, as a snapshot: callers keep the returned dict and read only from it."""
+    global _index, _stale
+    ix = _index
+    if _needs_build(ix):
         with _lock:
-            if time.time() - _index['built'] > INDEX_TTL or not _index['ids']:
-                _build()
-    return _index
+            ix = _index
+            if _needs_build(ix):
+                _stale = False        # cleared BEFORE the read, so a reset during the build wins
+                ix = _build()
+                _index = ix           # one reference swap
+    return ix
 
 
 def reset_index(*_a, **_k):
-    _index['built'] = 0.0
+    global _stale
+    _stale = True
 
 
 def warm_search_index():
@@ -308,8 +323,9 @@ def quick_ids(query: str, *, limit: int = 8) -> list:
     from apps.catalog.models import Item
     from .matching import _arabic_adjust, _normalize
     snd = {}
-    for iid, _s in candidates(query, limit=60):
-        s = sound_score(query, iid)
+    ix = index()                      # one snapshot for the candidates and their scores
+    for iid, _s in candidates(query, limit=60, ix=ix):
+        s = sound_score(query, iid, ix=ix)
         if s >= 0.75:
             snd[iid] = s
     if not snd:
@@ -352,7 +368,7 @@ def _sim(a: str, b: str) -> float:
     return Levenshtein.normalized_similarity(a, b)
 
 
-def candidates(text: str, *, limit: int = 60, cutoff: float = 0.72) -> list:
+def candidates(text: str, *, limit: int = 60, cutoff: float = 0.72, ix=None) -> list:
     """[(item_id, sound score 0..1)] for the line's first name word(s) — by skeleton
     similarity against every catalog item's brand (and scientific) skeleton. ms-fast."""
     from rapidfuzz import process
@@ -361,7 +377,7 @@ def candidates(text: str, *, limit: int = 60, cutoff: float = 0.72) -> list:
     skels, vkeys = p['skels'], p['vkeys']
     if not skels:
         return []
-    ix = index()
+    ix = ix or index()
     q1 = skels[0]
     q12 = ''.join(skels[:2])
     q123 = ''.join(skels[:3])
@@ -384,12 +400,12 @@ def candidates(text: str, *, limit: int = 60, cutoff: float = 0.72) -> list:
     return sorted(hits.items(), key=lambda x: -x[1])
 
 
-def sound_score(text: str, item_id: int) -> float:
+def sound_score(text: str, item_id: int, *, ix=None) -> float:
     """How well the line's name words SOUND like the item's name words (0..1): the first
     query word against the item's first two words, plus coverage of the other words."""
     p = parse_query(text)
     skels, vkeys = p['skels'], p['vkeys']
-    ix = index()
+    ix = ix or index()
     toks = ix['tokens'].get(item_id) or []
     vtoks = ix['vtokens'].get(item_id) or []
     if not skels or not toks:

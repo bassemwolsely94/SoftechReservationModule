@@ -4,7 +4,7 @@ through every search path, with timings. Run before and after each search batch.
 
     python manage.py search_probe                       # 3 timed runs per query and path
     python manage.py search_probe --repeat 5 --json out.json
-    python manage.py search_probe --with-temp-indexes   # dev DB without catalog 0044–0046
+    python manage.py search_probe --with-temp-indexes   # (re)build catalog 0044–0046 for this run
 
 Paths (in-process, APIRequestFactory as an existing superuser — no server needed):
   A  /api/items/softech-search/?no_live=1   (the POS / pickers endpoint)
@@ -18,9 +18,12 @@ timings mean nothing, and the probe says so loudly. Entries marked `real_report_
 catalog lacks the data) are printed but never fail the run.
 
 Read-only: everything runs in ONE transaction that is always rolled back. --with-temp-indexes
-creates the missing 0044–0046 indexes inside that transaction (rolled back with it, never
-committed). Note CREATE INDEX holds a SHARE lock on catalog_item / catalog_itembarcode until the
-run ends: catalog writes (the item sync) wait for it — a minute or two.
+DROPS every 0044–0046 index name that exists and creates all of them again from the migrations'
+SQL, inside that transaction (rolled back with it, never committed) — so an index left under
+the same name with an OLDER expression (a hand-made copy on the dev DB) is never what gets
+timed. Note DROP / CREATE INDEX lock catalog_item / catalog_itembarcode until the run ends:
+catalog reads from other sessions on the dropped indexes and writes (the item sync) wait for
+it — a minute or two.
 """
 import importlib
 import json
@@ -77,7 +80,8 @@ class Command(BaseCommand):
         parser.add_argument('--repeat', type=int, default=3, help='Timed runs per query and path (default 3).')
         parser.add_argument('--json', dest='json_path', default='', help='Write every query result to this JSON file.')
         parser.add_argument('--with-temp-indexes', action='store_true',
-                            help='Create the catalog 0044–0046 indexes for this run only (always rolled back).')
+                            help='Drop and rebuild the catalog 0044–0046 indexes from the migrations for this '
+                                 'run only (always rolled back).')
 
     def handle(self, *args, **opts):
         user = (get_user_model().objects.filter(is_superuser=True, is_active=True).order_by('id').first())
@@ -87,17 +91,23 @@ class Command(BaseCommand):
         with transaction.atomic():
             try:
                 missing = missing_indexes()
-                if opts['with_temp_indexes'] and missing:
+                if opts['with_temp_indexes']:
+                    # drop first: CREATE … IF NOT EXISTS would keep an index of the same name built
+                    # on an older expression, and the run would time that one
+                    names = index_names()
                     with connection.cursor() as c:
-                        for name, s in zip(index_names(), index_sql()):
-                            if name in missing:
-                                c.execute(s)
+                        # DDL refuses a table with pending deferred-FK checks (rows written
+                        # earlier in this transaction, e.g. a test's fixtures): run them now
+                        c.execute('SET CONSTRAINTS ALL IMMEDIATE')
+                        for name in names:
+                            c.execute(f'DROP INDEX IF EXISTS {name}')
+                        for s in index_sql():
+                            c.execute(s)
                         c.execute('ANALYZE catalog_item')
                         c.execute('ANALYZE catalog_itembarcode')
-                    self.stdout.write('temporary indexes created (rolled back at the end): ' + ', '.join(missing))
+                    self.stdout.write('indexes rebuilt from the migrations (rolled back at the end): '
+                                      + ', '.join(names))
                     missing = missing_indexes()
-                elif opts['with_temp_indexes']:
-                    self.stdout.write('the catalog 0044–0046 indexes already exist — nothing to create')
                 records = self._run(user, repeat)
             finally:
                 transaction.set_rollback(True)          # read-only: nothing this run did is kept

@@ -43,11 +43,14 @@ SYNONYMS: dict = _build()
 
 
 def expand_terms(terms: list):
-    """Per (folded) term: the typed term plus its canonical forms. None when no term has one."""
+    """Per (folded) term: a `(typed, canonical forms)` pair — the two kept apart, never
+    de-duplicated, so `_synonym_ids` can tell a token that is its own canonical (MG, TAB, G) and
+    match it by the whole-word rule alone. `()` for a term with no entry. None when no term has
+    one."""
     out, any_hit = [], False
     for t in terms:
-        canon = SYNONYMS.get(t)
+        canon = SYNONYMS.get(t, ())
         if canon:
             any_hit = True
-        out.append(tuple(dict.fromkeys((t,) + (canon or ()))))
+        out.append((t, canon))
     return out if any_hit else None

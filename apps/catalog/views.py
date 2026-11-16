@@ -407,9 +407,11 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
 
         Search rules = apps/catalog/wildcard.py (the same in every search box):
           * and % = any characters (vol*ren*50*tab* = vol%ren%50%tab), always "contains",
-          parts in the order typed, space literal. Ranked: exact code/barcode, learned
-          memory, literal text, pattern, any word order, Arabic by sound; nothing found →
-          typo-tolerant rows flagged approx «تقريبي».
+          parts in the order typed, space literal. Tiers (wildcard.item_search): exact
+          code/barcode (+ code prefix), learned memory, the name starts / a word starts /
+          contains / any word order (each with literal text first), synonyms (syp → SYRUP),
+          Arabic by sound, active ingredient; nothing found → typo-tolerant rows flagged approx
+          «تقريبي»; digits inside a code last (never with code_prefix=0).
 
         No disease / symptom expansion: a picker finds ITEMS (name, code, active ingredient);
         «سكر» finds what is named سكر. Disease → drug is the drug assistant's job.

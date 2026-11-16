@@ -34,8 +34,8 @@ class CorpusTests(TestCase):
         cache.delete('catalog:softech_search_down')
 
     def test_corpus_shape(self):
-        self.assertEqual(len(CORPUS), 52)
-        self.assertEqual(len({e['q'] for e in CORPUS}), 52)
+        self.assertEqual(len(CORPUS), 56)
+        self.assertEqual(len({e['q'] for e in CORPUS}), 56)
         self.assertEqual(len({sid for sid, _, _ in SEED_NAMES}), len(SEED_NAMES))
         for e in CORPUS:
             self.assertIn(e.get('top', 1), (1, 3), e['q'])
@@ -81,7 +81,7 @@ class CorpusTests(TestCase):
         with open(path, encoding='utf-8') as f:
             out = json.load(f)
         self.assertEqual(out['missing_indexes'], [])
-        self.assertEqual(len(out['records']), 52)
+        self.assertEqual(len(out['records']), 56)
         for r in out['records']:
             self.assertTrue(r['paths']['A']['ok'] and r['paths']['D']['ok'], r['q'])
             self.assertEqual(set(r['paths']), {'A', 'B', 'C', 'D'})

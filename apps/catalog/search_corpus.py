@@ -1,7 +1,7 @@
 """The item-search golden corpus (unified item search S1, Task 8).
 
-The 52 queries of the 2026-11-16 probe with what the TOP results must look like. One list, two
-users:
+The 52 queries of the 2026-11-16 probe, plus 4 three-letter prefixes from the final review, with
+what the TOP results must look like. One list, two users:
   · apps/tests/test_search_corpus.py seeds SEED_NAMES (+ SEED_BARCODES, SEED_INGREDIENTS) in an
     empty test DB and asserts every entry (CI, no timing);
   · `manage.py search_probe` runs the same entries on the real catalog through every search path
@@ -80,6 +80,12 @@ CORPUS = [
     {'q': '%1%cream', 'expect': r'1%.*CREAM', 'top': 3, 'note': 'leading wildcard'},
     {'q': 'vol ren', 'expect': r'VOLTAREN', 'top': 1, 'tier': 'any_order', 'note': 'space inside a word'},
     {'q': 'pa', 'expect': r'^PA', 'top': 1, 'tier': 'starts', 'note': 'two letters = starts-with only (D7)'},
+    # three letters = the full tiers, but a name that STARTS with them still leads
+    {'q': 'pan', 'expect': r'^PAN', 'top': 1, 'tier': 'starts', 'note': '3-letter prefix'},
+    {'q': 'con', 'expect': r'^CON', 'top': 1, 'tier': 'starts', 'note': '3-letter prefix'},
+    {'q': 'vit', 'expect': r'^VIT', 'top': 1, 'tier': 'starts',
+     'note': '3-letter prefix; also a synonym key (VITAMIN) — the starts row still leads'},
+    {'q': 'ami', 'expect': r'^AMI', 'top': 1, 'tier': 'starts', 'note': '3-letter prefix'},
 ]
 
 # (softech_id, name, name_scientific) — copied from the real catalog as the probe printed them,
@@ -156,6 +162,8 @@ SEED_NAMES = [
     ('87547', 'TOP-4  15 GM CREAM', 'TOP-4  15 GM CREAM'),
     ('1972', 'BETNOVATE  * C *   15  GM  CREAM', 'BETNOVATE  * C *   15  GM  CREAM'),
     ('92559', 'FIRST SURG PAD <15CMX25CM> DRESSING PAD', 'FIRST SURG PAD <15CMX25CM> DRESSING PAD'),
+    ('85145', 'VIT-C EXTRA  60GUMMIES', 'VIT-C EXTRA  60GUMMIES'),
+    ('85000', 'AMIGRAINE  200 TAB', 'AMIGRAINE  200 TAB'),
 ]
 
 # (softech_id, barcode) — ItemBarcode rows
