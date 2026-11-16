@@ -27,6 +27,9 @@ class _Cur:
         params = list(params or [])
         assert sql.count('?') == len(params), sql
         self.conn.calls.append((sql, params))
+        m = re.match(r'SET ROWCOUNT (\d+)', sql)
+        if m:                                   # the session keeps the cap until it is reset
+            self.conn.rowcount = int(m.group(1))
         if 'dbo.stktransm' in sql:
             self._rows = self.conn.headers_for(sql)
         elif 'dbo.stktrans ' in sql:
@@ -35,7 +38,8 @@ class _Cur:
             self._rows = []
 
     def fetchall(self):
-        return list(self._rows)
+        cap = self.conn.rowcount                # applies to every SELECT, lines included
+        return list(self._rows)[:cap] if cap else list(self._rows)
 
     def close(self):
         pass

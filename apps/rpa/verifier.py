@@ -67,10 +67,9 @@ def _read(cur, sql, params):
 
 def _read_headers(cur, sql, params):
     """Header read with a row cap; the cap is lifted at once so the line reads are never truncated."""
-    try:
-        return _read(cur, sql, params)
-    finally:
-        cur.execute('SET ROWCOUNT 0')
+    rows = _read(cur, sql, params)
+    cur.execute('SET ROWCOUNT 0')               # only after a good read: never masks the first error
+    return rows
 
 
 _REF_IN_COMMENT = re.compile(r'RPA-(\d+)')
