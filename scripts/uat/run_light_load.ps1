@@ -89,6 +89,7 @@ $body = {
                 '--csv', "$rel/$tag", '--only-summary', '--logfile', "$rel/$tag.log" `
                 -WorkingDirectory $root -PassThru -WindowStyle Hidden `
                 -RedirectStandardOutput (Join-Path $out "$tag.out.txt") -RedirectStandardError (Join-Path $out "$tag.err.txt")
+            $null = $p.Handle      # cache the handle, else ExitCode reads blank after exit
             while (-not $p.HasExited) {
                 $f = Get-FreeGB
                 $pg = @(Get-Process postgres -ErrorAction SilentlyContinue)
