@@ -129,7 +129,7 @@ SCHEDULER_JOB_GUARDS = {
         'each transcript claimed with skip_locked; the tick also queues recent CDR calls via get_or_create on a unique (cdr_call, engine) constraint; caveat: maybe_launch_runner checks run_is_active without a lock and a 2nd runner resets running->pending, so one call can be transcribed twice (CPU only)'),
 
     # ── SOFTECH writers ───────────────────────────────────────────────────────
-    'pos_orders_flush': ('row_lock', 'apps.pos_orders.writer.push_order', ').update(status=SoftechSalesOrder.STATUS_PUSHING, updated_at=timezone.now())',
+    'pos_orders_flush': ('row_lock', 'apps.pos_orders.writer.push_order', 'claimable.update(status=SoftechSalesOrder.STATUS_PUSHING, updated_at=timezone.now())',
         'conditional UPDATE claim to PUSHING before any SOFTECH write (P-11); WRITES SOFTECH'),
     'pos_orders_reconcile': ('idempotent_upsert', 'apps.pos_orders.reconcile.reconcile_order', 'order.status = SoftechSalesOrder.STATUS_SETTLED',
         'reads branch DBs, flips pushed->settled from the same facts; never writes SOFTECH'),

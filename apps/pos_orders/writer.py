@@ -514,6 +514,20 @@ def build_return_from_sale(order: SoftechSalesOrder, selection=None):
 
 # ── 1. PREPARE — compute all numeric fields ─────────────────────────────────────
 def prepare_order(order: SoftechSalesOrder, tenders=None, live=False):
+    """Locked, atomic wrapper (full audit 2026-11-15, BE-2/BE-3). The order row is re-read under a row lock
+    and must still be what the caller loaded: a flush job that pushed it meanwhile (PUSHED + docnumber)
+    is never overwritten back to READY by this caller's stale copy, and a refused order (blocked item,
+    tender mismatch) leaves its lines and payments exactly as they were."""
+    from django.db import transaction
+    with transaction.atomic():
+        current = (SoftechSalesOrder.objects.select_for_update()
+                   .only('status', 'softech_docnumber').get(pk=order.pk))
+        if current.is_locked or current.status != order.status or                 current.softech_docnumber != order.softech_docnumber:
+            raise ValueError('تغيّرت حالة الطلب أثناء التجهيز (أُرسل أو أُلغي من مكان آخر) — حدّث الصفحة.')
+        return _prepare_order_unlocked(order, tenders=tenders, live=live)
+
+
+def _prepare_order_unlocked(order: SoftechSalesOrder, tenders=None, live=False):
     """
     Compute line + header money fields and persist them. Returns the order (status
     -> 'ready').
@@ -780,7 +794,7 @@ def _build_sql(branch, counter, n_lines, n_pay):
 
 
 # ── 3. PUSH — guarded; NO SOFTECH WRITE while the gate is off ────────────────────
-def push_order(order: SoftechSalesOrder, *, dry_run=True, live=False):
+def push_order(order: SoftechSalesOrder, *, dry_run=True, live=False, confirmed_not_landed=False):
     """
     Prepare + build the payload. With POS_WRITER_ENABLED off (current state, no test
     instance) this NEVER writes to SOFTECH — it returns the dry-run plan only.
@@ -796,6 +810,16 @@ def push_order(order: SoftechSalesOrder, *, dry_run=True, live=False):
             SoftechSalesOrder.STATUS_PUSHED, SoftechSalesOrder.STATUS_SETTLED):
         return {'mode': 'idempotent', 'wrote_to_softech': False, 'already_pushed': True,
                 'order_id': order.pk, 'docnumber': int(order.softech_docnumber)}
+    # A previous push may have committed with the reply lost. The cashier settling it moves it out of
+    # stktransm5 and SOFTECH drops our vf2 tag on the final document (checked live 2026-11-16, branch 130),
+    # so a retry could no longer find it and would post the sale twice (full audit S-1). Only a person who
+    # checked SOFTECH re-pushes it (confirmed_not_landed=True); the pending-table vf2 check still runs.
+    if (order.status == SoftechSalesOrder.STATUS_PUSH_FAILED and is_outcome_unknown(order)
+            and not confirmed_not_landed):
+        return {'mode': 'outcome_unknown', 'wrote_to_softech': False, 'ok': False, 'blocked': True,
+                'order_id': order.pk,
+                'detail': 'انقطع الاتصال بعد إرسال الطلب للكاشير ولا نعرف هل حُفظ في SOFTECH — '
+                          'راجع شاشة الكاشير/SOFTECH قبل إعادة الإرسال.'}
     # Allow retry from queued / push_failed too (a transient branch outage shouldn't strand it).
     if order.status not in (SoftechSalesOrder.STATUS_DRAFT, SoftechSalesOrder.STATUS_READY,
                             SoftechSalesOrder.STATUS_QUEUED, SoftechSalesOrder.STATUS_PUSH_FAILED):
@@ -849,11 +873,14 @@ def push_order(order: SoftechSalesOrder, *, dry_run=True, live=False):
     # holding the same order gets 0 rows and stops BEFORE touching SOFTECH. A plain save here let
     # two callers both pass the in-memory status check and both write the pending order.
     was_queued = order.status == SoftechSalesOrder.STATUS_QUEUED   # N4: see the refusal branch below
-    claimed = SoftechSalesOrder.objects.filter(
+    claimable = SoftechSalesOrder.objects.filter(
         pk=order.pk,
         status__in=(SoftechSalesOrder.STATUS_DRAFT, SoftechSalesOrder.STATUS_READY,
                     SoftechSalesOrder.STATUS_QUEUED, SoftechSalesOrder.STATUS_PUSH_FAILED),
-    ).update(status=SoftechSalesOrder.STATUS_PUSHING, updated_at=timezone.now())
+    )
+    if not confirmed_not_landed:        # S-1: never claim an outcome-unknown order automatically
+        claimable = claimable.exclude(erp_error__startswith=OUTCOME_UNKNOWN)
+    claimed = claimable.update(status=SoftechSalesOrder.STATUS_PUSHING, updated_at=timezone.now())
     if not claimed:
         logger.warning('[pos_orders] order=%s already being pushed by another caller — skipped', order.pk)
         return {'mode': 'busy', 'wrote_to_softech': False, 'ok': False, 'busy': True,
@@ -862,6 +889,7 @@ def push_order(order: SoftechSalesOrder, *, dry_run=True, live=False):
     order.status = SoftechSalesOrder.STATUS_PUSHING
 
     conn = None
+    commit_sent = False
     try:
         conn = get_branch_connection(order.branch.effective_db_host, order.branch.effective_db_port,
                                      order.branch.db_name or 'SOFTECHDB9', charset=_write_charset())
@@ -887,6 +915,7 @@ def push_order(order: SoftechSalesOrder, *, dry_run=True, live=False):
             logger.error('[pos_orders] order=%s push FAILED (readback mismatch) — rolled back', order.pk)
             return {'mode': 'commit', 'wrote_to_softech': False, 'ok': False,
                     'order_id': order.pk, 'readback': w}
+        commit_sent = True
         conn.commit()                                 # ← the only place we persist to SOFTECH
     except Exception as exc:
         if conn is not None:
@@ -915,9 +944,12 @@ def push_order(order: SoftechSalesOrder, *, dry_run=True, live=False):
                            order.pk, exc)
             raise
         order.status = SoftechSalesOrder.STATUS_PUSH_FAILED
-        order.erp_error = str(exc)
+        # Before commit() an error leaves an uncommitted transaction that SOFTECH rolls back. At or after
+        # it, the sale may be on the cashier screen: mark the outcome unknown (S-1) — never auto-retried.
+        order.erp_error = f'{OUTCOME_UNKNOWN}{exc}' if commit_sent else str(exc)
         order.save(update_fields=['status', 'erp_error', 'updated_at'])
-        logger.error('[pos_orders] order=%s push EXCEPTION (rolled back): %s', order.pk, exc)
+        logger.error('[pos_orders] order=%s push EXCEPTION (%s): %s', order.pk,
+                     'OUTCOME UNKNOWN' if commit_sent else 'rolled back', exc)
         raise
     finally:
         if conn is not None:
@@ -1406,6 +1438,38 @@ def _cc_row(order, raw, docnumber, credit_pno, seller):
     }
 
 
+# erp_error prefix: commit() was sent but its reply was lost — the sale may be in SOFTECH (full audit S-1).
+OUTCOME_UNKNOWN = 'outcome-unknown: '
+
+
+def is_outcome_unknown(order) -> bool:
+    """A push whose commit may have landed without us recording the docnumber: push_failed with the
+    outcome-unknown marker, or stuck in PUSHING without a number (the save after commit failed)."""
+    if order.softech_docnumber:
+        return False
+    return ((order.status == SoftechSalesOrder.STATUS_PUSH_FAILED
+             and str(order.erp_error or '').startswith(OUTCOME_UNKNOWN))
+            or order.status == SoftechSalesOrder.STATUS_PUSHING)
+
+
+def _find_pending_for_cancel(order):
+    """vf2 lookup in stktransm5 for an outcome-unknown order (read only). None when not pending or unreachable."""
+    if not order.branch or not order.branch.effective_db_host:
+        return None
+    from config.sybase import get_branch_connection
+    try:
+        conn = get_branch_connection(order.branch.effective_db_host, order.branch.effective_db_port,
+                                     order.branch.db_name or 'SOFTECHDB9', charset=_write_charset())
+    except Exception:
+        return None
+    try:
+        return _pending_docnumber_by_vf2(conn, order)
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
 def _pending_docnumber_by_vf2(conn, order):
     """
     Crash-recovery idempotency. If a PRIOR push committed the SOFTECH row but the
@@ -1768,7 +1832,7 @@ def probe_cancel(host, port, dbname, branchcode, doccode, docnumber, *, confirm=
     return res
 
 
-def cancel_order(order: SoftechSalesOrder):
+def cancel_order(order: SoftechSalesOrder, *, confirmed_not_landed=False):
     """
     Cancel an order. If it was pushed to SOFTECH (has a docnumber and is still
     pending), DELETE its pending rows there first (cashier-style Delete, §6k) — this
@@ -1779,6 +1843,17 @@ def cancel_order(order: SoftechSalesOrder):
         raise ValueError('Settled orders cannot be cancelled — issue a return instead.')
     if order.status == SoftechSalesOrder.STATUS_CANCELLED:
         return order  # idempotent
+
+    if is_outcome_unknown(order) and not order.softech_docnumber:
+        # The sale may be pending at the cashier without our number (S-6): find it by our vf2 tag and
+        # delete it like any pushed order; if it isn't pending, only a person who checked SOFTECH cancels.
+        found = _find_pending_for_cancel(order)
+        if found is not None:
+            order.softech_docnumber = found
+            order.save(update_fields=['softech_docnumber', 'updated_at'])
+        elif not confirmed_not_landed:
+            raise ValueError('لا نعرف هل وصل هذا الطلب إلى SOFTECH (انقطع الاتصال أثناء الإرسال) — '
+                             'راجع الكاشير/SOFTECH قبل الإلغاء.')
 
     was_pushed = bool(order.softech_docnumber) and order.status in (
         SoftechSalesOrder.STATUS_PUSHING,
