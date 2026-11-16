@@ -44,7 +44,7 @@ class _Cur:
 class _Conn:
     def __init__(self, by_ref=(), by_print=(), lines=None):
         self.by_ref, self.by_print, self.lines = list(by_ref), list(by_print), lines or {}
-        self.calls, self.closed = [], False
+        self.calls, self.closed, self.rowcount = [], False, 0
 
     def headers_for(self, sql):
         return self.by_ref if 'LIKE' in sql else self.by_print
@@ -56,8 +56,8 @@ class _Conn:
         self.closed = True
 
 
-def _hdr(num, user='5014', target='B02'):
-    return (num, user, target, date(2026, 11, 17), 'RPA')
+def _hdr(num, user='5014', target='B02', comments='RPA'):
+    return (num, user, target, date(2026, 11, 17), comments)
 
 
 class VerifierTests(TestCase):
@@ -83,7 +83,7 @@ class VerifierTests(TestCase):
         return [('100', Decimal('2'), date(2027, 5, 1)), ('200', Decimal('1.50000'), None)]
 
     def test_found_by_reference(self):
-        conn = _Conn(by_ref=[_hdr(77)], lines={77: self._good_lines()})
+        conn = _Conn(by_ref=[_hdr(77, comments=self.doc.reference)], lines={77: self._good_lines()})
         found = self._find(conn)
         self.assertEqual((found['docnumber'], found['matched_by']), (77, 'reference'))
         self.assertEqual(conn.calls[0][1], ['B01', f'%{self.doc.reference}%'])
@@ -100,25 +100,43 @@ class VerifierTests(TestCase):
         self.assertEqual(params[4], timezone.localdate())
 
     def test_candidate_with_extra_line_is_not_a_match(self):
-        conn = _Conn(by_ref=[_hdr(79)], lines={79: self._good_lines() + [('300', Decimal('1'), None)]})
+        conn = _Conn(by_ref=[_hdr(79, comments=self.doc.reference)], lines={79: self._good_lines() + [('300', Decimal('1'), None)]})
         self.assertIsNone(self._find(conn))
 
     def test_lines_queried_with_branch_and_doccode(self):
-        conn = _Conn(by_ref=[_hdr(77)], lines={77: self._good_lines()})
+        conn = _Conn(by_ref=[_hdr(77, comments=self.doc.reference)], lines={77: self._good_lines()})
         self._find(conn)
         sql, params = [c for c in conn.calls if 'dbo.stktrans ' in c[0]][0]
         self.assertEqual(params, ['B01', '125', 77])
         self.assertIn('branchcode=?', sql)
         self.assertIn('doccode=?', sql)
 
+    def test_long_document_is_not_truncated_by_the_header_row_cap(self):
+        for i in range(3, 9):
+            RpaLine.objects.create(document=self.doc, row_no=i, itemcode=f'9{i}', qty=Decimal('1'))
+        lines = self._good_lines() + [(f'9{i}', Decimal('1'), None) for i in range(3, 9)]
+        found = self._find(_Conn(by_ref=[_hdr(77, comments=self.doc.reference)], lines={77: lines}))
+        self.assertEqual((found['docnumber'], len(found['lines'])), (77, 8))
+        found = self._find(_Conn(by_print=[_hdr(78)], lines={78: lines}))
+        self.assertEqual(len(found['lines']), 8)
+
+    def test_reference_prefix_does_not_match_longer_reference(self):
+        other = f'{self.doc.reference}0'
+        conn = _Conn(by_ref=[_hdr(80, comments=other)], lines={80: self._good_lines()})
+        self.assertIsNone(self._find(conn))
+
+    def test_fingerprint_skips_document_naming_another_rpa_reference(self):
+        conn = _Conn(by_print=[_hdr(81, comments='RPA-99999')], lines={81: self._good_lines()})
+        self.assertIsNone(self._find(conn))
+
     def test_wrong_usercode_is_a_problem(self):
-        found = self._find(_Conn(by_ref=[_hdr(77, user='9999')], lines={77: self._good_lines()}))
+        found = self._find(_Conn(by_ref=[_hdr(77, user='9999', comments=self.doc.reference)], lines={77: self._good_lines()}))
         res = verifier.verify_issue_document(self.doc, found)
         self.assertFalse(res['ok'])
         self.assertEqual(len(res['problems']), 1)
 
     def test_all_good_and_expiry_and_target_problems(self):
-        found = self._find(_Conn(by_ref=[_hdr(77)], lines={77: self._good_lines()}))
+        found = self._find(_Conn(by_ref=[_hdr(77, comments=self.doc.reference)], lines={77: self._good_lines()}))
         self.assertEqual(verifier.verify_issue_document(self.doc, found), {'ok': True, 'problems': []})
         found['lines'][0]['expiry'] = date(2028, 1, 1)
         found['cust_branch_code'] = 'B09'

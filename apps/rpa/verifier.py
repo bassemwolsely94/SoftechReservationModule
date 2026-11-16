@@ -4,6 +4,7 @@ Reads only (through config.sybase). Never queries a docnumber bare: always branc
 Compares typed fields only (itemcode, qty, expiry, destination branch, usercode), never totals.
 """
 import logging
+import re
 from collections import Counter
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
@@ -64,6 +65,21 @@ def _read(cur, sql, params):
     return cur.fetchall()
 
 
+def _read_headers(cur, sql, params):
+    """Header read with a row cap; the cap is lifted at once so the line reads are never truncated."""
+    try:
+        return _read(cur, sql, params)
+    finally:
+        cur.execute('SET ROWCOUNT 0')
+
+
+_REF_IN_COMMENT = re.compile(r'RPA-(\d+)')
+
+
+def _names_other_document(comments, document):
+    return any(f'RPA-{n}' != document.reference for n in _REF_IN_COMMENT.findall(comments))
+
+
 def find_issue_document(document):
     """The doc-125 on the supplying branch's server for this document, or None."""
     job = document.job
@@ -75,16 +91,19 @@ def find_issue_document(document):
     cur = None
     try:
         cur = conn.cursor()
+        own = re.compile(rf'{re.escape(document.reference)}(?!\d)')   # LIKE also hits RPA-120 for RPA-12
         candidates = [(r, 'reference') for r in
-                      _read(cur, _REF_SQL, [bcode, f'%{document.reference}%'])]
+                      _read_headers(cur, _REF_SQL, [bcode, f'%{document.reference}%'])
+                      if own.search(_s(r[4]))]
         if not candidates:
             usercode = expected_softech_usercode(job.created_by)
             target = _s(job.target_branch.softech_branch_id) if job.target_branch_id else ''
             if usercode and target and job.approved_at:
                 start = timezone.localtime(job.approved_at).date()
                 candidates = [(r, 'fingerprint') for r in
-                              _read(cur, _FINGERPRINT_SQL,
-                                    [bcode, usercode, target, start, timezone.localdate()])]
+                              _read_headers(cur, _FINGERPRINT_SQL,
+                                            [bcode, usercode, target, start, timezone.localdate()])
+                              if not _names_other_document(_s(r[4]), document)]   # another RPA doc's
         for row, how in candidates:
             docnumber = int(Decimal(_s(row[0])))
             lines = [{'itemcode': _s(r[0]), 'qty': _qty(r[1]), 'expiry': _date(r[2])}
