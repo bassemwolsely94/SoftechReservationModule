@@ -294,8 +294,8 @@ SCREENS = [
             {'target': 'pos-order-search', 'label': T('بحث الصنف', 'Item search'),
              'text': T('بالاسم أو الكود أو الباركود (* أو % لأي حروف). كل نتيجة سطر: صورة، مربع كبير برصيد فرعك، الاسم والتركيز، ثم الفروع الأخرى صغيرة.',
                        'By name, code or barcode (* or % = any letters). One line per result: image, a big box with YOUR branch stock, name and strength, then other branches small.'),
-             'when': T('أخضر متاح، أصفر منخفض، أحمر صفر. ↑↓ تنقل، Enter يضيف أول نتيجة لآخر ما كتبته، → معاينة، Esc إغلاق. «المخزون منذ N دقيقة» يصفر بعد 30 دقيقة.',
-                       'Green available, amber low, red zero. ↑↓ move, Enter adds the newest first result, → preview, Esc close. "Stock N min ago" turns amber after 30 min.'),
+             'when': T('أخضر متاح، أصفر منخفض، أحمر صفر. ↑↓ تنقل، Enter يضيف أول نتيجة (لو عليها شارة تستنى Enter تاني)، → معاينة، Esc إغلاق. «المخزون منذ N دقيقة» يصفر بعد 30 د.',
+                       'Green ok, amber low, red zero. ↑↓ move, Enter adds the first result (a row with a chip waits for a 2nd Enter), → preview, Esc close. Stock age: amber at 30 min.'),
              'open_hint': T('لو الرصيد هنا صفر: «تحويل من …» (تبويب جديد) أو «تسجيل طلب» لو الشبكة صفر (يحتاج عميل بهاتف)، و«حجز».',
                             'Zero stock here: "Transfer from …" (new tab), or "Record demand" if the network is zero (needs a customer with a phone), plus "Reserve".'),
              'more': T(
@@ -556,8 +556,8 @@ SCREENS = [
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
         'updated': '2026-11-16',
-        'change_note': T('بحث الصنف: اللي بيبدأ باللي كتبته الأول، الرقم الكامل قبل غيره، syp/«شراب» شغالة، وشارة بتقول اتلقى الصنف إزاي',
-                         'Item search: names starting with what you typed first, whole numbers first, syp/«شراب» work, and a chip says how an item was found'),
+        'change_note': T('بحث الصنف: اللي بيبدأ باللي كتبته الأول، الرقم الكامل قبل غيره، syp/«شراب» شغالة، وشارة بتقول اتلقى الصنف إزاي؛ صنف عليه شارة ما بيتضافش بـEnter سريع',
+                         'Item search: names starting with what you typed first, whole numbers first, syp/«شراب» work, a chip says how an item was found; a chip row is never added by a quick Enter'),
     },
     {
         'key': 'pos.mobile',
