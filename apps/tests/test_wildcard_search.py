@@ -262,6 +262,19 @@ class FoldTests(TestCase):
         self.assertNotIn(res[iid], ('sound', 'approx', 'any_order'))
         self.assertIn(res[iid], {'literal', 'ordered', 'starts', 'word', 'contains'})
 
+    def test_db_side_fold_on_stored_names(self):
+        # the STORED names carry أ ة ى ; the queries are typed with ا ه ي — only the SQL
+        # translate() (argument order!) can make these meet
+        ids = _items('أوميز 20 كبسولة', 'فيتامين سى', 'مؤسسة  ئ  كريم')
+        by = {n: i.id for n, i in ids.items()}
+        for q, name in (('اوميز', 'أوميز 20 كبسولة'), ('كبسوله', 'أوميز 20 كبسولة'),
+                        ('سي', 'فيتامين سى'), ('موسسه', 'مؤسسة  ئ  كريم'),
+                        ('ي كريم', 'مؤسسة  ئ  كريم')):
+            res = dict(W.item_search(q))
+            self.assertIn(by[name], res, q)
+            self.assertIn(res[by[name]], {'literal', 'ordered', 'starts', 'word', 'contains'}, (q, res))
+            self.assertNotIn(res[by[name]], ('sound', 'approx', 'any_order'), q)
+
     def test_spaces_collapse(self):
         ids = _items('VOLTAREN   1% 15  GM  EMULGEL')
         iid = next(iter(ids.values())).id
