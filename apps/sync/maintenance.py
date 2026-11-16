@@ -14,7 +14,8 @@ Everything here deletes or marks rows in OUR Postgres only — nothing touches S
   prune_audit_log()     only actions in DELETABLE_AUDIT_ACTIONS age out (365 days). Money,
                         SOFTECH writes, permissions and approvals are never deleted (Rule 8).
   prune_pbx_events()    raw AMI events older than 90 days.
-  prune_notifications() read > 30 days, unread > 90 days (P-55 Part C); announcements excluded.
+  prune_notifications() read > 30 days, unread > 90 days (P-55 Part C); monitoring alerts (transit,
+                        SLA, connectivity) > 14 days (audit PERF-1); announcements excluded.
   prune_slow_requests() slow-request log older than 30 days.
   mark_stale_runs()     SyncRun rows 'running' for > 60 min → failed (process died).
   alert_failing_lanes() 3 failed runs in a row of one lane → one admin alert per lane per day
@@ -58,6 +59,12 @@ DELETABLE_AUDIT_ACTIONS = (
 PBX_EVENT_DAYS = 90
 NOTIF_READ_DAYS = 30
 NOTIF_UNREAD_DAYS = 90
+# Monitoring alerts are raised again on every check while the condition lasts, so an old one says nothing
+# a current one doesn't. Measured 2026-11-16: 698k of 727k notifications were these, 681k older than 14
+# days; one admin had 63,515 unread and the polled bell count took up to 2.4 s (full audit PERF-1).
+MONITORING_NOTIFICATION_TYPES = ('transit_critical', 'transit_overdue', 'transit_approaching_cancel',
+                                 'delivery_sla_alert', 'branch_connectivity')
+MONITORING_NOTIF_DAYS = 14
 SLOW_REQUEST_DAYS = 30
 
 LOCK_TIMEOUT_SECONDS = 30          # a delete batch waiting longer than this for a row lock fails its step
@@ -162,14 +169,24 @@ def prune_pbx_events(days=PBX_EVENT_DAYS):
     return _batched_delete(PBXEvent.objects.filter(received_at__lt=cutoff))
 
 
-def prune_notifications(read_days=NOTIF_READ_DAYS, unread_days=NOTIF_UNREAD_DAYS):
+def prune_notifications(read_days=NOTIF_READ_DAYS, unread_days=NOTIF_UNREAD_DAYS,
+                        monitoring_days=MONITORING_NOTIF_DAYS):
     """NotificationLog rows cascade with their notification."""
     from apps.notifications.models import Notification
     now = timezone.now()
     base = Notification.objects.exclude(notification_type='announcement')
+    monitoring = _batched_delete(base.filter(notification_type__in=MONITORING_NOTIFICATION_TYPES,
+                                             created_at__lt=now - datetime.timedelta(days=monitoring_days)))
     read = _batched_delete(base.filter(is_read=True, created_at__lt=now - datetime.timedelta(days=read_days)))
     unread = _batched_delete(base.filter(is_read=False, created_at__lt=now - datetime.timedelta(days=unread_days)))
-    return read + unread
+    return monitoring + read + unread
+
+
+def prune_idempotent_requests(days=7):
+    """Offline-queue idempotency keys (audit FE-1): a replay comes within minutes or hours, never a week later."""
+    from apps.config.models import IdempotentRequest
+    return _batched_delete(IdempotentRequest.objects.filter(
+        created_at__lt=timezone.now() - datetime.timedelta(days=days)))
 
 
 def prune_slow_requests(days=SLOW_REQUEST_DAYS):
@@ -322,6 +339,7 @@ def run_daily_retention():
         ('retention:pbx_events', prune_pbx_events),
         ('retention:audit_log', prune_audit_log),
         ('retention:slow_requests', prune_slow_requests),
+        ('retention:idempotency_keys', prune_idempotent_requests),
         ('retention:screen_views', prune_screen_views),
         ('retention:table_sizes', _snapshot_table_sizes),
         ('retention:lifecycle', _run_lifecycle_rules),

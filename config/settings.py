@@ -1113,6 +1113,8 @@ MIDDLEWARE += [
     'apps.access.export_middleware.ExportAuditMiddleware',
     # P-56: log API requests slower than SLOW_REQUEST_MS (route pattern only) for /sync
     'apps.sync.middleware.SlowRequestMiddleware',
+    # Audit FE-1: X-Idempotency-Key on the /m offline-queue POSTs — a replayed write lands once
+    'core.middleware.idempotency.IdempotencyKeyMiddleware',
 ]
 # N6: off / log / enforce - anonymous requests to /api/ paths not in apps/access/public_paths.py
 PUBLIC_API_ENFORCEMENT = config('PUBLIC_API_ENFORCEMENT', default='log')
