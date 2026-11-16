@@ -261,9 +261,10 @@ class CodeRequestTests(Fixture, TestCase):
     def test_eta_approval_codes_the_item(self):
         row = self._submitted()
         TaxCodeRequest.objects.filter(pk=row.pk).update(environment='production')   # only a real-system request codes the item
-        with mock.patch.object(eta_client.requests, 'get',
+        with (mock.patch.object(eta_client.requests, 'get',
                                return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Approved',
-                                                             'activeFrom': '2026-11-13T00:00:00Z'}])),                 override_settings(TAX_ETA_ENVIRONMENT='production', TAX_ETA_API_BASE_URL='', TAX_ETA_ID_BASE_URL=''):
+                                                             'activeFrom': '2026-11-13T00:00:00Z'}])),
+              override_settings(TAX_ETA_ENVIRONMENT='production', TAX_ETA_API_BASE_URL='', TAX_ETA_ID_BASE_URL='')):
             out = coding.refresh(self.admin)
         self.assertEqual(out['approved'], 1)
         self.p1.refresh_from_db()
@@ -273,8 +274,9 @@ class CodeRequestTests(Fixture, TestCase):
     def test_eta_rejection_keeps_item_blocked_and_allows_a_new_request(self):
         row = self._submitted()
         TaxCodeRequest.objects.filter(pk=row.pk).update(environment='production')
-        with mock.patch.object(eta_client.requests, 'get',
-                               return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Rejected'}])),                 override_settings(TAX_ETA_ENVIRONMENT='production', TAX_ETA_API_BASE_URL='', TAX_ETA_ID_BASE_URL=''):
+        with (mock.patch.object(eta_client.requests, 'get',
+                               return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Rejected'}])),
+              override_settings(TAX_ETA_ENVIRONMENT='production', TAX_ETA_API_BASE_URL='', TAX_ETA_ID_BASE_URL='')):
             coding.refresh(self.admin)
         self.p1.refresh_from_db()
         self.assertEqual(self.p1.coding_status, TaxItemProfile.CODE_REJECTED)
@@ -490,8 +492,10 @@ class PerSystemTests(Fixture, TestCase):
     def _approve(self, row, system='preprod'):
         row.status = TaxCodeRequest.SUBMITTED
         row.save()
-        with mock.patch.object(eta_client.requests, 'get',
-                               return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Approved'}])),                 mock.patch.object(eta_client.requests, 'post', return_value=_response(200, {'access_token': 'T'})),                 override_settings(TAX_ETA_ENVIRONMENT=system, TAX_ETA_API_BASE_URL='', TAX_ETA_ID_BASE_URL=''):
+        with (mock.patch.object(eta_client.requests, 'get',
+                               return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Approved'}])),
+              mock.patch.object(eta_client.requests, 'post', return_value=_response(200, {'access_token': 'T'})),
+              override_settings(TAX_ETA_ENVIRONMENT=system, TAX_ETA_API_BASE_URL='', TAX_ETA_ID_BASE_URL='')):
             coding.refresh(self.admin)
         row.refresh_from_db()
         self.p1.refresh_from_db()
@@ -525,8 +529,9 @@ class PerSystemTests(Fixture, TestCase):
         coding.prepare([self.p1.pk], self.accountant, system='production')
         row = TaxCodeRequest.objects.get()
         TaxCodeRequest.objects.filter(pk=row.pk).update(status=TaxCodeRequest.UNCERTAIN)
-        with mock.patch.object(eta_client.requests, 'post', return_value=_response(200, {'access_token': 'T'})),                 mock.patch.object(eta_client.requests, 'get',
-                                  return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Approved'}])) as get:
+        with (mock.patch.object(eta_client.requests, 'post', return_value=_response(200, {'access_token': 'T'})),
+              mock.patch.object(eta_client.requests, 'get',
+                                  return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Approved'}])) as get):
             out = coding.refresh(self.admin)
         get.assert_not_called()
         self.assertEqual(out['checked'], 0)
@@ -558,9 +563,10 @@ class PerSystemTests(Fixture, TestCase):
             coding.prepare([self.p1.pk], self.accountant)
             row = TaxCodeRequest.objects.get()
             TaxCodeRequest.objects.filter(pk=row.pk).update(status=TaxCodeRequest.UNCERTAIN)
-            with mock.patch.object(eta_client.requests, 'post', return_value=_response(200, {'access_token': 'T'})),                     mock.patch.object(eta_client.requests, 'get',
+            with (mock.patch.object(eta_client.requests, 'post', return_value=_response(200, {'access_token': 'T'})),
+                  mock.patch.object(eta_client.requests, 'get',
                                       return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Submitted',
-                                                                    'codeUsageRequestID': 5}])):
+                                                                    'codeUsageRequestID': 5}]))):
                 coding.refresh(self.admin)
             eta_client.reset_token()
         row.refresh_from_db()
@@ -797,8 +803,9 @@ class GpcAndGs1Tests(Fixture, TestCase):
         self.gs1.refresh_from_db()   # test system: the item stays uncoded
         self.assertEqual((self.gs1.coding_status, self.gs1.eta_code), ('missing', ''))
         TaxCodeRequest.objects.filter(pk=row.pk).update(environment='production')
-        with mock.patch.object(eta_client.requests, 'get',
-                               return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Approved'}])),                 override_settings(TAX_ETA_ENVIRONMENT='production', TAX_ETA_API_BASE_URL='', TAX_ETA_ID_BASE_URL=''):
+        with (mock.patch.object(eta_client.requests, 'get',
+                               return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Approved'}])),
+              override_settings(TAX_ETA_ENVIRONMENT='production', TAX_ETA_API_BASE_URL='', TAX_ETA_ID_BASE_URL='')):
             coding.refresh(self.admin)
         self.gs1.refresh_from_db()
         self.assertEqual((self.gs1.coding_status, self.gs1.code_type, self.gs1.coding_env), ('approved', 'GS1', 'production'))

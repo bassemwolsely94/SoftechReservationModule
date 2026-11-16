@@ -200,7 +200,7 @@ def send(request_ids, actor, confirm):
         raise TaxRuleError('طلب الأكواد من المصلحة مغلق (TAX_ETA_CODING_ENABLED)')
     ids = list(request_ids)[:MAX_PER_ACTION]
     rows = list(TaxCodeRequest.objects.filter(pk__in=ids, status__in=[TaxCodeRequest.PREPARED, TaxCodeRequest.FAILED])
-                .select_related('profile').order_by('id'))
+        .select_related('profile').order_by('id'))
     if not rows:
         raise TaxRuleError('لا توجد طلبات جاهزة للإرسال')
     if str(confirm).strip() != str(len(rows)):
@@ -296,7 +296,8 @@ def refresh(actor=None, request_ids=None, limit=100):
         states.append(TaxCodeRequest.FAILED)
     # Only this server's own system: codes are identical across systems, so another system's answer would
     # be about a different request. A row with no system yet is asked about here, as before.
-    qs = TaxCodeRequest.objects.filter(status__in=states, environment__in=[environment.current() or 'custom', ''])         .select_related('profile')
+    qs = (TaxCodeRequest.objects.filter(status__in=states, environment__in=[environment.current() or 'custom', ''])
+          .select_related('profile'))
     if request_ids:
         qs = qs.filter(pk__in=request_ids)
     done = {'checked': 0, 'approved': 0, 'rejected': 0, 'error': ''}
