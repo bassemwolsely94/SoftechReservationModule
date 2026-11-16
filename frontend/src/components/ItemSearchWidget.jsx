@@ -233,9 +233,7 @@ export default function ItemSearchWidget({
   }, [disabled])
 
   // Debounced search via React Query.
-  // Strip trailing/leading * so users who type "urosolv*" (ERP habit) still get results.
-  // Wildcards in the middle are also stripped — the quick widget uses icontains which
-  // already handles partial matches. Full wildcard syntax is available in the advanced modal.
+  // `*` / `%` are kept (system wildcard rules, applied by the server's engine ranking).
   const [debouncedQ, setDebouncedQ] = useState('')
   useEffect(() => {
     // both variants keep * / % (wildcard search rules); the default widget uses the engine ranking
@@ -317,8 +315,8 @@ export default function ItemSearchWidget({
     if (exact.length === 1) handleSelect(exact[0])
     // a single row the scanned code didn't match field-by-field: the POS takes it only when the
     // server says it is an exact code / barcode hit (safety rule 4 — never a fuzzy row); the
-    // default widget's rows carry no tier and keep the old single-result pick
-    else if (!exact.length && results.length === 1 && (!isPos || isExactCodeRow(results[0]))) handleSelect(results[0])
+    // both variants: engine rows carry a tier, so only an exact code hit is taken unseen
+    else if (!exact.length && results.length === 1 && isExactCodeRow(results[0])) handleSelect(results[0])
     else if (!results.length) setScanMiss(scanFor)
   }, [scanFor, typedQ, resultsStale, results])   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -381,6 +379,11 @@ export default function ItemSearchWidget({
     const listOpen = open && debouncedQ.length >= 2
     if (e.key === 'Escape') {
       if (open) { e.preventDefault(); e.stopPropagation(); setOpen(false) }
+      return
+    }
+    if (e.key === 'Enter' && resultsStale) {
+      // the rows on screen may belong to an older query: never pick one unseen (no queued Enter here)
+      e.preventDefault()
       return
     }
     if (!listOpen) return

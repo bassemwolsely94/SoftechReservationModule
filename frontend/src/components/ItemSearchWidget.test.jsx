@@ -8,7 +8,12 @@ vi.mock('../api/client', () => ({
   itemsApi: { wildcardSearch: vi.fn() },
 }))
 vi.mock('./AdvancedItemSearchModal', () => ({ default: () => <div>ADV-MODAL</div> }))
-vi.mock('./BarcodeScanner', () => ({ default: () => null, cameraAvailable: () => false }))
+const cam = vi.hoisted(() => ({ on: false }))
+vi.mock('./BarcodeScanner', () => ({
+  default: ({ onScan }) => <button onClick={() => onScan('555')}>FAKE-SCAN</button>,
+  cameraAvailable: () => cam.on,
+}))
+vi.mock('../hooks/useFeatures', () => ({ default: () => ({ cameraScan: cam.on }) }))
 
 import ItemSearchWidget from './ItemSearchWidget'
 
@@ -36,7 +41,7 @@ async function type(text) {
 }
 
 describe('ItemSearchWidget default variant on the engine', () => {
-  beforeEach(() => get.mockReset())
+  beforeEach(() => { get.mockReset(); cam.on = false })
   afterEach(cleanup)
 
   it('keeps wildcards and asks for rank=engine', async () => {
@@ -111,5 +116,41 @@ describe('ItemSearchWidget default variant on the engine', () => {
     const el = await screen.findByText(/TWO/)
     fireEvent.mouseDown(el)
     expect(onSelect.mock.calls[0][0]).toBe(rows[1])
+  })
+
+  it('Enter on stale rows (new query not answered yet) selects nothing', async () => {
+    const { onSelect } = setup()
+    const input = await type('alpha')
+    await screen.findByText(/THREE/)
+    get.mockReturnValue(new Promise(() => {}))   // the next query never answers
+    await type('alphb')
+    const notPrevented = fireEvent.keyDown(input, { key: 'Enter' })
+    expect(notPrevented).toBe(false)
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  async function scan(row) {
+    cam.on = true
+    const { onSelect } = setup({}, [row])
+    fireEvent.click(screen.getByTitle('مسح الباركود بالكاميرا'))
+    fireEvent.click(screen.getByText('FAKE-SCAN'))
+    await waitFor(() => expect(get).toHaveBeenCalled())
+    await screen.findByText(/ALPHA ONE/)
+    return onSelect
+  }
+
+  it('a scan resolving to one approx row is not auto-selected', async () => {
+    const onSelect = await scan({ ...rows[0], tier: 'approx', approx: true })
+    await new Promise(r => setTimeout(r, 50))
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('a scan resolving to one exact code row is auto-selected', async () => {
+    const row = { ...rows[0], tier: 'code' }
+    cam.on = true
+    const { onSelect } = setup({}, [row])
+    fireEvent.click(screen.getByTitle('مسح الباركود بالكاميرا'))
+    fireEvent.click(screen.getByText('FAKE-SCAN'))
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith(row))
   })
 })
