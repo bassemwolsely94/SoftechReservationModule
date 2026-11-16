@@ -13,37 +13,37 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='taxgpcbrick',
             name='class_code',
-            field=models.CharField(blank=True, max_length=8),
+            field=models.CharField(blank=True, db_default='', default='', max_length=8),
         ),
         migrations.AddField(
             model_name='taxgpcbrick',
             name='class_name',
-            field=models.CharField(blank=True, max_length=300),
+            field=models.CharField(blank=True, db_default='', default='', max_length=300),
         ),
         migrations.AddField(
             model_name='taxgpcbrick',
             name='definition',
-            field=models.TextField(blank=True),
+            field=models.TextField(blank=True, db_default='', default=''),
         ),
         migrations.AddField(
             model_name='taxgpcbrick',
             name='family_code',
-            field=models.CharField(blank=True, max_length=8),
+            field=models.CharField(blank=True, db_default='', default='', max_length=8),
         ),
         migrations.AddField(
             model_name='taxgpcbrick',
             name='family_name',
-            field=models.CharField(blank=True, max_length=300),
+            field=models.CharField(blank=True, db_default='', default='', max_length=300),
         ),
         migrations.AddField(
             model_name='taxgpcbrick',
             name='segment_code',
-            field=models.CharField(blank=True, max_length=8),
+            field=models.CharField(blank=True, db_default='', default='', max_length=8),
         ),
         migrations.AddField(
             model_name='taxgpcbrick',
             name='segment_name',
-            field=models.CharField(blank=True, max_length=300),
+            field=models.CharField(blank=True, db_default='', default='', max_length=300),
         ),
         migrations.AddField(
             model_name='taxgpcbrick',
