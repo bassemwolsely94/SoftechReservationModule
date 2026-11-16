@@ -1187,6 +1187,27 @@ select @dn as docnumber, @hdr as hdr, @lines as lines, isnull(@err,0) as err,
 
 # erp_error prefix: the last push timed out mid-batch, so SOFTECH may hold the document (S-2)
 TIMEOUT_UNKNOWN = 'timeout-unknown: '
+DUPLICATE_MISMATCH = 'duplicate-mismatch: '
+
+
+def _same_document(invoice, softech_docvalue) -> bool:
+    """Whether a SOFTECH purchase found by supplier number is really this invoice: totals within 2 %
+    (the band _score_candidate calls «قريب جداً»). Unknown on either side → trust the number, as before."""
+    try:
+        ours = float(_our_invoice_signature(invoice)[0] or 0)
+        theirs = float(softech_docvalue or 0)
+    except Exception:
+        return True
+    if not ours or not theirs:
+        return True
+    return abs(theirs - ours) / ours <= 0.02
+
+
+def _release_claim(invoice, message: str) -> None:
+    """Undo the 'pushing' claim without writing anything (the next push may run again)."""
+    invoice.status = 'push_failed'
+    invoice.erp_error = message[:1000]
+    invoice.save(update_fields=['status', 'erp_error', 'updated_at'])
 
 
 # ── 3. PUSH — guarded; dry-run plan unless gate on + dry_run=False ─────────────
@@ -1204,8 +1225,11 @@ def push_final(invoice: SupplierInvoice, *, dry_run=True, force=False, usercode=
     if invoice.softech_docnumber and invoice.status == 'finalized':
         return {'mode': 'idempotent', 'wrote_to_softech': False, 'already_finalized': True,
                 'invoice_id': invoice.pk, 'docnumber': int(invoice.softech_docnumber)}
+    # A purchase is safe to retry only when SOFTECH's supplier + invoice-number check below can find it,
+    # i.e. its supplier number has digits. Returns and number-less purchases wait for a manual check
+    # (full audit 2026-11-15, S-3).
     if (str(getattr(invoice, 'erp_error', '') or '').startswith(TIMEOUT_UNKNOWN)
-            and invoice.doc_kind != 'purchase' and not force):
+            and (invoice.doc_kind != 'purchase' or not _docnumber2(invoice)) and not force):
         return {'mode': 'timeout_unknown', 'wrote_to_softech': False, 'ok': False, 'blocked': True,
                 'invoice_id': invoice.pk,
                 'detail': 'انقطع الاتصال أثناء الترحيل السابق وقد يكون المستند محفوظاً في SOFTECH — '
@@ -1259,6 +1283,7 @@ def push_final(invoice: SupplierInvoice, *, dry_run=True, force=False, usercode=
     invoice.status = 'pushing'
 
     conn = None
+    batch_sent = False
     try:
         conn = get_branch_connection(host, invoice.branch.db_port or 5000,
                                      invoice.branch.db_name or 'SOFTECHDB9', charset=_write_charset())
@@ -1268,11 +1293,19 @@ def push_final(invoice: SupplierInvoice, *, dry_run=True, force=False, usercode=
         # softech_docnumber/finalized check at the top) instead.
         dn2 = _docnumber2(invoice)
         if dn2 and invoice.doc_kind == 'purchase':
-            dup = _q1(conn, "SELECT docnumber FROM stktransm WHERE cust_branch_code=? AND doccode=? "
+            dup = _q1(conn, "SELECT docnumber, docvalue FROM stktransm WHERE cust_branch_code=? AND doccode=? "
                             "AND docnumber2=?",
                       # Decimal, not int: supplier numbers above 2^31 (PharmaOverseas
                       # 8823747203) overflow a Java int bind — the push failed here.
                       [invoice.vendor.softech_personcode, invoice.softech_doccode, Decimal(dn2)])
+            if dup and not _same_document(invoice, dup[1] if len(dup) > 1 else None):
+                # Same digits, different document (e.g. «A-123» vs «123/2») — adopting it would mark this
+                # invoice finalized without posting it (full audit 2026-11-15, S-3). Stop for a person.
+                _release_claim(invoice, f'{DUPLICATE_MISMATCH}SOFTECH document {int(dup[0])} has the same supplier '
+                                        f'number but total {dup[1]} — check before posting')
+                return {'mode': 'duplicate_mismatch', 'wrote_to_softech': False, 'ok': False, 'blocked': True,
+                        'invoice_id': invoice.pk, 'docnumber': int(dup[0]),
+                        'detail': 'رقم فاتورة المورد مطابق لمستند آخر في SOFTECH بإجمالي مختلف — راجع قبل الترحيل.'}
             if dup:
                 invoice.softech_docnumber = int(dup[0]); invoice.status = 'finalized'
                 invoice.save(update_fields=['softech_docnumber', 'status', 'updated_at'])
@@ -1282,6 +1315,7 @@ def push_final(invoice: SupplierInvoice, *, dry_run=True, force=False, usercode=
         nowqty = read_stkbal(conn, branch, store, [c['_line'].item.softech_id for c in computed])
         ptclassifcode = read_supplier(conn, invoice.vendor.softech_personcode)['ptclassifcode']
         # UNCHAINED single-batch write: begin tran → inserts → verify → commit/rollback.
+        batch_sent = True        # from here on, an error may come after SOFTECH committed (S-4)
         w = _run_write_batch(conn, invoice, computed, header, ptclassifcode, usercode, nowqty, do_commit=True,
                              header_extra=header_extra, line_extra=line_extra)
         if not (w['ok'] and w['committed']):
@@ -1300,10 +1334,11 @@ def push_final(invoice: SupplierInvoice, *, dry_run=True, force=False, usercode=
         from config.sybase import is_timeout_error
         invoice.status = 'push_failed'
         invoice.erp_error = str(exc)
-        if conn is not None and is_timeout_error(exc):
-            # S-2: the batch may have committed before the link dropped. A purchase is safe to
-            # retry (SOFTECH's supplier + invoice-number check above finds it); a return is not,
-            # so push_final refuses it until someone checks SOFTECH and pushes with force.
+        if conn is not None and (batch_sent or is_timeout_error(exc)):
+            # The batch may have committed before the link dropped — whatever the driver's error text
+            # (JZ006 connection reset, socket closed, …: full audit S-4). A purchase with a supplier number
+            # is safe to retry (SOFTECH's supplier + invoice-number check above finds it); a return or a
+            # number-less purchase is not, so push_final refuses it until someone checks SOFTECH.
             invoice.erp_error = f'{TIMEOUT_UNKNOWN}{exc}'
         invoice.save(update_fields=['status', 'erp_error', 'updated_at'])
         logger.error('[invoices] invoice=%s push EXCEPTION (rolled back): %s', invoice.pk, exc)
