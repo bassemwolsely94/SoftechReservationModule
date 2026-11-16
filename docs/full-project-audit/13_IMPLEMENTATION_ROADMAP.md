@@ -16,16 +16,19 @@ wave is one or more separate batches with its own approval (CLAUDE.md batch rule
 
 ## Wave 1 — before VPS Stage B (cutover): posting safety and capacity (Category A)
 
+**Status 2026-11-16:** steps 1.1–1.4, 1.6 and 1.8 merged (PRs 150–154) and running in the office; 1.5 and
+1.7 wait for owner VPS steps. Details and what was left open: [11](11_BUG_FIX_REGISTER.md) §Wave 1.
+
 | Step | What | Findings | Effort |
 |---|---|---|---|
-| 1.1 | POS: settled-table vf2 lookup, atomic + locked `prepare_order`, reconcile `push_failed` | S-1, BE-2/3, S-6, S-7 | 1–2 days + rollback-probe golden test |
-| 1.2 | A/P writer lock + in-transaction read | S-2 | 1 day |
-| 1.3 | Purchase-invoice `INV<pk>` tag + "outcome unknown" on any post-commit error | S-3, S-4 | 1 day |
-| 1.4 | ISR / pos_cancel lost-reply guards | S-5, S-14 | 1 day |
-| 1.5 | Web capacity: 3 workers + Redis layer, exports/OCR off the web process, DB statement timeout | PERF-3 | 1 day + owner VPS step |
-| 1.6 | Sales-history date index (concurrently) + sargable filters; notification purge + bell default | PERF-1, PERF-2 | 1 day |
-| 1.7 | **Load test** (Locust plan in [07](07_PERFORMANCE_AUDIT.md)) on the VPS: 20 users, then step up to the breaking point; record p50/p95/p99 | §12.10 | 0.5 day |
-| 1.8 | Offline queue: user binding + server idempotency | FE-1 | 1 day |
+| 1.1 ✅ PR 153 (outcome unknown → person confirms; settled sales keep no `vf2`) | POS: settled-table vf2 lookup, atomic + locked `prepare_order`, reconcile `push_failed` | S-1, BE-2/3, S-6, S-7 | 1–2 days + rollback-probe golden test |
+| 1.2 ✅ PR 150 (lock; native same-second read left open) | A/P writer lock + in-transaction read | S-2 | 1 day |
+| 1.3 ◐ PR 151 (outcome unknown + 2 % adoption check; `INV<pk>` tag left open) | Purchase-invoice `INV<pk>` tag + "outcome unknown" on any post-commit error | S-3, S-4 | 1 day |
+| 1.4 ✅ PR 152 | ISR / pos_cancel lost-reply guards | S-5, S-14 | 1 day |
+| 1.5 ◐ PR 154, opt-in — owner installs (runbook §13.6) | Web capacity: 3 workers + Redis layer, exports/OCR off the web process, DB statement timeout | PERF-3 | 1 day + owner VPS step |
+| 1.6 ✅ PR 154 (315 → 4.1 ms; bell default left to D-19) | Sales-history date index (concurrently) + sargable filters; notification purge + bell default | PERF-1, PERF-2 | 1 day |
+| 1.7 ⏳ plan in `deploy/loadtest/` — owner runs on the VPS (runbook §13.7) | **Load test** (Locust plan in [07](07_PERFORMANCE_AUDIT.md)) on the VPS: 20 users, then step up to the breaking point; record p50/p95/p99 | §12.10 | 0.5 day |
+| 1.8 ✅ PR 154 | Offline queue: user binding + server idempotency | FE-1 | 1 day |
 
 ## Wave 2 — first weeks after go-live: quick wins (Category B)
 
