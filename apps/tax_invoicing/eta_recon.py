@@ -31,8 +31,9 @@ LINE_TOLERANCE = Decimal('0.06')        # lines are rounded to 0.01 each, so a s
 # all_uncoded: not at ETA, and no item on the sale has an ETA code · some_uncoded: some items have none (not the whole
 # story) · uncoded_lines: the amount gap is exactly the items with no ETA code · till_silent: not at ETA, and the
 # branch's tills sent under half of that day's sales (an Invoicer outage) · eta_other_day: found at ETA a day before or
-# after (same till, number, kind and amount: a sale around midnight)
-REASONS = ('all_uncoded', 'uncoded_lines', 'some_uncoded', 'till_silent', 'eta_other_day')
+# after (same till, number, kind and amount: a sale around midnight) · no_channel_rule: not at ETA, and its sales channel
+# has no decided TaxChannelRule (Invoicer sends cash sales only; channels sold on account were never sent)
+REASONS = ('all_uncoded', 'uncoded_lines', 'some_uncoded', 'till_silent', 'eta_other_day', 'no_channel_rule')
 SILENT_SHARE = Decimal('0.5')
 KIND_BY_DOCCODE = {'115': 's', '30': 'r'}
 DOCCODE_BY_KIND = {v: k for k, v in KIND_BY_DOCCODE.items()}
@@ -221,6 +222,7 @@ def reconcile_day(system, branch, day, coded=None):
     coded = coded_items() if coded is None else coded
     sales = _softech_rows(branch, day)
     by_invoice = set(TaxChannelRule.objects.filter(mode=TaxChannelRule.MODE_INVOICE).values_list('ptclassifcode', flat=True))
+    decided = set(TaxChannelRule.objects.exclude(mode=TaxChannelRule.MODE_UNDECIDED).values_list('ptclassifcode', flat=True))
     since = dt.datetime.combine(day - dt.timedelta(days=1), dt.time.min, tzinfo=CAIRO)
     near = {day + dt.timedelta(days=k): defaultdict(list) for k in (-1, 0, 1)}     # ETA receipts by Cairo day
     for r in EtaMirrorReceipt.objects.filter(system=system, pos_serial__in=[d.pos_serial for d in devices],
@@ -264,13 +266,15 @@ def reconcile_day(system, branch, day, coded=None):
         reason, uncoded_total = ('', None) if outcome == 'by_invoice' else _reason(outcome, sale, eta_total, coded)
         if moved:
             reason = 'eta_other_day'
+        elif outcome == 'missing_at_eta' and not reason and sale['channel'] not in decided:
+            reason = 'no_channel_rule'
         elif outcome == 'missing_at_eta' and not reason and silent:
             reason = 'till_silent'
         lines.append(EtaReconLine(system=system, softech_branchcode=branch, day=day, doccode=sale['doccode'],
                                   docnumber=sale['docnumber'], softech_total=sale['total'], outcome=outcome,
                                   eta_uuid=first.uuid if first else '', eta_total=eta_total,
                                   eta_status=first.status if first else '', eta_count=len(matches),
-                                  reason=reason, uncoded_total=uncoded_total))
+                                  reason=reason, uncoded_total=uncoded_total, channel=sale['channel'][:5]))
         if outcome != 'by_invoice':
             sign = -1 if sale['doccode'] == '30' else 1          # a return takes the sale back
             for itemcode in {x['itemcode'] for x in sale.get('lines') or [] if x['itemcode'] not in coded}:

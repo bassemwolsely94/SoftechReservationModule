@@ -830,6 +830,7 @@ class EtaReconLine(models.Model):
     # why it differs, where the SOFTECH lines tell (eta_recon.REASONS): items with no ETA code are left off receipts
     reason = models.CharField(max_length=16, blank=True, default='', db_default='')
     uncoded_total = models.DecimalField(max_digits=16, decimal_places=2, null=True, blank=True)
+    channel = models.CharField(max_length=5, blank=True, default='', db_default='')    # SOFTECH ptclassifcode
     computed_at = models.DateTimeField(auto_now=True)
 
     class Meta:
