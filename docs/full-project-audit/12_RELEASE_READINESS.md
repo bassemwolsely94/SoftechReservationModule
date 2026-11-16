@@ -9,7 +9,7 @@ PC is the SOFTECH writer and development server until cutover (owner, 2026-11-15
 | Stage | Verdict | Condition |
 |---|---|---|
 | **A — VPS live as a reader** (no SOFTECH writes, testers told it is a sandbox) | **GO** after owner steps A2–A7 in `docs/deploy/2026-11-15-go-live-status.md` | Unchanged by this audit; nothing found blocks a read-only VPS |
-| **B — cutover** (VPS becomes the only SOFTECH writer) | **NO-GO** until Wave 0 and Wave 1 steps 1.1–1.7 of [13](13_IMPLEMENTATION_ROADMAP.md) are done, plus the existing owner steps B7–B12 | Posting safety (S-1/S-2/S-3, BE-1 fixed here), capacity (PERF-3) and a measured load test are not yet in place |
+| **B — cutover** (VPS becomes the only SOFTECH writer) | **NO-GO** until Wave 0 and Wave 1 steps 1.1–1.7 of [13](13_IMPLEMENTATION_ROADMAP.md) are done, plus the existing owner steps B7–B12 | 2026-11-16: posting safety and offline idempotency merged (Wave 1, PRs 150–154). Still missing: extra web processes installed on the VPS (§13.6), a measured load test (§13.7), and a UI control for confirming an outcome-unknown POS order before the POS writer is switched on |
 
 ## Blockers for Stage B (new from this audit)
 

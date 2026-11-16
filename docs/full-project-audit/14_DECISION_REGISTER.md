@@ -19,10 +19,10 @@ Decisions available per row: **approve** · **approve with changes** · **defer*
 
 | # | Decision | Finding | Risk today | Recommended fix | Effort |
 |---|---|---|---|---|---|
-| D-05 | POS crash recovery must also look in the settled tables for the `vf2` tag before a retry | S-1 (P1), BE-2/3 (P1/P2) | Second sale in SOFTECH after a lost commit reply + cashier settlement + retry | Search `stktransm` (final) as well as `stktransm5`; lock `prepare_order` and make it atomic; reconcile `push_failed` orders too | 1–2 days + golden-template verify |
-| D-06 | A/P allocation writer: lock and re-read inside the SOFTECH transaction | S-2 (P1) | Lost update / doubled `chequestrans` link under two simultaneous writes on one invoice | Advisory lock per invoice + read inside the txn + relative update of `docvaluepay` | 1 day |
-| D-07 | Purchase-invoice idempotency key | S-3 (P1), S-4 | Duplicate purchase on retry when the supplier number has no digits; wrong adoption when digits collide | Write the `INV<pk>` tag the code already expects and look it up first; treat any post-commit error as "outcome unknown" | 1 day |
-| D-08 | ISR push and POS cancel after a lost commit reply | S-5, S-6, S-14 (P2/P3) | Second approved ISR; a cancelled order left pending in SOFTECH; duplicate `pos_cancel` rows | Record "outcome unknown" and re-read by tag before any retry | 1 day |
+| D-05 ✅ done PR 153 (a person confirms after an unknown outcome — a settled sale keeps no `vf2`) | POS crash recovery must also look in the settled tables for the `vf2` tag before a retry | S-1 (P1), BE-2/3 (P1/P2) | Second sale in SOFTECH after a lost commit reply + cashier settlement + retry | Search `stktransm` (final) as well as `stktransm5`; lock `prepare_order` and make it atomic; reconcile `push_failed` orders too | 1–2 days + golden-template verify |
+| D-06 ✅ lock done PR 150; in-transaction `HOLDLOCK` read still open (rollback probe first) | A/P allocation writer: lock and re-read inside the SOFTECH transaction | S-2 (P1) | Lost update / doubled `chequestrans` link under two simultaneous writes on one invoice | Advisory lock per invoice + read inside the txn + relative update of `docvaluepay` | 1 day |
+| D-07 ◐ PR 151: outcome unknown + 2 % adoption check; `INV<pk>` tag still open (rollback probe first) | Purchase-invoice idempotency key | S-3 (P1), S-4 | Duplicate purchase on retry when the supplier number has no digits; wrong adoption when digits collide | Write the `INV<pk>` tag the code already expects and look it up first; treat any post-commit error as "outcome unknown" | 1 day |
+| D-08 ✅ done PR 152 (POS cancel part in PR 153) | ISR push and POS cancel after a lost commit reply | S-5, S-6, S-14 (P2/P3) | Second approved ISR; a cancelled order left pending in SOFTECH; duplicate `pos_cancel` rows | Record "outcome unknown" and re-read by tag before any retry | 1 day |
 | D-09 | Price-change writer derives prices from the mirror and overwrites blindly | S-11 (P2), BE-14 | Wrong price if pack size / VAT changed in SOFTECH since the last sync | Read live pack/VAT inside the write, compare-and-set on the old value | 0.5–1 day |
 | D-10 | Bare docnumber lookups in the reservation / transfer matchers | S-8 (P2) | A reservation confirmed against another branch's sale | Always key on (branch, doccode, docnumber) | 0.5 day |
 
@@ -43,12 +43,12 @@ Decisions available per row: **approve** · **approve with changes** · **defer*
 
 | # | Decision | Finding | Note |
 |---|---|---|---|
-| D-19 | Notification flood: 726k rows, none read; bell polled every 30 s | PERF-1 | Purge/archive old notifications (data deletion) + default the bell to action items. Pairs with C26 |
-| D-20 | Index on `customers_purchasehistory (invoice_date, doc_code)` + sargable date filters | PERF-2 | Migration on a large table: `CREATE INDEX CONCURRENTLY` at a quiet time |
-| D-21 | More than one web process on the VPS | PERF-3 | Deployment change (e.g. 3 uvicorn workers behind nginx + Redis channel layer); move 70–165 s exports/OCR off the web process |
-| D-22 | Load test with 20 simultaneous users | §12.10 | Not run: the only full database is the office DB that the live office runtime uses. Run on the VPS **before** Stage B, or approve a 10-minute run against the office at a quiet hour |
+| D-19 ◐ PR 154: monitoring alerts kept 14 days; bell default still open | Notification flood: 726k rows, none read; bell polled every 30 s | PERF-1 | Purge/archive old notifications (data deletion) + default the bell to action items. Pairs with C26 |
+| D-20 ✅ done PR 154, office 315 → 4.1 ms | Index on `customers_purchasehistory (invoice_date, doc_code)` + sargable date filters | PERF-2 | Migration on a large table: `CREATE INDEX CONCURRENTLY` at a quiet time |
+| D-21 ◐ PR 154 opt-in unit + runbook §13.6 — owner installs | More than one web process on the VPS | PERF-3 | Deployment change (e.g. 3 uvicorn workers behind nginx + Redis channel layer); move 70–165 s exports/OCR off the web process |
+| D-22 ⏳ Locust plan + runbook §13.7 — owner runs on the VPS | Load test with 20 simultaneous users | §12.10 | Not run: the only full database is the office DB that the live office runtime uses. Run on the VPS **before** Stage B, or approve a 10-minute run against the office at a quiet hour |
 | D-23 | Drop the 3.65 GB of indexes with zero scans | PERF-7 | Stats were reset by the 2026-11-12 crashes — re-measure on production first |
-| D-24 | Offline queue: bind writes to the user who made them and honour `X-Idempotency-Key` on the server | FE-1 | Changes the mobile offline contract |
+| D-24 ✅ done PR 154 | Offline queue: bind writes to the user who made them and honour `X-Idempotency-Key` on the server | FE-1 | Changes the mobile offline contract |
 | D-25 | Replace ~200 native `confirm/alert/prompt` dialogs and modal create flows | FE-9, FE-27 | UI redesign scale (CLAUDE.md rule 11); do screen by screen with the busiest first |
 | D-26 | `RBAC_ENFORCEMENT` / `NETWORK_POLICY_ENFORCEMENT` → `enforce` | SEC-12, round 2 D8 | Unchanged from round 2: after go-live, per `docs/security/round2/R3_enforce_readiness.md` |
 
