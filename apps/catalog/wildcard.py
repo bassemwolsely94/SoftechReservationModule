@@ -50,22 +50,82 @@ class _UpperLike(Lookup):
 Field.register_lookup(_UpperLike)
 
 
+# ── the FOLDED name form (item search): Arabic letter variants, case and space runs ───────
+# ONE constant builds both the SQL the lookups run and the expression the trigram indexes
+# are created on (catalog migration 0044) — PostgreSQL only uses an expression index when
+# the query's expression is the same, so never edit one without the other.
+FOLD_FROM = 'أإآٱةىؤئ'
+FOLD_TO = 'ااااهيوي'
+FOLD_SQL = (r"translate(upper(regexp_replace(coalesce({col},''), '\s+', ' ', 'g')), "
+            "'" + FOLD_FROM + "', '" + FOLD_TO + "')")
+
+_DIGITS = {ord(c): str(i) for i, c in enumerate('٠١٢٣٤٥٦٧٨٩')}
+_DIGITS.update({ord(c): str(i) for i, c in enumerate('۰۱۲۳۴۵۶۷۸۹')})
+_TASHKEEL = re.compile('[\u0640\u064B-\u065F\u0670\u06D6-\u06ED]')     # tatweel + harakat
+_FOLD_MAP = str.maketrans(FOLD_FROM, FOLD_TO)
+
+
+def fold_query(q: str) -> str:
+    """The query in the same folded form as FOLD_SQL: Arabic digits → 0-9, tashkeel / tatweel
+    removed, أإآٱ→ا ة→ه ى→ي ؤ→و ئ→ي, upper case, space runs collapsed, stripped. Wildcards kept."""
+    t = (q or '').translate(_DIGITS)
+    t = _TASHKEEL.sub('', t).translate(_FOLD_MAP).upper()
+    return re.sub(r'\s+', ' ', t).strip()
+
+
+class _FoldedLookup(Lookup):
+    prepare_rhs = False
+
+    def _lhs(self, compiler, connection):
+        lhs, params = self.process_lhs(compiler, connection)
+        if connection.vendor == 'postgresql':
+            return FOLD_SQL.format(col=lhs), params
+        return f"UPPER({lhs})", params            # no folding off PostgreSQL (dev / SQLite only)
+
+
+class _FoldedLike(_FoldedLookup):
+    """field__fulike=PATTERN → FOLD(field) LIKE PATTERN ESCAPE '\\' (PATTERN built by
+    `pattern(..., fold=True)`; same expression as the trigram index → index scan)."""
+    lookup_name = 'fulike'
+
+    def as_sql(self, compiler, connection):
+        lhs, lhs_params = self._lhs(compiler, connection)
+        rhs, rhs_params = self.process_rhs(compiler, connection)
+        return f"{lhs} LIKE {rhs} ESCAPE '\\'", lhs_params + rhs_params
+
+
+class _FoldedRegex(_FoldedLookup):
+    """field__fregex=REGEX → FOLD(field) ~ REGEX (PostgreSQL)."""
+    lookup_name = 'fregex'
+
+    def as_sql(self, compiler, connection):
+        lhs, lhs_params = self._lhs(compiler, connection)
+        rhs, rhs_params = self.process_rhs(compiler, connection)
+        return f"{lhs} ~ {rhs}", lhs_params + rhs_params
+
+
+Field.register_lookup(_FoldedLike)
+Field.register_lookup(_FoldedRegex)
+
+
 def _esc(s: str) -> str:
     return s.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
 
 
-def parse(q: str) -> dict:
+def parse(q: str, fold: bool = False) -> dict:
     """{'raw', 'segments' (text between wildcards, in order), 'terms' (every word),
-    'wild' (a wildcard was typed)}."""
-    raw = re.sub(r'\s+', ' ', (q or '').strip())
+    'wild' (a wildcard was typed)}. fold=True runs `fold_query` first (item name search);
+    the default leaves the text as typed for the modules still on `ulike`."""
+    raw = re.sub(r'\s+', ' ', (fold_query(q) if fold else (q or '')).strip())
     segments = [s for s in WILD.split(raw) if s.strip()]
     terms = [t for t in re.split(r'[\s*%]+', raw) if t]
     return {'raw': raw, 'segments': segments, 'terms': terms, 'wild': bool(WILD.search(raw))}
 
 
-def pattern(q: str) -> str:
-    """'vol*ren*50*tab*' → '%VOL%REN%50%TAB%' (ordered, contains, literal spaces)."""
-    p = parse(q)
+def pattern(q: str, fold: bool = True) -> str:
+    """'vol*ren*50*tab*' → '%VOL%REN%50%TAB%' (ordered, contains, literal spaces). Folded
+    (Arabic forms / digits) by default — pair it with `fulike`; fold=False pairs with `ulike`."""
+    p = parse(q, fold)
     return '%' + '%'.join(_esc(s.upper()) for s in p['segments']) + '%' if p['segments'] else '%'
 
 
@@ -88,9 +148,9 @@ def text_matches(text, q: str) -> bool:
     return all(t.lower() in hay for t in p['terms'])
 
 
-def literal_pattern(q: str) -> str:
+def literal_pattern(q: str, fold: bool = True) -> str:
     """Exactly what was typed, % and * taken LITERALLY — the 'exact text first' tier."""
-    return '%' + _esc(parse(q)['raw'].upper()) + '%'
+    return '%' + _esc(parse(q, fold)['raw'].upper()) + '%'
 
 
 def _any(fields, lookup, value) -> Q:
@@ -100,18 +160,18 @@ def _any(fields, lookup, value) -> Q:
     return out
 
 
-def ordered_q(q: str, *fields) -> Q:
-    return _any(fields, 'ulike', pattern(q))
+def ordered_q(q: str, *fields, fold: bool = False) -> Q:
+    return _any(fields, 'fulike' if fold else 'ulike', pattern(q, fold))
 
 
-def any_order_q(q: str, *fields) -> Q:
+def any_order_q(q: str, *fields, fold: bool = False) -> Q:
     """Every word somewhere in the same field set, any order («50 voltaren tab»)."""
-    terms = parse(q)['terms']
+    terms = parse(q, fold)['terms']
     if len(terms) < 2:
         return Q(pk__in=[])
     out = Q()
     for t in terms:
-        out &= _any(fields, 'ulike', '%' + _esc(t.upper()) + '%')
+        out &= _any(fields, 'fulike' if fold else 'ulike', '%' + _esc(t.upper()) + '%')
     return out
 
 
@@ -120,13 +180,13 @@ def wq(q: str, *fields) -> Q:
     order. With no wildcard and one word it is exactly the old `icontains`."""
     if not parse(q)['segments']:
         return Q()
-    return ordered_q(q, *fields) | any_order_q(q, *fields)
+    return ordered_q(q, *fields, fold=False) | any_order_q(q, *fields, fold=False)
 
 
-def rank_case(q: str, fields) -> Case:
+def rank_case(q: str, fields, fold: bool = False) -> Case:
     """0 = literal text, 1 = wildcard in order, 2 = any order."""
-    return Case(When(_any(fields, 'ulike', literal_pattern(q)), then=Value(0)),
-                When(ordered_q(q, *fields), then=Value(1)),
+    return Case(When(_any(fields, 'fulike' if fold else 'ulike', literal_pattern(q, fold)), then=Value(0)),
+                When(ordered_q(q, *fields, fold=fold), then=Value(1)),
                 default=Value(2), output_field=IntegerField())
 
 
@@ -207,13 +267,13 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
         except Exception:
             sound = []
     with _trigram_indexes():
-        add(base.filter(_any(ITEM_FIELDS, 'ulike', literal_pattern(raw))).order_by()
+        add(base.filter(_any(ITEM_FIELDS, 'fulike', literal_pattern(raw))).order_by()
             .values_list('id', flat=True)[:limit], 'literal')
         if len(out) < limit:
-            add(base.filter(ordered_q(raw, *ITEM_FIELDS)).order_by()
+            add(base.filter(ordered_q(raw, *ITEM_FIELDS, fold=True)).order_by()
                 .values_list('id', flat=True)[:limit * 2], 'ordered')
         if len(out) < limit:
-            add(base.filter(any_order_q(raw, *ITEM_FIELDS)).order_by()
+            add(base.filter(any_order_q(raw, *ITEM_FIELDS, fold=True)).order_by()
                 .values_list('id', flat=True)[:limit * 2], 'any_order')
     add(sound, 'sound')
     # no catalog text hit (a remembered item alone doesn't count) → typo-tolerant fallback

@@ -241,3 +241,55 @@ class CodeTierTests(TestCase):
     def test_code_part_never_on_pos_path(self):
         res = W.item_search('690', code_prefix=False)
         self.assertNotIn('code_part', [t for _, t in res])
+
+
+class FoldTests(TestCase):
+    """Names are matched on a folded form (Arabic letter variants, Arabic digits, space runs)
+    served by the trigram expression indexes (catalog migration 0044)."""
+
+    def test_fold_query(self):
+        self.assertEqual(W.fold_query('  أوجمنتين   ١ جم '), 'اوجمنتين 1 جم')
+        self.assertEqual(W.fold_query('vol*ren'), 'VOL*REN')
+
+    def test_arabic_digits_fold(self):
+        self.assertEqual(W.pattern('كونجستال ٢٠'), '%كونجستال 20%')
+
+    def test_hamza_matches_literally(self):
+        ids = _items('AUGMENTIN 156MG SYRUP 80ML اوجمنتين 156مجم شراب')
+        iid = next(iter(ids.values())).id
+        res = dict(W.item_search('أوجمنتين'))
+        self.assertIn(iid, res)
+        self.assertNotIn(res[iid], ('sound', 'approx', 'any_order'))
+        self.assertIn(res[iid], {'literal', 'ordered', 'starts', 'word', 'contains'})
+
+    def test_spaces_collapse(self):
+        ids = _items('VOLTAREN   1% 15  GM  EMULGEL')
+        iid = next(iter(ids.values())).id
+        res = W.item_search('VOLTAREN 1% 15 GM')
+        self.assertEqual(res[0][0], iid)
+        self.assertNotIn(res[0][1], ('sound', 'approx', 'any_order'))
+        self.assertIn(res[0][1], {'literal', 'ordered', 'starts', 'word', 'contains'})
+
+    def test_fold_sql_null_safe(self):
+        from apps.catalog.models import Item
+        _items('NULLSAFE ONE')
+        Item.objects.update(name_scientific='')
+        self.assertEqual(Item.objects.filter(name_scientific__fulike='%X%').count(), 0)
+        self.assertEqual(Item.objects.filter(name__fulike='%NULLSAFE%').count(), 1)
+
+    def test_index_used(self):
+        from django.db import connection
+        if connection.vendor != 'postgresql':
+            self.skipTest('PostgreSQL only')
+        from apps.catalog.models import Item
+        with connection.cursor() as cur:
+            cur.execute('SET LOCAL enable_seqscan = off')
+            cur.execute('SET LOCAL enable_indexscan = off')    # not a full b-tree walk: bitmap on the trigram index
+            sql, params = Item.objects.filter(name__fulike='%PANADOL%').values('id').query.sql_with_params()
+            cur.execute('EXPLAIN ' + sql, params)
+            plan = '\n'.join(r[0] for r in cur.fetchall())
+            sql, params = Item.objects.filter(name_scientific__fulike='%PANADOL%').values('id').query.sql_with_params()
+            cur.execute('EXPLAIN ' + sql, params)
+            plan2 = '\n'.join(r[0] for r in cur.fetchall())
+        self.assertIn('catalog_item_name_fold_trgm', plan)
+        self.assertIn('catalog_item_sci_fold_trgm', plan2)
