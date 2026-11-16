@@ -159,7 +159,7 @@ ITEM_FIELDS = ('name', 'name_scientific')
 
 
 def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefix: bool = True) -> list:
-    """[(item_id, tier)] best first. tier: 'code' (exact code / barcode) · 'learned'
+    """[(item_id, tier)] best first. tier: 'code' (exact code / barcode) · 'code_part' (digits inside a code, last, never POS) · 'learned'
     (people confirmed this spelling) · 'literal' · 'ordered' · 'any_order' · 'sound'
     (Arabic by sound) · 'approx' (typo fallback, only when nothing else matched)."""
     from apps.catalog.models import Item, ItemBarcode
@@ -177,12 +177,22 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
                 out.append((i, tier))
 
     raw = p['raw']
+    code_part = []
     if not p['wild']:
-        add(base.filter(Q(softech_id__iexact=raw) | Q(barcode__iexact=raw)).values_list('id', flat=True), 'code')
-        add(ItemBarcode.objects.filter(barcode__iexact=raw, item__in=base).values_list('item_id', flat=True), 'code')
+        # exact `=` (codes / barcodes are digits, nothing to case-fold) so the b-tree
+        # indexes are used; __iexact wraps the column in UPPER() and forces a seq scan
+        add(base.filter(Q(softech_id=raw) | Q(barcode=raw)).values_list('id', flat=True), 'code')
+        add(ItemBarcode.objects.filter(barcode=raw, item__in=base).values_list('item_id', flat=True), 'code')
         if code_prefix and raw.isdigit() and len(raw) >= 4:   # a partial code / barcode → its prefix
             add(base.filter(Q(softech_id__startswith=raw) | Q(barcode__startswith=raw)).order_by('softech_id')
                 .values_list('id', flat=True)[:limit], 'code')
+        # a code FRAGMENT (inside the code / barcode): collected now, appended LAST — never
+        # on the POS path (code_prefix=False keeps codes exact-only)
+        if code_prefix and raw.isdigit() and len(raw) >= 2:
+            code_part = list(base.filter(Q(softech_id__contains=raw) | Q(barcode__contains=raw))
+                             .order_by('softech_id').values_list('id', flat=True)[:limit])
+            code_part += list(ItemBarcode.objects.filter(barcode__contains=raw, item__in=base)
+                              .order_by('barcode').values_list('item_id', flat=True)[:limit])
         try:
             from apps.shortage.learning import learned_item_ids
             add(learned_item_ids(raw), 'learned')
@@ -212,6 +222,7 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
             add(_approx_ids(WILD.sub(' ', raw), limit, base), 'approx')
         except Exception:
             pass
+    add(code_part, 'code_part')
     return out[:limit]
 
 

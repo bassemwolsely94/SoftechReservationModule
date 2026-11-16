@@ -197,3 +197,47 @@ class LikeSpecialsAreLiteralTests(TestCase):
         self.assertEqual(got, {'ALPHA_BETA 10MG'})
         got = set(Item.objects.filter(W.wq('gamma\delta', 'name')).values_list('name', flat=True))
         self.assertEqual(got, {'GAMMA\DELTA SYRUP'})
+
+
+class CodeTierTests(TestCase):
+    """Exact code / barcode must hit the b-tree index (no UPPER()); partial codes are a
+    last-place `code_part` tier that never runs on the POS path."""
+
+    def setUp(self):
+        from apps.catalog.models import Item, ItemBarcode
+        self.augmentin = Item.objects.create(softech_id='3690', name='AUGMENTIN 1G (1000MG) 14 TAB',
+                                             pack_price=10, is_active=True)
+        ItemBarcode.objects.create(item=self.augmentin, barcode='6221025032348')
+        self.souvenir = Item.objects.create(softech_id='990001', name='SOUVENIR ROGO COLORE 250M(3690) PERFUME',
+                                            pack_price=10, is_active=True)
+        self.concor = Item.objects.create(softech_id='136900', name='CONCOR 5MG 30TAB',
+                                          pack_price=10, is_active=True)
+
+    def test_exact_code_uses_index(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        with CaptureQueriesContext(connection) as ctx:
+            res = W.item_search('3690')
+        sql = ' '.join(q['sql'] for q in ctx.captured_queries)
+        self.assertNotIn('UPPER("catalog_item"."softech_id")', sql)
+        self.assertNotIn('UPPER("catalog_itembarcode"."barcode")', sql)
+        # PostgreSQL renders iexact as UPPER("col"::text): catch any UPPER() on the code columns
+        self.assertNotRegex(sql, r'UPPER\("catalog_item(barcode)?"\."(softech_id|barcode)"')
+        self.assertEqual(res[0], (self.augmentin.id, 'code'))
+
+    def test_barcode_exact(self):
+        self.assertEqual(W.item_search('6221025032348')[0], (self.augmentin.id, 'code'))
+
+    def test_code_part_outside_pos(self):
+        res = W.item_search('690')
+        self.assertIn((self.augmentin.id, 'code_part'), res)
+        self.assertIn((self.concor.id, 'code_part'), res)
+        tiers = [t for _, t in res]
+        first_part = tiers.index('code_part')
+        self.assertTrue(all(t == 'code_part' for t in tiers[first_part:]))
+        ids = [i for i, _ in res]
+        self.assertLess(ids.index(self.souvenir.id), first_part)
+
+    def test_code_part_never_on_pos_path(self):
+        res = W.item_search('690', code_prefix=False)
+        self.assertNotIn('code_part', [t for _, t in res])
