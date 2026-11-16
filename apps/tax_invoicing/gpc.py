@@ -6,6 +6,7 @@ code request must name a brick from it. The suggestion is learned from our own a
 most used by approved items of the same SOFTECH family, else the same category, else the same type
 (Medicine / Cosmetics / …). It is only shown; a person picks the brick for every request.
 """
+import json
 import re
 from collections import Counter, defaultdict
 
@@ -82,12 +83,90 @@ def load(rows):
     return {'read': len(merged), 'created': created, 'updated': updated}
 
 
+def _kids(node):
+    for key in ('Childs', 'childs', 'children', 'Children'):
+        if isinstance(node.get(key), list):
+            return [k for k in node[key] if isinstance(k, dict)]
+    return []
+
+
+def _field(node, *keys):
+    for k in keys:
+        if node.get(k) not in (None, ''):
+            return _text(node[k])
+    return ''
+
+
+def read_gs1_json(path):
+    """Bricks from GS1's GPC JSON (Segment > Family > Class > Brick; the top may be a list or {'Schema': [...]}).
+    Each row: code, name_en, definition and the segment / family / class code and name above it."""
+    with open(path, encoding='utf-8-sig') as f:
+        data = json.load(f)
+    if isinstance(data, dict):
+        data = next((data[k] for k in ('Schema', 'schema', 'Segments', 'segments') if isinstance(data.get(k), list)), [data])
+    rows = []
+
+    def walk(node, trail):
+        code = _field(node, 'Code', 'code')
+        title = _field(node, 'Title', 'Description', 'title', 'description')
+        definition = _field(node, 'Definition', 'definition')
+        level = len(trail) + 1
+        explicit = _field(node, 'Level', 'level').lower()
+        if explicit:
+            level = {'segment': 1, 'family': 2, 'class': 3, 'brick': 4}.get(explicit, level)
+        if level == 4:
+            if BRICK.match(code):
+                row = {'code': code, 'name_en': title, 'definition': definition}
+                for (lvl_code, lvl_name), pre in zip(trail, ('segment', 'family', 'class')):
+                    row[pre + '_code'], row[pre + '_name'] = lvl_code, lvl_name
+                rows.append(row)
+            return
+        for kid in _kids(node):
+            walk(kid, trail + [(code, title)])
+
+    for top in data:
+        if isinstance(top, dict):
+            walk(top, [])
+    return rows
+
+
+def load_gs1(rows, version='gs1-20260520'):
+    """Insert or update bricks from read_gs1_json rows; never deletes. A brick already there keeps its Arabic
+    name and takes source=version, the English name, definition and hierarchy."""
+    merged = {r['code']: r for r in rows}
+    existing = {b.code: b for b in TaxGpcBrick.objects.filter(code__in=list(merged))}
+    short = ('name_en', 'segment_name', 'family_name', 'class_name')
+    fields = short + ('definition', 'segment_code', 'family_code', 'class_code')
+    created = updated = 0
+    with transaction.atomic():
+        new = []
+        for code, r in merged.items():
+            vals = {k: (r.get(k) or '')[:300] if k in short else (r.get(k) or '') for k in fields}
+            b = existing.get(code)
+            if b is None:
+                new.append(TaxGpcBrick(code=code, source=version, **vals))
+                created += 1
+                continue
+            vals['name_en'] = vals['name_en'] or b.name_en
+            if b.source != version or any(getattr(b, k) != v for k, v in vals.items()):
+                for k, v in vals.items():
+                    setattr(b, k, v)
+                b.source = version
+                b.save()
+                updated += 1
+        TaxGpcBrick.objects.bulk_create(new, batch_size=2000)
+    return {'read': len(merged), 'created': created, 'updated': updated}
+
+
 def loaded():
     return TaxGpcBrick.objects.exists()
 
 
-def known(code):
-    """True when the list is not loaded yet (nothing to check against) or holds this brick."""
+def known(code, *, official_only=False):
+    """True when the list is not loaded yet (nothing to check against) or holds this brick. With official_only,
+    the brick must come from a GS1 list, not only the owner's workbook."""
+    if official_only:
+        return TaxGpcBrick.objects.filter(code=code).exclude(source='workbook').exists()
     return not loaded() or TaxGpcBrick.objects.filter(code=code).exists()
 
 

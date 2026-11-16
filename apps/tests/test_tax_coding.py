@@ -964,3 +964,80 @@ class SendFromTests(Fixture, TestCase):
                                  format='json')
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.json()['send_from'])
+
+
+
+# ── GS1 GPC list (May 2026) ────────────────────────────────────────────────────────────────────
+
+class GpcGs1Tests(TestCase):
+    FIXTURE = {'Schema': [
+        {'Code': '51000000', 'Title': 'Healthcare', 'Definition': 'Seg def', 'Childs': [
+            {'Code': '51160000', 'Title': 'Pharma', 'Definition': 'Fam def', 'Childs': [
+                {'Code': '51160100', 'Title': 'Pharma Drugs', 'Definition': 'Cls def', 'Childs': [
+                    {'Code': '10005845', 'Title': 'Analgesics', 'Definition': 'Pain relief', 'Attributes': [{'Code': '1'}]},
+                    {'Code': '10000454', 'Title': 'Antipyretics'},
+                ]}]}]},
+        {'Code': '53000000', 'Title': 'Beauty', 'Definition': 'Seg2', 'children': [
+            {'Code': '53100000', 'Title': 'Skin', 'children': [
+                {'Code': '53100100', 'Title': 'Skin care', 'children': [
+                    {'Code': '10008001', 'Title': 'Creams', 'Definition': 'Cream def'}]}]}]},
+    ]}
+
+    def _path(self, data=None):
+        import json
+        import os
+        import shutil
+        import tempfile
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        p = os.path.join(d, 'gpc.json')
+        with open(p, 'w', encoding='utf-8') as f:
+            json.dump(self.FIXTURE if data is None else data, f)
+        return p
+
+    def test_load_twice_is_idempotent_with_hierarchy(self):
+        from apps.tax_invoicing import gpc
+        from apps.tax_invoicing.models import TaxGpcBrick
+        rows = gpc.read_gs1_json(self._path())
+        self.assertEqual(len(rows), 3)
+        r1 = gpc.load_gs1(rows)
+        r2 = gpc.load_gs1(gpc.read_gs1_json(self._path()))
+        self.assertEqual((r1['created'], r2['created'], r2['updated']), (3, 0, 0))
+        self.assertEqual(TaxGpcBrick.objects.count(), 3)
+        b = TaxGpcBrick.objects.get(code='10005845')
+        self.assertEqual((b.segment_code, b.family_code, b.class_code), ('51000000', '51160000', '51160100'))
+        self.assertEqual((b.segment_name, b.class_name, b.definition, b.source),
+                         ('Healthcare', 'Pharma Drugs', 'Pain relief', 'gs1-20260520'))
+        self.assertEqual(TaxGpcBrick.objects.get(code='10008001').segment_code, '53000000')
+        self.assertEqual(TaxGpcBrick.objects.get(code='10000454').definition, '')
+
+    def test_top_level_list_is_accepted(self):
+        from apps.tax_invoicing import gpc
+        rows = gpc.read_gs1_json(self._path(self.FIXTURE['Schema']))
+        self.assertEqual(len(rows), 3)
+
+    def test_workbook_brick_known_but_not_official_and_arabic_kept(self):
+        from apps.tax_invoicing import gpc
+        from apps.tax_invoicing.models import TaxGpcBrick
+        TaxGpcBrick.objects.create(code='10005845', name_en='Old', name_ar='مسكنات')
+        TaxGpcBrick.objects.create(code='10009999', name_en='Only workbook')
+        self.assertTrue(gpc.known('10005845'))
+        self.assertFalse(gpc.known('10005845', official_only=True))
+        gpc.load_gs1(gpc.read_gs1_json(self._path()))
+        b = TaxGpcBrick.objects.get(code='10005845')
+        self.assertEqual((b.name_ar, b.name_en, b.source), ('مسكنات', 'Analgesics', 'gs1-20260520'))
+        self.assertTrue(gpc.known('10005845', official_only=True))
+        self.assertFalse(gpc.known('10009999', official_only=True))
+        self.assertEqual(TaxGpcBrick.objects.get(code='10009999').source, 'workbook')
+
+    def test_command_needs_exactly_one_source(self):
+        import io
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        from apps.tax_invoicing.models import TaxGpcBrick
+        with self.assertRaises(CommandError):
+            call_command('load_gpc_bricks')
+        with self.assertRaises(CommandError):
+            call_command('load_gpc_bricks', 'a.xlsx', gs1_json='b.json')
+        call_command('load_gpc_bricks', gs1_json=self._path(), stdout=io.StringIO())
+        self.assertEqual(TaxGpcBrick.objects.count(), 3)

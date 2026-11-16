@@ -495,6 +495,15 @@ class TaxGpcBrick(models.Model):
     code = models.CharField(max_length=8, unique=True)
     name_en = models.CharField(max_length=300, blank=True)
     name_ar = models.CharField(max_length=300, blank=True)
+    # 'workbook' for the owner's workbook, else the GS1 list version (e.g. 'gs1-20260520')
+    source = models.CharField(max_length=20, default='workbook', db_default='workbook')
+    definition = models.TextField(blank=True)
+    segment_code = models.CharField(max_length=8, blank=True)
+    family_code = models.CharField(max_length=8, blank=True)
+    class_code = models.CharField(max_length=8, blank=True)
+    segment_name = models.CharField(max_length=300, blank=True)
+    family_name = models.CharField(max_length=300, blank=True)
+    class_name = models.CharField(max_length=300, blank=True)
     loaded_at = models.DateTimeField(auto_now=True)
 
     class Meta:
