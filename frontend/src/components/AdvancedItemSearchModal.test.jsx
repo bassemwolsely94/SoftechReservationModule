@@ -50,6 +50,21 @@ describe('AdvancedItemSearchModal on the engine', () => {
     expect(lastItemParams()).not.toHaveProperty('rank')
   })
 
+  it('one character (wildcards not counted) keeps the plain search, without rank', async () => {
+    setup()
+    await search('a')
+    expect(lastItemParams().search).toBe('a')
+    expect(lastItemParams()).not.toHaveProperty('rank')
+
+    cleanup(); get.mockReset(); setup()
+    await search('*a%')
+    expect(lastItemParams()).not.toHaveProperty('rank')
+
+    cleanup(); get.mockReset(); setup()
+    await search('ab')
+    expect(lastItemParams().rank).toBe('engine')
+  })
+
   it('shows the tier chip in the results name cell', async () => {
     setup()
     await search('alpha')

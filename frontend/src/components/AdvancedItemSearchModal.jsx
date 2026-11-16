@@ -70,7 +70,12 @@ function buildParams(criteria) {
   const q = (criteria.search || '').trim()
   // one rule set server-side (apps/catalog/wildcard.py): * and % = any characters, parts in
   // order, ranked exact text first — over name, scientific name, code and barcode
-  if (q) { p.search = q; p.rank = 'engine' }  // engine order + tier chips (S2)
+  // engine order + tier chips (S2) from 2 non-wildcard characters — the picker's minimum (the
+  // engine finds nothing for one letter); shorter text keeps the plain wildcard list
+  if (q) {
+    p.search = q
+    if (q.replace(/[*%]/g, '').length >= 2) p.rank = 'engine'
+  }
 
   if (criteria.category)       p.category        = criteria.category
   if (criteria.supplier_code)  p.supplier_code   = criteria.supplier_code
