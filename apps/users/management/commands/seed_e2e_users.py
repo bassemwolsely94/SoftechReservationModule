@@ -47,6 +47,18 @@ class Command(BaseCommand):
                 k: v for k, v in it.items() if k != 'softech_id'})
             item.search_name = search_name_for(item)
             item.save(update_fields=['search_name'])
+        # Network stock + one customer for the call-centre drawer flow (full audit C01).
+        from apps.catalog.models import ItemStock
+        from apps.customers.models import Customer
+        by_code = {b.softech_branch_id: b for b in branches}
+        for code, branch_code, store, qty in getattr(settings, 'E2E_STOCK', []):
+            ItemStock.objects.update_or_create(
+                item=Item.objects.get(softech_id=code), branch=by_code[branch_code], softech_store_code=store,
+                defaults={'quantity_on_hand': qty})
+        cust = getattr(settings, 'E2E_CUSTOMER', None)
+        if cust:
+            Customer.objects.update_or_create(phone=cust['phone'], defaults={
+                'name': cust['name'], 'is_guest': False, 'preferred_branch': branch})
         # A tiny chart of accounts for the finance ledger flow (codes finance does not use).
         from apps.finance.models import GLAccount, GLAccountGroup
         for name, section, code, acc_name, nature, acc_type in settings.E2E_GL_ACCOUNTS:

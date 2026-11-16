@@ -13,6 +13,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { omniApi, customersApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
+import ItemSearchWidget from '../components/ItemSearchWidget'
+import StockLookupDrawer, { omniChannel } from '../components/StockLookupDrawer'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const fmtDt = (dt) => {
@@ -338,6 +340,7 @@ function AIAssistBar({ conv, onUseReply }) {
 // ── Customer 360 side panel ───────────────────────────────────────────────────
 function Customer360Panel({ conv, onUpdate }) {
   const qc = useQueryClient()
+  const [stockItem, setStockItem] = useState(null)   // network stock drawer (full audit C01)
 
   const { data: customer } = useQuery({
     queryKey: ['omni-customer', conv.customer],
@@ -415,6 +418,24 @@ function Customer360Panel({ conv, onUpdate }) {
           <p className="text-xs text-gray-400">جهة اتصال غير معرَّفة</p>
           <p className="text-sm text-gray-600 mt-1" dir="ltr">{conv.contact_phone}</p>
         </div>
+      )}
+
+      {/* «هل الصنف متوفر؟» — network stock → reserve / transfer / lost demand (full audit C01) */}
+      <div className="bg-white rounded-lg border border-gray-200 p-3 space-y-2" data-tour="omni-inbox-stock">
+        <p className="text-xs font-bold text-gray-500">📍 هل الصنف متوفر؟</p>
+        <ItemSearchWidget selected={null} onSelect={setStockItem} placeholder="ابحث عن صنف..." />
+      </div>
+
+      {stockItem && (
+        <StockLookupDrawer
+          item={stockItem} branchId={conv.branch || null} channel={omniChannel(conv.created_from_channel)}
+          customer={{ id: conv.customer || null, name: customer?.name || conv.customer_name || '',
+                      phone: customer?.phone || conv.customer_phone || conv.contact_phone || '' }}
+          onCreated={() => {
+            qc.invalidateQueries({ queryKey: ['omni-cust-reservations', conv.customer] })
+            qc.invalidateQueries({ queryKey: ['omni-timeline', conv.id] })
+          }}
+          onClose={() => setStockItem(null)} />
       )}
     </div>
   )
