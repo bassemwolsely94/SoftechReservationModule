@@ -269,7 +269,8 @@ class FoldTests(TestCase):
         ids = _items('أوميز 20 كبسولة', 'فيتامين سى', 'مؤسسة  ئ  كريم')
         by = {n: i.id for n, i in ids.items()}
         for q, name in (('اوميز', 'أوميز 20 كبسولة'), ('كبسوله', 'أوميز 20 كبسولة'),
-                        ('مين سي', 'فيتامين سى'),        # ≥3 letters: D7 makes «سي» starts-only ('موسسه', 'مؤسسة  ئ  كريم'),
+                        # ≥3 letters: D7 makes a 2-letter «سي» starts-only
+                        ('مين سي', 'فيتامين سى'), ('موسسه', 'مؤسسة  ئ  كريم'),
                         ('ي كريم', 'مؤسسة  ئ  كريم')):
             res = dict(W.item_search(q))
             self.assertIn(by[name], res, q)
@@ -397,6 +398,39 @@ class RankingTests(TestCase):
         self.assertEqual(starts[2:], sorted(starts[2:]))
         self.assertIn('CONCOR COR 2.5MG 30TAB', starts[2:])
 
+    def test_one_letter_returns_nothing(self):
+        # D7: names need 3 characters, 2 = starts-with; 1 letter is no search at all
+        self.assertEqual(W.item_search('a'), [])
+        self.assertEqual(W.item_search('a*'), [])
+        # one digit stays an exact code lookup
+        from apps.catalog.models import Item
+        it = Item.objects.create(softech_id='7', name='SEVEN TEST ITEM', pack_price=1, is_active=True)
+        self.assertEqual(W.item_search('7'), [(it.id, 'code')])
+
+    def test_starts_hits_survive_the_candidate_cap(self):
+        # broad queries rank at most NAME_CAP pattern candidates — but every `starts` hit is
+        # always a candidate, so the best rows can't fall outside a sample
+        from apps.catalog.models import Item
+        Item.objects.bulk_create([Item(softech_id=f'96{i:04d}', name=f'AAA DIVOLX {i:03d}', pack_price=1,
+                                       is_active=True) for i in range(12)])
+        with mock.patch.object(W, 'NAME_CAP', 3):
+            res = self.tiers('vol')
+        self.assertEqual(res[0], ('VOLTAREN 50MG 20TAB', 'starts'))
+
+    def test_prefix_index_used(self):
+        from django.db import connection
+        from apps.catalog.models import Item
+        # an empty test table plans on any index, so check the index is built on EXACTLY the
+        # expression the lookup renders (PostgreSQL only matches an identical expression)
+        sql, _ = Item.objects.filter(name__fulike='X%').values('id').query.sql_with_params()
+        with connection.cursor() as cur:
+            cur.execute("SELECT indexdef FROM pg_indexes WHERE indexname IN "
+                        "('catalog_item_name_fold_prefix', 'catalog_item_sci_fold_prefix')")
+            defs = [r[0] for r in cur.fetchall()]
+        self.assertEqual(len(defs), 2)
+        self.assertTrue(all('text_pattern_ops' in d and 'translate(upper(regexp_replace' in d for d in defs))
+        self.assertIn('translate(upper(regexp_replace', sql)
+
     def test_punctuation_only_returns_nothing(self):
         for q in ('**', '%', '-', '()', '  '):
             self.assertEqual(W.item_search(q), [], q)
@@ -411,7 +445,13 @@ class RankingTests(TestCase):
         from django.test.utils import CaptureQueriesContext
         with CaptureQueriesContext(connection) as ctx:
             W.item_search('voltaren 50')
-        self.assertLessEqual(len(ctx.captured_queries), 6, [q['sql'][:120] for q in ctx.captured_queries])
+        # data round-trips: code+barcode (one UNION) · learned memory (3) · ranked names ·
+        # any-order top-up. The SAVEPOINT / SET LOCAL enable_seqscan pair around the ranked
+        # query (_trigram_indexes: keeps the planner on the trigram index) is not counted.
+        data = [q['sql'] for q in ctx.captured_queries
+                if not q['sql'].startswith(('SAVEPOINT', 'RELEASE SAVEPOINT', 'SET LOCAL'))]
+        self.assertLessEqual(len(data), 6, [q[:120] for q in data])
+        self.assertLessEqual(len(ctx.captured_queries), 10)
 
     def test_code_part_is_lazy(self):
         # the name tiers already fill `limit` → the code_part scans (no index) never run

@@ -250,6 +250,7 @@ ITEM_FIELDS = ('name', 'name_scientific')
 
 NAME_TIERS = ('starts', 'word', 'contains', 'contains')     # rank % 4; rank 8 = any_order
 NAME_WINDOW = 60                      # design §5.2: a fixed candidate window before the trim
+NAME_CAP = 300                        # most name candidates ranked per query (speed; see below)
 
 
 def _rank_name_ids(q: str, base, *, window: int = NAME_WINDOW, starts_only: bool = False) -> list:
@@ -265,10 +266,14 @@ def _rank_name_ids(q: str, base, *, window: int = NAME_WINDOW, starts_only: bool
     fields = ITEM_FIELDS
     sp, wr = starts_pattern(q), word_regex(q)
     lp, pp = literal_pattern(q), pattern(q)
-    if starts_only:
-        cond = Q(name__fulike=sp)
-    else:
-        cond = ordered_q(q, *fields, fold=True) | any_order_q(q, *fields, fold=True)
+    num = Value(0, output_field=IntegerField())
+    for n in dict.fromkeys(_NUM.findall(p['raw'])):
+        num = num + Case(When(name__fregex=number_regex(n), then=Value(1)), default=Value(0),
+                         output_field=IntegerField())
+    if starts_only:                   # every row is rank 0: whole numbers, then name
+        rows = (base.filter(name__fulike=sp).annotate(_num=num).order_by('-_num', 'name', 'id')
+                .values_list('id', flat=True)[:window])
+        return [(i, 'starts') for i in rows]
     whens = []
     for k, f in enumerate(fields):
         whens += [When(Q(**{f'{f}__fulike': sp}), then=Value(4 * k)),
@@ -278,12 +283,26 @@ def _rank_name_ids(q: str, base, *, window: int = NAME_WINDOW, starts_only: bool
     rank = Case(*whens, default=Value(8), output_field=IntegerField())
     lit = (Case(When(_any(fields, 'fulike', lp), then=Value(1)), default=Value(0),
                 output_field=IntegerField()) if p['wild'] else Value(0, output_field=IntegerField()))
-    num = Value(0, output_field=IntegerField())
-    for n in dict.fromkeys(_NUM.findall(p['raw'])):
-        num = num + Case(When(name__fregex=number_regex(n), then=Value(1)), default=Value(0),
-                         output_field=IntegerField())
-    rows = (base.filter(cond).annotate(_rank=rank, _lit=lit, _num=num)
-            .order_by('_rank', '-_lit', '-_num', 'name', 'id').values_list('id', '_rank')[:window])
+    # Speed (budget 40 ms). The CASE above re-folds the name per arm, so it only runs on a
+    # bounded candidate set — never on every match of a broad query («tab», «cream» match
+    # thousands):
+    #   · every `starts` hit, uncapped (a range scan on the folded prefix b-tree, catalog 0045);
+    #   · the first NAME_CAP in-order pattern hits the trigram index returns (unordered, so
+    #     the scan stops early);
+    #   · any_order is the LAST rank, so its query runs only when the pattern tiers left the
+    #     window short (then capped at the window, and only for 2+ words).
+    # Exact whenever the pattern matches ≤ NAME_CAP items and any-order ≤ window; past that,
+    # the lower tiers rank a sample — still in tier order, whole numbers first, then by name.
+    cands = (base.filter(_any(fields, 'fulike', sp)).order_by().values('id')
+             .union(base.filter(ordered_q(q, *fields, fold=True)).order_by().values('id')[:NAME_CAP]))
+    rows = list(base.filter(id__in=cands).annotate(_rank=rank, _lit=lit, _num=num)
+                .order_by('_rank', '-_lit', '-_num', 'name', 'id').values_list('id', '_rank')[:window])
+    if len(rows) < window and len(p['terms']) >= 2:
+        have = [i for i, _ in rows]
+        more = (base.filter(any_order_q(q, *fields, fold=True)).exclude(id__in=have).order_by()
+                .values('id')[:window])
+        rows += list(base.filter(id__in=more).annotate(_num=num).order_by('-_num', 'name', 'id')
+                     .values_list('id', Value(8, output_field=IntegerField()))[:window - len(rows)])
     return [(i, NAME_TIERS[r % 4] if r < 8 else 'any_order') for i, r in rows]
 
 
@@ -294,9 +313,15 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
     else matched) · 'code_part' (digits inside a code — last, only when the rest left room,
     never on the POS path)."""
     from apps.catalog.models import Item, ItemBarcode
+    from apps.shortage.matching import _trigram_indexes
     p = parse(q)
     # nothing to search: no letter or digit at all («**», «-», «()»)
     if not p['segments'] or not re.search(r'[^\W_]', p['raw']):
+        return []
+    # D7: one letter is no search (names need 3 characters, 2 = "starts with"); one digit
+    # still goes on to the exact code lookup below
+    compact = re.sub(r'[\s*%]', '', fold_query(p['raw']))
+    if len(compact) < 2 and not compact.isdigit():
         return []
     base = Item.objects.filter(is_active=True) if active_only else Item.objects.all()
     out, seen = [], set()
@@ -311,8 +336,10 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
     if not p['wild']:
         # exact `=` (codes / barcodes are digits, nothing to case-fold) so the b-tree
         # indexes are used; __iexact wraps the column in UPPER() and forces a seq scan
-        add(base.filter(Q(softech_id=raw) | Q(barcode=raw)).values_list('id', flat=True), 'code')
-        add(ItemBarcode.objects.filter(barcode=raw, item__in=base).values_list('item_id', flat=True), 'code')
+        # ONE statement: each half of the UNION uses its own b-tree
+        add(base.filter(Q(softech_id=raw) | Q(barcode=raw)).order_by().values_list('id', flat=True)
+            .union(ItemBarcode.objects.filter(barcode=raw, item__in=base).order_by()
+                   .values_list('item_id', flat=True)), 'code')
         if code_prefix and raw.isdigit() and len(raw) >= 4:   # a partial code / barcode → its prefix
             add(base.filter(Q(softech_id__startswith=raw) | Q(barcode__startswith=raw)).order_by('softech_id')
                 .values_list('id', flat=True)[:limit], 'code')
@@ -329,12 +356,15 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
             sound = search_ids(WILD.sub(' ', raw), limit=limit)
         except Exception:
             sound = []
-    # D7: names need 3 characters — a shorter query (letters or digits) is "starts with" only.
-    # ONE ranked query; the folded-name trigram indexes (catalog 0044) are chosen by the
-    # planner on their own (checked with and without ANALYZE stats), so no SET LOCAL forcing.
-    compact = re.sub(r'[\s*%]', '', fold_query(raw))
-    for i, tier in _rank_name_ids(raw, base, window=max(NAME_WINDOW, limit), starts_only=len(compact) < 3):
-        add((i,), tier)
+    # D7: names need 3 characters — two are "starts with" only; one digit is a code alone
+    if len(compact) >= 2:
+        # the index forcing matters here: for the capped candidate sub-select (LIMIT) the
+        # planner prefers a seq scan that re-folds every name it passes (≈30 ms on «cream»)
+        # over the trigram bitmap (≈3 ms) — it doesn't know how dear the fold expression is
+        with _trigram_indexes():
+            for i, tier in _rank_name_ids(raw, base, window=max(NAME_WINDOW, limit),
+                                          starts_only=len(compact) < 3):
+                add((i,), tier)
     add(sound, 'sound')
     # no catalog text hit (a remembered item alone doesn't count) → typo-tolerant fallback
     if not raw.isdigit() and not any(t not in ('code', 'learned') for _, t in out):

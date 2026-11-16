@@ -435,7 +435,7 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
 
         # ── ONE search behaviour for the whole system (apps/catalog/wildcard.py) ──
         # * and % = any characters, parts in the order typed, space literal; ranked:
-        # exact code/barcode → learned memory → literal text → wildcard in order → any word
+        # exact code/barcode → learned memory → name starts / word / contains → any word
         # order → Arabic by sound → (nothing found) typo-tolerant «تقريبي».
         # PG first (mirrors SOFTECH, and its prices are preferred anyway); SOFTECH live is
         # only asked when PG finds nothing — behind a breaker so a down server 100 never
@@ -556,7 +556,7 @@ def _softech_live_search(like_q: str, branch_id) -> list:
             'unit_price': float(row[6]) if row[6] is not None else 0.0,
             'requires_fridge': bool(row[9]) if row[9] else False,
             'medicine_type': str(row[10]).strip() if row[10] else '',
-            'source': 'softech', 'item_id': None, 'tier': 'ordered',
+            'source': 'softech', 'item_id': None, 'tier': 'contains',
         })
     # Same pattern again within a few minutes (typing, paging, a colleague) is answered
     # from here instead of another login + items scan (doc 30 F10). Misses expire sooner
