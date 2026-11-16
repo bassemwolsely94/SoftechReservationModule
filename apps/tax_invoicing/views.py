@@ -17,10 +17,12 @@ apps/tax_invoicing/views.py — mounted at /api/tax-invoicing/ (doc 36).
   GET  eta/status/   POST eta/check-login/          which ETA system, is the login working (finalize)
   GET  codes/  GET codes/candidates/  POST codes/prepare/ · codes/send/ · codes/refresh/
   PATCH codes/<id>/  POST codes/<id>/cancel/         EGS item-code requests (coding.py)
+  GET  codes/queue/  POST codes/queue/decide/ · codes/queue/reopen/   production coding decisions (coding_queue.py)
 Every rule is enforced in services.py or here; the screen only hides what the user cannot do.
 """
 import datetime as dt
 import logging
+from decimal import Decimal
 
 from django.conf import settings
 from django.db import transaction
@@ -1185,6 +1187,86 @@ def codes_check(request):
         return Response(coding.check_codes(request.user, _ids(request) or None))
     except services.TaxRuleError as exc:
         return _refuse(exc)
+
+
+# ── ETA production coding queue (batch S1): decide per item "code" or "keep out" ────────────────
+
+QUEUE_SORT = ('value', 'docs', 'last_day', 'itemcode', 'premark')
+QUEUE_PAGE = 100
+
+
+def _queue_row(r):
+    return {**r, 'value': str(Decimal(r['value']).quantize(Decimal('0.01'))),
+            'vat_rate': format(Decimal(r['vat_rate']).normalize(), 'f'),
+            'sources': {k: float(v) for k, v in r['sources'].items()}}
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, VIEWER])
+def codes_queue(request):
+    """Items sold on production receipts with no code, biggest sales first, with the keep-out suggestion and the
+    VAT prefill. ?recent=<days>&premark=&decided=yes|no&q=&ordering=&page="""
+    from . import coding_queue
+    p = request.query_params
+    try:
+        recent = int(p['recent']) if p.get('recent') else None
+        page = max(int(p.get('page') or 1), 1)
+    except ValueError:
+        return Response({'detail': 'رقم غير صحيح'}, status=status.HTTP_400_BAD_REQUEST)
+    if recent is not None and recent < 1:
+        return Response({'detail': 'رقم غير صحيح'}, status=status.HTTP_400_BAD_REQUEST)
+    ordering = p.get('ordering') or '-value'
+    key = ordering.lstrip('-')
+    if key not in QUEUE_SORT:
+        return Response({'detail': 'ترتيب غير مدعوم'}, status=status.HTTP_400_BAD_REQUEST)
+    decided = p.get('decided') if p.get('decided') in ('yes', 'no') else None
+    rows = coding_queue.rows(recent_days=recent, premark=p.get('premark') or None, decided=decided,
+                             q=p.get('q') or '')
+    rows.sort(key=lambda r: r['itemcode'])
+    rows.sort(key=lambda r: (r[key] is None, r[key] if r[key] is not None else 0), reverse=ordering.startswith('-'))
+    total = sum((r['value'] for r in rows), Decimal('0'))
+    count = len(rows)
+    return Response({'count': count, 'page': page, 'pages': max(-(-count // QUEUE_PAGE), 1),
+                     'total_value': str(total.quantize(Decimal('0.01'))),
+                     'catalog_without_profile': coding._catalog_without_profile().exists(),
+                     'rows': [_queue_row(r) for r in rows[(page - 1) * QUEUE_PAGE:page * QUEUE_PAGE]]})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, APPROVER])
+def codes_queue_decide(request):
+    """{itemcodes: [..≤200], decision: code|keep_out, vat_rate?, names?, note?}. One item: its own rate and names, 409
+    when it already has a decision. Many: each takes its prefilled rate; flagged or already-decided ones are skipped."""
+    from . import coding_queue
+    d = request.data
+    itemcodes = d.get('itemcodes')
+    if not isinstance(itemcodes, list):
+        return Response({'detail': 'اختر الأصناف'}, status=status.HTTP_400_BAD_REQUEST)
+    names = d.get('names') if isinstance(d.get('names'), dict) else None
+    try:
+        decided, skipped = coding_queue.decide_many(itemcodes, request.user, decision=d.get('decision') or '',
+                                                    vat_rate=d.get('vat_rate'), names=names,
+                                                    note=str(d.get('note') or ''))
+    except TaxItemProfile.DoesNotExist:
+        return Response({'detail': coding_queue.UNKNOWN_ITEM}, status=status.HTTP_404_NOT_FOUND)
+    except services.TaxRuleError as exc:
+        if str(exc) == coding_queue.ALREADY_DECIDED:
+            return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
+        return _refuse(exc)
+    return Response({'decided': decided, 'skipped': skipped})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, APPROVER])
+def codes_queue_reopen(request):
+    """{itemcode, reason}: clears an item's decision so it can be decided again (audited)."""
+    from . import coding_queue
+    profile = get_object_or_404(TaxItemProfile, softech_itemcode=str(request.data.get('itemcode') or '').strip())
+    try:
+        coding_queue.reopen(profile.pk, request.user, str(request.data.get('reason') or ''))
+    except services.TaxRuleError as exc:
+        return _refuse(exc)
+    return Response({'itemcode': profile.softech_itemcode, 'decision': None})
 
 
 @api_view(['GET'])

@@ -1,14 +1,19 @@
 """ETA production item coding queue (batch S1): the shared VAT-treatment confirmation and the queue built on it."""
 from collections import Counter
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
+from rest_framework.test import APIClient
 
 from apps.catalog.models import Item
 from apps.procurement.models import PurchaseLine, SupplierSegmentation
 from apps.tax_invoicing import coding_queue, coding_rule, services
-from apps.tax_invoicing.models import TaxAuditEvent, TaxCodingDecision, TaxItemProfile
+from apps.tax_invoicing.models import (EtaCodeUsage, EtaReconUncodedItem, TaxAuditEvent, TaxCodingDecision,
+                                       TaxItemProfile)
 from apps.tests.test_tax_invoicing import Fixture
 
 
@@ -183,6 +188,12 @@ class DecisionTests(Fixture, TestCase):
         d = TaxCodingDecision.objects.get(profile=self.p)
         self.assertEqual((d.code_name, d.code_name_ar, d.description), ('X', 'س', 'GLOW CREAM'))
 
+    def test_arabic_names_default_to_profile_arabic_name(self):
+        TaxItemProfile.objects.filter(pk=self.p.pk).update(item_name_ar='كريم')
+        d = coding_queue.decide(self.p.pk, self.accountant, decision='keep_out')
+        self.assertEqual((d.code_name, d.code_name_ar, d.description, d.description_ar),
+                         ('GLOW CREAM', 'كريم', 'GLOW CREAM', 'كريم'))
+
     def test_code_needs_rate_0_or_14(self):
         for bad in (None, 5, 'x'):
             with self.assertRaises(services.TaxRuleError):
@@ -191,7 +202,8 @@ class DecisionTests(Fixture, TestCase):
 
     def test_rate_against_accountant_confirmed_errors(self):
         p = self.coded('900031', rate=14)
-        with self.assertRaisesMessage(services.TaxRuleError, 'النسبة تخالف المعاملة المعتمدة من المحاسب'):
+        with self.assertRaisesMessage(services.TaxRuleError,
+                                      'النسبة تخالف المعاملة الضريبية المعتمدة للصنف — عدّلها من شاشة الأصناف أولاً'):
             coding_queue.decide(p.pk, self.accountant, decision='code', vat_rate=0)
         coding_queue.decide(p.pk, self.accountant, decision='code', vat_rate=14)
         self.assertFalse(TaxAuditEvent.objects.filter(action='item_mapping_changed', entity_id='900031').exists())
@@ -235,3 +247,178 @@ class DecisionTests(Fixture, TestCase):
     def test_reopen_undecided_errors(self):
         with self.assertRaises(services.TaxRuleError):
             coding_queue.reopen(self.p.pk, self.admin, 'why')
+
+
+QUEUE = '/api/tax-invoicing/codes/queue/'
+
+
+def sold(code, value, docs=1, day=None, system='production', branch='101'):
+    day = day or timezone.localdate() - timedelta(days=1)
+    return EtaReconUncodedItem.objects.create(system=system, softech_branchcode=branch, day=day, itemcode=code,
+                                              docs=docs, qty=1, value=value)
+
+
+class QueueApiTests(Fixture, TestCase):
+    def setUp(self):
+        self.build('qa')
+        self.api = self.client_for(self.accountant)
+        # A: biggest seller, bought official; B: cosmetic at 0 % (flagged); C: no catalog row, sold 200 days ago
+        make_item('910001', 'Medicine', 0, name='ALPHA')
+        make_item('910002', 'Cosmetics', 0, name='BETA')
+        bought('910001', 'S30', 'OFFICIAL_DISTRIBUTOR')
+        self.pa = TaxItemProfile.objects.create(softech_itemcode='910001', item_name='ALPHA')
+        self.pb = TaxItemProfile.objects.create(softech_itemcode='910002', item_name='BETA')
+        self.pc = TaxItemProfile.objects.create(softech_itemcode='910003', item_name='GAMMA')
+        sold('910001', 500, docs=3)
+        sold('910001', 100, docs=1, branch='102')
+        sold('910002', 200, docs=2)
+        sold('910003', 50, day=timezone.localdate() - timedelta(days=200))
+
+    def client_for(self, user):
+        c = APIClient()
+        c.force_authenticate(user)
+        return c
+
+    def codes(self, body):
+        return [r['itemcode'] for r in body['rows']]
+
+    def test_ordering_biggest_first_and_totals(self):
+        r = self.api.get(QUEUE)
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(self.codes(r.data), ['910001', '910002', '910003'])
+        self.assertEqual((r.data['count'], r.data['page'], r.data['pages'], r.data['total_value']), (3, 1, 1, '850.00'))
+        a = r.data['rows'][0]
+        self.assertEqual((a['value'], a['docs'], a['premark'], a['premark_reason']), ('600.00', 4, 'code', 'official'))
+        self.assertEqual(a['sources'], {'OFFICIAL_DISTRIBUTOR': 5})
+        self.assertIsNone(a['decision'])
+        self.assertEqual(self.codes(self.api.get(QUEUE, {'ordering': 'itemcode'}).data), ['910001', '910002', '910003'])
+        self.assertEqual(self.codes(self.api.get(QUEUE, {'ordering': '-itemcode'}).data), ['910003', '910002', '910001'])
+        self.assertEqual(self.api.get(QUEUE, {'ordering': 'name'}).status_code, 400)
+
+    def test_recent_filter(self):
+        r = self.api.get(QUEUE, {'recent': 30})
+        self.assertEqual(self.codes(r.data), ['910001', '910002'])
+        self.assertEqual(r.data['total_value'], '800.00')
+        self.assertEqual(self.api.get(QUEUE, {'recent': 'x'}).status_code, 400)
+
+    def test_q_and_premark_filters(self):
+        self.assertEqual(self.codes(self.api.get(QUEUE, {'q': 'bet'}).data), ['910002'])
+        self.assertEqual(self.codes(self.api.get(QUEUE, {'premark': 'code'}).data), ['910001'])
+
+    def test_decided_filter(self):
+        coding_queue.decide(self.pb.pk, self.accountant, decision='keep_out')
+        self.assertEqual(self.codes(self.api.get(QUEUE, {'decided': 'yes'}).data), ['910002'])
+        self.assertEqual(self.codes(self.api.get(QUEUE, {'decided': 'no'}).data), ['910001', '910003'])
+        row = self.api.get(QUEUE, {'decided': 'yes'}).data['rows'][0]
+        self.assertEqual(row['decision'], 'keep_out')
+        self.assertTrue(row['decided_by'])
+        self.assertIsNotNone(row['decided_at'])
+
+    def test_pharmacist_403_accountant_200(self):
+        self.assertEqual(self.client_for(self.pharmacist).get(QUEUE).status_code, 403)
+        self.assertEqual(self.api.get(QUEUE).status_code, 200)
+
+    def test_accountant_decides_viewer_only_403(self):
+        from apps.tests.factories import make_user
+        from apps.users.models import RoleModuleAccess
+        from core.middleware import module_access
+        RoleModuleAccess.objects.update_or_create(role='viewer', module='tax_invoicing', action='view',
+                                                  defaults={'is_allowed': True})
+        RoleModuleAccess.objects.filter(role='viewer', module='tax_invoicing').exclude(action='view').delete()
+        module_access.clear_cache()
+        viewer, _, _ = make_user('viewer_qa', role='viewer', branch=self.branch)
+        vc = self.client_for(viewer)
+        self.assertEqual(vc.get(QUEUE).status_code, 200)
+        r = vc.post(QUEUE + 'decide/', {'itemcodes': ['910001'], 'decision': 'keep_out'}, format='json')
+        self.assertEqual(r.status_code, 403)
+        r = vc.post(QUEUE + 'reopen/', {'itemcode': '910001', 'reason': 'x'}, format='json')
+        self.assertEqual(r.status_code, 403)
+        self.assertFalse(TaxCodingDecision.objects.exists())
+        r = self.api.post(QUEUE + 'decide/', {'itemcodes': ['910001'], 'decision': 'code', 'vat_rate': 0},
+                          format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual((r.data['decided'], r.data['skipped']), (['910001'], []))
+        self.assertEqual(TaxCodingDecision.objects.get(profile=self.pa).decision, 'code')
+
+    def test_bulk_code_uses_prefill_and_skips_flagged(self):
+        r = self.api.post(QUEUE + 'decide/', {'itemcodes': ['910001', '910002', '999999'], 'decision': 'code'},
+                          format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data['decided'], ['910001'])
+        self.assertEqual({s['itemcode']: s['why'] for s in r.data['skipped']},
+                         {'910002': 'النسبة تحتاج تأكيداً', '999999': 'صنف غير معروف'})
+        self.assertEqual(int(TaxCodingDecision.objects.get(profile=self.pa).vat_rate), 0)
+        self.assertFalse(TaxCodingDecision.objects.filter(profile=self.pb).exists())
+
+    def test_already_decided_bulk_skipped_single_409(self):
+        coding_queue.decide(self.pa.pk, self.accountant, decision='keep_out')
+        r = self.api.post(QUEUE + 'decide/', {'itemcodes': ['910001', '910003'], 'decision': 'keep_out'},
+                          format='json')
+        self.assertEqual(r.data['decided'], ['910003'])
+        self.assertEqual(r.data['skipped'], [{'itemcode': '910001', 'why': 'للصنف قرار سابق — أعد فتحه أولاً'}])
+        r = self.api.post(QUEUE + 'decide/', {'itemcodes': ['910001'], 'decision': 'keep_out'}, format='json')
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.data['detail'], 'للصنف قرار سابق — أعد فتحه أولاً')
+
+    def test_single_bad_rate_400_and_too_many(self):
+        r = self.api.post(QUEUE + 'decide/', {'itemcodes': ['910001'], 'decision': 'code', 'vat_rate': 5},
+                          format='json')
+        self.assertEqual(r.status_code, 400)
+        r = self.api.post(QUEUE + 'decide/', {'itemcodes': [str(i) for i in range(201)], 'decision': 'keep_out'},
+                          format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(self.api.post(QUEUE + 'decide/', {'itemcodes': [], 'decision': 'keep_out'},
+                                       format='json').status_code, 400)
+
+    def test_reopen(self):
+        coding_queue.decide(self.pa.pk, self.accountant, decision='keep_out')
+        r = self.api.post(QUEUE + 'reopen/', {'itemcode': '910001', 'reason': ''}, format='json')
+        self.assertEqual(r.status_code, 400)
+        r = self.api.post(QUEUE + 'reopen/', {'itemcode': '910001', 'reason': 'wrong'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(TaxCodingDecision.objects.get(profile=self.pa).decision, '')
+        r = self.api.post(QUEUE + 'reopen/', {'itemcode': '999999', 'reason': 'x'}, format='json')
+        self.assertEqual(r.status_code, 404)
+
+    def test_item_coded_on_eta_not_listed_and_last_status_shown(self):
+        EtaCodeUsage.objects.create(system='production', code_type='EGS', item_code='EG-1-910001', status='Approved',
+                                    itemcode='910001')
+        EtaCodeUsage.objects.create(system='production', code_type='EGS', item_code='EG-1-910002', status='Rejected',
+                                    itemcode='910002')
+        EtaCodeUsage.objects.create(system='preprod', code_type='EGS', item_code='EG-1-910003', status='Approved',
+                                    itemcode='910003')
+        r = self.api.get(QUEUE)
+        self.assertEqual(self.codes(r.data), ['910002', '910003'])
+        self.assertEqual([x['eta_last_status'] for x in r.data['rows']], ['Rejected', ''])
+
+    def test_coded_profiles_excluded_unless_test_system_only(self):
+        TaxItemProfile.objects.filter(pk=self.pa.pk).update(coding_status='approved', coding_env='')
+        TaxItemProfile.objects.filter(pk=self.pb.pk).update(coding_status='pending', coding_env='preprod')
+        sold('910004', 999, system='preprod')
+        TaxItemProfile.objects.create(softech_itemcode='910004')
+        self.assertEqual(self.codes(self.api.get(QUEUE).data), ['910002', '910003'])
+
+    def test_no_catalog_row_listed_with_no_purchase(self):
+        row = [x for x in self.api.get(QUEUE).data['rows'] if x['itemcode'] == '910003'][0]
+        self.assertEqual((row['name'], row['premark'], row['premark_reason']), ('GAMMA', '', 'no_purchase'))
+        self.assertEqual(row['sources'], {})
+
+    def test_flags_catalog_items_without_profile(self):
+        self.assertFalse(self.api.get(QUEUE).data['catalog_without_profile'])
+        make_item('910099')
+        self.assertTrue(self.api.get(QUEUE).data['catalog_without_profile'])
+
+    def test_constant_queries(self):
+        with CaptureQueriesContext(connection) as small:
+            coding_queue.rows()
+        for n in range(5, 25):
+            code = f'92{n:04d}'
+            make_item(code)
+            TaxItemProfile.objects.create(softech_itemcode=code)
+            sold(code, n)
+            bought(code, f'S{n}', 'MANUFACTURER')
+        coding_queue.decide(TaxItemProfile.objects.get(softech_itemcode='920005').pk, self.accountant,
+                            decision='keep_out')
+        with CaptureQueriesContext(connection) as big:
+            self.assertEqual(len(coding_queue.rows()), 23)
+        self.assertEqual(len(small), len(big))
