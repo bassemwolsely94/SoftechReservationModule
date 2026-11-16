@@ -5,12 +5,12 @@
  * chosen here (0 / 14) and the item is decided on its own; the server skips flagged items in a bulk "code".
  */
 import { useState } from 'react'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { taxInvoicingApi } from '../../api/client'
 import SortTh from '../../components/SortTh'
 import useGridKeyboard from '../../hooks/useGridKeyboard'
 import useServerSort from '../../hooks/useServerSort'
-import { ActionMsg, Badge, Btn, Failed, fmt, fmtDate, fmtInt, fmtTime, Grid, INPUT, Loading, Section, useAction } from './ui'
+import { ActionMsg, Badge, Btn, errText, Failed, fmt, fmtDate, fmtInt, fmtTime, Grid, INPUT, Loading, Section, useAction } from './ui'
 
 const SORT = ['value', 'docs', 'last_day', 'itemcode', 'premark']
 const TH = 'px-2 py-2 font-semibold whitespace-nowrap text-right'
@@ -37,18 +37,29 @@ const KEYS_HINT = '⌨ ↑↓ تنقل · مسافة تحديد · Enter قبو�
 
 const sourcesText = s => Object.entries(s || {}).sort((a, b) => b[1] - a[1])
   .map(([k, q]) => `${SOURCE[k] || k} ${fmtInt(Math.round(q))}`).join(' · ') || 'لا مشتريات'
+const QUEUE_KEY = ['tax-invoicing', 'coding-queue']
+// useAction reloads only on success; a refused decision (409, a rule) may still mean the list moved, so reload then too
+function useReloadOnError() {
+  const qc = useQueryClient()
+  return call => async () => {
+    try { return await call() } catch (e) { qc.invalidateQueries({ queryKey: QUEUE_KEY }); throw e }
+  }
+}
+// keys a focused button or link inside the grid owns (it clicks on Enter / Space)
+const BUTTON_KEYS = new Set(['Enter', 'NumpadEnter', 'Space', 'KeyC', 'KeyK', 'KeyM'])
 const isTyping = t => t && (t.isContentEditable || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA'
   || (t.tagName === 'INPUT' && !['checkbox', 'radio', 'button'].includes(t.type)))
 
 function Reopen({ row, onDone }) {
   const [reason, setReason] = useState('')
   const act = useAction()
+  const guard = useReloadOnError()
   return (
     <div className="flex flex-wrap items-center gap-2">
       <input className={`${INPUT} w-64`} aria-label={`سبب إعادة فتح ${row.itemcode}`} placeholder="سبب إعادة الفتح"
         value={reason} onChange={e => setReason(e.target.value)} />
       <Btn variant="danger" disabled={act.pending || !reason.trim()}
-        onClick={() => act.run(() => taxInvoicingApi.codingReopen({ itemcode: row.itemcode, reason }), 'أُعيد فتح الصنف', onDone)}>
+        onClick={() => act.run(guard(() => taxInvoicingApi.codingReopen({ itemcode: row.itemcode, reason })), 'أُعيد فتح الصنف', onDone)}>
         إعادة فتح
       </Btn>
       <ActionMsg msg={act.msg} />
@@ -99,10 +110,13 @@ export function EtaHolds() {
 export default function QueueTab({ me }) {
   const canDecide = !!me.can_approve
   const act = useAction()
-  const [page, setPage] = useState(1)
+  const guard = useReloadOnError()
+  const [page, setPageRaw] = useState(1)
   const [ordering, setOrdering] = useState('-value')
   const [f, setF] = useState({ premark: '', decided: 'no', recent: false, q: '' })
   const [picked, setPicked] = useState([])
+  // a new page, sort or filter shows other rows: the ticks go with the old ones
+  const setPage = v => { setPageRaw(v); setPicked([]) }
   const [rates, setRates] = useState({})
   const [open, setOpen] = useState(null)
   const [note, setNote] = useState('')
@@ -112,7 +126,7 @@ export default function QueueTab({ me }) {
   const q = useQuery({ queryKey: ['tax-invoicing', 'coding-queue', params],
     queryFn: () => taxInvoicingApi.codingQueue(params).then(r => r.data), placeholderData: keepPreviousData })
   const rows = q.data?.rows || []
-  const set = (k, v) => { setF(x => ({ ...x, [k]: v })); setPage(1); setPicked([]) }
+  const set = (k, v) => { setF(x => ({ ...x, [k]: v })); setPage(1) }
 
   const toggle = r => { if (canDecide && !r.decision) setPicked(p => (p.includes(r.itemcode) ? p.filter(x => x !== r.itemcode) : [...p, r.itemcode])) }
   const selection = row => (picked.length ? rows.filter(r => picked.includes(r.itemcode)) : row ? [row] : []).filter(r => !r.decision)
@@ -139,7 +153,7 @@ export default function QueueTab({ me }) {
     const why = decision === 'code' ? codeBlock(list) : list.length ? '' : 'اختر صنفاً'
     if (why) { setNote(why); return }
     setNote('')
-    act.run(() => taxInvoicingApi.codingDecide(payload(list, decision)), summary, done)
+    act.run(guard(() => taxInvoicingApi.codingDecide(payload(list, decision))), summary, done)
   }
   // Enter: each row takes its own pre-mark; rows with no pre-mark are left
   const acceptBlock = list => {
@@ -158,10 +172,15 @@ export default function QueueTab({ me }) {
     const left = list.filter(r => !r.premark).map(r => ({ itemcode: r.itemcode, why: 'بلا مقترح' }))
     act.run(async () => {
       const out = { decided: [], skipped: [...left] }
+      // each group on its own: one refused group is reported and the other still saved
       for (const [d, l] of groups) {
-        const { data } = await taxInvoicingApi.codingDecide(payload(l, d))
-        out.decided.push(...data.decided)
-        out.skipped.push(...data.skipped)
+        try {
+          const { data } = await taxInvoicingApi.codingDecide(payload(l, d))
+          out.decided.push(...data.decided)
+          out.skipped.push(...data.skipped)
+        } catch (e) {
+          out.skipped.push(...l.map(r => ({ itemcode: r.itemcode, why: errText(e) })))
+        }
       }
       return { data: out }
     }, summary, done)
@@ -177,6 +196,7 @@ export default function QueueTab({ me }) {
   const activeRow = rows.find(r => r.itemcode === kb.active) || null
   // C / K act before the shared hook, which reads K as "up"
   const onKeyDown = e => {
+    if (BUTTON_KEYS.has(e.code) && e.target !== e.currentTarget && e.target.closest?.('button, a')) return
     if (!isTyping(e.target) && !e.ctrlKey && !e.metaKey && !e.altKey && (e.code === 'KeyC' || e.code === 'KeyK')) {
       e.preventDefault()
       e.stopPropagation()

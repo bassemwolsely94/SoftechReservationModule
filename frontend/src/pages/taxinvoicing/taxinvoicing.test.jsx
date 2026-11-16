@@ -626,6 +626,41 @@ describe('production coding queue', () => {
     expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['901'], decision: 'keep_out' })
   })
 
+  it('leaves Enter on a focused row button to that button, not to the active row', async () => {
+    show(<QueueTab me={ME} />)
+    fireEvent.mouseDown(await screen.findByText('Item 900'))
+    const row901 = screen.getByText('Item 901').closest('tr')
+    const keepOut = within(row901).getByRole('button', { name: 'استبعد' })
+    keepOut.focus()
+    expect(fireEvent.keyDown(keepOut, { code: 'Enter', key: 'Enter' })).toBe(true)   // not prevented: the button clicks
+    expect(fireEvent.keyDown(keepOut, { code: 'KeyK', key: 'k' })).toBe(true)
+    expect(api.codingDecide).not.toHaveBeenCalled()
+    fireEvent.click(keepOut)
+    await waitFor(() => expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['901'], decision: 'keep_out' }))
+  })
+
+  it('reloads the queue when a decision is refused', async () => {
+    api.codingDecide.mockRejectedValue({ response: { status: 409, data: { detail: 'للصنف قرار سابق — أعد فتحه أولاً' } } })
+    show(<QueueTab me={ME} />)
+    const row900 = (await screen.findByText('Item 900')).closest('tr')
+    const before = api.codingQueue.mock.calls.length
+    fireEvent.click(within(row900).getByRole('button', { name: 'استبعد' }))
+    expect(await screen.findByText('للصنف قرار سابق — أعد فتحه أولاً')).toBeTruthy()
+    await waitFor(() => expect(api.codingQueue.mock.calls.length).toBeGreaterThan(before))
+  })
+
+  it('reports a refused group and still saves the other on Enter', async () => {
+    api.codingDecide.mockImplementation(body => (body.decision === 'keep_out'
+      ? Promise.reject({ response: { status: 409, data: { detail: 'للصنف قرار سابق' } } })
+      : Promise.resolve({ data: { decided: ['900'], skipped: [] } })))
+    show(<QueueTab me={ME} />)
+    fireEvent.click(await screen.findByLabelText('اختيار 900'))
+    fireEvent.click(screen.getByLabelText('اختيار 901'))
+    fireEvent.mouseDown(screen.getByText('Item 900'))
+    fireEvent.keyDown(screen.getByTestId('coding-queue-grid'), { code: 'Enter', key: 'Enter' })
+    expect(await screen.findByText(/قُرر 1 — تُرك 1: 901 \(للصنف قرار سابق\)/)).toBeTruthy()
+  })
+
   it('hides the decide buttons without approve', async () => {
     show(<QueueTab me={{ ...ME, can_approve: false }} />)
     await screen.findByText('Item 900')
