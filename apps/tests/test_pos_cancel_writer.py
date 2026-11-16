@@ -153,6 +153,21 @@ class LiveWritePathTests(TestCase):
         self.assertIsNone(e.softech_written_at)                  # UN-claimed → retried, no dup
         self.assertIn('ASE down', e.write_error)
 
+    def test_lost_commit_reply_keeps_the_claim(self):
+        # Full audit 2026-11-15, S-14: the commit may have landed — un-claiming re-inserted the rows next run.
+        br = make_branch()
+        e = _evt(br, code='77777')
+        conn = self._fake_conn()
+        conn.commit.side_effect = RuntimeError('JZ006: Caught IOException: Connection reset')
+        with patch('config.sybase.get_branch_connection', return_value=conn), \
+             patch('apps.pos_orders.writer._exec_insert'):
+            s = PCW.write_pos_cancel_batch(dry_run=False, min_age_minutes=0)
+        self.assertEqual(s['written'], 0)
+        e.refresh_from_db()
+        self.assertIsNotNone(e.softech_written_at)               # still claimed → never re-inserted
+        self.assertTrue(e.write_error.startswith(PCW.OUTCOME_UNKNOWN))
+        conn.rollback.assert_not_called()
+
 
 @override_settings(POS_CANCEL_WRITE_ENABLED=True)
 class ConcurrentRunTests(TestCase):

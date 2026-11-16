@@ -243,7 +243,7 @@ def _line_row(ln, new_isr, idx, usercode):
     }
 
 
-def _write_isr(conn, source_branch, dest_branch, lines, usercode, *, do_commit, approved=False):
+def _write_isr(conn, source_branch, dest_branch, lines, usercode, *, do_commit, approved=False, progress=None):
     """
     Write the ISR in ONE chained transaction, inserting in _INSERT_CHUNK batches
     (a single 2800-line batch overruns ASE's procedure cache). Serial allocated once
@@ -267,6 +267,8 @@ def _write_isr(conn, source_branch, dest_branch, lines, usercode, *, do_commit, 
         new_isr = _next_isrdocnumber(row[0] if row and row[0] is not None else None, prefix)
 
         # HEADER first (stockisrm) — required for the ISR to be retrievable
+        if progress is not None:
+            progress['sent'] = True      # from here an error may come after SOFTECH committed (S-5)
         docvalue = sum(float(ln['itemqty']) * float(ln['itemcostprice']) for ln in lines)
         cur.execute(_insert_sql('stockisrm',
                                 _header_row(source_branch, dest_branch, new_isr, docvalue,
@@ -303,6 +305,10 @@ def _write_isr(conn, source_branch, dest_branch, lines, usercode, *, do_commit, 
             jconn.setAutoCommit(True)
         except Exception:
             pass
+
+
+# Draft error prefix when a push may have landed in SOFTECH without a confirmed reply (S-5).
+OUTCOME_UNKNOWN = 'outcome-unknown: '
 
 
 # ── 2. PUSH — guarded; dry-run plan unless gate on + dry_run=False ──────────────
@@ -381,7 +387,20 @@ def _push_isr_record(isr_push, *, executed_by=None, force_reason='', confirm_cou
                                      'by': getattr(executed_by, 'username', None), 'at': timezone.now().isoformat()}
             isr_push.params = params
             isr_push.save(update_fields=['params'])
-        w = _write_isr(conn, isr_push.branchcode, (isr_push.dest_branchcode or isr_push.branchcode), lines, usercode, do_commit=True, approved=True)
+        progress = {}
+        try:
+            w = _write_isr(conn, isr_push.branchcode, (isr_push.dest_branchcode or isr_push.branchcode), lines,
+                           usercode, do_commit=True, approved=True, progress=progress)
+        except Exception as exc:
+            if progress.get('sent'):
+                # The ISR may be in SOFTECH (the commit can land before the reply is lost). Leaving the draft
+                # APPROVED let a retry write a second approved ISR (full audit 2026-11-15, S-5): mark it failed
+                # with an unknown outcome — a new draft with the same lines then needs a written reason.
+                isr_push.status = IsrPush.STATUS_FAILED
+                isr_push.error = f'{OUTCOME_UNKNOWN}{exc}'[:300]
+                isr_push.readback = {'outcome_unknown': True}
+                isr_push.save(update_fields=['status', 'error', 'readback'])
+            raise
     finally:
         if conn is not None:
             try:

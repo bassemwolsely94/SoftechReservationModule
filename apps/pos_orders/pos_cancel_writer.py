@@ -39,6 +39,9 @@ _REACHED_SOFTECH = {SoftechSalesOrder.STATUS_PUSHING,
                     SoftechSalesOrder.STATUS_SETTLED}
 
 
+# write_error prefix: the commit was sent but its reply was lost (S-14) — never re-inserted automatically.
+OUTCOME_UNKNOWN = 'outcome-unknown: '
+
 def write_enabled():
     return writer_allowed('POS_CANCEL_WRITE_ENABLED')
 
@@ -138,19 +141,30 @@ def write_pos_cancel_batch(*, dry_run=None, limit=2000, min_age_minutes=360):
             continue
         rows = [_row_from_event(e) for e in evs if e.id in ids]
         conn = None
+        commit_sent = False
         try:
             conn = get_branch_connection(branch.effective_db_host, branch.effective_db_port,
                                          branch.db_name or 'SOFTECHDB9', charset=W._write_charset())
             conn.begin()
             for row in rows:
                 W._exec_insert(conn, 'pos_cancel', row)
+            commit_sent = True
             conn.commit()
         except Exception as exc:
-            if conn is not None:
+            if conn is not None and not commit_sent:
                 try:
                     conn.rollback()
                 except Exception:
                     pass
+            if commit_sent:
+                # The commit may have landed before the reply was lost: keep the claim so the next run
+                # never inserts these rows a second time (full audit 2026-11-15, S-14). A person checks.
+                PosSelectionEvent.objects.filter(id__in=ids, write_error=token).update(
+                    write_error=(OUTCOME_UNKNOWN + str(exc))[:200])
+                summary['branches'][bc] = {'outcome_unknown': len(rows), 'error': str(exc)[:200]}
+                logger.error('[pos_cancel_writer] branch %s commit reply lost — %d rows kept claimed: %s',
+                             bc, len(rows), exc)
+                continue
             # UN-CLAIM (only this run's claim) → retried next run (branch unreachable, or a write error)
             PosSelectionEvent.objects.filter(id__in=ids, write_error=token).update(
                 softech_written_at=None, write_error=str(exc)[:200])
