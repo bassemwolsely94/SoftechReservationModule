@@ -66,3 +66,9 @@ ocr_tessdata/
 # Attendance agent, filled settings (secret) and local state (names)
 agent.ini
 agent_state/
+
+# Role-by-role UAT (docs/superpowers/specs/2026-11-16-role-uat-design.md): credentials + real reference data stay local
+frontend/uat/.uat-*.json
+frontend/uat/.auth/
+frontend/test-results-uat/
+logs/uat.log
