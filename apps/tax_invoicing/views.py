@@ -432,7 +432,6 @@ _CODING_FIELDS = ('code_type', 'eta_code', 'coding_status', 'unit_type', 'item_n
 
 def _apply_item(request, p, data):
     """Coding needs `edit`. Tax treatment and disposition are the accountant's: `approve`."""
-    from decimal import Decimal, InvalidOperation
     touched_treatment = any(f in data for f in _TREATMENT_FIELDS)
     touched_disposition = any(f in data for f in _DISPOSITION_FIELDS)
     if (touched_treatment or touched_disposition) and not _can(request, 'approve'):
@@ -450,23 +449,12 @@ def _apply_item(request, p, data):
     if p.list_status not in dict(TaxItemProfile.LIST_CHOICES):
         return Response({'detail': 'قائمة غير معروفة'}, status=status.HTTP_400_BAD_REQUEST)
     if touched_treatment:
-        treatment = data.get('tax_treatment', p.tax_treatment)
-        if treatment not in dict(TaxItemProfile.TREATMENT_CHOICES):
-            return Response({'detail': 'معاملة ضريبية غير معروفة'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            rate = Decimal(str(data.get('vat_rate', p.vat_rate)))
-        except InvalidOperation:
-            return Response({'detail': 'نسبة غير صحيحة'}, status=status.HTTP_400_BAD_REQUEST)
-        if treatment == TaxItemProfile.TREATMENT_TAXABLE and not (0 < rate <= 100):
-            return Response({'detail': 'الصنف الخاضع يحتاج نسبة ضريبة'}, status=status.HTTP_400_BAD_REQUEST)
-        if treatment in (TaxItemProfile.TREATMENT_EXEMPT, TaxItemProfile.TREATMENT_ZERO) \
-                and not (data.get('treatment_reference', p.treatment_reference) or '').strip():
-            return Response({'detail': 'اذكر مرجع الإعفاء أو النسبة الصفرية'}, status=status.HTTP_400_BAD_REQUEST)
-        p.tax_treatment = treatment
-        p.vat_rate = rate if treatment == TaxItemProfile.TREATMENT_TAXABLE else Decimal('0')
-        p.treatment_reference = (data.get('treatment_reference', p.treatment_reference) or '').strip()
-        p.treatment_confirmed_at = None if treatment == TaxItemProfile.TREATMENT_UNCLASSIFIED else timezone.now()
-        p.treatment_confirmed_by = None if treatment == TaxItemProfile.TREATMENT_UNCLASSIFIED else request.user
+            services.confirm_treatment(
+                p, treatment=data.get('tax_treatment', p.tax_treatment), vat_rate=data.get('vat_rate', p.vat_rate),
+                reference=data.get('treatment_reference', p.treatment_reference), actor=request.user)
+        except services.TaxRuleError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
     if touched_disposition:
         if data['disposition'] not in dict(TaxItemProfile.DISPOSITION_CHOICES):
             return Response({'detail': 'قرار غير معروف'}, status=status.HTTP_400_BAD_REQUEST)
