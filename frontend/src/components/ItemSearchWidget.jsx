@@ -39,6 +39,8 @@ import StockAge from '../pos/search/StockAge'
 import { isExactishRow, isExactCodeRow } from '../pos/search/autoAdd'
 import BarcodeScanner, { cameraAvailable } from './BarcodeScanner'
 import useFeatures from '../hooks/useFeatures'
+import SearchTierChip from './SearchTierChip'
+import Highlight from './Highlight'
 
 // A scanned code matches an item when it is the item's code, its primary barcode or one of its
 // extra barcodes (shape differs between the default and the POS search results).
@@ -141,17 +143,23 @@ function SelectedItemCard({ item, onClear, disabled }) {
 
 // ── Dropdown result row ────────────────────────────────────────────────────────
 
-function ResultRow({ item, onSelect }) {
+function ResultRow({ item, onSelect, index, selected, query }) {
   const primaryBarcode = item.all_barcodes?.[0] || item.barcode || ''
   const price  = fmtPrice(item.pack_price)
   const stock  = item.total_stock !== undefined ? Number(item.total_stock) : null
 
   return (
     <div
-      className="px-3 py-2.5 hover:bg-brand-50 cursor-pointer border-b border-gray-50 last:border-0 transition-colors"
+      data-idx={index}
+      role="option"
+      aria-selected={!!selected}
+      className={`px-3 py-2.5 hover:bg-brand-50 cursor-pointer border-b border-gray-50 last:border-0 transition-colors ${selected ? 'bg-brand-50' : ''}`}
       onMouseDown={e => { e.preventDefault(); onSelect(item) }}
     >
-      <div className="font-semibold text-sm text-gray-900 leading-snug">{item.name}</div>
+      <div className="font-semibold text-sm text-gray-900 leading-snug">
+        <Highlight text={item.name} query={query} />
+        <SearchTierChip row={item} />
+      </div>
       {item.name_scientific && (
         <div className="text-[10px] text-gray-400 italic mb-0.5">{item.name_scientific}</div>
       )}
@@ -230,19 +238,19 @@ export default function ItemSearchWidget({
   // already handles partial matches. Full wildcard syntax is available in the advanced modal.
   const [debouncedQ, setDebouncedQ] = useState('')
   useEffect(() => {
-    // pos variant keeps * / % (wildcard search rules); the default widget strips them as before.
-    const cleaned = isPos ? q.trim() : q.replace(/\*/g, '').trim()
+    // both variants keep * / % (wildcard search rules); the default widget uses the engine ranking
+    const cleaned = q.trim()
     if (cleaned.replace(/[*%]/g, '').length < 2) { setDebouncedQ(''); return }
     const t = setTimeout(() => setDebouncedQ(cleaned), 280)
     return () => clearTimeout(t)
-  }, [q, isPos])
+  }, [q])
 
   const { data: found, isFetching, isPlaceholderData } = useQuery({
-    queryKey: isPos ? ['item-search-widget', debouncedQ, branchId, 'pos'] : ['item-search-widget', debouncedQ],
+    queryKey: isPos ? ['item-search-widget', debouncedQ, branchId, 'pos'] : ['item-search-widget', debouncedQ, 'engine'],
     queryFn: () => isPos
       ? itemsApi.wildcardSearch(debouncedQ, branchId, { network: true, noLive: true })
           .then(r => ({ rows: r.data.results || [], asOf: r.data.stock_as_of ?? null }))
-      : api.get('/items/', { params: { search: debouncedQ, page_size: 10 } })
+      : api.get('/items/', { params: { search: debouncedQ, rank: 'engine', page_size: 10 } })
           .then(r => ({ rows: r.data.results || r.data, asOf: null })),
     enabled: debouncedQ.length >= 2,
     staleTime: 15_000,
@@ -272,7 +280,7 @@ export default function ItemSearchWidget({
   // pos: the rows on screen belong to an OLDER query while the debounce/fetch catches up, so an
   // Enter pressed then is queued for the typed text and acts only on ITS fresh first row (a scanner
   // typing a code + Enter adds that code's item, never the previous result's highlighted row).
-  const typedQ = isPos ? q.trim() : q.replace(/\*/g, '').trim()
+  const typedQ = q.trim()
   const resultsStale = typedQ !== debouncedQ || isFetching || !!isPlaceholderData
   const [enterFor, setEnterFor] = useState(null)
 
@@ -336,9 +344,9 @@ export default function ItemSearchWidget({
 
   // keep the highlighted row in view while arrowing
   useEffect(() => {
-    if (!isPos || !open) return
-    dropdownRef.current?.querySelector(`[data-idx="${sel}"]`)?.scrollIntoView({ block: 'nearest' })
-  }, [sel, isPos, open, results])
+    if (!open) return
+    dropdownRef.current?.querySelector(`[data-idx="${sel}"]`)?.scrollIntoView?.({ block: 'nearest' })
+  }, [sel, open, results])
 
   function onPosKeyDown(e) {
     const listOpen = open && debouncedQ.length >= 2 && results.length > 0
@@ -364,6 +372,24 @@ export default function ItemSearchWidget({
     else if (e.key === 'Enter') {
       const it = results[Math.min(sel, results.length - 1)]
       if (it) { e.preventDefault(); handleSelect(it) }
+    }
+  }
+
+  // default variant: ↑/↓ move the highlight (clamped), Enter picks it, Esc closes — no preview,
+  // F7 or queued Enter (those are POS-only)
+  function onDefaultKeyDown(e) {
+    const listOpen = open && debouncedQ.length >= 2
+    if (e.key === 'Escape') {
+      if (open) { e.preventDefault(); e.stopPropagation(); setOpen(false) }
+      return
+    }
+    if (!listOpen) return
+    if (e.key === 'ArrowDown') { e.preventDefault(); setSel(s => Math.min(s + 1, Math.max(results.length - 1, 0))) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(s => Math.max(s - 1, 0)) }
+    else if (e.key === 'Enter') {
+      e.preventDefault()   // never submit an enclosing form while the list is open
+      const it = results[Math.min(sel, results.length - 1)]
+      if (it) handleSelect(it)
     }
   }
 
@@ -405,7 +431,7 @@ export default function ItemSearchWidget({
             placeholder={placeholder}
             value={q}
             onChange={e => { setQ(e.target.value); setOpen(true); setScanMiss('') }}
-            onKeyDown={isPos ? onPosKeyDown : undefined}
+            onKeyDown={isPos ? onPosKeyDown : onDefaultKeyDown}
             onFocus={() => setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 150)}
             autoFocus={autoFocus}
@@ -460,7 +486,7 @@ export default function ItemSearchWidget({
         <BarcodeIcon />
         {isPos
           ? 'اسم · كود · باركود · * أو % لأي حروف · ↑↓ تنقّل · Enter إضافة · → معاينة · F7 بدائل · Esc إغلاق ·'
-          : 'اسم · كود · باركود (قارئ ضوئي متوافق) · لا حاجة لـ * (البحث الجزئي تلقائي) ·'}
+          : 'اسم · كود · باركود (قارئ ضوئي متوافق) · * أو % لأي حروف · ↑↓ تنقّل · Enter اختيار ·'}
         <button data-tour="item-search-advanced"
           type="button"
           onClick={() => setShowAdvanced(true)}
@@ -515,11 +541,13 @@ export default function ItemSearchWidget({
       {showDropdown && !isPos && (
         <div
           ref={dropdownRef}
+          role="listbox"
           className="absolute z-30 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 max-h-64 overflow-y-auto"
         >
           {results.length > 0 ? (
-            results.map(item => (
-              <ResultRow key={item.id} item={item} onSelect={handleSelect} />
+            results.map((item, i) => (
+              <ResultRow key={item.id} item={item} onSelect={handleSelect}
+                index={i} selected={i === sel} query={debouncedQ} />
             ))
           ) : (
             <div className="px-4 py-4 text-sm text-gray-400 text-center">
