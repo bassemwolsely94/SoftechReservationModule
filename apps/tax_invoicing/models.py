@@ -480,8 +480,9 @@ class TaxCodeRequest(models.Model):
         verbose_name = 'طلب كود صنف من المصلحة'
         ordering = ['-prepared_at', '-id']
         constraints = [
-            models.UniqueConstraint(fields=['profile'], condition=Q(status__in=['prepared', 'sending', 'submitted', 'uncertain']),
-                                    name='one_open_code_request_per_item'),
+            models.UniqueConstraint(fields=['profile', 'environment'],
+                                    condition=Q(status__in=['prepared', 'sending', 'submitted', 'uncertain']),
+                                    name='one_open_code_request_per_item_system'),
         ]
 
     def __str__(self):

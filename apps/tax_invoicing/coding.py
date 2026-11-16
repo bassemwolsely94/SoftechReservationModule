@@ -78,11 +78,12 @@ def _check_fields(parent_code, code_name, code_name_ar):
     return problems
 
 
-def prepare(profile_ids, actor, *, parent_code='', active_from=None, reason='', use_suggested=False):
+def prepare(profile_ids, actor, *, parent_code='', active_from=None, reason='', use_suggested=False, system=''):
     """Draft one request per item. Sends nothing. Returns {'created': [...], 'skipped': [{itemcode, why}]}.
     The brick: the one typed for the batch, else the item's own, else (only when asked) the suggested one,
     which the person saw beside the item before preparing."""
     tax_id = _issuer_tax_id()
+    system = system or environment.current()
     ids = list(profile_ids)[:MAX_PER_ACTION]
     created, skipped = [], []
     profiles = list(TaxItemProfile.objects.filter(pk__in=ids).select_related('item__category').order_by('softech_itemcode'))
@@ -104,7 +105,7 @@ def prepare(profile_ids, actor, *, parent_code='', active_from=None, reason='', 
                 row = TaxCodeRequest.objects.create(
                     profile=profile, item_code=item_code_for(tax_id, profile.softech_itemcode), parent_code=brick,
                     code_name=name_en[:200], code_name_ar=name_ar[:200], active_from=active_from or timezone.localdate(),
-                    request_reason=(reason or 'صنف صيدلي يُباع للعملاء')[:300], prepared_by=actor)
+                    request_reason=(reason or 'صنف صيدلي يُباع للعملاء')[:300], prepared_by=actor, environment=system)
         except IntegrityError:
             skipped.append({'itemcode': profile.softech_itemcode, 'why': 'يوجد طلب مفتوح لهذا الصنف'})
             continue
@@ -160,9 +161,15 @@ def _payload(row):
     return item
 
 
+def _touches_profile(row):
+    """Only a real-system request for the item's own code changes the item. A test-system request, or a
+    test-system copy of a real code, leaves the item's real coding as it is."""
+    return row.purpose != TaxCodeRequest.PURPOSE_MIRROR and row.environment == 'production'
+
+
 def _mark_profile_pending(row, actor):
-    if row.purpose == TaxCodeRequest.PURPOSE_MIRROR:
-        return     # a test-system copy of a real code: the item's real coding stays as it is
+    if not _touches_profile(row):
+        return
     profile = row.profile
     before = {'coding_status': profile.coding_status, 'eta_code': profile.eta_code, 'code_type': profile.code_type}
     profile.coding_status, profile.eta_code, profile.code_type = TaxItemProfile.CODE_PENDING, row.item_code, _code_type(row)
@@ -199,8 +206,11 @@ def send(request_ids, actor, confirm):
     if str(confirm).strip() != str(len(rows)):
         raise TaxRuleError(f'اكتب عدد الطلبات ({len(rows)}) للتأكيد')
     env = environment.current() or 'custom'
-    results = {'submitted': 0, 'failed': 0, 'uncertain': 0, 'stopped': ''}
+    results = {'submitted': 0, 'failed': 0, 'uncertain': 0, 'stopped': '', 'refused': []}
     for row in rows:
+        if row.environment and row.environment != env:
+            results['refused'].append({'id': row.pk, 'why': f'الطلب مُعدّ للمنظومة «{row.environment}» وهذا السيرفر يرسل إلى «{env}»'})
+            continue
         with transaction.atomic():
             claimed = TaxCodeRequest.objects.filter(pk=row.pk, status__in=[TaxCodeRequest.PREPARED, TaxCodeRequest.FAILED]) \
                 .update(status=TaxCodeRequest.SENDING, sent_by=actor, sent_at=timezone.now(), environment=env, error='')
@@ -257,7 +267,7 @@ def _apply_eta_answer(row, eta_row, actor):
             profile.eta_check_env, profile.eta_check_status = row.environment, TaxItemProfile.CHECK_FOUND
             profile.eta_checked_at = timezone.now()
             profile.save()
-    elif status in (TaxCodeRequest.APPROVED, TaxCodeRequest.REJECTED):
+    elif status in (TaxCodeRequest.APPROVED, TaxCodeRequest.REJECTED) and _touches_profile(row):
         profile = row.profile
         before = {'coding_status': profile.coding_status, 'eta_code': profile.eta_code}
         profile.coding_status = TaxItemProfile.CODE_APPROVED if status == TaxCodeRequest.APPROVED else TaxItemProfile.CODE_REJECTED
@@ -386,10 +396,10 @@ def mirror_candidates(limit=500):
             .exclude(pk__in=open_ids).order_by('softech_itemcode')[:limit])
 
 
-def prepare_mirror(profile_ids, actor, *, reason=''):
+def prepare_mirror(profile_ids, actor, *, reason='', system=''):
     """Register the items' existing real codes in the test system in use, so test documents can carry them.
     Never in production: there a missing code is a finding for the accountant, not something to re-register."""
-    here = environment.current()
+    here = system or environment.current()
     if here in ('', 'production'):
         raise TaxRuleError('تسجيل الأكواد الحالية متاح في المنظومة التجريبية فقط')
     tax_id = _issuer_tax_id()
@@ -412,7 +422,7 @@ def prepare_mirror(profile_ids, actor, *, reason=''):
                     profile=profile, purpose=TaxCodeRequest.PURPOSE_MIRROR, item_code=profile.eta_code,
                     parent_code=profile.gpc_code, code_name=profile.item_name[:200],
                     code_name_ar=(profile.item_name_ar or profile.item_name)[:200], active_from=timezone.localdate(),
-                    request_reason=(reason or 'تسجيل كود قائم للاختبار')[:300], prepared_by=actor)
+                    request_reason=(reason or 'تسجيل كود قائم للاختبار')[:300], prepared_by=actor, environment=here)
         except IntegrityError:
             skipped.append({'itemcode': profile.softech_itemcode, 'why': 'يوجد طلب مفتوح لهذا الصنف'})
             continue
@@ -466,9 +476,10 @@ def gs1_candidates(limit=500):
     return out
 
 
-def prepare_gs1(profile_ids, actor, *, reason=''):
+def prepare_gs1(profile_ids, actor, *, reason='', system=''):
     """Draft a "use this GS1 code" request per item, from its catalog barcode. Sends nothing.
     Real or test system alike: an approved GS1 code is the item's code in that system."""
+    system = system or environment.current()
     ids = list(profile_ids)[:MAX_PER_ACTION]
     created, skipped = [], []
     for profile in TaxItemProfile.objects.filter(pk__in=ids).select_related('item').prefetch_related('item__barcodes').order_by('softech_itemcode'):
@@ -486,7 +497,7 @@ def prepare_gs1(profile_ids, actor, *, reason=''):
                     code_name=(profile.item_name or barcode)[:200],
                     code_name_ar=(profile.item_name_ar or profile.item_name or barcode)[:200],
                     active_from=timezone.localdate(), request_reason=(reason or 'باركود المصنع لصنف نبيعه')[:300],
-                    prepared_by=actor)
+                    prepared_by=actor, environment=system)
         except IntegrityError:
             skipped.append({'itemcode': profile.softech_itemcode, 'why': 'يوجد طلب مفتوح لهذا الصنف'})
             continue
