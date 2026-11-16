@@ -866,3 +866,23 @@ class EtaReconUncodedItem(models.Model):
                                                name='eta_recon_uncoded_once')]
         indexes = [models.Index(fields=['system', 'itemcode'], name='eta_recon_uncoded_item'),
                    models.Index(fields=['system', 'day'], name='eta_recon_uncoded_day')]
+
+
+class EtaCodeUsage(models.Model):
+    """One code-usage request ETA holds for us in one system (the portal's code-usage history), whatever its status
+    (Approved / Rejected / Submitted). A read-only mirror: only eta_codes.fetch writes it. `itemcode` is our SOFTECH
+    code once the EGS/GS1 code is matched to an item."""
+    system = models.CharField(max_length=12, choices=ETA_SYSTEMS)
+    code_type = models.CharField(max_length=10)
+    item_code = models.CharField(max_length=100)
+    code_name = models.CharField(max_length=300, blank=True, default='')
+    active_from = models.DateField(null=True, blank=True)
+    active_to = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=30, blank=True, default='')
+    gpc = models.CharField(max_length=10, blank=True, default='')
+    itemcode = models.CharField(max_length=10, blank=True, default='', db_index=True)
+    fetched_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'كود مسجل لدى المصلحة'
+        constraints = [models.UniqueConstraint(fields=['system', 'code_type', 'item_code'], name='eta_code_usage_once')]

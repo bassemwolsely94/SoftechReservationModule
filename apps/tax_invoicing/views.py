@@ -1187,6 +1187,18 @@ def codes_check(request):
         return _refuse(exc)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, VIEWER])
+def codes_eta_holds(request):
+    """What ETA production already holds for us (the mirrored code-usage history) against the owner's sheet."""
+    from . import eta_codes
+    from .eta_reader import SYSTEMS
+    system = request.query_params.get('system') or 'production'
+    if system not in SYSTEMS:
+        return Response({'detail': 'منظومة غير معروفة'}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(eta_codes.report(system))
+
+
 # ── ETA history mirror: progress and refresh (doc 36 §history) ─────────────────────────────────
 
 @api_view(['GET'])
