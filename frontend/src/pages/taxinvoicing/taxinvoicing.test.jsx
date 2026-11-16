@@ -51,6 +51,10 @@ const api = vi.hoisted(() => ({
   reconUncoded: vi.fn(),
   reconUncodedExport: vi.fn(),
   saveReceiptConfig: vi.fn(),
+  codingQueue: vi.fn(),
+  codingDecide: vi.fn(),
+  codingReopen: vi.fn(),
+  etaHolds: vi.fn(),
 }))
 
 vi.mock('../../components/DataFreshnessBar', () => ({ default: () => null }))
@@ -67,6 +71,7 @@ const { BranchActions, ChainStart, TestMapping, SendFrom } = await import('./Rec
 const { default: CodesTab, CodeCheck, Candidates, Gs1Candidates } = await import('./CodesTab')
 const { HistoryProgress } = await import('./SettingsTab')
 const { default: HistoryTab } = await import('./HistoryTab')
+const { default: QueueTab } = await import('./QueueTab')
 
 const line = (id, status) => ({
   id, docnumber: '55', docdate: '2026-10-01', branch: '170', itemcode: `I${id}`, item_name: `صنف ${id}`, quantity: '1',
@@ -554,5 +559,83 @@ describe('SOFTECH ↔ ETA reconciliation', () => {
     expect(api.reconLines).toHaveBeenCalledWith(expect.objectContaining({ system: 'production', outcome: 'missing_at_eta', reason: 'none', ordering: '-softech_total' }))
     fireEvent.change(screen.getByLabelText('القناة'), { target: { value: '90' } })
     await waitFor(() => expect(api.reconLines).toHaveBeenLastCalledWith(expect.objectContaining({ channel: '90', reason: 'none' })))
+  })
+})
+
+describe('production coding queue', () => {
+  const qrow = (itemcode, value, extra = {}) => ({
+    id: Number(itemcode), itemcode, name: `Item ${itemcode}`, name_ar: '', value, docs: 3, last_day: '2026-11-14',
+    premark: 'code', premark_reason: 'official', note: 'اشتُري من موزع أو مخزن أو مصنع', sources: { OFFICIAL_DISTRIBUTOR: 12 },
+    vat_rate: '0', vat_flagged: false, vat_why: 'catalog', eta_last_status: '', decision: null, decided_by: '', decided_at: null, ...extra,
+  })
+  const rows = [
+    qrow('900', '5000.00'),
+    qrow('901', '1200.00', { premark: 'keep_out', premark_reason: 'unofficial_only', note: 'لم يُشترَ من موزع أو مخزن أو مصنع' }),
+    qrow('902', '300.00', { vat_flagged: true, vat_why: 'zero_for_type' }),
+  ]
+
+  beforeEach(() => {
+    api.codingQueue.mockResolvedValue({ data: { count: 3, page: 1, pages: 1, total_value: '6500.00', catalog_without_profile: false, rows } })
+    api.etaHolds.mockResolvedValue({ data: { on_eta_not_in_sheet: [{ code_type: 'EGS', item_code: 'EG-1-77', code_name: 'Old item', status: 'Active', itemcode: '77' }],
+      in_sheet_not_on_eta: ['55'], counts: { usages: 10, active: 8, matched: 7, unmatched: 1, sheet: 9 } } })
+    api.codingDecide.mockResolvedValue({ data: { decided: ['901'], skipped: [] } })
+  })
+
+  it('renders the rows biggest sales first, as the server sends them', async () => {
+    show(<QueueTab me={ME} />)
+    await screen.findByText('Item 900')
+    const grid = screen.getByTestId('coding-queue-grid')
+    const names = within(grid).getAllByText(/^Item 9\d\d$/).map(e => e.textContent)
+    expect(names).toEqual(['Item 900', 'Item 901', 'Item 902'])
+    expect(api.codingQueue).toHaveBeenCalledWith(expect.objectContaining({ ordering: '-value', page: 1 }))
+  })
+
+  it('disables the bulk accept while the selection holds a row whose VAT needs checking', async () => {
+    show(<QueueTab me={ME} />)
+    fireEvent.click(await screen.findByLabelText('اختيار 900'))
+    expect(screen.getByRole('button', { name: /قبول المقترح/ }).disabled).toBe(false)
+    fireEvent.click(screen.getByLabelText('اختيار 902'))
+    expect(screen.getByRole('button', { name: /قبول المقترح/ }).disabled).toBe(true)
+  })
+
+  it('K on the selected row keeps it out of coding', async () => {
+    show(<QueueTab me={ME} />)
+    fireEvent.click(await screen.findByLabelText('اختيار 901'))
+    fireEvent.keyDown(screen.getByTestId('coding-queue-grid'), { code: 'KeyK', key: 'k' })
+    await waitFor(() => expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['901'], decision: 'keep_out' }))
+  })
+
+  it('decides a flagged row on its own with the rate chosen for it', async () => {
+    show(<QueueTab me={ME} />)
+    fireEvent.click(await screen.findByLabelText('اختيار 902'))
+    const code = screen.getAllByRole('button', { name: 'كوّد' })[0]
+    expect(code.disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('نسبة ضريبة 902'), { target: { value: '14' } })
+    fireEvent.keyDown(screen.getByTestId('coding-queue-grid'), { code: 'KeyC', key: 'c' })
+    await waitFor(() => expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['902'], decision: 'code', vat_rate: '14' }))
+  })
+
+  it('Enter accepts each selected row by its own pre-mark', async () => {
+    show(<QueueTab me={ME} />)
+    fireEvent.click(await screen.findByLabelText('اختيار 900'))
+    fireEvent.click(screen.getByLabelText('اختيار 901'))
+    fireEvent.mouseDown(screen.getByText('Item 900'))
+    fireEvent.keyDown(screen.getByTestId('coding-queue-grid'), { code: 'Enter', key: 'Enter' })
+    await waitFor(() => expect(api.codingDecide).toHaveBeenCalledTimes(2))
+    expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['900'], decision: 'code', vat_rate: '0' })
+    expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['901'], decision: 'keep_out' })
+  })
+
+  it('hides the decide buttons without approve', async () => {
+    show(<QueueTab me={{ ...ME, can_approve: false }} />)
+    await screen.findByText('Item 900')
+    expect(screen.queryByRole('button', { name: /قبول المقترح/ })).toBeNull()
+    expect(screen.queryByLabelText('اختيار 900')).toBeNull()
+  })
+
+  it('shows what ETA production holds that our sheet lacks', async () => {
+    show(<QueueTab me={ME} />)
+    fireEvent.click(await screen.findByRole('button', { name: /عرض ما لدى المصلحة/ }))
+    expect(await screen.findByText('EG-1-77')).toBeTruthy()
   })
 })
