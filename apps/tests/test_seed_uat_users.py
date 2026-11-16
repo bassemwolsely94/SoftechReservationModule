@@ -109,6 +109,18 @@ class SeedUatUsersTest(TestCase):
         self.assertNotIn('real:old_pharma', {u['key'] for u in data['users']})
 
     @override_settings(**UAT)
+    def test_real_auto_uses_screen_views_when_last_login_is_empty(self):
+        from apps.audit.models import ScreenView
+        _, p_idle, _ = make_user('idle_sales', role='salesperson', branch=self.a)
+        _, p_busy, _ = make_user('busy_sales', role='salesperson', branch=self.a)
+        sv = ScreenView.objects.create(staff=p_busy, role='salesperson', route='/pos', branch=self.a)
+        ScreenView.objects.filter(pk=sv.pk).update(at=timezone.now() - timedelta(days=2))
+        _, data = self.run_cmd('--real-auto')
+        keys = {u['key'] for u in data['users']}
+        self.assertIn('real:busy_sales', keys)
+        self.assertNotIn('real:idle_sales', keys)
+
+    @override_settings(**UAT)
     def test_idempotent_and_password_reused(self):
         _, first = self.run_cmd()
         n = User.objects.filter(username__startswith='uat_').count()

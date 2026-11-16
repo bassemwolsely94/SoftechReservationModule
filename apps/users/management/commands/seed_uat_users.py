@@ -167,15 +167,21 @@ class Command(BaseCommand):
 
     @staticmethod
     def _recent_real_users(StaffProfile, branch_a, branch_b):
+        # Activity = the latest screen view (audit ScreenView, P-57); JWT logins never update
+        # auth last_login, so it is only the fallback.
+        from django.db.models import Max
+        from django.db.models.functions import Coalesce
         since = timezone.now() - timedelta(days=30)
         names = []
         for role in ROLE_KEYS:
-            qs = (StaffProfile.objects.filter(role=role, is_active=True, user__is_active=True,
-                                              user__last_login__gte=since)
+            qs = (StaffProfile.objects.filter(role=role, is_active=True, user__is_active=True)
                   .exclude(user__username__startswith='uat_').exclude(user__username__startswith='e2e_')
+                  .annotate(seen=Coalesce(Max('screen_views__at', filter=Q(screen_views__at__gte=since)),
+                                          'user__last_login'))
+                  .filter(seen__gte=since)
                   .select_related('user'))
-            in_ab = qs.filter(branch__in=[branch_a, branch_b]).order_by('-user__last_login').first()
-            pick = in_ab or qs.order_by('-user__last_login').first()
+            in_ab = qs.filter(branch__in=[branch_a, branch_b]).order_by('-seen').first()
+            pick = in_ab or qs.order_by('-seen').first()
             if pick:
                 names.append(pick.user.username)
         return names
