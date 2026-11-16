@@ -53,6 +53,15 @@ def index_sql() -> list:
     return sql
 
 
+def index_drop_sql() -> list:
+    """The DROP INDEX IF EXISTS statements of catalog 0044–0046 (each migration's own constant
+    REVERSE list) — so --with-temp-indexes never builds SQL from text."""
+    sql = []
+    for mod in INDEX_MIGRATIONS:
+        sql += importlib.import_module(mod).REVERSE
+    return sql
+
+
 def index_names() -> list:
     return [re.search(r'CREATE INDEX IF NOT EXISTS (\w+)', s).group(1) for s in index_sql()]
 
@@ -99,8 +108,8 @@ class Command(BaseCommand):
                         # DDL refuses a table with pending deferred-FK checks (rows written
                         # earlier in this transaction, e.g. a test's fixtures): run them now
                         c.execute('SET CONSTRAINTS ALL IMMEDIATE')
-                        for name in names:
-                            c.execute(f'DROP INDEX IF EXISTS {name}')
+                        for s in index_drop_sql():      # the migrations' constant DROP statements
+                            c.execute(s)
                         for s in index_sql():
                             c.execute(s)
                         c.execute('ANALYZE catalog_item')
