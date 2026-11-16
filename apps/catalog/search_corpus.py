@@ -168,9 +168,7 @@ SEED_INGREDIENTS = [('89489', 'DICLOFENAC POTASSIUM')]
 
 def check(entry, rows) -> bool:
     """rows: [(name, tier)] best first. True when a row in the first entry['top'] matches
-    entry['expect'] — and, if the entry names a tier, that row has that tier."""
-    rx = re.compile(entry['expect'], re.I)
-    for name, tier in rows[:entry.get('top', 1)]:
-        if rx.search(name or ''):
-            return entry.get('tier') is None or tier == entry['tier']
-    return False
+    entry['expect'] — and, if the entry names a tier, that same row has that tier."""
+    rx, want = re.compile(entry['expect'], re.I), entry.get('tier')
+    return any(rx.search(name or '') and (want is None or tier == want)
+               for name, tier in rows[:entry.get('top', 1)])

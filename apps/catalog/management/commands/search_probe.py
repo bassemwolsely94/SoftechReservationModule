@@ -4,7 +4,7 @@ through every search path, with timings. Run before and after each search batch.
 
     python manage.py search_probe                       # 3 timed runs per query and path
     python manage.py search_probe --repeat 5 --json out.json
-    python manage.py search_probe --with-temp-indexes   # dev DB without catalog 0044/0045
+    python manage.py search_probe --with-temp-indexes   # dev DB without catalog 0044–0046
 
 Paths (in-process, APIRequestFactory as an existing superuser — no server needed):
   A  /api/items/softech-search/?no_live=1   (the POS / pickers endpoint)
@@ -13,14 +13,14 @@ Paths (in-process, APIRequestFactory as an existing superuser — no server need
   D  wildcard.item_search(q)                (the engine itself)
 
 Exit code 1 when a corpus entry fails on A or D, or D's p95 is over BUDGET_MS. The time budget
-is only judged when the folded-name indexes (catalog 0044 + 0045) exist — without them the
+is only judged when the search indexes (catalog 0044–0046) exist — without them the
 timings mean nothing, and the probe says so loudly. Entries marked `real_report_only` (the real
 catalog lacks the data) are printed but never fail the run.
 
 Read-only: everything runs in ONE transaction that is always rolled back. --with-temp-indexes
-creates the 0044/0045 indexes inside that transaction (rolled back with it, never committed). Note
-CREATE INDEX holds a SHARE lock on catalog_item until the run ends: catalog writes (the item
-sync) wait for it — a minute or two.
+creates the missing 0044–0046 indexes inside that transaction (rolled back with it, never
+committed). Note CREATE INDEX holds a SHARE lock on catalog_item / catalog_itembarcode until the
+run ends: catalog writes (the item sync) wait for it — a minute or two.
 """
 import importlib
 import json
@@ -38,11 +38,12 @@ GATED = ('A', 'D')                      # B and C are report-only until S2
 LABELS = {'A': 'softech-search no_live', 'B': 'items ?search=', 'C': 'universal items',
           'D': 'item_search()'}
 INDEX_MIGRATIONS = ('apps.catalog.migrations.0044_folded_name_trgm',
-                    'apps.catalog.migrations.0045_folded_name_prefix')
+                    'apps.catalog.migrations.0045_folded_name_prefix',
+                    'apps.catalog.migrations.0046_code_part_trgm')
 
 
 def index_sql() -> list:
-    """The CREATE INDEX statements of catalog 0044 + 0045 (same SQL, so the same index names)."""
+    """The CREATE INDEX statements of catalog 0044–0046 (same SQL, so the same index names)."""
     sql = []
     for mod in INDEX_MIGRATIONS:
         sql += importlib.import_module(mod).SQL
@@ -76,7 +77,7 @@ class Command(BaseCommand):
         parser.add_argument('--repeat', type=int, default=3, help='Timed runs per query and path (default 3).')
         parser.add_argument('--json', dest='json_path', default='', help='Write every query result to this JSON file.')
         parser.add_argument('--with-temp-indexes', action='store_true',
-                            help='Create the catalog 0044/0045 indexes for this run only (always rolled back).')
+                            help='Create the catalog 0044–0046 indexes for this run only (always rolled back).')
 
     def handle(self, *args, **opts):
         user = (get_user_model().objects.filter(is_superuser=True, is_active=True).order_by('id').first())
@@ -92,10 +93,11 @@ class Command(BaseCommand):
                             if name in missing:
                                 c.execute(s)
                         c.execute('ANALYZE catalog_item')
+                        c.execute('ANALYZE catalog_itembarcode')
                     self.stdout.write('temporary indexes created (rolled back at the end): ' + ', '.join(missing))
                     missing = missing_indexes()
                 elif opts['with_temp_indexes']:
-                    self.stdout.write('the catalog 0044/0045 indexes already exist — nothing to create')
+                    self.stdout.write('the catalog 0044–0046 indexes already exist — nothing to create')
                 records = self._run(user, repeat)
             finally:
                 transaction.set_rollback(True)          # read-only: nothing this run did is kept
@@ -206,7 +208,7 @@ class Command(BaseCommand):
             w('')
             w('!' * 78)
             w(f'!! WARNING: indexes missing: {", ".join(missing)}')
-            w('!! The engine is tuned WITH catalog 0044/0045 — these timings mean nothing and the')
+            w('!! The engine is tuned WITH catalog 0044–0046 — these timings mean nothing and the')
             w(f'!! {BUDGET_MS} ms budget is NOT judged. Apply the migrations or use --with-temp-indexes.')
             w('!' * 78)
         elif p95 > BUDGET_MS:

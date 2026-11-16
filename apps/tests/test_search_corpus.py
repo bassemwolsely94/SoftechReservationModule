@@ -92,4 +92,6 @@ class CorpusTests(TestCase):
         self.assertTrue(check(e, [('AUGMACILLIN', 'word'), ('X', 'word')]))
         self.assertFalse(check(e, [('A', 'word'), ('B', 'word'), ('C', 'word'), ('AUGMENTIN', 'word')]))
         self.assertFalse(check(e, [('AUGMENTIN', 'sound')]))
+        # a name match with the wrong tier doesn't end the scan: the next top-N row may fit both
+        self.assertTrue(check(e, [('AUGMENTIN', 'sound'), ('AUGMACILLIN', 'word')]))
         self.assertFalse(check({'q': 'x', 'expect': '.'}, []))
