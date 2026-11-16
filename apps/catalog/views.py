@@ -419,7 +419,7 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
 
         Optional params:
           branch_id — if provided, includes qty_at_branch in each result
-          limit — rows to return (default 20, max 50)
+          limit — rows to return (default 50, max 50)
           code_prefix=0 — exact codes only (forced by no_live=1, the POS)
         """
         q = (request.query_params.get('q') or '').strip()
@@ -440,9 +440,9 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
         # makes the box hang for a minute per keystroke.
         from apps.catalog.wildcard import item_search, parse
         try:
-            limit = max(1, min(50, int(request.query_params.get('limit', 20))))
+            limit = max(1, min(50, int(request.query_params.get('limit', 50))))
         except (TypeError, ValueError):
-            limit = 20
+            limit = 50
         # no_live=1 (the POS) → never read SOFTECH live during a sale; PG catalog only, and
         # codes stay exact (no prefix / fragment matching in the middle of a sale).
         no_live = request.query_params.get('no_live') == '1'

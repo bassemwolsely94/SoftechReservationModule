@@ -688,14 +688,20 @@ class IngredientAndEndpointTests(TestCase):
         self.assertEqual(len(self._get(q='concor', limit='2')), 2)
         self.assertEqual(len(self._get(q='concor')), 3)
         with mock.patch('apps.catalog.wildcard.item_search', return_value=[]) as m:
+            self._get(q='concor')
+            self.assertEqual(m.call_args.kwargs['limit'], 50)       # S1: default unchanged
+        with mock.patch('apps.catalog.wildcard.item_search', return_value=[]) as m:
             self._get(q='concor', limit='999')
             self.assertEqual(m.call_args.kwargs['limit'], 50)
             self._get(q='concor', limit='0')
             self.assertEqual(m.call_args.kwargs['limit'], 1)
             self._get(q='concor', limit='abc')
-            self.assertEqual(m.call_args.kwargs['limit'], 20)
+            self.assertEqual(m.call_args.kwargs['limit'], 50)
 
     def test_pos_path_forces_exact_codes(self):
+        with mock.patch('apps.catalog.views._softech_live_search') as live:
+            res = self.c.get('/api/items/softech-search/', {'q': 'zzzqqq', 'no_live': '1'}).json()['results']
+            live.assert_not_called()                          # POS never reads SOFTECH live
         res = self._get(q='690', no_live='1')
         self.assertFalse([r for r in res if r.get('code_part')])
         with mock.patch('apps.catalog.wildcard.item_search', return_value=[]) as m:
@@ -705,6 +711,15 @@ class IngredientAndEndpointTests(TestCase):
             self.assertFalse(m.call_args.kwargs['code_prefix'])
             self._get(q='690')
             self.assertTrue(m.call_args.kwargs['code_prefix'])
+
+    def test_atc_code_prefix_finds_ingredient_items(self):
+        from apps.chronic.models import ActiveIngredient, ItemIngredientMap
+        ai = ActiveIngredient.objects.create(name='GLIBENCLAMIDE', atc_code='A10BA02')
+        ItemIngredientMap.objects.create(item=self.it['CONCOR PLUS'], active_ingredient=ai)
+        for q in ('A10BA02', 'a10b', 'A10'):
+            self.assertIn((self.it['CONCOR PLUS'].id, 'ingredient'), W.item_search(q), q)
+        self.assertEqual(W.ingredient_names('a10b', [self.it['CONCOR PLUS'].id]),
+                         {self.it['CONCOR PLUS'].id: 'GLIBENCLAMIDE'})
 
     def test_rows_have_id_and_flags(self):
         res = self._get(q='diclofenac')

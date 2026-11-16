@@ -404,6 +404,9 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
     return out[:limit]
 
 
+ATC_CODE = re.compile(r'^[A-Z]\d{2}([A-Z]{1,2}(\d{2})?)?$')
+
+
 def _ingredient_pairs(q: str, base, room: int, have=()):
     """[(item_id, ActiveIngredient.name)] — items whose mapped active ingredient matches the typed
     text / pattern (the name is a plain column: `ulike` with the unfolded pattern). Primary
@@ -411,8 +414,12 @@ def _ingredient_pairs(q: str, base, room: int, have=()):
     from apps.chronic.models import ItemIngredientMap
     if room <= 0:
         return []
+    cond = Q(active_ingredient__name__ulike=pattern(q, fold=False))
+    code = fold_query(q).strip().upper()
+    if ATC_CODE.match(code):                  # A10 / A10B / A10BA02 → by ATC prefix too
+        cond |= Q(active_ingredient__atc_code__istartswith=code)
     rows = (ItemIngredientMap.objects
-            .filter(active_ingredient__name__ulike=pattern(q, fold=False), item__in=base)
+            .filter(cond, item__in=base)
             .exclude(item_id__in=list(have))
             .order_by('-is_primary', 'item__name', 'item_id', 'active_ingredient__name')
             .values_list('item_id', 'active_ingredient__name')[:room * 3])
