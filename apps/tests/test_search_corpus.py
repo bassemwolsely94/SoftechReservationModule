@@ -75,7 +75,8 @@ class CorpusTests(TestCase):
         fd, path = tempfile.mkstemp(suffix='.json')
         os.close(fd)
         self.addCleanup(os.remove, path)
-        with mock.patch('apps.catalog.management.commands.search_probe.BUDGET_MS', 10_000),                 mock.patch('apps.catalog.management.commands.search_probe.B_BUDGET_MS', 10_000):
+        probe = 'apps.catalog.management.commands.search_probe'
+        with mock.patch(f'{probe}.BUDGET_MS', 10_000), mock.patch(f'{probe}.B_BUDGET_MS', 10_000):
             call_command('search_probe', repeat=1, with_temp_indexes=True, json_path=path,
                          stdout=io.StringIO())
         with open(path, encoding='utf-8') as f:
@@ -148,4 +149,47 @@ class ProbeLiveIndexTests(TestCase):
         if connection.vendor != 'postgresql':
             self.skipTest('PostgreSQL only')
         from apps.catalog.management.commands import search_probe as SP
+        self.assertEqual(SP.plan_temp_indexes(SP.live_indexdefs()), ([], []))
+
+
+class Migration0047LockWindowTests(TestCase):
+    """catalog 0047 builds the new fold indexes under temporary names FIRST (SHARE lock: reads go
+    on), and only then drops the old ones (ACCESS EXCLUSIVE) and renames — so the exclusive lock
+    never spans the four builds. Both directions end on the final names."""
+
+    def mig(self):
+        import importlib
+        return importlib.import_module('apps.catalog.migrations.0047_fold_marks_narrow')
+
+    def test_builds_before_the_exclusive_part(self):
+        m = self.mig()
+        for sql in (m.SQL, m.REVERSE):
+            kinds = ['create' if s.startswith('CREATE') else 'rename' if s.startswith('ALTER')
+                     else 'drop_tmp' if s.endswith(m.TMP) else 'drop' for s in sql]
+            self.assertEqual(kinds, ['drop_tmp'] * 4 + ['create'] * 4 + ['drop'] * 4 + ['rename'] * 4)
+            # every build goes to a temporary name; the old (final) names are dropped only after
+            self.assertTrue(all(m.TMP + ' ON ' in s for s in sql if s.startswith('CREATE')))
+            self.assertEqual(sql[8:12], m.DROP)
+            self.assertEqual(sql[12:], m.RENAME)
+        # search_probe reads the FINAL-name statements
+        from apps.catalog.management.commands import search_probe as SP
+        self.assertEqual(SP.index_names()[:4], list(m.NAMES))
+        self.assertTrue(all(m.TMP not in s for s in m.CREATE))
+
+    def test_reverse_then_forward_on_the_test_db(self):
+        from django.db import connection
+        if connection.vendor != 'postgresql':
+            self.skipTest('PostgreSQL only')
+        from apps.catalog.management.commands import search_probe as SP
+        m = self.mig()
+        with connection.cursor() as c:
+            for s in m.REVERSE:
+                c.execute(s)
+            live = SP.live_indexdefs()
+            for name, v1 in zip(m.NAMES, m.CREATE_V1):
+                self.assertTrue(SP.indexdef_matches(live[name], v1), name)
+            for s in m.SQL:
+                c.execute(s)
+            c.execute('SELECT count(*) FROM pg_class WHERE relname = ANY(%s)', [[n + m.TMP for n in m.NAMES]])
+            self.assertEqual(c.fetchone()[0], 0)
         self.assertEqual(SP.plan_temp_indexes(SP.live_indexdefs()), ([], []))
