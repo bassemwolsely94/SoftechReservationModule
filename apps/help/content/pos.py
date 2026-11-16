@@ -299,8 +299,8 @@ SCREENS = [
              'open_hint': T('لو الرصيد هنا صفر: «تحويل من …» (تبويب جديد) أو «تسجيل طلب» لو الشبكة صفر (يحتاج عميل بهاتف)، و«حجز».',
                             'Zero stock here: "Transfer from …" (new tab), or "Record demand" if the network is zero (needs a customer with a phone), plus "Reserve".'),
              'more': T(
-                 'اكتب الاسم أو الكود أو امسح الباركود؛ الصنف بيتضاف كسطر جديد وتختار التشغيلة (الأقرب انتهاءً أولاً).\n• «📷🎤 ذكي» يقرا صورة روشتة أو تسجيل صوتي ويقترح الأصناف، وإنت بتأكد كل صنف قبل ما يتضاف.\n• لو ظهر «تطبيق الخصم المقترح» فده خصم محسوب من النظام.',
-                 'Type the name or code, or scan the barcode; the item is added as a new line and you pick the batch (nearest expiry first).\n• "📷🎤 Smart" reads a prescription photo or a voice recording and suggests items; you confirm each one before it is added.\n• If "Apply suggested discount" appears, it is a discount calculated by the system.')},
+                 'اكتب الاسم أو الكود أو امسح الباركود؛ الصنف بيتضاف كسطر جديد وتختار التشغيلة (الأقرب انتهاءً أولاً).\n• «📷🎤 ذكي» يقرا صورة روشتة أو تسجيل صوتي ويقترح الأصناف، وإنت بتأكد كل صنف قبل ما يتضاف.\n• لو ظهر «تطبيق الخصم المقترح» فده خصم محسوب من النظام.\n• الترتيب: اللي بيبدأ باللي كتبته الأول، والرقم الكامل (كونكور 5 ← 5MG) قبل باقي النتايج اللي فيها نفس الأرقام (وبتظهر برضه). الاختصارات زي syp أو «شراب» شغالة. الشارة بتقول الصنف اتلقى إزاي: «من الذاكرة» أو «بالنطق» أو «تقريبي» أو «مادة فعالة».',
+                 'Type the name or code, or scan the barcode; the item is added as a new line and you pick the batch (nearest expiry first).\n• "📷🎤 Smart" reads a prescription photo or a voice recording and suggests items; you confirm each one before it is added.\n• If "Apply suggested discount" appears, it is a discount calculated by the system.\n• Order: names starting with what you typed come first; a whole number (concor 5 → 5MG) comes before other matches of the digits, which still show. Abbreviations like syp or «شراب» work. A chip says how an item was found: «من الذاكرة», «بالنطق», «تقريبي» or «مادة فعالة».')},
             {'target': 'pos-order-image-search', 'label': T('بحث بالصور / Image search (F6)', 'Image search (F6)'),
              'text': T('شبكة صور بملء الشاشة (5 أعمدة): الصورة والاسم والتركيز ومربع رصيد فرعك وأفضل فرع آخر. صندوق البحث بيبدأ بما كتبته.',
                        'A full-screen picture grid (5 columns): image, name, strength, your branch stock box and the best other branch. Its search box starts with what you typed.'),
@@ -555,8 +555,9 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-15',
-        'change_note': T('موافقة التواصل (P-05): تذكيرات الصرف والعروض محتاجة موافقة العميل', "Contact consent (P-05): refill reminders and offers need the customer's yes"),
+        'updated': '2026-11-16',
+        'change_note': T('بحث الصنف: اللي بيبدأ باللي كتبته الأول، الرقم الكامل قبل غيره، syp/«شراب» شغالة، وشارة بتقول اتلقى الصنف إزاي',
+                         'Item search: names starting with what you typed first, whole numbers first, syp/«شراب» work, and a chip says how an item was found'),
     },
     {
         'key': 'pos.mobile',
