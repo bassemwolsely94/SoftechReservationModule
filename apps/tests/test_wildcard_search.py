@@ -469,3 +469,55 @@ class RankingTests(TestCase):
         # not enough name hits → code_part runs and comes last
         res = W.item_search('0003', limit=60)        # inside 950003: no prefix, no name
         self.assertIn('code_part', [t for _, t in res])
+
+
+class SynonymTests(TestCase):
+    """Appendix A: a typed token also searches its canonical form — whole word or a unit glued
+    to a number, one direction only (design §6 item 4)."""
+
+    def setUp(self):
+        P.reset_index()
+        self.it = _items('AUGMENTIN 457MG/5ML SYRUP 70ML', 'AUGMENTIN 1G 14 TAB اوجمنتين',
+                         'GLUCOSE GEL', 'VITAMIN C 500MG 30TAB', 'ZYRTEC ORAL DROPS 10ML')
+
+    def tiers(self, q):
+        from apps.catalog.models import Item
+        names = dict(Item.objects.values_list('id', 'name'))
+        return [(names[i], t) for i, t in W.item_search(q)]
+
+    def test_form_abbreviation(self):
+        res = self.tiers('augmentin syp')
+        self.assertEqual(res[0], ('AUGMENTIN 457MG/5ML SYRUP 70ML', 'synonym'))
+
+    def test_arabic_unit(self):
+        names = [n for n, _ in self.tiers('اوجمنتين 1 جم')]
+        self.assertIn('AUGMENTIN 1G 14 TAB اوجمنتين', names)
+        if 'AUGMENTIN 457MG/5ML SYRUP 70ML' in names:
+            self.assertLess(names.index('AUGMENTIN 1G 14 TAB اوجمنتين'),
+                            names.index('AUGMENTIN 457MG/5ML SYRUP 70ML'))
+
+    def test_vit(self):
+        self.assertIn('VITAMIN C 500MG 30TAB', [n for n, _ in self.tiers('vit c')])
+
+    def test_whole_word_only(self):
+        from apps.catalog.models import Item
+        Item.objects.create(softech_id='941100', name='ZYRTEC 10G GEL', pack_price=1, is_active=True)
+        Item.objects.create(softech_id='941101', name='ZYRTEC GRAPE DROPS 10ML', pack_price=1, is_active=True)
+        res = dict(self.tiers('zyrtec جم'))
+        self.assertEqual(res.get('ZYRTEC 10G GEL'), 'synonym')
+        # its only G is inside GRAPE → never a synonym hit (the Arabic query may still reach it
+        # by SOUND of «zyrtec», a separate, lower tier)
+        self.assertNotEqual(res.get('ZYRTEC GRAPE DROPS 10ML'), 'synonym')
+
+    def test_one_direction(self):
+        from apps.catalog import search_synonyms as S
+        self.assertIsNone(S.expand_terms(['SYRUP']))
+        self.assertEqual(S.expand_terms(['AUGMENTIN', 'SYP']), [('AUGMENTIN',), ('SYP', 'SYRUP')])
+        self.assertEqual(S.SYNONYMS['فوار'], ('SACH', 'EFF'))
+        self.assertEqual(S.SYNONYMS['G'], ('G', 'GM'))
+
+    def test_typed_form_still_literal(self):
+        res = self.tiers('augmentin syrup')
+        self.assertEqual(res[0][0], 'AUGMENTIN 457MG/5ML SYRUP 70ML')
+        # the words are not adjacent in the name → any_order; what matters: typed form is literal
+        self.assertIn(res[0][1], ('starts', 'contains', 'any_order'))

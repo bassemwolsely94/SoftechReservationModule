@@ -144,7 +144,8 @@ def re_esc(s: str) -> str:
     return ''.join('\\' + c if ord(c) < 128 and not c.isalnum() else c for c in s)
 
 
-WORD_START = '(^|[^A-Z0-9ء-ي])'          # on the FOLDED (upper-case) name
+LETTERS = 'A-Zء-ي'                       # the letter class of the FOLDED (upper-case) name
+WORD_START = f'(^|[^{LETTERS}0-9])'     # on the FOLDED (upper-case) name
 
 
 def word_regex(q: str, fold: bool = True) -> str:
@@ -309,7 +310,7 @@ def _rank_name_ids(q: str, base, *, window: int = NAME_WINDOW, starts_only: bool
 def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefix: bool = True) -> list:
     """[(item_id, tier)] best first. tier: 'code' (exact code / barcode) · 'learned' (people
     confirmed this spelling) · 'starts' · 'word' · 'contains' · 'any_order' (the name tiers,
-    `_rank_name_ids`) · 'sound' (Arabic by sound) · 'approx' (typo fallback, only when nothing
+    `_rank_name_ids`) · 'synonym' (Appendix A table, whole word / unit) · 'sound' (Arabic by sound) · 'approx' (typo fallback, only when nothing
     else matched) · 'code_part' (digits inside a code — last, only when the rest left room,
     never on the POS path)."""
     from apps.catalog.models import Item, ItemBarcode
@@ -365,6 +366,17 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
             for i, tier in _rank_name_ids(raw, base, window=max(NAME_WINDOW, limit),
                                           starts_only=len(compact) < 3):
                 add((i,), tier)
+    # Appendix A synonyms (syp → SYRUP, جم → G/GM): only when the name tiers left the window short
+    if len(out) < max(NAME_WINDOW, limit):
+        try:
+            from apps.catalog.search_synonyms import expand_terms
+            exp = expand_terms(parse(raw, fold=True)['terms'])
+        except Exception:
+            exp = None
+        if exp is not None:
+            with _trigram_indexes():
+                add(_synonym_ids(exp, base, [i for i, _ in out], max(NAME_WINDOW, limit) - len(out)),
+                    'synonym')
     add(sound, 'sound')
     # no catalog text hit (a remembered item alone doesn't count) → typo-tolerant fallback
     if not raw.isdigit() and not any(t not in ('code', 'learned') for _, t in out):
@@ -382,6 +394,27 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
             add(ItemBarcode.objects.filter(barcode__contains=raw, item__in=base)
                 .order_by('barcode').values_list('item_id', flat=True)[:limit], 'code_part')
     return out[:limit]
+
+
+def _synonym_ids(expanded, base, have, room: int) -> list:
+    """Items where EVERY term matches: the typed text anywhere in the folded name, OR one of its
+    canonical forms as a whole word / a unit glued to a number (`500MG`, `1G`; never inside a
+    longer word — «G» is not GRAPE). A term that is its own canonical (g, mg, tab…) matches only
+    by the whole-word rule, or «g» would hit every name containing a G."""
+    cond = Q()
+    for term in expanded:
+        typed, canon = term[0], term[1:]
+        t = Q()
+        if typed not in canon:
+            t |= Q(name__fulike='%' + _esc(typed) + '%')
+        if canon:
+            t |= Q(name__fregex=f'(^|[^{LETTERS}])(' + '|'.join(re_esc(c) for c in canon)
+                   + f')($|[^{LETTERS}])')
+        cond &= t
+    if room <= 0:
+        return []
+    return list(base.filter(cond).exclude(id__in=have).order_by('name', 'id')
+                .values_list('id', flat=True)[:room])
 
 
 _NUM = re.compile(r'\d+(?:\.\d+)?')
