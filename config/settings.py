@@ -235,6 +235,7 @@ INSTALLED_APPS = [
     'apps.approvals',
     'apps.batches',
     'apps.hr',
+    'apps.rpa',  # روبوت الإدخال — SOFTECH screen RPA (design 2026-11-16)
     'apps.crews',  # الأطقم — dated cross-branch people groupings (spec 2026-11-13 §6)
     'apps.forecasting',
     'apps.insights',
@@ -953,6 +954,8 @@ CUSTOMER_MERGE_ROLES         = ['admin', 'supervisor', 'call_center']
 # B7 merge part 2 — approved pairs merged at HQ (apps/customers/merge_write.py). Off by default (dry run).
 CUSTOMER_MERGE_WRITE_ENABLED = config('CUSTOMER_MERGE_WRITE_ENABLED', default=False, cast=bool)
 CUSTOMER_MERGE_BATCH_MAX     = config('CUSTOMER_MERGE_BATCH_MAX', default=20, cast=int)
+# SOFTECH screen RPA: the Windows agent may type documents into SOFTECH. Off by default.
+RPA_SOFTECH_ENTRY_ENABLED   = config('RPA_SOFTECH_ENTRY_ENABLED', default=False, cast=bool)
 
 # ── Supplier-invoice save-time validations (replicate SofTech; apps/invoices/validations.py) ──
 INVOICE_MAX_COST_INCREASE_PCT = config('INVOICE_MAX_COST_INCREASE_PCT', default=25, cast=float)  # W2 price spike

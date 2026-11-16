@@ -58,6 +58,7 @@ MODULE_CHOICES = [
     ('hr_attendance', 'الحضور والبصمة'),
     ('data_health',  'صحة البيانات'),
     ('crews',        'الأطقم'),
+    ('rpa',          'روبوت الإدخال'),
 ]
 
 ACTION_CHOICES = [
