@@ -1,7 +1,8 @@
 """
 System-wide item search rules (apps/catalog/wildcard.py) — owner decision 2026-10-05:
 `*` and `%` are both wildcards, always "contains", parts in the order typed, space literal;
-exact literal text ranks first, then the pattern, then the same words in any order; typos /
+the name starts with it, then a part starts a word, then contains (exact literal text before
+the pattern), then the same words in any order; whole typed numbers lead each tier; typos /
 Arabic by sound when nothing matches.
 """
 from unittest import mock
@@ -75,8 +76,8 @@ class ItemSearchTests(TestCase):
         res = self.tiers('1% cream')
         names = [n for n, _ in res]
         self.assertIn('BETNOVATE 0.1 CREAM 30GM', names)
-        lit = [n for n, t in res if t == 'literal']
-        self.assertEqual(set(lit), {'TINOX 1% CREAM 15 GM', 'IVERZINE 1% CREAM 30 GM'})
+        lit = {'TINOX 1% CREAM 15 GM', 'IVERZINE 1% CREAM 30 GM'}
+        self.assertEqual(set(names[:2]), lit)
         self.assertLess(max(names.index(n) for n in lit), names.index('BETNOVATE 0.1 CREAM 30GM'))
 
     def test_space_is_literal(self):
@@ -183,8 +184,8 @@ class LikeSpecialsAreLiteralTests(TestCase):
 
     def test_percent_is_literal_in_the_exact_text_tier(self):
         res = self.names('zeta 1% gel')
-        self.assertEqual([n for n, t in res if t == 'literal'], ['ZETA 1% GEL'])
-        self.assertEqual(res[0][0], 'ZETA 1% GEL')
+        # both names START with the pattern ZETA 1*GEL; the one saying exactly "1% GEL" leads
+        self.assertEqual(res[:2], [('ZETA 1% GEL', 'starts'), ('ZETA 1X GEL', 'starts')])
 
     def test_quote_and_semicolon_are_plain_text(self):
         self.assertEqual([n for n, _ in self.names("o'neil; drop")], ["O'NEIL; DROP TABLE"])
@@ -260,7 +261,7 @@ class FoldTests(TestCase):
         res = dict(W.item_search('أوجمنتين'))
         self.assertIn(iid, res)
         self.assertNotIn(res[iid], ('sound', 'approx', 'any_order'))
-        self.assertIn(res[iid], {'literal', 'ordered', 'starts', 'word', 'contains'})
+        self.assertIn(res[iid], {'starts', 'word', 'contains'})
 
     def test_db_side_fold_on_stored_names(self):
         # the STORED names carry أ ة ى ; the queries are typed with ا ه ي — only the SQL
@@ -268,11 +269,11 @@ class FoldTests(TestCase):
         ids = _items('أوميز 20 كبسولة', 'فيتامين سى', 'مؤسسة  ئ  كريم')
         by = {n: i.id for n, i in ids.items()}
         for q, name in (('اوميز', 'أوميز 20 كبسولة'), ('كبسوله', 'أوميز 20 كبسولة'),
-                        ('سي', 'فيتامين سى'), ('موسسه', 'مؤسسة  ئ  كريم'),
+                        ('مين سي', 'فيتامين سى'),        # ≥3 letters: D7 makes «سي» starts-only ('موسسه', 'مؤسسة  ئ  كريم'),
                         ('ي كريم', 'مؤسسة  ئ  كريم')):
             res = dict(W.item_search(q))
             self.assertIn(by[name], res, q)
-            self.assertIn(res[by[name]], {'literal', 'ordered', 'starts', 'word', 'contains'}, (q, res))
+            self.assertIn(res[by[name]], {'starts', 'word', 'contains'}, (q, res))
             self.assertNotIn(res[by[name]], ('sound', 'approx', 'any_order'), q)
 
     def test_spaces_collapse(self):
@@ -281,7 +282,7 @@ class FoldTests(TestCase):
         res = W.item_search('VOLTAREN 1% 15 GM')
         self.assertEqual(res[0][0], iid)
         self.assertNotIn(res[0][1], ('sound', 'approx', 'any_order'))
-        self.assertIn(res[0][1], {'literal', 'ordered', 'starts', 'word', 'contains'})
+        self.assertIn(res[0][1], {'starts', 'contains'})
 
     def test_fold_sql_null_safe(self):
         from apps.catalog.models import Item
@@ -306,3 +307,125 @@ class FoldTests(TestCase):
             plan2 = '\n'.join(r[0] for r in cur.fetchall())
         self.assertIn('catalog_item_name_fold_trgm', plan)
         self.assertIn('catalog_item_sci_fold_trgm', plan2)
+
+
+class RankingTests(TestCase):
+    """SOFTECH-ordered ranking (design §5.2): starts → word → contains (literal text, then the
+    pattern) → any order; inside a tier whole typed numbers first (D2), then name A→Z; a hit
+    only in name_scientific one step below the same hit in name."""
+
+    def setUp(self):
+        from apps.catalog.models import Item
+        P.reset_index()
+        self.it = _items(
+            'VOLTAREN 50MG 20TAB', 'DIVOL KIDS SHAMPOO 500ML', 'CONCOR 5MG 30TAB',
+            'CONCOR COR 2.5MG 30TAB', 'CONCOR 10MG 30TAB', 'CONCOR AMLO 5MG/5MG 30TAB',
+            'PANADOL EXTRA 24TAB', 'FIRST SURG PAD DRESSING', 'HEPATICUM 140 MG 30CAP',
+            'TINOX 1% CREAM 15 GM', 'BETNOVATE 0.1 CREAM 30GM', 'SOMEBRAND',
+            'AUGMENTIN (1G) TAB')
+        Item.objects.filter(name='SOMEBRAND').update(name_scientific='PANADOL GENERIC')
+
+    def tiers(self, q, **kw):
+        from apps.catalog.models import Item
+        names = dict(Item.objects.values_list('id', 'name'))
+        return [(names[i], t) for i, t in W.item_search(q, **kw)]
+
+    def names(self, q):
+        return [n for n, _ in self.tiers(q)]
+
+    def test_starts_before_contains(self):
+        res = self.tiers('vol*50')
+        self.assertEqual(res[0], ('VOLTAREN 50MG 20TAB', 'starts'))
+        names = [n for n, _ in res]
+        self.assertIn('DIVOL KIDS SHAMPOO 500ML', names)
+        self.assertGreater(names.index('DIVOL KIDS SHAMPOO 500ML'), 0)
+        self.assertEqual(dict(res)['DIVOL KIDS SHAMPOO 500ML'], 'contains')
+
+    def test_whole_number_first_but_all_digits_match(self):
+        names = self.names('concor 5')
+        self.assertEqual(names[0], 'CONCOR 5MG 30TAB')
+        self.assertIn('CONCOR COR 2.5MG 30TAB', names)                 # D2: digits match anywhere
+        self.assertLess(names.index('CONCOR AMLO 5MG/5MG 30TAB'), names.index('CONCOR COR 2.5MG 30TAB'))
+
+    def test_whole_number_boost_with_arabic_digits(self):
+        self.assertEqual(self.tiers('concor ٥')[0][0], 'CONCOR 5MG 30TAB')
+
+    def test_decimal_is_one_number(self):
+        # «2» is not a whole-number hit inside 2.5 either: the plain 2-something wins the boost
+        from apps.catalog.models import Item
+        Item.objects.create(softech_id='941990', name='CONCOR COR 2MG 30TAB', pack_price=10, is_active=True)
+        names = self.names('concor cor 2')
+        self.assertEqual(names[:2], ['CONCOR COR 2MG 30TAB', 'CONCOR COR 2.5MG 30TAB'])
+
+    def test_two_letters_starts_only(self):
+        res = self.tiers('pa')
+        self.assertTrue(res)
+        self.assertTrue(all(t == 'starts' for _, t in res), res)
+        names = [n for n, _ in res]
+        self.assertIn('PANADOL EXTRA 24TAB', names)
+        self.assertNotIn('FIRST SURG PAD DRESSING', names)
+        self.assertNotIn('HEPATICUM 140 MG 30CAP', names)
+        # two digits are no name either (D7: names need 3 characters) — «14» ≠ HEPATICUM 140
+        self.assertNotIn('HEPATICUM 140 MG 30CAP', self.names('14'))
+        self.assertIn('HEPATICUM 140 MG 30CAP', self.names('140'))
+
+    def test_word_tier(self):
+        self.assertIn(('FIRST SURG PAD DRESSING', 'word'), self.tiers('pad'))
+
+    def test_literal_text_before_pattern_in_contains(self):
+        names = self.names('1% cream')
+        self.assertIn('BETNOVATE 0.1 CREAM 30GM', names)
+        self.assertLess(names.index('TINOX 1% CREAM 15 GM'), names.index('BETNOVATE 0.1 CREAM 30GM'))
+
+    def test_name_before_scientific(self):
+        res = self.tiers('panadol')
+        names = [n for n, _ in res]
+        self.assertIn('PANADOL EXTRA 24TAB', names)
+        self.assertIn('SOMEBRAND', names)
+        self.assertLess(names.index('PANADOL EXTRA 24TAB'), names.index('SOMEBRAND'))
+        self.assertEqual(dict(res)['SOMEBRAND'], 'starts')       # same tier name, lower rank
+
+    def test_same_tier_sorted_by_name(self):
+        res = self.tiers('concor')
+        starts = [n for n, t in res if t == 'starts']
+        self.assertEqual(starts, sorted(starts))                  # no numbers typed → name A→Z
+        self.assertLess(starts.index('CONCOR 10MG 30TAB'), starts.index('CONCOR 5MG 30TAB'))
+        # with a number: whole-number score first, then name
+        res = self.tiers('concor*5')
+        starts = [n for n, t in res if t == 'starts']
+        self.assertEqual(starts[:2], ['CONCOR 5MG 30TAB', 'CONCOR AMLO 5MG/5MG 30TAB'])
+        self.assertEqual(starts[2:], sorted(starts[2:]))
+        self.assertIn('CONCOR COR 2.5MG 30TAB', starts[2:])
+
+    def test_punctuation_only_returns_nothing(self):
+        for q in ('**', '%', '-', '()', '  '):
+            self.assertEqual(W.item_search(q), [], q)
+
+    def test_regex_specials_are_plain_text(self):
+        for q in ('augmentin (1g)', 'c++', 'a[b', 'a' + chr(92), '(?', '^$|.*'):
+            W.item_search(q)                                      # never a regex error
+        self.assertIn('AUGMENTIN (1G) TAB', self.names('augmentin (1g)'))
+
+    def test_query_count_bounded(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        with CaptureQueriesContext(connection) as ctx:
+            W.item_search('voltaren 50')
+        self.assertLessEqual(len(ctx.captured_queries), 6, [q['sql'][:120] for q in ctx.captured_queries])
+
+    def test_code_part_is_lazy(self):
+        # the name tiers already fill `limit` → the code_part scans (no index) never run
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from apps.catalog.models import Item
+        Item.objects.bulk_create([Item(softech_id=f'95{i:04d}', name=f'BRAND 500{i} MG', pack_price=1,
+                                       is_active=True) for i in range(5)])
+        with CaptureQueriesContext(connection) as ctx:
+            res = W.item_search('500', limit=3)
+        self.assertEqual(len(res), 3)
+        self.assertNotIn('code_part', [t for _, t in res])
+        sql = ' '.join(q['sql'] for q in ctx.captured_queries)
+        self.assertNotRegex(sql, r'"softech_id"::text LIKE|"barcode"::text LIKE')
+        # not enough name hits → code_part runs and comes last
+        res = W.item_search('0003', limit=60)        # inside 950003: no prefix, no name
+        self.assertIn('code_part', [t for _, t in res])

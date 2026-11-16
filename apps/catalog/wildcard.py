@@ -6,9 +6,12 @@ Owner decision (2026-10-05), SOFTECH-style:
         vol*ren*50*tab*  =  vol%ren%50%tab  →  VOLTAREN 50MG 20TAB
   • a search always means "contains" (implicit wildcard at both ends), case-insensitive;
   • the parts must appear IN THE ORDER typed; a SPACE is literal (not a wildcard);
-  • ranking — results whose name LITERALLY contains exactly what was typed come first
-    («1% cream» → the items that really say "1% CREAM" on top), then the wildcard pattern
-    in order, then the same words in ANY order (2nd tier: «50 voltaren» → VOLTAREN 50MG);
+  • ranking (item pickers, design 2026-11-16 §5.2) — the name STARTS with it, then a part
+    starts a WORD, then CONTAINS (the literal text — «1% cream» → items that really say
+    "1% CREAM" — before the wildcard pattern), then the same words in ANY order («50 voltaren»
+    → VOLTAREN 50MG); whole typed numbers lead each tier, then name A→Z; a hit only in the
+    scientific name ranks below the same hit in the name. Module filters (`wq`,
+    `filter_and_rank`) keep literal → pattern → any order;
   • nothing found → the smart matcher's fallback (typos, Arabic by sound, learned memory),
     tagged «تقريبي»; Arabic queries always include sound matches («بالنطق»).
 
@@ -129,6 +132,33 @@ def pattern(q: str, fold: bool = True) -> str:
     return '%' + '%'.join(_esc(s.upper()) for s in p['segments']) + '%' if p['segments'] else '%'
 
 
+def starts_pattern(q: str, fold: bool = True) -> str:
+    """`pattern` without the leading % — the name STARTS with the typed text / pattern."""
+    p = parse(q, fold)
+    return '%'.join(_esc(s.upper()) for s in p['segments']) + '%' if p['segments'] else '%'
+
+
+def re_esc(s: str) -> str:
+    """A PostgreSQL-ARE-safe escape of typed text: a backslash before every non-alphanumeric
+    ASCII character (in an ARE a backslash + a non-alphanumeric is always that character)."""
+    return ''.join('\\' + c if ord(c) < 128 and not c.isalnum() else c for c in s)
+
+
+WORD_START = '(^|[^A-Z0-9ء-ي])'          # on the FOLDED (upper-case) name
+
+
+def word_regex(q: str, fold: bool = True) -> str:
+    """The first typed part starting a WORD of the name, the other parts after it in order."""
+    segs = [s.upper() for s in parse(q, fold)['segments']]
+    return WORD_START + '.*'.join(re_esc(s) for s in segs) if segs else ''
+
+
+def number_regex(n: str) -> str:
+    """`n` as a WHOLE number: 5 hits 5MG and 5MG/5MG, not 2.5MG, 50MG or 15MG (a decimal is one
+    number, both ways: neither 2 nor 5 is whole inside 2.5)."""
+    return r'(^|[^0-9.])' + re_esc(n) + r'($|[^0-9.]|\.($|[^0-9]))'
+
+
 def text_matches(text, q: str) -> bool:
     """Plain-text check with the same rules as the screens' wildcardMatch (utils/wildcard.js):
     the parts in the order typed, OR every word in any order; case-insensitive. Used where a
@@ -218,14 +248,55 @@ class WildcardSearchFilter(SearchFilter):
 ITEM_FIELDS = ('name', 'name_scientific')
 
 
-def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefix: bool = True) -> list:
-    """[(item_id, tier)] best first. tier: 'code' (exact code / barcode) · 'code_part' (digits inside a code, last, never POS) · 'learned'
-    (people confirmed this spelling) · 'literal' · 'ordered' · 'any_order' · 'sound'
-    (Arabic by sound) · 'approx' (typo fallback, only when nothing else matched)."""
-    from apps.catalog.models import Item, ItemBarcode
-    from apps.shortage.matching import _trigram_indexes
-    p = parse(q)
+NAME_TIERS = ('starts', 'word', 'contains', 'contains')     # rank % 4; rank 8 = any_order
+NAME_WINDOW = 60                      # design §5.2: a fixed candidate window before the trim
+
+
+def _rank_name_ids(q: str, base, *, window: int = NAME_WINDOW, starts_only: bool = False) -> list:
+    """[(item_id, tier)] for the NAME tiers in ONE query, SOFTECH-ordered:
+    0 starts · 1 word (a part starts a word) · 2 contains the literal text · 3 contains the
+    pattern · 4–7 the same four found only in name_scientific (one step below, same tier
+    names) · 8 any_order. Inside a rank: literal text first (only differs when a wildcard was
+    typed), then whole typed numbers (D2 — digits still MATCH anywhere, only the boost needs a
+    whole number), then name A→Z. starts_only (D7, 2-letter queries): name starts-with only."""
+    p = parse(q, fold=True)
     if not p['segments']:
+        return []
+    fields = ITEM_FIELDS
+    sp, wr = starts_pattern(q), word_regex(q)
+    lp, pp = literal_pattern(q), pattern(q)
+    if starts_only:
+        cond = Q(name__fulike=sp)
+    else:
+        cond = ordered_q(q, *fields, fold=True) | any_order_q(q, *fields, fold=True)
+    whens = []
+    for k, f in enumerate(fields):
+        whens += [When(Q(**{f'{f}__fulike': sp}), then=Value(4 * k)),
+                  When(Q(**{f'{f}__fregex': wr}), then=Value(4 * k + 1)),
+                  When(Q(**{f'{f}__fulike': lp}), then=Value(4 * k + 2)),
+                  When(Q(**{f'{f}__fulike': pp}), then=Value(4 * k + 3))]
+    rank = Case(*whens, default=Value(8), output_field=IntegerField())
+    lit = (Case(When(_any(fields, 'fulike', lp), then=Value(1)), default=Value(0),
+                output_field=IntegerField()) if p['wild'] else Value(0, output_field=IntegerField()))
+    num = Value(0, output_field=IntegerField())
+    for n in dict.fromkeys(_NUM.findall(p['raw'])):
+        num = num + Case(When(name__fregex=number_regex(n), then=Value(1)), default=Value(0),
+                         output_field=IntegerField())
+    rows = (base.filter(cond).annotate(_rank=rank, _lit=lit, _num=num)
+            .order_by('_rank', '-_lit', '-_num', 'name', 'id').values_list('id', '_rank')[:window])
+    return [(i, NAME_TIERS[r % 4] if r < 8 else 'any_order') for i, r in rows]
+
+
+def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefix: bool = True) -> list:
+    """[(item_id, tier)] best first. tier: 'code' (exact code / barcode) · 'learned' (people
+    confirmed this spelling) · 'starts' · 'word' · 'contains' · 'any_order' (the name tiers,
+    `_rank_name_ids`) · 'sound' (Arabic by sound) · 'approx' (typo fallback, only when nothing
+    else matched) · 'code_part' (digits inside a code — last, only when the rest left room,
+    never on the POS path)."""
+    from apps.catalog.models import Item, ItemBarcode
+    p = parse(q)
+    # nothing to search: no letter or digit at all («**», «-», «()»)
+    if not p['segments'] or not re.search(r'[^\W_]', p['raw']):
         return []
     base = Item.objects.filter(is_active=True) if active_only else Item.objects.all()
     out, seen = [], set()
@@ -237,7 +308,6 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
                 out.append((i, tier))
 
     raw = p['raw']
-    code_part = []
     if not p['wild']:
         # exact `=` (codes / barcodes are digits, nothing to case-fold) so the b-tree
         # indexes are used; __iexact wraps the column in UPPER() and forces a seq scan
@@ -246,13 +316,6 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
         if code_prefix and raw.isdigit() and len(raw) >= 4:   # a partial code / barcode → its prefix
             add(base.filter(Q(softech_id__startswith=raw) | Q(barcode__startswith=raw)).order_by('softech_id')
                 .values_list('id', flat=True)[:limit], 'code')
-        # a code FRAGMENT (inside the code / barcode): collected now, appended LAST — never
-        # on the POS path (code_prefix=False keeps codes exact-only)
-        if code_prefix and raw.isdigit() and len(raw) >= 2:
-            code_part = list(base.filter(Q(softech_id__contains=raw) | Q(barcode__contains=raw))
-                             .order_by('softech_id').values_list('id', flat=True)[:limit])
-            code_part += list(ItemBarcode.objects.filter(barcode__contains=raw, item__in=base)
-                              .order_by('barcode').values_list('item_id', flat=True)[:limit])
         try:
             from apps.shortage.learning import learned_item_ids
             add(learned_item_ids(raw), 'learned')
@@ -266,15 +329,12 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
             sound = search_ids(WILD.sub(' ', raw), limit=limit)
         except Exception:
             sound = []
-    with _trigram_indexes():
-        add(base.filter(_any(ITEM_FIELDS, 'fulike', literal_pattern(raw))).order_by()
-            .values_list('id', flat=True)[:limit], 'literal')
-        if len(out) < limit:
-            add(base.filter(ordered_q(raw, *ITEM_FIELDS, fold=True)).order_by()
-                .values_list('id', flat=True)[:limit * 2], 'ordered')
-        if len(out) < limit:
-            add(base.filter(any_order_q(raw, *ITEM_FIELDS, fold=True)).order_by()
-                .values_list('id', flat=True)[:limit * 2], 'any_order')
+    # D7: names need 3 characters — a shorter query (letters or digits) is "starts with" only.
+    # ONE ranked query; the folded-name trigram indexes (catalog 0044) are chosen by the
+    # planner on their own (checked with and without ANALYZE stats), so no SET LOCAL forcing.
+    compact = re.sub(r'[\s*%]', '', fold_query(raw))
+    for i, tier in _rank_name_ids(raw, base, window=max(NAME_WINDOW, limit), starts_only=len(compact) < 3):
+        add((i,), tier)
     add(sound, 'sound')
     # no catalog text hit (a remembered item alone doesn't count) → typo-tolerant fallback
     if not raw.isdigit() and not any(t not in ('code', 'learned') for _, t in out):
@@ -282,7 +342,15 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
             add(_approx_ids(WILD.sub(' ', raw), limit, base), 'approx')
         except Exception:
             pass
-    add(code_part, 'code_part')
+    # a code FRAGMENT (inside the code / barcode) — last, and only when the tiers above left
+    # room: `contains` on a code can't use the b-tree, so it is a scan we skip when we can.
+    # Never on the POS path (code_prefix=False keeps codes exact-only).
+    if code_prefix and not p['wild'] and raw.isdigit() and len(raw) >= 2 and len(out) < limit:
+        add(base.filter(Q(softech_id__contains=raw) | Q(barcode__contains=raw))
+            .order_by('softech_id').values_list('id', flat=True)[:limit], 'code_part')
+        if len(out) < limit:
+            add(ItemBarcode.objects.filter(barcode__contains=raw, item__in=base)
+                .order_by('barcode').values_list('item_id', flat=True)[:limit], 'code_part')
     return out[:limit]
 
 
