@@ -1041,3 +1041,27 @@ class GpcGs1Tests(TestCase):
             call_command('load_gpc_bricks', 'a.xlsx', gs1_json='b.json')
         call_command('load_gpc_bricks', gs1_json=self._path(), stdout=io.StringIO())
         self.assertEqual(TaxGpcBrick.objects.count(), 3)
+
+    def test_wrapped_file_loads_same_bricks(self):
+        from apps.tax_invoicing import gpc
+        plain = gpc.read_gs1_json(self._path())
+        wrapped = gpc.read_gs1_json(self._path({'GPC': {'Version': '1', 'Schema': self.FIXTURE['Schema']}}))
+        self.assertEqual(plain, wrapped)
+
+    def test_empty_or_garbage_file_raises(self):
+        from apps.tax_invoicing import gpc
+        for data in ([], {}, {'a': 1}, [{'Code': 'x', 'Title': 'y'}]):
+            with self.assertRaises(ValueError):
+                gpc.read_gs1_json(self._path(data))
+
+    def test_shifted_levels_are_refused(self):
+        from apps.tax_invoicing import gpc
+        from apps.tax_invoicing.models import TaxGpcBrick
+        coded_root = [{'Code': '99000000', 'Title': 'Root', 'Childs': self.FIXTURE['Schema']}]
+        with self.assertRaises(ValueError):
+            gpc.read_gs1_json(self._path(coded_root))
+        # a file that starts at families: classes would be read as bricks
+        families = self.FIXTURE['Schema'][0]['Childs']
+        with self.assertRaises(ValueError):
+            gpc.read_gs1_json(self._path(families))
+        self.assertEqual(TaxGpcBrick.objects.count(), 0)

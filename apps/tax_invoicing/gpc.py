@@ -97,36 +97,59 @@ def _field(node, *keys):
     return ''
 
 
+_LEVEL_CODE = (re.compile(r'^\d{2}0{6}$'), re.compile(r'^\d{2}(?!00)\d{2}0{4}$'), re.compile(r'^\d{4}(?!00)\d{2}00$'))
+
+
+def _segments(node):
+    """The segment nodes: the first nodes with an 8-digit Code found going down through any uncoded wrappers
+    (lists, or objects such as {'Schema': [...]})."""
+    if isinstance(node, list):
+        return [s for n in node for s in _segments(n)]
+    if not isinstance(node, dict):
+        return []
+    if BRICK.match(_field(node, 'Code', 'code')):
+        return [node]
+    return [s for v in node.values() if isinstance(v, (list, dict)) for s in _segments(v)]
+
+
 def read_gs1_json(path):
-    """Bricks from GS1's GPC JSON (Segment > Family > Class > Brick; the top may be a list or {'Schema': [...]}).
-    Each row: code, name_en, definition and the segment / family / class code and name above it."""
+    """Bricks from GS1's GPC JSON. Segments are found by going down through uncoded wrappers (a list, or an
+    object like {'Schema': [...]}); below them it must be exactly Segment > Family > Class > Brick, and the
+    codes must follow GPC's own pattern (segment NN000000, family NNMM0000 (MM not 00), class NNMMKK00 (KK not 00), brick 8 digits
+    whose children, the attributes, are not themselves a coded Family/Class-like tree). Anything else, or a
+    file with no bricks, raises ValueError rather than loading shifted levels. Each row: code, name_en,
+    definition and the segment / family / class code and name above it."""
     with open(path, encoding='utf-8-sig') as f:
         data = json.load(f)
-    if isinstance(data, dict):
-        data = next((data[k] for k in ('Schema', 'schema', 'Segments', 'segments') if isinstance(data.get(k), list)), [data])
     rows = []
+
+    def bad(why, code):
+        raise ValueError(f'ملف GPC غير متوقع: {why} ({code or "بدون كود"})')
 
     def walk(node, trail):
         code = _field(node, 'Code', 'code')
-        title = _field(node, 'Title', 'Description', 'title', 'description')
-        definition = _field(node, 'Definition', 'definition')
         level = len(trail) + 1
-        explicit = _field(node, 'Level', 'level').lower()
-        if explicit:
-            level = {'segment': 1, 'family': 2, 'class': 3, 'brick': 4}.get(explicit, level)
-        if level == 4:
-            if BRICK.match(code):
-                row = {'code': code, 'name_en': title, 'definition': definition}
-                for (lvl_code, lvl_name), pre in zip(trail, ('segment', 'family', 'class')):
-                    row[pre + '_code'], row[pre + '_name'] = lvl_code, lvl_name
-                rows.append(row)
+        if level <= 3:
+            if not _LEVEL_CODE[level - 1].match(code):
+                bad(f'كود المستوى {level} لا يطابق نمط GPC', code)
+            for kid in _kids(node):
+                walk(kid, trail + [(code, _field(node, 'Title', 'Description', 'title', 'description'))])
             return
-        for kid in _kids(node):
-            walk(kid, trail + [(code, title)])
+        if not BRICK.match(code):
+            bad('كود البريك غير صالح', code)
+        if any(BRICK.match(_field(k, 'Code', 'code')) and any(BRICK.match(_field(g, 'Code', 'code')) for g in _kids(k))
+               for k in _kids(node)):
+            bad('هذا المستوى فيه مستويات أعمق، أي أنه ليس بريك', code)
+        row = {'code': code, 'name_en': _field(node, 'Title', 'Description', 'title', 'description'),
+               'definition': _field(node, 'Definition', 'definition')}
+        for (lvl_code, lvl_name), pre in zip(trail, ('segment', 'family', 'class')):
+            row[pre + '_code'], row[pre + '_name'] = lvl_code, lvl_name
+        rows.append(row)
 
-    for top in data:
-        if isinstance(top, dict):
-            walk(top, [])
+    for seg in _segments(data):
+        walk(seg, [])
+    if not rows:
+        raise ValueError('لا توجد بريكات في ملف GPC')
     return rows
 
 
