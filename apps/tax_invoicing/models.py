@@ -880,6 +880,7 @@ class EtaCodeUsage(models.Model):
     active_to = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=30, blank=True, default='')
     gpc = models.CharField(max_length=10, blank=True, default='')
+    request_id = models.CharField(max_length=30, blank=True, default='')
     itemcode = models.CharField(max_length=10, blank=True, default='', db_index=True)
     fetched_at = models.DateTimeField(auto_now=True)
 

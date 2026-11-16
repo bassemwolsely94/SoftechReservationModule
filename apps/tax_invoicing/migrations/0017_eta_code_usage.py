@@ -22,6 +22,7 @@ class Migration(migrations.Migration):
                 ('active_to', models.DateField(blank=True, null=True)),
                 ('status', models.CharField(blank=True, default='', max_length=30)),
                 ('gpc', models.CharField(blank=True, default='', max_length=10)),
+                ('request_id', models.CharField(blank=True, default='', max_length=30)),
                 ('itemcode', models.CharField(blank=True, db_index=True, default='', max_length=10)),
                 ('fetched_at', models.DateTimeField(auto_now=True)),
             ],

@@ -4,7 +4,7 @@ import json
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.tax_invoicing import eta_codes
-from apps.tax_invoicing.eta_client import _json
+from apps.tax_invoicing.eta_client import EtaNotConfigured, EtaRefused, EtaUncertain, _json
 from apps.tax_invoicing.eta_reader import SYSTEMS, EtaReader
 
 
@@ -21,7 +21,10 @@ class Command(BaseCommand):
         if not reader.enabled():
             raise CommandError(reader.why_not())
         if o['probe']:
-            r = reader.get(eta_codes.PATH, {'Ps': 100, 'Pn': 1, 'OrderDirections': 'Descending'})
+            try:
+                r = reader.get(eta_codes.PATH, {'Ps': 100, 'Pn': 1, 'OrderDirections': 'Descending'})
+            except (EtaUncertain, EtaRefused, EtaNotConfigured) as exc:
+                raise CommandError(str(exc)) from exc
             body = _json(r)
             rows = eta_codes._rows(body)
             self.stdout.write(f'HTTP {r.status_code}; rows on page: {len(rows)}')

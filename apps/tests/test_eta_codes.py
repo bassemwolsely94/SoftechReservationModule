@@ -47,9 +47,57 @@ class FetchTests(Fixture, TestCase):
     def setUp(self):
         self.build('c1')
 
-    def run_fetch(self, reader):
+    def run_fetch(self, reader, **kw):
         with mock.patch.object(eta_codes, 'EtaReader', return_value=reader):
-            return eta_codes.fetch('production')
+            return eta_codes.fetch('production', **{'page_size': 2, **kw})
+
+    def test_same_code_approved_then_rejected_is_held(self):
+        out = self.run_fetch(FakeReader([[row('EG-100200300-A1'), row('X1')],
+                                         [row('EG-100200300-A1', 'Rejected', activeFrom='2023-01-01'), row('X2')]]))
+        self.assertTrue(out['complete'])
+        u = EtaCodeUsage.objects.get(item_code='EG-100200300-A1')
+        self.assertEqual(u.status, 'Approved')
+
+    def test_newer_rejected_beside_older_approved_still_held(self):
+        self.run_fetch(FakeReader([[row('EG-100200300-A1', 'Rejected', activeFrom='2025-06-01',
+                                        codeUsageRequestID=9),
+                                    row('EG-100200300-A1', 'Approved', activeFrom='2024-01-01',
+                                        codeUsageRequestID=5)]]))
+        u = EtaCodeUsage.objects.get(item_code='EG-100200300-A1')
+        self.assertEqual((u.status, u.request_id), ('Approved', '5'))
+
+    def test_partial_fetch_does_not_downgrade_stored_approved(self):
+        self.run_fetch(FakeReader([[row('EG-100200300-A1'), row('X1')]]))
+        self.run_fetch(FakeReader([[row('EG-100200300-A1', 'Rejected'), row('X1')]], fail_at=2))
+        self.assertEqual(EtaCodeUsage.objects.get(item_code='EG-100200300-A1').status, 'Approved')
+
+    def test_total_pages_stops_clamped_paging(self):
+        full = {'result': [row('A'), row('B')], 'metadata': {'totalPages': 1}}
+        r = FakeReader([full] * 50)    # ETA clamps an out-of-range Pn to the last page
+        out = self.run_fetch(r)
+        self.assertTrue(out['complete'])
+        self.assertEqual(r.calls, [1])
+
+    def test_short_page_ends_the_fetch(self):
+        r = FakeReader([[row('A'), row('B')], [row('C')]])
+        out = self.run_fetch(r)
+        self.assertEqual((out['complete'], r.calls), (True, [1, 2]))
+
+    def test_max_pages_is_incomplete_with_error(self):
+        out = self.run_fetch(FakeReader([[row('A'), row('B')], [row('C'), row('D')]]), max_pages=2)
+        self.assertFalse(out['complete'])
+        self.assertTrue(out['error'])
+
+    def test_404_after_a_full_page_is_incomplete(self):
+        class R(FakeReader):
+            def get(self, path, params=None):
+                if params['Pn'] == 2:
+                    return Resp(404, {})
+                return super().get(path, params)
+        out = self.run_fetch(R([[row('A'), row('B')]]))
+        self.assertFalse(out['complete'])
+        self.assertTrue(out['error'])
+        self.assertEqual(EtaCodeUsage.objects.count(), 2)
 
     def test_two_pages_then_empty_is_complete_and_stores_every_status(self):
         r = FakeReader([{'result': [row('EG-100200300-A1'), row('EG-100200300-A2', 'Rejected')]},
@@ -72,10 +120,10 @@ class FetchTests(Fixture, TestCase):
         self.assertEqual((out['rows'], out['complete'], out['error']), (0, True, ''))
 
     def test_failure_midway_keeps_rows_and_is_incomplete(self):
-        out = self.run_fetch(FakeReader([[row('EG-100200300-A1')], [row('EG-100200300-A2')]], fail_at=2))
+        out = self.run_fetch(FakeReader([[row('EG-100200300-A1'), row('X9')], [row('EG-100200300-A2')]], fail_at=2))
         self.assertFalse(out['complete'])
         self.assertTrue(out['error'])
-        self.assertEqual(EtaCodeUsage.objects.count(), 1)
+        self.assertEqual(EtaCodeUsage.objects.count(), 2)
 
     def test_disabled_reader_does_not_fetch(self):
         out = eta_codes.fetch('production')
