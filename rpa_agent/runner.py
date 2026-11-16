@@ -10,6 +10,40 @@ def _now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 
+_MODS = "^%+"
+_CELL_END = ("{TAB}", "{ENTER}")
+
+
+def split_chunks(keys):
+    """Split send_keys notation into chunks ending at each {TAB}/{ENTER} token, so the
+    runner can check the stop flag between chunks. Never splits inside a token."""
+    chunks, cur, i, n = [], "", 0, len(keys)
+    while i < n:
+        start = i
+        while i < n and keys[i] in _MODS:
+            i += 1
+        if i >= n:
+            cur += keys[start:]
+            break
+        c = keys[i]
+        if c == "{":
+            j = keys.find("}", i + 2)
+            i = n if j == -1 else j + 1
+        elif c == "(":
+            j = keys.find(")", i + 1)
+            i = n if j == -1 else j + 1
+        else:
+            i += 1
+        tok = keys[start:i]
+        cur += tok
+        if tok.upper() in _CELL_END:
+            chunks.append(cur)
+            cur = ""
+    if cur:
+        chunks.append(cur)
+    return chunks
+
+
 def _match_rule(rules, popup):
     title = popup.get("title", "") or ""
     text = popup.get("text", "") or ""
@@ -44,6 +78,9 @@ def run_keyplan(keyplan, driver, *, stop, on_step=None, on_shot=None, mode="dry_
     def finish(outcome):
         return {"outcome": outcome, "steps": steps_out}
 
+    if not steps:
+        rec(-1, "plan", False, "empty keyplan")
+        return finish("error")
     if stop.is_set():
         rec(-1, "start", False, "stopped_by_operator")
         return finish("stopped_by_operator")
@@ -61,7 +98,11 @@ def run_keyplan(keyplan, driver, *, stop, on_step=None, on_shot=None, mode="dry_
             if not driver.focus(title):
                 rec(i, label, False, "wrong_window")
                 return finish("wrong_window")
-            driver.send(step["send"], cell_delay)
+            for chunk in split_chunks(step["send"]):
+                if stop.is_set():
+                    rec(i, label, False, "stopped_by_operator")
+                    return finish("stopped_by_operator")
+                driver.send(chunk, cell_delay)
             if form_delay:
                 stop.wait(form_delay)
             for _ in range(5):
@@ -74,9 +115,15 @@ def run_keyplan(keyplan, driver, *, stop, on_step=None, on_shot=None, mode="dry_
                         shot(i)
                         rec(i, label, False, "unknown_popup: %s" % (p.get("title", ""),))
                         return finish("unknown_popup")
+                    if stop.is_set():
+                        rec(i, label, False, "stopped_by_operator")
+                        return finish("stopped_by_operator")
                     driver.send(rule["answer_keys"], cell_delay)
                 if form_delay:
                     stop.wait(form_delay)
+            if stop.is_set():
+                rec(i, label, False, "stopped_by_operator")
+                return finish("stopped_by_operator")
             is_final = bool(step.get("final")) or pos == last
             if pos == 0 or (pos + 1) % 10 == 0 or is_final:
                 shot(i)

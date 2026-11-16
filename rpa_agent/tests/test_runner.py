@@ -113,3 +113,51 @@ class RunnerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FixRoundTests(unittest.TestCase):
+    def test_stop_mid_step_sends_no_further_chunks(self):
+        from rpa_agent.runner import split_chunks
+        self.assertEqual(split_chunks("a{TAB}b{ENTER}c"), ["a{TAB}", "b{ENTER}", "c"])
+        self.assertEqual(split_chunks("^{TAB}{}}x"), ["^{TAB}{}}x"])
+        stop = threading.Event()
+        d = FakeDriver()
+        orig = d.send
+
+        def send(keys, pause):
+            orig(keys, pause)
+            stop.set()
+        d.send = send
+        p = plan(1)
+        p["steps"][0]["send"] = "a{TAB}b{TAB}c{ENTER}"
+        r = run_keyplan(p, d, stop=stop)
+        self.assertEqual(r["outcome"], "stopped_by_operator")
+        self.assertEqual(d.sent, [("a{TAB}", 0)])
+
+    def test_stop_during_final_step_is_not_dry_run_ok(self):
+        stop = threading.Event()
+        d = FakeDriver()
+        orig = d.send
+
+        def send(keys, pause):
+            orig(keys, pause)
+            stop.set()
+        d.send = send
+        r = run_keyplan(plan(1), d, stop=stop)
+        self.assertEqual(r["outcome"], "stopped_by_operator")
+
+    def test_injected_esc_ignored(self):
+        from rpa_agent.overlay import handle_press
+        stop = threading.Event()
+        handle_press(stop, True, True)
+        self.assertFalse(stop.is_set())
+        handle_press(stop, False, False)
+        self.assertFalse(stop.is_set())
+        handle_press(stop, True, False)
+        self.assertTrue(stop.is_set())
+
+    def test_empty_steps_is_error(self):
+        d = FakeDriver()
+        r = run_keyplan(plan(1, steps=[]), d, stop=threading.Event())
+        self.assertEqual(r["outcome"], "error")
+        self.assertEqual(d.sent, [])

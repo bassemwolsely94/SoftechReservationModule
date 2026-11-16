@@ -1,4 +1,5 @@
 """ElRezeiky SOFTECH screen robot agent. Config: %APPDATA%\\ElRezeiky\\rpa_agent.json"""
+import datetime
 import json
 import os
 import threading
@@ -17,6 +18,18 @@ def load_config(path=CONFIG):
         return json.load(f)
 
 
+def report_with_retry(client, doc_id, payload, attempts=4, sleep=time.sleep):
+    for n in range(attempts):
+        try:
+            client.report(doc_id, payload)
+            return True
+        except Exception as e:  # noqa: BLE001
+            print("report failed (%d/%d): %s" % (n + 1, attempts, e))
+            if n < attempts - 1:
+                sleep(2 ** (n + 1))
+    return False
+
+
 def run_one(client, claim, mode="dry_run"):
     from .driver import Win32Driver
     from .overlay import Overlay
@@ -25,10 +38,6 @@ def run_one(client, claim, mode="dry_run"):
     doc_id = kp["document"]
     stop = threading.Event()
     overlay = Overlay(stop)
-    if not overlay.confirm_checklist(kp["reference"], kp.get("checklist", [])):
-        client.report(doc_id, {"run_id": run_id, "mode": mode,
-                               "outcome": "stopped_by_operator", "steps": []})
-        return
     alive = threading.Event()
 
     def beat():
@@ -37,8 +46,8 @@ def run_one(client, claim, mode="dry_run"):
                 client.heartbeat(doc_id)
             except Exception:
                 pass
+    # heartbeat covers the checklist wait as well as the run
     threading.Thread(target=beat, daemon=True).start()
-    overlay.show_running(kp["reference"])
 
     def on_shot(i, png):
         try:
@@ -46,11 +55,22 @@ def run_one(client, claim, mode="dry_run"):
         except Exception:
             pass
     try:
-        result = run_keyplan(kp, Win32Driver(), stop=stop, on_shot=on_shot, mode=mode)
+        if not overlay.confirm_checklist(kp["reference"], kp.get("checklist", [])):
+            result = {"outcome": "stopped_by_operator", "steps": []}
+        else:
+            overlay.show_running(kp["reference"])
+            result = run_keyplan(kp, Win32Driver(), stop=stop, on_shot=on_shot, mode=mode)
+    except Exception as e:  # noqa: BLE001 - keyplan/tk/driver failure
+        result = {"outcome": "error", "steps": [
+            {"i": -1, "label": "agent", "at": datetime.datetime.now(
+                datetime.timezone.utc).isoformat(), "ok": False, "note": str(e)}]}
     finally:
         alive.set()
-        overlay.close()
-    client.report(doc_id, {"run_id": run_id, "mode": mode, **result})
+        try:
+            overlay.close()
+        except Exception:
+            pass
+    report_with_retry(client, doc_id, {"run_id": run_id, "mode": mode, **result})
 
 
 def main():
@@ -64,7 +84,11 @@ def main():
             print("claim failed:", e)
             claim = None
         if claim:
-            run_one(client, claim)
+            try:
+                run_one(client, claim)
+            except Exception as e:  # noqa: BLE001 - the poll loop must survive
+                print("run failed:", e)
+                time.sleep(POLL_SECONDS)
         else:
             time.sleep(POLL_SECONDS)
 

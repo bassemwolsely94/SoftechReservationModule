@@ -7,6 +7,12 @@ START = "ابدأ"
 CANCEL = "إلغاء"
 
 
+def handle_press(stop, is_esc, injected):
+    """Esc stops the run, but never for keys the robot itself injected."""
+    if is_esc and not injected:
+        stop.set()
+
+
 class Overlay:
     def __init__(self, stop_event):
         self.stop = stop_event
@@ -69,9 +75,8 @@ class Overlay:
         try:
             from pynput import keyboard
 
-            def on_press(key):
-                if key == keyboard.Key.esc:
-                    self.stop.set()
+            def on_press(key, injected=False):
+                handle_press(self.stop, key == keyboard.Key.esc, injected)
             self._listener = keyboard.Listener(on_press=on_press)
             self._listener.start()
         except Exception:
