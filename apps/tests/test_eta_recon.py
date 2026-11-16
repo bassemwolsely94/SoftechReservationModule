@@ -171,7 +171,8 @@ class ReconReasonTests(ReconTests):
     def setUp(self):
         super().setUp()
         for code in ('A', 'B'):
-            TaxItemProfile.objects.create(softech_itemcode=code, eta_code=f'EG-1-{code}', coding_status='approved')
+            TaxItemProfile.objects.create(softech_itemcode=code, eta_code=f'EG-1-{code}', coding_status='approved',
+                                          list_status='white')
         TaxItemProfile.objects.create(softech_itemcode='X', eta_code='')          # a profile without a code
         # 'DLV' and 'CPN' have no profile at all: they count as having no code too
 
@@ -235,7 +236,7 @@ class ReconReasonTests(ReconTests):
         _eta(2, 30)
         _eta(3, 40)                                        # a normal day: the tills sent
         eta_recon.reconcile_day('production', '150', DAY)
-        TaxItemProfile.objects.filter(softech_itemcode='X').update(eta_code='EG-1-X')
+        TaxItemProfile.objects.filter(softech_itemcode='X').update(eta_code='EG-1-X', list_status='white')
         eta_recon.reconcile_day('production', '150', DAY)
         self.assertEqual((self._line(1).reason, EtaReconUncodedItem.objects.count()), ('', 0))
 
@@ -247,6 +248,19 @@ class ReconReasonTests(ReconTests):
         self.assertEqual([(r['itemcode'], r['value'], r['docs']) for r in rows], [('X', Decimal('110.00'), 3), ('DLV', Decimal('90.00'), 9)])
         self.assertEqual(rows[0]['last_day'], DAY + dt.timedelta(days=1))
         self.assertEqual([r['itemcode'] for r in eta_recon.uncoded_items('production', branch='130')], ['DLV'])
+
+
+class CodedItemsTests(TestCase):
+    """'Coded' for the receipts recon = coded in the owner's bulk EGS sheet (the 13-Nov workbook import)."""
+
+    def test_only_white_sheet_items_with_a_code_and_no_coding_env_count(self):
+        TaxItemProfile.objects.create(softech_itemcode='SHEET', eta_code='EG-1-S', list_status='white')
+        TaxItemProfile.objects.create(softech_itemcode='PREPROD', eta_code='EG-1-P', coding_status='approved',
+                                      list_status='white', coding_env='preprod')
+        TaxItemProfile.objects.create(softech_itemcode='PROD', eta_code='EG-1-D', coding_status='approved',
+                                      list_status='black', coding_env='production')
+        TaxItemProfile.objects.create(softech_itemcode='NOCODE', eta_code='', list_status='white')
+        self.assertEqual(eta_recon.coded_items(), {'SHEET'})
 
 
 class ReconOtherDayAndSilentTests(ReconTests):
