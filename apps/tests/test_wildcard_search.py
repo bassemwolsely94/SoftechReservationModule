@@ -577,3 +577,52 @@ class TypoTests(TestCase):
         t = ItemSearchTests('test_typo_fallback_only_when_nothing_found')
         t.setUp()
         t.test_typo_fallback_only_when_nothing_found()
+
+
+class SoundTierTests(TestCase):
+    """The Arabic `sound` tier fits the 40 ms budget: the in-memory sound index re-ranked in
+    place (apps/shortage/phonetic.quick_ids), not the full shared matcher — and no lookup at
+    all when the earlier tiers already filled the result."""
+
+    def setUp(self):
+        P.reset_index()
+        self.it = _items(
+            'PANADOL ADVANCE 500MG 24TAB LOCAL EGYPT (2STRIPSX12) SMALL OLD SIZE',
+            'NEXIUM 40MG 28TAB (LOCAL)  (4STRIPSX7)', 'ZYRTEC 10MG 20TAB',
+            'CATAFLAM  50MG 20TAB (2STRIPSX10)', 'CATAFLAM 25MG 20TAB (2STRIPSX10)',
+            'CATAFLAM  75 MG  5 SUPP', 'CERELAC RICE WITH MILK 125GM',
+            'BRUFEN 400MG 30TAB (3STRIPSX10)', 'VOLTAREN 50MG 20TAB فولتارين 50مجم')
+
+    def first(self, q, **kw):
+        from apps.catalog.models import Item
+        res = W.item_search(q, **kw)
+        return (Item.objects.get(id=res[0][0]).name, res[0][1]) if res else None
+
+    def test_arabic_brands_by_sound_without_the_heavy_matcher(self):
+        cases = (('بنادول', 'PANADOL'), ('بانادول', 'PANADOL'), ('نيكسيوم', 'NEXIUM'),
+                 ('زيرتك', 'ZYRTEC'), ('كتافلام', 'CATAFLAM'), ('سيريلاك', 'CERELAC'),
+                 ('بروفين', 'BRUFEN'), ('كاتافلام 50', 'CATAFLAM  50MG'))
+        with mock.patch('apps.shortage.matching.find_best_matches', return_value=[]) as heavy:
+            for q, brand in cases:
+                got = self.first(q)
+                self.assertIsNotNone(got, q)
+                self.assertTrue(got[0].startswith(brand), (q, got))
+                self.assertEqual(got[1], 'sound', q)
+            heavy.assert_not_called()
+
+    def test_number_picks_the_strength(self):
+        self.assertEqual(self.first('كاتافلام 25')[0], 'CATAFLAM 25MG 20TAB (2STRIPSX10)')
+
+    def test_latin_or_short_query_has_no_sound(self):
+        self.assertEqual(P.quick_ids('cataflam'), [])
+        self.assertEqual(P.quick_ids('كت'), [])
+
+    def test_no_sound_lookup_when_result_already_full(self):
+        # «فولتارين» is in the name: the name tier alone fills limit=1 — the sound lookup is
+        # skipped (what it adds would be cut off anyway)
+        with mock.patch('apps.shortage.phonetic.quick_ids', return_value=[]) as q:
+            self.assertEqual(self.first('فولتارين', limit=1)[0], 'VOLTAREN 50MG 20TAB فولتارين 50مجم')
+            q.assert_not_called()
+        with mock.patch('apps.shortage.phonetic.quick_ids', return_value=[]) as q:
+            W.item_search('كتافلام')
+            q.assert_called_once()

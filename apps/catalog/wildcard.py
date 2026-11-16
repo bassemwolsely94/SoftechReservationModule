@@ -349,14 +349,6 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
             add(learned_item_ids(raw), 'learned')
         except Exception:
             pass
-    arabic = bool(re.search(r'[؀-ۿ]', raw))
-    sound = []
-    if arabic:
-        try:
-            from apps.shortage.phonetic import search_ids
-            sound = search_ids(WILD.sub(' ', raw), limit=limit)
-        except Exception:
-            sound = []
     # D7: names need 3 characters — two are "starts with" only; one digit is a code alone
     if len(compact) >= 2:
         # the index forcing matters here: for the capped candidate sub-select (LIMIT) the
@@ -377,7 +369,15 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
             with _trigram_indexes():
                 add(_synonym_ids(exp, base, [i for i, _ in out], max(NAME_WINDOW, limit) - len(out)),
                     'synonym')
-    add(sound, 'sound')
+    # Arabic by sound — only when the tiers above left room: what it adds goes after them, so
+    # past `limit` it would be cut anyway. The in-memory sound index (phonetic.quick_ids), not
+    # the full shared matcher: its learned memory is the `learned` tier above.
+    if len(out) < limit and re.search(r'[؀-ۿ]', raw):
+        try:
+            from apps.shortage.phonetic import quick_ids
+            add(quick_ids(WILD.sub(' ', raw), limit=limit), 'sound')
+        except Exception:
+            pass
     # no catalog text hit (a remembered item alone doesn't count) → typo-tolerant fallback
     if not raw.isdigit() and not any(t not in ('code', 'learned') for _, t in out):
         try:

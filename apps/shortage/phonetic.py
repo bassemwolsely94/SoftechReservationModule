@@ -282,6 +282,40 @@ def search_ids(query: str, *, limit: int = 8) -> list:
     return [m['item_id'] for m in find_best_matches(query, top_n=limit, min_score=0.75)]
 
 
+def quick_ids(query: str, *, limit: int = 8) -> list:
+    """The catalog search box's `sound` tier (apps/catalog/wildcard.item_search): the same
+    sound evidence and order as `search_ids`, from this in-process index alone — no DB
+    prefilter, no learned memory (item_search has its own `learned` tier) and no Arabic-name
+    word scoring (its name tiers already find Arabic text in names). ≈ the cost of
+    `candidates` plus one small query, where the full matcher took 26–67 ms.
+    Score = the matcher's Arabic score: 0.62 + 0.30 × sound (sound ≥ 0.75, below that there
+    is no evidence) + agreement of the typed numbers / form words / descriptors; ties go to
+    the closer whole name. [] for a Latin query or under 3 characters, like `search_ids`."""
+    if not re.search(r'[؀-ۿ]', query or '') or len((query or '').strip()) < 3:
+        return []
+    from types import SimpleNamespace
+    from rapidfuzz import fuzz
+    from apps.catalog.models import Item
+    from .matching import _arabic_adjust, _normalize
+    snd = {}
+    for iid, _s in candidates(query, limit=60):
+        s = sound_score(query, iid)
+        if s >= 0.75:
+            snd[iid] = s
+    if not snd:
+        return []
+    names = dict(Item.objects.filter(id__in=list(snd), is_active=True).order_by()
+                 .values_list('id', 'name'))
+    pq = parse_query(query)
+    q_nums = re.findall(r'\d+(?:\.\d+)?', _normalize(query))
+    qn = _normalize(query)
+    ranked = sorted(
+        ((0.62 + 0.30 * snd[i] + _arabic_adjust(SimpleNamespace(name=n), q_nums, pq['forms'], pq['words']),
+          fuzz.ratio(qn, _normalize(n)), -i, i) for i, n in names.items()),
+        reverse=True)
+    return [i for *_k, i in ranked[:limit]]
+
+
 # ── retrieval + scoring ─────────────────────────────────────────────────────────
 def _sim(a: str, b: str) -> float:
     from rapidfuzz.distance import Levenshtein
