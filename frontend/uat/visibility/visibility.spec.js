@@ -11,7 +11,8 @@
 // a screen that opens but whose own data APIs all answer 403 (served = 'refused'). Layout calls
 // (seen on >= 40 % of one surface's visits) are not "own data" (matrix shellApis).
 // Verdicts (findings via finding(), ws 'W2'):
-//   crash (page error / 5xx)                           → P1 crash
+//   crash (page error / 5xx)                           → P1 crash   (page errors that are only unhandled 401/403
+//                                                        rejections = 'unhandled403', a refusal that does not say so: P3 hidden / P2 shown)
 //   menu hidden, own data APIs answer 2xx, not in KNOWN_GAPS → P1 screen   (in KNOWN_GAPS → pass, owner-accepted 2026-11-06)
 //   menu shown, screen refused                         → P2 screen  (P3 when the entry is only a parent: /finance → /finance/coa)
 //   blank, or a loading text still on screen ('stuck') → P2 screen
@@ -25,7 +26,7 @@
 //   skipped: [{route, reason}],                        // :param / public routes not visited
 //   users: {
 //     [key]: { role, shape, branch, at: ISO, durationMs, shellApis: {desk|m|rider: [apiPath]},
-//       rows: { [route]: { status: 'ok'|'slow'|'refused'|'blank'|'stuck'|'crash', raw: <gotoSettled status>,
+//       rows: { [route]: { status: 'ok'|'slow'|'refused'|'blank'|'stuck'|'unhandled403'|'crash', raw: <gotoSettled status>,
 //                          served: 'data'|'refused'|'none', ms, finalUrl,
 //                          menu: true|false|null, menuPath, inherited: bool,
 //                          canView: bool|null,             // can(key, item.module, 'view') when the menu item names a module
@@ -84,11 +85,12 @@ const apiKey = u => u.replace(/^https?:\/\/[^/]+/, '').split('?')[0].replace(/\/
 function judge({ status, served, menu, inherited, knownGap }) {
   if (status === 'crash') return { verdict: 'P1', kind: 'crash', severity: 'P1', reason: 'crash',
     expected: 'screen renders or is refused cleanly', actual: 'page error or 5xx' }
-  if (status === 'stuck' && served === 'refused') {
+  if ((status === 'stuck' && served === 'refused') || status === 'unhandled403') {
+    const how = status === 'stuck' ? 'the screen keeps loading' : 'an unhandled 403 error leaves an empty screen'
     if (menu === true) return { verdict: inherited ? 'P3' : 'P2', kind: 'screen', severity: inherited ? 'P3' : 'P2', reason: 'shown but refused',
-      expected: 'menu entry shown → screen opens', actual: 'data APIs answer 403 and the screen keeps loading' }
+      expected: 'menu entry shown → screen opens', actual: `data APIs answer 403 and ${how}` }
     return { verdict: 'P3', kind: 'screen', severity: 'P3', reason: 'refused without saying so',
-      expected: 'refused screen says so', actual: 'data APIs answer 403 but the screen keeps loading' }
+      expected: 'refused screen says so', actual: `data APIs answer 403 but ${how}` }
   }
   if (status === 'stuck') return { verdict: 'P2', kind: 'screen', severity: 'P2', reason: 'endless loading',
     expected: 'screen settles (data or a clean refusal)', actual: 'still loading after settle' }
@@ -148,6 +150,13 @@ for (const u of users) {
         // A redirect to a landing screen is the app's refusal (RequireRole / RiderHome / mobile guards).
         if (['ok', 'slow', 'blank'].includes(status) && r.finalUrl !== wanted && LANDING.test(r.finalUrl) && !LANDING.test(wanted)) status = 'refused'
         else if (['ok', 'slow'].includes(status) && LOADING.test(text)) status = 'stuck'
+        // gotoSettled counts any page error as a crash. When every page error is an unhandled
+        // 401/403 rejection and nothing answered 5xx, the server refused correctly and the screen
+        // shows an empty state instead of saying so: judged like 'stuck' after a 403.
+        else if (status === 'crash' && !r.apiErrors.some(e => e.status >= 500)) {
+          const pageErrs = r.consoleErrors.filter(e => e.startsWith('pageerror'))
+          if (pageErrs.length && pageErrs.every(e => /status code 40[13]\b/.test(e))) status = 'unhandled403'
+        }
         let evidence
         if (!['ok', 'slow', 'refused'].includes(status)) evidence = await shot(page, u.key, route)
         raw.push({ route, r, status, apis: seen, evidence })
