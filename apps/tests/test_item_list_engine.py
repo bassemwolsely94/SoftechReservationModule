@@ -96,6 +96,19 @@ class ItemListEngineTests(TestCase):
         self.assertEqual([x['name'] for x in rows],
                          ['CONCOR 10MG 30TAB', 'CONCOR 5MG 30TAB', 'CONCOR COR 2.5MG 30TAB'])
 
+    def test_engine_ordering_tiebreak_pages_stably(self):
+        # equal pack_price + ordering=pack_price: `id` is the final tiebreak, so page_size=1
+        # walks every row exactly once, in a fixed order
+        Item.objects.filter(name__startswith='CONCOR').update(pack_price=50)
+        seen = []
+        for page in (1, 2, 3):
+            rows = self.get(search='concor', rank='engine', ordering='pack_price',
+                            page_size=1, page=page)['results']
+            self.assertEqual(len(rows), 1)
+            seen.append(rows[0]['id'])
+        expected = sorted(Item.objects.filter(name__startswith='CONCOR').values_list('id', flat=True))
+        self.assertEqual(seen, expected)
+
     def test_engine_pagination(self):
         from apps.catalog.wildcard import item_search
         from apps.catalog.views import ENGINE_LIST_CAP

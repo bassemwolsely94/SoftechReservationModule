@@ -231,6 +231,9 @@ class ItemListSearchFilter(WildcardSearchFilter):
             # CASE WHEN per id costs ≈45 ms of SQL compiling at 500 ids (measured 2026-11-16)
             qs = qs.order_by(Func(Value(ids, output_field=ArrayField(models.BigIntegerField())),
                                   F('id'), function='array_position', output_field=IntegerField()))
+        elif ids:
+            # equal sort values (same price…) must page stably: `id` is the final tiebreak
+            qs = qs.order_by(*qs.query.order_by, 'id')
         return qs
 
     @staticmethod
