@@ -18,6 +18,7 @@ import CancelReasonPicker, { cancelNote, EMPTY_CANCEL } from '../components/Canc
 import SortTh from '../components/SortTh'
 import useSortableRows from '../hooks/useSortableRows'
 import RemovedFileNote from '../components/RemovedFileNote'
+import { escapeDeep } from '../utils/escapeHtml'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -203,7 +204,11 @@ function buildCustomerWhatsAppText(r, pharmacy = null) {
  * No prices, no internal fields — customer-safe content only.
  * pharmacy — from GET /api/config/pharmacy/ (optional)
  */
-function printCustomerReceipt(r, pharmacy = null) {
+function printCustomerReceipt(rawR, rawPharmacy = null) {
+  // SEC-2 (full audit 2026-11-15): customer-typed text reaches this template — escape the data once,
+  // the template below stays unchanged.
+  const r = escapeDeep(rawR)
+  const pharmacy = rawPharmacy ? escapeDeep(rawPharmacy) : null
   const fulfillmentLabel = r.fulfillment_method === 'delivery' ? 'توصيل للمنزل'
     : r.fulfillment_method === 'pickup' ? 'استلام من الفرع' : null
 

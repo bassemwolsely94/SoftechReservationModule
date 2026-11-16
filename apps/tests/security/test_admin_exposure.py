@@ -2,7 +2,7 @@
 N0 / H9 — Django admin exposure.
 
 Django admin has no 2FA, and nginx used to let all of 10/8 (every ZeroTier member) reach it.
-Now: the admin URL is mounted only when DJANGO_ADMIN_ENABLED (default: DEBUG; off in production),
+Now: the admin URL is mounted only when DJANGO_ADMIN_ENABLED (default: off; was DEBUG until the 2026-11-15 audit),
 and nginx allows only the addresses listed in a per-VPS include file.
 """
 import importlib
@@ -40,10 +40,10 @@ class AdminMountTests(SimpleTestCase):
             _reload_urls()
             self.assertEqual(resolve('/admin/').route, 'admin/')
 
-    def test_setting_defaults_to_debug(self):
-        # The test runner forces DEBUG=False after settings load, so check the source default.
+    def test_setting_defaults_to_off(self):
+        # Full audit 2026-11-15 (SEC-4): no longer tied to DEBUG — the office dev server runs DEBUG on the LAN.
         text = (_ROOT / 'config' / 'settings.py').read_text(encoding='utf-8')
-        self.assertIn("DJANGO_ADMIN_ENABLED = config('DJANGO_ADMIN_ENABLED', default=DEBUG, cast=bool)", text)
+        self.assertIn("DJANGO_ADMIN_ENABLED = config('DJANGO_ADMIN_ENABLED', default=False, cast=bool)", text)
 
 
 class NginxAdminTests(SimpleTestCase):

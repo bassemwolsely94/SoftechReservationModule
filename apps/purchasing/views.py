@@ -2005,7 +2005,9 @@ def filter_options(request):
     def _codelist(code_field, name_field, name_ar_field=None):
         fields = [code_field, name_field] + ([name_ar_field] if name_ar_field else [])
         seen: dict = {}
-        for r in base_qs.exclude(**{code_field: ''}).values(*fields).distinct():
+        # order_by() clears Item.Meta.ordering ('name'): otherwise DISTINCT also runs over the item name
+        # and returns ~one row per item instead of one per code (full audit 2026-11-15, PERF-5).
+        for r in base_qs.exclude(**{code_field: ''}).values(*fields).order_by().distinct():
             code = r.get(code_field)
             if not code:
                 continue

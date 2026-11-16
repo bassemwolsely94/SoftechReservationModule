@@ -148,6 +148,17 @@ def _get_record_branch_id(model_name: str, record_id: int):
     return None
 
 
+def _chatter_branch_denied(user, model_name: str, record_id_int) -> bool:
+    """True when a branch-scoped user may not touch this record's chatter (read OR post)."""
+    from core import branch_scope
+    if record_id_int is None or branch_scope.branch_ids(user) is None:
+        return False
+    record_branch_id = _get_record_branch_id(model_name, record_id_int)
+    sides = record_branch_id if isinstance(record_branch_id, set) else (
+        {record_branch_id} if record_branch_id is not None else set())
+    return bool(sides) and not any(branch_scope.allows(user, b) for b in sides)
+
+
 # ── Notification list ─────────────────────────────────────────────────────────
 
 @api_view(['GET'])
@@ -747,21 +758,15 @@ def chatter_list(request, model_name, record_id):
         return Response({'detail': 'ليس لديك صلاحية على هذه الوحدة'}, status=status.HTTP_403_FORBIDDEN)
 
     # Branch scope enforcement
-    from core import branch_scope
-    if branch_scope.branch_ids(request.user) is not None:
-        try:
-            record_id_int = int(record_id)
-        except (ValueError, TypeError):
-            record_id_int = None
-        if record_id_int is not None:
-            record_branch_id = _get_record_branch_id(model_name, record_id_int)
-            sides = record_branch_id if isinstance(record_branch_id, set) else (
-                {record_branch_id} if record_branch_id is not None else set())
-            if sides and not any(branch_scope.allows(request.user, b) for b in sides):
-                return Response(
-                    {'detail': 'ليس لديك صلاحية الاطلاع على سجلات هذا الفرع'},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+    try:
+        record_id_int = int(record_id)
+    except (ValueError, TypeError):
+        record_id_int = None
+    if _chatter_branch_denied(request.user, model_name, record_id_int):
+        return Response(
+            {'detail': 'ليس لديك صلاحية الاطلاع على سجلات هذا الفرع'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     qs = (
         ChatterMessage.objects
@@ -868,6 +873,14 @@ def chatter_post(request, model_name, record_id):
         return Response(
             {'detail': 'معرف السجل غير صالح'},
             status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Same branch scope as reading the thread (full audit 2026-11-15, SEC-3): before, anyone with the
+    # module could post into another branch's record by changing the id.
+    if _chatter_branch_denied(request.user, model_name, record_id_int):
+        return Response(
+            {'detail': 'ليس لديك صلاحية على سجلات هذا الفرع'},
+            status=status.HTTP_403_FORBIDDEN,
         )
 
     # ── Attachment validation (image / doc / legacy audio) ────────────────────

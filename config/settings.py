@@ -47,8 +47,13 @@ SECRET_KEY = config('SECRET_KEY', default='')
 
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-# Django admin has no 2FA (N0/H9): off in production, on in dev. Turn on for a maintenance window only.
-DJANGO_ADMIN_ENABLED = config('DJANGO_ADMIN_ENABLED', default=DEBUG, cast=bool)
+# Django admin has no 2FA (N0/H9): off unless asked for — not tied to DEBUG, because the office dev server
+# runs DEBUG on the LAN (full audit 2026-11-15, SEC-4). Turn on for a maintenance window only.
+DJANGO_ADMIN_ENABLED = config('DJANGO_ADMIN_ENABLED', default=False, cast=bool)
+
+# Accept WhatsApp / Meta webhook events without a signature when the app secret is unset. Local webhook
+# experiments only; was implied by DEBUG until the full audit (SEC-4).
+WEBHOOK_ALLOW_UNSIGNED = config('WEBHOOK_ALLOW_UNSIGNED', default=False, cast=bool)
 
 # Signing key for JWTs, portal sessions, delivery-tracking / PBX-recording links and
 # (when OMNI_CREDENTIALS_KEY is unset) the encryption of stored channel credentials.
@@ -80,7 +85,14 @@ if _RUNNING_TESTS and not config('SOFTECH_TESTS_ALLOW_LIVE', default=False, cast
 # change-me. `check --deploy` only warns about them, so without this a copied template would pass release.sh.
 if not SECRET_KEY or SECRET_KEY.lower().startswith('change'):
     if DEBUG or _RUNNING_TESTS:
-        SECRET_KEY = SECRET_KEY or 'dev-only-insecure-' + os.urandom(16).hex()
+        # Replace the placeholder too, not only an empty key: the .env.example value is public, so a DEBUG
+        # process that kept it signed tokens anyone with the repo could forge (full audit 2026-11-15,
+        # SEC-1). The throwaway key changes on every restart — set a real key to stay logged in.
+        if SECRET_KEY and not _RUNNING_TESTS:
+            sys.stderr.write('WARNING: SECRET_KEY is the .env.example placeholder — using a throwaway key '
+                             'for this process. Set a long random SECRET_KEY in .env.\n')
+        _throwaway_key = 'dev-only-insecure-' + os.urandom(16).hex()
+        SECRET_KEY = _throwaway_key
     else:
         from django.core.exceptions import ImproperlyConfigured
         raise ImproperlyConfigured(

@@ -845,8 +845,12 @@ class CursorWrapper:
             self._stmt = self._conn.prepareStatement(sql)
             _apply_query_timeout(self._stmt, timeout)
             for i, param in enumerate(params, start=1):
-                if isinstance(param, int):
+                if isinstance(param, bool) or (isinstance(param, int) and -2**31 <= param < 2**31):
                     self._stmt.setInt(i, param)
+                elif isinstance(param, int):
+                    # Above the 32-bit range JPype refuses setInt (e.g. coupon ranges ddmmyyyy*100 from the
+                    # 22nd of a month) — bind as a long (full audit 2026-11-15, S-10).
+                    self._stmt.setLong(i, param)
                 elif isinstance(param, float):
                     self._stmt.setDouble(i, param)
                 elif isinstance(param, str):

@@ -1316,7 +1316,7 @@ def push_final(invoice: SupplierInvoice, *, dry_run=True, force=False, usercode=
                 pass
 
     invoice.softech_docnumber = w['docnumber']
-    invoice.softech_docdate   = timezone.now().date()
+    invoice.softech_docdate   = timezone.localdate()   # Cairo date, as SOFTECH getdate() (audit S-13)
     invoice.status            = 'finalized'
     invoice.erp_executed_at   = timezone.now()
     invoice.erp_payload       = plan

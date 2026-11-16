@@ -168,6 +168,17 @@ class OrderDetailView(branch_scope.BranchScopedMixin, generics.RetrieveUpdateDes
                             status=status.HTTP_409_CONFLICT)
         return super().update(request, *a, **k)
 
+    def destroy(self, request, *a, **k):
+        # Only an order that never left this system may be deleted. A pushed/settled order carries the
+        # SOFTECH docnumber and the client_token that makes a replayed create idempotent; a push_failed one
+        # may have landed (outcome unknown); a queued one can be claimed by the flush job at any moment.
+        # Those are closed through cancel/return instead (full audit 2026-11-15, BE-1).
+        order = self.get_object()
+        if order.status not in (order.STATUS_DRAFT, order.STATUS_READY):
+            return Response({'detail': 'الأمر مقفل (تم إرساله/تحصيله) — لا يمكن الحذف.'},
+                            status=status.HTTP_409_CONFLICT)
+        return super().destroy(request, *a, **k)
+
 
 @api_view(['GET'])
 @permission_classes([CanOperatePosOrders])

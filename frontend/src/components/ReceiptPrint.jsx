@@ -9,6 +9,7 @@
  *   import { printReservationReceipt, printTransferReceipt } from '../components/ReceiptPrint'
  *   <button onClick={() => printReservationReceipt(reservation)}>طباعة</button>
  */
+import { escapeDeep } from '../utils/escapeHtml'
 
 // ── Status labels ─────────────────────────────────────────────────────────────
 const STATUS_AR = {
@@ -487,7 +488,7 @@ function buildTransferHTML(t) {
 // ── Print functions ───────────────────────────────────────────────────────────
 
 export function printReservationReceipt(reservation) {
-  const html   = buildReservationHTML(reservation)
+  const html   = buildReservationHTML(escapeDeep(reservation))   // SEC-2: data is escaped, templates unchanged
   const win    = window.open('', '_blank', 'width=400,height=700')
   if (!win) {
     alert('يرجى السماح بالنوافذ المنبثقة لطباعة الإيصال')
@@ -504,7 +505,7 @@ export function printReservationReceipt(reservation) {
 }
 
 export function printTransferReceipt(transfer) {
-  const html = buildTransferHTML(transfer)
+  const html = buildTransferHTML(escapeDeep(transfer))   // SEC-2
   const win  = window.open('', '_blank', 'width=400,height=700')
   if (!win) {
     alert('يرجى السماح بالنوافذ المنبثقة لطباعة الإيصال')

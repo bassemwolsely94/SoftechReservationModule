@@ -47,12 +47,12 @@ class MetaGraphWebhookView(APIView):
                     hmac.compare_digest(sig[7:].encode(), expected.encode())):
                 logger.warning('Meta Graph webhook: invalid signature')
                 return HttpResponse('Forbidden', status=403)
-        elif not settings.DEBUG:
-            # Fail closed: unsigned events would let anyone inject messages.
+        elif not getattr(settings, 'WEBHOOK_ALLOW_UNSIGNED', False):
+            # Fail closed: unsigned events would let anyone inject messages. Not tied to DEBUG (SEC-4).
             logger.warning('META_GRAPH_APP_SECRET not set — rejecting unsigned webhook')
             return HttpResponse('Forbidden', status=403)
         else:
-            logger.warning('META_GRAPH_APP_SECRET not set — accepting unsigned webhook (DEBUG)')
+            logger.warning('META_GRAPH_APP_SECRET not set — accepting unsigned webhook (WEBHOOK_ALLOW_UNSIGNED)')
 
         try:
             payload = json.loads(request.body)

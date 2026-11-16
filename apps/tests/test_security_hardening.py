@@ -323,6 +323,19 @@ class WebhookSignatureTests(TestCase):
     def test_meta_rejects_unsigned_when_secret_missing(self):
         self.assertEqual(self._meta().status_code, 403)
 
+    @override_settings(WHATSAPP_APP_SECRET='', META_GRAPH_APP_SECRET='', DEBUG=True, WEBHOOK_ALLOW_UNSIGNED=False)
+    def test_debug_alone_no_longer_accepts_unsigned(self):
+        # Full audit 2026-11-15, SEC-4: the office runs DEBUG on the LAN; DEBUG must not open the webhooks.
+        self.assertEqual(self._wa().status_code, 403)
+        self.assertEqual(self._meta().status_code, 403)
+
+    @override_settings(WHATSAPP_APP_SECRET='', META_GRAPH_APP_SECRET='', WEBHOOK_ALLOW_UNSIGNED=True)
+    def test_explicit_switch_accepts_unsigned(self):
+        with mock.patch('apps.whatsapp.views.process_webhook'), \
+             mock.patch('apps.social.views.process_meta_webhook'):
+            self.assertEqual(self._wa().status_code, 200)
+            self.assertEqual(self._meta().status_code, 200)
+
     @override_settings(META_GRAPH_APP_SECRET='s3cret')
     def test_meta_signature_checks(self):
         self.assertEqual(self._meta('sha256=deadbeef').status_code, 403)
@@ -482,6 +495,19 @@ class ProductionSettingsGuardTests(SimpleTestCase):
     def test_debug_still_boots_with_a_placeholder_key(self):
         r = self._import_settings(DEBUG='True', SECRET_KEY='CHANGE')
         self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_debug_never_signs_with_the_public_placeholder(self):
+        # Full audit 2026-11-15, SEC-1: the office ran DEBUG with the .env.example key, so tokens were
+        # forgeable by anyone with the repo. DEBUG must swap it for a throwaway key, like an empty one.
+        placeholder = RepositoryEnv(str(self.ROOT / '.env.example')).data['SECRET_KEY']
+        base = {k: v for k, v in os.environ.items() if k not in ('SECRET_KEY', 'DEBUG', 'ALLOWED_HOSTS')}
+        base.update(DEBUG='True', SECRET_KEY=placeholder)
+        code = 'import config.settings as s, os; print(s.SECRET_KEY == os.environ["SECRET_KEY"])'
+        r = subprocess.run([sys.executable, '-c', code], cwd=self.ROOT, env=base,
+                           capture_output=True, text=True, timeout=120)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.strip().splitlines()[-1], 'False')
+        self.assertIn('placeholder', r.stderr)
 
     def test_production_allowed_hosts_not_wildcard(self):
         r = self._import_settings(DEBUG='False', SECRET_KEY='x' * 50)

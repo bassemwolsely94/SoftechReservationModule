@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { demandApi, branchesApi } from '../api/client'
+import { escapeHtml } from '../utils/escapeHtml'
 
 export default function ShelfQrButton({ productId, productName = '' }) {
   const [open, setOpen]     = useState(false)
@@ -34,7 +35,7 @@ export default function ShelfQrButton({ productId, productName = '' }) {
         <div style="font-weight:800;font-size:18px;color:${navy}">صيدليات الرزيقي</div>
         <div style="font-size:13px;color:#555;margin:6px 0 16px">غير متوفر؟ امسح الكود ليصلك إشعار عند توفره</div>
         <img src="data:image/png;base64,${qr.qr_code}" style="width:260px;height:260px"/>
-        <div style="font-weight:700;margin-top:14px">${(productName || '').replace(/</g, '')}</div>
+        <div style="font-weight:700;margin-top:14px">${escapeHtml(productName)}</div>
       </body></html>`)
     w.document.close(); w.focus(); setTimeout(() => w.print(), 300)
   }
