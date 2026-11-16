@@ -451,8 +451,16 @@ def _approx_ids(text: str, limit: int, base) -> list:
                       if words else 0)
             # the brand as SPELLED (CATAFLM ≈ CATAFLAM, not ANTIFLAM that only sounds alike)
             spelled = fuzz.ratio(head, toks[0]) / 100 if head and toks else 0
-            return (0.35 * snd + 0.15 * spelled + 0.2 * fuzz.token_set_ratio(up, name) / 100
-                    + 0.2 * wagree + 0.1 * agree)
+            # the word / number terms count only when such words / numbers were typed —
+            # otherwise «panadool» alone could never reach APPROX_MIN; dividing by the
+            # weights in use keeps the scale 0..1
+            sc = 0.35 * snd + 0.15 * spelled + 0.2 * fuzz.token_set_ratio(up, name) / 100
+            used = 0.7
+            if words:
+                sc, used = sc + 0.2 * wagree, used + 0.2
+            if nums:
+                sc, used = sc + 0.1 * agree, used + 0.1
+            return sc / used
         scored = sorted(((score(c), c[0]) for c in cands if c[0] in names), reverse=True)
         ranked = [i for sc, i in scored if sc >= APPROX_MIN]
         if ranked:

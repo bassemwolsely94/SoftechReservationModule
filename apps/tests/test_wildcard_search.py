@@ -526,3 +526,54 @@ class SynonymTests(TestCase):
         self.assertEqual(res[0][0], 'AUGMENTIN 457MG/5ML SYRUP 70ML')
         # the words are not adjacent in the name → any_order; what matters: typed form is literal
         self.assertIn(res[0][1], ('starts', 'contains', 'any_order'))
+
+
+class TypoTests(TestCase):
+    """Single-word typos on LONG, realistic names (the short names in ItemSearchTests hid the
+    bug: with no extra words or numbers typed, the word / number terms scored 0 and the brand
+    stayed under APPROX_MIN)."""
+
+    def setUp(self):
+        P.reset_index()
+        self.it = _items(
+            'PANADOL ADVANCE 500MG 24TAB LOCAL EGYPT (2STRIPSX12) SMALL OLD SIZE',
+            'PANADOL EXTRA  48TAB (EGYPT) (4STRIPSX12)',
+            'VOLTAREN - SR - 100MG 20TAB (2STRIPSX10) فولتارين 100 مجم',
+            'AUGMENTIN 1G (1000MG) 14 TAB (2STRIPSX7) اوجمنتين 1جم 14قرص',
+            'CATAFLAM  50MG 20TAB (2STRIPSX10)',
+            'ANTIFLAM 50MG 20TAB')
+
+    def names(self, ids):
+        from apps.catalog.models import Item
+        names = dict(Item.objects.values_list('id', 'name'))
+        return [names[i] for i in ids]
+
+    def test_single_word_typos(self):
+        from apps.catalog.models import Item
+        base = Item.objects.filter(is_active=True)
+        for q, brand in (('panadool', 'PANADOL'), ('voltren', 'VOLTAREN'), ('agmentin', 'AUGMENTIN')):
+            res = self.names(W._approx_ids(q, 20, base))
+            self.assertTrue(res, q)
+            self.assertTrue(res[0].startswith(brand), (q, res))
+            # and through the search box
+            first = W.item_search(q)
+            self.assertTrue(first, q)
+            self.assertEqual(first[0][1], 'approx', q)
+            self.assertTrue(self.names([first[0][0]])[0].startswith(brand), (q, first))
+
+    def test_spelled_beats_sounds_like(self):
+        res = self.names([i for i, _ in W.item_search('cataflm 50')])
+        self.assertTrue(res)
+        self.assertTrue(res[0].startswith('CATAFLAM'), res)
+        self.assertNotEqual(res[0], 'ANTIFLAM 50MG 20TAB')
+
+    def test_gibberish_no_guess(self):
+        self.assertEqual(W.item_search('xqzvw'), [])
+
+    def test_existing_multiword_typos_unchanged(self):
+        # the short-name catalog of ItemSearchTests, run unchanged after this fix
+        from apps.catalog.models import Item
+        Item.objects.all().delete()
+        t = ItemSearchTests('test_typo_fallback_only_when_nothing_found')
+        t.setUp()
+        t.test_typo_fallback_only_when_nothing_found()
