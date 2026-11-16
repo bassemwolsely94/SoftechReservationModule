@@ -115,9 +115,8 @@ def _segments(node):
 def read_gs1_json(path):
     """Bricks from GS1's GPC JSON. Segments are found by going down through uncoded wrappers (a list, or an
     object like {'Schema': [...]}); below them it must be exactly Segment > Family > Class > Brick, and the
-    codes must follow GPC's own pattern (segment NN000000, family NNMM0000 (MM not 00), class NNMMKK00 (KK not 00), brick 8 digits
-    that does not match a segment / family / class pattern; everything under a brick, its attributes, is
-    ignored). Anything else, or a
+    codes must follow GPC's own pattern (segment NN000000, family NNMM0000 (MM not 00), class NNMMKK00 (KK not 00), brick any 8
+    digits; everything under a brick, its attributes, is ignored). Anything else, or a
     file with no bricks, raises ValueError rather than loading shifted levels. Each row: code, name_en,
     definition and the segment / family / class code and name above it."""
     with open(path, encoding='utf-8-sig') as f:
@@ -138,8 +137,6 @@ def read_gs1_json(path):
             return
         if not BRICK.match(code):
             bad('كود البريك غير صالح', code)
-        if any(rx.match(code) for rx in _LEVEL_CODE):
-            bad('كود البريك يطابق نمط قسم أو عائلة أو فئة', code)
         row = {'code': code, 'name_en': _field(node, 'Title', 'Description', 'title', 'description'),
                'definition': _field(node, 'Definition', 'definition')}
         for (lvl_code, lvl_name), pre in zip(trail, ('segment', 'family', 'class')):

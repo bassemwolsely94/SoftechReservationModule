@@ -1073,3 +1073,10 @@ class GpcGs1Tests(TestCase):
         brick = data['Schema'][0]['Childs'][0]['Childs'][0]['Childs'][0]
         brick['Childs'] = [{'Code': '20000001', 'Title': 'Attr', 'Childs': [{'Code': '30000001', 'Title': 'Val'}]}]
         self.assertEqual(len(gpc.read_gs1_json(self._path(data))), 3)
+
+    def test_brick_code_ending_00_loads(self):
+        import copy
+        from apps.tax_invoicing import gpc
+        data = copy.deepcopy(self.FIXTURE)
+        data['Schema'][0]['Childs'][0]['Childs'][0]['Childs'].append({'Code': '10000600', 'Title': 'Odd code'})
+        self.assertEqual(len(gpc.read_gs1_json(self._path(data))), 4)
