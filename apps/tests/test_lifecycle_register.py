@@ -95,7 +95,7 @@ class RegisterValueTests(SimpleTestCase):
         self.assertEqual(set(RULES), {
             'rate_runs', 'transit_alert_notes', 'transit_audit_events', 'prescriptions', 'ocr_pos_rx',
             'conversations', 'financial_docs', 'bundle_pages', 'images_rejected', 'images_unreviewed',
-            'images_obsolete', 'delivery_proof', 'staff_messages', 'unreferenced', *P56_KEYS})
+            'images_obsolete', 'delivery_proof', 'staff_messages', 'unreferenced', 'rpa_screenshots', *P56_KEYS})
         for key, rule in RULES.items():
             self.assertEqual(rule.key, key)
 
@@ -114,6 +114,7 @@ class RegisterValueTests(SimpleTestCase):
             'images_obsolete': ('file', None, 90, 100, 1_000),
             'delivery_proof': ('file', None, 365, 200, 5_000),
             'staff_messages': ('file', None, 365, 500, 5_000),
+            'rpa_screenshots': ('file', None, 180, 200, 5_000),
             'unreferenced': ('file', None, 30, 100, 1_000),
         }
         for key, values in expected.items():
