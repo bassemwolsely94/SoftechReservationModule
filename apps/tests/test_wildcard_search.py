@@ -729,3 +729,29 @@ class IngredientAndEndpointTests(TestCase):
         ing = [r for r in res if r['name'] == 'CATAFLAM 50MG'][0]
         self.assertIs(ing['ingredient'], True)
         self.assertEqual(ing['ingredient_name'], 'DICLOFENAC POTASSIUM')
+
+
+class WarmStartTests(SimpleTestCase):
+    def _ready(self, argv, env):
+        from apps.shortage.apps import ShortageConfig
+        import apps.shortage as shortage_pkg
+        cfg = ShortageConfig('apps.shortage', shortage_pkg)
+        with mock.patch('sys.argv', argv), mock.patch.dict('os.environ', env, clear=False),                 mock.patch('core.threads.start_thread') as st,                 mock.patch('apps.shortage.phonetic._connect_signals'):
+            cfg.ready()
+        return st
+
+    def test_warm_start_skipped_for_tests(self):
+        st = self._ready(['manage.py', 'test'], {})
+        st.assert_not_called()
+
+    def test_warm_start_runs_on_the_runserver_worker(self):
+        st = self._ready(['manage.py', 'runserver'], {'RUN_MAIN': 'true'})
+        st.assert_called_once()
+        self.assertIs(st.call_args.args[0], P.warm_search_index)
+
+    def test_warm_start_skipped_in_the_reloader_parent(self):
+        with mock.patch.dict('os.environ', {}, clear=False):
+            import os
+            os.environ.pop('RUN_MAIN', None)
+            st = self._ready(['manage.py', 'runserver'], {})
+        st.assert_not_called()

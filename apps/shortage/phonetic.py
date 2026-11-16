@@ -264,6 +264,15 @@ def reset_index(*_a, **_k):
     _index['built'] = 0.0
 
 
+def warm_search_index():
+    """Build the sound index ahead of the first search; never raises (runs on a start-up thread)."""
+    try:
+        index()
+    except Exception:
+        import logging
+        logging.getLogger("elrezeiky.shortage").exception("warm_search_index failed")
+
+
 def _connect_signals():
     """A catalog item saved / deleted through the ORM refreshes the sound index on the next
     lookup (bulk SOFTECH syncs are covered by INDEX_TTL)."""
