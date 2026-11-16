@@ -707,7 +707,7 @@ function PharmacyProfileEditor({ isAdmin }) {
     setSaving(true); setError(null)
     try {
       await configApi.updatePharmacy(draft)
-      await qc.invalidateQueries(['pharmacy-profile'])
+      await qc.invalidateQueries({ queryKey: ['pharmacy-profile'] })
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
       setEditing(false)

@@ -10,7 +10,7 @@
  *  5. Job History   — full audit log
  */
 import { useState, useCallback, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { imageApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
 import useServerSort from '../hooks/useServerSort'
@@ -281,8 +281,8 @@ function ReviewQueueTab({ onGallery }) {
     setLoading(true)
     try {
       await imageApi.reviewCandidate(c.id, {action, set_primary:true})
-      qc.invalidateQueries(['img-review-queue'])
-      qc.invalidateQueries(['img-report'])
+      qc.invalidateQueries({ queryKey: ['img-review-queue'] })
+      qc.invalidateQueries({ queryKey: ['img-report'] })
     } finally { setLoading(false) }
   }, [qc])
 
@@ -591,7 +591,7 @@ function ItemImageManager({ item, onClose }) {
     enabled:  panel === 'candidates',
   })
 
-  const refresh = () => { refetchGallery(); refetchCands(); qc.invalidateQueries(['img-product-search']); qc.invalidateQueries(['img-report']) }
+  const refresh = () => { refetchGallery(); refetchCands(); qc.invalidateQueries({ queryKey: ['img-product-search'] }); qc.invalidateQueries({ queryKey: ['img-report'] }) }
 
   const handleSetPrimary = async (mediaId) => {
     setBusy(true)
@@ -640,7 +640,7 @@ function ItemImageManager({ item, onClose }) {
     setBusy(true)
     try {
       await imageApi.createJob({ item_id: itemId, priority: 3, auto_approve_threshold: 0.78, force_rerun: true })
-      qc.invalidateQueries(['img-report'])
+      qc.invalidateQueries({ queryKey: ['img-report'] })
       alert('تم إطلاق مهمة البحث')
     } catch(e) { alert('فشل الإطلاق') }
     finally { setBusy(false) }
@@ -996,7 +996,7 @@ function GalleryTab({ initialItemId = '' }) {
       producer_name: producers.length ? producers.join(',') : undefined,
       page, page_size: 25,
     }).then(r => r.data),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
 
   const results = data?.results || []

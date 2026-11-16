@@ -1215,7 +1215,7 @@ function TaskDrawer({ taskId, onClose, onMutate, branches = [] }) {
     setActing(true)
     try { await fn() } finally {
       setActing(false)
-      qc.invalidateQueries(['followup-detail', taskId])
+      qc.invalidateQueries({ queryKey: ['followup-detail', taskId] })
       onMutate()
     }
   }
@@ -1536,7 +1536,7 @@ function TaskDrawer({ taskId, onClose, onMutate, branches = [] }) {
                                   } else {
                                     setOutcomeBucket(''); setOutcomePreset('')
                                   }
-                                  qc.invalidateQueries(['followup-detail', taskId])
+                                  qc.invalidateQueries({ queryKey: ['followup-detail', taskId] })
                                   onMutate()
                                 } finally { setActing(false) }
                               }}
@@ -2193,17 +2193,17 @@ export default function FollowUpsPage() {
   })
 
   const invalidate = useCallback(() => {
-    qc.invalidateQueries(['followup-tasks'])
-    qc.invalidateQueries(['followup-grouped'])
-    qc.invalidateQueries(['followup-dashboard'])
+    qc.invalidateQueries({ queryKey: ['followup-tasks'] })
+    qc.invalidateQueries({ queryKey: ['followup-grouped'] })
+    qc.invalidateQueries({ queryKey: ['followup-dashboard'] })
     setQuickTask(null)
   }, [qc])
 
   const onDrawerMutate = useCallback(() => {
-    qc.invalidateQueries(['followup-tasks'])
-    qc.invalidateQueries(['followup-grouped'])
-    qc.invalidateQueries(['followup-dashboard'])
-    if (selectedTask) qc.invalidateQueries(['followup-detail', selectedTask.id])
+    qc.invalidateQueries({ queryKey: ['followup-tasks'] })
+    qc.invalidateQueries({ queryKey: ['followup-grouped'] })
+    qc.invalidateQueries({ queryKey: ['followup-dashboard'] })
+    if (selectedTask) qc.invalidateQueries({ queryKey: ['followup-detail', selectedTask.id] })
   }, [qc, selectedTask])
 
   const TAB_STATUSES = [
@@ -2239,7 +2239,7 @@ export default function FollowUpsPage() {
                   <button data-tour="followups-tasks-admin-channels"
                     onClick={async () => {
                       try { await followupsApi.backfillChannels() } catch {}
-                      qc.invalidateQueries(['followup-tasks'])
+                      qc.invalidateQueries({ queryKey: ['followup-tasks'] })
                     }}
                     className="btn-secondary text-xs px-3 py-2">
                     🔧 تحديث القنوات
@@ -2252,7 +2252,7 @@ export default function FollowUpsPage() {
                       } catch (e) {
                         alert('فشل: ' + (e?.response?.data?.detail || e.message))
                       }
-                      qc.invalidateQueries(['followup-tasks'])
+                      qc.invalidateQueries({ queryKey: ['followup-tasks'] })
                     }}
                     className="btn-secondary text-xs px-3 py-2">
                     🧾 تحديث بيانات الفواتير
@@ -2263,7 +2263,7 @@ export default function FollowUpsPage() {
                         const { data } = await followupsApi.updatePriorityScores()
                         alert(`تم تحديث درجة الأولوية لـ ${data.tasks_updated} مهمة`)
                       } catch (e) { alert('فشل: ' + e.message) }
-                      qc.invalidateQueries(['followup-tasks'])
+                      qc.invalidateQueries({ queryKey: ['followup-tasks'] })
                     }}
                     className="btn-secondary text-xs px-3 py-2">
                     ⚡ تحديث الأولويات
@@ -2275,7 +2275,7 @@ export default function FollowUpsPage() {
                         const { data } = await followupsApi.cleanupDead({ dry_run: false })
                         alert(`تم إلغاء ${data.cancelled} مهمة منتهية`)
                       } catch (e) { alert('فشل: ' + e.message) }
-                      qc.invalidateQueries(['followup-tasks'])
+                      qc.invalidateQueries({ queryKey: ['followup-tasks'] })
                     }}
                     className="btn-secondary text-xs px-3 py-2 text-red-600">
                     🗑 تنظيف المهام الميتة
@@ -2291,8 +2291,8 @@ export default function FollowUpsPage() {
                         if (!confirm(`سيتم إلغاء ${data.tasks_cancelled} مهمة مكررة في ${data.groups_affected} مجموعة. متابعة؟`)) return
                         const { data: res } = await followupsApi.deduplicate({ dry_run: false })
                         alert(`✅ تم دمج ${res.tasks_cancelled} مهمة مكررة`)
-                        qc.invalidateQueries(['followup-tasks'])
-                        qc.invalidateQueries(['followup-grouped'])
+                        qc.invalidateQueries({ queryKey: ['followup-tasks'] })
+                        qc.invalidateQueries({ queryKey: ['followup-grouped'] })
                       } catch (e) { alert('فشل: ' + e.message) }
                     }}
                     className="btn-secondary text-xs px-3 py-2 text-orange-600">
@@ -2308,8 +2308,8 @@ export default function FollowUpsPage() {
                         const { data: result } = await followupsApi.generate({
                           dry_run: false, overdue_days: 3,
                         })
-                        qc.invalidateQueries(['followup-tasks'])
-                        qc.invalidateQueries(['followup-dashboard'])
+                        qc.invalidateQueries({ queryKey: ['followup-tasks'] })
+                        qc.invalidateQueries({ queryKey: ['followup-dashboard'] })
                         const parts = []
                         if (result.tasks_created)    parts.push(`${result.tasks_created} مهمة جديدة`)
                         if (result.tasks_escalated)  parts.push(`${result.tasks_escalated} ${fa()} فائت`)

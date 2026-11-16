@@ -17,7 +17,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import useServerSort from '../hooks/useServerSort'
 import SortTh from '../components/SortTh'
 import { recommendationsApi, customersApi } from '../api/client'
@@ -115,8 +115,8 @@ function EngineStatusStrip({ onTriggerSuccess }) {
   const triggerMutation = useMutation({
     mutationFn: () => recommendationsApi.trigger(params),
     onSuccess: () => {
-      qc.invalidateQueries(['rec-latest-run'])
-      qc.invalidateQueries(['rec-runs-history'])
+      qc.invalidateQueries({ queryKey: ['rec-latest-run'] })
+      qc.invalidateQueries({ queryKey: ['rec-runs-history'] })
       onTriggerSuccess?.()
     },
   })
@@ -125,7 +125,7 @@ function EngineStatusStrip({ onTriggerSuccess }) {
   useEffect(() => {
     if (run?.status !== 'running') return
     const t = setInterval(() => {
-      qc.invalidateQueries(['rec-latest-run'])
+      qc.invalidateQueries({ queryKey: ['rec-latest-run'] })
     }, 4000)
     return () => clearInterval(t)
   }, [run?.status, qc])
@@ -248,7 +248,7 @@ function FBTPairsTab() {
       page_size: PAGE_SIZE,
     }).then(r => r.data),
     staleTime: 60_000,
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
 
   const rows  = data?.results || data || []
@@ -624,7 +624,7 @@ export default function RecommendationsPage() {
       </div>
 
       {/* Engine status strip */}
-      <EngineStatusStrip onTriggerSuccess={() => qc.invalidateQueries(['rec-runs-history'])} />
+      <EngineStatusStrip onTriggerSuccess={() => qc.invalidateQueries({ queryKey: ['rec-runs-history'] })} />
 
       {/* KPI row — latest run */}
       <LatestRunKpis />

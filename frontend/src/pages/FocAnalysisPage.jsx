@@ -9,7 +9,7 @@
  *   - Tax burden summary
  */
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { procurementIntelApi } from '../api/client'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import useAuthStore from '../store/authStore'
@@ -84,19 +84,19 @@ export default function FocAnalysisPage() {
   const focQ = useQuery({
     queryKey: ['foc-analysis', params],
     queryFn:  () => procurementIntelApi.focAnalysis(params).then(r => r.data),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
 
   const expiryQ = useQuery({
     queryKey: ['expiry-returns', params],
     queryFn:  () => procurementIntelApi.expiryReturns(params).then(r => r.data),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
 
   const taxQ = useQuery({
     queryKey: ['tax-burden', params],
     queryFn:  () => procurementIntelApi.taxBurden(params).then(r => r.data),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
 
   const foc    = focQ.data

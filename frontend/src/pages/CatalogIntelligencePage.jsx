@@ -658,8 +658,8 @@ function EnrichmentManagementTab() {
   const createBatch = useMutation({
     mutationFn: (data) => enrichmentApi.createBatch(data),
     onSuccess: () => {
-      qc.invalidateQueries(['enrBatches'])
-      qc.invalidateQueries(['enrReport'])
+      qc.invalidateQueries({ queryKey: ['enrBatches'] })
+      qc.invalidateQueries({ queryKey: ['enrReport'] })
       setShowCreateForm(false)
       setBatchName('')
     },
@@ -667,28 +667,28 @@ function EnrichmentManagementTab() {
 
   const cancelBatch = useMutation({
     mutationFn: (id) => enrichmentApi.cancelBatch(id),
-    onSuccess: () => qc.invalidateQueries(['enrBatches']),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['enrBatches'] }),
   })
 
   const bulkApprove = useMutation({
     mutationFn: ({ itemId, conf }) => enrichmentApi.bulkApprove(itemId, conf),
     onSuccess: () => {
-      qc.invalidateQueries(['enrQueue', queueParams])
-      qc.invalidateQueries(['enrReport'])
+      qc.invalidateQueries({ queryKey: ['enrQueue', queueParams] })
+      qc.invalidateQueries({ queryKey: ['enrReport'] })
     },
   })
 
   const recompute = useMutation({
     mutationFn: () => enrichmentApi.recomputeScores(),
     onSuccess: () => {
-      qc.invalidateQueries(['enrReport'])
-      qc.invalidateQueries(['enrQueue'])
+      qc.invalidateQueries({ queryKey: ['enrReport'] })
+      qc.invalidateQueries({ queryKey: ['enrQueue'] })
     },
   })
 
   const generate = useMutation({
     mutationFn: ({ itemPk }) => enrichmentApi.generate(itemPk, false),
-    onSuccess: () => qc.invalidateQueries(['enrQueue', queueParams]),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['enrQueue', queueParams] }),
   })
 
   // ── Derived report values ─────────────────────────────────────────────

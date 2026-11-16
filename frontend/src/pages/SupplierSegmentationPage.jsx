@@ -6,7 +6,7 @@
  * labels + colours come from the admin-managed master, not hard-coded.
  */
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { procurementIntelApi } from '../api/client'
 import { useProcurementFilters } from '../components/ProcurementFilters'
 import useAuthStore from '../store/authStore'
@@ -110,7 +110,7 @@ export default function SupplierSegmentationPage() {
   const { data: summaryData, isLoading: summaryLoading } = useQuery({
     queryKey: ['segments-summary', params],
     queryFn:  () => procurementIntelApi.segmentsSummary(params).then(r => r.data),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
 
   const { data: listData, isLoading: listLoading } = useQuery({
@@ -120,7 +120,7 @@ export default function SupplierSegmentationPage() {
       q:        searchQ || undefined,
       ordering: ordering || undefined,
     }).then(r => r.data),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
 
   const overrideMutation = useMutation({

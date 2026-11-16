@@ -411,7 +411,7 @@ export default function NewReservationPage() {
         }
       }
 
-      qc.invalidateQueries(['reservations-kanban'])
+      qc.invalidateQueries({ queryKey: ['reservations-kanban'] })
       navigate(`/reservations/${res.data.id}`)
     } catch (e) {
       if (e.response?.status === 409 && e.response?.data?.duplicate) {
