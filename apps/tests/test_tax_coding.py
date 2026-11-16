@@ -1065,3 +1065,11 @@ class GpcGs1Tests(TestCase):
         with self.assertRaises(ValueError):
             gpc.read_gs1_json(self._path(families))
         self.assertEqual(TaxGpcBrick.objects.count(), 0)
+
+    def test_brick_attributes_with_coded_children_are_ignored(self):
+        import copy
+        from apps.tax_invoicing import gpc
+        data = copy.deepcopy(self.FIXTURE)
+        brick = data['Schema'][0]['Childs'][0]['Childs'][0]['Childs'][0]
+        brick['Childs'] = [{'Code': '20000001', 'Title': 'Attr', 'Childs': [{'Code': '30000001', 'Title': 'Val'}]}]
+        self.assertEqual(len(gpc.read_gs1_json(self._path(data))), 3)
