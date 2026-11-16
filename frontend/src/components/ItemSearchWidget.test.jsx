@@ -8,9 +8,9 @@ vi.mock('../api/client', () => ({
   itemsApi: { wildcardSearch: vi.fn() },
 }))
 vi.mock('./AdvancedItemSearchModal', () => ({ default: () => <div>ADV-MODAL</div> }))
-const cam = vi.hoisted(() => ({ on: false }))
+const cam = vi.hoisted(() => ({ on: false, code: '555' }))
 vi.mock('./BarcodeScanner', () => ({
-  default: ({ onScan }) => <button onClick={() => onScan('555')}>FAKE-SCAN</button>,
+  default: ({ onScan }) => <button onClick={() => onScan(cam.code)}>FAKE-SCAN</button>,
   cameraAvailable: () => cam.on,
 }))
 vi.mock('../hooks/useFeatures', () => ({ default: () => ({ cameraScan: cam.on }) }))
@@ -41,7 +41,7 @@ async function type(text) {
 }
 
 describe('ItemSearchWidget default variant on the engine', () => {
-  beforeEach(() => { get.mockReset(); cam.on = false })
+  beforeEach(() => { get.mockReset(); cam.on = false; cam.code = '555' })
   afterEach(cleanup)
 
   it('keeps wildcards and asks for rank=engine', async () => {
@@ -145,12 +145,29 @@ describe('ItemSearchWidget default variant on the engine', () => {
     expect(onSelect).not.toHaveBeenCalled()
   })
 
-  it('a scan resolving to one exact code row is auto-selected', async () => {
-    const row = { ...rows[0], tier: 'code' }
+  it("a scan equal to the row's code is auto-selected", async () => {
+    const row = { ...rows[0], softech_id: '555', tier: 'code' }
     cam.on = true
     const { onSelect } = setup({}, [row])
     fireEvent.click(screen.getByTitle('مسح الباركود بالكاميرا'))
     fireEvent.click(screen.getByText('FAKE-SCAN'))
     await waitFor(() => expect(onSelect).toHaveBeenCalledWith(row))
+  })
+
+  it("a scan equal to the row's barcode in another case is auto-selected", async () => {
+    cam.code = 'abc555'
+    const row = { ...rows[0], barcode: 'ABC555', tier: 'code' }
+    cam.on = true
+    const { onSelect } = setup({}, [row])
+    fireEvent.click(screen.getByTitle('مسح الباركود بالكاميرا'))
+    fireEvent.click(screen.getByText('FAKE-SCAN'))
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith(row))
+  })
+
+  it("a scan whose digits only start one row's code (code_prefix) is not auto-selected", async () => {
+    const onSelect = await scan({ ...rows[0], softech_id: '5551', tier: 'code_prefix', code_prefix: true })
+    expect(screen.getByText('بداية الكود')).toBeTruthy()
+    await new Promise(r => setTimeout(r, 50))
+    expect(onSelect).not.toHaveBeenCalled()
   })
 })

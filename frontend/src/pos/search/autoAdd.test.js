@@ -9,7 +9,7 @@ describe('isExactishRow (queued Enter)', () => {
   })
 
   it('refuses every fuzzy tier', () => {
-    for (const tier of ['learned', 'sound', 'approx', 'ingredient', 'synonym', 'code_part']) {
+    for (const tier of ['learned', 'sound', 'approx', 'ingredient', 'synonym', 'code_prefix', 'code_part']) {
       expect(isExactishRow({ tier, [tier]: true })).toBe(false)
     }
   })
@@ -32,10 +32,11 @@ describe('isExactishRow (queued Enter)', () => {
 describe('isExactCodeRow (camera scan)', () => {
   it('accepts only an exact code / barcode row', () => {
     expect(isExactCodeRow({ tier: 'code' })).toBe(true)
-    for (const tier of ['starts', 'word', 'contains', 'any_order', 'sound', 'approx', 'code_part', 'learned']) {
+    for (const tier of ['starts', 'word', 'contains', 'any_order', 'sound', 'approx', 'code_prefix', 'code_part', 'learned']) {
       expect(isExactCodeRow({ tier })).toBe(false)
     }
     expect(isExactCodeRow(null)).toBe(false)
     expect(isExactCodeRow({ tier: 'code', code_part: true })).toBe(false)
+    expect(isExactCodeRow({ tier: 'code', code_prefix: true })).toBe(false)
   })
 })

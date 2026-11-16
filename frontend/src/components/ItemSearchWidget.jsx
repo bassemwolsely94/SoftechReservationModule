@@ -43,13 +43,15 @@ import SearchTierChip from './SearchTierChip'
 import Highlight from './Highlight'
 
 // A scanned code matches an item when it is the item's code, its primary barcode or one of its
-// extra barcodes (shape differs between the default and the POS search results).
+// extra barcodes (shape differs between the default and the POS search results). Case does not
+// matter: a few barcodes carry letters, and one real one is stored in lower case.
 function matchesCode(item, code) {
-  const c = String(code).trim()
+  const norm = v => String(v ?? '').trim().toUpperCase()
+  const c = norm(code)
   if (!c || !item) return false
-  if (String(item.softech_id ?? '').trim() === c || String(item.barcode ?? '').trim() === c) return true
+  if (norm(item.softech_id) === c || norm(item.barcode) === c) return true
   const extra = item.barcodes || item.all_barcodes || []
-  return extra.some(b => String(b?.barcode ?? b).trim() === c)
+  return extra.some(b => norm(b?.barcode ?? b) === c)
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -315,7 +317,8 @@ export default function ItemSearchWidget({
     if (exact.length === 1) handleSelect(exact[0])
     // a single row the scanned code didn't match field-by-field: the POS takes it only when the
     // server says it is an exact code / barcode hit (safety rule 4 — never a fuzzy row); the
-    // both variants: engine rows carry a tier, so only an exact code hit is taken unseen
+    // both variants: engine rows carry a tier, so only an exact code hit is taken unseen — a
+    // `code_prefix` row (the scanned digits only START its code) waits for a click
     else if (!exact.length && results.length === 1 && isExactCodeRow(results[0])) handleSelect(results[0])
     else if (!results.length) setScanMiss(scanFor)
   }, [scanFor, typedQ, resultsStale, results])   // eslint-disable-line react-hooks/exhaustive-deps

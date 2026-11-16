@@ -1,7 +1,7 @@
 /**
  * SearchTierChip — one small chip saying WHY a search row matched when it is not an exact hit.
  * Shared by the item pickers and the POS result rows. At most one chip, by priority:
- * learned > ingredient > sound > approx > code_part. Synonym / exact rows get none.
+ * learned > ingredient > sound > approx > code_prefix > code_part. Synonym / exact rows get none.
  */
 const CHIPS = [
   { key: 'learned', cls: 'bg-teal-100 text-teal-800', title: 'أكّد شخصٌ هذا الصنف لهذا الاسم من قبل',
@@ -13,6 +13,8 @@ const CHIPS = [
   { key: 'approx', cls: 'bg-amber-100 text-amber-800',
     title: 'لا يوجد صنف يطابق ما كُتب بالضبط — هذه أقرب الأصناف (خطأ إملائي محتمل)',
     label: () => 'تقريبي' },
+  { key: 'code_prefix', cls: 'bg-gray-100 text-gray-700', title: 'كود الصنف يبدأ بما كُتب — ليس الكود كاملًا',
+    label: () => 'بداية الكود' },
   { key: 'code_part', cls: 'bg-gray-100 text-gray-700', title: 'تطابق جزءًا من كود الصنف',
     label: () => 'جزء من الكود' },
 ]

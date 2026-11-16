@@ -118,8 +118,9 @@ class ItemSearchSerializer(serializers.ModelSerializer):
 
 
 # Tiers the pickers show a chip for: learned «من الذاكرة», sound «بالنطق», approx «تقريبي»,
-# ingredient «المادة الفعالة», code_part, synonym (wildcard.item_search tier names).
-FLAG_TIERS = ('learned', 'sound', 'approx', 'ingredient', 'code_part', 'synonym')
+# ingredient «المادة الفعالة», code_prefix «بداية الكود», code_part, synonym (wildcard.item_search
+# tier names). code_prefix is flagged so no client mistakes a code's start for the exact code.
+FLAG_TIERS = ('learned', 'sound', 'approx', 'ingredient', 'code_prefix', 'code_part', 'synonym')
 
 
 def engine_tier_fields(tier: str, ingredient_name: str = '') -> dict:

@@ -239,6 +239,28 @@ class CodeTierTests(TestCase):
         ids = [i for i, _ in res]
         self.assertLess(ids.index(self.souvenir.id), first_part)
 
+    def test_code_prefix_is_its_own_tier_after_exact_code(self):
+        # «3690» = augmentin's exact code; 36901 only STARTS with it → `code_prefix`, never `code`
+        # (a camera scan auto-picks a lone `code` row), ranked right after the exact hit
+        from apps.catalog.models import Item
+        from apps.catalog.serializers import engine_tier_fields
+        longer = Item.objects.create(softech_id='36901', name='ZZ LONGER CODE ITEM', pack_price=1,
+                                     is_active=True)
+        res = W.item_search('3690')
+        self.assertEqual(res[:2], [(self.augmentin.id, 'code'), (longer.id, 'code_prefix')])
+        self.assertEqual([i for i, t in res if t == 'code'], [self.augmentin.id])
+        # a prefix-only query: no row claims to be the exact code
+        self.assertEqual(W.item_search('36901'), [(longer.id, 'code')])
+        self.assertNotIn('code', [t for _, t in W.item_search('369')])
+        res = W.item_search('3690', limit=5)
+        self.assertNotIn((longer.id, 'code'), res)
+        # the row flag every client reads
+        self.assertEqual(engine_tier_fields('code_prefix'), {'tier': 'code_prefix', 'code_prefix': True})
+        self.assertEqual(engine_tier_fields('code'), {'tier': 'code'})
+        # POS (code_prefix=False): exact codes only — no prefix row at all
+        self.assertEqual(W.item_search('3690', code_prefix=False)[0], (self.augmentin.id, 'code'))
+        self.assertNotIn('code_prefix', [t for _, t in W.item_search('3690', code_prefix=False)])
+
     def test_code_part_never_on_pos_path(self):
         res = W.item_search('690', code_prefix=False)
         self.assertNotIn('code_part', [t for _, t in res])
