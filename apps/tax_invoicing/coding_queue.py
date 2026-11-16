@@ -54,11 +54,30 @@ def _rate(vat_rate):
     return rate
 
 
+ALREADY_CODED = 'الصنف مُكوَّد بالفعل — ليس في طابور الترميز'
+
+
+def sheet_coded(profile):
+    """Coded on the production sheet (approved/pending, not a preprod-only code)."""
+    return (profile.coding_status in (TaxItemProfile.CODE_APPROVED, TaxItemProfile.CODE_PENDING)
+            and profile.coding_env in ('', 'production'))
+
+
+def _on_eta_production(codes):
+    """(itemcodes with an approved/active ETA production usage, usages by itemcode)."""
+    usages = {}
+    for u in EtaCodeUsage.objects.filter(system='production', itemcode__in=list(codes)):
+        usages.setdefault(u.itemcode, []).append(u)
+    return {c for c, us in usages.items() if any(u.status.lower() in eta_codes.ACTIVE_STATUSES for u in us)}, usages
+
+
 def decide(profile_id, actor, *, decision, vat_rate=None, names=None, note=''):
     if decision not in dict(TaxCodingDecision.DECISION_CHOICES):
         raise TaxRuleError('قرار غير معروف')
     with transaction.atomic():
         profile = TaxItemProfile.objects.select_for_update().get(pk=profile_id)
+        if sheet_coded(profile) or _on_eta_production([profile.softech_itemcode])[0]:
+            raise TaxRuleError(ALREADY_CODED)
         row = TaxCodingDecision.objects.filter(profile=profile).first()
         if row is not None and row.decision:
             raise TaxRuleError(ALREADY_DECIDED)
@@ -152,15 +171,10 @@ def rows(*, recent_days=None, premark=None, decided=None, q=''):
         sales = sales.filter(day__gte=timezone.localdate() - dt.timedelta(days=recent_days))
     sold = {r['itemcode']: r for r in sales.values('itemcode').annotate(value=Sum('value'), docs=Sum('docs'),
                                                                         last_day=Max('day'))}
-    profiles = list(TaxItemProfile.objects.filter(softech_itemcode__in=list(sold)).exclude(
-        coding_status__in=(TaxItemProfile.CODE_APPROVED, TaxItemProfile.CODE_PENDING),
-        coding_env__in=('', 'production')))
+    profiles = [p for p in TaxItemProfile.objects.filter(softech_itemcode__in=list(sold)) if not sheet_coded(p)]
 
-    usages = {}
-    for u in EtaCodeUsage.objects.filter(system='production', itemcode__in=[p.softech_itemcode for p in profiles]):
-        usages.setdefault(u.itemcode, []).append(u)
+    on_eta, usages = _on_eta_production(p.softech_itemcode for p in profiles)
     best = {code: _best_usage(us) for code, us in usages.items()}
-    on_eta = {code for code, us in usages.items() if any(u.status.lower() in eta_codes.ACTIVE_STATUSES for u in us)}
     profiles = [p for p in profiles if p.softech_itemcode not in on_eta]
     codes = [p.softech_itemcode for p in profiles]
 

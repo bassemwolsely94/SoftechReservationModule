@@ -144,7 +144,7 @@ A new tab in «الترميز الضريبي» (existing coding screen): «طا�
 - Keyboard: `useGridKeyboard` (↑↓ Space Enter M Ctrl+A) — Enter = accept pre-mark (+ brick + VAT) for the
   selection, K = keep out, C = code it. Sortable (`useServerSort`), filters: pre-mark, decision, family, flag.
 - Bulk: "accept pre-marks for the selection" is allowed only for rows whose brick and VAT are both non-flagged.
-- Read access: tax module view; deciding: `finalize` permission (same as preparing code requests).
+- Read access: tax module view; deciding: `approve` permission (a decision confirms the item's VAT, the same level as confirming a treatment on the item screen; `finalize` stays for preparing/sending code requests).
 
 ## 5. GPC brick suggestion (owner chose: learned first, AI for the rest)
 

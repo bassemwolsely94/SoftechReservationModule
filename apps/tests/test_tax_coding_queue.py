@@ -207,7 +207,7 @@ class DecisionTests(Fixture, TestCase):
         self.assertFalse(TaxCodingDecision.objects.exists())
 
     def test_rate_against_accountant_confirmed_errors(self):
-        p = self.coded('900031', rate=14)
+        p = self.coded('900031', rate=14, coding_env='preprod')
         with self.assertRaisesMessage(services.TaxRuleError,
                                       'النسبة تخالف المعاملة الضريبية المعتمدة للصنف — عدّلها من شاشة الأصناف أولاً'):
             coding_queue.decide(p.pk, self.accountant, decision='code', vat_rate=0)
@@ -385,6 +385,34 @@ class QueueApiTests(Fixture, TestCase):
         r = self.api.post(QUEUE + 'decide/', {'itemcodes': ['910001'], 'decision': 'keep_out'}, format='json')
         self.assertEqual(r.status_code, 409)
         self.assertEqual(r.data['detail'], 'للصنف قرار سابق — أعد فتحه أولاً')
+
+    def test_sheet_coded_or_on_eta_item_cannot_be_decided(self):
+        TaxItemProfile.objects.filter(pk=self.pa.pk).update(coding_status='approved', coding_env='production')
+        before = TaxItemProfile.objects.get(pk=self.pa.pk).tax_treatment
+        r = self.api.post(QUEUE + 'decide/', {'itemcodes': ['910001'], 'decision': 'code', 'vat_rate': 14},
+                          format='json')
+        self.assertEqual(r.status_code, 400, r.content)
+        self.assertEqual(r.data['detail'], 'الصنف مُكوَّد بالفعل — ليس في طابور الترميز')
+        self.assertFalse(TaxCodingDecision.objects.filter(profile=self.pa).exists())
+        self.assertEqual(TaxItemProfile.objects.get(pk=self.pa.pk).tax_treatment, before)
+        # active on ETA production, not coded on the sheet
+        EtaCodeUsage.objects.create(system='production', code_type='EGS', item_code='EG-1-910003', status='Approved',
+                                    itemcode='910003')
+        r = self.api.post(QUEUE + 'decide/', {'itemcodes': ['910003'], 'decision': 'keep_out'}, format='json')
+        self.assertEqual(r.status_code, 400, r.content)
+        # bulk skips it with that reason, others still go through
+        r = self.api.post(QUEUE + 'decide/', {'itemcodes': ['910001', '910003', '910002'], 'decision': 'keep_out'},
+                          format='json')
+        self.assertEqual(r.data['decided'], ['910002'])
+        self.assertEqual({s['itemcode']: s['why'] for s in r.data['skipped']},
+                         {'910001': 'الصنف مُكوَّد بالفعل — ليس في طابور الترميز',
+                          '910003': 'الصنف مُكوَّد بالفعل — ليس في طابور الترميز'})
+
+    def test_preprod_only_coded_item_can_be_decided(self):
+        TaxItemProfile.objects.filter(pk=self.pa.pk).update(coding_status='approved', coding_env='preprod')
+        r = self.api.post(QUEUE + 'decide/', {'itemcodes': ['910001'], 'decision': 'keep_out'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data['decided'], ['910001'])
 
     def test_single_bad_rate_400_and_too_many(self):
         r = self.api.post(QUEUE + 'decide/', {'itemcodes': ['910001'], 'decision': 'code', 'vat_rate': 5},
