@@ -161,6 +161,12 @@ class VatTests(Fixture, TestCase):
         p = TaxItemProfile.objects.create(softech_itemcode='900026', vat_rate=14)
         self.assertEqual(coding_rule.vat_prefill(make_item('900026', 'Body Building', 0), p)[:2], (Decimal('0'), True))
 
+    def test_no_catalog_row_flagged_unless_confirmed(self):
+        p = TaxItemProfile.objects.create(softech_itemcode='900027', vat_rate=14)
+        self.assertEqual(coding_rule.vat_prefill(None, p), (Decimal('0'), True, 'no_catalog'))
+        self.assertEqual(coding_rule.vat_prefill(None, None), (Decimal('0'), True, 'no_catalog'))
+        self.assertEqual(coding_rule.vat_prefill(None, self.coded('900028', rate=14)), (Decimal('14'), False, 'confirmed'))
+
 
 class DecisionTests(Fixture, TestCase):
     def setUp(self):
@@ -346,14 +352,29 @@ class QueueApiTests(Fixture, TestCase):
         self.assertEqual(TaxCodingDecision.objects.get(profile=self.pa).decision, 'code')
 
     def test_bulk_code_uses_prefill_and_skips_flagged(self):
-        r = self.api.post(QUEUE + 'decide/', {'itemcodes': ['910001', '910002', '999999'], 'decision': 'code'},
-                          format='json')
+        r = self.api.post(QUEUE + 'decide/', {'itemcodes': ['910001', '910002', '910003', '999999'],
+                                              'decision': 'code'}, format='json')
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual(r.data['decided'], ['910001'])
         self.assertEqual({s['itemcode']: s['why'] for s in r.data['skipped']},
-                         {'910002': 'النسبة تحتاج تأكيداً', '999999': 'صنف غير معروف'})
+                         {'910002': 'النسبة تحتاج تأكيداً', '910003': 'النسبة تحتاج تأكيداً',
+                          '999999': 'صنف غير معروف'})
         self.assertEqual(int(TaxCodingDecision.objects.get(profile=self.pa).vat_rate), 0)
-        self.assertFalse(TaxCodingDecision.objects.filter(profile=self.pb).exists())
+        self.assertFalse(TaxCodingDecision.objects.filter(profile__in=[self.pb, self.pc]).exists())
+        self.pc.refresh_from_db()
+        self.assertIsNone(self.pc.treatment_confirmed_at)   # no catalog row: nobody chose 0 %, so nothing confirmed
+
+    def test_bulk_unknown_decision_400(self):
+        for body in ({'itemcodes': ['910001', '910002'], 'decision': 'maybe'}, {'itemcodes': ['910001', '910002']}):
+            self.assertEqual(self.api.post(QUEUE + 'decide/', body, format='json').status_code, 400)
+        self.assertFalse(TaxCodingDecision.objects.exists())
+
+    def test_non_string_names_are_coerced(self):
+        r = self.api.post(QUEUE + 'decide/', {'itemcodes': ['910001'], 'decision': 'code', 'vat_rate': 0,
+                                              'names': {'code_name': 5, 'code_name_ar': None}}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        d = TaxCodingDecision.objects.get(profile=self.pa)
+        self.assertEqual((d.code_name, d.code_name_ar), ('5', 'ALPHA'))
 
     def test_already_decided_bulk_skipped_single_409(self):
         coding_queue.decide(self.pa.pk, self.accountant, decision='keep_out')

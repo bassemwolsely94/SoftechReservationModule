@@ -95,7 +95,7 @@ def decide(profile_id, actor, *, decision, vat_rate=None, names=None, note=''):
         for field in NAME_FIELDS:
             limit = TaxCodingDecision._meta.get_field(field).max_length
             fallback = default_ar if field.endswith('_ar') else default_name
-            row_value = (names.get(field) or '').strip() or fallback or ''
+            row_value = str(names.get(field) or '').strip() or fallback or ''
             setattr(row, field, row_value[:limit])
         row.note = (note or '').strip()[:300]
         row.decision, row.decided_by, row.decided_at = decision, actor, timezone.now()
@@ -207,6 +207,8 @@ def decide_many(itemcodes, actor, *, decision, vat_rate=None, names=None, note='
         raise TaxRuleError('اختر الأصناف')
     if len(codes) > MAX_BULK:
         raise TaxRuleError(f'{MAX_BULK} صنف على الأكثر في المرة')
+    if decision not in dict(TaxCodingDecision.DECISION_CHOICES):
+        raise TaxRuleError('قرار غير معروف')
     bulk = len(codes) > 1
     profiles = {p.softech_itemcode: p for p in TaxItemProfile.objects.filter(softech_itemcode__in=codes)}
     decided, skipped = [], []

@@ -71,11 +71,13 @@ def premark(item, sources):
 def vat_prefill(item, profile):
     """(rate, flagged, why). A treatment the accountant confirmed wins and is never flagged; otherwise the rate is
     SOFTECH's itemsalestaxp, flagged when it looks wrong for the item type (cosmetics/others/body building at 0,
-    medicine at 14) or is neither 0 nor 14."""
+    medicine at 14) or is neither 0 nor 14. With no catalog row there is nothing to go on: 0, flagged."""
     if profile is not None and profile.treatment_confirmed_at:
         return Decimal(profile.vat_rate), False, 'confirmed'
-    rate = Decimal(str((item.sale_tax_pct if item is not None else 0) or 0))
-    mtype = (item.medicine_type_name if item is not None else '') or ''
+    if item is None:
+        return Decimal('0'), True, 'no_catalog'
+    rate = Decimal(str(item.sale_tax_pct or 0))
+    mtype = item.medicine_type_name or ''
     if rate not in STANDARD_RATES:
         return rate, True, 'odd_rate'
     if mtype in ZERO_RATE_SUSPECT_TYPES and rate == 0:
