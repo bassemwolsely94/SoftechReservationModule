@@ -159,3 +159,74 @@ class ItemListEngineTests(TestCase):
         rows = self.get(search='**', rank='engine')['results']
         self.assertEqual(len(rows), len(self.it))
         self.assertTrue(all('tier' not in x for x in rows))
+
+
+class EngineCapAfterFiltersTests(TestCase):
+    """The engine's row cap (ENGINE_LIST_CAP) cuts AFTER the list's other filters: item_search
+    runs inside the filtered items (its `base`), so a filtered match ranked below the cap in the
+    whole catalog is still found. The dropdown (page 1, page_size ≤ 10) ranks only the name
+    window."""
+
+    def setUp(self):
+        P.reset_index()
+        self.cat_a = Category.objects.create(softech_id='CA1', name='A')
+        self.cat_b = Category.objects.create(softech_id='CB1', name='B')
+        # five «TABX …» names that sort before the target, all in category A / supplier S1
+        for i in range(5):
+            Item.objects.create(softech_id=f'ZA{i}', name=f'TABX {chr(65 + i)} ITEM', category=self.cat_a,
+                                supplier_code='S1', pack_price=10, is_active=True)
+        self.target = Item.objects.create(softech_id='ZT1', name='TABX ZULU ITEM', category=self.cat_b,
+                                          supplier_code='S2', pack_price=99, is_active=True)
+        self.user = get_user_model().objects.create_user(username='cap', password='x')
+        self.c = APIClient()
+        self.c.force_authenticate(self.user)
+
+    def ids(self, **params):
+        r = self.c.get(URL, {'search': 'tabx', 'rank': 'engine', **params})
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        return [x['id'] for x in r.json()['results']]
+
+    def test_filtered_target_below_the_global_cap_is_found(self):
+        from apps.catalog.wildcard import item_search
+        with mock.patch('apps.catalog.views.ENGINE_LIST_CAP', 3):
+            # the whole catalog's top 3 does NOT hold the target …
+            self.assertNotIn(self.target.id, [i for i, _ in item_search('tabx', limit=3)])
+            # … but every filter narrows the engine's own search first
+            self.assertEqual(self.ids(supplier_code='S2'), [self.target.id])
+            self.assertEqual(self.ids(category=self.cat_b.id), [self.target.id])
+            self.assertEqual(self.ids(pack_price_min='50'), [self.target.id])
+            self.assertEqual(len(self.ids(supplier_code='S1')), 3)
+
+    def test_in_stock_filter_runs_inside_the_engine(self):
+        from apps.branches.models import Branch
+        from apps.catalog.models import ItemStock
+        br = Branch.objects.create(code='T1', name='T1')
+        ItemStock.objects.create(item=self.target, branch=br, quantity_on_hand=4)
+        with mock.patch('apps.catalog.views.ENGINE_LIST_CAP', 3):
+            self.assertEqual(self.ids(in_stock='true'), [self.target.id])
+
+    def test_no_filter_passes_no_base(self):
+        # without a filter the engine runs exactly as before (its default base)
+        with mock.patch('apps.catalog.wildcard.item_search', return_value=[]) as m:
+            self.ids()
+            self.assertIsNone(m.call_args.kwargs['base'])
+            self.ids(supplier_code='S2')
+            self.assertIsNotNone(m.call_args.kwargs['base'])
+
+    def test_learned_and_sound_rows_stay_inside_the_filter(self):
+        with mock.patch('apps.shortage.learning.learned_item_ids',
+                        return_value=[Item.objects.get(softech_id='ZA0').id, self.target.id]):
+            self.assertEqual(self.ids(supplier_code='S2'), [self.target.id])
+
+    def test_picker_page_uses_the_name_window(self):
+        from apps.catalog.views import ENGINE_LIST_CAP
+        from apps.catalog.wildcard import NAME_WINDOW
+        with mock.patch('apps.catalog.wildcard.item_search', return_value=[]) as m:
+            for params, cap in (({'page_size': 10}, NAME_WINDOW),
+                                ({'page_size': 5, 'page': 1}, NAME_WINDOW),
+                                ({'page_size': 30}, ENGINE_LIST_CAP),     # the Ctrl+F1 modal
+                                ({'page_size': 10, 'page': 2}, ENGINE_LIST_CAP),
+                                ({}, ENGINE_LIST_CAP)):
+                # (page 2 of an empty mocked set answers 404 — only the engine call matters here)
+                self.c.get(URL, {'search': 'tabx', 'rank': 'engine', **params})
+                self.assertEqual(m.call_args.kwargs['limit'], cap, params)

@@ -323,12 +323,19 @@ def _rank_name_ids(q: str, base, *, window: int = NAME_WINDOW, starts_only: bool
     return [(i, NAME_TIERS[r % 4] if r < 8 else 'any_order') for i, r in rows]
 
 
-def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefix: bool = True) -> list:
-    """[(item_id, tier)] best first. tier: 'code' (exact code / barcode) · 'learned' (people
-    confirmed this spelling) · 'starts' · 'word' · 'contains' · 'any_order' (the name tiers,
-    `_rank_name_ids`) · 'synonym' (Appendix A table, whole word / unit) · 'sound' (Arabic by sound) · 'approx' (typo fallback, only when nothing
+def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefix: bool = True,
+                base=None) -> list:
+    """[(item_id, tier)] best first. tier: 'code' (exact code / barcode) · 'code_prefix' (4+
+    digits that START a code / barcode — right after 'code', never on the POS path; a scan must
+    never take it as exact) · 'learned' (people confirmed this spelling) · 'starts' · 'word' ·
+    'contains' · 'any_order' (the name tiers, `_rank_name_ids`) · 'synonym' (Appendix A table,
+    whole word / unit) · 'sound' (Arabic by sound) · 'approx' (typo fallback, only when nothing
     else matched) · 'code_part' (digits inside a code — last, only when the rest left room,
-    never on the POS path)."""
+    never on the POS path).
+
+    `base`: an Item queryset every tier searches inside (default: the whole catalog) — the item
+    list passes its other filters here so `limit` cuts AFTER them, not before. `active_only`
+    still applies on top of it."""
     from apps.catalog.models import Item, ItemBarcode
     from apps.shortage.matching import _trigram_indexes
     p = parse(q)
@@ -340,8 +347,20 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
     compact = re.sub(r'[\s*%]', '', fold_query(p['raw']))
     if len(compact) < 2 and not compact.isdigit():
         return []
-    base = Item.objects.filter(is_active=True) if active_only else Item.objects.all()
+    narrowed = base is not None
+    base = (base if narrowed else Item.objects.all()).order_by()
+    if active_only:
+        base = base.filter(is_active=True)
     out, seen = [], set()
+
+    def within(ids):
+        # the learned memory and the sound index return ids from the whole catalog: keep the
+        # ones inside a caller's `base` (the default base keeps them as before)
+        ids = list(ids)
+        if not narrowed or not ids:
+            return ids
+        keep = set(base.filter(id__in=ids).values_list('id', flat=True))
+        return [i for i in ids if i in keep]
 
     def add(ids, tier):
         for i in ids:
@@ -364,10 +383,10 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
                    .values_list('item_id', flat=True)), 'code')
         if code_prefix and raw.isdigit() and len(raw) >= 4:   # a partial code / barcode → its prefix
             add(base.filter(Q(softech_id__startswith=raw) | Q(barcode__startswith=raw)).order_by('softech_id')
-                .values_list('id', flat=True)[:limit], 'code')
+                .values_list('id', flat=True)[:limit], 'code_prefix')
         try:
             from apps.shortage.learning import learned_item_ids
-            add(learned_item_ids(raw), 'learned')
+            add(within(learned_item_ids(raw)), 'learned')
         except Exception:
             pass
     # D7: names need 3 characters — two are "starts with" only; one digit is a code alone
@@ -399,7 +418,7 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
     if len(out) < limit and re.search(r'[؀-ۿ]', raw):
         try:
             from apps.shortage.phonetic import quick_ids
-            add(quick_ids(WILD.sub(' ', raw), limit=limit), 'sound')
+            add(within(quick_ids(WILD.sub(' ', raw), limit=limit)), 'sound')
         except Exception:
             pass
     # the active ingredient (diclofenac → CATAFLAM): after every brand/name hit, only while the
@@ -411,9 +430,9 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
         except Exception:
             pass
     # no catalog text hit (a remembered item alone doesn't count) → typo-tolerant fallback
-    if not raw.isdigit() and not any(t not in ('code', 'learned') for _, t in out):
+    if not raw.isdigit() and not any(t not in ('code', 'code_prefix', 'learned') for _, t in out):
         try:
-            add(_approx_ids(WILD.sub(' ', raw), limit, base), 'approx')
+            add(within(_approx_ids(WILD.sub(' ', raw), limit, base)), 'approx')   # its matcher fallback
         except Exception:
             pass
     # a code FRAGMENT (inside the code / barcode) — last, and only when the tiers above left
