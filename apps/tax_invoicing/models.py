@@ -164,6 +164,42 @@ class TaxItemProfile(models.Model):
         return f'{self.softech_itemcode} {self.eta_code}'.strip()
 
 
+class TaxCodingDecision(models.Model):
+    """The owner's production-coding decision for one item: give it an ETA code or keep it out for now.
+    Only coding_queue writes it. Reopening keeps the row (decision = '') so the item can be decided again;
+    the full history is in the audit events."""
+    DECISION_CODE, DECISION_KEEP_OUT = 'code', 'keep_out'
+    DECISION_CHOICES = [(DECISION_CODE, 'يُكوَّد'), (DECISION_KEEP_OUT, 'يبقى خارج الترميز')]
+
+    profile = models.OneToOneField(TaxItemProfile, on_delete=models.PROTECT, related_name='coding_decision')
+    decision = models.CharField(max_length=10, choices=DECISION_CHOICES, blank=True, default='')
+    # What the purchase rule suggested when the decision was taken (coding_rule.premark).
+    premark = models.CharField(max_length=10, blank=True, default='')
+    premark_reason = models.CharField(max_length=30, blank=True, default='')
+    vat_rate = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    vat_flagged = models.BooleanField(default=False)
+    code_name = models.CharField(max_length=200, blank=True, default='')
+    code_name_ar = models.CharField(max_length=200, blank=True, default='')
+    description = models.CharField(max_length=300, blank=True, default='')
+    description_ar = models.CharField(max_length=300, blank=True, default='')
+    brick = models.CharField(max_length=8, blank=True, default='')
+    brick_source = models.CharField(max_length=15, blank=True, default='')
+    note = models.CharField(max_length=300, blank=True, default='')
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name='+')
+    decided_at = models.DateTimeField(null=True, blank=True)
+    reopened_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name='+')
+    reopened_at = models.DateTimeField(null=True, blank=True)
+    reopen_reason = models.CharField(max_length=300, blank=True, default='')
+
+    class Meta:
+        verbose_name = 'قرار ترميز صنف'
+
+    def __str__(self):
+        return f'{self.profile_id} {self.decision or "-"}'
+
+
 class TaxExclusionBasis(models.Model):
     """A documented legal basis for leaving a line off an official invoice. None is seeded: until
     an authorized person records one, no exclusion can be approved and those drafts stay blocked."""
