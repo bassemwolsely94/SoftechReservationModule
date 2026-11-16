@@ -105,6 +105,33 @@ class ItemSearchSerializer(serializers.ModelSerializer):
             pass
         return seen
 
+    def to_representation(self, obj):
+        """`/api/items/?rank=engine` (S2): the view puts the engine's {item_id: tier} and the
+        matched ingredient names in the context — the row then carries `tier` + its flag.
+        Without them (every other caller) the row is exactly as before."""
+        row = super().to_representation(obj)
+        tiers = self.context.get('engine_tiers')
+        if tiers is not None and obj.id in tiers:
+            row.update(engine_tier_fields(
+                tiers[obj.id], (self.context.get('ingredient_names') or {}).get(obj.id, '')))
+        return row
+
+
+# Tiers the pickers show a chip for: learned «من الذاكرة», sound «بالنطق», approx «تقريبي»,
+# ingredient «المادة الفعالة», code_part, synonym (wildcard.item_search tier names).
+FLAG_TIERS = ('learned', 'sound', 'approx', 'ingredient', 'code_part', 'synonym')
+
+
+def engine_tier_fields(tier: str, ingredient_name: str = '') -> dict:
+    """The keys an engine-ranked row adds: `tier`, `<tier>: True` for a flagged tier, and
+    `ingredient_name` on an ingredient row. Shared by softech-search and ?rank=engine."""
+    out = {'tier': tier}
+    if tier in FLAG_TIERS:
+        out[tier] = True
+    if tier == 'ingredient':
+        out['ingredient_name'] = ingredient_name
+    return out
+
 
 # ── Variant groups ─────────────────────────────────────────────────────────────
 
