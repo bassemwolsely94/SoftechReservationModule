@@ -18,7 +18,7 @@ def _escape(text: str) -> str:
 
 
 def to_send_keys(cell: str) -> str:
-    """DataLoad `\{NAME}` becomes pywinauto `{NAME}`; any other text is literal (specials braced)."""
+    r"""DataLoad `\{NAME}` becomes pywinauto `{NAME}`; any other text is literal (specials braced)."""
     out, pos = [], 0
     for m in _DATALOAD.finditer(cell):
         out.append(_escape(cell[pos:m.start()]))

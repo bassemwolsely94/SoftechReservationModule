@@ -71,10 +71,8 @@ class KeyplanTests(TestCase):
         self.assertEqual([s['i'] for s in plan['steps']], [1, 2, 3])
 
     def test_dry_run_requires_cancel_keys(self):
-        self.recipe.status = 'draft'
-        self.recipe.save()
-        self.recipe.cancel_keys = []
-        self.recipe.save()
+        RpaRecipe.objects.filter(pk=self.recipe.pk).update(cancel_keys=[])
+        self.doc = RpaDocument.objects.get(pk=self.doc.pk)
         with self.assertRaises(ValueError):
             build_keyplan(self.doc, mode='dry_run')
 
