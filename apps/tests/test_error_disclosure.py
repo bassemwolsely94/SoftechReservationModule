@@ -105,7 +105,8 @@ class SoftechReadErrorTests(TestCase):
         from apps.purchasing.models import IsrPush
         p = IsrPush.objects.create(branchcode=self.branch.softech_branch_id)
         _, _, client = make_user('err_isr_purch', role='purchasing', branch=self.branch)
-        with mock.patch('config.sybase.get_branch_connection', side_effect=RuntimeError(JDBC_LEAK)),              self.assertLogs('elrezeiky.errors', level='ERROR'):
+        with mock.patch('config.sybase.get_branch_connection', side_effect=RuntimeError(JDBC_LEAK)), \
+             self.assertLogs('elrezeiky.errors', level='ERROR'):
             r = client.get(f'/api/purchasing/isr/pushes/{p.pk}/push-review/')
         self.assertEqual(r.status_code, 502, r.content)
         self._no_leak(r.json()['detail'])
@@ -115,21 +116,25 @@ class SoftechReadErrorTests(TestCase):
         _, prof, client = make_user('err_sc_pharm', role='pharmacist', branch=self.branch)
         s = StockCountSession.objects.create(name='UAT', branch_code=self.branch.softech_branch_id,
                                              status='draft', created_by=prof)
-        with mock.patch('apps.stockcount.engine.generate_snapshot', side_effect=RuntimeError(JDBC_LEAK)),              self.assertLogs('elrezeiky.errors', level='ERROR'):
+        with mock.patch('apps.stockcount.engine.generate_snapshot', side_effect=RuntimeError(JDBC_LEAK)), \
+             self.assertLogs('elrezeiky.errors', level='ERROR'):
             r = client.post(f'/api/stockcount/sessions/{s.pk}/generate-snapshot/', {}, format='json')
         self.assertEqual(r.status_code, 503, r.content)
         self._no_leak(r.json()['detail'])
 
     def test_pos_branch_stores_note(self):
         _, _, client = make_user('err_pos_pharm', role='pharmacist', branch=self.branch)
-        with mock.patch('apps.pos_orders.customer_directory.branch_stores', side_effect=RuntimeError(JDBC_LEAK)),              self.assertLogs('elrezeiky.errors', level='ERROR'):
+        with mock.patch('apps.pos_orders.customer_directory.branch_stores', side_effect=RuntimeError(JDBC_LEAK)), \
+             self.assertLogs('elrezeiky.errors', level='ERROR'):
             r = client.get('/api/pos-orders/branch-stores/', {'branch': self.branch.pk})
         self.assertEqual(r.status_code, 200, r.content)
         self._no_leak(r.json()['note'])
 
     def test_personal_dashboard_transactions(self):
         from apps.personal import queries
-        with mock.patch.object(queries, '_rows', side_effect=RuntimeError(JDBC_LEAK)),              mock.patch.object(queries, '_one', side_effect=RuntimeError(JDBC_LEAK)),              self.assertLogs('elrezeiky.errors', level='ERROR'):
+        with mock.patch.object(queries, '_rows', side_effect=RuntimeError(JDBC_LEAK)), \
+             mock.patch.object(queries, '_one', side_effect=RuntimeError(JDBC_LEAK)), \
+             self.assertLogs('elrezeiky.errors', level='ERROR'):
             out = queries.customer_transactions('123')
         self._no_leak(out['error'])
 

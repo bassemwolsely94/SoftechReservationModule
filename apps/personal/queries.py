@@ -305,7 +305,7 @@ def supplier_payments(person_code: str, days: int = 180, limit: int = 300) -> di
     try:
         out['cheques'] = _person_cheques(pc, int(days), limit)
     except Exception as e:
-        out['cheques'] = [{'_error': str(e)[:200]}]
+        out['cheques'] = [{'_error': public_error(None, e)}]
     return out
 
 
@@ -379,5 +379,5 @@ def customer_payments(person_code: str, days: int = 180, limit: int = 300) -> di
     try:
         out['cheques'] = _person_cheques(pc, int(days), limit)
     except Exception as e:
-        out['cheques'] = [{'_error': str(e)[:200]}]
+        out['cheques'] = [{'_error': public_error(None, e)}]
     return out

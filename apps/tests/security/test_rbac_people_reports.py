@@ -11,8 +11,9 @@ included — or edit a shift template; /api/incentives/ and /api/insights/ serve
 Now: analytics and insights reads = analytics view (insight writes keep their admin / supervisor
 checks); sales targets sit on the KPI board's side: analytics view, writes still admin /
 supervisor / purchasing; shift templates and assignments are written by managers only (admin /
-supervisor / purchasing); a staff member's own incentive progress and HR self-service (check-in /
-out, leave, permit, overtime, expense, advance) stay open to every role — viewer included.
+supervisor / purchasing); a staff member's own incentive progress and attendance check-in / out stay
+open to every role — viewer included. Filing an HR request (leave, permit, overtime, expense,
+advance) needs hr create (UAT W5, owner 2026-11-17): viewer and quality_manager hold hr view only.
 """
 from django.test import TestCase, override_settings
 
@@ -24,6 +25,15 @@ from .routes import Tripwire
 from .sweep import sweep
 
 MISSING = '987654321'
+_LEAVE = {'leave_type_code': 'annual', 'start_date': '2026-08-01', 'end_date': '2026-08-03',
+          'return_to_work_date': '2026-08-05', 'days_requested': '3', 'reason': 'ظرف'}
+
+
+def _seed_hr():
+    from io import StringIO
+    from django.core.management import call_command
+    call_command('seed_hr_config', stdout=StringIO())
+    call_command('seed_approval_workflows', stdout=StringIO())
 
 
 class PeopleReportsSweepTests(TestCase):
@@ -93,7 +103,11 @@ class PeopleReportsTests(TestCase):
         _seed_hr()
         for role in ('salesperson', 'accountant'):
             with self.subTest(role=role):
-                r = self._call(role, 'post', '/api/hr/leave-requests/submit/', _LEAVE)
+                user, profile, _ = make_user(f'z9a_{role}', role=role)
+                profile.hr_code = f'HR-{role}'                   # leave needs the employee's HR code
+                profile.save(update_fields=['hr_code'])
+                with Tripwire():
+                    r = bearer_client(user).post('/api/hr/leave-requests/submit/', _LEAVE, format='json')
                 self.assertEqual(r.status_code, 201, r.content)
 
     def test_supervisor_still_assigns_shifts(self):
