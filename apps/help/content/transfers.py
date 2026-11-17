@@ -1223,8 +1223,9 @@ SCREENS = [
              'when': T('لما الصنف اتنقل مكانه والقواعد بقت بتصنّفه صح.', 'When the item moved and the rules classify it correctly now.'),
              'warn': T('الصنف ممكن يروح لمنطقة تانية في ورقة التجميع الجاية — جرّبه في الاختبار الأول.', 'The item may land in another zone on the next picking sheet — test it first.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'tips': [T('تخصيص صنف: ابحث بالاسم أو الكود أو الباركود (* أو % لأي حروف)، أو Ctrl+F1 للبحث المتقدم.', 'Assign an item: search by name, code or barcode (* or % for any characters), or Ctrl+F1 for advanced search.')],
+        'updated': '2026-11-17',
+        'change_note': T('خانة البحث عن الصنف بقت نفس خانة باقي الشاشات (Ctrl+F1 للبحث المتقدم)', 'The item search box is now the same as on other screens (Ctrl+F1 for advanced search)'),
     },
     {
         'key': 'transfers.mobile_list',

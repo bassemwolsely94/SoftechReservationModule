@@ -282,7 +282,8 @@ SCREENS = [
             T('معالجة الملفات الصعبة: عند رفع حزمة يتخطّى النظام الصفحات الفارغة، ويصحّح اتجاه الصفحات المقلوبة، ويضع تنبيهات على الفواتير الناقصة أو المقصوصة أو منخفضة الجودة (خط يد) لتراجعها بعناية.',
               'Messy files: when a bundle is uploaded the system skips blank pages, auto-rotates sideways pages, and flags incomplete, paper-cut or low-quality (handwriting) invoices so you review them carefully.'),
         ],
-        'tips': [
+        'tips': [T('إعادة ربط البند: اكتب الاسم أو الكود في خانة البحث، أو Ctrl+F1 للبحث المتقدم؛ الاختيار بيأكّد البند زي الأول.', 'Re-match a line: type the name or code in the search box, or Ctrl+F1 for advanced search; the pick confirms the line as before.'),
+                 
             T('لو رفعت نفس ملف الفاتورة تاني، بيظهر تنبيه أصفر في نموذج الرفع: «رفعت هذا الملف من قبل» مع «فتح» للفاتورة القديمة و«رفع على أي حال». مفيش حاجة بتتحفظ إلا لو كملت.',
               'If you upload the same invoice file again, an amber notice appears in the upload form: "You uploaded this file before", with "Open" for the earlier one and "Upload anyway". Nothing is saved unless you continue.'),
             T('صور الفواتير وصفحات الحزم بتتحفظ زي ما هي ومش بتتصغّر. صفحات الحزمة المؤقتة ممكن المالك يفعّل تنضيفها بعد ما الحزمة تخلص على السيرفر لاحقًا، والملف الأصلي للحزمة بيفضل.',
@@ -529,7 +530,7 @@ SCREENS = [
              'warn': T('القالب بيأثر على كل فواتير المورد ده الجاية — قالب غلط يبوّظ قراءتها كلها.', "The template affects all this supplier's future invoices — a wrong one spoils them all."),
              'open_hint': T('اضغط «⚙ قالب المورد» الأول.', 'Press "⚙ Supplier template" first.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلتر الفرع والحالة بيقبل أكثر من اختيار؛ تنبيه عند رفع نفس ملف الفاتورة تاني، والصور المحذوفة بتتحفظ ٣٠ يومًا قبل ما تتمسح نهائيًا.', 'The branch and status filters take several choices; a notice when the same invoice file is uploaded again, and deleted scans are kept 30 days before they are gone for good.'),
+        'updated': '2026-11-17',
+        'change_note': T('خانة البحث عن الصنف بقت نفس خانة باقي الشاشات (Ctrl+F1 للبحث المتقدم)', 'The item search box is now the same as on other screens (Ctrl+F1 for advanced search)'),
     },
 ]

@@ -22,6 +22,7 @@ import { fa } from '../utils/flowArrow'
 import useSortableRows from '../hooks/useSortableRows'
 import { nextSort, sortRows, ariaSortOf } from '../hooks/sortCompare'
 import SortTh from '../components/SortTh'
+import ItemSearchWidget from '../components/ItemSearchWidget'
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })
 const toLatinDigits = (s) => s ? String(s).replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -151,7 +152,7 @@ function PatientNameAutocomplete({ claimId, value, onChange, onCommit, className
   )
 }
 
-function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggleSelect }) {
+export function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggleSelect }) {
   const [showAdjust, setShowAdjust] = useState(false)
   const [showLines, setShowLines]   = useState(false)
   const [lines, setLines]           = useState(rx.lines || null)
@@ -529,6 +530,13 @@ function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggleSelect
                             className="w-20 border border-gray-300 rounded px-1 py-0.5 font-mono" />
                           <button data-tour="insurance-claim-line-lookup" onClick={() => lookupNewItem(l.id, (e.item_code ?? l.softech_itemcode).trim())}
                             className="text-blue-600 hover:underline">بحث</button>
+                        </div>
+                        {/* or find it by name: a pick only fills the code and runs the same lookup as «بحث»
+                            (Enter takes an exact code only); the save stays the «حفظ» button below */}
+                        <div className="mt-1 min-w-[16rem]">
+                          <ItemSearchWidget mode="single" exactCodeOnly placeholder="أو ابحث بالاسم…"
+                            onSelect={(it) => { if (!it?.softech_id) return
+                              setE({ item_code: it.softech_id }); lookupNewItem(l.id, it.softech_id) }} />
                         </div>
                         {e.lookup && (e.lookup.found
                           ? <div className="text-[10px] text-gray-500">{e.lookup.item_name} · {fmt(e.lookup.pack_price)}</div>

@@ -426,7 +426,8 @@ SCREENS = [
             T('ابدأ بالروشتات والأسماء، ثم الأصناف والفروقات، ثم الملاحق والإضافات اليدوية وفصل الأسماء.', 'Start with prescriptions and names, then items and differences, then supplements, manual additions and name separation.'),
             T('افتح «الجاهزية للإصدار» حتى لا يبقى خطأ، ثم اطبع من «طباعة وتصدير».', 'Open "Readiness to issue" until no error remains, then print from "Print & export".'),
         ],
-        'tips': [T('التعديلات تؤثر على إجمالي المطالبة — الشاشة تطلب تأكيداً، وكلها قابلة للتراجع ومسجّلة.', 'Edits change the claim total — the screen asks for confirmation, and all are reversible and logged.')],
+        'tips': [T('تغيير صنف البند: اكتب الكود ثم «بحث»، أو ابحث بالاسم واختار الصنف فيتملى الكود؛ «حفظ» بيطلب تأكيد زي الأول.', "Change a line's item: type the code then «Search», or search by name and pick it to fill the code; «Save» still asks to confirm."),
+                 T('التعديلات تؤثر على إجمالي المطالبة — الشاشة تطلب تأكيداً، وكلها قابلة للتراجع ومسجّلة.', 'Edits change the claim total — the screen asks for confirmation, and all are reversible and logged.')],
         'related': ['insurance.print', 'insurance.item_overrides', 'insurance.separation_lists', 'tax_invoicing.main'],
         'tour': [
             {'target': 'insurance-claim-kpis',
@@ -872,8 +873,8 @@ SCREENS = [
              'when': T('بعد ما تختار الصفوف والأعمدة.', 'After choosing the rows and columns.'),
              'open_hint': T('تبويب «تحليل البيانات»، بعد ظهور نتيجة.', 'The "Data analysis" tab, once a result shows.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فئات الفوترة: بطاقات + جدول واحد، لا نقل صامت بين الفئات، الحذف يرجّع الروشتات فوراً؛ تصدير أصناف المطالبة Excel؛ الوضع الضريبي للمطالبة يظهر الآن أعلى الشاشة', "Billing groups: cards + one grid, no silent moves between groups, deleting returns receipts at once; claim items Excel export; The claim's tax status now shows at the top of the screen"),
+        'updated': '2026-11-17',
+        'change_note': T('تعديل البنود: تقدر تلاقي الصنف الجديد بالاسم، والكود بيتملى لوحده', 'Line editing: find the new item by name and its code is filled in'),
     },
     {
         'key': 'insurance.print',
@@ -1129,9 +1130,10 @@ SCREENS = [
              'when': T('لو التصنيف اتحدد غلط أو السبب محتاج توضيح.', 'If the classification was set wrong or the reason needs clarifying.'),
              'warn': T('التعديل بيأثر على المطالبات اللي بتتطبّق عليها بعد كده — شوف «المطالبات المتأثرة».', 'The change affects the claims it is applied to from now on — check "Affected claims".')},
         ],
-        'updated': '2026-11-01',
+        'tips': [T('تصويب جديد: اكتب الكود، أو ابحث بالاسم واختار الصنف فيتملى الكود ويتعمل «بحث بالكتالوج» لوحده.', 'New override: type the code, or search by name and pick the item; the code is filled and «Catalog lookup» runs by itself.')],
+        'updated': '2026-11-17',
     
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'change_note': T('تصويب جديد: تقدر تلاقي الصنف بالاسم والكود بيتملى لوحده', 'New override: find the item by name and its code is filled in'),
     },
     {
         'key': 'insurance.reports',
