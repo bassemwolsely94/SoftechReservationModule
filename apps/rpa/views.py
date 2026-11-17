@@ -3,16 +3,19 @@
 Backend owns the rules (workflow.py / dld.py / dispatch.py); these views only authenticate, scope to the
 user's branches, parse uploads and shape responses. Nothing here writes to SOFTECH.
 """
+import csv
 import json
 import re
+import zipfile
 from datetime import timedelta
 
 from django.conf import settings
 from django.db.models import Count
 from django.utils import timezone
+from openpyxl.utils.exceptions import InvalidFileException
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.exceptions import APIException, ValidationError
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import SAFE_METHODS, BasePermission, IsAuthenticated
 from rest_framework.response import Response
@@ -22,7 +25,7 @@ from apps.branches.models import Branch
 from core import branch_scope
 from core.errors import public_error
 from core.permissions import matrix_permission
-from core.sort_ordering import NullsLastOrderingFilter, explicit_order_by
+from core.sort_ordering import explicit_order_by
 from core.upload_safety import max_upload_bytes
 
 from . import workflow
@@ -39,6 +42,13 @@ _REF = re.compile(r'مرجع:\s*(\w+)')
 JOB_SORT_KEYS = {'id': 'id', 'created_at': 'created_at', 'screen': 'screen__title_ar', 'branch': 'branch__name',
                  'target_branch': 'target_branch__name', 'filename': 'filename', 'status': 'status'}
 
+RECIPE_SORT_KEYS = {'id': 'id', 'screen': 'screen__title_ar', 'version': 'version', 'status': 'status',
+                    'approved_at': 'approved_at'}
+DEVICE_SORT_KEYS = {'id': 'id', 'label': 'label', 'created_at': 'created_at', 'last_seen_at': 'last_seen_at',
+                    'revoked_at': 'revoked_at'}
+# Errors a bad upload can raise while being parsed; anything else is a real fault and must surface as a 500.
+PARSE_ERRORS = (ValueError, InvalidFileException, zipfile.BadZipFile, csv.Error)
+
 RPA = matrix_permission('rpa')
 RPA_APPROVE = matrix_permission('rpa', post=('approve',))
 RPA_EDIT = matrix_permission('rpa', post=('edit',))
@@ -51,6 +61,26 @@ class RpaAdminOnly(BasePermission):
     def has_permission(self, request, view):
         profile = getattr(request.user, 'staff_profile', None)
         return bool(profile is not None and profile.is_active and profile.is_admin)
+
+
+def _body(request):
+    """The request body as a mapping; a JSON list / scalar is a 400, not an AttributeError."""
+    data = request.data
+    if not hasattr(data, 'get'):
+        raise ValidationError({'detail': 'صيغة الطلب غير صحيحة.'})
+    return data
+
+
+def _text(data, key, *, required=False):
+    value = data.get(key, '')
+    if value is None:
+        value = ''
+    if not isinstance(value, str):
+        raise ValidationError({key: 'القيمة يجب أن تكون نصاً.'})
+    value = value.strip()
+    if required and not value:
+        raise ValidationError({key: 'هذا الحقل مطلوب.'})
+    return value
 
 
 def _profile(request):
@@ -109,8 +139,8 @@ class JobListCreateView(generics.ListAPIView):
 
     def post(self, request):
         profile = _profile(request)
-        data = request.data
-        screen_key = (data.get('screen') or '').strip()
+        data = _body(request)
+        screen_key = _text(data, 'screen')
         if screen_key not in STAGE1_SCREENS:
             raise ValidationError({'screen': 'هذه الشاشة غير متاحة في المرحلة الأولى.'})
         if 'dry_run' in data and str(data.get('dry_run')).strip().lower() not in ('1', 'true', 'yes', 'on'):
@@ -121,12 +151,10 @@ class JobListCreateView(generics.ListAPIView):
         _check_upload(upload)
         try:
             job = workflow.create_job(profile=profile, screen_key=screen_key, branch=branch, target_branch=target,
-                                      store_code=data.get('store_code') or '', upload=upload)
+                                      store_code=_text(data, 'store_code'), upload=upload)
         except RpaScreen.DoesNotExist:
             raise ValidationError({'screen': 'الشاشة غير موجودة.'})
-        except APIException:
-            raise
-        except Exception as exc:   # noqa: BLE001 - ValueError/UnicodeDecodeError/openpyxl/BadZipFile: 400, never raw text
+        except PARSE_ERRORS as exc:   # UnicodeDecodeError is a ValueError; DRF errors pass through untouched
             raise _bad_input(request, exc, 'تعذّرت قراءة الملف؛ تأكد أنه ملف Excel أو CSV سليم بعمودي الكود والكمية.')
         job = _scoped_jobs(profile).get(pk=job.pk)
         return Response(JobDetailSerializer(job, context={'request': request}).data, status=status.HTTP_201_CREATED)
@@ -155,14 +183,14 @@ def job_approve(request, pk):
 @permission_classes([IsAuthenticated, RPA_APPROVE])
 def job_cancel(request, pk):
     job = _job_or_404(request, pk)
-    workflow.cancel_job(job, _profile(request), request.data.get('reason', ''))
+    workflow.cancel_job(job, _profile(request), _text(_body(request), 'reason'))
     return Response(JobDetailSerializer(_job_or_404(request, pk), context={'request': request}).data)
 
 
 # ── Documents ────────────────────────────────────────────────────────────────
 
 def _document_or_404(request, pk):
-    qs = RpaDocument.objects.select_related('job__screen', 'job__branch', 'job__target_branch', 'claimed_by')
+    qs = RpaDocument.objects.select_related('job__screen', 'job__branch', 'job__target_branch')
     return branch_scope.get_or_404(qs, _profile(request), field='job__branch', pk=pk)
 
 
@@ -182,7 +210,8 @@ def document_detail(request, pk):
 def document_resolve(request, pk):
     document = _document_or_404(request, pk)
     from apps.rpa.dispatch import resolve_document   # Task 8 module; imported late so the API loads without it
-    resolve_document(document, _profile(request), request.data.get('decision', ''), request.data.get('reason', ''))
+    body = _body(request)
+    resolve_document(document, _profile(request), _text(body, 'decision'), _text(body, 'reason'))
     return _document_response(request, pk)
 
 
@@ -191,9 +220,7 @@ def document_resolve(request, pk):
 class RecipeListCreateView(generics.ListAPIView):
     serializer_class = RecipeSerializer
     parser_classes = [MultiPartParser, FormParser, JSONParser]
-    filter_backends = [NullsLastOrderingFilter]
-    ordering_fields = ['id', 'version', 'status', 'created_at', 'approved_at']
-    ordering = ['-version', '-id']
+    filter_backends = []
 
     def get_permissions(self):
         if self.request.method in SAFE_METHODS:
@@ -201,11 +228,16 @@ class RecipeListCreateView(generics.ListAPIView):
         return [IsAuthenticated(), RpaAdminOnly()]
 
     def get_queryset(self):
-        return RpaRecipe.objects.select_related('screen', 'created_by__user', 'approved_by__user')
+        qs = RpaRecipe.objects.select_related('screen', 'created_by__user', 'approved_by__user')
+        if self.request.method not in SAFE_METHODS:
+            return qs
+        return qs.order_by(*explicit_order_by(self.request.query_params.get('ordering'), RECIPE_SORT_KEYS,
+                                              ('-version', '-id')))
 
     def post(self, request):
         profile = _profile(request)
-        screen_key = (request.data.get('screen') or '').strip()
+        body = _body(request)
+        screen_key = _text(body, 'screen')
         if screen_key not in STAGE1_SCREENS:
             raise ValidationError({'screen': 'هذه الشاشة غير متاحة في المرحلة الأولى.'})
         screen = RpaScreen.objects.filter(key=screen_key).first()
@@ -213,7 +245,7 @@ class RecipeListCreateView(generics.ListAPIView):
             raise ValidationError({'screen': 'الشاشة غير موجودة.'})
         upload = request.FILES.get('file')
         _check_upload(upload, extensions=('.dld',))
-        raw_map = request.data.get('field_map')
+        raw_map = body.get('field_map')
         try:
             field_map = json.loads(raw_map) if isinstance(raw_map, str) else raw_map
         except ValueError:
@@ -225,7 +257,7 @@ class RecipeListCreateView(generics.ListAPIView):
             template = parse_dld(decode_dld(upload.read()))
             recipe = recipe_from_dld(template, screen=screen, field_map=[n.strip() for n in field_map],
                                      created_by=profile, source_filename=(upload.name or '')[:255])
-        except Exception as exc:   # noqa: BLE001 - parser / codec errors: 400 with a log reference, never raw text
+        except PARSE_ERRORS as exc:   # parser / codec errors: 400 with a log reference, never raw text
             raise _bad_input(request, exc, 'تعذّر استيراد القالب؛ تأكد أنه ملف .dld سليم وأن أسماء الحقول بعدد أعمدة البيانات.')
         recipe = self.get_queryset().get(pk=recipe.pk)
         return Response(RecipeSerializer(recipe).data, status=status.HTTP_201_CREATED)
@@ -250,16 +282,15 @@ def _devices_for(profile):
 class DeviceListCreateView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, RPA]
     serializer_class = DeviceSerializer
-    filter_backends = [NullsLastOrderingFilter]
-    ordering_fields = ['id', 'label', 'created_at', 'last_seen_at', 'revoked_at']
-    ordering = ['-created_at', '-id']
+    filter_backends = []
 
     def get_queryset(self):
-        return _devices_for(_profile(self.request))
+        return _devices_for(_profile(self.request)).order_by(*explicit_order_by(
+            self.request.query_params.get('ordering'), DEVICE_SORT_KEYS, ('-created_at', '-id')))
 
     def post(self, request):
         profile = _profile(request)
-        label = (request.data.get('label') or '').strip()
+        label = _text(_body(request), 'label')
         if not label:
             raise ValidationError({'label': 'اكتب اسم الجهاز.'})
         from apps.rpa.auth import issue_device   # Task 8 module

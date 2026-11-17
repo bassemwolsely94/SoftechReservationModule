@@ -1,10 +1,11 @@
 """Response shapes of the staff API. Branches always carry their names; devices never carry token material."""
 from datetime import timedelta
 
+from django.db.models import Prefetch
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import RpaDevice, RpaDocument, RpaJob, RpaLine, RpaRecipe, RpaRun, RpaScreen
+from .models import RpaDevice, RpaDocument, RpaJob, RpaLine, RpaRecipe, RpaRun, RpaScreen, RpaScreenshot
 
 ONLINE_WINDOW = timedelta(minutes=2)
 
@@ -104,7 +105,7 @@ class RunSerializer(serializers.ModelSerializer):
 
     def get_screenshots(self, run):
         return [{'id': s.id, 'step_index': s.step_index, 'url': s.image.url, 'created_at': s.created_at}
-                for s in run.shots.all().order_by('step_index', 'id')]
+                for s in run.shots.all()]
 
 
 class DocumentDetailSerializer(DocumentSerializer):
@@ -126,7 +127,8 @@ class DocumentDetailSerializer(DocumentSerializer):
         return _branch_name(doc.job.target_branch)
 
     def get_runs(self, doc):
-        runs = doc.runs.select_related('device', 'recipe').prefetch_related('shots').order_by('-started_at', '-id')
+        runs = (doc.runs.select_related('device', 'recipe').order_by('-started_at', '-id')
+                .prefetch_related(Prefetch('shots', queryset=RpaScreenshot.objects.order_by('step_index', 'id'))))
         return RunSerializer(runs, many=True).data
 
 

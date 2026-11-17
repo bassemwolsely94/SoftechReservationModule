@@ -295,3 +295,59 @@ class StatusTests(_Base):
         self.assertEqual(r.data['screens'][0]['key'], 'issue_125')
         with self.settings(RPA_SOFTECH_ENTRY_ENABLED=False):
             self.assertFalse(self.sup_c.get('/api/rpa/status/').data['switch_on'])
+
+
+class FixRoundTests(_Base):
+    def _file(self):
+        return SimpleUploadedFile('same.xlsx', _xlsx([['1', 2, None]]).read())
+
+    def test_every_ordering_key_works_and_unknown_is_400(self):
+        from apps.rpa import views
+        self._job()
+        self._recipe('approved')
+        RpaDevice.objects.create(staff=self.adm, created_by=self.adm, label='d', token_hash='o1')
+        for url, keys in (('jobs', views.JOB_SORT_KEYS), ('recipes', views.RECIPE_SORT_KEYS),
+                          ('devices', views.DEVICE_SORT_KEYS)):
+            for key in keys:
+                for prefix in ('', '-'):
+                    r = self.adm_c.get(f'/api/rpa/{url}/?ordering={prefix}{key}')
+                    self.assertEqual(r.status_code, 200, (url, prefix + key))
+            self.assertEqual(self.adm_c.get(f'/api/rpa/{url}/?ordering=nope').status_code, 400, url)
+        self.assertEqual(self.adm_c.get('/api/rpa/recipes/?ordering=created_at').status_code, 400)
+
+    def test_non_string_reason_or_body_is_400(self):
+        job = self._job()
+        doc = job.documents.first()
+        fake = types.ModuleType('apps.rpa.dispatch')
+        fake.resolve_document = lambda *a: None
+        for body in ({'reason': ['x']}, {'reason': {'a': 1}}):
+            r = self.sup2_c.post(f'/api/rpa/jobs/{job.id}/cancel/', body, format='json')
+            self.assertEqual(r.status_code, 400, body)
+            with mock.patch.dict(sys.modules, {'apps.rpa.dispatch': fake}):
+                self.assertEqual(self.sup2_c.post(f'/api/rpa/documents/{doc.id}/resolve/', body,
+                                                  format='json').status_code, 400, body)
+        r = self.sup2_c.post(f'/api/rpa/jobs/{job.id}/cancel/', ['x'], format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(self.sup2_c.post('/api/rpa/devices/', ['x'], format='json').status_code, 400)
+        job.refresh_from_db()
+        self.assertEqual(job.status, 'uploaded')
+
+    def test_runtime_fault_is_not_masked_as_bad_file(self):
+        with mock.patch('apps.rpa.views.workflow.create_job', side_effect=RuntimeError('db down')):
+            with self.assertRaises(RuntimeError):
+                self.sup_c.post('/api/rpa/jobs/', {'screen': 'issue_125', 'branch': self.a.id,
+                                                   'target_branch': self.b.id, 'file': self._file()},
+                                format='multipart')
+
+    def test_duplicate_does_not_leak_other_branch_job_id(self):
+        data = {'screen': 'issue_125', 'target_branch': self.a.id}
+        first = self.adm_c.post('/api/rpa/jobs/', dict(data, branch=self.b.id, file=self._file()), format='multipart')
+        self.assertEqual(first.status_code, 201, first.content)
+        r = self.ph_c.post('/api/rpa/jobs/', {'screen': 'issue_125', 'branch': self.a.id,
+                                              'target_branch': self.b.id, 'file': self._file()}, format='multipart')
+        self.assertEqual(r.status_code, 400)
+        self.assertNotIn('job_id', r.data)
+        self.assertIn('detail', r.data)
+        # in scope: the id is still returned
+        again = self.adm_c.post('/api/rpa/jobs/', dict(data, branch=self.b.id, file=self._file()), format='multipart')
+        self.assertEqual(str(again.data['job_id']), str(first.data['id']))

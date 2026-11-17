@@ -37,7 +37,10 @@ def create_job(*, profile, screen_key, branch, target_branch, store_code, upload
         screen = RpaScreen.objects.select_for_update().get(key=screen_key)
         existing = RpaJob.objects.filter(upload_sha256=digest).exclude(status='cancelled').first()
         if existing:
-            raise ValidationError({'detail': 'تم رفع هذا الملف من قبل.', 'job_id': existing.id})
+            detail = {'detail': 'تم رفع هذا الملف من قبل.'}
+            if branch_scope.allows(profile, existing.branch_id):   # never leak another branch's job id
+                detail['job_id'] = existing.id
+            raise ValidationError(detail)
         job = RpaJob.objects.create(
             screen=screen, branch=branch, target_branch=target_branch, created_by=profile,
             store_code=str(store_code or ''), source_kind='excel', filename=filename[:255],
