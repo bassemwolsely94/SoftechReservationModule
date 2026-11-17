@@ -7,7 +7,7 @@ then match. Every decision and reopen is audited.
 Deciding "code" also records the item's GPC brick (batch S2): the one the person picks, else the item's suggestion
 (gpc_learn's learned brick, else the stored AI proposal). Bulk "code" takes a suggestion only when it is learned or
 a high-confidence AI one; anything else waits for a person (CLAUDE.md rule 10). A brick can be set later on a
-"code" decision until a production code request is made for the item (`set_brick`, audited)."""
+"code" decision while no open or approved production code request exists for the item (`set_brick`, audited)."""
 import datetime as dt
 from decimal import Decimal, InvalidOperation
 
@@ -193,15 +193,17 @@ def decide(profile_id, actor, *, decision, vat_rate=None, names=None, note='', b
 
 def set_brick(profile_id, actor, brick):
     """Sets or changes the brick of an item decided "code" (e.g. decided before bricks were recorded), without
-    reopening, until a production code request exists for it. Audited."""
+    reopening, while no open or approved production code request exists for it (after an ETA rejection, a failed
+    or a cancelled request the brick can be fixed). Audited."""
     with transaction.atomic():
         profile = TaxItemProfile.objects.select_for_update().get(pk=profile_id)
         row = TaxCodingDecision.objects.filter(profile=profile).first()
         if row is None or row.decision != TaxCodingDecision.DECISION_CODE:
             raise TaxRuleError(BRICK_NOT_CODE)
         if (TaxCodeRequest.objects.filter(profile=profile, purpose=TaxCodeRequest.PURPOSE_NEW,
-                                          environment='production')
-                .exclude(status=TaxCodeRequest.CANCELLED).exists()):
+                                          environment='production',
+                                          status__in=(*TaxCodeRequest.OPEN_STATES, TaxCodeRequest.APPROVED))
+                .exists()):
             raise TaxRuleError(BRICK_REQUESTED)
         before = _row(row)
         row.brick, row.brick_source = _brick_for(check_brick(brick), suggestions([profile]).get(profile.pk))
@@ -311,6 +313,7 @@ def rows(*, recent_days=None, premark=None, decided=None, q=''):
                     'brick_confidence': s.get('confidence', ''), 'brick_reason': s.get('reason', ''),
                     'brick_second': s.get('second', ''), 'brick_second_name': brick_names.get(s.get('second'), ''),
                     'own_brick': own, 'own_brick_name': brick_names.get(own, ''),
+                    'brick_confirmed': bool(d is not None and d.decision and d.brick),
                     'eta_last_status': best[code].status if code in best else ''})
     return out
 

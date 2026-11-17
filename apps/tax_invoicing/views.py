@@ -1274,7 +1274,8 @@ def codes_queue_reopen(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, APPROVER])
 def codes_queue_brick(request):
-    """{itemcode, brick}: sets the GPC brick of an item decided "code", until its production code request (audited)."""
+    """{itemcode, brick}: sets the GPC brick of an item decided "code" while it has no open or approved production
+    code request (audited)."""
     from . import coding_queue, gpc
     profile = get_object_or_404(TaxItemProfile, softech_itemcode=str(request.data.get('itemcode') or '').strip())
     try:

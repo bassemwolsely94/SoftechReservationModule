@@ -621,6 +621,31 @@ class BrickTests(Fixture, TestCase):
             coding_queue.set_brick(q.pk, self.admin, '10003333')
         self.assertEqual(TaxCodingDecision.objects.get(profile=q).brick, '10002222')
 
+    def test_set_brick_lock_follows_request_status(self):
+        q = self.profile()
+        coding_queue.decide(q.pk, self.accountant, decision='code', vat_rate=14, brick=BRICK)
+        req = TaxCodeRequest.objects.create(profile=q, item_code=f'EG-1-{q.softech_itemcode}', parent_code=BRICK,
+                                            code_name='x', code_name_ar='x', active_from=date(2026, 1, 1),
+                                            environment='production')
+        for status in (TaxCodeRequest.REJECTED, TaxCodeRequest.FAILED, TaxCodeRequest.CANCELLED):
+            TaxCodeRequest.objects.filter(pk=req.pk).update(status=status)
+            coding_queue.set_brick(q.pk, self.admin, '10002222')    # after a rejection the brick can be fixed
+        for status in (*TaxCodeRequest.OPEN_STATES, TaxCodeRequest.APPROVED):
+            TaxCodeRequest.objects.filter(pk=req.pk).update(status=status)
+            with self.assertRaisesMessage(services.TaxRuleError, 'طُلب كود الصنف من المصلحة بالفعل'):
+                coding_queue.set_brick(q.pk, self.admin, '10003333')
+        self.assertEqual(TaxCodingDecision.objects.get(profile=q).brick, '10002222')
+
+    def test_brick_confirmed_flag(self):
+        s1, coded, out, open_ = self.profile(), self.profile(), self.profile(), self.profile()
+        TaxCodingDecision.objects.create(profile=s1, decision='code', vat_rate=14)     # S1: no brick yet
+        coding_queue.decide(coded.pk, self.accountant, decision='code', vat_rate=14, brick=BRICK)
+        coding_queue.decide(out.pk, self.accountant, decision='keep_out')
+        self.assertEqual([self.row(x)['brick_confirmed'] for x in (s1, coded, out, open_)],
+                         [False, True, False, False])
+        coding_queue.set_brick(s1.pk, self.admin, BRICK)
+        self.assertTrue(self.row(s1)['brick_confirmed'])
+
     def test_brick_api_and_viewer_403(self):
         from apps.tests.factories import make_user
         from apps.users.models import RoleModuleAccess
