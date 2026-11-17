@@ -65,6 +65,9 @@ def approve_job(job, profile) -> RpaJob:
             raise ValidationError({'detail': 'لا يمكن اعتماد هذه المهمة في حالتها الحالية.'})
         if RpaDocument.objects.filter(job=job, lines__status__in=['unmatched', 'error']).exists():
             raise ValidationError({'detail': 'توجد أصناف غير مطابقة أو بها خطأ؛ صحّحها قبل الاعتماد.'})
+        # The screen row is the lock recipe approvals take too: the recipe cannot be retired
+        # between reading it here and freezing it onto the job.
+        RpaScreen.objects.select_for_update().get(pk=job.screen_id)
         recipe = (RpaRecipe.objects.filter(screen_id=job.screen_id, status='approved')
                   .order_by('-version').first())
         if recipe is None:
@@ -90,7 +93,8 @@ def cancel_job(job, profile, reason: str) -> RpaJob:
         job = RpaJob.objects.select_for_update().get(pk=job.pk)
         if job.status in ('cancelled', 'done'):
             raise ValidationError({'detail': 'لا يمكن إلغاء هذه المهمة في حالتها الحالية.'})
-        if job.documents.filter(status__in=['in_progress', 'posted']).exists():
+        documents = list(job.documents.select_for_update())   # a claim cannot slip in between
+        if any(d.status in ('in_progress', 'posted') for d in documents):
             raise ValidationError({'detail': 'لا يمكن الإلغاء: يوجد مستند قيد التنفيذ أو مُرحَّل.'})
         old_status = job.status
         job.status = 'cancelled'
@@ -109,6 +113,7 @@ def approve_recipe(recipe, profile) -> RpaRecipe:
     if profile.id == recipe.created_by_id:
         raise PermissionDenied('لا يمكنك اعتماد وصفة قمت باستيرادها أنت.')
     with transaction.atomic():
+        RpaScreen.objects.select_for_update().get(pk=recipe.screen_id)   # one approval per screen at a time
         recipe = RpaRecipe.objects.select_for_update().get(pk=recipe.pk)
         if recipe.status != 'draft':
             raise ValidationError({'detail': 'يمكن اعتماد الوصفة وهي مسودة فقط.'})

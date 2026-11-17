@@ -50,7 +50,12 @@ class RpaRecipe(models.Model):
     approved_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=['screen', 'version'], name='rpa_recipe_screen_version_uniq')]
+        constraints = [
+            models.UniqueConstraint(fields=['screen', 'version'], name='rpa_recipe_screen_version_uniq'),
+            # backstop: at most one approved recipe per screen
+            models.UniqueConstraint(fields=['screen'], condition=models.Q(status='approved'),
+                                    name='rpa_recipe_one_approved_per_screen'),
+        ]
 
     def __str__(self):
         return f'{self.screen_id} v{self.version} ({self.status})'

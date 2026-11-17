@@ -1,5 +1,7 @@
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, connection, transaction
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.audit.models import AuditLog
@@ -121,3 +123,45 @@ class CancelTests(_Base):
     def test_cancel_requires_reason(self):
         with self.assertRaises(ValidationError):
             workflow.cancel_job(self.job, self.uploader, '  ')
+
+
+class RaceGuardTests(_Base):
+    def _locks(self, ctx, table):
+        return [q['sql'] for q in ctx.captured_queries if 'FOR UPDATE' in q['sql'] and table in q['sql']]
+
+    def test_second_approved_recipe_refused_by_db(self):
+        self._recipe(1)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self._recipe(2)
+
+    def test_approve_recipe_locks_screen_row(self):
+        self._recipe(1)
+        new = self._recipe(2, 'draft')
+        with CaptureQueriesContext(connection) as ctx:
+            workflow.approve_recipe(new, self.approver)
+        self.assertTrue(self._locks(ctx, 'rpa_rpascreen'))
+
+    def test_approve_job_locks_screen_row(self):
+        self._recipe(1)
+        with CaptureQueriesContext(connection) as ctx:
+            workflow.approve_job(self.job, self.approver)
+        self.assertTrue(self._locks(ctx, 'rpa_rpascreen'))
+
+    def test_cancel_locks_documents(self):
+        with CaptureQueriesContext(connection) as ctx:
+            workflow.cancel_job(self.job, self.uploader, 'x')
+        self.assertTrue(self._locks(ctx, 'rpa_rpadocument'))
+
+    def test_cancel_refused_when_posted(self):
+        self.doc.status = 'posted'
+        self.doc.save()
+        with self.assertRaises(ValidationError):
+            workflow.cancel_job(self.job, self.uploader, 'x')
+
+    def test_later_recipe_approval_keeps_job_frozen_recipe(self):
+        v1 = self._recipe(1)
+        workflow.approve_job(self.job, self.approver)
+        new = self._recipe(2, 'draft')
+        workflow.approve_recipe(new, self.approver)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.recipe_id, v1.id)
