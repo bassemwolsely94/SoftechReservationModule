@@ -22,7 +22,7 @@ from django.utils import timezone
 from config.writers import writer_allowed
 
 from . import environment, eta_client, eta_coding_client, gpc
-from .models import TaxCodeRequest, TaxIssuerProfile, TaxItemProfile
+from .models import TaxCodeRequest, TaxCodingDecision, TaxIssuerProfile, TaxItemProfile
 from .services import TaxRuleError, audit
 
 FLAG = 'TAX_ETA_CODING_ENABLED'
@@ -126,6 +126,128 @@ def prepare(profile_ids, actor, *, parent_code='', active_from=None, reason='', 
                      'brick_from': 'batch' if parent_code else 'item' if own else 'suggested'})
         created.append(row.pk)
     return {'created': created, 'skipped': skipped}
+
+
+# ── production requests prepared from the coding queue's decisions (batch S4) ──────────────────
+
+NO_DECISION = 'لا قرار تكويد'
+NEEDS_BRICK = 'تحتاج فئة GPC'
+TREATMENT_NOT_CONFIRMED = 'المعاملة الضريبية غير معتمدة'
+OPEN_IN_PRODUCTION = 'يوجد طلب مفتوح في المنظومة الفعلية'
+ALREADY_APPROVED = 'الصنف مُعتمد بالفعل'
+CODE_PENDING_ALREADY = 'للصنف كود قيد الاعتماد'
+UNKNOWN_ITEM = 'صنف غير معروف'
+DEFAULT_REASON = 'صنف صيدلي يُباع للعملاء'
+NO_GS1_OFFER = '«جرّب GS1» متاح فقط بعد رفض المصلحة لطلب الكود الداخلي، وللصنف باركود GS1 صحيح'
+
+
+def production_requests(profile_ids):
+    """{profile_id: {'latest': TaxCodeRequest, 'open': bool, 'approved': bool}} over the items' production
+    requests (a mirror request never goes to production). At most one query."""
+    out = {}
+    profile_ids = list(profile_ids)
+    if not profile_ids:
+        return out
+    qs = (TaxCodeRequest.objects.filter(profile_id__in=profile_ids, environment=PRODUCTION)
+          .exclude(purpose=TaxCodeRequest.PURPOSE_MIRROR).order_by('profile_id', '-prepared_at', '-id'))
+    for r in qs:
+        seen = out.setdefault(r.profile_id, {'latest': r, 'open': False, 'approved': False})
+        seen['open'] = seen['open'] or r.status in TaxCodeRequest.OPEN_STATES
+        seen['approved'] = seen['approved'] or r.status == TaxCodeRequest.APPROVED
+    return out
+
+
+def decision_blocker(profile, decision, requests):
+    """Why an item cannot get a production request from its decision, '' when it can. `requests` is the item's
+    production_requests() entry (or None). No queries; the GPC list and the names are checked when preparing."""
+    if decision is None or decision.decision != TaxCodingDecision.DECISION_CODE:
+        return NO_DECISION
+    requests = requests or {}
+    on_sheet = profile.coding_env in ('', PRODUCTION)
+    if requests.get('approved') or (on_sheet and profile.coding_status == TaxItemProfile.CODE_APPROVED):
+        return ALREADY_APPROVED
+    if requests.get('open'):
+        return OPEN_IN_PRODUCTION
+    if on_sheet and profile.coding_status == TaxItemProfile.CODE_PENDING:
+        return CODE_PENDING_ALREADY
+    if not GPC_BRICK.match(decision.brick or ''):
+        return NEEDS_BRICK
+    if profile.treatment_confirmed_at is None:
+        return TREATMENT_NOT_CONFIRMED
+    return ''
+
+
+def prepare_from_decisions(itemcodes, actor, system=PRODUCTION):
+    """Drafts one EGS request per item decided «يُكوَّد» in the coding queue, for ETA production. Sends nothing.
+    From the decision: the confirmed brick and the names; active from 1 January of this year. Skipped with a
+    reason: no "code" decision, no brick (or one not in the GPC list), an unconfirmed VAT treatment, an open
+    production request, an item already approved. Returns {'created': [ids], 'skipped': [{itemcode, why}]}."""
+    from .coding_queue import _on_eta_production
+    codes = list(dict.fromkeys(str(c).strip() for c in itemcodes or () if str(c).strip()))
+    if not codes:
+        raise TaxRuleError('اختر الأصناف')
+    if len(codes) > MAX_PER_ACTION:
+        raise TaxRuleError(f'{MAX_PER_ACTION} صنف على الأكثر في المرة')
+    tax_id = _issuer_tax_id()
+    profiles = {p.softech_itemcode: p for p in TaxItemProfile.objects.filter(softech_itemcode__in=codes)}
+    ids = [p.pk for p in profiles.values()]
+    decisions = {d.profile_id: d for d in TaxCodingDecision.objects.filter(profile__in=ids)}
+    requests = production_requests(ids)
+    on_eta, _ = _on_eta_production(profiles)
+    active_from = timezone.localdate().replace(month=1, day=1)
+    created, skipped = [], []
+    for code in codes:
+        profile = profiles.get(code)
+        if profile is None:
+            skipped.append({'itemcode': code, 'why': UNKNOWN_ITEM})
+            continue
+        d = decisions.get(profile.pk)
+        why = decision_blocker(profile, d, requests.get(profile.pk))
+        if not why and code in on_eta:
+            why = ALREADY_APPROVED
+        if not why and not gpc.known(d.brick):
+            why = NEEDS_BRICK
+        if not why:
+            why = '؛ '.join(_check_fields(d.brick, d.code_name, d.code_name_ar))
+        if why:
+            skipped.append({'itemcode': code, 'why': why})
+            continue
+        try:
+            with transaction.atomic():
+                row = TaxCodeRequest.objects.create(
+                    profile=profile, purpose=TaxCodeRequest.PURPOSE_NEW, item_code=item_code_for(tax_id, code),
+                    parent_code=d.brick, code_name=d.code_name.strip()[:200], code_name_ar=d.code_name_ar.strip()[:200],
+                    description=d.description.strip()[:300], description_ar=d.description_ar.strip()[:300],
+                    active_from=active_from, request_reason=DEFAULT_REASON, prepared_by=actor, environment=system)
+        except IntegrityError:
+            skipped.append({'itemcode': code, 'why': OPEN_IN_PRODUCTION})
+            continue
+        audit('code_request_prepared', actor=actor, entity='code_request', entity_id=row.pk,
+              after={'item_code': row.item_code, 'parent_code': row.parent_code, 'itemcode': code,
+                     'brick_from': 'decision', 'environment': system})
+        created.append(row.pk)
+    return {'created': created, 'skipped': skipped}
+
+
+def gs1_offer(latest, item):
+    """{'available', 'gtin'}: «جرّب GS1» is offered only when the item's latest production request is an EGS one
+    ETA rejected and the item has a valid GS1 barcode. Never prepared by itself: a person takes the offer."""
+    if latest is None or latest.purpose != TaxCodeRequest.PURPOSE_NEW or latest.status != TaxCodeRequest.REJECTED:
+        return {'available': False, 'gtin': ''}
+    gtin = gtin_for(item)
+    return {'available': bool(gtin), 'gtin': gtin}
+
+
+def prepare_gs1_offer(itemcode, actor):
+    """A person took the «جرّب GS1» offer: drafts one production GS1 request (prepare_gs1). Sends nothing."""
+    profile = (TaxItemProfile.objects.filter(softech_itemcode=str(itemcode or '').strip())
+               .select_related('item').prefetch_related('item__barcodes').first())
+    if profile is None:
+        raise TaxItemProfile.DoesNotExist(UNKNOWN_ITEM)
+    latest = production_requests([profile.pk]).get(profile.pk, {}).get('latest')
+    if not gs1_offer(latest, profile.item)['available']:
+        raise TaxRuleError(NO_GS1_OFFER)
+    return prepare_gs1([profile.pk], actor, system=PRODUCTION)
 
 
 def edit(request_id, actor, fields):
@@ -361,6 +483,12 @@ def _apply_eta_answer(row, eta_row, actor):
     elif status in (TaxCodeRequest.APPROVED, TaxCodeRequest.REJECTED) and _touches_profile(row):
         profile = row.profile
         before = {'coding_status': profile.coding_status, 'eta_code': profile.eta_code}
+        # Only a person's «كوّد» decision puts the item on the white list once ETA approves its code.
+        listed = (status == TaxCodeRequest.APPROVED and row.environment == PRODUCTION and TaxCodingDecision.objects
+                  .filter(profile=profile, decision=TaxCodingDecision.DECISION_CODE).exists())
+        if listed:
+            before.update(list_status=profile.list_status, disposition=profile.disposition,
+                          coding_env=profile.coding_env)
         profile.coding_status = TaxItemProfile.CODE_APPROVED if status == TaxCodeRequest.APPROVED else TaxItemProfile.CODE_REJECTED
         profile.eta_code, profile.code_type = row.item_code, _code_type(row)
         profile.coding_env = row.environment
@@ -369,10 +497,15 @@ def _apply_eta_answer(row, eta_row, actor):
             profile.eta_checked_at = timezone.now()
         if status == TaxCodeRequest.APPROVED and eta_row.get('activeFrom'):
             profile.active_from = str(eta_row['activeFrom'])[:10]
+        if listed:
+            profile.list_status, profile.disposition = TaxItemProfile.LIST_WHITE, TaxItemProfile.DISP_INCLUDE
         profile.save()
+        after = {'coding_status': profile.coding_status, 'eta_code': profile.eta_code}
+        if listed:
+            after.update(list_status=profile.list_status, disposition=profile.disposition,
+                         coding_env=profile.coding_env)
         audit('item_coding_from_eta', actor=actor, entity='item', entity_id=profile.pk,
-              reason=f'قرار المصلحة على {row.item_code}: {row.eta_status}', before=before,
-              after={'coding_status': profile.coding_status, 'eta_code': profile.eta_code})
+              reason=f'قرار المصلحة على {row.item_code}: {row.eta_status}', before=before, after=after)
     if old != row.status:
         audit('code_request_status', actor=actor, entity='code_request', entity_id=row.pk,
               before={'status': old}, after={'status': row.status, 'eta_status': row.eta_status})

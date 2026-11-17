@@ -1289,6 +1289,33 @@ def codes_queue_brick(request):
                      'brick_name': gpc.names([row.brick]).get(row.brick, '')})
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, EDITOR])
+def codes_queue_prepare(request):
+    """{itemcodes: [..≤200]}: drafts an ETA production code request for each item decided «يُكوَّد» (its confirmed
+    brick and names). Sends nothing. {created: [ids], skipped: [{itemcode, why}]}."""
+    itemcodes = request.data.get('itemcodes')
+    if not isinstance(itemcodes, list):
+        return Response({'detail': 'اختر الأصناف'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        return Response(coding.prepare_from_decisions(itemcodes, request.user))
+    except services.TaxRuleError as exc:
+        return _refuse(exc)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, EDITOR])
+def codes_queue_gs1(request):
+    """{itemcode}: a person takes the «جرّب GS1» offer after ETA rejected the item's EGS request: drafts one
+    production GS1 request from its barcode. Sends nothing."""
+    try:
+        return Response(coding.prepare_gs1_offer(str(request.data.get('itemcode') or ''), request.user))
+    except TaxItemProfile.DoesNotExist:
+        return Response({'detail': coding.UNKNOWN_ITEM}, status=status.HTTP_404_NOT_FOUND)
+    except services.TaxRuleError as exc:
+        return _refuse(exc)
+
+
 SUGGEST_MAX = 5     # each AI call can take tens of seconds; an outage must not outlive nginx's 600 s
 SUGGEST_OFF = 'اقتراح الفئة بالذكاء الاصطناعي متوقف — فعّله من الإعدادات أولاً'
 SUGGEST_NOT_ASKED = 'للصنف فئة معروفة أو هو دواء — لا حاجة للسؤال'

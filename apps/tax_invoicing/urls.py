@@ -67,6 +67,8 @@ urlpatterns = [
     path('codes/queue/reopen/', views.codes_queue_reopen),
     path('codes/queue/brick/', views.codes_queue_brick),
     path('codes/queue/suggest/', views.codes_queue_suggest),
+    path('codes/queue/prepare/', views.codes_queue_prepare),
+    path('codes/queue/gs1/', views.codes_queue_gs1),
     path('codes/sheet/', egs_sheet_views.sheet),
     path('codes/sheet/build/', egs_sheet_views.sheet_build),
     path('codes/sheet/<int:number>/download/', egs_sheet_views.sheet_download),

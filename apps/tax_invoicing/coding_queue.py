@@ -12,10 +12,10 @@ import datetime as dt
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
-from django.db.models import Max, Q, Sum
+from django.db.models import Max, Prefetch, Q, Sum
 from django.utils import timezone
 
-from . import coding_rule, eta_codes, gpc, services
+from . import coding, coding_rule, eta_codes, gpc, services
 from .models import (EtaCodeUsage, EtaReconUncodedItem, TaxBrickSuggestion, TaxCodeRequest, TaxCodingDecision,
                      TaxItemProfile)
 from .services import TaxRuleError
@@ -262,17 +262,19 @@ def rows(*, recent_days=None, premark=None, decided=None, q=''):
     """Items sold on ETA production receipts without a code that still have no production code, one dict each.
     A constant number of queries whatever the number of items. `premark` 'none' matches no suggestion; `decided`
     'yes' / 'no'. Unsorted: the view sorts and pages."""
-    from apps.catalog.models import Item
+    from apps.catalog.models import Item, ItemBarcode
 
     sold, profiles, best = candidates(recent_days=recent_days)
     codes = [p.softech_itemcode for p in profiles]
 
-    items = list(Item.objects.filter(Q(pk__in=[p.item_id for p in profiles if p.item_id]) | Q(softech_id__in=codes)))
+    items = list(Item.objects.filter(Q(pk__in=[p.item_id for p in profiles if p.item_id]) | Q(softech_id__in=codes))
+                 .prefetch_related(Prefetch('barcodes', queryset=ItemBarcode.objects.filter(is_active=True))))
     by_pk, by_code = {i.pk: i for i in items}, {i.softech_id: i for i in items}
     sources = coding_rule.purchase_sources(codes)
     decisions = {d.profile_id: d for d in TaxCodingDecision.objects.filter(profile__in=[p.pk for p in profiles])
                  .select_related('decided_by')}
     suggested = suggestions(profiles)
+    requests = coding.production_requests([p.pk for p in profiles])
     brick_names = gpc.names({s['code'] for s in suggested.values()} | {s['second'] for s in suggested.values()}
                             | {d.brick for d in decisions.values()}
                             | {p.gpc_code for p in profiles if gpc.BRICK.match(p.gpc_code or '')})
@@ -316,8 +318,21 @@ def rows(*, recent_days=None, premark=None, decided=None, q=''):
                     'brick_second': s.get('second', ''), 'brick_second_name': brick_names.get(s.get('second'), ''),
                     'own_brick': own, 'own_brick_name': brick_names.get(own, ''),
                     'brick_confirmed': bool(d is not None and d.decision and d.brick),
-                    'eta_last_status': best[code].status if code in best else ''})
+                    'eta_last_status': best[code].status if code in best else '',
+                    **_request_fields(p, d, requests.get(p.pk), item)})
     return out
+
+
+def _request_fields(profile, decision, requests, item):
+    """The item's latest production code request, whether one can be prepared from its decision (and why not),
+    and the «جرّب GS1» offer. No queries."""
+    latest = (requests or {}).get('latest')
+    blocker = coding.decision_blocker(profile, decision, requests)
+    return {'request': None if latest is None else {
+                'id': latest.pk, 'status': latest.status, 'status_label': latest.get_status_display(),
+                'eta_status': latest.eta_status, 'error': latest.error, 'purpose': latest.purpose},
+            'request_ready': not blocker, 'request_blocker': blocker,
+            'gs1_offer': coding.gs1_offer(latest, item)}
 
 
 def decide_many(itemcodes, actor, *, decision, vat_rate=None, names=None, note='', brick=None):
