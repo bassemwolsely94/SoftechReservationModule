@@ -19,7 +19,6 @@ import openpyxl
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
-from openpyxl.formula.translate import Translator
 from openpyxl.utils import get_column_letter, range_boundaries
 
 from apps.tax_invoicing.gpc import _text
@@ -133,7 +132,7 @@ def open_version(version):
 
 COLS = 16
 COL_B, COL_I, COL_K = 1, 8, 10
-FORMULA_COLS = (11, 13, 14, 15)          # L, N, O, P: the sheet's own formulas, row number translated
+FORMULA_COLS = (11, 13, 14, 15)          # L, N, O, P: the owner's formulas, written as their values (_fill_values)
 CODE_TYPES = ('EGS', 'GS1')
 VAT_RATES = (Decimal('0'), Decimal('0.14'))
 
@@ -254,9 +253,8 @@ def _padded(r):
 
 
 def _scan(ws):
-    """({itemcode: [(row number, coded)]}, last row with a value in A..K, the first row carrying the L/N/O/P
-    formulas)."""
-    rows, last, template = {}, 1, None
+    """({itemcode: [(row number, coded)]}, last row with a value in A..K)."""
+    rows, last = {}, 1
     for n, r in enumerate(ws.iter_rows(min_row=2, max_col=COLS, values_only=True), start=2):
         r = _padded(r)
         if any(v not in (None, '') for v in r[:COL_K + 1]):
@@ -264,21 +262,99 @@ def _scan(ws):
         code = _text(r[COL_J])
         if code:
             rows.setdefault(code, []).append((n, bool(_text(r[COL_A]) and _text(r[COL_G]))))
-        if template is None and all(isinstance(r[c], str) and r[c].startswith('=') for c in FORMULA_COLS):
-            template = n
-    return rows, last, template
+    return rows, last
 
 
-def _write_row(ws, n, c, template):
+def _write_row(ws, n, c):
     values = {COL_A: c['code_type'], COL_B: c['item_code'], 2: c['code_name'], 3: c['code_name_ar'],
               4: c['description'], 5: c['description_ar'], COL_G: dt.datetime.combine(c['active_from'], dt.time()),
               COL_I: _number(c['gpc']), COL_J: _number(c['itemcode']), COL_K: float(c['vat'])}
     for col, value in values.items():
         ws.cell(n, col + 1).value = value
-    for col in FORMULA_COLS:
-        origin = ws.cell(template, col + 1)
-        ws.cell(n, col + 1).value = Translator(origin.value, origin=origin.coordinate).translate_formula(
-            f'{get_column_letter(col + 1)}{n}')
+
+
+def _blank(v):
+    return v is None or v == ''
+
+
+def _formula_values(r):
+    """(L, N, O, P) exactly as the owner's formulas compute them from A, G, I, K (Excel rules: a blank cell is 0 and
+    ""; text compares case-insensitively and never equals a number):
+    L =IF(AND(K=0%,A="EGS",I<>0,G<>""),1,0)   N =IF(AND(A="",G=""),"1","0")   O =K*100   P =IF(O=0,"v003","v009").
+    A text K Excel cannot multiply gives (L, N, None, None)."""
+    a, g, i, k = r[COL_A], r[COL_G], r[COL_I], r[COL_K]
+    numeric_k = 0 if _blank(k) else (int(k) if isinstance(k, bool) else k)
+    if not isinstance(numeric_k, (int, float)):
+        try:
+            numeric_k = float(str(numeric_k).strip())    # K*100 coerces numeric text; K=0% never matches text
+            k_zero = False
+        except ValueError:
+            numeric_k, k_zero = None, False
+    else:
+        k_zero = numeric_k == 0
+    a_egs = isinstance(a, str) and a.upper() == 'EGS'
+    i_nonzero = not _blank(i) and not (isinstance(i, (int, float)) and not isinstance(i, bool) and i == 0)
+    l_value = 1 if (k_zero and a_egs and i_nonzero and not _blank(g)) else 0
+    n_value = '1' if (_blank(a) and _blank(g)) else '0'
+    if numeric_k is None:
+        return l_value, n_value, None, None
+    o_value = round(numeric_k * 100, 9)
+    if float(o_value).is_integer():
+        o_value = int(o_value)
+    return l_value, n_value, o_value, 'v003' if o_value == 0 else 'v009'
+
+
+def _has_row(r):
+    return any(not _blank(v) for v in r[:COL_K + 1]) or any(not _blank(r[c]) for c in FORMULA_COLS)
+
+
+def _fill_values(ws, written=()):
+    """Writes L/N/O/P of every DataEntry row as the value its formula gives (the Invoicer may read the file without
+    recalculating, and openpyxl keeps no computed values). Only the cell form changes (formula → its own value);
+    A..K and every effective value stay as they were, so a coded row is still untouched. A value the owner typed
+    instead of a formula is kept: when it equals the formula's (a typed 0 for "0") and when it differs (the real
+    sheet has one: item 114109, N typed 1). Rows in `written` (the rows this build coded or appended) always get the
+    formula values. Returns {(row, column index): value} of the kept typed values that differ, for checks."""
+    written, typed = set(written), {}
+    for n, r in enumerate(ws.iter_rows(min_row=2, max_col=COLS, values_only=True), start=2):
+        r = _padded(r)
+        if not _has_row(r):
+            continue
+        for col, value in zip(FORMULA_COLS, _formula_values(r)):
+            got = r[col]
+            if _same(value, got):
+                continue
+            if n not in written and not _blank(got) and not (isinstance(got, str) and got.startswith('=')):
+                typed[(n, col)] = got
+                continue
+            ws.cell(n, col + 1).value = value
+    return typed
+
+
+def _same(want, got):
+    """A cell value equal to a formula's value: numbers within 1e-9, else the same text (a typed 0 = "0"); a formula
+    or an empty cell never equals a value."""
+    if want is None or got is None:
+        return want is got
+    if isinstance(got, str) and got.startswith('='):
+        return False
+    if isinstance(want, (int, float)) and isinstance(got, (int, float)) and not isinstance(got, bool):
+        return abs(want - got) < 1e-9
+    return _text(want) == _text(got)
+
+
+def _formula_mismatches(ws, typed=None):
+    """Itemcodes (or row numbers) whose L/N/O/P are not the values of their formulas, apart from the owner's typed
+    values `typed` kept by _fill_values (same row, same column, same value)."""
+    typed, bad = typed or {}, []
+    for n, r in enumerate(ws.iter_rows(min_row=2, max_col=COLS, values_only=True), start=2):
+        r = _padded(r)
+        if not _has_row(r):
+            continue
+        if not all(_same(w, r[c]) or ((n, c) in typed and typed[(n, c)] == r[c])
+                   for w, c in zip(_formula_values(r), FORMULA_COLS)):
+            bad.append(_text(r[COL_J]) or f'صف {n}')
+    return bad
 
 
 def _copy_style(ws, src, dst):
@@ -338,7 +414,8 @@ def _sample(items, n=5):
 
 def checks(wb, held_counts):
     """Arabic reasons this workbook must not become a version; [] = accepted. `held_counts` = read_counts of the
-    held version plus its `sheetnames`. The saved file's re-read is checked by build."""
+    held version plus its `sheetnames` (and `typed`: the owner's typed L/N/O/P values build kept, from
+    _fill_values). The saved file's re-read is checked by build."""
     problems = []
     if list(wb.sheetnames) != list(held_counts['sheetnames']):
         problems.append('أسماء أوراق الملف تغيرت عن النسخة السابقة')
@@ -355,6 +432,9 @@ def checks(wb, held_counts):
     if counts['bad']:
         problems.append('صفوف مكوّدة ناقصة أو خاطئة: '
                         + _sample(f'{code} ({"، ".join(p)})' for code, p in counts['bad']))
+    mismatched = _formula_mismatches(ws, held_counts.get('typed'))
+    if mismatched:
+        problems.append(f'قيم الأعمدة L وN وO وP لا تطابق معادلاتها: {_sample(mismatched)}')
     new = set(counts['coded_itemcodes']) - {_text(c) for c in held_counts['coded_itemcodes']}
     keep_out = TaxCodingDecision.objects.filter(decision=TaxCodingDecision.DECISION_KEEP_OUT,
                                                 profile__softech_itemcode__in=list(new))
@@ -369,7 +449,9 @@ def checks(wb, held_counts):
 
 def build(actor, note=''):
     """The next version from the latest one: each ready candidate codes its uncoded row, or gets a new row after the
-    last item row (style of the row above, inside the DataEntry table and autofilter). Coded rows are never touched.
+    last item row (style of the row above, inside the DataEntry table and autofilter). Coded rows are never touched:
+    their A..K stay as they are, and L/N/O/P of every row are written as the values of the owner's formulas
+    (_fill_values: same effective value, so the Invoicer reads them without Excel recalculating).
     Returns the new version; the latest one unchanged when nothing is to be written; {'refused': [...]} when a check
     fails (nothing stored). One load, one save."""
     held = latest()
@@ -388,27 +470,28 @@ def build(actor, note=''):
             ready.append(c)
     if not ready:
         return held
-    wb = openpyxl.load_workbook(io.BytesIO(data))     # not read_only / data_only: the formulas must survive
+    wb = openpyxl.load_workbook(io.BytesIO(data))     # not read_only: the workbook is edited and saved whole
     held_counts['sheetnames'] = list(wb.sheetnames)
     ws = wb[SHEET]
-    rows, last, template = _scan(ws)
-    if template is None:
-        return {'refused': [f'لا يوجد في ورقة «{SHEET}» صف بمعادلات الأعمدة L وN وO وP لنسخها'], 'skipped': skipped}
-    coded, added = [], []
+    rows, last = _scan(ws)
+    coded, added, written = [], [], []
     for c in ready:
         at = rows.get(c['itemcode'])
         if at and any(is_coded for _, is_coded in at):     # a coded row is never rewritten
             continue
         if at:
-            _write_row(ws, at[0][0], c, template)
+            _write_row(ws, at[0][0], c)
+            written.append(at[0][0])
             coded.append(c['itemcode'])
         else:
             last += 1
             _copy_style(ws, last - 1, last)
-            _write_row(ws, last, c, template)
+            _write_row(ws, last, c)
+            written.append(last)
             added.append(c['itemcode'])
     if not (coded or added):
         return held
+    held_counts['typed'] = _fill_values(ws, written)
     if added:
         for table in ws.tables.values():
             table.ref = _extend(table.ref, last)

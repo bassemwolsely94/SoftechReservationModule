@@ -296,8 +296,7 @@ class BuildTests(_BuildMixin, TestCase):
         r = _row_values(ws, 4)
         self.assertEqual(r[:11], ['EGS', 'EG-499336534-300', 'CN', 'اسم', 'DS', 'وصف',
                                   dt.datetime(dt.date.today().year, 1, 1), None, 10000043, 300, 0.14])
-        self.assertEqual(r[11], '=IF(AND(K4=0%,A4="EGS",I4<>0,G4<>""),1,0)')
-        self.assertEqual(r[13:], ['=IF(AND(A4="",G4=""), "1","0")', '=K4*100', '=IF(O4=0,"v003","v009")'])
+        self.assertEqual(r[11:], [0, None, '0', 14, 'v009'])            # the formulas' values, not formulas
         self.assertEqual((v.coded_rows, v.total_rows), (3, 4))
         self.assertEqual(v.coded_itemcodes, ['0200', '100', '300'])
         ev = TaxAuditEvent.objects.get(action='egs_sheet_built')
@@ -310,7 +309,10 @@ class BuildTests(_BuildMixin, TestCase):
         v = self.build()
         o, n = _wb(self.held_bytes)['DataEntry'], _wb(egs_sheet.open_version(v))['DataEntry']
         for row in (2, 3, 5):
-            self.assertEqual(_row_values(n, row), _row_values(o, row))
+            self.assertEqual(_row_values(n, row)[:11], _row_values(o, row)[:11])
+        # L/N/O/P keep their effective value, written as a value: 100 (EGS, 14%), 0200 (GS1, 0%), 400 (A, no G)
+        self.assertEqual([_row_values(n, row)[11:] for row in (2, 3, 5)],
+                         [[0, None, '0', 14, 'v009'], [0, None, '0', 0, 'v003'], [0, None, '0', 14, 'v009']])
         self.assertEqual((v.coded, v.added), (['300'], []))
         self.assertEqual(n.max_row, o.max_row)
 
@@ -323,7 +325,7 @@ class BuildTests(_BuildMixin, TestCase):
         r = _row_values(ws, 6)
         self.assertEqual(r[:11], ['EGS', 'EG-499336534-500', 'ETA NAME', 'ETA NAME', 'ETA NAME', 'ETA NAME',
                                   dt.datetime(2026, 3, 1), None, 10000044, 500, 0])
-        self.assertEqual(r[15], '=IF(O6=0,"v003","v009")')
+        self.assertEqual(r[11:], [1, None, '0', 0, 'v003'])
         self.assertTrue(ws.cell(6, 1).font.bold)
         self.assertEqual(ws.cell(6, 7).number_format, 'mm-dd-yy')
         self.assertEqual(ws.tables['DataEntryTable'].ref, 'A1:P6')
@@ -338,7 +340,7 @@ class BuildTests(_BuildMixin, TestCase):
         v = self.build()
         ws = _wb(egs_sheet.open_version(v))['DataEntry']
         self.assertEqual((ws['J6'].value, ws['J7'].value), (500, 501))
-        self.assertEqual(ws['L7'].value, '=IF(AND(K7=0%,A7="EGS",I7<>0,G7<>""),1,0)')
+        self.assertEqual([ws[f'{c}7'].value for c in 'LNOP'], [0, '0', 14, 'v009'])
         self.assertEqual(ws.auto_filter.ref, 'A1:P7')
 
     def test_keep_out_is_excluded(self):
@@ -395,6 +397,39 @@ class BuildTests(_BuildMixin, TestCase):
         self.profile('502', gpc='10000045')
         ws = _wb(egs_sheet.open_version(self.build()))['DataEntry']
         self.assertEqual([ws.cell(n, 9).value for n in (6, 7, 8)], [10000046, 10000044, 10000045])
+
+    def test_no_formula_is_left_in_a_built_file(self):
+        self.profile('300', brick='10000043')
+        self.profile('500', brick='10000043')
+        ws = _wb(egs_sheet.open_version(self.build()))['DataEntry']
+        formulas = [c.coordinate for row in ws.iter_rows() for c in row
+                    if isinstance(c.value, str) and c.value.startswith('=')]
+        self.assertEqual(formulas, [])
+        self.assertEqual([ws[f'{c}2'].value for c in 'LNOP'], [0, '0', 14, 'v009'])     # untouched coded row
+        self.assertEqual([ws[f'{c}4'].value for c in 'LNOP'], [0, '0', 14, 'v009'])     # newly coded row
+        self.assertEqual([ws[f'{c}6'].value for c in 'LNOP'], [0, '0', 14, 'v009'])     # appended row
+
+    def test_a_typed_value_equal_to_the_formula_is_kept(self):
+        wb = _wb(self.sheet_bytes())
+        wb['DataEntry']['N3'] = 0               # the owner typed 0 where the formula gives "0"
+        TaxEgsSheetVersion.objects.all().delete()
+        self.seed(_save(wb))
+        self.profile('300', brick='10000043')
+        ws = _wb(egs_sheet.open_version(self.build()))['DataEntry']
+        self.assertEqual(ws['N3'].value, 0)
+        self.assertEqual(ws['N2'].value, '0')
+
+    def test_a_typed_value_other_than_the_formula_is_kept_on_an_untouched_row(self):
+        wb = _wb(self.sheet_bytes())
+        wb['DataEntry']['N2'] = 1               # like item 114109 in the real sheet: N typed 1, formula gives "0"
+        wb['DataEntry']['N4'] = 1               # on the row this build codes: replaced by the formula's value
+        TaxEgsSheetVersion.objects.all().delete()
+        self.seed(_save(wb))
+        self.profile('300', brick='10000043')
+        v = self.build()
+        self.assertIsInstance(v, TaxEgsSheetVersion)
+        ws = _wb(egs_sheet.open_version(v))['DataEntry']
+        self.assertEqual((ws['N2'].value, ws['N4'].value), (1, '0'))
 
     def test_a_build_with_nothing_new_returns_the_latest_and_stores_nothing(self):
         self.assertEqual(self.build(), self.held)
@@ -463,6 +498,7 @@ class ChecksTests(_BuildMixin, TestCase):
 
     def check(self, edit):
         wb = _wb(self.held_bytes)
+        egs_sheet._fill_values(wb['DataEntry'])
         edit(wb['DataEntry'], wb)
         return egs_sheet.checks(wb, self.held_counts())
 
@@ -485,16 +521,42 @@ class ChecksTests(_BuildMixin, TestCase):
             'I zero': put(I2=0),
             'K': put(K2=0.07),
             'fewer coded rows': put(G2=None),
+            'L value': put(L3=1),
+            'N value': put(N2='1'),
+            'O value': put(O2=0.14),
+            'P value': put(P3='v009'),
+            'a formula left in O': put(O2='=K2*100'),
         }
         for name, edit in cases.items():
             with self.subTest(name):
                 self.assertTrue(self.check(edit), name)
+
+    def test_a_mismatched_row_is_named(self):
+        problems = self.check(lambda ws, wb: ws.__setitem__('P2', 'v003'))
+        self.assertEqual(len(problems), 1)
+        self.assertIn('100', problems[0])
+
+    def test_formula_values_follow_excel(self):
+        def vals(a=None, g=None, i=None, k=None):
+            r = [None] * 16
+            r[0], r[6], r[8], r[10] = a, g, i, k
+            return egs_sheet._formula_values(r)
+        self.assertEqual(vals('egs', D, 10000043, 0), (1, '0', 0, 'v003'))         # Excel text compare ignores case
+        self.assertEqual(vals('EGS', D, 0, 0), (0, '0', 0, 'v003'))
+        self.assertEqual(vals('EGS', D, None, 0), (0, '0', 0, 'v003'))
+        self.assertEqual(vals('EGS', None, 10000043, 0), (0, '0', 0, 'v003'))
+        self.assertEqual(vals('GS1', D, 10000043, 0), (0, '0', 0, 'v003'))
+        self.assertEqual(vals('EGS', D, 10000043, None), (1, '0', 0, 'v003'))      # blank K is 0
+        self.assertEqual(vals(), (0, '1', 0, 'v003'))
+        self.assertEqual(vals('EGS', D, 10000043, 0.14), (0, '0', 14, 'v009'))
+        self.assertIsInstance(vals(k=0.14)[2], int)
 
     def test_a_newly_coded_keep_out_item_refuses(self):
         self.profile('300', decision='keep_out')
 
         def code_300(ws, wb):
             ws['A4'], ws['G4'], ws['I4'] = 'EGS', D, 10000043
+            egs_sheet._fill_values(ws, [4])
         problems = self.check(code_300)
         self.assertEqual(len(problems), 1)
         self.assertIn('300', problems[0])
