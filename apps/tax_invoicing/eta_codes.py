@@ -78,7 +78,7 @@ def _collect(best, rows):
             continue
         rec = {'code_name': _first(row, 'codeName', 'codeNamePrimaryLang')[:300],
                'active_from': _date(row.get('activeFrom')), 'active_to': _date(row.get('activeTo')),
-               'status': _first(row, 'status')[:30], 'gpc': _first(row, 'parentCode', 'gpcCode')[:10],
+               'status': _first(row, 'status')[:30], 'gpc': _first(row, 'parentItemCode', 'parentCode', 'gpcCode')[:10],
                'request_id': _first(row, 'codeUsageRequestID')[:30]}
         key = (_code_type(row, item_code), item_code)
         if _better(rec, best.get(key)):

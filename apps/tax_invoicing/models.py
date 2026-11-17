@@ -200,6 +200,31 @@ class TaxCodingDecision(models.Model):
         return f'{self.profile_id} {self.decision or "-"}'
 
 
+class TaxBrickSuggestion(models.Model):
+    """The AI's proposed GPC brick for one item (gpc_ai), kept so the queue can show it without asking again.
+    Only a proposal: a person confirms the brick on the coding decision. source 'none' = asked, no usable answer
+    (`error` says why). Only gpc_ai writes it."""
+    CONFIDENCE_CHOICES = [('high', 'عالية'), ('medium', 'متوسطة'), ('low', 'منخفضة'), ('', '-')]
+    SOURCE_AI, SOURCE_NONE = 'ai', 'none'
+    SOURCE_CHOICES = [(SOURCE_AI, 'اقتراح الذكاء الاصطناعي'), (SOURCE_NONE, 'لا اقتراح')]
+
+    profile = models.OneToOneField(TaxItemProfile, on_delete=models.PROTECT, related_name='brick_suggestion')
+    brick = models.CharField(max_length=8, blank=True, default='', db_default='')
+    second = models.CharField(max_length=8, blank=True, default='', db_default='')
+    reason = models.CharField(max_length=200, blank=True, default='', db_default='')
+    confidence = models.CharField(max_length=6, choices=CONFIDENCE_CHOICES, blank=True, default='', db_default='')
+    source = models.CharField(max_length=4, choices=SOURCE_CHOICES, default=SOURCE_NONE, db_default=SOURCE_NONE)
+    model = models.CharField(max_length=60, blank=True, default='', db_default='')
+    error = models.CharField(max_length=200, blank=True, default='', db_default='')
+    asked_at = models.DateTimeField()
+
+    class Meta:
+        verbose_name = 'اقتراح فئة GPC'
+
+    def __str__(self):
+        return f'{self.profile_id} {self.brick or self.source}'
+
+
 class TaxExclusionBasis(models.Model):
     """A documented legal basis for leaving a line off an official invoice. None is seeded: until
     an authorized person records one, no exclusion can be approved and those drafts stay blocked."""
