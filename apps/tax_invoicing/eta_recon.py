@@ -196,6 +196,9 @@ def coded_items():
     empty); codes requested through our own screens (coding_env set) are not in it and do not count."""
     version = egs_sheet.latest()
     if version is not None:
+        if not version.coded_itemcodes:
+            logger.warning('EGS sheet version %s has no coded items: every receipt line counts as uncoded',
+                           version.number)
         return {str(c) for c in version.coded_itemcodes}
     return set(TaxItemProfile.objects.filter(list_status=TaxItemProfile.LIST_WHITE, coding_env='')
                .exclude(eta_code='').values_list('softech_itemcode', flat=True))

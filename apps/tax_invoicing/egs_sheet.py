@@ -36,7 +36,8 @@ def read_counts(data):
     """{'total_rows', 'coded_rows', 'coded_itemcodes'} from a workbook's bytes. A data row = one with an itemcode in J;
     itemcodes are text as SOFTECH writes them (100 stored as a number reads '100'; text keeps leading zeros)."""
     try:
-        wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True)
+        # data_only: cached values, so a formula text never reads as an itemcode or a filled A/G.
+        wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     except Exception as exc:    # openpyxl raises several types for a non-workbook
         raise SheetError('الملف ليس ملف Excel صالحاً') from exc
     try:
@@ -71,8 +72,11 @@ def latest():
 
 def store(data, *, source, built_by=None, note='', coded_rows=0, total_rows=0, added=(), coded=(), skipped=(),
           coded_itemcodes=()):
-    """Writes `data` as the next version: file first, then the row; a failed row removes the file. Then removes the
-    files of all but the newest KEEP_FILES versions (their rows stay)."""
+    """Writes `data` as the next version: file first, then the row; a failed row removes the file. Old files (all but
+    the newest KEEP_FILES versions; their rows stay) are removed only after the transaction commits
+    (transaction.on_commit), so a rollback never loses a kept version's file. A caller that wraps store() in its own
+    transaction must call discard_file(version) when that transaction rolls back (Django has no on-rollback hook), as
+    egs_sheet_seed does."""
     folder = _dir()
     folder.mkdir(parents=True, exist_ok=True)
     sha = hashlib.sha256(data).hexdigest()
@@ -90,8 +94,14 @@ def store(data, *, source, built_by=None, note='', coded_rows=0, total_rows=0, a
         except Exception:
             path.unlink(missing_ok=True)
             raise
-    _prune()
+        transaction.on_commit(_prune)
     return version
+
+
+def discard_file(version):
+    """Removes the file of a version whose row was rolled back (see store)."""
+    if not TaxEgsSheetVersion.objects.filter(pk=version.pk, file_name=version.file_name).exists():
+        (_dir() / version.file_name).unlink(missing_ok=True)
 
 
 def _prune():

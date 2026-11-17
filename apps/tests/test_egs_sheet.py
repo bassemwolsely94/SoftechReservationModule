@@ -8,10 +8,12 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 import openpyxl
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db import transaction
 from django.test import TestCase, override_settings
 
 from apps.tax_invoicing import egs_sheet, eta_recon
@@ -96,7 +98,8 @@ class StoreTests(_TempDirMixin, TestCase):
         self.assertTrue(os.path.isfile(os.path.join(self.store_dir, v.file_name)))
 
     def test_keeps_the_newest_ten_files_and_every_row(self):
-        versions = [egs_sheet.store(make_sheet(ROWS[:1] * (n + 1)), source='build') for n in range(12)]
+        with self.captureOnCommitCallbacks(execute=True):
+            versions = [egs_sheet.store(make_sheet(ROWS[:1] * (n + 1)), source='build') for n in range(12)]
         self.assertEqual([v.number for v in versions], list(range(1, 13)))
         self.assertEqual(TaxEgsSheetVersion.objects.count(), 12)
         on_disk = sorted(os.listdir(self.store_dir))
@@ -104,6 +107,40 @@ class StoreTests(_TempDirMixin, TestCase):
         with self.assertRaises(egs_sheet.SheetError):
             egs_sheet.open_version(versions[0])
         self.assertEqual(egs_sheet.latest().number, 12)
+
+    def test_no_file_is_pruned_before_the_commit(self):
+        with self.captureOnCommitCallbacks(execute=False) as callbacks:
+            for n in range(12):
+                egs_sheet.store(make_sheet(ROWS[:1] * (n + 1)), source='build')
+        self.assertEqual(len(os.listdir(self.store_dir)), 12)
+        self.assertTrue(callbacks)
+
+    def test_a_rolled_back_store_keeps_every_old_file_and_leaves_no_new_one(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            for n in range(10):
+                egs_sheet.store(make_sheet(ROWS[:1] * (n + 1)), source='build')
+        before = sorted(os.listdir(self.store_dir))
+        version = None
+        with self.assertRaises(RuntimeError):
+            with self.captureOnCommitCallbacks(execute=True):
+                try:
+                    with transaction.atomic():
+                        version = egs_sheet.store(make_sheet(ROWS), source='build')
+                        raise RuntimeError('audit failed')
+                except RuntimeError:
+                    egs_sheet.discard_file(version)
+                    raise
+        self.assertEqual(sorted(os.listdir(self.store_dir)), before)
+        self.assertEqual(TaxEgsSheetVersion.objects.count(), 10)
+
+    def test_a_formula_in_j_is_not_an_itemcode(self):
+        wb = openpyxl.load_workbook(io.BytesIO(make_sheet(ROWS)))
+        wb['DataEntry']['J2'] = '=1+1'          # no cached value: reads as empty, never as the formula text
+        buf = io.BytesIO()
+        wb.save(buf)
+        counts = egs_sheet.read_counts(buf.getvalue())
+        self.assertNotIn('=1+1', counts['coded_itemcodes'])
+        self.assertEqual(counts['total_rows'], 3)
 
     def test_latest_is_none_with_no_versions(self):
         self.assertIsNone(egs_sheet.latest())
@@ -134,6 +171,19 @@ class SeedCommandTests(_TempDirMixin, TestCase):
             call_command('egs_sheet_seed', self.src, stdout=io.StringIO())
         self.assertEqual(TaxEgsSheetVersion.objects.count(), 1)
 
+    def test_an_audit_failure_rolls_back_and_keeps_every_old_file(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            for n in range(10):
+                egs_sheet.store(make_sheet(ROWS[:1] * (n + 1)), source='build')
+        before = sorted(os.listdir(self.store_dir))
+        with mock.patch('apps.tax_invoicing.management.commands.egs_sheet_seed.audit',
+                        side_effect=RuntimeError('audit down')):
+            with self.assertRaises(RuntimeError), self.captureOnCommitCallbacks(execute=True):
+                call_command('egs_sheet_seed', self.src, '--force-new', stdout=io.StringIO())
+        self.assertEqual(sorted(os.listdir(self.store_dir)), before)
+        self.assertEqual(TaxEgsSheetVersion.objects.count(), 10)
+        self.assertFalse(TaxAuditEvent.objects.filter(action='egs_sheet_seed').exists())
+
     def test_force_new_adds_the_next_version(self):
         call_command('egs_sheet_seed', self.src, stdout=io.StringIO())
         call_command('egs_sheet_seed', self.src, '--force-new', stdout=io.StringIO())
@@ -159,3 +209,8 @@ class CodedItemsSourceTests(_TempDirMixin, TestCase):
         egs_sheet.store(make_sheet(ROWS), source='seed', coded_itemcodes=['0200', '100'])
         egs_sheet.store(make_sheet(ROWS[:1]), source='build', coded_itemcodes=['0200', '100', '500'])
         self.assertEqual(eta_recon.coded_items(), {'0200', '100', '500'})
+
+    def test_an_empty_version_is_logged_and_counts_nothing_as_coded(self):
+        egs_sheet.store(make_sheet(ROWS[:1]), source='build', coded_itemcodes=[])
+        with self.assertLogs('apps.tax_invoicing.eta_recon', level='WARNING'):
+            self.assertEqual(eta_recon.coded_items(), set())

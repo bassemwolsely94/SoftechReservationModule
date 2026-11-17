@@ -34,12 +34,18 @@ class Command(BaseCommand):
             counts = egs_sheet.read_counts(data)
         except egs_sheet.SheetError as exc:
             raise CommandError(str(exc)) from exc
-        with transaction.atomic():      # no version without its audit event
-            version = egs_sheet.store(data, source=TaxEgsSheetVersion.SOURCE_SEED,
-                                      note=note or f'seed from {src.name}', **counts)
-            audit('egs_sheet_seed', entity='egs_sheet', entity_id=version.number, reason=version.note,
-                  after={'number': version.number, 'file': src.name, 'sha256': version.sha256, 'size': version.size,
-                         'coded_rows': version.coded_rows, 'total_rows': version.total_rows,
-                         'coded_items': len(version.coded_itemcodes)})
+        version = None
+        try:
+            with transaction.atomic():      # no version without its audit event
+                version = egs_sheet.store(data, source=TaxEgsSheetVersion.SOURCE_SEED,
+                                          note=note or f'seed from {src.name}', **counts)
+                audit('egs_sheet_seed', entity='egs_sheet', entity_id=version.number, reason=version.note,
+                      after={'number': version.number, 'file': src.name, 'sha256': version.sha256,
+                             'size': version.size, 'coded_rows': version.coded_rows,
+                             'total_rows': version.total_rows, 'coded_items': len(version.coded_itemcodes)})
+        except Exception:
+            if version is not None:     # rolled back: its file must not stay behind
+                egs_sheet.discard_file(version)
+            raise
         self.stdout.write(f'version {version.number}: {version.total_rows} rows, {version.coded_rows} coded rows, '
                           f'{len(version.coded_itemcodes)} coded items')
