@@ -43,6 +43,23 @@ def format_field(line, field: str) -> str:
     raise ValueError(f'unknown recipe field: {field}')
 
 
+_TOKEN = re.compile(r'\{\{\}|\{\}\}|\{[^{}]+\}|.', re.S)
+
+
+def _tokens(send: str) -> list:
+    """send_keys tokens; brace names are case-insensitive to the agent and a repeat count is dropped."""
+    out = []
+    for tok in _TOKEN.findall(send):
+        if len(tok) > 1 and tok.startswith('{') and tok not in ('{{}', '{}}'):
+            tok = '{%s}' % (tok[1:-1].split() or [''])[0].upper()
+        out.append(tok)
+    return out
+
+
+def _contains(seq: list, sub: list) -> bool:
+    return any(seq[i:i + len(sub)] == sub for i in range(len(seq) - len(sub) + 1))
+
+
 def _cells_to_keys(cells, line=None, reference=None) -> str:
     parts = []
     for cell in cells or []:
@@ -58,6 +75,8 @@ def _cells_to_keys(cells, line=None, reference=None) -> str:
                 if line is None:
                     raise ValueError(f'line field {name!r} is only valid in line_cells')
                 value = format_field(line, name)
+            if any(ch in value for ch in '\r\n\t'):
+                raise ValueError(f'field {name!r} value contains a newline or tab')
             parts.append(_escape(value))
         else:
             parts.append(to_send_keys(cell.get('value', '')))
@@ -103,13 +122,16 @@ def build_keyplan(document, *, mode: str) -> dict:
     steps.append({'i': len(steps) + 1, 'label': final_label,
                   'send': _cells_to_keys(final_keys), 'final': True})
 
-    if mode == 'dry_run' and recipe.save_keys:
-        save_seq = _cells_to_keys(recipe.save_keys)
-        if save_seq and any(save_seq in step['send'] for step in steps):
-            raise ValueError('a dry-run plan must never contain the save keys')
-
     popups = [{**p, 'answer_keys': to_send_keys(p['answer_keys'])} if p.get('answer_keys') else p
               for p in (recipe.popups or [])]
+
+    if mode == 'dry_run' and recipe.save_keys:
+        # A single-key save_keys (e.g. {ENTER}) refuses every dry run: deliberate, fails closed.
+        save = _tokens(_cells_to_keys(recipe.save_keys))
+        sequences = [[t for step in steps for t in _tokens(step['send'])]]
+        sequences += [_tokens(p['answer_keys']) for p in popups if p.get('answer_keys')]
+        if save and any(_contains(seq, save) for seq in sequences):
+            raise ValueError('a dry-run plan must never contain the save keys')
 
     return {
         'document': document.pk,

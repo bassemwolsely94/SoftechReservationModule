@@ -157,3 +157,26 @@ class KeyplanTests(TestCase):
         self.doc = RpaDocument.objects.get(pk=self.doc.pk)
         with self.assertRaises(ValueError):
             build_keyplan(self.doc, mode='dry_run')
+
+    def test_dry_run_refuses_lowercase_save_keys(self):
+        self._set(line_cells=self.recipe.line_cells + [KEYS(r'\{f10}')])
+        with self.assertRaises(ValueError):
+            build_keyplan(self.doc, mode='dry_run')
+
+    def test_dry_run_refuses_save_keys_split_across_steps(self):
+        self._set(save_keys=[KEYS(r'\{F10}\{ENTER}')],
+                  line_cells=[FIELD('itemcode'), KEYS(r'\{F10}')],
+                  ref_cells=[KEYS(r'\{ENTER}')])
+        with self.assertRaises(ValueError):
+            build_keyplan(self.doc, mode='dry_run')
+
+    def test_dry_run_refuses_save_keys_in_popup_answer(self):
+        self._set(popups=[{'title': 'x', 'answer_keys': r'\{F10}'}])
+        with self.assertRaises(ValueError):
+            build_keyplan(self.doc, mode='dry_run')
+
+    def test_data_value_with_newline_or_tab_refused(self):
+        for bad in ('a\nb', 'a\tb'):
+            RpaLine.objects.filter(document=self.doc).update(itemcode=bad)
+            with self.assertRaises(ValueError):
+                build_keyplan(self.doc, mode='dry_run')
