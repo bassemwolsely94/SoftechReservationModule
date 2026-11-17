@@ -605,6 +605,12 @@ ERP_SERVICE_USERCODE = config('ERP_SERVICE_USERCODE', default='')
 # SOFTECH; /push returns a dry-run plan only. Flip to True ONLY after the live
 # write path is implemented and validated against SOFTECH_TEST_HOST.
 POS_WRITER_ENABLED = config('POS_WRITER_ENABLED', default=False, cast=bool)
+# Returns (doc_kind 'return', SOFTECH doccode 30) on the POS screen. Owner decision D3 (UAT 2026-11-17):
+# OFF = a NEW return order is refused and the screen does not offer «مرتجع»; returns already created
+# keep their posting path. Not a SOFTECH writer switch.
+POS_RETURNS_ENABLED = config('POS_RETURNS_ENABLED', default=False, cast=bool)
+# D1 (UAT 2026-11-17): hours another branch's customer stays openable by id after a full-phone find.
+CUSTOMER_FOUND_HOURS = config('CUSTOMER_FOUND_HOURS', default=12, cast=int)
 # Usage-instructions slip (apps.usage_print, Project 5). OFF = screen hidden, API 404. Never writes SOFTECH.
 USAGE_PRINT_ENABLED = config('USAGE_PRINT_ENABLED', default=False, cast=bool)
 # HR Attendance stage 1 (apps/hr/attendance): fingerprint punch collection by the office agent. OFF =
