@@ -163,7 +163,7 @@ class RunOneModeTests(unittest.TestCase):
         calls = []
         client = mock.Mock()
         client.claim.side_effect = [dict(claim(1), mode="live"), KeyboardInterrupt()]
-        with mock.patch.object(main, "load_config", return_value={"base_url": "x", "token": "t"}),                 mock.patch.object(main, "AgentClient", return_value=client),                 mock.patch.object(main, "run_one", side_effect=lambda cl, c, **kw: calls.append(kw)),                 mock.patch.object(main.time, "sleep"):
+        with mock.patch.object(main, "load_config", return_value={"base_url": "x", "token": "t"}),                 mock.patch.object(main, "AgentClient", return_value=client),                 mock.patch.object(main, "run_one", side_effect=lambda cl, c, **kw: calls.append(kw)),                 mock.patch.object(main.time, "sleep"), mock.patch("builtins.print"):
             with self.assertRaises(KeyboardInterrupt):
                 main.main()
         self.assertEqual(calls, [{"allow_live": False}])
