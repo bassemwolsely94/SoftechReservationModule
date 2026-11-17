@@ -30,7 +30,8 @@
  *                                   modal with `multi`
  *  exactCodeOnly         — Enter before any ↑/↓ picks only an exact code row (isExactCodeRow);
  *                          other rows stay listed for a click / arrow + Enter
- *  Every item handed to onSelect carries `id` and `item_id`, equal (withItemId).
+ *  Every item handed to onSelect carries `id` and `item_id`, equal (withItemId) — except the POS
+ *  variant, which passes its softech-search rows as-is (they already carry both).
  *
  * POS variant (variant="pos", used by /pos and /m/pos only — default rendering is untouched):
  *  branchId              — current branch (PK); results carry its stock + network branch pills
@@ -328,14 +329,20 @@ export default function ItemSearchWidget({
   }, [onSelect, resetBox, clearTicks])
 
   // what the advanced-search modal hands back: an array in multi, one item otherwise
+  // multi: the modal's rows join the inline ticks (inline first, deduped by id) in ONE onSelect
   const onModalSelect = useCallback((picked) => {
     setShowAdvanced(false)
     if (Array.isArray(picked)) {
-      if (!picked.length) return
-      resetBox()
-      onSelect(picked.map(withItemId))
+      const merged = []
+      const seen = new Set()
+      for (const it of [...ticked, ...picked].map(withItemId)) {
+        if (seen.has(it.id)) continue
+        seen.add(it.id)
+        merged.push(it)
+      }
+      addItems(merged)
     } else handleSelect(picked)
-  }, [onSelect, resetBox, handleSelect])
+  }, [ticked, addItems, handleSelect])
 
   // 📷 camera scan (CAMERA_SCAN_ENABLED): the code goes into the search; once that code's own
   // results are in, an exact barcode/code match (or a single result) is chosen like a click.

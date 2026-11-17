@@ -169,4 +169,46 @@ describe('AdvancedItemSearchModal pick modes', () => {
     expect(notPrevented).toBe(true)
     expect(screen.getByText('إضافة المحدد (0)')).toBeTruthy()
   })
+
+  it('with multi: ↓ from the search box moves focus to the grid, then Space ticks and Enter adds', async () => {
+    const { onSelect } = mount({ multi: true })
+    await search('alpha')
+    await screen.findByText(/TWO/)
+    const box = screen.getByPlaceholderText(/urosolv/)
+    box.focus()
+    fireEvent.keyDown(document.activeElement, { key: 'ArrowDown', code: 'ArrowDown' })
+    const grid = screen.getByTestId('adv-results')
+    expect(document.activeElement).toBe(grid)
+    fireEvent.keyDown(document.activeElement, { key: ' ', code: 'Space' })
+    expect(screen.getByText('إضافة المحدد (1)')).toBeTruthy()
+    fireEvent.keyDown(document.activeElement, { key: 'Enter', code: 'Enter' })
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(onSelect.mock.calls[0][0].map(i => i.id)).toEqual([1])
+  })
+
+  it('with multi: Space on a focused row checkbox toggles that row exactly once', async () => {
+    const { onSelect } = mount({ multi: true })
+    await search('alpha')
+    await screen.findByText(/TWO/)
+    const grid = screen.getByTestId('adv-results')
+    grid.focus()
+    fireEvent.keyDown(grid, { key: 'ArrowDown', code: 'ArrowDown' })   // highlight row 1
+    const box2 = screen.getAllByLabelText(/تحديد/)[1]
+    box2.focus()
+    // the window handler leaves a checkbox's Space alone (not prevented) …
+    expect(fireEvent.keyDown(box2, { key: ' ', code: 'Space' })).toBe(true)
+    expect(screen.getByText('إضافة المحدد (0)')).toBeTruthy()
+    // … and the browser's native Space → click ticks it through onChange
+    fireEvent.click(box2)
+    expect(screen.getByText('إضافة المحدد (1)')).toBeTruthy()
+    const boxes = screen.getAllByLabelText(/تحديد/)
+    expect(boxes.map(b => b.checked)).toEqual([false, true])
+    fireEvent.click(screen.getByText('إضافة المحدد (1)'))
+    expect(onSelect.mock.calls[0][0].map(i => i.id)).toEqual([2])
+  })
+
+  it('with multi: the results grid has a visible focus ring', async () => {
+    mount({ multi: true })
+    expect(screen.getByTestId('adv-results').className).toMatch(/focus-visible:ring/)
+  })
 })

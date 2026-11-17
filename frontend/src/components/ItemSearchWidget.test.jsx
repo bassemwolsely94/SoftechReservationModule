@@ -319,4 +319,58 @@ describe('ItemSearchWidget modes', () => {
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(onSelect).toHaveBeenCalledWith(withId(rows[1]))
   })
+
+  it('multi: Ctrl+F1 modal items merge with inline ticks (inline first, deduped) in one call', async () => {
+    const data = [{ id: 7, softech_id: '107', name: 'ALPHA SEVEN', tier: 'exact' }, rows[0]]
+    const { onSelect } = setup({ mode: 'multi' }, data)
+    const input = screen.getByRole('textbox')
+    fireEvent.change(input, { target: { value: 'alpha' } })
+    await screen.findByText(/SEVEN/)
+    fireEvent.keyDown(input, { key: ' ', code: 'Space', ctrlKey: true })   // tick id 7
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: ' ', code: 'Space', ctrlKey: true })   // tick id 1
+    fireEvent.keyDown(window, { key: 'F1', ctrlKey: true })
+    fireEvent.click(screen.getByText('MODAL-PICK'))                         // modal gives 7, 8
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(onSelect.mock.calls[0][0].map(i => i.id)).toEqual([7, 1, 8])
+    for (const it of onSelect.mock.calls[0][0]) expect(it.item_id).toBe(it.id)
+    expect(input.value).toBe('')
+    expect(screen.queryByText(/إضافة المحدد/)).toBeNull()                   // inline ticks cleared
+  })
+
+  it('multi: Ctrl+Space with the list closed ticks nothing and does not crash', async () => {
+    const { onSelect } = setup({ mode: 'multi' })
+    const input = screen.getByRole('textbox')
+    expect(fireEvent.keyDown(input, { key: ' ', code: 'Space', ctrlKey: true })).toBe(false)
+    fireEvent.change(input, { target: { value: 'alpha' } })
+    await screen.findByText(/THREE/)
+    fireEvent.keyDown(input, { key: 'Escape' })
+    fireEvent.keyDown(input, { key: ' ', code: 'Space', ctrlKey: true })
+    expect(screen.queryByText(/إضافة المحدد/)).toBeNull()
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('multi: Ctrl+Space on stale rows ticks nothing', async () => {
+    const { onSelect } = setup({ mode: 'multi' })
+    const input = screen.getByRole('textbox')
+    fireEvent.change(input, { target: { value: 'alpha' } })
+    await screen.findByText(/THREE/)
+    get.mockReturnValue(new Promise(() => {}))   // the next query never answers
+    fireEvent.change(input, { target: { value: 'alphb' } })
+    fireEvent.keyDown(input, { key: ' ', code: 'Space', ctrlKey: true })
+    expect(screen.queryByText(/إضافة المحدد/)).toBeNull()
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+})
+
+describe('withItemId', () => {
+  it('id wins when a row carries both and they differ; both end up equal', async () => {
+    const { withItemId } = await import('./itemSearchPick')
+    expect(withItemId({ id: 5, item_id: 9, name: 'X' })).toEqual({ id: 5, item_id: 5, name: 'X' })
+    expect(withItemId({ item_id: 9 })).toEqual({ id: 9, item_id: 9 })
+    expect(withItemId({ id: 4 })).toEqual({ id: 4, item_id: 4 })
+    const same = { id: 3, item_id: 3 }
+    expect(withItemId(same)).toBe(same)
+  })
 })

@@ -289,6 +289,8 @@ export default function AdvancedItemSearchModal({ onSelect, onClose, multi = fal
       if (e.key === 'ArrowDown' && results.length > 0) {
         e.preventDefault()
         setHighlighted(i => Math.min(i + 1, results.length - 1))
+        // multi: ↓ from the search box hands the focus to the grid, so Space / Enter reach it
+        if (multi && e.target === firstInputRef.current) resultsBodyRef.current?.focus()
         return
       }
       if (e.key === 'ArrowUp' && results.length > 0) {
@@ -300,7 +302,10 @@ export default function AdvancedItemSearchModal({ onSelect, onClose, multi = fal
         // the grid keys (useGridKeyboard): Space ticks, Enter adds — never while typing in a field
         if (isTyping(e.target)) return
         const row = highlighted >= 0 ? results[highlighted] : null
-        if (e.code === 'Space' || e.key === ' ') {
+        const space = e.code === 'Space' || e.key === ' '
+        // a focused checkbox (a row's or a criteria one) toggles natively via its own onChange
+        if (space && e.target?.type === 'checkbox') return
+        if (space) {
           if (row) { e.preventDefault(); toggleTick(row) }
           return
         }
@@ -499,7 +504,7 @@ export default function AdvancedItemSearchModal({ onSelect, onClose, multi = fal
 
         {/* ── Results table ────────────────────────────────────────────────────── */}
         <div data-tour="item-search-modal-results" data-testid="adv-results" tabIndex={0}
-          className="flex-1 overflow-y-auto min-h-0 focus:outline-none" ref={resultsBodyRef}>
+          className="flex-1 overflow-y-auto min-h-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40" ref={resultsBodyRef}>
           {activeParams === null ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-300 gap-2">
               <div className="text-5xl">🔍</div>
