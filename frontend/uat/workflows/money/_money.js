@@ -86,7 +86,9 @@ export async function screenOk(browser, key, url, { severity = 'P1', what = 'scr
       // amount containing "403"). Say what matched, so a false "refused" is visible as such.
       const text = await page.locator('main, #root').first().innerText().catch(() => '')
       const m = text.match(/غير مصرح|ليس لديك صلاحية|لا تملك صلاحية|403|Forbidden/)
-      near = m ? text.slice(Math.max(0, m.index - 25), m.index + 25).replace(/\s+/g, ' ').replace(/\d{8,}/g, '#') : ''
+      near = m ? text.slice(Math.max(0, m.index - 25), m.index + 25).replace(/\s+/g, ' ').replace(/\d{8,}/g, '#')
+        // page data may hold a patient's or customer's name: keep only the digits around the match
+        .replace(/[^\d\s.:-]+/g, '…') : ''
       if (m && m[0] === '403') {
         finding({ ws: WS, key, route: url.replace(/\/\d+(?=\/|$)/g, '/:id'), kind: 'decision', severity: 'P3',
           expected: 'harness: "refused" means a refusal screen',
