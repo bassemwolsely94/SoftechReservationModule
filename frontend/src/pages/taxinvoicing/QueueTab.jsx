@@ -84,7 +84,11 @@ function BrickPicker({ row, onPick, onClose, onAsk, asking }) {
     e.stopPropagation()
     if (e.key === 'ArrowDown') { e.preventDefault(); setHi(i => Math.min(options.length - 1, i + 1)) }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setHi(i => Math.max(0, i - 1)) }
-    else if (e.key === 'Enter') { e.preventDefault(); if (options[hi]) onPick(options[hi]) }
+    else if (e.key === 'Enter') {
+      e.preventDefault()
+      // the list may still be the one for an earlier search: wait for the results of what was typed
+      if (text.trim() === q && !list.isFetching && options[hi]) onPick(options[hi])
+    }
     else if (e.key === 'Escape') { e.preventDefault(); onClose() }
   }
   return (

@@ -723,6 +723,23 @@ describe('production coding queue', () => {
       await waitFor(() => expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['903'], decision: 'code', vat_rate: '0', brick: '10003333' }))
     })
 
+    it('ignores Enter while the search results are still for an earlier text', async () => {
+      show(<QueueTab me={ME} />)
+      const row903 = (await screen.findByText('Item 903')).closest('tr')
+      fireEvent.click(within(row903).getByRole('button', { name: 'اختيار فئة 903' }))
+      const box = screen.getByLabelText('بحث فئة 903')
+      fireEvent.change(box, { target: { value: 'كريم' } })
+      await screen.findByText('لوشن')
+      api.codeGpc.mockImplementation(() => Promise.resolve({ data: { loaded: true, rows: [{ code: '10004444', name_ar: 'صابون', used: 0 }] } }))
+      fireEvent.change(box, { target: { value: 'صابون' } })
+      fireEvent.keyDown(box, { code: 'Enter', key: 'Enter' })     // still showing the «كريم» list: nothing picked
+      expect(within(row903).queryByText('اختيار يدوي')).toBeNull()
+      await screen.findByText('صابون')
+      fireEvent.keyDown(box, { code: 'Enter', key: 'Enter' })
+      expect(within(row903).getByText('اختيار يدوي')).toBeTruthy()
+      expect(within(row903).getByText('10004444')).toBeTruthy()
+    })
+
     it('sets the brick of an item already decided "code"', async () => {
       api.codingSetBrick.mockResolvedValue({ data: { itemcode: '904', brick: '10002222', brick_source: 'person', brick_name: 'كريمات' } })
       show(<QueueTab me={ME} />)
