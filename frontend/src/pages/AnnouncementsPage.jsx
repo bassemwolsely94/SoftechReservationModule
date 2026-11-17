@@ -13,10 +13,8 @@ import { usePermission } from '../hooks/usePermission'
 export default function AnnouncementsPage() {
   const qc = useQueryClient()
   const { user } = useAuthStore()
-  // publishing: the API's broadcasters (admin / supervisor, apps/notifications/views.py) AND the
-  // role matrix's settings create — UAT D5, owner: tighten to the matrix
-  const settingsCreate = usePermission('settings', 'create')
-  const canBroadcast = ['admin', 'supervisor'].includes(user?.role) && settingsCreate
+  // publishing = the matrix «التنبيهات والإعلانات» create (admin + supervisor by default; owner 2026-11-17)
+  const canBroadcast = usePermission('alerts', 'create')
   const [showForm, setShowForm] = useState(false)
   const [statsFor, setStatsFor] = useState(null)
 

@@ -44,6 +44,7 @@ ALL_MODULES = [
     'hr_attendance', # الحضور والبصمة: no role but admin; everyone else via named grants (apps/hr/attendance/access.py)
     'data_health',   # صحة البيانات: 'view' = Growth + Problems + forced refresh; rules / held files / restore = admin only
     'crews',         # الأطقم: 'view' = list/members/history/unattributed sales, 'edit' = create/change/end rows/archive; admin only by default
+    'alerts',        # التنبيهات والإعلانات: 'view' = phone-alert log + policies, 'edit' = change policies/channel, 'create' = publish an announcement (admin + supervisor, owner 2026-11-17)
 ]
 
 ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize']
@@ -230,6 +231,7 @@ PERMISSIONS = {
     # ─────────────────────────────────────────────────────────────────────
     'supervisor': {
         'dashboard':    RO,
+        'alerts':       {'view', 'create', 'edit'},   # phone alerts + announcements (owner 2026-11-17)
         'pos':          {'view', 'create', 'edit'},
         'usage_print':  {'view', 'create', 'edit'},   # + presets and slip settings
         'reservations': {'view', 'create', 'edit', 'approve', 'export', 'assign'},

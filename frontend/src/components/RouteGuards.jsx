@@ -25,7 +25,7 @@ export function RequireRole({ roles, module, action = 'view', children }) {
   const { user } = useAuthStore()
   const perms = usePermissionStore(s => s.permissions)
   const userRole = user?.role || 'viewer'
-  if (!roles.includes(userRole)) return <Navigate to="/dashboard" replace />
+  if (roles && !roles.includes(userRole)) return <Navigate to="/dashboard" replace />   // no list = the matrix alone decides
   if (module && userRole !== 'admin') {
     if (perms === null) return null
     if (!perms[module]?.[action]) return <Navigate to="/dashboard" replace />

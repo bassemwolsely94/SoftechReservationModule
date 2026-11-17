@@ -158,10 +158,12 @@ describe('navItemVisible (the side-menu rule)', () => {
     expect(byPath['/missed-sales'].module).toBe('reservations')
     expect(byPath['/phantom-sales'].module).toBe('analytics')
     expect(byPath['/cash-optimization'].module).toBe('analytics')
-    expect(byPath['/phone-alerts'].module).toBe('settings')
-    // a supervisor (no settings grant in the seed) no longer sees phone alerts in the menu
-    const perms = { settings: {}, pos: { view: true } }
-    expect(navItemVisible(byPath['/phone-alerts'], { role: 'supervisor', perms })).toBe(false)
+    expect(byPath['/phone-alerts'].module).toBe('alerts')
+    // «التنبيهات والإعلانات» (owner 2026-11-17): the matrix alone decides — supervisor by default
+    expect(navItemVisible(byPath['/phone-alerts'], { role: 'supervisor', perms: { alerts: { view: true } } })).toBe(true)
+    expect(navItemVisible(byPath['/phone-alerts'], { role: 'supervisor', perms: { alerts: {} } })).toBe(false)
+    expect(navItemVisible(byPath['/phone-alerts'], { role: 'pharmacist', perms: { alerts: { view: true } } })).toBe(true)
+    const perms = { pos: { view: true } }
     expect(navItemVisible(byPath['/pos/exceptions'], { role: 'supervisor', perms })).toBe(true)
   })
   it('every menu item has a path and a known shape', () => {

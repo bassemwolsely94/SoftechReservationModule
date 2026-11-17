@@ -554,7 +554,7 @@ export default function App() {
             <Route path="pick-zones" element={<PickZonesPage />} />
             {/* phone alerts (WhatsApp): admin + supervisor, and the matrix's settings view (UAT D5) */}
             <Route path="phone-alerts"
-              element={<RequireRole roles={['admin','supervisor']} module="settings"><PhoneAlertsPage /></RequireRole>} />
+              element={<RequireRole module="alerts"><PhoneAlertsPage /></RequireRole>} />
             {/* permissions matrix: admin only */}
             <Route path="permissions"
               element={<RequireRole roles={['admin']}><PermissionsMatrixPage /></RequireRole>} />

@@ -25,20 +25,20 @@ logger = logging.getLogger('elrezeiky.phone_alerts')
 
 
 class IsAdminOrSupervisor(BasePermission):
-    message = 'هذه الصفحة للمدير والمشرف فقط'
+    """The «التنبيهات والإعلانات» matrix module (owner 2026-11-17): `alerts` view to read, edit to
+    change. Seeded for admin + supervisor (users 0058); the owner may grant it to others."""
+    message = 'لا تملك صلاحية التنبيهات'
 
     def has_permission(self, request, view):
         u = request.user
         if not (u and u.is_authenticated):
             return False
         p = getattr(u, 'staff_profile', None)
-        if not (p and p.is_active and p.role in ('admin', 'supervisor')):
+        if not (p and p.is_active):
             return False
-        # UAT D5 (2026-11-17): the screen follows the role matrix, so the API does too — settings view
-        # to read, settings edit to change (admin always passes)
         from core.permissions import matrix_allows
         need = ('view',) if request.method in ('GET', 'HEAD', 'OPTIONS') else ('edit',)
-        return matrix_allows(p, 'settings', *need)
+        return matrix_allows(p, 'alerts', *need)
 
 
 PERMS = [IsAuthenticated, IsAdminOrSupervisor]

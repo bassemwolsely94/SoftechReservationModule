@@ -880,17 +880,17 @@ SCREENS = [
             'حتى تتأكد الإدارة أن كل موظف قرأ التعميم.',
             'Management broadcasts to the branches (decisions, instructions, changes in work) with '
             '"acknowledge reading", so management knows every employee has read it.'),
-        'audience': T('الجميع يقرأ؛ المدير ينشر ويتابع من قرأ (والمشرف لو مصفوفة الصلاحيات أعطته «الإعدادات — إنشاء»)؛ كاتب الإعلان يرى من قرأ ويحذف إعلانه.',
-                      'Everyone reads; the admin publishes and tracks who read (a supervisor too when the permission matrix gives them "Settings — create"); an author sees who read and can delete their own.'),
+        'audience': T('الجميع يقرأ؛ المدير والمشرف ينشروا ويتابعوا مين قرأ (صلاحية «التنبيهات والإعلانات — إنشاء»)؛ كاتب الإعلان يشوف مين قرأ ويقدر يمسح إعلانه.',
+                      'Everyone reads; the admin and supervisors publish and track who read (the "Alerts & announcements — create" permission); an author sees who read and can delete their own.'),
         'steps': [
             T('اقرأ الإعلان ثم اضغط «تأكيد القراءة» — هذا مطلوب ويُسجَّل باسمك.',
               'Read the announcement then press "Acknowledge" — this is required and recorded under your name.'),
             {'text': T('لنشر إعلان: «+ إعلان جديد» ← العنوان والنص ← اختر الأدوار والفروع المستهدفة (الفراغ = الجميع) ← «إعلان هام» لو عاجل ← «نشر الإعلان».',
                        'To publish: "+ New announcement" → title and text → choose target roles and branches (empty = everyone) → tick "Important" if urgent → "Publish".'),
-             'roles': ['admin']},
+             'roles': ['admin', 'supervisor']},
             {'text': T('اضغط «من قرأ» لترى قائمة من أكّد القراءة ونسبة القراءة.',
                        'Press "Who read" to see who acknowledged and the read rate.'),
-             'roles': ['admin']},
+             'roles': ['admin', 'supervisor']},
         ],
         'tips': [
             T('كل إعلان يصل أيضاً كإشعار على الجرس لكل المستهدفين؛ «إعلان هام» يميّزه بالأحمر.',
@@ -923,7 +923,7 @@ SCREENS = [
          },
             {'target': 'general-announcements-new', 'label': T('+ إعلان جديد', '+ New announcement'),
              'text': T('يفتح نموذج تعميم جديد. «إغلاق» يقفله من غير نشر.', 'Opens a new broadcast form. "Close" hides it without publishing.'),
-             'open_hint': T('للمدير فقط (والمشرف لو مصفوفة الصلاحيات أعطته «الإعدادات — إنشاء»).', 'Admin only (and a supervisor when the permission matrix gives them "Settings — create").'),
+             'open_hint': T('للمدير والمشرف (صلاحية «التنبيهات والإعلانات — إنشاء»).', 'Admin and supervisor (the "Alerts & announcements — create" permission).'),
              'more': T('بيفتح نموذج: العنوان والنص، الأدوار والفروع المستهدفة (لو فاضية = الكل)، و«إعلان هام» لو عاجل، ثم «نشر الإعلان».\n• الإعلان الهام بيوصل كمان كإشعار على الجرس لكل المستهدفين.',
                        'It opens a form: title and text, target roles and branches (empty = everyone), "Important" if urgent, then "Publish".\n• An important announcement also arrives as a bell notification to everyone targeted.'),
          },
@@ -966,7 +966,7 @@ SCREENS = [
              'open_hint': T('لكاتب الإعلان والمدير.', 'For the author and the admin.')},
         ],
         'updated': '2026-11-17',
-        'change_note': T('النشر يتبع مصفوفة الصلاحيات (الإعدادات — إنشاء): المدير افتراضياً', 'Publishing follows the permission matrix (Settings — create): the admin by default'),
+        'change_note': T('النشر بصلاحية «التنبيهات والإعلانات — إنشاء»: المدير والمشرف افتراضياً', 'Publishing needs "Alerts & announcements — create": admin and supervisor by default'),
     },
     {
         'key': 'general.help_center',
@@ -1363,7 +1363,7 @@ SCREENS = [
             'WhatsApp alerts for urgent events (a reservation waiting for sourcing, an HQ transfer, a status change, a new task): '
             'the recipient taps "Received" and may add a remark, and the system reminds them then escalates if nobody does. '
             'Here you choose which events alert, who owns the work, each branch\'s mobile, and review the log.'),
-        'audience': T('المدير — والمشرف فقط لو مصفوفة الصلاحيات أعطته «الإعدادات — عرض».', 'The admin — and a supervisor only when the permission matrix gives them "Settings — view".'),
+        'audience': T('المدير والمشرف (صلاحية «التنبيهات والإعلانات»).', 'Admins and supervisors (the "Alerts & announcements" permission).'),
         'tabs': [
             {'key': 'policy', 'title': T('السياسات', 'Policies'),
              'body': T('لكل حدث: «لا» (لا يصل تنبيه) أو «اختياري» (يصل لو علّم الموظف «نبّه على الموبايل») أو «دائماً». مع مدة التذكير والتصعيد بالدقائق، وأقصى عدد تذكيرات، ومن يُصعَّد إليهم. «يُصعَّد إلى» في سطر الحدث نفسه يسبق قائمة سطر «تصعيد»، ثم مسؤولي التصعيد، ثم المشرفين. سطر «تصعيد» نفسه لا يُصعَّد مرة أخرى.',
@@ -1440,7 +1440,7 @@ SCREENS = [
              'open_hint': T('في تبويب «السجل».', 'On the "Log" tab.')},
         ],
         'updated': '2026-11-17',
-        'change_note': T('الشاشة تتبع مصفوفة الصلاحيات (الإعدادات — عرض): المدير افتراضياً',
-                         'The log\'s screen follows the permission matrix (Settings — view): the admin by default'),
+        'change_note': T('الشاشة بصلاحية «التنبيهات والإعلانات»: المدير والمشرف افتراضياً',
+                         'The screen needs the "Alerts & announcements" permission: admin and supervisor by default'),
     },
 ]

@@ -21,7 +21,7 @@ frontend/src/App.jsx::admin,purchasing x1
 frontend/src/App.jsx::admin,purchasing,quality_manager x1
 frontend/src/App.jsx::admin,purchasing,supervisor x1
 frontend/src/App.jsx::admin,quality_manager,supervisor x2
-frontend/src/App.jsx::admin,supervisor x2
+frontend/src/App.jsx::admin,supervisor x1
 frontend/src/App.jsx::delivery x1
 frontend/src/components/InTransitTab.jsx::purchasing x2
 frontend/src/components/followups/CallListsPanel.jsx::admin,call_center,supervisor x1
@@ -60,8 +60,7 @@ frontend/src/components/navGroups.js::admin,purchasing,quality_manager,superviso
 frontend/src/components/navGroups.js::admin,purchasing,supervisor x4
 frontend/src/components/navGroups.js::admin,purchasing,viewer x1
 frontend/src/components/navGroups.js::admin,quality_manager,supervisor x6
-frontend/src/components/navGroups.js::admin,supervisor x4
-frontend/src/pages/AnnouncementsPage.jsx::admin,supervisor x1
+frontend/src/components/navGroups.js::admin,supervisor x3
 frontend/src/pages/BatchesPage.jsx::admin,pharmacist,purchasing x2
 frontend/src/pages/BatchesPage.jsx::admin,quality_manager,supervisor x1
 frontend/src/pages/CallCenterAnalyticsPage.jsx::admin,call_center,quality_manager,supervisor x1
