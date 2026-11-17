@@ -292,6 +292,14 @@ def required(path, method):
     # asks `edit`, as the views do
     if prefix == 'crews' and method not in ('GET', 'HEAD', 'OPTIONS'):
         return 'crews', ('edit',)
+    # Marketplace (doc 38): writes ask exactly what the views ask (apps/marketplace/views.py) — approving /
+    # unapproving a listing = approve; channel and store writes (push-stock included) = edit; the rest
+    # (listing proposals, manual intake, order actions) = the default write grants
+    if prefix == 'marketplace' and method not in ('GET', 'HEAD', 'OPTIONS'):
+        if parts[3:4] == ['listings'] and parts[5:6] in (['approve'], ['unapprove']):
+            return 'marketplace', ('approve',)
+        if parts[3:4] in (['channels'], ['stores']):
+            return 'marketplace', ('edit',)
     # POS alternatives live under /api/composition/ (chronic) but belong to the POS module
     if prefix == 'composition' and len(parts) > 3 and parts[3] == 'alternatives':
         return 'pos', (('view',) if method in ('GET', 'HEAD', 'OPTIONS') else _POST_ACTIONS)

@@ -507,3 +507,240 @@ class MarketplaceToPosTests(TestCase):
         with patch('apps.pos_orders.writer.push_order') as w:
             to_pos.convert(self.order, self.staff)
         w.assert_not_called()
+
+
+@override_settings(MARKETPLACE_ENABLED=True, MARKETPLACE_PUSH_ENABLED=False)
+class MarketplaceApiTests(TestCase):
+    """Task 6: /api/marketplace/ — flag, permissions, branch scope, masking, manual intake, webhook."""
+
+    def setUp(self):
+        self.branch = make_branch()
+        self.branch2 = make_branch2()
+        self.admin_user, self.admin, self.client_admin = make_admin('api_admin')
+        self.channel = MarketplaceChannel.objects.create(
+            code='api_test', name='منصة', softech_personcode='PL01', stock_buffer=Decimal('0'),
+            adapter='fake', is_active=True, credentials={'secret': 'top-secret-value'})
+        self.store = ChannelStore.objects.create(channel=self.channel, branch=self.branch,
+                                                 external_store_id='S1', is_active=True)
+        self.store2 = ChannelStore.objects.create(channel=self.channel, branch=self.branch2,
+                                                  external_store_id='S2', is_active=True)
+        self.item = make_item('صنف', 'API001')
+        self.item.pack_price = Decimal('10')
+        self.item.pack_price_tax = Decimal('11.40')
+        self.item.sale_tax_pct = Decimal('14')
+        self.item.save()
+        for b in (self.branch, self.branch2):
+            ItemStock.objects.create(item=self.item, branch=b, softech_store_code='100',
+                                     quantity_on_hand=Decimal('10'))
+        self.listing = ChannelListing.objects.create(channel=self.channel, item=self.item, approved=True,
+                                                     external_sku='SKU1')
+
+    def _order(self, ext, store=None, phone='01011112222'):
+        store = store or self.store
+        return ExternalOrder.objects.create(channel=self.channel, store=store, branch=store.branch,
+                                            external_id=ext, customer_phone=phone)
+
+    def _webhook_body(self, ext='W1'):
+        return {'external_id': ext, 'external_store_id': 'S1', 'customer_name': 'عميل',
+                'customer_phone': '01099998888', 'address': 'عنوان', 'payment_mode': 'platform_paid',
+                'total': '20', 'lines': [{'external_sku': 'SKU1', 'name': 'صنف', 'qty': '2', 'unit_price': '10'}]}
+
+    def _hook(self, code='api_test', body=None, sig='top-secret-value'):
+        extra = {'HTTP_X_FAKE_SIGNATURE': sig} if sig is not None else {}
+        return self.client.post(f'/api/marketplace/webhooks/{code}/', body if body is not None else self._webhook_body(),
+                                content_type='application/json', **extra)
+
+    def test_flag_off_404(self):
+        with override_settings(MARKETPLACE_ENABLED=False):
+            for path in ('/api/marketplace/channels/', '/api/marketplace/orders/', '/api/marketplace/listings/'):
+                self.assertEqual(self.client_admin.get(path).status_code, 404, path)
+            self.assertEqual(self._hook().status_code, 404)
+
+    def test_other_branch_order_hidden(self):
+        mine = self._order('M1')
+        other = self._order('O1', store=self.store2)
+        _, _, client = make_pharmacist('api_ph_branch', branch=self.branch)
+        r = client.get('/api/marketplace/orders/')
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        ids = {row['id'] for row in r.json()['results']}
+        self.assertIn(mine.id, ids)
+        self.assertNotIn(other.id, ids)
+        self.assertEqual(client.get(f'/api/marketplace/orders/{other.id}/').status_code, 404)
+        self.assertEqual(client.post(f'/api/marketplace/orders/{other.id}/accept/').status_code, 404)
+        self.assertEqual(client.get(f'/api/marketplace/orders/{mine.id}/').status_code, 200)
+
+    def test_manual_intake_end_to_end(self):
+        body = {'channel': self.channel.id, 'branch': self.branch.id, 'external_id': 'MAN-1',
+                'customer_name': 'عميل', 'customer_phone': '01055554444', 'address': 'عنوان',
+                'payment_mode': 'cash_on_delivery',
+                'lines': [{'item_id': self.item.id, 'qty': 2, 'unit_price': '12.50'}]}
+        r = self.client_admin.post('/api/marketplace/orders/manual/', body, format='json')
+        self.assertEqual(r.status_code, 201, r.content[:300])
+        order = ExternalOrder.objects.get(pk=r.json()['id'])
+        self.assertEqual((order.source, order.branch_id, order.platform_total), ('manual', self.branch.id, Decimal('25')))
+        self.assertEqual(order.lines.get().listing_id, self.listing.id)
+        again = self.client_admin.post('/api/marketplace/orders/manual/', body, format='json')
+        self.assertEqual(again.status_code, 200)
+        self.assertEqual(again.json()['id'], order.id)
+        with self.captureOnCommitCallbacks(execute=True):
+            acc = self.client_admin.post(f'/api/marketplace/orders/{order.id}/accept/')
+        self.assertEqual(acc.status_code, 200, acc.content[:300])
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'accepted')
+        self.assertEqual(order.pos_order.status, 'draft')
+        self.assertEqual(acc.json()['pos_order']['id'], order.pos_order_id)
+        bad = self.client_admin.post(f'/api/marketplace/orders/{order.id}/accept/')
+        self.assertEqual(bad.status_code, 400)
+        self.assertEqual(bad.json()['detail'], 'انتقال غير مسموح')
+        st = self.client_admin.post(f'/api/marketplace/orders/{order.id}/status/',
+                                    {'to_status': 'preparing', 'note': 'ok'}, format='json')
+        self.assertEqual(st.status_code, 200, st.content[:300])
+        self.assertEqual(st.json()['status'], 'preparing')
+
+    def test_manual_intake_other_branch_refused(self):
+        _, _, client = make_pharmacist('api_ph_manual', branch=self.branch)
+        body = {'channel': self.channel.id, 'branch': self.branch2.id, 'external_id': 'MAN-X',
+                'lines': [{'item_id': self.item.id, 'qty': 1, 'unit_price': '1'}]}
+        self.assertEqual(client.post('/api/marketplace/orders/manual/', body, format='json').status_code, 403)
+        self.assertFalse(ExternalOrder.objects.exists())
+
+    def test_reject_flow(self):
+        order = self._order('RJ1')
+        r = self.client_admin.post(f'/api/marketplace/orders/{order.id}/reject/', {'reason': 'مغلق'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        order.refresh_from_db()
+        self.assertEqual((order.status, order.reject_reason), ('rejected', 'مغلق'))
+
+    def test_webhook_creates_and_duplicate_200(self):
+        r = self._hook()
+        self.assertEqual(r.status_code, 201, r.content[:300])
+        oid = r.json()['id']
+        self.assertEqual(ExternalOrder.objects.get(pk=oid).source, 'api')
+        r2 = self._hook()
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.json()['id'], oid)
+        self.assertEqual(ExternalOrder.objects.count(), 1)
+
+    def test_webhook_bad_signature_403(self):
+        r = self._hook(sig='wrong')
+        self.assertEqual(r.status_code, 403)
+        self.assertNotIn('secret', r.content.decode())
+        self.assertEqual(self._hook(sig=None).status_code, 403)
+        self.assertFalse(ExternalOrder.objects.exists())
+
+    def test_webhook_unknown_store_422_nothing_stored(self):
+        body = self._webhook_body()
+        body['external_store_id'] = 'NOPE'
+        r = self._hook(body=body)
+        self.assertEqual(r.status_code, 422)
+        self.assertNotIn('01099998888', r.content.decode())
+        self.assertFalse(ExternalOrder.objects.exists())
+        bad = self._hook(body={'external_id': 'B1', 'external_store_id': 'S1', 'lines': [{'qty': 'abc'}]})
+        self.assertEqual(bad.status_code, 422)
+        self.assertFalse(ExternalOrder.objects.exists())
+
+    def test_webhook_disabled_channel_404(self):
+        self.channel.is_active = False
+        self.channel.save()
+        self.assertEqual(self._hook().status_code, 404)
+        MarketplaceChannel.objects.create(code='man_hook', name='يدوي', adapter='manual', is_active=True)
+        self.assertEqual(self._hook(code='man_hook', body={}).status_code, 404)
+        self.assertEqual(self._hook(code='nope', body={}).status_code, 404)
+
+    def test_credentials_never_returned(self):
+        secret = 'top-secret-value'
+        r = self.client_admin.get('/api/marketplace/channels/')
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn(secret, r.content.decode())
+        self.assertNotIn('credentials', r.json()['results'][0])
+        d = self.client_admin.get(f'/api/marketplace/channels/{self.channel.id}/')
+        self.assertEqual(d.status_code, 200)
+        self.assertNotIn(secret, d.content.decode())
+        p = self.client_admin.patch(f'/api/marketplace/channels/{self.channel.id}/',
+                                    {'credentials': {'secret': 'new-secret-xyz'}, 'name': 'جديد'}, format='json')
+        self.assertEqual(p.status_code, 200, p.content[:300])
+        self.assertNotIn('new-secret-xyz', p.content.decode())
+        self.channel.refresh_from_db()
+        self.assertEqual(self.channel.credentials, {'secret': 'new-secret-xyz'})
+        c = self.client_admin.post('/api/marketplace/channels/', {'code': 'new_ch', 'name': 'ن',
+                                   'credentials': {'secret': 'zzz-created'}}, format='json')
+        self.assertEqual(c.status_code, 201, c.content[:300])
+        self.assertNotIn('zzz-created', c.content.decode())
+        push = self.client_admin.post(f'/api/marketplace/channels/{self.channel.id}/push-stock/')
+        self.assertEqual(push.status_code, 200, push.content[:300])
+        self.assertEqual(len(push.json()), 2)
+        self.assertTrue(all(row['dry_run'] for row in push.json()))
+        log = self.client_admin.get('/api/marketplace/push-log/', {'channel': self.channel.id})
+        self.assertEqual(log.status_code, 200)
+        self.assertEqual(len(log.json()['results']), 2)
+        self.assertNotIn('new-secret-xyz', log.content.decode())
+        self.assertNotIn('credentials', log.content.decode())
+
+    def test_phone_masked_in_list(self):
+        self._order('PH1', phone='01011112222')
+        r = self.client_admin.get('/api/marketplace/orders/')
+        self.assertEqual(r.status_code, 200)
+        body = r.content.decode()
+        self.assertNotIn('01011112222', body)
+        self.assertTrue(r.json()['results'][0]['customer_phone'].endswith('222'))
+        self.assertNotIn('raw_payload', body)
+
+    def test_pharmacist_cannot_approve_listing(self):
+        from django.core.management import call_command
+        call_command('seed_permissions', verbosity=0)
+        new = ChannelListing.objects.create(channel=self.channel, item=make_item('آخر', 'API002'))
+        _, _, client = make_pharmacist('api_ph_approve', branch=self.branch)
+        r = client.post(f'/api/marketplace/listings/{new.id}/approve/')
+        self.assertEqual(r.status_code, 403)
+        new.refresh_from_db()
+        self.assertFalse(new.approved)
+        self.assertEqual(client.patch(f'/api/marketplace/channels/{self.channel.id}/', {'name': 'x'},
+                                      format='json').status_code, 403)
+
+    def test_listing_approve_unapprove_audited(self):
+        from apps.audit.models import AuditLog
+        new = ChannelListing.objects.create(channel=self.channel, item=make_item('آخر', 'API003'))
+        r = self.client_admin.post(f'/api/marketplace/listings/{new.id}/approve/')
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        new.refresh_from_db()
+        self.assertTrue(new.approved)
+        self.assertEqual(new.approved_by_id, self.admin.id)
+        self.assertIsNotNone(new.approved_at)
+        self.assertTrue(AuditLog.objects.filter(action='marketplace_listing_approved').exists())
+        self.client_admin.post(f'/api/marketplace/listings/{new.id}/unapprove/')
+        new.refresh_from_db()
+        self.assertFalse(new.approved)
+        self.assertIsNone(new.approved_by_id)
+        self.assertTrue(AuditLog.objects.filter(action='marketplace_listing_unapproved').exists())
+
+    def test_listings_list_problem_and_qty(self):
+        r = self.client_admin.get('/api/marketplace/listings/', {'channel': self.channel.id, 'branch': self.branch.id})
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        row = r.json()['results'][0]
+        self.assertEqual((row['problem'], row['qty']), ('', '10'))
+        c = self.client_admin.post('/api/marketplace/listings/', {'channel': self.channel.id,
+                                   'item': make_item('ب', 'API004').id, 'approved': True}, format='json')
+        self.assertEqual(c.status_code, 201, c.content[:300])
+        self.assertFalse(ChannelListing.objects.get(pk=c.json()['id']).approved)
+
+    def test_stores_branch_scoped(self):
+        _, _, client = make_pharmacist('api_ph_store', branch=self.branch)
+        r = client.get('/api/marketplace/stores/')
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        self.assertEqual({row['id'] for row in r.json()['results']}, {self.store.id})
+
+
+class MarketplaceMiddlewareTests(TestCase):
+    def test_webhooks_exempt_only_exact_prefix(self):
+        from core.middleware.module_access import required
+        self.assertIsNone(required('/api/marketplace/webhooks/x/', 'POST'))
+        self.assertIsNotNone(required('/api/marketplace/orders/', 'GET'))
+        self.assertIsNotNone(required('/api/marketplace/webhooks-evil/', 'POST'))
+        self.assertEqual(required('/api/marketplace/listings/1/approve/', 'POST'), ('marketplace', ('approve',)))
+        self.assertEqual(required('/api/marketplace/listings/1/unapprove/', 'POST'), ('marketplace', ('approve',)))
+        self.assertEqual(required('/api/marketplace/channels/', 'POST'), ('marketplace', ('edit',)))
+        self.assertEqual(required('/api/marketplace/channels/1/push-stock/', 'POST'), ('marketplace', ('edit',)))
+        self.assertEqual(required('/api/marketplace/stores/1/', 'PATCH'), ('marketplace', ('edit',)))
+        self.assertEqual(required('/api/marketplace/channels/', 'GET'), ('marketplace', ('view',)))
+        self.assertEqual(required('/api/marketplace/orders/manual/', 'POST')[0], 'marketplace')
+        self.assertIn('create', required('/api/marketplace/orders/manual/', 'POST')[1])

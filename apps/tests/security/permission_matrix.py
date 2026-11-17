@@ -72,7 +72,7 @@ BRANCH_SCOPE = {
     'data_health':  'all — company-level by nature; admin, supervisor and quality manager only',
     'crews':        'all — company-level by design (spec 2026-11-13 §10): crews group people across branches; admin only by default',
     'usage_print':  'own — invoice lookup (403 before any SOFTECH read), sheets, lines, print, prescription (branch_scope); presets + slip settings chain-wide',
-    'marketplace':  'own — orders carry their fulfilling branch (store.branch); channels, stores, listings, settlement are company-level (edit/approve = supervisor)',
+    'marketplace':  'own — orders, platform stores and push logs carry their branch (branch_scope; per-branch qty on listings); channels, listings, settlement are company-level (edit/approve = supervisor); webhooks = own gate',
 }
 
 

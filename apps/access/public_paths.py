@@ -39,6 +39,9 @@ PUBLIC_PREFIXES = (
     '/api/whatsapp/webhook/',
     # apps.hr.attendance.agent_views (no staff user; per-agent secret, hashed, constant-time)
     '/api/hr-attendance/agent/',
+    # apps.marketplace.views.WebhookView (no staff user; MARKETPLACE_ENABLED + active non-manual channel +
+    # the channel adapter's signature check; 404/403/422 bodies are generic)
+    '/api/marketplace/webhooks/',
 )
 
 # Allowed for GET / HEAD / OPTIONS only; any other method needs a signed-in user.
