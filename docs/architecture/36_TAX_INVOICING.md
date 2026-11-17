@@ -196,6 +196,42 @@ records; the usage report above compares against that set.
 requests already do. `coding.refresh` asks ETA only about requests of this server's own system (plus rows with no
 system yet), because codes are identical across systems and another system's answer concerns a different request.
 
+### GPC brick per item (batch S2)
+Code: `gpc_learn.py` (learned bricks), `gpc_ai.py` (AI proposal), `coding_queue.py` (decide / `set_brick`).
+Every brick shown is a suggestion; a person confirms it (CLAUDE.md rule 10).
+
+**Learned sources, in order (first hit wins; `gpc_learn.learned`, constant queries).**
+1. `decisions`: bricks people confirmed on `TaxCodingDecision` (`decision='code'`) for items of the same SOFTECH
+   family (`Item.family_name`), counted only with at least 3 items and the top brick on at least 80% of them
+   (a 60/40 family gives nothing and falls through).
+2. `eta`: the brick (`parentItemCode`, kept as `EtaCodeUsage.gpc`) of approved/active ETA production codes of items of
+   the same family, same 3 / 80% rule.
+3. `sheet`: the item's own brick in the owner's sheet (`TaxItemProfile.gpc_code`, not '' or '0').
+   `manage.py load_sheet_bricks PATH` fills it from sheet «ElRezeiky GPC Applied», column «أكواد الضرائب», only where
+   empty or '0', 8 digits and `gpc.known()`; audited.
+4. `medicine`: `medicine_type_name == 'Medicine'` → `10005845`.
+
+A learned brick that is not on the loaded brick list (`gpc.known`) is dropped; while no list is loaded, all pass.
+
+**AI proposal** (`gpc_ai`). Switch `TAX_GPC_AI_ENABLED`, default off (forced off under tests); off = the nightly job and
+"ask again" do nothing and say so, the learned sources still work. Nightly job `gpc_ai_suggest` 02:30
+(`SCHEDULER_JOB_GUARDS`), `manage.py suggest_bricks [--limit N] [--itemcode X]`, and «اقترح مرة أخرى» (≤20 items).
+Only items with no learned brick are asked; medicines are never asked. The AI picks from a shortlist of at most 40:
+the family's bricks from decisions and ETA codes (up to 15), then GS1 bricks sharing an English word with the item's
+family / category / name, segments 50/51/53 first. GS1 names are English, so an item with an Arabic-only name gets the
+family bricks only. The answer must be in the shortlist and `gpc.known()`; otherwise, or on malformed JSON, it is
+stored as "no suggestion" with the reason, nothing raised. Only item descriptors go out (name, family, category, type,
+origin, producer): no prices, no customers. Order: biggest uncoded sales first; an answered item is not asked again for
+30 days; a "no answer" (provider down) is retried the next night, and a run stops after 5 no-answers in a row.
+
+**Deciding with a brick.** "Code" needs a brick: the one the person picks (8 digits, `gpc.known()`; source `person`
+when it differs from the suggestion), else the row's suggestion. Bulk "code" / accept takes a suggestion only when it
+is learned or a high-confidence AI one; others are skipped «الفئة تحتاج تأكيداً». Keep-out needs no brick.
+`set_brick` (`POST codes/queue/brick/`, audited `coding_brick_set`) sets or changes the brick of an item already
+decided "code" without reopening; it is locked only while the item has an open (prepared / sending / submitted /
+uncertain) or approved production code request, so after a rejection the brick can be fixed. Queue rows carry
+`brick_confirmed`; the screen marks a "code" decision without a brick «تحتاج فئة».
+
 ## Which ETA system
 
 `environment.py`: `TAX_ETA_ENVIRONMENT` = `preprod` or `production` picks ETA's published addresses; explicit
