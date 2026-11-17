@@ -2,7 +2,12 @@
 
 Deciding "code" also confirms the item's VAT treatment (14 = taxable, 0 = exempt under the VAT law's exemption
 table) through services.confirm_treatment, unless the accountant already confirmed one, which the decision must
-then match. Every decision and reopen is audited."""
+then match. Every decision and reopen is audited.
+
+Deciding "code" also records the item's GPC brick (batch S2): the one the person picks, else the item's suggestion
+(gpc_learn's learned brick, else the stored AI proposal). Bulk "code" takes a suggestion only when it is learned or
+a high-confidence AI one; anything else waits for a person (CLAUDE.md rule 10). A brick can be set later on a
+"code" decision until a production code request is made for the item (`set_brick`, audited)."""
 import datetime as dt
 from decimal import Decimal, InvalidOperation
 
@@ -10,14 +15,22 @@ from django.db import transaction
 from django.db.models import Max, Q, Sum
 from django.utils import timezone
 
-from . import coding_rule, eta_codes, services
-from .models import EtaCodeUsage, EtaReconUncodedItem, TaxCodingDecision, TaxItemProfile
+from . import coding_rule, eta_codes, gpc, services
+from .models import (EtaCodeUsage, EtaReconUncodedItem, TaxBrickSuggestion, TaxCodeRequest, TaxCodingDecision,
+                     TaxItemProfile)
 from .services import TaxRuleError
 
 ALREADY_DECIDED = 'للصنف قرار سابق — أعد فتحه أولاً'
 RATE_MISMATCH = 'النسبة تخالف المعاملة الضريبية المعتمدة للصنف — عدّلها من شاشة الأصناف أولاً'
 NEEDS_RATE_CHECK = 'النسبة تحتاج تأكيداً'
 UNKNOWN_ITEM = 'صنف غير معروف'
+NEEDS_BRICK_CHECK = 'الفئة تحتاج تأكيداً'
+BRICK_REQUIRED = 'اختر فئة GPC للصنف'
+BAD_BRICK = 'كود الفئة 8 أرقام'
+UNKNOWN_BRICK = 'الفئة غير موجودة في قائمة GPC'
+BRICK_NOT_CODE = 'الفئة تُسجَّل لصنف قراره «يُكوَّد» فقط'
+BRICK_REQUESTED = 'طُلب كود الصنف من المصلحة بالفعل — لا تتغير الفئة'
+PERSON = 'person'
 MAX_BULK = 200
 
 EXEMPT_REFERENCE = 'سلعة معفاة — قانون الضريبة على القيمة المضافة رقم 67 لسنة 2016، جدول الإعفاءات'
@@ -35,7 +48,8 @@ def catalog_item(profile):
 
 def _row(d):
     return {'decision': d.decision, 'premark': d.premark, 'premark_reason': d.premark_reason, 'vat_rate': d.vat_rate,
-            'vat_flagged': d.vat_flagged, 'note': d.note, **{f: getattr(d, f) for f in NAME_FIELDS},
+            'vat_flagged': d.vat_flagged, 'brick': d.brick, 'brick_source': d.brick_source, 'note': d.note,
+            **{f: getattr(d, f) for f in NAME_FIELDS},
             'decided_by_id': d.decided_by_id, 'decided_at': d.decided_at}
 
 
@@ -71,7 +85,52 @@ def _on_eta_production(codes):
     return {c for c, us in usages.items() if any(u.status.lower() in eta_codes.ACTIVE_STATUSES for u in us)}, usages
 
 
-def decide(profile_id, actor, *, decision, vat_rate=None, names=None, note=''):
+def suggestions(profiles):
+    """{profile_id: {'code', 'source', 'confidence', 'reason', 'second'}}: the learned brick (gpc_learn), else the
+    stored AI proposal with a brick. Learned sources carry no confidence. Constant queries."""
+    from . import gpc_learn
+    profiles = list(profiles)
+    out = {pk: {'code': hit['code'], 'source': hit['source'], 'confidence': '', 'reason': hit.get('basis') or '',
+                'second': ''} for pk, hit in gpc_learn.learned(profiles).items()}
+    ai = (TaxBrickSuggestion.objects.filter(profile__in=[p.pk for p in profiles], source=TaxBrickSuggestion.SOURCE_AI)
+          .exclude(brick='')) if profiles else ()
+    for s in ai:
+        out.setdefault(s.profile_id, {'code': s.brick, 'source': TaxBrickSuggestion.SOURCE_AI,
+                                      'confidence': s.confidence, 'reason': s.reason, 'second': s.second})
+    return out
+
+
+def check_brick(brick):
+    brick = str(brick or '').strip()
+    if not gpc.BRICK.match(brick):
+        raise TaxRuleError(BAD_BRICK)
+    if not gpc.known(brick):
+        raise TaxRuleError(UNKNOWN_BRICK)
+    return brick
+
+
+def _brick_for(brick, suggestion, *, bulk=False):
+    """(brick, source) for a decision: the person's brick ('person' unless it is the suggestion), else the
+    suggestion's. In bulk only a learned or high-confidence AI suggestion is taken."""
+    if str(brick or '').strip():
+        brick = check_brick(brick)
+        return brick, suggestion['source'] if suggestion and suggestion['code'] == brick else PERSON
+    if bulk and not bulk_brick_ok(suggestion):
+        raise TaxRuleError(NEEDS_BRICK_CHECK)
+    if not suggestion:
+        raise TaxRuleError(BRICK_REQUIRED)
+    return check_brick(suggestion['code']), suggestion['source']
+
+
+def bulk_brick_ok(suggestion):
+    """A bulk decision may take a learned brick or a high-confidence AI one; the rest wait for a person."""
+    return bool(suggestion) and (suggestion['source'] != TaxBrickSuggestion.SOURCE_AI
+                                 or suggestion['confidence'] == 'high')
+
+
+def decide(profile_id, actor, *, decision, vat_rate=None, names=None, note='', brick=None, bulk=False):
+    """One item's decision. "code" needs a brick: `brick`, else the item's suggestion (with `bulk`, only a learned
+    or high-confidence AI one, checked under the item's lock)."""
     if decision not in dict(TaxCodingDecision.DECISION_CHOICES):
         raise TaxRuleError('قرار غير معروف')
     with transaction.atomic():
@@ -92,6 +151,7 @@ def decide(profile_id, actor, *, decision, vat_rate=None, names=None, note=''):
         treatment_before = None
         if decision == TaxCodingDecision.DECISION_CODE:
             rate = _rate(vat_rate)
+            row.brick, row.brick_source = _brick_for(brick, suggestions([profile]).get(profile.pk), bulk=bulk)
             if profile.treatment_confirmed_at:
                 if Decimal(profile.vat_rate) != rate:
                     raise TaxRuleError(RATE_MISMATCH)
@@ -107,6 +167,7 @@ def decide(profile_id, actor, *, decision, vat_rate=None, names=None, note=''):
             row.vat_rate = rate
         else:
             row.vat_rate = None
+            row.brick, row.brick_source = '', ''
 
         default_name = (item.name if item is not None else '') or profile.item_name or profile.item_name_ar
         default_ar = profile.item_name_ar or default_name
@@ -127,6 +188,26 @@ def decide(profile_id, actor, *, decision, vat_rate=None, names=None, note=''):
             services.audit('item_mapping_changed', actor=actor, entity='item', entity_id=code,
                            reason='قرار الترميز', before=treatment_before, after=_treatment(profile))
             services.revalidate_drafts_for_items({code})
+    return row
+
+
+def set_brick(profile_id, actor, brick):
+    """Sets or changes the brick of an item decided "code" (e.g. decided before bricks were recorded), without
+    reopening, until a production code request exists for it. Audited."""
+    with transaction.atomic():
+        profile = TaxItemProfile.objects.select_for_update().get(pk=profile_id)
+        row = TaxCodingDecision.objects.filter(profile=profile).first()
+        if row is None or row.decision != TaxCodingDecision.DECISION_CODE:
+            raise TaxRuleError(BRICK_NOT_CODE)
+        if (TaxCodeRequest.objects.filter(profile=profile, purpose=TaxCodeRequest.PURPOSE_NEW,
+                                          environment='production')
+                .exclude(status=TaxCodeRequest.CANCELLED).exists()):
+            raise TaxRuleError(BRICK_REQUESTED)
+        before = _row(row)
+        row.brick, row.brick_source = _brick_for(check_brick(brick), suggestions([profile]).get(profile.pk))
+        row.save(update_fields=['brick', 'brick_source'])
+        services.audit('coding_brick_set', actor=actor, entity='item', entity_id=profile.softech_itemcode,
+                       reason='فئة GPC', before=before, after=_row(row))
     return row
 
 
@@ -189,6 +270,10 @@ def rows(*, recent_days=None, premark=None, decided=None, q=''):
     sources = coding_rule.purchase_sources(codes)
     decisions = {d.profile_id: d for d in TaxCodingDecision.objects.filter(profile__in=[p.pk for p in profiles])
                  .select_related('decided_by')}
+    suggested = suggestions(profiles)
+    brick_names = gpc.names({s['code'] for s in suggested.values()} | {s['second'] for s in suggested.values()}
+                            | {d.brick for d in decisions.values()}
+                            | {p.gpc_code for p in profiles if gpc.BRICK.match(p.gpc_code or '')})
 
     q = (q or '').strip().lower()
     out = []
@@ -208,20 +293,33 @@ def rows(*, recent_days=None, premark=None, decided=None, q=''):
             continue
         rate, flagged, why = coding_rule.vat_prefill(item, p)
         sale = sold[code]
+        s = suggested.get(p.pk) or {}
+        if decision == TaxCodingDecision.DECISION_CODE and d.brick:     # the confirmed brick, not a suggestion
+            brick, brick_source = d.brick, d.brick_source
+            if s.get('code') != brick:
+                s = {}
+        else:
+            brick, brick_source = s.get('code', ''), s.get('source', '')
+        own = p.gpc_code if gpc.BRICK.match(p.gpc_code or '') and p.gpc_code != brick else ''
         out.append({'id': p.pk, 'itemcode': code, 'name': name, 'name_ar': p.item_name_ar,
                     'value': sale['value'] or Decimal('0'), 'docs': sale['docs'] or 0, 'last_day': sale['last_day'],
                     'premark': mark, 'premark_reason': reason, 'note': note, 'sources': dict(src or {}),
                     'vat_rate': rate, 'vat_flagged': flagged, 'vat_why': why, 'decision': decision,
                     'decided_by': _who(d.decided_by) if decision else '',
                     'decided_at': d.decided_at if decision else None,
+                    'brick': brick, 'brick_name': brick_names.get(brick, ''), 'brick_source': brick_source,
+                    'brick_confidence': s.get('confidence', ''), 'brick_reason': s.get('reason', ''),
+                    'brick_second': s.get('second', ''), 'brick_second_name': brick_names.get(s.get('second'), ''),
+                    'own_brick': own, 'own_brick_name': brick_names.get(own, ''),
                     'eta_last_status': best[code].status if code in best else ''})
     return out
 
 
-def decide_many(itemcodes, actor, *, decision, vat_rate=None, names=None, note=''):
+def decide_many(itemcodes, actor, *, decision, vat_rate=None, names=None, note='', brick=None):
     """Decides each item on its own; returns (decided itemcodes, skipped [{itemcode, why}]). With more than one item
-    and decision 'code', each item takes its prefilled VAT rate and a flagged rate is skipped for a person to check.
-    A single item takes `vat_rate` and `names` as given, and its errors are raised, not skipped."""
+    and decision 'code', each item takes its prefilled VAT rate and its suggested brick: a flagged rate, or a brick
+    that is missing or only a medium/low-confidence AI proposal, is skipped for a person to check.
+    A single item takes `vat_rate`, `names` and `brick` as given, and its errors are raised, not skipped."""
     codes = list(dict.fromkeys(str(c).strip() for c in itemcodes or () if str(c).strip()))
     if not codes:
         raise TaxRuleError('اختر الأصناف')
@@ -246,7 +344,8 @@ def decide_many(itemcodes, actor, *, decision, vat_rate=None, names=None, note='
                 skipped.append({'itemcode': code, 'why': NEEDS_RATE_CHECK})
                 continue
         try:
-            decide(profile.pk, actor, decision=decision, vat_rate=rate, names=None if bulk else names, note=note)
+            decide(profile.pk, actor, decision=decision, vat_rate=rate, names=None if bulk else names, note=note,
+                   brick=None if bulk else brick, bulk=bulk)
         except TaxRuleError as exc:
             if not bulk:
                 raise

@@ -65,6 +65,8 @@ urlpatterns = [
     path('codes/queue/', views.codes_queue),
     path('codes/queue/decide/', views.codes_queue_decide),
     path('codes/queue/reopen/', views.codes_queue_reopen),
+    path('codes/queue/brick/', views.codes_queue_brick),
+    path('codes/queue/suggest/', views.codes_queue_suggest),
     path('codes/<int:pk>/', views.code_detail),
     path('codes/<int:pk>/cancel/', views.code_cancel),
     path('receipts/', views.receipts_list),

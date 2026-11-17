@@ -4,7 +4,9 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.db import connection
-from django.test import TestCase
+from unittest import mock
+
+from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -12,8 +14,8 @@ from rest_framework.test import APIClient
 from apps.catalog.models import Item
 from apps.procurement.models import PurchaseLine, SupplierSegmentation
 from apps.tax_invoicing import coding_queue, coding_rule, services
-from apps.tax_invoicing.models import (EtaCodeUsage, EtaReconUncodedItem, TaxAuditEvent, TaxCodingDecision,
-                                       TaxItemProfile)
+from apps.tax_invoicing.models import (EtaCodeUsage, EtaReconUncodedItem, TaxAuditEvent, TaxBrickSuggestion,
+                                       TaxCodeRequest, TaxCodingDecision, TaxGpcBrick, TaxItemProfile)
 from apps.tests.test_tax_invoicing import Fixture
 
 
@@ -54,6 +56,7 @@ class ConfirmTreatmentTests(Fixture, TestCase):
             services.confirm_treatment(p, treatment='taxable', vat_rate=0, reference='', actor=self.accountant)
 
 
+BRICK = '10001234'      # any 8 digits pass gpc.known() while no brick list is loaded
 EXEMPT_REF = 'سلعة معفاة — قانون الضريبة على القيمة المضافة رقم 67 لسنة 2016، جدول الإعفاءات'
 
 
@@ -175,7 +178,7 @@ class DecisionTests(Fixture, TestCase):
         self.p = TaxItemProfile.objects.create(softech_itemcode='900030', item=self.item)
 
     def test_code_14_confirms_taxable(self):
-        d = coding_queue.decide(self.p.pk, self.accountant, decision='code', vat_rate=14)
+        d = coding_queue.decide(self.p.pk, self.accountant, decision='code', vat_rate=14, brick=BRICK)
         self.p.refresh_from_db()
         self.assertEqual((self.p.tax_treatment, int(self.p.vat_rate)), ('taxable', 14))
         self.assertIsNotNone(self.p.treatment_confirmed_at)
@@ -186,7 +189,7 @@ class DecisionTests(Fixture, TestCase):
         self.assertTrue(TaxAuditEvent.objects.filter(action='item_mapping_changed', entity_id='900030').exists())
 
     def test_code_0_is_exempt_with_reference(self):
-        coding_queue.decide(self.p.pk, self.accountant, decision='code', vat_rate='0',
+        coding_queue.decide(self.p.pk, self.accountant, decision='code', vat_rate='0', brick=BRICK,
                             names={'code_name': 'X', 'code_name_ar': 'س'})
         self.p.refresh_from_db()
         self.assertEqual((self.p.tax_treatment, int(self.p.vat_rate)), ('exempt', 0))
@@ -210,8 +213,8 @@ class DecisionTests(Fixture, TestCase):
         p = self.coded('900031', rate=14, coding_env='preprod')
         with self.assertRaisesMessage(services.TaxRuleError,
                                       'النسبة تخالف المعاملة الضريبية المعتمدة للصنف — عدّلها من شاشة الأصناف أولاً'):
-            coding_queue.decide(p.pk, self.accountant, decision='code', vat_rate=0)
-        coding_queue.decide(p.pk, self.accountant, decision='code', vat_rate=14)
+            coding_queue.decide(p.pk, self.accountant, decision='code', vat_rate=0, brick=BRICK)
+        coding_queue.decide(p.pk, self.accountant, decision='code', vat_rate=14, brick=BRICK)
         self.assertFalse(TaxAuditEvent.objects.filter(action='item_mapping_changed', entity_id='900031').exists())
 
     def test_decide_twice_errors(self):
@@ -246,7 +249,7 @@ class DecisionTests(Fixture, TestCase):
         self.assertIsNotNone(d.reopened_at)
         self.assertTrue(TaxAuditEvent.objects.filter(action='coding_decision_reopened', entity_id='900030',
                                                      reason='wrong call').exists())
-        d2 = coding_queue.decide(self.p.pk, self.accountant, decision='code', vat_rate=14)
+        d2 = coding_queue.decide(self.p.pk, self.accountant, decision='code', vat_rate=14, brick=BRICK)
         self.assertEqual(d2.pk, d.pk)
         self.assertEqual(TaxCodingDecision.objects.count(), 1)
 
@@ -345,13 +348,15 @@ class QueueApiTests(Fixture, TestCase):
         r = vc.post(QUEUE + 'reopen/', {'itemcode': '910001', 'reason': 'x'}, format='json')
         self.assertEqual(r.status_code, 403)
         self.assertFalse(TaxCodingDecision.objects.exists())
-        r = self.api.post(QUEUE + 'decide/', {'itemcodes': ['910001'], 'decision': 'code', 'vat_rate': 0},
-                          format='json')
+        r = self.api.post(QUEUE + 'decide/', {'itemcodes': ['910001'], 'decision': 'code', 'vat_rate': 0,
+                                              'brick': BRICK}, format='json')
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual((r.data['decided'], r.data['skipped']), (['910001'], []))
         self.assertEqual(TaxCodingDecision.objects.get(profile=self.pa).decision, 'code')
 
     def test_bulk_code_uses_prefill_and_skips_flagged(self):
+        # linked to its catalog row, the medicine gets the medicine brick
+        TaxItemProfile.objects.filter(pk=self.pa.pk).update(item=Item.objects.get(softech_id='910001'))
         r = self.api.post(QUEUE + 'decide/', {'itemcodes': ['910001', '910002', '910003', '999999'],
                                               'decision': 'code'}, format='json')
         self.assertEqual(r.status_code, 200, r.content)
@@ -371,7 +376,8 @@ class QueueApiTests(Fixture, TestCase):
 
     def test_non_string_names_are_coerced(self):
         r = self.api.post(QUEUE + 'decide/', {'itemcodes': ['910001'], 'decision': 'code', 'vat_rate': 0,
-                                              'names': {'code_name': 5, 'code_name_ar': None}}, format='json')
+                                              'brick': BRICK, 'names': {'code_name': 5, 'code_name_ar': None}},
+                          format='json')
         self.assertEqual(r.status_code, 200, r.content)
         d = TaxCodingDecision.objects.get(profile=self.pa)
         self.assertEqual((d.code_name, d.code_name_ar), ('5', 'ALPHA'))
@@ -475,4 +481,257 @@ class QueueApiTests(Fixture, TestCase):
                             decision='keep_out')
         with CaptureQueriesContext(connection) as big:
             self.assertEqual(len(coding_queue.rows()), 23)
+        self.assertEqual(len(small), len(big))
+
+
+class BrickTests(Fixture, TestCase):
+    """The decision carries a confirmed GPC brick (batch S2)."""
+
+    def setUp(self):
+        self.build('br')
+        from apps.users.models import RoleModuleAccess
+        RoleModuleAccess.objects.update_or_create(role='pharmacist', module='tax_invoicing', action='view',
+                                                  defaults={'is_allowed': False})
+        self.api = APIClient()
+        self.api.force_authenticate(self.accountant)
+        self.n = 0
+
+    def profile(self, mtype='Cosmetics', family='', tax=14, gpc_code='', value=100):
+        self.n += 1
+        code = f'93{self.n:04d}'
+        item = Item.objects.create(softech_id=code, name=f'ITEM {code}', medicine_type_name=mtype, family_name=family,
+                                   sale_tax_pct=tax)
+        bought(code, f'SB{self.n}', 'MANUFACTURER')
+        sold(code, value)
+        return TaxItemProfile.objects.create(softech_itemcode=code, item=item, item_name=item.name, gpc_code=gpc_code)
+
+    def ai(self, p, brick='10000777', confidence='high', second=''):
+        return TaxBrickSuggestion.objects.create(profile=p, brick=brick, second=second, confidence=confidence,
+                                                 reason='كريم للبشرة', source='ai', model='m', asked_at=timezone.now())
+
+    def row(self, p):
+        return [r for r in coding_queue.rows() if r['id'] == p.pk][0]
+
+    # ── single decide ────────────────────────────────────────────────────────────────────────────────
+    def test_code_without_brick_or_suggestion_refused(self):
+        p = self.profile()
+        with self.assertRaisesMessage(services.TaxRuleError, 'اختر فئة GPC للصنف'):
+            coding_queue.decide(p.pk, self.accountant, decision='code', vat_rate=14)
+        self.assertFalse(TaxCodingDecision.objects.exists())
+        p.refresh_from_db()
+        self.assertIsNone(p.treatment_confirmed_at)
+
+    def test_passed_brick_is_person(self):
+        p = self.profile()
+        d = coding_queue.decide(p.pk, self.accountant, decision='code', vat_rate=14, brick=' 10001234 ')
+        self.assertEqual((d.brick, d.brick_source), ('10001234', 'person'))
+        ev = TaxAuditEvent.objects.get(action='coding_decision', entity_id=p.softech_itemcode)
+        self.assertEqual(ev.after['brick'], '10001234')
+
+    def test_bad_or_unknown_brick_refused(self):
+        p = self.profile()
+        for bad in ('1234', 'abcdefgh', '123456789'):
+            with self.assertRaisesMessage(services.TaxRuleError, 'كود الفئة 8 أرقام'):
+                coding_queue.decide(p.pk, self.accountant, decision='code', vat_rate=14, brick=bad)
+        TaxGpcBrick.objects.create(code='10000001', name_ar='فئة')
+        with self.assertRaisesMessage(services.TaxRuleError, 'الفئة غير موجودة في قائمة GPC'):
+            coding_queue.decide(p.pk, self.accountant, decision='code', vat_rate=14, brick='10009999')
+        self.assertFalse(TaxCodingDecision.objects.exists())
+
+    def test_suggestion_used_when_none_passed(self):
+        med = self.profile('Medicine', tax=0)
+        d = coding_queue.decide(med.pk, self.accountant, decision='code', vat_rate=0)
+        self.assertEqual((d.brick, d.brick_source), ('10005845', 'medicine'))
+        cos = self.profile()
+        self.ai(cos, confidence='low')     # one person, one item: any suggestion they confirm
+        d = coding_queue.decide(cos.pk, self.accountant, decision='code', vat_rate=14)
+        self.assertEqual((d.brick, d.brick_source), ('10000777', 'ai'))
+
+    def test_passed_brick_equal_to_suggestion_keeps_its_source(self):
+        p = self.profile('Medicine', tax=0)
+        d = coding_queue.decide(p.pk, self.accountant, decision='code', vat_rate=0, brick='10005845')
+        self.assertEqual(d.brick_source, 'medicine')
+
+    def test_keep_out_needs_no_brick(self):
+        p = self.profile()
+        d = coding_queue.decide(p.pk, self.accountant, decision='keep_out')
+        self.assertEqual((d.brick, d.brick_source), ('', ''))
+
+    def test_api_single_decide_with_brick(self):
+        p = self.profile()
+        r = self.api.post(QUEUE + 'decide/', {'itemcodes': [p.softech_itemcode], 'decision': 'code', 'vat_rate': 14},
+                          format='json')
+        self.assertEqual((r.status_code, r.data['detail']), (400, 'اختر فئة GPC للصنف'))
+        r = self.api.post(QUEUE + 'decide/', {'itemcodes': [p.softech_itemcode], 'decision': 'code', 'vat_rate': 14,
+                                              'brick': BRICK}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(TaxCodingDecision.objects.get(profile=p).brick, BRICK)
+
+    # ── bulk ─────────────────────────────────────────────────────────────────────────────────────────
+    def test_bulk_takes_learned_or_high_ai_skips_the_rest(self):
+        med = self.profile('Medicine', tax=0)
+        high, medium, low, none = (self.profile() for _ in range(4))
+        self.ai(high, confidence='high')
+        self.ai(medium, confidence='medium')
+        self.ai(low, confidence='low')
+        codes = [x.softech_itemcode for x in (med, high, medium, low, none)]
+        decided, skipped = coding_queue.decide_many(codes, self.accountant, decision='code')
+        self.assertEqual(decided, [med.softech_itemcode, high.softech_itemcode])
+        self.assertEqual({x['itemcode']: x['why'] for x in skipped},
+                         {c: 'الفئة تحتاج تأكيداً' for c in codes[2:]})
+        self.assertEqual(TaxCodingDecision.objects.get(profile=high).brick_source, 'ai')
+        self.assertEqual(TaxCodingDecision.objects.get(profile=med).brick, '10005845')
+
+    def test_bulk_keep_out_ignores_bricks(self):
+        a, b = self.profile(), self.profile()
+        decided, skipped = coding_queue.decide_many([a.softech_itemcode, b.softech_itemcode], self.accountant,
+                                                    decision='keep_out')
+        self.assertEqual((len(decided), skipped), (2, []))
+
+    # ── set_brick ────────────────────────────────────────────────────────────────────────────────────
+    def test_set_brick_on_s1_decision_without_reopening(self):
+        p = self.profile()
+        TaxCodingDecision.objects.create(profile=p, decision='code', vat_rate=14)   # decided in S1, no brick
+        d = coding_queue.set_brick(p.pk, self.admin, '10002222')
+        self.assertEqual((d.decision, d.brick, d.brick_source), ('code', '10002222', 'person'))
+        ev = TaxAuditEvent.objects.get(action='coding_brick_set', entity_id=p.softech_itemcode)
+        self.assertEqual((ev.before['brick'], ev.after['brick']), ('', '10002222'))
+        coding_queue.set_brick(p.pk, self.admin, '10003333')     # can change again
+        self.assertEqual(TaxCodingDecision.objects.get(profile=p).brick, '10003333')
+
+    def test_set_brick_refusals(self):
+        p = self.profile()
+        with self.assertRaisesMessage(services.TaxRuleError, 'الفئة تُسجَّل لصنف قراره «يُكوَّد» فقط'):
+            coding_queue.set_brick(p.pk, self.admin, BRICK)
+        coding_queue.decide(p.pk, self.accountant, decision='keep_out')
+        with self.assertRaisesMessage(services.TaxRuleError, 'الفئة تُسجَّل لصنف قراره «يُكوَّد» فقط'):
+            coding_queue.set_brick(p.pk, self.admin, BRICK)
+        q = self.profile()
+        coding_queue.decide(q.pk, self.accountant, decision='code', vat_rate=14, brick=BRICK)
+        with self.assertRaisesMessage(services.TaxRuleError, 'كود الفئة 8 أرقام'):
+            coding_queue.set_brick(q.pk, self.admin, '12')
+        TaxCodeRequest.objects.create(profile=q, item_code=f'EG-1-{q.softech_itemcode}', parent_code=BRICK,
+                                      code_name='x', code_name_ar='x', active_from=date(2026, 1, 1),
+                                      environment='preprod')
+        coding_queue.set_brick(q.pk, self.admin, '10002222')      # a test-system request does not lock it
+        TaxCodeRequest.objects.create(profile=q, item_code=f'EG-1-{q.softech_itemcode}', parent_code=BRICK,
+                                      code_name='x', code_name_ar='x', active_from=date(2026, 1, 1),
+                                      environment='production')
+        with self.assertRaisesMessage(services.TaxRuleError, 'طُلب كود الصنف من المصلحة بالفعل — لا تتغير الفئة'):
+            coding_queue.set_brick(q.pk, self.admin, '10003333')
+        self.assertEqual(TaxCodingDecision.objects.get(profile=q).brick, '10002222')
+
+    def test_brick_api_and_viewer_403(self):
+        from apps.tests.factories import make_user
+        from apps.users.models import RoleModuleAccess
+        from core.middleware import module_access
+        p = self.profile()
+        TaxCodingDecision.objects.create(profile=p, decision='code', vat_rate=14)
+        TaxGpcBrick.objects.create(code='10002222', name_ar='كريمات')
+        r = self.api.post(QUEUE + 'brick/', {'itemcode': p.softech_itemcode, 'brick': '10002222'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual((r.data['brick'], r.data['brick_source'], r.data['brick_name']),
+                         ('10002222', 'person', 'كريمات'))
+        r = self.api.post(QUEUE + 'brick/', {'itemcode': p.softech_itemcode, 'brick': '10009999'}, format='json')
+        self.assertEqual((r.status_code, r.data['detail']), (400, 'الفئة غير موجودة في قائمة GPC'))
+        self.assertEqual(self.api.post(QUEUE + 'brick/', {'itemcode': '999999', 'brick': BRICK},
+                                       format='json').status_code, 404)
+        RoleModuleAccess.objects.update_or_create(role='viewer', module='tax_invoicing', action='view',
+                                                  defaults={'is_allowed': True})
+        RoleModuleAccess.objects.filter(role='viewer', module='tax_invoicing').exclude(action='view').delete()
+        module_access.clear_cache()
+        viewer, _, _ = make_user('viewer_br', role='viewer', branch=self.branch)
+        vc = APIClient()
+        vc.force_authenticate(viewer)
+        self.assertEqual(vc.post(QUEUE + 'brick/', {'itemcode': p.softech_itemcode, 'brick': '10002222'},
+                                 format='json').status_code, 403)
+        self.assertEqual(vc.post(QUEUE + 'suggest/', {'itemcodes': [p.softech_itemcode]},
+                                 format='json').status_code, 403)
+
+    # ── suggest (ask the AI again) ───────────────────────────────────────────────────────────────────
+    def test_suggest_refused_when_switch_off(self):
+        p = self.profile()
+        with mock.patch('apps.tax_invoicing.gpc_ai.suggest_one') as ask:
+            r = self.api.post(QUEUE + 'suggest/', {'itemcodes': [p.softech_itemcode]}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data['detail'], 'اقتراح الفئة بالذكاء الاصطناعي متوقف — فعّله من الإعدادات أولاً')
+        ask.assert_not_called()
+
+    @override_settings(TAX_GPC_AI_ENABLED=True)
+    def test_suggest_asks_each_item_up_to_20(self):
+        p, med = self.profile(), self.profile('Medicine', tax=0)
+        r = self.api.post(QUEUE + 'suggest/', {'itemcodes': [str(i) for i in range(21)]}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(self.api.post(QUEUE + 'suggest/', {'itemcodes': []}, format='json').status_code, 400)
+
+        def fake(profile):
+            if profile.pk == med.pk:
+                return None
+            return self.ai(profile, confidence='medium')
+        with mock.patch('apps.tax_invoicing.gpc_ai.suggest_one', side_effect=fake) as ask:
+            r = self.api.post(QUEUE + 'suggest/', {'itemcodes': [p.softech_itemcode, med.softech_itemcode, '999999']},
+                              format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(ask.call_count, 2)
+        self.assertEqual([(a['itemcode'], a['brick'], a['confidence']) for a in r.data['asked']],
+                         [(p.softech_itemcode, '10000777', 'medium')])
+        self.assertEqual({s['itemcode']: s['why'] for s in r.data['skipped']},
+                         {med.softech_itemcode: 'للصنف فئة معروفة أو هو دواء — لا حاجة للسؤال',
+                          '999999': 'صنف غير معروف'})
+        self.assertFalse(TaxCodingDecision.objects.exists())    # asking never decides
+
+    # ── rows ─────────────────────────────────────────────────────────────────────────────────────────
+    def test_rows_show_suggestion_and_confirmed_brick(self):
+        TaxGpcBrick.objects.create(code='10000777', name_ar='كريمات البشرة')
+        TaxGpcBrick.objects.create(code='10000888', name_en='Lotions')
+        TaxGpcBrick.objects.create(code='10005845', name_ar='أدوية')
+        TaxGpcBrick.objects.create(code=BRICK, name_ar='أخرى')
+        cos, med, bare = self.profile(), self.profile('Medicine', tax=0), self.profile()
+        self.ai(cos, confidence='medium', second='10000888')
+        r = self.row(cos)
+        self.assertEqual((r['brick'], r['brick_name'], r['brick_source'], r['brick_confidence'], r['brick_reason'],
+                          r['brick_second'], r['brick_second_name']),
+                         ('10000777', 'كريمات البشرة', 'ai', 'medium', 'كريم للبشرة', '10000888', 'Lotions'))
+        r = self.row(med)
+        self.assertEqual((r['brick'], r['brick_name'], r['brick_source'], r['brick_confidence']),
+                         ('10005845', 'أدوية', 'medicine', ''))
+        r = self.row(bare)
+        self.assertEqual((r['brick'], r['brick_source'], r['own_brick']), ('', '', ''))
+        coding_queue.decide(cos.pk, self.accountant, decision='code', vat_rate=14, brick=BRICK)
+        r = self.row(cos)
+        self.assertEqual((r['brick'], r['brick_name'], r['brick_source'], r['brick_confidence'], r['brick_reason']),
+                         (BRICK, 'أخرى', 'person', '', ''))
+        api_row = [x for x in self.api.get(QUEUE).data['rows'] if x['itemcode'] == cos.softech_itemcode][0]
+        self.assertEqual(api_row['brick_source'], 'person')
+
+    def test_own_sheet_brick_shown_beside_family_suggestion(self):
+        for _ in range(3):
+            q = self.profile(family='Creams')
+            TaxCodingDecision.objects.create(profile=q, decision='code', brick='10000777')
+        p = self.profile(family='Creams', gpc_code='10000999')
+        r = self.row(p)
+        self.assertEqual((r['brick'], r['brick_source'], r['own_brick']), ('10000777', 'decisions', '10000999'))
+        same = self.profile(gpc_code='10000999')          # its own brick is the suggestion: nothing extra
+        r = self.row(same)
+        self.assertEqual((r['brick'], r['brick_source'], r['own_brick']), ('10000999', 'sheet', ''))
+
+    def test_constant_queries_with_bricks(self):
+        TaxGpcBrick.objects.create(code='10000777', name_ar='كريمات')
+
+        def batch(k):
+            for _ in range(k):
+                fam = self.profile(family='Creams')
+                TaxCodingDecision.objects.create(profile=fam, decision='code', brick='10000777', vat_rate=14)
+                self.ai(self.profile(), confidence='low')
+                self.profile('Medicine', tax=0)
+                self.profile(gpc_code='10000999')
+        batch(1)
+        for _ in range(2):
+            self.profile(family='Creams')
+        with CaptureQueriesContext(connection) as small:
+            n_small = len(coding_queue.rows())
+        batch(6)
+        with CaptureQueriesContext(connection) as big:
+            n_big = len(coding_queue.rows())
+        self.assertGreater(n_big, n_small)
         self.assertEqual(len(small), len(big))
