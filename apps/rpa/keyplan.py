@@ -46,13 +46,44 @@ def format_field(line, field: str) -> str:
 _TOKEN = re.compile(r'\{\{\}|\{\}\}|\{[^{}]+\}|.', re.S)
 
 
+def _norm_token(tok: str) -> str:
+    if tok == '{{}':
+        return '{'
+    if tok == '{}}':
+        return '}'
+    if len(tok) > 1 and tok.startswith('{'):
+        name = (tok[1:-1].split() or [''])[0].upper()
+        if name.startswith('VK_'):
+            name = name[3:]
+        return name.lower() if len(name) == 1 else '{%s}' % name
+    return tok.lower()
+
+
 def _tokens(send: str) -> list:
-    """send_keys tokens; brace names are case-insensitive to the agent and a repeat count is dropped."""
-    out = []
-    for tok in _TOKEN.findall(send):
-        if len(tok) > 1 and tok.startswith('{') and tok not in ('{{}', '{}}'):
-            tok = '{%s}' % (tok[1:-1].split() or [''])[0].upper()
-        out.append(tok)
+    """Canonical send_keys tokens, so equivalent spellings compare equal.
+
+    Brace names are upper-cased with any repeat count and VK_ prefix dropped; single-character
+    braces and letters collapse to the bare lower-case character; `^(ab)` flattens to `^a ^b`.
+    """
+    raw = _TOKEN.findall(send)
+    out, i = [], 0
+    while i < len(raw):
+        if raw[i] in ('+', '^', '%'):
+            j = i
+            while j < len(raw) and raw[j] in ('+', '^', '%'):
+                j += 1
+            mods = raw[i:j]
+            if j < len(raw) and raw[j] == '(' and ')' in raw[j:]:
+                end = raw.index(')', j)
+                for ch in raw[j + 1:end]:
+                    out.extend(mods + [_norm_token(ch)])
+                i = end + 1
+                continue
+            out.extend(mods)
+            i = j
+            continue
+        out.append(_norm_token(raw[i]))
+        i += 1
     return out
 
 

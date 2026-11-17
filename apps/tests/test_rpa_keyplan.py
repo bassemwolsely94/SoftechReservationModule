@@ -5,7 +5,7 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from apps.rpa.keyplan import build_keyplan, format_field, to_send_keys
+from apps.rpa.keyplan import _tokens, build_keyplan, format_field, to_send_keys
 from apps.rpa.models import RpaDocument, RpaJob, RpaLine, RpaRecipe, RpaScreen
 from apps.tests.factories import make_branch
 from apps.users.models import StaffProfile
@@ -180,3 +180,21 @@ class KeyplanTests(TestCase):
             RpaLine.objects.filter(document=self.doc).update(itemcode=bad)
             with self.assertRaises(ValueError):
                 build_keyplan(self.doc, mode='dry_run')
+
+    def test_equivalent_spellings_tokenise_identically(self):
+        base = _tokens('^s')
+        for spelling in ('^{s}', '^S', '^(s)', '^{S}'):
+            self.assertEqual(_tokens(spelling), base, spelling)
+        self.assertEqual(_tokens('{VK_F10}'), _tokens('{f10 2}'))
+
+    def test_dry_run_refuses_equivalent_spellings_of_save_key(self):
+        # Recipe cells are escaped literals unless written in DataLoad form, so use that form.
+        for spelling in (r'\{^}s', r'\{^}S', r'\{^}\{s}', r'\{^}\{S}'):
+            self._set(save_keys=[KEYS(r'\{^}s')], line_cells=[KEYS(spelling)])
+            with self.assertRaises(ValueError, msg=spelling):
+                build_keyplan(self.doc, mode='dry_run')
+
+    def test_dry_run_refuses_vk_prefixed_save_key(self):
+        self._set(save_keys=[KEYS(r'\{F10}')], line_cells=[KEYS(r'\{VK_F10}')])
+        with self.assertRaises(ValueError):
+            build_keyplan(self.doc, mode='dry_run')
