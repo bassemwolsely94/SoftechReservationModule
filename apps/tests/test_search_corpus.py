@@ -6,7 +6,7 @@ The real-catalog run with timings is `manage.py search_probe`.
 """
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from rest_framework.test import APIClient
 
 from apps.catalog import wildcard as W
@@ -75,7 +75,8 @@ class CorpusTests(TestCase):
         fd, path = tempfile.mkstemp(suffix='.json')
         os.close(fd)
         self.addCleanup(os.remove, path)
-        with mock.patch('apps.catalog.management.commands.search_probe.BUDGET_MS', 10_000):
+        probe = 'apps.catalog.management.commands.search_probe'
+        with mock.patch(f'{probe}.BUDGET_MS', 10_000), mock.patch(f'{probe}.B_BUDGET_MS', 10_000):
             call_command('search_probe', repeat=1, with_temp_indexes=True, json_path=path,
                          stdout=io.StringIO())
         with open(path, encoding='utf-8') as f:
@@ -83,7 +84,7 @@ class CorpusTests(TestCase):
         self.assertEqual(out['missing_indexes'], [])
         self.assertEqual(len(out['records']), 56)
         for r in out['records']:
-            self.assertTrue(r['paths']['A']['ok'] and r['paths']['D']['ok'], r['q'])
+            self.assertTrue(all(r['paths'][p]['ok'] for p in 'ABD'), (r['q'], r['paths']['B']))
             self.assertEqual(set(r['paths']), {'A', 'B', 'C', 'D'})
         self.assertEqual(Item.objects.count(), before)
 
@@ -95,3 +96,100 @@ class CorpusTests(TestCase):
         # a name match with the wrong tier doesn't end the scan: the next top-N row may fit both
         self.assertTrue(check(e, [('AUGMENTIN', 'sound'), ('AUGMACILLIN', 'word')]))
         self.assertFalse(check({'q': 'x', 'expect': '.'}, []))
+
+
+class ProbeGateTests(SimpleTestCase):
+    """search_probe: path B (the item list, rank=engine) is gated; --with-temp-indexes touches
+    only the indexes that are missing or built on another expression."""
+
+    def test_probe_path_b_gated(self):
+        from apps.catalog.management.commands import search_probe as SP
+        self.assertIn('B', SP.GATED)
+        self.assertEqual(SP.budget_ms('B'), 150)
+        self.assertEqual(SP.budget_ms('D'), SP.BUDGET_MS)
+        self.assertIsNone(SP.budget_ms('A'))
+
+    def test_temp_indexes_drop_only_differing(self):
+        import importlib
+        from apps.catalog.management.commands import search_probe as SP
+        m = importlib.import_module('apps.catalog.migrations.0047_fold_marks_narrow')
+        mig = next(s for s in m.CREATE if 'catalog_item_name_fold_prefix' in s)
+
+        def live(expr_from):
+            # what pg_get_indexdef prints for that index (casts, parens, schema, USING btree)
+            return ('CREATE INDEX catalog_item_name_fold_prefix ON public.catalog_item USING btree '
+                    "(regexp_replace(translate(upper((COALESCE(name, ''::character varying))::text), '"
+                    + expr_from + "'::text, 'ااااهيوي'::text), '\\s+'::text, ' '::text, 'g'::text) "
+                    'text_pattern_ops)')
+        v2_from = W.FOLD_FROM + W._TASHKEEL_CHARS
+        v1_from = W.FOLD_FROM + ''.join(map(chr, [0x0640, *range(0x064B, 0x0660), 0x0670,
+                                                  *range(0x06D6, 0x06EE)]))
+        self.assertTrue(SP.indexdef_matches(live(v2_from), mig))
+        self.assertFalse(SP.indexdef_matches(live(v1_from), mig))
+        self.assertFalse(SP.indexdef_matches(live(v2_from).replace("' '::text", "''::text"), mig))
+        sql = SP.index_sql()
+        names = SP.index_names()
+        defs = {n: live(v2_from) if n == 'catalog_item_name_fold_prefix' else None for n in names}
+        drop, create = SP.plan_temp_indexes(defs)
+        self.assertEqual(drop, [])
+        self.assertEqual(create, [n for n in names if n != 'catalog_item_name_fold_prefix'])
+        defs['catalog_item_name_fold_prefix'] = live(v1_from)
+        drop, create = SP.plan_temp_indexes(defs)
+        self.assertEqual(drop, ['catalog_item_name_fold_prefix'])
+        self.assertEqual(create, names)
+        self.assertEqual(len(sql), len(names))
+
+
+class ProbeLiveIndexTests(TestCase):
+    """On the test DB (catalog migrations applied) every search index matches its migration:
+    --with-temp-indexes would drop and lock nothing."""
+
+    def test_no_index_differs_after_migrate(self):
+        from django.db import connection
+        if connection.vendor != 'postgresql':
+            self.skipTest('PostgreSQL only')
+        from apps.catalog.management.commands import search_probe as SP
+        self.assertEqual(SP.plan_temp_indexes(SP.live_indexdefs()), ([], []))
+
+
+class Migration0047LockWindowTests(TestCase):
+    """catalog 0047 builds the new fold indexes under temporary names FIRST (SHARE lock: reads go
+    on), and only then drops the old ones (ACCESS EXCLUSIVE) and renames — so the exclusive lock
+    never spans the four builds. Both directions end on the final names."""
+
+    def mig(self):
+        import importlib
+        return importlib.import_module('apps.catalog.migrations.0047_fold_marks_narrow')
+
+    def test_builds_before_the_exclusive_part(self):
+        m = self.mig()
+        for sql in (m.SQL, m.REVERSE):
+            kinds = ['create' if s.startswith('CREATE') else 'rename' if s.startswith('ALTER')
+                     else 'drop_tmp' if s.endswith(m.TMP) else 'drop' for s in sql]
+            self.assertEqual(kinds, ['drop_tmp'] * 4 + ['create'] * 4 + ['drop'] * 4 + ['rename'] * 4)
+            # every build goes to a temporary name; the old (final) names are dropped only after
+            self.assertTrue(all(m.TMP + ' ON ' in s for s in sql if s.startswith('CREATE')))
+            self.assertEqual(sql[8:12], m.DROP)
+            self.assertEqual(sql[12:], m.RENAME)
+        # search_probe reads the FINAL-name statements
+        from apps.catalog.management.commands import search_probe as SP
+        self.assertEqual(SP.index_names()[:4], list(m.NAMES))
+        self.assertTrue(all(m.TMP not in s for s in m.CREATE))
+
+    def test_reverse_then_forward_on_the_test_db(self):
+        from django.db import connection
+        if connection.vendor != 'postgresql':
+            self.skipTest('PostgreSQL only')
+        from apps.catalog.management.commands import search_probe as SP
+        m = self.mig()
+        with connection.cursor() as c:
+            for s in m.REVERSE:
+                c.execute(s)
+            live = SP.live_indexdefs()
+            for name, v1 in zip(m.NAMES, m.CREATE_V1):
+                self.assertTrue(SP.indexdef_matches(live[name], v1), name)
+            for s in m.SQL:
+                c.execute(s)
+            c.execute('SELECT count(*) FROM pg_class WHERE relname = ANY(%s)', [[n + m.TMP for n in m.NAMES]])
+            self.assertEqual(c.fetchone()[0], 0)
+        self.assertEqual(SP.plan_temp_indexes(SP.live_indexdefs()), ([], []))

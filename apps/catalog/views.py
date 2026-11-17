@@ -2,10 +2,15 @@ from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
+from django.core.exceptions import EmptyResultSet
 from django.db import models
+from django.contrib.postgres.fields import ArrayField
+from django.db.models import F, Func, IntegerField, Value
 from .models import Category, Item, ItemStock, exclude_unsellable, unsellable_q
-from .serializers import CategorySerializer, ItemSerializer, ItemStockSerializer, ItemSearchSerializer
+from .serializers import (CategorySerializer, ItemSerializer, ItemStockSerializer, ItemSearchSerializer,
+                          engine_tier_fields)
 from .wildcard import WildcardSearchFilter
 from core.errors import public_error
 from core.permissions import RouteModulePermission  # round 2, D6
@@ -182,11 +187,89 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Category.objects.all().order_by('name')
 
 
+# ── /api/items/?search=…&rank=engine (S2): the item list in the search engine's order ──
+# Most engine rows one list request ranks (item_search limit). The list's other filters run
+# INSIDE the engine (item_search `base`), so the cap cuts after them. Real catalog 2026-11-16,
+# fold indexes on, page_size=10: p95 ≤ 67 ms per query, «tab» (a full 500-row set) 64 ms.
+ENGINE_LIST_CAP = 500
+# The dropdown picker (page 1, page_size ≤ PICKER_PAGE_SIZE) shows 10 rows and no count: it
+# ranks only the engine's name window (wildcard.NAME_WINDOW = 60) — far cheaper than 500.
+PICKER_PAGE_SIZE = 10
+
+
+def engine_list_cap(request) -> int:
+    """item_search `limit` for this rank=engine request: the name window for the dropdown
+    (page 1, page_size ≤ 10 — its `count` is then capped too, the dropdown shows none), else
+    ENGINE_LIST_CAP (the Ctrl+F1 modal, deeper pages)."""
+    from .wildcard import NAME_WINDOW
+    p = request.query_params
+    try:
+        size = int(p.get('page_size') or 0)
+    except (TypeError, ValueError):
+        size = 0
+    if p.get('page', '1') in ('', '1') and 0 < size <= PICKER_PAGE_SIZE:
+        return NAME_WINDOW
+    return ENGINE_LIST_CAP
+
+
+def engine_search_text(request):
+    """The search text when this list request asks for the engine order — `rank=engine` and a
+    `search` with at least one non-wildcard character — else None (the plain list)."""
+    from .wildcard import parse
+    p = request.query_params
+    if p.get('rank') != 'engine':
+        return None
+    q = (p.get('search') or '').strip()
+    return q if parse(q)['segments'] else None
+
+
+class ItemListPagination(PageNumberPagination):
+    """The global page size; `page_size` is read only on the engine path (`rank=engine`), so
+    every other caller of /api/items/ pages exactly as before."""
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+    def get_page_size(self, request):
+        if engine_search_text(request) is None:
+            return self.page_size
+        return super().get_page_size(request)
+
+
+class ItemListSearchFilter(WildcardSearchFilter):
+    """The plain wildcard search — or, with `rank=engine`, the engine's set (item_search) in
+    the engine's order. The other filters have already run; a valid `ordering` sorts within
+    the engine set instead (OrderingFilter ran before this backend)."""
+
+    def filter_queryset(self, request, queryset, view):
+        q = engine_search_text(request)
+        if q is None:
+            return super().filter_queryset(request, queryset, view)
+        ids = [i for i, _ in view.engine_tiers(q, base=view.engine_base())]
+        qs = queryset.filter(id__in=ids)
+        if ids and not self._ordering_sent(request, queryset, view):
+            # the engine's position: array_position(ARRAY[ids], id) — one bound array; a
+            # CASE WHEN per id costs ≈45 ms of SQL compiling at 500 ids (measured 2026-11-16)
+            qs = qs.order_by(Func(Value(ids, output_field=ArrayField(models.BigIntegerField())),
+                                  F('id'), function='array_position', output_field=IntegerField()))
+        elif ids:
+            # equal sort values (same price…) must page stably: `id` is the final tiebreak
+            qs = qs.order_by(*qs.query.order_by, 'id')
+        return qs
+
+    @staticmethod
+    def _ordering_sent(request, queryset, view) -> bool:
+        of = filters.OrderingFilter()
+        raw = request.query_params.get(of.ordering_param, '')
+        fields = [f.strip() for f in raw.split(',') if f.strip()]
+        return bool(fields and of.remove_invalid_fields(queryset, fields, view, request))
+
+
 class ItemViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated, RouteModulePermission]
+    pagination_class = ItemListPagination
     # search runs AFTER ordering: its rank (literal text → pattern → any word order) leads,
-    # the chosen sort column orders within each rank
-    filter_backends = [DjangoFilterBackend, filters.OrderingFilter, WildcardSearchFilter]
+    # the chosen sort column orders within each rank. rank=engine: ItemListSearchFilter.
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter, ItemListSearchFilter]
     filterset_fields = ['category', 'requires_fridge', 'medicine_type',
                         'insurance_type', 'item_level', 'is_fast_moving',
                         'has_points', 'is_stockable', 'batch_required',
@@ -202,19 +285,42 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ['name']
 
     def get_queryset(self):
-        from django.db.models import Sum, Value, DecimalField
-        from django.db.models.functions import Coalesce
         qs = Item.objects.filter(is_active=True).prefetch_related(
             'stock_levels__branch', 'category', 'barcodes'
-        ).distinct()  # distinct() required: joining ItemBarcode can produce duplicate rows
+        )
+        if engine_search_text(self.request) is None:
+            qs = qs.distinct()  # distinct() required: joining ItemBarcode can produce duplicate rows
+        # (rank=engine: the search is `id IN (engine ids)` — no barcode join, no duplicates)
+        stock_order = 'total_stock' in self.request.query_params.get('ordering', '')
+        return self._item_filters(qs, for_ordering=stock_order)
+
+    def engine_base(self):
+        """rank=engine: the Items the engine searches inside — the active catalog with every
+        list filter EXCEPT search / ordering (DjangoFilterBackend fields, in_stock, the
+        operational filters), so ENGINE_LIST_CAP cuts after the filters. None when no filter
+        narrows it — the engine's own default base, the exact queries as without filters.
+        in_stock (a SUM … HAVING) goes in as one id sub-select, so the engine's own tier
+        queries stay un-grouped."""
+        plain = Item.objects.filter(is_active=True)
+        qs = DjangoFilterBackend().filter_queryset(
+            self.request, self._item_filters(plain, for_ordering=False), self)
+        if self.request.query_params.get('in_stock') == 'true':
+            return Item.objects.filter(id__in=qs.order_by().values('id'))
+        try:
+            if str(qs.order_by().query) == str(plain.order_by().query):
+                return None
+        except EmptyResultSet:      # a filter that can match nothing: the engine finds nothing
+            pass
+        return qs
+
+    def _item_filters(self, qs, *, for_ordering):
+        """in_stock + the operational filters (shared by the list and the engine base)."""
+        from django.db.models import Sum, Value, DecimalField
+        from django.db.models.functions import Coalesce
         p = self.request.query_params
 
         # Annotate total_stock when ordering by it, or when filtering by in_stock
-        ordering_param = p.get('ordering', '')
-        needs_stock_annotation = (
-            p.get('in_stock') == 'true'
-            or 'total_stock' in ordering_param
-        )
+        needs_stock_annotation = p.get('in_stock') == 'true' or for_ordering
         if needs_stock_annotation:
             qs = qs.annotate(
                 total_stock=Coalesce(
@@ -357,6 +463,26 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
             return ItemSearchSerializer
         return ItemSerializer
 
+    def engine_tiers(self, q, base=None):
+        """wildcard.item_search for this request, once: [(item_id, tier)] best first, inside
+        `base` (engine_base: the list's other filters), capped by engine_list_cap."""
+        if getattr(self, '_engine', None) is None:
+            from apps.catalog.wildcard import item_search
+            self._engine = (q, item_search(q, limit=engine_list_cap(self.request), base=base))
+        return self._engine[1]
+
+    def get_serializer_context(self):
+        """rank=engine: the rows' tiers and matched ingredient names (ItemSearchSerializer)."""
+        ctx = super().get_serializer_context()
+        if getattr(self, '_engine', None) is not None:
+            q, tiers = self._engine
+            ctx['engine_tiers'] = dict(tiers)
+            ing = [i for i, t in tiers if t == 'ingredient']
+            if ing:
+                from apps.catalog.wildcard import ingredient_names
+                ctx['ingredient_names'] = ingredient_names(q, ing)
+        return ctx
+
     @action(detail=True, methods=['get'])
     def stock(self, request, pk=None):
         """
@@ -408,7 +534,7 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
         Search rules = apps/catalog/wildcard.py (the same in every search box):
           * and % = any characters (vol*ren*50*tab* = vol%ren%50%tab), always "contains",
           parts in the order typed, space literal. Tiers (wildcard.item_search): exact
-          code/barcode (+ code prefix), learned memory, the name starts / a word starts /
+          code/barcode (+ code prefix, tier code_prefix), learned memory, the name starts / a word starts /
           contains / any word order (each with literal text first), synonyms (syp → SYRUP),
           Arabic by sound, active ingredient; nothing found → typo-tolerant rows flagged approx
           «تقريبي»; digits inside a code last (never with code_prefix=0).
@@ -470,7 +596,8 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
 def _search_rows(tiers, branch_id, q='') -> list:
     """[(item_id, tier)] from wildcard.item_search → softech-search result dicts, same
     order. Flags for the picker chips: learned «من الذاكرة», sound «بالنطق», approx «تقريبي»,
-    ingredient «المادة الفعالة» (+ ingredient_name), code_part, synonym. `id` = item_id."""
+    ingredient «المادة الفعالة» (+ ingredient_name), code_prefix «بداية الكود», code_part,
+    synonym. `id` = item_id."""
     if not tiers:
         return []
     ids = [i for i, _ in tiers]
@@ -495,14 +622,11 @@ def _search_rows(tiers, branch_id, q='') -> list:
             'name_scientific': item.name_scientific, 'barcode': item.barcode,
             'pack_price': float(item.pack_price), 'unit_price': float(item.unit_price),
             'requires_fridge': item.requires_fridge, 'medicine_type': item.medicine_type,
-            'source': 'pg_catalog', 'item_id': item.id, 'id': item.id, 'tier': tier,
+            'source': 'pg_catalog', 'item_id': item.id, 'id': item.id,
             'qty_at_branch': stock.get(item.id, 0.0) if branch_id else None,
         }
         row.update(_unit_fields(item))
-        if tier in ('learned', 'sound', 'approx', 'ingredient', 'code_part', 'synonym'):
-            row[tier] = True
-        if tier == 'ingredient':
-            row['ingredient_name'] = ing.get(item.id, '')
+        row.update(engine_tier_fields(tier, ing.get(item.id, '')))
         rows.append(row)
     return rows
 

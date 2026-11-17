@@ -288,6 +288,25 @@ def warm_search_index():
         logging.getLogger("elrezeiky.shortage").exception("warm_search_index failed")
 
 
+def warm_after_init(*, poll: float = 0.1, timeout: float = 120.0, sleep=None):
+    """The start-up thread's target (apps.shortage.apps): wait until the app registry is ready
+    — ready() runs before it is, and a query then gets Django's "Accessing the database during
+    app initialization" warning — then warm the sound index. Gives up after `timeout` seconds.
+    Always closes this thread's DB connections. Never raises."""
+    from django.apps import apps as registry
+    from django.db import connections
+    sleep = sleep or time.sleep
+    try:
+        deadline = time.monotonic() + timeout
+        while not registry.ready:
+            if time.monotonic() >= deadline:
+                return
+            sleep(poll)
+        warm_search_index()
+    finally:
+        connections.close_all()
+
+
 def _connect_signals():
     """A catalog item saved / deleted through the ORM refreshes the sound index on the next
     lookup (bulk SOFTECH syncs are covered by INDEX_TTL)."""
