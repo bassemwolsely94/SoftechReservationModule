@@ -214,3 +214,42 @@ class RunTests(Base):
         with mock.patch(COMPLETE, return_value=({}, '')):
             tasks._run_gpc_ai_suggest()
         self.assertEqual(TaxBrickSuggestion.objects.get().source, 'none')
+
+
+@ON
+class OutageTests(Base):
+    def test_provider_outage_stops_after_five_and_items_stay_pending(self):
+        profiles = [self.item(name=f'S{i} SHAMPOO', value=100 + i) for i in range(8)]
+        with mock.patch(COMPLETE, return_value=({}, '')) as complete:
+            counts = gpc_ai.run()
+        self.assertEqual(complete.call_count, gpc_ai.OUTAGE_STREAK)
+        self.assertEqual(counts, {'none': 5, 'stopped': 'provider'})
+        self.assertEqual({p.pk for p in gpc_ai.pending()}, {p.pk for p in profiles})
+
+    def test_a_real_answer_resets_the_streak(self):
+        for i in range(7):
+            self.item(name=f'S{i} SHAMPOO', value=100 - i)
+        answers = iter([({}, '')] * 4 + [({'brick': HAIR}, 'm')] + [({}, '')] * 2)
+        with mock.patch(COMPLETE, side_effect=lambda item, prompt: next(answers)):
+            counts = gpc_ai.run()
+        self.assertEqual(counts, {'none': 6, 'suggested': 1})
+
+    def test_answered_none_stays_fresh(self):
+        p = self.item()
+        with mock.patch(COMPLETE, return_value=({'brick': '99999999'}, 'm')):
+            gpc_ai.suggest_one(p)
+        self.assertEqual(gpc_ai.pending(), [])
+
+    def test_medicine_linked_by_item_id_not_pending(self):
+        p = self.item(mtype='Medicine')
+        other = TaxItemProfile.objects.create(softech_itemcode='ZLINK', item=p.item)
+        EtaReconUncodedItem.objects.create(system='production', softech_branchcode='01', day=dt.date(2026, 11, 1),
+                                           itemcode='ZLINK', docs=1, qty=1, value=Decimal(999))
+        self.assertNotIn(other.pk, [x.pk for x in gpc_ai.pending()])
+
+    def test_shortlist_failure_labelled(self):
+        p = self.item()
+        with mock.patch.object(gpc_ai, 'shortlist', side_effect=ValueError('x')), mock.patch(COMPLETE) as complete:
+            row = gpc_ai.suggest_one(p)
+        complete.assert_not_called()
+        self.assertEqual(row.error, f'{gpc_ai.SHORTLIST_ERROR} (ValueError)')

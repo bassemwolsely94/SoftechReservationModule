@@ -28,12 +28,14 @@ SEGMENTS = ('50', '51', '53')          # food/beverage, healthcare, beauty/perso
 DEFINITION_CHARS = 160
 REASON_CHARS = 120
 FRESH_DAYS = 30
+OUTAGE_STREAK = 5        # this many "no answer" in a row = the providers are down; stop the run
 CONFIDENCE = ('high', 'medium', 'low')
-_WORD = re.compile(r'[a-z]{4,}')
+_WORD = re.compile(r'[a-z]{4,}')     # GS1 names are English: an Arabic-only name gets no word matches (family bricks only)
 _STOP = {'with', 'from', 'tabs', 'tablet', 'tablets', 'caps', 'capsule', 'capsules', 'syrup', 'other', 'items'}
 
 NO_ITEM = 'الصنف غير مربوط بالكتالوج'
 NO_SHORTLIST = 'لا توجد فئات مرشحة'
+SHORTLIST_ERROR = 'تعذر بناء القائمة المرشحة'
 NO_ANSWER = 'لم يرد مزود الذكاء الاصطناعي'
 NOT_LISTED = 'الفئة المقترحة ليست في القائمة المرشحة'
 NOT_KNOWN = 'الفئة المقترحة غير موجودة في قائمة GPC'
@@ -152,8 +154,12 @@ def suggest_one(profile):
         return _store(profile, error=NO_ITEM)
     try:
         bricks = shortlist(item)
-        if not bricks:
-            return _store(profile, error=NO_SHORTLIST)
+    except Exception as exc:     # our own data, not the AI: say so, and keep the job going
+        logger.warning('gpc_ai: shortlist for item %s: %s', profile.softech_itemcode, type(exc).__name__)
+        return _store(profile, error=f'{SHORTLIST_ERROR} ({type(exc).__name__})')
+    if not bricks:
+        return _store(profile, error=NO_SHORTLIST)
+    try:
         from apps.enrichment.ai_extractor import complete_json
         raw, model = complete_json(item, build_prompt(item, bricks))
     except Exception as exc:     # a provider / network failure must not stop the job
@@ -184,7 +190,7 @@ def suggest_one(profile):
 
 def pending(limit=200):
     """Queue items worth asking, biggest uncoded value first: no learned brick, not a medicine, not kept out,
-    and no suggestion asked in the last 30 days."""
+    and no suggestion asked in the last 30 days. A "no answer" (provider down) is not an answer: asked again next run."""
     from apps.catalog.models import Item
 
     sold, profiles, _ = coding_queue.candidates()
@@ -193,25 +199,36 @@ def pending(limit=200):
                    .values_list('profile_id', flat=True))
     fresh = set(TaxBrickSuggestion.objects.filter(profile__in=[p.pk for p in profiles],
                                                   asked_at__gte=timezone.now() - dt.timedelta(days=FRESH_DAYS))
-                .values_list('profile_id', flat=True))
+                .exclude(error__startswith=NO_ANSWER).values_list('profile_id', flat=True))
     learned = gpc_learn.learned(profiles)
     codes = [p.softech_itemcode for p in profiles]
-    kinds = dict(Item.objects.filter(Q(pk__in=[p.item_id for p in profiles if p.item_id]) | Q(softech_id__in=codes))
-                 .values_list('softech_id', 'medicine_type_name'))
+    items = list(Item.objects.filter(Q(pk__in=[p.item_id for p in profiles if p.item_id]) | Q(softech_id__in=codes))
+                 .values_list('pk', 'softech_id', 'medicine_type_name'))
+    by_pk, by_code = {pk: kind for pk, _, kind in items}, {code: kind for _, code, kind in items}
+
+    def kind(p):     # the linked item first, as coding_queue.catalog_item
+        return by_pk.get(p.item_id) if p.item_id else by_code.get(p.softech_itemcode)
+
     left = [p for p in profiles if p.pk not in kept_out and p.pk not in fresh and p.pk not in learned
-            and kinds.get(p.softech_itemcode) != 'Medicine']
+            and kind(p) != 'Medicine']
     left.sort(key=lambda p: (-(sold[p.softech_itemcode]['value'] or 0), p.softech_itemcode))
     return left[:limit]
 
 
 def run(limit=200):
-    """Ask for up to `limit` items. Stops when the switch is off (also between items). Returns counts."""
+    """Ask for up to `limit` items. Stops when the switch is off (also between items), and after OUTAGE_STREAK
+    "no answer" results in a row (counts['stopped'] = 'provider'): the provider chain never raises, it waits and
+    returns nothing, so an outage would otherwise grind through every item. Returns counts."""
     if not enabled():
         return {'skipped': 'switch_off'}
     counts = Counter()
+    streak = 0
     for profile in pending(limit):
+        if streak >= OUTAGE_STREAK:
+            counts['stopped'] = 'provider'
+            break
         if not enabled():
-            counts['stopped'] += 1
+            counts['stopped'] = 'switch_off'
             break
         try:
             row = suggest_one(profile)
@@ -225,4 +242,5 @@ def run(limit=200):
             counts['suggested'] += 1
         else:
             counts['none'] += 1
+        streak = streak + 1 if row is not None and row.error.startswith(NO_ANSWER) else 0
     return dict(counts)
