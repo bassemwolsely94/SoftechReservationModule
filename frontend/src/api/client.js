@@ -3337,6 +3337,13 @@ export const taxInvoicingApi = {
   reconUncoded:    (params)       => api.get('/tax-invoicing/history/recon/uncoded/', { params }),
   reconUncodedExport: (params)    => api.get('/tax-invoicing/history/recon/uncoded/export/', { params, responseType: 'blob' }),
   codesAddFromCatalog: ()        => api.post('/tax-invoicing/codes/add-from-catalog/', {}),
+  // Production coding queue (batch S1): the owner decides per item "code" or "keep out"
+  codingQueue:     (params = {})  => api.get('/tax-invoicing/codes/queue/', { params }),
+  codingDecide:    (data)         => api.post('/tax-invoicing/codes/queue/decide/', data),
+  codingReopen:    (data)         => api.post('/tax-invoicing/codes/queue/reopen/', data),
+  codingSetBrick:  (data)         => api.post('/tax-invoicing/codes/queue/brick/', data),
+  codingSuggest:   (data)         => api.post('/tax-invoicing/codes/queue/suggest/', data),
+  etaHolds:        (params = {})  => api.get('/tax-invoicing/codes/eta-holds/', { params }),
   codesSend:       (data)         => api.post('/tax-invoicing/codes/send/', data),
   codesRefresh:    (data)         => api.post('/tax-invoicing/codes/refresh/', data),
   codesCheck:      (data)         => api.post('/tax-invoicing/codes/check/', data),

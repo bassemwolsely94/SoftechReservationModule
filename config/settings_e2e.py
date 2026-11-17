@@ -113,6 +113,10 @@ E2E_ITEMS = [
     {'softech_id': 'E2E001', 'name': 'E2E PARACETAMOL 500MG 20 TAB', 'pack_price': '25.00', 'unit_price': '12.50'},
     {'softech_id': 'E2E002', 'name': 'E2E VITAMIN C 1000MG 10 TAB', 'pack_price': '40.00', 'unit_price': '40.00'},
 ]
+# Network stock for the call-centre drawer flow (full audit C01): E2E001 only at the second branch.
+E2E_STOCK = [('E2E001', '992', 'B01', '7')]
+# A customer the call-centre flow looks up by phone (a number no real customer uses).
+E2E_CUSTOMER = {'name': 'عميل الاختبار E2E', 'phone': '01099990001'}
 # POS ready uses the offline price (no SOFTECH read); it is the default, pinned here.
 POS_LIVE_PRICING = False
 

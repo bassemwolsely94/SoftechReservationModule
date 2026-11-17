@@ -106,7 +106,7 @@ class PosSearchApiTests(TestCase):
         live = [{'softech_id': 'LIVE1', 'name': 'NEWDRUG 10MG', 'name_scientific': '',
                  'barcode': '', 'pack_price': 1.0, 'unit_price': 1.0,
                  'requires_fridge': False, 'medicine_type': '', 'source': 'softech',
-                 'item_id': None, 'tier': 'ordered', 'qty_at_branch': 0.0}]
+                 'item_id': None, 'tier': 'contains', 'qty_at_branch': 0.0}]
         with patch('apps.catalog.views._softech_live_search', return_value=live):
             r = self.client_.get(URL, {'q': 'NEWDRUG', 'branch_id': self.a.id, 'network': '1'})
         row = next(x for x in r.data['results'] if x['softech_id'] == 'LIVE1')

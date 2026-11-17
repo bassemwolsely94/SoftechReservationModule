@@ -906,6 +906,8 @@ TAX_ERECEIPT_SUBMIT_ENABLED = config('TAX_ERECEIPT_SUBMIT_ENABLED', default=Fals
 TAX_ETA_CODING_ENABLED = config('TAX_ETA_CODING_ENABLED', default=False, cast=bool)
 TAX_ETA_PRODUCTION_ALLOWED = config('TAX_ETA_PRODUCTION_ALLOWED', default=False, cast=bool)
 TAX_ALLOW_MOCK_SIGNER = config('TAX_ALLOW_MOCK_SIGNER', default=False, cast=bool)
+# Nightly AI proposal of a GPC brick for uncoded items (apps/tax_invoicing/gpc_ai.py). Sends item names only.
+TAX_GPC_AI_ENABLED = config('TAX_GPC_AI_ENABLED', default=False, cast=bool)
 # ETA history mirror: reading each ETA system with its own login (never sends). Production uses an ERP
 # registration made for us, never Invoicer's. Each system has its own switch, default off.
 TAX_ETA_READ_PREPROD_ENABLED = config('TAX_ETA_READ_PREPROD_ENABLED', default=False, cast=bool)
@@ -927,7 +929,7 @@ if _RUNNING_TESTS:
     TAX_ETA_CLIENT_ID = TAX_ETA_CLIENT_SECRET = TAX_ETA_CA_BUNDLE = ''
     TAX_ETA_SUBMIT_ENABLED = TAX_ERECEIPT_SUBMIT_ENABLED = TAX_ETA_CODING_ENABLED = TAX_ETA_PRODUCTION_ALLOWED = False
     TAX_SIGNER_CLASS, TAX_ALLOW_MOCK_SIGNER = 'apps.tax_invoicing.signing.NotConfiguredSigner', False
-    TAX_ETA_READ_PREPROD_ENABLED = TAX_ETA_READ_PRODUCTION_ENABLED = False
+    TAX_ETA_READ_PREPROD_ENABLED = TAX_ETA_READ_PRODUCTION_ENABLED = TAX_GPC_AI_ENABLED = False
     TAX_ETA_READ_PREPROD_CLIENT_ID = TAX_ETA_READ_PREPROD_CLIENT_SECRET = ''
     TAX_ETA_READ_PRODUCTION_CLIENT_ID = TAX_ETA_READ_PRODUCTION_CLIENT_SECRET = ''
 

@@ -189,8 +189,12 @@ def _decide(sale, matches):
 
 
 def coded_items():
-    """SOFTECH item codes that have an ETA code today. A receipt carries only these items' lines."""
-    return set(TaxItemProfile.objects.exclude(eta_code='').values_list('softech_itemcode', flat=True))
+    """SOFTECH item codes coded in the owner's bulk EGS sheet: a receipt carries only these items' lines (Invoicer
+    uploads only sheet-coded items). Until S3's sheet versions exist, the 13-Nov workbook import is the sheet (white,
+    with a code, coding_env empty); S3 replaces the source. Codes requested through our own screens (coding_env set)
+    are not in the sheet and do not count."""
+    return set(TaxItemProfile.objects.filter(list_status=TaxItemProfile.LIST_WHITE, coding_env='')
+               .exclude(eta_code='').values_list('softech_itemcode', flat=True))
 
 
 def _reason(outcome, sale, eta_total, coded):

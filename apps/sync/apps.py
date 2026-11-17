@@ -1,5 +1,14 @@
 from django.apps import AppConfig
 
+# Management commands that need no web-process start-up work (scheduler, warm caches).
+# Shared with apps.shortage.apps so the two never drift apart.
+SKIP_COMMANDS = frozenset({
+    "migrate", "makemigrations", "collectstatic", "compress",
+    "shell", "dbshell", "createsuperuser", "check", "test",
+    "inspectdb", "dumpdata", "loaddata",
+    "run_sync", "sync_finance",
+})
+
 
 class SyncConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
@@ -33,13 +42,7 @@ class SyncConfig(AppConfig):
             return
 
         # Skip commands that don't need any of this.
-        _skip = {
-            "migrate", "makemigrations", "collectstatic", "compress",
-            "shell", "dbshell", "createsuperuser", "check", "test",
-            "inspectdb", "dumpdata", "loaddata",
-            "run_sync", "sync_finance",
-        }
-        if cmd in _skip:
+        if cmd in SKIP_COMMANDS:
             return
 
         # Prevent running in Django's dev-server reloader parent.
