@@ -8,7 +8,9 @@ from apps.branches.models import Branch
 from apps.catalog.models import Item, ItemSupplierLink
 from apps.config.models import SystemSetting
 from apps.invoices.models import VendorProfile
-from apps.rpa.models import (BuyList, BuyListLine, PortalAccount, PortalBasket, SupplierPortal)
+from apps.procurement.models import PurchaseLine
+from apps.rpa.models import (BuyList, BuyListLine, PortalAccount, PortalBasket, PortalJob,
+                             SupplierPortal)
 from apps.rpa.portal import buylist as bl
 from apps.rpa.portal import jobs
 from apps.users.models import RoleModuleAccess
@@ -43,7 +45,8 @@ class JobTests(TestCase):
             key='pharma_overseas', defaults={'supplier_code': '565'})
         cls.account = PortalAccount.objects.create(portal=cls.portal, label='main')
         cls.vendor = VendorProfile.objects.create(name='PO', softech_personcode='565')
-        cls.items = [Item.objects.create(softech_id=f'PJ{n}', name=f'item {n}', is_active=True)
+        cls.items = [Item.objects.create(softech_id=f'PJ{n}', name=f'item {n}', is_active=True,
+                            pack_price=Decimal('10'))
                      for n in range(25)]
 
     def _list(self, n=3, others=0):
@@ -180,3 +183,53 @@ class JobTests(TestCase):
         jobs.cancel_job(job, staff=self.buyer, reason='x')
         for a in ('created', 'approved', 'cancelled'):
             self.assertTrue(AuditLog.objects.filter(action=f'rpa_portal_job_{a}').exists(), a)
+
+    def _buy(self, item, cost_total=500, qty=10, day=None):
+        from django.utils import timezone
+        return PurchaseLine.objects.create(
+            branch_code='100', supplier_code='565', doc_number=f'D{item.pk}{cost_total}',
+            doc_date=day or timezone.localdate(), item_code=item.softech_id, doccode='10',
+            net_qty=qty, net_value=cost_total, public_price=100)
+
+    def test_four_eyes_uses_purchase_cost(self):
+        # unit cost 50 (500/10); 2 lines x qty 2 = 200. pack_price alone would give 40.
+        SystemSetting.objects.create(key='portal_four_eyes_above', label='x', value='100',
+                                     value_type='decimal')
+        for it in self.items[:2]:
+            self._buy(it)
+        job = self._job(n=2)
+        with mock.patch(PATCH, _preview(price=0)):   # preview line values are not used
+            with self.assertRaises(PermissionDenied):
+                jobs.approve_job(job, staff=self.buyer)
+            jobs.approve_job(job, staff=self.boss)
+        job.refresh_from_db()
+        self.assertEqual(job.estimated_value, Decimal('200'))
+
+    def test_four_eyes_required_when_unpriced(self):
+        SystemSetting.objects.create(key='portal_four_eyes_above', label='x', value='1000000',
+                                     value_type='decimal')
+        Item.objects.filter(pk=self.items[0].pk).update(pack_price=0)
+        job = self._job(n=2)
+        with mock.patch(PATCH, _preview()):
+            with self.assertRaises(PermissionDenied):
+                jobs.approve_job(job, staff=self.buyer)
+            jobs.approve_job(job, staff=self.boss)
+
+    def test_second_job_for_same_lines_refused(self):
+        b = self._list(n=2)
+        jobs.create_job(b, portal=self.portal, account=self.account, staff=self.buyer)
+        with self.assertRaises(jobs.JobError):
+            jobs.create_job(b, portal=self.portal, account=self.account, staff=self.buyer)
+
+    def test_approve_refused_when_lines_in_other_approved_job(self):
+        b = self._list(n=2)
+        first = jobs.create_job(b, portal=self.portal, account=self.account, staff=self.buyer)
+        second = PortalJob.objects.create(portal=self.portal, account=self.account, buylist=b,
+                                          created_by=self.buyer)   # bypasses create_job
+        with mock.patch(PATCH, _preview()):
+            jobs.approve_job(first, staff=self.buyer)
+            with self.assertRaises(jobs.JobError):
+                jobs.approve_job(second, staff=self.buyer)
+        second.refresh_from_db()
+        self.assertEqual(second.status, 'draft')
+        self.assertEqual(second.baskets.count(), 0)
