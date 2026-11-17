@@ -230,3 +230,57 @@ class EngineCapAfterFiltersTests(TestCase):
                 # (page 2 of an empty mocked set answers 404 — only the engine call matters here)
                 self.c.get(URL, {'search': 'tabx', 'rank': 'engine', **params})
                 self.assertEqual(m.call_args.kwargs['limit'], cap, params)
+
+
+class FilteredSoundAndTypoTests(TestCase):
+    """S3 Task 1 — a filter in the Ctrl+F1 modal narrows the «بالنطق» (sound) and «تقريبي»
+    (approx) tiers too: the sound index drops items outside the filter BEFORE it keeps its best
+    candidates, so a filtered item ranked below the whole catalog's cut is still found."""
+
+    QUERY_AR = 'بنادول'          # sounds like PANADOL (skeleton BNDL)
+
+    def setUp(self):
+        P.reset_index()
+        cache.delete('catalog:softech_search_down')
+        self.cat_a = Category.objects.create(softech_id='FA1', name='Crowd')
+        self.cat_b = Category.objects.create(softech_id='FB1', name='Target')
+        # more perfect sound-alikes than the index keeps per lookup (60) and than `limit` …
+        for i in range(65):
+            Item.objects.create(softech_id=f'FS{i:03d}', name='PANADOL TAB', category=self.cat_a,
+                                pack_price=10, is_active=True)
+        # … and one weaker (still ≥ 0.75) sound-alike, the only item in category B
+        self.target = Item.objects.create(softech_id='FT001', name='BANADORL TAB', category=self.cat_b,
+                                          pack_price=10, is_active=True)
+        self.user = get_user_model().objects.create_user(username='snd', password='x')
+        self.c = APIClient()
+        self.c.force_authenticate(self.user)
+
+    def test_filtered_sound_match_outside_global_top(self):
+        from apps.catalog.wildcard import item_search
+        # the whole catalog's sound tier does not reach the target …
+        self.assertNotIn(self.target.id, [i for i, _ in item_search(self.QUERY_AR)])
+        # … the filtered one does, as a sound row
+        got = item_search(self.QUERY_AR, base=Item.objects.filter(category=self.cat_b))
+        self.assertEqual(got, [(self.target.id, 'sound')])
+
+    def test_filtered_sound_match_through_the_modal_list(self):
+        r = self.c.get(URL, {'search': self.QUERY_AR, 'rank': 'engine', 'category': self.cat_b.id,
+                             'page_size': 30})
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        rows = r.json()['results']
+        self.assertEqual([x['id'] for x in rows], [self.target.id])
+        self.assertTrue(rows[0].get('sound'), rows[0])
+
+    def test_filtered_typo_match_outside_global_top(self):
+        from apps.catalog.wildcard import item_search
+        with mock.patch('apps.shortage.matching.find_best_matches', return_value=[]):
+            self.assertNotIn(self.target.id, [i for i, _ in item_search('panadool')])
+            got = item_search('panadool', base=Item.objects.filter(category=self.cat_b))
+        self.assertEqual(got, [(self.target.id, 'approx')])
+
+    def test_filter_still_drops_items_outside_it(self):
+        from apps.catalog.wildcard import item_search
+        crowd = set(Item.objects.filter(category=self.cat_a).values_list('id', flat=True))
+        got = item_search(self.QUERY_AR, base=Item.objects.filter(category=self.cat_a), limit=5)
+        self.assertEqual(len(got), 5)
+        self.assertTrue(all(i in crowd and t == 'sound' for i, t in got), got)
