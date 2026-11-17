@@ -25,7 +25,7 @@
 //   updatedAt: ISO, webPort, capMs, slowMs, branches: {A, B},
 //   skipped: [{route, reason}],                        // :param / public routes not visited
 //   users: {
-//     [key]: { role, shape, branch, at: ISO, durationMs, shellApis: {desk|m|rider: [apiPath]},
+//     [key]: { role, shape, branch, at: ISO, durationMs, relogins, shellApis: {desk|m|rider: [apiPath]},
 //       rows: { [route]: { status: 'ok'|'slow'|'refused'|'blank'|'stuck'|'unhandled403'|'crash', raw: <gotoSettled status>,
 //                          served: 'data'|'refused'|'none', ms, finalUrl,
 //                          menu: true|false|null, menuPath, inherited: bool,
@@ -38,7 +38,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { test } from '@playwright/test'
-import { UAT_USERS, stateFile, safeKey, BRANCH_A, BRANCH_B } from '../lib/users.js'
+import { UAT_USERS, stateFile, safeKey, BRANCH_A, BRANCH_B, userByKey, PASSWORD } from '../lib/users.js'
 import { expectedFor, can, reference } from '../lib/expected.js'
 import { gotoSettled } from '../lib/page.js'
 import { finding } from '../lib/findings.js'
@@ -113,6 +113,31 @@ function judge({ status, served, menu, inherited, knownGap }) {
   return { verdict: 'pass', reason: menu === null ? 'no menu entry' : (refused ? 'hidden + refused' : 'shown + renders') }
 }
 
+// Session + backend guard (same approach as W4's exposure/alive.js keepSignedIn/guardBackend).
+// Access tokens live 1 h and refresh tokens rotate + blacklist, while each user's sweep runs well
+// over an hour from one saved login: without this, later screens open on /login and are recorded
+// as "refused", passing with nothing checked. Before every visit: /api/auth/me/ must be 200,
+// else refresh, else sign in again through the login API (cookies, so the SPA picks it up). A
+// backend that does not answer (or 5xx on me/) throws: the user's test fails and its rows are not
+// written, so a down server is never counted as refusals.
+const HDR = { 'X-Requested-With': 'XMLHttpRequest' }
+async function meStatus(page) {
+  try { return (await page.request.get('/api/auth/me/', { headers: HDR, timeout: 15_000 })).status() } catch { return 0 }
+}
+async function ensureSignedIn(page, key, when) {
+  let s = await meStatus(page)
+  if (s === 200) return false
+  if (s === 0 || s >= 500) throw new Error(`UAT backend not answering ${when} (status ${s || 'refused'}); this run does not count`)
+  await page.request.post('/api/auth/refresh/', { headers: HDR }).catch(() => null)
+  if ((s = await meStatus(page)) !== 200) {
+    const r = await page.request.post('/api/auth/login/', {
+      headers: HDR, data: { username: userByKey(key).username, password: PASSWORD } }).catch(() => null)
+    if ((s = await meStatus(page)) !== 200) throw new Error(`${key}: could not sign in again ${when} (login ${r?.status() ?? 'failed'}, me ${s}); this run does not count`)
+  }
+  await page.context().storageState({ path: stateFile(key) })
+  return true
+}
+
 for (const u of users) {
   test.describe(`visibility: ${u.key}`, () => {
     test.use({ storageState: stateFile(u.key) })
@@ -123,9 +148,9 @@ for (const u of users) {
       const { routes, skipped } = sweepRoutes(reference(branchLetter(u)))
       const list = routes.filter(r => !onlyRoutes.length || onlyRoutes.some(p => r.route === p || r.route.startsWith(p + '/')))
 
-      let meRes = await page.request.get('/api/auth/me/')
-      if (meRes.status() !== 200) { await page.goto('/'); meRes = await page.request.get('/api/auth/me/') }
-      const me = meRes.status() === 200 ? await meRes.json() : {}
+      await ensureSignedIn(page, u.key, 'at start')
+      const me = await (await page.request.get('/api/auth/me/', { headers: HDR })).json()
+      let relogins = 0
       const ctx = { role: u.role, user: me, perms: expectedFor(u.key).perms }
 
       // Every /api/ answer to a request made during this visit (gotoSettled keeps only the errors).
@@ -142,8 +167,17 @@ for (const u of users) {
       // Pass 1: visit everything.
       const raw = []
       for (const { route } of list) {
+        if (await ensureSignedIn(page, u.key, `before ${route}`)) relogins++
         visit++; seen = []
-        const r = await gotoSettled(page, route, { capMs: CAP_MS, slowMs: SLOW_MS })
+        let r = await gotoSettled(page, route, { capMs: CAP_MS, slowMs: SLOW_MS })
+        // Landed on /login: the session lapsed mid-visit. Sign in again and visit once more; a
+        // second /login is a lost session (throws), never a "refused" row.
+        if (/^\/login\/?$/.test(r.finalUrl) && route !== '/login') {
+          if (!(await ensureSignedIn(page, u.key, `after ${route}`))) throw new Error(`${u.key}: ${route} sent a signed-in user to /login; this run does not count`)
+          relogins++; visit++; seen = []
+          r = await gotoSettled(page, route, { capMs: CAP_MS, slowMs: SLOW_MS })
+          if (/^\/login\/?$/.test(r.finalUrl)) throw new Error(`${u.key}: session lost again on ${route}; this run does not count`)
+        }
         const text = await page.locator('main, #root').first().innerText().catch(() => '')
         const wanted = route.split('?')[0]
         let status = r.status
@@ -217,7 +251,7 @@ for (const u of users) {
       }
 
       writeMatrix(u.key, { role: u.role, shape: u.shape, branch: u.branch, at: new Date().toISOString(),
-                           durationMs: Date.now() - t0, shellApis: Object.fromEntries(Object.entries(shell).map(([k, v]) => [k, [...v]])),
+                           durationMs: Date.now() - t0, relogins, shellApis: Object.fromEntries(Object.entries(shell).map(([k, v]) => [k, [...v]])),
                            rows }, skipped)
     })
   })
