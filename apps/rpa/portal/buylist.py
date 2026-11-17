@@ -151,6 +151,8 @@ def create_from_rows(rows, *, staff, file_sha256):
 def pick(line, supplier_code, *, staff):
     if line.buylist.status != 'open':
         raise BuyListError('القائمة مغلقة')
+    from apps.rpa.portal.jobs import assert_line_not_frozen
+    assert_line_not_frozen(line)
     line.chosen_supplier = str(supplier_code)
     line.save(update_fields=['chosen_supplier'])
     return line
