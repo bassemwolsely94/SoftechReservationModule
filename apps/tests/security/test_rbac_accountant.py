@@ -48,7 +48,7 @@ class AccountantMatrixTests(TestCase):
         # crews: users 0057 seeds an explicit denial row for every role but admin).
         later = importlib.import_module('apps.users.migrations.0055_data_health_module')
         self.assertIn('accountant', later.ROLES)
-        self.assertEqual(set(mig.MODULES) | {'hr_attendance', 'data_health', 'tax_invoicing', 'crews'}, set(ALL_MODULES))
+        self.assertEqual(set(mig.MODULES) | {'hr_attendance', 'data_health', 'tax_invoicing', 'crews', 'rpa'}, set(ALL_MODULES))
         from apps.users.models import RoleModuleAccess
         self.assertEqual(RoleModuleAccess.objects.filter(role='accountant', module='tax_invoicing').count(), len(ALL_ACTIONS))
         self.assertEqual(mig.ACTIONS, ALL_ACTIONS)
