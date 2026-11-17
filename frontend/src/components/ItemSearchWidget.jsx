@@ -36,6 +36,7 @@ import AdvancedItemSearchModal from './AdvancedItemSearchModal'
 import PosResultRow from '../pos/search/PosResultRow'
 import PosItemPreview from '../pos/search/PosItemPreview'
 import StockAge from '../pos/search/StockAge'
+import { isExactishRow, isExactCodeRow } from '../pos/search/autoAdd'
 import BarcodeScanner, { cameraAvailable } from './BarcodeScanner'
 import useFeatures from '../hooks/useFeatures'
 
@@ -306,7 +307,10 @@ export default function ItemSearchWidget({
     setScanFor(null)
     const exact = results.filter(it => matchesCode(it, scanFor))
     if (exact.length === 1) handleSelect(exact[0])
-    else if (!exact.length && results.length === 1) handleSelect(results[0])
+    // a single row the scanned code didn't match field-by-field: the POS takes it only when the
+    // server says it is an exact code / barcode hit (safety rule 4 — never a fuzzy row); the
+    // default widget's rows carry no tier and keep the old single-result pick
+    else if (!exact.length && results.length === 1 && (!isPos || isExactCodeRow(results[0]))) handleSelect(results[0])
     else if (!results.length) setScanMiss(scanFor)
   }, [scanFor, typedQ, resultsStale, results])   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -324,7 +328,10 @@ export default function ItemSearchWidget({
     if (typedQ !== enterFor) { setEnterFor(null); return }       // typing went on → drop it
     if (resultsStale) return
     setEnterFor(null)
-    if (results[0]) handleSelect(results[0])
+    // only a plain code / name hit is added unseen (safety rule 4): a sound / approx /
+    // ingredient / synonym / learned row is shown highlighted and waits for the cashier's Enter
+    if (isExactishRow(results[0])) handleSelect(results[0])
+    else if (results.length) { setSel(0); setOpen(true) }
   }, [enterFor, typedQ, resultsStale, results])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // keep the highlighted row in view while arrowing

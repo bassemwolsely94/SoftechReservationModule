@@ -1,4 +1,4 @@
-"""
+r"""
 python manage.py probe_ssb_comm
 
 Read-only inspection of the SOFTECH SSB9 replication engine:
