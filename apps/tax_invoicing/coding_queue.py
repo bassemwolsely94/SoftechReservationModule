@@ -160,12 +160,9 @@ def _who(user):
     return (user.get_full_name() or user.username) if user is not None else ''
 
 
-def rows(*, recent_days=None, premark=None, decided=None, q=''):
-    """Items sold on ETA production receipts without a code that still have no production code, one dict each.
-    A constant number of queries whatever the number of items. `premark` 'none' matches no suggestion; `decided`
-    'yes' / 'no'. Unsorted: the view sorts and pages."""
-    from apps.catalog.models import Item
-
+def candidates(*, recent_days=None):
+    """The queue's items: (sold {itemcode: {'value', 'docs', 'last_day'}}, profiles, best ETA usage by itemcode) for
+    items sold on ETA production receipts without a code that still have no production code. Constant queries."""
     sales = EtaReconUncodedItem.objects.filter(system='production')
     if recent_days is not None:
         sales = sales.filter(day__gte=timezone.localdate() - dt.timedelta(days=recent_days))
@@ -175,7 +172,16 @@ def rows(*, recent_days=None, premark=None, decided=None, q=''):
 
     on_eta, usages = _on_eta_production(p.softech_itemcode for p in profiles)
     best = {code: _best_usage(us) for code, us in usages.items()}
-    profiles = [p for p in profiles if p.softech_itemcode not in on_eta]
+    return sold, [p for p in profiles if p.softech_itemcode not in on_eta], best
+
+
+def rows(*, recent_days=None, premark=None, decided=None, q=''):
+    """Items sold on ETA production receipts without a code that still have no production code, one dict each.
+    A constant number of queries whatever the number of items. `premark` 'none' matches no suggestion; `decided`
+    'yes' / 'no'. Unsorted: the view sorts and pages."""
+    from apps.catalog.models import Item
+
+    sold, profiles, best = candidates(recent_days=recent_days)
     codes = [p.softech_itemcode for p in profiles]
 
     items = list(Item.objects.filter(Q(pk__in=[p.item_id for p in profiles if p.item_id]) | Q(softech_id__in=codes)))

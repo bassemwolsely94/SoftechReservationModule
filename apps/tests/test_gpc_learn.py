@@ -131,6 +131,21 @@ class LearnedTests(Fixture, TestCase):
         self.assertEqual(got[p.pk]['source'], 'sheet')
         self.assertNotIn(q.pk, got)
 
+    def test_unknown_brick_dropped_once_list_loaded(self):
+        for _ in range(3):
+            self.decided(A)          # A is not on the loaded list → falls through to the sheet brick
+        target = self.profile(gpc_code=C)
+        stray = self.profile(family='Lone', gpc_code=B)    # not on the list either → nothing
+        med = self.profile(family='Lone2', mtype='Medicine')
+        TaxGpcBrick.objects.create(code=C)
+        TaxGpcBrick.objects.create(code=gpc_learn.MEDICINE_BRICK)
+        got = gpc_learn.learned([target, stray, med])
+        self.assertEqual((got[target.pk]['code'], got[target.pk]['source']), (C, 'sheet'))
+        self.assertNotIn(stray.pk, got)
+        self.assertEqual(got[med.pk]['source'], 'medicine')
+        TaxGpcBrick.objects.filter(code=gpc_learn.MEDICINE_BRICK).delete()
+        self.assertNotIn(med.pk, gpc_learn.learned([med]))
+
     def test_empty(self):
         self.assertEqual(gpc_learn.learned([]), {})
 
@@ -142,6 +157,7 @@ class LearnedTests(Fixture, TestCase):
         many = few + [self.profile(family=f'F{i}', mtype='Medicine') for i in range(10)]
         few = list(TaxItemProfile.objects.filter(pk__in=[p.pk for p in few]))
         many = list(TaxItemProfile.objects.filter(pk__in=[p.pk for p in many]))
+        TaxGpcBrick.objects.bulk_create([TaxGpcBrick(code=c) for c in (A, B, gpc_learn.MEDICINE_BRICK)])
         with CaptureQueriesContext(connection) as small:
             gpc_learn.learned(few)
         with CaptureQueriesContext(connection) as big:

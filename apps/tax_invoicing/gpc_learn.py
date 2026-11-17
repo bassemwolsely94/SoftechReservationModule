@@ -7,7 +7,8 @@ Sources, first hit wins:
 3. sheet — the item's own brick from the owner's sheet (TaxItemProfile.gpc_code, see `load_sheet_bricks`);
 4. medicine — a medicine with nothing better gets the medicines brick.
 A family source counts only with at least MIN_ITEMS items and the top brick on at least MIN_SHARE of them, so a
-mixed family gives nothing and the next source is tried. A suggestion is only shown; a person confirms the brick.
+mixed family gives nothing and the next source is tried. Once a brick list is loaded, a brick not on it is
+skipped the same way (one batched lookup). A suggestion is only shown; a person confirms the brick.
 The query count does not grow with the number of profiles.
 """
 from collections import Counter, defaultdict
@@ -17,7 +18,7 @@ from django.db.models import F, OuterRef, Subquery
 from apps.catalog.models import Item
 
 from .gpc import BRICK
-from .models import EtaCodeUsage, TaxCodingDecision
+from .models import EtaCodeUsage, TaxCodingDecision, TaxGpcBrick
 
 MIN_ITEMS = 3
 MIN_SHARE = 0.8
@@ -62,6 +63,15 @@ def _eta_counts(families):
     return by
 
 
+def _known_filter(codes):
+    """A test for 'is this brick on the loaded list' over `codes`, in two queries whatever their number;
+    everything passes while no list is loaded (as gpc.known)."""
+    if not TaxGpcBrick.objects.exists():
+        return lambda code: True
+    on_list = set(TaxGpcBrick.objects.filter(code__in=list(codes)).values_list('code', flat=True))
+    return on_list.__contains__
+
+
 def learned(profiles):
     """{profile_id: {'code', 'source', 'share', 'n', 'basis'}} for the profiles that have a learned brick."""
     profiles = list(profiles)
@@ -75,6 +85,8 @@ def learned(profiles):
     by_eta = _eta_counts(families) if families else {}
     tops = {'decisions': {f: _top(c) for f, c in by_decision.items()},
             'eta': {f: _top(c) for f, c in by_eta.items()}}
+    ok = _known_filter({t[0] for src in tops.values() for t in src.values() if t}
+                       | {p.gpc_code for p in profiles if BRICK.match(p.gpc_code or '')} | {MEDICINE_BRICK})
 
     out = {}
     for p in profiles:
@@ -83,13 +95,13 @@ def learned(profiles):
         hit = None
         for source in ('decisions', 'eta'):
             top = tops[source].get(family) if family else None
-            if top:
+            if top and ok(top[0]):
                 brick, share, n = top
                 hit = {'code': brick, 'source': source, 'share': share, 'n': n, 'basis': f'العائلة {family}'}
                 break
-        if hit is None and BRICK.match(p.gpc_code or ''):
+        if hit is None and BRICK.match(p.gpc_code or '') and ok(p.gpc_code):
             hit = {'code': p.gpc_code, 'source': 'sheet', 'share': 1.0, 'n': 1, 'basis': 'ملف الأكواد'}
-        if hit is None and item.get('medicine_type_name') == 'Medicine':
+        if hit is None and item.get('medicine_type_name') == 'Medicine' and ok(MEDICINE_BRICK):
             hit = {'code': MEDICINE_BRICK, 'source': 'medicine', 'share': 1.0, 'n': 0, 'basis': 'دواء'}
         if hit:
             out[p.pk] = hit
