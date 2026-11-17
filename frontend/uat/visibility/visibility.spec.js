@@ -127,7 +127,14 @@ async function meStatus(page) {
 async function ensureSignedIn(page, key, when) {
   let s = await meStatus(page)
   if (s === 200) return false
-  if (s === 0 || s >= 500) throw new Error(`UAT backend not answering ${when} (status ${s || 'refused'}); this run does not count`)
+  // The shared server runs under a watchdog that restarts it within seconds: ride out a short gap,
+  // but a backend down for over a minute fails the test (reported, never counted as refusals).
+  for (let waited = 0; (s === 0 || s >= 500) && waited < 60_000; waited += 5_000) {
+    await page.waitForTimeout(5_000)
+    s = await meStatus(page)
+  }
+  if (s === 200) return false
+  if (s === 0 || s >= 500) throw new Error(`UAT backend not answering ${when} for over a minute (status ${s || 'refused'}); this run does not count`)
   await page.request.post('/api/auth/refresh/', { headers: HDR }).catch(() => null)
   if ((s = await meStatus(page)) !== 200) {
     const r = await page.request.post('/api/auth/login/', {
