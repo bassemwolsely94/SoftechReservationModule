@@ -30,6 +30,25 @@ def report_with_retry(client, doc_id, payload, attempts=4, sleep=time.sleep):
     return False
 
 
+# The server answers a heartbeat with 409 when the document is no longer ours (lease ran out, a
+# person took it over), 404 when it was never ours and 401 when the device was revoked: stop typing.
+LEASE_LOST_CODES = (401, 404, 409)
+
+
+def heartbeat_loop(client, doc_id, alive, stop, lost, interval=HEARTBEAT_SECONDS):
+    """Renew the lease until `alive` is set. If the server says the lease is gone, set `lost` and
+    `stop` (the same stop the operator's Esc sets), so the runner halts before the next keystroke."""
+    while not alive.wait(interval):
+        try:
+            client.heartbeat(doc_id)
+        except Exception as e:  # noqa: BLE001 - a network blip is retried on the next beat
+            code = getattr(getattr(e, "response", None), "status_code", None)
+            if code in LEASE_LOST_CODES:
+                lost.set()
+                stop.set()
+                return
+
+
 def run_one(client, claim, mode="dry_run"):
     from .driver import Win32Driver
     from .overlay import Overlay
@@ -40,14 +59,10 @@ def run_one(client, claim, mode="dry_run"):
     overlay = Overlay(stop)
     alive = threading.Event()
 
-    def beat():
-        while not alive.wait(HEARTBEAT_SECONDS):
-            try:
-                client.heartbeat(doc_id)
-            except Exception:
-                pass
+    lost = threading.Event()
     # heartbeat covers the checklist wait as well as the run
-    threading.Thread(target=beat, daemon=True).start()
+    threading.Thread(target=heartbeat_loop, args=(client, doc_id, alive, stop, lost, HEARTBEAT_SECONDS),
+                     daemon=True).start()
 
     def on_shot(i, png):
         try:
@@ -57,9 +72,15 @@ def run_one(client, claim, mode="dry_run"):
     try:
         if not overlay.confirm_checklist(kp["reference"], kp.get("checklist", [])):
             result = {"outcome": "stopped_by_operator", "steps": []}
+        elif lost.is_set():
+            result = {"outcome": "lease_lost", "steps": []}
         else:
             overlay.show_running(kp["reference"])
             result = run_keyplan(kp, Win32Driver(), stop=stop, on_shot=on_shot, mode=mode)
+        # our own stop, not the operator's: say so (a run that already saved keeps "saved" so
+        # the server checks SOFTECH for it)
+        if lost.is_set() and result.get("outcome") == "stopped_by_operator":
+            result = {**result, "outcome": "lease_lost"}
     except Exception as e:  # noqa: BLE001 - keyplan/tk/driver failure
         result = {"outcome": "error", "steps": [
             {"i": -1, "label": "agent", "at": datetime.datetime.now(
