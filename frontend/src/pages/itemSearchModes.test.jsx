@@ -1,7 +1,7 @@
 // S3 Task 4 — call sites hand ItemSearchWidget their selection mode, and a `multi` site turns
 // the ONE onSelect(items[]) into its own per-item add (with its own dedupe).
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 
@@ -16,15 +16,31 @@ vi.mock('../components/ItemSearchWidget', () => ({
 vi.mock('../api/client', () => ({
   default: { get: vi.fn() },
   offersApi: {},
+  catalogIntelApi: {
+    bundles: vi.fn(() => Promise.resolve({ data: [
+      { id: 9, name: 'BOX', discount_type: 'none', is_active: true,
+        items: [{ id: 50, item: 1, item_name: 'ALPHA', quantity: 1 }] },
+    ] })),
+    addBundleItem: vi.fn(() => Promise.resolve({ data: {} })),
+  },
+  recommendationsApi: {},
+  enrichmentApi: {},
+  vouchersApi: { create: vi.fn(() => Promise.resolve({ data: { id: 77 } })) },
+  customersApi: {},
   transfersApi: { create: vi.fn(), submit: vi.fn() },
   branchesApi: { list: vi.fn(() => Promise.resolve({ data: [] })) },
 }))
 vi.mock('../store/authStore', () => ({ default: () => ({ user: { role: 'pharmacist', branch_id: 3 } }) }))
 vi.mock('../components/PhoneAlertToggle', () => ({ default: () => null }))
 vi.mock('../components/ui', () => ({ useToast: () => () => {} }))
+vi.mock('../components/CustomerSearchWidget', () => ({ default: () => null }))
+vi.mock('./vouchers/GiftCouponsTab', () => ({ default: () => null }))
 
 const { ItemPick } = await import('./OffersPage')
 const { default: MobileNewTransferPage } = await import('./mobile/MobileNewTransferPage')
+const { BundlesTab } = await import('./CatalogIntelligencePage')
+const { CreateVoucherModal } = await import('./VouchersPage')
+const { catalogIntelApi, vouchersApi } = await import('../api/client')
 
 const lastOnSelect = () => widget.props[widget.props.length - 1].onSelect
 const A = { id: 1, item_id: 1, softech_id: '101', name: 'ALPHA' }
@@ -75,5 +91,50 @@ describe('mobile new transfer (list)', () => {
     expect(screen.getByText('ALPHA')).toBeTruthy()
     expect(screen.getByText('BETA')).toBeTruthy()
     expect(screen.getAllByText(/^كود:/)).toHaveLength(2)
+  })
+})
+
+const withClient = (ui) => (
+  <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <MemoryRouter>{ui}</MemoryRouter>
+  </QueryClientProvider>
+)
+
+describe('catalog-intelligence bundle items (multi)', () => {
+  afterEach(() => { cleanup(); widget.props = []; catalogIntelApi.addBundleItem.mockClear() })
+
+  it('POSTs only the new items, once each: an existing member and a repeat are skipped', async () => {
+    render(withClient(<BundlesTab />))
+    fireEvent.click(await screen.findByText('BOX'))
+    expect(screen.getByTestId('item-box').dataset.mode).toBe('multi')
+    act(() => lastOnSelect()([A, B, C, B]))      // A is already in the bundle; B is picked twice
+    await waitFor(() => expect(catalogIntelApi.addBundleItem).toHaveBeenCalledTimes(2))
+    expect(catalogIntelApi.addBundleItem.mock.calls).toEqual([
+      [9, { item: 2, quantity: 1 }],
+      [9, { item: 3, quantity: 1 }],
+    ])
+  })
+
+  it('a batch of existing members only sends nothing', async () => {
+    render(withClient(<BundlesTab />))
+    fireEvent.click(await screen.findByText('BOX'))
+    act(() => lastOnSelect()([A, A]))
+    await new Promise(r => setTimeout(r, 20))
+    expect(catalogIntelApi.addBundleItem).not.toHaveBeenCalled()
+  })
+})
+
+describe('voucher eligible items (multi)', () => {
+  afterEach(() => { cleanup(); widget.props = []; vouchersApi.create.mockClear() })
+
+  it('adds only new items, once each, to applicable_items', async () => {
+    render(withClient(<CreateVoucherModal onClose={() => {}} onCreate={() => {}} />))
+    expect(screen.getByTestId('item-box').dataset.mode).toBe('multi')
+    act(() => lastOnSelect()([A]))
+    act(() => lastOnSelect()([B, A, B, C]))      // A already applicable; B twice in the batch
+    fireEvent.change(screen.getByPlaceholderText(/مثال: خصم/), { target: { value: 'T' } })
+    fireEvent.click(screen.getByText('✓ إنشاء القسيمة'))
+    await waitFor(() => expect(vouchersApi.create).toHaveBeenCalledTimes(1))
+    expect(vouchersApi.create.mock.calls[0][0].applicable_items).toEqual([1, 2, 3])
   })
 })

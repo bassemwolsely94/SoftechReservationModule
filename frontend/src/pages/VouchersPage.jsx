@@ -135,7 +135,7 @@ function Toast({ toast }) {
 const CustomerPicker = CustomerSearchWidget
 
 // ── Tab 1: Create Voucher Modal ───────────────────────────────────────────────
-function CreateVoucherModal({ onClose, onCreate }) {
+export function CreateVoucherModal({ onClose, onCreate }) {
   const today = new Date().toISOString().slice(0, 10)
   const [form, setForm] = useState({
     title: '', description: '',
