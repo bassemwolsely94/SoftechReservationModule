@@ -1,12 +1,14 @@
-"""RPA job workflow: create (Task 4); approve/cancel are added in Task 5."""
+"""RPA job workflow: create, four-eyes approval of jobs and recipes, cancel."""
 from django.db import transaction
+from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.audit.models import AuditLog
 from core import branch_scope
+from core.permissions import matrix_allows
 from core.upload_safety import sha256_of
 
-from .models import RpaDocument, RpaJob, RpaScreen
+from .models import RpaDocument, RpaJob, RpaRecipe, RpaScreen
 from .sheet import build_lines, parse_issue_sheet
 
 CLOSED_BRANCH_CODE = '110'
@@ -49,3 +51,78 @@ def create_job(*, profile, screen_key, branch, target_branch, store_code, upload
                                'target_branch': target_branch.name if target_branch else ''},
                      note=f'رفع مهمة {screen.title_ar}')
     return job
+
+
+def approve_job(job, profile) -> RpaJob:
+    """Four-eyes: someone other than the uploader approves; freezes the latest approved recipe."""
+    if not matrix_allows(profile, 'rpa', 'approve'):
+        raise PermissionDenied('ليس لديك صلاحية اعتماد مهام الروبوت.')
+    if profile.id == job.created_by_id:
+        raise PermissionDenied('لا يمكنك اعتماد مهمة قمت برفعها أنت.')
+    with transaction.atomic():
+        job = RpaJob.objects.select_for_update().get(pk=job.pk)
+        if job.status != 'uploaded':
+            raise ValidationError({'detail': 'لا يمكن اعتماد هذه المهمة في حالتها الحالية.'})
+        if RpaDocument.objects.filter(job=job, lines__status__in=['unmatched', 'error']).exists():
+            raise ValidationError({'detail': 'توجد أصناف غير مطابقة أو بها خطأ؛ صحّحها قبل الاعتماد.'})
+        recipe = (RpaRecipe.objects.filter(screen_id=job.screen_id, status='approved')
+                  .order_by('-version').first())
+        if recipe is None:
+            raise ValidationError({'detail': 'لا توجد وصفة معتمدة لهذه الشاشة.'})
+        job.recipe = recipe
+        job.status = 'approved'
+        job.approved_by = profile
+        job.approved_at = timezone.now()
+        job.save(update_fields=['recipe', 'status', 'approved_by', 'approved_at'])
+        job.documents.filter(status='pending').update(status='approved')
+        AuditLog.log('rpa_job_approved', user=profile, obj=job,
+                     old_data={'status': 'uploaded'},
+                     new_data={'status': 'approved', 'recipe_id': recipe.id, 'recipe_version': recipe.version},
+                     note=f'اعتماد مهمة {job.screen.title_ar}')
+    return job
+
+
+def cancel_job(job, profile, reason: str) -> RpaJob:
+    reason = (reason or '').strip()
+    if not reason:
+        raise ValidationError({'reason': 'يجب ذكر سبب الإلغاء.'})
+    with transaction.atomic():
+        job = RpaJob.objects.select_for_update().get(pk=job.pk)
+        if job.status in ('cancelled', 'done'):
+            raise ValidationError({'detail': 'لا يمكن إلغاء هذه المهمة في حالتها الحالية.'})
+        if job.documents.filter(status__in=['in_progress', 'posted']).exists():
+            raise ValidationError({'detail': 'لا يمكن الإلغاء: يوجد مستند قيد التنفيذ أو مُرحَّل.'})
+        old_status = job.status
+        job.status = 'cancelled'
+        job.save(update_fields=['status'])
+        job.documents.exclude(status='cancelled').update(status='cancelled')
+        AuditLog.log('rpa_job_cancelled', user=profile, obj=job,
+                     old_data={'status': old_status}, new_data={'status': 'cancelled', 'reason': reason},
+                     note=reason)
+    return job
+
+
+def approve_recipe(recipe, profile) -> RpaRecipe:
+    """Four-eyes on a recipe: an admin other than its importer; the previous approved one retires."""
+    if not profile.is_admin:
+        raise PermissionDenied('اعتماد الوصفة للمدير فقط.')
+    if profile.id == recipe.created_by_id:
+        raise PermissionDenied('لا يمكنك اعتماد وصفة قمت باستيرادها أنت.')
+    with transaction.atomic():
+        recipe = RpaRecipe.objects.select_for_update().get(pk=recipe.pk)
+        if recipe.status != 'draft':
+            raise ValidationError({'detail': 'يمكن اعتماد الوصفة وهي مسودة فقط.'})
+        previous = (RpaRecipe.objects.select_for_update()
+                    .filter(screen_id=recipe.screen_id, status='approved').first())
+        if previous is not None:
+            previous.status = 'retired'
+            previous.save()          # through the guard; approved -> retired is the allowed move
+        recipe.status = 'approved'
+        recipe.approved_by = profile
+        recipe.approved_at = timezone.now()
+        recipe.save()
+        AuditLog.log('rpa_recipe_approved', user=profile, obj=recipe,
+                     old_data={'previous_recipe_id': previous.id if previous else None},
+                     new_data={'recipe_id': recipe.id, 'version': recipe.version},
+                     note=f'اعتماد وصفة {recipe.screen.title_ar} v{recipe.version}')
+    return recipe
