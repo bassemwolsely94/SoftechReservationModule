@@ -57,15 +57,6 @@ GET /api/crews/options/
 
 # ── Round 2, R4 step 2: DETAIL routes of planted records (lines "GET-DETAIL <canonical path>") ───────
 
-# reason: owner decision B-2 (2026-10-30) — a customer can buy at any branch, so a FOUND customer opens
-#   (profile, POS summary, patient profile, loyalty account / SOFTECH balance) whatever their branch;
-#   another branch's phone numbers are masked (phone canary sweep checks that).
-GET-DETAIL /api/customers/987654321/
-GET-DETAIL /api/customers/987654321/patient-profile/
-GET-DETAIL /api/customers/987654321/pos-summary/
-GET-DETAIL /api/loyalty/customers/987654321/account/
-GET-DETAIL /api/loyalty/customers/987654321/softech-balance/
-
 # reason: the detail of configuration lists already shared across branches (list lines above): area
 #   fees, rider roster, shift templates, omni channel accounts, replacement rules, pick zones and item
 #   overrides.
