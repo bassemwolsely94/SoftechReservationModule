@@ -74,6 +74,7 @@ MODULE_BY_PREFIX = {
     'tasks': 'tasks',         # own module since 2026-11-03 (owner); views check it too
     'counselling': 'counselling',   # Project 4 sheets; assistant + cards are POS (see required_access)
     'data-health': 'data_health',   # Stage 5 /data-health; rules, held files, restore = IsAdminRole in the views
+    'marketplace': 'marketplace',   # doc 38 channels; /marketplace/webhooks/ is exempt below (own gate)
     'crews': 'crews',               # الأطقم (spec 2026-11-13 §6.5): view / edit only; company-level
 }
 
@@ -260,6 +261,10 @@ def required(path, method):
     # counts their OWN blind list (the matrix gives salespeople read-only stockcount), and review is
     # for named branch managers + stock_audit management (apps/stockcount/daily/views.py)
     if prefix == 'stockcount' and parts[3:4] == ['daily']:
+        return None
+    # Inbound platform webhooks have no staff session: /api/marketplace/webhooks/ is exempt like
+    # EXEMPT_PREFIXES, own gate: adapter signature check + channel active (apps/marketplace/views.py webhook)
+    if prefix == 'marketplace' and parts[3:4] == ['webhooks']:
         return None
     method = method.upper()
     # Owner answer Q-7e (2026-11-05): removing a LINE from a document (reservation line / image, shortage
