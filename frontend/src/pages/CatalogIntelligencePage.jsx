@@ -15,6 +15,7 @@ import useHelpTab from '../help/useHelpTab'
 import useServerSort from '../hooks/useServerSort'
 import SortTh from '../components/SortTh'
 import { fa } from '../utils/flowArrow'
+import { newBundleItems } from '../utils/bundleItems'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt = (n) => n != null ? Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'
@@ -197,24 +198,10 @@ function VariantGroupsTab() {
 }
 
 // ── Product Bundles Tab ───────────────────────────────────────────────────────
-// multi-add: the picked items not yet in the bundle, once each — an existing member is never
-// POSTed again (BundleItem is unique per bundle + item; the endpoint has no validator for it)
-export function newBundleItems(picked, bundle) {
-  const seen = new Set((bundle?.items || []).map(bi => String(bi.item)))
-  const fresh = []
-  for (const it of picked) {
-    const key = String(it.id)
-    if (seen.has(key)) continue
-    seen.add(key)
-    fresh.push(it)
-  }
-  return fresh
-}
-
 export function BundlesTab() {
   const qc = useQueryClient()
   const [selected, setSelected] = useState(null)
-  const [addErr, setAddErr] = useState('')
+  const [addErr, setAddErr] = useState(null)   // {bundleId, msg}: shown only on that bundle
   const [q, setQ] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [newBundle, setNewBundle] = useState({
@@ -246,7 +233,8 @@ export function BundlesTab() {
     mutationFn: ({ bundleId, item }) =>
       catalogIntelApi.addBundleItem(bundleId, { item: item.id, quantity: 1 }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['bundles'] }),
-    onError: (_e, { item }) => setAddErr(`تعذّرت إضافة «${item.name || item.id}» للباقة`),
+    onError: (_e, { bundleId, item }) =>
+      setAddErr({ bundleId, msg: `تعذّرت إضافة «${item.name || item.id}» للباقة` }),
   })
 
   const removeItemMutation = useMutation({
@@ -385,14 +373,16 @@ export function BundlesTab() {
                 selected={null}
                 mode="multi"
                 onSelect={(picked) => {
-                  setAddErr('')
+                  setAddErr(null)
                   newBundleItems(picked, selectedBundle)
                     .forEach(item => addItemMutation.mutate({ bundleId: selectedBundle.id, item }))
                 }}
                 onClear={() => {}}
                 placeholder="ابحث باسم الصنف أو الكود أو الباركود..."
               />
-              {addErr && <div className="text-xs text-red-600 mt-1">{addErr}</div>}
+              {addErr?.bundleId === selectedBundle.id && (
+                <div className="text-xs text-red-600 mt-1">{addErr.msg}</div>
+              )}
             </div>
 
             {/* Items */}

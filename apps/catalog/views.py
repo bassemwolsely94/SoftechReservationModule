@@ -814,7 +814,17 @@ def add_bundle_item(request, bundle_pk):
     bundle = get_object_or_404(ProductBundle, pk=bundle_pk)
     ser = BundleItemSerializer(data=request.data)
     ser.is_valid(raise_exception=True)
-    ser.save(bundle=bundle)
+    # (bundle, item) is unique: an existing member is a 400, never an IntegrityError 500
+    duplicate = DRFResponse({'detail': 'الصنف موجود بالفعل في الباقة'},
+                            status=status.HTTP_400_BAD_REQUEST)
+    if BundleItem.objects.filter(bundle=bundle, item=ser.validated_data['item']).exists():
+        return duplicate
+    from django.db import IntegrityError, transaction
+    try:
+        with transaction.atomic():           # a racing second add still lands here, not in a 500
+            ser.save(bundle=bundle)
+    except IntegrityError:
+        return duplicate
     return DRFResponse(ser.data, status=status.HTTP_201_CREATED)
 
 

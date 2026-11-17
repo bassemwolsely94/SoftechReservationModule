@@ -20,6 +20,7 @@ vi.mock('../api/client', () => ({
     bundles: vi.fn(() => Promise.resolve({ data: [
       { id: 9, name: 'BOX', discount_type: 'none', is_active: true,
         items: [{ id: 50, item: 1, item_name: 'ALPHA', quantity: 1 }] },
+      { id: 10, name: 'CASE', discount_type: 'none', is_active: true, items: [] },
     ] })),
     addBundleItem: vi.fn(() => Promise.resolve({ data: {} })),
   },
@@ -100,8 +101,15 @@ const withClient = (ui) => (
   </QueryClientProvider>
 )
 
+// let queued mutations, promise callbacks and React updates run to the end before asserting
+const settle = () => act(async () => { await new Promise(r => setTimeout(r, 50)) })
+
 describe('catalog-intelligence bundle items (multi)', () => {
-  afterEach(() => { cleanup(); widget.props = []; catalogIntelApi.addBundleItem.mockClear() })
+  afterEach(() => {
+    cleanup(); widget.props = []
+    catalogIntelApi.addBundleItem.mockReset()
+    catalogIntelApi.addBundleItem.mockImplementation(() => Promise.resolve({ data: {} }))
+  })
 
   it('POSTs only the new items, once each: an existing member and a repeat are skipped', async () => {
     render(withClient(<BundlesTab />))
@@ -109,6 +117,8 @@ describe('catalog-intelligence bundle items (multi)', () => {
     expect(screen.getByTestId('item-box').dataset.mode).toBe('multi')
     act(() => lastOnSelect()([A, B, C, B]))      // A is already in the bundle; B is picked twice
     await waitFor(() => expect(catalogIntelApi.addBundleItem).toHaveBeenCalledTimes(2))
+    await settle()
+    expect(catalogIntelApi.addBundleItem).toHaveBeenCalledTimes(2)
     expect(catalogIntelApi.addBundleItem.mock.calls).toEqual([
       [9, { item: 2, quantity: 1 }],
       [9, { item: 3, quantity: 1 }],
@@ -119,8 +129,21 @@ describe('catalog-intelligence bundle items (multi)', () => {
     render(withClient(<BundlesTab />))
     fireEvent.click(await screen.findByText('BOX'))
     act(() => lastOnSelect()([A, A]))
-    await new Promise(r => setTimeout(r, 20))
+    await settle()
     expect(catalogIntelApi.addBundleItem).not.toHaveBeenCalled()
+  })
+
+  it('a failed add shows its error on that bundle only', async () => {
+    catalogIntelApi.addBundleItem.mockImplementation(() => Promise.reject(new Error('boom')))
+    render(withClient(<BundlesTab />))
+    fireEvent.click(await screen.findByText('BOX'))
+    act(() => lastOnSelect()([B]))
+    expect(await screen.findByText(/تعذّرت إضافة «BETA»/)).toBeTruthy()
+    fireEvent.click(screen.getByText('CASE'))      // another bundle
+    await settle()
+    expect(screen.queryByText(/تعذّرت إضافة/)).toBeNull()
+    fireEvent.click(screen.getByText('BOX'))       // back: the error belongs to BOX
+    expect(await screen.findByText(/تعذّرت إضافة «BETA»/)).toBeTruthy()
   })
 })
 
