@@ -191,8 +191,8 @@ class CodeRequestTests(Fixture, TestCase):
         self.assertEqual(item['itemCode'], 'EG-100200300-50001')
         self.assertEqual(item['parentCode'], '10000454')
         self.assertTrue(item['activeFrom'].endswith('T00:00:00Z'))
-        self.p1.refresh_from_db()
-        self.assertEqual((self.p1.coding_status, self.p1.eta_code), (TaxItemProfile.CODE_PENDING, 'EG-100200300-50001'))
+        self.p1.refresh_from_db()   # a test-system request leaves the item's real coding alone
+        self.assertEqual((self.p1.coding_status, self.p1.eta_code), (TaxItemProfile.CODE_MISSING, ''))
         self.assertTrue(TaxAuditEvent.objects.filter(action='code_request_sent').exists())
         self.assertEqual(TaxCodeRequest.objects.get().environment, 'preprod')
 
@@ -229,7 +229,7 @@ class CodeRequestTests(Fixture, TestCase):
         uncertain.refresh_from_db()
         self.assertEqual((uncertain.status, uncertain.eta_request_id), (TaxCodeRequest.SUBMITTED, '77'))
         uncertain.profile.refresh_from_db()
-        self.assertEqual(uncertain.profile.coding_status, TaxItemProfile.CODE_PENDING)
+        self.assertEqual(uncertain.profile.coding_status, TaxItemProfile.CODE_MISSING)   # test system: item untouched
 
     def test_uncertain_that_eta_never_saw_becomes_resendable(self):
         coding.prepare([self.p1.pk], self.accountant)
@@ -260,9 +260,11 @@ class CodeRequestTests(Fixture, TestCase):
 
     def test_eta_approval_codes_the_item(self):
         row = self._submitted()
-        with mock.patch.object(eta_client.requests, 'get',
+        TaxCodeRequest.objects.filter(pk=row.pk).update(environment='production')   # only a real-system request codes the item
+        with (mock.patch.object(eta_client.requests, 'get',
                                return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Approved',
-                                                             'activeFrom': '2026-11-13T00:00:00Z'}])):
+                                                             'activeFrom': '2026-11-13T00:00:00Z'}])),
+              override_settings(TAX_ETA_ENVIRONMENT='production', TAX_ETA_API_BASE_URL='', TAX_ETA_ID_BASE_URL='')):
             out = coding.refresh(self.admin)
         self.assertEqual(out['approved'], 1)
         self.p1.refresh_from_db()
@@ -271,13 +273,15 @@ class CodeRequestTests(Fixture, TestCase):
 
     def test_eta_rejection_keeps_item_blocked_and_allows_a_new_request(self):
         row = self._submitted()
-        with mock.patch.object(eta_client.requests, 'get',
-                               return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Rejected'}])):
+        TaxCodeRequest.objects.filter(pk=row.pk).update(environment='production')
+        with (mock.patch.object(eta_client.requests, 'get',
+                               return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Rejected'}])),
+              override_settings(TAX_ETA_ENVIRONMENT='production', TAX_ETA_API_BASE_URL='', TAX_ETA_ID_BASE_URL='')):
             coding.refresh(self.admin)
         self.p1.refresh_from_db()
         self.assertEqual(self.p1.coding_status, TaxItemProfile.CODE_REJECTED)
         self.assertIn(self.p1, list(coding.candidates()))
-        self.assertEqual(len(coding.prepare([self.p1.pk], self.accountant)['created']), 1)
+        self.assertEqual(len(coding.prepare([self.p1.pk], self.accountant, system='production')['created']), 1)
 
     def test_prepared_request_can_be_corrected_but_not_after_sending(self):
         coding.prepare([self.p1.pk], self.accountant)
@@ -478,6 +482,110 @@ def _details(active=True):
 
 
 @override_settings(**CODING_ON)
+class PerSystemTests(Fixture, TestCase):
+    """A request for ETA's test system never changes the item's real coding; one open request per system."""
+
+    def setUp(self):
+        self.build('ps')
+        self.p1 = TaxItemProfile.objects.create(softech_itemcode='60001', item_name='Panadol', gpc_code='10000454')
+
+    def _approve(self, row, system='preprod'):
+        row.status = TaxCodeRequest.SUBMITTED
+        row.save()
+        with (mock.patch.object(eta_client.requests, 'get',
+                               return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Approved'}])),
+              mock.patch.object(eta_client.requests, 'post', return_value=_response(200, {'access_token': 'T'})),
+              override_settings(TAX_ETA_ENVIRONMENT=system, TAX_ETA_API_BASE_URL='', TAX_ETA_ID_BASE_URL='')):
+            coding.refresh(self.admin)
+        row.refresh_from_db()
+        self.p1.refresh_from_db()
+
+    def test_preprod_approval_leaves_the_item_alone(self):
+        coding.prepare([self.p1.pk], self.accountant)
+        row = TaxCodeRequest.objects.get()
+        self.assertEqual(row.environment, 'preprod')
+        self._approve(row)
+        self.assertEqual(row.status, TaxCodeRequest.APPROVED)
+        self.assertEqual((self.p1.coding_status, self.p1.eta_code), (TaxItemProfile.CODE_MISSING, ''))
+
+    def test_production_approval_codes_the_item(self):
+        coding.prepare([self.p1.pk], self.accountant, system='production')
+        row = TaxCodeRequest.objects.get()
+        self._approve(row, 'production')
+        self.assertEqual(self.p1.coding_status, TaxItemProfile.CODE_APPROVED)
+
+    def test_open_preprod_and_production_requests_coexist(self):
+        coding.prepare([self.p1.pk], self.accountant)
+        out = coding.prepare([self.p1.pk], self.accountant, system='production')
+        self.assertEqual(len(out['created']), 1)
+        self.assertEqual(TaxCodeRequest.objects.count(), 2)
+
+    def test_two_open_production_requests_are_refused(self):
+        coding.prepare([self.p1.pk], self.accountant, system='production')
+        out = coding.prepare([self.p1.pk], self.accountant, system='production')
+        self.assertEqual((out['created'], out['skipped'][0]['why']), ([], 'يوجد طلب مفتوح لهذا الصنف'))
+
+    def test_refresh_ignores_a_row_of_another_system(self):
+        coding.prepare([self.p1.pk], self.accountant, system='production')
+        row = TaxCodeRequest.objects.get()
+        TaxCodeRequest.objects.filter(pk=row.pk).update(status=TaxCodeRequest.UNCERTAIN)
+        with (mock.patch.object(eta_client.requests, 'post', return_value=_response(200, {'access_token': 'T'})),
+              mock.patch.object(eta_client.requests, 'get',
+                                  return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Approved'}])) as get):
+            out = coding.refresh(self.admin)
+        get.assert_not_called()
+        self.assertEqual(out['checked'], 0)
+        row.refresh_from_db()
+        self.p1.refresh_from_db()
+        self.assertEqual((row.status, self.p1.coding_status), (TaxCodeRequest.UNCERTAIN, TaxItemProfile.CODE_MISSING))
+
+    PROD = dict(TAX_ETA_ENVIRONMENT='production', TAX_ETA_API_BASE_URL='', TAX_ETA_ID_BASE_URL='',
+                TAX_ETA_PRODUCTION_ALLOWED=True)
+
+    def test_production_send_marks_the_item_pending(self):
+        with override_settings(**self.PROD):
+            eta_client.reset_token()
+            coding.prepare([self.p1.pk], self.accountant)
+            row = TaxCodeRequest.objects.get()
+            self.assertEqual(row.environment, 'production')
+            with mock.patch.object(eta_client.requests, 'post',
+                                   side_effect=[_response(200, {'access_token': 'T', 'expires_in': 3600}), _response(200, {})]):
+                self.assertEqual(coding.send([row.pk], self.admin, '1')['submitted'], 1)
+            eta_client.reset_token()
+        self.p1.refresh_from_db()
+        self.assertEqual((self.p1.coding_status, self.p1.eta_code, self.p1.coding_env),
+                         (TaxItemProfile.CODE_PENDING, 'EG-100200300-60001', 'production'))
+        self.assertTrue(TaxAuditEvent.objects.filter(action='item_coding_from_eta', entity_id=str(self.p1.pk)).exists())
+
+    def test_production_uncertain_then_found_marks_the_item_pending(self):
+        with override_settings(**self.PROD):
+            eta_client.reset_token()
+            coding.prepare([self.p1.pk], self.accountant)
+            row = TaxCodeRequest.objects.get()
+            TaxCodeRequest.objects.filter(pk=row.pk).update(status=TaxCodeRequest.UNCERTAIN)
+            with (mock.patch.object(eta_client.requests, 'post', return_value=_response(200, {'access_token': 'T'})),
+                  mock.patch.object(eta_client.requests, 'get',
+                                      return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Submitted',
+                                                                    'codeUsageRequestID': 5}]))):
+                coding.refresh(self.admin)
+            eta_client.reset_token()
+        row.refresh_from_db()
+        self.p1.refresh_from_db()
+        self.assertEqual((row.status, self.p1.coding_status), (TaxCodeRequest.SUBMITTED, TaxItemProfile.CODE_PENDING))
+        self.assertTrue(TaxAuditEvent.objects.filter(action='item_coding_from_eta', entity_id=str(self.p1.pk)).exists())
+
+    def test_send_refuses_a_row_prepared_for_another_system(self):
+        coding.prepare([self.p1.pk], self.accountant, system='production')
+        row = TaxCodeRequest.objects.get()
+        with mock.patch.object(eta_client.requests, 'post') as post:
+            out = coding.send([row.pk], self.admin, '1')
+        post.assert_not_called()
+        self.assertEqual((out['submitted'], len(out['refused'])), (0, 1))
+        row.refresh_from_db()
+        self.assertEqual((row.status, row.environment), (TaxCodeRequest.PREPARED, 'production'))
+
+
+@override_settings(**CODING_ON)
 class CodeCheckTests(Fixture, TestCase):
 
     def setUp(self):
@@ -579,8 +687,10 @@ class CodeCheckTests(Fixture, TestCase):
         with mock.patch.object(eta_client.requests, 'get',
                                return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Approved'}])):
             coding.refresh(self.admin)
-        p.refresh_from_db()
-        self.assertEqual((p.coding_status, p.coding_env, p.eta_check_status), ('approved', 'preprod', 'found'))
+        p.refresh_from_db()   # approved in the test system: the request is tagged, the item is not coded
+        row.refresh_from_db()
+        self.assertEqual((row.status, row.environment), ('approved', 'preprod'))
+        self.assertEqual((p.coding_status, p.coding_env, p.eta_check_status), ('missing', '', ''))
 
     def test_check_view_needs_edit_and_reports(self):
         self.assertEqual(api(self.pharmacist).post('/api/tax-invoicing/codes/check/', {}, format='json').status_code, 403)
@@ -690,13 +800,15 @@ class GpcAndGs1Tests(Fixture, TestCase):
         url, body = put.call_args[0][0], put.call_args[1]['data'].decode('utf-8')
         self.assertTrue(url.endswith('/api/v1.0/codetypes/requests/codeusages'))
         self.assertIn('"codetype": "GS1"', body)
-        self.gs1.refresh_from_db()
-        self.assertEqual((self.gs1.coding_status, self.gs1.code_type, self.gs1.eta_code), ('pending', 'GS1', '4006381333931'))
-        with mock.patch.object(eta_client.requests, 'get',
-                               return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Approved'}])):
+        self.gs1.refresh_from_db()   # test system: the item stays uncoded
+        self.assertEqual((self.gs1.coding_status, self.gs1.eta_code), ('missing', ''))
+        TaxCodeRequest.objects.filter(pk=row.pk).update(environment='production')
+        with (mock.patch.object(eta_client.requests, 'get',
+                               return_value=_response(200, [{'itemCode': row.item_code, 'status': 'Approved'}])),
+              override_settings(TAX_ETA_ENVIRONMENT='production', TAX_ETA_API_BASE_URL='', TAX_ETA_ID_BASE_URL='')):
             coding.refresh(self.admin)
         self.gs1.refresh_from_db()
-        self.assertEqual((self.gs1.coding_status, self.gs1.code_type, self.gs1.coding_env), ('approved', 'GS1', 'preprod'))
+        self.assertEqual((self.gs1.coding_status, self.gs1.code_type, self.gs1.coding_env), ('approved', 'GS1', 'production'))
 
     def test_gs1_refused_inside_a_200_is_failed_not_submitted(self):
         row = TaxCodeRequest.objects.get(pk=coding.prepare_gs1([self.gs1.pk], self.accountant)['created'][0])
@@ -859,3 +971,119 @@ class SendFromTests(Fixture, TestCase):
                                  format='json')
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.json()['send_from'])
+
+
+
+# ── GS1 GPC list (May 2026) ────────────────────────────────────────────────────────────────────
+
+class GpcGs1Tests(TestCase):
+    FIXTURE = {'Schema': [
+        {'Code': '51000000', 'Title': 'Healthcare', 'Definition': 'Seg def', 'Childs': [
+            {'Code': '51160000', 'Title': 'Pharma', 'Definition': 'Fam def', 'Childs': [
+                {'Code': '51160100', 'Title': 'Pharma Drugs', 'Definition': 'Cls def', 'Childs': [
+                    {'Code': '10005845', 'Title': 'Analgesics', 'Definition': 'Pain relief', 'Attributes': [{'Code': '1'}]},
+                    {'Code': '10000454', 'Title': 'Antipyretics'},
+                ]}]}]},
+        {'Code': '53000000', 'Title': 'Beauty', 'Definition': 'Seg2', 'children': [
+            {'Code': '53100000', 'Title': 'Skin', 'children': [
+                {'Code': '53100100', 'Title': 'Skin care', 'children': [
+                    {'Code': '10008001', 'Title': 'Creams', 'Definition': 'Cream def'}]}]}]},
+    ]}
+
+    def _path(self, data=None):
+        import json
+        import os
+        import shutil
+        import tempfile
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        p = os.path.join(d, 'gpc.json')
+        with open(p, 'w', encoding='utf-8') as f:
+            json.dump(self.FIXTURE if data is None else data, f)
+        return p
+
+    def test_load_twice_is_idempotent_with_hierarchy(self):
+        from apps.tax_invoicing import gpc
+        from apps.tax_invoicing.models import TaxGpcBrick
+        rows = gpc.read_gs1_json(self._path())
+        self.assertEqual(len(rows), 3)
+        r1 = gpc.load_gs1(rows)
+        r2 = gpc.load_gs1(gpc.read_gs1_json(self._path()))
+        self.assertEqual((r1['created'], r2['created'], r2['updated']), (3, 0, 0))
+        self.assertEqual(TaxGpcBrick.objects.count(), 3)
+        b = TaxGpcBrick.objects.get(code='10005845')
+        self.assertEqual((b.segment_code, b.family_code, b.class_code), ('51000000', '51160000', '51160100'))
+        self.assertEqual((b.segment_name, b.class_name, b.definition, b.source),
+                         ('Healthcare', 'Pharma Drugs', 'Pain relief', 'gs1-20260520'))
+        self.assertEqual(TaxGpcBrick.objects.get(code='10008001').segment_code, '53000000')
+        self.assertEqual(TaxGpcBrick.objects.get(code='10000454').definition, '')
+
+    def test_top_level_list_is_accepted(self):
+        from apps.tax_invoicing import gpc
+        rows = gpc.read_gs1_json(self._path(self.FIXTURE['Schema']))
+        self.assertEqual(len(rows), 3)
+
+    def test_workbook_brick_known_but_not_official_and_arabic_kept(self):
+        from apps.tax_invoicing import gpc
+        from apps.tax_invoicing.models import TaxGpcBrick
+        TaxGpcBrick.objects.create(code='10005845', name_en='Old', name_ar='مسكنات')
+        TaxGpcBrick.objects.create(code='10009999', name_en='Only workbook')
+        self.assertTrue(gpc.known('10005845'))
+        self.assertFalse(gpc.known('10005845', official_only=True))
+        gpc.load_gs1(gpc.read_gs1_json(self._path()))
+        b = TaxGpcBrick.objects.get(code='10005845')
+        self.assertEqual((b.name_ar, b.name_en, b.source), ('مسكنات', 'Analgesics', 'gs1-20260520'))
+        self.assertTrue(gpc.known('10005845', official_only=True))
+        self.assertFalse(gpc.known('10009999', official_only=True))
+        self.assertEqual(TaxGpcBrick.objects.get(code='10009999').source, 'workbook')
+
+    def test_command_needs_exactly_one_source(self):
+        import io
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        from apps.tax_invoicing.models import TaxGpcBrick
+        with self.assertRaises(CommandError):
+            call_command('load_gpc_bricks')
+        with self.assertRaises(CommandError):
+            call_command('load_gpc_bricks', 'a.xlsx', gs1_json='b.json')
+        call_command('load_gpc_bricks', gs1_json=self._path(), stdout=io.StringIO())
+        self.assertEqual(TaxGpcBrick.objects.count(), 3)
+
+    def test_wrapped_file_loads_same_bricks(self):
+        from apps.tax_invoicing import gpc
+        plain = gpc.read_gs1_json(self._path())
+        wrapped = gpc.read_gs1_json(self._path({'GPC': {'Version': '1', 'Schema': self.FIXTURE['Schema']}}))
+        self.assertEqual(plain, wrapped)
+
+    def test_empty_or_garbage_file_raises(self):
+        from apps.tax_invoicing import gpc
+        for data in ([], {}, {'a': 1}, [{'Code': 'x', 'Title': 'y'}]):
+            with self.assertRaises(ValueError):
+                gpc.read_gs1_json(self._path(data))
+
+    def test_shifted_levels_are_refused(self):
+        from apps.tax_invoicing import gpc
+        from apps.tax_invoicing.models import TaxGpcBrick
+        coded_root = [{'Code': '99000000', 'Title': 'Root', 'Childs': self.FIXTURE['Schema']}]
+        with self.assertRaises(ValueError):
+            gpc.read_gs1_json(self._path(coded_root))
+        # a file that starts at families: classes would be read as bricks
+        families = self.FIXTURE['Schema'][0]['Childs']
+        with self.assertRaises(ValueError):
+            gpc.read_gs1_json(self._path(families))
+        self.assertEqual(TaxGpcBrick.objects.count(), 0)
+
+    def test_brick_attributes_with_coded_children_are_ignored(self):
+        import copy
+        from apps.tax_invoicing import gpc
+        data = copy.deepcopy(self.FIXTURE)
+        brick = data['Schema'][0]['Childs'][0]['Childs'][0]['Childs'][0]
+        brick['Childs'] = [{'Code': '20000001', 'Title': 'Attr', 'Childs': [{'Code': '30000001', 'Title': 'Val'}]}]
+        self.assertEqual(len(gpc.read_gs1_json(self._path(data))), 3)
+
+    def test_brick_code_ending_00_loads(self):
+        import copy
+        from apps.tax_invoicing import gpc
+        data = copy.deepcopy(self.FIXTURE)
+        data['Schema'][0]['Childs'][0]['Childs'][0]['Childs'].append({'Code': '10000600', 'Title': 'Odd code'})
+        self.assertEqual(len(gpc.read_gs1_json(self._path(data))), 4)

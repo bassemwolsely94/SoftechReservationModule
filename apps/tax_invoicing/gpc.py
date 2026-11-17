@@ -6,6 +6,7 @@ code request must name a brick from it. The suggestion is learned from our own a
 most used by approved items of the same SOFTECH family, else the same category, else the same type
 (Medicine / Cosmetics / …). It is only shown; a person picks the brick for every request.
 """
+import json
 import re
 from collections import Counter, defaultdict
 
@@ -82,12 +83,110 @@ def load(rows):
     return {'read': len(merged), 'created': created, 'updated': updated}
 
 
+def _kids(node):
+    for key in ('Childs', 'childs', 'children', 'Children'):
+        if isinstance(node.get(key), list):
+            return [k for k in node[key] if isinstance(k, dict)]
+    return []
+
+
+def _field(node, *keys):
+    for k in keys:
+        if node.get(k) not in (None, ''):
+            return _text(node[k])
+    return ''
+
+
+_LEVEL_CODE = (re.compile(r'^\d{2}0{6}$'), re.compile(r'^\d{2}(?!00)\d{2}0{4}$'), re.compile(r'^\d{4}(?!00)\d{2}00$'))
+
+
+def _segments(node):
+    """The segment nodes: the first nodes with an 8-digit Code found going down through any uncoded wrappers
+    (lists, or objects such as {'Schema': [...]})."""
+    if isinstance(node, list):
+        return [s for n in node for s in _segments(n)]
+    if not isinstance(node, dict):
+        return []
+    if BRICK.match(_field(node, 'Code', 'code')):
+        return [node]
+    return [s for v in node.values() if isinstance(v, (list, dict)) for s in _segments(v)]
+
+
+def read_gs1_json(path):
+    """Bricks from GS1's GPC JSON. Segments are found by going down through uncoded wrappers (a list, or an
+    object like {'Schema': [...]}); below them it must be exactly Segment > Family > Class > Brick, and the
+    codes must follow GPC's own pattern (segment NN000000, family NNMM0000 (MM not 00), class NNMMKK00 (KK not 00), brick any 8
+    digits; everything under a brick, its attributes, is ignored). Anything else, or a
+    file with no bricks, raises ValueError rather than loading shifted levels. Each row: code, name_en,
+    definition and the segment / family / class code and name above it."""
+    with open(path, encoding='utf-8-sig') as f:
+        data = json.load(f)
+    rows = []
+
+    def bad(why, code):
+        raise ValueError(f'ملف GPC غير متوقع: {why} ({code or "بدون كود"})')
+
+    def walk(node, trail):
+        code = _field(node, 'Code', 'code')
+        level = len(trail) + 1
+        if level <= 3:
+            if not _LEVEL_CODE[level - 1].match(code):
+                bad(f'كود المستوى {level} لا يطابق نمط GPC', code)
+            for kid in _kids(node):
+                walk(kid, trail + [(code, _field(node, 'Title', 'Description', 'title', 'description'))])
+            return
+        if not BRICK.match(code):
+            bad('كود البريك غير صالح', code)
+        row = {'code': code, 'name_en': _field(node, 'Title', 'Description', 'title', 'description'),
+               'definition': _field(node, 'Definition', 'definition')}
+        for (lvl_code, lvl_name), pre in zip(trail, ('segment', 'family', 'class')):
+            row[pre + '_code'], row[pre + '_name'] = lvl_code, lvl_name
+        rows.append(row)
+
+    for seg in _segments(data):
+        walk(seg, [])
+    if not rows:
+        raise ValueError('لا توجد بريكات في ملف GPC')
+    return rows
+
+
+def load_gs1(rows, version='gs1-20260520'):
+    """Insert or update bricks from read_gs1_json rows; never deletes. A brick already there keeps its Arabic
+    name and takes source=version, the English name, definition and hierarchy."""
+    merged = {r['code']: r for r in rows}
+    existing = {b.code: b for b in TaxGpcBrick.objects.filter(code__in=list(merged))}
+    short = ('name_en', 'segment_name', 'family_name', 'class_name')
+    fields = short + ('definition', 'segment_code', 'family_code', 'class_code')
+    created = updated = 0
+    with transaction.atomic():
+        new = []
+        for code, r in merged.items():
+            vals = {k: (r.get(k) or '')[:300] if k in short else (r.get(k) or '') for k in fields}
+            b = existing.get(code)
+            if b is None:
+                new.append(TaxGpcBrick(code=code, source=version, **vals))
+                created += 1
+                continue
+            vals['name_en'] = vals['name_en'] or b.name_en
+            if b.source != version or any(getattr(b, k) != v for k, v in vals.items()):
+                for k, v in vals.items():
+                    setattr(b, k, v)
+                b.source = version
+                b.save()
+                updated += 1
+        TaxGpcBrick.objects.bulk_create(new, batch_size=2000)
+    return {'read': len(merged), 'created': created, 'updated': updated}
+
+
 def loaded():
     return TaxGpcBrick.objects.exists()
 
 
-def known(code):
-    """True when the list is not loaded yet (nothing to check against) or holds this brick."""
+def known(code, *, official_only=False):
+    """True when the list is not loaded yet (nothing to check against) or holds this brick. With official_only,
+    the brick must come from a GS1 list, not only the owner's workbook."""
+    if official_only:
+        return TaxGpcBrick.objects.filter(code=code).exclude(source='workbook').exists()
     return not loaded() or TaxGpcBrick.objects.filter(code=code).exists()
 
 

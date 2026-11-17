@@ -194,6 +194,13 @@ SCREENS = [
                        'An item with no approved code blocks every document it is on. "Check codes" asks ETA whether it holds each code in the system in use. Pick the items that need a code, then "Prepare requests": each gets our internal code EG-<tax id>-<item code> under an 8-digit GPC code, and nothing is sent. '
                        'Someone who holds finalize ticks the requests, types their count, then "Send to the Authority". "Refresh status from the Authority" asks for its decision: approval makes the item code approved, rejection keeps it blocked and allows a new request. '
                        'An uncertain result stops sending until the status is refreshed. At the top, "Authority system" shows pre-production or production, the switches that are on, and "Test login".')},
+            {'key': 'queue', 'title': T('🧮 طابور الترميز', '🧮 Coding queue'),
+             'body': T('أصناف بيعت على إيصالات المنظومة الفعلية بلا كود، مرتبة بقيمة المبيعات. لكل صنف مقترح من مصادر شرائه (كوّد أو استبعد) ونسبة ضريبة من SOFTECH، وكلاهما مدخل فقط؛ قرارك هو ما يُحفظ ويُسجَّل بمن قرر ومتى. '
+                       'حدد الأصناف بالمسافة ثم Enter لقبول مقترح كل صنف (الصنف بلا مقترح يُترك)، أو C للتكويد أو K للاستبعاد. النسبة بالأحمر تحتاج تأكيداً: اختر 0 أو 14 ثم قرر الصنف وحده؛ القبول الجماعي معطل طالما في المختار صنف كهذا. '
+                       '«إعادة فتح» تحت تفاصيل الصنف (M أو الضغط عليه) تمسح القرار بسبب مكتوب وتُبقي نسبة الضريبة المؤكدة؛ لتغييرها عدّلها في تبويب «الأصناف». «ما لدى المصلحة» يعرض الأكواد المفعلة لدى المصلحة الفعلية وليست في ملف الأكواد. لا يُرسل شيء للمصلحة من هنا.',
+                       'Items sold on production receipts with no code, biggest sales first. Each has a suggestion from where it was bought (code or keep out) and a VAT rate from SOFTECH; both are inputs only, and your decision is what is saved, with who and when. '
+                       'Tick items with Space, then Enter accepts each one’s suggestion (an item with none is left), or C to code and K to keep out. A red rate needs checking: pick 0 or 14, then decide that item on its own; bulk accept is off while the selection holds one. '
+                       '"Reopen" in the item details (M or a click) clears the decision with a written reason and keeps the confirmed VAT rate; to change the rate, edit it on the items tab. "What ETA holds" lists codes active on ETA production that are not in the coding sheet. Nothing is sent to ETA from here.')},
             {'key': 'receipts', 'title': T('🧾 الإيصالات', '🧾 Receipts'),
              'body': T('ملخص بالحالات لكل فرع، والقائمة بأسباب الحجز، واستيراد يوم من SOFTECH للقراءة فقط، وإعداد جهاز كل فرع، وقرار كل قناة. «إصدار الجاهز» يجمد الإيصالات في سلسلة الفرع، و«معاينة الإرسال» لا ترسل شيئاً. الإرسال الفعلي يظهر بعد المعاينة ويحتاج كتابة كود الفرع، وهو معطل طالما الإرسال مغلق.',
                        'A per-branch summary by status, the list with hold reasons, reading a day from SOFTECH (read only), each branch’s device setup, and each channel’s decision. "Issue ready" freezes receipts into the branch chain, and "Preview sending" sends nothing. The real send appears after the preview and needs the typed branch code; it is disabled while sending is off.')},
@@ -227,8 +234,8 @@ SCREENS = [
         'related': ['insurance.claim', 'insurance.claims'],
         'tour': [
             {'target': 'tax-invoicing-main-tabs', 'label': T('المطالبات · المستندات · الاستثناءات', 'Claims · Documents · Exceptions'),
-             'text': T('عشرة تبويبات: المطالبات، المستندات، المطبوعة، الاستثناءات، الأصناف، الاستيراد، الأكواد، الإيصالات، سجل المصلحة، الإعدادات.',
-                       'Ten tabs: claims, documents, printed, exceptions, items, import, codes, receipts, ETA history, settings.')},
+             'text': T('أحد عشر تبويباً: المطالبات، المستندات، المطبوعة، الاستثناءات، الأصناف، الاستيراد، الأكواد، طابور الترميز، الإيصالات، السجل، الإعدادات.',
+                       'Eleven tabs: claims, documents, printed, exceptions, items, import, codes, coding queue, receipts, ETA history, settings.')},
             {'target': 'tax-invoicing-main-sending-off', 'label': T('🔕 الإرسال الفعلي مغلق', '🔕 Live sending is off'),
              'text': T('يظهر طالما الإرسال للمصلحة مغلق: كل ما تفعله مراجعة ومعاينة.', 'Shows while sending to ETA is off: everything you do is review and preview.'),
              'open_hint': T('يختفي عند فتح الإرسال.', 'It goes away when sending is opened.')},
@@ -458,9 +465,17 @@ SCREENS = [
              'open_hint': T('بعد الفحص، عند وجود أكواد غير موجودة.', 'After a check, when codes are missing.')},
             {'target': 'tax-invoicing-main-codes-refresh', 'label': T('تحديث الحالة من المصلحة', 'Refresh status from the Authority'),
              'text': T('يسأل المصلحة عن الطلبات المرسلة. قرارها وحده يغير ترميز الصنف.', 'Asks ETA about sent requests. Only its decision changes the item coding.')},
+            {'target': 'tax-invoicing-queue-grid', 'label': T('طابور الترميز', 'Coding queue'),
+             'text': T('Enter يقبل مقترح المحدد، C كوّد، K استبعد. النسبة الحمراء تُختار ثم يُقرر الصنف وحده. السيرفر يسجل كل قرار.',
+                       'Enter accepts the selection’s suggestion, C codes, K keeps out. Pick a red rate, then decide that item alone. The server logs each decision.'),
+             'open_hint': T('تبويب «🧮 طابور الترميز».', 'The "🧮 Coding queue" tab.')},
+            {'target': 'tax-invoicing-queue-eta-holds', 'label': T('ما لدى المصلحة', 'What ETA holds'),
+             'text': T('أكواد مفعلة لدى المصلحة الفعلية مقابل ملف الأكواد، وما لديها وليس في الملف. قراءة فقط.',
+                       'Codes active on ETA production against the coding sheet, and those it holds that the sheet lacks. Read only.'),
+             'open_hint': T('أسفل تبويب «🧮 طابور الترميز».', 'Bottom of the "🧮 Coding queue" tab.')},
         ],
-        'updated': '2026-11-15',
-        'change_note': T('«المطابقة»: سبب «قناة بيع بلا قاعدة ضريبية»، وعمود القناة، وقائمة المبيعات الناقصة بلا سبب معروف مرتبة من الأكبر مع تصديرها',
-                         '"Reconciliation": a "sales channel with no tax rule" reason, a channel column, and a list of missing sales with no known cause, biggest first, with export'),
+        'updated': '2026-11-16',
+        'change_note': T('تبويب «🧮 طابور الترميز»: قرار كوّد أو استبعد لكل صنف بيع بلا كود في المنظومة الفعلية، مع لوحة «ما لدى المصلحة»',
+                         'New "🧮 Coding queue" tab: decide code or keep out for each item sold uncoded on ETA production, with a "What ETA holds" panel'),
     },
 ]
