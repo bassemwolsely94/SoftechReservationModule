@@ -3319,6 +3319,8 @@ export const taxInvoicingApi = {
   codingQueue:     (params = {})  => api.get('/tax-invoicing/codes/queue/', { params }),
   codingDecide:    (data)         => api.post('/tax-invoicing/codes/queue/decide/', data),
   codingReopen:    (data)         => api.post('/tax-invoicing/codes/queue/reopen/', data),
+  codingSetBrick:  (data)         => api.post('/tax-invoicing/codes/queue/brick/', data),
+  codingSuggest:   (data)         => api.post('/tax-invoicing/codes/queue/suggest/', data),
   etaHolds:        (params = {})  => api.get('/tax-invoicing/codes/eta-holds/', { params }),
   codesSend:       (data)         => api.post('/tax-invoicing/codes/send/', data),
   codesRefresh:    (data)         => api.post('/tax-invoicing/codes/refresh/', data),

@@ -54,6 +54,8 @@ const api = vi.hoisted(() => ({
   codingQueue: vi.fn(),
   codingDecide: vi.fn(),
   codingReopen: vi.fn(),
+  codingSetBrick: vi.fn(),
+  codingSuggest: vi.fn(),
   etaHolds: vi.fn(),
 }))
 
@@ -566,7 +568,9 @@ describe('production coding queue', () => {
   const qrow = (itemcode, value, extra = {}) => ({
     id: Number(itemcode), itemcode, name: `Item ${itemcode}`, name_ar: '', value, docs: 3, last_day: '2026-11-14',
     premark: 'code', premark_reason: 'official', note: 'اشتُري من موزع أو مخزن أو مصنع', sources: { OFFICIAL_DISTRIBUTOR: 12 },
-    vat_rate: '0', vat_flagged: false, vat_why: 'catalog', eta_last_status: '', decision: null, decided_by: '', decided_at: null, ...extra,
+    vat_rate: '0', vat_flagged: false, vat_why: 'catalog', eta_last_status: '', decision: null, decided_by: '', decided_at: null,
+    brick: '10000673', brick_name: 'أدوية', brick_source: 'medicine', brick_confidence: '', brick_reason: '', brick_second: '',
+    brick_second_name: '', own_brick: '', own_brick_name: '', brick_confirmed: false, ...extra,
   })
   const rows = [
     qrow('900', '5000.00'),
@@ -666,6 +670,77 @@ describe('production coding queue', () => {
     await screen.findByText('Item 900')
     expect(screen.queryByRole('button', { name: /قبول المقترح/ })).toBeNull()
     expect(screen.queryByLabelText('اختيار 900')).toBeNull()
+  })
+
+  describe('GPC brick column', () => {
+    const aiRow = qrow('903', '250.00', { brick: '10000777', brick_name: 'كريمات البشرة', brick_source: 'ai', brick_confidence: 'medium',
+      brick_reason: '<b>كريم</b> للبشرة', own_brick: '10000999', own_brick_name: 'مستحضرات' })
+    const s1Row = qrow('904', '200.00', { decision: 'code', decided_by: 'admin', brick: '', brick_name: '', brick_source: '', brick_confirmed: false })
+    beforeEach(() => {
+      api.codingQueue.mockResolvedValue({ data: { count: 5, page: 1, pages: 1, total_value: '6950.00', catalog_without_profile: false,
+        rows: [...rows, aiRow, s1Row] } })
+      api.codeGpc.mockImplementation(({ q } = {}) => Promise.resolve({ data: { loaded: true,
+        rows: q ? [{ code: '10002222', name_ar: 'كريمات', used: 0 }, { code: '10003333', name_ar: 'لوشن', used: 0 }] : [] } }))
+    })
+
+    it('labels where each brick came from, the AI confidence and reason as text, and a missing brick', async () => {
+      show(<QueueTab me={ME} />)
+      const row903 = (await screen.findByText('Item 903')).closest('tr')
+      expect(within(row903).getByText('اقتراح ذكي · متوسطة')).toBeTruthy()
+      expect(within(row903).getByText('<b>كريم</b> للبشرة')).toBeTruthy()      // plain text, never HTML
+      expect(row903.querySelector('b')).toBeNull()
+      expect(within(row903).getByText(/في ملف الشركة:/).textContent).toContain('10000999')
+      const row900 = screen.getByText('Item 900').closest('tr')
+      expect(within(row900).getByText('دواء')).toBeTruthy()
+      const row904 = screen.getByText('Item 904').closest('tr')
+      expect(within(row904).getByText('تحتاج فئة')).toBeTruthy()
+    })
+
+    it('disables bulk accept and code while the selection holds an AI suggestion that is not high-confidence', async () => {
+      show(<QueueTab me={ME} />)
+      fireEvent.click(await screen.findByLabelText('اختيار 900'))
+      fireEvent.click(screen.getByLabelText('اختيار 903'))
+      const accept = screen.getByRole('button', { name: /قبول المقترح/ })
+      expect(accept.disabled).toBe(true)
+      expect(accept.title).toBe('في المختار صنف فئته اقتراح ذكي يحتاج تأكيداً — قرره وحده')
+    })
+
+    it('picks a brick with the keyboard for an undecided row and sends it with the decision', async () => {
+      show(<QueueTab me={ME} />)
+      const row903 = (await screen.findByText('Item 903')).closest('tr')
+      fireEvent.click(within(row903).getByRole('button', { name: 'اختيار فئة 903' }))
+      const box = screen.getByLabelText('بحث فئة 903')
+      fireEvent.change(box, { target: { value: 'كريم' } })
+      await waitFor(() => expect(api.codeGpc).toHaveBeenCalledWith({ q: 'كريم' }))
+      await screen.findByText('لوشن')
+      // keys typed in the picker never reach the grid shortcuts
+      expect(fireEvent.keyDown(box, { code: 'KeyK', key: 'k' })).toBe(true)
+      fireEvent.keyDown(box, { code: 'ArrowDown', key: 'ArrowDown' })
+      fireEvent.keyDown(box, { code: 'Enter', key: 'Enter' })
+      expect(api.codingDecide).not.toHaveBeenCalled()
+      expect(within(row903).getByText('اختيار يدوي')).toBeTruthy()
+      fireEvent.click(within(row903).getByRole('button', { name: 'كوّد' }))
+      await waitFor(() => expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['903'], decision: 'code', vat_rate: '0', brick: '10003333' }))
+    })
+
+    it('sets the brick of an item already decided "code"', async () => {
+      api.codingSetBrick.mockResolvedValue({ data: { itemcode: '904', brick: '10002222', brick_source: 'person', brick_name: 'كريمات' } })
+      show(<QueueTab me={ME} />)
+      const row904 = (await screen.findByText('Item 904')).closest('tr')
+      fireEvent.click(within(row904).getByRole('button', { name: 'اختيار فئة 904' }))
+      fireEvent.change(screen.getByLabelText('بحث فئة 904'), { target: { value: '1000' } })
+      fireEvent.click(await screen.findByText('كريمات'))
+      await waitFor(() => expect(api.codingSetBrick).toHaveBeenCalledWith({ itemcode: '904', brick: '10002222' }))
+    })
+
+    it('asks again for the selection and shows the server refusal when the switch is off', async () => {
+      api.codingSuggest.mockRejectedValue({ response: { status: 400, data: { detail: 'اقتراح الفئة بالذكاء الاصطناعي متوقف — فعّله من الإعدادات أولاً' } } })
+      show(<QueueTab me={ME} />)
+      fireEvent.click(await screen.findByLabelText('اختيار 903'))
+      fireEvent.click(screen.getByRole('button', { name: 'اقترح مرة أخرى' }))
+      await waitFor(() => expect(api.codingSuggest).toHaveBeenCalledWith({ itemcodes: ['903'] }))
+      expect(await screen.findByText('اقتراح الفئة بالذكاء الاصطناعي متوقف — فعّله من الإعدادات أولاً')).toBeTruthy()
+    })
   })
 
   it('shows what ETA production holds that our sheet lacks', async () => {
