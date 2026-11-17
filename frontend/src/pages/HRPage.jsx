@@ -9,6 +9,7 @@ import useAuthStore from '../store/authStore'
 import { printHRRequest } from '../components/HRPrint'
 import { DateField, IdentityFields, weekdayAr } from '../components/HRForm'
 import useHelpTab from '../help/useHelpTab'
+import usePermission from '../hooks/usePermission'
 import SortTh from '../components/SortTh'
 import useServerSort from '../hooks/useServerSort'
 
@@ -55,6 +56,7 @@ function LeaveTab() {
   const { headerProps } = useServerSort(ordering, setOrdering, { allowed: ['staff_sort', 'code_sort', 'leave_type__name_ar', 'start_date', 'end_date', 'days_requested', 'status_rank'] })
   const { user } = useAuthStore()
   const [showForm, setShowForm] = useState(false)
+  const canFile = usePermission('hr', 'create')   // filing needs hr create; the server refuses without it
   const [form, setForm] = useState({ leave_type_code: '', start_date: '', end_date: '', return_to_work_date: '', days_requested: '', reason: '' })
   const [identity, setIdentity] = useState({})
   const [err, setErr] = useState(null)
@@ -93,10 +95,10 @@ function LeaveTab() {
     <div>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-base font-semibold text-gray-800">طلبات الإجازة</h2>
-        <button data-tour="hr-requests-new" onClick={() => setShowForm(s => !s)}
+        {canFile && <button data-tour="hr-requests-new" onClick={() => setShowForm(s => !s)}
           className="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700">
           + طلب إجازة جديد
-        </button>
+        </button>}
       </div>
 
       {balances.length > 0 && (
@@ -111,7 +113,7 @@ function LeaveTab() {
         </div>
       )}
 
-      {showForm && (
+      {canFile && showForm && (
         <div data-tour="hr-requests-form" className="bg-gray-50 border border-gray-200 rounded-xl p-5 mb-5">
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
@@ -201,6 +203,7 @@ function OvertimeTab() {
   const [ordering, setOrdering] = useState('')
   const { headerProps } = useServerSort(ordering, setOrdering, { allowed: ['staff_sort', 'code_sort', 'date', 'hours', 'status_rank'] })
   const [showForm, setShowForm] = useState(false)
+  const canFile = usePermission('hr', 'create')   // filing needs hr create; the server refuses without it
   const [form, setForm] = useState({ date: '', hours: '', reason: '' })
   const [identity, setIdentity] = useState({})
   const [err, setErr] = useState(null)
@@ -227,13 +230,13 @@ function OvertimeTab() {
     <div>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-base font-semibold text-gray-800">طلبات الإضافي</h2>
-        <button data-tour="hr-requests-new" onClick={() => setShowForm(s => !s)}
+        {canFile && <button data-tour="hr-requests-new" onClick={() => setShowForm(s => !s)}
           className="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700">
           + طلب إضافي جديد
-        </button>
+        </button>}
       </div>
 
-      {showForm && (
+      {canFile && showForm && (
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 mb-5">
           <div className="grid grid-cols-3 gap-4 mb-4">
             <DateField label="التاريخ" value={form.date} onChange={v => setForm(f => ({ ...f, date: v }))} />
@@ -309,6 +312,7 @@ function AdvancesTab() {
   const [ordering, setOrdering] = useState('')
   const { headerProps } = useServerSort(ordering, setOrdering, { allowed: ['staff_sort', 'amount', 'repayment_date', 'reason', 'status_rank'] })
   const [showForm, setShowForm] = useState(false)
+  const canFile = usePermission('hr', 'create')   // filing needs hr create; the server refuses without it
   const [form, setForm] = useState({ amount: '', repayment_date: '', reason: '' })
   const [identity, setIdentity] = useState({})
   const [err, setErr] = useState(null)
@@ -335,13 +339,13 @@ function AdvancesTab() {
     <div>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-base font-semibold text-gray-800">سلف الرواتب</h2>
-        <button data-tour="hr-requests-new" onClick={() => setShowForm(s => !s)}
+        {canFile && <button data-tour="hr-requests-new" onClick={() => setShowForm(s => !s)}
           className="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700">
           + طلب سلفة جديدة
-        </button>
+        </button>}
       </div>
 
-      {showForm && (
+      {canFile && showForm && (
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 mb-5">
           <div className="grid grid-cols-3 gap-4 mb-4">
             <div>
@@ -433,6 +437,7 @@ function ExpensesTab() {
   const [ordering, setOrdering] = useState('')
   const { headerProps } = useServerSort(ordering, setOrdering, { allowed: ['staff_sort', 'amount', 'category_sort', 'description', 'status_rank'] })
   const [showForm, setShowForm] = useState(false)
+  const canFile = usePermission('hr', 'create')   // filing needs hr create; the server refuses without it
   const [form, setForm] = useState(EMPTY_EXPENSE)
   const [identity, setIdentity] = useState({})
   const [err, setErr] = useState(null)
@@ -474,13 +479,13 @@ function ExpensesTab() {
     <div>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-base font-semibold text-gray-800">مطالبات المصروفات</h2>
-        <button data-tour="hr-requests-new" onClick={() => setShowForm(s => !s)}
+        {canFile && <button data-tour="hr-requests-new" onClick={() => setShowForm(s => !s)}
           className="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700">
           + مطالبة جديدة
-        </button>
+        </button>}
       </div>
 
-      {showForm && (
+      {canFile && showForm && (
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 mb-5">
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
@@ -596,6 +601,7 @@ function PermitsTab() {
   const [ordering, setOrdering] = useState('')
   const { headerProps } = useServerSort(ordering, setOrdering, { allowed: ['staff_sort', 'code_sort', 'type_sort', 'date', 'time_from', 'destination', 'status_rank'] })
   const [showForm, setShowForm] = useState(false)
+  const canFile = usePermission('hr', 'create')   // filing needs hr create; the server refuses without it
   const [form, setForm] = useState(EMPTY_PERMIT)
   const [identity, setIdentity] = useState({})
   const [err, setErr] = useState(null)
@@ -633,13 +639,13 @@ function PermitsTab() {
     <div>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-base font-semibold text-gray-800">الأذونات (مأمورية / تعديل شيفت)</h2>
-        <button data-tour="hr-requests-new" onClick={() => setShowForm(s => !s)}
+        {canFile && <button data-tour="hr-requests-new" onClick={() => setShowForm(s => !s)}
           className="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700">
           + إذن جديد
-        </button>
+        </button>}
       </div>
 
-      {showForm && (
+      {canFile && showForm && (
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 mb-5">
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
