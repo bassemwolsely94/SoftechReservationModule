@@ -57,6 +57,9 @@ const api = vi.hoisted(() => ({
   codingSetBrick: vi.fn(),
   codingSuggest: vi.fn(),
   etaHolds: vi.fn(),
+  egsSheet: vi.fn(() => Promise.resolve({ data: { versions: [], build: { state: 'idle' }, pending: { ready: 0, skipped: [] }, can_build: false } })),
+  egsSheetBuild: vi.fn(),
+  egsSheetDownload: vi.fn(),
 }))
 
 vi.mock('../../components/DataFreshnessBar', () => ({ default: () => null }))
@@ -74,6 +77,7 @@ const { default: CodesTab, CodeCheck, Candidates, Gs1Candidates } = await import
 const { HistoryProgress } = await import('./SettingsTab')
 const { default: HistoryTab } = await import('./HistoryTab')
 const { default: QueueTab } = await import('./QueueTab')
+const { default: EgsSheetPanel, REMINDER } = await import('./EgsSheetPanel')
 
 const line = (id, status) => ({
   id, docnumber: '55', docdate: '2026-10-01', branch: '170', itemcode: `I${id}`, item_name: `صنف ${id}`, quantity: '1',
@@ -792,5 +796,64 @@ describe('production coding queue', () => {
     show(<QueueTab me={ME} />)
     fireEvent.click(await screen.findByRole('button', { name: /عرض ما لدى المصلحة/ }))
     expect(await screen.findByText('EG-1-77')).toBeTruthy()
+  })
+})
+
+describe('Invoicer codes file panel', () => {
+  const version = (extra = {}) => ({ number: 2, built_at: '2026-11-17T10:00:00Z', source: 'build', built_by: 'محاسب', note: '',
+    coded_rows: 36010, total_rows: 36500, added: 3, coded: 2, skipped: [{ itemcode: '7', why: 'x' }, { itemcode: '8', why: 'y' }], size: 15000000, has_file: true, ...extra })
+  const sheet = (extra = {}) => ({ data: { versions: [version(), version({ number: 1, source: 'seed', added: 0, coded: 0 })],
+    build: { state: 'idle' }, pending: { ready: 4, skipped: [{ itemcode: '500', why: 'لا توجد فئة GPC للصنف' }] }, can_build: true, ...extra } })
+
+  it('shows the latest version, its counts, the reminder and the skipped reasons on demand', async () => {
+    api.egsSheet.mockResolvedValue(sheet())
+    show(<EgsSheetPanel />)
+    expect(await screen.findByText(/النسخة 2/)).toBeTruthy()
+    expect(screen.getByText('36,010')).toBeTruthy()
+    expect(screen.getByText(REMINDER)).toBeTruthy()
+    expect(REMINDER).toBe('بعد استبدال الملف في D:\\invoicer_mini أغلق Excel — الملف المفتوح يوقف رفع الإيصالات')
+    expect(screen.getByText('القيم في الأعمدة L–P مكتوبة كأرقام وليست معادلات.')).toBeTruthy()
+    expect(screen.queryByText(/لا توجد فئة GPC للصنف/)).toBeNull()
+    expect(screen.getByText('تُرك في هذه النسخة').querySelector('b').textContent).toBe('2')
+    expect(screen.getByRole('button', { name: /متروك الآن/ }).textContent).toContain('1')
+    fireEvent.click(screen.getByRole('button', { name: /متروك الآن/ }))
+    expect(screen.getByText(/لا توجد فئة GPC للصنف/)).toBeTruthy()
+  })
+
+  it('starts a build and downloads the full file of the latest version', async () => {
+    api.egsSheet.mockResolvedValue(sheet())
+    api.egsSheetBuild.mockResolvedValue({ data: { started: true } })
+    api.egsSheetDownload.mockResolvedValue({ data: new Blob(['x']) })
+    URL.createObjectURL = vi.fn(() => 'blob:x')
+    URL.revokeObjectURL = vi.fn()
+    show(<EgsSheetPanel />)
+    fireEvent.click(await screen.findByRole('button', { name: 'بناء نسخة جديدة' }))
+    await waitFor(() => expect(api.egsSheetBuild).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole('button', { name: 'تنزيل الملف كاملاً' }))
+    await waitFor(() => expect(api.egsSheetDownload).toHaveBeenCalledWith(2, 'full'))
+    fireEvent.click(screen.getByRole('button', { name: 'الصفوف الجديدة فقط' }))
+    await waitFor(() => expect(api.egsSheetDownload).toHaveBeenCalledWith(2, 'new'))
+  })
+
+  it('shows a refused build with its reasons, such as a duplicate itemcode in the held sheet', async () => {
+    api.egsSheet.mockResolvedValue(sheet({ build: { state: 'refused', refused: ['كود صنف مكرر في العمود J: 300'], finished_at: '2026-11-17T10:02:00Z' } }))
+    show(<EgsSheetPanel />)
+    const box = await screen.findByTestId('egs-sheet-refused')
+    expect(within(box).getByText('كود صنف مكرر في العمود J: 300')).toBeTruthy()
+  })
+
+  it('polls while a build runs and disables the build button', async () => {
+    api.egsSheet.mockResolvedValue(sheet({ build: { state: 'running', started_at: '2026-11-17T10:00:00Z' } }))
+    show(<EgsSheetPanel />)
+    expect((await screen.findByRole('button', { name: 'جارٍ البناء…' })).disabled).toBe(true)
+    await waitFor(() => expect(api.egsSheet.mock.calls.length).toBeGreaterThan(1), { timeout: 6000 })
+  }, 10000)
+
+  it('offers no build or download without the approve permission', async () => {
+    api.egsSheet.mockResolvedValue(sheet({ can_build: false }))
+    show(<EgsSheetPanel />)
+    await screen.findByText(/النسخة 2/)
+    expect(screen.queryByRole('button', { name: 'بناء نسخة جديدة' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'تنزيل الملف كاملاً' })).toBeNull()
   })
 })
