@@ -25,7 +25,17 @@ Design `docs/superpowers/specs/2026-11-16-role-uat-design.md` · Plan `docs/supe
 P1 = wrong person can see or do something they must not, or a workflow is broken · P2 = leak of
 lesser data, misleading screen, or a rule bent · P3 = polish, owner decision, or stricter-than-matrix.
 
-## Owner decisions needed
+## Owner decisions (answered 2026-11-17)
+
+| # | Decision | Fixed on |
+|---|---|---|
+| D1 | Require the full-phone search first: another branch's customer opens by id only within 12 h of a full-phone find (`CustomerFound`, `CUSTOMER_FOUND_HOURS`). | `claude/uat-fixes` |
+| D2 | Yes — POS locked to the user's own branches (picker + every POS lookup; order creation was already checked). | `claude/uat-fixes` |
+| D3 | No — returns off the POS screen (`POS_RETURNS_ENABLED`, default off; existing returns keep their posting path). | `claude/uat-fixes` |
+| D4 | Real user roles to be revised together with the owner before go-live. | open |
+| D5 | Tighten the code to the matrix: the 24 looser frontend gates now also ask the matrix grant their API checks. Backend role lists that are looser than the matrix are listed as follow-ups. | `claude/uat-fixes` |
+
+The questions as originally asked:
 
 | # | Question | From |
 |---|---|---|
