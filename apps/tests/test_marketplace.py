@@ -349,8 +349,9 @@ class MarketplaceIntakeTests(TestCase):
         from apps.marketplace import intake
         order, _ = self._ingest(ext='E2', lines=[self.IL('ZZZ', 'مجهول', Decimal('1'), Decimal('5'))])
         self.assertEqual(order.lines.get().problem, 'not_listed')
-        with patch('apps.marketplace.to_pos.convert'), self.assertRaises(ValueError):
+        with patch('apps.marketplace.to_pos.convert') as conv, self.assertRaises(ValueError):
             intake.accept(order, self.staff)
+        conv.assert_not_called()
         order.refresh_from_db()
         self.assertEqual(order.status, 'received')
         order2, _ = self._ingest(ext='E3')
@@ -364,9 +365,11 @@ class MarketplaceIntakeTests(TestCase):
         from apps.marketplace import intake
         order, _ = self._ingest(ext='E4', lines=[self.IL('SKU1', 'صنف', Decimal('6'), Decimal('10')),
                                                  self.IL('SKU1', 'صنف', Decimal('6'), Decimal('10'))])
-        with patch('apps.marketplace.to_pos.convert'), self.assertRaises(ValueError):
+        with patch('apps.marketplace.to_pos.convert') as conv, self.assertRaises(ValueError):
             intake.accept(order, self.staff)
+        conv.assert_not_called()
         self.assertEqual(order.lines.first().problem, 'out_of_stock')
+        self.assertEqual([l.problem for l in order.lines.all()], ['out_of_stock', 'out_of_stock'])
 
     def test_accept_happy_path_and_convert_failure_rolls_back(self):
         from apps.marketplace import intake
@@ -412,3 +415,95 @@ class MarketplaceIntakeTests(TestCase):
         self.assertEqual((order.status, order.reject_reason), ('rejected', 'مغلق'))
         with self.assertRaises(ValueError):
             intake.reject(order, self.staff, 'x')
+
+    def test_second_accept_raises_and_no_second_draft(self):
+        from apps.marketplace import intake
+        self.channel.softech_personcode = 'P100'
+        self.channel.save()
+        order, _ = self._ingest(ext='E9')
+        intake.accept(order, self.staff)
+        with self.assertRaises(ValueError):
+            intake.accept(order, self.staff)
+        self.assertEqual(SoftechSalesOrder.objects.count(), 1)
+
+    def test_end_to_end_accept_creates_real_draft(self):
+        from apps.marketplace import intake
+        self.channel.softech_personcode = 'P100'
+        self.channel.save()
+        order, _ = self._ingest(ext='E10')
+        with self.captureOnCommitCallbacks(execute=True):
+            intake.accept(order, self.staff)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'accepted')
+        self.assertEqual(order.pos_order.status, 'draft')
+        self.assertEqual(order.pos_order.cust_branch_code, 'P100')
+        self.assertTrue(PushLog.objects.filter(kind='status').exists())
+
+
+class MarketplaceToPosTests(TestCase):
+    def setUp(self):
+        from apps.marketplace.adapters.base import IncomingLine, IncomingOrder
+        self.branch = make_branch()
+        _, self.staff, _ = make_admin('topos_admin')
+        self.staff.softech_user_id = ' 123456789 '
+        self.staff.save()
+        self.channel = MarketplaceChannel.objects.create(code='tp_test', name='منصة', softech_personcode='PL01',
+                                                         stock_buffer=Decimal('0'))
+        ChannelStore.objects.create(channel=self.channel, branch=self.branch, external_store_id='S', is_active=True)
+        self.item = make_item('صنف', 'TP001')
+        self.item.pack_price = Decimal('10')
+        self.item.pack_price_tax = Decimal('11.40')
+        self.item.sale_tax_pct = Decimal('14')
+        self.item.save()
+        ItemStock.objects.create(item=self.item, branch=self.branch, softech_store_code='100',
+                                 quantity_on_hand=Decimal('10'))
+        ChannelListing.objects.create(channel=self.channel, item=self.item, approved=True, external_sku='K')
+        from apps.marketplace import intake
+        inc = IncomingOrder('X1', 'S', 'c', '', 'a', 'platform_paid', Decimal('20'),
+                            [IncomingLine('K', 'صنف', Decimal('2'), Decimal('10'))], {})
+        self.order, _ = intake.ingest(self.channel, inc, source='api')
+
+    def test_convert_creates_contract_draft_on_platform_account(self):
+        from apps.audit.models import AuditLog
+        from apps.marketplace import to_pos
+        draft = to_pos.convert(self.order, self.staff)
+        self.assertEqual((draft.channel, draft.status, draft.doc_kind), ('contract', 'draft', 'sale'))
+        self.assertEqual(draft.cust_branch_code, 'PL01')
+        self.assertEqual(draft.branch, self.branch)
+        self.assertEqual(draft.softech_branchcode, self.branch.softech_branch_id)
+        self.assertIn('X1', draft.notes)
+        self.assertEqual(draft.seller_usercode, '12345')
+        self.assertEqual(draft.lines.count(), 1)
+        line = draft.lines.get()
+        self.assertEqual((line.qty, line.item_sale_price, line.item_sale_price_tax, line.sale_tax_pct, line.cust_discp),
+                         (Decimal('2'), Decimal('10'), Decimal('11.40'), Decimal('14'), 0))
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.pos_order_id, draft.pk)
+        self.assertTrue(AuditLog.objects.filter(action='marketplace_pos_draft_created').exists())
+
+    def test_convert_twice_returns_same_draft(self):
+        from apps.marketplace import to_pos
+        d1 = to_pos.convert(self.order, self.staff)
+        self.order.pos_order = None
+        self.order.save()
+        d2 = to_pos.convert(self.order, self.staff)
+        self.assertEqual(d1.pk, d2.pk)
+        self.assertEqual(SoftechSalesOrder.objects.count(), 1)
+        self.assertEqual(d1.lines.count(), 1)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.pos_order_id, d1.pk)
+
+    def test_convert_without_personcode_refused(self):
+        from apps.marketplace import to_pos
+        self.channel.softech_personcode = ' '
+        self.channel.save()
+        self.order.refresh_from_db()
+        with self.assertRaisesMessage(ValueError, 'حساب المنصة في SOFTECH غير محدد'):
+            to_pos.convert(self.order, self.staff)
+        self.assertEqual(SoftechSalesOrder.objects.count(), 0)
+
+    def test_convert_never_calls_writer(self):
+        from apps.marketplace import to_pos
+        with patch('apps.pos_orders.writer.push_order') as w:
+            to_pos.convert(self.order, self.staff)
+        w.assert_not_called()

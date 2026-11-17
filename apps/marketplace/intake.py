@@ -145,7 +145,7 @@ def accept(order, user, request=None):
             to_pos.convert(order, user)  # a ValueError here rolls the status change back
     if problems:  # raised after the block so the refreshed line.problem values are kept
         raise ValueError('؛ '.join(f'{l.name or l.external_sku}: {detail}' for l, detail in problems))
-    push.push_status(order)
+    transaction.on_commit(lambda: push.push_status(order))
     return order
 
 
@@ -157,7 +157,7 @@ def reject(order, user, reason, request=None):
         order.reject_reason = (reason or '')[:200]
         order.save(update_fields=['reject_reason'])
         _transition(order, S.STATUS_REJECTED, user, note=order.reject_reason, request=request)
-    push.push_status(order)
+    transaction.on_commit(lambda: push.push_status(order))
     return order
 
 
@@ -165,5 +165,5 @@ def set_status(order, to_status, user, note='', request=None):
     with transaction.atomic():
         order = _locked(order)
         _transition(order, to_status, user, note=note, request=request)
-    push.push_status(order)
+    transaction.on_commit(lambda: push.push_status(order))
     return order
