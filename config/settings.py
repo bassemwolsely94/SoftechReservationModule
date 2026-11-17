@@ -605,6 +605,10 @@ ERP_SERVICE_USERCODE = config('ERP_SERVICE_USERCODE', default='')
 # SOFTECH; /push returns a dry-run plan only. Flip to True ONLY after the live
 # write path is implemented and validated against SOFTECH_TEST_HOST.
 POS_WRITER_ENABLED = config('POS_WRITER_ENABLED', default=False, cast=bool)
+# Maker-checker on ISR / GL / price-change approvals (core/maker_checker.py, UAT W5b 2026-11-17): the
+# creator never approves their own document, except the admin role while this is True (the owner
+# prepares and approves today). Set False once real roles are assigned (owner decision D4).
+SELF_APPROVAL_ADMIN_EXEMPT = config('SELF_APPROVAL_ADMIN_EXEMPT', default=True, cast=bool)
 # Usage-instructions slip (apps.usage_print, Project 5). OFF = screen hidden, API 404. Never writes SOFTECH.
 USAGE_PRINT_ENABLED = config('USAGE_PRINT_ENABLED', default=False, cast=bool)
 # HR Attendance stage 1 (apps/hr/attendance): fingerprint punch collection by the office agent. OFF =

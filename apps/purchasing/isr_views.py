@@ -376,6 +376,9 @@ def isr_approve(request, pk):
     if p.status != IsrPush.STATUS_PROPOSED:
         return Response({'detail': f'لا يمكن اعتماد طلب حالته {p.get_status_display()}.'},
                         status=http.HTTP_400_BAD_REQUEST)
+    from core import maker_checker
+    if (refused := maker_checker.refusal(p.created_by, request.user)):    # UAT W5b P0: maker != checker
+        return Response({'detail': refused, 'code': 'self_approval'}, status=http.HTTP_403_FORBIDDEN)
     from apps.purchasing.isr_guards import duplicate_pushed
     dup = duplicate_pushed(p)
     p.status = IsrPush.STATUS_APPROVED

@@ -122,6 +122,10 @@ def approve_request(request, pk):
             status=400
         )
 
+    from core import maker_checker
+    if (refused := maker_checker.refusal(obj.requested_by, request.user)):   # UAT W5b: maker != checker
+        return Response({'detail': refused, 'error_code': 'self_approval'}, status=403)
+
     # Refuse BEFORE approving, so a switched-off write never leaves an
     # approved-but-unexecuted request behind (it stays pending for later).
     if not writer_allowed('PRICING_SOFTECH_WRITE_ENABLED'):
