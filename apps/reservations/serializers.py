@@ -522,6 +522,13 @@ class ReservationCreateSerializer(PhoneAlertWriteMixin, serializers.ModelSeriali
             raise serializers.ValidationError('الكمية يجب أن تكون أكبر من صفر')
         return value
 
+    def validate_contact_phone(self, value):
+        # A number shown masked (apps/customers/access.mask: «••••123») must never be stored as the
+        # contact number — screens that open a customer from another branch only see the masked form.
+        if '•' in (value or '') or '*' in (value or ''):
+            raise serializers.ValidationError('رقم الهاتف ظاهر مخفيّاً — أدخل الرقم كاملاً.')
+        return value
+
     def validate(self, data):
         has_item        = bool(data.get('item'))
         has_manual_name = bool((data.get('manual_item_name') or '').strip())
