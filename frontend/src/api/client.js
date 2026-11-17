@@ -3026,6 +3026,25 @@ export const codeMapsApi = {
   patchItemType: (id, data) => api.patch(`/config/code-maps/item-types/${id}/`, data),
 }
 
+// ── SOFTECH screen robot (/rpa) — staff API, paths per Task 9 ──────────────────
+
+export const rpaApi = {
+  status:        ()          => api.get('/rpa/status/'),
+  jobs:          (params)    => api.get('/rpa/jobs/', { params }),
+  createJob:     (formData)  => api.post('/rpa/jobs/', formData),          // multipart
+  job:           (id)        => api.get(`/rpa/jobs/${id}/`),
+  approveJob:    (id)        => api.post(`/rpa/jobs/${id}/approve/`),
+  cancelJob:     (id)        => api.post(`/rpa/jobs/${id}/cancel/`),
+  document:      (id)        => api.get(`/rpa/documents/${id}/`),
+  resolve:       (id, reason) => api.post(`/rpa/documents/${id}/resolve/`, { reason }),
+  recipes:       ()          => api.get('/rpa/recipes/'),
+  createRecipe:  (formData)  => api.post('/rpa/recipes/', formData),        // multipart .dld
+  approveRecipe: (id)        => api.post(`/rpa/recipes/${id}/approve/`),
+  devices:       ()          => api.get('/rpa/devices/'),
+  addDevice:     (label)     => api.post('/rpa/devices/', { label }),       // → { device, token } once
+  revokeDevice:  (id)        => api.post(`/rpa/devices/${id}/revoke/`),
+}
+
 // ── Pick zones (replenishment picking-sheet classification) ───────────────────
 
 export const pickZonesApi = {
