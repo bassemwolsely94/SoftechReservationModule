@@ -234,6 +234,64 @@ class AgentApiTests(_World, TestCase):
         doc.refresh_from_db()
         self.assertEqual(doc.status, 'approved')
 
+    def test_job_cancelled_after_selection_never_claimed(self):
+        """The job row is not locked with the document: a cancel that lands between the candidate
+        query's snapshot and the lock must still stop the claim."""
+        doc = self.make_doc()
+        real = dispatch._candidates
+
+        class CancelAfterSelect:
+            def __init__(self, qs):
+                self.qs = qs
+
+            def first(self):
+                found = self.qs.first()
+                if found is not None:
+                    RpaJob.objects.filter(pk=found.job_id).update(status='cancelled')
+                return found
+
+        with mock.patch('apps.rpa.dispatch._candidates', side_effect=lambda d: CancelAfterSelect(real(d))):
+            self.assertIsNone(dispatch.claim_next(self.dev))
+        doc.refresh_from_db()
+        self.assertEqual((doc.status, doc.claimed_by_id), ('approved', None))
+        self.assertFalse(RpaRun.objects.exists())
+        self.find.assert_not_called()
+
+    def test_job_cancelled_during_softech_lookup_never_claimed(self):
+        doc = self.make_doc()
+
+        def cancel_meanwhile(document):
+            RpaJob.objects.filter(pk=document.job_id).update(status='cancelled')
+            return None
+
+        self.find.side_effect = cancel_meanwhile
+        self.assertIsNone(dispatch.claim_next(self.dev))
+        doc.refresh_from_db()
+        self.assertEqual(doc.status, 'approved')
+        self.assertFalse(RpaRun.objects.exists())
+
+    def test_unexpected_keyplan_error_goes_to_person_and_queue_moves_on(self):
+        first = self.make_doc()
+        second = self.make_doc()
+        real = dispatch.build_keyplan
+
+        def boom(document, *, mode):
+            if document.pk == first.pk:
+                raise KeyError('secret-ish internal text')
+            return real(document, mode=mode)
+
+        with mock.patch('apps.rpa.dispatch.build_keyplan', side_effect=boom), \
+                self.assertLogs('elrezeiky.errors', 'ERROR'):
+            r = self.claim()
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['keyplan']['document'], second.pk)
+        first.refresh_from_db()
+        self.assertEqual(first.status, 'needs_person')
+        self.assertNotIn('secret-ish', first.needs_person_reason)
+        self.assertIn('مرجع', first.needs_person_reason)
+        self.assertTrue(AuditLog.objects.filter(action='rpa_document_needs_person',
+                                                object_id=str(first.pk)).exists())
+
     def test_unbuildable_keyplan_goes_to_person(self):
         doc = self.make_doc()
         RpaRecipe.objects.filter(pk=self.recipe.pk).update(cancel_keys=[])
@@ -334,6 +392,26 @@ class AgentApiTests(_World, TestCase):
         self.assertEqual(doc.status, 'needs_person')
         self.find.assert_called_once()                    # only the claim-time lookup
 
+    def test_lease_lost_report_goes_to_person(self):
+        doc = self.make_doc()
+        run_id = self.claim().json()['run_id']
+        self.assertEqual(self._report(doc, run_id, 'lease_lost').status_code, 200)
+        doc.refresh_from_db()
+        self.assertEqual((doc.status, doc.needs_person_reason), ('needs_person', 'انقطع الروبوت قبل الإبلاغ'))
+        self.assertEqual(RpaRun.objects.get(pk=run_id).outcome, 'timeout')
+
+    def test_device_revoked_mid_run_401(self):
+        doc = self.make_doc()
+        run_id = self.claim().json()['run_id']
+        RpaDevice.objects.filter(pk=self.dev.pk).update(revoked_at=timezone.now())
+        self.assertEqual(self.client.post(f'/api/rpa/agent/documents/{doc.pk}/heartbeat/').status_code, 401)
+        self.assertEqual(self._report(doc, run_id, 'dry_run_ok').status_code, 401)
+        self.assertEqual(self.client.post(f'/api/rpa/agent/runs/{run_id}/screenshot/',
+                                          {'step_index': '1', 'image': _upload(_png())}).status_code, 401)
+        doc.refresh_from_db()
+        self.assertEqual(doc.status, 'in_progress')     # its lease runs out → a person, as any lost run
+        self.assertIsNone(RpaRun.objects.get(pk=run_id).finished_at)
+
     def test_unknown_outcome_recorded_as_error(self):
         doc = self.make_doc()
         run_id = self.claim().json()['run_id']
@@ -389,6 +467,10 @@ class AgentApiTests(_World, TestCase):
             ok = self.client.post(url, {'step_index': '3', 'image': _upload(_png())})
             self.assertEqual(ok.status_code, 201)
             from PIL import Image
+            raw_jpg = io.BytesIO()
+            Image.new('RGB', (4, 4)).save(raw_jpg, format='JPEG')
+            jpg = self.client.post(url, {'step_index': '4', 'image': _upload(raw_jpg.getvalue(), 'shot.jpg')})
+            self.assertEqual(jpg.status_code, 201)
             raw = io.BytesIO()
             Image.new('RGB', (4, 4)).save(raw, format='GIF')
             gif = _upload(raw.getvalue(), 'shot.gif')
@@ -403,8 +485,9 @@ class AgentApiTests(_World, TestCase):
             self._report(doc, run_id, 'dry_run_ok')
             self.assertEqual(self.client.post(url, {'step_index': '9',
                                                     'image': _upload(_png())}).status_code, 409)
-        shot = RpaScreenshot.objects.get()
-        self.assertEqual((shot.run_id, shot.step_index), (run_id, 3))
+        shots = list(RpaScreenshot.objects.order_by('step_index').values_list('run_id', 'step_index'))
+        self.assertEqual(shots, [(run_id, 3), (run_id, 4)])
+        self.assertTrue(RpaScreenshot.objects.get(step_index=4).image.name.endswith('.jpg'))
 
     # ── middleware: the agent path reaches DRF ──────────────────────────────────────────────
 
@@ -493,6 +576,18 @@ class ResolveTests(_World, TestCase):
         self.doc.refresh_from_db()
         self.assertEqual((self.doc.status, self.doc.softech_docnumber), ('posted', 77))
 
+    def test_resolve_posted_records_failed_verification(self):
+        found = {'docnumber': 78, 'usercode': 'x', 'cust_branch_code': 'T8RB', 'matched_by': 'fingerprint',
+                 'lines': []}
+        with mock.patch(FIND, return_value=found), \
+                mock.patch(VERIFY, return_value={'ok': False, 'problems': ['مستخدم SOFTECH لا يطابق']}):
+            dispatch.resolve_document(self.doc, self.staff, 'posted', 'راجعته بنفسي')
+        log = AuditLog.objects.get(action='rpa_document_resolved')
+        self.assertIs(log.new_data['verify_ok'], False)
+        self.assertEqual(log.new_data['verify_problems'], ['مستخدم SOFTECH لا يطابق'])
+        self.doc.refresh_from_db()
+        self.assertEqual(self.doc.verify_result['ok'], False)
+
     def test_resolve_cancelled(self):
         dispatch.resolve_document(self.doc, self.staff, 'cancelled', 'لا داعي')
         self.doc.refresh_from_db()
@@ -508,7 +603,9 @@ class ResolveTests(_World, TestCase):
 
 @override_settings(**ON)
 class ConcurrentClaimTests(_World, TransactionTestCase):
-    """Real row locks need real transactions on separate connections."""
+    """Two agents claiming at once never share a document (real transactions on separate
+    connections). This proves "no shared claim", not that skip_locked was used: a blocking lock
+    would pass too, only slower."""
     serialized_rollback = True      # put the data-migration rows (screens, matrix) back after the flush
 
     def setUp(self):

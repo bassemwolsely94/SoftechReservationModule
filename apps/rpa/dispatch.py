@@ -21,10 +21,11 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from apps.audit.models import AuditLog
 from config.writers import writer_allowed
 from core import branch_scope
+from core.errors import public_error
 from core.permissions import matrix_allows
 
 from .keyplan import build_keyplan
-from .models import RpaDocument, RpaRun
+from .models import RpaDocument, RpaJob, RpaRun
 from .verifier import find_issue_document, verify_issue_document
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,14 @@ def _candidates(device):
             .order_by('job_id', 'seq', 'pk'))
 
 
+def _still_claimable(doc):
+    """Re-read after the lock: the lock covers the document row only (of=self), and PostgreSQL
+    re-checks a WHERE only on the rows it locks, so a job cancelled after the candidate query's
+    snapshot would otherwise pass. Asked again right before the claim is written."""
+    return (RpaDocument.objects.filter(pk=doc.pk, status='approved').exists()
+            and RpaJob.objects.filter(pk=doc.job_id, status='approved').exists())
+
+
 def claim_next(device):
     """The next document for this device's operator, claimed under a 10-minute lease, or None.
 
@@ -127,6 +136,8 @@ def claim_next(device):
             if doc is None:
                 return None
             job = doc.job
+            if not _still_claimable(doc):
+                continue
             try:
                 found = find_issue_document(doc)
             except Exception as exc:                 # noqa: BLE001 - SOFTECH unreachable: claim nothing
@@ -149,6 +160,11 @@ def claim_next(device):
                 continue
             except ValueError as exc:
                 _needs_person(doc, f'تعذر بناء خطة الإدخال: {exc}', user=job.created_by)
+                continue
+            except Exception as exc:                 # noqa: BLE001 - one bad document must not block the queue
+                _needs_person(doc, f'تعذر بناء خطة الإدخال — {public_error(None, exc)}', user=job.created_by)
+                continue
+            if not _still_claimable(doc):            # cancelled while SOFTECH was being searched
                 continue
             now = timezone.now()
             doc.status = 'in_progress'
@@ -222,7 +238,9 @@ def report_run(document, device, payload) -> RpaRun:
         if run.finished_at is not None:
             return run
         outcome = payload.get('outcome')
-        outcome = outcome if outcome in _OUTCOMES else 'error'
+        # the agent stopped itself because the heartbeat said the lease is gone
+        lease_lost = outcome == 'lease_lost'
+        outcome = 'timeout' if lease_lost else outcome if outcome in _OUTCOMES else 'error'
         run.outcome = outcome
         run.steps = _clean_steps(payload.get('steps'))
         run.finished_at = timezone.now()
@@ -242,7 +260,7 @@ def report_run(document, device, payload) -> RpaRun:
             elif outcome == 'dry_run_ok':
                 _needs_person(doc, 'نتيجة تجريبية في تشغيل فعلي', user=user)
             else:
-                _needs_person(doc, outcome, user=user)
+                _needs_person(doc, LOST_REASON if lease_lost else outcome, user=user)
         AuditLog.log('rpa_run_reported', user=user, obj=doc, old_data={'status': old},
                      new_data={'status': doc.status, 'run_id': run.pk, 'mode': run.mode, 'outcome': outcome,
                                'steps': len(run.steps)},
@@ -310,8 +328,10 @@ def resolve_document(document, profile, decision: str, reason: str):
             doc.status = 'cancelled'
             doc.lease_until = None
             doc.save(update_fields=['status', 'lease_until'])
-        AuditLog.log('rpa_document_resolved', user=profile, obj=doc, old_data=old,
-                     new_data={'status': doc.status, 'decision': decision, 'reason': reason,
-                               'softech_docnumber': doc.softech_docnumber},
+        new = {'status': doc.status, 'decision': decision, 'reason': reason,
+               'softech_docnumber': doc.softech_docnumber}
+        if decision == 'posted':                     # a person may post over a failed check: keep it on record
+            new.update(verify_ok=doc.verify_result['ok'], verify_problems=doc.verify_result['problems'])
+        AuditLog.log('rpa_document_resolved', user=profile, obj=doc, old_data=old, new_data=new,
                      note=f'{doc.reference}: {decision} — {reason}')
     return doc

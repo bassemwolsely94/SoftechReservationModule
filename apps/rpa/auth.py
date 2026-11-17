@@ -37,6 +37,8 @@ def device_for_secret(secret):
     digest = hash_secret(secret)
     device = (RpaDevice.objects.select_related('staff__user')
               .filter(token_hash=digest, revoked_at__isnull=True).first())
+    # The equality lookup on the hash is the real check; this compare repeats it in constant time
+    # as a guard against a collation/normalising lookup ever matching a different string.
     if device is None or not hmac.compare_digest(_as_bytes(device.token_hash), _as_bytes(digest)):
         return None
     return device
