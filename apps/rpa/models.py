@@ -171,3 +171,5 @@ class RpaScreenshot(models.Model):
     step_index = models.PositiveIntegerField(default=0)
     image = models.ImageField(upload_to='rpa/%Y/%m/')
     created_at = models.DateTimeField(auto_now_add=True)
+
+from .portal.models import *  # noqa: F401,F403 — portal models live in a sub-module
