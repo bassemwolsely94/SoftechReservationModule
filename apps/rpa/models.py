@@ -50,19 +50,35 @@ class RpaRecipe(models.Model):
     approved_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=['screen', 'version'], name='rpa_recipe_screen_version_uniq')]
+        constraints = [
+            models.UniqueConstraint(fields=['screen', 'version'], name='rpa_recipe_screen_version_uniq'),
+            # backstop: at most one approved recipe per screen
+            models.UniqueConstraint(fields=['screen'], condition=models.Q(status='approved'),
+                                    name='rpa_recipe_one_approved_per_screen'),
+        ]
 
     def __str__(self):
         return f'{self.screen_id} v{self.version} ({self.status})'
 
+    def _normalised(self, name):
+        """The field's Python value, so Decimal('0.20') == 0.2 == '0.2' compare equal."""
+        field = self._meta.get_field(name)
+        value = getattr(self, field.attname)
+        if isinstance(field, models.DecimalField) and value is not None:
+            return field.to_python(str(value)).normalize()
+        return value
+
     def save(self, *args, **kwargs):
-        # Once approved the content is frozen; only the status may move (approved -> retired).
+        # Approved content is frozen and approved -> retired is the only status move; a retired
+        # recipe is final. (Going back to draft would reopen the content for editing.)
         if self.pk:
             stored = RpaRecipe.objects.filter(pk=self.pk).first()
-            if stored is not None and stored.status == 'approved':
-                for name in self.CONTENT_FIELDS:
-                    if getattr(stored, name) != getattr(self, name):
-                        raise ValidationError('recipe is immutable once approved')
+            if stored is not None and stored.status in ('approved', 'retired'):
+                allowed = {'approved': ('approved', 'retired'), 'retired': ('retired',)}[stored.status]
+                changed = self.status not in allowed or any(
+                    stored._normalised(n) != self._normalised(n) for n in self.CONTENT_FIELDS)
+                if changed:
+                    raise ValidationError('recipe is immutable once approved')
         super().save(*args, **kwargs)
 
 
@@ -75,6 +91,9 @@ class RpaDevice(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     last_seen_at = models.DateTimeField(null=True, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
+    # why the last claim handed nothing out although work may wait (e.g. SOFTECH unreachable); '' = fine
+    last_claim_error = models.CharField(max_length=255, blank=True, default='')
+    last_claim_error_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return self.label

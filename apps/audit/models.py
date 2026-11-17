@@ -225,6 +225,8 @@ class AuditLog(models.Model):
         ('rpa_portal_resolved', 'روبوت مواقع الموردين — حل'),
         ('rpa_portal_code_learnt', 'روبوت مواقع الموردين — تعلّم كود'),
         ('rpa_portal_account_changed', 'روبوت مواقع الموردين — تغيير حساب'),
+        ('rpa_recipe_edited',           'روبوت الإدخال — تعديل مسودة وصفة'),
+        ('rpa_screen_changed',          'روبوت الإدخال — تفعيل أو إيقاف شاشة'),
 
     ]
 

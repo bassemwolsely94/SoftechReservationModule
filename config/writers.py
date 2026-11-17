@@ -55,7 +55,7 @@ WRITER_FLAGS = {
     'REPLACEMENT_POSTING_ENABLED':         {'protects': 'مستندات بدل الروشتة'},
     'INSURANCE_SOFTECH_WRITE_ENABLED':     {'protects': 'إعادة تسعير مطالبات التأمين'},
     'CUSTOMER_MERGE_WRITE_ENABLED':        {'protects': 'دمج أكواد العملاء المكررة'},
-    'RPA_SOFTECH_ENTRY_ENABLED':           {'protects': 'إدخال المستندات في شاشة SOFTECH بالروبوت'},
+    'RPA_SOFTECH_ENTRY_ENABLED':           {'protects': 'روبوت إدخال SOFTECH (إذن صرف، جرد، مشتريات، مرتجع)'},
     'RPA_SUPPLIER_PORTAL_ENABLED':         {'protects': 'روبوت مواقع الموردين (طلبيات ومرتجع صلاحية)'},
 }
 

@@ -77,6 +77,13 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(len(d.sent), 1)
         self.assertTrue(shots)
 
+    def test_empty_popup_rule_never_matches(self):
+        p = plan(popups=[{"title_contains": " ", "text_contains": "", "answer_keys": "{ENTER}"}])
+        d = FakeDriver(popups_after={1: [{"title": "Save changes?", "text": "anything"}]})
+        r = run_keyplan(p, d, stop=threading.Event())
+        self.assertEqual(r["outcome"], "unknown_popup")
+        self.assertNotIn("{ENTER}", [k for k, _ in d.sent])
+
     def test_known_popup_answered_and_continues(self):
         p = plan(popups=[{"title_contains": "Confirm", "text_contains": "save", "answer_keys": "{ENTER}"}])
         d = FakeDriver(popups_after={1: [{"title": "Confirm", "text": "Do you save?"}]})

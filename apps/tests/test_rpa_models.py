@@ -45,3 +45,27 @@ class RpaModelsTests(TestCase):
         recipe.line_cells = [{'kind': 'keys', 'value': '{TAB}'}]
         recipe.save()
         self.assertEqual(RpaRecipe.objects.get(pk=recipe.pk).line_cells[0]['value'], '{TAB}')
+
+    def test_approved_recipe_cannot_go_back_to_draft(self):
+        recipe = RpaRecipe.objects.create(
+            screen=RpaScreen.objects.get(key='issue_125'), version=1, status='approved',
+            created_by=self._staff())
+        recipe.status = 'draft'
+        with self.assertRaisesMessage(ValidationError, 'recipe is immutable once approved'):
+            recipe.save()
+        self.assertEqual(RpaRecipe.objects.get(pk=recipe.pk).status, 'approved')
+
+    def test_retired_recipe_stays_retired(self):
+        recipe = RpaRecipe.objects.create(
+            screen=RpaScreen.objects.get(key='issue_125'), version=1, status='retired',
+            created_by=self._staff())
+        recipe.status = 'draft'
+        with self.assertRaisesMessage(ValidationError, 'recipe is immutable once approved'):
+            recipe.save()
+
+    def test_float_decimal_equality_does_not_false_alarm(self):
+        recipe = RpaRecipe.objects.create(
+            screen=RpaScreen.objects.get(key='issue_125'), version=1, status='approved',
+            created_by=self._staff())
+        recipe.cell_delay = 0.2          # same value as the stored Decimal('0.20')
+        recipe.save()

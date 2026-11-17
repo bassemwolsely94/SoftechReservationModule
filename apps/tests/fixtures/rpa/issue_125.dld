@@ -1,0 +1,82 @@
+﻿begindelays
+DataDelay=0
+CellDelay=0.2
+FormDelay=0.25
+KeyHold=50
+SystemHold=50
+HourGlass=250
+TAB=0
+ENT=0
+*UP=0
+*DN=0
+*LT=0
+*RT=0
+*SP=0
+*SAVE=0
+*NB=0
+*PB=0
+*NF=0
+*PF=0
+*NR=0
+*PR=0
+*FR=0
+*LR=0
+*ER=0
+*DR=0
+*SB=0
+*ST=0
+*BM=0
+*QE=0
+*QR=0
+*FI=0
+*FA=0
+*IR=0
+*CL=0
+*FE=0
+*AA=0
+*AB=0
+*AC=0
+*AD=0
+*AE=0
+*AF=0
+*AG=0
+*AH=0
+*AI=0
+*AJ=0
+*AK=0
+*AL=0
+*AM=0
+*AN=0
+*AO=0
+*AP=0
+*AQ=0
+*AR=0
+*AS=0
+*AT=0
+*AU=0
+*AV=0
+*AW=0
+*AX=0
+*AY=0
+*AZ=0
+enddelays
+beginheader
+Key Strokes	Data	Key Strokes	Key Strokes	Key Strokes	Data	Key Strokes	Data	Key Strokes	Key Strokes	Key Strokes																																																																																																				
+
+000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+endheader
+beginother
+Window=SofTech Smart Business® - MINI - [إذن صـرف للفــروع]
+Description=
+CommandGroup=Other
+PasteCtrlV=1
+endother
+begindata
+\{F2}	52	\{ENTER}	\{ENTER}	\{TAB}	1/5/25	\{TAB}	1	\{ENTER}	\{ENTER}	\{ENTER}
+\{F2}	404	\{ENTER}	\{ENTER}	\{TAB}	1/5/25	\{TAB}	5	\{ENTER}	\{ENTER}	\{ENTER}
+\{F2}	260	\{ENTER}	\{ENTER}	\{TAB}	1/5/25	\{TAB}	10	\{ENTER}	\{ENTER}	\{ENTER}
+\{F2}	404	\{ENTER}	\{ENTER}	\{TAB}	1/5/25	\{TAB}	15	\{ENTER}	\{ENTER}	\{ENTER}
+\{F2}	52	\{ENTER}	\{ENTER}	\{TAB}	1/5/25	\{TAB}	20	\{ENTER}	\{ENTER}	\{ENTER}
+\{F2}		\{ENTER}	\{ENTER}	\{TAB}	1/5/25	\{TAB}		\{ENTER}	\{ENTER}	\{ENTER}
+\{F2}		\{ENTER}	\{ENTER}	\{TAB}	1/5/25	\{TAB}		\{ENTER}	\{ENTER}	\{ENTER}
+enddata
