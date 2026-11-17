@@ -148,6 +148,19 @@ def approve_job(job, *, staff, reasons=None):
     return job
 
 
+def promote_basket(basket):
+    """The ONE ready rule: a pending basket is ready when every line has a supplier key or is
+    not_found, and at least one line has a key (an all-not_found basket has nothing to order)."""
+    if basket.status != 'pending':
+        return False
+    lines = list(basket.lines.values_list('supplier_key', 'status'))
+    if any(not k and st != 'not_found' for k, st in lines) or not any(k for k, _ in lines):
+        return False
+    basket.status = 'ready'
+    basket.save(update_fields=['status'])
+    return True
+
+
 def build_baskets(job):
     """Cut the job's lines into baskets of portal.basket_size in seq order. Idempotent: a job
     that already has baskets gets them back untouched."""
@@ -162,12 +175,12 @@ def build_baskets(job):
         for n, start in enumerate(range(0, len(lines), size), start=1):
             chunk = lines[start:start + size]
             keys = [canonical_sku(known_key(job.portal, ln.item)) for ln in chunk]
-            basket = PortalBasket.objects.create(
-                job=job, seq=n, status='ready' if all(keys) else 'pending')
+            basket = PortalBasket.objects.create(job=job, seq=n, status='pending')
             PortalLine.objects.bulk_create([
                 PortalLine(basket=basket, buyline=ln, item=ln.item, wanted_qty=ln.remaining_qty,
                            supplier_key=k, supplier_key_padded=padded_sku(k))
                 for ln, k in zip(chunk, keys)])
+            promote_basket(basket)
             out.append(basket)
     return out
 

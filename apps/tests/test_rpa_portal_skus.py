@@ -109,3 +109,56 @@ class SkuTests(TestCase):
         self.assertEqual(bline.chosen_supplier, '')
         self.assertEqual(bline.tried[-1]['accepted'], 0)
         self.assertEqual(basket.lines.get().status, 'not_found')
+
+    def _two_in_basket(self):
+        basket, bline = self._basket_line(self.a)
+        other = BuyListLine.objects.create(buylist=self.bl, seq=9, item=self.b, needed_qty=1,
+                                           remaining_qty=1, chosen_supplier='565', source_key='sk:b')
+        PortalLine.objects.create(basket=basket, buyline=other, item=self.b, wanted_qty=1)
+        return basket, bline, other
+
+    def test_reject_one_line_then_confirm_rest_readies_basket(self):
+        basket, bline, other = self._two_in_basket()
+        skus.reject_discovery(other, staff=self.staff)
+        basket.refresh_from_db()
+        self.assertEqual(basket.status, 'pending')
+        skus.confirm_discovery(self._discover(bline).lines.order_by('id').first(), staff=self.staff)
+        basket.refresh_from_db()
+        self.assertEqual(basket.status, 'ready')
+
+    def test_all_lines_rejected_basket_not_ready(self):
+        basket, bline, other = self._two_in_basket()
+        skus.reject_discovery(bline, staff=self.staff)
+        skus.reject_discovery(other, staff=self.staff)
+        basket.refresh_from_db()
+        self.assertEqual(basket.status, 'pending')
+
+    def test_confirm_without_saved_mapping_writes_no_key(self):
+        from unittest import mock
+        basket, bline = self._basket_line(self.a)
+        cand = self._discover(bline).lines.order_by('id').first()
+        with mock.patch('apps.supply.availability.learn_vendor_mapping', side_effect=RuntimeError):
+            skus.confirm_discovery(cand, staff=self.staff)
+        cand.refresh_from_db()
+        self.assertTrue(cand.match_reason.get('learn_failed'))
+        basket.refresh_from_db()
+        self.assertEqual(basket.status, 'pending')
+        self.assertEqual(basket.lines.get().supplier_key, '')
+
+    def test_foreign_buyline_skipped(self):
+        other_bl = BuyList.objects.create(source_kind='upload', created_by=self.staff)
+        foreign = BuyListLine.objects.create(buylist=other_bl, seq=1, item=self.b, needed_qty=1,
+                                             remaining_qty=1, source_key='sk:foreign')
+        batch = skus.record_discovery(self.job, [{'buyline_id': foreign.pk, 'candidates': [
+            {'name': 'X', 'sku': '5'}]}, {'buyline_id': 999999, 'candidates': []}], run=self._run())
+        self.assertEqual(batch.lines.count(), 0)
+        self.assertEqual(len(batch.errors), 2)
+
+    def test_confirm_refuses_non_portal_line(self):
+        from apps.supply.models import AvailabilityBatch, AvailabilityLine
+        _, bline = self._basket_line(self.a)
+        wa = AvailabilityBatch.objects.create(supplier=self.vendor, source='whatsapp')
+        ln = AvailabilityLine.objects.create(batch=wa, raw_text='x', supplier_item_code='7',
+                                             match_reason={'buyline_id': bline.pk, 'job_id': self.job.pk})
+        with self.assertRaises(skus.DiscoveryError):
+            skus.confirm_discovery(ln, staff=self.staff)

@@ -6,6 +6,10 @@ class PortalSetupError(Exception):
     pass
 
 
+class DiscoveryError(ValueError):
+    pass
+
+
 def canonical_sku(raw) -> str:
     """Digits only, leading zeros stripped. '' when the value is not all digits."""
     s = str(raw or '').strip().replace(' ', '')
@@ -50,15 +54,22 @@ def known_key(portal, item) -> str:
 
 def record_discovery(job, results, *, run):
     """Store the robot's candidate products as one portal AvailabilityBatch, one line per
-    candidate. Nothing is picked here: a person confirms (confirm_discovery)."""
+    candidate. Nothing is picked here: a person confirms (confirm_discovery). Entries whose
+    buyline_id is not a line of the job's buy list are skipped and listed on batch.errors."""
     from django.db import transaction
     from apps.supply.models import AvailabilityBatch, AvailabilityLine
     vendor = vendor_for(job.portal)
+    valid = set(job.buylist.lines.values_list('pk', flat=True))
+    errors = []
     with transaction.atomic():
         batch = AvailabilityBatch.objects.create(
             supplier=vendor, supplier_name=vendor.name, source=AvailabilityBatch.SOURCE_PORTAL,
             notes=f'portal discovery job {job.pk} run {getattr(run, "pk", "")}')
         for res in results or []:
+            bid = res.get('buyline_id')
+            if bid not in valid:
+                errors.append({'buyline_id': bid, 'error': 'not a line of this job buy list'})
+                continue
             for cand in res.get('candidates') or []:
                 sku = canonical_sku(cand.get('sku'))
                 if not sku:
@@ -67,47 +78,59 @@ def record_discovery(job, results, *, run):
                     batch=batch, raw_text=str(cand.get('name') or '')[:300],
                     supplier_item_code=sku, price=cand.get('price'),
                     signals=['out_of_stock'] if cand.get('stock_mark') else [],
-                    match_reason={'buyline_id': res.get('buyline_id'), 'job_id': job.pk})
+                    match_reason={'buyline_id': bid, 'job_id': job.pk})
+    batch.errors = errors
     return batch
 
 
 def _promote_ready(job):
-    """Pending baskets whose every line now has a key become ready (the same rule
-    jobs.build_baskets applies at build time)."""
     from apps.rpa.models import PortalBasket
+    from apps.rpa.portal.jobs import promote_basket
     for basket in PortalBasket.objects.filter(job=job, status='pending'):
-        if not basket.lines.filter(supplier_key='').exists():
-            basket.status = 'ready'
-            basket.save(update_fields=['status'])
+        promote_basket(basket)
 
 
 def confirm_discovery(availability_line, *, staff):
     """A person confirmed this candidate for the buy line's item: learn the code, write it on
-    the job's portal lines, ready the baskets that now have every key. When the code is
-    already confirmed for another item the conflict stays on the line for a person."""
+    the job's portal lines, ready the baskets that are now complete. When the code is already
+    confirmed for another item, or could not be learnt, the line stays for a person."""
     from django.db import transaction
+    from apps.invoices.models import VendorItemMapping
     from apps.rpa.models import BuyListLine, PortalJob, PortalLine
     from apps.rpa.portal.buylist import _audit
     from apps.supply.availability import confirm_line
-    from apps.supply.models import AvailabilityLine
+    from apps.supply.models import AvailabilityBatch, AvailabilityLine
     with transaction.atomic():
         line = AvailabilityLine.objects.select_for_update().select_related('batch').get(
             pk=availability_line.pk)
+        if line.batch.source != AvailabilityBatch.SOURCE_PORTAL:
+            raise DiscoveryError('ليس سطر اكتشاف من موقع مورد')
         mr = line.match_reason or {}
-        buyline = BuyListLine.objects.select_related('item').get(pk=mr['buyline_id'])
+        job = PortalJob.objects.filter(pk=mr.get('job_id')).first()
+        buyline = (BuyListLine.objects.select_related('item')
+                   .filter(pk=mr.get('buyline_id'), buylist_id=job.buylist_id).first()
+                   if job else None)
+        if buyline is None:
+            raise DiscoveryError('سطر الاكتشاف لا يخص قائمة المهمة')
         sku = canonical_sku(line.supplier_item_code)
+        if not sku:
+            raise DiscoveryError('كود المورد غير صالح')
         confirm_line(line, buyline.item, staff=staff, vendor_code=sku)
         line.refresh_from_db()
         if (line.match_reason or {}).get('vendor_code_conflict'):
             return
-        job_id = mr.get('job_id')
-        lines = PortalLine.objects.filter(item=buyline.item, supplier_key='',
-                                          basket__status__in=['pending', 'ready'])
-        if job_id:
-            lines = lines.filter(basket__job_id=job_id)
-        lines.update(supplier_key=sku, supplier_key_padded=padded_sku(sku))
-        if job_id:
-            _promote_ready(PortalJob.objects.get(pk=job_id))
+        if not VendorItemMapping.objects.filter(vendor=line.batch.supplier, vendor_item_code=sku,
+                                                item=buyline.item).exists():
+            mr2 = dict(line.match_reason or {})
+            mr2['learn_failed'] = True
+            line.match_reason = mr2
+            line.save(update_fields=['match_reason'])
+            return
+        PortalLine.objects.filter(
+            basket__job=job, item=buyline.item, supplier_key='', status='pending',
+            basket__status__in=['pending', 'ready']).update(
+                supplier_key=sku, supplier_key_padded=padded_sku(sku))
+        _promote_ready(job)
         _audit('rpa_portal_code_learnt', line, staff=staff,
                note=f'item {buyline.item_id} code {sku}',
                extra={'item_id': buyline.item_id, 'sku': sku, 'buyline_id': buyline.pk})
@@ -121,8 +144,12 @@ def reject_discovery(buyline, *, staff):
     with transaction.atomic():
         locked = BuyListLine.objects.select_for_update().get(pk=buyline.pk)
         supplier = locked.chosen_supplier
-        PortalLine.objects.filter(buyline=locked, supplier_key='').update(
+        affected = list(PortalLine.objects.filter(buyline=locked, supplier_key='', status='pending')
+                        .select_related('basket__job'))
+        PortalLine.objects.filter(pk__in=[p.pk for p in affected]).update(
             status='not_found', message='لا يوجد كود مطابق في موقع المورد')
         apply_result(locked, supplier_code=supplier, accepted=0, basket_id=None)
+        for job in {p.basket.job for p in affected}:
+            _promote_ready(job)
         _audit('rpa_portal_code_learnt', locked, staff=staff, note='none of the candidates',
                extra={'rejected': True})
