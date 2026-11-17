@@ -526,6 +526,27 @@ class StaticGuardTests(SimpleTestCase):
                           if s.flag and not hasattr(settings, s.flag)})
         self.assertEqual(missing, [])
 
+    def test_screen_write_sites_resolve(self):
+        """Screen-robot writes hold no SQL, so the scan above cannot find them: each entry must
+        name a real function and a registered writer flag (SOFTECH RPA, Task 8)."""
+        import importlib
+
+        from config.writers import WRITER_FLAGS
+
+        from .softech_write_manifest import SCREEN_WRITE_SITES
+        self.assertTrue(SCREEN_WRITE_SITES)
+        for key, site in SCREEN_WRITE_SITES.items():
+            path, qualname = key.split('::')
+            module = importlib.import_module(path[:-len('.py')].replace('/', '.'))
+            target = module
+            for part in qualname.split('.'):
+                target = getattr(target, part, None)
+                self.assertIsNotNone(target, f'{key}: {part} not found')
+            self.assertTrue(callable(target), key)
+            self.assertIn(site.flag, WRITER_FLAGS, key)
+            self.assertTrue(site.dry_run_default, key)
+            self.assertTrue(site.idempotency and site.audit, key)
+
     def test_softech_write_flags_default_false(self):
         tree = ast.parse((static_scan.REPO_ROOT / 'config' / 'settings.py').read_text(encoding='utf-8'))
         assert_matches_baseline(self, 'write_flags_default_true', static_scan.default_true_flags(tree))
