@@ -107,6 +107,8 @@ export const MOBILE = /(?<!\d)(?:0020|20)?0?1[0125]\d{8}(?!\d)/g
 const PHONE_KEY = /phone|mobile|whats|tel(?!e?gram)|contact_number/i
 // numbers that belong to staff / branches / riders, not customers: not this check's business
 const NOT_CUSTOMER_PATH = /branch|staff|user|employee|assigned|rider|driver|created_by|updated_by|pharmacist|agent|supplier|company/i
+// endpoints that list the pharmacy's own / staff numbers (run 3: config whatsapp_number, drivers' mobiles)
+const NOT_CUSTOMER_URL = /^\/api\/(config|branches|users|auth|hr|delivery\/drivers|delivery\/riders|staff)\//
 
 /** Mobile numbers in customer-phone fields of a JSON body: [{path, value}] (value stays in memory only). */
 export function phoneFieldNumbers(json) {
@@ -207,7 +209,7 @@ export function checkPhones(o) {
     const src = phoneRule(key, domain, 'A', true).src
     const leaks = []      // [{at, value}]
     for (const b of o.bodies || []) {
-      if (!b.json) continue
+      if (!b.json || NOT_CUSTOMER_URL.test(safePath(b.url))) continue
       for (const h of phoneFieldNumbers(b.json)) leaks.push({ at: `${safePath(b.url)} ${h.path.replace(/\[\d+\]/g, '[]')}`, value: h.value })
     }
     for (const f of o.files || []) for (const m of normalise(f.text).match(MOBILE) || []) leaks.push({ at: `file ${f.name}`, value: m })
@@ -224,6 +226,9 @@ export function checkPhones(o) {
   }
   // Over-masking: a customer this screen is about, whose number this user may see in full, shows only masked.
   for (const c of o.overMask || []) {
+    // only customers of a branch the user sees: for others "full" would rest on a record the
+    // response may not show (run 3: call-center lookup by the restricted supervisor)
+    if (!sees(key, c.branch)) continue
     const r = phoneRule(key, domain, c.branch, true)
     if (r.rule !== 'full' || !c.needle) continue
     const full = text.includes(c.needle) || (o.bodies || []).some(b => b.json && jsonHits(b.json, c.needle).length)

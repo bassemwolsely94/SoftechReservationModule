@@ -20,6 +20,7 @@ guardBackend()
 for (const key of EXPOSURE_USERS) {
   test.describe(`exposure records as ${key}`, () => {
     test.use({ storageState: stateFile(key) })
+    test.describe.configure({ timeout: 600_000 })   // loops over many pages: 3 min stopped run 3 mid-scan
     keepSignedIn(key)
 
     test(`${key} other-branch detail records are absent`, async ({ page, baseURL }) => {

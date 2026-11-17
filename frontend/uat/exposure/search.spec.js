@@ -42,6 +42,7 @@ guardBackend()
 for (const key of EXPOSURE_USERS) {
   test.describe(`exposure search as ${key}`, () => {
     test.use({ storageState: stateFile(key) })
+    test.describe.configure({ timeout: 600_000 })   // loops over many pages: 3 min stopped run 3 mid-scan
     keepSignedIn(key)
     const all = refCustomers()
     const unseen = all.filter(c => !sees(key, c.branch))
