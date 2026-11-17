@@ -32,7 +32,13 @@ class IsAdminOrSupervisor(BasePermission):
         if not (u and u.is_authenticated):
             return False
         p = getattr(u, 'staff_profile', None)
-        return bool(p and p.is_active and p.role in ('admin', 'supervisor'))
+        if not (p and p.is_active and p.role in ('admin', 'supervisor')):
+            return False
+        # UAT D5 (2026-11-17): the screen follows the role matrix, so the API does too — settings view
+        # to read, settings edit to change (admin always passes)
+        from core.permissions import matrix_allows
+        need = ('view',) if request.method in ('GET', 'HEAD', 'OPTIONS') else ('edit',)
+        return matrix_allows(p, 'settings', *need)
 
 
 PERMS = [IsAuthenticated, IsAdminOrSupervisor]

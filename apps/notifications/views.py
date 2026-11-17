@@ -648,7 +648,9 @@ _BROADCAST_ROLES = frozenset({'admin', 'supervisor'})
 
 
 def _can_broadcast(profile):
-    return bool(profile and (profile.role in _BROADCAST_ROLES))
+    # UAT D5 (2026-11-17): also the matrix grant the screen asks for (settings create)
+    from core.permissions import matrix_allows
+    return bool(profile and (profile.role in _BROADCAST_ROLES) and matrix_allows(profile, 'settings', 'create'))
 
 
 @api_view(['GET', 'POST'])
