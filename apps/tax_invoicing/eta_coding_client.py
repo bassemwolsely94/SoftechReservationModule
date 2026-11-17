@@ -77,14 +77,16 @@ class CodingClient:
         return True if self.system == 'production' else _verify()
 
     def _token(self):
-        with _lock:
-            cached = _tokens.get(self.system)
-            if cached and cached['expires'] > time.time() + 60:
-                return cached['value']
         client_id, secret = self._credentials()
         if not (client_id and secret):
             raise EtaNotConfigured(f'بيانات دخول منظومة المصلحة «{self.system}» لطلب الأكواد غير موجودة '
                                    f'(TAX_ETA_{self.system.upper()}_CLIENT_ID)')
+        key = (self.system, client_id)          # a changed login never reuses the old login's token
+        with _lock:
+            cached = _tokens.get(key)
+            if cached and cached['expires'] > time.time() + 60:
+                return cached['value']
+        self._pace()                            # a login counts against ETA's pace too
         try:
             r = requests.post(self.hosts['id'] + '/connect/token',
                               data={'grant_type': 'client_credentials', 'client_id': client_id, 'client_secret': secret},
@@ -95,10 +97,16 @@ class CodingClient:
         if r.status_code != 200:
             raise EtaRefused(f'رفضت منظومة {self.system} الدخول (HTTP {r.status_code})', r.status_code)
         body = _json(r)
+        value = str(body.get('access_token') or '') if isinstance(body, dict) else ''
+        if not value:
+            raise EtaRefused(f'لم ترسل منظومة {self.system} رمز الدخول', r.status_code)
+        try:
+            expires_in = int(body.get('expires_in', 3600))
+        except (TypeError, ValueError):
+            expires_in = 3600
         with _lock:
-            _tokens[self.system] = {'value': body.get('access_token', ''),
-                                    'expires': time.time() + int(body.get('expires_in', 3600))}
-            return _tokens[self.system]['value']
+            _tokens[key] = {'value': value, 'expires': time.time() + expires_in}
+        return value
 
     def _headers(self):
         return {'Authorization': f'Bearer {self._token()}', 'Content-Type': 'application/json',

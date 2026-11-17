@@ -162,7 +162,34 @@ class CodingClientTests(_Clean, SimpleTestCase):
             client.my_code_requests('EG-1')
             client.my_code_requests('EG-2')
         self.assertTrue(sleep.called)
-        self.assertLessEqual(sleep.call_args[0][0], 0.5)
+        self.assertLessEqual(sleep.call_args_list[0][0][0], 0.5)     # (sleep is mocked, so later waits add up)
+
+    def test_token_is_kept_per_login(self):
+        client = eta_coding_client.CodingClient('production')
+        with mock.patch.object(eta_coding_client.requests, 'post', return_value=TOKEN) as post, \
+                mock.patch.object(eta_coding_client.requests, 'get', return_value=_response(200, [])):
+            client.my_code_requests('EG-1')
+            with override_settings(TAX_ETA_PRODUCTION_CLIENT_ID='own-id', TAX_ETA_PRODUCTION_CLIENT_SECRET='own-sec'):
+                client.my_code_requests('EG-1')
+            client.my_code_requests('EG-1')
+        self.assertEqual([c[1]['data']['client_id'] for c in post.call_args_list], ['prod-id', 'own-id'])
+
+    def test_login_without_a_token_is_refused_and_not_cached(self):
+        client = eta_coding_client.CodingClient('production')
+        with mock.patch.object(eta_coding_client.requests, 'post', return_value=_response(200, {'expires_in': 3600})), \
+                mock.patch.object(eta_coding_client.requests, 'get') as get:
+            with self.assertRaises(eta_coding_client.EtaRefused):
+                client.my_code_requests('EG-1')
+            get.assert_not_called()
+        self.assertEqual(eta_coding_client._tokens, {})
+
+    def test_login_is_paced_too(self):
+        with mock.patch.object(eta_coding_client, 'MIN_INTERVAL', 0.5), \
+                mock.patch.object(eta_coding_client.time, 'sleep') as sleep, \
+                mock.patch.object(eta_coding_client.requests, 'post', return_value=TOKEN), \
+                mock.patch.object(eta_coding_client.requests, 'get', return_value=_response(200, [])):
+            eta_coding_client.CodingClient('production').my_code_requests('EG-1')   # login, then the call
+        self.assertEqual(sleep.call_count, 1)
 
     def test_unknown_system_refused(self):
         with self.assertRaises(ValueError):
@@ -263,6 +290,51 @@ class ProductionGateTests(_Clean, Fixture, TestCase):
         self.assertTrue(coding.first_request_pending())
         out, _ = self._send(rows[:1])                                  # one at a time is allowed
         self.assertEqual(out['submitted'], 1)
+
+    def test_one_production_request_in_flight_until_eta_approves_one(self):
+        rows = self._prod(self.p1, self.p2)
+        self.assertEqual(self._send(rows[:1])[0]['submitted'], 1)
+        for state in (TaxCodeRequest.SUBMITTED, TaxCodeRequest.UNCERTAIN, TaxCodeRequest.SENDING):
+            with self.subTest(state=state):
+                TaxCodeRequest.objects.filter(pk=rows[0].pk).update(status=state)
+                with mock.patch.object(eta_coding_client.requests, 'post') as post:
+                    with self.assertRaisesMessage(coding.TaxRuleError, coding.FIRST_REQUEST_IN_FLIGHT):
+                        coding.send([rows[1].pk], self.admin, '1', actor_can_finalize=True)
+                self._assert_nothing_left(rows[1:], post)
+        TaxCodeRequest.objects.filter(pk=rows[0].pk).update(status=TaxCodeRequest.APPROVED)
+        self.assertEqual(self._send(rows[1:])[0]['submitted'], 1)
+
+    @override_settings(TAX_ETA_CODING_PRODUCTION_BATCH_OK=True)
+    def test_owner_flag_lifts_the_in_flight_rule(self):
+        rows = self._prod(self.p1, self.p2)
+        self._send(rows[:1])
+        self.assertEqual(self._send(rows[1:])[0]['submitted'], 1)
+
+    def test_in_flight_check_runs_after_the_lock_with_the_claim(self):
+        """Another sender claims its first request while we wait on the lock: we must see it and stop."""
+        rows = self._prod(self.p1)
+        other = TaxItemProfile.objects.create(softech_itemcode='70003', item_name='Other', gpc_code='10000454')
+        real_lock = coding._lock_production
+
+        def lock_then_other_sender_wins():
+            real_lock()
+            TaxCodeRequest.objects.create(profile=other, item_code='EG-100200300-70003', parent_code='10000454',
+                                          code_name='O', code_name_ar='O', active_from=timezone.localdate(),
+                                          environment='production', status=TaxCodeRequest.SENDING)
+        with mock.patch.object(coding, '_lock_production', side_effect=lock_then_other_sender_wins) as lock, \
+                mock.patch.object(eta_coding_client.requests, 'post') as post:
+            with self.assertRaisesMessage(coding.TaxRuleError, coding.FIRST_REQUEST_IN_FLIGHT):
+                coding.send([rows[0].pk], self.admin, '1', actor_can_finalize=True)
+        lock.assert_called_once()
+        self._assert_nothing_left(rows, post)
+
+    def test_the_production_lock_is_a_transaction_advisory_lock(self):
+        from django.db import connection, transaction
+        with transaction.atomic():
+            coding._lock_production()
+            with connection.cursor() as cur:
+                cur.execute("SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND pid = pg_backend_pid()")
+                self.assertGreaterEqual(cur.fetchone()[0], 1)
 
     @override_settings(TAX_ETA_CODING_PRODUCTION_BATCH_OK=True)
     def test_owner_flag_lifts_the_first_request_rule(self):

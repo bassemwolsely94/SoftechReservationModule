@@ -16,7 +16,7 @@ Gates for sending:
 """
 import re
 
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.utils import timezone
 
 from config.writers import writer_allowed
@@ -30,6 +30,9 @@ PRODUCTION = 'production'
 PRODUCTION_FLAG = eta_coding_client.PRODUCTION_FLAG
 BATCH_FLAG = 'TAX_ETA_CODING_PRODUCTION_BATCH_OK'
 FIRST_REQUEST_ONLY = 'أرسل طلباً واحداً أولاً حتى تعتمده المصلحة'
+FIRST_REQUEST_IN_FLIGHT = 'يوجد طلب للمنظومة الفعلية لدى المصلحة لم يُعتمد بعد؛ انتظر اعتماده قبل إرسال طلب آخر'
+PRODUCTION_LOCK = 'eta-coding-production'
+IN_FLIGHT = (TaxCodeRequest.SENDING, TaxCodeRequest.SUBMITTED, TaxCodeRequest.UNCERTAIN)
 MAX_PER_ACTION = 200
 GPC_BRICK = re.compile(r'^\d{8}$')
 _ETA_STATUS = {'submitted': TaxCodeRequest.SUBMITTED, 'approved': TaxCodeRequest.APPROVED,
@@ -239,8 +242,39 @@ def production_gate(rows, actor_can_finalize, confirm):
         raise TaxRuleError('لا توجد طلبات جاهزة للإرسال')
     if str(confirm).strip() != str(len(rows)):
         raise TaxRuleError(f'اكتب عدد الطلبات ({len(rows)}) للتأكيد')
-    if len(rows) > 1 and first_request_pending() and not writer_allowed(BATCH_FLAG):
-        raise TaxRuleError(FIRST_REQUEST_ONLY)
+    if _first_request_rule_applies():
+        if len(rows) > 1:
+            raise TaxRuleError(FIRST_REQUEST_ONLY)
+        if _production_in_flight():
+            raise TaxRuleError(FIRST_REQUEST_IN_FLIGHT)
+
+
+def _first_request_rule_applies():
+    return first_request_pending() and not writer_allowed(BATCH_FLAG)
+
+
+def _production_in_flight():
+    return TaxCodeRequest.objects.filter(environment=PRODUCTION, status__in=IN_FLIGHT).exists()
+
+
+def _lock_production():
+    """Serialises production claims (call inside a transaction): the first-request check and the claim run
+    under one lock, so two senders can never both put a first request in front of ETA."""
+    with connection.cursor() as cur:
+        cur.execute('SELECT pg_advisory_xact_lock(hashtext(%s))', [PRODUCTION_LOCK])
+
+
+def _claim(row, env, actor):
+    """Moves the row to SENDING. For production while the first-request rule applies, refuses when another
+    production request is already in flight; checked and claimed under the same lock."""
+    with transaction.atomic():
+        if env == PRODUCTION:
+            _lock_production()
+            if _first_request_rule_applies() and _production_in_flight():
+                raise TaxRuleError(FIRST_REQUEST_IN_FLIGHT)
+        return (TaxCodeRequest.objects.filter(pk=row.pk, status__in=[TaxCodeRequest.PREPARED, TaxCodeRequest.FAILED])
+                .update(status=TaxCodeRequest.SENDING, sent_by=actor, sent_at=timezone.now(), environment=env,
+                        error=''))
 
 
 def send(request_ids, actor, confirm, *, actor_can_finalize=False):
@@ -270,9 +304,7 @@ def send(request_ids, actor, confirm, *, actor_can_finalize=False):
         except TaxRuleError as exc:
             results['refused'].append({'id': row.pk, 'why': str(exc)})
             continue
-        with transaction.atomic():
-            claimed = TaxCodeRequest.objects.filter(pk=row.pk, status__in=[TaxCodeRequest.PREPARED, TaxCodeRequest.FAILED]) \
-                .update(status=TaxCodeRequest.SENDING, sent_by=actor, sent_at=timezone.now(), environment=env, error='')
+        claimed = _claim(row, env, actor)
         if not claimed:
             continue
         try:
