@@ -815,8 +815,8 @@ SCREENS = [
              'text': T('للمتابعة وإنت بتكتب. الاعتماد بيرفض أي قيد مش متزن، والسيرفر هو اللي بيحسب.', 'For checking as you type. Approval refuses any unbalanced entry; the server does the sums.'),
              'open_hint': T('افتح قيداً أو «+ قيد يدوي».', 'Open an entry or "+ Manual entry".')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلاتر الحالة والدفتر والفرع والمصدر تقبل الآن أكثر من اختيار معاً', 'Status, book, branch and source filters now take several choices at once'),
+        'updated': '2026-11-17',
+        'change_note': T('اللي عمل القيد مبيعتمدهوش — يعتمده محاسب تاني أو مدير النظام', 'Whoever drafted an entry cannot approve it — another accountant or the admin approves it'),
     },
     {
         'key': 'finance.gl_parties',

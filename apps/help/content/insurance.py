@@ -872,8 +872,8 @@ SCREENS = [
              'when': T('بعد ما تختار الصفوف والأعمدة.', 'After choosing the rows and columns.'),
              'open_hint': T('تبويب «تحليل البيانات»، بعد ظهور نتيجة.', 'The "Data analysis" tab, once a result shows.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فئات الفوترة: بطاقات + جدول واحد، لا نقل صامت بين الفئات، الحذف يرجّع الروشتات فوراً؛ تصدير أصناف المطالبة Excel؛ الوضع الضريبي للمطالبة يظهر الآن أعلى الشاشة', "Billing groups: cards + one grid, no silent moves between groups, deleting returns receipts at once; claim items Excel export; The claim's tax status now shows at the top of the screen"),
+        'updated': '2026-11-17',
+        'change_note': T('المطالبة المقدَّمة متقفلة: مبترجعش مسودة إلا من مدير النظام وبسبب مكتوب، والتعديل بملحق', 'A submitted claim is locked: only the admin can return it to draft, with a written reason; changes go through a supplement'),
     },
     {
         'key': 'insurance.print',

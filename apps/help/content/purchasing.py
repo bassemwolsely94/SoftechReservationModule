@@ -1025,8 +1025,8 @@ SCREENS = [
              'text': T('يجهّز رسالة بالتفاصيل ويفتح واتساب — على رقم العميل لو معروف، وإلا تختار المحادثة.', "Builds a message with the details and opens WhatsApp — to the customer's number when known, else you pick the chat."),
              'when': T('الرسالة مش بتتبعت لوحدها: راجعها واضغط إرسال في واتساب.', 'Nothing is sent by itself: review it and press send in WhatsApp.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('«مقارنة أسعار الشراء»: فلتر المورد بقى يقبل أكثر من مورد.', '"Purchase price comparison": the supplier filter now takes several suppliers.'),
+        'updated': '2026-11-17',
+        'change_note': T('اللي اقترح طلب التوريد (ISR) مبيعتمدهوش — يعتمده زميل أو مدير النظام', 'Whoever proposed an ISR cannot approve it — a colleague or the admin approves it'),
     },
     {
         'key': 'purchasing.overview',
