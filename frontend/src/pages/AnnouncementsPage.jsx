@@ -7,12 +7,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { notificationsApi, branchesApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import useRoles from '../hooks/useRoles'
+import { usePermission } from '../hooks/usePermission'
 
 
 export default function AnnouncementsPage() {
   const qc = useQueryClient()
   const { user } = useAuthStore()
-  const canBroadcast = ['admin', 'supervisor'].includes(user?.role)
+  // publishing: the API's broadcasters (admin / supervisor, apps/notifications/views.py) AND the
+  // role matrix's settings create — UAT D5, owner: tighten to the matrix
+  const settingsCreate = usePermission('settings', 'create')
+  const canBroadcast = ['admin', 'supervisor'].includes(user?.role) && settingsCreate
   const [showForm, setShowForm] = useState(false)
   const [statsFor, setStatsFor] = useState(null)
 
@@ -52,7 +56,8 @@ export default function AnnouncementsPage() {
       ) : (
         <div className="space-y-3" data-tour="general-announcements-list">
           {items.map(a => {
-            const mine = a.author === user?.staff_profile_id || ['admin', 'supervisor'].includes(user?.role)
+            // read stats + delete: the author or an admin, exactly as the API (announcement_detail)
+            const mine = a.author === user?.staff_profile_id || user?.role === 'admin'
             return (
               <div key={a.id} data-tour="general-announcements-card" className={`bg-white rounded-2xl border p-4 ${a.priority === 'high' ? 'border-red-200' : 'border-gray-100'}`}>
                 <div className="flex items-start justify-between gap-3">

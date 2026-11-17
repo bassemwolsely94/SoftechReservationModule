@@ -16,6 +16,7 @@ import CustomerSearchWidget from '../components/CustomerSearchWidget'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import GiftCouponsTab from './vouchers/GiftCouponsTab'
 import useAuthStore from '../store/authStore'
+import { usePermission } from '../hooks/usePermission'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
 import useServerSort from '../hooks/useServerSort'
@@ -1375,8 +1376,10 @@ export default function VouchersPage() {
   const [redeemTarget, setRedeemTarget] = useState(null)
 
   const { user } = useAuthStore()
-  // Display only — the API enforces the same roles (apps/vouchers/coupon_views.py).
-  const canSeeCoupons = ['admin', 'supervisor', 'purchasing', 'quality_manager'].includes(user?.role)
+  // Display only — the API enforces the same roles (apps/vouchers/coupon_views.py) and the
+  // middleware the vouchers view grant; a removed grant hides the tab (UAT D5).
+  const vouchersView = usePermission('vouchers', 'view')
+  const canSeeCoupons = ['admin', 'supervisor', 'purchasing', 'quality_manager'].includes(user?.role) && vouchersView
 
   const tabs = [
     { key: 'vouchers',  label: '🎫 القسائم' },
