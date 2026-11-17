@@ -11,10 +11,13 @@ from config.writers import writer_allowed
 
 _DATALOAD = re.compile(r'\\{([^{}]*)\}')
 _SPECIALS = set('+^%~(){}[]')
+# The agent sends with with_spaces/with_tabs/with_newlines off, so whitespace must be explicit keys.
+_WHITESPACE = {' ': '{SPACE}', '\t': '{TAB}', '\n': '{ENTER}'}
 
 
 def _escape(text: str) -> str:
-    return ''.join('{%s}' % ch if ch in _SPECIALS else ch for ch in text)
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    return ''.join(_WHITESPACE.get(ch) or ('{%s}' % ch if ch in _SPECIALS else ch) for ch in text)
 
 
 def to_send_keys(cell: str) -> str:
@@ -40,13 +43,21 @@ def format_field(line, field: str) -> str:
     raise ValueError(f'unknown recipe field: {field}')
 
 
-def _cells_to_keys(cells, line=None, reference='') -> str:
+def _cells_to_keys(cells, line=None, reference=None) -> str:
     parts = []
     for cell in cells or []:
         if isinstance(cell, str):
             parts.append(to_send_keys(cell))
         elif cell.get('kind') == 'field':
-            value = reference if cell['value'] == 'reference' else format_field(line, cell['value'])
+            name = cell['value']
+            if name == 'reference':
+                if reference is None:
+                    raise ValueError('the reference field belongs in ref_cells, not line_cells')
+                value = reference
+            else:
+                if line is None:
+                    raise ValueError(f'line field {name!r} is only valid in line_cells')
+                value = format_field(line, name)
             parts.append(_escape(value))
         else:
             parts.append(to_send_keys(cell.get('value', '')))
@@ -78,8 +89,12 @@ def build_keyplan(document, *, mode: str) -> dict:
     else:
         raise ValueError(f'unknown mode: {mode}')
 
+    lines = list(document.lines.order_by('row_no', 'pk'))
+    if not lines:
+        raise ValueError('document has no lines; a plan must not only save or cancel')
+
     steps = []
-    for n, line in enumerate(document.lines.order_by('row_no', 'pk'), start=1):
+    for n, line in enumerate(lines, start=1):
         steps.append({'i': len(steps) + 1, 'label': f'سطر {n}',
                       'send': _cells_to_keys(recipe.line_cells, line)})
     if recipe.ref_cells:
@@ -88,6 +103,14 @@ def build_keyplan(document, *, mode: str) -> dict:
     steps.append({'i': len(steps) + 1, 'label': final_label,
                   'send': _cells_to_keys(final_keys), 'final': True})
 
+    if mode == 'dry_run' and recipe.save_keys:
+        save_seq = _cells_to_keys(recipe.save_keys)
+        if save_seq and any(save_seq in step['send'] for step in steps):
+            raise ValueError('a dry-run plan must never contain the save keys')
+
+    popups = [{**p, 'answer_keys': to_send_keys(p['answer_keys'])} if p.get('answer_keys') else p
+              for p in (recipe.popups or [])]
+
     return {
         'document': document.pk,
         'reference': document.reference,
@@ -95,6 +118,6 @@ def build_keyplan(document, *, mode: str) -> dict:
         'cell_delay': float(recipe.cell_delay),
         'form_delay': float(recipe.form_delay),
         'checklist': _checklist(job, recipe),
-        'popups': list(recipe.popups or []),
+        'popups': popups,
         'steps': steps,
     }

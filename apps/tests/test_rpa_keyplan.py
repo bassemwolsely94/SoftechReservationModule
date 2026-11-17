@@ -59,7 +59,7 @@ class KeyplanTests(TestCase):
                          '{F2}52{ENTER}{ENTER}{TAB}1/5/25{TAB}1{ENTER}{ENTER}{ENTER}')
         self.assertEqual(plan['steps'][0]['label'], 'سطر 1')
         self.assertEqual(plan['reference'], f'RPA-{self.doc.pk}')
-        self.assertEqual(plan['steps'][1]['send'], f'RPA{{-}}{self.doc.pk}{{ENTER}}'.replace('{-}', '-'))
+        self.assertEqual(plan['steps'][1]['send'], f'RPA-{self.doc.pk}{{ENTER}}')
 
     def test_dry_run_ends_with_cancel_never_save(self):
         plan = build_keyplan(self.doc, mode='dry_run')
@@ -98,3 +98,62 @@ class KeyplanTests(TestCase):
         self.assertNotIn('T7B', text)
         self.assertIn('105', text)
         self.assertIn('افتح الشاشة', text)
+
+    def _set(self, **fields):
+        RpaRecipe.objects.filter(pk=self.recipe.pk).update(**fields)
+        self.doc = RpaDocument.objects.get(pk=self.doc.pk)
+
+    def test_dry_run_refuses_save_keys_in_line_cells(self):
+        self._set(line_cells=self.recipe.line_cells + [KEYS(r'\{F10}')])
+        with self.assertRaises(ValueError):
+            build_keyplan(self.doc, mode='dry_run')
+
+    def test_dry_run_refuses_save_keys_in_cancel_keys(self):
+        self._set(cancel_keys=[KEYS(r'\{ESC}'), KEYS(r'\{F10}')])
+        with self.assertRaises(ValueError):
+            build_keyplan(self.doc, mode='dry_run')
+
+    def test_document_without_lines_refused(self):
+        self.doc.lines.all().delete()
+        with self.assertRaises(ValueError):
+            build_keyplan(self.doc, mode='dry_run')
+
+    def test_popup_answer_keys_converted(self):
+        self._set(popups=[{'title': 'x', 'answer_keys': r'\{ENTER}'}])
+        plan = build_keyplan(self.doc, mode='dry_run')
+        self.assertEqual(plan['popups'][0]['answer_keys'], '{ENTER}')
+
+    def test_whitespace_in_literals_and_data_is_braced(self):
+        self.assertEqual(to_send_keys('a b\tc\nd'), 'a{SPACE}b{TAB}c{ENTER}d')
+        RpaLine.objects.filter(document=self.doc).update(itemcode='AB 12')
+        plan = build_keyplan(self.doc, mode='dry_run')
+        self.assertIn('AB{SPACE}12', plan['steps'][0]['send'])
+        self.assertNotIn(' ', plan['steps'][0]['send'])
+
+    def test_reference_field_in_line_cells_refused(self):
+        self._set(line_cells=[FIELD('reference')])
+        with self.assertRaises(ValueError):
+            build_keyplan(self.doc, mode='dry_run')
+
+    def test_line_field_in_ref_cells_refused(self):
+        self._set(ref_cells=[FIELD('qty')])
+        with self.assertRaises(ValueError):
+            build_keyplan(self.doc, mode='dry_run')
+
+    def test_live_refused_when_save_keys_empty(self):
+        self._set(save_keys=[])
+        self.screen.live = True
+        self.screen.save()
+        with mock.patch('apps.rpa.keyplan.writer_allowed', return_value=True):
+            with self.assertRaises(PermissionError):
+                build_keyplan(self.doc, mode='live')
+
+    def test_unknown_mode_refused(self):
+        with self.assertRaises(ValueError):
+            build_keyplan(self.doc, mode='bogus')
+
+    def test_missing_recipe_refused(self):
+        RpaJob.objects.filter(pk=self.job.pk).update(recipe=None)
+        self.doc = RpaDocument.objects.get(pk=self.doc.pk)
+        with self.assertRaises(ValueError):
+            build_keyplan(self.doc, mode='dry_run')
