@@ -15,7 +15,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ('branches', '0014_close_test_branch_b01'),
         ('catalog', '0043_item_shortage_softech_before'),
-        ('rpa', '0001_initial'),
+        ('rpa', '0003_device_last_claim_error'),
         ('supply', '0012_rpa_portal_wiring'),
         ('users', '0058_rpa_module'),
     ]
