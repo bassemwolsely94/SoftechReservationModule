@@ -611,7 +611,6 @@ class ConcurrentClaimTests(_World, TransactionTestCase):
     """Two agents claiming at once never share a document (real transactions on separate
     connections). This proves "no shared claim", not that skip_locked was used: a blocking lock
     would pass too, only slower."""
-    serialized_rollback = True      # put the data-migration rows (screens, matrix) back after the flush
 
     def setUp(self):
         self.build_world('T8C')
