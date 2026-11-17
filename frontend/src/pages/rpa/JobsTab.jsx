@@ -29,13 +29,14 @@ function DryRunBadge() {
 function JobDetail({ jobId, onOpenDoc, openDocId }) {
   const qc = useQueryClient()
   const [err, setErr] = useState('')
+  const [cancelReason, setCancelReason] = useState('')
   const q = useQuery({ queryKey: ['rpa', 'job', jobId], queryFn: () => rpaApi.job(jobId).then(r => r.data), refetchInterval: 15000 })
   const job = q.data
   const docs = useMemo(() => asList(job?.documents), [job])
   const { sorted, headerProps } = useSortableRows(docs, { getValue: docValue, persistKey: 'rpa-job-docs' })
-  const after = () => { setErr(''); qc.invalidateQueries({ queryKey: ['rpa'] }) }
+  const after = () => { setErr(''); setCancelReason(''); qc.invalidateQueries({ queryKey: ['rpa'] }) }
   const approve = useMutation({ mutationFn: () => rpaApi.approveJob(jobId), onSuccess: after, onError: e => setErr(errText(e)) })
-  const cancel = useMutation({ mutationFn: () => rpaApi.cancelJob(jobId), onSuccess: after, onError: e => setErr(errText(e)) })
+  const cancel = useMutation({ mutationFn: () => rpaApi.cancelJob(jobId, cancelReason.trim()), onSuccess: after, onError: e => setErr(errText(e)) })
 
   if (q.isLoading) return <div className="card p-4 text-muted text-sm">جارٍ التحميل…</div>
   if (q.isError || !job) return <div className="card p-4 text-red-600 text-sm">تعذّر تحميل الأمر.</div>
@@ -54,9 +55,16 @@ function JobDetail({ jobId, onOpenDoc, openDocId }) {
             </button>
           )}
           {['uploaded', 'approved'].includes(job.status) && (
-            <button type="button" className="btn-secondary text-sm" disabled={cancel.isPending} onClick={() => cancel.mutate()}>
-              {cancel.isPending ? 'جارٍ الإلغاء…' : 'إلغاء الأمر'}
-            </button>
+            <>
+              <label className="sr-only" htmlFor={`rpa-cancel-reason-${job.id}`}>سبب الإلغاء</label>
+              <input id={`rpa-cancel-reason-${job.id}`} className="input-field text-sm w-48" maxLength={250}
+                     value={cancelReason} onChange={e => setCancelReason(e.target.value)}
+                     placeholder="سبب الإلغاء (مطلوب)" />
+              <button type="button" className="btn-secondary text-sm"
+                      disabled={!cancelReason.trim() || cancel.isPending} onClick={() => cancel.mutate()}>
+                {cancel.isPending ? 'جارٍ الإلغاء…' : 'إلغاء الأمر'}
+              </button>
+            </>
           )}
         </div>
       </div>

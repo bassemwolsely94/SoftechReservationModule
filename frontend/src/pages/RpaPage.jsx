@@ -43,6 +43,9 @@ function StatusStrip() {
           {online.length ? `أجهزتي المتصلة: ${online.length}` : 'لا يوجد جهاز متصل لك الآن'}
         </span>
       )}
+      {s?.last_claim_error && (
+        <span className="text-amber-700 dark:text-amber-300">{s.last_claim_error}</span>
+      )}
       {screens.length > 0 && (
         <span className="text-muted">
           الشاشات: {screens.map(x => x.title_ar || SCREEN_LABEL[x.key] || x.key).join('، ')}

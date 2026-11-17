@@ -84,15 +84,21 @@ SCREENS = [
              'body': T('كل أمر رفعته أو ترى فرعه، من الأحدث. العمود «الحالة»: بانتظار الاعتماد، معتمد، ملغي، تم. '
                        'شارة «تجربة بدون حفظ» على كل أمر في المرحلة الأولى. افتح أمرًا (Enter أو الضغط) لترى مستنداته، '
                        'ثم افتح مستندًا لترى أسطره بحالة المطابقة والرسالة والتحذير، والتشغيلات بخطواتها ولقطات الشاشة. '
-                       'قاعدة العينين: الذي رفع الأمر لا يعتمده، شخص آخر يضغط «اعتماد الأمر». «إلغاء الأمر» قبل التشغيل. '
-                       'مستند «يحتاج مراجعة» يعني أن الروبوت توقف أو لم يتأكد؛ اكتب سبب الحسم في الخانة التي تظهر تحت العنوان واضغط «سجّل الحسم». '
+                       'قاعدة العينين: الذي رفع الأمر لا يعتمده، شخص آخر يضغط «اعتماد الأمر». «إلغاء الأمر» يحتاج سببًا تكتبه في الخانة بجانبه؛ '
+                       'المستند الذي نجحت تجربته أو وُجد في SOFTECH يبقى كما هو ويُلغى الباقي. '
+                       'مستند «يحتاج مراجعة» يعني أن الروبوت توقف أو لم يتأكد؛ اكتب سبب الحسم في الخانة التي تظهر تحت العنوان ثم اختر أحد ثلاثة: '
+                       '«إعادة المحاولة» (يعود للروبوت، ويرفضها الخادم لو وجد المستند في SOFTECH)، «تم الحفظ في SOFTECH» (الخادم يبحث عنه ويسجل رقمه)، '
+                       'أو «إلغاء المستند». رقم المرجع RPA-… يظهر على كل مستند. '
                        'الجدول يترتب بالضغط على عنوان العمود، والأسهم تنقلك بين الأوامر.',
                        'Every job you uploaded or whose branch you may see, newest first. "Status": awaiting approval, approved, cancelled, done. '
                        'A "no-save dry run" badge sits on every Stage 1 job. Open a job (Enter or a click) to see its documents, then open a document '
                        'to see its lines with match status, message and warning, and the runs with their steps and screenshots. '
-                       'Four-eyes rule: whoever uploaded a job does not approve it; someone else presses "Approve job". "Cancel job" works before a run. '
-                       'A "needs review" document means the robot stopped or could not be sure; write the reason in the box that appears at the top and press '
-                       '"Record resolution". The grid sorts by clicking a column header, and the arrows move between jobs.')},
+                       'Four-eyes rule: whoever uploaded a job does not approve it; someone else presses "Approve job". "Cancel job" needs a reason typed in '
+                       'the box next to it; a document whose dry run succeeded or that SOFTECH already holds stays as it is and the rest are cancelled. '
+                       'A "needs review" document means the robot stopped or could not be sure; write the reason in the box that appears at the top, then pick '
+                       'one of three: "Retry" (back to the robot; the server refuses it if it finds the document in SOFTECH), "Saved in SOFTECH" (the server '
+                       'looks it up and records its number), or "Cancel document". Each document shows its RPA-… reference. '
+                       'The grid sorts by clicking a column header, and the arrows move between jobs.')},
             {'key': 'upload', 'title': T('رفع ملف', 'Upload file'),
              'body': T('ارفع ملف Excel لإذن صرف من فرع إلى فرع. الشاشة الوحيدة المتاحة الآن «إذن صرف للفروع». اختر «من فرع» و«إلى فرع» (المستلم) '
                        'وكود المخزن إن لزم. الخادم يقرأ الملف ويطابق الأصناف ويرفض: فرعًا خارج فروعك، أو فرعًا مغلقًا، أو الفرع المستلم نفسه المصدر، '
@@ -110,12 +116,21 @@ SCREENS = [
                        'if lost, revoke the device and add another. A device is "online" if seen in the last two minutes. "Revoke device" stops it at once. '
                        'The admin sees all devices.')},
             {'key': 'recipes', 'title': T('الوصفات', 'Recipes'),
-             'body': T('للمدير فقط. الوصفة هي تسجيل ضغطات شاشة SOFTECH (ملف .dld) مع خريطة الحقول. ارفعها «كمسودة»، ثم يعتمدها مدير آخر '
-                       '(العينان الأربع أيضًا): الوصفة المعتمدة تتجمد ولا تتغير، وتكون واحدة معتمدة فقط لكل شاشة. '
-                       'الأمر المعتمد يحمل الوصفة المعتمدة وقت اعتماده.',
-                       'Admin only. A recipe is a recording of the SOFTECH screen keystrokes (a .dld file) with its field map. Upload it "as a draft", then '
-                       'another admin approves it (four-eyes again): an approved recipe is frozen and unchangeable, and only one is approved per screen. '
-                       'An approved job carries the approved recipe from the moment it was approved.')},
+             'body': T('للمدير فقط. الوصفة هي تسجيل ضغطات شاشة SOFTECH (ملف .dld) مع خريطة الحقول (itemcode و qty و expiry). ارفعها «كمسودة»، '
+                       'ثم اضغط «إكمال المسودة» واكتب ما لا يحمله ملف .dld: مفاتيح الإلغاء بدون حفظ (مطلوبة)، والنوافذ المنبثقة المعروفة '
+                       '(جزء من العنوان أو النص ومفاتيح الرد)، وقائمة المراجعة قبل البدء، وخانة المرجع إن وُجدت، ثم «حفظ المسودة». '
+                       'المفاتيح الخاصة تُكتب بصيغة DataLoad مثل \\{ESC}. يعتمدها مدير آخر غير من رفعها أو عدّلها (العينان الأربع)، '
+                       'والخادم يرفض وصفة ناقصة أو أقدم من المعتمدة. الوصفة المعتمدة تتجمد ولا تتغير، وتكون واحدة معتمدة فقط لكل شاشة. '
+                       'الأمر المعتمد يحمل الوصفة المعتمدة وقت اعتماده. زر «تفعيل الشاشة» / «إيقاف الشاشة» أعلى التبويب يحدد هل يستلم الروبوت '
+                       'مستندات الشاشة؛ الإدخال الفعلي لا يُفتح في المرحلة الأولى.',
+                       'Admin only. A recipe is a recording of the SOFTECH screen keystrokes (a .dld file) with its field map (itemcode, qty, expiry). Upload it '
+                       '"as a draft", then press "Complete draft" and fill in what a .dld does not carry: the cancel-without-saving keys (required), the known '
+                       'popups (part of the title or text, and the answer keys), the checklist before starting, and the reference field if any, then '
+                       '"Save draft". Special keys are written in DataLoad form, such as \\{ESC}. Another admin, not the one who uploaded or edited it, approves '
+                       'it (four-eyes), and the server refuses an incomplete recipe or one older than the approved one. An approved recipe is frozen and '
+                       'unchangeable, and only one is approved per screen. An approved job carries the approved recipe from the moment it was approved. '
+                       'The "Enable screen" / "Stop screen" button at the top of the tab sets whether the robot takes the screen\'s documents; live entry '
+                       'does not open in Stage 1.')},
         ],
         'steps': [
             T('ارفع الملف من «رفع ملف»، ثم افتح الأمر من «الأوامر» وراجع الأسطر غير المطابقة والتحذيرات.',
@@ -124,8 +139,8 @@ SCREENS = [
               'Ask a colleague other than you to approve the job. The robot does not start before approval.'),
             T('أثناء التشغيل «ارفع يدك عن الكيبورد»: الروبوت يكتب في SOFTECH، وأي لمسة قد تُدخل بياناتك في الخانة الخطأ.',
               'While it runs, "take your hands off the keyboard": the robot types into SOFTECH and any touch may put your input in the wrong field.'),
-            T('مستند «يحتاج مراجعة»: افتحه وافحص SOFTECH، ثم اكتب سبب الحسم واضغط «سجّل الحسم».',
-              'A "needs review" document: open it, check SOFTECH, then write the resolution reason and press "Record resolution".'),
+            T('مستند «يحتاج مراجعة»: افتحه وافحص SOFTECH، ثم اكتب سبب الحسم واختر «إعادة المحاولة» أو «تم الحفظ في SOFTECH» أو «إلغاء المستند».',
+              'A "needs review" document: open it, check SOFTECH, then write the reason and pick "Retry", "Saved in SOFTECH" or "Cancel document".'),
         ],
         'tips': [
             T('كل الأوامر الآن «تجربة بدون حفظ»: يكتب الروبوت ثم يلغي، ولا يُحفظ أي مستند في SOFTECH. التشغيل الحقيقي يُفتح في مرحلة لاحقة بموافقة المالك.',
@@ -134,6 +149,12 @@ SCREENS = [
               'If the strip says "the robot is off in settings", no device takes documents. The switch is with the admin.'),
             T('«يحتاج مراجعة» لا يعني أن شيئًا حُفظ بالخطأ بالضرورة، بل أن الروبوت لم يستطع التأكد. تحقق من SOFTECH قبل أن تحسم.',
               '"Needs review" does not necessarily mean something was saved wrongly; it means the robot could not be sure. Check SOFTECH before you resolve.'),
+            T('بعد كل تجربة يبحث الخادم في SOFTECH: لو وجد المستند محفوظًا يحوّله إلى «يحتاج مراجعة» فورًا. لو تعذر الاتصال تبقى «نجحت التجربة» '
+              'وتظهر على التشغيل خطوة «لم يتم التحقق من SOFTECH».',
+              'After every dry run the server searches SOFTECH: if it finds the document saved it turns it to "needs review" at once. If SOFTECH '
+              'cannot be reached the result stays "dry run succeeded" and the run shows a "SOFTECH not checked" step.'),
+            T('لو ظهر في الشريط «تعذر الاتصال بـ SOFTECH للتحقق قبل الإدخال» فالروبوت ينتظر ولن يستلم مستندًا حتى يعود الاتصال.',
+              'If the strip says SOFTECH could not be reached for the check before typing, the robot waits and takes no document until the link is back.'),
             T('الرمز يظهر مرة واحدة فقط. من يملكه يشغّل الروبوت باسمك، فلا ترسله في رسالة.',
               'The token shows only once. Whoever holds it can run the robot in your name, so do not send it in a message.'),
             T('كل جدول يترتب بالضغط على عنوان العمود. أسماء الفروع تظهر بالكود والاسم.',
@@ -165,8 +186,8 @@ SCREENS = [
                        'The uploader does not approve their own job, and the server refuses. Review the lines first.'),
              'open_hint': _JOB_OPEN},
             {'target': 'rpa-main-resolve', 'label': T('يحتاج مراجعة', 'Needs review'),
-             'text': T('اكتب سبب الحسم هنا بعد فحص SOFTECH، ثم «سجّل الحسم». السبب مطلوب.',
-                       'Write the resolution reason here after checking SOFTECH, then "Record resolution". The reason is required.'),
+             'text': T('اكتب سبب الحسم هنا بعد فحص SOFTECH، ثم اختر: «إعادة المحاولة» أو «تم الحفظ في SOFTECH» أو «إلغاء المستند». السبب مطلوب.',
+                       'Write the reason here after checking SOFTECH, then pick "Retry", "Saved in SOFTECH" or "Cancel document". The reason is required.'),
              'open_hint': T('يظهر فقط في مستند حالته «يحتاج مراجعة».', 'Shows only in a document whose status is "needs review".')},
             {'target': 'rpa-main-upload', 'label': T('رفع ملف', 'Upload file'),
              'text': T('فرع المصدر والمستلم وملف Excel. الخادم يرفض المغلق والمكرر.',
@@ -177,10 +198,12 @@ SCREENS = [
                        'The device token shows once: "Copy it now, it will not show again".'),
              'open_hint': T('افتح تبويب «أجهزتي».', 'Open the "My devices" tab.')},
             {'target': 'rpa-main-recipes', 'label': T('الوصفات', 'Recipes'),
-             'text': T('للمدير: تسجيلات الشاشة. تُرفع كمسودة ويعتمدها مدير آخر ثم تتجمد.',
-                       'Admin: the screen recordings. Uploaded as a draft, approved by another admin, then frozen.'),
+             'text': T('للمدير: تسجيلات الشاشة. تُرفع كمسودة، تُكمَل بمفاتيح الإلغاء والنوافذ المنبثقة، ويعتمدها مدير آخر ثم تتجمد. '
+                       'وفيها زر تفعيل الشاشة.',
+                       'Admin: screen recordings. Uploaded as a draft, completed with cancel keys and popups, approved by another admin, then frozen. '
+                       'Screen switch here too.'),
              'open_hint': T('افتح تبويب «الوصفات» (للمدير).', 'Open the "Recipes" tab (admin).')},
         ],
-        'updated': '2026-11-16',
+        'updated': '2026-11-17',
     },
 ]

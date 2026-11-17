@@ -1,8 +1,9 @@
 /**
  * DocumentDrawer — one RPA document: its lines (match status / message / warning), the runs with
  * their step list and screenshots, and — only when the document `needs_person` — the resolve
- * form. A side panel (not a modal); the reason field is inline (rule 11). The server decides
- * who may resolve; this only calls the API.
+ * form: one reason box and three decisions (retry / saved in SOFTECH / cancel the document).
+ * A side panel (not a modal); everything is inline (rule 11). The server decides who may
+ * resolve and checks SOFTECH before a retry or a "saved"; this only calls the API.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -10,6 +11,13 @@ import { rpaApi } from '../../api/client'
 import useSortableRows from '../../hooks/useSortableRows'
 import SortTh from '../../components/SortTh'
 import { Badge, DOC_STATUS, LINE_STATUS, OUTCOME, asList, errText, fmtTime } from './shared.jsx'
+
+// the three decisions the server accepts (dispatch.DECISIONS)
+const DECISIONS = [
+  { key: 'retry', label: 'إعادة المحاولة', cls: 'btn-primary', hint: 'يعود المستند للروبوت؛ يرفضها الخادم لو وجد المستند في SOFTECH.' },
+  { key: 'posted', label: 'تم الحفظ في SOFTECH', cls: 'btn-secondary', hint: 'الخادم يبحث عنه في SOFTECH ويسجل رقمه.' },
+  { key: 'cancelled', label: 'إلغاء المستند', cls: 'btn-secondary', hint: 'لن يكتبه الروبوت.' },
+]
 
 const lineValue = (r, k) => (k === 'status' ? (LINE_STATUS[r.status]?.label || r.status) : r[k])
 
@@ -114,7 +122,7 @@ export default function DocumentDrawer({ documentId, onClose }) {
   }, [documentId, !!doc, needsPerson]) // eslint-disable-line react-hooks/exhaustive-deps -- once per opened document
 
   const resolve = useMutation({
-    mutationFn: () => rpaApi.resolve(documentId, reason.trim()),
+    mutationFn: decision => rpaApi.resolve(documentId, decision, reason.trim()),
     onSuccess: () => {
       setReason(''); setErr('')
       qc.invalidateQueries({ queryKey: ['rpa'] })
@@ -142,12 +150,17 @@ export default function DocumentDrawer({ documentId, onClose }) {
           <input id="rpa-resolve-reason" ref={reasonRef} className="input-field w-full" value={reason} maxLength={250}
                  onChange={e => setReason(e.target.value)}
                  placeholder="مثال: راجعت SOFTECH ولا يوجد مستند محفوظ" />
-          <div className="flex items-center gap-2">
-            <button type="button" className="btn-primary text-sm"
-                    disabled={!reason.trim() || resolve.isPending} onClick={() => resolve.mutate()}>
-              {resolve.isPending ? 'جارٍ الحفظ…' : 'سجّل الحسم'}
-            </button>
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="قرار الحسم">
+            {DECISIONS.map(d => (
+              <button key={d.key} type="button" className={`${d.cls} text-sm`} title={d.hint}
+                      disabled={!reason.trim() || resolve.isPending} onClick={() => resolve.mutate(d.key)}>
+                {resolve.isPending && resolve.variables === d.key ? 'جارٍ الحفظ…' : d.label}
+              </button>
+            ))}
             {err && <span className="text-xs text-red-600">{err}</span>}
+          </div>
+          <div className="text-xs text-muted">
+            {DECISIONS.map(d => `«${d.label}»: ${d.hint}`).join(' · ')}
           </div>
         </div>
       )}
