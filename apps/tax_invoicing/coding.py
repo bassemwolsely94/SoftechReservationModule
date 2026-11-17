@@ -6,8 +6,13 @@ register our own internal code, EG-<tax id>-<SOFTECH item code>, under a GPC bri
 request until ETA's staff approve or reject it. ETA's answer is the only thing that moves the item's
 coding fields: pending once ETA holds the request, approved or rejected on ETA's decision.
 
-Gates for sending, in order: flag TAX_ETA_CODING_ENABLED (writer instance only) · production also
-needs TAX_ETA_PRODUCTION_ALLOWED (eta_client) · `finalize` permission in the view · a typed count.
+Each request goes to the ETA system it was prepared for (client_for): production through its own client
+(eta_coding_client, own login) from any server; any other system only from a server that sends there (eta_client).
+Gates for sending:
+  production (production_gate, all required): TAX_ETA_CODING_PRODUCTION_ENABLED (writer instance only) ·
+    `finalize` · a typed count · the first-request rule (one request until ETA approves one, unless
+    TAX_ETA_CODING_PRODUCTION_BATCH_OK). TAX_ETA_PRODUCTION_ALLOWED is not involved: it unlocks invoices too.
+  the server's own test system: TAX_ETA_CODING_ENABLED · a typed count (as before).
 """
 import re
 
@@ -16,11 +21,15 @@ from django.utils import timezone
 
 from config.writers import writer_allowed
 
-from . import environment, eta_client, gpc
+from . import environment, eta_client, eta_coding_client, gpc
 from .models import TaxCodeRequest, TaxIssuerProfile, TaxItemProfile
 from .services import TaxRuleError, audit
 
 FLAG = 'TAX_ETA_CODING_ENABLED'
+PRODUCTION = 'production'
+PRODUCTION_FLAG = eta_coding_client.PRODUCTION_FLAG
+BATCH_FLAG = 'TAX_ETA_CODING_PRODUCTION_BATCH_OK'
+FIRST_REQUEST_ONLY = 'أرسل طلباً واحداً أولاً حتى تعتمده المصلحة'
 MAX_PER_ACTION = 200
 GPC_BRICK = re.compile(r'^\d{8}$')
 _ETA_STATUS = {'submitted': TaxCodeRequest.SUBMITTED, 'approved': TaxCodeRequest.APPROVED,
@@ -186,30 +195,80 @@ def _code_type(row):
     return 'GS1' if row.purpose == TaxCodeRequest.PURPOSE_GS1 else 'EGS'
 
 
-def _send_one(row):
+def _send_one(row, client):
     if row.purpose == TaxCodeRequest.PURPOSE_GS1:
-        return eta_client.request_code_reuse([{'codetype': 'GS1', 'itemCode': row.item_code,
-                                               'comment': (row.request_reason or 'باركود المصنع لصنف نبيعه')[:200]}])
-    return eta_client.create_egs_codes([_payload(row)])
+        return client.request_code_reuse([{'codetype': 'GS1', 'itemCode': row.item_code,
+                                           'comment': (row.request_reason or 'باركود المصنع لصنف نبيعه')[:200]}])
+    return client.create_egs_codes([_payload(row)])
 
 
-def send(request_ids, actor, confirm):
-    """Send prepared requests one by one, so each item's outcome is its own. The typed confirmation
-    is the number of requests being sent."""
-    if not writer_allowed(FLAG):
-        raise TaxRuleError('طلب الأكواد من المصلحة مغلق (TAX_ETA_CODING_ENABLED)')
-    ids = list(request_ids)[:MAX_PER_ACTION]
-    rows = list(TaxCodeRequest.objects.filter(pk__in=ids, status__in=[TaxCodeRequest.PREPARED, TaxCodeRequest.FAILED])
-        .select_related('profile').order_by('id'))
+def _here():
+    return environment.current() or 'custom'
+
+
+def system_of(row):
+    """The ETA system a request belongs to. A row from before systems were recorded belongs to this server's."""
+    return row.environment or _here()
+
+
+def client_for(system):
+    """The client for one ETA system: production through its own client and login, from any server; this
+    server's own system through eta_client, as before. Any other system cannot be reached from here."""
+    if system == PRODUCTION:
+        return eta_coding_client.CodingClient(PRODUCTION)
+    here = _here()
+    if system in ('', here):
+        return eta_client
+    raise TaxRuleError(f'الطلب مُعدّ للمنظومة «{system}» وهذا السيرفر يرسل إلى «{here}»')
+
+
+def first_request_pending():
+    """True while no production request has reached `approved`: the first-request rule applies."""
+    return not TaxCodeRequest.objects.filter(environment=PRODUCTION, status=TaxCodeRequest.APPROVED).exists()
+
+
+def production_gate(rows, actor_can_finalize, confirm):
+    """Every gate for sending code requests to ETA production; raises TaxRuleError at the first that fails.
+    `actor_can_finalize` comes from the view (matrix `finalize`), `confirm` is what the person typed."""
+    rows = list(rows)
+    if not writer_allowed(PRODUCTION_FLAG):
+        raise TaxRuleError(f'طلب الأكواد من منظومة المصلحة الفعلية مغلق ({PRODUCTION_FLAG})')
+    if not actor_can_finalize:
+        raise TaxRuleError('إرسال طلبات الأكواد للمنظومة الفعلية يحتاج صلاحية الاعتماد النهائي (finalize)')
     if not rows:
         raise TaxRuleError('لا توجد طلبات جاهزة للإرسال')
     if str(confirm).strip() != str(len(rows)):
         raise TaxRuleError(f'اكتب عدد الطلبات ({len(rows)}) للتأكيد')
-    env = environment.current() or 'custom'
+    if len(rows) > 1 and first_request_pending() and not writer_allowed(BATCH_FLAG):
+        raise TaxRuleError(FIRST_REQUEST_ONLY)
+
+
+def send(request_ids, actor, confirm, *, actor_can_finalize=False):
+    """Send prepared requests one by one, so each item's outcome is its own. The typed confirmation
+    is the number of requests being sent. Production requests go out only through production_gate and
+    never together with another system's."""
+    ids = list(request_ids)[:MAX_PER_ACTION]
+    rows = list(TaxCodeRequest.objects.filter(pk__in=ids, status__in=[TaxCodeRequest.PREPARED, TaxCodeRequest.FAILED])
+        .select_related('profile').order_by('id'))
+    production = [row for row in rows if system_of(row) == PRODUCTION]
+    if production:
+        if len(production) != len(rows):
+            raise TaxRuleError('أرسل طلبات المنظومة الفعلية وحدها، منفصلة عن طلبات المنظومة التجريبية')
+        production_gate(production, actor_can_finalize, confirm)
+    else:
+        if not writer_allowed(FLAG):
+            raise TaxRuleError('طلب الأكواد من المصلحة مغلق (TAX_ETA_CODING_ENABLED)')
+        if not rows:
+            raise TaxRuleError('لا توجد طلبات جاهزة للإرسال')
+        if str(confirm).strip() != str(len(rows)):
+            raise TaxRuleError(f'اكتب عدد الطلبات ({len(rows)}) للتأكيد')
     results = {'submitted': 0, 'failed': 0, 'uncertain': 0, 'stopped': '', 'refused': []}
     for row in rows:
-        if row.environment and row.environment != env:
-            results['refused'].append({'id': row.pk, 'why': f'الطلب مُعدّ للمنظومة «{row.environment}» وهذا السيرفر يرسل إلى «{env}»'})
+        env = system_of(row)
+        try:
+            client = client_for(env)
+        except TaxRuleError as exc:
+            results['refused'].append({'id': row.pk, 'why': str(exc)})
             continue
         with transaction.atomic():
             claimed = TaxCodeRequest.objects.filter(pk=row.pk, status__in=[TaxCodeRequest.PREPARED, TaxCodeRequest.FAILED]) \
@@ -217,7 +276,7 @@ def send(request_ids, actor, confirm):
         if not claimed:
             continue
         try:
-            http_status, body = _send_one(row)
+            http_status, body = _send_one(row, client)
         except eta_client.EtaNotConfigured as exc:
             TaxCodeRequest.objects.filter(pk=row.pk).update(status=TaxCodeRequest.FAILED, error=str(exc))
             results['stopped'] = str(exc)
@@ -294,19 +353,25 @@ def refresh(actor=None, request_ids=None, limit=100):
     if request_ids:
         # Asked about by name: a refused request too ("code already exists" may mean ETA already has ours).
         states.append(TaxCodeRequest.FAILED)
-    # Only this server's own system: codes are identical across systems, so another system's answer would
-    # be about a different request. A row with no system yet is asked about here, as before.
-    qs = (TaxCodeRequest.objects.filter(status__in=states, environment__in=[environment.current() or 'custom', ''])
+    # Each row is asked of its own system: codes are identical across systems, so another system's answer
+    # would be about a different request. Production rows on any server (through the production client);
+    # this server's own system, and a row with no system yet, as before; any other system not from here.
+    qs = (TaxCodeRequest.objects.filter(status__in=states, environment__in=sorted({_here(), '', PRODUCTION}))
           .select_related('profile'))
     if request_ids:
         qs = qs.filter(pk__in=request_ids)
     done = {'checked': 0, 'approved': 0, 'rejected': 0, 'error': ''}
+    could_not_ask = set()       # "could not ask" stops that system only
     for row in qs.order_by('checked_at', 'id')[:limit]:
+        system = system_of(row)
+        if system in could_not_ask:
+            continue
         try:
-            found = eta_client.my_code_requests(row.item_code)
+            found = client_for(system).my_code_requests(row.item_code)
         except (eta_client.EtaUncertain, eta_client.EtaRefused, eta_client.EtaNotConfigured) as exc:
-            done['error'] = str(exc)
-            break
+            done['error'] = done['error'] or str(exc)
+            could_not_ask.add(system)
+            continue
         with transaction.atomic():
             row = TaxCodeRequest.objects.select_for_update().select_related('profile').get(pk=row.pk)
             if found:
@@ -350,13 +415,14 @@ def summary():
 CHECK_PER_ACTION = 100
 
 
-def check_codes(actor=None, profile_ids=None, limit=CHECK_PER_ACTION):
-    """Ask ETA, code by code, whether it holds each item's code in the system in use, and record the answer
-    beside the system's name. Reads only. Unchecked-here items go first. "Could not ask" stops and changes
-    nothing for the item it was on."""
-    here = environment.current()
+def check_codes(actor=None, profile_ids=None, limit=CHECK_PER_ACTION, system=''):
+    """Ask ETA, code by code, whether it holds each item's code in one system (default: the one in use;
+    production from any server), and record the answer beside the system's name. Reads only. Unchecked-there
+    items go first. "Could not ask" stops and changes nothing for the item it was on."""
+    here = system or environment.current()
     if not here:
         raise TaxRuleError('منظومة المصلحة غير محددة (TAX_ETA_ENVIRONMENT)')
+    client = client_for(here)
     qs = TaxItemProfile.objects.exclude(eta_code='').exclude(code_type='')
     if profile_ids:
         qs = qs.filter(pk__in=list(profile_ids)[:limit])
@@ -367,7 +433,7 @@ def check_codes(actor=None, profile_ids=None, limit=CHECK_PER_ACTION):
     done = {'checked': 0, 'found': 0, 'inactive': 0, 'not_found': 0, 'error': '', 'environment': here}
     for profile in qs[:limit]:
         try:
-            details = eta_client.code_details(profile.code_type.upper(), profile.eta_code)
+            details = client.code_details(profile.code_type.upper(), profile.eta_code)
         except (eta_client.EtaUncertain, eta_client.EtaRefused, eta_client.EtaNotConfigured) as exc:
             done['error'] = str(exc)
             break

@@ -1117,7 +1117,8 @@ def code_cancel(request, pk):
 @permission_classes([IsAuthenticated, SENDER])
 def codes_send(request):
     try:
-        result = coding.send(_ids(request), request.user, request.data.get('confirm'))
+        result = coding.send(_ids(request), request.user, request.data.get('confirm'),
+                             actor_can_finalize=_can(request, 'finalize'))
     except services.TaxRuleError as exc:
         return _refuse(exc)
     return Response(result)
