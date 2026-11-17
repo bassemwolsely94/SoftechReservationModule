@@ -1,5 +1,6 @@
 """Marketplace channels (doc 38) — Task 1: access, seed grants, model constraints."""
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.db import IntegrityError, connection, transaction
 from django.test import TestCase, override_settings
@@ -10,7 +11,7 @@ from apps.marketplace.access import Access
 from apps.marketplace.availability import platform_price, sellable_qty, snapshot
 from apps.marketplace.eligibility import listing_problem
 from apps.marketplace.models import (ChannelListing, ChannelStore, ExternalOrder, ExternalOrderLine,
-                                     MarketplaceChannel)
+                                     MarketplaceChannel, PushLog)
 from apps.pos_orders.models import SoftechSalesOrder
 from apps.tests.factories import make_admin, make_branch, make_branch2, make_item, make_pharmacist
 from apps.users.management.commands.seed_permissions import PERMISSIONS
@@ -305,3 +306,109 @@ class MarketplacePushTests(TestCase):
         self.channel.credentials = {'secret': 's3'}
         Req.headers = {}
         self.assertFalse(get_adapter('fake', self.channel).verify_webhook(Req))   # missing header
+
+
+class MarketplaceIntakeTests(TestCase):
+    def setUp(self):
+        from apps.marketplace.adapters.base import IncomingLine, IncomingOrder
+        self.IL, self.IO = IncomingLine, IncomingOrder
+        self.branch = make_branch()
+        _, self.staff, _ = make_admin('intake_admin')
+        self.channel = MarketplaceChannel.objects.create(code='in_test', name='تجربة', stock_buffer=Decimal('0'))
+        self.store = ChannelStore.objects.create(channel=self.channel, branch=self.branch,
+                                                 external_store_id='ST1', is_active=True)
+        self.item = make_item('صنف', 'IN001')
+        ItemStock.objects.create(item=self.item, branch=self.branch, softech_store_code='100',
+                                 quantity_on_hand=Decimal('10'))
+        self.listing = ChannelListing.objects.create(channel=self.channel, item=self.item, approved=True,
+                                                     external_sku='SKU1')
+
+    def _incoming(self, ext='E1', lines=None, store='ST1'):
+        lines = lines if lines is not None else [self.IL('SKU1', 'صنف', Decimal('2'), Decimal('10'))]
+        return self.IO(ext, store, 'عميل', '01000000000', 'عنوان', 'platform_paid', Decimal('20'), lines, {})
+
+    def _ingest(self, **kw):
+        from apps.marketplace import intake
+        return intake.ingest(self.channel, self._incoming(**kw), source='api')
+
+    def test_duplicate_webhook_is_one_order(self):
+        o1, c1 = self._ingest()
+        o2, c2 = self._ingest()
+        self.assertTrue(c1)
+        self.assertFalse(c2)
+        self.assertEqual(o1.pk, o2.pk)
+        self.assertEqual(ExternalOrder.objects.count(), 1)
+        self.assertEqual(o1.events.count(), 1)
+
+    def test_unknown_store_creates_nothing(self):
+        with self.assertRaises(ValueError):
+            self._ingest(store='NOPE')
+        self.assertEqual(ExternalOrder.objects.count(), 0)
+
+    def test_accept_refuses_unlisted_or_blocked_line(self):
+        from apps.marketplace import intake
+        order, _ = self._ingest(ext='E2', lines=[self.IL('ZZZ', 'مجهول', Decimal('1'), Decimal('5'))])
+        self.assertEqual(order.lines.get().problem, 'not_listed')
+        with patch('apps.marketplace.to_pos.convert'), self.assertRaises(ValueError):
+            intake.accept(order, self.staff)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'received')
+        order2, _ = self._ingest(ext='E3')
+        self.item.item_archive = True
+        self.item.save()
+        with patch('apps.marketplace.to_pos.convert'), self.assertRaises(ValueError):
+            intake.accept(order2, self.staff)
+        self.assertEqual(order2.lines.get().problem, 'blocked')
+
+    def test_accept_refuses_oos_line(self):
+        from apps.marketplace import intake
+        order, _ = self._ingest(ext='E4', lines=[self.IL('SKU1', 'صنف', Decimal('6'), Decimal('10')),
+                                                 self.IL('SKU1', 'صنف', Decimal('6'), Decimal('10'))])
+        with patch('apps.marketplace.to_pos.convert'), self.assertRaises(ValueError):
+            intake.accept(order, self.staff)
+        self.assertEqual(order.lines.first().problem, 'out_of_stock')
+
+    def test_accept_happy_path_and_convert_failure_rolls_back(self):
+        from apps.marketplace import intake
+        order, _ = self._ingest(ext='E5')
+        with patch('apps.marketplace.to_pos.convert', side_effect=ValueError('x')), self.assertRaises(ValueError):
+            intake.accept(order, self.staff)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'received')
+        with patch('apps.marketplace.to_pos.convert') as conv, self.captureOnCommitCallbacks(execute=True):
+            intake.accept(order, self.staff)
+        conv.assert_called_once()
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'accepted')
+        self.assertTrue(PushLog.objects.filter(kind='status').exists())
+
+    def test_illegal_transition_raises(self):
+        from apps.marketplace import intake
+        order, _ = self._ingest(ext='E6')
+        for bad in ('delivered', 'preparing'):
+            with self.assertRaises(ValueError) as cm:
+                intake.set_status(order, bad, self.staff)
+            self.assertEqual(str(cm.exception), 'انتقال غير مسموح')
+
+    def test_every_transition_audited(self):
+        from apps.audit.models import AuditLog
+        from apps.marketplace import intake
+        order, _ = self._ingest(ext='E7')
+        with patch('apps.marketplace.to_pos.convert'):
+            intake.accept(order, self.staff)
+        for st in ('preparing', 'ready', 'handed_over', 'delivered'):
+            intake.set_status(order, st, self.staff, note='ok')
+        self.assertEqual(order.events.count(), 6)
+        self.assertEqual(AuditLog.objects.filter(action__startswith='marketplace_order_').count(), 6)
+        self.assertEqual(AuditLog.objects.filter(action='marketplace_order_delivered').count(), 1)
+        blob = ' '.join(str(a.new_data) + str(a.old_data) + str(a.extra) for a in AuditLog.objects.all())
+        self.assertNotIn('01000000000', blob)
+
+    def test_reject_records_reason(self):
+        from apps.marketplace import intake
+        order, _ = self._ingest(ext='E8')
+        intake.reject(order, self.staff, 'مغلق')
+        order.refresh_from_db()
+        self.assertEqual((order.status, order.reject_reason), ('rejected', 'مغلق'))
+        with self.assertRaises(ValueError):
+            intake.reject(order, self.staff, 'x')
